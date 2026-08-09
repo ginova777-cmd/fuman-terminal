@@ -8,6 +8,7 @@ const ROOT = path.resolve(__dirname, "..");
 const REQUIRED_IN_ROOT = [
   "ops:predictive-preflight",
   "verify:terminal-predictive-preflight",
+  "verify:terminal-power-recovery",
   "verify:fugle-websocket-sources",
   "verify:terminal-water-root",
   "verify:terminal-water-root-contract",
@@ -44,6 +45,8 @@ const REQUIRED_IN_ROOT = [
   "verify:terminal-autonomous-completion-audit",
   "verify:protected-readback-credential-contract",
   "verify:protected-readback-credential",
+  "verify:terminal-final-audit",
+  "verify:terminal-final-audit-contract",
   "verify:terminal-ops-production-live:authenticated",
   "ops:production-unattended-readiness-report:authenticated",
   "verify:production-unattended-readiness-report",
@@ -81,6 +84,8 @@ const SNAPSHOT_ONLY_PRODUCTION_SCRIPTS = [
   "verify:terminal-resource-chain",
   "verify:terminal-resource-chain:unattended",
   "verify:protected-readback-credential",
+  "verify:terminal-final-audit",
+  "verify:terminal-final-audit-contract",
 ];
 
 function readJson(rel) {
@@ -109,8 +114,9 @@ function issue(issues, code, details = {}) {
 
 function verifyRootOrder(rootScripts, issues) {
   const positions = Object.fromEntries(rootScripts.map((name, index) => [name, index]));
-  const orderedPairs = [
-    ["ops:predictive-preflight", "verify:terminal-water-root"],
+  const orderedPairs = [    ["ops:predictive-preflight", "verify:terminal-predictive-preflight"],
+    ["verify:terminal-predictive-preflight", "verify:terminal-power-recovery"],
+    ["verify:terminal-power-recovery", "verify:terminal-water-root"],
     ["verify:terminal-water-root", "verify:strategy-scan-formal-gate"],
     ["verify:strategy-scan-formal-gate", "verify:daily-manifest-schedule-transition"],
     ["verify:daily-manifest-schedule-transition", "manifest:daily-terminal-run"],
@@ -124,7 +130,10 @@ function verifyRootOrder(rootScripts, issues) {
     ["verify:terminal-canary-publish", "verify:terminal-resource-chain:unattended"],
     ["verify:terminal-resource-chain:unattended", "verify:terminal-runid-closure"],
     ["verify:terminal-runid-closure", "verify:manifest-publish-wiring"],
-    ["verify:terminal-autonomous-completion-audit", "verify:terminal-ops-production-live:authenticated"],
+    ["verify:terminal-autonomous-completion-audit", "verify:protected-readback-credential"],
+    ["verify:protected-readback-credential", "verify:terminal-final-audit"],
+    ["verify:terminal-final-audit", "verify:terminal-final-audit-contract"],
+    ["verify:terminal-final-audit-contract", "verify:terminal-ops-production-live:authenticated"],
     ["verify:terminal-ops-production-live:authenticated", "ops:production-unattended-readiness-report:authenticated"],
   ];
   for (const [before, after] of orderedPairs) {

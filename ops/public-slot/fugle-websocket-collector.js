@@ -352,7 +352,6 @@ function readPrioritySymbols(symbols) {
 
   addMany("terminalPriority", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, { priority: true });
   addMany("openingPriority", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, { priority: true });
-  counts.strategy1 = 0; // retired: do not subscribe Strategy1 priority symbols
   addMany("strategy2", payload.strategy2 || payload.strategy2Symbols, { priority: true });
   addMany("strategy3", payload.strategy3 || payload.strategy3Symbols, { priority: true });
   addMany("strategy4", payload.strategy4 || payload.strategy4Symbols, { priority: true });
@@ -360,7 +359,6 @@ function readPrioritySymbols(symbols) {
   addMany("institution", payload.institution || payload.institutionSymbols, { priority: true });
   addMany("warrant", payload.warrant || payload.warrantSymbols, { priority: true });
   addMany("cb", payload.cb || payload.cbSymbols, { priority: true });
-  counts.realtimeRadar = 0; // retired: do not subscribe realtime radar priority symbols
   addMany("threeDayOpenHighFade", payload.threeDayOpenHighFade || payload.openHighFadeSymbols, { priority: true });
   addMany("dynamic", payload.dynamic || payload.dynamicMotherPoolSymbols, { priority: true });
   addMany("hot", payload.hot || payload.daytradeHotSymbols || payload.priorityStrongSymbols, { priority: true });

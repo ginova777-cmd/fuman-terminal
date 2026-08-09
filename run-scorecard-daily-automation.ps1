@@ -201,10 +201,7 @@ $env:FUMAN_SCANNER_TARGET_DATE = $ExpectedDate
 $env:FUMAN_SCANNER_TARGET_TRADE_DATE = $ExpectedDate
 $env:FUMAN_SCORECARD_EXPECTED_DATE = $ExpectedDate
 Write-Step ("trading day status date={0} isTradingDay={1} reason={2} source={3} allowPrevious={4}" -f $tradingDayStatus.date, $tradingDayStatus.isTradingDay, $tradingDayStatus.reason, $tradingDayStatus.source, $allowPreviousForRun)
-if (-not [bool]$tradingDayStatus.isTradingDay) {
-  Write-Step "market closed; preserve previous-good scorecard and skip backfill/publish"
-  return
-}`r`nif ($protectedReadbackCredential.enabled) {
+if ($protectedReadbackCredential.enabled) {
   Write-Step ("protected readback credential armed source={0}" -f $protectedReadbackCredential.source)
 } elseif ($EffectiveNoLiveVerify) {
   Write-Step ("production protected live verify disabled for this run; no member bearer token was provided, so only computation-layer Supabase snapshot is verified reason={0}" -f $protectedReadbackCredential.reason)

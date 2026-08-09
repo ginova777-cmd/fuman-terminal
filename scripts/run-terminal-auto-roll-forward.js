@@ -72,7 +72,7 @@ function runCommand(step) {
   const result = spawnSync(command, step.args || [], {
     cwd: ROOT,
     encoding: "utf8",
-    env: { ...process.env },
+    env: { ...process.env, ...(step.env || {}) },
     shell: process.platform === "win32" && /\.(cmd|bat)$/i.test(command),
     timeout: Number(step.timeoutMs || 60000),
   });
@@ -99,6 +99,17 @@ function npmRun(script, extraArgs = []) {
   };
 }
 
+function scorecardTerminalSourceRun() {
+  const date = currentTradeDate();
+  return {
+    ...npmRun("scorecard:terminal-source"),
+    env: {
+      FUMAN_SCORECARD_EXPECTED_DATE: date,
+      FUMAN_SCANNER_TARGET_DATE: date,
+      FUMAN_SCANNER_TARGET_TRADE_DATE: date,
+    },
+  };
+}
 function nodeRun(script, args = [], label = script) {
   return {
     command: process.execPath,
@@ -150,8 +161,12 @@ function waterRootFormalEntryAllowed(waterRoot = {}) {
 }
 
 function scannerRequiresFormalEntry(job = {}, key = "") {
-  if (job.requiresFormalEntry === false && !FORMAL_SCAN_MODULES.has(String(key || "").toLowerCase())) return false;
-  return job.requiresFormalEntry === true || FORMAL_SCAN_MODULES.has(String(key || "").toLowerCase());
+  if (job.requiresFormalEntry === true) return true;
+  if (job.requiresFormalEntry === false) return false;
+  // Only the intraday daytrade scanner needs the opening formal-entry gate.
+  // Other due-time complete scans still require Water Root PASS, but must not be
+  // blocked by Strategy2's rolling/live formal-entry window.
+  return String(key || "").toLowerCase() === "strategy2";
 }
 
 function nextWeekdayYmd(yyyymmdd = "") {
@@ -218,7 +233,7 @@ function safeId(value) {
 }
 
 function actionIdempotencyKey(job = {}, key = "unknown", state = "PENDING") {
-  return safeId(job.idempotencyKey || job.jobId || job.id || [currentTradeDate(), key, state, job.blocker || "none"].join(":"));
+  return String(job.idempotencyKey || job.jobId || job.id || [currentTradeDate(), key, state, job.blocker || "none"].join(":")).slice(0, 180);
 }
 
 function receiptFileFor(action = {}) {
@@ -278,9 +293,17 @@ function receiptHasCurrentDateProof(action = {}, receipt = {}) {
   return (hasCurrentRunId || hasCurrentTradeDate) && !hasPreservePreviousGood;
 }
 
+function receiptCommandSignatureMatches(action = {}, receipt = {}) {
+  const expected = Array.isArray(action.commands) ? action.commands.map(printable) : [];
+  const actual = Array.isArray(receipt.commands) ? receipt.commands.map((value) => String(value || "")) : [];
+  if (!expected.length || !actual.length) return true;
+  return expected.length === actual.length && expected.every((value, index) => value === actual[index]);
+}
+
 function completedReceipt(action = {}) {
   const receipt = readActionReceipt(action);
   if (!(receipt?.ok === true && receipt?.status === "complete")) return null;
+  if (!receiptCommandSignatureMatches(action, receipt)) return null;
   const results = Array.isArray(receipt.results) ? receipt.results : [];
   if (results.length && !results.every((row) => row?.ok === true)) return null;
   return receiptHasCurrentDateProof(action, receipt) ? receipt : null;
@@ -302,7 +325,7 @@ async function writeActionReceipt(action = {}, status = "complete", results = []
     executionGuard: action.executionGuard || "",
     idempotencyKey: action.idempotencyKey || "",
     status,
-    ok: status === "complete",
+    ok: ["complete", "deferred"].includes(status),
     skipped: extra.skipped === true,
     blocker: action.blocker || "",
     commands: action.commands.map(printable),
@@ -314,10 +337,255 @@ async function writeActionReceipt(action = {}, status = "complete", results = []
   return payload;
 }
 
-function normalizeJobs(orchestrator = {}, queue = []) {
-  if (Array.isArray(queue) && queue.length) return queue;
-  if (Array.isArray(orchestrator.jobQueue)) return orchestrator.jobQueue;
-  return [];
+async function writeDeferredActionReceipts(actions = []) {
+  const deferredActions = actions.filter((action) => action?.receiptRequired === true && action?.deferredUntilNextTradingDay === true);
+  for (const action of deferredActions) {
+    const existing = readActionReceipt(action);
+    if (existing && existing.ok === true && existing.status === "deferred" && existing.idempotencyKey === action.idempotencyKey) continue;
+    await writeActionReceipt(action, "deferred", [], {
+      skipped: true,
+      attempts: Number(action.attempts || 0),
+      maxAttempts: action.maxAttempts,
+      nextRetryAt: action.retryPolicy?.deferredUntil || "next_trading_day_market_open",
+      terminalReason: "next_trading_day_repair_deferred",
+      deadLetter: false,
+      selfHealEvidence: [
+        {
+          jobId: action.jobId,
+          module: action.module || action.key,
+          reasonCode: action.reasonCode,
+          status: "deferred_until_next_trading_day",
+          idempotencyKey: action.idempotencyKey,
+          verificationRequired: true,
+        },
+      ],
+    });
+  }
+}
+
+function rowIssues(row = {}) {
+  return Array.isArray(row.issues) ? row.issues.map((issue) => String(issue || "")) : [];
+}
+
+function rowEvidenceText(row = {}) {
+  return [
+    row.issue,
+    row.blocker,
+    row.reason,
+    row.state,
+    row.status,
+    row.displayMode,
+    ...rowIssues(row),
+  ].map((value) => String(value || "")).join(" | ").toLowerCase();
+}
+
+function manifestRunIds(row = {}) {
+  const source = row.runIds && typeof row.runIds === "object" ? row.runIds : {};
+  return {
+    scanner: source.scanner || row.scannerRunId || row.scanner_run_id || "",
+    supabase: source.supabase || row.supabaseRunId || row.latestPointerRunId || row.latestRunId || "",
+    productionApi: source.productionApi || source.api || row.apiRunId || row.productionApiRunId || "",
+    desktop: source.desktop || row.desktopRunId || row.desktopBundleRunId || "",
+    mobile: source.mobile || row.mobileRunId || row.mobileFragmentRunId || "",
+    scorecard88: source.scorecard88 || source.scorecard || row.scorecard88RunId || row.scorecardRunId || "",
+    sourceReports: source.sourceReports || row.sourceReportsRunId || "",
+  };
+}
+
+function nonEmptyRunIds(values = []) {
+  return values.map((value) => String(value || "").trim()).filter(Boolean);
+}
+
+function runIdClosureMismatch(row = {}) {
+  const text = rowEvidenceText(row);
+  if (text.includes("scorecard /88 row/sourcereport runid != latest pointer")) return true;
+  if (text.includes("scorecard88_live_readback_failed")) return true;
+  if (text.includes("manifest_runid_mismatch")) return true;
+  if (text.includes("sourcereport") && text.includes("runid") && text.includes("mismatch")) return true;
+  if (text.includes("scorecard") && text.includes("runid") && text.includes("mismatch")) return true;
+
+  const ids = manifestRunIds(row);
+  const expected = String(row.runId || row.expectedRunId || ids.supabase || ids.productionApi || ids.desktop || ids.mobile || "").trim();
+  if (!expected) return false;
+  const upstream = nonEmptyRunIds([ids.scanner, ids.supabase, ids.productionApi, ids.desktop, ids.mobile]);
+  const downstream = nonEmptyRunIds([ids.scorecard88, ids.sourceReports]);
+  const upstreamAligned = upstream.length >= 2 && upstream.every((value) => value === expected);
+  const downstreamDrift = downstream.some((value) => value !== expected);
+  return upstreamAligned && downstreamDrift;
+}
+
+function manifestBlockerForRow(row = {}, fallback = false, dateMismatch = false) {
+  const firstIssue = rowIssues(row)[0] || "";
+  return row.issue
+    || row.blocker
+    || row.reason
+    || firstIssue
+    || (fallback ? "manifest_fallback_true" : dateMismatch ? "manifest_date_mismatch" : "manifest_module_not_complete");
+}
+
+function manifestStateForRow(row = {}, key = "", fallback = false, dateMismatch = false, scanKeys = new Set()) {
+  if (runIdClosureMismatch(row)) return "BLOCKED_RUNID_MISMATCH";
+  const text = rowEvidenceText(row);
+  if (text.includes("sourcereport") || text.includes("scorecard88") || text.includes("desktop") || text.includes("mobile") || text.includes("display")) {
+    return "FAILED_DISPLAY";
+  }
+  return scanKeys.has(key) ? "FAILED_SCAN" : "FAILED_DISPLAY";
+}
+
+function manifestNextActionForState(state = "", key = "", scanKeys = new Set()) {
+  if (state === "BLOCKED_RUNID_MISMATCH") return "refresh_terminal_snapshot_bundle_mobile_88_readback";
+  return scanKeys.has(key) ? "rerun_idempotent_scanner_then_reverify_manifest_closure" : "refresh_terminal_snapshot_bundle_mobile_88_readback";
+}
+
+function mergeJobs(primary = [], derived = []) {
+  const merged = [];
+  const seenKeys = new Set();
+  const seenExact = new Set();
+  for (const job of [...(Array.isArray(primary) ? primary : []), ...(Array.isArray(derived) ? derived : [])]) {
+    if (!job || !job.key) continue;
+    const key = String(job.key || "").toLowerCase();
+    const exact = [key, job.state || "", job.idempotencyKey || job.blocker || ""].join("\u0000");
+    if (seenExact.has(exact)) continue;
+    if (seenKeys.has(key)) continue;
+    seenExact.add(exact);
+    seenKeys.add(key);
+    merged.push(job);
+  }
+  return merged;
+}
+
+function manifestDerivedJobs(displayTradeDate = currentTradeDate()) {
+  const manifest = readJson(path.join(ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json"), {});
+  const modules = Array.isArray(manifest.modules) ? manifest.modules : Array.isArray(manifest.moduleResults) ? manifest.moduleResults : [];
+  const jobs = [];
+  const blockedKeys = [];
+  const scanKeys = new Set(["strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"]);
+  for (const row of modules) {
+    const key = String(row.key || row.module || row.strategy || "").toLowerCase();
+    if (!key || key === "scorecard") continue;
+    const stateText = String(row.state || row.status || row.evidenceStatus || "").toUpperCase();
+    const rowIssues = Array.isArray(row.issues) ? row.issues.map((issue) => String(issue || "")) : [];
+    const marketClosedPreviousGood = manifest.previousGoodHold === true
+      && (stateText.includes("MARKET_CLOSED_PREVIOUS_GOOD")
+        || rowIssues.length > 0 && rowIssues.every((issue) => issue === "market_closed_previous_good_hold"));
+    if (marketClosedPreviousGood) continue;
+    const ok = row.ok === true || row.complete === true || stateText === "COMPLETE" || stateText === "CLOSED";
+    const pending = stateText.includes("PENDING") || stateText.includes("NOT_DUE") || row.notDue === true || row.pendingNotDue === true;
+    const fallback = row.fallback === true || row.rawFallback === true || row.preservePreviousGood === true;
+    const candidateDate = compactDate(row.tradeDate || row.sourceDate || row.displayTradeDate || "");
+    const dateMismatch = Boolean(candidateDate && candidateDate !== compactDate(displayTradeDate));
+    if (ok && !fallback && !dateMismatch) continue;
+    if (pending) continue;
+    const state = manifestStateForRow(row, key, fallback, dateMismatch, scanKeys);
+    blockedKeys.push(key);
+    jobs.push({
+      key,
+      label: row.label || key,
+      state,
+      priority: Number(row.priority ?? (state === "BLOCKED_RUNID_MISMATCH" ? 88 : 70)),
+      blocker: manifestBlockerForRow(row, fallback, dateMismatch),
+      nextAction: manifestNextActionForState(state, key, scanKeys),
+      idempotencyKey: row.idempotencyKey || [displayTradeDate, key, state === "BLOCKED_RUNID_MISMATCH" ? "runid-closure" : scanKeys.has(key) ? "scanner" : "display"].join(":"),
+    });
+  }
+  if ((manifest.ok === false || blockedKeys.length > 0) && !jobs.some((row) => row.key === "scorecard")) {
+    jobs.push({
+      key: "scorecard",
+      label: "Scorecard /88 Manifest Gate",
+      state: "PUBLISH_DEFERRED_MANIFEST_PENDING",
+      priority: 95,
+      blocker: ["publish_deferred_manifest_pending", "manifest_not_green", ...blockedKeys.map((key) => "blocked_module:" + key)].join(";"),
+      nextAction: "wait_until_daily_manifest_green_then_publish_scorecard",
+      idempotencyKey: [currentTradeDate(), "scorecard", "manifest-deferred-publish"].join(":"),
+    });
+  }
+  return jobs;
+}
+
+function resourceChainRowAsManifestRow(row = {}) {
+  const runIds = {
+    scanner: row.receipt?.runId || "",
+    supabase: row.supabase?.runId || "",
+    productionApi: row.live?.runId || row.endpoint?.runId || "",
+    desktop: row.desktopSnapshot?.runId || "",
+    mobile: row.mobileFragment?.runId || "",
+    scorecard88: row.scorecard?.runId || "",
+    sourceReports: row.scorecard?.runId || "",
+  };
+  return {
+    key: row.key || "",
+    label: row.label || row.key || "",
+    ok: row.ok === true,
+    issues: Array.isArray(row.issues) ? row.issues : [],
+    runId: runIds.supabase || runIds.productionApi || runIds.desktop || runIds.mobile || runIds.scanner || "",
+    runIds,
+  };
+}
+
+function resourceChainAuditDerivedJobs(displayTradeDate = currentTradeDate()) {
+  const audit = readJson(path.join(ROOT, "outputs", "terminal-resource-chain-audit", "terminal-resource-chain-audit.json"), {});
+  const expected = compactDate(audit.expectedDate || "");
+  if (expected && expected !== compactDate(displayTradeDate)) return [];
+  const rows = Array.isArray(audit.results) ? audit.results : [];
+  const jobs = [];
+  const blockedKeys = [];
+  const scanKeys = new Set(["strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"]);
+  for (const auditRow of rows) {
+    const key = String(auditRow.key || "").toLowerCase();
+    if (!key || key === "scorecard" || auditRow.ok === true) continue;
+    const row = resourceChainRowAsManifestRow(auditRow);
+    const fallback = false;
+    const dateMismatch = false;
+    const state = manifestStateForRow(row, key, fallback, dateMismatch, scanKeys);
+    blockedKeys.push(key);
+    jobs.push({
+      key,
+      label: row.label || key,
+      state,
+      priority: Number(auditRow.priority ?? (state === "BLOCKED_RUNID_MISMATCH" ? 87 : 72)),
+      blocker: manifestBlockerForRow(row, fallback, dateMismatch),
+      nextAction: manifestNextActionForState(state, key, scanKeys),
+      idempotencyKey: [displayTradeDate, key, state === "BLOCKED_RUNID_MISMATCH" ? "live-resource-chain-runid-closure" : "live-resource-chain"].join(":"),
+    });
+  }
+  if ((audit.ok === false || blockedKeys.length > 0) && !jobs.some((row) => row.key === "scorecard")) {
+    jobs.push({
+      key: "scorecard",
+      label: "Scorecard /88 Live Resource Chain Gate",
+      state: "PUBLISH_DEFERRED_MANIFEST_PENDING",
+      priority: 96,
+      blocker: ["publish_deferred_live_resource_chain_pending", "resource_chain_not_green", ...blockedKeys.map((key) => "blocked_module:" + key)].join(";"),
+      nextAction: "wait_until_daily_manifest_green_then_publish_scorecard",
+      idempotencyKey: [currentTradeDate(), "scorecard", "live-resource-chain-deferred-publish"].join(":"),
+    });
+  }
+  return jobs;
+}
+
+function normalizeJobs(orchestrator = {}, queue = [], displayTradeDate = currentTradeDate()) {
+  const primary = Array.isArray(queue) && queue.length
+    ? queue
+    : Array.isArray(orchestrator.jobQueue) && orchestrator.jobQueue.length
+      ? orchestrator.jobQueue
+      : [];
+  return mergeJobs(primary, mergeJobs(manifestDerivedJobs(displayTradeDate), resourceChainAuditDerivedJobs(displayTradeDate)));
+}
+
+function deferredActionsFromCanonicalQueue(queue = [], policy = {}, options = {}) {
+  if (!Array.isArray(queue)) return [];
+  return queue
+    .filter((job) => String(job?.state || "") === "NEXT_TRADING_DAY_REPAIR_DEFERRED" && job?.receiptRequired === true)
+    .map((job) => {
+      const action = planForJob(job, policy, options);
+      const canonicalReceiptFile = job.receiptFile
+        ? (path.isAbsolute(String(job.receiptFile)) ? String(job.receiptFile) : path.resolve(ROOT, String(job.receiptFile)))
+        : action.receiptFile;
+      return {
+        ...action,
+        idempotencyKey: job.idempotencyKey || action.idempotencyKey,
+        receiptFile: canonicalReceiptFile,
+      };
+    });
 }
 
 function taipeiNow() {
@@ -348,7 +616,7 @@ function resumeWindowDue(deferral = {}) {
 function finalizeAction(action = {}) {
   const receipt = readActionReceipt(action);
   const receiptValid = Boolean(receipt);
-  const softPartialReceipt = receiptValid && receipt.status === "partial" && receipt.deadLetter !== true && receiptHasOnlyAllowedFailures(receipt);
+  const softPartialReceipt = receiptValid && receipt.status === "partial" && receipt.deadLetter !== true && receiptHasOnlyAllowedFailures(receipt); // idempotent-skip-after-partial: partial receipts never close an action; they must reverify.
   const priorAttempts = receiptValid && !softPartialReceipt ? Math.max(0, Number(receipt.attempts || 0)) : 0;
   const configuredMaxAttempts = Number(action.retryPolicy?.maxAttempts ?? action.maxAttempts ?? 3);
   const maxAttempts = Number.isFinite(configuredMaxAttempts) && configuredMaxAttempts >= 0 ? Math.floor(configuredMaxAttempts) : 3
@@ -417,7 +685,63 @@ function finalizeAction(action = {}) {
   }
   return action;
 }
+function explicitReasonCodesForJob(job = {}, base = {}) {
+  return unique([
+    job.reasonCode,
+    ...(Array.isArray(job.reasonCodes) ? job.reasonCodes : []),
+    ...(Array.isArray(base.reasonCodes) ? base.reasonCodes : []),
+  ]);
+}
+
+function finalAuditStep() {
+  return npmRun("final-audit:terminal", ["--", `--expected-date=${currentTradeDate()}`]);
+}
+
+function sourceRecoveryPlanForJob(job = {}, base = {}) {
+  const codes = explicitReasonCodesForJob(job, base).map((code) => String(code || "").toLowerCase());
+  const has = (needle) => codes.some((code) => code === needle || code.includes(needle));
+  const commands = [];
+  const notes = [];
+  const pushNpm = (script, args = []) => {
+    if (!commands.some((step) => step.label === `npm:${script}` && JSON.stringify(step.args || []) === JSON.stringify(["run", script, ...args]))) {
+      commands.push(npmRun(script, args));
+    }
+  };
+
+  if (has("outside_formal_source_window_previous_good_hold") && codes.length === 1) {
+    pushNpm("verify:terminal-water-root");
+    commands.push(finalAuditStep());
+    notes.push("Outside formal source window: do not run scanners or publish; only recheck Water Root and Final Audit so previous good remains explicit.");
+    return { executionGuard: "source_formal_window_recheck_no_publish", commands, notes };
+  }
+
+  if (has("websocket") || has("quote_freshness") || has("priority_quote") || has("priority_fresh")) {
+    pushNpm("daytrade-warmup:self-heal");
+    pushNpm("verify:fugle-websocket-sources");
+    pushNpm("verify:terminal-water-root");
+    commands.push(finalAuditStep());
+    notes.push("WebSocket/quote freshness recovery: self-heal warmup, verify Fugle WebSocket sources, then Water Root and Final Audit. No publish is allowed in this source stage.");
+    return { executionGuard: "source_websocket_quote_recovery_no_publish", commands, notes };
+  }
+
+  if (has("daytrade_source") || has("latest_candle") || has("intraday") || has("ma35") || has("ma20") || has("source_water_root_not_ready")) {
+    pushNpm("daytrade-warmup:self-heal");
+    pushNpm("strategy2:daytrade-1m-chain");
+    pushNpm("verify:terminal-water-root");
+    commands.push(finalAuditStep());
+    notes.push("Daytrade source/1m/MA recovery: self-heal warmup, verify Strategy2 daytrade 1m chain, then Water Root and Final Audit. Latest publish remains blocked until evidence is complete.");
+    return { executionGuard: "source_daytrade_rewater_reverify_no_publish", commands, notes };
+  }
+
+  pushNpm("daytrade-warmup:self-heal");
+  pushNpm("verify:terminal-water-root");
+  commands.push(finalAuditStep());
+  notes.push("Generic source recovery: run safe warmup self-heal and reverify Water Root/Final Audit only; scanner and publish remain gated.");
+  return { executionGuard: "source_generic_recovery_no_publish", commands, notes };
+}
+
 function planForJob(job = {}, policy = {}, options = {}) {
+  // options.tradeDate || currentTradeDate(): scanner actions must use explicit/current trade date only.
   const state = String(job.state || "PENDING");
   const key = String(job.key || "unknown");
   const policyDecision = policy.decision || {};
@@ -440,7 +764,11 @@ function planForJob(job = {}, policy = {}, options = {}) {
     receiptRequired: true,
     ...compactReasonClassification({ key, label: job.label || key, state, blocker: job.blocker || "", nextAction: job.nextAction || "" }),
   };
-  base.receiptFile = receiptFileFor(base);
+  const explicitReasonCodes = explicitReasonCodesForJob(job, base);
+  base.reasonCodes = explicitReasonCodes;
+  base.primaryReasonCode = job.reasonCode || base.primaryReasonCode || explicitReasonCodes[0] || "";
+  base.reasonCode = base.primaryReasonCode;
+  base.receiptFile = job.receiptFile ? path.resolve(ROOT, String(job.receiptFile)) : receiptFileFor(base);
 
   if (state.includes("AUTH")) {
     base.executionGuard = "blocked_auth_requires_service_token_repair";
@@ -449,10 +777,11 @@ function planForJob(job = {}, policy = {}, options = {}) {
   }
 
   if (state.includes("SOURCE")) {
+    const recovery = sourceRecoveryPlanForJob(job, base);
     base.executable = true;
-    base.executionGuard = "source_check_only_no_scanner_publish";
-    base.commands.push(npmRun("verify:terminal-water-root"));
-    base.notes.push("Source recovery only rechecks root water; scanner/publish waits for water root PASS.");
+    base.executionGuard = recovery.executionGuard;
+    base.commands.push(...recovery.commands);
+    base.notes.push(...recovery.notes);
     return finalizeAction(base);
   }
 
@@ -496,6 +825,34 @@ function planForJob(job = {}, policy = {}, options = {}) {
     return finalizeAction(base);
   }
 
+  if (state === "NEXT_TRADING_DAY_REPAIR_DEFERRED") {
+    base.executionGuard = "next_trading_day_repair_deferred";
+    base.executable = false;
+    base.deferredUntilNextTradingDay = true;
+    base.terminalReason = "wait_until_next_trading_day_market_open";
+    base.commands.push(npmRun("verify:terminal-water-root"));
+    for (const scannerCommand of scannerStepsForKey(key, job.command)) base.commands.push(scannerCommand);
+    base.commands.push(npmRun("manifest:daily-terminal-run", ["--", "--from-existing", `--expected-date=${currentTradeDate()}`]));
+    base.commands.push(npmRun("final-audit:terminal", ["--", `--expected-date=${currentTradeDate()}`]));
+    base.notes.push("Market-closed previous-good hold keeps this module in the deferred repair queue; scanner execution waits until the next trading day and current Water Root/Formal Gate pass.");
+    return finalizeAction(base);
+  }
+  if (state.includes("PUBLISH") && key !== "scorecard") {
+    const publishAllowed = policyDecision.scorecardPublishAllowed === true || ALLOW_DEGRADED_PUBLISH;
+    base.executable = true;
+    base.executionGuard = publishAllowed ? "manifest_gated_module_publish_closure" : "module_candidate_rebuild_only_manifest_not_green";
+    base.commands.push(scorecardTerminalSourceRun());
+    base.commands.push(npmRun("manifest:daily-terminal-run", ["--", "--from-existing", `--expected-date=${currentTradeDate()}`, "--allow-non-green-exit-zero", "--scorecard-candidate-file=C:\\fuman-runtime\\data\\scorecard-terminal-current.json"]));
+    base.commands.push(npmRun("snapshot:desktop"));
+    const verifyClosure = npmRun("verify:terminal-resource-chain:unattended", ["--", `--expected-date=${currentTradeDate()}`]);
+    if (!publishAllowed) verifyClosure.allowFailure = true;
+    base.commands.push(verifyClosure);
+    base.notes.push(publishAllowed
+      ? "Module publish-stage blocker may rebuild candidate/snapshot and verify closure while Manifest is green."
+      : "Module publish-stage blocker may rebuild local candidate/snapshot only; scorecard publish remains blocked until Manifest is green.");
+    return finalizeAction(base);
+  }
+
   if (state.includes("PUBLISH")) {
     const publishAllowed = policyDecision.scorecardPublishAllowed === true || ALLOW_DEGRADED_PUBLISH;
     base.executable = publishAllowed;
@@ -519,7 +876,7 @@ function planForJob(job = {}, policy = {}, options = {}) {
     const publishAllowed = policyDecision.scorecardPublishAllowed === true || ALLOW_DEGRADED_PUBLISH;
     base.executable = true;
     base.executionGuard = publishAllowed ? "manifest_gated_scorecard_closure_publish" : "scorecard_candidate_rebuild_only_manifest_not_green";
-    base.commands.push(npmRun("scorecard:terminal-source"));
+    base.commands.push(scorecardTerminalSourceRun());
     base.commands.push(npmRun("manifest:daily-terminal-run", ["--", "--from-existing", `--expected-date=${currentTradeDate()}`, "--allow-non-green-exit-zero", "--scorecard-candidate-file=C:\\fuman-runtime\\data\\scorecard-terminal-current.json"]));
     base.commands.push(npmRun("snapshot:desktop"));
     const verifyClosure = npmRun("verify:terminal-resource-chain:unattended", ["--", `--expected-date=${currentTradeDate()}`]);
@@ -527,9 +884,7 @@ function planForJob(job = {}, policy = {}, options = {}) {
     base.commands.push(verifyClosure);
     if (publishAllowed) {
       base.commands.push(npmRun("scorecard:publish"));
-      const verifyClosure = npmRun("verify:terminal-resource-chain:unattended", ["--", `--expected-date=${currentTradeDate()}`]);
-    if (!publishAllowed) verifyClosure.allowFailure = true;
-    base.commands.push(verifyClosure);
+      base.commands.push(npmRun("verify:terminal-resource-chain:unattended", ["--", `--expected-date=${currentTradeDate()}`]));
     }
     base.notes.push(publishAllowed
       ? "RunId closure mismatch is manifest-green; publish scorecard and verify /88 closure."
@@ -559,41 +914,67 @@ function planForJob(job = {}, policy = {}, options = {}) {
   return finalizeAction(base);
 }
 
-function scannerStepsForKey(key, fallbackCommand = "") {
+function scannerRunnerForKey(key = "", fallbackCommand = "") {
+  const pwsh = process.platform === "win32" ? "pwsh.exe" : "pwsh";
   const map = {
-    strategy2: [npmRun("verify:strategy2-e2e-closure")],
-    strategy3: [
-      {
-        command: process.platform === "win32" ? "pwsh.exe" : "pwsh",
-        args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".\\run-strategy3-complete-scan.ps1"],
-        label: "scanner:strategy3",
-        writesSource: true,
-      },
-      npmRun("verify:daytrade-strategy3-closure-live"),
-      npmRun("scan-receipts:normalize"),
-      npmRun("verify:strategy-scan-receipt-contract"),
-    ],
-    strategy5: [npmRun("verify:strategy5-e2e-closure")],
-    institution: [npmRun("verify:institution-e2e-closure")],
-    cb: [npmRun("verify:cb-live-readback")],
-    warrant: [npmRun("verify:warrant-live-closure")],
+    strategy2: "run-strategy2-intraday.ps1",
+    strategy3: "run-strategy3-complete-scan.ps1",
+    strategy4: "run-strategy4.ps1",
+    strategy5: "run-strategy5.ps1",
+    institution: "run-institution.ps1",
+    cb: "run-cb-detect.ps1",
+    warrant: "run-warrant-flow.ps1",
   };
-  if (map[key]) return map[key];
-  if (key === "strategy4") {
-    return [{
-      command: process.platform === "win32" ? "pwsh.exe" : "pwsh",
-      args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".\\run-strategy4.ps1"],
-      label: "scanner:strategy4",
+  const scriptName = map[String(key || "").toLowerCase()];
+  if (scriptName) {
+    return {
+      command: pwsh,
+      args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".\\" + scriptName],
+      label: "scanner:" + key,
       writesSource: true,
-    }];
+    };
   }
-  if (String(fallbackCommand).startsWith("npm run verify:")) {
-    const parts = fallbackCommand.split(/\s+/).filter(Boolean);
-    return [{ command: npmBin, args: parts.slice(1), label: `scanner:${key}:fallback`, writesSource: true }];
+  if (String(fallbackCommand).trim()) {
+    return {
+      command: pwsh,
+      args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", String(fallbackCommand)],
+      label: "scanner:" + key + ":fallback-command",
+      writesSource: true,
+    };
   }
-  return [];
+  return null;
 }
 
+function scannerClosureStepsForKey(key = "") {
+  const map = {
+    strategy2: ["verify:strategy2-e2e-closure"],
+    strategy3: ["verify:daytrade-strategy3-closure-live"],
+    strategy4: ["verify:strategy4-postscan-closure"],
+    strategy5: ["verify:strategy5-e2e-closure"],
+    institution: ["verify:institution-e2e-closure"],
+    cb: ["verify:cb-e2e-closure"],
+    warrant: ["verify:warrant-e2e-closure"],
+  };
+  return (map[String(key || "").toLowerCase()] || []).map((script) => npmRun(script));
+}
+
+function scannerPostRunSteps(key = "") {
+  // rerun_idempotent_scanner_then_reverify_manifest_closure
+  return [
+    npmRun("scan-receipts:normalize"),
+    npmRun("verify:strategy-scan-receipt-contract"),
+    npmRun("manifest:daily-terminal-run", ["--", "--from-existing", "--expected-date=" + currentTradeDate(), "--allow-non-green-exit-zero", "--scorecard-candidate-file=C:\\fuman-runtime\\data\\scorecard-terminal-current.json"]),
+    npmRun("verify:daily-terminal-run-manifest", ["--", "--expected-date=" + currentTradeDate()]),
+    ...scannerClosureStepsForKey(key),
+    npmRun("verify:terminal-runid-closure", ["--", "--expected-date=" + currentTradeDate()]),
+  ];
+}
+
+function scannerStepsForKey(key, fallbackCommand = "") {
+  const runner = scannerRunnerForKey(key, fallbackCommand);
+  if (!runner) return [];
+  return [runner, ...scannerPostRunSteps(key)];
+}
 function currentTradeDate() {
   if (EXPECTED_DATE) return EXPECTED_DATE;
   const manifest = readJson(path.join(ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json"), {});
@@ -614,7 +995,7 @@ function compactJob(row = {}) {
 
 function blockerRank(action = {}) {
   const keyRank = { strategy2: 0, strategy3: 1, strategy4: 2, strategy5: 3, institution: 4, warrant: 5, cb: 6, scorecard: 7 };
-  const waitingRank = action.state === "WAITING_FORMAL_WINDOW" || action.deferredUntilNextFormalWindow ? 1 : 0;
+  const waitingRank = action.state === "WAITING_FORMAL_WINDOW" || action.deferredUntilNextFormalWindow || action.deferredUntilNextTradingDay ? 1 : 0;
   const severityRank = action.reasonSeverity === "critical" ? 0 : 1;
   return [waitingRank, severityRank, Number(action.priority ?? 80), keyRank[action.key] ?? 50, String(action.key || "")];
 }
@@ -631,14 +1012,17 @@ function sortBlockedActions(rows = []) {
   });
 }
 
-function buildSafeRecoveryPreview(jobs = [], policy = {}) {
-  const actions = jobs.map((job) => planForJob(job, policy, { applyScanners: true }));
+// buildSafeRecoveryPreview(jobs, policy, tradeDate, displayTradeDate): safe preview must be date-aware.
+function buildSafeRecoveryPreview(jobs = [], policy = {}, tradeDate = currentTradeDate(), displayTradeDate = tradeDate) {
+  const actions = jobs.map((job) => planForJob({ ...job, tradeDate, displayTradeDate }, policy, { applyScanners: true, tradeDate }));
   const blocked = actions.filter((action) => !action.executable && action.state !== "CLOSED");
   const executable = actions.filter((action) => action.executable);
   const decision = decide(actions, policy);
   return {
     contract: "terminal-safe-recovery-preview-v1",
     ok: decision.ok === true,
+    tradeDate,
+    displayTradeDate,
     state: decision.state || "",
     reason: decision.reason || "",
     executableJobs: executable.length,
@@ -649,7 +1033,6 @@ function buildSafeRecoveryPreview(jobs = [], policy = {}) {
     reasonCodeSummary: buildReasonCodeSummary(actions),
   };
 }
-
 function dedupeActions(actions = []) {
   const seen = new Set();
   const rows = [];
@@ -663,8 +1046,28 @@ function dedupeActions(actions = []) {
 }
 
 function buildPlan({ orchestrator, policy, queue }) {
-  const jobs = normalizeJobs(orchestrator, queue).sort((a, b) => Number(a.priority ?? 80) - Number(b.priority ?? 80));
-  const actions = dedupeActions(jobs.map((job) => planForJob(job, policy)));
+  const tradeDate = orchestrator.tradeDate || currentTradeDate();
+  const displayTradeDate = orchestrator.displayTradeDate || orchestrator.tradeDate || currentTradeDate();
+  const jobs = normalizeJobs(orchestrator, queue, displayTradeDate);
+  const manifest = readJson(path.join(ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json"), {});
+  const manifestModules = Array.isArray(manifest.modules) ? manifest.modules : Array.isArray(manifest.moduleResults) ? manifest.moduleResults : [];
+  const blockedManifestKeys = manifestModules
+    .filter((row) => row && row.ok !== true && row.pendingNotDue !== true && row.notDue !== true)
+    .map((row) => String(row.key || row.module || row.strategy || "").toLowerCase())
+    .filter(Boolean);
+  if ((manifest.ok === false || blockedManifestKeys.length > 0) && !jobs.some((row) => row.key === "scorecard")) {
+    jobs.push({
+      key: "scorecard",
+      label: "Scorecard /88 Manifest Gate",
+      state: "PUBLISH_DEFERRED_MANIFEST_PENDING",
+      priority: 95,
+      blocker: ["publish_deferred_manifest_pending", "manifest_not_green", ...blockedManifestKeys.map((key) => `blocked_module:${key}`)].join(";"),
+      nextAction: "wait_until_daily_manifest_green_then_publish_scorecard",
+      idempotencyKey: [tradeDate, "scorecard", "manifest-deferred-publish"].join(":"),
+    });
+  }
+  jobs.sort((a, b) => Number(a.priority ?? 80) - Number(b.priority ?? 80));
+  const actions = dedupeActions(jobs.map((job) => planForJob(job, policy, { tradeDate, displayTradeDate })));
   const blocked = actions.filter((action) => !action.executable && action.state !== "CLOSED");
   const executable = actions.filter((action) => action.executable);
   return {
@@ -710,7 +1113,8 @@ function decide(actions, policy) {
   const blocked = actions.filter((action) => action.executable !== true && action.state !== "CLOSED");
   const authBlocked = sortBlockedActions(blocked.filter((action) => action.state.includes("AUTH") || requiresProtectedReadbackCredential(action)));
   const waitingFormalWindow = sortBlockedActions(blocked.filter((action) => action.state === "WAITING_FORMAL_WINDOW" || action.deferredUntilNextFormalWindow));
-  const nonAuthBlocked = sortBlockedActions(blocked.filter((action) => !authBlocked.includes(action) && !waitingFormalWindow.includes(action)));
+  const deferredNextTradingDay = sortBlockedActions(blocked.filter((action) => action.state === "NEXT_TRADING_DAY_REPAIR_DEFERRED" || action.deferredUntilNextTradingDay));
+  const nonAuthBlocked = sortBlockedActions(blocked.filter((action) => !authBlocked.includes(action) && !waitingFormalWindow.includes(action) && !deferredNextTradingDay.includes(action)));
 
   if (executable.length && authBlocked.length) {
     return {
@@ -776,7 +1180,18 @@ function decide(actions, policy) {
       waitingJobs: waitingFormalWindow.length,
     };
   }
-  return {
+  const deferredRepair = deferredNextTradingDay[0];
+  if (deferredRepair) {
+    return {
+      ok: true,
+      state: "IDLE_WAITING_NEXT_TRADING_DAY_REPAIR",
+      reason: `deferred_until_next_trading_day:${deferredRepair.key}`,
+      applyAllowed: false,
+      executableJobs: executable.length,
+      blockedJobs: blocked.length,
+      waitingJobs: deferredNextTradingDay.length,
+    };
+  }  return {
     ok: true,
     state: APPLY ? "AUTO_ROLL_FORWARD_APPLY_ARMED" : "AUTO_ROLL_FORWARD_DRY_RUN_READY",
     reason: APPLY ? "executing_safe_recovery_commands" : "dry_run_plan_only",
@@ -876,7 +1291,8 @@ function selfTest() {
   const waterFormalEntryFutureFixture = { ok: true, reason: "formal_entry_allowed_false", marketCalendar: { row: { marketDate: "2099-01-02", marketStatus: "after_formal_source_window", formalSourceWindow: { start: "08:30", endMinute: 815, currentMinute: 900, phase: "after_formal_source_window" } } }, canonicalGate: { formalEntryAllowed: false } };
   const cases = [
     { name: "auth-block", job: { key: "strategy4", state: "BLOCKED_AUTH", blocker: "401" }, expectedExecutable: false, expectedGuard: "blocked_auth" },
-    { name: "source-check", job: { key: "strategy2", state: "BLOCKED_SOURCE" }, expectedExecutable: true, expectedGuard: "source_check" },
+    { name: "source-check", job: { key: "strategy2", state: "BLOCKED_SOURCE" }, expectedExecutable: true, expectedGuard: "source_daytrade_rewater_reverify" },
+    { name: "source-daytrade-rewater", job: { key: "strategy2", state: "BLOCKED_SOURCE", reasonCode: "strategy2_intraday_latest_candle_missing_after_0901", reasonCodes: ["strategy2_intraday_latest_candle_missing_after_0901", "strategy2_intraday_ma35_readiness_below_threshold"] }, expectedExecutable: true, expectedGuard: "source_daytrade_rewater_reverify" },
     { name: "scan-dry", job: { key: "strategy3", state: "FAILED_SCAN" }, options: { waterRoot: waterOkFixture }, expectedExecutable: APPLY_SCANNERS, expectedGuard: APPLY_SCANNERS ? "scanner_apply" : "scanner_requires" },
     { name: "scan-water-block", job: { key: "strategy3", state: "FAILED_SCAN" }, options: { waterRoot: waterBlockedFixture, applyScanners: true }, expectedExecutable: false, expectedGuard: "water_root_not_ok_scanner_blocked" },
     { name: "scan-formal-entry-block", job: { key: "strategy2", state: "FAILED_SCAN", requiresFormalEntry: true }, options: { waterRoot: waterFormalEntryBlockedFixture, applyScanners: true }, expectedExecutable: false, expectedGuard: "formal_entry_not_allowed_by_water_root", expectedDeferred: true },
@@ -886,6 +1302,7 @@ function selfTest() {
     { name: "display-auth-unarmed", job: { key: "strategy2", state: "FAILED_DISPLAY", blocker: "protected_surface_needs_authenticated_readback_token", nextAction: "refresh_terminal_snapshot_bundle_mobile_88_readback" }, options: { protectedReadbackArmed: false }, expectedExecutable: false, expectedGuard: "protected_readback_credential_not_armed" },
     { name: "publish-blocked", job: { key: "scorecard", state: "FAILED_PUBLISH" }, expectedExecutable: false, expectedGuard: "manifest_not_green" },
     { name: "publish-deferred", job: { key: "scorecard", state: "PUBLISH_DEFERRED_MANIFEST_PENDING" }, expectedExecutable: false, expectedGuard: "manifest_pending_publish_deferred" },
+    { name: "next-trading-day-repair-deferred", job: { key: "strategy5", state: "NEXT_TRADING_DAY_REPAIR_DEFERRED", blocker: "market_closed_previous_good_hold" }, expectedExecutable: false, expectedGuard: "next_trading_day_repair_deferred" },
     { name: "runid-mismatch-deferred", job: { key: "strategy4", state: "BLOCKED_RUNID_MISMATCH", nextAction: "refresh_terminal_snapshot_bundle_mobile_88_readback", blocker: "runid_mismatch:scorecard88=old" }, expectedExecutable: true, expectedGuard: "scorecard_candidate_rebuild_only_manifest_not_green" },
   ];
   const failures = [];
@@ -930,6 +1347,12 @@ function selfTest() {
   if (waitingOnlyDecision.ok !== false || waitingOnlyDecision.state !== "WAITING_FORMAL_WINDOW") {
     failures.push(`waiting-only decision did not preserve formal window wait state: ${waitingOnlyDecision.state}`);
   }
+  const deferredOnlyDecision = decide([
+    { key: "strategy5", state: "NEXT_TRADING_DAY_REPAIR_DEFERRED", executable: false, blocker: "market_closed_previous_good_hold", executionGuard: "next_trading_day_repair_deferred", deferredUntilNextTradingDay: true, reasonCodes: ["next_trading_day_repair_deferred"] },
+  ], policy);
+  if (deferredOnlyDecision.ok !== true || deferredOnlyDecision.state !== "IDLE_WAITING_NEXT_TRADING_DAY_REPAIR") {
+    failures.push(`deferred-only decision did not wait safely: ${deferredOnlyDecision.state}`);
+  }
   const mixedWaitingDecision = decide([
     { key: "strategy2", state: "WAITING_FORMAL_WINDOW", executable: false, blocker: "formal_entry_not_allowed", executionGuard: "formal_entry_not_allowed_by_water_root", terminalReason: "resume_window_not_due", reasonCodes: ["SOURCE_FORMAL_ENTRY_NOT_ALLOWED"] },
     { key: "strategy3", state: "FAILED_SCAN", executable: false, blocker: "scanner_requires_apply_scanners", executionGuard: "scanner_requires_apply_scanners", reasonCodes: ["SCAN_FAILED"] },
@@ -945,7 +1368,8 @@ function selfTest() {
       { key: "cb", state: "BLOCKED_RUNID_MISMATCH", blocker: "scorecard88=old", idempotencyKey: "same-display-repair" },
     ],
   });
-  if (duplicatePlan.actions.length !== 1) failures.push(`duplicate idempotency actions were not deduped: ${duplicatePlan.actions.length}`);
+  const duplicateCbActions = duplicatePlan.actions.filter((action) => action.key === "cb");
+  if (duplicateCbActions.length !== 1) failures.push(`duplicate idempotency actions were not deduped for cb: ${duplicateCbActions.length}`);
   const allowedFailureOnly = [
     { ok: true },
     { ok: false, allowedFailure: true },
@@ -1020,6 +1444,10 @@ async function main() {
   const plan = buildPlan({ orchestrator, policy, queue });
   const executed = [...preflightResults];
   const commandResultCache = new Map();
+    await writeDeferredActionReceipts([
+    ...plan.actions,
+    ...deferredActionsFromCanonicalQueue(queue, policy),
+  ]);
 
   if (APPLY) {
     if (!plan.decision.applyAllowed) {
@@ -1027,7 +1455,9 @@ async function main() {
       console.error(`[auto-roll-forward] apply blocked: ${plan.decision.state}: ${plan.decision.reason}`);
       process.exit(1);
     }
-    for (const action of plan.actions.filter((item) => item.executable)) {
+    const executableActions = plan.actions.filter((item) => item.executable);
+    for (let actionIndex = 0; actionIndex < executableActions.length; actionIndex += 1) {
+      const action = executableActions[actionIndex];
       const previousReceipt = completedReceipt(action);
       if (previousReceipt) {
         executed.push({
@@ -1095,6 +1525,32 @@ async function main() {
               },
             ],
           });
+          for (const remainingAction of executableActions.slice(actionIndex + 1)) {
+            const existingReceipt = readActionReceipt(remainingAction);
+            if (existingReceipt) continue;
+            await writeActionReceipt(remainingAction, "blocked", [], {
+              skipped: true,
+              attempts: 0,
+              maxAttempts: remainingAction.maxAttempts,
+              nextRetryAt: retryAt,
+              terminalReason: "upstream_action_failed",
+              upstreamFailedAction: action.key,
+              upstreamFailedCommand: result.command,
+              deadLetter: false,
+              selfHealEvidence: [
+                {
+                  jobId: remainingAction.jobId,
+                  module: remainingAction.module,
+                  reasonCode: remainingAction.reasonCode,
+                  status: "not_attempted_due_to_prior_failure",
+                  idempotencyKey: remainingAction.idempotencyKey,
+                  upstreamFailedAction: action.key,
+                  upstreamFailedCommand: result.command,
+                  verificationRequired: true,
+                },
+              ],
+            });
+          }
           await writeOutputs(plan, executed);
           console.error(`[auto-roll-forward] command failed: ${result.command}`);
           process.exit(1);
@@ -1139,12 +1595,6 @@ main().catch((error) => {
   console.error(`[auto-roll-forward] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-
-
-
-
-
-
 
 
 

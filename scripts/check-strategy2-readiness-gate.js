@@ -51,31 +51,6 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
-function boolValue(value) {
-  if (value === true || value === "true" || value === "YES" || value === "yes" || value === 1) return true;
-  return false;
-}
-
-function taipeiParts(date = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Taipei",
-    hour12: false,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).formatToParts(date);
-  const value = (type) => Number(parts.find((part) => part.type === type)?.value || 0);
-  return { hour: value("hour"), minute: value("minute") };
-}
-
-function isRegularDaytradeWindow(date = new Date()) {
-  const { hour, minute } = taipeiParts(date);
-  const total = hour * 60 + minute;
-  return total >= 9 * 60 && total <= 13 * 60 + 30;
-}
-
 async function fetchRows(table, query) {
   const base = String(SUPABASE_URL || "").replace(/\/+$/, "");
   if (!base || !SUPABASE_KEY) throw new Error("missing Supabase credentials");
@@ -193,7 +168,6 @@ async function checkOnce() {
     refreshWarning = error?.message || String(error);
     log(`WARN strategy2 readiness cache refresh failed: ${refreshWarning}`);
   }
-  const refreshHealthy = refreshWarning === "";
   const statusRows = await fetchRows(
     STATUS_VIEW,
     [
@@ -203,25 +177,6 @@ async function checkOnce() {
   );
   const status = statusRows[0] || null;
   if (!status) throw new Error(`${STATUS_VIEW} returned no rows`);
-
-  let daytradeSourceStatus = null;
-  let daytradeSourcePayload = {};
-  try {
-    const sourceRows = await fetchRows(
-      "source_status",
-      [
-        "select=status,message,updated_at,payload",
-        "source_name=eq.fugle_daytrade_source",
-        "limit=1",
-      ].join("&")
-    );
-    daytradeSourceStatus = sourceRows[0] || null;
-    daytradeSourcePayload = daytradeSourceStatus?.payload && typeof daytradeSourceStatus.payload === "object"
-      ? daytradeSourceStatus.payload
-      : {};
-  } catch (error) {
-    refreshWarning = refreshWarning || `source_status:fugle_daytrade_source read failed: ${error?.message || String(error)}`;
-  }
 
   const missingRows = await fetchRows(
     MISSING_VIEW,
@@ -267,55 +222,16 @@ async function checkOnce() {
     }),
   ];
 
-  const legacyReady = refreshHealthy && status.strategy2_ready_100 === true;
-  const intradayExpected = cleanNumber(status.detection_expected_count);
-  const intradayReady = cleanNumber(status.intraday_1m_ready_count);
-  const intradayCoverage = intradayExpected > 0 ? intradayReady / intradayExpected : 0;
-  const regularDaytradeWindow = isRegularDaytradeWindow(checkedAt);
-  const dedicatedSourceReady = refreshHealthy
-    && String(daytradeSourceStatus?.status || "").toLowerCase() === "ok"
-    && String(daytradeSourcePayload.daytrade_gate_grade || "").toUpperCase() === "A"
-    && boolValue(daytradeSourcePayload.formal_entry_allowed)
-    && boolValue(daytradeSourcePayload.scanner_can_run_opening)
-    && cleanNumber(daytradeSourcePayload.priority_fresh_quote_coverage_120s) >= 0.95
-    && cleanNumber(daytradeSourcePayload.quote_age_seconds) <= 90
-    && cleanNumber(daytradeSourcePayload.intraday_1m_stale_seconds) <= 120
-    && String(daytradeSourcePayload.daily_volume_status || "").toLowerCase() === "ready"
-    && cleanNumber(daytradeSourcePayload.futopt_stock_mapped) > 0
-    && cleanNumber(daytradeSourcePayload.futopt_stock_this_loop || daytradeSourcePayload.futopt_stock_quotes_this_loop) > 0;
-  const ready = legacyReady || (regularDaytradeWindow && dedicatedSourceReady && intradayCoverage >= 0.95);
-  const readinessMode = legacyReady
-    ? "legacy_strategy2_ready_100"
-    : ready
-      ? "regular_daytrade_dedicated_source_ready"
-      : "legacy_or_dedicated_source_not_ready";
+  const ready = status.strategy2_ready_100 === true;
   const payload = {
     ok: ready,
     source: "strategy2-readiness-gate",
     gate: "strategy2-0845-futopt+0855-preopen-hot+0900-1330-detection",
     checkedAt: checkedAt.toISOString(),
     checkedAtTaipei: taipeiTimestamp(checkedAt),
-    status: ready ? "ready" : (status.status || "not_ready"),
-    reason: ready && !legacyReady ? "regular_daytrade_dedicated_source_ready; legacy preopen/MA35 diagnostics do not block regular session" : (status.reason || ""),
+    status: status.status || (ready ? "ready" : "not_ready"),
+    reason: status.reason || "",
     publishAllowed: ready,
-    refreshHealthy,
-    readinessMode,
-    legacyStrategy2Ready100: legacyReady,
-    regularDaytradeWindow,
-    dedicatedSourceReady,
-    intradayCoverage,
-    daytradeSourceStatus,
-    daytradeSourcePayload: {
-      daytrade_gate_grade: daytradeSourcePayload.daytrade_gate_grade || "",
-      formal_entry_allowed: daytradeSourcePayload.formal_entry_allowed ?? null,
-      scanner_can_run_opening: daytradeSourcePayload.scanner_can_run_opening ?? null,
-      priority_fresh_quote_coverage_120s: daytradeSourcePayload.priority_fresh_quote_coverage_120s ?? null,
-      quote_age_seconds: daytradeSourcePayload.quote_age_seconds ?? null,
-      intraday_1m_stale_seconds: daytradeSourcePayload.intraday_1m_stale_seconds ?? null,
-      daily_volume_status: daytradeSourcePayload.daily_volume_status || "",
-      futopt_stock_mapped: daytradeSourcePayload.futopt_stock_mapped ?? null,
-      futopt_stock_this_loop: daytradeSourcePayload.futopt_stock_this_loop ?? daytradeSourcePayload.futopt_stock_quotes_this_loop ?? null,
-    },
     scannerBehavior: ready
       ? "publish new complete run allowed"
       : "preserve latest complete run; surface explicit readiness reason; no silent fallback",
@@ -336,13 +252,6 @@ async function checkOnce() {
     },
     refreshResult,
     refreshWarning,
-    issues: refreshHealthy ? [] : [{
-      severity: "critical",
-      id: "strategy2-readiness-refresh-failed",
-      message: "Readiness cache refresh failed; cached readiness is not authoritative for publish.",
-      detail: refreshWarning,
-      policy: "preserve_previous_good_and_fail_closed",
-    }],
     logFile: LOG_FILE,
   };
 

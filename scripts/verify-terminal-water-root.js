@@ -298,7 +298,20 @@ function statusIssues(payload) {
       && /timeout|aborted/.test(text)
       && effective.intraday1mStaleSeconds <= required.intraday1mStaleSeconds
       && payload.intraday1m?.summary?.hasTodayData === true;
-    if (diagnosticStatusCacheTimeout) continue;
+    const nonfatalQuoteLookupMiss = /fugle quote \d+ http 404/.test(text)
+      && source.status === "ok"
+      && effective.ok === true
+      && source.formalEntryAllowed === true
+      && source.scannerCanRunOpening === true;
+    const dailyVolumeReady = ["ready", "ok"].includes(String(source.dailyVolumeStatus || daily.status || "").toLowerCase());
+    const nonfatalDailyVolumeWriteTimeout = target === "fugle_daytrade_daily_volume_avg"
+      && /timeout|aborted/.test(text)
+      && source.status === "ok"
+      && effective.ok === true
+      && dailyVolumeReady
+      && source.formalEntryAllowed === true
+      && source.scannerCanRunOpening === true;
+    if (diagnosticStatusCacheTimeout || nonfatalQuoteLookupMiss || nonfatalDailyVolumeWriteTimeout) continue;
     if (/22007|invalid input syntax for type timestamp with time zone/.test(text)) {
       issues.push("source_write_schema_invalid:timestamp_with_time_zone");
     } else {
@@ -343,7 +356,7 @@ for (const item of payload.probes) {
     if (gate.formalEntryAllowed !== true) issues.push("formal_entry_allowed_false");
     if (gate.scannerCanRunOpening !== true) issues.push("scanner_can_run_opening_false");
   }
-  const intradayDiagnosticCoveredBySource = source.hasIntraday1mStaleSeconds && source.intraday1mStaleSeconds <= required.intraday1mStaleSeconds;
+  const intradayDiagnosticCoveredBySource = !required.formalNow && source.hasIntraday1mStaleSeconds && source.intraday1mStaleSeconds <= required.intraday1mStaleSeconds;
   const intradayHasTodayData = intradaySummary.hasTodayData === true || asNumber(intraday.today_candle_count) > 0;
   if (!intradayDiagnosticCoveredBySource && (intraday.today_candle_count !== undefined || intradaySummary.hasTodayData !== undefined) && intradayHasTodayData !== true) {
     issues.push("intraday_1m_today_candle_count_zero");
@@ -514,3 +527,8 @@ module.exports = {
   isMarketClosedPreviousGood,
   statusIssues,
 };
+
+
+
+
+

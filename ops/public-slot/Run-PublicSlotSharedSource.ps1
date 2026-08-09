@@ -742,7 +742,6 @@ function New-Intraday1mStatsSnapshot {
     today_candle_count = 0
     warmup_candle_count = 0
     continuous_candle_count = 0
-    ready_ge_20 = 0
     ready_ge_35 = 0
     ready_ge_80 = 0
     ready_ge_200 = 0
@@ -761,7 +760,7 @@ function Get-Intraday1mCoverageStats {
   $stats = New-Intraday1mStatsSnapshot
   $stats.intraday_1m_stats_source = "fallback_current_batch"
 
-  $statusSelect = "symbol,latest_candle_time,today_candle_count,warmup_candle_count,continuous_candle_count,candle_count,ready_ma20_continuous,ready_ma35_continuous,ready_macd_continuous,ready_ge_20,ready_ge_35,ready_ge_80,ready_ge_200,has_today_data"
+  $statusSelect = "symbol,latest_candle_time,today_candle_count,warmup_candle_count,continuous_candle_count,candle_count,ready_ma20_continuous,ready_ma35_continuous,ready_macd_continuous,ready_ge_35,ready_ge_80,ready_ge_200,has_today_data"
   $viewRows = @()
   $candidateSymbols = @($Symbols | Where-Object { [string]$_ -match '^\d{4}$' } | Select-Object -Unique)
 
@@ -784,15 +783,12 @@ function Get-Intraday1mCoverageStats {
         $stats.ready_ma20_continuous = [int](Get-Number $coverage.ready_ma20_continuous)
         $stats.ready_ma35_continuous = [int](Get-Number $coverage.ready_ma35_continuous)
         $stats.ready_macd_continuous = [int](Get-Number $coverage.ready_macd_continuous)
-        $stats.ready_ge_20 = [int](Get-Number $coverage.ready_ge_20)
         $stats.ready_ge_35 = [int](Get-Number $coverage.ready_ge_35)
         $stats.ready_ge_80 = [int](Get-Number $coverage.ready_ge_80)
         $stats.ready_ge_200 = [int](Get-Number $coverage.ready_ge_200)
-        if ($stats.ready_ge_20 -le 0) { $stats.ready_ge_20 = $stats.ready_ma20_continuous }
         if ($stats.ready_ge_35 -le 0) { $stats.ready_ge_35 = $stats.ready_ma35_continuous }
         if ($stats.ready_ma35_continuous -lt $stats.ready_ge_35) { $stats.ready_ma35_continuous = $stats.ready_ge_35 }
         if ($stats.ready_ma20_continuous -lt $stats.ready_ma35_continuous) { $stats.ready_ma20_continuous = $stats.ready_ma35_continuous }
-        if ($stats.ready_ge_20 -lt $stats.ready_ma20_continuous) { $stats.ready_ge_20 = $stats.ready_ma20_continuous }
         if ($stats.ready_macd_continuous -lt $stats.ready_ge_80) { $stats.ready_macd_continuous = $stats.ready_ge_80 }
         if ($stats.intraday_1m_stale_seconds -le 0) {
           $stats.intraday_1m_stale_seconds = Get-IsoAgeSeconds -IsoTime $stats.intraday_1m_latest_candle_time
@@ -853,7 +849,7 @@ function Get-Intraday1mCoverageStats {
         }
         $warmupRows += $rowWarmupCount
         $continuousRows += $rowContinuousCount
-        if ($row.ready_ma20_continuous -eq $true -or $row.ready_ge_20 -eq $true -or $rowContinuousCount -ge 20) { $readyMa20++ }
+        if ($row.ready_ma20_continuous -eq $true -or $rowContinuousCount -ge 20) { $readyMa20++ }
         if ($row.ready_ma35_continuous -eq $true -or $row.ready_ge_35 -eq $true -or $rowContinuousCount -ge 35) { $readyMa35++ }
         if ($row.ready_macd_continuous -eq $true -or $rowContinuousCount -ge 80) { $readyMacd++ }
         if ($row.ready_ge_80 -eq $true) { $ready80++ }
@@ -872,7 +868,6 @@ function Get-Intraday1mCoverageStats {
       $stats.ready_ma20_continuous = $readyMa20
       $stats.ready_ma35_continuous = $readyMa35
       $stats.ready_macd_continuous = $readyMacd
-      $stats.ready_ge_20 = $readyMa20
       $stats.ready_ge_35 = $readyMa35
       $stats.ready_ge_80 = $ready80
       $stats.ready_ge_200 = $ready200
@@ -904,7 +899,6 @@ function Get-Intraday1mCoverageStats {
   $stats.ready_ma20_continuous = @($readyGroups | Where-Object { $_.Count -ge 20 }).Count
   $stats.ready_ma35_continuous = @($readyGroups | Where-Object { $_.Count -ge 35 }).Count
   $stats.ready_macd_continuous = @($readyGroups | Where-Object { $_.Count -ge 80 }).Count
-  $stats.ready_ge_20 = $stats.ready_ma20_continuous
   $stats.ready_ge_35 = $stats.ready_ma35_continuous
   $stats.ready_ge_80 = @($readyGroups | Where-Object { $_.Count -ge 80 }).Count
   $stats.ready_ge_200 = @($readyGroups | Where-Object { $_.Count -ge 200 }).Count
@@ -953,7 +947,6 @@ function Merge-IntradayStatsWithFallbackRows {
   $Stats.ready_ma20_continuous = [math]::Max([int](Get-Number $Stats.ready_ma20_continuous), $readyMa20)
   $Stats.ready_ma35_continuous = [math]::Max([int](Get-Number $Stats.ready_ma35_continuous), $readyMa35)
   $Stats.ready_macd_continuous = [math]::Max([int](Get-Number $Stats.ready_macd_continuous), $ready80)
-  $Stats.ready_ge_20 = [math]::Max([int](Get-Number $Stats.ready_ge_20), $readyMa20)
   $Stats.ready_ge_35 = [math]::Max([int](Get-Number $Stats.ready_ge_35), $readyMa35)
   $Stats.ready_ge_80 = [math]::Max([int](Get-Number $Stats.ready_ge_80), $ready80)
   $Stats.ready_ge_200 = [math]::Max([int](Get-Number $Stats.ready_ge_200), $ready200)
@@ -988,9 +981,6 @@ function Copy-IntradayStatsFromSourcePayload {
   $Stats.ready_ma35_continuous = $previousReady35
   $Stats.ready_macd_continuous = [int](Get-Number $Payload.ready_macd_continuous_symbols)
   if ($Stats.ready_macd_continuous -le 0) { $Stats.ready_macd_continuous = [int](Get-Number $Payload.ready_macd_continuous) }
-  $Stats.ready_ge_20 = [int](Get-Number $Payload.ready_ge_20)
-  if ($Stats.ready_ge_20 -le 0) { $Stats.ready_ge_20 = [int](Get-Number $Payload.ready_ge_20_symbols) }
-  if ($Stats.ready_ge_20 -le 0) { $Stats.ready_ge_20 = $Stats.ready_ma20_continuous }
   $Stats.ready_ge_35 = [int](Get-Number $Payload.ready_ge_35)
   if ($Stats.ready_ge_35 -le 0) { $Stats.ready_ge_35 = [int](Get-Number $Payload.ready_ge_35_symbols) }
   if ($Stats.ready_ge_35 -le 0) { $Stats.ready_ge_35 = $Stats.ready_ma35_continuous }
@@ -1002,7 +992,6 @@ function Copy-IntradayStatsFromSourcePayload {
   if ($Stats.ready_ge_35 -lt $Stats.ready_ge_80) { $Stats.ready_ge_35 = $Stats.ready_ge_80 }
   if ($Stats.ready_ma35_continuous -lt $Stats.ready_ge_35) { $Stats.ready_ma35_continuous = $Stats.ready_ge_35 }
   if ($Stats.ready_ma20_continuous -lt $Stats.ready_ma35_continuous) { $Stats.ready_ma20_continuous = $Stats.ready_ma35_continuous }
-  if ($Stats.ready_ge_20 -lt $Stats.ready_ma20_continuous) { $Stats.ready_ge_20 = $Stats.ready_ma20_continuous }
   if ($Stats.ready_macd_continuous -lt $Stats.ready_ge_80) { $Stats.ready_macd_continuous = $Stats.ready_ge_80 }
   if ($previousRows -gt 0 -and $previousStale -lt 999999) {
     $Stats.intraday_1m_stale_seconds = $previousStale
@@ -1710,50 +1699,35 @@ function Write-WebSocketPrioritySymbols {
         $existingPriority = Get-Content -LiteralPath $PrioritySymbolsFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
       }
     } catch {}
-    $strategy2Symbols = @($groups.strategy2)
-    if ($strategy2Symbols.Count -eq 0 -and $existingPriority.priorityBridge.groups.strategy2.status -eq "ready") { $strategy2Symbols = @($existingPriority.priorityBridge.groups.strategy2.symbols) }
-    $strategy3Symbols = @($groups.strategy3)
-    if ($strategy3Symbols.Count -eq 0 -and $existingPriority.priorityBridge.groups.strategy3.status -eq "ready") { $strategy3Symbols = @($existingPriority.priorityBridge.groups.strategy3.symbols) }
-    $strategy4Symbols = @($groups.strategy4)
-    if ($strategy4Symbols.Count -eq 0 -and $existingPriority.priorityBridge.groups.strategy4.status -eq "ready") { $strategy4Symbols = @($existingPriority.priorityBridge.groups.strategy4.symbols) }
-    $strategy5Symbols = @($groups.strategy5)
-    if ($strategy5Symbols.Count -eq 0 -and $existingPriority.priorityBridge.groups.strategy5.status -eq "ready") { $strategy5Symbols = @($existingPriority.priorityBridge.groups.strategy5.symbols) }
-    $institutionSymbols = @($groups.institution)
-    if ($institutionSymbols.Count -eq 0 -and $existingPriority.priorityBridge.groups.institution.status -eq "ready") { $institutionSymbols = @($existingPriority.priorityBridge.groups.institution.symbols) }
-    $warrantSymbols = @($groups.warrant)
-    if ($warrantSymbols.Count -eq 0 -and $existingPriority.priorityBridge.groups.warrant.status -eq "ready") { $warrantSymbols = @($existingPriority.priorityBridge.groups.warrant.symbols) }
-    $cbSymbols = @($groups.cb)
-    if ($cbSymbols.Count -eq 0 -and $existingPriority.priorityBridge.groups.cb.status -eq "ready") { $cbSymbols = @($existingPriority.priorityBridge.groups.cb.symbols) }
     $daytradePrioritySymbols = @($existingPriority.daytradePrioritySymbols + $existingPriority.daytradeSymbols + $existingPriority.daytrade) |
       Where-Object { [string]$_ -match '^\d{4}$' } |
       Select-Object -Unique
-    $terminalPrioritySymbols = @($daytradePrioritySymbols + @($groups.terminalPrioritySymbols) + @($strategy2Symbols) + @($strategy3Symbols) + @($strategy4Symbols) + @($strategy5Symbols) + @($institutionSymbols) + @($warrantSymbols) + @($cbSymbols)) |
+    $terminalPrioritySymbols = @($daytradePrioritySymbols + @($groups.terminalPrioritySymbols)) |
       Where-Object { [string]$_ -match '^\d{4}$' } |
       Select-Object -Unique
-    $openingPrioritySymbols = @($daytradePrioritySymbols + @($groups.openingPrioritySymbols) + @($strategy2Symbols) + @($strategy3Symbols) + @($strategy4Symbols) + @($strategy5Symbols) + @($institutionSymbols) + @($warrantSymbols) + @($cbSymbols)) |
+    $openingPrioritySymbols = @($daytradePrioritySymbols + @($groups.openingPrioritySymbols)) |
       Where-Object { [string]$_ -match '^\d{4}$' } |
       Select-Object -Unique
-    $allPrioritySymbols = @($daytradePrioritySymbols + @($groups.symbols) + @($strategy2Symbols) + @($strategy3Symbols) + @($strategy4Symbols) + @($strategy5Symbols) + @($institutionSymbols) + @($warrantSymbols) + @($cbSymbols)) |
+    $allPrioritySymbols = @($daytradePrioritySymbols + @($groups.symbols)) |
       Where-Object { [string]$_ -match '^\d{4}$' } |
       Select-Object -Unique
     Write-JsonFile -Path $PrioritySymbolsFile -Value ([ordered]@{
       updatedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ss.fff'Z'")
       source = "public-slot-shared-source-priority-pool"
-      priorityBridge = $existingPriority.priorityBridge
       reason = $Reason
       policy = "terminal-wide priority first: strategy1/2/3/4/5, institution, warrant underlying, CB, realtime radar; then 3-day open-high-fade, dynamic bull/volume, hot/strong, then full mother pool"
       daytradePrioritySymbols = @($daytradePrioritySymbols)
       daytradePriorityCount = @($daytradePrioritySymbols).Count
       terminalPrioritySymbols = @($terminalPrioritySymbols)
       strategy1 = @($groups.strategy1)
-      strategy2 = @($strategy2Symbols)
-      strategy3 = @($strategy3Symbols)
+      strategy2 = @($groups.strategy2)
+      strategy3 = @($groups.strategy3)
       strategy3QuotePriority = @($groups.strategy3QuotePriority)
-      strategy4 = @($strategy4Symbols)
-      strategy5 = @($strategy5Symbols)
-      institution = @($institutionSymbols)
-      warrant = @($warrantSymbols)
-      cb = @($cbSymbols)
+      strategy4 = @($groups.strategy4)
+      strategy5 = @($groups.strategy5)
+      institution = @($groups.institution)
+      warrant = @($groups.warrant)
+      cb = @($groups.cb)
       realtimeRadar = @($groups.realtimeRadar)
       threeDayOpenHighFade = @($groups.threeDayOpenHighFade)
       dynamic = @($groups.dynamicAmplitudeBull) + @($groups.dynamicVolumeSurge)
@@ -1766,14 +1740,14 @@ function Write-WebSocketPrioritySymbols {
       counts = [ordered]@{
         daytrade = @($daytradePrioritySymbols).Count
         strategy1 = @($groups.strategy1).Count
-        strategy2 = @($strategy2Symbols).Count
-        strategy3 = @($strategy3Symbols).Count
+        strategy2 = @($groups.strategy2).Count
+        strategy3 = @($groups.strategy3).Count
         strategy3QuotePriority = @($groups.strategy3QuotePriority).Count
-        strategy4 = @($strategy4Symbols).Count
-        strategy5 = @($strategy5Symbols).Count
-        institution = @($institutionSymbols).Count
-        warrant = @($warrantSymbols).Count
-        cb = @($cbSymbols).Count
+        strategy4 = @($groups.strategy4).Count
+        strategy5 = @($groups.strategy5).Count
+        institution = @($groups.institution).Count
+        warrant = @($groups.warrant).Count
+        cb = @($groups.cb).Count
         realtimeRadar = @($groups.realtimeRadar).Count
         strategyPriority = $script:ApiUniverseStats.strategy_priority_symbols
         terminalPriority = $script:ApiUniverseStats.terminal_priority_symbols
@@ -2361,7 +2335,6 @@ function Write-QuoteHeartbeatStatus {
       ready_ma20_continuous = $intradayStats.ready_ma20_continuous
       ready_ma35_continuous = $intradayStats.ready_ma35_continuous
       ready_macd_continuous = $intradayStats.ready_macd_continuous
-      ready_ge_20 = $intradayStats.ready_ge_20
       ready_ge_35 = $intradayStats.ready_ge_35
       ready_ge_80 = $intradayStats.ready_ge_80
       ready_ge_200 = $intradayStats.ready_ge_200
@@ -2369,14 +2342,12 @@ function Write-QuoteHeartbeatStatus {
       latest_candle_time = $intradayStats.intraday_1m_latest_candle_time
       latest_candle_time_taipei = $latestCandleTimeTaipei
       today_1m_symbols = $intradayStats.intraday_1m_symbols_today
-      ready_ge_20_symbols = $intradayStats.ready_ge_20
       ready_ge_35_symbols = $intradayStats.ready_ge_35
       ready_ge_80_symbols = $intradayStats.ready_ge_80
       ready_ge_200_symbols = $intradayStats.ready_ge_200
       ready_ma20_continuous_symbols = $intradayStats.ready_ma20_continuous
       ready_ma35_continuous_symbols = $intradayStats.ready_ma35_continuous
       ready_macd_continuous_symbols = $intradayStats.ready_macd_continuous
-      ready_ge_20_ratio = [math]::Round($intradayStats.ready_ge_20 / [math]::Max(1, $effectiveEligibleSymbols), 4)
       ready_ge_35_ratio = [math]::Round($intradayStats.ready_ge_35 / [math]::Max(1, $effectiveEligibleSymbols), 4)
       ready_ge_80_ratio = [math]::Round($intradayStats.ready_ge_80 / [math]::Max(1, $effectiveEligibleSymbols), 4)
       ready_ge_200_ratio = [math]::Round($intradayStats.ready_ge_200 / [math]::Max(1, $effectiveEligibleSymbols), 4)
@@ -3121,8 +3092,11 @@ function Start-FugleWebSocketCollector {
   $psi.UseShellExecute = $false
   $psi.CreateNoWindow = $true
   $psi.Environment["FUMAN_RUNTIME_DIR"] = $RuntimeDir
-  $psi.Environment["FUGLE_STREAMING_CHANNELS"] = "trades,aggregates,candles"
-  $psi.Environment["FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS"] = "1800"
+  $psi.Environment["FUGLE_STREAMING_CHANNELS"] = "trades,candles"
+  $psi.Environment["FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS"] = "2000"
+  $psi.Environment["FUGLE_STREAMING_CHANNEL_SYMBOL_LIMITS"] = "trades=1650,candles=300"
+  $psi.Environment["FUGLE_STREAMING_SUBSCRIPTION_SAFETY_MARGIN"] = "50"
+  $psi.Environment["FUGLE_STREAMING_PRIORITY_CHANNELS"] = "candles"
   $psi.Environment["STRATEGY2_FUGLE_WS_MAX_SYMBOLS"] = [string]$SeedSymbolCount
   $psi.Environment["STRATEGY2_FUGLE_WS_QUOTE_KEEP_MS"] = [string]($QuoteKeepMinutes * 60 * 1000)
   $psi.Environment["FUGLE_COLLECTOR_LOOP_MS"] = [string]$FugleCollectorLoopMilliseconds
@@ -3439,10 +3413,11 @@ function Invoke-FugleFutoptTickers {
   try {
     if (Test-Path -LiteralPath $FutoptTickersCacheFile) {
       $age = ((Get-Date) - (Get-Item -LiteralPath $FutoptTickersCacheFile).LastWriteTime).TotalSeconds
-      $cached = Read-JsonFile -Path $FutoptTickersCacheFile -Default $null
-      $cachedRows = @($cached.data)
-      if ($age -lt $FutoptTickersEverySeconds -and $null -ne $cached -and $cachedRows.Count -gt 0) {
-        $cached | Add-Member -NotePropertyName public_slot_from_cache -NotePropertyValue $true -Force
+      if ($age -lt $FutoptTickersEverySeconds) {
+        $cached = Read-JsonFile -Path $FutoptTickersCacheFile -Default $null
+        if ($null -ne $cached) {
+          $cached | Add-Member -NotePropertyName public_slot_from_cache -NotePropertyValue $true -Force
+        }
         return $cached
       }
     }
@@ -3455,18 +3430,6 @@ function Invoke-FugleFutoptTickers {
   try {
     $uri = "https://api.fugle.tw/marketdata/v1.0/futopt/intraday/tickers?type=FUTURE"
     $payload = Invoke-RestMethod -Uri $uri -Headers $headers -TimeoutSec 25 -ErrorAction Stop
-    $payloadRows = @($payload.data)
-    if ($payloadRows.Count -eq 0) {
-      Write-Log "WARN fugle futopt tickers returned empty payload; preserve previous non-empty cache"
-      if (Test-Path -LiteralPath $FutoptTickersCacheFile) {
-        $cached = Read-JsonFile -Path $FutoptTickersCacheFile -Default $null
-        if (@($cached.data).Count -gt 0) {
-          $cached | Add-Member -NotePropertyName public_slot_from_cache -NotePropertyValue $true -Force
-          return $cached
-        }
-      }
-      return $payload
-    }
     $payload | Add-Member -NotePropertyName public_slot_from_cache -NotePropertyValue $false -Force
     Write-JsonFile -Path $FutoptTickersCacheFile -Value $payload
     return $payload
@@ -3474,10 +3437,10 @@ function Invoke-FugleFutoptTickers {
     Write-Log "WARN fugle futopt tickers failed: $($_.Exception.Message)"
     if (Test-Path -LiteralPath $FutoptTickersCacheFile) {
       $cached = Read-JsonFile -Path $FutoptTickersCacheFile -Default $null
-      if (@($cached.data).Count -gt 0) {
+      if ($null -ne $cached) {
         $cached | Add-Member -NotePropertyName public_slot_from_cache -NotePropertyValue $true -Force
-        return $cached
       }
+      return $cached
     }
     return $null
   }
@@ -4664,18 +4627,15 @@ do {
       ready_ma20_continuous = $intradayStats.ready_ma20_continuous
       ready_ma35_continuous = $intradayStats.ready_ma35_continuous
       ready_macd_continuous = $intradayStats.ready_macd_continuous
-      ready_ge_20 = $intradayStats.ready_ge_20
       ready_ge_35 = $intradayStats.ready_ge_35
       ready_ge_80 = $intradayStats.ready_ge_80
       ready_ge_200 = $intradayStats.ready_ge_200
-      ready_ge_20_symbols = $intradayStats.ready_ge_20
       ready_ge_35_symbols = $intradayStats.ready_ge_35
       ready_ge_80_symbols = $intradayStats.ready_ge_80
       ready_ge_200_symbols = $intradayStats.ready_ge_200
       ready_ma20_continuous_symbols = $intradayStats.ready_ma20_continuous
       ready_ma35_continuous_symbols = $intradayStats.ready_ma35_continuous
       ready_macd_continuous_symbols = $intradayStats.ready_macd_continuous
-      ready_ge_20_ratio = [math]::Round($intradayStats.ready_ge_20 / [math]::Max(1, $seeded), 4)
       ready_ge_35_ratio = [math]::Round($intradayStats.ready_ge_35 / [math]::Max(1, $seeded), 4)
       ready_ge_80_ratio = [math]::Round($intradayStats.ready_ge_80 / [math]::Max(1, $seeded), 4)
       ready_ge_200_ratio = [math]::Round($intradayStats.ready_ge_200 / [math]::Max(1, $seeded), 4)
@@ -4960,3 +4920,5 @@ if (-not $Once) {
   } catch {}
 }
 Write-Log "Public slot shared source stopped."
+
+

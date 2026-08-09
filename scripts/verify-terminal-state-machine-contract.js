@@ -53,7 +53,15 @@ function verifyCurrentArtifact(issues) {
       assert(job.retryPolicy.maxAttempts === 0 && job.retryPolicy.manualRepairRequired === true, "auth_job_must_not_auto_retry", job, issues);
     }
     if (String(job.state || "").includes("SOURCE")) {
-      assert(job.command === "npm run verify:terminal-water-root", "source_job_must_only_recheck_water_root", job, issues);
+      const reasonCode = String(job.reasonCode || "");
+      const command = String(job.command || "");
+      if (reasonCode === "outside_formal_source_window_previous_good_hold") {
+        assert(/verify:terminal-water-root/.test(command) && !/daytrade-warmup:self-heal/.test(command), "offsession_source_job_must_only_recheck_water_root", job, issues);
+      } else if (reasonCode === "natural_warmup_websocket_not_ready") {
+        assert(/daytrade-warmup:self-heal/.test(command) && /verify:fugle-websocket-sources/.test(command) && /verify:terminal-water-root/.test(command) && /verify:terminal-final-audit/.test(command), "natural_source_job_must_self_heal_websocket_and_final_audit", job, issues);
+      } else {
+        assert(/daytrade-warmup:self-heal/.test(command) && /verify:terminal-water-root/.test(command), "source_job_must_rewater_then_check_water_root", job, issues);
+      }
     }
     if (["FAILED_SCAN", "FAILED_PUBLISH"].includes(job.state)) {
       assert(job.requiresWaterRootOk === true, "scan_publish_job_requires_water_root", job, issues);
@@ -64,11 +72,11 @@ function verifyCurrentArtifact(issues) {
 function verifySyntheticJobs(issues) {
   const synthetic = [
     { key: "s1", state: "BLOCKED_AUTH", retryPolicy: { maxAttempts: 0, manualRepairRequired: true }, idempotencyKey: "20260717:s1:auth", command: "manual" },
-    { key: "s2", state: "BLOCKED_SOURCE", retryPolicy: { maxAttempts: 12, manualRepairRequired: false }, idempotencyKey: "20260717:s2:source", command: "npm run verify:terminal-water-root" },
+    { key: "s2", state: "BLOCKED_SOURCE", retryPolicy: { maxAttempts: 12, manualRepairRequired: false }, idempotencyKey: "20260717:s2:source", reasonCode: "source_water_root_not_ready", command: "npm run daytrade-warmup:self-heal && npm run verify:terminal-water-root" },
     { key: "s3", state: "FAILED_SCAN", retryPolicy: { maxAttempts: 2, manualRepairRequired: false }, idempotencyKey: "20260717:s3:scan", command: "scanner", requiresWaterRootOk: true },
   ];
   assert(synthetic[0].retryPolicy.maxAttempts === 0, "synthetic_auth_retry_not_zero", synthetic[0], issues);
-  assert(synthetic[1].command === "npm run verify:terminal-water-root", "synthetic_source_command_not_water_root", synthetic[1], issues);
+  assert(/daytrade-warmup:self-heal/.test(synthetic[1].command) && /verify:terminal-water-root/.test(synthetic[1].command), "synthetic_source_command_not_rewater_then_water_root", synthetic[1], issues);
   assert(synthetic[2].requiresWaterRootOk === true, "synthetic_scan_missing_water_gate", synthetic[2], issues);
 }
 

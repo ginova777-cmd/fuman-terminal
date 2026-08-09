@@ -15,6 +15,24 @@ const files = [
   "scripts/verify-terminal-resource-chain.js",
 ];
 
+const formalActiveFiles = [
+  ...files,
+  "api/strategy2-latest.js",
+  "api/strategy3-latest.js",
+  "api/strategy4-latest.js",
+  "api/strategy5-latest.js",
+  "lib/supabase-public-slot.js",
+  "scripts/run-daytrade-source-writer.js",
+  "scripts/verify-terminal-water-root.js",
+  "scripts/verify-strategy-scan-formal-gate.js",
+  "scripts/write-terminal-orchestrator-state.js",
+    "scripts/write-daily-terminal-run-manifest.js",
+  "scripts/check-strategy2-daytrade-1m-chain.js",
+  "scripts/check-strategy3-session-readiness.js","scripts/run-terminal-auto-roll-forward.js",
+  "run-strategy2-intraday.ps1",
+  "run-strategy3-complete-scan.ps1",
+];
+
 const issues = [];
 function read(rel) {
   return fs.readFileSync(path.join(root, rel), "utf8");
@@ -171,6 +189,24 @@ if (!sourceReports.includes("const forceLiveSourceReports = sourceReportsLiveSou
   issues.push({ file: "api/source-reports.js", code: "source_reports_live_not_env_gated", line: "strictLiveReports/refreshSourceReports must not directly enable live source reports" });
 }
 
+for (const rel of [...new Set(formalActiveFiles)]) {
+  const text = read(rel);
+  const lines = text.split(/\r?\n/);
+  lines.forEach((line, idx) => {
+    if (/\bready_ge_20(?:_symbols)?\b/.test(line)) {
+      push(rel, idx + 1, "legacy_ready_ge20_in_formal_active_path", line);
+    }
+  });
+}
+const waterRoot = read("scripts/verify-terminal-water-root.js");
+if (!/readyMa20Continuous/.test(waterRoot) || !/ready_ma20_continuous/.test(waterRoot)) {
+  issues.push({
+    file: "scripts/verify-terminal-water-root.js",
+    code: "water_root_missing_ready_ma20_continuous",
+    line: "Formal MA20 readiness must use ready_ma20_continuous, not legacy ready_ge_20.",
+  });
+}
+
 if (issues.length) {
   console.error(JSON.stringify({ ok: false, issueCount: issues.length, issues }, null, 2));
   process.exit(1);
@@ -180,4 +216,10 @@ console.log(JSON.stringify({
   contract: "terminal-live-scope-v1",
   rule: "Only Strategy2/daytrade and explicit source gates may force live/noSnapshot; scorecard/mobile/desktop default to snapshots/sourceReports.",
   checkedFiles: files,
+  formalActiveCheckedFiles: [...new Set(formalActiveFiles)],
 }, null, 2));
+
+
+
+
+

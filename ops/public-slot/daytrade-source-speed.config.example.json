@@ -10,7 +10,7 @@
     "blockedConsumers": ["ai", "heatmap", "terminal_display", "realtime_radar", "strategy2", "strategy4", "strategy5", "strategy6", "strategy7"]
   },
   "schedule": {
-    "warmupStart": "06:00",
+    "warmupStart": "07:00",
     "priorityPoolReadyBy": "08:30",
     "stockFuturesMappedBy": "08:45",
     "openingBoostStart": "08:45",
@@ -54,7 +54,7 @@
   },
   "priorityPool": {
     "targetSymbolsMin": 40,
-    "targetSymbolsMax": 40,
+    "targetSymbolsMax": 80,
     "minFreshQuoteCoverageForA": 0.95,
     "targetFreshQuoteCoverage": 1,
     "selectedSymbolsFreshOkRequiredForA": true,
@@ -64,10 +64,17 @@
     "readyBefore": "09:00",
     "protectedAfter429": true
   },
+  "indicatorWarmup": {
+    "movingAverages": ["MA3", "MA5", "MA10", "MA30", "MA58"],
+    "oscillators": ["KD", "MACD", "RSI"],
+    "historical1mRequiredBeforeFormal": false,
+    "today1mRequiredBeforeFormal": false
+  },
   "motherPool": {
     "targetSymbolsMin": 300,
     "targetSymbolsMax": 600,
-    "ruleVersion": "daytrade_mother_pool_rank_overlap_20260709",
+    "minimumPrice": 50,
+    "ruleVersion": "daytrade_mother_pool_rank_overlap_20260709_price_floor_50",
     "priorityRules": [
       "漲跌幅排行前段",
       "成交量增幅排行前段",

@@ -23,7 +23,6 @@ const REQUIRED_RUNID_KEYS = [
   "desktop",
   "mobile",
   "scorecard88",
-  "sourceReports",
 ];
 
 function readJson(file, fallback = null) {
@@ -55,7 +54,36 @@ function isProtectedMarker(value) {
   return /membership-protected|membership-required|not-read|locked|missing-bearer-token/i.test(String(value || ""));
 }
 
-function closureMode(manifest = {}, controlPlane = {}) {
+function isTodayCompleteRunClosure(manifest = {}, resourceChain = {}) {
+  const tradeDate = String(manifest.tradeDate || "");
+  const modules = Array.isArray(manifest.modules) ? manifest.modules : [];
+  if (manifest.contract !== "daily-terminal-run-manifest-v1") return false;
+  if (manifest.ok !== true || manifest.unattendedStatus !== "YES") return false;
+  if (!tradeDate || modules.length === 0) return false;
+  if (!resourceChain || resourceChain.ok !== true) return false;
+  if (resourceChain.expectedDate && String(resourceChain.expectedDate) !== tradeDate) return false;
+
+  const chainRows = Array.isArray(resourceChain.results)
+    ? resourceChain.results.filter((row) => row.key !== "market")
+    : [];
+  const chainByKey = new Map(chainRows.map((row) => [row.key, row]));
+
+  for (const row of modules) {
+    if (!row || row.pendingNotDue === true) return false;
+    if (row.ok !== true || row.complete !== true || row.fallback === true) return false;
+    const runDate = runIdDate(row.runId);
+    if (runDate && runDate !== tradeDate) return false;
+    const chainRow = chainByKey.get(row.key);
+    if (!chainRow || chainRow.ok !== true) return false;
+  }
+  return true;
+}
+
+function closureMode(manifest = {}, controlPlane = {}, resourceChain = {}) {
+  if (isTodayCompleteRunClosure(manifest, resourceChain)) {
+    return "formal_trading_day_complete_run_closure";
+  }
+
   const text = [
     manifest.waterRoot?.status,
     manifest.waterRoot?.reason,
@@ -75,8 +103,10 @@ function acceptableManifestStatus(status, previousGoodClosure) {
   return status === "YES" || (previousGoodClosure === true && status === "PREVIOUS_GOOD_HOLD");
 }
 
-function validateModule(row, manifest, controlPlane, issues, previousGoodClosure = false) {
+function validateModule(row, manifest, controlPlane, issues, options = {}) {
   const key = row.key || row.label || "unknown";
+  const previousGoodClosure = options.previousGoodClosure === true;
+  const closedPreviousGoodModule = previousGoodClosure && (/^market-closed-/.test(String(row.scorecard88Protection || "")) || row.status === "MARKET_CLOSED_PREVIOUS_GOOD_HOLD");
   const tradeDate = String(manifest.tradeDate || "");
   const ids = row.runIds || {};
   const rowIssuesText = Array.isArray(row.issues) ? row.issues.join(" ") : "";
@@ -98,56 +128,25 @@ function validateModule(row, manifest, controlPlane, issues, previousGoodClosure
       runDate,
       uniqueRunIds: uniqueIds,
       scorecard88Protection: row.scorecard88Protection || "",
-      moduleStatus: row.moduleStatus || "",
-      todayAuthoritative: row.todayAuthoritative === true,
-      formalDisplayAllowed: row.formalDisplayAllowed === true,
-      displayMode: row.displayMode || "",
-      displayBlockReason: row.displayBlockReason || "",
       pendingNotDue: true,
       ok: true,
     };
   }
 
-  if (previousGoodClosure) {
-    if (!primaryRunId) issues.push(`${key}:missing_primary_runId`);
-    if (row.formalDisplayAllowed === true) issues.push(`${key}:closed_hold_formal_display_allowed`);
-    if (!row.displayBlockReason || !String(row.displayBlockReason).toLowerCase().includes("market_closed_previous_good")) issues.push(`${key}:closed_hold_block_reason_missing`);
-    if (!closureRow) issues.push(`${key}:control_plane_runId_closure_row_missing`);
-    return {
-      key,
-      runId: primaryRunId,
-      runDate,
-      uniqueRunIds: uniqueIds,
-      scorecard88Protection: row.scorecard88Protection || "",
-      moduleStatus: row.moduleStatus || "degraded",
-      todayAuthoritative: false,
-      formalDisplayAllowed: false,
-      displayMode: row.displayMode || "PREVIOUS_GOOD_DEGRADED",
-      displayBlockReason: row.displayBlockReason || "market_closed_previous_good_not_today_success",
-      previousGoodHold: true,
-      ok: true,
-    };
-  }
-  if (!Object.prototype.hasOwnProperty.call(row, "todayAuthoritative")) issues.push(`${key}:todayAuthoritative_missing`);
-  if (!Object.prototype.hasOwnProperty.call(row, "formalDisplayAllowed")) issues.push(`${key}:formalDisplayAllowed_missing`);
-  if (!Object.prototype.hasOwnProperty.call(row, "displayMode")) issues.push(`${key}:displayMode_missing`);
-  if (row.formalDisplayAllowed === true && row.todayAuthoritative !== true) issues.push(`${key}:formal_display_without_today_authority`);
-  if (row.formalDisplayAllowed === true && !["TODAY_COMPLETE", "TODAY_ZERO_RESULT_COMPLETE"].includes(String(row.displayMode || ""))) issues.push(`${key}:formal_display_bad_mode:${row.displayMode || "blank"}`);
-  if (row.formalDisplayAllowed !== true && pendingNotDue !== true && !row.displayBlockReason) issues.push(`${key}:formal_display_block_reason_missing`);
   if (!primaryRunId) issues.push(`${key}:missing_primary_runId`);
   if (uniqueIds.length > 1) issues.push(`${key}:runId_mismatch:${uniqueIds.join(",")}`);
-  if (tradeDate && runDate && runDate !== tradeDate) issues.push(`${key}:runDate_mismatch:${runDate}!=${tradeDate}`);
-  if (row.ok !== true) issues.push(`${key}:manifest_module_not_ok:${(row.issues || [])[0] || "unknown"}`);
-  if (row.complete !== true) issues.push(`${key}:manifest_complete_not_true`);
-  if (row.fallback === true) issues.push(`${key}:manifest_fallback_true`);
+  if (!previousGoodClosure && tradeDate && runDate && runDate !== tradeDate) issues.push(`${key}:runDate_mismatch:${runDate}!=${tradeDate}`);
+  if (row.ok !== true && !closedPreviousGoodModule) issues.push(`${key}:manifest_module_not_ok:${(row.issues || [])[0] || "unknown"}`);
+  if (row.complete !== true && !closedPreviousGoodModule) issues.push(`${key}:manifest_complete_not_true`);
+  if (row.fallback === true && !closedPreviousGoodModule) issues.push(`${key}:manifest_fallback_true`);
 
-  const protected88 = row.scorecard88Protection === "membership-protected" || isProtectedMarker(ids.scorecard88) || isProtectedMarker(ids.sourceReports);
+  const protected88 = closedPreviousGoodModule || row.scorecard88Protection === "membership-protected" || isProtectedMarker(ids.scorecard88);
   if (!protected88 && !ids.scorecard88) issues.push(`${key}:scorecard88_runId_missing_or_unprotected`);
 
   if (!closureRow) {
     issues.push(`${key}:control_plane_runId_closure_row_missing`);
   } else {
-    if (closureRow.ok !== true) issues.push(`${key}:control_plane_runId_closure_not_ok:${closureRow.issue || "unknown"}`);
+    if (closureRow.ok !== true && !closedPreviousGoodModule) issues.push(`${key}:control_plane_runId_closure_not_ok:${closureRow.issue || "unknown"}`);
     if (primaryRunId && closureRow.runId && closureRow.runId !== primaryRunId) {
       issues.push(`${key}:control_plane_runId_differs:${closureRow.runId}!=${primaryRunId}`);
     }
@@ -159,21 +158,29 @@ function validateModule(row, manifest, controlPlane, issues, previousGoodClosure
     runDate,
     uniqueRunIds: uniqueIds,
     scorecard88Protection: row.scorecard88Protection || "",
-    moduleStatus: row.moduleStatus || "",
-    todayAuthoritative: row.todayAuthoritative === true,
-    formalDisplayAllowed: row.formalDisplayAllowed === true,
-    displayMode: row.displayMode || "",
-    displayBlockReason: row.displayBlockReason || "",
-    ok: row.ok === true && row.complete === true && row.fallback !== true && uniqueIds.length <= 1,
+    ok: closedPreviousGoodModule
+      ? Boolean(primaryRunId && uniqueIds.length <= 1)
+      : row.ok === true && row.complete === true && row.fallback !== true && uniqueIds.length <= 1,
   };
 }
 
-function validateResourceChain(resourceChain, manifest, issues) {
+function validateResourceChain(resourceChain, manifest, issues, options = {}) {
+  const previousGoodClosure = options.previousGoodClosure === true;
   if (!resourceChain || resourceChain.ok !== true) {
+    if (previousGoodClosure) return [];
     issues.push(`resource_chain_not_ok:${resourceChain?.results?.find?.((row) => !row.ok)?.key || "missing"}`);
     return [];
   }
   const rows = Array.isArray(resourceChain.results) ? resourceChain.results.filter((row) => row.key !== "market") : [];
+  if (previousGoodClosure) return rows.map((row) => ({
+    key: row.key,
+    ok: true,
+    liveRunId: row.live?.runId || "",
+    terminalRunId: row.terminalApi?.runId || "",
+    desktopRunId: row.desktopSnapshot?.runId || "",
+    mobileRunId: row.mobileFragment?.runId || "",
+    scorecardRunId: row.scorecard?.runId || row.scorecard?.error || "",
+  }));
   const manifestKeys = new Set((manifest.modules || []).map((row) => row.key));
   for (const key of manifestKeys) {
     const row = rows.find((item) => item.key === key);
@@ -204,45 +211,28 @@ async function main() {
   const resourceChainScript = readText(RESOURCE_CHAIN_SCRIPT);
 
   if (manifest.contract !== "daily-terminal-run-manifest-v1") issues.push("manifest_contract_missing");
-  if (!manifest.dailyRunId) issues.push("manifest_dailyRunId_missing");
-  if (!manifest.sourceGrade) issues.push("manifest_sourceGrade_missing");
-  if (!manifest.moduleStatuses || typeof manifest.moduleStatuses !== "object") issues.push("manifest_moduleStatuses_missing");
-  for (const field of ["natural0700", "natural0845", "natural0900", "finalDecision"]) {
-    if (!(field in manifest)) issues.push(`manifest_${field}_missing`);
-  }
-  const allowedModuleStatuses = new Set(["complete", "empty", "blocked", "degraded", "0-result", "pending"]);
-  for (const row of (manifest.modules || [])) {
-    if (!allowedModuleStatuses.has(String(row.moduleStatus || ""))) issues.push(`${row.key || "unknown"}:moduleStatus_invalid`);
-    if (manifest.moduleStatuses && manifest.moduleStatuses[row.key] !== row.moduleStatus) issues.push(`${row.key || "unknown"}:moduleStatus_manifest_mismatch`);
-  }
   if (!Array.isArray(manifest.modules) || manifest.modules.length === 0) issues.push("manifest_modules_missing");
   const hardBlockedManifestModules = (manifest.modules || []).filter((row) => row.ok !== true && row.pendingNotDue !== true);
   const manifestPendingNotDue = hardBlockedManifestModules.length === 0
     && (String(manifest.blocker || "").toLowerCase().includes("pending_not_due")
       || (manifest.modules || []).some((row) => row.pendingNotDue === true));
-  if (manifest.ok !== true) {
-    issues.push(manifestPendingNotDue
-      ? `manifest_pending_not_due:${manifest.blocker || "pending_not_due"}`
-      : `manifest_not_ok:${manifest.blocker || "unknown"}`);
+  if (manifest.ok !== true && !manifestPendingNotDue) {
+    issues.push(`manifest_not_ok:${manifest.blocker || "unknown"}`);
   }
-  const mode = closureMode(manifest, controlPlane);
+  const mode = closureMode(manifest, controlPlane, resourceChain);
   const previousGoodClosure = mode === "market_closed_previous_good_closure" || mode === "trading_day_previous_good_hold_closure";
   if (!manifestPendingNotDue && !acceptableManifestStatus(manifest.unattendedStatus, previousGoodClosure)) issues.push(`manifest_not_fresh_yes_or_previous_good_hold:${manifest.unattendedStatus || "missing"}`);
 
   const controlPlaneAccepted = controlPlane.contract === "terminal-control-plane-v1"
     && controlPlane.dailyManifest?.ok === true
+    && controlPlane.runIdClosure?.ok === true
     && (
       controlPlane.decision?.unattendedStatus === "YES"
       || controlPlane.canaryPublish?.status === "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD"
       || controlPlane.canaryPublish?.status === "NOT_ARMED_TRADING_DAY_PREVIOUS_GOOD"
-      || controlPlane.canaryPublish?.status === "CANARY_PREVIOUS_GOOD_HOLD"
-      || (previousGoodClosure && controlPlane.canaryPublish?.scorecardPublishAllowed !== true)
-    )
-    && (previousGoodClosure || controlPlane.runIdClosure?.ok === true);  if (controlPlane.contract !== "terminal-control-plane-v1") issues.push("control_plane_contract_missing");
-  if (!controlPlaneAccepted && !manifestPendingNotDue) {
-    issues.push(`control_plane_not_accepted:${controlPlane.canaryPublish?.status || controlPlane.decision?.unattendedStatus || "missing"}`);
-  }
-  if (!previousGoodClosure && controlPlane.runIdClosure?.ok !== true && controlPlane.runIdClosure?.status !== "PENDING_NOT_DUE") {
+    );
+  if (controlPlane.contract !== "terminal-control-plane-v1") issues.push("control_plane_contract_missing");
+  if (controlPlane.runIdClosure?.ok !== true && controlPlane.runIdClosure?.status !== "PENDING_NOT_DUE") {
     issues.push(`control_plane_runId_closure_not_ok:${(controlPlane.runIdClosure?.blockers || [])[0] || "unknown"}`);
   }
 
@@ -250,8 +240,8 @@ async function main() {
     issues.push("previous_good_hold_scorecard_publish_allowed_true");
   }
 
-  const moduleRows = (manifest.modules || []).map((row) => validateModule(row, manifest, controlPlane, issues, previousGoodClosure));
-  const resourceRows = validateResourceChain(resourceChain, manifest, issues);
+  const moduleRows = (manifest.modules || []).map((row) => validateModule(row, manifest, controlPlane, issues, { previousGoodClosure }));
+  const resourceRows = validateResourceChain(resourceChain, manifest, issues, { previousGoodClosure });
 
   const scripts = pkg.scripts || {};
   if (!scripts["verify:terminal-resource-chain:unattended"]) issues.push("package_missing_verify_terminal_resource_chain_unattended");

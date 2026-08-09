@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-02T15:54:42.029Z",
+  "updatedAt": "2026-08-08T20:33:16.764Z",
   "policyVersion": 3,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
@@ -23,6 +23,8 @@
       "Fuman Scorecard Daily Automation 1400",
       "Fuman Daytrade Strategy3 Closure Verify 1410",
       "Fuman Strategy2 Intraday Scan",
+      "Fuman Strategy2 LINE Start 0900",
+      "Fuman Strategy2 LINE Stop 1330",
       "Fuman Strategy2 Supabase Coverage 0800",
       "Fuman Strategy2 E2E Closure Readback",
       "Fuman Strategy3 Battle Verify 1305",
@@ -33,7 +35,6 @@
       "Fuman Strategy5 Watchdog 2130",
       "Fuman Supabase Vercel History Cleanup 1545",
       "Fuman Terminal Local Freshness Verify 0830-2230",
-      "Fuman Terminal Autonomous Ops 5m",
       "Fuman Vercel Cost Health Monitor 2115",
       "Fuman Warrant Battle Verify 2055",
       "Fuman 買賣超 Cache 2100",
@@ -52,18 +53,13 @@
       "Fuman Fugle Daytrade Watchdog Every Minute",
       "Fuman Scorecard Daily Watchdog 1410",
       "Fuman Market Calendar Auto Update 1900-0830",
-      "Fuman Daytrade Warmup Nine-Day Audit 0915"
+      "Fuman Terminal Autonomous Root Monitor"
     ],
-    "expectedDisabledTasks": [
-      "Fuman Public Slot Anti Rollback Guard 1m",
-      "Fuman Public Slot Quote Fast Flush 0845",
-      "Fuman Terminal Autonomous Root Monitor",
-      "Fuman Fugle Daytrade WebSocket Collector 0600-1330"
-    ],
+    "expectedDisabledTasks": [],
     "retiredTasks": [
-      "Fuman ?單??琿?",
-      "Fuman ?單??琿? Watchdog",
-      "Fuman ?單??琿??交炎 0910",
+      "Fuman 即時雷達",
+      "Fuman 即時雷達 Watchdog",
+      "Fuman 即時雷達健檢 0910",
       "Fuman Auto Main Release 1615",
       "Fuman Daily Health Summary 1545",
       "Fuman Daytrade Source Writer",
@@ -93,9 +89,8 @@
       "Fuman Strategy3 Refresh Snapshot 1308",
       "Fuman Strategy4 Postscan Closure 1605",
       "Fuman Terminal API Health",
-      "Fuman Strategy2 LINE Start 0900",
-      "Fuman Strategy2 LINE Stop 1330",
-      "Fuman Daytrade Near-One Natural Source"
+      "Fuman Public Slot Anti Rollback Guard 1m",
+      "Fuman Public Slot Quote Fast Flush 0845"
     ],
     "retiredTaskNamePatterns": [
       "^Fuman Freshness Gate Full [0-9]{4} 2010$"
@@ -156,19 +151,18 @@
       ],
       "Fuman Strategy2 Supabase Coverage 0800": [
         0,
-        267009,
-        2147946720
+        267009
       ],
       "FumanTerminalProductionHealthMonitor": [
         0,
         267009
       ],
-      "Fuman ?單??琿?": [
+      "Fuman 即時雷達": [
         0,
         267009,
         267014
       ],
-      "Fuman ?單??琿? Watchdog": [
+      "Fuman 即時雷達 Watchdog": [
         0,
         267009
       ],
@@ -251,8 +245,10 @@
         0,
         267009
       ],
-      "Fuman Daytrade Warmup Nine-Day Audit 0915": [
-        0
+      "Fuman Terminal Autonomous Root Monitor": [
+        0,
+        267009,
+        267011
       ]
     },
     "coveredBy": {
@@ -422,6 +418,30 @@
       "expectedState": "Ready"
     },
     {
+      "taskName": "\\Fuman Open Buy Cache 2130",
+      "displayName": "Fuman Open Buy Cache 2130",
+      "description": "Strategy1 open-buy cache.",
+      "time": "21:30",
+      "expectedState": "Disabled",
+      "retiredReason": "retired_from_formal_unattended_scope"
+    },
+    {
+      "taskName": "\\Fuman Open Buy Preopen 0855",
+      "displayName": "Fuman Open Buy Preopen 0855",
+      "description": "Strategy1 preopen final runner.",
+      "time": "08:55",
+      "expectedState": "Disabled",
+      "retiredReason": "retired_from_formal_unattended_scope"
+    },
+    {
+      "taskName": "\\Fuman Open Buy Preopen Prepare 0845",
+      "displayName": "Fuman Open Buy Preopen Prepare 0845",
+      "description": "Strategy1 preopen prepare runner.",
+      "time": "08:45",
+      "expectedState": "Disabled",
+      "retiredReason": "retired_from_formal_unattended_scope"
+    },
+    {
       "taskName": "\\Fuman PC Wake 0430",
       "displayName": "Fuman PC Wake 0430",
       "description": "Mini PC wake timer.",
@@ -433,7 +453,8 @@
       "displayName": "Fuman Public Slot Anti Rollback Guard 1m",
       "description": "Public slot anti-rollback guard.",
       "time": "every 1 minute",
-      "expectedState": "Disabled"
+      "expectedState": "Disabled",
+      "retiredReason": "retired_from_formal_unattended_scope"
     },
     {
       "taskName": "\\Fuman Public Slot Shared Source 0800",
@@ -450,7 +471,8 @@
       "expectedState": "Disabled",
       "expectedTriggers": [
         "08:45"
-      ]
+      ],
+      "retiredReason": "retired_from_formal_unattended_scope"
     },
     {
       "taskName": "\\Fuman Public Slot Shared Source Watchdog",
@@ -472,6 +494,38 @@
       "description": "Scorecard daily automation.",
       "time": "14:00",
       "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman STAR Preopen Watch 0845",
+      "displayName": "Fuman STAR Preopen Watch 0845",
+      "description": "Strategy1 STAR preopen watch. Non-zero result is covered by later preopen prepare/final success.",
+      "time": "08:45",
+      "expectedState": "Disabled",
+      "retiredReason": "retired_from_formal_unattended_scope"
+    },
+    {
+      "taskName": "\\Fuman Strategy1 Candidate Verify 2135",
+      "displayName": "Fuman Strategy1 Candidate Verify 2135",
+      "description": "Strategy1 candidate verify.",
+      "time": "21:35",
+      "expectedState": "Disabled",
+      "retiredReason": "retired_from_formal_unattended_scope"
+    },
+    {
+      "taskName": "\\Fuman Strategy1 Flame Gate Verify 0852",
+      "displayName": "Fuman Strategy1 Flame Gate Verify 0852",
+      "description": "Strategy1 flame gate verify.",
+      "time": "08:52",
+      "expectedState": "Disabled",
+      "retiredReason": "retired_from_formal_unattended_scope"
+    },
+    {
+      "taskName": "\\Fuman Strategy1 Futopt Preopen Verify 0850",
+      "displayName": "Fuman Strategy1 Futopt Preopen Verify 0850",
+      "description": "Strategy1 futures/options preopen verify.",
+      "time": "08:50",
+      "expectedState": "Disabled",
+      "retiredReason": "retired_from_formal_unattended_scope"
     },
     {
       "taskName": "\\Fuman Strategy2 Intraday Scan",
@@ -583,17 +637,6 @@
       "expectedState": "Ready"
     },
     {
-      "taskName": "\\Fuman Terminal Autonomous Ops 5m",
-      "displayName": "Fuman Terminal Autonomous Ops 5m",
-      "description": "Gated autonomous recovery, scan, publish and closure controller; single daily lock prevents overlap.",
-      "time": "06:00-22:30",
-      "expectedState": "Ready",
-      "expectedTriggers": [
-        "06:00",
-        "repeat 5m"
-      ]
-    },
-    {
       "taskName": "\\Fuman Terminal Local Freshness Verify 0830-2230",
       "displayName": "Fuman Terminal Local Freshness Verify 0830-2230",
       "description": "Local freshness verify/repair from 08:30 through 22:30.",
@@ -616,6 +659,25 @@
       "description": "Warrant battle verification.",
       "time": "20:55",
       "expectedState": "Ready"
+    },
+    {
+      "taskName": "\\Fuman 即時雷達",
+      "displayName": "Fuman 即時雷達",
+      "description": "Realtime radar. 267014 is allowed when the market window has ended.",
+      "time": "08:58",
+      "expectedState": "Disabled",
+      "retiredReason": "retired_from_formal_unattended_scope"
+    },
+    {
+      "taskName": "\\Fuman 即時雷達 Watchdog",
+      "displayName": "Fuman 即時雷達 Watchdog",
+      "description": "Realtime radar watchdog. Repeats every minute from 08:59 and restarts the radar task if it is stopped or stale during 09:00-13:30.",
+      "time": "08:59-13:30",
+      "expectedState": "Disabled",
+      "expectedTriggers": [
+        "08:59"
+      ],
+      "retiredReason": "retired_from_formal_unattended_scope"
     },
     {
       "taskName": "\\Fuman 買賣超 Cache 2100",
@@ -674,6 +736,20 @@
       "expectedState": "Disabled"
     },
     {
+      "taskName": "\\Fuman Market Overview Patrol 0900",
+      "displayName": "Fuman Market Overview Patrol 0900",
+      "description": "Disabled: market overview is covered by API surfaces.",
+      "time": "09:00",
+      "expectedState": "Disabled"
+    },
+    {
+      "taskName": "\\Fuman Market Overview Watchdog 0901",
+      "displayName": "Fuman Market Overview Watchdog 0901",
+      "description": "Disabled: market overview patrol is disabled.",
+      "time": "09:01",
+      "expectedState": "Disabled"
+    },
+    {
       "taskName": "\\Fuman Strategy3 Battle Verify 1323",
       "displayName": "Fuman Strategy3 Battle Verify 1323",
       "description": "Disabled: duplicate Strategy3 battle verify.",
@@ -709,9 +785,16 @@
       "expectedState": "Disabled"
     },
     {
+      "taskName": "\\Fuman 即時雷達健檢 0910",
+      "displayName": "Fuman 即時雷達健檢 0910",
+      "description": "Disabled: realtime radar health is covered by the main radar and monitor chain.",
+      "time": "09:10",
+      "expectedState": "Disabled"
+    },
+    {
       "taskName": "\\Fuman Daytrade Source Preflight 0830",
       "displayName": "Fuman Daytrade Source Preflight 0830",
-      "description": "Predictive daytrade preflight. Uses Fugle WebSocket transport checks and fail-closed market-calendar protection before natural warmup gates.",
+      "description": "Read-only 08:30 predictive preflight for daytrade warmup. Captures immutable source readiness evidence after boot/power recovery and must not write strategy latest.",
       "time": "08:30",
       "expectedState": "Ready",
       "expectedTriggers": [
@@ -779,9 +862,9 @@
       ]
     },
     {
-      "taskName": "\\\\Fuman Daytrade Source Final Verdict 0912",
+      "taskName": "\\Fuman Daytrade Source Final Verdict 0912",
       "displayName": "Fuman Daytrade Source Final Verdict 0912",
-      "description": "Final daytrade warmup unattended verdict. Reads natural 0700/0845/0900 evidence, writes summary, and invokes root self-heal apply without backfilling natural evidence.",
+      "description": "Read-only daytrade final verdict at 09:12. Runs warmup root apply after natural 0700/0845/0900 evidence and must not write strategy latest.",
       "time": "09:12",
       "expectedState": "Ready",
       "expectedTriggers": [
@@ -829,11 +912,21 @@
       ]
     },
     {
-      "taskName": "\\\\Fuman Daytrade Warmup Nine-Day Audit 0915",
-      "displayName": "Fuman Daytrade Warmup Nine-Day Audit 0915",
-      "description": "Read-only nine-day warmup evidence audit; does not publish or self-heal.",
-      "time": "09:15",
-      "expectedState": "Ready"
+      "taskName": "\\Fuman Terminal Autonomous Root Monitor",
+      "displayName": "Fuman Terminal Autonomous Root Monitor",
+      "description": "Autonomous root monitor: predictive preflight, water root, daily manifest, state machine, job queue roll-forward, runId closure, production readback.",
+      "time": "08:55,09:10,09:40,13:35,14:10,16:10,21:35,22:00",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:55",
+        "09:10",
+        "09:40",
+        "13:35",
+        "14:10",
+        "16:10",
+        "21:35",
+        "22:00"
+      ]
     }
   ]
 }

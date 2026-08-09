@@ -17,6 +17,7 @@ const ROUTE_ALIASES = new Map([
   ["cb-detect-latest", "cb"],
   ["warrant-flow", "warrant"],
   ["warrant-flow-latest", "warrant"],
+  ["realtime-radar-latest", "realtime-radar"],
   ["market-overview", "market"],
 ]);
 
@@ -97,16 +98,7 @@ const CONTRACTS = [
         "fugle_quotes_latest+v_strategy2_intraday_ready+stock_daily_volume",
         "Strategy3 formal gating no longer reads quote-ready view"
       ),
-      // Issued-share capital is a slow-moving enrichment, not a live quote source.
-      // Keep it bounded, but do not make a monthly corporate-action feed fail the
-      // intraday source root after a normal holiday/reporting gap.
-      sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], {
-        order: "updated_at.desc",
-        maxAgeDays: 90,
-        level: "warning",
-        requiredWhenEnv: "STRATEGY3_REQUIRE_TURNOVER",
-        purpose: "optional turnover enrichment; hard only when STRATEGY3_REQUIRE_TURNOVER=1",
-      }),
+      sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 45, level: "warning" }),
       sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3 }),
     ],
   },
@@ -116,10 +108,8 @@ const CONTRACTS = [
     checks: [
       runTable("strategy4_scan_runs", "strategy4"),
       resultTable("strategy4_scan_results", [...COMMON_RESULT_FIELDS, "strategy", "rank", "score", "zone", "zone_label", "price_source", "volume_unit", "data_contract_source"]),
-      sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "open", "high", "low", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3 }),
+      sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3 }),
       sourceTable("fugle_daily_volume", ["symbol", "trade_date", "volume", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3 }),
-      sourceTable("v_stock_daily_ohlcv", ["symbol", "market", "trade_date", "open", "high", "low", "close", "volume", "updated_at"], { order: "trade_date.desc", maxAgeDays: 3 }),
-      sourceTable("v_stock_daily_ohlcv_completeness", ["trade_date", "rows", "ohlc_rows", "ohlc_symbols"], { order: "trade_date.desc", maxAgeDays: 3 }),
       sourceTable("strategy4_daily_ohlcv_view", ["symbol", "trade_date", "close", "volume_lots", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3, level: "warning" }),
     ],
   },
@@ -130,11 +120,8 @@ const CONTRACTS = [
       runView("v_strategy5_latest_complete_run", "strategy5"),
       resultTable("strategy5_scan_results", [...COMMON_RESULT_FIELDS, "strategy", "rank", "score", "signals", "data_contract_source"]),
       sourceTable("v_chip_flows_latest", ["symbol", "trade_date", "foreign_net", "investment_trust_net", "dealer_net", "institution_total_net", "source"], { order: "trade_date.desc", maxAgeDays: 3, level: "warning" }),
-      // Issued-share capital is a slow-moving enrichment, not a live quote source.
-      // Keep it bounded, but do not make a monthly corporate-action feed fail the
-      // intraday source root after a normal holiday/reporting gap.
-      sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 90, level: "warning" }),
-      sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "open", "high", "low", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3, level: "warning" }),
+      sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 30, level: "warning" }),
+      sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3, level: "warning" }),
     ],
   },
   {
@@ -241,7 +228,6 @@ function sourceTable(table, fields, options = {}) {
     select: fields.join(","),
     query: [options.order ? `order=${options.order}` : "", "limit=5"].filter(Boolean).join("&"),
     level: options.level || "error",
-    requiredWhenEnv: options.requiredWhenEnv || "",
     minRows: Number(options.minRows || 0),
     requireToday: options.requireToday === true,
     maxAgeDays: Number(options.maxAgeDays || 0),
@@ -602,10 +588,6 @@ async function checkOne(strategy, check) {
       issues: [],
     };
   }
-  const requiredByEnv = check.requiredWhenEnv
-    ? process.env[check.requiredWhenEnv] === "1"
-    : false;
-  const effectiveLevel = requiredByEnv ? "error" : (check.level || "error");
   const result = await fetchRows(check.table, check.select, check.query);
   const tradingDay = await currentTradingDayStatus();
   const marketClosedLiveSource = isMarketClosedLiveSourceCheck(check, tradingDay);
@@ -624,17 +606,16 @@ async function checkOne(strategy, check) {
   if (result.ok && check.kind.startsWith("latest-run") && Number(result.rows[0]?.result_count || 0) <= 0 && strategy.key !== "strategy2") {
     issues.push(`${check.table} latest complete run result_count<=0`);
   }
-  const newest = result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "";
   if (result.ok && check.requireToday && !liveSourceSkipped) {
     const expected = await expectedQuoteDateKey();
+    const newest = result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "";
     const today = taipeiDateKey();
     if (!newest) issues.push(`${check.table} newest date missing; expected at least quote date ${expected}`);
     else if (newest < expected) issues.push(`${check.table} newest date ${newest} < expected quote date ${expected}`);
     else if (newest > today) issues.push(`${check.table} newest date ${newest} > Taipei today ${today}`);
   }
-  // Historical source freshness is not a live requirement on market-closed days.
-  // Closed days preserve previous-good; trading days remain strict.
-  if (result.ok && check.maxAgeDays && tradingDay?.isTradingDay !== false) {
+  if (result.ok && check.maxAgeDays) {
+    const newest = result.rows.map(rowDate).filter(Boolean).sort().at(-1) || "";
     const ageDays = dateAgeDays(newest);
     if (ageDays == null) issues.push(`${check.table} newest date missing; maxAgeDays=${check.maxAgeDays}`);
     if (ageDays != null && ageDays > check.maxAgeDays) issues.push(`${check.table} newest date ${newest} age ${ageDays}d > ${check.maxAgeDays}d`);
@@ -673,8 +654,7 @@ async function checkOne(strategy, check) {
   return {
     ...check,
     ok: issues.length === 0,
-    level: effectiveLevel,
-    requiredByEnv,
+    level: check.level || "error",
     rowCount: result.rows.length,
     newestDate: check.kind === "realtime-radar-cache"
       ? realtimeRadarPayloadDate(result.rows[0]?.payload || {}) || rowDate(result.rows[0] || {})

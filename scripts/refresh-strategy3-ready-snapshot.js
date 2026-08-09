@@ -132,7 +132,7 @@ function candleMinutes(value) {
 function sessionReady(status = {}) {
   const count = cleanNumber(status.today_candle_count ?? status.candle_count ?? status.rows_today);
   const continuous = cleanNumber(status.continuous_candle_count);
-  if (status.ready_ge_20 === true || status.ready_ma20_continuous === true || continuous >= MIN_INTRADAY_1M_CANDLES) return true;
+  if (status.ready_ma20_continuous === true || continuous >= MIN_INTRADAY_1M_CANDLES) return true;
   if (count >= MIN_INTRADAY_1M_CANDLES) return true;
   const minute = candleMinutes(status.latest_candle_time || status.intraday_1m_status_updated_at || status.updated_at);
   return count > 0 && minute != null && minute >= SESSION_LATEST_MINUTE;
@@ -181,7 +181,17 @@ async function main() {
   const tradeDate = argValue("--trade-date", process.env.STRATEGY3_TRADE_DATE || taipeiTradeDate());
   const refreshedAt = new Date().toISOString();
 
-  const statusRefresh = await rpc("refresh_strategy2_readiness_cache", {});
+  let statusRefresh;
+  try {
+    statusRefresh = await rpc("refresh_strategy2_readiness_cache", {});
+  } catch (error) {
+    statusRefresh = {
+      ok: false,
+      warning: "readiness_refresh_failed_using_readback",
+      error: String(error?.message || error),
+    };
+    console.warn(JSON.stringify({ source: "strategy3_ready_snapshot_terminal_refresh", ...statusRefresh }));
+  }
   const [quotes, statuses, capitals] = await Promise.all([
     fetchAllRows("fugle_quotes_latest", {
       select: [
@@ -278,3 +288,4 @@ main().catch((error) => {
   }));
   process.exit(1);
 });
+

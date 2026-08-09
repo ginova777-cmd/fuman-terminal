@@ -196,9 +196,16 @@ async function main() {
   }
   const heartbeat = setInterval(() => lock.renew(), 60 * 1000);
   heartbeat.unref?.();
-  process.once("exit", () => { clearInterval(heartbeat); lock.release(); });
-  process.once("SIGINT", () => { lock.release(); process.exit(130); });
-  process.once("SIGTERM", () => { lock.release(); process.exit(143); });
+  let lockReleased = false;
+  function releaseActiveLock() {
+    clearInterval(heartbeat);
+    if (lockReleased) return;
+    lockReleased = true;
+    lock.release();
+  }
+  process.once("exit", releaseActiveLock);
+  process.once("SIGINT", () => { releaseActiveLock(); process.exit(130); });
+  process.once("SIGTERM", () => { releaseActiveLock(); process.exit(143); });
   let stopReason = "";
 
   // The single-master gate must run before any source, scanner, or publish action.
@@ -349,6 +356,7 @@ async function main() {
   ];
   fs.writeFileSync(path.join(OUT_DIR, "terminal-autonomous-ops-latest.md"), `${lines.join("\\n")}\n`, "utf8");
   console.log(JSON.stringify({ ok: payload.ok, executionOk: payload.executionOk, mode, tradeDate, unattendedStatus: payload.unattendedStatus, opsState: finalSummary.opsState, blocker: finalSummary.blocker, output: out, requiredFailureCount: requiredFailures.length }, null, 2));
+  releaseActiveLock();
   if (!payload.executionOk) process.exitCode = 1;
 }
 
@@ -356,6 +364,7 @@ main().catch((error) => {
   console.error(`[terminal-autonomous-ops] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+
 
 
 

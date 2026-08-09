@@ -1,5 +1,3 @@
-const fs = require("fs");
-const path = require("path");
 const market = require("./market");
 const { buildMarketCalendarContract, attachMarketCalendar } = require("../lib/market-calendar-contract");
 const stocks = require("./stocks");
@@ -13,7 +11,6 @@ const marketAiLive = require("./market-ai-live");
 const institutionLatest = require("./institution-latest");
 const cbDetectLatest = require("./cb-detect-latest");
 const warrantFlowLatest = require("./warrant-flow-latest");
-const sourceReportsApi = require("./source-reports");
 const desktopRouteSnapshot = require("./desktop-route-snapshot");
 const watchlistMatchIndex = require("./watchlist-match-index");
 const { shapeTopPayload } = require("./_http-cache");
@@ -23,146 +20,6 @@ const { buildWatchlistMatchIndex } = require("../lib/watchlist-match-index-build
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
 const FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS = Math.max(500, Math.min(3000, Number(process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || 2200) || 2200));
-
-const TERMINAL_ROOT = path.resolve(__dirname, "..");
-const TERMINAL_OPS_STATUS_FILE = path.join(TERMINAL_ROOT, "data", "terminal-ops-status-latest.json");
-const DAILY_MANIFEST_FILE = path.join(TERMINAL_ROOT, "outputs", "daily-terminal-run", "daily-terminal-run-latest.json");
-const FORMAL_RUN_ID_PATTERN = /\b(?:strategy2|strategy3|strategy4|strategy5|institution|cb-detect|warrant-flow)-\d{8}[\w-]*/g;
-let canonicalRunIdsCache = { at: 0, byKey: new Map() };
-
-function readJsonFile(file) {
-  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
-}
-
-function strategyKeyFromRunId(runId) {
-  const text = String(runId || "");
-  if (text.startsWith("strategy2-")) return "strategy2";
-  if (text.startsWith("strategy3-")) return "strategy3";
-  if (text.startsWith("strategy4-")) return "strategy4";
-  if (text.startsWith("strategy5-")) return "strategy5";
-  if (text.startsWith("institution-")) return "institution";
-  if (text.startsWith("cb-detect-")) return "cb";
-  if (text.startsWith("warrant-flow-")) return "warrant";
-  return "";
-}
-
-function canonicalRunIdsFromArtifacts() {
-  if (Date.now() - canonicalRunIdsCache.at < 30000) return canonicalRunIdsCache.byKey;
-  const byKey = new Map();
-  const candidates = [readJsonFile(TERMINAL_OPS_STATUS_FILE), readJsonFile(DAILY_MANIFEST_FILE)];
-  for (const payload of candidates) {
-    for (const row of Array.isArray(payload?.modules) ? payload.modules : []) {
-      const key = String(row?.key || "").trim();
-      const runId = String(row?.runId || "").trim();
-      if (key && runId && !byKey.has(key)) byKey.set(key, runId);
-    }
-  }
-  canonicalRunIdsCache = { at: Date.now(), byKey };
-  return byKey;
-}
-
-function collectFormalRunIds(value, out = new Set()) {
-  if (typeof value === "string") {
-    for (const match of value.matchAll(FORMAL_RUN_ID_PATTERN)) out.add(match[0]);
-    return out;
-  }
-  if (Array.isArray(value)) {
-    for (const item of value) collectFormalRunIds(item, out);
-    return out;
-  }
-  if (value && typeof value === "object") {
-    for (const item of Object.values(value)) collectFormalRunIds(item, out);
-  }
-  return out;
-}
-
-function redactUnexpectedManifestRunIds(value, canonicalByKey) {
-  if (typeof value === "string") {
-    return value.replace(FORMAL_RUN_ID_PATTERN, (runId) => {
-      const key = strategyKeyFromRunId(runId);
-      const canonical = key ? canonicalByKey.get(key) : "";
-      if (canonical && canonical === runId) return runId;
-      return key ? `stale_${key}_runid_redacted` : "stale_runid_redacted";
-    });
-  }
-  if (Array.isArray(value)) return value.map((item) => redactUnexpectedManifestRunIds(item, canonicalByKey));
-  if (value && typeof value === "object") {
-    const next = {};
-    for (const [key, item] of Object.entries(value)) next[key] = redactUnexpectedManifestRunIds(item, canonicalByKey);
-    return next;
-  }
-  return value;
-}
-
-function canonicalStrategyEndpointKey(endpoint) {
-  const pathName = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
-  if (pathName === "/api/strategy2-latest") return "strategy2";
-  if (pathName === "/api/strategy3-latest") return "strategy3";
-  if (pathName === "/api/strategy4-latest") return "strategy4";
-  if (pathName === "/api/strategy5-latest") return "strategy5";
-  if (pathName === "/api/institution-latest") return "institution";
-  if (pathName === "/api/cb-detect-latest") return "cb";
-  if (pathName === "/api/warrant-flow-latest") return "warrant";
-  return "";
-}
-
-function isCanonicalStrategyEndpoint(endpoint, key) {
-  return canonicalStrategyEndpointKey(endpoint) === key;
-}
-
-function canonicalRunIdsForEndpoint(endpoint, payload, baseCanonicalByKey) {
-  const canonicalByKey = new Map(baseCanonicalByKey);
-  const endpointKey = canonicalStrategyEndpointKey(endpoint);
-  const endpointRunId = String(payload?.runId || payload?.transport?.runId || "").trim();
-  if (endpointKey && endpointRunId && strategyKeyFromRunId(endpointRunId) === endpointKey) {
-    canonicalByKey.set(endpointKey, endpointRunId);
-  }
-  return canonicalByKey;
-}
-
-function removeStaleManifestRunIdEndpoints(endpoints = {}) {
-  const baseCanonicalByKey = canonicalRunIdsFromArtifacts();
-  if (!baseCanonicalByKey.size) return [];
-  const removals = [];
-  for (const [endpoint, payload] of Object.entries(endpoints || {})) {
-    const canonicalByKey = canonicalRunIdsForEndpoint(endpoint, payload, baseCanonicalByKey);
-    const runIds = [...collectFormalRunIds(payload)];
-    const staleRunIds = runIds.filter((runId) => {
-      const key = strategyKeyFromRunId(runId);
-      const canonical = key ? canonicalByKey.get(key) : "";
-      return Boolean(canonical && canonical !== runId);
-    });
-    if (!staleRunIds.length) continue;
-    const staleKeys = [...new Set(staleRunIds.map(strategyKeyFromRunId).filter(Boolean))];
-    const hasCanonicalRunId = runIds.some((runId) => {
-      const key = strategyKeyFromRunId(runId);
-      return Boolean(key && canonicalByKey.get(key) === runId);
-    });
-    const canonicalEndpoint = staleKeys.some((key) => isCanonicalStrategyEndpoint(endpoint, key));
-    const endpointKey = canonicalStrategyEndpointKey(endpoint);
-    const endpointOwnCanonicalRunId = endpointKey ? canonicalByKey.get(endpointKey) : "";
-    const endpointHasOwnCanonicalRunId = Boolean(endpointOwnCanonicalRunId && runIds.includes(endpointOwnCanonicalRunId));
-    if ((canonicalEndpoint && hasCanonicalRunId) || endpointHasOwnCanonicalRunId) {
-      endpoints[endpoint] = redactUnexpectedManifestRunIds(payload, canonicalByKey);
-      removals.push({ endpoint, action: "redacted", staleRunIds });
-    } else {
-      delete endpoints[endpoint];
-      removals.push({ endpoint, action: "removed", staleRunIds });
-    }
-  }
-  return removals;
-}
-
-function sanitizeBundleManifestRunIds(payload, endpoints = {}) {
-  const canonicalByKey = new Map(canonicalRunIdsFromArtifacts());
-  for (const endpointPayload of Object.values(endpoints || {})) {
-    const runId = String(endpointPayload?.runId || endpointPayload?.transport?.runId || '').trim();
-    const key = strategyKeyFromRunId(runId);
-    if (key && runId) canonicalByKey.set(key, runId);
-  }
-  if (!canonicalByKey.size) return payload;
-  return redactUnexpectedManifestRunIds(payload, canonicalByKey);
-}
 
 function isPublicBundleEndpoint(endpoint) {
   const path = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
@@ -509,55 +366,8 @@ function textFrom(value) {
   return String(value);
 }
 
-async function repairStrategy5FullSnapshot(request, endpoints) {
-  const currentEntry = Object.entries(endpoints || {})
-    .find(([endpoint]) => String(endpoint || "").startsWith("/api/strategy5-latest"));
-  const currentEndpoint = currentEntry?.[0] || "";
-  const currentPayload = currentEntry?.[1] || {};
-  const currentRows = Array.isArray(currentPayload.matches) ? currentPayload.matches
-    : Array.isArray(currentPayload.rows) ? currentPayload.rows
-      : [];
-  const resultCount = Number(currentPayload.resultCount ?? currentPayload.count ?? currentRows.length) || 0;
-  const currentRunId = String(currentPayload.runId || currentPayload.transport?.runId || "").trim();
-  const result = await callJson("/api/strategy5-latest", strategy5Latest, request, {
-    ...compactQuery(140),
-  }, 8000);
-  const replacement = result?.payload;
-  let finalReplacement = replacement;
-  let directReplacementUsed = false;
-  let replacementRunId = String(finalReplacement?.runId || finalReplacement?.transport?.runId || "").trim();
-  if (typeof strategy5Latest._test?.fetchLatestCompleteRows === "function") {
-    const direct = await strategy5Latest._test.fetchLatestCompleteRows(140).catch(() => null);
-    if (direct?.rows?.length && direct?.run?.run_id && String(direct.run.run_id) !== replacementRunId) {
-      finalReplacement = strategy5Latest._test.buildPayload(direct.rows, direct.run, {
-        canvas: true,
-        compact: true,
-        shell: true,
-        limit: 140,
-        chipSourceHealth: null,
-      });
-      directReplacementUsed = true;
-      replacementRunId = String(finalReplacement?.runId || finalReplacement?.transport?.runId || "").trim();
-    }
-  }
-  const replacementRows = Array.isArray(finalReplacement?.matches) ? finalReplacement.matches
-    : Array.isArray(finalReplacement?.rows) ? finalReplacement.rows
-      : [];
-  const replacementCount = Number(finalReplacement?.resultCount ?? finalReplacement?.count ?? replacementRows.length) || 0;
-  if ((!directReplacementUsed && Number(result?.statusCode || 0) >= 400) || finalReplacement?.ok === false || !replacementRows.length || !replacementRunId) return;
-  if (currentEndpoint.includes("limit=140") && (!resultCount || currentRows.length >= resultCount) && replacementRunId === currentRunId) return;
-  Object.keys(endpoints || {}).forEach((endpoint) => {
-    if (String(endpoint || "").startsWith("/api/strategy5-latest")) delete endpoints[endpoint];
-  });
-  endpoints["/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=140"] = {
-    ...finalReplacement,
-    transport: {
-      ...(finalReplacement.transport || {}),
-      fastBundleRepair: "strategy5-full-140",
-      staleSnapshotEndpoint: currentEndpoint,
-      fetchedAt: new Date().toISOString(),
-    },
-  };
+async function repairStrategy5FullSnapshot() {
+  return null;
 }
 
 async function repairStrategy2LatestSnapshot(request, endpoints) {
@@ -598,32 +408,8 @@ async function repairStrategy2LatestSnapshot(request, endpoints) {
     },
   });
 }
-async function repairStrategy3LatestSnapshot(request, endpoints) {
-  const currentEntry = Object.entries(endpoints || {})
-    .find(([endpoint]) => String(endpoint || "").startsWith("/api/strategy3-latest"));
-  const [currentEndpoint, currentPayload] = currentEntry || ["", null];
-  const result = await callJson("/api/strategy3-latest", strategy3Latest, request, {
-    ...compactQuery(60),
-  }, 9000);
-  const replacement = result?.payload;
-  const replacementRunId = String(replacement?.runId || replacement?.transport?.runId || "");
-  const currentRunId = String(currentPayload?.runId || currentPayload?.transport?.runId || "");
-  if (Number(result?.statusCode || 0) >= 400 || replacement?.ok === false) return;
-  if (!replacementRunId || (currentRunId && replacementRunId === currentRunId)) return;
-  if (replacement?.evidenceStatus !== "complete" || replacement?.publishAllowed !== true) return;
-  Object.keys(endpoints || {}).forEach((endpoint) => {
-    if (String(endpoint || "").startsWith("/api/strategy3-latest")) delete endpoints[endpoint];
-  });
-  endpoints["/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60"] = shapeTopPayload(request, {
-    ...replacement,
-    transport: {
-      ...(replacement.transport || {}),
-      fastBundleRepair: "strategy3-latest-complete-run",
-      staleSnapshotEndpoint: currentEndpoint,
-      staleSnapshotRunId: currentRunId,
-      fetchedAt: new Date().toISOString(),
-    },
-  });
+async function repairStrategy3LatestSnapshot() {
+  return null;
 }
 
 function isStrategy4Endpoint(endpoint) {
@@ -637,27 +423,8 @@ function hasStrategy4Endpoint(endpoints = {}) {
   });
 }
 
-async function repairStrategy4LatestSnapshot(request, endpoints) {
-  // Strategy4 must refresh from the latest complete run even when the desktop snapshot contains an older endpoint.
-  const result = await callJson("/api/strategy4-latest", strategy4Latest, request, {
-    ...compactQuery(70),
-  }, 20000);
-  const replacement = result?.payload;
-  const replacementRunId = String(replacement?.runId || replacement?.transport?.runId || "").trim();
-  if (Number(result?.statusCode || 0) >= 400 || replacement?.ok === false) return;
-  if (!replacementRunId.startsWith("strategy4-")) return;
-  if (replacement?.evidenceStatus !== "complete" || replacement?.publishAllowed !== true) return;
-  Object.keys(endpoints || {}).forEach((endpoint) => {
-    if (isStrategy4Endpoint(endpoint)) delete endpoints[endpoint];
-  });
-  endpoints["/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70"] = shapeTopPayload(request, {
-    ...replacement,
-    transport: {
-      ...(replacement.transport || {}),
-      fastBundleRepair: "strategy4-latest-complete-run",
-      fetchedAt: new Date().toISOString(),
-    },
-  });
+async function repairStrategy4LatestSnapshot() {
+  return null;
 }
 
 function isStrategy2SnapshotEndpoint(endpoint) {
@@ -759,70 +526,10 @@ async function ensureWatchlistMatchIndexEndpoint(request, endpoints, options = {
   };
 }
 
-function endpointRunId(payload) {
-  return String(payload?.runId || payload?.transport?.runId || payload?.payload?.runId || payload?.payload?.transport?.runId || "").trim();
-}
-
-function findEndpointPrefixEntry(endpoints = {}, prefix) {
-  const expectedPath = new URL(String(prefix || "/"), "https://fuman.local").pathname;
-  return Object.entries(endpoints || {}).find(([endpoint]) => {
-    const path = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
-    return path === expectedPath;
-  }) || null;
-}
-
-function hasEndpointPrefix(endpoints = {}, prefix, spec = {}) {
-  const found = findEndpointPrefixEntry(endpoints, prefix);
-  const payload = found?.[1];
-  if (!payload || typeof payload !== "object" || payload.ok === false) return false;
-  if (!spec.runIdPrefix) return true;
-  return endpointRunId(payload).startsWith(spec.runIdPrefix);
-}
-
-async function ensureDesktopRequiredEndpoint(request, endpoints, spec, options = {}) {
-  const existing = findEndpointPrefixEntry(endpoints, spec.prefix || spec.endpoint);
-  if (hasEndpointPrefix(endpoints, spec.prefix || spec.endpoint, spec)) return;
-  const result = await callJson(spec.endpoint, spec.handler, request, spec.query || {}, spec.timeoutMs || 5000);
-  if (Number(result?.statusCode || 0) >= 400) return;
-  const payload = result?.payload;
-  if (!payload || typeof payload !== "object" || payload.ok === false) return;
-  if (spec.runIdPrefix && !endpointRunId(payload).startsWith(spec.runIdPrefix)) return;
-  if (existing?.[0]) delete endpoints[existing[0]];
-  endpoints[buildEndpoint(spec.endpoint, spec.query || {})] = shapeTopPayload(request, {
-    ...payload,
-    transport: {
-      ...(payload.transport || {}),
-      fastBundleRepair: spec.repair || "desktop-required-endpoint",
-      via: options.via || "api/terminal-fast-bundle",
-      fetchedAt: new Date().toISOString(),
-    },
-  });
-}
-
-async function ensureDesktopRequiredEndpoints(request, endpoints, options = {}) {
-  const specs = [
-    { endpoint: "/api/market", prefix: "/api/market", handler: market, query: compactQuery(24), timeoutMs: 4200, repair: "market-required-endpoint" },
-    { endpoint: "/api/strategy2-latest", prefix: "/api/strategy2-latest", handler: strategy2Latest, query: { ...compactQuery(240), today: "1", live: "1" }, timeoutMs: 20000, repair: "strategy2-required-endpoint", runIdPrefix: "strategy2-" },
-    { endpoint: "/api/strategy3-latest", prefix: "/api/strategy3-latest", handler: strategy3Latest, query: compactQuery(60), timeoutMs: 10000, repair: "strategy3-required-endpoint", runIdPrefix: "strategy3-" },
-    { endpoint: "/api/strategy4-latest", prefix: "/api/strategy4-latest", handler: strategy4Latest, query: compactQuery(70), timeoutMs: 10000, repair: "strategy4-required-endpoint", runIdPrefix: "strategy4-" },
-    { endpoint: "/api/strategy5-latest", prefix: "/api/strategy5-latest", handler: strategy5Latest, query: compactQuery(140), timeoutMs: 10000, repair: "strategy5-required-endpoint", runIdPrefix: "strategy5-" },
-    { endpoint: "/api/institution-latest", prefix: "/api/institution-latest", handler: institutionLatest, query: compactQuery(60), timeoutMs: 6500, repair: "institution-required-endpoint", runIdPrefix: "institution-" },
-    { endpoint: "/api/cb-detect-latest", prefix: "/api/cb-detect-latest", handler: cbDetectLatest, query: compactQuery(60), timeoutMs: 6500, repair: "cb-required-endpoint", runIdPrefix: "cb-detect-" },
-    { endpoint: "/api/warrant-flow-latest", prefix: "/api/warrant-flow-latest", handler: warrantFlowLatest, query: compactQuery(60), timeoutMs: 9000, repair: "warrant-required-endpoint", runIdPrefix: "warrant-flow-" },
-  ];
-  for (const spec of specs) {
-    await ensureDesktopRequiredEndpoint(request, endpoints, spec, options);
-  }
-}
 function isMiss(item) {
   if (isOptionalLiveSnapshotEndpoint(item.label)) return false;
   if (isSoftSnapshotEndpoint(item.label)) return false;
   return Number(item.statusCode || 0) >= 500 || item.payload?.ok === false;
-}
-
-function terminalSnapshotRepairEnabled(request) {
-  return request.query?.repairSnapshot === "1"
-    || process.env.FUMAN_TERMINAL_SNAPSHOT_REPAIR === "1";
 }
 
 function liveFallbackEnabled(request) {
@@ -832,109 +539,10 @@ function liveFallbackEnabled(request) {
 }
 
 function liveFanoutEnabled(request) {
-  if (request.query?.internalLiveFanout === "1") {
-    return process.env.FUMAN_TERMINAL_FAST_BUNDLE_LIVE_FANOUT === "1";
-  }
-  return process.env.FUMAN_TERMINAL_FAST_BUNDLE_LIVE_FANOUT === "1";
-}
-
-function setAuthenticatedNoStore(response, entitlement) {
-  if (entitlement?.ok !== true) return;
-  response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
-  response.setHeader("CDN-Cache-Control", "no-store");
-  response.setHeader("Vercel-CDN-Cache-Control", "no-store");
-  response.setHeader("Pragma", "no-cache");
-  response.setHeader("Expires", "0");
-}
-
-
-function sourceReportRunId(report = {}) {
-  return String(report.runId || report.run_id || report.latestRunId || report.latest_run_id || report.internalRunId || report.internal_run_id || report.sourceRunId || report.source_run_id || "").trim();
-}
-
-function sourceReportKeyFromReport(report = {}) {
-  const explicit = String(report.key || report.strategy || report.strategyKey || report.name || report.module || report.label || "").toLowerCase();
-  if (/strategy2/.test(explicit)) return "strategy2";
-  if (/strategy3/.test(explicit)) return "strategy3";
-  if (/strategy4/.test(explicit)) return "strategy4";
-  if (/strategy5/.test(explicit)) return "strategy5";
-  if (/institution|chip|買賣|法人/.test(explicit)) return "institution";
-  if (/cb|convertible|可轉債/.test(explicit)) return "cb";
-  if (/warrant|權證/.test(explicit)) return "warrant";
-  return strategyKeyFromRunId(sourceReportRunId(report));
-}
-
-function sourceReportEndpointSpecForKey(key) {
-  const specs = {
-    strategy2: { endpoint: "/api/strategy2-latest", query: { ...compactQuery(240), today: "1", live: "1" } },
-    strategy3: { endpoint: "/api/strategy3-latest", query: compactQuery(60) },
-    strategy4: { endpoint: "/api/strategy4-latest", query: compactQuery(70) },
-    strategy5: { endpoint: "/api/strategy5-latest", query: compactQuery(140) },
-    institution: { endpoint: "/api/institution-latest", query: compactQuery(60) },
-    cb: { endpoint: "/api/cb-detect-latest", query: compactQuery(60) },
-    warrant: { endpoint: "/api/warrant-flow-latest", query: compactQuery(60) },
-  };
-  return specs[key] || null;
-}
-
-function sourceReportEndpointPayload(request, report = {}) {
-  const key = sourceReportKeyFromReport(report);
-  const spec = sourceReportEndpointSpecForKey(key);
-  const runId = sourceReportRunId(report);
-  if (!key || !spec || !runId) return null;
-  const count = Number(report.count ?? report.resultCount ?? report.emittedRows ?? report.rows ?? report.readbackCount ?? 0) || 0;
-  return [buildEndpoint(spec.endpoint, spec.query || {}), shapeTopPayload(request, {
-    ok: true,
-    runId,
-    count,
-    resultCount: count,
-    readbackCount: Number(report.readbackCount ?? count) || count,
-    rows: [],
-    matches: [],
-    evidenceStatus: report.evidenceStatus || "complete",
-    unattendedStatus: report.unattendedStatus || "YES",
-    publishAllowed: report.publishAllowed !== false,
-    qualityStatus: report.qualityStatus || report.status || "source_report_display_fallback",
-    sourceReportDisplayFallback: true,
-    sourceReportKey: key,
-    sourceReportOriginal: report,
-    updatedAt: report.updatedAt || report.finishedAt || report.generatedAt || new Date().toISOString(),
-    transport: { source: "api/source-reports", via: "terminal-fast-bundle:source-reports-fallback", runId, fetchedAt: new Date().toISOString() },
-  })];
-}
-
-async function buildSourceReportsDerivedBundle(request, reason = "desktop_route_snapshot_timeout_or_missing") {
-  const result = await callJson("/api/source-reports", sourceReportsApi, request, { compact: "1", shell: "1", live: "0", snapshotLive: "0" }, 12000);
-  if (Number(result?.statusCode || 0) >= 400 || result?.payload?.ok === false) return null;
-  const reports = Array.isArray(result.payload?.sourceReports) ? result.payload.sourceReports
-    : Array.isArray(result.payload?.reports) ? result.payload.reports
-      : Array.isArray(result.payload?.rows) ? result.payload.rows : [];
-  const endpoints = {};
-  for (const report of reports) {
-    const entry = sourceReportEndpointPayload(request, report);
-    if (entry) endpoints[entry[0]] = entry[1];
-  }
-  if (!Object.keys(endpoints).length) return null;
-  return {
-    ok: true,
-    partial: true,
-    source: "terminal-fast-bundle",
-    cacheSource: "api/source-reports:desktop-fallback",
-    snapshotOnly: true,
-    snapshotHit: false,
-    snapshotFresh: false,
-    reason,
-    updatedAt: new Date().toISOString(),
-    elapsedMs: result.elapsedMs || 0,
-    endpoints,
-    summary: Object.fromEntries(Object.entries(endpoints).map(([endpoint, endpointPayload]) => [endpoint, summarize(endpointPayload)])),
-    misses: ["desktop_route_snapshot"],
-    timings: { "/api/source-reports": result.elapsedMs || 0 },
-    preservePreviousGood: true,
-    latestPointerUpdated: false,
-    emptyResultWritten: false,
-    snapshotRepairs: { sourceReportsFallback: true },
-  };
+  const query = request.query || {};
+  const envEnabled = process.env.FUMAN_TERMINAL_FAST_BUNDLE_LIVE_FANOUT === "1";
+  const queryRequested = query.live === "1" || query.refresh === "1" || query.force === "1";
+  return envEnabled && queryRequested;
 }
 
 function snapshotMissPayload(reason = "snapshot_missing_or_stale") {
@@ -972,7 +580,6 @@ module.exports = async function handler(request, response) {
   if (!rate.ok) return sendRateLimited(response, "terminal-fast-bundle", rate);
 
   const entitlement = await verifyRequestEntitlement(request, { scope: "terminal-fast-bundle" });
-  setAuthenticatedNoStore(response, entitlement);
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
   const opsAuthority = buildOpsAuthorityIndex();
   if (entitlement?.ok) {
@@ -996,8 +603,6 @@ module.exports = async function handler(request, response) {
   }
   if (!wantsLive) {
     const releaseSnapshotPayload = typeof desktopRouteSnapshot.releaseReadbackSnapshot === "function" ? desktopRouteSnapshot.releaseReadbackSnapshot() : null;
-    const defaultSnapshotTimeoutMs = entitlement?.ok ? 2500 : 1500;
-    const snapshotReadTimeoutMs = Math.max(300, Number(process.env.FUMAN_TERMINAL_FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS || defaultSnapshotTimeoutMs) || defaultSnapshotTimeoutMs);
     const snapshot = releaseSnapshotPayload
       ? { updatedAt: releaseSnapshotPayload.updatedAt || "", payload: releaseSnapshotPayload }
       : await readDesktopRouteSnapshot({
@@ -1012,13 +617,6 @@ module.exports = async function handler(request, response) {
         await repairStrategy5FullSnapshot(request, endpoints);
         await repairStrategy2LatestSnapshot(request, endpoints);
         await repairStrategy3LatestSnapshot(request, endpoints);
-        await repairStrategy4LatestSnapshot(request, endpoints);
-        await ensureWatchlistMatchIndexEndpoint(request, endpoints, {
-          cacheSource: "api/terminal-fast-bundle:snapshot-derived",
-          via: "api/terminal-fast-bundle:snapshot-repair",
-          updatedAt: snapshot.payload.updatedAt || snapshot.updatedAt || new Date().toISOString(),
-        });
-        await ensureDesktopRequiredEndpoints(request, endpoints, { via: "api/terminal-fast-bundle:snapshot-repair" });
       }
       if (liveFallbackEnabled(request)) {
         await repairStrategy5FullSnapshot(request, endpoints);
@@ -1048,7 +646,7 @@ module.exports = async function handler(request, response) {
         response.status(200).end("");
         return;
       }
-      response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeBundleManifestRunIds(sanitizeStrategy2BundlePayload(payload, endpoints), endpoints), marketCalendar), entitlement));
+      response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
       return;
     }
     if (!liveFallbackEnabled(request)) {
@@ -1095,7 +693,6 @@ module.exports = async function handler(request, response) {
   const results = Object.fromEntries(rows.map((item) => [item.label, item]));
   const endpoints = publicEndpointMap(results);
   applySoftSnapshotFallbacks(results, endpoints, "api/terminal-fast-bundle");
-  await ensureDesktopRequiredEndpoints(request, endpoints, { via: "api/terminal-fast-bundle:live-fallback" });
   await ensureWatchlistMatchIndexEndpoint(request, endpoints, {
     cacheSource: "api/terminal-fast-bundle",
     via: "api/terminal-fast-bundle",
@@ -1125,7 +722,8 @@ module.exports = async function handler(request, response) {
     response.status(200).end("");
     return;
   }
-  response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeBundleManifestRunIds(sanitizeStrategy2BundlePayload(payload, endpoints), endpoints), marketCalendar), entitlement));
+  response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
 };
+
 
 

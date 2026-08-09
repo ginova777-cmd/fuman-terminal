@@ -510,7 +510,7 @@ async function publishStrategy5CompleteRunToSupabase(output) {
   output.blockedReason = output.corePublishQuality.ok ? "" : output.corePublishQuality.reason;
   output.scanner_block_reason = output.blockedReason;
   if (!output.corePublishQuality.ok) {
-    console.warn(`strategy5 complete run blocked: ${output.corePublishQuality.reason} runId=${runId} resultCount=${Array.isArray(output.matches) ? output.matches.length : cleanNumber(output.count)}`);
+    console.warn(`strategy5 complete run blocked: ${output.corePublishQuality.reason}`);
     return false;
   }
   const runningRow = buildStrategy5RunRow(output, runId, "running");

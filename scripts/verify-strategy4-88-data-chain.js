@@ -226,6 +226,7 @@ async function main() {
   fs.writeFileSync(outFile, `${JSON.stringify(report, null, 2)}\n`, "utf8");
   console.log(`[strategy4-88-data-chain] wrote ${outFile}`);
   console.log(`[strategy4-88-data-chain] ok=${ok} runId=${runId || "missing"} issues=${report.issues.map((item) => item.code).join(",") || "none"}`);
+  console.log(JSON.stringify(report));
   if (!ok) process.exit(1);
 }
 
@@ -233,6 +234,7 @@ main().catch((error) => {
   console.error(`[strategy4-88-data-chain] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+
 
 
 

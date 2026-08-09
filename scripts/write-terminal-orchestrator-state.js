@@ -1,4 +1,4 @@
-const fs = require("fs");
+﻿const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
@@ -11,13 +11,13 @@ let EXPECTED_DATE = EXPECTED_DATE_ARG.replace(/\D/g, "").slice(0, 8);
 let EFFECTIVE_VALIDATION_DATE = "";
 const FROM_EXISTING = process.argv.includes("--from-existing");
 const SELF_TEST = process.argv.includes("--self-test");
-const LIFECYCLE_STATES = ["PENDING", "PENDING_NOT_DUE", "PUBLISH_DEFERRED_MANIFEST_PENDING", "WATER_OK", "RUNNING", "SCANNED", "PUBLISHED", "DISPLAY_VERIFIED", "CLOSED"];
+const LIFECYCLE_STATES = ["PENDING", "PENDING_NOT_DUE", "PUBLISH_DEFERRED_MANIFEST_PENDING", "NEXT_TRADING_DAY_REPAIR_DEFERRED", "WATER_OK", "RUNNING", "SCANNED", "PUBLISHED", "DISPLAY_VERIFIED", "CLOSED"];
 const FAILURE_STATES = ["BLOCKED_SOURCE", "BLOCKED_AUTH", "FAILED_SCAN", "FAILED_PUBLISH", "FAILED_DISPLAY", "DEGRADED_PREVIOUS_GOOD", "BLOCKED_RUNID_MISMATCH", "BLOCKED_DATE_MISMATCH"];
 const STATE_MACHINE_CONTRACT = {
   contract: "terminal-state-machine-v1",
   lifecycle: LIFECYCLE_STATES,
   failureStates: FAILURE_STATES,
-  terminalStates: ["CLOSED", "PENDING_NOT_DUE", "PUBLISH_DEFERRED_MANIFEST_PENDING", "DEGRADED_PREVIOUS_GOOD", "BLOCKED_SOURCE", "BLOCKED_AUTH", "BLOCKED_RUNID_MISMATCH", "BLOCKED_DATE_MISMATCH", "FAILED_SCAN", "FAILED_PUBLISH", "FAILED_DISPLAY"],
+  terminalStates: ["CLOSED", "PENDING_NOT_DUE", "PUBLISH_DEFERRED_MANIFEST_PENDING", "NEXT_TRADING_DAY_REPAIR_DEFERRED", "DEGRADED_PREVIOUS_GOOD", "BLOCKED_SOURCE", "BLOCKED_AUTH", "BLOCKED_RUNID_MISMATCH", "BLOCKED_DATE_MISMATCH", "FAILED_SCAN", "FAILED_PUBLISH", "FAILED_DISPLAY"],
   invariants: [
     "water_root_must_pass_before_scanner_publish",
     "scanner_receipt_runid_must_equal_supabase_latest_pointer",
@@ -27,6 +27,7 @@ const STATE_MACHINE_CONTRACT = {
     "closed_requires_date_evidence_publish_and_issue_free_row",
     "auth_blocker_requires_manual_service_token_repair",
     "market_closed_skips_formal_scan_and_preserves_previous_good",
+    "market_closed_deferred_repairs_must_stay_in_queue_until_next_trading_day",
     "market_calendar_target_date_is_authoritative_over_previous_manifest",
   ],
 };
@@ -52,7 +53,35 @@ function readJson(file, fallback = null) {
     return fallback;
   }
 }
+function receiptFileForIdempotencyKey(idempotencyKey = "unknown") {
+  const safeId = String(idempotencyKey || "unknown")
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
+    .slice(0, 180);
+  return path.join(OUT_DIR, "receipts", `${safeId}.json`);
+}
 
+function preserveExistingDeferredReceipt(job = {}) {
+  if (String(job.state || "") !== "NEXT_TRADING_DAY_REPAIR_DEFERRED") return job;
+  const directFile = String(job.receiptFile || "");
+  const direct = readJson(path.resolve(ROOT, directFile), null);
+  if (direct?.contract === "terminal-auto-roll-forward-action-receipt-v1" && direct.status === "deferred") {
+    return { ...job, idempotencyKey: direct.idempotencyKey || job.idempotencyKey, receiptFile: path.resolve(ROOT, directFile) };
+  }
+  const repairDate = String(job.idempotencyKey || "").split(":")[0].replace(/\D/g, "").slice(0, 8);
+  const prefix = `${repairDate}_${String(job.key || "unknown")}_NEXT_TRADING_DAY_REPAIR_DEFERRED_`;
+  const receiptDir = path.join(OUT_DIR, "receipts");
+  let candidates = [];
+  try {
+    candidates = fs.readdirSync(receiptDir)
+      .filter((name) => name.startsWith(prefix) && name.endsWith(".json"))
+      .map((name) => ({ file: path.join(receiptDir, name), payload: readJson(path.join(receiptDir, name), null) }))
+      .filter((row) => row.payload?.contract === "terminal-auto-roll-forward-action-receipt-v1" && row.payload.status === "deferred" && String(row.payload.key || "") === String(job.key || ""));
+  } catch {
+    return job;
+  }
+  const match = candidates[0];
+  return match ? { ...job, idempotencyKey: match.payload.idempotencyKey || job.idempotencyKey, receiptFile: match.file } : job;
+}
 function manifestPathForExpectedDate(expectedDate = "") {
   const dateKey = String(expectedDate || "").replace(/\D/g, "").slice(0, 8);
   const datedPath = dateKey
@@ -84,6 +113,70 @@ function issueText(row = {}) {
 
 function has(text, ...needles) {
   return needles.some((needle) => text.includes(needle));
+}
+function sourceQualityLikeText(text = "") {
+  return /source_quality_fail|latest_candle_time|ready_ge_35|ready_ma20|ready_ma35|fresh_quote_coverage|coverage_120s|intraday_1m|candle_time|water_root|source_status|not_ready|stale|scanner_can_run_opening|formal_entry_allowed|formal_entry_speed_verdict/i.test(String(text || ""));
+}
+
+function hasExplicitSourceQualityGap(row = {}) {
+  const text = [issueText(row), row.displayBlockReason, row.blocker, row.reason].filter(Boolean).join(" | ");
+  return row.todayAuthoritative !== true && /source_quality_fail/i.test(text);
+}
+
+function reasonCodesFor(row = {}, state = "", blocker = "") {
+  const text = [issueText(row), row.displayBlockReason, blocker, row.reason, row.blocker].filter(Boolean).join(" | ").toLowerCase();
+  const key = String(row.key || "").toLowerCase();
+  const codes = [];
+  const add = (code) => { if (code && !codes.includes(code)) codes.push(code); };
+  if (state === "BLOCKED_AUTH" || /401|unauthorized|service_token/.test(text)) add("backend_service_token_missing_or_invalid");
+  if (/authenticated readback|membership|token not armed/.test(text)) add("protected_surface_readback_token_not_armed");
+  if (/runid_mismatch|manifest_runid_mismatch|row\/sourcereport runid != latest pointer/.test(text)) add("terminal_runid_closure_mismatch");
+  if (/tradedate_mismatch|sourcedate_mismatch|date mismatch/.test(text)) add("scanner_target_date_mismatch");
+  if (/outside_formal_source_window|off[-_ ]?session|formal_source_window/.test(text)) add("outside_formal_source_window_previous_good_hold");
+  if (key === "strategy2" && /latest_candle_time\s+missing|latest_candle_time missing|candle_time missing/.test(text)) add("strategy2_intraday_latest_candle_missing_after_0901");
+  if (key === "strategy2" && /ready_ge_35|ready_ma35|ma35/.test(text)) add("strategy2_intraday_ma35_readiness_below_threshold");
+  if (key === "strategy2" && /ready_ma20|ma20/.test(text)) add("strategy2_intraday_ma20_readiness_below_threshold");
+  if (key === "strategy2" && /fresh_quote_coverage|priority_fresh_quote_coverage|coverage_120s|quote_coverage/.test(text)) add("strategy2_quote_freshness_coverage_below_threshold");
+  if (/websocket/.test(text) && /not_ready|stale|blocked|fail/.test(text)) add("fugle_websocket_source_not_ready");
+  if (/formal_entry_allowed|formal_entry_speed_verdict|scanner_can_run_opening/.test(text)) add("formal_entry_gate_not_ready");
+  if (key === "strategy3" && /source_quality_fail/.test(text)) add("strategy3_1300_intraday_source_quality_gap");
+  if (/water_root|source_status|source_quality_fail|not_ready|stale|intraday_1m/.test(text)) add("source_water_root_not_ready");
+  if (codes.length === 0 && state) add(String(state).toLowerCase());
+  return codes;
+}
+
+function primaryReasonCode(row = {}, state = "", blocker = "") {
+  const codes = reasonCodesFor(row, state, blocker);
+  const priority = [
+    "backend_service_token_missing_or_invalid",
+    "protected_surface_readback_token_not_armed",
+    "strategy2_intraday_latest_candle_missing_after_0901",
+    "strategy2_intraday_ma35_readiness_below_threshold",
+    "strategy2_intraday_ma20_readiness_below_threshold",
+    "strategy2_quote_freshness_coverage_below_threshold",
+    "fugle_websocket_source_not_ready",
+    "formal_entry_gate_not_ready",
+    "strategy3_1300_intraday_source_quality_gap",
+    "source_water_root_not_ready",
+    "outside_formal_source_window_previous_good_hold",
+    "terminal_runid_closure_mismatch",
+    "scanner_target_date_mismatch",
+  ];
+  return priority.find((code) => codes.includes(code)) || codes[0] || String(state || "unknown").toLowerCase();
+}
+function actionForReasonCode(reasonCode = "", state = "") {
+  if (reasonCode === "strategy3_1300_intraday_source_quality_gap") return "repair_strategy3_1300_entry_candles_on_next_trading_day";
+  if (reasonCode === "strategy2_intraday_latest_candle_missing_after_0901") return "run_daytrade_1m_rewater_then_verify_strategy2_daytrade_1m_chain_and_water_root";
+  if (reasonCode === "strategy2_intraday_ma35_readiness_below_threshold") return "run_daytrade_candles_rewater_then_verify_strategy2_daytrade_1m_chain";
+  if (reasonCode === "strategy2_intraday_ma20_readiness_below_threshold") return "run_daytrade_candles_rewater_then_verify_strategy2_daytrade_1m_chain";
+  if (reasonCode === "strategy2_quote_freshness_coverage_below_threshold") return "restart_fugle_websocket_priority_pool_then_reverify_water_root";
+  if (reasonCode === "fugle_websocket_source_not_ready") return "reconnect_fugle_websocket_then_reverify_water_root";
+  if (reasonCode === "formal_entry_gate_not_ready") return "wait_for_formal_entry_window_or_rewater_then_reverify_formal_gate";
+  if (reasonCode === "source_water_root_not_ready") return "run_daytrade_warmup_self_heal_then_reverify_water_root";
+  if (reasonCode === "outside_formal_source_window_previous_good_hold") return "wait_until_next_formal_source_window_then_verify_water_root";
+  if (reasonCode === "terminal_runid_closure_mismatch") return "refresh_terminal_snapshot_bundle_mobile_88_readback";
+  if (reasonCode === "backend_service_token_missing_or_invalid") return "fix_service_token_or_authenticated_readback_then_rerun_module";
+  return "";
 }
 
 function normalizedDate(value) {
@@ -281,6 +374,32 @@ function classifyModule(row = {}, manifest = {}, marketCalendar = null) {
   const marketClosedHold = isMarketClosedPreviousGood(manifest, marketCalendar);
 
   if (marketClosedHold) {
+    const sourceGapRepair = hasExplicitSourceQualityGap(row);
+    const needsNextTradingDayRepair = row.fallback === true
+      || row.rawFallback === true
+      || (row.evidenceStatus && row.evidenceStatus !== "complete")
+      || row.publishAllowed === false
+      || sourceGapRepair;
+    if (needsNextTradingDayRepair) {
+      const blockerReason = sourceGapRepair
+        ? String(row.displayBlockReason || row.blocker || row.reason || "source_quality_fail")
+        : firstBlockingIssue(row, null, "market_closed_previous_good_requires_next_trading_day_repair");
+      const repairTradeDate = firstNormalizedDate(row.tradeDate, row.sourceDate, repairTradeDateFromRunIds(row), EFFECTIVE_VALIDATION_DATE, EXPECTED_DATE);
+      const repairRunId = String(row.runId || runIds.scanner || "");
+      return {
+        state: "NEXT_TRADING_DAY_REPAIR_DEFERRED",
+        layer: ["schedule", "market_calendar", "previous_good_hold", "next_trading_day_repair"],
+        blocker: blockerReason,
+        nextAction: "defer_until_next_trading_day_then_rerun_only_affected_module",
+        retryable: true,
+        deferredUntil: "next_trading_day_market_open",
+        priority: priorityForState("NEXT_TRADING_DAY_REPAIR_DEFERRED"),
+        reasonCode: primaryReasonCode(row, "NEXT_TRADING_DAY_REPAIR_DEFERRED", blockerReason),
+        reasonCodes: reasonCodesFor(row, "NEXT_TRADING_DAY_REPAIR_DEFERRED", blockerReason),
+        repairTradeDate,
+        repairRunId,
+      };
+    }
     return {
       state: "CLOSED",
       layer: ["closed", "market_calendar", "previous_good_hold"],
@@ -366,14 +485,14 @@ function classifyModule(row = {}, manifest = {}, marketCalendar = null) {
     state = "BLOCKED_RUNID_MISMATCH";
     layer.push("display", "runid_closure");
     blocker = firstBlockingIssue(row, /manifest_runid_mismatch|runid_mismatch|runid mismatch|row\/sourceReport runId != latest pointer/i, "runid_closure_mismatch");
+  } else if (waterBlocked || sourceQualityLikeText(text) || has(text, "water", "not_ready", "stale", "coverage")) {
+    state = "BLOCKED_SOURCE";
+    layer.push("source");
+    blocker = manifest.waterRoot?.reason || firstBlockingIssue(row, /source_quality_fail|latest_candle_time|ready_ge_35|ready_ma20|ready_ma35|fresh_quote_coverage|coverage_120s|intraday_1m|candle_time|water_root|source_status|not_ready|stale|scanner_can_run_opening|formal_entry_allowed|formal_entry_speed_verdict/i, "source_not_ready");
   } else if (has(text, "scorecard", "publish")) {
     state = "FAILED_PUBLISH";
     layer.push("publish", "scorecard88");
     blocker = firstBlockingIssue(row, null, "scorecard_publish_not_closed");
-  } else if (waterBlocked || has(text, "source", "water", "not_ready", "stale", "coverage")) {
-    state = "BLOCKED_SOURCE";
-    layer.push("source");
-    blocker = manifest.waterRoot?.reason || firstBlockingIssue(row, null, "source_not_ready");
   } else if (row.fallback === true || has(text, "fallback", "previous", "old", "mismatch")) {
     state = "DEGRADED_PREVIOUS_GOOD";
     layer.push("display", "previous_good");
@@ -390,7 +509,9 @@ function classifyModule(row = {}, manifest = {}, marketCalendar = null) {
     state,
     layer: [...new Set(layer)],
     blocker,
-    nextAction: nextActionForState(state, row),
+    reasonCode: primaryReasonCode(row, state, blocker),
+    reasonCodes: reasonCodesFor(row, state, blocker),
+    nextAction: actionForReasonCode(primaryReasonCode(row, state, blocker), state) || nextActionForState(state, row),
     retryable: state !== "BLOCKED_AUTH" || has(text, "authenticated readback"),
     priority: priorityForState(state),
   };
@@ -405,6 +526,7 @@ function priorityForState(state) {
     BLOCKED_DATE_MISMATCH: 36,
     FAILED_PUBLISH: 40,
     PUBLISH_DEFERRED_MANIFEST_PENDING: 84,
+    NEXT_TRADING_DAY_REPAIR_DEFERRED: 86,
     DEGRADED_PREVIOUS_GOOD: 50,
     FAILED_DISPLAY: 60,
     PENDING_NOT_DUE: 85,
@@ -414,6 +536,11 @@ function priorityForState(state) {
 }
 
 function nextActionForState(state, row = {}) {
+  const text = issueText(row);
+  const stableReason = primaryReasonCode(row, state, firstBlockingIssue(row, null, ""));
+  const stableAction = actionForReasonCode(stableReason, state);
+  if (stableAction) return stableAction;
+  if (state === "FAILED_PUBLISH" && sourceQualityLikeText(text)) return "rewater_then_reverify_water_root_and_rerun_only_affected_module";
   if (state === "BLOCKED_AUTH") return "fix_service_token_or_authenticated_readback_then_rerun_module";
   if (state === "BLOCKED_SOURCE") return "wait_or_fix_water_root_then_rerun_only_affected_module";
   if (state === "FAILED_SCAN") return "rerun_strategy_scanner_after_water_ok";
@@ -421,6 +548,7 @@ function nextActionForState(state, row = {}) {
   if (state === "BLOCKED_RUNID_MISMATCH") return "refresh_terminal_snapshot_bundle_mobile_88_readback";
   if (state === "BLOCKED_DATE_MISMATCH") return "rerun_strategy_scanner_after_date_gate_fix";
   if (state === "PUBLISH_DEFERRED_MANIFEST_PENDING") return "wait_for_manifest_full_green_then_scorecard_publish";
+  if (state === "NEXT_TRADING_DAY_REPAIR_DEFERRED") return "defer_until_next_trading_day_then_rerun_only_affected_module";
   if (state === "DEGRADED_PREVIOUS_GOOD") return "rebuild_today_snapshot_and_verify_no_old_runid";
   if (state === "FAILED_DISPLAY") return "refresh_terminal_snapshot_bundle_mobile_88_readback";
   return "none";
@@ -428,7 +556,7 @@ function nextActionForState(state, row = {}) {
 
 function lifecycleStageForRow(row = {}, classification = {}, manifest = {}, marketCalendar = null) {
   if (classification.state === "CLOSED") return "CLOSED";
-  if (classification.state === "PENDING_NOT_DUE" || classification.state === "PUBLISH_DEFERRED_MANIFEST_PENDING") return classification.state;
+  if (classification.state === "PENDING_NOT_DUE" || classification.state === "PUBLISH_DEFERRED_MANIFEST_PENDING" || classification.state === "NEXT_TRADING_DAY_REPAIR_DEFERRED") return classification.state;
   if (classification.state) return classification.state;
   const runIds = row.runIds || {};
   const waterClosed = isMarketClosedPreviousGood(manifest, marketCalendar);
@@ -450,6 +578,7 @@ function retryPolicyForState(state) {
     BLOCKED_DATE_MISMATCH: { maxAttempts: 2, backoffSeconds: 180, fuseAfterAttempts: 2, autoRetry: false, manualRepairRequired: false },
     DEGRADED_PREVIOUS_GOOD: { maxAttempts: 3, backoffSeconds: 60, fuseAfterAttempts: 3, autoRetry: true, manualRepairRequired: false },
     FAILED_DISPLAY: { maxAttempts: 3, backoffSeconds: 60, fuseAfterAttempts: 3, autoRetry: true, manualRepairRequired: false },
+    NEXT_TRADING_DAY_REPAIR_DEFERRED: { maxAttempts: 3, backoffSeconds: 300, fuseAfterAttempts: 3, autoRetry: true, manualRepairRequired: false, deferredUntil: "next_trading_day_market_open" },
   };
   return policies[state] || { maxAttempts: 1, backoffSeconds: 120, fuseAfterAttempts: 1, autoRetry: false, manualRepairRequired: false };
 }
@@ -461,6 +590,9 @@ function idempotencyKeyFor(row = {}, classification = {}) {
 }
 function executionGuardForRow(row = {}, classification = {}) {
   const state = String(classification.state || "");
+  if (state === "BLOCKED_SOURCE") {
+    return "after command, re-run the reason-specific verifier, terminal Water Root, Daily Manifest, and Final Audit; do not publish latest until source blocker disappears and current tradeDate evidence is complete";
+  }
   if (state.includes("DISPLAY") || state.includes("DEGRADED") || state.includes("PREVIOUS") || state.includes("RUNID_MISMATCH")) {
     return "after command, re-run daily manifest and verify productionApi/desktop/mobile/scorecard88 runIds are same latest runId; reject old runId, fallback, previous-good, missing runId, or membership-only 401 as success";
   }
@@ -468,10 +600,10 @@ function executionGuardForRow(row = {}, classification = {}) {
 }
 function jobForRow(row, classification) {
   if (classification.state === "CLOSED" || classification.state === "PENDING_NOT_DUE" || classification.state === "PUBLISH_DEFERRED_MANIFEST_PENDING") return null;
-  const command = commandFor(row.key, classification.state);
+  const command = commandFor(row.key, classification.state, classification);
   const repairTradeDate = repairTradeDateForRow(row, classification);
   const idempotencyKey = idempotencyKeyFor(row, classification);
-  const receiptFile = path.join(OUT_DIR, "receipts", idempotencyKey.replace(/[^a-zA-Z0-9_.-]+/g, "_") + ".json");
+  const receiptFile = receiptFileForIdempotencyKey(idempotencyKey);
   const retryPolicy = retryPolicyForState(classification.state);
   const jobId = [repairTradeDate || EXPECTED_DATE || "latest", row.key || "unknown"].join(":");
   return {
@@ -490,7 +622,8 @@ function jobForRow(row, classification) {
     receiptFile,
     receiptRequired: true,
     retryPolicy,
-    reasonCode: classification.blocker || classification.state || "UNKNOWN",
+    reasonCode: classification.reasonCode || primaryReasonCode(row, classification.state, classification.blocker) || "UNKNOWN",
+    reasonCodes: classification.reasonCodes || reasonCodesFor(row, classification.state, classification.blocker),
     attempts: 0,
     maxAttempts: Number(retryPolicy.maxAttempts ?? 3),
     timeout: ["FAILED_SCAN", "BLOCKED_SOURCE"].includes(classification.state) ? 240000 : 60000,
@@ -498,13 +631,89 @@ function jobForRow(row, classification) {
     terminalReason: null,
     deadLetter: false,
     selfHealEvidence: [],
-    requiresWaterRootOk: ["FAILED_SCAN", "FAILED_PUBLISH", "DEGRADED_PREVIOUS_GOOD", "FAILED_DISPLAY"].includes(classification.state),
+    requiresWaterRootOk: ["FAILED_SCAN", "FAILED_PUBLISH", "DEGRADED_PREVIOUS_GOOD", "FAILED_DISPLAY", "NEXT_TRADING_DAY_REPAIR_DEFERRED"].includes(classification.state),
     expectedDate: EXPECTED_DATE,
     repairTradeDate,
     runId: row.runId || "",
     runIds: row.runIds || {},
     issues: row.issues || [],
     executionGuard: executionGuardForRow(row, classification),
+  };
+}
+
+function finalAuditPath() {
+  return path.join(ROOT, "outputs", "terminal-final-audit", "terminal-unattended-final-audit.json");
+}
+
+function finalAuditJobForManifest(manifest = {}, marketCalendar = null) {
+  const audit = readJson(finalAuditPath(), {});
+  if (audit.ok !== false && String(audit.decision || "").toUpperCase() !== "NO") return null;
+  if (isMarketClosedPreviousGood(manifest, marketCalendar)) return null;
+  const auditDate = normalizedDate(audit.tradeDate || audit.trade_date || audit.expectedDate);
+  const expected = normalizedDate(EXPECTED_DATE);
+  if (auditDate && expected && auditDate !== expected) return null;
+  const firstBlocker = String(audit.first_blocker || audit.firstBlocker || audit.blocker || "");
+  const reasonCode = String(audit.reason_code || audit.reasonCode || "").toLowerCase();
+  if (firstBlocker !== "natural_evidence" && !/^natural_/.test(reasonCode)) return null;
+  const blocker = firstBlocker || reasonCode || "natural_evidence_not_ready";
+  const naturalLayer = reasonCode === "natural_warmup_websocket_not_ready"
+    ? ["source", "natural_evidence", "websocket"]
+    : ["source", "natural_evidence", "daytrade_source"];
+  const naturalLabel = reasonCode === "natural_warmup_websocket_not_ready"
+    ? "Natural Evidence / Fugle WebSocket Warmup"
+    : "Natural Evidence / Daytrade Source Warmup";
+  const classification = {
+    state: "BLOCKED_SOURCE",
+    layer: naturalLayer,
+    priority: 5,
+    retryable: true,
+    blocker,
+    reasonCode: reasonCode || "natural_warmup_websocket_not_ready",
+    reasonCodes: [reasonCode || "natural_warmup_websocket_not_ready"],
+    nextAction: String(audit.allowed_action || audit.allowedAction || "restart_fugle_websocket_source_then_run_rewater_verification"),
+  };
+  const row = {
+    key: "natural-evidence",
+    label: naturalLabel,
+    runId: String(audit.daily_run_id || audit.dailyRunId || manifest.daily_run_id || manifest.dailyRunId || ""),
+    runIds: {},
+    issues: [classification.reasonCode, blocker].filter(Boolean),
+  };
+  const idempotencyKey = idempotencyKeyFor(row, classification);
+  const receiptFile = receiptFileForIdempotencyKey(idempotencyKey);
+  const retryPolicy = retryPolicyForState(classification.state);
+  const jobId = [EXPECTED_DATE || "latest", row.key].join(":");
+  return {
+    jobId,
+    module: row.key,
+    key: row.key,
+    label: row.label,
+    state: classification.state,
+    layer: classification.layer,
+    priority: classification.priority,
+    retryable: classification.retryable,
+    blocker: classification.blocker,
+    nextAction: classification.nextAction,
+    command: commandFor(row.key, classification.state, classification),
+    idempotencyKey,
+    receiptFile,
+    receiptRequired: true,
+    retryPolicy,
+    reasonCode: classification.reasonCode,
+    reasonCodes: classification.reasonCodes,
+    attempts: 0,
+    maxAttempts: Number(retryPolicy.maxAttempts ?? 12),
+    timeout: 240000,
+    nextRetryAt: null,
+    terminalReason: null,
+    deadLetter: false,
+    selfHealEvidence: [],
+    requiresWaterRootOk: false,
+    expectedDate: EXPECTED_DATE,
+    runId: row.runId,
+    runIds: {},
+    issues: row.issues,
+    executionGuard: `after command, re-run final audit and verify natural evidence / Water Root no longer reports ${classification.reasonCode}; if this was daytrade_source_not_ready, verify strategy2:daytrade-1m-chain also recovers latest candle and MA readiness`,
   };
 }
 
@@ -528,7 +737,7 @@ function rootWaterJobForManifest(manifest = {}, marketCalendar = null) {
     issues: [blocker],
   };
   const idempotencyKey = idempotencyKeyFor(row, classification);
-  const receiptFile = path.join(OUT_DIR, "receipts", idempotencyKey.replace(/[^a-zA-Z0-9_.-]+/g, "_") + ".json");
+  const receiptFile = receiptFileForIdempotencyKey(idempotencyKey);
   const retryPolicy = retryPolicyForState(classification.state);
   const jobId = [EXPECTED_DATE || "latest", row.key].join(":");
   return {
@@ -542,12 +751,13 @@ function rootWaterJobForManifest(manifest = {}, marketCalendar = null) {
     retryable: classification.retryable,
     blocker: classification.blocker,
     nextAction: classification.nextAction,
-    command: commandFor(row.key, classification.state),
+    command: commandFor(row.key, classification.state, classification),
     idempotencyKey,
     receiptFile,
     receiptRequired: true,
     retryPolicy,
-    reasonCode: classification.blocker || classification.state || "SOURCE_NOT_READY",
+    reasonCode: classification.reasonCode || primaryReasonCode(row, classification.state, classification.blocker) || "SOURCE_NOT_READY",
+    reasonCodes: classification.reasonCodes || reasonCodesFor(row, classification.state, classification.blocker),
     attempts: 0,
     maxAttempts: Number(retryPolicy.maxAttempts ?? 3),
     timeout: 240000,
@@ -563,14 +773,31 @@ function rootWaterJobForManifest(manifest = {}, marketCalendar = null) {
   };
 }
 
-function commandFor(key, state) {
+function commandFor(key, state, classification = {}, options = {}) {
+  const blockerText = String(classification.blocker || classification.reasonCode || "");
+  const reasonCode = String(classification.reasonCode || "");
+  if (state === "NEXT_TRADING_DAY_REPAIR_DEFERRED" && reasonCode === "strategy3_1300_intraday_source_quality_gap") {
+    const tradeDate = String(classification.repairTradeDate || classification.tradeDate || "");
+    const runId = String(classification.repairRunId || classification.runId || "");
+    return "npm run verify:terminal-water-root && node scripts/repair-strategy3-1300-entry-candles.js --trade-date=" + tradeDate + " --run-id=" + runId + " --max-symbols=39 --apply && npm run verify:daytrade-strategy3-closure-live && npm run manifest:daily-terminal-run -- --from-existing && npm run final-audit:terminal";
+  }
+  const expectedDateForCommand = options.dynamicTradeDate === true ? "" : EXPECTED_DATE;
+  const finalAuditCmd = expectedDateForCommand ? `npm run final-audit:terminal -- --expected-date=${expectedDateForCommand}` : "npm run final-audit:terminal";
+  if (state === "FAILED_PUBLISH" && sourceQualityLikeText(blockerText)) return `npm run daytrade-warmup:self-heal && npm run verify:terminal-water-root && npm run manifest:daily-terminal-run -- --from-existing && ${finalAuditCmd}`;
   if (state === "BLOCKED_AUTH") return "verify service token env, then rerun scanner/readback with machine token";
-  if (state === "BLOCKED_SOURCE") return "npm run daytrade-warmup:self-heal && npm run verify:terminal-water-root";
+  if (reasonCode === "natural_warmup_websocket_not_ready") return `npm run daytrade-warmup:self-heal && npm run verify:fugle-websocket-sources && npm run verify:terminal-water-root && ${finalAuditCmd}`;
+  if (reasonCode === "natural_warmup_daytrade_source_not_ready") return `npm run daytrade-warmup:self-heal && npm run strategy2:daytrade-1m-chain && npm run verify:terminal-water-root && ${finalAuditCmd}`;
+  if (reasonCode === "strategy2_intraday_latest_candle_missing_after_0901") return `npm run daytrade-warmup:self-heal && npm run strategy2:daytrade-1m-chain && npm run verify:terminal-water-root && ${finalAuditCmd}`;
+  if (reasonCode === "strategy2_intraday_ma35_readiness_below_threshold" || reasonCode === "strategy2_intraday_ma20_readiness_below_threshold") return `npm run daytrade-warmup:self-heal && npm run strategy2:daytrade-1m-chain && npm run verify:terminal-water-root && ${finalAuditCmd}`;
+  if (reasonCode === "strategy2_quote_freshness_coverage_below_threshold") return `npm run daytrade-warmup:self-heal && npm run verify:fugle-websocket-sources && npm run verify:terminal-water-root && ${finalAuditCmd}`;
+  if (reasonCode === "outside_formal_source_window_previous_good_hold") return "npm run verify:terminal-water-root";
+  if (state === "NEXT_TRADING_DAY_REPAIR_DEFERRED") return `npm run verify:terminal-water-root && ${commandFor(key, "FAILED_SCAN", classification, { dynamicTradeDate: true })} && npm run manifest:daily-terminal-run -- --from-existing && npm run final-audit:terminal`;
+  if (state === "BLOCKED_SOURCE") return `npm run daytrade-warmup:self-heal && npm run verify:terminal-water-root && ${finalAuditCmd}`;
   if (state === "FAILED_PUBLISH") return "npm run manifest:daily-terminal-run && npm run scorecard:publish";
   if (state === "BLOCKED_RUNID_MISMATCH") return "npm run scorecard:terminal-source && npm run manifest:daily-terminal-run -- --from-existing --scorecard-candidate-file=C:\\fuman-runtime\\data\\scorecard-terminal-current.json && npm run snapshot:desktop && npm run verify:terminal-resource-chain:unattended";
   if (state === "FAILED_DISPLAY") return "npm run verify:terminal-resource-chain:unattended";
   const map = {
-    strategy2: `npm run verify:strategy2-e2e-closure -- --expected-date=${EXPECTED_DATE}`,
+    strategy2: expectedDateForCommand ? `npm run verify:strategy2-e2e-closure -- --expected-date=${expectedDateForCommand}` : "npm run verify:strategy2-e2e-closure",
     strategy3: "npm run verify:daytrade-strategy3-closure-live",
     strategy4: "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\run-strategy4.ps1",
     strategy5: "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\run-strategy5.ps1",
@@ -580,7 +807,6 @@ function commandFor(key, state) {
   };
   return map[key] || "rerun module scanner and terminal readback";
 }
-
 function overallState(manifest, moduleStates, marketCalendar = null, manifestDateMatchesExpected = true) {
   if (manifestDateMatchesExpected === false) return "BLOCKED_DATE_MISMATCH";
   if (manifest.ok === true && moduleStates.every((row) => row.state === "CLOSED")) return "CLOSED";
@@ -596,6 +822,7 @@ function overallState(manifest, moduleStates, marketCalendar = null, manifestDat
   if (moduleStates.some((row) => row.state === "FAILED_DISPLAY")) return "FAILED_DISPLAY";
   if (moduleStates.some((row) => row.state === "DEGRADED_PREVIOUS_GOOD")) return "DEGRADED_PREVIOUS_GOOD";
   if (moduleStates.some((row) => row.state === "PENDING_NOT_DUE" || row.state === "PUBLISH_DEFERRED_MANIFEST_PENDING")) return "PENDING_NOT_DUE";
+  if (moduleStates.some((row) => row.state === "NEXT_TRADING_DAY_REPAIR_DEFERRED")) return "CLOSED";
   return "DEGRADED_PREVIOUS_GOOD";
 }
 
@@ -649,7 +876,7 @@ function selfTest() {
       manifest: waterBlockedManifest,
       expectedState: "BLOCKED_SOURCE",
       expectedJob: true,
-      expectedCommand: "npm run daytrade-warmup:self-heal && npm run verify:terminal-water-root",
+      expectedCommand: "npm run daytrade-warmup:self-heal && npm run verify:terminal-water-root && npm run final-audit:terminal -- --expected-date=20260730",
     },
     {
       name: "scanner_failure_requires_water_root",
@@ -788,6 +1015,26 @@ function selfTest() {
       expectedState: "CLOSED",
       expectedJob: false,
     },
+    {
+      name: "market_closed_source_quality_gap_is_deferred_for_strategy3",
+      row: {
+        key: "strategy3",
+        label: "Strategy3",
+        complete: false,
+        todayAuthoritative: false,
+        tradeDate: "20260807",
+        sourceDate: "20260807",
+        runId: "strategy3-20260807-20260807052453",
+        runIds: { scanner: "strategy3-20260807-20260807052453" },
+        displayBlockReason: "scorecard candidate source_quality_fail: strategy3_1300_intraday_1m_partial:23/39",
+        issues: ["market_closed_previous_good_hold"],
+      },
+      manifest: { previousGoodHold: true, waterRoot: { ok: true } },
+      marketCalendar: closedMarket,
+      expectedState: "NEXT_TRADING_DAY_REPAIR_DEFERRED",
+      expectedJob: true,
+      expectedCommand: "npm run verify:terminal-water-root && node scripts/repair-strategy3-1300-entry-candles.js --trade-date=20260807 --run-id=strategy3-20260807-20260807052453 --max-symbols=39 --apply && npm run verify:daytrade-strategy3-closure-live && npm run manifest:daily-terminal-run -- --from-existing && npm run final-audit:terminal",
+    },
   ];
   const failures = [];
   const results = cases.map((item) => {
@@ -878,6 +1125,7 @@ async function main() {
   const manifestPath = manifestPathForExpectedDate(EXPECTED_DATE_EXPLICIT ? EXPECTED_DATE : "");
   const manifest = readJson(manifestPath, {});
   const manifestTradeDate = String(manifest.tradeDate || manifest.expectedDate || "").replace(/\D/g, "").slice(0, 8);
+  const dailyRunId = String(manifest.daily_run_id || manifest.dailyRunId || manifest.runId || "");
   const displayTradeDate = displayTradeDateFrom(marketCalendar, manifest, EXPECTED_DATE);
   const manifestDateMatchesExpected = !manifestTradeDate || manifestTradeDate === EXPECTED_DATE;
   const manifestDateMatchesDisplay = !manifestTradeDate || (!!displayTradeDate && manifestTradeDate === displayTradeDate);
@@ -895,11 +1143,15 @@ async function main() {
     };
   });
   const marketClosedHold = isMarketClosedPreviousGood(manifest, marketCalendar);
+  const finalAuditJob = finalAuditJobForManifest(manifest, marketCalendar);
   const rootWaterJob = rootWaterJobForManifest(manifest, marketCalendar);
-  const jobQueue = [rootWaterJob, ...moduleStates.map((row) => jobForRow(row, row))]
+  const generatedJobQueue = [finalAuditJob, rootWaterJob, ...moduleStates.map((row) => jobForRow(row, row))]
     .filter(Boolean)
+    .map((job) => ({ ...job, daily_run_id: dailyRunId, dailyRunId, tradeDate: EXPECTED_DATE, trade_date: EXPECTED_DATE }));
+  const jobQueue = generatedJobQueue
+    .map(preserveExistingDeferredReceipt)
     .sort((a, b) => a.priority - b.priority || String(a.key).localeCompare(String(b.key)));
-  const pendingModules = moduleStates.filter((row) => row.state === "PENDING_NOT_DUE" || row.state === "PUBLISH_DEFERRED_MANIFEST_PENDING");
+  const pendingModules = moduleStates.filter((row) => row.state === "PENDING_NOT_DUE" || row.state === "PUBLISH_DEFERRED_MANIFEST_PENDING" || row.state === "NEXT_TRADING_DAY_REPAIR_DEFERRED");
   const actionableModules = moduleStates.filter((row) => row.state !== "CLOSED" && !pendingModules.includes(row));
   const queuedKeys = new Set(jobQueue.map((job) => job.key));
   const missingJobModules = actionableModules.filter((row) => !queuedKeys.has(row.key)).map((row) => row.key);
@@ -911,9 +1163,15 @@ async function main() {
     queuedModuleCount: queuedKeys.size,
     missingJobModules,
   };
-  const hasPendingNotDue = jobQueue.length === 0 && moduleStates.some((row) => row.state === "PENDING_NOT_DUE" || row.state === "PUBLISH_DEFERRED_MANIFEST_PENDING");
+  const deferredRepairJobs = jobQueue.filter((job) => job.state === "NEXT_TRADING_DAY_REPAIR_DEFERRED");
+  const activeJobQueue = jobQueue.filter((job) => job.state !== "NEXT_TRADING_DAY_REPAIR_DEFERRED");
+  const hasOnlyDeferredRepairs = jobQueue.length > 0 && activeJobQueue.length === 0 && deferredRepairJobs.length === jobQueue.length;
+  const hasPendingNotDue = activeJobQueue.length === 0 && moduleStates.some((row) => row.state === "PENDING_NOT_DUE" || row.state === "PUBLISH_DEFERRED_MANIFEST_PENDING");
+  const overallStateValue = overallState(manifest, moduleStates, marketCalendar, manifestDateAccepted);
   const state = {
     contract: "terminal-orchestrator-state-v1",
+    daily_run_id: dailyRunId,
+    dailyRunId,
     checkedAt: new Date().toISOString(),
     tradeDate: EXPECTED_DATE,
     manifestTradeDate,
@@ -930,8 +1188,8 @@ async function main() {
     marketCalendar,
     stateMachineContract: STATE_MACHINE_CONTRACT,
     marketClosedPreviousGood: marketClosedHold,
-    overallState: overallState(manifest, moduleStates, marketCalendar, manifestDateAccepted),
-    unattendedStatus: manifest.ok === true && manifestDateAccepted && jobQueue.length === 0 ? (marketClosedHold ? "PREVIOUS_GOOD_HOLD" : "YES") : "NO",
+    overallState: overallStateValue,
+    unattendedStatus: !manifestDateAccepted ? "NO" : overallStateValue === "PENDING_NOT_DUE" ? "WAITING_SOURCE_WINDOW" : manifest.ok === true && (jobQueue.length === 0 || (marketClosedHold && hasOnlyDeferredRepairs)) ? (marketClosedHold ? "PREVIOUS_GOOD_HOLD" : "YES") : "NO",
     blocker: hasPendingNotDue
       ? (manifest.blocker || jobQueue[0]?.blocker || "pending_not_due")
       : (!manifestDateAccepted
@@ -939,6 +1197,9 @@ async function main() {
         : (marketClosedHold ? (jobQueue[0]?.blocker || "market_closed_previous_good") : (jobQueue[0]?.blocker || manifest.blocker || ""))),
     modules: moduleStates,
     jobQueue,
+    activeJobQueue,
+    deferredRepairJobs,
+    hasOnlyDeferredRepairs,
     queueCoverage,
   };
   const stateFile = path.join(OUT_DIR, "terminal-orchestrator-state.json");
@@ -947,7 +1208,7 @@ async function main() {
   await fs.promises.writeFile(stateFile, JSON.stringify(state, null, 2));
   await fs.promises.writeFile(queueFile, JSON.stringify(jobQueue, null, 2));
   await fs.promises.writeFile(mdFile, markdown(state));
-  const operationallyValid = queueCoverage.ok && manifestDateAccepted && (state.unattendedStatus === "YES" || state.unattendedStatus === "PREVIOUS_GOOD_HOLD" || (state.overallState === "PENDING_NOT_DUE" && jobQueue.length === 0));
+  const operationallyValid = queueCoverage.ok && manifestDateAccepted && (state.unattendedStatus === "YES" || state.unattendedStatus === "PREVIOUS_GOOD_HOLD" || (state.overallState === "PENDING_NOT_DUE" && activeJobQueue.length === 0));
   console.log(JSON.stringify({
     ok: operationallyValid,
     unattendedStatus: state.unattendedStatus,
@@ -965,6 +1226,22 @@ main().catch((error) => {
   console.error(`[terminal-orchestrator-state] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

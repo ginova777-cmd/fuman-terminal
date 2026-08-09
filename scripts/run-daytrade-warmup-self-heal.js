@@ -16,6 +16,7 @@ const NO_TASKS = process.argv.includes("--no-tasks");
 const SOURCE_NAME = "fugle_daytrade_source";
 const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
 const schtasksBin = process.platform === "win32" ? "schtasks.exe" : "schtasks";
+const DAYTRADE_WRITER_TASK = "\\Fuman Daytrade Source Writer 0600-1330";
 
 const CONTRACT = {
   contract: "daytrade-warmup-self-heal-runner-v1",
@@ -37,6 +38,7 @@ const CONTRACT = {
     "rewater_must_be_followed_by_verification",
     "success_requires_rewater_verification_not_action_exit_only",
     "self_heal_apply_failure_keeps_unattended_no",
+    "live_rewater_apply_is_blocked_outside_formal_source_window",
   ],
 };
 
@@ -118,10 +120,16 @@ function taskRun(taskName) {
   return command(`task:${taskName.replace(/^\\/, "")}`, schtasksBin, ["/Run", "/TN", taskName], { taskName });
 }
 
+function receiptIsSupersededByRuntimeCode(code, receipt) {
+  if (!receipt || code !== "SCANNER_OPENING_FALSE") return false;
+  const text = JSON.stringify(receipt).toLowerCase();
+  return text.includes("global\\\\fumanfugledaytradesourcewriter") && isDaytradeWriterTaskRunning();
+}
+
 function actionCommand(action) {
   switch (action) {
     case "START_DAYTRADE_WRITER_TASK":
-      return taskRun("\\Fuman Daytrade Source Writer 0600-1330");
+      return taskRun(DAYTRADE_WRITER_TASK);
     case "START_DAYTRADE_WATCHDOG_TASK":
       return taskRun("\\Fuman Fugle Daytrade Watchdog Every Minute");
     case "RUN_DAYTRADE_SOURCE_WRITER_ONCE":
@@ -135,7 +143,7 @@ function actionCommand(action) {
     case "VERIFY_REWATER":
       return null;
     case "TASK_DIAGNOSTIC_ONLY":
-      return command("task-diagnostic:daytrade-warmup", schtasksBin, ["/Query", "/TN", "\\Fuman Daytrade Source Writer 0600-1330", "/FO", "LIST", "/V"], { diagnosticOnly: true });
+      return command("task-diagnostic:daytrade-warmup", schtasksBin, ["/Query", "/TN", DAYTRADE_WRITER_TASK, "/FO", "LIST", "/V"], { diagnosticOnly: true });
     case "STOP_PROTECT_NATURAL_EVIDENCE_REQUIRED":
       return null;
     default:
@@ -147,12 +155,41 @@ function printable(step) {
   return [step.command, ...(step.args || [])].join(" ");
 }
 
+function canonicalFailureCode(code) {
+  const text = String(code || "").trim();
+  const lower = text.toLowerCase();
+  if (!text || lower === "natural_evidence") return "";
+  if (/^TRADE_DATE_\d{4}_\d{2}_\d{2}$/.test(text)) return "TRADE_DATE_MISMATCH";
+  if (lower === "natural_warmup_websocket_not_ready" || lower.includes("restart_fugle_websocket_source_then_run_rewater_verification")) return "WEBSOCKET_NOT_FORMAL_READY";
+  if (lower === "natural_warmup_daytrade_source_not_ready" || lower.includes("restart_daytrade_source_writer_then_run_rewater_verification")) return "SOURCE_STATUS_NOT_OK";
+  if (lower === "natural_warmup_canonical_gate_not_ready" || lower.includes("refresh_daytrade_canonical_gate_then_run_rewater_verification")) return "GATE_NOT_A";
+  if (lower === "natural_warmup_futopt_txf_not_ready" || lower.includes("restart_futopt_websocket_and_refresh_contract_health_then_reverify")) return "FUTOPT_TXF_NOT_READY";
+  return text;
+}
+
 function normalizeFailureCodes(summary = {}) {
   const codes = [];
   if (Array.isArray(summary.failure_codes)) codes.push(...summary.failure_codes);
   if (Array.isArray(summary.incident_reason_codes)) codes.push(...summary.incident_reason_codes);
+  const finalAuditFields = [
+    summary.reason_code,
+    summary.reasonCode,
+    summary.first_blocker,
+    summary.firstBlocker,
+    summary.allowed_action,
+    summary.allowedAction,
+    summary.recovery_queue?.reason_code,
+    summary.recoveryQueue?.reasonCode,
+    summary.recovery_queue?.allowed_action,
+    summary.recoveryQueue?.allowedAction,
+    summary.decision?.reason_code,
+    summary.decision?.reasonCode,
+    summary.decision?.allowed_action,
+    summary.decision?.allowedAction,
+  ];
+  codes.push(...finalAuditFields.filter(Boolean));
   const checks = Array.isArray(summary.failed_checks) ? [...summary.failed_checks] : [];
-  checks.push(summary.owner_message, summary.reason, summary.message, summary.status);
+  checks.push(summary.owner_message, summary.reason, summary.message, summary.status, ...finalAuditFields);
   for (const report of Object.values(summary.phase_results || {})) {
     if (Array.isArray(report.failures)) checks.push(...report.failures);
     if (Array.isArray(report.failure_codes)) codes.push(...report.failure_codes);
@@ -164,6 +201,10 @@ function normalizeFailureCodes(summary = {}) {
     if (text.includes("task_missed:0700")) codes.push("TASK_MISSED_0700");
     if (text.includes("task_missed:0845")) codes.push("TASK_MISSED_0845");
     if (text.includes("task_missed:0900")) codes.push("TASK_MISSED_0900");
+    if (text.includes("natural_warmup_websocket_not_ready") || text.includes("restart_fugle_websocket_source")) codes.push("WEBSOCKET_NOT_FORMAL_READY");
+    if (text.includes("natural_warmup_daytrade_source_not_ready") || text.includes("restart_daytrade_source_writer")) codes.push("SOURCE_STATUS_NOT_OK");
+    if (text.includes("natural_warmup_canonical_gate_not_ready") || text.includes("refresh_daytrade_canonical_gate")) codes.push("GATE_NOT_A");
+    if (text.includes("natural_warmup_futopt_txf_not_ready") || text.includes("restart_futopt_websocket")) codes.push("FUTOPT_TXF_NOT_READY");
     if (text.includes("prioritypoolsymbols") || text.includes("priority_pool_symbols")) codes.push("PRIORITY_POOL_NOT_40");
     if (text.includes("priorityfreshquotecoverage120s") || text.includes("priority_fresh_quote_coverage_120s")) codes.push("PRIORITY_COVERAGE_LT_095");
     if (text.includes("mother_pool_fresh_coverage_below_080") || text.includes("motherpoolfreshquotecoverage120s") || text.includes("mother_pool_fresh_quote_coverage_120s")) codes.push("MOTHER_POOL_FRESH_COVERAGE_LT_080");
@@ -171,14 +212,14 @@ function normalizeFailureCodes(summary = {}) {
     if (text.includes("quoteageseconds") || text.includes("quote_age_seconds")) codes.push("QUOTE_STALE");
     if (text.includes("intraday_1m") || text.includes("today_1m")) codes.push("INTRADAY_1M_NOT_FRESH");
     if (text.includes("daily_volume_status")) codes.push("DAILY_VOLUME_NOT_READY");
-    if (text.includes("scanner_can_run_opening") || text.includes("scannerCanRunOpening")) codes.push("SCANNER_OPENING_FALSE");
+    if (text.includes("scanner_can_run_opening") || text.includes("scannercanrunopening")) codes.push("SCANNER_OPENING_FALSE");
     if (text.includes("formalentryspeedverdict") || text.includes("formal_entry_speed_verdict")) codes.push("FORMAL_VERDICT_NO");
     if (text.includes("gategrade") || text.includes("gate_grade")) codes.push("GATE_NOT_A");
     if (text.includes("natural_schedule_evidence")) codes.push("MISSING_NATURAL_SCHEDULE_EVIDENCE");
     if (text.includes("manual_verification_only")) codes.push("MANUAL_VERIFICATION_ONLY");
     if (text.includes("timeout")) codes.push("SUPABASE_TIMEOUT");
   }
-  return [...new Set(codes.map((code) => String(code || "").trim()).filter(Boolean).map((code) => /^TRADE_DATE_\d{4}_\d{2}_\d{2}$/.test(code) ? "TRADE_DATE_MISMATCH" : code))];
+  return [...new Set(codes.map(canonicalFailureCode).filter(Boolean))];
 }
 
 function defaultSummaryFile(tradeDate) {
@@ -217,11 +258,12 @@ function planActions(summary, tradeDate) {
     const priorIsValid = prior && prior.contract === "daytrade-warmup-self-heal-action-receipt-v1" && prior.idempotencyKey === idempotencyKey;
     const priorAttempts = priorIsValid ? Math.max(0, Number(prior.attempts || 0)) : 0;
     const maxAttempts = 3;
-    const priorCompleted = priorIsValid && prior.ok === true && prior.status === "complete";
-    const priorDeadLetter = priorIsValid && prior.deadLetter === true;
+    const priorSuperseded = priorIsValid && receiptIsSupersededByRuntimeCode(code, prior);
+    const priorCompleted = priorIsValid && priorSuperseded !== true && prior.ok === true && prior.status === "complete";
+    const priorDeadLetter = priorIsValid && priorSuperseded !== true && prior.deadLetter === true;
     const nextRetryAt = priorIsValid ? (prior.nextRetryAt || null) : null;
     const retryDue = !nextRetryAt || !Number.isFinite(Date.parse(nextRetryAt)) || Date.parse(nextRetryAt) <= Date.now();
-    const deadLetter = priorDeadLetter || priorAttempts >= maxAttempts;
+    const deadLetter = priorSuperseded !== true && (priorDeadLetter || priorAttempts >= maxAttempts);
     const waitingForRetry = !priorCompleted && !deadLetter && !retryDue;
     const state = stopOnly
       ? "STOP_PROTECT"
@@ -248,6 +290,7 @@ function planActions(summary, tradeDate) {
       commands,
       attempts: priorAttempts,
       maxAttempts,
+      priorSuperseded,
       timeoutMs: commands.some((step) => step.writesSource === true) ? 240000 : 60000,
       timeout: commands.some((step) => step.writesSource === true) ? 240000 : 60000,
       nextRetryAt,
@@ -288,6 +331,24 @@ function runStep(step) {
     stdout: String(result.stdout || "").slice(-12000),
     stderr: String(result.stderr || "").slice(-12000),
   };
+}
+
+function isDaytradeWriterTaskRunning() {
+  if (process.platform !== "win32") return false;
+  const result = spawnSync(schtasksBin, ["/Query", "/TN", DAYTRADE_WRITER_TASK, "/FO", "LIST", "/V"], {
+    cwd: ROOT,
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 20000,
+  });
+  const text = `${result.stdout || ""}\n${result.stderr || ""}`.toLowerCase();
+  return result.status === 0 && (text.includes("status:") && text.includes("running"));
+}
+
+function isBenignWriterAlreadyRunning(step, result) {
+  const text = `${result?.stdout || ""}\n${result?.stderr || ""}`.toLowerCase();
+  return step?.label === "daytrade-source:writer-once"
+    && (text.includes("global\\fumanfugledaytradesourcewriter") || isDaytradeWriterTaskRunning());
 }
 
 function writeReceipt(job, status, results, extra = {}) {
@@ -338,6 +399,59 @@ function requiresNextNaturalEvidence(summary = {}) {
     || text.includes("pending_not_due")
     || text.includes("wait_for_natural_evidence");
 }
+function taipeiClock(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(date).map((part) => [part.type, part.value]));
+  const hour = Number(parts.hour || 0);
+  const minute = Number(parts.minute || 0);
+  return { hour, minute, minutes: hour * 60 + minute };
+}
+
+function summaryPhaseText(summary = {}) {
+  return [
+    summary.phase,
+    summary.current_phase,
+    summary.currentPhase,
+    summary.gate_phase,
+    summary.source_status?.phase,
+    summary.sourceStatus?.phase,
+    summary.payload?.phase,
+    summary.reason,
+    summary.gate_reason,
+    summary.formal_entry_speed_verdict,
+    summary.source_status_at_run?.status,
+    summary.source_status_at_run_status,
+  ].map((value) => String(value || "").toLowerCase()).join(" ");
+}
+
+function liveTimeGuardEnabled() {
+  return !SELF_TEST
+    && !argValue("summary")
+    && process.env.FUMAN_DAYTRADE_SELF_HEAL_IGNORE_TIME_GUARD !== "1";
+}
+
+function isOutsideFormalSourceWindow(summary = {}, tradeDate = taipeiTradeDate(), now = new Date()) {
+  if (!liveTimeGuardEnabled()) return false;
+  if (summary.market_closed === true) return true;
+  const phaseText = summaryPhaseText(summary);
+  if (phaseText.includes("market_closed")
+    || phaseText.includes("after_daytrade_window")
+    || phaseText.includes("after_formal")
+    || phaseText.includes("off_session")
+    || phaseText.includes("formal entry disabled by phase")) {
+    return true;
+  }
+  const today = ymd(taipeiTradeDate(now));
+  if (ymd(tradeDate) !== today) return true;
+  const { minutes } = taipeiClock(now);
+  const start = 6 * 60;
+  const end = 13 * 60 + 45;
+  return minutes < start || minutes > end;
+}
 function buildPlan(summary, tradeDate) {
   if (summary.market_closed === true) {
     const reason = "market closed; no rewater and no formal entry";
@@ -362,18 +476,27 @@ function buildPlan(summary, tradeDate) {
         ok: true,
         state: "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
         applyAllowed: false,
+        natural_evidence_backfill_allowed: false,
+        self_heal_counts_as_unattended_yes: false,
+        rewater_verification_required: true,
         reason,
       },
       exclusions: ["membership", "terminal_ui", "/88", "desktop", "mobile"],
     };
   }
 
+  const outsideFormalSourceWindow = isOutsideFormalSourceWindow(summary, tradeDate);
   const plannedActions = planActions(summary, tradeDate);
   const hasPendingPhase = Array.isArray(summary.pending_phase) && summary.pending_phase.length > 0;
   const waitingForNaturalEvidence = hasPendingPhase && nextRetryIsFuture(summary) && requiresNextNaturalEvidence(summary);
   const pendingNotDue = waitingForNaturalEvidence || summary.status === "PENDING_NOT_DUE" || normalizeFailureCodes(summary).includes("PENDING_NOT_DUE");
   const failureCodes = pendingNotDue ? [] : plannedActions.failureCodes;
-  const jobs = pendingNotDue ? [] : plannedActions.jobs;
+  const jobs = pendingNotDue ? [] : outsideFormalSourceWindow ? plannedActions.jobs.map((job) => ({
+    ...job,
+    state: job.executable ? "OUTSIDE_FORMAL_SOURCE_WINDOW" : job.state,
+    executable: false,
+    terminalReason: "outside_formal_source_window_preserve_previous_good",
+  })) : plannedActions.jobs;
   const unknownCodes = pendingNotDue ? [] : plannedActions.unknownCodes;
   const executableJobs = jobs.filter((job) => job.executable);
   const retryBlockedJobs = jobs.filter((job) => !job.executable && (job.state === "WAITING_RETRY" || job.state === "DEAD_LETTER"));
@@ -392,32 +515,39 @@ function buildPlan(summary, tradeDate) {
     jobs,
     rewaterVerification: rewaterVerificationCommands(),
     decision: {
-      ok: pendingNotDue || okBefore || (unknownCodes.length === 0 && (executableJobs.length > 0 || retryBlockedJobs.length > 0)),
-      state: pendingNotDue
-        ? "WAITING_FOR_NATURAL_PHASE"
-        : okBefore
-          ? "NO_REWATER_NEEDED"
-          : unknownCodes.length
-            ? "UNKNOWN_REASON_CODE_BLOCKED"
-            : executableJobs.length
-              ? "SELF_HEAL_PLANNED"
-              : retryBlockedJobs.length
-                ? "WAITING_RETRY_OR_DEAD_LETTER"
-                : "NO_FAILURE_CODES_FOUND",
-      applyAllowed: !okBefore && unknownCodes.length === 0 && executableJobs.length > 0,
-      reason: waitingForNaturalEvidence
-        ? "next natural 0700/0845/0900 evidence is required before rewater can count"
+      ok: outsideFormalSourceWindow || pendingNotDue || okBefore || (unknownCodes.length === 0 && (executableJobs.length > 0 || retryBlockedJobs.length > 0)),
+      state: outsideFormalSourceWindow
+        ? "OUTSIDE_FORMAL_SOURCE_WINDOW_PRESERVE_PREVIOUS_GOOD"
         : pendingNotDue
-          ? "next warmup phase is not due yet"
+          ? "WAITING_FOR_NATURAL_PHASE"
           : okBefore
-            ? "warmup already yes"
+            ? "NO_REWATER_NEEDED"
             : unknownCodes.length
-              ? "unknown reason code: " + unknownCodes.join(",")
+              ? "UNKNOWN_REASON_CODE_BLOCKED"
               : executableJobs.length
-                ? "reason codes mapped to self-heal actions"
+                ? "SELF_HEAL_PLANNED"
                 : retryBlockedJobs.length
-                  ? "retry window not due or job is dead-lettered; no rewater executed"
-                  : "warmup not ready but no failure code was emitted; reason classifier must be fixed",
+                  ? "WAITING_RETRY_OR_DEAD_LETTER"
+                  : "NO_FAILURE_CODES_FOUND",
+      applyAllowed: !outsideFormalSourceWindow && !okBefore && unknownCodes.length === 0 && executableJobs.length > 0,
+      natural_evidence_backfill_allowed: false,
+      self_heal_counts_as_unattended_yes: false,
+      rewater_verification_required: true,
+      reason: outsideFormalSourceWindow
+        ? "outside formal daytrade source window; preserve previous good and wait for next 0700/0845/0900 natural evidence"
+        : waitingForNaturalEvidence
+          ? "next natural 0700/0845/0900 evidence is required before rewater can count"
+          : pendingNotDue
+            ? "next warmup phase is not due yet"
+            : okBefore
+              ? "warmup already yes"
+              : unknownCodes.length
+                ? "unknown reason code: " + unknownCodes.join(",")
+                : executableJobs.length
+                  ? "reason codes mapped to self-heal actions"
+                  : retryBlockedJobs.length
+                    ? "retry window not due or job is dead-lettered; no rewater executed"
+                    : "warmup not ready but no failure code was emitted; reason classifier must be fixed",
     },
     exclusions: ["membership", "terminal_ui", "/88", "desktop", "mobile"],
   };
@@ -480,7 +610,7 @@ function main() {
     return;
   }
 
-  const tradeDate = argValue("expected-date", argValue("trade-date", taipeiTradeDate())).replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
+  const tradeDate = argValue("expected-date", argValue("trade-date", process.env.FUMAN_TRADE_DATE || taipeiTradeDate())).replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
   const summary = latestSummary(tradeDate);
   const plan = buildPlan(summary, tradeDate);
   const executed = [];
@@ -493,6 +623,7 @@ function main() {
         "WAITING_FOR_NATURAL_PHASE",
         "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
         "WAITING_RETRY_OR_DEAD_LETTER",
+        "OUTSIDE_FORMAL_SOURCE_WINDOW_PRESERVE_PREVIOUS_GOOD",
       ]);
       const payload = { ok: safeNoActionStates.has(plan.decision.state), state: plan.decision.state, reason: plan.decision.reason, output: path.join(OUT_DIR, "daytrade-warmup-self-heal-plan.json") };
       const line = JSON.stringify(payload, null, 2);
@@ -540,15 +671,18 @@ function main() {
           continue;
         }
         const result = runStep(step);
-        jobResults.push(result);
-        executed.push({ ...result, code: job.code, idempotencyKey: job.idempotencyKey, receiptFile: job.receiptFile });
-        if (!result.ok) {
+        const effectiveResult = (!result.ok && isBenignWriterAlreadyRunning(step, result))
+          ? { ...result, ok: true, benignAlreadyRunning: true, reason: "writer_already_running_mutex" }
+          : result;
+        jobResults.push(effectiveResult);
+        executed.push({ ...effectiveResult, code: job.code, idempotencyKey: job.idempotencyKey, receiptFile: job.receiptFile });
+        if (!effectiveResult.ok) {
           const exhausted = attempt >= job.maxAttempts;
           const retryAt = exhausted
             ? null
             : new Date(Date.now() + Math.min(30 * 60 * 1000, 60 * 1000 * (2 ** Math.max(0, attempt - 1)))).toISOString();
           writeReceipt(job, "failed", jobResults, {
-            failedCommand: result.command,
+            failedCommand: effectiveResult.command,
             attempts: attempt,
             maxAttempts: job.maxAttempts,
             nextRetryAt: retryAt,
@@ -559,14 +693,14 @@ function main() {
                 code: job.code,
                 status: "action_failed",
                 idempotencyKey: job.idempotencyKey,
-                failedCommand: result.command,
+                failedCommand: effectiveResult.command,
                 verificationRequired: true,
                 naturalEvidenceBackfillAllowed: false,
               },
             ],
           });
           writeOutputs(plan, executed, verificationResults);
-          console.error(JSON.stringify({ ok: false, failedJob: job.code, failedCommand: result.command, receiptFile: job.receiptFile }, null, 2));
+          console.error(JSON.stringify({ ok: false, failedJob: job.code, failedCommand: effectiveResult.command, receiptFile: job.receiptFile }, null, 2));
           process.exit(1);
         }
       }
@@ -605,6 +739,9 @@ function main() {
     failureCodes: plan.failureCodes,
     unknownCodes: plan.unknownCodes,
     applyAllowed: plan.decision.applyAllowed,
+    natural_evidence_backfill_allowed: false,
+    self_heal_counts_as_unattended_yes: false,
+    rewater_verification_required: true,
     verificationOk,
     output: path.join(OUT_DIR, "daytrade-warmup-self-heal-plan.json"),
   }, null, 2));
@@ -612,6 +749,10 @@ function main() {
 }
 
 main();
+
+
+
+
 
 
 

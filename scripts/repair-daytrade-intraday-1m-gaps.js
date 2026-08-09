@@ -137,13 +137,11 @@ async function main() {
       if (SYNTHESIZE) {
         const covered = new Set(localRows.map((row) => rowMinute(row.candle_time)));
         let previousClose = null;
-        const syntheticRows = [];
         for (const label of expectedMinutes) {
           const row = localRows.find((candidate) => rowMinute(candidate.candle_time) === label && !isSynthetic(candidate) && candidate.volume_strategy_usable !== false && !String(candidate.source || "").includes("quote_derived") && number(candidate.close));
           if (row) { previousClose = number(row.close); continue; }
-          if (!covered.has(label) && previousClose) { const synthetic = makeSyntheticRow(symbol, tradeDate, label, previousClose, item.market || ""); syntheticRows.push(synthetic); localRows.push(synthetic); covered.add(label); }
+          if (!covered.has(label) && previousClose) { const synthetic = makeSyntheticRow(symbol, tradeDate, label, previousClose, item.market || ""); if (APPLY) writtenSynthetic += await supabaseUpsert("fugle_daytrade_intraday_1m", [synthetic], "symbol,candle_time", serviceKey); localRows.push(synthetic); covered.add(label); }
         }
-        if (APPLY) writtenSynthetic += await supabaseUpsert("fugle_daytrade_intraday_1m", syntheticRows, "symbol,candle_time", serviceKey);
       }
       const audit = buildTimelineAudit({ symbol, tradeDate, rows: localRows, expectedMinutes });
       if (APPLY) await supabaseUpsert("fugle_daytrade_intraday_1m_timeline_audit", [{ ...audit, checked_at: new Date().toISOString(), payload: { source: "gap-repair", synthesize: SYNTHESIZE, apply: true } }], "symbol,trade_date", serviceKey);

@@ -23,6 +23,7 @@ const SOURCE_HOST_APPROVAL_FILE = runtimePath("config", "daytrade-source-host-ap
 const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
 const STATE_FILE = statePath("daytrade-source-writer-state.json");
 const ENRICHMENT_PENDING_STATE_FILE = statePath("daytrade-source-writer-enrichment-pending.json");
+const MOTHER_POOL_DELTA_STATE_FILE = statePath("daytrade-mother-pool-delta.json");
 const RUNTIME_CONFIG_FILE = runtimePath("config", "daytrade-source-speed.json");
 const REPO_CONFIG_FILE = repoPath("ops", "public-slot", "daytrade-source-speed.config.example.json");
 const PRIORITY_SYMBOLS_FILE = process.env.FUGLE_DAYTRADE_PRIORITY_SYMBOLS_FILE || cachePath("intraday", "fugle-daytrade-ws-priority-symbols.json");
@@ -176,6 +177,11 @@ const MOTHER_POOL_MAX_SYMBOLS = Math.max(
   MOTHER_POOL_MIN_SYMBOLS,
   Math.min(600, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MAX_SYMBOLS || CONFIG.motherPool?.targetSymbolsMax, 600)),
 );const REST_PRIORITY_BATCH_LIMIT = Math.max(1, positiveNumber(process.env.DAYTRADE_REST_PRIORITY_BATCH_LIMIT, 40));
+const MOTHER_POOL_MIN_PRICE = Math.max(50, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_PRICE, 50));
+const MOTHER_POOL_RULE_VERSION = 'daytrade_mother_pool_dynamic_discovery_union_20260808_avg5_classified';
+const HOT_POOL_MIN_SYMBOLS = 40;
+const HOT_POOL_MAX_SYMBOLS = 80;
+const PREOPEN_WARMUP_START_MINUTES = 7 * 60;
 const BATCH_SIZE = Math.max(1, Math.min(FORMAL_DAYTRADE_PRIORITY_LIMIT, REST_PRIORITY_BATCH_LIMIT, positiveNumber(CONFIG.collector?.quoteBatchSize, 40)));
 const CONCURRENCY = 1;
 const TARGET_BATCH_INTERVAL_SECONDS = Math.max(5, positiveNumber(CONFIG.collector?.targetBatchIntervalSeconds, 5));
@@ -286,7 +292,6 @@ const SUPABASE_READ_KEY = process.env.SUPABASE_ANON_KEY
   || process.env.FUMAN_SUPABASE_ANON_KEY
   || readSecret("supabase-anon-key.txt")
   || SUPABASE_SERVICE_KEY;
-const WRITER_LEASE_OWNER = `${process.env.COMPUTERNAME || "writer-host"}:${process.pid}:daytrade-source-writer`;
 const FUGLE_API_KEY = process.env.FUGLE_API_KEY
   || process.env.FUMAN_FUGLE_API_KEY
   || readSecret("fugle-api-key.txt");
@@ -419,19 +424,6 @@ function requireSupabaseKey(write = false) {
   return key;
 }
 
-async function ensureWriterLease() {
-  if (!APPLY) return;
-  const key = requireSupabaseKey(true);
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/acquire_fugle_daytrade_intraday_writer_lease`, {
-    method: "POST", headers: headers(key), body: JSON.stringify({ p_owner_id: WRITER_LEASE_OWNER, p_lease_seconds: 180 }),
-    signal: AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_WRITE_TIMEOUT_MS) : undefined,
-  });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`writer lease RPC HTTP ${response.status}: ${text.slice(0, 240)}`);
-  const result = text ? JSON.parse(text) : {};
-  if (!result.ok) throw new Error(`writer lease unavailable: ${result.reason || "unknown"}`);
-}
-
 async function supabaseGet(resource, query = "", options = {}) {
   const key = requireSupabaseKey(Boolean(options.service));
   const url = `${SUPABASE_URL}/rest/v1/${resource}${query ? `?${query}` : ""}`;
@@ -536,22 +528,39 @@ async function supabaseUpsert(resource, rows, conflict, options = {}) {
   const key = requireSupabaseKey(true);
   let written = 0;
   const batchSize = Math.max(1, Math.min(Number(options.batchSize || 300), 500));
+  const writeTimeoutMs = Math.max(SUPABASE_WRITE_TIMEOUT_MS, Number(options.timeoutMs || 0));
+  const retries = Math.max(0, Math.min(Number(options.retries || 0), 2));
+  const retryDelayMs = Math.max(250, Math.min(Number(options.retryDelayMs || 1000), 5000));
   for (let i = 0; i < rows.length; i += batchSize) {
     const chunk = rows.slice(i, i + batchSize);
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/${resource}?on_conflict=${encodeURIComponent(conflict)}`, {
-      method: "POST",
-      headers: {
-        ...headers(key),
-        Prefer: "resolution=merge-duplicates",
-      },
-      body: JSON.stringify(chunk),
-      signal: AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_WRITE_TIMEOUT_MS) : undefined,
-    });
-    if (!response.ok) {
-      const text = await response.text().catch(() => "");
-      throw new Error(`${resource} upsert HTTP ${response.status}: ${text.slice(0, 240)}`);
+    let lastError = null;
+    for (let attempt = 0; attempt <= retries; attempt += 1) {
+      try {
+        const response = await fetch(`${SUPABASE_URL}/rest/v1/${resource}?on_conflict=${encodeURIComponent(conflict)}`, {
+          method: "POST",
+          headers: {
+            ...headers(key),
+            Prefer: "resolution=merge-duplicates",
+          },
+          body: JSON.stringify(chunk),
+          signal: AbortSignal.timeout ? AbortSignal.timeout(writeTimeoutMs) : undefined,
+        });
+        if (!response.ok) {
+          const responseText = await response.text().catch(() => "");
+          throw new Error(`${resource} upsert HTTP ${response.status}: ${responseText.slice(0, 240)}`);
+        }
+        written += chunk.length;
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        const message = String(error?.message || error || "");
+        const retryable = attempt < retries && /timeout|aborted|502|503|504|522|429|ECONNRESET|ETIMEDOUT/i.test(message);
+        if (!retryable) throw error;
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs * (attempt + 1)));
+      }
     }
-    written += chunk.length;
+    if (lastError) throw lastError;
   }
   return { written };
 }
@@ -559,19 +568,32 @@ async function supabaseUpsert(resource, rows, conflict, options = {}) {
 async function supabaseDelete(resource, query = "") {
   if (DRY_RUN) return { deleted: 0, skipped: true, dryRun: true };
   const key = requireSupabaseKey(true);
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/${resource}${query ? `?${query}` : ""}`, {
-    method: "DELETE",
-    headers: {
-      ...headers(key),
-      Prefer: "return=minimal",
-    },
-    signal: AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_WRITE_TIMEOUT_MS) : undefined,
-  });
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(`${resource} delete HTTP ${response.status}: ${text.slice(0, 240)}`);
+  const timeoutMs = Math.max(SUPABASE_WRITE_TIMEOUT_MS, 30000);
+  let lastError = null;
+  for (let attempt = 0; attempt <= 1; attempt += 1) {
+    try {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/${resource}${query ? `?${query}` : ""}`, {
+        method: "DELETE",
+        headers: {
+          ...headers(key),
+          Prefer: "return=minimal",
+        },
+        signal: AbortSignal.timeout ? AbortSignal.timeout(timeoutMs) : undefined,
+      });
+      if (!response.ok) {
+        const text = await response.text().catch(() => "");
+        throw new Error(`${resource} delete HTTP ${response.status}: ${text.slice(0, 240)}`);
+      }
+      return { deleted: 0 };
+    } catch (error) {
+      lastError = error;
+      const message = String(error?.message || error || "");
+      const retryable = attempt < 1 && /timeout|aborted|502|503|504|522|429|ECONNRESET|ETIMEDOUT/i.test(message);
+      if (!retryable) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
   }
-  return { deleted: 0 };
+  throw lastError;
 }
 
 async function supabaseInsert(resource, rows, options = {}) {
@@ -652,19 +674,77 @@ function apply429State(state) {
 function evaluateMotherPoolBasePool(row, metrics) {
   const market = String(row.market || "").toLowerCase();
   const type = String(row.stockType || row.type || row.payload?.stockType || row.payload?.type || "").toLowerCase();
+  const payload = objectPayload(row.payload);
   const failedChecks = [];
   const pendingChecks = [];
+  const explicitFalse = (value) => value !== undefined && value !== null
+    && /^(false|0|no|n|not_allowed|forbidden|blocked)$/i.test(String(value).trim());
+  const statusText = [
+    payload.tradingStatus,
+    payload.trading_status,
+    payload.tradeStatus,
+    payload.trade_status,
+    payload.marketStatus,
+    payload.market_status,
+    payload.controlStatus,
+    payload.control_status,
+    payload.dispositionStatus,
+    payload.disposition_status,
+  ].filter(Boolean).join(" ").toLowerCase();
+  const statusControlled = /處置|分盤|管制|人工|disposition|split.?trading|controlled|restricted|halted|suspended/.test(statusText);
+  const dispositionFlag = [
+    payload.isDisposition,
+    payload.is_disposition,
+    payload.inDisposition,
+    payload.in_disposition,
+  ].some(boolValue);
+  const splitTradingFlag = [
+    payload.isSplitTrading,
+    payload.is_split_trading,
+    payload.splitTrading,
+    payload.split_trading,
+  ].some(boolValue);
+  const manualControlFlag = [
+    payload.isControlled,
+    payload.is_controlled,
+    payload.manualControl,
+    payload.manual_control,
+    payload.tradingRestricted,
+    payload.trading_restricted,
+  ].some(boolValue);
+  const daytradeBlocked = boolValue(row.isDaytradeUnsuitable)
+    || boolValue(payload.isDaytradeUnsuitable)
+    || boolValue(payload.is_daytrade_unsuitable)
+    || explicitFalse(payload.daytradeAllowed)
+    || explicitFalse(payload.daytrade_allowed)
+    || explicitFalse(payload.canDaytrade)
+    || explicitFalse(payload.can_daytrade)
+    || explicitFalse(payload.daytradeEligible)
+    || explicitFalse(payload.daytrade_eligible);
+  if (row.isActive === false) failedChecks.push("inactive");
+  if (row.isBlacklisted === true) failedChecks.push("blacklisted");
+  if (row.isSuspended === true || row.isHalted === true) failedChecks.push("halted_or_suspended");
   if (!market || !/(twse|tse|tpex|otc|上市|上櫃)/i.test(market)) failedChecks.push("market_not_twse_otc");
-  if (row.isTrial === true || row.payload?.isTrial === true || /(etf|warrant|preferred|test|trial|權證|特別股|優先股|測試)/i.test(type)) failedChecks.push("not_common_stock");
-  if (metrics.price > 0 && (metrics.price < 10 || metrics.price > 1000)) failedChecks.push("price_out_of_range_10_1000");
-  else pendingChecks.push("price_pending");
-  // Five-day average volume ranks liquidity; it is not a hard membership gate.
-  // The full-market ordinary-stock pool must be able to rotate to 300-600 symbols.
-  // Missing history remains pending and cannot be promoted without evidence.
-  if (!(metrics.avgVolume5 > 0)) pendingChecks.push("avg5_volume_pending");
+  if (row.isEtf === true || row.isWarrant === true || row.isCb === true || row.isTrial === true
+    || row.payload?.isEtf === true || row.payload?.is_etf === true
+    || /(etf|warrant|convertible|preferred|test|trial|權證|特別股|優先股|可轉債|測試)/i.test(type)
+    || (row.stockType && !/^common(stock)?$/i.test(String(row.stockType)))) {
+    failedChecks.push("not_common_stock");
+  }
+  if (daytradeBlocked) failedChecks.push("daytrade_not_allowed");
+  if (dispositionFlag || statusControlled) failedChecks.push("disposition_or_controlled");
+  if (splitTradingFlag) failedChecks.push("split_trading");
+  if (manualControlFlag) failedChecks.push("manual_control");
+  if (metrics.price > 0) {
+    if (metrics.price < MOTHER_POOL_MIN_PRICE) failedChecks.push("price_below_50");
+  } else pendingChecks.push("price_pending");
+  // avg5 is a liquidity grade only. It must never be a direct mother-pool rejection.
+  // Missing live quote data remains pending; it cannot bypass the price floor.
+  if (!metrics.quotePresent) pendingChecks.push("quote_pending");
+  else if (!metrics.quoteFresh) pendingChecks.push("quote_stale");
   if (metrics.totalVolume > 0) {
     if (metrics.changePercent < -5) failedChecks.push("change_percent_below_minus5");
-  } else {
+  } else if (taipeiMinutes() >= 9 * 60) {
     pendingChecks.push("today_volume_pending");
   }
   return {
@@ -680,26 +760,52 @@ async function fetchActiveSymbols() {
     "select=symbol,name,market,stock_type,type,industry,is_etf,is_suspended,payload&order=symbol.asc",
     { service: true },
   );
-  const active = [];
-  for (const row of rows) {
+  // stock_tickers is the legacy name/market feed; stock_universe is the
+  // authoritative trading-eligibility feed. Merge both so hard exclusions
+  // cannot be bypassed by a stale or incomplete ticker row.
+  const universeRows = await supabaseGetPaged(
+    "stock_universe",
+    "select=symbol,name,market,industry,is_active,is_etf,is_warrant,is_cb,is_blacklisted,is_daytrade_unsuitable,payload&order=symbol.asc",
+    { service: true },
+  );
+  const universeBySymbol = new Map(universeRows.map((row) => [normalizeCode(row.symbol), row]).filter(([symbol]) => symbol));
+  const mergedBySymbol = new Map();
+  for (const row of [...rows, ...universeRows]) {
     const symbol = normalizeCode(row.symbol);
     if (!symbol || symbol.startsWith("00")) continue;
-    if (row.is_suspended === true) continue;
-    if (row.is_etf === true) continue;
+    const prior = mergedBySymbol.get(symbol) || {};
+    const universe = universeBySymbol.get(symbol) || {};
+    const merged = { ...prior, ...universe, ...row };
+    for (const key of ["name", "market", "industry", "is_active", "is_etf", "is_warrant", "is_cb", "is_blacklisted", "is_daytrade_unsuitable", "payload"]) {
+      if (merged[key] === undefined || merged[key] === null || merged[key] === "") merged[key] = universe[key] ?? prior[key];
+    }
+    mergedBySymbol.set(symbol, merged);
+  }
+  const active = [];
+  for (const row of mergedBySymbol.values()) {
+    const symbol = normalizeCode(row.symbol);
+    const payload = objectPayload(row.payload);
     active.push({
       symbol,
       name: row.name || symbol,
       market: row.market || "",
-      stockType: row.stock_type || row.type || "",
-      industry: row.industry || row.payload?.industry || row.payload?.category || "",
-      isTrial: row.is_trial === true || row.payload?.isTrial === true || row.payload?.is_trial === true,
-      payload: row.payload || {},
+      stockType: row.stock_type || row.type || payload.stockType || payload.stock_type || "",
+      industry: row.industry || payload.industry || payload.category || "",
+      isActive: row.is_active,
+      isEtf: row.is_etf,
+      isWarrant: row.is_warrant,
+      isCb: row.is_cb,
+      isBlacklisted: row.is_blacklisted,
+      isDaytradeUnsuitable: row.is_daytrade_unsuitable,
+      isSuspended: row.is_suspended,
+      isHalted: row.is_halted,
+      isTrial: row.is_trial === true || payload.isTrial === true || payload.is_trial === true,
+      payload,
     });
   }
   active.sort((a, b) => a.symbol.localeCompare(b.symbol));
   return active;
 }
-
 function dailyVolumeRowsToMap(rows, source) {
   const map = new Map(rows.map((row) => [normalizeCode(row.symbol), {
     symbol: normalizeCode(row.symbol),
@@ -1058,9 +1164,16 @@ function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, 
     const intraday = intradayMap?.get(symbol) || {};
     const openPrice = firstNumber(intraday.open_price, metrics.openPrice);
     const aboveOpenPrice = openPrice > 0 && metrics.price >= openPrice;
+    const ma3 = firstNumber(intraday.ma3, intraday.sma3);
     const ma5 = firstNumber(intraday.ma5, intraday.sma5);
     const ma10 = firstNumber(intraday.ma10, intraday.sma10);
+    const ma20 = firstNumber(intraday.ma20, intraday.sma20);
+    const ma30 = firstNumber(intraday.ma30, intraday.sma30);
     const ma35 = firstNumber(intraday.ma35, intraday.sma35);
+    const ma58 = firstNumber(intraday.ma58, intraday.sma58);
+    const ma3Ma5Ma10Bullish = ma3 > 0 && ma5 > 0 && ma10 > 0 && ma3 > ma5 && ma5 > ma10;
+    const ma5Ma10Ma30Bullish = ma5 > 0 && ma10 > 0 && ma30 > 0 && ma5 > ma10 && ma10 > ma30;
+    const movingAverageTurnBullish = ma3Ma5Ma10Bullish || ma5Ma10Ma30Bullish;
     const maValuesReady = ma5 > 0 && ma10 > 0 && ma35 > 0;
     const maAlignment = maValuesReady && ma5 > ma10 && ma10 > ma35;
     const reportedBullish = boolValue(intraday.ma5_ma10_ma35_bullish);
@@ -1097,9 +1210,16 @@ function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, 
       quoteAgeSeconds: ageSeconds(quoteFreshnessTime(quoteMap.get(symbol))),
       latestCandleTime: intraday.latest_candle_time || "",
       intraday1mStaleSeconds: numberValue(intraday.latest_candle_age_seconds, 999999),
+      ma3,
       ma5,
       ma10,
+      ma20,
+      ma30,
       ma35,
+      ma58,
+      ma3Ma5Ma10Bullish,
+      ma5Ma10Ma30Bullish,
+      movingAverageTurnBullish,
       maValuesReady,
       maAlignment,
       ma5Ma10Ma35Bullish: bullish,
@@ -1123,9 +1243,16 @@ function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, 
     quoteAgeSeconds: row.quoteAgeSeconds,
     latestCandleTime: row.latestCandleTime,
     intraday1mStaleSeconds: row.intraday1mStaleSeconds,
+    ma3: row.ma3,
     ma5: row.ma5,
     ma10: row.ma10,
+    ma20: row.ma20,
+    ma30: row.ma30,
     ma35: row.ma35,
+    ma58: row.ma58,
+    ma3Ma5Ma10Bullish: row.ma3Ma5Ma10Bullish,
+    ma5Ma10Ma30Bullish: row.ma5Ma10Ma30Bullish,
+    movingAverageTurnBullish: row.movingAverageTurnBullish,
     ma5Ma10Ma35Bullish: row.ma5Ma10Ma35Bullish,
     aboveOpenPrice: row.aboveOpenPrice,
     recent1mVolumeTrend: row.recent1mVolumeTrend,
@@ -1150,6 +1277,7 @@ function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, 
     rules: {
       bullishGainVolume: "change_percent>2 AND ma5>ma10>ma35 AND volume_expanding",
       volumeSurgeTop100: "total_volume>10000 AND total_volume/avg_volume5>=2 AND volume_expanding AND recent_2_3_1m_volume_not_shrinking AND volume_rank<=100",
+      movingAverageTurn: "MA3>MA5>MA10 OR MA5>MA10>MA30",
       formalEntryScope: "priority_top40",
       rotationScope: "mother_pool_300_600",
     },
@@ -1162,6 +1290,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const daily = dailyVolumeMap.get(symbol) || {};
   const dailyPayload = daily.payload || {};
   const activeRow = supplementalMaps.activeBySymbol?.get(symbol) || {};
+  const intraday = supplementalMaps.intradayMap?.get(symbol) || {};
   const capital = supplementalMaps.capitalMap?.get(symbol) || {};
   const chip = supplementalMaps.chipMap?.get(symbol) || {};
   const margin = supplementalMaps.marginChangeMap?.get(symbol) || {};
@@ -1181,6 +1310,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const previousVolume = firstNumber(daily.volume, dailyPayload.volume, payload.previousVolume, payload.previous_volume);
   const avgVolume5 = firstNumber(daily.avg_volume5, dailyPayload.avgVolume5, dailyPayload.avg_volume5, payload.avgVolume5, payload.avg_volume5);
   const volumeRatio5 = avgVolume5 > 0 ? totalVolume / avgVolume5 : 0;
+  const quotePresent = quoteMap?.has(symbol) === true;
   const quoteFresh = ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS;
   const currentMinutes = taipeiMinutes();
   const sessionElapsedMinutes = currentMinutes >= 540 && currentMinutes <= 810
@@ -1191,6 +1321,39 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     : 0;
   const estimatedVolumeRatio = previousVolume > 0 ? projectedVolume / previousVolume : 0;
   const estimatedVolumeRatioUsable = quoteFresh && sessionElapsedMinutes > 0 && previousVolume > 0;
+  const ma3 = firstNumber(intraday.ma3, intraday.sma3);
+  const ma5 = firstNumber(intraday.ma5, intraday.sma5);
+  const ma10 = firstNumber(intraday.ma10, intraday.sma10);
+  const ma30 = firstNumber(intraday.ma30, intraday.sma30);
+  const ma58 = firstNumber(intraday.ma58, intraday.sma58);
+  const ma3Rising = boolValue(intraday.ma3_rising ?? intraday.ma3Rising ?? payload.ma3Rising ?? payload.ma3_rising);
+  const ma5Rising = boolValue(intraday.ma5_rising ?? intraday.ma5Rising ?? payload.ma5Rising ?? payload.ma5_rising);
+  const ma10Rising = boolValue(intraday.ma10_rising ?? intraday.ma10Rising ?? payload.ma10Rising ?? payload.ma10_rising);
+  const ma30Rising = boolValue(intraday.ma30_rising ?? intraday.ma30Rising ?? payload.ma30Rising ?? payload.ma30_rising);
+  const ma58Rising = boolValue(intraday.ma58_rising ?? intraday.ma58Rising ?? payload.ma58Rising ?? payload.ma58_rising);
+  const ma3Ma5Ma10Bullish = ma3 > 0 && ma5 > 0 && ma10 > 0 && ma3 > ma5 && ma5 > ma10;
+  const ma5Ma10Ma30Bullish = ma5 > 0 && ma10 > 0 && ma30 > 0 && ma5 > ma10 && ma10 > ma30;
+  const movingAverageTurnBullish = ma3Ma5Ma10Bullish || ma5Ma10Ma30Bullish;
+  const aboveMa30 = price > 0 && ma30 > 0 && price > ma30;
+  const aboveMa58 = price > 0 && ma58 > 0 && price > ma58;
+  const openingRangeBreak = boolValue(payload.openingRangeBreak || payload.opening_range_break || intraday.opening_range_break || intraday.openingRangeBreak);
+  const trackedBuyPointActive = boolValue(payload.trackedBuyPointActive || payload.tracked_buy_point_active || payload.buyPointTriggered || payload.buy_point_triggered);
+  const surgeFlag = changePercent > 2 || volumeRatio5 >= 1.5 || estimatedVolumeRatio >= 2;
+  const volumeSpikeFlag = volumeRatio5 >= 2 || estimatedVolumeRatio >= 2;
+  const candleCount = numberValue(intraday.today_candle_count ?? intraday.candle_count ?? intraday.warmup_candle_count);
+  const firstCandleTime = intraday.first_candle_time || intraday.firstCandleTime || "";
+  const lastCandleTime = intraday.latest_candle_time || intraday.last_candle_time || intraday.lastCandleTime || "";
+  const dataGapRequired = currentMinutes >= 9 * 60 && currentMinutes <= 13 * 60 + 30;
+  const expectedTodayCandles = dataGapRequired ? Math.max(1, currentMinutes - 9 * 60 + 1) : 0;
+  const dataGap = {
+    status: dataGapRequired && candleCount < expectedTodayCandles ? "DATA_GAP" : "OK",
+    candle_count: candleCount,
+    first_candle_time: firstCandleTime,
+    last_candle_time: lastCandleTime,
+    missing_window: !dataGapRequired ? "" : candleCount < expectedTodayCandles ? (lastCandleTime || "unknown") + "-now" : "",
+  };
+  const sectorName = firstText(activeRow.industry, activeRow.payload?.industry, activeRow.payload?.sectorName, activeRow.payload?.sector_name);
+  const sectorStrengthScore = firstNumber(activeRow.payload?.sectorStrengthScore, activeRow.payload?.sector_strength_score, payload.sectorStrengthScore, payload.sector_strength_score);
   const issuedShares = firstNumber(capital.issuedShares, payload.issuedShares, payload.issued_shares, dailyPayload.issuedShares, dailyPayload.issued_shares);
   const currentTurnoverRate = issuedShares > 0 && totalVolume > 0 ? (totalVolume * 1000 / issuedShares) * 100 : 0;
   const avgTurnoverRate5 = issuedShares > 0 && avgVolume5 > 0 ? (avgVolume5 * 1000 / issuedShares) * 100 : 0;
@@ -1321,6 +1484,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const daytradeCrowded = boolValue(payload.daytradeCrowded || payload.daytrade_crowded || payload.daytradeBigPlayer || dailyPayload.daytradeCrowded || dailyPayload.daytrade_crowded || dailyPayload.daytradeBigPlayer) || daytradeCrowded3To5d;
   return {
     price,
+    quotePresent,
     openPrice,
     previousClose,
     amplitudeFromOpen,
@@ -1334,6 +1498,31 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     projectedVolume,
     estimatedVolumeRatio,
     estimatedVolumeRatioUsable,
+    ma3,
+    ma5,
+    ma10,
+    ma30,
+    ma58,
+    ma3Rising,
+    ma5Rising,
+    ma10Rising,
+    ma30Rising,
+    ma58Rising,
+    aboveMa30,
+    aboveMa58,
+    openingRangeBreak,
+    trackedBuyPointActive,
+    surgeFlag,
+    volumeSpikeFlag,
+    candleCount,
+    firstCandleTime,
+    lastCandleTime,
+    dataGap,
+    sectorName,
+    sectorStrengthScore,
+    ma3Ma5Ma10Bullish,
+    ma5Ma10Ma30Bullish,
+    movingAverageTurnBullish,
     highPrice,
     lowPrice,
     limitUpPrice,
@@ -1434,13 +1623,16 @@ async function fetchIntradayStatus(activeSymbols = []) {
         symbol,
         market: row.market || "",
         latest_candle_time: "",
+        first_candle_time: "",
         today_candle_count: 0,
         warmup_candle_count: 0,
         continuous_candle_count: 0,
+        ready_ma3: false,
         ready_ma5: false,
         ready_ma10: false,
         ready_ma20_continuous: false,
         ready_ma30: false,
+        ready_ma58: false,
         ready_ma35_continuous: false,
         latest_candle_age_seconds: 999999,
         _closes: [],
@@ -1457,14 +1649,19 @@ async function fetchIntradayStatus(activeSymbols = []) {
       current._volumes.push(Math.max(0, numberValue(row.volume)));
       current._highs.push(Math.max(0, numberValue(row.high, close)));
       current._lows.push(Math.max(0, numberValue(row.low, close)));
+      if (candleTime && (!current.first_candle_time || Date.parse(candleTime) < Date.parse(current.first_candle_time))) {
+        current.first_candle_time = candleTime;
+      }
       if (candleTime && (!current.latest_candle_time || Date.parse(candleTime) > Date.parse(current.latest_candle_time))) {
         current.latest_candle_time = candleTime;
         current.latest_candle_age_seconds = ageSeconds(candleTime);
       }
+      current.ready_ma3 = current.continuous_candle_count >= 3;
       current.ready_ma5 = current.continuous_candle_count >= 5;
       current.ready_ma10 = current.continuous_candle_count >= 10;
       current.ready_ma20_continuous = current.continuous_candle_count >= 20;
       current.ready_ma30 = current.continuous_candle_count >= 30;
+      current.ready_ma58 = current.continuous_candle_count >= 58;
       current.ready_ma35_continuous = current.continuous_candle_count >= 35;
       grouped.set(symbol, current);
     }
@@ -1474,10 +1671,13 @@ async function fetchIntradayStatus(activeSymbols = []) {
       const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
       const movingAverage = (count, offset = 0) => average(closes.slice(offset, offset + count));
       const volumeSum = (count, offset = 0) => volumes.slice(offset, offset + count).reduce((sum, value) => sum + value, 0);
+      current.ma3 = movingAverage(3);
       current.ma5 = movingAverage(5);
       current.ma10 = movingAverage(10);
+      current.ma20 = movingAverage(20);
       current.ma30 = movingAverage(30);
       current.ma35 = movingAverage(35);
+      current.ma58 = movingAverage(58);
       current.ma5_ma10_ma35_bullish = Number.isFinite(current.ma5)
         && Number.isFinite(current.ma10)
         && Number.isFinite(current.ma35)
@@ -1485,10 +1685,12 @@ async function fetchIntradayStatus(activeSymbols = []) {
         && current.ma10 > current.ma35
         && current.ma35 > 0;
       current.ma_bullish_alignment = current.ma5_ma10_ma35_bullish;
+      current.ma3_rising = closes.length >= 6 && movingAverage(3, 0) > movingAverage(3, 3);
       current.ma5_rising = closes.length >= 10 && movingAverage(5, 0) > movingAverage(5, 5);
       current.ma10_rising = closes.length >= 20 && movingAverage(10, 0) > movingAverage(10, 10);
       current.ma30_rising = closes.length >= 60 && movingAverage(30, 0) > movingAverage(30, 30);
       current.ma35_rising = closes.length >= 70 && movingAverage(35, 0) > movingAverage(35, 35);
+      current.ma58_rising = closes.length >= 116 && movingAverage(58, 0) > movingAverage(58, 58);
       const latestVolume = volumeSum(3, 0);
       const previousVolume = volumeSum(3, 3);
       current.recent_1m_volume_trend = previousVolume <= 0
@@ -1577,7 +1779,7 @@ async function fetchIntradayStatus(activeSymbols = []) {
   try {
     const rows = await supabaseGetPaged(
       "v_fugle_daytrade_intraday_1m_status",
-      "select=symbol,latest_candle_time,today_candle_count,warmup_candle_count,continuous_candle_count,ready_ma5,ready_ma10,ready_ma20_continuous,ready_ma30,ready_ma35_continuous,latest_candle_age_seconds,ma5,ma10,ma35,ma5_ma10_ma35_bullish,ma_bullish_alignment,ma30",
+      "select=symbol,latest_candle_time,today_candle_count,warmup_candle_count,continuous_candle_count,ready_ma3,ready_ma5,ready_ma10,ready_ma20_continuous,ready_ma30,ready_ma58,ready_ma35_continuous,latest_candle_age_seconds,ma3,ma5,ma10,ma20,ma30,ma35,ma58,ma3_rising,ma5_rising,ma10_rising,ma30_rising,ma35_rising,ma58_rising,ma5_ma10_ma35_bullish,ma_bullish_alignment",
       { service: true, pageSize: 1000 },
     );
     if (rows.length) {
@@ -1653,22 +1855,29 @@ function intradayStatusCacheRows(intradayMap) {
         today_candle_count: Math.max(0, Math.floor(numberValue(row.today_candle_count))),
         warmup_candle_count: Math.max(0, Math.floor(numberValue(row.warmup_candle_count))),
         continuous_candle_count: Math.max(0, Math.floor(numberValue(row.continuous_candle_count))),
+        ready_ma3: boolValue(row.ready_ma3),
         ready_ma20_continuous: boolValue(row.ready_ma20_continuous),
         ready_ma35_continuous: boolValue(row.ready_ma35_continuous),
         latest_candle_age_seconds: Math.max(0, Math.floor(numberValue(row.latest_candle_age_seconds, 999999))),
+        ready_ma58: boolValue(row.ready_ma58),
         ready_ma5: boolValue(row.ready_ma5),
         ready_ma10: boolValue(row.ready_ma10),
         ready_ma30: boolValue(row.ready_ma30),
+        ma35: Number.isFinite(Number(row.ma35)) ? Number(row.ma35) : null,
+        ma3: Number.isFinite(Number(row.ma3)) ? Number(row.ma3) : null,
         ma5: Number.isFinite(Number(row.ma5)) ? Number(row.ma5) : null,
         ma10: Number.isFinite(Number(row.ma10)) ? Number(row.ma10) : null,
-        ma35: Number.isFinite(Number(row.ma35)) ? Number(row.ma35) : null,
+        ma20: Number.isFinite(Number(row.ma20)) ? Number(row.ma20) : null,
+        ma30: Number.isFinite(Number(row.ma30)) ? Number(row.ma30) : null,
+        ma58: Number.isFinite(Number(row.ma58)) ? Number(row.ma58) : null,
         ma5_ma10_ma35_bullish: boolValue(row.ma5_ma10_ma35_bullish),
         ma_bullish_alignment: boolValue(row.ma_bullish_alignment),
-        ma30: Number.isFinite(Number(row.ma30)) ? Number(row.ma30) : null,
+        ma3_rising: boolValue(row.ma3_rising),
         ma5_rising: boolValue(row.ma5_rising),
         ma10_rising: boolValue(row.ma10_rising),
         ma30_rising: boolValue(row.ma30_rising),
         ma35_rising: boolValue(row.ma35_rising),
+        ma58_rising: boolValue(row.ma58_rising),
         relative_volume_5m: Number.isFinite(Number(row.relative_volume_5m)) ? Number(row.relative_volume_5m) : 0,
         recent_1m_volume_trend: String(row.recent_1m_volume_trend || 'unknown'),
         macd_line: Number.isFinite(Number(row.macd_line)) ? Number(row.macd_line) : null,
@@ -1740,7 +1949,7 @@ function mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows) {
   if (!prioritySymbols.size) return intradayMap;
   const quoteCache = readFugleWebSocketQuotes({ maxAgeMs: WINDOW_SECONDS * 1000 });
   let merged = 0;
-  if (envFlag("DAYTRADE_ALLOW_QUOTE_DERIVED_1M")) for (const quote of quoteCache.quotes.values()) {
+  for (const quote of quoteCache.quotes.values()) {
     const symbol = normalizeCode(quote.symbol || quote.code);
     if (!symbol || !prioritySymbols.has(symbol)) continue;
     const seenAt = normalizeTimestamp(quote.quoteSeenAt || quote.updatedAt || quoteCache.payload?.updatedAt, "");
@@ -1748,11 +1957,13 @@ function mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows) {
     const previous = intradayMap.get(symbol) || { symbol };
     const previousContinuous = numberValue(previous.continuous_candle_count ?? previous.candle_count);
     const previousToday = numberValue(previous.today_candle_count);
+    const readyMa3 = boolValue(previous.ready_ma3) || previousContinuous >= 3;
     const readyMa5 = boolValue(previous.ready_ma5) || previousContinuous >= 5;
     const readyMa10 = boolValue(previous.ready_ma10) || previousContinuous >= 10;
     const readyMa20 = boolValue(previous.ready_ma20_continuous) || previousContinuous >= 20;
     const readyMa30 = boolValue(previous.ready_ma30) || previousContinuous >= 30;
     const readyMa35 = boolValue(previous.ready_ma35_continuous) || boolValue(previous.ready_ge_35) || previousContinuous >= 35;
+    const readyMa58 = boolValue(previous.ready_ma58) || previousContinuous >= 58;
     intradayMap.set(symbol, {
       ...previous,
       symbol,
@@ -1762,9 +1973,11 @@ function mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows) {
       continuous_candle_count: Math.max(previousContinuous, readyMa35 ? 35 : readyMa20 ? 20 : 1),
       ready_ma5: readyMa5,
       ready_ma10: readyMa10,
+      ready_ma3: readyMa3,
       ready_ma20_continuous: readyMa20,
       ready_ma30: readyMa30,
       ready_ma35_continuous: readyMa35,
+      ready_ma58: readyMa58,
       latest_candle_age_seconds: ageSeconds(seenAt),
       source: previous.source || "fugle_daytrade_writer:websocket_quote_derived_status",
     });
@@ -2304,17 +2517,26 @@ function readRuntimePrioritySeeds(activeSymbols) {
   };
 
   addMany("daytrade", payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, 120);
+  // strategy1 is retained as historical source evidence only; it is not a mother-pool seed.
   addMany("terminal", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, 100);
   addMany("opening", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, 100);
   addMany("strategy2", payload.strategy2 || payload.strategy2Symbols || bridgeValues("strategy2"), 90);
   addMany("strategy3", payload.strategy3 || payload.strategy3Symbols || bridgeValues("strategy3"), 90);
+  addMany("strategy6", payload.strategy6 || payload.strategy6Symbols || bridgeValues("strategy6"), 80);
+  addMany("strategy7", payload.strategy7 || payload.strategy7Symbols || bridgeValues("strategy7"), 80);
+  addMany("slash88", payload.slash88 || payload.eightyEight || payload.strategy88 || payload.strategy88Symbols, 90);
   addMany("strategy4", payload.strategy4 || payload.strategy4Symbols || bridgeValues("strategy4"), 80);
   addMany("strategy5", payload.strategy5 || payload.strategy5Symbols || bridgeValues("strategy5"), 80);
+  addMany("chip", payload.chip || payload.chipSymbols || payload.chipPrioritySymbols || payload.chip_priority_symbols, 75);
   addMany("institution", payload.institution || payload.institutionSymbols || bridgeValues("institution"), 75);
+  addMany("recent_strong", payload.recentStrongSymbols || payload.recentStrengthSymbols || payload.recent_strong_symbols || payload.yesterdayStrongSymbols || payload.yesterday_strong_symbols, 85);
+  addMany("yesterday_front", payload.yesterdayFrontSymbols || payload.yesterdayVolumeSymbols || payload.yesterdayTradeValueSymbols || payload.yesterday_top_symbols, 75);
+  addMany("yesterday_gain_amplitude_spike", payload.yesterdayGainSymbols || payload.yesterdayAmplitudeSymbols || payload.yesterdayVolumeSpikeSymbols || payload.yesterday_gain_symbols || payload.yesterday_amplitude_symbols || payload.yesterday_volume_spike_symbols, 75);
   addMany("warrant", payload.warrant || payload.warrantSymbols || bridgeValues("warrant"), 70);
   addMany("cb", payload.cb || payload.cbSymbols || bridgeValues("cb"), 60);
-  addMany("realtime_radar", payload.realtimeRadar || payload.realtimeRadarSymbols, 75);
   addMany("daytrade_hot", payload.hot || payload.daytradeHotSymbols || payload.priorityStrongSymbols, 75);
+  addMany("stock_future", payload.stockFutureSymbols || payload.futoptSymbols || payload.individualFuturesSymbols, 85);
+  addMany("manual_watchlist", payload.manualWatchlist || payload.manual_watchlist || payload.watchlist || payload.userWatchlist || payload.user_watchlist, 120);
   addMany("symbols", payload.symbols, 10);
 
   return {
@@ -2334,6 +2556,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   supplementalMaps.activeBySymbol = activeBySymbol;
   const seeds = readRuntimePrioritySeeds(activeSymbols);
   const bySymbol = new Map();
+  const sourceSeedBySymbol = new Map(seeds.symbols.map((entry) => [entry.symbol, entry]));
   const candidates = activeSymbols.map((row) => ({
     ...row,
     metrics: quoteMetrics(row.symbol, dailyVolumeMap, quoteMap, supplementalMaps),
@@ -2352,9 +2575,12 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   // The ordinary-stock mother pool warms from the full active universe.
   // Pending quote/volume fields may enter the warming pool, but formal entry
   // still requires fresh quotes and every canonical gate condition below.
-  const rankingCandidates = [...qualifiedCandidates, ...pendingCandidates];
+  // A pending quote or stale quote cannot enter the published mother pool.
+  // It remains visible in base-pool diagnostics until the next radar refresh.
+  const rankingCandidates = qualifiedCandidates;
   const changeRanks = rankMap(rankingCandidates, (row) => row.metrics.changePercent, { minValue: 0 });
   const volumeSurgeRanks = rankMap(rankingCandidates, (row) => row.metrics.volumeRatio5, { minValue: 0 });
+  const estimatedVolumeRanks = rankMap(rankingCandidates, (row) => row.metrics.estimatedVolumeRatio, { minValue: 0 });
   const volumeRanks = rankMap(rankingCandidates, (row) => row.metrics.totalVolume, { minValue: 0 });
   const valueRanks = rankMap(rankingCandidates, (row) => row.metrics.tradeValue, { minValue: 0 });
   const turnoverRanks = rankMap(rankingCandidates, (row) => row.metrics.turnoverRate3To5d, { minValue: 0 });
@@ -2418,6 +2644,10 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     } else if (metrics.changePercent >= 2) {
       score += 95;
       reasons.push("gain_rank_gt2");
+    }
+    if (metrics.movingAverageTurnBullish) {
+      score += 125;
+      reasons.push("ma3_5_10_or_ma5_10_30_turn_bullish");
     }
     if (metrics.volumeRatio5 >= 2) {
       score += 160;
@@ -2519,9 +2749,26 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       reasons.push("daytrade_crowded_watch");
     }
 
+    const seedSources = [...new Set((sourceSeedBySymbol.get(row.symbol)?.sources || []).filter((value) => value && value !== "symbols"))];
+    const sourceSignal = seedSources.length > 0 || metrics.stockFutureInitial0846Ok || metrics.trackedBuyPointActive;
+    const dynamicSignal = metrics.changePercent > 2 || metrics.volumeRatio5 >= 2 || (volumeRank > 0 && volumeRank <= 100) || (valueRank > 0 && valueRank <= 150) || metrics.movingAverageTurnBullish || metrics.surgeFlag || metrics.volumeSpikeFlag;
+    const isMotherPoolCandidate = sourceSignal || dynamicSignal;
+    const strongResonance = metrics.volumeRatio5 >= 2 || metrics.tradeValue >= FORMAL_SIGNAL_MIN_TRADE_VALUE || metrics.movingAverageTurnBullish || seedSources.length >= 2;
+    const liquidityGrade = metrics.avgVolume5 >= 3000 ? "formal_ok" : metrics.avgVolume5 >= 1000 || strongResonance ? "trial_or_watch" : "watch_only";
+    if (seedSources.length) reasons.push(...seedSources.map((value) => "source_" + value));
+    if (volumeRank > 0 && volumeRank <= 100) reasons.push("volume_rank_top100");
+    if (valueRank > 0 && valueRank <= 150) reasons.push("trade_value_rank_front");
+    if (metrics.surgeFlag) reasons.push("intraday_surge");
+    if (metrics.volumeSpikeFlag) reasons.push("intraday_volume_spike");
+    if (metrics.openingRangeBreak) reasons.push("opening_range_break_0901");
+    if (metrics.trackedBuyPointActive) reasons.push("tracked_buy_point_active");
     return {
       ...row,
       score,
+      isMotherPoolCandidate,
+      liquidityGrade,
+      sourceFlags: seedSources,
+      poolReasons: [...new Set(reasons)],
       prioritySource: "dynamic_daytrade_mother_pool",
       priorityReason: reasons.length ? reasons.join("+") : "dynamic_liquidity_fill",
       priorityMetrics: {
@@ -2540,11 +2787,18 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         projectedVolume: Math.round(metrics.projectedVolume),
         estimatedVolumeRatio: Number(metrics.estimatedVolumeRatio.toFixed(4)),
         estimatedVolumeRatioUsable: metrics.estimatedVolumeRatioUsable,
+        ma3: Number(metrics.ma3.toFixed(4)),
+        ma5: Number(metrics.ma5.toFixed(4)),
+        ma10: Number(metrics.ma10.toFixed(4)),
+        ma30: Number(metrics.ma30.toFixed(4)),
+        ma58: Number(metrics.ma58.toFixed(4)),
+        ma3Ma5Ma10Bullish: metrics.ma3Ma5Ma10Bullish,
+        ma5Ma10Ma30Bullish: metrics.ma5Ma10Ma30Bullish,
+        movingAverageTurnBullish: metrics.movingAverageTurnBullish,
         formalLiquidityEligible,
         formalLiquidityRejectReason,
         changeRank,
         volumeSurgeRank,
-        estimatedVolumeRank,
         volumeRank,
         valueRank,
         turnoverRank,
@@ -2576,6 +2830,24 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         quoteFresh: metrics.quoteFresh,
         fieldCoverage: metrics.fieldCoverage,
         ruleHits: reasons,
+        poolReasons: [...new Set(reasons)],
+        strategySourceFlags: seedSources,
+        isMotherPoolCandidate,
+        liquidityGrade,
+        ma3TurnUp: metrics.ma3Rising,
+        ma5TurnUp: metrics.ma5Rising,
+        ma10TurnUp: metrics.ma10Rising,
+        ma30TurnUp: metrics.ma30Rising,
+        ma58TurnUp: metrics.ma58Rising,
+        maBullStackShort: metrics.ma3Ma5Ma10Bullish,
+        maBullStackMid: metrics.ma5Ma10Ma30Bullish,
+        aboveMa30: metrics.aboveMa30,
+        aboveMa58: metrics.aboveMa58,
+        openingRangeBreak: metrics.openingRangeBreak,
+        surgeFlag: metrics.surgeFlag,
+        volumeSpikeFlag: metrics.volumeSpikeFlag,
+        tradeValueRank: valueRank,
+        dataGap: metrics.dataGap,
         basePoolEligible: row.basePool.eligible,
         basePoolPending: row.basePool.pending,
         basePoolFailedChecks: row.basePool.failedChecks,
@@ -2584,9 +2856,13 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     };
   }).sort((a, b) => Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true) || b.score - a.score || a.symbol.localeCompare(b.symbol));
 
-  for (const row of rankedCandidates) {
+  const rankedBySymbol = new Map(rankedCandidates.map((row) => [row.symbol, row]));
+  const signalCandidates = rankedCandidates.filter((row) => row.isMotherPoolCandidate);
+  const rotationCandidates = rankedCandidates.filter((row) => !row.isMotherPoolCandidate);
+  const selectedCandidates = [...signalCandidates, ...rotationCandidates];
+  for (const row of selectedCandidates) {
     if (bySymbol.size >= MOTHER_POOL_MAX_SYMBOLS) break;
-    if (!row.formalLiquidityEligible) continue;
+    // Mother pool is the warming/discovery layer; formal entry remains separately gated.
     bySymbol.set(row.symbol, {
       ...row,
       score: row.score,
@@ -2594,7 +2870,6 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       priorityReason: row.priorityReason,
     });
   }
-  const rankedBySymbol = new Map(rankedCandidates.map((row) => [row.symbol, row]));
   for (const seed of seeds.symbols) {
     const row = rankedBySymbol.get(seed.symbol);
     if (!row || !row.formalLiquidityEligible) continue;
@@ -2618,16 +2893,21 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       name: row.name || row.symbol,
       market: row.market || "",
       priority_rank: index + 1,
-      priority_reason: row.priorityReason || "",
-      source: row.prioritySource || "unknown",
+      priority_reason: row.priorityReason || (row.isMotherPoolCandidate ? "mother_pool_signal" : "radar_rotation_fill"),
+      source: row.sourceFlags?.length ? row.sourceFlags.join(",") : row.prioritySource || "unknown",
       updated_at: priorityUpdatedAt,
       payload: {
         score: numberValue(row.score),
         selected: true,
         consumerScope: ["daytrade", "strategy3"],
-        motherPoolRuleVersion: "daytrade_mother_pool_base_filter_20260731_max600",
+        motherPoolRuleVersion: MOTHER_POOL_RULE_VERSION,
         motherPoolMetrics: row.priorityMetrics || {},
         motherPoolRuleHits: row.priorityMetrics?.ruleHits || [],
+        poolReasons: row.poolReasons?.length ? row.poolReasons : ["radar_rotation_fill"],
+        strategySourceFlags: row.sourceFlags || [],
+        liquidityGrade: row.liquidityGrade || "watch_only",
+        motherPoolCandidate: row.isMotherPoolCandidate === true,
+        dataGap: row.priorityMetrics?.dataGap || { status: "OK", candle_count: 0, first_candle_time: "", last_candle_time: "", missing_window: "" },
         basePoolEligible: row.priorityMetrics?.basePoolEligible === true,
         basePoolPending: row.priorityMetrics?.basePoolPending === true,
         runtimePrioritySource: seeds.source,
@@ -2635,6 +2915,9 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         runtimePriorityCounts: seeds.counts,
       },
     }));
+  output.sourceSeedCounts = seeds.counts;
+  output.sourceSeedUpdatedAt = seeds.updatedAt;
+  output.sourceSeedUnion = [...new Set(seeds.symbols.flatMap((entry) => entry.sources || []))];
   output.basePoolMeta = {
     activeSymbols: candidates.length,
     basePoolEligibleSymbols: qualifiedCandidates.length,
@@ -2642,7 +2925,15 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     basePoolExcludedSymbols: Math.max(0, candidates.length - qualifiedCandidates.length - pendingCandidates.length),
     minimumSymbols: MOTHER_POOL_MIN_SYMBOLS,
     maximumSymbols: MOTHER_POOL_MAX_SYMBOLS,
-    ruleVersion: "daytrade_mother_pool_base_filter_20260731_max600",
+    minimumPrice: MOTHER_POOL_MIN_PRICE,
+    signalCandidateSymbols: signalCandidates.length,
+    rotationFillSymbols: rotationCandidates.length,
+    quotePendingSymbols: candidates.filter((row) => row.basePool.pendingChecks?.includes("quote_pending")).map((row) => row.symbol),
+    quoteStaleSymbols: candidates.filter((row) => row.basePool.pendingChecks?.includes("quote_stale")).map((row) => row.symbol),
+    priceFloorRejectedSymbols: candidates
+      .filter((row) => (row.basePool.failedChecks || []).includes("price_below_50"))
+      .map((row) => row.symbol),
+    ruleVersion: MOTHER_POOL_RULE_VERSION,
     failureCounts: basePoolFailureCounts,
     pendingCounts: basePoolPendingCounts,
   };
@@ -2671,6 +2962,7 @@ function publishDaytradePrioritySymbols(priorityRows) {
     .map((row) => normalizeCode(row.symbol))
     .filter((code) => /^\d{4}$/.test(code))
     .slice(0, MOTHER_POOL_MAX_SYMBOLS);
+  const daytradeHotPoolSymbols = daytradeMotherPoolSymbols.slice(0, HOT_POOL_MAX_SYMBOLS);
   const daytradePrioritySymbols = daytradeMotherPoolSymbols.slice(0, FORMAL_DAYTRADE_PRIORITY_LIMIT);
   const formalPriorityStrategyChip = buildFormalStrategyChipArtifact(
     bridgePayload,
@@ -2700,6 +2992,10 @@ function publishDaytradePrioritySymbols(priorityRows) {
     daytradeMotherPoolCount: daytradeMotherPoolSymbols.length,
     daytradePrioritySymbols: daytradeMotherPoolSymbols,
     daytradePriorityCount: daytradeMotherPoolSymbols.length,
+    daytradeHotPoolSymbols,
+    daytradeHotPoolCount: daytradeHotPoolSymbols.length,
+    daytradeHotPoolMinCount: HOT_POOL_MIN_SYMBOLS,
+    daytradeHotPoolMaxCount: HOT_POOL_MAX_SYMBOLS,
     daytradeFormalPrioritySymbols: daytradePrioritySymbols,
     daytradeFormalPriorityCount: daytradePrioritySymbols.length,
     formalPriorityStrategyChip,
@@ -2719,6 +3015,7 @@ function publishDaytradePrioritySymbols(priorityRows) {
       prioritySource: "daytrade-dedicated-priority-bridge",
       daytradePriorityCount: daytradeMotherPoolSymbols.length,
       daytradeMotherPoolCount: daytradeMotherPoolSymbols.length,
+      daytradeHotPoolCount: daytradeHotPoolSymbols.length,
       daytradeFormalPriorityCount: daytradePrioritySymbols.length,
       terminalPriorityCount: nextPriorityPayload.terminalPrioritySymbols.length,
       openingPriorityCount: nextPriorityPayload.openingPrioritySymbols.length,
@@ -2746,7 +3043,7 @@ function readRuntimePrioritySummary(activeSymbols) {
   const institution = countPriorityValues(payload.institution || payload.institutionSymbols, universe);
   const warrant = countPriorityValues(payload.warrant || payload.warrantSymbols, universe);
   const cb = countPriorityValues(payload.cb || payload.cbSymbols, universe);
-  const realtimeRadar = countPriorityValues(payload.realtimeRadar || payload.realtimeRadarSymbols, universe);
+  const realtimeRadar = 0;
   const formalPriorityStrategyChip = objectPayload(payload.formalPriorityStrategyChip);
   const strategyChipCompleteLatestRun = formalPriorityStrategyChip.schemaVersion === 'daytrade-formal-priority-strategy-chip-v1'
     && formalPriorityStrategyChip.status === 'ready'
@@ -2770,7 +3067,7 @@ function readRuntimePrioritySummary(activeSymbols) {
     formalPriorityStrategyChip,
     strategyChipCompleteLatestRun,
     strategyChipCompleteLatestRunReason: strategyChipCompleteLatestRun ? '' : String(formalPriorityStrategyChip.completeLatestRunReason || 'formal_priority_strategy_chip_missing_or_incomplete'),
-    strategyPriority: strategy2 + strategy3 + strategy4 + strategy5 + institution + warrant + cb + realtimeRadar,
+    strategyPriority: strategy2 + strategy3 + strategy4 + strategy5 + institution + warrant + cb,
     total: countPriorityValues(payload.symbols, universe),
   };
 }
@@ -2803,16 +3100,6 @@ function readWebSocketStatusSummary() {
     streamingChannels,
     connected: Boolean(status.websocketConnected),
     authenticated: Boolean(status.websocketAuthenticated),
-    authenticatedAt: status.authenticatedAt || "",
-    authenticationCount: numberValue(status.authenticationCount),
-    subscriptionAckCount: numberValue(status.subscriptionAckCount),
-    subscriptionAckExpected: numberValue(status.subscriptionAckExpected),
-    subscriptionAckChannels: Array.isArray(status.subscriptionAckChannels) ? status.subscriptionAckChannels : [],
-    subscriptionAckReady: Boolean(status.subscriptionAckReady),
-    intradayOddLot: status.intradayOddLot === false ? false : null,
-    subscriptionMode: status.subscriptionMode || "",
-    lastMessageAt: status.lastMessageAt || "",
-    lastCandleTime: status.lastCandleTime || "",
     subscribed: numberValue(status.subscribed),
     subscribedSymbols: numberValue(status.subscribedSymbols),
     subscribedChannels: numberValue(status.subscribedChannels),
@@ -2984,6 +3271,7 @@ async function fetchQuoteBatch(symbols) {
 
 function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dailyVolumeMap, intradayMap, futoptRows, websocketFutoptSync = {}, opening0901Evidence = {}, fetchResult, state, supplementalMaps = {} }) {
   const phase = phaseNow();
+  const warmupDataFillActive = taipeiMinutes() >= PREOPEN_WARMUP_START_MINUTES;
   const runtimePriority = readRuntimePrioritySummary(activeSymbols);
   const strategyChipCompleteLatestRun = runtimePriority.strategyChipCompleteLatestRun === true;
   const strategyChipReason = runtimePriority.strategyChipCompleteLatestRunReason || 'formal_priority_strategy_chip_missing_or_incomplete';
@@ -3057,23 +3345,29 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     ? "ready"
     : "not_ready";
 
+  let readyMa3 = 0;
   let readyMa20 = 0;
   let readyMa35 = 0;
+  let readyMa58 = 0;
   let today1mSymbols = 0;
   let today1mRows = 0;
   let intraday1mStaleSeconds = 999999;
   for (const [symbol, row] of intradayMap.entries()) {
     if (!activeSet.has(symbol)) continue;
     const continuousCount = numberValue(row.continuous_candle_count ?? row.candle_count);
+    if (boolValue(row.ready_ma3) || continuousCount >= 3) readyMa3 += 1;
     if (boolValue(row.ready_ma20_continuous) || continuousCount >= 20) readyMa20 += 1;
     if (boolValue(row.ready_ma35_continuous) || boolValue(row.ready_ge_35) || continuousCount >= 35) readyMa35 += 1;
+    if (boolValue(row.ready_ma58) || continuousCount >= 58) readyMa58 += 1;
     if (numberValue(row.today_candle_count) > 0) today1mSymbols += 1;
     today1mRows += numberValue(row.today_candle_count);
     intraday1mStaleSeconds = Math.min(intraday1mStaleSeconds, numberValue(row.latest_candle_age_seconds, 999999));
   }
   if (intradayMap.aggregate) {
+    readyMa3 = Math.max(readyMa3, numberValue(intradayMap.aggregate.readyMa3));
     readyMa20 = Math.max(readyMa20, numberValue(intradayMap.aggregate.readyMa20));
     readyMa35 = Math.max(readyMa35, numberValue(intradayMap.aggregate.readyMa35));
+    readyMa58 = Math.max(readyMa58, numberValue(intradayMap.aggregate.readyMa58));
     today1mSymbols = Math.max(today1mSymbols, numberValue(intradayMap.aggregate.todaySymbols));
     today1mRows = Math.max(today1mRows, numberValue(intradayMap.aggregate.todayRows));
     intraday1mStaleSeconds = Math.min(intraday1mStaleSeconds, numberValue(intradayMap.aggregate.staleSeconds, 999999));
@@ -3242,7 +3536,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const motherPoolFreshnessWarning = !offSession && motherFreshCoverage < 0.8;
   if (!offSession && priorityPoolSymbols < minFormalPrioritySymbols) failedChecks.push('priority_top40_below_40');
   if (!offSession && priorityFreshCoverage < MIN_PRIORITY_FRESH_COVERAGE) failedChecks.push('priority_top40_fresh_coverage_below_095');
-  if (!offSession && after0845 && !strategyChipCompleteLatestRun) failedChecks.push('strategy_chip_complete_latest_run_missing');
+  // Strategy/chip results are an optional priority bridge. They may not exist at the opening gate yet; daytrade formal entry must rely on dedicated live data.
   if (!offSession && latestQuoteAge > MAX_QUOTE_AGE_SECONDS) failedChecks.push('quote_stale');
   if (!offSession && dailyVolumeStatus !== 'ready') failedChecks.push('daily_volume_not_ready');
   if (!offSession && after0900 && intraday1mStaleSeconds > MAX_INTRADAY_1M_STALE_SECONDS) failedChecks.push('intraday_1m_not_ready');
@@ -3276,10 +3570,12 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     gate_grade: offSession ? "D" : gateGrade,
     gate_status: gateGrade === "A" ? "ready" : "not_ready",
     formal_entry_speed_verdict: gateGrade === "A" ? "YES" : "NO",
-    daytrade_source_speed_ok: gateGrade === "A",
+    // Formal daytrade speed is measured on the subscribed priority pool.
+    // Full-market quote speed is diagnostic only and must not block formal entry.
+    daytrade_source_speed_ok: formalPrioritySpeedOk,
     gate_mode: "priority_first",
-    formal_gate_scope: "mother_pool_rotation_priority_top40",
-    formal_scan_scope: "mother_pool_300_600_rotation",
+    formal_gate_scope: "mother_pool_300_rotating_deep_scan",
+    formal_scan_scope: "mother_pool_300_rotating_deep_scan",
     mother_pool_scan_min_symbols: MOTHER_POOL_MIN_SYMBOLS,
     mother_pool_scan_max_symbols: MOTHER_POOL_MAX_SYMBOLS,
     formal_source_name: SOURCE_NAME,
@@ -3324,16 +3620,6 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     websocket_streaming_channels: webSocketStatus.streamingChannels,
     websocket_connected: webSocketStatus.connected,
     websocket_authenticated: webSocketStatus.authenticated,
-    websocket_authenticated_at: webSocketStatus.authenticatedAt,
-    websocket_authentication_count: webSocketStatus.authenticationCount,
-    websocket_subscription_ack_count: webSocketStatus.subscriptionAckCount,
-    websocket_subscription_ack_expected: webSocketStatus.subscriptionAckExpected,
-    websocket_subscription_ack_channels: webSocketStatus.subscriptionAckChannels,
-    websocket_subscription_ack_ready: webSocketStatus.subscriptionAckReady,
-    websocket_intraday_odd_lot: webSocketStatus.intradayOddLot,
-    websocket_subscription_mode: webSocketStatus.subscriptionMode,
-    websocket_last_message_at: webSocketStatus.lastMessageAt,
-    websocket_last_candle_time: webSocketStatus.lastCandleTime,
     websocket_subscribed: webSocketStatus.subscribed,
     websocket_subscribed_symbols: webSocketStatus.subscribedSymbols,
     websocket_subscribed_channels: webSocketStatus.subscribedChannels,
@@ -3370,23 +3656,33 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     formal_priority_strategy_chip_status: runtimePriority.formalPriorityStrategyChip.status || 'missing',
     formal_priority_strategy_chip_trade_date: runtimePriority.formalPriorityStrategyChip.tradeDate || '',
     formal_priority_strategy_chip_complete_latest_run_evidence: strategyChipCompleteLatestRun,
-    formal_priority_strategy_chip_blocks_formal_entry: !strategyChipCompleteLatestRun,
+    formal_priority_strategy_chip_required_for_formal_entry: false,
+    formal_priority_strategy_chip_blocks_formal_entry: false,
     formal_priority_strategy_chip_reason: strategyChipReason,
     realtime_radar_priority_symbols: runtimePriority.realtimeRadar,
     batch_size: BATCH_SIZE,
     batch_interval_seconds: TARGET_BATCH_INTERVAL_SECONDS,
     priority_symbols: priorityPoolSymbols,
     priority_pool_symbols: priorityPoolSymbols,
-    formal_scope: "mother_pool_rotation_priority_top40",
+    formal_scope: "mother_pool_300_rotating_deep_scan",
     opening_boost_active: openingBoostActive,
     opening_boost_effective: openingBoostEffective,
     opening_boost_scope: openingBoostScope,
     opening_boost_reason: openingBoostReason,
-    mother_pool_rule_version: "daytrade_mother_pool_base_filter_20260731_max600",
+    mother_pool_rule_version: MOTHER_POOL_RULE_VERSION,
     mother_pool_symbols: priorityRows.length,
     mother_pool_fresh_coverage_120s: Number(motherFreshCoverage.toFixed(4)),
     mother_pool_fresh_quotes_120s: freshMother.length,
     mother_pool_source: "dynamic_daytrade_mother_pool",
+    mother_pool_source_seed_counts: priorityRows.sourceSeedCounts || {},
+    mother_pool_source_seed_union: priorityRows.sourceSeedUnion || [],
+    mother_pool_source_seed_updated_at: priorityRows.sourceSeedUpdatedAt || "",
+    mother_pool_min_price: MOTHER_POOL_MIN_PRICE,
+    mother_pool_price_floor_rejected_symbols: priorityRows.basePoolMeta?.priceFloorRejectedSymbols || [],
+    mother_pool_price_floor_rejected_count: (priorityRows.basePoolMeta?.priceFloorRejectedSymbols || []).length,
+    hot_pool_symbols: Math.min(HOT_POOL_MAX_SYMBOLS, priorityRows.length),
+    hot_pool_min_symbols: HOT_POOL_MIN_SYMBOLS,
+    hot_pool_max_symbols: HOT_POOL_MAX_SYMBOLS,
     mother_pool_capital_rows: supplementalMaps.capitalMap?.size || 0,
     mother_pool_chip_rows: supplementalMaps.chipMap?.size || 0,
     mother_pool_margin_change_rows: supplementalMaps.marginChangeMap?.size || 0,
@@ -3414,6 +3710,12 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     mother_pool_base_pool_excluded_symbols: priorityRows.basePoolMeta?.basePoolExcludedSymbols || 0,
     mother_pool_base_pool_failure_counts: priorityRows.basePoolMeta?.failureCounts || {},
     mother_pool_base_pool_pending_counts: priorityRows.basePoolMeta?.pendingCounts || {},
+    mother_pool_signal_candidate_symbols: priorityRows.basePoolMeta?.signalCandidateSymbols || 0,
+    mother_pool_rotation_fill_symbols: priorityRows.basePoolMeta?.rotationFillSymbols || 0,
+    mother_pool_quote_pending_symbols: priorityRows.basePoolMeta?.quotePendingSymbols || [],
+    mother_pool_quote_stale_symbols: priorityRows.basePoolMeta?.quoteStaleSymbols || [],
+    mother_pool_avg5_policy: "classification_only_avg5_never_hard_excludes",
+    mother_pool_required_readback_fields: ["trade_date", "symbol", "name", "market", "price", "open_price", "previous_close", "change_percent", "total_volume", "trade_value", "avg5_volume", "relative_volume_ratio", "volume_rank", "trade_value_rank", "ma3_turn_up", "ma5_turn_up", "ma10_turn_up", "ma30_turn_up", "ma58_turn_up", "ma_bull_stack_short", "ma_bull_stack_mid", "above_ma30", "above_ma58", "opening_range_break", "surge_flag", "volume_spike_flag", "strategy_source_flags", "sector_name", "sector_strength_score", "liquidity_grade", "mother_pool_score", "mother_pool_rank", "pool_reasons", "source_name", "updated_at"],
     priority_source_injecting: prioritySourceInjecting,
     priority_min_injecting_quotes: MIN_PRIORITY_INJECTING_QUOTES,
     priority_fresh_quote_coverage_target_120s: MIN_PRIORITY_FRESH_COVERAGE,
@@ -3438,12 +3740,18 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     avg_volume5_coverage: Number(dailyVolumeCoverage.toFixed(4)),
     historical_1m_warmup_status: historical1mWarmupStatus,
     today_1m_status: today1mStatus,
+    ma3_warmup_status: readyMa3 >= Math.max(1, Math.min(priorityPoolSymbols || 1, minFormalPrioritySymbols)) ? "ready" : readyMa3 > 0 ? "degraded" : "empty",
     ma20_warmup_status: ma20WarmupStatus,
     ma35_warmup_status: ma35WarmupStatus,
+    ma58_warmup_status: readyMa58 >= Math.max(1, Math.min(priorityPoolSymbols || 1, minFormalPrioritySymbols)) ? "ready" : readyMa58 > 0 ? "degraded" : "empty",
+    ready_ma3: readyMa3,
     ready_ma20_continuous: readyMa20,
     ready_ma35_continuous: readyMa35,
+    ready_ma58: readyMa58,
     ready_ma20_required: effectiveMa20Required,
     ready_ma35_required: effectiveMa35Required,
+    indicator_set: ["MA3", "MA5", "MA10", "MA20", "MA30", "MA35", "MA58", "KD", "MACD", "RSI"],
+    preopen_today_1m_required_before_formal: false,
     intraday_1m_stale_seconds: intraday1mStaleSeconds,
     today_1m_symbols: today1mSymbols,
     today_1m_rows: today1mRows,
@@ -3483,13 +3791,15 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     last_self_heal_at: state.lastSelfHealAt || null,
     last_self_heal_reason: state.lastSelfHealReason || "",
     phase,
+    warmup_start_taipei: "07:00",
+    warmup_data_fill_active: warmupDataFillActive,
     off_session: offSession,
     formal_entry_allowed: !offSession && after0845 && gateGrade === "A" && webSocketStatus.formalReady,
     latest_update_allowed: !offSession && after0845 && gateGrade === "A" && webSocketStatus.formalReady,
     preserve_previous_good: offSession || gateGrade !== "A",
     apply_mode: APPLY,
     fetch_enabled: FETCH_ENABLED,
-    quote_fetch_allowed_for_phase: quoteFetchAllowedForPhase(phase),
+    quote_fetch_allowed_for_phase: warmupDataFillActive && quoteFetchAllowedForPhase(phase),
     quote_freshness_basis: "market_updated_at",
     fetch_disabled_reason: fetchResult.disabledReason || "",
     fetched_this_loop: fetchResult.fetched,
@@ -3501,21 +3811,55 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
 function sourceGateA(values) {
   return values.selectedSymbolsFreshOk
     && (!values.after0845 || values.motherPoolSymbols >= MOTHER_POOL_MIN_SYMBOLS)
-    && true
     && values.priorityPoolSymbols >= (values.minPriorityPoolSymbols || MIN_PRIORITY_POOL_SYMBOLS)
     && values.quoteAgeSeconds <= MAX_QUOTE_AGE_SECONDS
     && values.cooldownRemaining <= 0
     && values.last429AgeSeconds > RECENT_429_BLOCK_SECONDS
     && (!values.after0830 || values.dailyVolumeStatus === "ready")
     && (!values.after0845 || values.scannerCanRunOpening)
-    && (!values.after0845 || values.strategyChipCompleteLatestRun === true)
     && (!values.after0845 || values.readyMa20 >= (values.effectiveMa20Required || MIN_READY_MA20_CONTINUOUS))
     && (!values.after0845 || !REQUIRE_MA35_FOR_FORMAL_DAYTRADE || values.readyMa35 >= (values.effectiveMa35Required || MIN_READY_MA35_CONTINUOUS))
     && (!REQUIRE_FUTOPT_FOR_FORMAL_DAYTRADE || !values.after0845 || values.futoptMapped >= MIN_FUTOPT_MAPPED)
     && (!values.after0900 || values.intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
 }
 
+function updateMotherPoolDelta(priorityRows) {
+  const current = new Map((Array.isArray(priorityRows) ? priorityRows : []).map((row, index) => [
+    normalizeCode(row.symbol),
+    { symbol: normalizeCode(row.symbol), rank: index + 1, score: numberValue(row.score) },
+  ]).filter(([symbol]) => symbol));
+  const previousPayload = readJson(MOTHER_POOL_DELTA_STATE_FILE, {});
+  const previous = new Map((Array.isArray(previousPayload.rows) ? previousPayload.rows : []).map((row) => [
+    normalizeCode(row.symbol),
+    { symbol: normalizeCode(row.symbol), rank: numberValue(row.rank), score: numberValue(row.score) },
+  ]).filter(([symbol]) => symbol));
+  const added = [...current.values()].filter((row) => !previous.has(row.symbol));
+  const removed = [...previous.values()].filter((row) => !current.has(row.symbol));
+  const upgraded = [...current.values()].filter((row) => {
+    const prior = previous.get(row.symbol);
+    return prior && prior.rank > FORMAL_DAYTRADE_PRIORITY_LIMIT && row.rank <= FORMAL_DAYTRADE_PRIORITY_LIMIT;
+  });
+  if (!DRY_RUN) writeJson(MOTHER_POOL_DELTA_STATE_FILE, {
+    source_name: SOURCE_NAME,
+    trade_date: taipeiDate(),
+    updated_at: nowIso(),
+    rows: [...current.values()],
+  });
+  return {
+    previous_count: previous.size,
+    current_count: current.size,
+    added_count: added.length,
+    added_symbols: added.map((row) => row.symbol),
+    removed_count: removed.length,
+    removed_symbols: removed.map((row) => row.symbol),
+    upgraded_to_priority_count: upgraded.length,
+    upgraded_to_priority_symbols: upgraded.map((row) => row.symbol),
+  };
+}
+
 async function writeStatusAndScorecard(result) {
+  const motherPoolDelta = updateMotherPoolDelta(result.priorityRows);
+  result.payload.mother_pool_delta = motherPoolDelta;
   await ensureWriterLease();
   const nonFatalWriteErrors = result.payload.nonfatal_write_errors || [];
   result.payload.source_host_id = SOURCE_HOST_ID;
@@ -3738,32 +4082,18 @@ async function syncWebSocketIntraday1mCandles(priorityRows) {
       close: numberValue(candle.close),
       volume: numberValue(candle.volume),
       source: "fugle_daytrade_writer:websocket_candles",
-      source_channel: "candles",
-      candle_origin: "websocket_candle",
-      synthetic: false,
-      volume_strategy_usable: true,
-      websocket_row: true,
-      rest_repair_row: false,
-      intraday_odd_lot: false,
       updated_at: candle.candleSeenAt || cache.payload?.updatedAt || nowIso(),
       payload: {
         ...(candle.payload || {}),
         cacheUpdatedAt: cache.payload?.updatedAt || "",
         source: "fugle-websocket-candles-cache",
-        source_channel: "candles",
-        candle_origin: "websocket_candle",
-        synthetic: false,
-        volume_strategy_usable: true,
-        websocket_row: true,
-        rest_repair_row: false,
-        intradayOddLot: false,
       },
     });
   }
   const quoteCache = readFugleWebSocketQuotes({ maxAgeMs: WINDOW_SECONDS * 1000 });
   const rowKeys = new Set(rows.map((row) => `${row.symbol}|${row.candle_time}`));
   const candleRowCount = rows.length;
-  if (envFlag("DAYTRADE_ALLOW_QUOTE_DERIVED_1M")) for (const quote of quoteCache.quotes.values()) {
+  for (const quote of quoteCache.quotes.values()) {
     const symbol = normalizeCode(quote.symbol || quote.code);
     if (!symbol || (prioritySymbols.size && !prioritySymbols.has(symbol))) continue;
     const seenAt = normalizeTimestamp(quote.quoteSeenAt || quote.updatedAt || quoteCache.payload?.updatedAt, nowIso());
@@ -3787,26 +4117,12 @@ async function syncWebSocketIntraday1mCandles(priorityRows) {
       close,
       volume: numberValue(quote.tradeVolume ?? quote.total_volume ?? quote.volume),
       source: "fugle_daytrade_writer:websocket_quote_derived_1m",
-      source_channel: "aggregates",
-      candle_origin: "quote_derived_disallowed",
-      synthetic: false,
-      volume_strategy_usable: false,
-      websocket_row: false,
-      rest_repair_row: false,
-      intraday_odd_lot: false,
       updated_at: seenAt,
       payload: {
         ...(quote.payload || {}),
         quoteSeenAt: seenAt,
         cacheUpdatedAt: quoteCache.payload?.updatedAt || "",
         source: "fugle-websocket-quote-derived-current-1m",
-        source_channel: "aggregates",
-        candle_origin: "quote_derived_disallowed",
-        synthetic: false,
-        volume_strategy_usable: false,
-        websocket_row: false,
-        rest_repair_row: false,
-        intradayOddLot: false,
       },
     });
   }
@@ -3862,7 +4178,7 @@ async function syncWebSocketFutoptQuotes() {
   if (!rows.length) {
     return { written: 0, skipped: true, cacheCount: cache.quotes.size, stockRows: 0, txfRows: 0 };
   }
-  await supabaseUpsert("fugle_daytrade_futopt_quotes_live", rows, "future_symbol", { batchSize: 80 });
+  await supabaseUpsert("fugle_daytrade_futopt_quotes_live", rows, "future_symbol", { batchSize: 40, timeoutMs: 30000, retries: 1, retryDelayMs: 1000 });
   return { written: rows.length, skipped: false, cacheCount: cache.quotes.size, stockRows, txfRows };
 }
 
@@ -3956,12 +4272,16 @@ async function tick() {
   await ensureWriterLease();
   const state = readWriterState();
   const phase = phaseNow();
-  const fetchAllowedForPhase = quoteFetchAllowedForPhase(phase);
-  const fetchPriorityOnlyForPhase = quoteFetchPriorityOnlyForPhase(phase);
+  const warmupDataFillActive = taipeiMinutes() >= PREOPEN_WARMUP_START_MINUTES;
+  const fetchAllowedForPhase = warmupDataFillActive && quoteFetchAllowedForPhase(phase);
+  const fetchPriorityOnlyForPhase = warmupDataFillActive && quoteFetchPriorityOnlyForPhase(phase);
   const activeSymbols = await fetchActiveSymbols();
   await refreshStrategyChipPriorityBridge();
   const dailyVolumeMap = await fetchDailyVolumeAvg();
   const quoteMap = await fetchExistingDaytradeQuotes();
+  // Seed pool ranking from the live WebSocket cache before any enrichment
+  // reads, so the first formal readthrough of a tick is freshness-first too.
+  mergeWebSocketQuoteCache(quoteMap);
   const provisionalPriorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, {});
   await writeEnrichmentPendingHeartbeat({
     activeSymbols,
@@ -3980,7 +4300,9 @@ async function tick() {
   const supplementalMaps = { capitalMap, chipMap, marginChangeMap, stockFutureInitialMap, stockGroupContractMap };
   let priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
   let intradayMap = await fetchIntradayStatus(activeSymbols);
+  supplementalMaps.intradayMap = intradayMap;
   intradayMap = mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows);
+  priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
   const nonFatalWriteErrors = [];
   let websocketQuoteReadthroughSync = { written: 0, skipped: true, reason: 'no_fresh_mother_quotes', candidateRows: priorityRows.length, freshRows: 0 };
   if (priorityRows.length) {
@@ -4067,7 +4389,12 @@ async function tick() {
       });
     }
     try {
-      await supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol", { batchSize: 40 });
+      await supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol", {
+        batchSize: 40,
+        timeoutMs: 30000,
+        retries: 1,
+        retryDelayMs: 1000,
+      });
       await supabaseDelete(
         "fugle_daytrade_priority_pool",
         `updated_at=lt.${encodeURIComponent(priorityRows[0].updated_at)}`,
@@ -4135,6 +4462,9 @@ async function tick() {
     }
   }
   if (fetchResult.rows.length) {
+    // Let freshness-first ranking see the latest WebSocket cache before the
+    // post-fetch mother-pool/formal-top40 rebuild.
+    mergeWebSocketQuoteCache(quoteMap);
     const rebuiltPriorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
     if (rebuiltPriorityRows.length) {
       priorityRows = rebuiltPriorityRows;
@@ -4142,13 +4472,75 @@ async function tick() {
         // Persist the post-fetch rebuild so the canonical mother-pool view sees
         // the same fresh quote timestamps used by source_status.payload.
         publishDaytradePrioritySymbols(priorityRows);
-        await supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol", { batchSize: 40 });
+        await supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol", {
+        batchSize: 40,
+        timeoutMs: 30000,
+        retries: 1,
+        retryDelayMs: 1000,
+      });
         await supabaseDelete(
           "fugle_daytrade_priority_pool",
           "updated_at=lt." + encodeURIComponent(priorityRows[0].updated_at),
         );
       } catch (error) {
         fetchResult.errors.push({ target: "fugle_daytrade_priority_pool_rebuild", message: error?.message || String(error) });
+      }
+    }
+  }
+
+  // The fetch/rebuild can change the formal top40 ordering. Re-read the
+  // WebSocket cache against that final ordering so the live quote table and
+  // source payload describe the same formal symbols in the same tick.
+  if (priorityRows.length) {
+    const postFetchQuoteMap = new Map(quoteMap);
+    mergeWebSocketQuoteCache(postFetchQuoteMap);
+    const postFetchWebsocketQuoteRows = priorityRows
+      .slice(0, FORMAL_DAYTRADE_PRIORITY_LIMIT)
+      .map((row) => postFetchQuoteMap.get(normalizeCode(row.symbol)))
+      .filter((quote) => quote && ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS)
+      .map((quote) => ({
+        symbol: normalizeCode(quote.symbol),
+        name: quote.name || normalizeCode(quote.symbol),
+        market: quote.market || '',
+        quote_seen_at: normalizeTimestamp(quote.quote_seen_at || quote.updated_at, nowIso()),
+        updated_at: normalizeTimestamp(quote.updated_at || quote.quote_seen_at, nowIso()),
+        last_trade_time: normalizeTimestamp(quote.last_trade_time || quote.quote_seen_at || quote.updated_at, nowIso()),
+        price: numberValue(quote.price),
+        open_price: numberValue(quote.open_price),
+        high_price: numberValue(quote.high_price),
+        low_price: numberValue(quote.low_price),
+        previous_close: numberValue(quote.previous_close) || null,
+        change_percent: numberValue(quote.change_percent),
+        total_volume: numberValue(quote.total_volume),
+        trade_value: numberValue(quote.trade_value),
+        bid_price: numberValue(quote.bid_price),
+        bid_volume: numberValue(quote.bid_volume),
+        ask_price: numberValue(quote.ask_price),
+        ask_volume: numberValue(quote.ask_volume),
+        cumulative_bid_volume: numberValue(quote.cumulative_bid_volume) || null,
+        cumulative_ask_volume: numberValue(quote.cumulative_ask_volume) || null,
+        cumulative_bid_ask_volume: numberValue(quote.cumulative_bid_ask_volume) || null,
+        limit_up_price: numberValue(quote.limit_up_price) || null,
+        limit_down_price: numberValue(quote.limit_down_price) || null,
+        stock_type: quote.stock_type || '',
+        session: quote.session || '',
+        source: quote.source || 'fugle_websocket_cache',
+        payload: quote.payload || {},
+      }))
+      .filter((quote) => quote.symbol);
+    if (postFetchWebsocketQuoteRows.length) {
+      try {
+        await supabaseUpsert('fugle_daytrade_quotes_live', postFetchWebsocketQuoteRows, 'symbol', { batchSize: 40 });
+        for (const quote of postFetchWebsocketQuoteRows) quoteMap.set(quote.symbol, quote);
+        websocketQuoteReadthroughSync = {
+          ...websocketQuoteReadthroughSync,
+          written: Math.max(websocketQuoteReadthroughSync.written || 0, postFetchWebsocketQuoteRows.length),
+          skipped: false,
+          reason: 'websocket_cache_final_formal_top40_readthrough',
+          finalFormalRows: postFetchWebsocketQuoteRows.length,
+        };
+      } catch (error) {
+        fetchResult.errors.push({ target: 'fugle_daytrade_quotes_live_final_formal_top40_readthrough', message: error?.message || String(error) });
       }
     }
   }
@@ -4246,6 +4638,14 @@ async function tick() {
     motherPoolMaxSymbols: MOTHER_POOL_MAX_SYMBOLS,
     motherPoolRuleVersion: result.payload.mother_pool_rule_version,
     motherPoolRuleHitCounts: result.payload.mother_pool_rule_hit_counts,
+    motherPoolMinPrice: result.payload.mother_pool_min_price,
+    motherPoolPriceFloorRejectedCount: result.payload.mother_pool_price_floor_rejected_count,
+    hotPoolSymbols: result.payload.hot_pool_symbols,
+    indicatorSet: result.payload.indicator_set,
+    readyMa3: result.payload.ready_ma3,
+    readyMa58: result.payload.ready_ma58,
+    ma3WarmupStatus: result.payload.ma3_warmup_status,
+    ma58WarmupStatus: result.payload.ma58_warmup_status,
     stockGroupContractSource: result.payload.stock_group_contract_source,
     stockGroupContractRows: result.payload.stock_group_contract_rows,
     stockFutureInitial0846Rows: result.payload.stock_future_initial_0846_rows,

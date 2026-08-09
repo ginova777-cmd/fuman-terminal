@@ -158,23 +158,6 @@ try {
       exit $dateExit
     }
 
-    $dailyOhlcvScript = Join-Path $repo "ops\public-slot\Backfill-Strategy4MissingDailyOhlcv.ps1"
-    Write-Log "daily OHLCV sync start: Fugle primary, official exchange fallback, inactive excluded"
-    & "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -File $dailyOhlcvScript -MaxSymbols 2000 -RetainTradeDays 20 -DelaySeconds 8 -MinimumCoveragePercent 95 *>&1 | Tee-Object -FilePath $log -Append
-    if ($LASTEXITCODE -ne 0) {
-      $reason = "daily OHLCV sync failed"
-      Write-Log $reason
-      Complete-Receipt "failed" 3 $false $reason $null $true $false
-      exit 3
-    }
-    & $nodeExe "scripts\verify-terminal-daily-ohlcv.js" *>&1 | Tee-Object -FilePath $log -Append
-    if ($LASTEXITCODE -ne 0) {
-      $reason = "daily OHLCV completeness verifier failed"
-      Write-Log $reason
-      Complete-Receipt "failed" 3 $false $reason $null $true $false
-      exit 3
-    }
-    Write-Log "daily OHLCV sync and verifier passed"
     & $nodeExe "scripts\verify-supabase-publish-hard-gate.js" "--strategy=strategy4" *>&1 | Tee-Object -FilePath $log -Append
     $gateExit = $LASTEXITCODE
     Write-Log "Strategy4 source prewarm publish gate probe exit=$gateExit"

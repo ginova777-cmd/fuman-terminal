@@ -165,6 +165,18 @@ try {
     $node = Get-Command node -ErrorAction Stop
   }
 
+  # A closed market is a valid previous-good state, not an API failure.
+  # Check this before production guard/monitor so stale local release metadata
+  # cannot generate a false LINE/Telegram/email alert on weekends or holidays.
+  $calendarOutput = @(& $node.Source "--use-system-ca" "scripts\check-market-calendar-action.js" "--label=API unattended patrol" 2>&1)
+  $calendarExitCode = if ($null -eq $LASTEXITCODE) { 0 } else { $LASTEXITCODE }
+  $calendarText = ($calendarOutput | Out-String)
+  Add-Content -LiteralPath $script:LogFile -Value $calendarText.TrimEnd()
+  if (($calendarExitCode -eq 0 -or $calendarExitCode -eq 10) -and $calendarText -match 'marketOpen.*false') {
+    Write-PatrolState -Status "market_closed_previous_good" -Message "market closed; preserve previous good; no API failure alert"
+    Add-Content -LiteralPath $script:LogFile -Value ("[{0}] market closed; patrol skipped; previous good preserved" -f (Get-Date -Format o))
+    exit 0
+  }
   $scorecardJson = Join-Path $stateDir ("api-unattended-scorecard-{0}.json" -f $safeComputer)
   $scorecardMd = Join-Path $reportDir ("api-unattended-scorecard-{0}.md" -f $safeComputer)
 

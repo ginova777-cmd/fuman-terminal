@@ -1,0 +1,14 @@
+{
+  "date": "2026-08-06",
+  "report_time": "08:30",
+  "run_id": "daily-20260806-0830",
+  "source": "opening_report_0830",
+  "mode": "priority_bias_only",
+  "industry": "semiconductors",
+  "bias": "strong",
+  "confidence": 0.9,
+  "evidence_summary": "Overseas semiconductor leaders remain strong before Taiwan open.",
+  "mapped_symbols": ["2330", "2454"],
+  "allowed_action": "boost_scan_priority_only",
+  "forbidden_action": "publish_formal_candidate_without_taiwan_evidence"
+}

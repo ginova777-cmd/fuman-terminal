@@ -1,16 +1,5 @@
 const { spawnSync } = require("child_process");
-const fs = require("fs");
-const path = require("path");
 const versionPayload = require("../version.json");
-
-function scorecardShellVersion() {
-  try {
-    const html = fs.readFileSync(path.join(__dirname, "..", "88.html"), "utf8");
-    return html.match(/data-scorecard-shell-version="([^"]+)"/i)?.[1] || "";
-  } catch {
-    return "";
-  }
-}
 
 function localGitSha() {
   if (process.env.VERCEL_GIT_COMMIT_SHA) return process.env.VERCEL_GIT_COMMIT_SHA;
@@ -41,7 +30,6 @@ module.exports = function handler(req, res) {
   res.status(200).json({
     ok: Boolean(gitSha && deployId),
     version: versionPayload.version,
-    scorecardShellVersion: scorecardShellVersion(),
     gitSha,
     deployId,
     deploymentId: deployId,

@@ -409,3 +409,14 @@ When reporting to the user, include only current facts:
 - commit hash if source changed.
 
 Do not paste old historical AGENTS content back into the answer or this file.
+## Final Audit Convergence Layer
+
+The daily convergence layer is authoritative for its connected scope:
+
+Market Calendar -> Predictive Preflight -> WebSocket Source -> Water Root -> Formal Gate
+
+Every run must carry one daily_run_id, acquire the single orchestrator lock, publish an active-module registry, and write one terminal-stage-receipt-v1 per required stage. A missing receipt is never completion evidence. The daily manifest and terminal-unattended-final-audit.json must report YES or NO, the first blocker, a stable reason_code, and an allowed_action.
+
+The current scope connects the five core gates, power recovery, daily OHLCV, the source/data chain, strategy/chip receipts, read-only API/desktop/mobile/scorecard/source-report surface receipts, and structured read-only verifier receipts for Canary, RunId Closure, route-88, Watchdog, and Auto Roll Forward. Control Plane and Recovery Queue are now required through read-only receipts; missing, stale, or unhealthy state remains blocking. The daily registry also records each module requirement_state (required/optional/disabled/not_required) and today_state (REQUIRED/OPTIONAL/DISABLED/NOT_REQUIRED/NOT_DUE), and fails closed on missing or duplicate registry configuration. Receipt collectors never inject source trade_date or run_id; resource-chain evidence is accepted only when its own expectedDate matches the audit trade_date, while command context remains explicit in command_result.context.
+
+If the lock is already held, the contender writes only an isolated lock-contention NO artifact and must not overwrite the authoritative latest audit. That artifact is verifiable as an aborted contention state, but it can never satisfy --require-yes.

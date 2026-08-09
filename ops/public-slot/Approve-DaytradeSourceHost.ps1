@@ -11,6 +11,7 @@ $dir = Join-Path $RuntimeDir "config"
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 $file = Join-Path $dir "daytrade-source-host-approval.json"
 [ordered]@{
+  contract = "daytrade-source-host-approval-v1"
   approved = $true
   sourceRole = "writer"
   hostId = $hostId

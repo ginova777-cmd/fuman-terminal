@@ -25,7 +25,7 @@ function main() {
   const host = String(process.env.COMPUTERNAME || "").trim().toUpperCase();
   const role = String(approval.sourceRole || "").trim().toLowerCase();
   const approved = approval.approved === true;
-  const writerProcesses = powershell("@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -match 'fugle-websocket-collector\\.js|run-daytrade-source-writer\\.js' }).Count");
+  const writerProcesses = powershell("@(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.Name -ieq 'node.exe' -and $_.CommandLine -match 'run-daytrade-source-writer\\.js' }).Count");
   const writerTask = powershell("$t=Get-ScheduledTask -TaskName 'Fuman Daytrade Source Writer 0600-1330' -ErrorAction SilentlyContinue; if($t){$t.State}else{'missing'}");
   const processCount = Number(writerProcesses.stdout || "0");
   const taskState = writerTask.stdout || "unknown";
@@ -37,10 +37,11 @@ function main() {
     if (/Ready|Running/i.test(taskState)) issues.push(`reader_host_writer_task_enabled:${taskState}`);
   } else if (role === "writer") {
     if (!approved) issues.push("writer_host_not_approved");
+    if (processCount > 1) issues.push(`multiple_writer_processes_present:${processCount}`);
   } else {
     issues.push("source_host_role_unknown");
   }
-  if (host === "FUMAN-PC" && role !== "reader") issues.push("FUMAN-PC_must_be_reader_only");
+  if (String(approval.hostId || "").trim().toUpperCase() !== host) issues.push("approval_host_mismatch");
 
   const result = {
     ok: issues.length === 0,

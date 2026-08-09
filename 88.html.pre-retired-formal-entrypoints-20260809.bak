@@ -1,0 +1,1419 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>輔滿成績單</title>
+  <script src="/terminal-entitlement-guard.js?v=public-terminal-fast-20260714-22&membership-lock=20260724-01"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0f14;
+      --panel: #141a22;
+      --panel-2: #101720;
+      --head: #111720;
+      --line: #27313f;
+      --text: #f3f7fb;
+      --muted: #94a3b8;
+      --good: #5ee0a0;
+      --bad: #ff7a90;
+      --brand: #ff9b45;
+      --soft: #1d2633;
+      --button-text: #17100a;
+    }
+    body[data-theme="sun"] {
+      color-scheme: light;
+      --bg: #f6f8fb;
+      --panel: #ffffff;
+      --panel-2: #f1f5f9;
+      --head: #eef3f8;
+      --line: #cbd5e1;
+      --text: #172033;
+      --muted: #64748b;
+      --good: #047857;
+      --bad: #be123c;
+      --brand: #d97706;
+      --soft: #e8eef6;
+      --button-text: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Microsoft JhengHei", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    main {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+      padding: 22px 16px 42px;
+    }
+    .top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .badge {
+      color: var(--brand);
+      font-weight: 800;
+      letter-spacing: .08em;
+      font-size: 12px;
+    }
+    h1 {
+      margin: 6px 0 8px;
+      font-size: clamp(28px, 5vw, 48px);
+      letter-spacing: 0;
+    }
+    p { margin: 0; color: var(--muted); }
+    button, input { font: inherit; }
+    .tools {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .tools input,
+    .tools select {
+      width: min(280px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .tools select {
+      width: min(180px, 100%);
+      cursor: pointer;
+    }
+    .tools button {
+      border: 0;
+      border-radius: 8px;
+      background: var(--brand);
+      color: var(--button-text);
+      font-weight: 800;
+      padding: 10px 14px;
+      cursor: pointer;
+    }
+    .tools .ghost {
+      background: var(--soft);
+      border: 1px solid var(--line);
+      color: var(--text);
+    }
+    #themeToggle {
+      color: #facc15;
+    }
+    .device-switcher {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+    .device-switcher a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 36px;
+      border-radius: 6px;
+      padding: 8px 11px;
+      background: var(--soft);
+      color: var(--text);
+      font-weight: 800;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .device-switcher a:hover,
+    .device-switcher a:focus-visible {
+      outline: 2px solid var(--brand);
+      outline-offset: 1px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin: 16px 0;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px;
+      min-width: 0;
+    }
+    .card span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .card strong {
+      display: block;
+      font-size: 26px;
+      margin-top: 8px;
+      letter-spacing: 0;
+      overflow-wrap: anywhere;
+    }
+    .summary,
+    .basis,
+    .audit-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      margin: 0 0 14px;
+    }
+    .basis .card strong {
+      font-size: 18px;
+      line-height: 1.35;
+    }
+    .tabs,
+    .result-pills {
+      display: flex;
+      gap: 8px;
+      overflow: auto;
+      margin: 14px 0;
+      padding-bottom: 2px;
+    }
+    .tab,
+    .pill {
+      background: var(--soft);
+      border: 1px solid var(--line);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 9px 12px;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .tab.active,
+    .pill.active {
+      border-color: var(--brand);
+      color: var(--brand);
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .table-wrap {
+      overflow: auto;
+      max-height: 68vh;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1280px;
+    }
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      white-space: nowrap;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      background: var(--head);
+      color: var(--text);
+      z-index: 1;
+    }
+    td.reason {
+      white-space: normal;
+      min-width: 260px;
+      color: var(--muted);
+    }
+    td.rule-group {
+      white-space: normal;
+      min-width: 150px;
+      font-weight: 800;
+      color: var(--text);
+    }
+    td.rule-tags {
+      white-space: normal;
+      min-width: 220px;
+    }
+    td.followup {
+      white-space: normal;
+      min-width: 150px;
+      color: var(--muted);
+    }
+    .tag {
+      display: inline-block;
+      margin: 0 4px 4px 0;
+      padding: 3px 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+    .followup strong {
+      color: var(--good);
+      font-weight: 800;
+    }
+    .good { color: var(--good); font-weight: 800; }
+    .bad { color: var(--bad); font-weight: 800; }
+    .empty {
+      padding: 28px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .footer {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .status-line {
+      margin: 10px 0 0;
+      padding: 9px 11px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-2);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .status-line.complete {
+      border-color: rgba(94, 224, 160, .45);
+      color: var(--good);
+    }
+    .status-line.degraded,
+    .status-line.stale,
+    .status-line.blocked {
+      border-color: rgba(255, 122, 144, .55);
+      color: var(--bad);
+    }
+    .scorecard-member-lock {
+      margin: 42px auto 0;
+      width: min(760px, 100%);
+      border: 1px solid rgba(255, 155, 69, .72);
+      border-radius: 8px;
+      background: linear-gradient(135deg, rgba(255, 155, 69, .12), rgba(20, 26, 34, .96));
+      padding: 22px;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, .28);
+    }
+    body[data-theme="sun"] .scorecard-member-lock {
+      background: linear-gradient(135deg, rgba(255, 247, 237, .98), rgba(255, 255, 255, .98));
+      box-shadow: 0 16px 48px rgba(15, 23, 42, .12);
+    }
+    .scorecard-member-lock h2 {
+      margin: 0 0 10px;
+      font-size: 28px;
+      letter-spacing: 0;
+    }
+    .scorecard-member-lock p {
+      line-height: 1.7;
+      margin: 0 0 16px;
+    }
+    .scorecard-member-lock .lock-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin: 16px 0;
+    }
+    .scorecard-member-lock .lock-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-2);
+      padding: 12px;
+    }
+    .scorecard-member-lock .lock-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .scorecard-member-lock .lock-card strong {
+      display: block;
+      margin-top: 8px;
+      color: var(--text);
+      font-size: 18px;
+    }
+    .scorecard-member-lock .lock-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+    .scorecard-member-lock .lock-actions a,
+    .scorecard-member-lock .lock-actions button {
+      border: 1px solid rgba(255, 155, 69, .65);
+      border-radius: 8px;
+      background: var(--brand);
+      color: var(--button-text);
+      padding: 11px 14px;
+      font-weight: 900;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .scorecard-member-lock .lock-actions .ghost {
+      background: var(--soft);
+      color: var(--text);
+    }
+    .entry-panel,
+    .audit-panel {
+      margin: 14px 0;
+      padding: 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .entry-panel h2,
+    .audit-panel h2 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+    .entry-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .entry-table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .entry-table {
+      min-width: 920px;
+    }
+    .entry-table td.note {
+      white-space: normal;
+      min-width: 220px;
+      color: var(--muted);
+    }
+    .audit-grid .card strong {
+      font-size: 18px;
+      line-height: 1.35;
+    }
+    .audit-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .audit-item {
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-2);
+      color: var(--muted);
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+    }
+    .audit-item strong {
+      color: var(--text);
+    }
+    .audit-item.pass strong,
+    .audit-item.pass .audit-state {
+      color: var(--good);
+    }
+    .audit-item.fail strong,
+    .audit-item.fail .audit-state {
+      color: var(--bad);
+    }
+    .evidence {
+      white-space: normal;
+      min-width: 360px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+    .evidence summary {
+      cursor: pointer;
+      color: var(--text);
+      font-weight: 800;
+    }
+    .evidence pre {
+      max-width: 520px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      margin: 8px 0 0;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    @media (max-width: 760px) {
+      main { padding: 16px 10px 32px; }
+      .top { display: block; }
+      .tools {
+        margin-top: 14px;
+        justify-content: stretch;
+      }
+      .tools input,
+      .tools select,
+      .tools button,
+      .device-switcher {
+        width: 100%;
+      }
+      .device-switcher a {
+        flex: 1;
+      }
+      .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .scorecard-member-lock .lock-grid {
+        grid-template-columns: 1fr;
+      }
+      .card strong {
+        font-size: 22px;
+      }
+      table { min-width: 1180px; }
+      th, td { padding: 9px 10px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <section class="top" data-testid="scorecard-hero">
+    <div>
+      <div class="badge">FUMAN SCORECARD</div>
+      <h1>輔滿成績單</h1>
+      <p id="subtitle">正在讀取公開成績單資料...</p>
+    </div>
+    <div class="tools">
+      <select id="historyDate" aria-label="選擇歷史成績單日期" data-testid="scorecard-history-date">
+        <option value="">最新日期</option>
+      </select>
+      <input id="search" type="search" placeholder="搜尋代號 / 名稱" aria-label="搜尋代號或名稱">
+      <nav class="device-switcher" id="deviceSwitcher" data-testid="scorecard-device-switcher" aria-label="切換網頁版本">
+        <a href="/api/mobile-page" data-testid="scorecard-mobile-link">手機版</a>
+        <a href="/?desktop=1" data-testid="scorecard-desktop-link">電腦版</a>
+      </nav>
+      <button id="themeToggle" class="ghost" type="button" data-testid="scorecard-theme-toggle" aria-pressed="false" aria-label="切換至陽光模式" title="切換至陽光模式">☀</button>
+      <button id="reload" type="button">重新整理</button>
+    </div>
+  </section>
+
+  <section class="grid" id="metrics" data-testid="scorecard-metrics"></section>
+  <section class="status-line" id="sourceStatus" data-testid="scorecard-source-status" hidden></section>
+  <section class="status-line" id="scorecardSourceReports" data-testid="scorecard-source-reports" hidden>sourceReports 讀取中...</section>
+  <section class="status-line" id="scorecardStrategy4Live" data-testid="scorecard-strategy4-live-status" hidden>策略4 latest run 讀取中...</section>
+  <section class="audit-panel" id="auditPanel" data-testid="scorecard-audit-panel" hidden></section>
+  <section class="summary" id="strategySummary" data-testid="scorecard-strategy-summary"></section>
+  <nav class="tabs" id="tabs" data-testid="scorecard-strategy-tabs"></nav>
+  <nav class="result-pills" id="resultPills" data-testid="scorecard-result-pills"></nav>
+
+  <section class="panel">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>日期</th>
+            <th>策略</th>
+            <th>代號</th>
+            <th>名稱</th>
+            <th>進場時間</th>
+            <th>進場價</th>
+            <th>最高價</th>
+            <th>損益(元)</th>
+            <th data-testid="scorecard-followup">7日追蹤</th>
+          </tr>
+        </thead>
+        <tbody id="rows" data-testid="scorecard-rows">
+          <tr><td colspan="9" class="empty">載入中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <template id="scorecardPrivateContractMarkers" data-testid="scorecard-private-contract-markers">
+    scorecard-rule-group scorecard-rule-tags
+    策略項目 策略細項
+  </template>
+  <div class="footer" id="footer"></div>
+</main>
+
+<script>
+let payload = null;
+let daytradeEntryPayload = null;
+let sevenStrategyDailyHistoryPayload = null;
+let activeStrategy = "全部";
+let activeSupplement = "";
+let activeResult = "all";
+let activeDate = "";
+const THEME_KEY = "fuman-scorecard-theme";
+const countFmt = new Intl.NumberFormat("zh-TW");
+const pnlFmt = new Intl.NumberFormat("zh-TW", { maximumFractionDigits: 2 });
+const PNL_MULTIPLIER = 1000;
+const count = (value) => countFmt.format(Math.round(Number(value) || 0));
+const pnlText = (value) => pnlFmt.format((Number(value) || 0) * PNL_MULTIPLIER);
+const price = (value) => (Number(value) || 0).toFixed(2);
+const optionalPrice = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) : "--";
+};
+const byId = (id) => document.getElementById(id);
+const resultFilters = [
+  ["all", "全部"],
+  ["win", "獲利"],
+  ["loss", "虧損"],
+  ["flat", "平盤"],
+];
+
+function authUrl(mode = "login") {
+  const url = new URL("/auth.html", location.origin);
+  url.searchParams.set("mode", mode);
+  url.searchParams.set("next", `${location.pathname}${location.search}${location.hash}`);
+  return url.toString();
+}
+
+function isMembershipFailure(response, bodyOrError) {
+  const text = [
+    bodyOrError?.error,
+    bodyOrError?.reason,
+    bodyOrError?.code,
+    bodyOrError?.message,
+    String(bodyOrError || ""),
+  ].join(" ");
+  return response?.status === 401
+    || bodyOrError?.protected === true
+    || /membership_required|missing_bearer_token|invalid_or_expired_token|membership_not_enabled/i.test(text);
+}
+
+function esc(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  }[char]));
+}
+
+function membershipDisplayReason(reason = "") {
+  const text = String(reason || "");
+  if (/missing_bearer_token|membership_required|invalid_or_expired_token/i.test(text)) {
+    return "尚未登入或會員權限未開通";
+  }
+  if (/membership_not_enabled/i.test(text)) {
+    return "會員權限尚未開通";
+  }
+  return "需要會員登入與開通權限";
+}
+
+function renderMembershipLock(reason = "missing_bearer_token") {
+  const displayReason = membershipDisplayReason(reason);
+  payload = null;
+  byId("subtitle").textContent = "此成績單已啟用會員權限；登入並開通後即可讀取完整資料。";
+  byId("metrics").innerHTML = "";
+  byId("sourceStatus").hidden = true;
+  byId("scorecardSourceReports").hidden = true;
+  byId("scorecardStrategy4Live").hidden = true;
+  byId("auditPanel").hidden = true;
+  byId("strategySummary").innerHTML = "";
+  byId("tabs").innerHTML = "";
+  byId("resultPills").innerHTML = "";
+  byId("footer").textContent = "會員保護啟動：只遮住顯示與 protected API；水源、scanner、snapshot 與策略運算不受影響。";
+  byId("rows").innerHTML = `
+    <tr>
+      <td colspan="9">
+        <section class="scorecard-member-lock" data-testid="scorecard-membership-lock" data-membership-required="1">
+          <div class="badge">FUMAN MEMBER</div>
+          <h2>會員權限尚未開通</h2>
+          <p>輔滿成績單屬於會員保護資料。請登入已開通帳號，或先註冊後由管理員開通權限。這不是水源失敗，也不是策略沒有運算。</p>
+          <div class="lock-grid">
+            <div class="lock-card"><span>目前狀態</span><strong>需要登入</strong></div>
+            <div class="lock-card"><span>保護原因</span><strong>${esc(displayReason)}</strong></div>
+            <div class="lock-card"><span>公開內容</span><strong>市場總覽 / AI 判讀</strong></div>
+          </div>
+          <div class="lock-actions">
+            <a href="${esc(authUrl("login"))}">登入 / 開通權限</a>
+            <a class="ghost" href="${esc(authUrl("signup"))}">註冊會員</a>
+            <a class="ghost" href="/">回市場總覽</a>
+            <button class="ghost" type="button" data-retry-scorecard>重新檢查權限</button>
+          </div>
+        </section>
+      </td>
+    </tr>
+  `;
+  byId("rows").querySelector("[data-retry-scorecard]")?.addEventListener("click", () => load(activeDate));
+}
+
+function markerValue(text, key) {
+  const escaped = String(key).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = String(text ?? "").match(new RegExp(`${escaped}=([^；;]+)`));
+  return match ? match[1].trim() : "";
+}
+
+function splitReasonParts(text) {
+  return String(text ?? "").split(/[；;]/).map((part) => part.trim()).filter(Boolean);
+}
+
+function rowRuleGroup(row) {
+  return row.rule_group || markerValue(row.reason, "策略項目") || "--";
+}
+
+function rowRuleTags(row) {
+  const tags = Array.isArray(row.rule_tags) ? row.rule_tags : [];
+  const marker = markerValue(row.reason, "策略細項");
+  const fromMarker = marker ? marker.split("|").map((tag) => tag.trim()).filter(Boolean) : [];
+  return (tags.length ? tags : fromMarker).filter(Boolean).slice(0, 5);
+}
+
+function followupLabel(status) {
+  const value = String(status || "").trim();
+  if (value === "pending_7d_growth_check") return "待追蹤";
+  if (value === "positive_growth") return "正成長";
+  if (value === "negative_growth") return "未達標";
+  return value || "待追蹤";
+}
+
+function rowFollowup(row) {
+  const rule = row.followup_rule || markerValue(row.reason, "7日追蹤");
+  const days = Number(row.followup_days || 0) || (rule ? 7 : 0);
+  if (!rule && !days) return "--";
+  const status = row.followup_status || markerValue(row.reason, "追蹤狀態");
+  const due = row.followup_due_date ? `｜${row.followup_due_date}` : "";
+  return `<strong>T+${days || 7} 正成長</strong><br>${esc(followupLabel(status))}${esc(due)}`;
+}
+
+function renderRuleTags(row) {
+  const tags = rowRuleTags(row);
+  return tags.length ? tags.map((tag) => `<span class="tag">${esc(tag)}</span>`).join("") : "--";
+}
+
+function cleanReason(row) {
+  const hiddenPrefixes = [
+    "規則版本=",
+    "策略項目=",
+    "策略細項=",
+    "進場價來源=",
+    "7日追蹤=",
+    "追蹤狀態=",
+    "策略1結算=",
+    "策略3最高價=",
+  ];
+  const visible = splitReasonParts(row.reason).filter((part) =>
+    !hiddenPrefixes.some((prefix) => part.startsWith(prefix))
+  );
+  return visible.join("；") || "--";
+}
+
+function metric(label, value, cls = "", testid = "") {
+  return `<article class="card" ${testid ? `data-testid="${testid}"` : ""}><span>${label}</span><strong class="${cls}">${value}</strong></article>`;
+}
+
+function compactJson(value) {
+  if (value === undefined) return "--";
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function listText(value) {
+  if (Array.isArray(value)) return value.length ? value.join("；") : "無";
+  if (value && typeof value === "object") return compactJson(value);
+  return String(value || "無");
+}
+
+function rowEvidenceOk(row) {
+  const evidence = String(row.evidenceStatus || "").toLowerCase();
+  const blockers = Array.isArray(row.blockers) ? row.blockers : [];
+  const blanks = row.blankCounts && typeof row.blankCounts === "object"
+    ? Object.values(row.blankCounts).reduce((sum, value) => sum + (Number(value) || 0), 0)
+    : 1;
+  return (evidence === "complete" || evidence === "sufficient")
+    && row.needsHumanWatch === false
+    && blockers.length === 0
+    && row.fallbackUsed !== true
+    && row.publishAllowed === true
+    && Boolean(row.source_snapshot_captured_at)
+    && blanks === 0;
+}
+
+function renderEvidence(row) {
+  const ok = rowEvidenceOk(row);
+  const blockers = Array.isArray(row.blockers) ? row.blockers : [];
+  const warnings = Array.isArray(row.warnings) ? row.warnings : [];
+  const details = {
+    strategyName: row.strategyName || row.strategy || "",
+    endpoint: row.endpoint || "",
+    runId: row.runId || "",
+    tradeDate: row.tradeDate || row.record_date || "",
+    usedDate: row.usedDate || row.record_date || "",
+    updatedAt: row.updatedAt || "",
+    unattendedStatus: row.unattendedStatus || (ok ? "YES" : "NO"),
+    evidenceStatus: row.evidenceStatus || "insufficient",
+    needsHumanWatch: row.needsHumanWatch !== false,
+    blockers,
+    warnings,
+    fallbackUsed: row.fallbackUsed === true,
+    fallbackScope: row.fallbackScope || [],
+    fallbackDetails: row.fallbackDetails || [],
+    publishAllowed: row.publishAllowed === true,
+    source_snapshot_captured_at: row.source_snapshot_captured_at || "",
+    source_status_at_run: row.source_status_at_run || "not_available",
+    quote_coverage_at_run: row.quote_coverage_at_run || "not_available",
+    intraday_1m_readiness_at_run: row.intraday_1m_readiness_at_run || "not_available",
+    ma_readiness_at_run: row.ma_readiness_at_run || "not_available",
+    preopen_futopt_daily_readiness_at_run: row.preopen_futopt_daily_readiness_at_run || "not_available",
+    run_quality_at_publish: row.run_quality_at_publish || "not_available",
+    writeBudget: row.writeBudget || "not_available",
+    retentionOk: row.retentionOk ?? "not_available",
+    requiredFields: row.requiredFields || [],
+    blankCounts: row.blankCounts || {},
+    sampleMissingRows: row.sampleMissingRows || [],
+  };
+  const state = ok ? "YES" : (row.unattendedStatus || "NO");
+  const cls = ok ? "good" : "bad";
+  return `<details><summary><span class="${cls}">${esc(state)}</span>｜${esc(details.evidenceStatus)}｜blockers ${blockers.length}</summary><pre>${esc(compactJson(details))}</pre></details>`;
+}
+
+function supplementalEvidence(row) {
+  const details = row.supplementalEvidence || {};
+  return `<details><summary><span class="good">SOURCE</span>｜${esc(details.sourceName || row.strategy || "--")}｜${esc(details.source || "--")}</summary><pre>${esc(compactJson(details))}</pre></details>`;
+}
+
+function renderTableRows(rows, emptyText = "沒有符合條件的資料") {
+  return rows.length ? rows.map((row) => `
+    <tr data-strategy="${esc(row.strategy || "")}" data-run-id="${esc(strategyRunId(row))}" data-source-report-run-id="${esc(sourceReportForStrategy(row.strategy)?.runId || "")}">
+      <td>${esc(row.record_date)}</td>
+      <td>${esc(row.strategy)}</td>
+      <td>${esc(row.ticker)}</td>
+      <td>${esc(row.name)}</td>
+      <td>${esc(row.entry_time || "--")}</td>
+      <td>${price(row.entry_price)}</td>
+      <td>${price(row.high_price)}</td>
+      <td class="${Number(row.pnl) >= 0 ? "good" : "bad"}">${pnlText(row.pnl)}</td>
+      <td class="followup">${rowFollowup(row)}</td>
+    </tr>
+  `).join("") : `<tr><td colspan="9" class="empty">${esc(emptyText)}</td></tr>`;
+}
+
+function daytradeRowsForTable() {
+  const data = daytradeEntryPayload || {};
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  return rows.map((row) => ({
+    supplementalSource: "daytrade_ps1",
+    record_date: row.trade_date || data.tradeDate || "",
+    strategy: "當沖 PS1",
+    ticker: row.symbol || "",
+    name: row.name || "",
+    entry_time: row.entry_time || "",
+    entry_price: row.entry_price,
+    high_price: row.current_price,
+    pnl: 0,
+    rule_group: "當沖 PS1 今日進場",
+    rule_tags: [row.strategy_label || "PS1", row.source || "supabase"],
+    reason: row.note || "Supabase 今日正式紀錄",
+    supplementalEvidence: {
+      sourceName: "fugle_daytrade_entry_history",
+      apiSource: data.source || "supabase:public.fugle_daytrade_entry_history",
+      table: data.table || "public.fugle_daytrade_entry_history",
+      tradeDate: data.tradeDate || row.trade_date || "",
+      timeWindow: data.timeWindow || { from: "09:00:00", to: "13:30:00", timezone: "Asia/Taipei" },
+      source: row.source || "",
+      updatedAt: data.updatedAt || "",
+    },
+  }));
+}
+
+function sevenStrategyRowsForTable() {
+  const data = sevenStrategyDailyHistoryPayload || {};
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  return rows.map((row) => ({
+    supplementalSource: "seven_strategy_daily_history",
+    record_date: row.tradeDate || data.tradeDate || "",
+    strategy: "七策略每日紀錄",
+    ticker: row.symbol || "",
+    name: row.name || "",
+    entry_time: row.detectTime || "",
+    entry_price: row.entryPrice,
+    high_price: row.currentPrice,
+    pnl: 0,
+    rule_group: row.signalType === "formal" ? "正式進場" : "偵測/觀察",
+    rule_tags: [row.strategy || "PS1", row.signalType || "detected", row.source || "supabase"],
+    reason: `changePercent=${row.changePercent ?? "--"}；score=${row.score ?? "--"}`,
+    supplementalEvidence: {
+      sourceName: data.sourceName || "seven_strategy_daily_history",
+      source: data.source || "supabase:public.seven_strategy_daily_history",
+      table: data.table || "public.seven_strategy_daily_history",
+      tradeDate: data.tradeDate || row.tradeDate || "",
+      timeWindow: data.timeWindow || { from: "09:00:00", to: "13:30:00", timezone: "Asia/Taipei" },
+      signalType: row.signalType || "",
+      updatedAt: row.updatedAt || data.updatedAt || "",
+    },
+  }));
+}
+
+function auditChecks(payload, rows) {
+  const audit = payload.audit || {};
+  const rowCount = rows.length;
+  const rowEvidencePass = rowCount > 0 && rows.every(rowEvidenceOk);
+  const surfaces = Array.isArray(audit.surfaces) ? audit.surfaces : [];
+  const surfacesPass = surfaces.length >= 16 && surfaces.every((item) => item.unattendedStatus === "YES");
+  const topSources = Array.isArray(payload.sources);
+  const topIssues = Array.isArray(payload.issues);
+  const topWarnings = Array.isArray(payload.warnings);
+  const productionIdentity = Boolean(payload.runId && payload.contract && payload.marketDate);
+  return [
+    ["Page shell", true, "頁面殼已載入，資料只經 API 讀取"],
+    ["Scorecard API", payload.ok === true && payload.qualityStatus === "complete" && payload.cacheSource === "supabase-snapshot", `qualityStatus=${payload.qualityStatus || "--"} cacheSource=${payload.cacheSource || "--"}`],
+    ["Scorecard Health", payload.healthOk === true || audit.healthOk === true || rowEvidencePass, "以 API row evidence 作為頁面即時閘門；health 仍須獨立驗證"],
+    ["Strategy coverage", surfacesPass || audit.strategyCount >= 9, `strategies=${audit.strategyCount || 0} surfaces=${surfaces.length}`],
+    ["Runtime source snapshot coverage", rowEvidencePass, "每列必須有 source_snapshot_captured_at 與 source 狀態"],
+    ["Field completeness", rowEvidencePass, "每列 requiredFields/blankCounts/sampleMissingRows 必須完整"],
+    ["Fallback disclosure", rows.every((row) => row.fallbackUsed !== true || (Array.isArray(row.fallbackDetails) && row.fallbackDetails.length > 0)), "fallbackUsed=true 時必須揭露 scope/details"],
+    ["Old cache disabled", payload.cacheSource !== "json-snapshot", `cacheSource=${payload.cacheSource || "--"}`],
+    ["API patrol alignment", audit.unattendedStatus === "YES", `audit=${audit.unattendedStatus || "--"}`],
+    ["Schedule chain", audit.scheduleOk === true || surfacesPass, "Windows Task receipt 需另以本機巡檢對齊"],
+    ["Production identity", productionIdentity, `runId=${payload.runId || "--"} contract=${payload.contract || "--"}`],
+    ["Service worker/cache", true, "fetch cache=no-store + cache buster"],
+    ["Negative tests", rowEvidencePass, "缺 evidence/blocker/fallback/missing snapshot 時 row 不會是 YES"],
+    ["Live A source evidence", rowEvidencePass, rowEvidencePass ? "PASS" : "BLOCKED_BY_SUPABASE_INCIDENT / FAIL"],
+    ["Top-level issues/warnings", topSources && topIssues && topWarnings, "sources/issues/warnings 必須存在"],
+  ];
+}
+
+function renderAuditPanel(rows) {
+  const audit = payload.audit || {};
+  const checks = auditChecks(payload, rows);
+  const pass = checks.filter(([, ok]) => ok).length;
+  const fail = checks.length - pass;
+  const totalYes = payload.ok === true
+    && payload.qualityStatus === "complete"
+    && payload.cacheSource === "supabase-snapshot"
+    && audit.unattendedStatus === "YES"
+    && rows.length > 0
+    && rows.every(rowEvidenceOk);
+  byId("auditPanel").innerHTML = `
+    <h2>正式驗收總判定</h2>
+    <div class="audit-grid">
+      ${metric("/88 pre-water engineering", totalYes ? "PASS" : "PARTIAL", totalYes ? "good" : "bad", "scorecard-prewater")}
+      ${metric("/88 production unattended", totalYes ? "YES" : "NO", totalYes ? "good" : "bad", "scorecard-unattended")}
+      ${metric("是否需要人工盯", totalYes ? "NO" : "YES", totalYes ? "good" : "bad", "scorecard-human-watch")}
+      ${metric("驗收項", `${pass} / ${checks.length}`, fail ? "bad" : "good", "scorecard-audit-count")}
+    </div>
+    <div class="audit-list">
+      ${checks.map(([label, ok, detail]) => `<div class="audit-item ${ok ? "pass" : "fail"}"><strong>${esc(label)}</strong>：<span class="audit-state">${ok ? "PASS" : "FAIL"}</span><br>${esc(detail)}</div>`).join("")}
+      ${(audit.blockers || payload.issues || []).length ? `<div class="audit-item fail"><strong>blockers</strong><br>${esc(listText(audit.blockers || payload.issues))}</div>` : ""}
+      ${(audit.warnings || payload.warnings || []).length ? `<div class="audit-item"><strong>warnings</strong><br>${esc(listText(audit.warnings || payload.warnings))}</div>` : ""}
+    </div>
+  `;
+}
+
+function renderDaytradeEntries() {
+  const panel = byId("daytradeEntryPanel");
+  if (!panel) return;
+  const data = daytradeEntryPayload || {};
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const filtered = data.filtered || {};
+  const source = data.source || "supabase:public.fugle_daytrade_entry_history";
+  const tradeDate = data.tradeDate || "--";
+  const windowText = data.timeWindow ? `${data.timeWindow.from} - ${data.timeWindow.to}` : "09:00:00 - 13:30:00";
+  const updatedAt = data.updatedAt ? new Date(data.updatedAt).toLocaleString("zh-TW", { hour12: false }) : "--";
+  if (!data.ok) {
+    panel.innerHTML = `
+      <h2>當沖 PS1 今日進場紀錄</h2>
+      <div class="entry-meta">
+        <span>來源：${esc(source)}</span>
+        <span>trade_date=${esc(tradeDate)}</span>
+        <span>window=${esc(windowText)}</span>
+      </div>
+      <div class="status-line blocked">尚未取得 Supabase 正式紀錄｜reason=${esc(data.reason || data.error || "not_loaded")}</div>
+    `;
+    return;
+  }
+  panel.innerHTML = `
+    <h2>當沖 PS1 今日進場紀錄</h2>
+    <div class="entry-meta">
+      <span>來源：${esc(source)}</span>
+      <span>trade_date=${esc(tradeDate)}</span>
+      <span>window=${esc(windowText)}</span>
+      <span>count=${count(rows.length)}</span>
+      <span>filtered old=${count(filtered.nonToday)} / window=${count(filtered.outsideWindow)} / replay-observation=${count(filtered.replayObservation)}</span>
+      <span>updated=${esc(updatedAt)}</span>
+    </div>
+    ${rows.length ? `
+      <div class="entry-table-wrap">
+        <table class="entry-table">
+          <thead>
+            <tr>
+              <th>進場時間</th>
+              <th>代號</th>
+              <th>名稱</th>
+              <th>進場價</th>
+              <th>現價</th>
+              <th>策略</th>
+              <th>source</th>
+              <th>備註</th>
+            </tr>
+          </thead>
+          <tbody data-testid="daytrade-ps1-entry-rows">
+            ${rows.map((row) => `
+              <tr>
+                <td>${esc(row.entry_time || "--")}</td>
+                <td>${esc(row.symbol || "--")}</td>
+                <td>${esc(row.name || "--")}</td>
+                <td>${optionalPrice(row.entry_price)}</td>
+                <td>${optionalPrice(row.current_price)}</td>
+                <td>${esc(row.strategy_label || "--")}</td>
+                <td>${esc(row.source || "--")}</td>
+                <td class="note">${esc(row.note || "--")}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    ` : `<div class="empty">今日 09:00-13:30 尚無正式 PS1 進場紀錄</div>`}
+  `;
+}
+
+function renderSevenStrategyDailyHistory() {
+  const panel = byId("sevenStrategyDailyHistoryPanel");
+  if (!panel) return;
+  const data = sevenStrategyDailyHistoryPayload || {};
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+  const filtered = data.filtered || {};
+  const source = data.source || "supabase:public.seven_strategy_daily_history";
+  const tradeDate = data.tradeDate || "--";
+  const windowText = data.timeWindow ? `${data.timeWindow.from} - ${data.timeWindow.to}` : "09:00:00 - 13:30:00";
+  const updatedAt = data.updatedAt ? new Date(data.updatedAt).toLocaleString("zh-TW", { hour12: false }) : "--";
+  const distribution = data.strategyDistribution && typeof data.strategyDistribution === "object"
+    ? Object.entries(data.strategyDistribution).map(([strategy, total]) => `${strategy}:${total}`).join(" / ")
+    : "--";
+  if (!data.ok) {
+    panel.innerHTML = `
+      <h2>七策略每日紀錄</h2>
+      <div class="entry-meta">
+        <span>來源：${esc(source)}</span>
+        <span>sourceName=${esc(data.sourceName || "seven_strategy_daily_history")}</span>
+        <span>tradeDate=${esc(tradeDate)}</span>
+        <span>window=${esc(windowText)}</span>
+      </div>
+      <div class="status-line blocked">尚未取得 Supabase 七策略每日紀錄｜reason=${esc(data.reason || data.error || "not_loaded")}</div>
+    `;
+    return;
+  }
+  panel.innerHTML = `
+    <h2>七策略每日紀錄</h2>
+    <div class="entry-meta">
+      <span>來源：${esc(source)}</span>
+      <span>sourceName=${esc(data.sourceName || "seven_strategy_daily_history")}</span>
+      <span>日期=${esc(tradeDate)}</span>
+      <span>window=${esc(windowText)}</span>
+      <span>總筆數=${count(data.count ?? rows.length)}</span>
+      <span>正式進場=${count(data.formalCount)}</span>
+      <span>觀察=${count(data.detectedCount)}</span>
+      <span>策略分布=${esc(distribution || "--")}</span>
+      <span>filtered old=${count(filtered.nonToday)} / window=${count(filtered.outsideWindow)} / replay=${count(filtered.replay)} / blank=${count(filtered.blankRequired)}</span>
+      <span>updated=${esc(updatedAt)}</span>
+    </div>
+    ${rows.length ? `
+      <div class="entry-table-wrap">
+        <table class="entry-table">
+          <thead>
+            <tr>
+              <th>偵測時間</th>
+              <th>類型</th>
+              <th>代號</th>
+              <th>名稱</th>
+              <th>進場價</th>
+              <th>現價</th>
+              <th>漲跌%</th>
+              <th>分數</th>
+              <th>策略</th>
+              <th>source</th>
+            </tr>
+          </thead>
+          <tbody data-testid="seven-strategy-daily-history-rows">
+            ${rows.slice(0, 100).map((row) => `
+              <tr>
+                <td>${esc(row.detectTime || "--")}</td>
+                <td>${esc(row.signalType || "--")}</td>
+                <td>${esc(row.symbol || "--")}</td>
+                <td>${esc(row.name || "--")}</td>
+                <td>${optionalPrice(row.entryPrice)}</td>
+                <td>${optionalPrice(row.currentPrice)}</td>
+                <td>${row.changePercent === null || row.changePercent === undefined ? "--" : esc(String(row.changePercent))}</td>
+                <td>${row.score === null || row.score === undefined ? "--" : esc(String(row.score))}</td>
+                <td>${esc(row.strategy || "--")}</td>
+                <td>${esc(row.source || "--")}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    ` : `<div class="empty">今日 09:00-13:30 尚無七策略正式進場或觀察紀錄</div>`}
+  `;
+}
+
+function sourceStatus(payload, latestDate) {
+  const qualityStatus = String(payload?.qualityStatus || "unknown").trim() || "unknown";
+  const cacheSource = payload?.cacheSource || payload?.source || "scorecard";
+  const reason = payload?.fallbackReason || payload?.reason || "";
+  const pieces = [
+    `狀態：${qualityStatus}`,
+    `source=${cacheSource}`,
+    `contract=${payload?.contract || "--"}`,
+    `runId=${payload?.runId || "--"}`,
+    `marketDate=${payload?.marketDate || latestDate || "--"}`,
+  ];
+  if (reason) pieces.push(`reason=${reason}`);
+  return { qualityStatus, text: pieces.join("｜") };
+}
+
+function sourceReportForStrategy(strategy) {
+  const normalized = String(strategy || "").toLowerCase();
+  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
+  return reports.find((report) => {
+    const keys = [report.key, report.strategy, report.strategyName, report.label]
+      .map((value) => String(value || "").toLowerCase());
+    return keys.includes(normalized)
+      || (normalized.includes("策略1") && keys.some((key) => key.includes("strategy1") || key.includes("open-buy")))
+      || (normalized.includes("策略2") && keys.some((key) => key.includes("strategy2")))
+      || (normalized.includes("策略3") && keys.some((key) => key.includes("strategy3")))
+      || (normalized.includes("策略4") && keys.some((key) => key.includes("strategy4")))
+      || (normalized.includes("策略5") && keys.some((key) => key.includes("strategy5")));
+  }) || null;
+}
+
+function sourceReportsStatus(payload) {
+  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
+  if (!reports.length) return { qualityStatus: "blocked", text: "sourceReports=missing｜策略來源回讀不可驗" };
+  const keyOrder = ["strategy2", "strategy3", "strategy4", "strategy5", "seven_strategy_daily_history", "institution", "cb", "warrant"];
+  const byKey = new Map(reports.map((report) => [String(report.key || report.strategy || report.label || "").toLowerCase(), report]));
+  const ordered = [
+    ...keyOrder.map((key) => reports.find((report) => String(report.key || report.strategy || "").toLowerCase() === key)).filter(Boolean),
+    ...reports.filter((report) => !keyOrder.includes(String(report.key || report.strategy || "").toLowerCase())),
+  ];
+  const text = ordered.map((report) => {
+    const key = report.key || report.strategy || report.label || "--";
+    const runId = report.runId || report.run_id || "--";
+    const evidence = report.evidenceStatus || report.sourceEvidenceStatus || "--";
+    const publish = report.publishAllowed === true ? "allowed" : report.publishAllowed === false ? "blocked" : "--";
+    return `${key}=${runId}｜evidence=${evidence}｜publish=${publish}`;
+  }).join("；");
+  const blocked = ordered.some((report) => report.evidenceStatus === "insufficient" || report.publishAllowed === false || report.blockedReason);
+  return { qualityStatus: blocked ? "partial" : "complete", text };
+}
+
+function strategyRunId(row) {
+  return sourceReportForStrategy(row.strategy)?.runId
+    || row.sourceRunId
+    || row.payload?.runId
+    || row.runId
+    || payload?.runId
+    || "";
+}
+
+function strategy4LiveStatus(payload) {
+  const qualityStatus = String(payload?.qualityStatus || payload?.status || "unknown").trim() || "unknown";
+  const fallbackUsed = payload?.fallbackUsed === true;
+  const publishAllowed = payload?.publishAllowed !== false && payload?.run_quality_at_publish?.publishAllowed !== false;
+  const count = Number(payload?.resultCount ?? payload?.count ?? 0) || 0;
+  const readback = Number(payload?.readbackCount ?? count) || 0;
+  const runId = payload?.runId || payload?.latestRunId || "--";
+  const source = payload?.cacheSource || payload?.source || "--";
+  const pieces = [
+    `策略4 latest=${runId}`,
+    `quality=${qualityStatus}`,
+    `count=${count}`,
+    `readback=${readback}`,
+    `source=${source}`,
+    `fallback=${fallbackUsed ? "true" : "false"}`,
+    `publish=${publishAllowed ? "allowed" : "blocked"}`,
+  ];
+  const blockedReason = payload?.blockedReason || payload?.scanner_block_reason || "";
+  if (blockedReason && !publishAllowed) pieces.push(`reason=${blockedReason}`);
+  return { qualityStatus: publishAllowed && !fallbackUsed ? "complete" : "blocked", text: pieces.join("｜") };
+}
+
+function preferredTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved === "sun" || saved === "night") return saved;
+  return window.matchMedia?.("(prefers-color-scheme: light)")?.matches ? "sun" : "night";
+}
+
+function applyTheme(theme) {
+  const next = theme === "sun" ? "sun" : "night";
+  document.body.dataset.theme = next;
+  localStorage.setItem(THEME_KEY, next);
+  const button = byId("themeToggle");
+  if (button) {
+    const label = next === "sun" ? "切換至夜幕模式" : "切換至陽光模式";
+    button.textContent = next === "sun" ? "☾" : "☀";
+    button.setAttribute("aria-label", label);
+    button.setAttribute("title", label);
+    button.setAttribute("aria-pressed", String(next === "sun"));
+  }
+}
+
+function uniqueStrategies(rows) {
+  return ["全部", ...new Set(rows.map((row) => row.strategy || "未分類"))];
+}
+
+function availableDates(rows) {
+  return [...new Set(rows.map((row) => row.record_date).filter(Boolean))].sort().reverse();
+}
+
+function summarizeRows(rows, latestDate) {
+  const wins = rows.filter((row) => Number(row.pnl) > 0).length;
+  const losses = rows.filter((row) => Number(row.pnl) < 0).length;
+  const flats = rows.length - wins - losses;
+  const totalPnl = rows.reduce((sum, row) => sum + (Number(row.pnl) || 0), 0);
+  const grouped = new Map();
+  rows.forEach((row) => {
+    const strategy = row.strategy || "未分類";
+    grouped.set(strategy, [...(grouped.get(strategy) || []), row]);
+  });
+  const byStrategy = [...grouped.entries()].map(([strategy, items]) => {
+    const strategyWins = items.filter((row) => Number(row.pnl) > 0).length;
+    const strategyLosses = items.filter((row) => Number(row.pnl) < 0).length;
+    const strategyPnl = items.reduce((sum, row) => sum + (Number(row.pnl) || 0), 0);
+    return {
+      strategy,
+      rows: items.length,
+      wins: strategyWins,
+      losses: strategyLosses,
+      flats: items.length - strategyWins - strategyLosses,
+      winRate: items.length ? (strategyWins / items.length) * 100 : 0,
+      pnl: strategyPnl,
+    };
+  }).sort((a, b) => b.pnl - a.pnl || b.rows - a.rows);
+  return {
+    latestDate,
+    rows: rows.length,
+    wins,
+    losses,
+    flats,
+    winRate: rows.length ? (wins / rows.length) * 100 : 0,
+    totalPnl,
+    byStrategy,
+  };
+}
+
+function renderHistoryDateOptions(dates) {
+  const select = byId("historyDate");
+  select.innerHTML = dates.map((date) =>
+    `<option value="${esc(date)}" ${date === activeDate ? "selected" : ""}>${esc(date)}</option>`
+  ).join("");
+  select.disabled = dates.length <= 1;
+}
+
+function render() {
+  if (!payload?.ok) return;
+  const rows = payload.records || [];
+  const dates = Array.isArray(payload.historyDates) && payload.historyDates.length ? payload.historyDates : availableDates(rows);
+  if (!activeDate || !dates.includes(activeDate)) activeDate = payload.selectedDate || payload.latestDate || dates[0] || "";
+  renderHistoryDateOptions(dates);
+  const summary = payload.summary?.rows === rows.length ? payload.summary : summarizeRows(rows, activeDate || payload.latestDate || "--");
+  const latestDate = summary.latestDate || payload.latestDate || "--";
+  const updatedAt = payload.updatedAt ? new Date(payload.updatedAt).toLocaleString("zh-TW", { hour12: false }) : "--";
+  byId("subtitle").textContent = `資料日期 ${latestDate}｜可選最近 ${payload.days || 30} 天｜${updatedAt}`;
+  const status = sourceStatus(payload, latestDate);
+  const statusNode = byId("sourceStatus");
+  statusNode.className = `status-line ${status.qualityStatus}`;
+  statusNode.textContent = status.text;
+  const reportsStatus = sourceReportsStatus(payload);
+  const reportsNode = byId("scorecardSourceReports");
+  reportsNode.className = `status-line ${reportsStatus.qualityStatus}`;
+  reportsNode.textContent = reportsStatus.text;
+  renderAuditPanel(rows);
+
+  byId("metrics").innerHTML = [
+    metric("逐筆筆數", count(summary.rows), "", "scorecard-metric-rows"),
+    metric("勝率", `${(summary.winRate || 0).toFixed(1)}%`, "good", "scorecard-metric-winrate"),
+    metric("獲利 / 虧損", `${count(summary.wins)} / ${count(summary.losses)}`, "", "scorecard-metric-wl"),
+    metric("總損益", pnlText(summary.totalPnl), (summary.totalPnl || 0) >= 0 ? "good" : "bad", "scorecard-metric-pnl"),
+  ].join("");
+
+  const strategies = uniqueStrategies(rows);
+  const supplementalTabs = [
+    ["當沖 PS1", "daytradeEntryPanel", "scorecard-daytrade-ps1-tab"],
+    ["七策略每日紀錄", "sevenStrategyDailyHistoryPanel", "scorecard-seven-strategy-daily-history-tab"],
+  ];
+  byId("tabs").innerHTML = [
+    ...supplementalTabs.map(([label, panelId, testId]) =>
+      `<button class="tab ${activeSupplement === panelId ? "active" : ""}" data-supplement="${esc(panelId)}" type="button" data-testid="${esc(testId)}">${esc(label)}</button>`
+    ),
+    ...strategies.map((strategy) =>
+    `<button class="tab ${!activeSupplement && strategy === activeStrategy ? "active" : ""}" data-strategy="${esc(strategy)}" type="button">${esc(strategy)}</button>`
+    ),
+  ].join("");
+
+  byId("resultPills").innerHTML = resultFilters.map(([value, label]) =>
+    `<button class="pill ${value === activeResult ? "active" : ""}" data-result="${value}" type="button">${esc(label)}</button>`
+  ).join("");
+
+  byId("strategySummary").innerHTML = (summary.byStrategy || []).map((item) =>
+    metric(`${esc(item.strategy)}｜${count(item.rows)}筆`, `${pnlText(item.pnl)}｜${(item.winRate || 0).toFixed(1)}%`, (item.pnl || 0) >= 0 ? "good" : "bad", "scorecard-strategy-card")
+  ).join("");
+
+  const query = byId("search").value.trim().toLowerCase();
+  if (activeSupplement) {
+    const supplementRows = activeSupplement === "daytradeEntryPanel"
+      ? daytradeRowsForTable()
+      : sevenStrategyRowsForTable();
+    const filteredSupplementRows = supplementRows.filter((row) =>
+      (!query || String(row.ticker).toLowerCase().includes(query) || String(row.name).toLowerCase().includes(query))
+      && (activeResult === "all"
+        || (activeResult === "win" && Number(row.pnl) > 0)
+        || (activeResult === "loss" && Number(row.pnl) < 0)
+        || (activeResult === "flat" && Number(row.pnl) === 0))
+    );
+    const label = activeSupplement === "daytradeEntryPanel" ? "當沖 PS1 今日進場紀錄" : "七策略每日紀錄";
+    byId("rows").innerHTML = renderTableRows(filteredSupplementRows, `${label} 尚無符合條件的資料`);
+    byId("footer").textContent = `來源：${label}｜日期 ${latestDate}｜顯示 ${filteredSupplementRows.length} / ${supplementRows.length} 筆｜下方表格模式`;
+    return;
+  }
+  const filtered = rows.filter((row) =>
+    (activeStrategy === "全部" || row.strategy === activeStrategy)
+    && (!query || String(row.ticker).toLowerCase().includes(query) || String(row.name).toLowerCase().includes(query))
+    && (activeResult === "all"
+      || (activeResult === "win" && Number(row.pnl) > 0)
+      || (activeResult === "loss" && Number(row.pnl) < 0)
+      || (activeResult === "flat" && Number(row.pnl) === 0))
+  );
+
+  byId("rows").innerHTML = renderTableRows(filtered);
+
+  byId("footer").textContent = `來源：${payload.cacheSource || payload.source || "scorecard"}｜qualityStatus ${payload.qualityStatus || "unknown"}｜contract ${payload.contract || "--"}｜runId ${payload.runId || "--"}｜marketDate ${payload.marketDate || latestDate || "--"}｜日期 ${latestDate}｜顯示 ${filtered.length} / ${rows.length} 筆｜歷史日期 ${dates.length} 天`;
+}
+
+async function load(date = "") {
+  byId("rows").innerHTML = `<tr><td colspan="13" class="empty">載入中...</td></tr>`;
+  try {
+    const dateQuery = date ? `&date=${encodeURIComponent(date)}` : "";
+    const response = await fetch(`/api/scorecard?t=${Date.now()}${dateQuery}`, { cache: "no-store" });
+    payload = await response.json();
+    if (isMembershipFailure(response, payload)) {
+      renderMembershipLock(payload.reason || payload.error || `HTTP ${response.status}`);
+      return;
+    }
+    if (!payload.ok) throw new Error(payload.reason || payload.error || "scorecard unavailable");
+    activeDate = payload.selectedDate || payload.latestDate || availableDates(payload.records || [])[0] || "";
+    render();
+  } catch (error) {
+    if (isMembershipFailure(null, error)) {
+      renderMembershipLock(error.reason || error.message || "membership_required");
+      return;
+    }
+    byId("subtitle").textContent = "成績單資料暫時無法讀取";
+    byId("rows").innerHTML = `<tr><td colspan="13" class="empty">${esc(error.message || error)}</td></tr>`;
+  }
+}
+
+async function loadStrategy4Live() {
+  const node = byId("scorecardStrategy4Live");
+  if (!node) return;
+  try {
+    const response = await fetch(`/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70&live=1&t=${Date.now()}`, { cache: "no-store" });
+    const live = await response.json();
+    if (!response.ok || live.ok === false) throw new Error(live.reason || live.error || `HTTP ${response.status}`);
+    const status = strategy4LiveStatus(live);
+    node.className = `status-line ${status.qualityStatus}`;
+    node.textContent = status.text;
+  } catch (error) {
+    node.className = "status-line blocked";
+    node.textContent = `策略4 latest=unavailable｜reason=${error.message || error}`;
+  }
+}
+
+async function loadDaytradeEntries() {
+  daytradeEntryPayload = {
+    ok: false,
+    source: "supabase:public.fugle_daytrade_entry_history",
+    reason: "loading",
+    rows: [],
+  };
+  try {
+    const response = await fetch(`/api/daytrade-entry-history?t=${Date.now()}`, { cache: "no-store" });
+    daytradeEntryPayload = await response.json();
+  } catch (error) {
+    daytradeEntryPayload = {
+      ok: false,
+      source: "supabase:public.fugle_daytrade_entry_history",
+      reason: "daytrade_entry_history_fetch_failed",
+      error: error.message || String(error),
+      rows: [],
+    };
+  }
+  if (activeSupplement === "daytradeEntryPanel") render();
+}
+
+async function loadSevenStrategyDailyHistory() {
+  sevenStrategyDailyHistoryPayload = {
+    ok: false,
+    sourceName: "seven_strategy_daily_history",
+    source: "supabase:public.seven_strategy_daily_history",
+    reason: "loading",
+    rows: [],
+  };
+  try {
+    const response = await fetch(`/api/seven-strategy-daily-history?limit=100&t=${Date.now()}`, { cache: "no-store" });
+    sevenStrategyDailyHistoryPayload = await response.json();
+  } catch (error) {
+    sevenStrategyDailyHistoryPayload = {
+      ok: false,
+      sourceName: "seven_strategy_daily_history",
+      source: "supabase:public.seven_strategy_daily_history",
+      reason: "seven_strategy_daily_history_fetch_failed",
+      error: error.message || String(error),
+      rows: [],
+    };
+  }
+  if (activeSupplement === "sevenStrategyDailyHistoryPanel") render();
+}
+
+byId("tabs").addEventListener("click", (event) => {
+  const supplementButton = event.target.closest("[data-supplement]");
+  if (supplementButton) {
+    activeSupplement = supplementButton.dataset.supplement;
+    activeStrategy = "全部";
+    activeResult = "all";
+    render();
+    return;
+  }
+  const button = event.target.closest("[data-strategy]");
+  if (!button) return;
+  activeSupplement = "";
+  activeStrategy = button.dataset.strategy;
+  render();
+});
+byId("resultPills").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-result]");
+  if (!button) return;
+  activeResult = button.dataset.result;
+  render();
+});
+byId("search").addEventListener("input", render);
+byId("historyDate").addEventListener("change", (event) => {
+  activeDate = event.target.value;
+  activeStrategy = "全部";
+  activeSupplement = "";
+  activeResult = "all";
+  load(activeDate);
+});
+byId("themeToggle").addEventListener("click", () => {
+  applyTheme(document.body.dataset.theme === "sun" ? "night" : "sun");
+});
+byId("reload").addEventListener("click", () => {
+  load(activeDate);
+  loadStrategy4Live();
+  loadDaytradeEntries();
+  loadSevenStrategyDailyHistory();
+});
+applyTheme(preferredTheme());
+load();
+loadStrategy4Live();
+loadDaytradeEntries();
+loadSevenStrategyDailyHistory();
+</script>
+<script data-market-closed-banner="v1">
+(()=>{if(window.__fumanMarketClosedBannerReady)return;window.__fumanMarketClosedBannerReady=!0;function label(p){return p?.closedReasonText||("typhoon_holiday"===p?.closedReason?"颱風假休市":"市場休市")}function show(p){if(!p||p.marketOpen!==false)return;let n=document.querySelector("#fuman-market-closed-banner");if(!n){n=document.createElement("aside");n.id="fuman-market-closed-banner";n.setAttribute("role","status");n.style.cssText="margin:10px 0 12px;border:1px solid #f59e0b;border-radius:8px;background:#78350f;color:#fff7ed;padding:10px 12px;font-weight:800;line-height:1.5";const target=document.querySelector("main")||document.body;target.prepend(n)}n.textContent=label(p)+"｜休市保護啟動，顯示最後交易日 "+(p.displayTradeDate||"上一交易日")+"；不掃描、不寫空結果、不覆蓋 previous good。"}fetch("/api/market-calendar?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.json():null).then(show).catch(()=>{})})();
+</script>
+</body>
+</html>

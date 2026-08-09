@@ -1,4 +1,4 @@
-const fs = require("fs");
+﻿const fs = require("fs");
 const path = require("path");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -75,6 +75,18 @@ async function supabaseUpsert(resource, rows, conflict, key) {
   return rows.length;
 }
 
+async function existingRealIntradayCandles(symbol, tradeDate, key) {
+  return await supabaseGet("fugle_daytrade_intraday_1m", [
+    "select=symbol,candle_time,trade_date,open,high,low,close,volume,source,source_channel,candle_origin,synthetic,volume_strategy_usable",
+    `symbol=eq.${encodeURIComponent(symbol)}`,
+    `trade_date=eq.${encodeURIComponent(tradeDate)}`,
+    "synthetic=eq.false",
+    "close=gt.0",
+    "order=candle_time.desc",
+    "limit=240",
+  ].join("&"), key);
+}
+
 async function latestStrategy3Run(scanDate, key) {
   const rows = await supabaseGet("strategy3_scan_runs", [
     "select=run_id,scan_date,status,complete,result_count,updated_at",
@@ -103,6 +115,24 @@ async function fugleCandles(symbol, apiKey) {
   const url = `https://api.fugle.tw/marketdata/v1.0/stock/intraday/candles/${encodeURIComponent(symbol)}?timeframe=1`;
   const result = await requestJson(url, { headers: { "X-API-KEY": apiKey, Accept: "application/json" } });
   return Array.isArray(result) ? result : (Array.isArray(result?.data) ? result.data : []);
+}
+
+async function fugleHistoricalCandles(symbol, tradeDate, apiKey) {
+  const query = new URLSearchParams({
+    timeframe: "1",
+    from: tradeDate,
+    to: tradeDate,
+    sort: "asc",
+    fields: "open,high,low,close,volume",
+  });
+  const url = `https://api.fugle.tw/marketdata/v1.0/stock/historical/candles/${encodeURIComponent(symbol)}?${query.toString()}`;
+  try {
+    const result = await requestJson(url, { headers: { "X-API-KEY": apiKey, Accept: "application/json" } });
+    return Array.isArray(result) ? result : (Array.isArray(result?.data) ? result.data : []);
+  } catch (error) {
+    if (/^HTTP 404\b/.test(String(error?.message || error))) return [];
+    throw error;
+  }
 }
 
 function taipeiMinute(value) {
@@ -146,7 +176,8 @@ function selectEntryCandle(symbol, candles, tradeDate) {
   return candidates[0] || null;
 }
 
-function repairRow(candle) {
+function repairRow(candle, repairSource = "fugle_rest") {
+  const existing = repairSource === "supabase_existing_real";
   return {
     symbol: candle.symbol,
     market: "",
@@ -157,21 +188,22 @@ function repairRow(candle) {
     low: candle.low,
     close: candle.close,
     volume: candle.volume,
-    source: "strategy3_scorecard_entry_repair:fugle_rest",
-    source_channel: "rest",
-    candle_origin: "rest_candle",
+    source: `strategy3_scorecard_entry_repair:${repairSource}`,
+    source_channel: existing ? cleanText(candle.source_channel) || "supabase" : "rest",
+    candle_origin: existing ? cleanText(candle.candle_origin) || "existing_real_candle" : "rest_candle",
     synthetic: false,
     volume_strategy_usable: true,
-    websocket_row: false,
-    rest_repair_row: true,
+    websocket_row: existing ? cleanText(candle.source_channel).toLowerCase().includes("websocket") : false,
+    rest_repair_row: !existing,
     intraday_odd_lot: false,
     updated_at: new Date().toISOString(),
     payload: {
       reason_code: "strategy3_1300_entry_price_repair",
-      source_channel: "rest",
-      candle_origin: "rest_candle",
+      source_channel: existing ? cleanText(candle.source_channel) || "supabase" : "rest",
+      candle_origin: existing ? cleanText(candle.candle_origin) || "existing_real_candle" : "rest_candle",
       synthetic: false,
       volume_strategy_usable: true,
+      repair_source: repairSource,
     },
   };
 }
@@ -190,12 +222,29 @@ async function main() {
   const repaired = [];
   const missing = [];
   const failed = [];
+  const sourceCounts = { supabase_existing_real: 0, fugle_rest: 0, fugle_historical_rest: 0 };
 
   for (const item of symbols) {
     try {
-      const entry = selectEntryCandle(item.symbol, await fugleCandles(item.symbol, fugleKey), tradeDate);
-      if (entry) repaired.push(repairRow(entry));
-      else missing.push(item.symbol);
+      const existing = selectEntryCandle(item.symbol, await existingRealIntradayCandles(item.symbol, tradeDate, serviceKey), tradeDate);
+      if (existing) {
+        repaired.push(repairRow(existing, "supabase_existing_real"));
+        sourceCounts.supabase_existing_real += 1;
+      } else {
+        const entry = selectEntryCandle(item.symbol, await fugleCandles(item.symbol, fugleKey), tradeDate);
+        if (entry) {
+          repaired.push(repairRow(entry, "fugle_rest"));
+          sourceCounts.fugle_rest += 1;
+        } else {
+          const historicalEntry = selectEntryCandle(item.symbol, await fugleHistoricalCandles(item.symbol, tradeDate, fugleKey), tradeDate);
+          if (historicalEntry) {
+            repaired.push(repairRow(historicalEntry, "fugle_historical_rest"));
+            sourceCounts.fugle_historical_rest = (sourceCounts.fugle_historical_rest || 0) + 1;
+          } else {
+            missing.push(item.symbol);
+          }
+        }
+      }
     } catch (error) {
       failed.push({ symbol: item.symbol, error: error.message || String(error) });
     }
@@ -211,6 +260,7 @@ async function main() {
     expectedSymbols: symbols.length,
     repaired: repaired.length,
     written,
+    sourceCounts,
     missing,
     failed,
     sample: repaired.slice(0, 10).map((row) => ({ symbol: row.symbol, candle_time: row.candle_time, close: row.close })),
@@ -224,3 +274,7 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: error.message || String(error) }, null, 2));
   process.exit(1);
 });
+
+
+
+

@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "outputs", "terminal-autonomous-root-runner-contract");
@@ -29,6 +30,42 @@ function addIssue(issues, issue, details = {}) {
 function requireMarker(issues, file, text, marker) {
   if (!text.includes(marker)) addIssue(issues, `missing_marker:${file}:${marker}`, { file, marker });
 }
+function queryWindowsTask(taskName) {
+  if (process.platform !== "win32") {
+    return {
+      checked: false,
+      reason: "non_windows_platform",
+      installed: null,
+      raw: "",
+    };
+  }
+  const result = spawnSync("schtasks.exe", ["/Query", "/TN", `\\${taskName}`, "/V", "/FO", "LIST"], {
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 15000,
+  });
+  const xmlResult = spawnSync("schtasks.exe", ["/Query", "/TN", `\\${taskName}`, "/XML"], {
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 15000,
+  });
+  const raw = `${result.stdout || ""}${result.stderr || ""}`;
+  const xmlRaw = `${xmlResult.stdout || ""}${xmlResult.stderr || ""}`;
+  const actionText = `${raw}\n${xmlRaw}`;
+  return {
+    checked: true,
+    installed: result.status === 0,
+    exitCode: result.status,
+    raw,
+    xmlRaw,
+    disabled: /Status:\s*Disabled/i.test(raw) || /<Enabled>\s*false\s*<\/Enabled>/i.test(xmlRaw),
+    hasApplyScanners: actionText.includes("-ApplyScanners"),
+    hasRequireProtectedReadback: actionText.includes("-RequireProtectedReadback"),
+    hasS4U: /<LogonType>\s*S4U\s*<\/LogonType>/i.test(xmlRaw) || /Logon Mode:\s*S4U/i.test(raw),
+    hasInteractiveOnly: /<LogonType>\s*InteractiveToken\s*<\/LogonType>/i.test(xmlRaw) || /Logon Mode:\s*Interactive only/i.test(raw),
+    hasRunner: actionText.includes("run-terminal-autonomous-root.ps1"),
+  };
+}
 
 async function main() {
   await fs.promises.mkdir(OUT_DIR, { recursive: true });
@@ -38,12 +75,11 @@ async function main() {
   const pkg = readJson("package.json", { scripts: {} });
   const registry = readJson("scripts/fuman-schedule-registry.json", {});
 
+  if (runner.includes("``r``n")) addIssue(issues, "runner_contains_literal_backtick_newline_escape", { file: "run-terminal-autonomous-root.ps1" });
   const runnerMarkers = [
     "terminal-autonomous-root-runner-v1",
     "ops:predictive-preflight",
     "verify:terminal-water-root",
-    "verify:terminal-final-audit",
-    "ops:terminal-self-heal:apply",
     "manifest:daily-terminal-run",
     "orchestrator:state:from-existing",
     "policy:autonomous-ops",
@@ -59,6 +95,11 @@ async function main() {
     "terminal-autonomous-root-latest.json",
     "IDLE_NO_RETRY_NEEDED",
     "toleratedExitCode",
+    "Acquire-OrchestratorLock",
+    "Release-OrchestratorLock",
+    "terminal-daily-orchestrator.lock",
+    "FUMAN_ORCHESTRATOR_LOCK_OWNER",
+    "FUMAN_DAILY_RUN_ID",
   ];
   for (const marker of runnerMarkers) requireMarker(issues, "run-terminal-autonomous-root.ps1", runner, marker);
 
@@ -74,10 +115,17 @@ async function main() {
     "21:35",
     "22:00",
     "-ApplyScanners",
+    "New-FumanPrincipal",
+    "LogonType S4U",
+    "InteractiveFallback",
   ];
   for (const marker of installerMarkers) requireMarker(issues, "scripts/install-terminal-autonomous-root-task.ps1", installer, marker);
 
   const scripts = pkg.scripts || {};
+  const invokedScripts = [...runner.matchAll(/Invoke-NpmStep\s+"[^"]+"\s+"([^"]+)"/g)].map((match) => match[1]);
+  for (const name of [...new Set(invokedScripts)]) {
+    if (!scripts[name]) addIssue(issues, "package_script_missing_runner_step:" + name, { name });
+  }
   for (const name of ["ops:autonomous-root", "ops:autonomous-root:apply-scanners", "install:terminal-autonomous-root-task", "ops:autonomous-root:contract"]) {
     if (!scripts[name]) addIssue(issues, `package_script_missing:${name}`);
   }
@@ -85,6 +133,9 @@ async function main() {
     addIssue(issues, "unattended_root_missing_autonomous_root_contract");
   }
 
+  const windowsTask = queryWindowsTask("Fuman Terminal Autonomous Root Monitor");
+  const finalAuditTask = queryWindowsTask("Fuman Terminal Full Unattended Final Audit");
+  const legacyConflictTask = queryWindowsTask("Fuman Terminal Autonomous Ops 5m");
   const activeTasks = registry.policy?.activeTasks || [];
   const allowed = registry.policy?.allowedResults?.["Fuman Terminal Autonomous Root Monitor"] || [];
   const taskRows = registry.tasks || [];
@@ -94,6 +145,20 @@ async function main() {
   }
   if (!taskRows.some((row) => String(row.taskName || row.displayName || "").includes("Fuman Terminal Autonomous Root Monitor"))) {
     addIssue(issues, "schedule_registry_missing_autonomous_root_task_row");
+  }
+  if (legacyConflictTask.checked && legacyConflictTask.installed && !legacyConflictTask.disabled) addIssue(issues, "windows_task_legacy_autonomous_ops_conflict", { raw: legacyConflictTask.raw.slice(0, 1200), xml: legacyConflictTask.xmlRaw.slice(0, 1200) });
+
+  if (finalAuditTask.checked) {
+    if (!finalAuditTask.installed) addIssue(issues, "windows_task_missing_full_unattended_final_audit", { exitCode: finalAuditTask.exitCode, raw: finalAuditTask.raw.slice(0, 1200) });
+    if (finalAuditTask.installed && !finalAuditTask.hasS4U) addIssue(issues, "windows_task_not_s4u_unattended_final_audit", { raw: finalAuditTask.raw.slice(0, 1200), xml: finalAuditTask.xmlRaw.slice(0, 1200) });
+  }
+  if (windowsTask.checked) {
+    if (!windowsTask.installed) addIssue(issues, "windows_task_missing_autonomous_root_monitor", { exitCode: windowsTask.exitCode, raw: windowsTask.raw.slice(0, 1200) });
+    if (windowsTask.installed && windowsTask.disabled) addIssue(issues, "windows_task_disabled_autonomous_root_monitor", { raw: windowsTask.raw.slice(0, 1200) });
+    if (windowsTask.installed && !windowsTask.hasRunner) addIssue(issues, "windows_task_missing_autonomous_root_runner", { raw: windowsTask.raw.slice(0, 1200) });
+    if (windowsTask.installed && !windowsTask.hasApplyScanners) addIssue(issues, "windows_task_missing_apply_scanners_flag", { raw: windowsTask.raw.slice(0, 1200) });
+    if (windowsTask.installed && !windowsTask.hasRequireProtectedReadback) addIssue(issues, "windows_task_missing_protected_readback_flag", { raw: windowsTask.raw.slice(0, 1200) });
+    if (windowsTask.installed && !windowsTask.hasS4U) addIssue(issues, "windows_task_not_s4u_unattended", { raw: windowsTask.raw.slice(0, 1200), xml: windowsTask.xmlRaw.slice(0, 1200) });
   }
 
   const payload = {
@@ -111,11 +176,36 @@ async function main() {
       activeTask: activeTasks.includes("Fuman Terminal Autonomous Root Monitor"),
       allowedResults: allowed,
     },
+    windowsTask: {
+      checked: windowsTask.checked,
+      installed: windowsTask.installed,
+      disabled: windowsTask.disabled,
+      hasRunner: windowsTask.hasRunner,
+      hasApplyScanners: windowsTask.hasApplyScanners,
+      hasRequireProtectedReadback: windowsTask.hasRequireProtectedReadback,
+      hasS4U: windowsTask.hasS4U,
+      hasInteractiveOnly: windowsTask.hasInteractiveOnly,
+      exitCode: windowsTask.exitCode,
+    },
+    finalAuditTask: {
+      checked: finalAuditTask.checked,
+      installed: finalAuditTask.installed,
+      hasS4U: finalAuditTask.hasS4U,
+      hasInteractiveOnly: finalAuditTask.hasInteractiveOnly,
+      exitCode: finalAuditTask.exitCode,
+    },
+    legacyConflictTask: {
+      checked: legacyConflictTask.checked,
+      installed: legacyConflictTask.installed,
+      disabled: legacyConflictTask.disabled,
+      exitCode: legacyConflictTask.exitCode,
+    },
     guarantees: [
       "autonomous root is callable as a first-class npm script",
       "Windows task wakes the full root chain after strategy due windows",
-      "runner executes preflight, water root, final audit, self-heal job queue, daily manifest, state machine, policy, job queue roll-forward, and readback-only closure",
+      "runner executes preflight, water root, daily manifest, state machine, policy, job queue roll-forward, and readback-only closure",
       "failure writes a receipt and attempts workflow alert",
+      "root monitor holds the shared daily orchestrator lock and passes a re-entrant owner lease to Final Audit",
     ],
     issues,
   };

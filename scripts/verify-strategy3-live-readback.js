@@ -205,6 +205,8 @@ function latestPointer(state = {}) {
   const quality = state.mergedPayload?.run_quality_at_publish || {};
   return {
     runId: state.latest?.runId || state.mergedPayload?.runId || "",
+    expectedTotal: cleanNumber(state.run?.row?.expected_total ?? state.mergedPayload?.expected_total ?? state.mergedPayload?.expectedTotal ?? quality.expectedTotal),
+    scannedCount: cleanNumber(state.run?.row?.scanned_count ?? state.mergedPayload?.scanned_count ?? state.mergedPayload?.scannedCount ?? quality.scannedCount),
     resultCount: cleanNumber(state.run?.row?.result_count ?? state.mergedPayload?.count),
     readbackCount: cleanNumber(state.results?.exactCount ?? state.results?.rowsRead ?? quality.readbackCount),
     checkedAt: state.checkedAt || "",

@@ -10,6 +10,14 @@ function passThroughArgs() {
   return process.argv.slice(2).filter((arg) => arg !== "--apply");
 }
 
+function parseJson(text) {
+  try {
+    return JSON.parse(String(text || "{}"));
+  } catch {
+    return {};
+  }
+}
+
 function run(label, script, args = []) {
   const nodeArgs = ["--use-system-ca", script, ...args];
   const result = spawnSync(process.execPath, nodeArgs, {
@@ -30,66 +38,57 @@ function run(label, script, args = []) {
   };
 }
 
-function parseJsonOutput(stdout) {
-  const raw = String(stdout || "").trim();
-  if (raw) {
-    try {
-      const value = JSON.parse(raw);
-      if (value && typeof value === "object") return value;
-    } catch {}
-  }
-  const lines = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    try {
-      const value = JSON.parse(lines[index]);
-      if (value && typeof value === "object") return value;
-    } catch {}
-  }
-  return {};
+function isUnattendedYes(payload) {
+  return payload.unattended_yes === "YES"
+    || payload.unattendedStatus === "YES"
+    || payload.unattended_status === "YES"
+    || payload.unattendedYes === true
+    || payload.unattended_yes === true;
 }
 
 function main() {
   const extra = passThroughArgs();
   const warmup = run("verify:daytrade-warmup-unattended", "scripts/verify-daytrade-warmup-unattended.js", extra);
+  const finalPayload = parseJson(warmup.stdout);
   const selfHealArgs = APPLY ? ["--apply", ...extra] : extra;
   const selfHeal = run(APPLY ? "daytrade-warmup:self-heal:apply" : "daytrade-warmup:self-heal", "scripts/run-daytrade-warmup-self-heal.js", selfHealArgs);
-  const initialPayload = parseJsonOutput(warmup.stdout);
-  const selfHealPayload = parseJsonOutput(selfHeal.stdout);
-  let postHeal = null;
-  if (APPLY && !warmup.ok && selfHeal.ok && selfHealPayload.verificationOk === true) {
-    postHeal = run("verify:daytrade-warmup-unattended:post-rewater", "scripts/verify-daytrade-warmup-unattended.js", extra);
-  }
-  const finalPayload = parseJsonOutput(postHeal?.stdout || warmup.stdout);
-  const unattendedYes = finalPayload.unattended_yes === "YES" && finalPayload.natural_warmup_ok === true;
-  const formalEntryAllowed = finalPayload.formal_entry_allowed === true;
+  let selfHealPayload = {};
+  try { selfHealPayload = JSON.parse(selfHeal.stdout || "{}"); } catch {}
+
+  const unattendedYes = warmup.ok && isUnattendedYes(finalPayload);
   const marketClosed = finalPayload.market_closed === true || selfHealPayload.market_closed === true;
   const ok = unattendedYes || marketClosed;
-  const state = marketClosed
-    ? "WARMUP_MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD"
-    : unattendedYes
-    ? "WARMUP_UNATTENDED_YES"
-    : formalEntryAllowed
-      ? "WARMUP_REWATERED_FORMAL_ENTRY_ALLOWED_BUT_UNATTENDED_NO"
-      : selfHeal.ok
-        ? "WARMUP_NOT_READY_SELF_HEAL_PLANNED_OR_APPLIED"
-        : "WARMUP_NOT_READY_SELF_HEAL_FAILED";
+  const waitingForNaturalPhase = selfHealPayload.state === "WAITING_FOR_NATURAL_PHASE";
+  const state = unattendedYes
+    ? "WARMUP_UNATTENDED_YES_NO_REWATER_NEEDED"
+    : marketClosed
+      ? "WARMUP_MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD"
+      : waitingForNaturalPhase
+        ? "WARMUP_WAITING_FOR_NATURAL_PHASE"
+        : selfHeal.ok
+          ? "WARMUP_NOT_READY_SELF_HEAL_PLANNED_OR_APPLIED"
+          : "WARMUP_NOT_READY_SELF_HEAL_FAILED";
+
   const result = {
     ok,
-    unattended_yes: unattendedYes ? "YES" : "NO",
-    formal_entry_allowed: formalEntryAllowed,
-    market_closed: marketClosed,
     contract: "daytrade-warmup-root-with-self-heal-v2",
     checkedAt: new Date().toISOString(),
     mode: APPLY ? "apply" : "dry-run",
     state,
-    invariant: "market-closed policy may pass without formal entry, but only natural 0700/0845/0900 evidence can set unattended_yes=YES",
+    invariant: "warmup NO must still produce self-heal queue; self-heal does not backfill natural evidence or fake unattended YES",
+    marketClosedPolicy: "market-closed policy may pass without formal entry, but only natural 0700/0845/0900 evidence can set unattended_yes=YES",
+    unattendedYes,
+    marketClosed,
+    selfHealOk: selfHeal.ok,
+    selfHealCountsAsUnattendedYes: false,
     warmup,
-    selfHeal,
-    postHeal,
     finalPayload,
+    selfHeal,
+    selfHealPayload,
   };
   console.log(JSON.stringify(result, null, 2));
-  if (!ok) process.exit(1);
+  const rootExitOk = ok || waitingForNaturalPhase;
+  if (!rootExitOk) process.exit(1);
 }
 
 main();

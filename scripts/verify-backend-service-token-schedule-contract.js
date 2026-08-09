@@ -223,5 +223,3 @@ main().catch((error) => {
   console.error(`[backend-service-token-schedule-contract] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-
-

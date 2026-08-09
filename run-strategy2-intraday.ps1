@@ -131,6 +131,20 @@ function Get-Strategy2RunIdDate($RunId) {
   return ""
 }
 
+function Test-Strategy2LatestMatchesTarget($Payload, $TargetDate) {
+  if ($null -eq $Payload) { return $false }
+  $runDate = Get-Strategy2RunIdDate $Payload.runId
+  if ($runDate -ne $TargetDate) { return $false }
+  if ([int]$Payload.count -le 0) { return $false }
+  return $true
+}
+
+function Write-Strategy2BlockedPreserve($Reason, $Payload) {
+  $runId = if ($null -ne $Payload) { [string]$Payload.runId } else { "" }
+  $count = if ($null -ne $Payload) { [int]$Payload.count } else { 0 }
+  Write-Strategy2Receipt "blocked_preserved" 0 $false $count $runId @($Reason) $Reason $true $true
+}
+
 function Invoke-Strategy2AfterWindowRepair($Reason) {
   $targetDate = Get-Strategy2TaipeiDateKey
   $latest = Assert-Strategy2SupabaseLatest
@@ -195,7 +209,7 @@ if ($resourceGate.PreserveLatest) {
     "Strategy2 source gate is not ready before scan window; keep unattended runner alive and retry at 09:00 without writing preserved-latest receipt." >> $log
   } else {
     $verifiedPayload = Assert-Strategy2ApiPreserve
-    Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true $true
+    Write-Strategy2BlockedPreserve $reason $verifiedPayload
     "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
     exit 0
   }
@@ -214,6 +228,14 @@ if ($exitCode -ne 0) {
 # Do not redirect to cache sync, freshness:gate, deploy, bump, or GitHub push during runtime refreshes.
 "Strategy2 intraday cache written; fast-path sync-after-output skipped." >> $log
 $verifiedPayload = Assert-Strategy2ApiPreserve
+$targetDate = Get-Strategy2TaipeiDateKey
+if (-not (Test-Strategy2LatestMatchesTarget $verifiedPayload $targetDate)) {
+  $reason = "scanner finished but did not publish target-date Strategy2 latest pointer; target=$targetDate latestRunId=$($verifiedPayload.runId) count=$($verifiedPayload.count)"
+  $reason >> $log
+  Write-Strategy2BlockedPreserve $reason $verifiedPayload
+  "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
+  exit 0
+}
 Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 
 "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log

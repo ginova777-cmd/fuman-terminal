@@ -131,7 +131,9 @@ left join public.fugle_daytrade_daily_volume_avg d on d.symbol = p.symbol
 left join public.v_fugle_daytrade_intraday_1m_status s on s.symbol = p.symbol
 left join public.v_fugle_daytrade_intraday_1m_technical_status si on si.symbol = p.symbol
 left join public.source_status ss on ss.source_name = 'fugle_daytrade_source'
-where p.payload ->> 'basePoolEligible' = 'true';
+where p.payload ->> 'basePoolEligible' = 'true'
+  and coalesce(q.price, 0) >= 50
+  and q.quote_seen_at >= now() - interval '120 seconds';
 
 create or replace view public.v_fugle_daytrade_formal_priority_top40 as
 select

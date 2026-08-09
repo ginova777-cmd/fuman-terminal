@@ -1,147 +1,157 @@
 "use strict";
 
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/terminal-power-recovery");
-const TRADE_DATE = String(process.argv.find((arg) => arg.startsWith("--trade-date="))?.slice("--trade-date=".length) || process.env.FUMAN_TRADE_DATE || "").replace(/\D/g, "").slice(0, 8);
-const TASK_NAME = process.env.FUMAN_AUTONOMOUS_ROOT_TASK || "Fuman Terminal Autonomous Root Monitor";
+const ROOT = path.resolve(__dirname, "..");
+const TRADE_DATE = String(process.env.FUMAN_TRADE_DATE || "").match(/20\d{6}/)?.[0] || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date()).replace(/-/g, "");
+const DAILY_RUN_ID = String(process.env.FUMAN_DAILY_RUN_ID || "power-recovery");
+const TASK_NAME = process.env.FUMAN_AUTONOMOUS_ROOT_TASK_NAME || "Fuman Terminal Autonomous Root Monitor";
+const FINAL_AUDIT_TASK_NAME = process.env.FUMAN_FINAL_AUDIT_TASK_NAME || "Fuman Terminal Full Unattended Final Audit";
+const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
+const OUT_DIR = path.join(ROOT, "outputs", "terminal-power-recovery");
+const OUT_FILE = path.join(OUT_DIR, "terminal-power-recovery.json");
+const LOCK_FILE = path.join(RUNTIME_DIR, "state", "terminal-daily-orchestrator.lock");
+const REGISTRATION_RECEIPT_FILE = path.join(RUNTIME_DIR, "state", "power-recovery-task-registration.json");
 
-function writeJson(file, payload) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+function runPowerShell(script) {
+  const candidates = ["powershell.exe", "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"];
+  const executable = candidates.find((candidate) => candidate === "powershell.exe" || fs.existsSync(candidate));
+  if (!executable) return { ok: false, error: "powershell_not_found" };
+  const result = spawnSync(executable, ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script], { encoding: "utf8", windowsHide: true });
+  return { ok: result.status === 0, exit_code: result.status === null ? 1 : result.status, stdout: String(result.stdout || ""), stderr: String(result.stderr || "") };
 }
 
-function readJson(file, fallback = null) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return fallback;
+function parseLastJson(text) {
+  const lines = String(text || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    try { return JSON.parse(lines[i]); } catch (_) { /* keep scanning */ }
   }
+  return null;
 }
 
-function parseTaskList(text) {
-  const row = {};
-  for (const line of String(text || "").split(/\r?\n/)) {
-    const match = line.match(/^([^:]+):\s*(.*)$/);
-    if (match) row[match[1].trim().toLowerCase()] = match[2].trim();
+function taskStatus(taskName = TASK_NAME) {
+  const escaped = taskName.replace(/'/g, "''");
+  const script = `$t=Get-ScheduledTask -TaskName '${escaped}' -ErrorAction SilentlyContinue; if($null -eq $t){ @{exists=$false} | ConvertTo-Json -Compress; exit 0 }; $i=Get-ScheduledTaskInfo -TaskName '${escaped}' -ErrorAction SilentlyContinue; $p=$t.Principal; $a=@($t.Actions)[0]; @{exists=$true;state=[string]$t.State;enabled=([string]$t.State -ne 'Disabled');lastRun=([string]$i.LastRunTime);nextRun=([string]$i.NextRunTime);lastResult=[int64]$i.LastTaskResult;logonType=[string]$p.LogonType;runLevel=[string]$p.RunLevel;startWhenAvailable=[bool]$t.Settings.StartWhenAvailable;multipleInstances=[string]$t.Settings.MultipleInstances;executionTimeLimit=[string]$t.Settings.ExecutionTimeLimit;triggerCount=@($t.Triggers).Count;execute=[string]$a.Execute;arguments=[string]$a.Arguments} | ConvertTo-Json -Compress`;
+  const result = runPowerShell(script);
+  return parseLastJson(result.stdout) || { exists: false, probe_error: result.stderr || "task_query_failed" };
+}
+
+function powerEvents() {
+  const script = "$events=@(Get-WinEvent -FilterHashtable @{LogName='System'; Id=41,6008} -MaxEvents 20 -ErrorAction SilentlyContinue | ForEach-Object { @{id=$_.Id; time=$_.TimeCreated.ToString('o'); provider=$_.ProviderName} }); @{events=$events} | ConvertTo-Json -Compress -Depth 4";
+  const result = runPowerShell(script);
+  return parseLastJson(result.stdout) || { events: [], probe_error: result.stderr || "event_query_failed" };
+}
+
+function bootStatus() {
+  const script = "@{boot=(Get-CimInstance Win32_OperatingSystem).LastBootUpTime.ToUniversalTime().ToString('o'); now=(Get-Date).ToUniversalTime().ToString('o')} | ConvertTo-Json -Compress";
+  const result = runPowerShell(script);
+  return parseLastJson(result.stdout) || {};
+}
+
+function expectedLockHolder(pid) {
+  if (process.platform !== "win32") return { expected: true, image: "", reason: "non_windows_process_probe" };
+  const probe = spawnSync("tasklist.exe", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], { encoding: "utf8", windowsHide: true, timeout: 5000 });
+  const raw = String(probe.stdout || "") + String(probe.stderr || "");
+  const row = raw.split(/\r?\n/).find((line) => line.includes(`"${pid}"`)) || "";
+  const image = (row.match(/^"([^"]+)"/) || [])[1] || "";
+  return { expected: /^node(\.exe)?$/i.test(image), image, reason: image ? "process_image_checked" : "pid_not_found" };
+}
+
+function lockStatus() {
+  if (!fs.existsSync(LOCK_FILE)) return { exists: false, safe: true, staleLockHandled: true };
+  let payload = null;
+  try { payload = JSON.parse(fs.readFileSync(LOCK_FILE, "utf8")); } catch (_) { return { exists: true, safe: false, staleLockHandled: false, reason: "lock_json_invalid" }; }
+  const pid = Number(payload?.pid || 0);
+  let running = false;
+  let holder = { expected: false, image: "", reason: "missing_pid" };
+  if (pid > 0) {
+    const probe = spawnSync("tasklist.exe", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], { encoding: "utf8", windowsHide: true });
+    running = String(probe.stdout || "").includes(`"${pid}"`);
+    holder = expectedLockHolder(pid);
   }
-  return row;
-}
-
-function xmlValue(xml, tag) {
-  const match = String(xml || "").match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i"));
-  return match ? match[1].trim() : "";
-}
-
-function queryTask(name) {
-  const list = spawnSync("schtasks", ["/Query", "/TN", `\\${name}`, "/V", "/FO", "LIST"], {
-    encoding: "utf8",
-    windowsHide: true,
-  });
-  const xml = spawnSync("schtasks", ["/Query", "/TN", `\\${name}`, "/XML"], {
-    encoding: "utf8",
-    windowsHide: true,
-  });
-  const stdout = String(list.stdout || "");
-  const stderr = `${list.stderr || ""}${xml.stderr || ""}`;
-  const row = parseTaskList(stdout);
-  const xmlText = String(xml.stdout || "");
-  const enabledText = xmlValue(xmlText, "Enabled");
-  const startWhenAvailableText = xmlValue(xmlText, "StartWhenAvailable");
-  const enabled = enabledText ? enabledText.toLowerCase() !== "false" : !String(stdout).toLowerCase().includes("disabled");
-  return {
-    name,
-    ok: list.status === 0 || xml.status === 0,
-    exitCode: list.status === 0 || xml.status === 0 ? 0 : (list.status === null ? 1 : list.status),
-    state: enabled ? "Enabled" : "Disabled",
-    enabled,
-    startWhenAvailable: startWhenAvailableText ? startWhenAvailableText.toLowerCase() === "true" : null,
-    lastRunTime: row["last run time"] || "",
-    lastResult: row["last result"] || "",
-    nextRunTime: row["next run time"] || "",
-    taskToRun: row["task to run"] || "",
-    stdoutTail: stdout.slice(-1200),
-    stderrTail: String(stderr).slice(-1200),
-  };
-}
-
-function dateMs(value) {
-  const ms = Date.parse(String(value || ""));
-  return Number.isFinite(ms) ? ms : null;
-}
-
-function fileMtime(file) {
-  try {
-    return fs.statSync(file).mtime.toISOString();
-  } catch {
-    return "";
-  }
+  const safe = running && holder.expected === true;
+  return { exists: true, safe, staleLockHandled: safe, pid, holder, daily_run_id: payload?.daily_run_id || "" };
 }
 
 function main() {
-  const checkedAt = new Date();
-  const bootTime = new Date(Date.now() - Math.round(os.uptime() * 1000));
-  const lockFile = path.join(RUNTIME_DIR, "state", "terminal-daily-orchestrator.lock");
-  const finalAuditFile = path.join(RUNTIME_DIR, "state", "unattended-final-audit.json");
-  const lock = readJson(lockFile, null);
-  const task = queryTask(TASK_NAME);
-  const issues = [];
-  const warnings = [];
-  const bootMs = bootTime.getTime();
-  const lockAcquiredMs = dateMs(lock?.acquired_at);
-  const auditMtime = fileMtime(finalAuditFile);
-  const auditMtimeMs = dateMs(auditMtime);
-
-  if (!task.ok) issues.push("autonomous_root_task_not_queryable");
-  if (task.ok && task.enabled === false) issues.push("autonomous_root_task_not_enabled");
-  if (task.ok && task.startWhenAvailable === false) warnings.push("autonomous_root_task_start_when_available_false");
-  if (lock && lockAcquiredMs && lockAcquiredMs < bootMs) issues.push("orchestrator_lock_before_last_boot");
-  if (!auditMtime) warnings.push("runtime_final_audit_receipt_missing");
-  if (auditMtimeMs && auditMtimeMs < bootMs) warnings.push("runtime_final_audit_before_last_boot");
-
+  const task = taskStatus();
+  const finalAuditTask = taskStatus(FINAL_AUDIT_TASK_NAME);
+  const legacyTask = taskStatus("Fuman Terminal Autonomous Ops 5m");
+  const boot = bootStatus();
+  const events = powerEvents();
+  const lock = lockStatus();
+  const registrationReceipt = fs.existsSync(REGISTRATION_RECEIPT_FILE) ? (() => { try { return JSON.parse(fs.readFileSync(REGISTRATION_RECEIPT_FILE, "utf8")); } catch (_) { return { ok: false, failures: ["registration_receipt_invalid"] }; } })() : null;
+  const registrationReceiptAuthoritative = registrationReceipt?.ok === true;
+  const registrationReceiptIgnoredReason = registrationReceipt && registrationReceipt.ok !== true ? "live_task_readback_is_authoritative_after_existing_task_verified" : "";
+  const taskRegistered = task.exists === true && task.enabled === true;
+  const legacyTaskConflict = legacyTask.exists === true && legacyTask.enabled === true;
+  const unattendedPrincipalReady = String(task.logonType || "").toLowerCase() === "s4u" && String(task.runLevel || "").toLowerCase() === "highest";
+  const startWhenAvailableReady = task.startWhenAvailable === true;
+  const multipleInstancesReady = String(task.multipleInstances || "").toLowerCase() === "ignorenew";
+  const rootActionReady = /run-terminal-autonomous-root\.ps1/i.test(`${task.execute || ""} ${task.arguments || ""}`);
+  const rootApplyScannersReady = /\s-ApplyScanners(\s|$)/i.test(` ${task.arguments || ""} `);
+  const rootProtectedReadbackReady = /\s-RequireProtectedReadback(\s|$)/i.test(` ${task.arguments || ""} `);
+  const triggerCountReady = Number(task.triggerCount || 0) >= 8;
+  const postBootRecoveryVerified = taskRegistered && Boolean(boot.boot) && Boolean(task.lastRun) && Date.parse(task.lastRun) >= Date.parse(boot.boot);
+  const lockSafe = lock.safe === true;
+  const staleLockHandled = lock.staleLockHandled === true;
+  const eventRows = Array.isArray(events.events) ? events.events : (events.events ? [events.events] : []);
+  const powerRecoveryOk = taskRegistered && unattendedPrincipalReady && startWhenAvailableReady && multipleInstancesReady && rootActionReady && rootApplyScannersReady && rootProtectedReadbackReady && triggerCountReady && postBootRecoveryVerified && lockSafe && staleLockHandled && !legacyTaskConflict;
   const payload = {
-    contract: "terminal-power-recovery-check-v1",
-    checked_at: checkedAt.toISOString(),
+    contract: "terminal-power-recovery-receipt-v1",
+    ok: powerRecoveryOk,
+    status: powerRecoveryOk ? "PASS" : "BLOCKED",
+    complete: powerRecoveryOk,
+    power_checked: true,
     trade_date: TRADE_DATE,
-    host: os.hostname(),
-    runtime_dir: RUNTIME_DIR,
-    boot: {
-      boot_time: bootTime.toISOString(),
-      uptime_seconds: Math.round(os.uptime()),
-      checked_after_boot_seconds: Math.max(0, Math.round((checkedAt.getTime() - bootMs) / 1000)),
-    },
+    daily_run_id: DAILY_RUN_ID,
+    task_name: TASK_NAME,
+    final_audit_task_name: FINAL_AUDIT_TASK_NAME,
+    registration_receipt_file: REGISTRATION_RECEIPT_FILE,
+    registration_receipt: registrationReceipt,
+    registrationReceiptAuthoritative,
+    registrationReceiptIgnoredReason,
+    taskRegistered,
+    startWhenAvailableReady,
+    multipleInstancesReady,
+    rootActionReady,
+    rootApplyScannersReady,
+    rootProtectedReadbackReady,
+    triggerCountReady,
+    postBootRecoveryVerified,
+    lockSafe,
+    staleLockHandled,
+    systemBootAt: boot.boot || "",
+    unexpectedShutdownEvent: eventRows.length > 0,
+    recoveryActions: legacyTaskConflict ? ["disable_legacy_autonomous_ops_task_then_retry"] : (postBootRecoveryVerified ? ["autonomous_root_task_presence_verified", "post_boot_root_task_run_verified"] : (taskRegistered ? (unattendedPrincipalReady ? ["run_or_wait_for_autonomous_root_monitor_after_last_boot"] : ["re_register_autonomous_root_task_with_s4u_highest"]) : ["register_autonomous_root_monitor_task"])),
     task,
-    orchestrator_lock: {
-      file: lockFile,
-      exists: Boolean(lock),
-      acquired_at: lock?.acquired_at || "",
-      before_last_boot: Boolean(lock && lockAcquiredMs && lockAcquiredMs < bootMs),
-    },
-    runtime_final_audit: {
-      file: finalAuditFile,
-      exists: Boolean(auditMtime),
-      updated_at: auditMtime,
-      after_last_boot: Boolean(auditMtimeMs && auditMtimeMs >= bootMs),
-    },
-    status: issues.length ? "blocked" : "ready",
-    ok: issues.length === 0,
-    issues,
-    warnings,
-    reason: issues[0] || "power_recovery_ready",
-    allowed_action: issues.length
-      ? "end_stale_orchestrator_lock_and_rerun_terminal_autonomous_root"
-      : "none",
+    final_audit_task: finalAuditTask,
+    legacy_task: legacyTask,
+    legacy_task_conflict: legacyTaskConflict,
+    power_events: eventRows,
+    lock,
+    checked_at: new Date().toISOString(),
+    failures: [
+      ...(taskRegistered ? [] : ["autonomous_root_monitor_task_missing_or_disabled"]),
+      ...(unattendedPrincipalReady ? [] : ["autonomous_root_monitor_task_not_s4u_highest"]),
+      ...(startWhenAvailableReady ? [] : ["autonomous_root_monitor_task_not_start_when_available"]),
+      ...(multipleInstancesReady ? [] : ["autonomous_root_monitor_task_not_ignore_new"]),
+      ...(rootActionReady ? [] : ["autonomous_root_monitor_task_action_not_root_runner"]),
+      ...(rootApplyScannersReady ? [] : ["autonomous_root_monitor_task_missing_apply_scanners"]),
+      ...(rootProtectedReadbackReady ? [] : ["autonomous_root_monitor_task_missing_protected_readback"]),
+      ...(triggerCountReady ? [] : ["autonomous_root_monitor_task_trigger_count_low"]),
+      ...(postBootRecoveryVerified ? [] : ["autonomous_root_monitor_has_not_run_after_last_boot"]),
+      ...(lockSafe ? [] : ["orchestrator_lock_not_safe"]),
+      ...(staleLockHandled ? [] : ["stale_or_invalid_lock_requires_owner_recovery"]),
+      ...(legacyTaskConflict ? ["legacy_autonomous_ops_task_enabled"] : []),
+    ],
   };
-
-  const jsonFile = path.join(OUT_DIR, "terminal-power-recovery.json");
-  writeJson(jsonFile, payload);
-  console.log(JSON.stringify({ ok: payload.ok, status: payload.status, reason: payload.reason, bootTime: payload.boot.boot_time, taskState: task.state, lastResult: task.lastResult, output: jsonFile }, null, 2));
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  fs.writeFileSync(OUT_FILE, JSON.stringify(payload, null, 2));
+  console.log(JSON.stringify(payload, null, 2));
   if (!payload.ok) process.exitCode = 1;
 }
 
 main();
-

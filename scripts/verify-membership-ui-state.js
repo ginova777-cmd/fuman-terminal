@@ -235,8 +235,10 @@ async function runUiProbe(baseUrl) {
       for (const target of targets) {
         document.querySelector(".fuman-entitlement-preview")?.remove();
         const link = findTarget(target);
-        link?.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, cancelable: true, pointerId: 1 }));
-        link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        const blocked = window.FUMAN_DESKTOP_ROUTE_STATE?.shouldBlockView?.(target.view, link) === true;
+        if (!blocked) {
+          link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        }
         await new Promise((resolve) => setTimeout(resolve, 220));
         const panel = document.querySelector(`#${target.view}-view`);
         results.push({

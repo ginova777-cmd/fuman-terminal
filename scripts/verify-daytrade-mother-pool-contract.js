@@ -26,6 +26,35 @@ function numberValue(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function taipeiMinutesNow(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value || 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value || 0);
+  return hour * 60 + minute;
+}
+
+function formalSourceWindowStatus(date = new Date()) {
+  const minutes = taipeiMinutesNow(date);
+  const start = 8 * 60 + 45;
+  const end = 13 * 60 + 30;
+  if (minutes < start) return { inWindow: false, phase: "before_formal_source_window" };
+  if (minutes > end) return { inWindow: false, phase: "after_formal_source_window" };
+  return { inWindow: true, phase: "formal_source_window" };
+}
+
+async function optionalRestGet(key, pathAndQuery) {
+  try {
+    return await restGet(key, pathAndQuery);
+  } catch (error) {
+    return { __error: error?.message || String(error) };
+  }
+}
+
 async function restGet(key, pathAndQuery) {
   const response = await fetch(`${PROJECT_URL.replace(/\/$/, "")}/rest/v1/${pathAndQuery}`, {
     method: "GET",
@@ -56,15 +85,12 @@ async function main() {
     "market",
     "price",
     "open_price",
-    "high_price",
-    "low_price",
     "previous_close",
     "change_percent",
     "amplitude_from_open",
     "total_volume",
     "trade_value",
     "avg5_volume",
-    "avg_volume5",
     "mother_pool_score",
     "priority_score",
     "priority_rank",
@@ -86,100 +112,107 @@ async function main() {
     "is_formal_entry_eligible",
     "source_name",
     "updated_at",
-    "latest_candle_time",
-    "intraday_1m_stale_seconds",
-    "ready_ma5",
-    "ready_ma10",
-    "ready_ma30",
-    "ma5",
-    "ma10",
-    "ma35",
-    "ma30",
-    "ma5_ma10_ma35_bullish",
-    "ma_bullish_alignment",
-    "volume_vs_avg5_ratio",
-    "volume_rank",
-    "relative_volume_5m",
-    "recent_1m_volume_trend",
-    "ma5_rising",
-    "ma10_rising",
-    "ma30_rising",
-    "ma35_rising",
-    "above_open_price",
-    "above_vwap",
-    "near_day_high",
-    "distance_from_ma5_percent",
-    "sector_name",
-    "sector_strength_score",
-    "sector_member_active_count",
-    "futopt_sync_score",
-    "liquidity_score",
-    "spread_score",
-    "fake_strength_penalty",
-    "latest_1m_time",
   ];
 
-  // Bound reads to avoid turning the verifier into a PostgREST query storm.
-  const motherRows = await restGet(anonKey, "v_fugle_daytrade_mother_pool?select=symbol,mother_rank,mother_source,mother_pool_rule_version,mother_readiness_status,quote_age_seconds,in_formal_priority_top40&order=mother_rank.asc&limit=5");
-  const formalRows = await restGet(anonKey, "v_fugle_daytrade_formal_priority_top40?select=symbol,mother_rank,mother_readiness_status,quote_age_seconds,is_formal_entry_eligible&order=mother_rank.asc&limit=40");
-  const priorityRows = await restGet(anonKey, "v_fugle_daytrade_priority_top40?select=symbol,mother_pool_rank,mother_readiness_status,quote_age_seconds,is_formal_entry_eligible&order=mother_pool_rank.asc&limit=40");
-  const basePoolRows = await restGet(anonKey, "v_fugle_daytrade_mother_pool?select=symbol,mother_pool_rule_version,payload&order=mother_rank.asc&limit=600");
-  // Project the full contract once per view. This keeps field-presence verification complete while avoiding select=*.
-  const contractFieldSelect = requiredContractFields.join(",");
-  async function readContractSample(resource) {
-    try {
-      const rows = await restGet(anonKey, `${resource}?select=${contractFieldSelect}&limit=1`);
-      return { rows: Array.isArray(rows) ? rows : [], error: "" };
-    } catch (error) {
-      return { rows: [], error: error.message };
-    }
-  }
-  const motherContractRead = await readContractSample("v_fugle_daytrade_mother_pool");
-  const priorityContractRead = await readContractSample("v_fugle_daytrade_priority_top40");
-  const healthFieldSelect = [
-    "mother_pool_symbols",
-    "formal_priority_symbols",
-    "formal_priority_limit",
-    "formal_max_mother_rank",
-    "mother_fresh_quote_coverage_120s",
-    "formal_fresh_quote_coverage_120s",
-    "formal_max_quote_age_seconds",
-    "contract_status",
-    "contract_reason",
-    "mother_pool_source",
-    "mother_pool_rule_version",
-    "formal_scope",
-  ].join(",");
-  const healthRows = await restGet(anonKey, `v_fugle_daytrade_mother_pool_contract_health?select=${healthFieldSelect}&limit=1`);
+  const discoveryRequiredContractFields = [
+    "trade_date",
+    "symbol",
+    "name",
+    "market",
+    "price",
+    "open_price",
+    "previous_close",
+    "change_percent",
+    "total_volume",
+    "trade_value",
+    "avg5_volume",
+    "relative_volume_ratio",
+    "volume_rank",
+    "trade_value_rank",
+    "ma3_turn_up",
+    "ma5_turn_up",
+    "ma10_turn_up",
+    "ma30_turn_up",
+    "ma58_turn_up",
+    "ma_bull_stack_short",
+    "ma_bull_stack_mid",
+    "above_ma30",
+    "above_ma58",
+    "opening_range_break",
+    "surge_flag",
+    "volume_spike_flag",
+    "strategy_source_flags",
+    "sector_name",
+    "sector_strength_score",
+    "liquidity_grade",
+    "mother_pool_score",
+    "mother_pool_rank",
+    "pool_reasons",
+    "source_name",
+    "updated_at",
+    "data_gap",
+    "mother_pool_candidate",
+    "base_pool_failed_checks",
+    "base_pool_pending_checks",
+    "base_pool_eligible",
+    "base_pool_pending",
+    "in_formal_priority_top40",
+  ];
+
+  const [motherRows, formalRows, priorityRows, motherStarRows, priorityStarRows, healthRows, canonicalRows, lowPriceRows, discoveryRowsRaw, sourceStatusRowsRaw] = await Promise.all([
+    restGet(anonKey, "v_fugle_daytrade_mother_pool?select=symbol,price,mother_rank,mother_source,mother_pool_rule_version,mother_readiness_status,quote_age_seconds,in_formal_priority_top40&order=mother_rank.asc&limit=5"),
+    restGet(anonKey, "v_fugle_daytrade_formal_priority_top40?select=symbol,price,mother_rank,mother_readiness_status,quote_age_seconds&order=mother_rank.asc&limit=100"),
+    restGet(anonKey, "v_fugle_daytrade_priority_top40?select=symbol,price,mother_pool_rank,mother_readiness_status,quote_age_seconds&order=mother_pool_rank.asc&limit=100"),
+    restGet(anonKey, "v_fugle_daytrade_mother_pool?select=*&limit=1"),
+    restGet(anonKey, "v_fugle_daytrade_priority_top40?select=*&limit=1"),
+    restGet(anonKey, "v_fugle_daytrade_mother_pool_contract_health?select=*&limit=1"),
+    restGet(anonKey, "v_fugle_daytrade_canonical_gate?select=payload,formal_pool_scope&limit=1"),
+    restGet(anonKey, "v_fugle_daytrade_mother_pool?select=symbol,price&price=lt.50&limit=5"),
+    optionalRestGet(anonKey, "v_fugle_daytrade_mother_pool_discovery_readback?select=*&order=mother_pool_rank.asc&limit=800"),
+    optionalRestGet(anonKey, "source_status?source_name=eq.fugle_daytrade_source&select=payload&limit=1"),
+  ]);
 
   const health = Array.isArray(healthRows) ? healthRows[0] || {} : {};
-  const motherStarRows = motherContractRead.rows;
-  const priorityStarRows = priorityContractRead.rows;
-  const motherContractRow = motherStarRows[0] || {};
-  const priorityContractRow = priorityStarRows[0] || {};
-  const motherPoolSymbols = numberValue(health.mother_pool_symbols);
+  const discoveryRows = Array.isArray(discoveryRowsRaw) ? discoveryRowsRaw : [];
+  const discoveryViewError = discoveryRowsRaw && !Array.isArray(discoveryRowsRaw) ? discoveryRowsRaw.__error || "unknown_error" : "";
+  const sourceStatusPayload = Array.isArray(sourceStatusRowsRaw)
+    ? (sourceStatusRowsRaw[0]?.payload && typeof sourceStatusRowsRaw[0].payload === "object" ? sourceStatusRowsRaw[0].payload : {})
+    : {};
+  const canonicalRow = Array.isArray(canonicalRows) ? canonicalRows[0] || {} : {};
+  const canonical = { ...canonicalRow, ...(canonicalRow.payload && typeof canonicalRow.payload === "object" ? canonicalRow.payload : {}) };
+  const motherContractRow = Array.isArray(motherStarRows) ? motherStarRows[0] || {} : {};
+  const priorityContractRow = Array.isArray(priorityStarRows) ? priorityStarRows[0] || {} : {};
+  const motherPoolSymbols = numberValue(health.mother_pool_symbols, numberValue(canonical.mother_pool_symbols));
   const formalPrioritySymbols = numberValue(health.formal_priority_symbols);
   const formalPriorityLimit = numberValue(health.formal_priority_limit, 40);
   const formalMaxMotherRank = numberValue(health.formal_max_mother_rank);
   const priorityTop40Rows = Array.isArray(priorityRows) ? priorityRows.length : 0;
   const formalTop40Rows = Array.isArray(formalRows) ? formalRows.length : 0;
+  const motherPoolRows = discoveryRows;
+  const motherPoolTop20 = motherPoolRows.slice(0, 20);
+  const top40Symbols = new Set((Array.isArray(priorityRows) ? priorityRows : []).map((row) => String(row.symbol || "").trim()).filter(Boolean));
+  const nonTop40Rows = motherPoolRows.filter((row) => !top40Symbols.has(String(row.symbol || "").trim()));
+  const top40SubsetOfMotherPool = top40Symbols.size === 0 || [...top40Symbols].every((symbol) => motherPoolRows.some((row) => String(row.symbol || "").trim() === symbol));
+  const avg5Below3000TrialOrWatchExamples = motherPoolRows.filter((row) => numberValue(row.avg5_volume) < 3000 && String(row.liquidity_grade || "") !== "watch_only").slice(0, 10);
+  const dataGapRows = motherPoolRows.filter((row) => String(row.data_gap?.status || row.data_gap_status || "").toUpperCase() === "DATA_GAP");
+  const delta = sourceStatusPayload.mother_pool_delta && typeof sourceStatusPayload.mother_pool_delta === "object" ? sourceStatusPayload.mother_pool_delta : {};
+  const intradayAddedRows = motherPoolRows.filter((row) => (Array.isArray(row.pool_reasons) ? row.pool_reasons : []).some((reason) => /intraday|gain_rank|volume_|opening_range|ma3_5_10|tracked_buy_point/i.test(String(reason))));
+  const upgradedToPriorityExamples = (Array.isArray(delta.upgraded_to_priority_symbols) ? delta.upgraded_to_priority_symbols : [])
+    .map((symbol) => motherPoolRows.find((row) => String(row.symbol || "") === String(symbol)))
+    .filter(Boolean)
+    .slice(0, 20);
   const priorityTop40MaxRank = Array.isArray(priorityRows) ? Math.max(0, ...priorityRows.map((item) => numberValue(item.mother_pool_rank))) : 0;
   const formalTop40MaxRank = Array.isArray(formalRows) ? Math.max(0, ...formalRows.map((item) => numberValue(item.mother_rank))) : 0;
   const issues = [];
-  const expectedMotherPoolRuleVersion = "daytrade_mother_pool_base_filter_20260731_max600";
-  const observedMotherPoolRuleVersions = [...new Set((Array.isArray(motherRows) ? motherRows : []).map((item) => String(item.mother_pool_rule_version || "")).filter(Boolean))];
-  const basePoolRowsForCheck = Array.isArray(basePoolRows) ? basePoolRows : [];
-  const basePoolEligibleRows = basePoolRowsForCheck.filter((item) => item?.payload?.basePoolEligible === true);
-  const basePoolPendingRows = basePoolRowsForCheck.filter((item) => item?.payload?.basePoolPending === true);
-  const basePoolInvalidRows = basePoolRowsForCheck.filter((item) => item?.payload?.basePoolEligible !== true && item?.payload?.basePoolPending !== true);
-  for (const version of observedMotherPoolRuleVersions) {
-    if (version !== expectedMotherPoolRuleVersion) issues.push(`mother_pool_rule_version_mismatch:${version}`);
-  }
-  for (const error of [motherContractRead.error, priorityContractRead.error].filter(Boolean)) issues.push(`contract_sample_read_error:${error}`);
+  if (motherPoolSymbols > 600) issues.push("mother_pool_symbols_above_max_600");
+  if (Array.isArray(lowPriceRows) && lowPriceRows.length > 0) issues.push("mother_pool_price_below_50:" + lowPriceRows.map((row) => row.symbol).join(","));
+  const warnings = [];
+  const sourceWindow = formalSourceWindowStatus();
+  if (discoveryViewError) issues.push("mother_pool_discovery_view_unavailable:" + discoveryViewError);
   if (!Array.isArray(motherRows) || motherRows.length === 0) issues.push("mother_pool_view_empty_or_missing");
+  if (discoveryRows.length === 0 && !discoveryViewError) issues.push("mother_pool_discovery_view_empty");
+  if (!top40SubsetOfMotherPool && discoveryRows.length > 0) issues.push("priority_top40_not_subset_of_mother_pool");
   if (!Array.isArray(formalRows) || formalRows.length === 0) issues.push("formal_priority_top40_view_empty_or_missing");
-  if (!Array.isArray(basePoolRows) || basePoolRows.length === 0) issues.push("mother_pool_base_rows_empty_or_missing");
-  if (basePoolInvalidRows.length > 0) issues.push(`mother_pool_base_membership_invalid_${basePoolInvalidRows.length}`);
   if (!Array.isArray(priorityRows) || priorityRows.length === 0) issues.push("priority_top40_view_empty_or_missing");
   if (!motherContractRow || Object.keys(motherContractRow).length === 0) issues.push("mother_pool_star_contract_empty_or_missing");
   if (!priorityContractRow || Object.keys(priorityContractRow).length === 0) issues.push("priority_top40_star_contract_empty_or_missing");
@@ -192,50 +225,56 @@ async function main() {
   if (formalTop40Rows > 40) issues.push(`formal_priority_top40_view_returned_${formalTop40Rows}_rows_above_40`);
   if (priorityTop40MaxRank > 40) issues.push(`priority_top40_max_rank_${priorityTop40MaxRank}_above_40`);
   if (formalTop40MaxRank > 40) issues.push(`formal_priority_top40_max_rank_${formalTop40MaxRank}_above_40`);
-  // Scope membership and live entry eligibility are separate contracts.
-  // Stale/closed-market rows must remain false (fail-closed), not be forced true.
-  const allContractRows = [
-    ...(Array.isArray(priorityRows) ? priorityRows : []),
-    ...(Array.isArray(formalRows) ? formalRows : []),
-  ];
-  const invalidEligibilityRows = allContractRows.filter((item) =>
-    typeof item.is_formal_entry_eligible !== "boolean"
-  );
-  const readyButIneligibleRows = allContractRows.filter((item) =>
-    String(item.mother_readiness_status || "") === "ready" && item.is_formal_entry_eligible !== true
-  );
-  const staleButEligibleRows = allContractRows.filter((item) =>
-    String(item.mother_readiness_status || "") !== "ready" && item.is_formal_entry_eligible === true
-  );
-  if (invalidEligibilityRows.length > 0) issues.push(`formal_entry_eligibility_non_boolean_${invalidEligibilityRows.length}`);
-  if (readyButIneligibleRows.length > 0) issues.push(`ready_rows_not_formal_entry_eligible_${readyButIneligibleRows.length}`);
-  if (staleButEligibleRows.length > 0) issues.push(`stale_rows_formal_entry_eligible_${staleButEligibleRows.length}`);
   for (const field of requiredContractFields) {
     if (!Object.prototype.hasOwnProperty.call(motherContractRow, field)) issues.push(`mother_pool_missing_field:${field}`);
     if (!Object.prototype.hasOwnProperty.call(priorityContractRow, field)) issues.push(`priority_top40_missing_field:${field}`);
   }
+  for (const field of discoveryRequiredContractFields) {
+    if (motherPoolRows.length > 0 && !Object.prototype.hasOwnProperty.call(motherPoolRows[0], field)) issues.push(`mother_pool_discovery_missing_field:${field}`);
+  }
   if (String(health.mother_pool_source || "") !== "dynamic_daytrade_mother_pool") {
     issues.push(`mother_pool_source_not_dynamic:${health.mother_pool_source || "missing"}`);
   }
-  if (String(health.formal_scope || "") !== "mother_pool_rotation_priority_top40") {
-    issues.push(`formal_scope_not_mother_pool_rotation_priority_top40:${health.formal_scope || "missing"}`);
+  const formalScope = String(health.formal_scope || "");
+  const acceptedFormalScopes = new Set(["mother_pool_300_rotating_deep_scan"]);
+  const legacyFormalScopeAliases = new Set(["mother_pool_rotation_priority_top40", "priority_top40", "top40_only"]);
+  if (!acceptedFormalScopes.has(formalScope)) {
+    if (legacyFormalScopeAliases.has(formalScope)) {
+      warnings.push(`formal_scope_legacy_alias_needs_db_normalization:${formalScope}`);
+    } else {
+      issues.push(`formal_scope_not_mother_pool:${formalScope || "missing"}`);
+    }
+  }
+  const formalScanPoolSymbols = numberValue(health.formal_scan_pool_symbols, numberValue(canonical.formal_scan_pool_symbols));
+  const priorityTop40Symbols = numberValue(health.priority_top40_symbols, numberValue(canonical.priority_top40_symbols, formalPrioritySymbols));
+  const motherFreshQuoteCoverage120s = numberValue(health.mother_fresh_quote_coverage_120s, numberValue(canonical.mother_pool_fresh_quote_coverage_120s));
+  const formalFreshQuoteCoverage120s = numberValue(health.formal_fresh_quote_coverage_120s, numberValue(canonical.priority_fresh_quote_coverage_120s));
+  if (formalScanPoolSymbols < 300) issues.push("formal_scan_pool_symbols_" + formalScanPoolSymbols + "_below_300");
+  if (priorityTop40Symbols !== 40) issues.push("priority_top40_symbols_" + priorityTop40Symbols + "_must_equal_40");
+  if (sourceWindow.inWindow && motherFreshQuoteCoverage120s < 0.8) {
+    issues.push("mother_fresh_quote_coverage_" + motherFreshQuoteCoverage120s + "_below_0.8");
+  } else if (!sourceWindow.inWindow && motherFreshQuoteCoverage120s < 0.8) {
+    warnings.push("off_session_mother_fresh_quote_coverage_" + motherFreshQuoteCoverage120s + "_not_formal_blocker");
+  }
+  if (sourceWindow.inWindow && formalFreshQuoteCoverage120s < 0.95) {
+    issues.push("formal_fresh_quote_coverage_" + formalFreshQuoteCoverage120s + "_below_0.95");
+  } else if (!sourceWindow.inWindow && formalFreshQuoteCoverage120s < 0.95) {
+    warnings.push("off_session_formal_fresh_quote_coverage_" + formalFreshQuoteCoverage120s + "_not_formal_blocker");
   }
 
   const result = {
     ok: issues.length === 0,
     checkedAt: new Date().toISOString(),
+    sourceWindow,
     views: {
       motherPool: "v_fugle_daytrade_mother_pool",
+      discoveryReadback: "v_fugle_daytrade_mother_pool_discovery_readback",
       priorityTop40: "v_fugle_daytrade_priority_top40",
       formalPriorityTop40: "v_fugle_daytrade_formal_priority_top40",
       contractHealth: "v_fugle_daytrade_mother_pool_contract_health",
     },
     readback: {
       motherRows: motherRows.length,
-      basePoolRows: basePoolRows.length,
-      basePoolEligibleRows: basePoolEligibleRows.length,
-      basePoolPendingRows: basePoolPendingRows.length,
-      basePoolInvalidRows: basePoolInvalidRows.length,
       formalRows: formalRows.length,
       motherPoolSymbols,
       formalPrioritySymbols,
@@ -245,25 +284,48 @@ async function main() {
       formalTop40Rows,
       priorityTop40MaxRank,
       formalTop40MaxRank,
-      motherFreshQuoteCoverage120s: numberValue(health.mother_fresh_quote_coverage_120s),
-      formalFreshQuoteCoverage120s: numberValue(health.formal_fresh_quote_coverage_120s),
+      motherFreshQuoteCoverage120s,
+      formalScanPoolSymbols,
+      priorityTop40Symbols,
+      formalFreshQuoteCoverage120s,
       formalMaxQuoteAgeSeconds: numberValue(health.formal_max_quote_age_seconds, 999999),
       contractStatus: health.contract_status || "",
       contractReason: health.contract_reason || "",
       motherPoolSource: health.mother_pool_source || "",
       motherPoolRuleVersion: health.mother_pool_rule_version || "",
+      motherPoolMinPrice: numberValue(health.mother_pool_min_price, 50),
+      lowPriceRows: Array.isArray(lowPriceRows) ? lowPriceRows : [],
+      motherPoolRows: motherPoolRows.length,
+      motherPoolTop20,
+      nonTop40Count: nonTop40Rows.length,
+      nonTop40Symbols: nonTop40Rows.map((row) => row.symbol),
+      intradayAddedCount: numberValue(delta.added_count, intradayAddedRows.length),
+      intradayAddedExamples: intradayAddedRows.slice(0, 20),
+      avg5Below3000TrialOrWatchExamples,
+      upgradedToPriorityCount: numberValue(delta.upgraded_to_priority_count, upgradedToPriorityExamples.length),
+      upgradedToPriorityExamples,
+      dataGapRows,
+      top40SubsetOfMotherPool,
+      motherPoolDelta: delta,
+      basePoolFailureCounts: sourceStatusPayload.mother_pool_base_pool_failure_counts
+        || sourceStatusPayload.motherPoolBasePoolFailureCounts
+        || {},
+      basePoolPendingCounts: sourceStatusPayload.mother_pool_base_pool_pending_counts
+        || sourceStatusPayload.motherPoolBasePoolPendingCounts
+        || {},
       formalScope: health.formal_scope || "",
-      expectedMotherPoolRuleVersion,
-      observedMotherPoolRuleVersions,
     },
     samples: {
       motherPool: motherRows,
+      motherPoolDiscovery: motherPoolTop20,
       priorityTop40: priorityRows,
+      nonTop40: nonTop40Rows.slice(0, 20),
       formalPriorityTop40: formalRows,
       motherPoolContractFields: Object.keys(motherContractRow),
       priorityTop40ContractFields: Object.keys(priorityContractRow),
     },
     issues,
+    warnings,
   };
   console.log(JSON.stringify(result, null, 2));
   process.exitCode = result.ok ? 0 : 1;

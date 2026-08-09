@@ -2,22 +2,16 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
-const { loadActiveModuleRegistry } = require("../lib/terminal-active-module-registry");
-const ACTIVE_MODULES = new Set(loadActiveModuleRegistry().active.map((row) => row.key));
 
-const MODULE_FILES = {
-  strategy1: { api: "open-buy-latest", scanner: ["scripts/scan-open-buy-cache.js", "OPEN_BUY_API_ONLY = true"] },
-  strategy2: { api: "strategy2-latest", scanner: ["scripts/scan-intraday-signals.js", "STRATEGY2_API_ONLY = true"] },
-  strategy3: { api: "strategy3-latest", scanner: ["scripts/scan-strategy3-cache.js", "STRATEGY3_API_ONLY = true"] },
-  strategy4: { api: "strategy4-latest", scanner: ["scripts/scan-strategy4-cache.js", "STRATEGY4_API_ONLY = true"] },
-  strategy5: { api: "strategy5-latest", scanner: ["scripts/scan-strategy5-cache.js", "STRATEGY5_API_ONLY = true"] },
-  institution: { api: "institution-latest", scanner: ["scripts/scan-institution-cache.js", "INSTITUTION_API_ONLY = true"] },
-  warrant: { api: "warrant-flow-latest", scanner: ["scripts/scan-warrant-flow-cache.js", "WARRANT_FLOW_API_ONLY = true"] },
-  cb: { api: "cb-detect-latest", scanner: null },
-};
-const ACTIVE_RUNTIME_MODULES = Object.keys(MODULE_FILES).filter((key) => ACTIVE_MODULES.has(key));
-
-const requiredRuntimeApis = ACTIVE_RUNTIME_MODULES.map((key) => "/api/" + MODULE_FILES[key].api);
+const requiredRuntimeApis = [
+  "/api/strategy2-latest",
+  "/api/strategy3-latest",
+  "/api/strategy4-latest",
+  "/api/strategy5-latest",
+  "/api/institution-latest",
+  "/api/warrant-flow-latest",
+  "/api/cb-detect-latest",
+];
 
 const forbiddenStaticPatterns = [
   /(?:\/data\/|data[\\/])open-buy[^"'\s)]*\.json/g,
@@ -38,9 +32,25 @@ const runtimeFiles = [
   "terminal-app.js",
 ];
 
-const apiFiles = ACTIVE_RUNTIME_MODULES.map((key) => "api/" + MODULE_FILES[key].api + ".js");
+const apiFiles = [
+  "api/strategy2-latest.js",
+  "api/strategy3-latest.js",
+  "api/strategy4-latest.js",
+  "api/strategy5-latest.js",
+  "api/institution-latest.js",
+  "api/warrant-flow-latest.js",
+  "api/cb-detect-latest.js",
+];
 
-const scannerMarkers = ACTIVE_RUNTIME_MODULES.map((key) => MODULE_FILES[key].scanner).filter(Boolean).concat([["scripts/generate-slim-cache.js", "DESKTOP_API_ONLY_STATIC_OUTPUT = true"]]);
+const scannerMarkers = [
+  ["scripts/scan-intraday-signals.js", "STRATEGY2_API_ONLY = true"],
+  ["scripts/scan-strategy3-cache.js", "STRATEGY3_API_ONLY = true"],
+  ["scripts/scan-strategy4-cache.js", "STRATEGY4_API_ONLY = true"],
+  ["scripts/scan-strategy5-cache.js", "STRATEGY5_API_ONLY = true"],
+  ["scripts/scan-institution-cache.js", "INSTITUTION_API_ONLY = true"],
+  ["scripts/scan-warrant-flow-cache.js", "WARRANT_FLOW_API_ONLY = true"],
+  ["scripts/generate-slim-cache.js", "DESKTOP_API_ONLY_STATIC_OUTPUT = true"],
+];
 
 const publishSourceFiles = [
   "scripts/sync-main-deploy-source.js",

@@ -14,7 +14,10 @@ function main() {
     output: DATA_FILE,
   }, null, 2));
   const expectedWaitingState = status.state === "PENDING_NOT_DUE" || String(status.reason || "").startsWith("pending_not_due");
-  if (!expectedWaitingState && status.unattendedStatus !== "YES" && status.unattendedStatus !== "PREVIOUS_GOOD_HOLD") process.exitCode = 1;
+  const previousGoodHold = status.unattendedStatus === "PREVIOUS_GOOD_HOLD"
+    || status.state === "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD"
+    || String(status.reason || "").includes("market_closed_preserve_previous_good");
+  if (!expectedWaitingState && status.unattendedStatus !== "YES" && !previousGoodHold) process.exitCode = 1;
 }
 
 main();

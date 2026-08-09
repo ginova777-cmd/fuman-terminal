@@ -705,6 +705,7 @@ function strategy2HardAReadiness(payload = {}) {
   if (
     payload?.sourceGate?.publishAllowed === true
     || (payload?.currentSourceGateCoverage?.ready === true && payload?.sourceGate?.rawPublishAllowed === true)
+    || strategy2CompletedRunSnapshotDisplayReady(payload)
   ) {
     return { ok: true, issues: [] };
   }
@@ -743,7 +744,7 @@ function strategy2HardAReadiness(payload = {}) {
     cleanNumber(quote.active_symbols)
   );
   const maThreshold = expectedSymbols > 0 ? Math.ceil(expectedSymbols * 0.95) : 300;
-  const ma20 = cleanNumber(ma.ready_ma20_continuous ?? ma.readyGe20 ?? ma.ready_ge_20);
+  const ma20 = cleanNumber(ma.ready_ma20_continuous);
   const ma35 = cleanNumber(ma.ready_ma35_continuous ?? ma.readyGe35 ?? ma.ready_ge_35);
   if (ma20 < maThreshold) issues.push(`a_ready_ma20_continuous_below_${maThreshold}`);
   if (ma35 < maThreshold) issues.push(`a_ready_ma35_continuous_below_${maThreshold}`);
@@ -1006,6 +1007,97 @@ function strategy2RunSnapshotReady(payload = {}) {
 function strategy2LatestRunQualityReady(value) {
   return /^(complete|ok|ready|fresh)$/i.test(String(value || "").trim());
 }
+
+function strategy2CompletedRunSnapshotDisplayReady(payload = {}, qualityStatus = "") {
+  const today = payload?.marketSession?.today || taipeiClock().ymd;
+  const payloadTradeDate = compactDate(payload?.tradeDate || payload?.usedDate || payload?.sourceDate || payload?.date || payload?.marketSession?.marketDataDate || "");
+  const rowCount = cleanNumber(payload?.count ?? payload?.resultCount ?? payload?.totalCount ?? payload?.readbackCount);
+  const arrayCount = Math.max(
+    Array.isArray(payload?.rows) ? payload.rows.length : 0,
+    Array.isArray(payload?.records) ? payload.records.length : 0,
+    Array.isArray(payload?.events) ? payload.events.length : 0
+  );
+  const runQualityPayload = payload?.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
+    ? payload.run_quality_at_publish
+    : {};
+  const runQuality = qualityStatus || runQualityPayload.qualityStatus || runQualityPayload.status || payload?.qualityStatus;
+  const runPublishAllowed = runQualityPayload.publishAllowed === true || payload?.publishAllowed === true;
+  return Boolean(
+    strategy2RunSnapshotReady(payload)
+    && payload?.complete === true
+    && payload?.runId
+    && payloadTradeDate === today
+    && (strategy2LatestRunQualityReady(runQuality) || runPublishAllowed)
+    && payload?.cacheSource === "supabase-api"
+    && payload?.fallbackUsed !== true
+    && payload?.noTodayDetections !== true
+    && Math.max(rowCount, arrayCount) > 0
+  );
+}
+function strategy2FormalDisplayAllowed(payload = {}) {
+  const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
+    ? payload.run_quality_at_publish
+    : {};
+  const evidenceStatus = String(payload.evidenceStatus || payload.sourceEvidenceStatus || quality.evidenceStatus || "").toLowerCase();
+  const unattendedStatus = String(payload.unattendedStatus || payload.unattended?.status || quality.unattendedStatus || "").toUpperCase();
+  return Boolean(
+    payload.publishAllowed !== false
+    && payload.publishBlocked !== true
+    && payload.fallbackUsed !== true
+    && payload.preservePreviousGood !== true
+    && (evidenceStatus === "complete" || evidenceStatus === "sufficient")
+    && unattendedStatus !== "NO"
+  );
+}
+
+function hideStrategy2PreviousGoodRows(payload = {}, reason = "strategy2_previous_good_hidden") {
+  if (strategy2FormalDisplayAllowed(payload)) return payload;
+  const rows = Array.isArray(payload.rows) ? payload.rows : [];
+  const events = Array.isArray(payload.events) ? payload.events : [];
+  const records = Array.isArray(payload.records) ? payload.records : [];
+  const hiddenPreviousGoodCount = Math.max(
+    Number(payload.hiddenPreviousGoodCount || 0),
+    rows.length,
+    events.length,
+    records.length,
+    Number(payload.count || 0),
+    Number(payload.resultCount || 0),
+    Number(payload.readbackCount || 0)
+  );
+  return {
+    ...payload,
+    ok: false,
+    status: payload.status === "ready" ? "degraded" : payload.status,
+    qualityStatus: payload.qualityStatus === "complete" ? "degraded" : payload.qualityStatus,
+    displayMode: payload.displayMode || "blocked_previous_good_hidden",
+    previousGoodRowsHidden: hiddenPreviousGoodCount > 0,
+    hiddenPreviousGoodCount,
+    previousGoodDisplayPolicy: "formal terminal hides previous-good rows unless publishAllowed/evidence/unattended are complete",
+    rows: [],
+    events: [],
+    records: [],
+    count: 0,
+    resultCount: 0,
+    readbackCount: 0,
+    publishAllowed: false,
+    publishBlocked: true,
+    publishBlockedReason: payload.publishBlockedReason || payload.blockedReason || payload.scanner_block_reason || reason,
+    evidenceStatus: payload.evidenceStatus || payload.sourceEvidenceStatus || "insufficient",
+    sourceEvidenceStatus: payload.sourceEvidenceStatus || payload.evidenceStatus || "insufficient",
+    unattendedStatus: payload.unattendedStatus || payload.unattended?.status || "NO",
+    unattended: {
+      ...(payload.unattended || {}),
+      status: payload.unattendedStatus || payload.unattended?.status || "NO",
+      canRunUnattended: false,
+      evidenceStatus: payload.evidenceStatus || payload.sourceEvidenceStatus || "insufficient",
+      reason: payload.publishBlockedReason || payload.blockedReason || payload.scanner_block_reason || reason,
+    },
+    degradedBlocksLatest: true,
+    preservePreviousGood: true,
+    mustPreserveLatest: true,
+  };
+}
+
 function compactStrategy2Payload(payload, options) {
   if (!options?.compact) return attachStrategy2SelfCheck(payload, { deferHardA: options?.deferHardA === true });
   const limit = options.limit || 60;
@@ -1042,6 +1134,18 @@ function compactStrategy2Payload(payload, options) {
   const compactUnattendedStatus = compactPublishAllowed
     ? "YES"
     : payload?.unattendedStatus || payload?.unattended?.status || "NO";
+    const displayAllowed = strategy2FormalDisplayAllowed({
+    ...payload,
+    publishAllowed: compactPublishAllowed,
+    publishBlocked: compactPublishBlocked,
+    evidenceStatus: compactEvidenceStatus,
+    unattendedStatus: compactUnattendedStatus,
+    preservePreviousGood: compactPublishAllowed ? payload?.preservePreviousGood === true : true,
+  });
+  const displayRows = displayAllowed ? rows : [];
+  const displayEvents = displayAllowed ? events : [];
+  const displayRecords = displayAllowed ? records : [];
+  const hiddenPreviousGoodCount = displayAllowed ? 0 : Math.max(rows.length, events.length, records.length);
   const compactPayload = {
     ok: compactPublishAllowed ? payload?.ok !== false : false,
     compact: true,
@@ -1094,7 +1198,13 @@ function compactStrategy2Payload(payload, options) {
     latestPointerUpdated: compactPublishAllowed ? payload?.latestPointerUpdated === true : false,
     scanWindow: payload?.scanWindow || null,
     marketSession: payload?.marketSession || null,
-    count: rows.length,
+    displayMode: displayAllowed ? (noTodayDetections ? "today_zero_result_complete" : "today_complete") : "blocked_previous_good_hidden",
+    previousGoodRowsHidden: !displayAllowed && hiddenPreviousGoodCount > 0,
+    hiddenPreviousGoodCount,
+    previousGoodDisplayPolicy: "formal terminal hides previous-good rows unless publishAllowed/evidence/unattended are complete",
+    count: displayRows.length,
+    resultCount: displayRows.length,
+    readbackCount: displayRows.length,
     matchCount: cleanNumber(payload?.matchCount || payload?.entryCount || payload?.aCount || rows.length),
     entryCount: cleanNumber(payload?.entryCount || payload?.aCount || events.length),
     aCount: cleanNumber(payload?.aCount || payload?.entryCount || events.length),
@@ -1102,9 +1212,9 @@ function compactStrategy2Payload(payload, options) {
     totalCount: cleanNumber(payload?.totalCount || payload?.scanned || payload?.total || payload?.records?.length),
     scanned: cleanNumber(payload?.scanned || payload?.records?.length),
     total: cleanNumber(payload?.total || payload?.records?.length),
-    events,
-    records,
-    rows,
+    events: displayEvents,
+    records: displayRecords,
+    rows: displayRows,
     transport: {
       ...(payload?.transport || {}),
       compact: true,
@@ -1325,8 +1435,8 @@ function buildStrategy2SourceGateSnapshotFields(payload, sourceGate, sourceCover
     cleanNumber(runSourcePayload.ready_ma35_continuous),
     today1mSymbols
   );
-  const readyGe20 = Math.max(
-    cleanNumber(gateCoverage.readyGe20),
+  const readyMa20 = Math.max(
+    cleanNumber(gateCoverage.readyMa20),
     cleanNumber(runSourcePayload.ready_ma20_continuous),
     readyGe35
   );
@@ -1416,7 +1526,7 @@ function buildStrategy2SourceGateSnapshotFields(payload, sourceGate, sourceCover
       ready: true,
       source: STRATEGY2_SOURCE_STATUS_NAME,
       checkedAt: capturedAt,
-      ready_ma20_continuous: readyGe20,
+      ready_ma20_continuous: readyMa20,
       ready_ma35_continuous: readyGe35,
       expected_symbols: expected,
       reason: "Strategy2 MA readiness covered by dedicated daytrade source gate",
@@ -1483,14 +1593,18 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     ? payload.run_quality_at_publish
     : {};
   const immutableRunQualityStatus = runQuality.qualityStatus || runQuality.status || payload?.qualityStatus;
+  const completedRunSnapshotDisplayReady = strategy2CompletedRunSnapshotDisplayReady(payload, immutableRunQualityStatus);
   const publishedRunSnapshotAllowed = Boolean(
-    runSnapshotReady
-    && payload?.complete === true
-    && payload?.runId
-    && strategy2LatestRunQualityReady(immutableRunQualityStatus)
-    && payload?.cacheSource === "supabase-api"
-    && payload?.fallbackUsed !== true
-    && payload?.noTodayDetections !== true
+    completedRunSnapshotDisplayReady
+    || (
+      runSnapshotReady
+      && payload?.complete === true
+      && payload?.runId
+      && strategy2LatestRunQualityReady(immutableRunQualityStatus)
+      && payload?.cacheSource === "supabase-api"
+      && payload?.fallbackUsed !== true
+      && payload?.noTodayDetections !== true
+    )
   );
   const priorityFirstPublishAllowed = Boolean(
     payload?.complete === true
@@ -1515,14 +1629,7 @@ function attachStrategy2PublishGate(payload, sourceGate) {
   const sourceGateCoverage = normalizedSourceCoverage;
   const today = payload?.marketSession?.today || taipeiClock().ymd;
   const payloadTradeDate = compactDate(payload?.tradeDate || payload?.usedDate || payload?.sourceDate || payload?.date || payload?.marketSession?.marketDataDate || "");
-  const runCompleteReady = Boolean(
-    payload?.complete === true
-    && payload?.runId
-    && payloadTradeDate === today
-    && strategy2LatestRunQualityReady(immutableRunQualityStatus)
-    && payload?.cacheSource === "supabase-api"
-    && payload?.fallbackUsed !== true
-  );
+  const runCompleteReady = Boolean(completedRunSnapshotDisplayReady);
   const topLevelSourceCoverage = runCompleteReady
     ? {
       ...sourceGateCoverage,
@@ -2147,7 +2254,8 @@ async function handler(request, response) {
           scanner_block_reason: "",
         }
         : gatedPayload;
-      response.status(200).json(responsePayload);
+      const finalResponsePayload = hideStrategy2PreviousGoodRows(responsePayload, "strategy2_publish_gate_blocked_previous_good_hidden");
+      response.status(200).json(finalResponsePayload);
       return;
     }
     const runtimeHistoryPayload = readStrategy2RuntimeHistoryPayload(marketSession, options);
@@ -2172,5 +2280,14 @@ async function handler(request, response) {
 };
 
 module.exports = withEntitlementRequired(handler, "strategy2");
+
+
+
+
+
+
+
+
+
 
 

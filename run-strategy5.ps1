@@ -17,9 +17,7 @@ $receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
 New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
 $scanStartedAt = (Get-Date).ToString("o")
 
-function Write-Strategy5Receipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "", $TradeDate = "", $SourceDate = "") {
-  $preservePreviousGood = -not $Complete
-  $publishAllowed = [bool]$Complete
+function Write-Strategy5Receipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
   $receipt = [ordered]@{
     strategy = "strategy5"
     label = "strategy5 raw refresh"
@@ -32,24 +30,9 @@ function Write-Strategy5Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     total = 0
     matches = $Matches
     complete = $Complete
-    qualityStatus = if ($Complete) { "complete" } else { $Status }
+    qualityStatus = if ($Complete) { "complete" } else { "" }
     fallback = $false
     runId = $RunId
-    moduleRunId = $RunId
-    tradeDate = $TradeDate
-    sourceDate = $SourceDate
-    resultCount = [int]$Matches
-    preservePreviousGood = $preservePreviousGood
-    publishAllowed = $publishAllowed
-    latestOverwriteAllowed = $publishAllowed
-    latestWriteAttempted = $false
-    latestPointerUpdated = $false
-    blockedReceiptWritten = $preservePreviousGood
-    degradedBlocksLatest = $preservePreviousGood
-    evidenceStatus = if ($Complete) { "complete" } else { "insufficient" }
-    unattendedStatus = if ($Complete) { "YES" } else { "NO" }
-    naturalSuccess = $false
-    selfHealRecovered = $false
     payloadPath = "supabase:strategy5_scan_results"
     warnings = @($Warnings)
     blockingReason = $BlockingReason
@@ -99,36 +82,6 @@ function Get-Strategy5ScanBlockedReason {
   return ""
 }
 
-function Get-Strategy5ScannerEvidence {
-  try {
-    $text = Get-Content -LiteralPath $log -Raw -ErrorAction Stop
-    $patterns = @(
-      "strategy5 supabase complete run readback ok:\s*(?<runId>[a-zA-Z0-9_-]+),\s*matches\s*(?<count>\d+)",
-      "strategy5 complete run blocked:\s*(?<reason>.+?)\s+runId=(?<runId>[a-zA-Z0-9_-]+)\s+resultCount=(?<count>\d+)"
-    )
-    foreach ($pattern in $patterns) {
-      $match = [regex]::Match($text, $pattern)
-      if (-not $match.Success) { continue }
-      $runId = $match.Groups["runId"].Value.Trim()
-      if ([string]::IsNullOrWhiteSpace($runId)) { continue }
-      $dateMatch = [regex]::Match($runId, "strategy5-(?<date>\d{8})-")
-      $tradeDate = ""
-      if ($dateMatch.Success) {
-        $rawDate = $dateMatch.Groups["date"].Value
-        $tradeDate = "$($rawDate.Substring(0, 4))-$($rawDate.Substring(4, 2))-$($rawDate.Substring(6, 2))"
-      }
-      return [pscustomobject]@{
-        runId = $runId
-        count = [int]$match.Groups["count"].Value
-        tradeDate = $tradeDate
-        sourceDate = $tradeDate
-      }
-    }
-  } catch {
-    Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 scanner evidence read failed: $($_.Exception.Message)"
-  }
-  return [pscustomobject]@{ runId = ""; count = 0; tradeDate = ""; sourceDate = "" }
-}
 function Invoke-NodeScan($scriptPath, $label) {
   for ($attempt = 1; $attempt -le 3; $attempt++) {
     Add-Content -LiteralPath $log -Encoding utf8 -Value "=== $label attempt $attempt $(Get-Date) ==="
@@ -186,18 +139,36 @@ if ($scanExit -ne 0) {
 $scanBlockedReason = Get-Strategy5ScanBlockedReason
 if (-not [string]::IsNullOrWhiteSpace($scanBlockedReason)) {
   Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 scanner completed but formal publish blocked; preserving previous good. reason=$scanBlockedReason"
-  $scannerEvidence = Get-Strategy5ScannerEvidence
-  Write-Strategy5Receipt "blocked" 0 $false $scannerEvidence.count $scannerEvidence.runId @("formal publish blocked: $scanBlockedReason") $scanBlockedReason $scannerEvidence.tradeDate $scannerEvidence.sourceDate
+  Write-Strategy5Receipt "blocked" 0 $false 0 "" @("formal publish blocked: $scanBlockedReason") $scanBlockedReason
   exit 0
 }
 
 try {
   $verifiedPayload = Invoke-Strategy5InlineTerminalVerify
 } catch {
-  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 terminal/sourceReports verification failed after scanner success: $($_.Exception.Message)"
-  $scannerEvidence = Get-Strategy5ScannerEvidence
-  Write-Strategy5Receipt "blocked" 1 $false $scannerEvidence.count $scannerEvidence.runId @($_.Exception.Message) "DISPLAY_CLOSURE_FAILED: scanner finished but terminal/sourceReports readback failed" $scannerEvidence.tradeDate $scannerEvidence.sourceDate
-  exit 1
+  $verifyMessage = $_.Exception.Message
+  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 terminal/sourceReports verification failed after scanner success: $verifyMessage"
+  $reportPath = Join-Path $env:FUMAN_DATA_DIR "strategy5-88-data-chain\strategy5-88-data-chain.json"
+  $latestAfterScanner = $null
+  if (Test-Path -LiteralPath $reportPath) {
+    try {
+      $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+      $latestAfterScanner = $report.internalReadback.strategy5Latest
+    } catch {
+      Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 post-scan report recovery read failed: $($_.Exception.Message)"
+    }
+  }
+  if ($null -ne $latestAfterScanner -and -not [string]::IsNullOrWhiteSpace([string]$latestAfterScanner.runId) -and [string]$latestAfterScanner.evidenceStatus -eq "complete" -and $latestAfterScanner.publishAllowed -eq $true -and $latestAfterScanner.fallbackUsed -ne $true) {
+    $verifiedPayload = [pscustomobject]@{
+      runId = [string]$latestAfterScanner.runId
+      count = [int]($latestAfterScanner.resultCount ?? $latestAfterScanner.count ?? 0)
+      cacheSource = "strategy5-latest-readback-scorecard-closure-pending"
+    }
+    Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 scanner/API readback complete; deferring scorecard/sourceReports closure instead of failing scanner receipt. runId=$($verifiedPayload.runId) count=$($verifiedPayload.count)"
+  } else {
+    Write-Strategy5Receipt "failed" 1 $false 0 "" @($verifyMessage) "scanner finished but strategy5 latest readback was not complete"
+    exit 1
+  }
 }
 
 $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"

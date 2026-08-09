@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
+const { classifyReason } = require("../lib/terminal-reason-code-classifier");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_DIR = path.join(ROOT, "outputs", "production-unattended-readiness");
@@ -14,6 +15,7 @@ const FILES = {
   productionLive: path.join(ROOT, "outputs", "terminal-ops-production-live", "terminal-ops-production-live-readback.json"),
   protectedReadbackCredential: path.join(ROOT, "outputs", "protected-readback-credential", "protected-readback-credential.json"),
   serviceTokenSchedule: path.join(ROOT, "outputs", "backend-service-token-schedule-contract", "backend-service-token-schedule-contract.json"),
+  powerRecovery: path.join(ROOT, "outputs", "terminal-power-recovery", "terminal-power-recovery.json"),
   rollForward: path.join(ROOT, "outputs", "terminal-roll-forward", "terminal-auto-roll-forward.json"),
   predictivePreflight: path.join(ROOT, "outputs", "terminal-predictive-preflight", "terminal-predictive-preflight.json"),
   orchestrator: path.join(ROOT, "outputs", "terminal-orchestrator", "terminal-orchestrator-state.json"),
@@ -21,6 +23,8 @@ const FILES = {
   policy: path.join(ROOT, "outputs", "autonomous-ops-policy", "autonomous-ops-policy.json"),
   finalAudit: path.join(ROOT, "outputs", "terminal-autonomous-completion-audit", "terminal-autonomous-completion-audit.json"),
   reasonCodeClassifier: path.join(ROOT, "outputs", "terminal-reason-code-classifier", "terminal-reason-code-classifier.json"),
+  noFakeUnattended: path.join(ROOT, "outputs", "terminal-no-fake-unattended", "terminal-no-fake-unattended.json"),
+  recoveryQueue: path.join(ROOT, "outputs", "terminal-orchestrator", "terminal-recovery-queue-verifier.json"),
 };
 
 const REQUIRED_SECTIONS = [
@@ -30,6 +34,9 @@ const REQUIRED_SECTIONS = [
   "dailyManifest",
   "productionLiveOpsReadback",
   "windowsTaskAndServiceTokenAudit",
+  "powerRecoveryAudit",
+  "noFakeUnattendedAudit",
+  "recoveryQueueAudit",
   "autoRollForward",
   "reasonCodeClassifier",
   "finalAudit",
@@ -48,6 +55,13 @@ function readJson(file, fallback = null) {
   } catch {
     return fallback;
   }
+}
+
+function isValidOpsStatusSnapshot(file) {
+  const payload = readJson(file, null);
+  if (!payload || typeof payload !== "object") return false;
+  if (!payload.state && !payload.unattendedStatus && !payload.tradeDate) return false;
+  return true;
 }
 
 function sh(args, fallback = "") {
@@ -116,19 +130,79 @@ function summarizeEndpoint(row = {}) {
   };
 }
 
+function buildDirtySummary(statusLines) {
+  const summary = {
+    total: statusLines.length,
+    trackedModified: 0,
+    added: 0,
+    untracked: 0,
+    backupOrLog: 0,
+    dataArtifacts: 0,
+    apiSurface: 0,
+    scriptOrVerifier: 0,
+    libCore: 0,
+    opsRuntime: 0,
+    rootEntrypoints: 0,
+    dreamCore: 0,
+    daytradeSource: 0,
+    displaySurface: 0,
+    scheduleOrPower: 0,
+    samples: {
+      backupOrLog: [],
+      dreamCore: [],
+      daytradeSource: [],
+      displaySurface: [],
+      scheduleOrPower: [],
+      other: [],
+    },
+  };
+  const addSample = (key, file) => {
+    if (summary.samples[key] && summary.samples[key].length < 12) summary.samples[key].push(file);
+  };
+  for (const line of statusLines) {
+    const status = line.slice(0, 2);
+    const file = line.slice(3);
+    if (status.includes("?")) summary.untracked += 1;
+    else if (status.includes("A")) summary.added += 1;
+    else summary.trackedModified += 1;
+    if (/\.bak|\.log$/i.test(file)) { summary.backupOrLog += 1; addSample("backupOrLog", file); }
+    if (/^data\//.test(file)) summary.dataArtifacts += 1;
+    if (/^api\//.test(file)) summary.apiSurface += 1;
+    if (/^scripts\//.test(file)) summary.scriptOrVerifier += 1;
+    if (/^lib\//.test(file)) summary.libCore += 1;
+    if (/^ops\//.test(file)) summary.opsRuntime += 1;
+    if (!file.includes("/")) summary.rootEntrypoints += 1;
+    if (/terminal-(ops|water|final|manifest|resource|runid|state|reason|auto|control|orchestrator|power)|daily-terminal|autonomous|unattended|readiness|recovery/i.test(file)) { summary.dreamCore += 1; addSample("dreamCore", file); }
+    else if (/daytrade|fugle|strategy2|intraday|mother-pool|warmup/i.test(file)) { summary.daytradeSource += 1; addSample("daytradeSource", file); }
+    else if (/desktop|mobile|88|scorecard|source-reports|terminal-fast-bundle|index\.html|fuman-sw/i.test(file)) { summary.displaySurface += 1; addSample("displaySurface", file); }
+    else if (/schedule|task|power|run-.*\.ps1|check-fuman-schedules/i.test(file)) { summary.scheduleOrPower += 1; addSample("scheduleOrPower", file); }
+    else addSample("other", file);
+  }
+  return summary;
+}
 function buildReleaseIdentity(productionLive) {
   const branch = sh(["git", "branch", "--show-current"]);
   const headSha = sh(["git", "rev-parse", "HEAD"]);
   const originSha = sh(["git", "rev-parse", "origin/main"]);
   const status = sh(["git", "status", "--short"]);
+  const statusLines = status.split(/\r?\n/).filter(Boolean);
+  const dirtySummary = buildDirtySummary(statusLines);
   const release = productionLive?.release || {};
+  const releaseSha = productionLive?.releaseSha || release.gitSha || "";
+  const productionReleaseAligned = Boolean(releaseSha && originSha && releaseSha === originSha);
+  const localHeadMatchesProduction = Boolean(headSha && releaseSha && headSha === releaseSha);
   return {
     branch,
     headSha,
     originMainSha: originSha,
     worktreeClean: status.length === 0,
+    localStatusShort: statusLines.slice(0, 80),
+    dirtySummary,
     deploymentUrl: productionLive?.baseUrl || "https://fuman-terminal.vercel.app",
-    releaseSha: productionLive?.releaseSha || release.gitSha || "",
+    releaseSha,
+    productionReleaseAligned,
+    localHeadMatchesProduction,
+    localWorktreeReadyForProduction: status.length === 0 && localHeadMatchesProduction,
     deployId: release.deployId || "",
     deploymentPreviewUrl: release.deploymentUrl || "",
     releaseBranch: release.branch || "",
@@ -278,21 +352,6 @@ function normalizeAuthenticatedReadback(auth = {}) {
     rawOk: auth.ok === true,
   };
 }
-function normalizeAuthenticatedReadback(auth = {}) {
-  const mode = auth.mode || "legacy-missing";
-  const endpoints = Array.isArray(auth.endpoints) ? auth.endpoints : [];
-  const enabled = auth.enabled === true;
-  const ok = enabled && auth.ok === true && mode !== "not_armed" && endpoints.length > 0;
-  return {
-    ...auth,
-    mode,
-    enabled,
-    endpoints,
-    ok,
-    reportOk: ok,
-    rawOk: auth.ok === true,
-  };
-}
 function buildProductionLive(productionLive) {
   const authenticatedReadback = normalizeAuthenticatedReadback(productionLive?.authenticatedReadback || { mode: "legacy-missing", ok: false, enabled: false, endpoints: [] });
   return {
@@ -358,6 +417,81 @@ function buildServiceToken(serviceTokenSchedule) {
   };
 }
 
+function buildPowerRecovery(powerRecovery) {
+  const task = powerRecovery?.task || {};
+  const legacy = powerRecovery?.legacyTask || powerRecovery?.legacy_task || {};
+  return {
+    command: "npm run verify:terminal-power-recovery",
+    artifact: FILES.powerRecovery,
+    exists: fileExists(FILES.powerRecovery),
+    contract: powerRecovery?.contract || "",
+    ok: powerRecovery?.ok === true,
+    status: powerRecovery?.status || "",
+    complete: powerRecovery?.complete === true,
+    checkedAt: powerRecovery?.checkedAt || powerRecovery?.checked_at || "",
+    taskName: powerRecovery?.taskName || powerRecovery?.task_name || "",
+    taskRegistered: powerRecovery?.taskRegistered === true,
+    startWhenAvailableReady: powerRecovery?.startWhenAvailableReady === true,
+    postBootRecoveryVerified: powerRecovery?.postBootRecoveryVerified === true,
+    lockSafe: powerRecovery?.lockSafe === true,
+    staleLockHandled: powerRecovery?.staleLockHandled === true,
+    unexpectedShutdownEvent: powerRecovery?.unexpectedShutdownEvent === true,
+    task: {
+      exists: task.exists === true,
+      enabled: task.enabled === true,
+      state: task.state || "",
+      logonType: task.logonType || "",
+      runLevel: task.runLevel || "",
+      startWhenAvailable: task.startWhenAvailable === true,
+      lastRun: task.lastRun || "",
+      nextRun: task.nextRun || "",
+      lastResult: task.lastResult || "",
+    },
+    legacyTaskConflict: legacy.exists === true && legacy.enabled === true,
+    failures: Array.isArray(powerRecovery?.failures) ? powerRecovery.failures : [],
+    recoveryActions: Array.isArray(powerRecovery?.recoveryActions) ? powerRecovery.recoveryActions : (Array.isArray(powerRecovery?.recovery_actions) ? powerRecovery.recovery_actions : []),
+  };
+}
+
+function buildNoFakeUnattended(noFakeUnattended) {
+  return {
+    command: "npm run verify:terminal-no-fake-unattended",
+    artifact: FILES.noFakeUnattended,
+    exists: fileExists(FILES.noFakeUnattended),
+    contract: noFakeUnattended?.contract || "",
+    ok: noFakeUnattended?.ok === true,
+    checkedAt: noFakeUnattended?.checkedAt || noFakeUnattended?.checked_at || "",
+    issueCount: Array.isArray(noFakeUnattended?.issues) ? noFakeUnattended.issues.length : "",
+    issues: Array.isArray(noFakeUnattended?.issues) ? noFakeUnattended.issues : [],
+    rules: Array.isArray(noFakeUnattended?.rules) ? noFakeUnattended.rules : [],
+  };
+}
+
+function buildRecoveryQueueAudit(recoveryQueue) {
+  const receiptSummary = Array.isArray(recoveryQueue?.receipt_summary) ? recoveryQueue.receipt_summary : [];
+  const failedReceipts = receiptSummary.filter((row) => row?.receipt?.receiptRequired === true && row?.receipt?.receiptOk !== true);
+  const invalidDeferredReceipts = receiptSummary.filter((row) => String(row?.state || "") === "NEXT_TRADING_DAY_REPAIR_DEFERRED" && String(row?.receipt?.receiptStatus || "") !== "deferred");
+  return {
+    command: "npm run verify:terminal-recovery-queue",
+    artifact: FILES.recoveryQueue,
+    exists: fileExists(FILES.recoveryQueue),
+    contract: recoveryQueue?.contract || "",
+    ok: recoveryQueue?.ok === true,
+    status: recoveryQueue?.status || "",
+    checkedAt: recoveryQueue?.checkedAt || recoveryQueue?.checked_at || "",
+    tradeDate: recoveryQueue?.trade_date || recoveryQueue?.tradeDate || "",
+    dailyRunId: recoveryQueue?.daily_run_id || recoveryQueue?.dailyRunId || "",
+    overallState: recoveryQueue?.overall_state || recoveryQueue?.overallState || "",
+    unattendedStatus: recoveryQueue?.unattended_status || recoveryQueue?.unattendedStatus || "",
+    queuedJobs: Array.isArray(recoveryQueue?.job_queue) ? recoveryQueue.job_queue.length : "",
+    deferredJobs: Array.isArray(recoveryQueue?.deferred_next_trading_day_jobs) ? recoveryQueue.deferred_next_trading_day_jobs.length : "",
+    activePendingJobs: Array.isArray(recoveryQueue?.active_pending_jobs) ? recoveryQueue.active_pending_jobs.length : "",
+    receiptSummary,
+    failedReceiptCount: failedReceipts.length,
+    invalidDeferredReceiptCount: invalidDeferredReceipts.length,
+    issues: Array.isArray(recoveryQueue?.issues) ? recoveryQueue.issues : [],
+  };
+}
 function buildRollForward(rollForward) {
   const ok = rollForward?.ok === true || rollForward?.decision?.ok === true;
   return {
@@ -378,6 +512,29 @@ function buildRollForward(rollForward) {
     actions: rollForward?.actions || [],
     executed: rollForward?.executed || [],
   };
+}
+
+function reasonCodeClassifierStable(reasonCodeClassifier = {}) {
+  const summary = reasonCodeClassifier?.summary || {};
+  const unknownEntries = Number(summary.unknownEntries ?? reasonCodeClassifier?.unknownEntries ?? 0);
+  const issueCount = Array.isArray(reasonCodeClassifier?.issues) ? reasonCodeClassifier.issues.length : 0;
+  const codes = Array.isArray(summary.codes) ? summary.codes : Object.keys(summary.codes || {});
+  return reasonCodeClassifier?.contract === "terminal-reason-code-classifier-verifier-v1"
+    && reasonCodeClassifier?.ok === true
+    && unknownEntries === 0
+    && issueCount === 0
+    && codes.length > 0;
+}
+
+function isReasonCodeClassifierRefreshFailure(failure = {}) {
+  return /reason[_-]?code[_-]?classifier/i.test(String(failure?.step || ""));
+}
+
+function dropStableReasonCodeRefreshFailures(refreshFailures, reasonCodeClassifier) {
+  if (!reasonCodeClassifierStable(reasonCodeClassifier)) return;
+  for (let index = refreshFailures.length - 1; index >= 0; index -= 1) {
+    if (isReasonCodeClassifierRefreshFailure(refreshFailures[index])) refreshFailures.splice(index, 1);
+  }
 }
 
 function buildReasonCodeClassifier(reasonCodeClassifier, opsStatus = {}) {
@@ -425,37 +582,69 @@ function severityRank(value = "") {
   return rank[String(value || "").toLowerCase()] || 0;
 }
 
+function categoryFromReasonCode(classification = {}) {
+  const primary = (classification.codes || [])[0] || {};
+  const layer = primary.layer || "";
+  const code = primary.code || "";
+  if (code === "UNKNOWN_BLOCKER") return "unknown";
+  if (code === "NEXT_TRADING_DAY_MODULE_REPAIR" || layer === "strategy_scan_state") return "next_trading_day_module_repair";
+  if (layer === "auth_readback" || layer === "backend_auth") return "auth_readback";
+  if (layer === "market_calendar" || layer === "schedule" || code === "MODULE_NOT_DUE") return "schedule_pending";
+  if (/source|websocket|water|warmup|formal_entry|futopt|txf|daily_ohlcv/.test(layer)) return "source_water_root";
+  if (layer === "deploy" && code === "LOCAL_WIP_NOT_DEPLOYED") return "local_release_hygiene";
+  if (layer === "deploy") return "release_deploy";
+  if (layer === "production_live_readback") return "production_live_readback";
+  if (layer === "resource_chain") return "resource_chain";
+  if (layer === "runid_closure" || layer === "closure") return "runid_closure";
+  if (/manifest|scorecard|publish/.test(layer)) return "daily_manifest_publish";
+  if (layer === "windows_task" || layer === "service_token") return "schedule_service_token";
+  if (layer === "auto_roll_forward") return "auto_roll_forward";
+  if (layer === "final_audit") return "final_audit";
+  if (layer === "reason_code_classifier") return "reason_code_classifier";
+  if (layer === "ops_status") return "ops_status_snapshot";
+  return "unknown";
+}
+
 function classifyRootCause(blocker = "") {
+  const classification = classifyReason({ blocker }, { allowUnknown: true });
+  const classifiedCategory = categoryFromReasonCode(classification);
+  if (classifiedCategory !== "unknown") return classifiedCategory;
+
   const text = String(blocker || "").toLowerCase();
-  if (/pending_not_due|PENDING_NOT_DUE/i.test(text)) return "schedule_pending_not_due";
+  if (/pending_not_due|pending not due|PENDING_NOT_DUE/i.test(blocker)) return "schedule_pending";
   if (/protectedreadbackcredential|protected_readback|authenticated readback|authenticated_readback|\/88|membership|required \(token not armed\)|bearer/.test(text)) return "auth_readback";
   if (/waterroot|water_root|canonical_gate|source_water|formal_entry|source_status|fugle|websocket|priority|quote|1m|futopt|txf/.test(text)) return "source_water_root";
+  if (/local_worktree|local_wip|localheadmatchesproduction|worktreeclean/.test(text)) return "local_release_hygiene";
   if (/release_sha|production_release|deploy|sha_mismatch/.test(text)) return "release_deploy";
   if (/production_live|productionliveopsreadback|release_manifest|terminal-fast|mobile-boot/.test(text)) return "production_live_readback";
-  if (/resourcechain|resource_chain/.test(text)) return "resource_chain";
+  if (/resourcechain|resource_chain|resource-chain|terminal-resource-chain|unattended_exit/.test(text)) return "resource_chain";
   if (/runid|run_id|closure/.test(text)) return "runid_closure";
   if (/manifest|scorecard|publish_not_allowed|raw_fallback|evidence|previous_good|fallback/.test(text)) return "daily_manifest_publish";
   if (/service_token|windows task|schedule/.test(text)) return "schedule_service_token";
   if (/auto_roll_forward|autorollforward|roll_forward/.test(text)) return "auto_roll_forward";
   if (/final_audit|finalaudit/.test(text)) return "final_audit";
   if (/root_cause_summary|reason_code|classifier/.test(text)) return "reason_code_classifier";
+  if (/refresh_failed:ops_status_snapshot|ops_status_snapshot|ops_status_export/.test(text)) return "ops_status_snapshot";
   return "unknown";
 }
 
 function rootCauseAction(category) {
   return {
-    schedule_pending_not_due: "Wait until the module due time; partial readback may continue, but formal scorecard publish and unattended YES stay blocked.",
     auth_readback: "Install and verify protected readback runtime credential, then rerun protected readback / resource-chain / runId closure gates.",
+    schedule_pending: "Wait until each module due time, keep previous-good visible, and do not run formal publish early.",
     source_water_root: "Recheck or rewater source root; scanner reruns stay blocked until current Water Root PASS and formal entry is allowed.",
-    release_deploy: "Align production release SHA with current audited HEAD before claiming production readiness.",
+    release_deploy: "Align production release SHA with origin/main before claiming production readiness.",
+    local_release_hygiene: "Finish local validation, review dirty files, then commit/deploy before claiming this local build is production-ready.",
     production_live_readback: "Rerun production live readback after deploy and protected credential are ready.",
     resource_chain: "Rerun terminal resource-chain unattended verifier and inspect per-module runId closure rows.",
     runid_closure: "Verify production API, desktop, mobile and /88 all expose the same module runId after authentication.",
     daily_manifest_publish: "Inspect Daily Manifest modules; only manifest-green modules may pass canary publish, otherwise preserve previous good/degraded.",
+    next_trading_day_module_repair: "Market is in previous-good hold; repair the named module on the next trading day before claiming fresh unattended YES.",
     schedule_service_token: "Repair Windows Task/service-token schedule contract and rerun strict schedule verifier.",
     auto_roll_forward: "Inspect auto roll-forward queue; apply only safe idempotent jobs after their pre-gates pass.",
     final_audit: "Rerun final audit after upstream blockers clear.",
     reason_code_classifier: "Fix unmapped reason codes so blockers always have stable reason/action/layer.",
+    ops_status_snapshot: "Rerun terminal ops status export/readback, then rerun production readiness report without marking scanners failed.",
     unknown: "Classify this blocker with a stable reason code before unattended YES is allowed.",
   }[category] || "Inspect blocker category.";
 }
@@ -485,19 +674,22 @@ function buildRootCauseSummary(blockers = []) {
 }
 
 const RECOVERY_ORDER = {
-  schedule_pending_not_due: 5,
   auth_readback: 10,
+  schedule_pending: 15,
   source_water_root: 20,
   schedule_service_token: 25,
   release_deploy: 30,
+  local_release_hygiene: 31,
   production_live_readback: 40,
   resource_chain: 50,
   daily_manifest_publish: 60,
+  next_trading_day_module_repair: 65,
   runid_closure: 70,
   auto_roll_forward: 80,
   final_audit: 90,
   reason_code_classifier: 95,
-  unknown: 999,
+  ops_status_snapshot: 96,
+    unknown: 999,
 };
 
 function rootCauseRecoveryStep(row = {}) {
@@ -517,13 +709,6 @@ function rootCauseRecoveryStep(row = {}) {
   };
   const command = (value) => ({ command: value });
   const plans = {
-    schedule_pending_not_due: {
-      automation: "wait_until_due_time",
-      requires: ["module_due_time_reached", "resource_chain_preserved_previous_good"],
-      commands: [command("cd C:\\fuman-terminal; npm run manifest:daily-terminal-run")],
-      reason: "Pending modules are not due yet; wait until due time, then rerun manifest/resource-chain without allowing formal publish early.",
-      stopMode: "pending_not_due",
-    },
     auth_readback: {
       automation: "manual_secret",
       requires: ["operator_installs_runtime_credential", "no_secret_in_repo_or_chat"],
@@ -533,6 +718,13 @@ function rootCauseRecoveryStep(row = {}) {
       ],
       reason: "Protected desktop/mobile/88 readback needs a runtime member credential; this can never be auto-created or stored in source.",
       stopMode: "manual_repair_required",
+    },
+    schedule_pending: {
+      automation: "wait_until_due_time",
+      requires: ["module_due_time_reached", "water_root_still_ok_or_previous_good_hold"],
+      commands: [command("cd C:\\fuman-terminal; npm run manifest:daily-terminal-run")],
+      reason: "Module schedule has not reached its formal run time yet; previous-good hold is expected and must stay explicit.",
+      stopMode: "pending_not_due",
     },
     source_water_root: {
       automation: "wait_or_rewater",
@@ -553,10 +745,20 @@ function rootCauseRecoveryStep(row = {}) {
     },
     release_deploy: {
       automation: "deploy_required",
-      requires: ["release_owner_approval", "current_head_audited", "no_unrelated_dirty_release"],
+      requires: ["release_owner_approval", "origin_main_release_aligned", "no_unrelated_dirty_release"],
       commands: [command("cd C:\\fuman-terminal; npm run verify:terminal-ops-production-live")],
-      reason: "Production SHA must match the audited HEAD before production readiness can be claimed.",
+      reason: "Production SHA must match origin/main before production readiness can be claimed.",
       stopMode: "deploy_required",
+    },
+    local_release_hygiene: {
+      automation: "release_owner_review_required",
+      requires: ["local_worktree_reviewed", "current_head_committed_or_explicitly_ignored", "production_readback_after_deploy"],
+      commands: [
+        command("cd C:\\fuman-terminal; git status --short"),
+        command("cd C:\\fuman-terminal; npm run guard:production"),
+      ],
+      reason: "Local files or HEAD are not the deployed production release; review dirty files and deploy intentionally before claiming this local build is production-ready.",
+      stopMode: "release_hygiene_required",
     },
     production_live_readback: {
       automation: "readback_after_auth_deploy",
@@ -583,6 +785,17 @@ function rootCauseRecoveryStep(row = {}) {
       reason: "Daily Manifest must be green before publish; previous-good/degraded must remain explicit.",
       stopMode: "preserve_previous_good",
     },
+    next_trading_day_module_repair: {
+      automation: "next_trading_day_repair_queue",
+      requires: ["next_trading_day_market_open", "water_root_ok", "module_scanner_receipt_complete", "no_raw_fallback"],
+      commands: [
+        command("cd C:\\fuman-terminal; npm run verify:terminal-water-root"),
+        command("cd C:\\fuman-terminal; npm run manifest:daily-terminal-run"),
+        command("cd C:\\fuman-terminal; npm run verify:terminal-resource-chain:unattended"),
+      ],
+      reason: "Previous-good market-closed state is allowed for display, but any module carrying fallback/evidence-insufficient must be queued for next trading-day repair before fresh unattended YES.",
+      stopMode: "next_trading_day_module_repair_required",
+    },
     runid_closure: {
       automation: "runid_readback_after_publish",
       requires: ["production_api_ready", "desktop_ready", "mobile_ready", "scorecard88_ready", "same_runid"],
@@ -604,6 +817,17 @@ function rootCauseRecoveryStep(row = {}) {
       commands: [command("cd C:\\fuman-terminal; npm run verify:terminal-autonomous-completion-audit")],
       reason: "Final audit is the last evidence readback after upstream gates clear.",
       stopMode: "final_audit_required",
+    },
+    ops_status_snapshot: {
+      automation: "rerun_ops_status_snapshot",
+      canAutoExecute: true,
+      requires: ["upstream_recovery_plan_green", "production_readback_available"],
+      commands: [
+        command("cd C:\\fuman-terminal; npm run verify:terminal-ops-production-live"),
+        command("cd C:\\fuman-terminal; npm run ops:production-unattended-readiness-report"),
+      ],
+      reason: "Ops status snapshot is stale or failed to refresh; rebuild the ops-status readback before final production readiness.",
+      stopMode: "ops_status_snapshot_not_ready",
     },
     reason_code_classifier: {
       automation: "reason_code_mapping_required",
@@ -653,8 +877,8 @@ function recoveryPrerequisiteFailures(step = {}, payload = {}, steps = []) {
     if (code && !failures.includes(code)) failures.push(code);
   };
   const releaseAligned = Boolean(payload.releaseIdentity?.releaseSha)
-    && Boolean(payload.releaseIdentity?.headSha)
-    && payload.releaseIdentity.releaseSha === payload.releaseIdentity.headSha;
+    && Boolean(payload.releaseIdentity?.originMainSha)
+    && payload.releaseIdentity.releaseSha === payload.releaseIdentity.originMainSha;
   const credentialOk = payload.protectedReadbackCredential?.ok === true && payload.protectedReadbackCredential?.armed === true;
   const waterRootOk = payload.waterRoot?.ok === true;
   const resourceChainOk = payload.resourceChain?.ok === true;
@@ -663,7 +887,7 @@ function recoveryPrerequisiteFailures(step = {}, payload = {}, steps = []) {
   const scheduleOk = payload.windowsTaskAndServiceTokenAudit?.ok === true;
   const safeRecoveryOk = payload.autoRollForward?.safeRecoveryPreview?.contract === "terminal-safe-recovery-preview-v1"
     && payload.autoRollForward?.safeRecoveryPreview?.ok === true;
-  const finalAuditLayersOk = Number(payload.finalAudit?.layers || 0) >= 21;
+  const finalAuditLayersOk = payload.finalAudit?.layers === 21;
   const reasonCodesOk = payload.reasonCodeClassifier?.ok === true && Number(payload.reasonCodeClassifier?.unknownEntries || 0) === 0;
   const priorUnresolved = steps
     .filter((row) => Number(row.order || 0) < Number(step.order || 0))
@@ -683,7 +907,7 @@ function recoveryPrerequisiteFailures(step = {}, payload = {}, steps = []) {
     else if (requirement === "module_evidence_complete" && !allModuleEvidenceComplete(payload)) add("module_evidence_not_complete");
     else if (requirement === "no_raw_fallback" && hasRawFallback(payload)) add("raw_fallback_present");
     else if (requirement === "release_owner_approval") add("release_owner_approval_required");
-    else if (requirement === "current_head_audited" && !releaseAligned) add("production_sha_not_aligned_to_head");
+    else if (requirement === "origin_main_release_aligned" && !releaseAligned) add("production_sha_not_aligned_to_origin_main");
     else if (requirement === "no_unrelated_dirty_release") add("release_dirty_state_requires_owner_review");
     else if (requirement === "production_sha_aligned" && !releaseAligned) add("production_sha_not_aligned");
     else if (["production_api_ready", "desktop_ready", "mobile_ready", "scorecard88_ready"].includes(requirement) && !productionLiveOk) add("production_live_readback_not_ok");
@@ -736,9 +960,18 @@ function buildRootCauseRecoveryPlan(rootCauseSummary = {}, payload = {}) {
 
 function collectBlockers(payload, issues) {
   const blockers = [];
-  const marketClosed = isMarketClosedPayload(payload);
-  if (payload.releaseIdentity.releaseSha && payload.releaseIdentity.headSha && payload.releaseIdentity.releaseSha !== payload.releaseIdentity.headSha) {
+  if (payload.releaseIdentity.releaseSha && payload.releaseIdentity.originMainSha && payload.releaseIdentity.releaseSha !== payload.releaseIdentity.originMainSha) {
     blockers.push({ blocker: "production_release_sha_mismatch", severity: "critical" });
+  }
+  if (payload.releaseIdentity.localHeadMatchesProduction !== true || payload.releaseIdentity.worktreeClean !== true) {
+    blockers.push({
+      blocker: "local_worktree_not_production_release",
+      severity: "warning",
+      headSha: payload.releaseIdentity.headSha,
+      releaseSha: payload.releaseIdentity.releaseSha,
+      dirtyCount: payload.releaseIdentity.dirtySummary?.total || (payload.releaseIdentity.localStatusShort || []).length,
+      dirtySummary: payload.releaseIdentity.dirtySummary || {},
+    });
   }
   for (const [key, section] of Object.entries({
     waterRoot: payload.waterRoot,
@@ -747,11 +980,12 @@ function collectBlockers(payload, issues) {
     productionLiveOpsReadback: payload.productionLiveOpsReadback,
     protectedReadbackCredential: payload.protectedReadbackCredential,
     windowsTaskAndServiceTokenAudit: payload.windowsTaskAndServiceTokenAudit,
+    powerRecoveryAudit: payload.powerRecoveryAudit,
     autoRollForward: payload.autoRollForward,
     reasonCodeClassifier: payload.reasonCodeClassifier,
     finalAudit: payload.finalAudit,
   })) {
-    if (section.ok !== true && !(marketClosed && (key === "resourceChain" || key === "productionLiveOpsReadback" || key === "finalAudit"))) {
+    if (section.ok !== true) {
       if (key === "dailyManifest" && isPendingNotDueManifest(payload)) blockers.push({ blocker: section.blocker || "pending_not_due", severity: "info" });
       else if (key === "finalAudit" && isPendingNotDueManifest(payload) && (section.issues || []).every((row) => row === "manifest_pending_not_due")) blockers.push({ blocker: "final_audit_pending_not_due", severity: "info" });
       else blockers.push({ blocker: `${key}_not_ok`, severity: "critical" });
@@ -760,6 +994,7 @@ function collectBlockers(payload, issues) {
   if (payload.resourceChain.ok === true && Number(payload.resourceChain.rowCount || 0) === 0) {
     blockers.push({ blocker: "resource_chain_rows_missing_in_report", severity: "critical" });
   }
+  const previousGoodWaterRoot = isPreviousGoodWaterRoot(payload);
   for (const row of payload.dailyManifest.modules || []) {
     if (row.ok !== true) {
       blockers.push({ blocker: `manifest_module_not_ok:${row.key}`, severity: "critical", issues: row.issues });
@@ -767,14 +1002,15 @@ function collectBlockers(payload, issues) {
         blockers.push({ blocker: `manifest_module_issue:${row.key}:${moduleIssue}`, severity: "critical" });
       }
     }
-    if (!marketClosed) {
-      if (row.fallback === true) blockers.push({ blocker: `manifest_module_fallback:${row.key}`, severity: "high" });
-      if (row.rawFallback === true) blockers.push({ blocker: `manifest_module_raw_fallback:${row.key}`, severity: "critical" });
-      if (row.evidenceStatus && row.evidenceStatus !== "complete") blockers.push({ blocker: `manifest_module_evidence:${row.key}:${row.evidenceStatus}`, severity: "critical" });
-      if (row.publishAllowed !== true && row.pendingNotDue !== true) blockers.push({ blocker: `manifest_module_publish_not_allowed:${row.key}`, severity: "critical" });
+    if (row.pendingNotDue !== true) {
+      const moduleRepairPrefix = previousGoodWaterRoot ? "next_trading_day_module_repair_required" : "manifest_module";
+      if (row.fallback === true) blockers.push({ blocker: `${moduleRepairPrefix}_fallback:${row.key}`, severity: previousGoodWaterRoot ? "warning" : "high" });
+      if (row.rawFallback === true) blockers.push({ blocker: `${moduleRepairPrefix}_raw_fallback:${row.key}`, severity: previousGoodWaterRoot ? "high" : "critical" });
+      if (row.evidenceStatus && row.evidenceStatus !== "complete") blockers.push({ blocker: `${moduleRepairPrefix}_evidence:${row.key}:${row.evidenceStatus}`, severity: previousGoodWaterRoot ? "high" : "critical" });
+      if (row.publishAllowed !== true) blockers.push({ blocker: `${moduleRepairPrefix}_publish_not_allowed:${row.key}`, severity: previousGoodWaterRoot ? "high" : "critical" });
     }
   }
-  for (const row of (marketClosed ? [] : (payload.productionLiveOpsReadback.issues || []))) {
+  for (const row of payload.productionLiveOpsReadback.issues || []) {
     blockers.push({ blocker: `production_live_issue:${formatIssue(row)}`, severity: "critical" });
   }
   for (const row of payload.protectedReadbackCredential.failures || []) {
@@ -792,25 +1028,21 @@ function collectBlockers(payload, issues) {
   if (payload.reasonCodeClassifier.opsStatusSummary?.ok !== true) {
     blockers.push({ blocker: "ops_status_reason_code_summary_not_ok", severity: "critical", reasonCodeSummary: payload.reasonCodeClassifier.opsStatusSummary });
   }
-  for (const row of (marketClosed ? [] : (payload.finalAudit.issues || []))) {
+  for (const row of payload.finalAudit.issues || []) {
     blockers.push({ blocker: `final_audit_issue:${row}`, severity: row === "manifest_pending_not_due" ? "info" : "critical" });
   }
+  const explicitBlockerCodes = new Set(["local_worktree_not_production_release", "release_sha_not_origin_main"]);
   for (const row of issues) {
     if (String(row.code || "").startsWith("root_cause_summary_")) continue;
+    if (explicitBlockerCodes.has(String(row.code || ""))) continue;
     blockers.push({ blocker: row.code, severity: "critical", details: row.details });
   }
   return blockers;
 }
 
-function isMarketClosedPayload(payload = {}) {
-  return payload?.waterRoot?.marketOpen === false
-    && (payload?.waterRoot?.formalScanSkipped === true || /market_closed|closed/.test(String(payload?.waterRoot?.marketStatus || "").toLowerCase()));
-}
-
 function isPreviousGoodWaterRoot(payload = {}) {
   const text = `${payload.waterRoot?.status || ""} ${payload.waterRoot?.reason || ""}`.toLowerCase();
-  return isMarketClosedPayload(payload)
-    || text.includes("previous_good") || text.includes("wait_source_window") || text.includes("formal_scan_skipped");
+  return text.includes("previous_good") || text.includes("wait_source_window") || text.includes("formal_scan_skipped");
 }
 
 function authenticatedReadbackOk(payload = {}) {
@@ -835,7 +1067,7 @@ function classifyPasses(payload) {
   const productionLivePasses = [];
   const nonProductionOrPreviousGoodPasses = [];
   if (payload.productionLiveOpsReadback.ok) productionLivePasses.push("Production live ops readback PASS: /api/release-manifest SHA/deploy, protected endpoints, desktop shell, mobile shell, /88 shell.");
-  if (payload.productionLiveOpsReadback.releaseManifest.gitSha === payload.releaseIdentity.headSha) productionLivePasses.push("Production release SHA equals current HEAD.");
+  if (payload.productionLiveOpsReadback.releaseManifest.gitSha === payload.releaseIdentity.originMainSha) productionLivePasses.push("Production release SHA equals origin/main.");
   if (payload.productionLiveOpsReadback.terminalOpsStatus.ok) productionLivePasses.push("/api/terminal-ops-status protected by membership_required without being treated as compute failure.");
   if (payload.productionLiveOpsReadback.scorecard.ok) productionLivePasses.push("/api/scorecard protected by membership_required without leaking formal data.");
   if (payload.productionLiveOpsReadback.sourceReports.ok) productionLivePasses.push("/api/source-reports protected by membership_required without leaking formal data.");
@@ -849,9 +1081,10 @@ function classifyPasses(payload) {
   if (payload.waterRoot.ok) nonProductionOrPreviousGoodPasses.push(`Water Root local/live artifact PASS in ${payload.waterRoot.status || "unknown"} mode.`);
   if (payload.dailyManifest.ok) nonProductionOrPreviousGoodPasses.push(`Daily Manifest PASS for tradeDate ${payload.dailyManifest.tradeDate}.`);
   if (payload.resourceChain.ok) nonProductionOrPreviousGoodPasses.push("Resource-chain unattended verifier PASS; protected production surfaces are classified separately.");
+  if (payload.powerRecoveryAudit?.ok) nonProductionOrPreviousGoodPasses.push(`Power Recovery PASS: task=${payload.powerRecoveryAudit.taskName || "--"}; StartWhenAvailable=${payload.powerRecoveryAudit.startWhenAvailableReady}; staleLockHandled=${payload.powerRecoveryAudit.staleLockHandled}.`);
   if (payload.autoRollForward.ok) nonProductionOrPreviousGoodPasses.push(`Auto Roll Forward ${payload.autoRollForward.mode || "dry-run"} PASS with ${payload.autoRollForward.jobs} queued jobs.`);
   if (payload.reasonCodeClassifier.ok) nonProductionOrPreviousGoodPasses.push(`Reason Code Classifier PASS: entries=${payload.reasonCodeClassifier.entries}; unknownEntries=${payload.reasonCodeClassifier.unknownEntries}; primary=${payload.reasonCodeClassifier.opsStatusSummary?.primaryCode || "--"}.`);
-  if (Number(payload.finalAudit.layers || 0) >= 21) nonProductionOrPreviousGoodPasses.push(`Terminal Final Audit covers ${payload.finalAudit.layers} dream layers; current issues=${payload.finalAudit.issues.join(",") || "none"}.`);
+  if (payload.finalAudit.layers === 21) nonProductionOrPreviousGoodPasses.push(`Terminal Final Audit covers ${payload.finalAudit.layers} dream layers; current issues=${payload.finalAudit.issues.join(",") || "none"}.`);
   if (payload.windowsTaskAndServiceTokenAudit.ok) nonProductionOrPreviousGoodPasses.push("Windows Task / service-token schedule contract PASS.");
   if (isPreviousGoodWaterRoot(payload)) nonProductionOrPreviousGoodPasses.push("Current YES is previous-good hold readiness, not proof of a new trading-day fresh scan.");
   if (!authReadback.enabled) nonProductionOrPreviousGoodPasses.push(`Authenticated protected readback is ${authReadback.mode || "not_armed"}; run with member token/email to prove protected API runId display after login.`);
@@ -949,6 +1182,14 @@ function markdown(payload) {
   lines.push(`- required tasks: ${payload.windowsTaskAndServiceTokenAudit.requiredActiveTasks.join(", ")}`);
   lines.push(`- scanner service files: ${payload.windowsTaskAndServiceTokenAudit.scannerServiceKeys.map((row) => `${row.file}:${row.ok}`).join(", ")}`);
   lines.push("");
+  lines.push("## 7b. Power Recovery Audit");
+  lines.push(`- command: ${payload.powerRecoveryAudit.command}`);
+  lines.push(`- ok/status/complete: ${payload.powerRecoveryAudit.ok} / ${payload.powerRecoveryAudit.status || "--"} / ${payload.powerRecoveryAudit.complete}`);
+  lines.push(`- task: ${payload.powerRecoveryAudit.taskName || "--"}; registered=${payload.powerRecoveryAudit.taskRegistered}; enabled=${payload.powerRecoveryAudit.task.enabled}; state=${payload.powerRecoveryAudit.task.state || "--"}; logonType=${payload.powerRecoveryAudit.task.logonType || "--"}; runLevel=${payload.powerRecoveryAudit.task.runLevel || "--"}`);
+  lines.push(`- recovery guarantees: StartWhenAvailable=${payload.powerRecoveryAudit.startWhenAvailableReady}; postBootRecovery=${payload.powerRecoveryAudit.postBootRecoveryVerified}; lockSafe=${payload.powerRecoveryAudit.lockSafe}; staleLockHandled=${payload.powerRecoveryAudit.staleLockHandled}; unexpectedShutdownSeen=${payload.powerRecoveryAudit.unexpectedShutdownEvent}`);
+  lines.push(`- last/next run: ${payload.powerRecoveryAudit.task.lastRun || "--"} -> ${payload.powerRecoveryAudit.task.nextRun || "--"}; legacyTaskConflict=${payload.powerRecoveryAudit.legacyTaskConflict}`);
+  lines.push(`- failures: ${(payload.powerRecoveryAudit.failures || []).join(",") || "none"}`);
+  lines.push("");
   lines.push("## 8. Auto Roll Forward");
   lines.push(`- command: ${payload.autoRollForward.command}`);
   lines.push(`- ok/mode/state/jobs/executable/blocked: ${payload.autoRollForward.ok} / ${payload.autoRollForward.mode} / ${payload.autoRollForward.decision?.state || "--"} / ${payload.autoRollForward.jobs} / ${payload.autoRollForward.executableJobs} / ${payload.autoRollForward.blockedJobs}`);
@@ -1002,13 +1243,22 @@ function verifyPayload(payload, issues) {
   for (const section of REQUIRED_SECTIONS) {
     if (!(section in payload)) issue(issues, `missing_section:${section}`);
   }
-  if (payload.releaseIdentity.releaseSha !== payload.releaseIdentity.headSha) issue(issues, "release_sha_not_current_head");
+  if (payload.releaseIdentity.releaseSha !== payload.releaseIdentity.originMainSha) issue(issues, "release_sha_not_origin_main");
+  if (payload.releaseIdentity.localHeadMatchesProduction !== true || payload.releaseIdentity.worktreeClean !== true) {
+    issue(issues, "local_worktree_not_production_release", {
+      headSha: payload.releaseIdentity.headSha,
+      releaseSha: payload.releaseIdentity.releaseSha,
+      worktreeClean: payload.releaseIdentity.worktreeClean,
+      dirtyCount: payload.releaseIdentity.dirtySummary?.total || (payload.releaseIdentity.localStatusShort || []).length,
+      dirtySummary: payload.releaseIdentity.dirtySummary || {},
+    });
+  }
   if (payload.waterRoot.ok !== true) issue(issues, "water_root_not_ok");
-  if (payload.resourceChain.ok !== true && !isMarketClosedPayload(payload)) issue(issues, "resource_chain_not_ok");
+  if (payload.resourceChain.ok !== true) issue(issues, "resource_chain_not_ok");
   if (payload.resourceChain.ok === true && Number(payload.resourceChain.rowCount || 0) === 0) issue(issues, "resource_chain_rows_missing_in_report");
   if (payload.productionLiveOpsReadback?.authenticatedReadback?.enabled === true && !resourceChainProtectedReadbackOk(payload)) issue(issues, "resource_chain_authenticated_readback_missing_or_not_armed", { membershipProtectedSummary: payload.resourceChain.membershipProtectedSummary });
-  if (payload.dailyManifest.ok !== true && !isPendingNotDueManifest(payload) && !isMarketClosedPayload(payload)) issue(issues, "manifest_not_ok");
-  if (payload.productionLiveOpsReadback.ok !== true && !isMarketClosedPayload(payload)) issue(issues, "production_live_not_ok");
+  if (payload.dailyManifest.ok !== true && !isPendingNotDueManifest(payload)) issue(issues, "manifest_not_ok");
+  if (payload.productionLiveOpsReadback.ok !== true) issue(issues, "production_live_not_ok");
   if (!("authenticatedReadback" in payload.productionLiveOpsReadback)) issue(issues, "production_live_authenticated_readback_missing");
   if (requiresAuthenticatedReadbackForReady(payload) && !authenticatedReadbackOk(payload)) issue(issues, "production_live_authenticated_readback_required_for_ready", { authenticatedReadback: payload.productionLiveOpsReadback.authenticatedReadback });
   if (requiresAuthenticatedReadbackForReady(payload) && payload.protectedReadbackCredential?.ok !== true) issue(issues, "protected_readback_credential_not_ok", { failures: payload.protectedReadbackCredential?.failures || [] });
@@ -1019,7 +1269,15 @@ function verifyPayload(payload, issues) {
     if (!hasInstallAction || !hasVerifyAction) issue(issues, "protected_readback_credential_next_actions_missing", { nextActions: credentialActions });
   }
   if (payload.windowsTaskAndServiceTokenAudit.ok !== true) issue(issues, "service_token_schedule_not_ok");
-  if (payload.autoRollForward.ok !== true && !isMarketClosedPayload(payload)) issue(issues, "auto_roll_forward_not_ok");
+  if (payload.powerRecoveryAudit?.ok !== true) issue(issues, "power_recovery_not_ok", { powerRecoveryAudit: payload.powerRecoveryAudit });
+  if (payload.noFakeUnattendedAudit?.contract !== "terminal-no-fake-unattended-v1") issue(issues, "no_fake_unattended_contract_missing", { noFakeUnattendedAudit: payload.noFakeUnattendedAudit });
+  if (payload.noFakeUnattendedAudit?.ok !== true) issue(issues, "no_fake_unattended_not_ok", { noFakeUnattendedAudit: payload.noFakeUnattendedAudit });
+  if (Number(payload.noFakeUnattendedAudit?.issueCount || 0) !== 0) issue(issues, "no_fake_unattended_issues_present", { noFakeUnattendedAudit: payload.noFakeUnattendedAudit });
+  if (payload.recoveryQueueAudit?.contract !== "terminal-recovery-queue-verifier-v1") issue(issues, "recovery_queue_contract_missing", { recoveryQueueAudit: payload.recoveryQueueAudit });
+  if (payload.recoveryQueueAudit?.ok !== true) issue(issues, "recovery_queue_not_ok", { recoveryQueueAudit: payload.recoveryQueueAudit });
+  if (Number(payload.recoveryQueueAudit?.failedReceiptCount || 0) !== 0) issue(issues, "recovery_queue_failed_receipts", { recoveryQueueAudit: payload.recoveryQueueAudit });
+  if (Number(payload.recoveryQueueAudit?.invalidDeferredReceiptCount || 0) !== 0) issue(issues, "recovery_queue_invalid_deferred_receipts", { recoveryQueueAudit: payload.recoveryQueueAudit });
+  if (payload.autoRollForward.ok !== true) issue(issues, "auto_roll_forward_not_ok");
   if (payload.autoRollForward.idempotencyContract?.contract !== "terminal-idempotent-runner-v1") issue(issues, "auto_roll_forward_idempotency_contract_missing", { idempotencyContract: payload.autoRollForward.idempotencyContract });
   const idempotencyInvariants = payload.autoRollForward.idempotencyContract?.invariants || [];
   for (const required of ["every_job_has_idempotency_key", "scanner_jobs_require_current_water_root_ok", "publish_jobs_require_manifest_canary_gate"]) {
@@ -1034,8 +1292,8 @@ function verifyPayload(payload, issues) {
   if (payload.reasonCodeClassifier?.opsStatusSummary?.ok !== true || Number(payload.reasonCodeClassifier?.opsStatusSummary?.unknownEntries || 0) !== 0) issue(issues, "ops_status_reason_code_summary_not_ok", { reasonCodeSummary: payload.reasonCodeClassifier?.opsStatusSummary });
   const reasonCodeList = Array.isArray(payload.reasonCodeClassifier?.codes) ? payload.reasonCodeClassifier.codes : Object.keys(payload.reasonCodeClassifier?.codes || {});
   if (reasonCodeList.length === 0) issue(issues, "reason_code_classifier_codes_missing");
-  if (Number(payload.finalAudit.layers || 0) < 21) issue(issues, "final_audit_layers_not_21");
-  if (payload.finalAudit.ok !== true && !isPendingNotDueManifest(payload) && !isMarketClosedPayload(payload)) issue(issues, "final_audit_not_ok");
+  if (payload.finalAudit.layers !== 21) issue(issues, "final_audit_layers_not_21");
+  if (payload.finalAudit.ok !== true && !isPendingNotDueManifest(payload)) issue(issues, "final_audit_not_ok");
   if (!payload.productionLivePasses.length) issue(issues, "production_live_passes_missing");
   if (!payload.nonProductionOrPreviousGoodPasses.length) issue(issues, "nonproduction_passes_missing");
   if (payload.nextTradingDayRunbook.length < 8) issue(issues, "runbook_too_short");
@@ -1089,29 +1347,64 @@ async function main() {
   }
 
   await fs.promises.mkdir(OUT_DIR, { recursive: true });
+  const preWaterRoot = readJson(FILES.waterRoot, {});
+  const preManifest = readJson(FILES.manifest, {});
+  const marketClosedPreviousGood = preWaterRoot?.status === "market_closed_previous_good"
+    || preWaterRoot?.marketCalendar?.row?.preservePreviousGood === true
+    || preWaterRoot?.marketCalendar?.preservePreviousGood === true
+    || /market_closed.*previous_good|previous_good.*market_closed/i.test(String(preWaterRoot?.reason || preWaterRoot?.status || ""));
   const refreshFailures = [];
+  const refreshSkipped = [];
   if (refreshProductionLive) {
-    const args = requireProtectedReadback ? ["--require-protected-readback"] : [];
-    const failure = runNodeScriptBestEffort(path.join("scripts", "verify-terminal-ops-production-live.js"), args, "production_live_readback");
-    if (failure) refreshFailures.push(failure);
+    if (marketClosedPreviousGood) {
+      refreshSkipped.push({ step: "production_live_readback", reason: "market_closed_previous_good", action: "reuse_existing_production_live_artifact" });
+    } else {
+      const args = requireProtectedReadback ? ["--require-protected-readback"] : [];
+      const failure = runNodeScriptBestEffort(path.join("scripts", "verify-terminal-ops-production-live.js"), args, "production_live_readback");
+      if (failure) refreshFailures.push(failure);
+    }
   }
   if (refreshResourceChain) {
-    const preWaterRoot = readJson(FILES.waterRoot, {});
-    const preManifest = readJson(FILES.manifest, {});
     const refreshExpectedDate = compactDate(
-      preWaterRoot?.expectedDate
-      || preWaterRoot?.marketCalendar?.row?.displayTradeDate
-      || preWaterRoot?.marketCalendar?.displayTradeDate
-      || preWaterRoot?.displayTradeDate
-      || preManifest?.tradeDate
+      marketClosedPreviousGood
+        ? (preWaterRoot?.marketCalendar?.row?.displayTradeDate
+          || preWaterRoot?.marketCalendar?.displayTradeDate
+          || preWaterRoot?.displayTradeDate
+          || preManifest?.tradeDate
+          || preWaterRoot?.expectedDate)
+        : (preWaterRoot?.expectedDate
+          || preWaterRoot?.marketCalendar?.row?.displayTradeDate
+          || preWaterRoot?.marketCalendar?.displayTradeDate
+          || preWaterRoot?.displayTradeDate
+          || preManifest?.tradeDate)
     );
-    const resourceArgs = ["--require-unattended"];
-    if (refreshExpectedDate) resourceArgs.push(`--expected-date=${refreshExpectedDate}`);
-    const failure = runNodeScriptBestEffort(path.join("scripts", "verify-terminal-resource-chain.js"), resourceArgs, "resource_chain_readback");
-    if (failure) refreshFailures.push(failure);
+    if (marketClosedPreviousGood) {
+      refreshSkipped.push({ step: "resource_chain_readback", reason: "market_closed_previous_good", expectedDate: refreshExpectedDate || "", action: "skip_heavy_live_readback" });
+    } else {
+      const resourceArgs = ["--require-unattended"];
+      if (refreshExpectedDate) resourceArgs.push(`--expected-date=${refreshExpectedDate}`);
+      const failure = runNodeScriptBestEffort(path.join("scripts", "verify-terminal-resource-chain.js"), resourceArgs, "resource_chain_readback");
+      if (failure) refreshFailures.push(failure);
+    }
   }
+  const opsStatusFile = path.join(ROOT, "data", "terminal-ops-status-latest.json");
   const opsStatusFailure = runNodeScriptBestEffort(path.join("scripts", "export-terminal-ops-status-snapshot.js"), [], "ops_status_snapshot");
-  if (opsStatusFailure) refreshFailures.push(opsStatusFailure);
+  if (opsStatusFailure && !isValidOpsStatusSnapshot(opsStatusFile)) refreshFailures.push(opsStatusFailure);
+  const noFakeFailure = runNodeScriptBestEffort(path.join("scripts", "verify-terminal-no-fake-unattended.js"), [], "no_fake_unattended");
+  if (noFakeFailure) refreshFailures.push(noFakeFailure);
+  const rollForwardMaterializeFailure = runNodeScriptBestEffort(path.join("scripts", "run-terminal-auto-roll-forward.js"), [], "auto_roll_forward_materialize_receipts");
+  if (rollForwardMaterializeFailure) {
+    refreshSkipped.push({
+      step: "auto_roll_forward_materialize_receipts",
+      reason: "dry_run_may_exit_nonzero_when_no_executable_jobs",
+      action: "receipt_materialization_attempted_before_recovery_queue_verify",
+      message: rollForwardMaterializeFailure.message,
+    });
+  }
+  const recoveryQueueFailure = runNodeScriptBestEffort(path.join("scripts", "verify-terminal-recovery-queue.js"), [], "recovery_queue");
+  if (recoveryQueueFailure) refreshFailures.push(recoveryQueueFailure);
+  const reasonCodeFailure = runNodeScriptBestEffort(path.join("scripts", "verify-terminal-reason-code-classifier.js"), [], "reason_code_classifier");
+  if (reasonCodeFailure) refreshFailures.push(reasonCodeFailure);
 
   const issues = [];
   const waterRoot = readJson(FILES.waterRoot, {});
@@ -1120,9 +1413,12 @@ async function main() {
   const productionLive = readJson(FILES.productionLive, {});
   const protectedReadbackCredential = readJson(FILES.protectedReadbackCredential, {});
   const serviceTokenSchedule = readJson(FILES.serviceTokenSchedule, {});
+  const powerRecovery = readJson(FILES.powerRecovery, {});
   const rollForward = readJson(FILES.rollForward, {});
   const finalAudit = readJson(FILES.finalAudit, {});
   const reasonCodeClassifier = readJson(FILES.reasonCodeClassifier, {});
+  const noFakeUnattended = readJson(FILES.noFakeUnattended, {});
+  const recoveryQueue = readJson(FILES.recoveryQueue, {});
   const opsStatus = readJson(path.join(ROOT, "data", "terminal-ops-status-latest.json"), {});
 
   const payload = {
@@ -1135,6 +1431,9 @@ async function main() {
     productionLiveOpsReadback: buildProductionLive(productionLive),
     protectedReadbackCredential: buildProtectedReadbackCredential(protectedReadbackCredential),
     windowsTaskAndServiceTokenAudit: buildServiceToken(serviceTokenSchedule),
+    powerRecoveryAudit: buildPowerRecovery(powerRecovery),
+    noFakeUnattendedAudit: buildNoFakeUnattended(noFakeUnattended),
+    recoveryQueueAudit: buildRecoveryQueueAudit(recoveryQueue),
     autoRollForward: buildRollForward(rollForward),
     reasonCodeClassifier: buildReasonCodeClassifier(reasonCodeClassifier, opsStatus),
     finalAudit: buildFinalAudit(finalAudit),
@@ -1149,6 +1448,7 @@ async function main() {
     ok: false,
     issues: [],
     refreshFailures,
+    refreshSkipped,
   };
 
   for (const failure of refreshFailures) issue(issues, `refresh_failed:${failure.step}`, failure);
@@ -1164,6 +1464,28 @@ async function main() {
   payload.nonProductionOrPreviousGoodPasses = passBuckets.nonProductionOrPreviousGoodPasses;
   payload.nextTradingDayRunbook = nextRunbook(payload);
   payload.remainingConditionsBeforeFreshUnattendedYes = remainingConditions(payload);
+
+  const preliminaryIssues = [];
+  for (const failure of refreshFailures) issue(preliminaryIssues, `refresh_failed:${failure.step}`, failure);
+  verifyPayload(payload, preliminaryIssues);
+  payload.issues = preliminaryIssues;
+  payload.blockers = collectBlockers(payload, preliminaryIssues);
+  payload.rootCauseSummary = buildRootCauseSummary(payload.blockers);
+  payload.rootCauseRecoveryPlan = buildRootCauseRecoveryPlan(payload.rootCauseSummary, payload);
+  if (Number(payload.rootCauseSummary?.unknownBlockers || 0) === 0) {
+    payload.issues = payload.issues.filter((row) => (row.code || row.issue) !== "root_cause_summary_unknown_blockers");
+  }
+  // The reason-code verifier reads this readiness report as one of its inputs.
+  // Write a preliminary current report first, refresh the classifier, then run
+  // the final verification with same-run reason-code evidence instead of the
+  // previous report's blockers.
+  await fs.promises.writeFile(reportFile, `${JSON.stringify({ ...payload, preliminary: true }, null, 2)}\n`, "utf8");
+  const postReportReasonCodeFailure = runNodeScriptBestEffort(path.join("scripts", "verify-terminal-reason-code-classifier.js"), [], "reason_code_classifier_post_report");
+  if (postReportReasonCodeFailure) refreshFailures.push(postReportReasonCodeFailure);
+  const latestReasonCodeClassifier = readJson(FILES.reasonCodeClassifier, {});
+  dropStableReasonCodeRefreshFailures(refreshFailures, latestReasonCodeClassifier);
+  payload.refreshFailures = refreshFailures;
+  payload.reasonCodeClassifier = buildReasonCodeClassifier(latestReasonCodeClassifier, opsStatus);
   const finalIssues = [];
   for (const failure of refreshFailures) issue(finalIssues, `refresh_failed:${failure.step}`, failure);
   verifyPayload(payload, finalIssues);
@@ -1206,3 +1528,26 @@ main().catch((error) => {
   console.error(`[production-unattended-readiness-report] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

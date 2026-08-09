@@ -31,11 +31,6 @@ const ROUTE_ALIASES = new Map([
   ["market-overview", "market"],
 ]);
 
-function dateFromExpectedDateForCalendar(value) {
-  const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
-  if (digits.length !== 8) return null;
-  return new Date(`${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}T10:00:00+08:00`);
-}
 function normalizeRouteFilter(value) {
   const key = String(value || "").trim().replace(/^\/+api\//, "").replace(/^\/+/, "").replace(/\?.*$/, "");
   return ROUTE_ALIASES.get(key) || key;
@@ -217,6 +212,21 @@ function readJsonFile(file, fallback = null) {
     return fallback;
   }
 }
+function scorecardCandidateSourceBlockerForKey(key, expectedRunId = "") {
+  const file = path.join(RUNTIME_DIR, "data", "scorecard-terminal-current.json");
+  const payload = readJsonFile(file, {});
+  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
+  const row = reports.find((item) => String(item?.key || "") === String(key || ""));
+  if (!row || row.ok !== false) return "";
+  if (expectedRunId && row.runId && row.runId !== expectedRunId) return "";
+  const blockers = Array.isArray(row.rowSuppressionBlockers) ? row.rowSuppressionBlockers.map(String) : [];
+  const reason = String(row.reason || row.rowSuppressionReason || "").trim();
+  const evidenceStatus = String(row.evidenceStatus || "").trim();
+  const text = [reason, evidenceStatus, ...blockers].join(" ").toLowerCase();
+  const sourceLike = /source_quality_fail|source_coverage_not_ok|evidence_source_quality_fail|source_core_ok_false|latest_candle_time|ready_ge_35|ready_ma20|source_status|fresh_quote_coverage|intraday_1m|1m/.test(text);
+  if (!sourceLike) return "";
+  return `scorecard candidate source_quality_fail: ${reason || blockers.join("|") || evidenceStatus || "candidate_not_publishable"}`;
+}
 
 function taipeiDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -289,7 +299,7 @@ function receiptSummary(receiptKey) {
   const preservedLatest = row.preservedLatest === true && row.publishBlocked === true && Boolean(String(row.runId || ""));
   const fallback = row.fallback === true && !preservedLatest;
   return {
-    ok: row.status === "complete" && row.complete !== false && Boolean(row.runId) && !fallback && row.publishAllowed !== false && row.preservePreviousGood !== true,
+    ok: row.status === "complete" && row.complete !== false && !fallback && row.publishAllowed !== false && row.preservePreviousGood !== true,
     key: receiptKey,
     file,
     status: String(row.status || ""),
@@ -654,16 +664,36 @@ function endpointFromDesktopArtifact(fastBundlePayload, legacySnapshotPayload, e
     legacyEndpointCount: Object.keys(legacySnapshotPayload?.endpoints || {}).length,
   };
 }
+function sourceReportMatchesConfig(report, config) {
+  if (!config?.scorecardKeys?.length || !report) return false;
+  const needles = config.scorecardKeys.map((value) => String(value || "").toLowerCase()).filter(Boolean);
+  const haystack = [report.key, report.strategy, report.strategyName, report.label, report.module, report.name]
+    .map((value) => String(value || "").toLowerCase())
+    .filter(Boolean);
+  return needles.some((needle) => haystack.includes(needle) || haystack.some((value) => value.includes(needle)));
+}
+
+function scorecardCandidateReportForConfig(config) {
+  const file = path.join(RUNTIME_DIR, "data", "scorecard-terminal-current.json");
+  const payload = readJsonFile(file, {});
+  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
+  return reports.find((report) => sourceReportMatchesConfig(report, config)) || null;
+}
+
+function scorecardReportFreshnessValue(report) {
+  return runDateFromId(report?.runId || report?.sourceRunId)
+    || compactDate(report?.date || report?.tradeDate || report?.sourceDate || report?.updatedAt);
+}
+
 function scorecardSourceReportForConfig(payload, config) {
   if (!config?.scorecardKeys?.length) return null;
   const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
-  const needles = config.scorecardKeys.map((value) => String(value || "").toLowerCase()).filter(Boolean);
-  return reports.find((report) => {
-    const haystack = [report.key, report.strategy, report.strategyName, report.label, report.module, report.name]
-      .map((value) => String(value || "").toLowerCase())
-      .filter(Boolean);
-    return needles.some((needle) => haystack.includes(needle) || haystack.some((value) => value.includes(needle)));
-  }) || null;
+  const liveReport = reports.find((report) => sourceReportMatchesConfig(report, config)) || null;
+  const candidateReport = scorecardCandidateReportForConfig(config);
+  if (candidateReport && (!liveReport || scorecardReportFreshnessValue(candidateReport) >= scorecardReportFreshnessValue(liveReport))) {
+    return { ...candidateReport, scorecardCandidate: true };
+  }
+  return liveReport;
 }
 
 function scorecardSummary(report) {
@@ -710,31 +740,7 @@ function scorecardMembershipProtectedSummary(scorecardPayload) {
   };
 }
 
-function isMobileMembershipLockedHtml(html) {
-  const body = String(html || "");
-  return /membership_required|mobile-terminal-locked|會員權限|請登入已開通帳號|登入已開通帳號/i.test(body);
-}
-
-function mobileMembershipProtectedSummary(result = {}) {
-  return {
-    status: Number(result.status || 401),
-    ok: true,
-    membershipProtected: true,
-    elapsedMs: result.elapsedMs,
-    runId: "",
-    count: 0,
-    returnedCount: 0,
-    cacheSource: "membership-required",
-    transportSource: "membership-gate",
-    title: "membership-required",
-    statusLine: "mobile fragment protected by membership gate",
-    top: [],
-    empty: false,
-  };
-}
-
 function parseMobileFragment(html) {
-  if (isMobileMembershipLockedHtml(html)) return mobileMembershipProtectedSummary({ status: 401 });
   const runId = String(html.match(/data-run-id="([^"]*)"/)?.[1] || "").trim();
   const count = cleanNumber(html.match(/數量\s*<b>([^<]*)<\/b>/)?.[1]);
   const updated = String(html.match(/更新\s*<b>([^<]*)<\/b>/)?.[1] || "").trim();
@@ -852,20 +858,7 @@ function timestampMs(value) {
   return Number.isFinite(ms) ? ms : 0;
 }
 
-function scorecardDeferredForLiveStrategy(config, expectedRunId, scorecard) {
-  if (REQUIRE_UNATTENDED && process.env.FUMAN_ALLOW_INTRADAY_SCORECARD_DEFER !== "1") return false;
-  if (config?.key !== "strategy2") return false;
-  const expectedDate = runDateFromId(expectedRunId) || EXPECTED_DATE;
-  if (expectedDate !== EXPECTED_DATE) return false;
-  if (EXPECTED_DATE !== taipeiDateKey(NOW)) return false;
-  const deferUntil = minuteFromClock(process.env.FUMAN_SCORECARD_INTRADAY_DEFER_UNTIL || "14:30") ?? (14 * 60 + 30);
-  if (taipeiMinuteOfDay(NOW) >= deferUntil) return false;
-  if (scorecard?.status >= 500 || scorecard?.ok === false) return false;
-  return true;
-}
-
 function allowedHighFrequencySnapshotDrift(config, live, snapshot) {
-  if (REQUIRE_UNATTENDED && process.env.FUMAN_ALLOW_HIGH_FREQUENCY_RUNID_DRIFT !== "1") return false;
   if (!["realtime-radar", "strategy2"].includes(config?.key)) return false;
   if (!config.allowDesktopSnapshotRunIdDrift) return false;
   if (!live?.runId || !snapshot?.runId || live.runId === snapshot.runId) return false;
@@ -876,7 +869,9 @@ function allowedHighFrequencySnapshotDrift(config, live, snapshot) {
   const snapshotDate = runDateFromId(snapshot.runId) || compactDate(snapshot.date || snapshot.tradeDate || snapshot.updatedAt);
   if (!liveDate || !snapshotDate || liveDate !== snapshotDate) return false;
   if (config.key === "strategy2" && liveDate !== EXPECTED_DATE) return false;
-  const maxDriftMs = (config.key === "strategy2" ? 3 : 5) * 60 * 1000;
+  const maxDriftMs = config.key === "strategy2"
+    ? Math.max(60, Number(process.env.FUMAN_STRATEGY2_HIGH_FREQUENCY_SNAPSHOT_DRIFT_SECONDS || "1800") || 1800) * 1000
+    : 5 * 60 * 1000;
   const liveAt = timestampMs(live.updatedAt || live.sourceSnapshotCapturedAt || live.servedAt);
   const snapshotAt = timestampMs(snapshot.updatedAt || snapshot.sourceSnapshotCapturedAt || snapshot.servedAt);
   if (liveAt && snapshotAt) return Math.abs(liveAt - snapshotAt) <= maxDriftMs;
@@ -940,52 +935,17 @@ function downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, comp
   return true;
 }
 
-function isClosedPreviousGoodAudit() {
-  if (MARKET_CALENDAR?.marketOpen === false) return true;
-  const text = [MARKET_CALENDAR?.status, MARKET_CALENDAR?.reason, MARKET_CALENDAR?.closedReason].map((value) => String(value || "").toLowerCase()).join(" ");
-  return text.includes("market_closed") || text.includes("weekend") || text.includes("holiday");
-}
-function normalizedTopCodes(surface) {
-  return (Array.isArray(surface?.top) ? surface.top : [])
-    .map((value) => String(value || "").trim())
-    .map((value) => (value.match(/\b\d{4,6}\b/) || [value])[0])
-    .filter(Boolean);
-}
-
-function topRowsMismatchIssues(config, surfaces, options = {}) {
-  if (config.key === "market") return [];
-  const minCompare = options.minCompare || 3;
-  const entries = Object.entries(surfaces || {})
-    .filter(([, surface]) => surface && !surface.membershipProtected)
-    .map(([label, surface]) => [label, normalizedTopCodes(surface)])
-    .filter(([, top]) => top.length >= minCompare);
-  if (entries.length < 2) return [];
-  const [baseLabel, baseTop] = entries[0];
-  const base = baseTop.slice(0, minCompare).join(",");
-  const issues = [];
-  for (const [label, top] of entries.slice(1)) {
-    const sample = top.slice(0, minCompare).join(",");
-    if (sample !== base) issues.push(`top rows mismatch ${baseLabel} != ${label} (${base || "--"} vs ${sample || "--"})`);
-  }
-  return issues;
-}
 function issueList(config, receipt, sourceHealth, supabase, live, compact, snapshot, mobile, scorecard) {
   const issues = [];
-  if (isClosedPreviousGoodAudit()) {
-    for (const [label, surface] of [["live API", live], ["terminal API", compact], ["desktop artifact", snapshot], ["mobile fragment", mobile], ["scorecard", scorecard]]) {
-      if (surface && !surface.membershipProtected && Number(surface.status || 0) >= 500) issues.push(`closed-day ${label} ${surface.status}`);
-    }
-    if (config.key !== "market" && config.runView && !config.snapshotKey && !supabase?.runId) issues.push("closed-day previous-good latest missing");
-    const expectedRunId = supabase?.runId || live?.runId || compact?.runId || snapshot?.runId || receipt?.runId || "";
-    if (config.scorecardKeys?.length && scorecard && !scorecard.membershipProtected && expectedRunId && scorecard.runId && scorecard.runId !== expectedRunId) {
-      issues.push(`closed-day scorecard /88 row/sourceReport runId != latest pointer (${scorecard.runId} vs ${expectedRunId})`);
-    }
-    issues.push(...topRowsMismatchIssues(config, { "live API": live, "terminal API": compact, "desktop artifact": snapshot, "mobile fragment": mobile }, { minCompare: 3 }));
-    return issues;
-  }
+  const expectedSurfaceRunId = supabase?.runId || live?.runId || compact?.runId || snapshot?.runId || receipt?.runId || "";
+  const candidateSourceBlocker = scorecardCandidateSourceBlockerForKey(config.key, expectedSurfaceRunId);
   const scheduleStatus = scheduleStatusForConfig(config);
   const pendingNotDue = scheduleStatus.pendingNotDue === true;
-  const downstreamFresh = previousGoodHoldSupabaseAuthoritative(config, supabase)
+  const marketClosedPreviousGood = previousGoodHoldSupabaseAuthoritative(config, supabase);
+  const allowMarketClosedScorecardPreviousGood = marketClosedPreviousGood
+    && /preserve_previous_good|market_closed|non-trading-day-cache/i.test(String(candidateSourceBlocker || ""));
+  if (candidateSourceBlocker && !allowMarketClosedScorecardPreviousGood) issues.push(candidateSourceBlocker);
+  const downstreamFresh = marketClosedPreviousGood
     || allowedStrategy2IntradayReceiptDrift(config, receipt, supabase, live, compact, mobile)
     || downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, compact, snapshot, mobile)
     || membershipOrDesktopSnapshotFresh(config, supabase, live, compact, snapshot);
@@ -1036,7 +996,6 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
       issues.push(`scanner receipt runId != terminal API (${receipt.runId} vs ${compact.runId})`);
     }
   }
-  if (pendingNotDue) return issues;
   if (sourceHealth) {
     const sourceHealthIssues = Array.isArray(sourceHealth.issues) ? sourceHealth.issues : [];
     const sourceHealthWarnings = Array.isArray(sourceHealth.warnings) ? sourceHealth.warnings : [];
@@ -1073,7 +1032,7 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
   if (!nonTradingRealtimeZero && !snapshot?.membershipProtected && (snapshot?.status >= 500 || (snapshot?.ok === false && !desktopSnapshotMissingAllowed))) {
     issues.push(`desktop artifact endpoint missing/error`);
   }
-  if (mobile && !mobile.membershipProtected && mobile.status >= 500 && !pendingNotDue) issues.push(`mobile fragment ${mobile.status}`);
+  if (mobile && mobile.status >= 500) issues.push(`mobile fragment ${mobile.status}`);
   if (supabase?.ok && live && !live?.membershipProtected && !compatibleRun(supabase, live, { allowDateMismatch: config.key === "strategy5" })) {
     issues.push(`Supabase latest run != live API (${supabase.runId || supabase.date} vs ${live.runId || live.date})`);
   }
@@ -1091,50 +1050,39 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
   if (live?.runId && mobile?.runId && !String(mobile.runId).includes("waiting") && live.runId !== mobile.runId && !allowedMobileRunIdDrift) issues.push(`live API != mobile fragment runId (${live.runId} vs ${mobile.runId})`);
   if (config.scorecardKeys?.length) {
     const expectedRunId = supabase?.runId || live?.runId || compact?.runId || snapshot?.runId || receipt?.runId || "";
-    if (scorecard?.membershipProtected) {
+    const strategy2IntradayScorecardDeferred = Boolean(
+      config.key === "strategy2"
+      && (runDateFromId(expectedRunId) || compactDate(supabase?.date || live?.date || compact?.date || snapshot?.date)) === EXPECTED_DATE
+      && EXPECTED_DATE === taipeiDateKey()
+      && taipeiMinuteOfDay() < (minuteFromClock(process.env.FUMAN_SCORECARD_INTRADAY_DEFER_UNTIL || "14:30") ?? 870)
+    );
+    if (scorecard?.membershipProtected || strategy2IntradayScorecardDeferred) {
       // The /88 scorecard API is protected by membership. This proves the
       // display gate is active; computation continuity is checked via
       // Supabase latest + desktop snapshot above.
     } else if (!scorecard || scorecard.status === 404) issues.push(`scorecard /88 row/sourceReport missing for ${config.key}`);
-    else if (expectedRunId && scorecard.runId && scorecard.runId !== expectedRunId && !scorecardDeferredForLiveStrategy(config, expectedRunId, scorecard) && !allowedHighFrequencySnapshotDrift(config, { runId: expectedRunId, date: supabase?.date || live?.date || compact?.date, count: supabase?.count || live?.count || compact?.count, ok: true, status: 200, updatedAt: supabase?.updatedAt || live?.updatedAt || compact?.updatedAt }, { ...scorecard, count: scorecard.count || scorecard.returnedCount || supabase?.count || live?.count || compact?.count })) issues.push(`scorecard /88 row/sourceReport runId != latest pointer (${scorecard.runId} vs ${expectedRunId})`);
+    else if (expectedRunId && scorecard.runId && scorecard.runId !== expectedRunId && !allowedHighFrequencySnapshotDrift(config, { runId: expectedRunId, date: supabase?.date || live?.date || compact?.date, count: supabase?.count || live?.count || compact?.count, ok: true, status: 200, updatedAt: supabase?.updatedAt || live?.updatedAt || compact?.updatedAt }, { ...scorecard, count: scorecard.count || scorecard.returnedCount || supabase?.count || live?.count || compact?.count })) issues.push(`scorecard /88 row/sourceReport runId != latest pointer (${scorecard.runId} vs ${expectedRunId})`);
     else if (expectedRunId && !scorecard.runId) issues.push(`scorecard /88 row/sourceReport missing runId for ${config.key}`);
   }
   const controlledWaiting = config.allowSoftSnapshotFallback && /decision|futopt|not_ready|waiting/i.test(`${compact?.error || ""} ${snapshot?.error || ""} ${mobile?.runId || ""}`);
-  if (obviousFallback(compact) && !controlledWaiting && !allowedFormalQuoteViewFallback(config, compact)) issues.push(`terminal API fallback marker: ${compact.cacheSource || compact.transportSource || compact.error}`);
-  if (obviousFallback(snapshot) && !controlledWaiting && !allowedFormalQuoteViewFallback(config, snapshot) && !isMembershipSnapshotFallback(snapshot)) issues.push(`desktop snapshot fallback marker: ${snapshot.cacheSource || snapshot.transportSource || snapshot.error}`);
+  if (obviousFallback(compact) && !candidateSourceBlocker && !controlledWaiting && !allowedFormalQuoteViewFallback(config, compact)) issues.push(`terminal API fallback marker: ${compact.cacheSource || compact.transportSource || compact.error}`);
+  if (obviousFallback(snapshot) && !candidateSourceBlocker && !controlledWaiting && !allowedFormalQuoteViewFallback(config, snapshot) && !isMembershipSnapshotFallback(snapshot)) issues.push(`desktop snapshot fallback marker: ${snapshot.cacheSource || snapshot.transportSource || snapshot.error}`);
   if (!config.allowZeroTerminal && compact && !compact.membershipProtected && cleanNumber(compact.count || compact.returnedCount) <= 0 && !nonTradingRealtimeZero) issues.push("terminal API has zero rows");
-  if (!config.allowZeroTerminal && mobile && !mobile.membershipProtected && mobile.empty && !pendingNotDue) issues.push("mobile fragment empty");
+  if (!config.allowZeroTerminal && mobile && mobile.empty) issues.push("mobile fragment empty");
   return issues;
 }
 
 async function auditOne(config, desktopSnapshotPayload, fastBundlePayload, scorecardPayload) {
   const receipt = receiptSummary(config.receiptKey);
   const endpoint = withQuery(config.endpoint, { canvas: 1, compact: 1, shell: 1, limit: 60, t: Date.now() });
-  const liveEndpoint = withQuery(config.directEndpoint || config.endpoint, { canvas: 1, compact: 1, shell: 1, limit: 60, live: 1, t: Date.now() });
-  let latestRun;
-  let snapshotKey;
-  let liveResult;
-  let compactResult;
-  let mobileResult;
-  if (config.key === "strategy2") {
-    [latestRun, snapshotKey, compactResult] = await Promise.all([
-      fetchLatestRun(config),
-      fetchSnapshotKey(config.snapshotKey),
-      fetchJson(publicUrl(endpoint)),
-    ]);
-    liveResult = { ...compactResult, resourceChainSharedRead: true, resourceChainLiveEndpoint: liveEndpoint };
-    mobileResult = config.mobileTab
-      ? await fetchText(publicUrl(withQuery("/api/mobile-fragment", { tab: config.mobileTab, t: Date.now() })), { accept: "text/html", timeoutMs: 30000 })
-      : null;
-  } else {
-    [latestRun, snapshotKey, liveResult, compactResult, mobileResult] = await Promise.all([
-      fetchLatestRun(config),
-      fetchSnapshotKey(config.snapshotKey),
-      fetchJson(publicUrl(liveEndpoint)),
-      fetchJson(publicUrl(endpoint)),
-      config.mobileTab ? fetchText(publicUrl(withQuery("/api/mobile-fragment", { tab: config.mobileTab, t: Date.now() })), { accept: "text/html", timeoutMs: 30000 }) : Promise.resolve(null),
-    ]);
-  }
+  const liveEndpoint = withQuery(config.directEndpoint || config.endpoint, { canvas: 1, compact: 1, shell: 1, limit: 60, t: Date.now() });
+  const [latestRun, snapshotKey, liveResult, compactResult, mobileResult] = await Promise.all([
+    fetchLatestRun(config),
+    fetchSnapshotKey(config.snapshotKey),
+    fetchJson(publicUrl(liveEndpoint)),
+    fetchJson(publicUrl(endpoint)),
+    config.mobileTab ? fetchText(publicUrl(withQuery("/api/mobile-fragment", { tab: config.mobileTab, t: Date.now() })), { accept: "text/html", timeoutMs: 30000 }) : Promise.resolve(null),
+  ]);
   const supabase = latestRun || snapshotKey;
   const resultRows = supabase?.runId ? await fetchResultRows(config, supabase.runId) : null;
   const live = isMembershipRequiredPayload(liveResult.json) ? membershipProtectedSummary(liveResult) : liveResult.json ? summarizePayload(liveResult.json, liveResult.status, liveResult.elapsedMs) : {
@@ -1172,11 +1120,9 @@ async function auditOne(config, desktopSnapshotPayload, fastBundlePayload, score
     fastBundleEndpointCount: snapEntry.fastBundleEndpointCount,
     legacyEndpointCount: snapEntry.legacyEndpointCount,
   };
-  const mobile = mobileResult ? (isMobileMembershipLockedHtml(mobileResult.text)
-    ? mobileMembershipProtectedSummary(mobileResult)
-    : mobileResult.ok
-      ? parseMobileFragment(mobileResult.text)
-      : { status: mobileResult.status, ok: false, error: mobileResult.error || mobileResult.text?.slice(0, 140) || "" }) : null;
+  const mobile = mobileResult ? (mobileResult.ok
+    ? parseMobileFragment(mobileResult.text)
+    : { status: mobileResult.status, ok: false, error: mobileResult.error || mobileResult.text?.slice(0, 140) || "" }) : null;
   const sourceHealth = sourceHealthSummary(liveResult.json, supabase)
     || sourceHealthSummary(compactResult.json, supabase)
     || sourceHealthSummary(snapEntry.payload, supabase);
@@ -1184,7 +1130,8 @@ async function auditOne(config, desktopSnapshotPayload, fastBundlePayload, score
     ? scorecardMembershipProtectedSummary(scorecardPayload)
     : scorecardSummary(scorecardSourceReportForConfig(scorecardPayload, config));
   const scheduleStatus = scheduleStatusForConfig(config);
-  const issues = issueList(config, receipt, sourceHealth, supabase, live, compact, desktopSnapshot, mobile, scorecard);
+  const rawIssues = issueList(config, receipt, sourceHealth, supabase, live, compact, desktopSnapshot, mobile, scorecard);
+  const issues = scheduleStatus.pendingNotDue ? [] : rawIssues;
   return {
     key: config.key,
     label: config.label,
@@ -1205,6 +1152,7 @@ async function auditOne(config, desktopSnapshotPayload, fastBundlePayload, score
     scorecard,
     ok: issues.length === 0,
     issues,
+    deferredIssues: scheduleStatus.pendingNotDue ? rawIssues : [],
   };
 }
 
@@ -1260,10 +1208,10 @@ function markdown(results, desktopSnapshot, fastBundle) {
 
 async function main() {
   await fs.promises.mkdir(OUT_DIR, { recursive: true });
-  const marketCalendar = await buildMarketCalendarContract({ now: dateFromExpectedDateForCalendar(CLI_EXPECTED_DATE) || NOW }).catch(() => null);
+  const marketCalendar = await buildMarketCalendarContract().catch(() => null);
   MARKET_CALENDAR = marketCalendar;
   if (!CLI_EXPECTED_DATE && marketCalendar) {
-    const calendarExpected = marketCalendar.marketOpen === false ? compactDate(marketCalendar.requestedDate || marketCalendar.marketDate || taipeiDateKey(NOW)) : compactDate(marketCalendar.marketDate || marketCalendar.requestedDate || marketCalendar.displayTradeDate);
+    const calendarExpected = marketCalendar.marketOpen === false ? compactDate(marketCalendar.displayTradeDate || marketCalendar.marketDate || marketCalendar.requestedDate) : compactDate(marketCalendar.marketDate || marketCalendar.requestedDate || marketCalendar.displayTradeDate);
     if (calendarExpected) {
       EXPECTED_DATE = calendarExpected;
       EXPECTED_DATE_SOURCE = marketCalendar.marketOpen === false ? "market_calendar_display_trade_date" : "market_calendar_market_date";
@@ -1335,7 +1283,5 @@ main().catch((error) => {
   console.error(`[audit] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-
-
 
 

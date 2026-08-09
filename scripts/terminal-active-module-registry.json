@@ -1,19 +1,312 @@
 {
-  "contract": "terminal-active-module-registry-v1",
-  "version": 1,
-  "policy": "only-active-modules-may-scan-publish-or-close; retired-modules-must-not-reappear",
+  "contract": "terminal-active-module-registry-v2",
+  "version": 2,
+  "policy": "only-active-modules-may-scan_publish_or_close; missing_or_not_yet_wired_receipt_is_NO",
   "active": [
-    { "key": "strategy2", "dueTime": "09:00", "requiredForUnattended": true, "class": "strategy" },
-    { "key": "strategy3", "dueTime": "13:05", "requiredForUnattended": true, "class": "strategy" },
-    { "key": "strategy4", "dueTime": "16:00", "requiredForUnattended": true, "class": "strategy" },
-    { "key": "strategy5", "dueTime": "21:00", "requiredForUnattended": true, "class": "strategy" },
-    { "key": "institution", "dueTime": "21:00", "requiredForUnattended": true, "class": "chip" },
-    { "key": "cb", "dueTime": "21:25", "requiredForUnattended": true, "class": "chip" },
-    { "key": "warrant", "dueTime": "20:30", "requiredForUnattended": true, "class": "chip" }
+    {
+      "key": "market_calendar",
+      "dueTime": "07:00",
+      "requiredForUnattended": true,
+      "class": "gate",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "preflight",
+      "dueTime": "07:00",
+      "requiredForUnattended": true,
+      "class": "gate",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "websocket",
+      "dueTime": "07:00",
+      "requiredForUnattended": true,
+      "class": "gate",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "water_root",
+      "dueTime": "07:00",
+      "requiredForUnattended": true,
+      "class": "gate",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "formal_gate",
+      "dueTime": "07:00",
+      "requiredForUnattended": true,
+      "class": "gate",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "power_recovery",
+      "dueTime": "00:00",
+      "requiredForUnattended": true,
+      "class": "recovery",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "source_warmup",
+      "dueTime": "07:00",
+      "requiredForUnattended": true,
+      "class": "source",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "stock_universe_1m",
+      "dueTime": "08:00",
+      "requiredForUnattended": true,
+      "class": "data",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "indicators_volume",
+      "dueTime": "08:00",
+      "requiredForUnattended": true,
+      "class": "data",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "mother_pool",
+      "dueTime": "09:00",
+      "requiredForUnattended": true,
+      "class": "pool",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "top40",
+      "dueTime": "09:00",
+      "requiredForUnattended": true,
+      "class": "pool",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "natural_evidence",
+      "dueTime": "09:00",
+      "requiredForUnattended": true,
+      "class": "evidence",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "daily_ohlcv",
+      "dueTime": "16:00",
+      "requiredForUnattended": true,
+      "class": "data",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "strategy2",
+      "dueTime": "09:00",
+      "requiredForUnattended": true,
+      "class": "strategy",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "strategy3",
+      "dueTime": "13:05",
+      "requiredForUnattended": true,
+      "class": "strategy",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "strategy4",
+      "dueTime": "16:00",
+      "requiredForUnattended": true,
+      "class": "strategy",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "strategy5",
+      "dueTime": "21:00",
+      "requiredForUnattended": true,
+      "class": "strategy",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "institution",
+      "dueTime": "21:00",
+      "requiredForUnattended": true,
+      "class": "chip",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "cb",
+      "dueTime": "21:25",
+      "requiredForUnattended": true,
+      "class": "chip",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "warrant",
+      "dueTime": "20:30",
+      "requiredForUnattended": true,
+      "class": "chip",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "canary",
+      "dueTime": "21:30",
+      "requiredForUnattended": true,
+      "class": "closure",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "runid_closure",
+      "dueTime": "21:30",
+      "requiredForUnattended": true,
+      "class": "closure",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "api",
+      "dueTime": "22:00",
+      "requiredForUnattended": true,
+      "class": "surface",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "desktop",
+      "dueTime": "22:00",
+      "requiredForUnattended": true,
+      "class": "surface",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "mobile",
+      "dueTime": "22:00",
+      "requiredForUnattended": true,
+      "class": "surface",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "route_88",
+      "dueTime": "22:00",
+      "requiredForUnattended": true,
+      "class": "surface",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "scorecard",
+      "dueTime": "22:00",
+      "requiredForUnattended": true,
+      "class": "surface",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "source_reports",
+      "dueTime": "22:00",
+      "requiredForUnattended": true,
+      "class": "surface",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "watchdog",
+      "dueTime": "22:00",
+      "requiredForUnattended": true,
+      "class": "control",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "auto_roll_forward",
+      "dueTime": "22:30",
+      "requiredForUnattended": true,
+      "class": "control",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "control_plane",
+      "dueTime": "22:30",
+      "requiredForUnattended": true,
+      "class": "control",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    },
+    {
+      "key": "recovery_queue",
+      "dueTime": "22:30",
+      "requiredForUnattended": true,
+      "class": "control",
+      "requirementState": "required",
+      "wired": true,
+      "status": "WIRED"
+    }
   ],
   "retired": [
-    { "key": "strategy1", "retired": true, "reason": "product_retired" },
-    { "key": "realtime-radar", "retired": true, "reason": "product_retired" },
-    { "key": "heatmap", "retired": true, "reason": "product_retired" }
+    {
+      "key": "strategy1",
+      "retired": true,
+      "reason": "product_retired"
+    },
+    {
+      "key": "realtime-radar",
+      "retired": true,
+      "reason": "product_retired"
+    },
+    {
+      "key": "heatmap",
+      "retired": true,
+      "reason": "product_retired"
+    }
   ]
 }

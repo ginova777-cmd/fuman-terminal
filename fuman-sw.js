@@ -1,6 +1,6 @@
-const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260726-01";
-const PROTECTED_NO_STALE_SW_EPOCH = "protected-no-stale-first-paint-20260717-01";
-
+const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260809-retired-gate-01";
+const PROTECTED_NO_STALE_SW_EPOCH = "protected-no-stale-first-paint-20260724-01";
+const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-api-only-20260809-01";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 const MARKET_OVERVIEW_RESTORE_ASSET_EPOCH = "market-overview-restore-20260627-02";
@@ -29,14 +29,13 @@ const STATIC_ASSETS = [
   "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260714-22",
   "/terminal-strategy-module.js?v=public-terminal-fast-20260714-22",
   `/terminal-watchlist-shell.js?v=${WATCHLIST_SHELL_ASSET_EPOCH}`,
-
-  "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260714-10",
-  "/terminal-chip-flow.js?v=public-terminal-fast-20260714-10",
-  "/terminal-warrant-flow.js?v=public-terminal-fast-20260714-10",
-  "/terminal-watchlist-module.js?v=public-terminal-fast-20260714-10",
-  "/terminal-intraday-radar.css?v=public-terminal-fast-20260714-10",
-  "/terminal-utility.css?v=public-terminal-fast-20260714-10",
-  "/refresh.html?v=public-terminal-fast-20260714-10",
+  "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260714-22",
+  "/terminal-chip-flow.js?v=public-terminal-fast-20260714-22",
+  "/terminal-warrant-flow.js?v=public-terminal-fast-20260714-22",
+  "/terminal-watchlist-module.js?v=public-terminal-fast-20260714-22",
+  "/terminal-intraday-radar.css?v=public-terminal-fast-20260714-22",
+  "/terminal-utility.css?v=public-terminal-fast-20260714-22",
+  "/refresh.html?v=public-terminal-fast-20260714-22",
   "/assets/logo.webp",
   "/favicon.ico",
 ];

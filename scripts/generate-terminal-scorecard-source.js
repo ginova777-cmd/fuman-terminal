@@ -552,9 +552,7 @@ function entryTimeOf(task, payload, row) {
   return fallbackEntryTime(task, payload);
 }
 
-function includeInScorecard(row, expectedDate = "") {
-  const rowDate = normalizeDate(row.record_date || row.scorecardDate || row.scan_date || row.source_date || row.usedDate || row.tradeDate || row.date || "");
-  if (expectedDate && rowDate && rowDate !== expectedDate) return false;
+function includeInScorecard(row) {
   const minutes = timeMinutes(row.entry_time);
   if (row.strategy === "策略2成績單") {
     return minutes !== null && minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
@@ -1240,30 +1238,13 @@ async function main() {
     }
     rawRecords = records.filter((row) => row.record_date && row.ticker);
   }
-  const scorecardRecords = rawRecords.filter((row) => includeInScorecard(row, latestDate));
+  const scorecardRecords = rawRecords.filter(includeInScorecard);
   const finalBatchLatestDate = scorecardRecords.map((row) => row.record_date).filter(Boolean).sort().at(-1) || latestDate;
   latestDate = tradingDay.isTradingDay ? finalBatchLatestDate : (sourceLatestDate || finalBatchLatestDate);
   const filtered = await enrichWithQuoteHighs(scorecardRecords.map((row) => alignRecordDate(row, latestDate)));
   const activeFiltered = filtered.filter((row) => !isRetiredScorecardStrategy(`${row.strategy || ""} ${row.source || ""} ${row.endpoint || ""}`));
-  const activeReports = reports
-    .filter((report) => !isRetiredScorecardStrategy(`${report.key || ""} ${report.strategy || ""} ${report.endpoint || ""}`))
-    .map((report) => {
-      const reportDate = dateFromReport(report);
-      if (latestDate && reportDate && reportDate !== latestDate) {
-        return {
-          ...report,
-          ok: false,
-          evidenceStatus: "insufficient",
-          unattendedStatus: "NO",
-          publishAllowed: false,
-          fallbackUsed: true,
-          preservePreviousGood: true,
-          degradedBlocksLatest: true,
-          reason: `source_report_date_mismatch:${reportDate}<${latestDate}`,
-        };
-      }
-      return report;
-    });
+  const activeReports = reports.filter((report) => !isRetiredScorecardStrategy(`${report.key || ""} ${report.strategy || ""} ${report.endpoint || ""}`));
+  const blockedReports = activeReports.filter((report) => report.ok !== true || Number(report.statusCode || 0) >= 400 || Number(report.suppressedRows || 0) > 0);
   const daily = summarize(activeFiltered);
   const payload = {
     ok: true,

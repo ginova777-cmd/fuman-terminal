@@ -6,6 +6,8 @@ const files = {
   fastBundle: path.join(ROOT, "api", "terminal-fast-bundle.js"),
   mobileBoot: path.join(ROOT, "api", "mobile-boot.js"),
 };
+const OUT_DIR = path.join(ROOT, "outputs", "terminal-no-fake-unattended");
+const OUT_FILE = path.join(OUT_DIR, "terminal-no-fake-unattended.json");
 const issues = [];
 
 function read(name) {
@@ -48,8 +50,14 @@ function main() {
       "mobile pending calendar fallback is fail-closed",
     ],
   };
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  fs.writeFileSync(OUT_FILE, JSON.stringify(result, null, 2) + "\n", "utf8");
+  result.output = OUT_FILE;
   console.log(JSON.stringify(result, null, 2));
   if (!result.ok) process.exitCode = 1;
 }
 
 main();
+
+
+

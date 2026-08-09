@@ -137,8 +137,9 @@ const ROUTES = [
     groups: [
       ["代號", ["code", "Code", "symbol", "stockId", "stock_id"]],
       ["名稱", ["name", "Name", "stockName", "stock_name"]],
+      ["價格/判讀", ["price", "close", "ClosingPrice", "lastPrice", "latestClose", "reason"]],
       ["漲跌/排序", ["change", "Change", "pct", "percent", "score", "rankScore", "finalScore", "rank"]],
-      ["判讀/來源", ["reason", "source", "tags", "side", "percentSource"]],
+      ["來源/更新", ["source", "industry", "updatedAt", "quoteDate"]],
     ],
     rowGroups: (row) => {
       const code = String(row?.code || row?.symbol || "").trim().toUpperCase();

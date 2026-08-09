@@ -74,6 +74,10 @@ function tabAuthorityKey(tab) {
   return "";
 }
 
+function shouldUseLiveFragment(tab) {
+  return String(tab || "").toLowerCase() === "strategy2";
+}
+
 function terminalAuthorityForTab(tab) {
   const key = tabAuthorityKey(tab);
   if (!key) return null;
@@ -279,7 +283,6 @@ function fetchStrategy2Internal(request, endpoint) {
   const url = new URL(endpoint, originFrom(request));
   const query = { ...Object.fromEntries(url.searchParams.entries()), verify: "1" };
   delete query.live;
-  delete query.noSnapshot;
   delete query.snapshot;
   delete query.cache;
   delete query.snapshotFirst;
@@ -309,7 +312,7 @@ function fetchStrategy2Internal(request, endpoint) {
 }
 function fetchStrategy4Internal(request, endpoint) {
   const url = new URL(endpoint, originFrom(request));
-  const query = Object.fromEntries(url.searchParams.entries());
+  const query = { ...Object.fromEntries(url.searchParams.entries()), verify: "1" };
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("strategy4_internal_timeout")), 12000);
     const finish = (result) => {
@@ -356,13 +359,6 @@ function fetchStrategy5Internal(request, endpoint) {
       reject(error);
     });
   });
-}
-
-function shouldUseLiveFragment(tab, request) {
-  return tab === "strategy2" && (
-    request.query?.live === "1"
-    || process.env.FUMAN_MOBILE_DAYTRADE_LIVE === "1"
-  );
 }
 
 function esc(value) {
@@ -455,6 +451,25 @@ function isValidBusinessRow(row, tab = "") {
   }
   return !isEvidenceLikeRow(row);
 }
+function hidePreviousGoodRows(rows, payload, tab = "") {
+  if (tab !== "strategy2") return rows;
+  const evidenceStatus = String(payload?.evidenceStatus || payload?.run_quality_at_publish?.evidenceStatus || "").toLowerCase();
+  const unattendedStatus = String(payload?.unattendedStatus || payload?.run_quality_at_publish?.unattendedStatus || "").toUpperCase();
+  const cacheSource = String(payload?.cacheSource || payload?.source || payload?.transport?.source || "").toLowerCase();
+  const previousGoodLike = payload?.preservePreviousGood === true
+    || payload?.fallbackUsed === true
+    || payload?.publishAllowed === false
+    || payload?.publishBlocked === true
+    || /previous-good|previous_good|fallback|snapshot-soft-fallback|runtime-session-history/.test(cacheSource)
+    || (evidenceStatus && evidenceStatus !== "complete")
+    || (unattendedStatus && unattendedStatus !== "YES");
+  if (!previousGoodLike) return rows;
+  payload.previousGoodRowsHidden = rows.length > 0;
+  payload.previousGoodRowsHiddenCount = rows.length;
+  payload.previousGoodDisplayPolicy = "mobile formal terminal hides previous-good rows unless publishAllowed/evidence/unattended are complete";
+  return [];
+}
+
 function normalizeRows(payload, tab = "") {
   const rows = arrayAt(payload, [
     "matches",
@@ -476,7 +491,7 @@ function normalizeRows(payload, tab = "") {
   if (tab === "strategy2") {
     const sortedRows = [...rows].sort((a, b) => strategy2TimeValue(b) - strategy2TimeValue(a));
     const windowRows = sortedRows.filter(inStrategy2Window);
-    return (windowRows.length ? windowRows : sortedRows).filter((row) => isValidBusinessRow(row, tab));
+    return hidePreviousGoodRows((windowRows.length ? windowRows : sortedRows).filter((row) => isValidBusinessRow(row, tab)), payload, tab);
   }
   return rows.filter((row) => isValidBusinessRow(row, tab)).slice(0, 20);
 }
@@ -854,23 +869,9 @@ function waitingRunId(payload, tab = "") {
 function extractRunId(payload, tab = "") {
   const runId = String(
     payload?.runId
-    || payload?.run_id
-    || payload?.latestRunId
-    || payload?.latest_run_id
-    || payload?.run?.runId
-    || payload?.run?.run_id
-    || payload?.latest?.runId
-    || payload?.latest?.run_id
-    || payload?.scanReceipt?.runId
-    || payload?.scanReceipt?.run_id
-    || payload?.receipt?.runId
-    || payload?.receipt?.run_id
     || payload?.transport?.runId
     || payload?.transport?.payloadRunId
     || payload?.payload?.runId
-    || payload?.payload?.run_id
-    || payload?.payload?.run?.runId
-    || payload?.payload?.run?.run_id
     || payload?.payload?.transport?.runId
     || payload?.meta?.runId
     || ""
@@ -878,84 +879,6 @@ function extractRunId(payload, tab = "") {
   return runId || waitingRunId(payload, tab);
 }
 
-function sourceReportKeyForTab(tab = "") {
-  return ({
-    chip: "institution",
-    cb: "cb",
-    warrant: "warrant",
-    strategy2: "strategy2",
-    strategy3: "strategy3",
-    strategy4: "strategy4",
-    strategy5: "strategy5",
-  })[tab] || tab;
-}
-
-function sourceReportRunId(report = {}) {
-  return String(report.runId || report.run_id || report.latestRunId || report.latest_run_id || report.internalRunId || report.internal_run_id || report.sourceRunId || report.source_run_id || "").trim();
-}
-
-
-function sourceReportAliasesForKey(key = "") {
-  return ({
-    institution: ["institution", "chip", "buy-sell", "買賣超", "法人"],
-    cb: ["cb", "cb-detect", "可轉債"],
-    warrant: ["warrant", "warrant-flow", "權證"],
-    strategy2: ["strategy2", "當沖"],
-    strategy3: ["strategy3", "隔日"],
-    strategy4: ["strategy4", "波段"],
-    strategy5: ["strategy5", "綜合"],
-  })[key] || [key];
-}
-
-function sourceReportMatchesKey(report = {}, key = "") {
-  const aliases = sourceReportAliasesForKey(key).map((item) => String(item || "").toLowerCase());
-  const raw = String(report?.key || report?.strategy || report?.strategyKey || report?.name || report?.module || report?.label || "").toLowerCase();
-  if (raw && aliases.some((alias) => raw === alias || raw.includes(alias))) return true;
-  const runId = sourceReportRunId(report).toLowerCase();
-  return aliases.some((alias) => runId.startsWith(alias + "-"));
-}
-
-function formalRunIdFromPayload(payload, tab = "") {
-  const key = sourceReportKeyForTab(tab);
-  const aliases = sourceReportAliasesForKey(key).map((item) => String(item || "").toLowerCase());
-  const direct = String(payload?.runId || payload?.run_id || payload?.latestRunId || payload?.latest_run_id || payload?.run?.runId || payload?.latest?.runId || payload?.transport?.runId || payload?.payload?.runId || payload?.payload?.transport?.runId || "").trim().toLowerCase();
-  return aliases.some((alias) => direct.startsWith(alias + "-")) ? direct : "";
-}
-
-async function sourceReportFallbackPayload(request, tab, endpoint, error) {
-  const key = sourceReportKeyForTab(tab);
-  if (!key || tab === "ai") return null;
-  const url = `${originFrom(request)}/api/source-reports?compact=1&shell=1&live=0&snapshotLive=0&ts=${Date.now()}`;
-  const payload = await fetchJsonWithTimeout(url, 12000, authHeadersFrom(request)).catch(() => null);
-  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports
-    : Array.isArray(payload?.reports) ? payload.reports
-      : Array.isArray(payload?.rows) ? payload.rows
-        : [];
-  const report = reports.find((item) => sourceReportMatchesKey(item, key));
-  const runId = sourceReportRunId(report);
-  if (!report || !runId) return null;
-  const count = Number(report.count ?? report.resultCount ?? report.emittedRows ?? report.rows ?? 0) || 0;
-  return {
-    ok: true,
-    runId,
-    count,
-    resultCount: count,
-    readbackCount: Number(report.readbackCount ?? count) || count,
-    rows: [],
-    matches: [],
-    evidenceStatus: report.evidenceStatus || "complete",
-    unattendedStatus: report.unattendedStatus || "YES",
-    publishAllowed: report.publishAllowed !== false,
-    qualityStatus: report.qualityStatus || report.status || "source_report_display_fallback",
-    mobileDisplayFallback: true,
-    mobileDisplayFallbackSource: "source-reports",
-    sourceReportKey: key,
-    sourceReportEndpoint: "/api/source-reports",
-    sourceReportOriginalEndpoint: endpoint,
-    sourceReportFallbackReason: error?.message || String(error || "mobile_fragment_live_fetch_failed"),
-    updatedAt: report.updatedAt || report.finishedAt || report.generatedAt || new Date().toISOString(),
-  };
-}
 module.exports = async function handler(request, response) {
   setNoStore(response);
   if (request.method !== "GET" && request.method !== "HEAD") {
@@ -982,6 +905,13 @@ module.exports = async function handler(request, response) {
       });
       return;
     }
+    const bypassHtmlSnapshot = shouldUseLiveFragment(tab) && (url.searchParams.get("live") === "1" || url.searchParams.get("verify") === "1" || url.searchParams.get("noSnapshot") === "1");
+    const htmlSnapshot = bypassHtmlSnapshot ? null : await readMobileFragmentHtmlSnapshot(tab);
+    if (htmlSnapshot?.html) {
+      response.setHeader("ETag", `"${crypto.createHash("sha1").update(htmlSnapshot.html).digest("hex").slice(0, 16)}"`);
+      sendHtml(request, response, 200, htmlSnapshot.html, { tab, snapshotHit: true, runId: htmlSnapshot.runId });
+      return;
+    }
   }
   try {
     const endpoint = appendQuery(config.endpoint, {
@@ -990,16 +920,14 @@ module.exports = async function handler(request, response) {
       compact: 1,
       shell: 1,
       limit: 60,
-      ...(shouldUseLiveFragment(tab, request) ? { live: 1, verify: 1, noSnapshot: 1 } : {}),
+      ...(shouldUseLiveFragment(tab) ? { live: 1, verify: 1, noSnapshot: 1 } : {}),
       ts: Date.now(),
     });
     const snapshot = await readDesktopRouteSnapshot({
       timeoutMs: MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS,
-      allowStale: tab === "strategy2",
-      maxAgeMs: tab === "strategy2" ? 24 * 60 * 60 * 1000 : undefined,
     }).catch(() => null);
     const snapshotPayload = tab === "ai" ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
-    const forceLivePayload = tab !== "ai" && tab !== "strategy2";
+    const forceLivePayload = shouldUseLiveFragment(tab);
     const payload = forceLivePayload
       || !hasUsableSnapshotPayload(snapshotPayload, tab)
 
@@ -1015,44 +943,11 @@ module.exports = async function handler(request, response) {
                 : fastWaitingPayload(tab, endpoint, error?.message || "strategy2_mobile_direct_timeout")))
             : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000, authHeadersFrom(request)))
       : snapshotPayload;
-    let displayPayload = payload;
-    if (tab !== "ai" && !formalRunIdFromPayload(payload, tab)) {
-      displayPayload = await sourceReportFallbackPayload(request, tab, endpoint, new Error("mobile_fragment_payload_missing_formal_run_id")).catch(() => null) || payload;
-    }
-    const html = renderFragment(tab, config, displayPayload);
-    if (tab !== "ai") writeMobileFragmentHtmlSnapshot(tab, html, displayPayload);
-    response.setHeader("ETag", "\"" + crypto.createHash("sha1").update(html).digest("hex").slice(0, 16) + "\"");
+    const html = renderFragment(tab, config, payload);
+    if (tab !== "ai") writeMobileFragmentHtmlSnapshot(tab, html, payload);
+    response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);
     sendHtml(request, response, 200, html, { tab });
   } catch (error) {
-    if (tab !== "ai") {
-      const htmlSnapshot = await readMobileFragmentHtmlSnapshot(tab).catch(() => null);
-      if (htmlSnapshot?.html) {
-        response.setHeader("X-Fuman-Mobile-Fragment-Fallback", "html-snapshot");
-        response.setHeader("ETag", "\"" + crypto.createHash("sha1").update(htmlSnapshot.html).digest("hex").slice(0, 16) + "\"");
-        sendHtml(request, response, 200, htmlSnapshot.html, {
-          tab,
-          snapshotHit: true,
-          fallback: true,
-          runId: htmlSnapshot.runId,
-          reason: error?.message || "mobile_fragment_live_fetch_failed",
-        });
-        return;
-      }
-    }
-    const reportFallback = await sourceReportFallbackPayload(request, tab, TAB_CONFIG[tab]?.endpoint || "", error).catch(() => null);
-    if (reportFallback) {
-      const html = renderFragment(tab, config, reportFallback);
-      response.setHeader("X-Fuman-Mobile-Fragment-Fallback", "source-reports");
-      response.setHeader("ETag", "\"" + crypto.createHash("sha1").update(html).digest("hex").slice(0, 16) + "\"");
-      sendHtml(request, response, 200, html, {
-        tab,
-        fallback: true,
-        displayFallback: true,
-        runId: reportFallback.runId,
-        reason: error?.message || "mobile_fragment_live_fetch_failed",
-      });
-      return;
-    }
     sendHtml(request, response, 503, `<div class="empty-state">手機 API fragment 暫時無法取得：${esc(error?.message || error)}</div>`, { tab });
   }
 };

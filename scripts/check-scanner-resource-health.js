@@ -147,7 +147,7 @@ async function fetchStrategy2ReadinessStatus() {
   }
 }
 
-async function fetchSourceStatusPayload(sourceName = "fugle_daytrade_source") {
+async function fetchSourceStatusPayload(sourceName = "fugle_shared_source") {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("missing Supabase credentials");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
@@ -316,7 +316,7 @@ async function fetchStrategy3SessionReadinessStatus() {
     statusRefreshWarning = error?.message || String(error);
   }
   const rows = await supabaseRowsPaged(`/rest/v1/${STRATEGY3_INTRADAY_STATUS_VIEW}?${query({
-    select: "symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_20,ready_ma20_continuous,ready_ma35_continuous",
+    select: "symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ma20_continuous,ready_ma35_continuous",
     order: "latest_candle_time.desc",
   })}`, 1000, 60000);
   const statusRows = Array.isArray(rows) ? rows : [];
@@ -328,7 +328,7 @@ async function fetchStrategy3SessionReadinessStatus() {
     const count = cleanNumber(row.today_candle_count);
     const continuous = cleanNumber(row.continuous_candle_count);
     const minute = candleMinutes(row.latest_candle_time || row.updated_at);
-    if (row.ready_ge_20 === true || row.ready_ma20_continuous === true || continuous >= STRATEGY3_MIN_INTRADAY_1M_CANDLES) return true;
+    if (row.ready_ma20_continuous === true || continuous >= STRATEGY3_MIN_INTRADAY_1M_CANDLES) return true;
     return count >= STRATEGY3_MIN_INTRADAY_1M_CANDLES
       || (count > 0 && minute != null && minute >= STRATEGY3_SESSION_LATEST_MINUTE);
   });
@@ -644,3 +644,5 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, blocked: true, error: error?.message || String(error) }, null, 2));
   process.exitCode = 1;
 });
+
+

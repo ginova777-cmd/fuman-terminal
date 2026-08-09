@@ -4,6 +4,8 @@ const path = require("path");
 const HOLIDAY_API_URL = process.env.TWSE_HOLIDAY_API_URL || "https://openapi.twse.com.tw/v1/holidaySchedule/holidaySchedule";
 const CACHE_MAX_AGE_MS = Math.max(60 * 60 * 1000, Number(process.env.TWSE_HOLIDAY_CACHE_MAX_AGE_MS || 7 * 24 * 60 * 60 * 1000));
 const HOLIDAY_FETCH_TIMEOUT_MS = Math.max(1000, Number(process.env.TWSE_HOLIDAY_FETCH_TIMEOUT_MS || 3000));
+const HOLIDAY_MEMORY_CACHE = new Map();
+const HOLIDAY_MEMORY_FAILURE_TTL_MS = 5 * 60 * 1000;
 
 function taipeiDateParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -114,11 +116,17 @@ function readTradingDayOverride(stateDir, key) {
 }
 
 async function fetchHolidayRows(stateDir, year) {
+  const cacheKey = `${stateDir}|${year}`;
+  const memory = HOLIDAY_MEMORY_CACHE.get(cacheKey);
+  const memoryAge = memory ? Date.now() - memory.fetchedAt : Infinity;
+  if (memory && (memory.value.rows.length > 0 || memoryAge < HOLIDAY_MEMORY_FAILURE_TTL_MS)) return memory.value;
   const cacheFile = cacheFileForYear(stateDir, year);
   const cached = readJson(cacheFile);
   const cachedAt = cached?.cachedAt ? Date.parse(cached.cachedAt) : 0;
   if (Array.isArray(cached?.rows) && cached.rows.length && cachedAt && Date.now() - cachedAt < CACHE_MAX_AGE_MS) {
-    return { rows: cached.rows, source: "cache" };
+    const value = { rows: cached.rows, source: "cache" };
+    HOLIDAY_MEMORY_CACHE.set(cacheKey, { fetchedAt: Date.now(), value });
+    return value;
   }
 
   try {
@@ -137,12 +145,18 @@ async function fetchHolidayRows(stateDir, year) {
     const rows = await response.json();
     if (!Array.isArray(rows)) throw new Error("unexpected TWSE holiday response");
     writeJson(cacheFile, { cachedAt: new Date().toISOString(), rows });
-    return { rows, source: "twse" };
+    const value = { rows, source: "twse" };
+    HOLIDAY_MEMORY_CACHE.set(cacheKey, { fetchedAt: Date.now(), value });
+    return value;
   } catch (error) {
     if (Array.isArray(cached?.rows) && cached.rows.length) {
-      return { rows: cached.rows, source: "stale_cache", error: error.message };
+      const value = { rows: cached.rows, source: "stale_cache", error: error.message };
+      HOLIDAY_MEMORY_CACHE.set(cacheKey, { fetchedAt: Date.now(), value });
+      return value;
     }
-    return { rows: [], source: "weekend_fallback", error: error.message };
+    const value = { rows: [], source: "weekend_fallback", error: error.message };
+    HOLIDAY_MEMORY_CACHE.set(cacheKey, { fetchedAt: Date.now(), value });
+    return value;
   }
 }
 

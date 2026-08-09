@@ -1,4 +1,4 @@
-﻿"use strict";
+"use strict";
 
 const fs = require("fs");
 const path = require("path");
@@ -102,7 +102,7 @@ function numberValue(value) {
 
 function isReady(row) {
   const continuous = numberValue(row.continuous_candle_count ?? row.candle_count);
-  return row.ready_ma20_continuous === true || row.ready_ge_20 === true || continuous >= MIN_CANDLES_FOR_STRATEGY3;
+  return row.ready_ma20_continuous === true || continuous >= MIN_CANDLES_FOR_STRATEGY3;
 }
 
 function latestTime(rows, key) {
@@ -179,15 +179,20 @@ async function main() {
   const statusRows = await getRowsSafe(`/rest/v1/${STATUS_VIEW}?select=*&limit=1`, STATUS_VIEW, warnings);
   const status = statusRows[0] || null;
   const sourceStatusReadiness = await fetchDaytradeSourcePayloadReadiness(warnings);
-  const readyRows = await getRowsPagedSafe([
+  const daytradeStatusRows = await getRowsPagedSafe([
+    `/rest/v1/${DAYTRADE_STATUS_VIEW}`,
+    "?select=symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ma20_continuous,ready_ma35_continuous",
+  ].join(""), DAYTRADE_STATUS_VIEW, warnings, 500, 5000);
+  const statusReadyCount = numberValue(status?.intraday_1m_ready_count);
+  const statusExpected = numberValue(status?.detection_expected_count);
+  const daytradeStatusReadyCount = daytradeStatusRows.filter(isReady).length;
+  const shouldReadHeavyReadyView = process.env.STRATEGY2_FORCE_READY_VIEW_READBACK === "1"
+    || Math.max(daytradeStatusReadyCount, statusReadyCount, numberValue(sourceStatusReadiness.readyCount)) < MIN_READY_FOR_STRATEGY3;
+  const readyRows = shouldReadHeavyReadyView ? await getRowsPagedSafe([
     `/rest/v1/${READY_VIEW}`,
     "?select=symbol,name,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_35,ready_ma20_continuous,ready_ma35_continuous,intraday_1m_status_updated_at,quote_updated_at",
     "&order=symbol.asc",
-  ].join(""), READY_VIEW, warnings);
-  const daytradeStatusRows = await getRowsPagedSafe([
-    `/rest/v1/${DAYTRADE_STATUS_VIEW}`,
-    "?select=symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_20,ready_ge_35,ready_ma20_continuous,ready_ma35_continuous,updated_at",
-  ].join(""), DAYTRADE_STATUS_VIEW, warnings, 500, 5000);
+  ].join(""), READY_VIEW, warnings) : [];
   const missingRows = await getRowsSafe([
     `/rest/v1/${MISSING_VIEW}`,
     "?select=checked_at,gate,symbol,name,missing_reason,details",
@@ -198,10 +203,7 @@ async function main() {
 
   let rawFallback = null;
   const readyCountFromView = readyRows.filter(isReady).length;
-  const daytradeStatusReadyCount = daytradeStatusRows.filter(isReady).length;
   const expectedFromView = readyRows.length;
-  const statusReadyCount = numberValue(status?.intraday_1m_ready_count);
-  const statusExpected = numberValue(status?.detection_expected_count);
   if (Math.max(readyCountFromView, daytradeStatusReadyCount, statusReadyCount) < MIN_READY_FOR_STRATEGY3) {
     rawFallback = await fetchRawLatestValidDayReadiness().catch((error) => ({ error: error?.message || String(error), readyCount: 0, expected: 0 }));
   }
@@ -226,7 +228,7 @@ async function main() {
     ok: strategy3Safe,
     status: strategy3Safe ? "ready_for_strategy3" : "not_ready_for_strategy3",
     checkedAt: new Date().toISOString(),
-    source: daytradeStatusReadyCount >= MIN_READY_FOR_STRATEGY3 ? DAYTRADE_STATUS_VIEW : (rawFallback?.readyCount >= MIN_READY_FOR_STRATEGY3 ? rawFallback.source : READY_VIEW),
+    source: daytradeStatusReadyCount >= MIN_READY_FOR_STRATEGY3 ? DAYTRADE_STATUS_VIEW : (statusReadyCount >= MIN_READY_FOR_STRATEGY3 ? STATUS_VIEW : (rawFallback?.readyCount >= MIN_READY_FOR_STRATEGY3 ? rawFallback.source : READY_VIEW)),
     statusView: STATUS_VIEW,
     daytradeStatusView: DAYTRADE_STATUS_VIEW,
     missingView: MISSING_VIEW,
@@ -284,3 +286,5 @@ main().catch((error) => {
   }, null, 2));
   process.exit(1);
 });
+
+

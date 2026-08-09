@@ -1,7 +1,6 @@
 const tls = require("tls");
 const fs = require("fs");
 const path = require("path");
-const { notificationsDisabled } = require("./notification-guard");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -19,7 +18,6 @@ function readSecretText(file) {
 }
 
 function notificationsDisabled() {
-  if (!/^(1|true|yes|on)$/i.test(String(process.env.FUMAN_ENABLE_LEGACY_EXTERNAL_NOTIFICATIONS || "").trim())) return true;
   if (/^(1|true|yes|on)$/i.test(String(process.env.FUMAN_NOTIFICATIONS_DISABLED || process.env.NOTIFICATIONS_DISABLED || "").trim())) return true;
   try {
     return JSON.parse(fs.readFileSync(path.join(RUNTIME_DIR, "config", "notifications-disabled.json"), "utf8")).disabled === true;
@@ -173,10 +171,6 @@ async function main() {
   const receiptFile = readArg("--receipt") || process.env.FUMAN_ALERT_RECEIPT_FILE || "";
   const dryRun = process.argv.includes("--dry-run") || process.env.FUMAN_ALERT_DRY_RUN === "1";
   const startedAt = new Date().toISOString();
-  if (notificationsDisabled()) {
-    console.log("failure alert skipped: legacy notifications disabled");
-    return;
-  }
   const workflow = process.env.GITHUB_WORKFLOW || "Intraday Radar Scorecard";
   const runUrl = process.env.GITHUB_RUN_URL || "";
   const mode = process.env.SCORECARD_MODE || "unknown";

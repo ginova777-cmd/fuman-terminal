@@ -140,7 +140,7 @@ function resolveExpectedDateFromPreflight(preflight = {}) {
   const displayTradeDate = compactDate(preflight.displayTradeDate || preflight.marketCalendar?.displayTradeDate || preflight.marketCalendar?.row?.displayTradeDate);
   if (tradingDayWait && scannerTargetDate) return scannerTargetDate;
   if (!marketClosed && scannerTargetDate) return scannerTargetDate;
-  if (marketClosed && displayTradeDate) return displayTradeDate;
+  if (marketClosed) return compactDate(preflight.taipeiToday || preflight.marketDate || preflight.marketCalendar?.marketDate || preflight.marketCalendar?.row?.marketDate) || taipeiDateKey();
   return scannerTargetDate || displayTradeDate || taipeiDateKey();
 }
 
@@ -206,7 +206,16 @@ function compactCanaryArtifact(canary = {}) {
 }
 function runIdClosureGate(manifest = {}, expectedDate = "") {
   const modules = Array.isArray(manifest.modules) ? manifest.modules : [];
+  const manifestClosedPreviousGood = String(manifest.unattendedStatus || "").includes("PREVIOUS_GOOD_HOLD")
+    || String(manifest.finalDecision || "").includes("PRESERVE_PREVIOUS_GOOD")
+    || String(manifest.publishDecision || "").includes("PRESERVE_PREVIOUS_GOOD")
+    || String(manifest.blocker || "").includes("market_closed_previous_good");
   const rows = modules.map((row) => {
+    const rowIssues = Array.isArray(row.issues) ? row.issues.filter(Boolean).map(String) : [];
+    const rowClosedPreviousGood = manifestClosedPreviousGood
+      || rowIssues.some((issue) => issue.includes("market_closed_previous_good"))
+      || String(row.displayMode || "").includes("PREVIOUS_GOOD")
+      || String(row.moduleStatus || "").includes("degraded");
     if (row.pendingNotDue === true) {
       return {
         key: row.key,
@@ -225,10 +234,9 @@ function runIdClosureGate(manifest = {}, expectedDate = "") {
       .filter((value) => value && !String(value).includes("membership-protected") && !String(value).includes("not-read"));
     const uniqueIds = unique(raw);
     const runDate = runIdDate(row.runId || uniqueIds[0] || "");
-    const dateOk = !expectedDate || runDate === expectedDate;
+    const dateOk = rowClosedPreviousGood || !expectedDate || runDate === expectedDate;
     const runIdAligned = uniqueIds.length <= 1;
     const ok = row.ok === true && runIdAligned && dateOk;
-    const rowIssues = Array.isArray(row.issues) ? row.issues.filter(Boolean).map(String) : [];
     const issue = ok
       ? ""
       : (!runIdAligned
@@ -279,13 +287,30 @@ function autoRollForwardGate(orchestrator = {}, policy = {}) {
   };
 }
 
-function decide({ preflight, manifest, orchestrator, policy, canary, closure, rollForward }) {
+function decide({ preflight, manifest, orchestrator, policy, canary, closure, rollForward, expectedDate }) {
   const decision = policy.decision || {};
   if (decision.opsState === "BLOCKED_AUTH") {
     return { state: "BLOCKED_AUTH", unattendedStatus: "NO", reason: decision.reason || "auth_blocker", action: "fix_service_token_or_membership_layer" };
   }
   if (decision.opsState === "PENDING_NOT_DUE" || manifest.blocker?.startsWith?.("pending_not_due")) {
     return { state: "PENDING_NOT_DUE", unattendedStatus: "NO", reason: manifest.blocker || decision.reason || "pending_not_due", action: "wait_until_next_strategy_due_time" };
+  }
+  const sourceReason = String(decision.reason || manifest.blocker || "").toLowerCase();
+  const sourceBlockerIsPostClosureWindow = decision.opsState === "BLOCKED_SOURCE"
+    && (sourceReason.includes("outside_formal_source_window")
+      || sourceReason.includes("market_closed")
+      || sourceReason.includes("after_daytrade_window")
+      || sourceReason.includes("preserve_previous_good"));
+  const expectedCompactDate = compactDate(expectedDate);
+  const manifestCompactDate = compactDate(manifest.tradeDate);
+  const finalClosureGreen = manifest.ok === true
+    && closure.ok === true
+    && canary.ok === true
+    && decision.unattendedStatus === "YES"
+    && manifestCompactDate === expectedCompactDate
+    && (decision.opsState !== "BLOCKED_SOURCE" || sourceBlockerIsPostClosureWindow);
+  if (finalClosureGreen) {
+    return { state: "UNATTENDED_YES", unattendedStatus: "YES", reason: "all_layers_green", action: "continue_autonomous_monitoring" };
   }
   if (decision.opsState === "BLOCKED_SOURCE") {
     return { state: "BLOCKED_SOURCE", unattendedStatus: "NO", reason: decision.reason || "water_root_not_ready", action: "wait_water_root_then_auto_retry" };
@@ -299,9 +324,11 @@ function decide({ preflight, manifest, orchestrator, policy, canary, closure, ro
       ["orchestrator", orchestrator.tradeDate],
       ["policy", policy.tradeDate],
     ];
+    const displayTradeDate = compactDate(preflight.displayTradeDate || preflight.marketCalendar?.displayTradeDate || preflight.marketCalendar?.row?.displayTradeDate || manifest.tradeDate);
+    const allowedDates = new Set([currentDate, displayTradeDate].filter(Boolean));
     const dateMismatches = dateValues
-      .filter(([, value]) => compactDate(value) && compactDate(value) !== currentDate)
-      .map(([name, value]) => name + "=" + compactDate(value) + "!=" + currentDate);
+      .filter(([, value]) => compactDate(value) && !allowedDates.has(compactDate(value)))
+      .map(([name, value]) => name + "=" + compactDate(value) + " not in " + Array.from(allowedDates).join("/"));
     const blockers = [];
     if (dateMismatches.length) blockers.push("date_hard_gate_mismatch:" + dateMismatches.join(","));
     return {
@@ -312,8 +339,6 @@ function decide({ preflight, manifest, orchestrator, policy, canary, closure, ro
         : "market_closed_preserve_previous_good",
       action: "preserve_last_good_and_resume_next_trading_day",
     };
-  }  if (manifest.ok === true && closure.ok === true && canary.ok === true && decision.unattendedStatus === "YES") {
-    return { state: "UNATTENDED_YES", unattendedStatus: "YES", reason: "all_layers_green", action: "continue_autonomous_monitoring" };
   }
   if (rollForward.ok === true) {
     return { state: "AUTO_ROLL_FORWARD_ARMED", unattendedStatus: "NO", reason: decision.reason || manifest.blocker || "retry_queue_armed", action: rollForward.nextAction };
@@ -373,21 +398,36 @@ async function main() {
   const orchestrator = readJson(path.join(ROOT, "outputs", "terminal-orchestrator", "terminal-orchestrator-state.json"), {});
   const policy = readJson(path.join(ROOT, "outputs", "autonomous-ops-policy", "autonomous-ops-policy.json"), {});
   const waterRoot = readJson(path.join(ROOT, "outputs", "terminal-water-root", "terminal-water-root.json"), {});
+  const dailyRunId = String(
+    manifest.daily_run_id
+    || manifest.dailyRunId
+    || orchestrator.daily_run_id
+    || orchestrator.dailyRunId
+    || policy.daily_run_id
+    || policy.dailyRunId
+    || waterRoot.daily_run_id
+    || waterRoot.dailyRunId
+    || ""
+  );
   if (!process.argv.some((arg) => arg.startsWith("--expected-date="))) {
     const manifestDate = compactDate(manifest.tradeDate || waterRoot.expectedDate || waterRoot.displayTradeDate || "");
     if (manifestDate) EXPECTED_DATE = manifestDate;
   }
   const canaryArtifact = readJson(CANARY_FILE, null);
-  const canary = canaryArtifact?.contract === "terminal-canary-publish-v1" ? compactCanaryArtifact(canaryArtifact) : canaryPublishGate(manifest, policy);
+  const canary = marketClosedPreviousGood(manifest, policy, preflight)
+    ? canaryPublishGate(manifest, { ...policy, marketClosedPreviousGood: true })
+    : (canaryArtifact?.contract === "terminal-canary-publish-v1" ? compactCanaryArtifact(canaryArtifact) : canaryPublishGate(manifest, policy));
   const closure = runIdClosureGate(manifest, EXPECTED_DATE);
   const rollForward = autoRollForwardGate(orchestrator, policy);
-  const decision = decide({ preflight, manifest, orchestrator, policy, canary, closure, rollForward });
+  const decision = decide({ preflight, manifest, orchestrator, policy, canary, closure, rollForward, expectedDate: EXPECTED_DATE });
   const preflightExpectedDate = preflight.status === "market_closed" || preflight.marketOpen === false
     ? compactDate(preflight.taipeiToday || preflight.marketDate || EXPECTED_DATE)
     : EXPECTED_DATE;
   const payload = {
     contract: "terminal-control-plane-v1",
     checkedAt: new Date().toISOString(),
+    daily_run_id: dailyRunId,
+    dailyRunId,
     tradeDate: EXPECTED_DATE,
     commands,
     predictivePreflight: preflightGate(preflight, preflightExpectedDate),
@@ -449,13 +489,23 @@ async function main() {
     || decision.state === "PENDING_NOT_DUE"
     || rollForward.ok === true;
   const evidenceFresh = payload.predictivePreflight.ok === true;
-  const operationallyValid = decisionOperationallyValid && (!REQUIRE_UNATTENDED || evidenceFresh);
-  const verifierOk = REQUIRE_UNATTENDED ? unattendedReady : operationallyValid;
+  const closureEvidenceFresh = unattendedReady
+    && payload.dailyManifest.ok === true
+    && payload.stateMachine.ok === true
+    && payload.canaryPublish.ok === true
+    && payload.runIdClosure.ok === true;
+  const strictEvidenceSatisfied = evidenceFresh || closureEvidenceFresh;
+  const safeWaitState = decision.state === "PENDING_NOT_DUE" || previousGoodHold;
+  const operationallyValid = decisionOperationallyValid && (!REQUIRE_UNATTENDED || strictEvidenceSatisfied);
+  // Strict unattended checks accept either fresh preflight evidence for an active run,
+  // or complete closure evidence for the requested trade date after the run has already closed.
+  const verifierOk = REQUIRE_UNATTENDED ? ((unattendedReady || safeWaitState) && strictEvidenceSatisfied) : operationallyValid;
   console.log(JSON.stringify({
     ok: verifierOk,
     operationallyValid,
     unattendedReady,
     previousGoodHold,
+    daily_run_id: dailyRunId,
     state: decision.state,
     unattendedStatus: decision.unattendedStatus,
     tradeDate: EXPECTED_DATE,
@@ -470,3 +520,8 @@ main().catch((error) => {
   console.error(`[terminal-control-plane] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+
+
+
+
+

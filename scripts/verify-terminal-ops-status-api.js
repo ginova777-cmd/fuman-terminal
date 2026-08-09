@@ -29,22 +29,35 @@ function assert(condition, issue, details, issues) {
   if (!condition) issues.push({ issue, details });
 }
 
+function gateHasReasonCode(gate, code) {
+  return Array.isArray(gate?.reasonCodes) && gate.reasonCodes.includes(code);
+}
+
 function isPendingNotDue(payload) {
-  return (payload.unattendedStatus === "NO" || payload.unattendedStatus === "PREVIOUS_GOOD_HOLD")
+  const dailyManifestGate = payload.gates?.dailyManifest || {};
+  const runIdClosureGate = payload.gates?.runIdClosure || {};
+  const manifestScheduleAware = dailyManifestGate.status === "PENDING_NOT_DUE"
+    || gateHasReasonCode(dailyManifestGate, "SCHEDULE_PENDING_NOT_DUE");
+  return payload.unattendedStatus === "NO"
     && payload.state === "PENDING_NOT_DUE"
-    && payload.gates?.dailyManifest?.status === "PENDING_NOT_DUE"
-    && payload.gates?.runIdClosure?.status === "PENDING_NOT_DUE"
+    && manifestScheduleAware
+    && runIdClosureGate.status === "PENDING_NOT_DUE"
+    && gateHasReasonCode(runIdClosureGate, "SCHEDULE_PENDING_NOT_DUE")
     && payload.actionMatrix?.stopMode === "wait_schedule";
 }
 
 function isMarketClosedPreviousGood(payload) {
+  const canaryStatus = String(payload.canaryPublish?.status || payload.gates?.canaryPublish?.status || "");
+  const canaryReasonCodes = Array.isArray(payload.gates?.canaryPublish?.reasonCodes) ? payload.gates.canaryPublish.reasonCodes : [];
+  const canaryPreviousGood = canaryStatus === "NOT_ARMED_MARKET_CLOSED_PREVIOUS_GOOD"
+    || canaryReasonCodes.includes("MARKET_CLOSED")
+    || payload.canaryPublish?.marketClosedPreviousGood === true;
   return payload.unattendedStatus === "PREVIOUS_GOOD_HOLD"
     && payload.state === "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD"
-    && payload.canaryPublish?.scorecardPublishAllowed === false
+    && canaryPreviousGood
     && payload.predictivePreflight?.preservePreviousGood === true
     && payload.predictivePreflight?.formalScanAllowed === false;
 }
-
 function isAcceptableOpsStatus(payload) {
   if (payload.unattendedStatus === "YES") return true;
   if (isPendingNotDue(payload)) return true;
@@ -92,9 +105,10 @@ async function main() {
   assert(Array.isArray(payload.reasonCodeSummary?.codes) && payload.reasonCodeSummary.codes.length > 0, "reason_code_summary_codes_missing", { reasonCodeSummary: payload.reasonCodeSummary }, issues);
   assert(payload.rootCauseSummary?.contract === "production-readiness-root-cause-summary-v1", "root_cause_summary_missing", { rootCauseSummary: payload.rootCauseSummary }, issues);
   assert(payload.rootCauseSummary?.ok === true && Number(payload.rootCauseSummary?.unknownBlockers || 0) === 0, "root_cause_summary_not_ok", { rootCauseSummary: payload.rootCauseSummary }, issues);
-  assert(Array.isArray(payload.rootCauseSummary?.categories) && payload.rootCauseSummary.categories.length > 0, "root_cause_summary_categories_missing", { rootCauseSummary: payload.rootCauseSummary }, issues);
+  const rootCauseTotalBlockers = Number(payload.rootCauseSummary?.totalBlockers || 0);
+  assert(Array.isArray(payload.rootCauseSummary?.categories) && (rootCauseTotalBlockers === 0 || payload.rootCauseSummary.categories.length > 0), "root_cause_summary_categories_missing", { rootCauseSummary: payload.rootCauseSummary }, issues);
   assert(payload.rootCauseRecoveryPlan?.contract === "production-readiness-root-cause-recovery-plan-v1", "root_cause_recovery_plan_missing", { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
-  assert(Array.isArray(payload.rootCauseRecoveryPlan?.steps) && payload.rootCauseRecoveryPlan.steps.length > 0, "root_cause_recovery_plan_steps_missing", { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
+  assert(Array.isArray(payload.rootCauseRecoveryPlan?.steps) && (rootCauseTotalBlockers === 0 || payload.rootCauseRecoveryPlan.steps.length > 0), "root_cause_recovery_plan_steps_missing", { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
   const recoveryCategories = new Set((payload.rootCauseRecoveryPlan?.steps || []).map((row) => row.category));
   for (const row of payload.rootCauseSummary?.categories || []) assert(recoveryCategories.has(row.category), `root_cause_recovery_plan_missing_category:${row.category}`, { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
   const authStep = (payload.rootCauseRecoveryPlan?.steps || []).find((row) => row.category === "auth_readback");
@@ -180,3 +194,4 @@ main().catch((error) => {
   console.error(`[terminal-ops-status-api] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
+

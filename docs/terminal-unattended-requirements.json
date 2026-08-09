@@ -1,0 +1,249 @@
+{
+  "contract": "terminal-unattended-requirements-v1",
+  "generated_for": "full_unattended_final_audit",
+  "policy": "every_required_requirement_needs_current_receipt;_missing_or_stale_evidence_is_NO",
+  "requirements": [
+    {
+      "key": "market_calendar",
+      "order": 1,
+      "required": true,
+      "receipt": "market_calendar",
+      "verifier": "scripts/check-market-calendar-action.js",
+      "allowed_action": "allow_formal_scan_or_skip_formal_scan_preserving_previous_good"
+    },
+    {
+      "key": "active_module_registry",
+      "order": 2,
+      "required": true,
+      "receipt": "active-module-registry.json",
+      "verifier": "scripts/write-terminal-active-module-registry.js",
+      "allowed_action": "repair_active_module_registry_writer_then_retry"
+    },
+    {
+      "key": "single_orchestrator_lock",
+      "order": 3,
+      "required": true,
+      "receipt": "orchestrator_lock",
+      "verifier": "lib/terminal-final-audit-contract.js",
+      "allowed_action": "wait_for_active_orchestrator_to_finish_then_retry"
+    },
+    {
+      "key": "predictive_preflight",
+      "order": 4,
+      "required": true,
+      "receipt": "preflight",
+      "verifier": "scripts/verify-terminal-predictive-preflight.js",
+      "allowed_action": "wait_or_fix_date_market_calendar_then_rerun_preflight"
+    },
+    {
+      "key": "websocket_trades_aggregates_candles",
+      "order": 5,
+      "required": true,
+      "receipt": "websocket",
+      "verifier": "scripts/verify-fugle-websocket-sources.js",
+      "allowed_action": "reconnect_or_repair_fugle_websocket_then_rerun_source_verifier"
+    },
+    {
+      "key": "stock_universe_1m",
+      "order": 6,
+      "required": true,
+      "receipt": "stock_universe_1m",
+      "verifier": "scripts/verify-terminal-water-root.js",
+      "allowed_action": "restore_full_stock_universe_and_1m_candles_then_rerun"
+    },
+    {
+      "key": "indicators_ma5_ma10_ma20_ma35_volume",
+      "order": 7,
+      "required": true,
+      "receipt": "indicators_volume",
+      "verifier": "scripts/verify-terminal-water-root.js",
+      "allowed_action": "restore_indicator_and_volume_chain_then_rerun"
+    },
+    {
+      "key": "all_strategy_and_chip_scans",
+      "order": 8,
+      "required": true,
+      "receipt": "strategy2,strategy3,strategy4,strategy5,institution,cb,warrant",
+      "verifier": "module_receipt_adapter",
+      "allowed_action": "rerun_only_failed_current_date_module_then_reverify"
+    },
+    {
+      "key": "mother_pool_300_600",
+      "order": 9,
+      "required": true,
+      "receipt": "mother_pool",
+      "verifier": "scripts/verify-daytrade-mother-pool-contract.js",
+      "allowed_action": "restore_300_to_600_symbol_mother_pool_then_rerun"
+    },
+    {
+      "key": "top40_priority_pool",
+      "order": 10,
+      "required": true,
+      "receipt": "top40",
+      "verifier": "scripts/verify-daytrade-mother-pool-contract.js",
+      "allowed_action": "restore_top40_priority_pool_and_fresh_quote_coverage_then_rerun"
+    },
+    {
+      "key": "natural_evidence_0700_0845_0900",
+      "order": 11,
+      "required": true,
+      "receipt": "natural_evidence",
+      "verifier": "scripts/verify-terminal-water-root.js",
+      "allowed_action": "wait_for_natural_checkpoint_or_record_blocked_recovery_evidence"
+    },
+    {
+      "key": "water_root",
+      "order": 12,
+      "required": true,
+      "receipt": "water_root",
+      "verifier": "scripts/verify-terminal-water-root.js",
+      "allowed_action": "repair_source_water_root_then_rerun_affected_gate"
+    },
+    {
+      "key": "formal_gate",
+      "order": 13,
+      "required": true,
+      "receipt": "formal_gate",
+      "verifier": "scripts/verify-strategy-scan-formal-gate.js",
+      "allowed_action": "wait_or_fix_water_root_then_rerun_formal_gate"
+    },
+    {
+      "key": "power_recovery_after_outage",
+      "order": 14,
+      "required": true,
+      "receipt": "power_recovery",
+      "verifier": "scripts/verify-terminal-power-recovery.js",
+      "allowed_action": "repair_or_register_start_when_available_final_audit_task_then_rerun"
+    },
+    {
+      "key": "self_heal_reconnect_backfill_rerun_reverify",
+      "order": 15,
+      "required": true,
+      "receipt": "watchdog,recovery_queue,daily_ohlcv",
+      "verifier": "module_receipt_adapter",
+      "allowed_action": "repair_only_first_blocker_then_rerun_affected_stage"
+    },
+    {
+      "key": "daily_ohlcv_90_percent_20_days",
+      "order": 16,
+      "required": true,
+      "receipt": "daily_ohlcv",
+      "verifier": "scripts/verify-terminal-daily-ohlcv.js",
+      "allowed_action": "run_read_only_daily_ohlcv_verifier_after_backfill_done"
+    },
+    {
+      "key": "manifest",
+      "order": 17,
+      "required": true,
+      "receipt": "terminal-daily-manifest.json",
+      "verifier": "scripts/write-terminal-daily-manifest.js",
+      "allowed_action": "produce_current_daily_manifest_before_claiming_completion"
+    },
+    {
+      "key": "canary_publish",
+      "order": 18,
+      "required": true,
+      "receipt": "canary",
+      "verifier": "scripts/verify-terminal-canary-publish.js",
+      "allowed_action": "run_canary_publish_verifier_and_record_current_receipt"
+    },
+    {
+      "key": "runid_closure",
+      "order": 19,
+      "required": true,
+      "receipt": "runid_closure",
+      "verifier": "scripts/verify-terminal-runid-closure-contract.js",
+      "allowed_action": "repair_daily_run_id_closure_then_reverify"
+    },
+    {
+      "key": "api",
+      "order": 20,
+      "required": true,
+      "receipt": "api",
+      "verifier": "scripts/verify-api-unattended-scorecard.js",
+      "allowed_action": "run_read_only_api_scorecard_and_record_current_receipt"
+    },
+    {
+      "key": "desktop",
+      "order": 21,
+      "required": true,
+      "receipt": "desktop",
+      "verifier": "scripts/verify-terminal-ui-state-acceptance.js",
+      "allowed_action": "refresh_and_verify_current_desktop_route_snapshot"
+    },
+    {
+      "key": "mobile",
+      "order": 22,
+      "required": true,
+      "receipt": "mobile",
+      "verifier": "scripts/verify-terminal-ui-e2e.js",
+      "allowed_action": "refresh_and_verify_current_mobile_states"
+    },
+    {
+      "key": "route_88",
+      "order": 23,
+      "required": true,
+      "receipt": "route_88",
+      "verifier": "scripts/verify-terminal-ui-state-acceptance.js",
+      "allowed_action": "verify_current_88_route_states"
+    },
+    {
+      "key": "scorecard",
+      "order": 24,
+      "required": true,
+      "receipt": "scorecard",
+      "verifier": "scripts/verify-api-unattended-scorecard.js",
+      "allowed_action": "run_read_only_scorecard_verifier_for_current_trade_date"
+    },
+    {
+      "key": "source_reports",
+      "order": 25,
+      "required": true,
+      "receipt": "source_reports",
+      "verifier": "scripts/verify-terminal-resource-chain.js",
+      "allowed_action": "produce_current_source_reports_and_reverify"
+    },
+    {
+      "key": "watchdog",
+      "order": 26,
+      "required": true,
+      "receipt": "watchdog",
+      "verifier": "scripts/verify-terminal-autonomous-root-runner.js",
+      "allowed_action": "repair_watchdog_and_record_current_recovery_evidence"
+    },
+    {
+      "key": "auto_roll_forward",
+      "order": 27,
+      "required": true,
+      "receipt": "auto_roll_forward",
+      "verifier": "scripts/verify-terminal-auto-roll-forward.js",
+      "allowed_action": "run_auto_roll_forward_verifier_and_recover_only_affected_stage"
+    },
+    {
+      "key": "recovery_queue",
+      "order": 28,
+      "required": true,
+      "receipt": "recovery_queue",
+      "verifier": "scripts/verify-terminal-recovery-queue.js",
+      "allowed_action": "process_recovery_queue_then_rerun_read_only_verifier"
+    },
+    {
+      "key": "control_plane",
+      "order": 29,
+      "required": true,
+      "receipt": "control_plane",
+      "verifier": "scripts/verify-terminal-control-plane.js",
+      "allowed_action": "repair_control_plane_then_rerun_read_only_verifier"
+    },
+    {
+      "key": "unattended_yes_no_final_audit",
+      "order": 30,
+      "required": true,
+      "receipt": "terminal-unattended-final-audit.json",
+      "verifier": "scripts/verify-terminal-final-audit-contract.js",
+      "allowed_action": "inspect_first_blocker_then_retry_only_allowed_action"
+    }
+  ],
+  "active_scope": "core_convergence_plus_power_recovery_plus_daily_ohlcv_plus_data_chain_plus_strategy_chip_plus_surface_readback_plus_read_only_verifier_closure",
+  "deferred_scope": "none"
+}

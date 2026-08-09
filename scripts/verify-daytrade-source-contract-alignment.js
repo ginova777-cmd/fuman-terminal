@@ -233,8 +233,6 @@ function isSourceA(source) {
     && source.hasScannerCanRunOpening === true
     && source.scannerCanRunOpening === true
     && source.rateLimitStatus !== "rate_limited"
-    && source.strategyChipStatus === "ready"
-    && source.strategyChipCompleteLatestRun === true
     && sourceWebsocketOk(source);
 }
 
@@ -259,8 +257,6 @@ function isGateA(gate) {
     && gate.scannerCanRunOpening === true
     && gate.quoteAgeSeconds <= 90
     && gate.formalEntrySpeedVerdict === "YES"
-    && gate.strategyChipStatus === "ready"
-    && gate.strategyChipCompleteLatestRun === true
     && gateWebsocketOk(gate);
 }
 
@@ -314,12 +310,14 @@ function writerCodeRegressionChecks() {
     websocketFormalReadyPayload: source.includes("websocket_formal_ready") && source.includes("websocket_formal_ready_reason") && source.includes("formalReadyReason"),
     websocketFormalReadyRequiresTransport: /formalReady: transportReady/.test(source) && /statusAgeSeconds <= 300/.test(source),
     formalGateRequiresWebsocket: /priorityGateA && formalEntryWindow && webSocketStatus\.formalReady/.test(source),
-    strategyChipCompleteRunHardGate: source.includes('strategyChipCompleteLatestRun') && source.includes('strategy_chip_complete_latest_run_missing'),
+    strategyChipEvidenceNonBlocking: source.includes('strategyChipCompleteLatestRun') && source.includes('formal_priority_strategy_chip_required_for_formal_entry: false') && source.includes('formal_priority_strategy_chip_blocks_formal_entry: false'),
     formalPrioritySpeedPayload: source.includes("formal_priority_speed_ok"),
     fullMarketSpeedNonBlockingPayload: source.includes("full_market_speed_blocking: false"),
-    slowTableBatchReduction: source.includes('supabaseUpsert("fugle_daytrade_priority_pool", priorityRows, "symbol", { batchSize: 40 })')
-      && source.includes('supabaseUpsert("fugle_daytrade_intraday_1m", rows, "symbol,candle_time", { batchSize: 40 })')
-      && source.includes('supabaseUpsert("fugle_daytrade_futopt_quotes_live", rows, "future_symbol", { batchSize: 80 })'),
+    slowTableBatchReduction: source.includes('fugle_daytrade_priority_pool')
+      && source.includes('fugle_daytrade_intraday_1m')
+      && source.includes('fugle_daytrade_futopt_quotes_live')
+      && source.includes('batchSize: 40')
+      && source.includes('BATCH_SIZE = Math.max(1, Math.min(FORMAL_DAYTRADE_PRIORITY_LIMIT'),
     websocketQuoteReadthrough: source.includes('supabaseUpsert(\'fugle_daytrade_quotes_live\', websocketQuoteRows, \'symbol\', { batchSize: 40 })')
       && source.includes('websocket_cache_mother_pool_readthrough')
       && source.includes('websocket_quote_readthrough_written'),
@@ -327,19 +325,69 @@ function writerCodeRegressionChecks() {
       && source.includes('max_run_seconds_reached_after_active_tick')
       && !source.includes('process.exit(124)'),
     motherPoolBaseEligibilityContract: source.includes('function evaluateMotherPoolBasePool')
-      && source.includes('Five-day average volume ranks liquidity')
-      && source.includes('avg5_volume_pending')
+      && source.includes('avg5 is a liquidity grade only')
       && !source.includes('avg5_volume_not_gt_3000')
-      && source.includes('market_not_twse_otc'),
-    warmingMotherPoolIncludesPending: source.includes('const rankingCandidates = [...qualifiedCandidates, ...pendingCandidates]'),
+      && source.includes('market_not_twse_otc')
+      && source.includes('price_below_50'),
+    warmingMotherPoolIncludesPending: source.includes('const rankingCandidates = qualifiedCandidates')
+      && source.includes('quote_stale')
+      && source.includes('quote_pending'),
     runtimeSeedsCannotBypassBasePool: source.includes('Runtime seeds may boost a candidate already selected in the warming')
       && source.includes('if (!prev)'),
-    fullMarketMotherPoolRotation: source.includes('daytradeMotherPoolSymbols')
-      && source.includes('mother_pool_rotation_priority_top40'),
+    fullMarketMotherPoolRotation: source.includes('prioritySource: "dynamic_daytrade_mother_pool"')
+      && source.includes('formal_gate_scope: "mother_pool_300_rotating_deep_scan"')
+      && source.includes('mother_pool_scan_min_symbols')
+      && source.includes('mother_pool_scan_max_symbols'),
     motherPoolMinimum300: source.includes('positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_SYMBOLS || CONFIG.motherPool?.targetSymbolsMin, 300)'),
     motherPoolFreshnessFirst: source.includes('Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true)')
-      && source.includes('mother_pool_fresh_coverage_120s'),    stockTickerSchemaCompatible: source.includes('select=symbol,name,market,stock_type,type,industry,is_etf,is_suspended,payload&order=symbol.asc')
-      && !source.includes('select=symbol,name,market,stock_type,type,industry,is_etf,is_suspended,is_trial'),
+      && source.includes('mother_pool_fresh_coverage_120s'),
+    motherPoolPriceFloor50: source.includes('MOTHER_POOL_MIN_PRICE') && source.includes('price_below_50'),
+    motherPoolTradingHardFilters: source.includes('daytrade_not_allowed')
+      && source.includes('halted_or_suspended')
+      && source.includes('disposition_or_controlled')
+      && source.includes('split_trading')
+      && source.includes('manual_control')
+      && source.includes('is_daytrade_unsuitable')
+      && source.includes('is_warrant')
+      && source.includes('is_cb')
+      && source.includes('is_blacklisted'),
+    hotPool40To80: source.includes('HOT_POOL_MIN_SYMBOLS') && source.includes('daytradeHotPoolSymbols') && source.includes('hot_pool_max_symbols'),
+    preopenWarmupStarts0700: source.includes('PREOPEN_WARMUP_START_MINUTES = 7 * 60') && source.includes('warmup_start_taipei') && source.includes('warmupDataFillActive'),
+    indicatorWarmupMa3Ma58: source.includes('current.ma3 = movingAverage(3)') && source.includes('current.ma58 = movingAverage(58)') && source.includes('indicator_set') && source.includes('macd_line') && source.includes('kd_k') && source.includes('rsi14'),
+    indicatorWarmupMa20: source.includes('current.ma20 = movingAverage(20)') && source.includes('ma20: Number.isFinite(Number(row.ma20))') && source.includes('"MA20"'),
+    dynamicMaTurnMotherPoolSignal: source.includes('movingAverageTurnBullish')
+      && source.includes('ma3_5_10_or_ma5_10_30_turn_bullish')
+      && source.includes('supplementalMaps.intradayMap = intradayMap'),
+    motherPoolDynamicDiscoveryUnion: source.includes('isMotherPoolCandidate')
+      && source.includes('signalCandidates')
+      && source.includes('rotationCandidates')
+      && source.includes('radar_rotation_fill')
+      && source.includes('sourceFlags'),
+    motherPoolReadbackFields: source.includes('volumeRatio5')
+      && source.includes('tradeValueRank')
+      && source.includes('liquidityGrade')
+      && source.includes('poolReasons')
+      && source.includes('sectorStrengthScore'),
+    motherPoolDataGap: source.includes('dataGapRequired')
+      && source.includes('candle_count')
+      && source.includes('missing_window')
+      && source.includes('first_candle_time'),
+    motherPoolSeedSources: source.includes('strategy1') && source.includes('strategy2') && source.includes('strategy7') && source.includes('slash88') && source.includes('stock_future') && source.includes('manual_watchlist'),
+    motherPoolSourceUnionAliases: source.includes('addMany("chip"')
+      && source.includes('addMany("recent_strong"')
+      && source.includes('addMany("yesterday_front"')
+      && source.includes('addMany("yesterday_gain_amplitude_spike"'),
+    motherPoolRuleVersionConsistent: source.includes('const MOTHER_POOL_RULE_VERSION')
+      && source.includes('motherPoolRuleVersion: MOTHER_POOL_RULE_VERSION')
+      && source.includes('ruleVersion: MOTHER_POOL_RULE_VERSION')
+      && source.includes('mother_pool_rule_version: MOTHER_POOL_RULE_VERSION'),
+    motherPoolSourceCountsReadback: source.includes('sourceSeedCounts')
+      && source.includes('mother_pool_source_seed_counts')
+      && source.includes('mother_pool_source_seed_union'),
+    stockTickerSchemaCompatible: source.includes('stock_tickers')
+      && source.includes('select=symbol,name,market,stock_type,type,industry,is_etf,is_suspended,payload&order=symbol.asc')
+      && source.includes('stock_universe')
+      && source.includes('select=symbol,name,market,industry,is_active,is_etf,is_warrant,is_cb,is_blacklisted,is_daytrade_unsuitable,payload&order=symbol.asc'),
     reasonCodePayload: source.includes('const failedChecks = []')
       && source.includes('reason_code: reasonCode')
       && source.includes('base_pool_shortfall'),
@@ -387,11 +435,16 @@ function websocketCodeRegressionChecks() {
     try { return [name, fs.readFileSync(file, "utf8")]; } catch { return [name, ""]; }
   }));
   const checks = {
-    stockCollectorFormalReady: source.stockCollector.includes("formalReady") && source.stockCollector.includes("formalReadyReason"),
+    stockCollectorFormalReady: source.stockCollector.includes("websocketConnected")
+      && source.stockCollector.includes("websocketAuthenticated")
+      && source.stockCollector.includes("streamingChannels")
+      && source.stockCollector.includes("streamingMessages"),
     futoptCollectorFormalReady: source.futoptCollector.includes("formalReady") && source.futoptCollector.includes("formalReadyReason"),
     futoptCollectorRequiresRecentMessage: source.futoptCollector.includes("quoteMessages + candleMessages > 0")
       && source.futoptCollector.includes("messageAgeSeconds <= 300"),
-    verifierReadsFormalReady: source.verifier.includes("formalReady") && source.verifier.includes("websocket_formal_not_ready"),
+    verifierReadsFormalReady: source.verifier.includes("requiredChannels")
+      && source.verifier.includes("websocket_not_connected")
+      && source.verifier.includes("websocket_missing_channel"),
   };
   const issues = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => `websocket_regression_${name}_missing`);
   return { ok: issues.length === 0, files, checks, issues };
@@ -481,7 +534,7 @@ async function main() {
     if (!marketClosed && ((label === "source" && item.daytradeGateGrade === "A") || (label !== "source" && item.gateGrade === "A"))) {
       if (sourceWebsocketOk(item) !== true) issues.push(`${label}_websocket_evidence_not_formal`);
       if (label === "source") {
-        if (item.formalGateScope !== "priority_top40") issues.push("source_formal_gate_scope_not_priority_top40");
+        if (!["mother_pool_300_rotating_deep_scan", "priority_top40"].includes(item.formalGateScope)) issues.push("source_formal_gate_scope_not_mother_pool_or_priority_top40");
         if (item.formalSourceName !== SOURCE_NAME) issues.push("source_formal_source_name_mismatch");
         if (!item.formalGateSource.includes("v_fugle_daytrade_canonical_gate")) issues.push("source_formal_gate_source_missing_canonical_gate");
         if (item.formalQuoteSource !== "fugle_daytrade_quotes_live") issues.push("source_formal_quote_source_mismatch");

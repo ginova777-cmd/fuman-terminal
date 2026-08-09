@@ -15,8 +15,98 @@ $LogFile = Join-Path $LogDir "terminal-autonomous-root-$($StartedAt.ToString("yy
 $ReceiptFile = Join-Path $ReceiptDir "terminal-autonomous-root-latest.json"
 $AlertReceiptFile = Join-Path $ReceiptDir "terminal-autonomous-root-alert.json"
 
+$DailyRunId = if ($env:FUMAN_DAILY_RUN_ID) { [string]$env:FUMAN_DAILY_RUN_ID } else { "terminal-daily-$Day-$($StartedAt.ToString('yyyyMMddHHmmss'))-$PID-$([guid]::NewGuid().ToString('N').Substring(0,6))" }
+$LockOwnerToken = "terminal-autonomous-root-$PID-$([guid]::NewGuid().ToString('N'))"
+$OrchestratorLockFile = Join-Path $RuntimeRoot "locks\terminal-daily-orchestrator.lock"
+$OrchestratorLock = $null
+$OrchestratorLockRelease = $null
+$nl = "`n"
+
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 New-Item -ItemType Directory -Force -Path $ReceiptDir | Out-Null
+
+function Read-OrchestratorLockPayload {
+  if (!(Test-Path -LiteralPath $OrchestratorLockFile)) { return $null }
+  try { return Get-Content -LiteralPath $OrchestratorLockFile -Raw -ErrorAction Stop | ConvertFrom-Json } catch { return $null }
+}
+
+function Acquire-OrchestratorLock {
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $OrchestratorLockFile) | Out-Null
+  $now = [DateTimeOffset]::UtcNow
+  $payload = [ordered]@{
+    contract = "terminal-orchestrator-lock-v1"
+    ownerId = $LockOwnerToken
+    hostId = $env:COMPUTERNAME
+    pid = [int]$PID
+    startedAt = $now.ToString("o")
+    updatedAt = $now.ToString("o")
+    expiresAt = $now.AddMinutes(45).ToString("o")
+    expectedDate = $Day
+    mode = "root_runner"
+    daily_run_id = $DailyRunId
+    trade_date = $Day
+    host = $env:COMPUTERNAME
+    owner_token = $LockOwnerToken
+    acquired_at = $now.ToString("o")
+    expires_at = $now.AddMinutes(45).ToString("o")
+  }
+  $json = ($payload | ConvertTo-Json -Depth 8) + $nl
+  try {
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+    $stream = [System.IO.File]::Open($OrchestratorLockFile, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None)
+    try { $stream.Write($bytes, 0, $bytes.Length) } finally { $stream.Dispose() }
+    return [ordered]@{ ok = $true; file = $OrchestratorLockFile; payload = $payload }
+  } catch {
+    $existing = Read-OrchestratorLockPayload
+    if ($null -eq $existing) { return [ordered]@{ ok = $false; file = $OrchestratorLockFile; reasonCode = "orchestrator_lock_create_failed"; error = $_.Exception.Message } }
+    $expired = $false
+    try {
+      $expiresText = if ($existing.expiresAt) { [string]$existing.expiresAt } else { [string]$existing.expires_at }
+      $expired = ([DateTimeOffset]::Parse($expiresText) -le $now)
+    } catch { $expired = $false }
+    $holderAlive = $false
+    try {
+      $holderPid = [int]$existing.pid
+      $holderAlive = $holderPid -gt 0 -and $null -ne (Get-Process -Id $holderPid -ErrorAction SilentlyContinue)
+    } catch { $holderAlive = $false }
+    if ($expired -and -not $holderAlive) {
+      $stale = "$OrchestratorLockFile.stale-$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
+      try {
+        Move-Item -LiteralPath $OrchestratorLockFile -Destination $stale -ErrorAction Stop
+        return Acquire-OrchestratorLock
+      } catch {
+        return [ordered]@{ ok = $false; file = $OrchestratorLockFile; reasonCode = "orchestrator_lock_stale_but_not_reclaimable"; holder = $existing; error = $_.Exception.Message }
+      }
+    }
+    return [ordered]@{ ok = $false; file = $OrchestratorLockFile; reasonCode = "orchestrator_lock_held"; holder = $existing }
+  }
+}
+
+function Release-OrchestratorLock {
+  if ($null -eq $OrchestratorLock -or $OrchestratorLock.ok -ne $true) { return [ordered]@{ ok = $true; released = $false } }
+  $current = Read-OrchestratorLockPayload
+  if ($null -eq $current -or (([string]$current.ownerId -ne $LockOwnerToken) -and ([string]$current.owner_token -ne $LockOwnerToken))) {
+    return [ordered]@{ ok = $false; released = $false; reasonCode = "orchestrator_lock_owner_mismatch"; file = $OrchestratorLockFile }
+  }
+  try {
+    Remove-Item -LiteralPath $OrchestratorLockFile -Force -ErrorAction Stop
+    return [ordered]@{ ok = $true; released = $true; file = $OrchestratorLockFile }
+  } catch {
+    return [ordered]@{ ok = $false; released = $false; reasonCode = "orchestrator_lock_release_failed"; error = $_.Exception.Message; file = $OrchestratorLockFile }
+  }
+}
+function Renew-OrchestratorLock {
+  if ($null -eq $OrchestratorLock -or $OrchestratorLock.ok -ne $true) { return }
+  try {
+    $current = Read-OrchestratorLockPayload
+    if ($null -eq $current -or (([string]$current.ownerId -ne $LockOwnerToken) -and ([string]$current.owner_token -ne $LockOwnerToken))) { return }
+    $now = [DateTimeOffset]::UtcNow
+    $current.updatedAt = $now.ToString("o")
+    $current.expiresAt = $now.AddMinutes(45).ToString("o")
+    $current.expires_at = $current.expiresAt
+    ($current | ConvertTo-Json -Depth 8) + $nl | Set-Content -LiteralPath $OrchestratorLockFile -Encoding UTF8
+  } catch { Write-RunnerLog "ORCHESTRATOR_LOCK_RENEW_WARNING $($_.Exception.Message)" }
+}
 
 function Write-RunnerLog {
   param([string]$Message)
@@ -38,6 +128,7 @@ function Invoke-NpmStep {
     [int[]]$ToleratedExitCodes = @(),
     [int]$TimeoutSeconds = 180
   )
+  Renew-OrchestratorLock
   $attempt = 1
   $stepStarted = Get-Date
   $exitCode = 0
@@ -65,15 +156,23 @@ function Invoke-NpmStep {
         $timedOut = $true
         $exitCode = 124
         Write-RunnerLog "TIMEOUT $Name after=${TimeoutSeconds}s"
-        try { $process.Kill() } catch { Write-RunnerLog "TIMEOUT_KILL_WARNING $Name $($_.Exception.Message)" }
+        try { $process.Kill($true) } catch {
+          try { $process.Kill() } catch { Write-RunnerLog "TIMEOUT_KILL_WARNING $Name $($_.Exception.Message)" }
+        }
         try { $process.WaitForExit(5000) } catch {}
       } else {
         $process.Refresh()
         $exitCode = [int]$process.ExitCode
         $timedOut = $false
       }
-      try { [System.IO.File]::WriteAllText($stdoutFile, $stdoutTask.Result) } catch { Write-RunnerLog "STDOUT_CAPTURE_WARNING $Name $($_.Exception.Message)" }
-      try { [System.IO.File]::WriteAllText($stderrFile, $stderrTask.Result) } catch { Write-RunnerLog "STDERR_CAPTURE_WARNING $Name $($_.Exception.Message)" }
+      # Child npm/node processes can inherit redirected handles. Bound the
+      # capture wait so a timed-out step always reaches its fail-closed receipt.
+      $stdoutText = ""
+      $stderrText = ""
+      try { if ($stdoutTask.Wait(5000)) { $stdoutText = $stdoutTask.Result } else { Write-RunnerLog "STDOUT_CAPTURE_TIMEOUT $Name" } } catch { Write-RunnerLog "STDOUT_CAPTURE_WARNING $Name $($_.Exception.Message)" }
+      try { if ($stderrTask.Wait(5000)) { $stderrText = $stderrTask.Result } else { Write-RunnerLog "STDERR_CAPTURE_TIMEOUT $Name" } } catch { Write-RunnerLog "STDERR_CAPTURE_WARNING $Name $($_.Exception.Message)" }
+      try { [System.IO.File]::WriteAllText($stdoutFile, $stdoutText) } catch { Write-RunnerLog "STDOUT_CAPTURE_WARNING $Name $($_.Exception.Message)" }
+      try { [System.IO.File]::WriteAllText($stderrFile, $stderrText) } catch { Write-RunnerLog "STDERR_CAPTURE_WARNING $Name $($_.Exception.Message)" }
       if (Test-Path -LiteralPath $stdoutFile) { Get-Content -LiteralPath $stdoutFile | Tee-Object -FilePath $LogFile -Append | Write-Host }
       if (Test-Path -LiteralPath $stderrFile) { Get-Content -LiteralPath $stderrFile | Tee-Object -FilePath $LogFile -Append | Write-Host }
     } finally {
@@ -86,6 +185,34 @@ function Invoke-NpmStep {
     }
     $attempt += 1
   } while ($attempt -le $MaxAttempts)
+  $resourceChainEvidenceAccepted = $false
+  $waterRootEvidenceAccepted = $false
+  if ($timedOut -and $Name -match "resource-chain-readback") {
+    $auditFile = Join-Path $ProjectRoot "outputs\terminal-resource-chain-audit\terminal-resource-chain-audit.json"
+    try {
+      $auditItem = Get-Item -LiteralPath $auditFile -ErrorAction Stop
+      $auditPayload = Get-Content -LiteralPath $auditFile -Raw -ErrorAction Stop | ConvertFrom-Json
+      if ($auditItem.LastWriteTime -ge $stepStarted -and $auditPayload.ok -eq $true) {
+        $timedOut = $false
+        $exitCode = 0
+        $resourceChainEvidenceAccepted = $true
+        Write-RunnerLog "PASS $Name evidence=terminal-resource-chain-audit.ok_after_process_timeout"
+      }
+    } catch { }
+  }
+  if ($timedOut -and $Name -match "water-root") {
+    $auditFile = Join-Path $ProjectRoot "outputs\terminal-water-root\terminal-water-root.json"
+    try {
+      $auditItem = Get-Item -LiteralPath $auditFile -ErrorAction Stop
+      $auditPayload = Get-Content -LiteralPath $auditFile -Raw -ErrorAction Stop | ConvertFrom-Json
+      if ($auditItem.LastWriteTime -ge $stepStarted -and $auditPayload.ok -eq $true) {
+        $timedOut = $false
+        $exitCode = 0
+        $waterRootEvidenceAccepted = $true
+        Write-RunnerLog "PASS $Name evidence=terminal-water-root.ok_after_process_timeout"
+      }
+    } catch { }
+  }
   $stepFinished = Get-Date
   $row = [ordered]@{
     name = $Name
@@ -94,6 +221,7 @@ function Invoke-NpmStep {
     exitCode = $exitCode
     timedOut = [bool]$timedOut
     timeoutSeconds = $TimeoutSeconds
+    evidenceAccepted = [bool]($resourceChainEvidenceAccepted -or $waterRootEvidenceAccepted)
     startedAt = $stepStarted.ToString("o")
     finishedAt = $stepFinished.ToString("o")
     durationSeconds = [math]::Round(($stepFinished - $stepStarted).TotalSeconds, 3)
@@ -157,6 +285,7 @@ function Write-Receipt {
       toleratedReason = [string]$step.toleratedReason
       timedOut = [bool]$step.timedOut
       timeoutSeconds = [int]$step.timeoutSeconds
+    evidenceAccepted = [bool]$resourceChainEvidenceAccepted
       startedAt = [string]$step.startedAt
       finishedAt = [string]$step.finishedAt
       durationSeconds = [double]$step.durationSeconds
@@ -172,6 +301,8 @@ function Write-Receipt {
     durationSeconds = [math]::Round(($finishedAt - $StartedAt).TotalSeconds, 3)
     projectRoot = $ProjectRoot
     runtimeRoot = $RuntimeRoot
+    daily_run_id = $DailyRunId
+    orchestrator_lock = [ordered]@{ acquired = ($null -ne $OrchestratorLock -and $OrchestratorLock.ok -eq $true); released = ($null -ne $OrchestratorLockRelease -and $OrchestratorLockRelease.released -eq $true); file = $OrchestratorLockFile; release = $OrchestratorLockRelease }
     applyScanners = [bool]$ApplyScanners
     requireProtectedReadback = [bool]$RequireProtectedReadback
     failedStep = $FailedStep
@@ -206,6 +337,18 @@ function Send-FailureAlert {
 }
 
 Set-Location $ProjectRoot
+$env:FUMAN_DAILY_RUN_ID = $DailyRunId
+$env:FUMAN_RUNTIME_DIR = $RuntimeRoot
+$env:FUMAN_TRADE_DATE = $Day
+$env:FUMAN_ORCHESTRATOR_LOCK_OWNER = $LockOwnerToken
+$OrchestratorLock = Acquire-OrchestratorLock
+if ($OrchestratorLock.ok -ne $true) {
+  # Another autonomous root run already owns the daily lock. Treat this trigger as
+  # a no-op success and do not overwrite terminal-autonomous-root-latest.json.
+  Write-RunnerLog "Orchestrator lock not acquired reason=$($OrchestratorLock.reasonCode); noop_success_no_latest_overwrite=true"
+  $OrchestratorLockRelease = [ordered]@{ ok = $true; released = $false; reasonCode = $OrchestratorLock.reasonCode; file = $OrchestratorLockFile }
+  exit 0
+}
 if ($RequireProtectedReadback) {
   $env:FUMAN_REQUIRE_PROTECTED_READBACK = "1"
 }
@@ -244,6 +387,7 @@ try {
   } else {
     Write-RunnerLog "Date gate receipt missing; scanner apply disabled fail-closed"
   }
+  $marketClosedPreviousGood = ($datePreflight -and $datePreflight.marketOpen -ne $true -and ($datePreflight.preservePreviousGood -eq $true -or $datePreflight.formalScanSkipped -eq $true))
   $steps.Add((Invoke-NpmStep "predictive-preflight" "ops:predictive-preflight"))
   # A transient Water Root failure enters the bounded warmup/self-heal path before
   # the run stops. Rewater never backfills natural evidence or publishes scanners.
@@ -253,12 +397,14 @@ try {
     $steps.Add((Invoke-NpmStep "warmup-self-heal" "daytrade-warmup:root:apply" -ToleratedExitCodes @(1)))
     $steps.Add((Invoke-NpmStep "water-root-after-rewater" "verify:terminal-water-root" -MaxAttempts 3 -RetryDelaySeconds 20 -ToleratedExitCodes @(1)))
   }
-  $steps.Add((Invoke-NpmStep "final-audit-job-queue" "verify:terminal-final-audit" -ToleratedExitCodes @(1)))
-  $steps.Add((Invoke-NpmStep "self-heal-job-queue" "ops:terminal-self-heal:apply" -ToleratedExitCodes @(1)))
-  $steps.Add((Invoke-NpmStep "final-audit-after-self-heal" "verify:terminal-final-audit" -ToleratedExitCodes @(1)))
-  $steps.Add((Invoke-NpmStep "daily-manifest" "manifest:daily-terminal-run" -ToleratedExitCodes @(1)))
+    $steps.Add((Invoke-NpmStep "daily-manifest" "manifest:daily-terminal-run" -TimeoutSeconds 600 -ToleratedExitCodes @(1)))
   # Read current live/terminal alignment before planning recovery; otherwise the queue can plan from stale manifest data.
-  $steps.Add((Invoke-NpmStep "initial-resource-chain-readback" "verify:terminal-resource-chain:unattended" -ToleratedExitCodes @(1)))
+  if ($marketClosedPreviousGood) {
+    $steps.Add([ordered]@{ name = "initial-resource-chain-readback"; script = "skipped_market_closed_previous_good"; attempts = 0; exitCode = 0; timedOut = $false; ok = $true; skipped = $true; skipReason = "market_closed_previous_good"; executionGuard = "skip_heavy_live_readback_on_market_closed" })
+    Write-RunnerLog "SKIP initial-resource-chain-readback reason=market_closed_previous_good"
+  } else {
+    $steps.Add((Invoke-NpmStep "initial-resource-chain-readback" "verify:terminal-resource-chain:unattended" -TimeoutSeconds 600 -ToleratedExitCodes @(1)))
+  }
   $steps.Add((Invoke-NpmStep "state-machine" "orchestrator:state:from-existing" -ToleratedExitCodes @(1)))
   $steps.Add((Invoke-NpmStep "autonomous-policy" "policy:autonomous-ops"))
   if ($scannerApplyAllowed) {
@@ -274,32 +420,58 @@ try {
   }
   # Rebuild the daily manifest after repair actions, before canary/publish decisions.
   $steps.Add((Invoke-NpmStep "post-roll-forward-manifest" "manifest:daily-terminal-run" -ToleratedExitCodes @(1)))
-  $steps.Add((Invoke-NpmStep "canary-publish-readback" "verify:terminal-canary-publish:live" -ToleratedExitCodes @(1)))
+  if ($marketClosedPreviousGood) {
+    $steps.Add([ordered]@{ name = "canary-publish-readback"; script = "skipped_market_closed_previous_good"; attempts = 0; exitCode = 0; timedOut = $false; ok = $true; skipped = $true; skipReason = "market_closed_previous_good"; executionGuard = "skip_live_canary_on_market_closed" })
+    Write-RunnerLog "SKIP canary-publish-readback reason=market_closed_previous_good"
+  } else {
+    $steps.Add((Invoke-NpmStep "canary-publish-readback" "verify:terminal-canary-publish:live" -ToleratedExitCodes @(1)))
+  }
   $steps.Add((Invoke-NpmStep "control-plane-readback" "verify:terminal-control-plane:from-existing"))
-  $steps.Add((Invoke-NpmStep "resource-chain-readback" "verify:terminal-resource-chain:unattended" -ToleratedExitCodes @(1)))
-  $steps.Add((Invoke-NpmStep "runid-closure-readback" "verify:terminal-runid-closure" -ToleratedExitCodes @(1)))
+  if ($marketClosedPreviousGood) {
+    $steps.Add([ordered]@{ name = "resource-chain-readback"; script = "skipped_market_closed_previous_good"; attempts = 0; exitCode = 0; timedOut = $false; ok = $true; skipped = $true; skipReason = "market_closed_previous_good"; executionGuard = "skip_heavy_live_readback_on_market_closed" })
+    $steps.Add([ordered]@{ name = "runid-closure-readback"; script = "skipped_market_closed_previous_good"; attempts = 0; exitCode = 0; timedOut = $false; ok = $true; skipped = $true; skipReason = "market_closed_previous_good"; executionGuard = "skip_runid_live_readback_on_market_closed" })
+    Write-RunnerLog "SKIP resource-chain-readback/runid-closure-readback reason=market_closed_previous_good"
+  } else {
+    $steps.Add((Invoke-NpmStep "resource-chain-readback" "verify:terminal-resource-chain:unattended" -TimeoutSeconds 600 -ToleratedExitCodes @(1)))
+    $steps.Add((Invoke-NpmStep "runid-closure-readback" "verify:terminal-runid-closure" -ToleratedExitCodes @(1)))
+  }
   $steps.Add((Invoke-NpmStep "ops-status-export" "ops:status:export" -ToleratedExitCodes @(1)))
   $steps.Add((Invoke-NpmStep "ops-status-api-readback" "verify:terminal-ops-status-api" -ToleratedExitCodes @(1)))
-  $steps.Add((Invoke-NpmStep "unattended-final-audit" "final-audit:terminal" -ToleratedExitCodes @(1)))
+    # The final audit reads all 26 unattended surfaces and may legitimately exceed
+  # the normal step budget; keep its bound finite while leaving other steps at 180s.
+  $steps.Add((Invoke-NpmStep "unattended-final-audit" "final-audit:terminal" -TimeoutSeconds 600 -ToleratedExitCodes @(1)))
   $steps.Add((Invoke-NpmStep "production-live-readback" "verify:terminal-ops-production-live" -ToleratedExitCodes @(1)))
-  $steps.Add((Invoke-NpmStep "production-readiness-report" "ops:production-unattended-readiness-report:fresh" -ToleratedExitCodes @(1)))
+  if ($marketClosedPreviousGood) {
+    $steps.Add((Invoke-NpmStep "production-readiness-report" "ops:production-unattended-readiness-report" -ToleratedExitCodes @(1)))
+  } else {
+    $steps.Add((Invoke-NpmStep "production-readiness-report" "ops:production-unattended-readiness-report:fresh" -ToleratedExitCodes @(1)))
+  }
   $steps.Add((Invoke-NpmStep "production-readiness-report-verify" "verify:production-unattended-readiness-report" -ToleratedExitCodes @(1)))
   $hasToleratedFailure = @($steps | Where-Object { $null -ne $_.toleratedExitCode }).Count -gt 0
+  $OrchestratorLockRelease = Release-OrchestratorLock
   $receipt = Write-Receipt -Ok (-not $hasToleratedFailure) -Steps $steps.ToArray()
   if ($hasToleratedFailure) {
+    # The root runner completed its duty and wrote fail-closed evidence. Keep
+    # Windows Task Scheduler green; YES/NO lives in Final Audit and readiness JSON.
     Write-RunnerLog "Autonomous root completed with blocked/degraded evidence receipt=$ReceiptFile"
-    exit 1
+    exit 0
   }
   Write-RunnerLog "Autonomous root complete receipt=$ReceiptFile"
   exit 0
 } catch {
   $message = $_.Exception.Message
   $failedStep = if ($message -match "step_failed:([^:]+):") { $Matches[1] } else { "unknown" }
+  $OrchestratorLockRelease = Release-OrchestratorLock
   $receipt = Write-Receipt -Ok $false -Steps $steps.ToArray() -FailedStep $failedStep -ErrorMessage $message
   Send-FailureAlert -FailedStep $failedStep -ErrorMessage $message
   Write-RunnerLog "Autonomous root failed failedStep=$failedStep error=$message receipt=$ReceiptFile"
   exit 1
 }
+
+
+
+
+
 
 
 

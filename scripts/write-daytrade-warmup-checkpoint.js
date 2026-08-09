@@ -54,9 +54,29 @@ function main() {
   const closed = isWeekend(dateKey) || policy === 'MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD';
   const expectedNaturalPhase = phase === '0705' ? '0700' : phase === '0847' ? '0845' : null;
   const evidence = artifact && (artifact.evidence || artifact);
+  const phaseResult = expectedNaturalPhase && summary && summary.phase_results
+    ? summary.phase_results[expectedNaturalPhase]
+    : null;
+  const phaseEvidence = (phaseResult && phaseResult.evidence) || evidence || {};
   const naturalEvidence = expectedNaturalPhase
-    ? Boolean((artifact && (artifact.natural_schedule_evidence === true || artifact.naturalScheduleEvidence === true))
-      || (evidence && evidence.naturalScheduleEvidence === true))
+    ? Boolean((phaseResult && phaseResult.natural_schedule_evidence === true)
+      || (artifact && (artifact.natural_schedule_evidence === true || artifact.naturalScheduleEvidence === true))
+      || (phaseEvidence && phaseEvidence.naturalScheduleEvidence === true))
+    : false;
+  const phasePass = expectedNaturalPhase
+    ? Boolean(phaseResult && phaseResult.pass === true
+      && phaseResult.natural_schedule_evidence === true
+      && phaseEvidence.naturalScheduleEvidence === true
+      && phaseEvidence.manualVerificationOnly !== true
+      && phaseEvidence.trade_date === isoDate
+      && phaseEvidence.daytradeGateGrade === 'A'
+      && phaseEvidence.priorityGateGrade === 'A'
+      && Number(phaseEvidence.priorityPoolSymbols) === 40
+      && Number(phaseEvidence.priorityFreshQuoteCoverage120s) >= 0.95
+      && phaseEvidence.scannerCanRunOpening === true
+      && phaseEvidence.formalEntrySpeedVerdict === 'YES'
+      && phaseResult.selfHealRecovered !== true
+      && phaseEvidence.selfHealRecovered !== true)
     : false;
   const failures = [];
   let status = 'PENDING';
@@ -65,11 +85,27 @@ function main() {
   } else if (!artifact && !summary) {
     failures.push('missing_checkpoint_input');
   } else if (expectedNaturalPhase) {
-    if (!artifact) failures.push('missing_phase_artifact');
+    if (!artifact && !phaseResult) failures.push('missing_phase_artifact');
     if (artifact && artifact.trade_date && artifact.trade_date !== isoDate) failures.push('phase_trade_date_mismatch');
+    if (phaseEvidence.trade_date && phaseEvidence.trade_date !== isoDate) failures.push('phase_evidence_trade_date_mismatch');
     if (!naturalEvidence) failures.push('natural_schedule_evidence_missing');
+    if (phaseResult && phaseResult.pending === true) failures.push('phase_pending:' + expectedNaturalPhase);
+    if (!phasePass) failures.push('formal_warmup_phase_not_pass:' + expectedNaturalPhase);
+    if (phaseResult && Array.isArray(phaseResult.failure_codes)) {
+      for (const code of phaseResult.failure_codes) failures.push('phase_failure_code:' + code);
+    }
+    if (phaseResult && Array.isArray(phaseResult.failures)) {
+      for (const failure of phaseResult.failures) failures.push('phase_failure:' + failure);
+    }
+    if (phaseEvidence.daytradeGateGrade && phaseEvidence.daytradeGateGrade !== 'A') failures.push('daytrade_gate_not_A:' + phaseEvidence.daytradeGateGrade);
+    if (phaseEvidence.priorityGateGrade && phaseEvidence.priorityGateGrade !== 'A') failures.push('priority_gate_not_A:' + phaseEvidence.priorityGateGrade);
+    if (Number.isFinite(Number(phaseEvidence.priorityPoolSymbols)) && Number(phaseEvidence.priorityPoolSymbols) !== 40) failures.push('priority_pool_not_40:' + phaseEvidence.priorityPoolSymbols);
+    if (Number.isFinite(Number(phaseEvidence.priorityFreshQuoteCoverage120s)) && Number(phaseEvidence.priorityFreshQuoteCoverage120s) < 0.95) failures.push('priority_fresh_quote_coverage_below_0_95:' + phaseEvidence.priorityFreshQuoteCoverage120s);
+    if (phaseEvidence.scannerCanRunOpening !== true) failures.push('scanner_can_run_opening_false');
+    if (phaseEvidence.formalEntrySpeedVerdict && phaseEvidence.formalEntrySpeedVerdict !== 'YES') failures.push('formal_entry_speed_verdict_not_yes:' + phaseEvidence.formalEntrySpeedVerdict);
     if (artifact && (artifact.self_heal_recovered === true || evidence && evidence.selfHealRecovered === true)) failures.push('self_heal_cannot_count_as_natural');
-    status = failures.length === 0 ? 'PASS' : 'FAIL';
+    if (phaseResult && phaseResult.selfHealRecovered === true) failures.push('phase_self_heal_cannot_count_as_natural');
+    status = failures.length === 0 ? 'PASS' : (phaseResult && phaseResult.pending === true ? 'PENDING' : 'FAIL');
   } else {
     if (!summary) failures.push('missing_final_summary');
     if (summary && summary.trade_date !== isoDate) failures.push('summary_trade_date_mismatch');
@@ -85,7 +121,9 @@ function main() {
     tradeDate: isoDate,
     status,
     ok: status === 'PASS' || status === 'MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD',
-    naturalSuccess: status === 'PASS' && phase !== '0912',
+    naturalScheduleEvidence: naturalEvidence,
+    formalWarmupPass: expectedNaturalPhase ? phasePass : status === 'PASS',
+    naturalSuccess: status === 'PASS' && phase !== '0912' && (expectedNaturalPhase ? phasePass : true),
     selfHealRecovered: Boolean((summary && summary.self_heal_recovered === true) || (artifact && artifact.self_heal_recovered === true)),
     preservePreviousGood: closed || Boolean(summary && summary.preserve_previous_good === true),
     policyDecision: policy || '',

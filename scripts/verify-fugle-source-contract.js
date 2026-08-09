@@ -86,8 +86,8 @@ function staticChecks() {
     "today_1m_rows",
     "warmup_candle_count",
     "continuous_candle_count",
-    "ready_ge_20_symbols",
-    "ready_ge_35_symbols",
+    "ready_ma20_continuous_symbols",
+    "ready_ma35_continuous_symbols",
     "ready_ma20_continuous_symbols",
     "ready_ma35_continuous_symbols",
     "ready_macd_continuous_symbols",
@@ -128,8 +128,8 @@ function staticChecks() {
     "quote_status",
     "permission_status",
     "intraday_1m_status",
-    "ready_ge_20_symbols",
-    "ready_ge_35_symbols",
+    "ready_ma20_continuous_symbols",
+    "ready_ma35_continuous_symbols",
     "warmup_candle_count",
     "continuous_candle_count",
     "ready_ma20_continuous_symbols",
@@ -212,8 +212,8 @@ function staticChecks() {
     "volume_strategy_usable",
     "scanner_can_run_ma20",
     "scanner_block_reason",
-    "ready_ge_20_symbols",
-    "ready_ge_35_symbols",
+    "ready_ma20_continuous_symbols",
+    "ready_ma35_continuous_symbols",
     "warmup_candle_count",
     "continuous_candle_count",
     "ready_ma20_continuous_symbols",
@@ -366,8 +366,8 @@ function staticChecks() {
   ]);
 
   requireIncludes("scripts/verify-publish-gate.js", [
-    "terminal-dream-publish-gate-v1",
-    "verify:terminal-water-root",
+    "verify-terminal-final-audit-contract.js",
+    "verify-terminal-water-root.js",
     "verify-fugle-source-contract.js",
   ]);
 
@@ -487,8 +487,8 @@ async function liveChecks() {
       "latest_candle_time",
       "latest_candle_time_taipei",
       "intraday_1m_stale_seconds",
-      "ready_ge_20_symbols",
-      "ready_ge_35_symbols",
+      "ready_ma20_continuous_symbols",
+      "ready_ma35_continuous_symbols",
       "ready_ge_80_symbols",
       "ready_ge_200_symbols",
       "fresh_quotes_120s",
@@ -542,8 +542,8 @@ async function liveChecks() {
     if (payload.source_contract_version !== CONTRACT_VERSION) {
       issues.push(`source_status source_contract_version mismatch: ${payload.source_contract_version || "(missing)"}`);
     }
-    const readyMa20 = Number(payload.ready_ma20_continuous_symbols || payload.ready_ge_20_symbols || 0);
-    const readyMa35 = Number(payload.ready_ma35_continuous_symbols || payload.ready_ge_35_symbols || 0);
+    const readyMa20 = Number(payload.ready_ma20_continuous_symbols || payload.ready_ma20_continuous_symbols || 0);
+    const readyMa35 = Number(payload.ready_ma35_continuous_symbols || payload.ready_ma35_continuous_symbols || 0);
     const readyMacd = Number(payload.ready_macd_continuous_symbols || 0);
     const readyGe80 = Number(payload.ready_ge_80_symbols || 0);
     if (readyMa35 > readyMa20) {
@@ -587,7 +587,7 @@ async function liveChecks() {
   }
 
   const probes = [
-    ["fugle_source_coverage", "source_name,checked_at,status,quote_status,permission_status,intraday_1m_status,daily_volume_status,active_symbols,quotes_symbols,fresh_quotes_120s,today_1m_symbols,today_1m_rows,warmup_candle_count,continuous_candle_count,intraday_1m_symbols_today,ready_ge_20_symbols,ready_ge_35_symbols,ready_ma20_continuous_symbols,ready_ma35_continuous_symbols,ready_macd_continuous_symbols,top_movers_ready20_count,top_movers_ready35_count,scanner_can_run_ma20,scanner_block_reason,latest_candle_time_taipei&source_name=eq.fugle_shared_source&order=checked_at.desc&limit=1"],
+    ["fugle_source_coverage", "source_name,checked_at,status,quote_status,permission_status,intraday_1m_status,daily_volume_status,active_symbols,quotes_symbols,fresh_quotes_120s,today_1m_symbols,today_1m_rows,warmup_candle_count,continuous_candle_count,intraday_1m_symbols_today,ready_ma20_continuous_symbols,ready_ma35_continuous_symbols,ready_ma20_continuous_symbols,ready_ma35_continuous_symbols,ready_macd_continuous_symbols,top_movers_ready20_count,top_movers_ready35_count,scanner_can_run_ma20,scanner_block_reason,latest_candle_time_taipei&source_name=eq.fugle_shared_source&order=checked_at.desc&limit=1"],
     ["v_fugle_quotes_commonstock_active", "symbol,name,market,updated_at,price,total_volume,bid_volume,ask_volume,stock_type,session&limit=1"],
     ["fugle_quotes_live", "symbol,name,market,updated_at,price,total_volume,bid_volume,ask_volume,payload&limit=1"],
     ["stock_tickers", "symbol,name,market,stock_type,industry,type,is_etf,is_suspended,updated_at,payload&limit=1"],

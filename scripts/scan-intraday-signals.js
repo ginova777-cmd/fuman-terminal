@@ -42,7 +42,7 @@ const SUPABASE_SOURCE_MAX_QUOTE_AGE_SECONDS = Number(process.env.STRATEGY2_SUPAB
 const SUPABASE_SOURCE_MIN_QUOTES = Number(process.env.STRATEGY2_SUPABASE_SOURCE_MIN_QUOTES || 500);
 const SUPABASE_SOURCE_MIN_ACTIVE_SYMBOLS = Number(process.env.STRATEGY2_SUPABASE_SOURCE_MIN_ACTIVE_SYMBOLS || 500);
 const MIN_AVG_5D_VOLUME = Number(process.env.STRATEGY2_MIN_AVG_5D_VOLUME || 0);
-const SUPABASE_DAYTRADE_SOURCE_ERROR_MESSAGE = "Supabase dedicated daytrade source 異常，等待資料恢復";
+const SUPABASE_SHARED_SOURCE_ERROR_MESSAGE = "Supabase shared source 異常，等待資料恢復";
 const QUOTE_CACHE_MAX_AGE_SECONDS = Number(process.env.STRATEGY2_QUOTE_CACHE_MAX_AGE_SECONDS || 15 * 60);
 const MIN_REALTIME_COVERAGE = Number(process.env.STRATEGY2_MIN_REALTIME_COVERAGE || 0.5);
 const REALTIME_BATCH_SIZE = Number(process.env.STRATEGY2_REALTIME_BATCH_SIZE || 8);
@@ -53,9 +53,7 @@ const REALTIME_FALLBACK_CANDIDATE_LIMIT = Math.max(0, Number(process.env.STRATEG
 const FORMAL_DAYTRADE_POOL_ONLY = process.env.STRATEGY2_FORMAL_DAYTRADE_POOL_ONLY === "1";
 const FORMAL_DAYTRADE_PRIORITY_LIMIT = Math.max(1, Number(process.env.STRATEGY2_FORMAL_DAYTRADE_PRIORITY_LIMIT || process.env.DAYTRADE_FORMAL_PRIORITY_LIMIT || 40));
 const PRIORITY_SYMBOLS_FILE = process.env.FUGLE_WS_PRIORITY_SYMBOLS_FILE
-  || process.env.FUGLE_DAYTRADE_PRIORITY_SYMBOLS_FILE
-  || process.env.FUGLE_WS_PRIORITY_SYMBOLS_FILE
-  || path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "cache", "intraday", "fugle-daytrade-ws-priority-symbols.json");
+  || path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "cache", "intraday", "fugle-ws-priority-symbols.json");
 const REALTIME_YAHOO_FALLBACK_CONCURRENCY = Math.max(1, Number(process.env.STRATEGY2_REALTIME_YAHOO_FALLBACK_CONCURRENCY || 6));
 const ENABLE_FINMIND_REALTIME = process.env.STRATEGY2_ENABLE_FINMIND_REALTIME === "1";
 const ENABLE_FINMIND_RESCUE = process.env.STRATEGY2_ENABLE_FINMIND_RESCUE !== "0";
@@ -2341,7 +2339,7 @@ async function fetchStocks(options = {}) {
     minActiveSymbols: SUPABASE_SOURCE_MIN_ACTIVE_SYMBOLS,
     allowWarmupSource: options.allowWarmupSource,
   });
-  if (!result.ok) throw new Error(result.error || SUPABASE_DAYTRADE_SOURCE_ERROR_MESSAGE);
+  if (!result.ok) throw new Error(result.error || SUPABASE_SHARED_SOURCE_ERROR_MESSAGE);
   return result.quotes.map((quote) => {
     const close = cleanNumber(quote.close);
     const prevClose = cleanNumber(quote.prevClose);
@@ -2419,8 +2417,8 @@ function buildStrategy2SharedSourceAbnormalReport(cache, key, timestamp, health)
     entrySourceHealthy: false,
     sourceCoverageHealthy: false,
     supabaseOnly: true,
-    skippedSupabaseDaytradeSourceUnhealthy: true,
-    message: SUPABASE_DAYTRADE_SOURCE_ERROR_MESSAGE,
+    skippedSupabaseSharedSourceUnhealthy: true,
+    message: SUPABASE_SHARED_SOURCE_ERROR_MESSAGE,
     reason: health?.reason || health?.message || "source_status missing",
     scanTimestamp: timestamp,
   };
@@ -2428,8 +2426,8 @@ function buildStrategy2SharedSourceAbnormalReport(cache, key, timestamp, health)
     source: "strategy2-supabase-first",
     date: key,
     updatedAt,
-    status: "supabase_daytrade_source_unhealthy",
-    message: SUPABASE_DAYTRADE_SOURCE_ERROR_MESSAGE,
+    status: "supabase_shared_source_unhealthy",
+    message: SUPABASE_SHARED_SOURCE_ERROR_MESSAGE,
     reason: cache.realtime.reason,
     realtime: cache.realtime,
     records: retainedRecords,
@@ -3593,7 +3591,7 @@ async function main() {
     verifyAnonReadAccess: true,
   }).catch((error) => ({
     ok: false,
-    message: SUPABASE_DAYTRADE_SOURCE_ERROR_MESSAGE,
+    message: SUPABASE_SHARED_SOURCE_ERROR_MESSAGE,
     reason: error?.message || String(error),
     status: null,
     payload: {},
@@ -3774,11 +3772,7 @@ async function main() {
 
   updateScorecardTradeTracks(scorecardTracker, strategy5Tracker, liveStocks, timestamp, key);
 
-  let malformedSymbolSkipCount = 0;
-  const malformedSymbolSkipSamples = [];
-
   for (const stock of liveStocks) {
-    try {
     const previous = cache.previous[stock.code] || null;
     const deltaVolume = Math.max(0, cleanNumber(stock.tradeVolume) - cleanNumber(previous?.tradeVolume));
     const scanStock = { ...stock, deltaVolume };
@@ -4038,13 +4032,6 @@ async function main() {
     if (appendTrackedSnapshot(cache, scanStock, timestamp, key, { entrySourceHealthy: technicalEntryHealthy, sourceCoverage: entrySourceCoverage, strategyMeta: snapshotMeta })) {
       added += 1;
     }
-    } catch (error) {
-      malformedSymbolSkipCount += 1;
-      const skippedCode = String(stock?.code || stock?.symbol || "unknown").trim() || "unknown";
-      const skippedReason = (error?.message || String(error)).slice(0, 240);
-      if (malformedSymbolSkipSamples.length < 12) malformedSymbolSkipSamples.push({ code: skippedCode, reason: skippedReason });
-      console.warn(`strategy2 symbol skipped due to malformed row: code=${skippedCode} reason=${skippedReason}`);
-    }
   }
 
   cache.records = normalizeStrategy2Records(cache.records || []);
@@ -4054,8 +4041,6 @@ async function main() {
     ...realtimeSummaryBase,
     tradable: Math.max(liveStocks.length, realtimeSummaryBase.entrySourceUsable || 0),
     tradableByQuote: liveStocks.length,
-    malformedSymbolSkipCount,
-    malformedSymbolSkipSamples,
   };
   const strategy2Report = enforceStrategy2EntryGuards({
     source: "strategy2-0900-1200-live-patrol",

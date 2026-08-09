@@ -415,6 +415,7 @@
       return /策略[1-5]|雷達|當沖|隔日|波段/.test(text) ? link : null;
     };
     const unlockForStrategyRoute = (event) => {
+      if (window.FUMAN_ENTITLEMENT_GUARD?.isEntitled?.() !== true) return;
       const link = isStrategyLink(event.target);
       if (!link) {
         const otherLink = event.target?.closest?.("[data-view]:not([data-member-tab])");
