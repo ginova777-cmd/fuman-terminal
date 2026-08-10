@@ -20,6 +20,11 @@ const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.verc
 const MIN_UNIVERSE_SIZE = Number(process.env.STRATEGY4_MIN_UNIVERSE_SIZE || 1500);
 const MIN_MATCH_COUNT = Number(process.env.STRATEGY4_MIN_MATCH_COUNT || 10);
 const MIN_MATCH_RATIO_TO_PREVIOUS = Number(process.env.STRATEGY4_MIN_MATCH_RATIO_TO_PREVIOUS || 0.5);
+const MATCH_YIELD_BASELINE_LOOKBACK = Number(process.env.STRATEGY4_MATCH_YIELD_BASELINE_LOOKBACK || 20);
+const MATCH_YIELD_MIN_NORMAL_COUNT = Number(process.env.STRATEGY4_MATCH_YIELD_MIN_NORMAL_COUNT || 100);
+const MATCH_YIELD_MIN_BASELINE_SAMPLES = Number(process.env.STRATEGY4_MATCH_YIELD_MIN_BASELINE_SAMPLES || 3);
+const MATCH_YIELD_MIN_RATIO_TO_BASELINE = Number(process.env.STRATEGY4_MATCH_YIELD_MIN_RATIO_TO_BASELINE || 0.5);
+const MATCH_YIELD_MIN_RATIO_TO_ELIGIBLE = Number(process.env.STRATEGY4_MATCH_YIELD_MIN_RATIO_TO_ELIGIBLE || 0.05);
 const MAX_YAHOO_SOURCE_RATIO = Number(process.env.STRATEGY4_MAX_YAHOO_SOURCE_RATIO || 0.2);
 const MIN_SOURCE_ROW_COUNT = Number(process.env.STRATEGY4_MIN_SOURCE_ROW_COUNT || 1500);
 const STRATEGY4_MIN_HISTORY_COVERAGE_RATIO = Number(process.env.STRATEGY4_MIN_HISTORY_COVERAGE_RATIO || 0.95);
@@ -873,6 +878,70 @@ function volumeFilterRuleChanged(previous, current) {
   return previousFiltered === 0 && currentFiltered > 0 || previousQuoteFiltered === 0 && currentQuoteFiltered > 0;
 }
 
+function median(values) {
+  const nums = normalizeArray(values).map(cleanNumber).filter((value) => value > 0).sort((a, b) => a - b);
+  if (!nums.length) return 0;
+  const mid = Math.floor(nums.length / 2);
+  return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+}
+
+async function fetchStrategy4RecentCompleteRuns(limit = MATCH_YIELD_BASELINE_LOOKBACK) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return [];
+  const baseUrl = SUPABASE_URL.replace(/\/+$/, "");
+  const select = "run_id,scan_date,status,complete,expected_total,scanned_count,result_count,no_data_count,error_count,quality_status,finished_at,payload";
+  const url = new URL(baseUrl + "/rest/v1/" + SUPABASE_RUNS_TABLE);
+  url.searchParams.set("select", select);
+  url.searchParams.set("strategy", "eq.strategy4");
+  url.searchParams.set("status", "eq.complete");
+  url.searchParams.set("complete", "eq.true");
+  url.searchParams.set("order", "finished_at.desc");
+  url.searchParams.set("limit", String(limit));
+  const response = await fetch(url, { headers: { apikey: SUPABASE_KEY, Authorization: "Bearer " + SUPABASE_KEY, Accept: "application/json" } });
+  const body = await response.text();
+  if (!response.ok) throw new Error("strategy4 history baseline HTTP " + response.status + " " + body.slice(0, 180));
+  const rows = JSON.parse(body || "[]");
+  return Array.isArray(rows) ? rows : [];
+}
+
+function strategy4EligibleYieldCount(output) {
+  const total = cleanNumber(output.total);
+  const volumeFiltered = cleanNumber(output.volumeFilteredCount || output.volumeFilter?.filtered?.length);
+  const quoteFiltered = cleanNumber(output.quoteLiquidityFilteredCount || output.quoteLiquidityFilter?.filtered?.length);
+  const noData = cleanNumber(output.noDataCount);
+  const errors = cleanNumber(output.errorCount);
+  return Math.max(0, total - volumeFiltered - quoteFiltered - noData - errors);
+}
+
+async function assertStrategy4MatchYieldGuard(output, previousRaw) {
+  const currentCount = cleanNumber(output.count);
+  const expectedTotal = cleanNumber(output.total);
+  const scannedCount = cleanNumber(output.scannedCount || output.scanned || output.total);
+  const eligibleCount = strategy4EligibleYieldCount(output);
+  const issues = [];
+  const warnings = [];
+  let history = [];
+  try { history = await fetchStrategy4RecentCompleteRuns(); } catch (error) { warnings.push("history_baseline_unavailable:" + (error?.message || String(error))); }
+  const normalHistory = history.filter((run) => String(run.run_id || "") !== String(output.runId || "") && run.complete === true && String(run.status || "") === "complete" && ["complete", "degraded"].includes(String(run.quality_status || "")) && cleanNumber(run.expected_total) >= MIN_SOURCE_ROW_COUNT && cleanNumber(run.scanned_count) >= cleanNumber(run.expected_total) && cleanNumber(run.result_count) >= MATCH_YIELD_MIN_NORMAL_COUNT);
+  const baselineCounts = normalHistory.map((run) => cleanNumber(run.result_count));
+  const baselineMedian = median(baselineCounts);
+  const minByBaseline = baselineCounts.length >= MATCH_YIELD_MIN_BASELINE_SAMPLES ? Math.max(MIN_MATCH_COUNT, Math.floor(baselineMedian * MATCH_YIELD_MIN_RATIO_TO_BASELINE)) : 0;
+  const minByEligible = eligibleCount >= MATCH_YIELD_MIN_NORMAL_COUNT ? Math.max(MIN_MATCH_COUNT, Math.floor(eligibleCount * MATCH_YIELD_MIN_RATIO_TO_ELIGIBLE)) : 0;
+  if (expectedTotal < MIN_SOURCE_ROW_COUNT) issues.push("expected_total_too_low:" + expectedTotal + "<" + MIN_SOURCE_ROW_COUNT);
+  if (scannedCount < expectedTotal) issues.push("scan_not_complete:" + scannedCount + "/" + expectedTotal);
+  if (baselineCounts.length >= MATCH_YIELD_MIN_BASELINE_SAMPLES && currentCount < minByBaseline) issues.push("match_yield_collapse current=" + currentCount + " baselineMedian=" + baselineMedian + " min=" + minByBaseline);
+  else if (baselineCounts.length < MATCH_YIELD_MIN_BASELINE_SAMPLES) warnings.push("baseline_samples_low:" + baselineCounts.length + "<" + MATCH_YIELD_MIN_BASELINE_SAMPLES);
+  if (minByEligible && currentCount < minByEligible) issues.push("match_yield_below_eligible_floor current=" + currentCount + " eligible=" + eligibleCount + " min=" + minByEligible);
+  const previousCompleteCount = previousRaw?.complete === true ? cleanNumber(previousRaw.count) : 0;
+  const minByPrevious = previousCompleteCount >= MIN_MATCH_COUNT ? Math.max(MIN_MATCH_COUNT, Math.floor(previousCompleteCount * MIN_MATCH_RATIO_TO_PREVIOUS)) : 0;
+  const filterRuleChanged = volumeFilterRuleChanged(previousRaw, output);
+  if (minByPrevious && currentCount < minByPrevious) {
+    if (ALLOW_FILTER_RULE_DROP && filterRuleChanged && currentCount >= MATCH_YIELD_MIN_NORMAL_COUNT) warnings.push("previous_drop_allowed_after_filter_rule_change current=" + currentCount + " previous=" + previousCompleteCount + " min=" + minByPrevious);
+    else issues.push("suspicious_match_drop current=" + currentCount + " previous=" + previousCompleteCount + " min=" + minByPrevious);
+  }
+  const guard = { ok: issues.length === 0, checkedAt: new Date().toISOString(), currentCount, expectedTotal, scannedCount, eligibleCount, previousCompleteCount, minByPrevious, filterRuleChanged, baseline: { lookback: MATCH_YIELD_BASELINE_LOOKBACK, minNormalCount: MATCH_YIELD_MIN_NORMAL_COUNT, minBaselineSamples: MATCH_YIELD_MIN_BASELINE_SAMPLES, sampleCount: baselineCounts.length, counts: baselineCounts, median: baselineMedian, minByBaseline, minRatioToBaseline: MATCH_YIELD_MIN_RATIO_TO_BASELINE }, eligibleFloor: { minRatioToEligible: MATCH_YIELD_MIN_RATIO_TO_ELIGIBLE, minByEligible }, warnings, issues };
+  if (issues.length) throw new Error("Strategy4 match yield guard failed: " + issues.join("; "));
+  return guard;
+}
 async function fetchJson(url, timeout = 20000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -1471,6 +1540,7 @@ function buildSupabaseRunRow(output, runId) {
       supabasePublishGate: output.supabasePublishGate || null,
       selfTest: output.selfTest || null,
       prePublishSelfTest: output.prePublishSelfTest || null,
+      matchYieldGuard: output.matchYieldGuard || null,
       publishedSelfTest: output.publishedSelfTest || null,
       fallbackUsed: false,
       fallbackScope: [],
@@ -2025,6 +2095,9 @@ async function main() {
   output.supabasePublishGate = assertStrategy4PublishGate();
   console.log(`strategy4 publish hard gate ok: status=${output.supabasePublishGate.status} publishAllowed=${output.supabasePublishGate.publishAllowed} staleSeconds=${output.supabasePublishGate.staleSeconds}`);
 
+  output.matchYieldGuard = await assertStrategy4MatchYieldGuard(output, previousRaw);
+  console.log(`strategy4 match yield guard ok: count ${output.matchYieldGuard.currentCount}, baselineMedian ${output.matchYieldGuard.baseline.median}, eligible ${output.matchYieldGuard.eligibleCount}`);
+
   const prePublishSelfTest = assertStrategy4PrePublishSelfTest(output);
   console.log(`strategy4 pre-publish self-test ok: count ${prePublishSelfTest.count}, executionRate ${prePublishSelfTest.executionRate}, coverageRatio ${prePublishSelfTest.coverageRatio}, breakdown ${prePublishSelfTest.walletBreakdownRows}/${prePublishSelfTest.mutakiBreakdownRows}`);
   writeStrategy4Output(output, true);
@@ -2040,17 +2113,6 @@ async function main() {
   if (FULL_SCAN && output.complete && output.yahooSourceRatio > MAX_YAHOO_SOURCE_RATIO) {
     console.warn(`Strategy4 degraded source mix: Yahoo fallback ${output.yahooSourceCount}/${Object.values(output.dataSourceCounts || {}).reduce((sum, count) => sum + Number(count || 0), 0)} (${output.yahooSourceRatio}), warning threshold ${MAX_YAHOO_SOURCE_RATIO}`);
   }
-  const previousCompleteCount = previousRaw?.complete === true ? Number(previousRaw.count || 0) : 0;
-  if (FULL_SCAN && output.complete && previousCompleteCount >= MIN_MATCH_COUNT) {
-    const minByHistory = Math.max(MIN_MATCH_COUNT, Math.floor(previousCompleteCount * MIN_MATCH_RATIO_TO_PREVIOUS));
-    if (output.count < minByHistory) {
-      if (ALLOW_FILTER_RULE_DROP && volumeFilterRuleChanged(previousRaw, output)) {
-        console.warn(`Strategy4 match drop allowed after filter rule change: ${output.count} vs previous ${previousCompleteCount}, filtered ${output.volumeFilteredCount}, minimum ${minByHistory}`);
-        return;
-      }
-      throw new Error(`Strategy4 suspicious match drop: ${output.count} vs previous ${previousCompleteCount}, minimum ${minByHistory}`);
-    }
-  }
 }
 
 if (require.main === module) {
@@ -2065,4 +2127,6 @@ module.exports = {
   buildSupabaseRunRow,
   buildSupabaseScanRows,
   buildStrategy4PrePublishSelfTest,
+  assertStrategy4MatchYieldGuard,
 };
+

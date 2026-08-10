@@ -151,11 +151,22 @@ function normalizeSignalList(value) {
 
 function normalizePayload(row) {
   const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+  const mutakiV17 = payload.mutakiV17 && typeof payload.mutakiV17 === "object" ? payload.mutakiV17 : {};
+  const triangleBreakout = payload.triangleBreakout && typeof payload.triangleBreakout === "object" ? payload.triangleBreakout : {};
   const signals = normalizeSignalList(payload.signals || row.signals);
   const swingZone = String(payload.swingZone || payload.zone || row.zone || "").trim();
   const swingZoneLabel = String(payload.swingZoneLabel || payload.zoneLabel || row.zone_label || "").trim();
+  const entryPrice = cleanNumber(payload.entryPrice ?? mutakiV17.entryPrice ?? payload.price ?? payload.close ?? row.price);
+  const targetPrice = cleanNumber(payload.targetPrice ?? mutakiV17.targetPrice ?? triangleBreakout.resistance ?? payload.priceTarget);
+  const stopPrice = cleanNumber(payload.stopPrice ?? mutakiV17.stopPrice);
+  const riskReward = cleanNumber(payload.riskReward ?? mutakiV17.riskReward);
   return {
     ...payload,
+    entryPrice,
+    targetPrice,
+    stopPrice,
+    riskReward,
+    targetPriceSource: targetPrice ? String(payload.targetPriceSource || (mutakiV17.targetPrice ? "mutakiV17.targetPrice" : triangleBreakout.resistance ? "triangleBreakout.resistance" : "payload.targetPrice")).trim() : "",
     code: String(payload.code || row.code || "").trim(),
     name: String(payload.name || row.name || row.code || "").trim(),
     market: String(payload.market || row.market || "").trim(),

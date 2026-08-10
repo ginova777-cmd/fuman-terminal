@@ -8,6 +8,8 @@ const EXPECTED_RUN_ID = String(process.env.EXPECTED_STRATEGY4_RUN_ID || "").trim
 const OUT_DIR = path.resolve(process.argv.find((arg) => arg.startsWith("--out="))?.slice("--out=".length) || "outputs/strategy4-88-data-chain");
 
 process.env.FUMAN_RUNTIME_DIR ||= "C:/fuman-runtime";
+process.env.FUMAN_SCORECARD_LIVE_SOURCE_REPORTS ||= "1";
+process.env.FUMAN_SCORECARD_LIVE_SNAPSHOT_READBACK ||= "1";
 process.env.FUMAN_DATA_DIR ||= "C:/fuman-runtime/data";
 process.env.FUMAN_CACHE_DIR ||= "C:/fuman-runtime/cache";
 process.env.FUMAN_STATE_DIR ||= "C:/fuman-runtime/state";
@@ -116,8 +118,8 @@ async function main() {
   ]);
   const mobile = await callInternal(modules.mobileFragment, "/api/mobile-fragment?tab=strategy4&live=1", { tab: "strategy4", live: "1" });
   const [scorecard, sourceReports] = await Promise.all([
-    callInternal(modules.scorecard, "/api/scorecard?t=1", { t: "1" }),
-    callInternal(modules.sourceReports, "/api/source-reports?live=1", { live: "1" }),
+    callInternal(modules.scorecard, "/api/scorecard?t=1&refreshSourceReports=1&strictLiveReports=1&noCache=1", { t: "1", refreshSourceReports: "1", strictLiveReports: "1", noCache: "1" }),
+    callInternal(modules.sourceReports, "/api/source-reports?live=1&refreshSourceReports=1&strictLiveReports=1", { live: "1", refreshSourceReports: "1", strictLiveReports: "1" }),
   ]);
   const [prodBundle, prodLatest, prodMobile, prodScorecard, prodSourceReports, prod88] = await Promise.all([
     fetchText("/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=80&live=1"),

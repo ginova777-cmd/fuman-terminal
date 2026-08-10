@@ -147,7 +147,7 @@ async function fetchStrategy2ReadinessStatus() {
   }
 }
 
-async function fetchSourceStatusPayload(sourceName = "fugle_shared_source") {
+async function fetchSourceStatusPayload(sourceName = "fugle_daytrade_source") {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("missing Supabase credentials");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
@@ -512,6 +512,7 @@ async function main() {
   let sourceStatus = null;
   let sourceGateIssues = [];
   let strategy3Session = null;
+  let strategy4HardGateIssues = [];
   if (String(row.strategy || "").toLowerCase() === "strategy2") {
     try {
       readiness = await fetchStrategy2ReadinessStatus();
@@ -556,9 +557,19 @@ async function main() {
       };
     }
   }
+  if (String(row.strategy || "").toLowerCase() === "strategy4") {
+    const targetDate = scannerTargetIsoDate() || normalizeIsoDate(row.latest_date || "");
+    const latestDate = normalizeIsoDate(row.latest_date || "");
+    const rowCount = Number(row.row_count || 0);
+    const rowMinRequired = Number(row.min_required_rows || 0);
+    if (rowMinRequired < STRATEGY4_MIN_DAILY_ROWS) strategy4HardGateIssues.push(`min_required_rows=${rowMinRequired}<${STRATEGY4_MIN_DAILY_ROWS}`);
+    if (targetDate && latestDate !== targetDate) strategy4HardGateIssues.push(`latest_date=${latestDate || "missing"} target_date=${targetDate}`);
+    if (rowCount < STRATEGY4_MIN_DAILY_ROWS) strategy4HardGateIssues.push(`row_count=${rowCount}<${STRATEGY4_MIN_DAILY_ROWS}`);
+    if (strategy4HardGateIssues.length && effectiveStatus === READY_STATUS) effectiveStatus = "not_ready";
+  }
   if (String(row.strategy || "").toLowerCase() === "strategy4" && effectiveStatus !== READY_STATUS) {
     try {
-      dailyFallback = await fetchStrategy4DailyFallbackStatus(scannerTargetIsoDate() || String(row.latest_date || ""));
+      dailyFallback = await fetchStrategy4DailyFallbackStatus(scannerTargetIsoDate() || taipeiTradeDate());
       if (dailyFallback.ready) {
         effectiveStatus = READY_STATUS;
       }
@@ -595,11 +606,15 @@ async function main() {
     ? `${strategy2LegacyReadinessStrict ? "legacy_readiness_strict" : "diagnostic_only"}:${readinessReason}`
     : "";
   const dailyFallbackReason = dailyFallback?.ready ? `daily_after_close_fallback_ready: ${dailyFallback.reason}` : "";
-  const reason = [strategy2DedicatedSourceReady ? "" : (row.reason || ""), dailyFallbackReason, readinessDiagnostic, strategy3SessionReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
+  const strategy4HardGateReason = strategy4HardGateIssues.length ? `strategy4 source hard gate: ${strategy4HardGateIssues.join("; ")}` : "";
+  const reason = [strategy2DedicatedSourceReady ? "" : (row.reason || ""), strategy4HardGateReason, dailyFallbackReason, readinessDiagnostic, strategy3SessionReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
   const readinessBlocked = Boolean(strategy2LegacyReadinessStrict && readiness && readiness.strategy2_ready_100 !== true && !strategy2DedicatedSourceReady);
   const strategy4DailyFallbackReady = String(row.strategy || "").toLowerCase() === "strategy4" && dailyFallback?.ready;
+  const strategy4HardGateBlocked = String(row.strategy || "").toLowerCase() === "strategy4" && strategy4HardGateIssues.length > 0 && !strategy4DailyFallbackReady;
   const suggestedScannerBehavior = strategy4DailyFallbackReady
     ? "publish allowed; Strategy4 after-close daily fallback is date-aligned and meets row threshold"
+    : strategy4HardGateBlocked
+    ? "preserve latest complete run; Strategy4 source hard gate is not date-aligned or row threshold is disabled"
     : strategy2DedicatedSourceReady
     ? "publish allowed; dedicated daytrade source is A and readiness cache is diagnostic-only"
     : sourceGateIssues.length || readinessBlocked
@@ -615,7 +630,7 @@ async function main() {
     requiredSource: row.required_source || "",
     latestDate: row.latest_date || "",
     rowCount: Number(row.row_count || 0),
-    minRequiredRows: Number(row.min_required_rows || 0),
+    minRequiredRows: String(row.strategy || "").toLowerCase() === "strategy4" ? Math.max(STRATEGY4_MIN_DAILY_ROWS, Number(row.min_required_rows || 0)) : Number(row.min_required_rows || 0),
     reason,
     scanner_block_reason: blocked ? (reason || "scanner source gate blocked") : "",
     publishAllowed: ok,
@@ -629,6 +644,10 @@ async function main() {
       minFreshQuoteCoverage120s: STRATEGY2_MIN_FRESH_QUOTE_COVERAGE_120S,
       intraday1mHardStaleSeconds: STRATEGY2_INTRADAY_1M_HARD_STALE_SECONDS,
       issues: sourceGateIssues,
+    },
+    strategy4HardGate: {
+      minRequiredRows: STRATEGY4_MIN_DAILY_ROWS,
+      issues: strategy4HardGateIssues,
     },
   };
   console.log(JSON.stringify(payload, null, 2));
@@ -644,5 +663,6 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, blocked: true, error: error?.message || String(error) }, null, 2));
   process.exitCode = 1;
 });
+
 
 

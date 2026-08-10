@@ -75,7 +75,7 @@ function tabAuthorityKey(tab) {
 }
 
 function shouldUseLiveFragment(tab) {
-  return String(tab || "").toLowerCase() === "strategy2";
+  return ["strategy2", "strategy4"].includes(String(tab || "").toLowerCase());
 }
 
 function terminalAuthorityForTab(tab) {
@@ -951,3 +951,4 @@ module.exports = async function handler(request, response) {
     sendHtml(request, response, 503, `<div class="empty-state">手機 API fragment 暫時無法取得：${esc(error?.message || error)}</div>`, { tab });
   }
 };
+

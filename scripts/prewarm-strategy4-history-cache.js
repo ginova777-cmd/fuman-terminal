@@ -13,7 +13,7 @@ const VOLUME_AVG5_FILE = path.join(RUNTIME_DIR, "cache", "strategy4-volume-avg5.
 const BATCH_SIZE = Number(process.env.STRATEGY4_PREWARM_BATCH_SIZE || 40);
 const BATCHES_PER_RUN = Number(process.env.STRATEGY4_PREWARM_BATCHES_PER_RUN || 0);
 const SLEEP_MS = Number(process.env.STRATEGY4_PREWARM_SLEEP_MS || 800);
-const MAX_REMAINING_MISS = Number(process.env.STRATEGY4_PREWARM_MAX_REMAINING_MISS || 2000);
+const MAX_REMAINING_MISS = Number(process.env.STRATEGY4_PREWARM_MAX_REMAINING_MISS || 100);
 const STRATEGY4_MIN_HISTORY_BARS = Number(process.env.STRATEGY4_MIN_HISTORY_BARS || 60);
 const HISTORY_LOOKBACK_DAYS = Number(process.env.STRATEGY4_HISTORY_LOOKBACK_DAYS || 420);
 const HISTORY_CACHE_ROWS = Number(process.env.STRATEGY4_HISTORY_CACHE_ROWS || 260);
@@ -850,5 +850,6 @@ main().catch((error) => {
   });
   process.exit(1);
 });
+
 
 

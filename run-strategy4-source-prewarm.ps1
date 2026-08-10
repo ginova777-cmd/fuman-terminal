@@ -74,6 +74,32 @@ function Complete-Receipt($Status, $ExitCode, $SourceReady, $Reason, $ResourceGa
   Write-JsonFile $datedReceipt $payload
 }
 
+function Invoke-Strategy4SourceRootVerifier {
+  param([string]$TargetDate = $tradeDate)
+
+  Push-Location $repo
+  try {
+    $previousTargetDate = $env:FUMAN_SCANNER_TARGET_DATE
+    $previousTargetTradeDate = $env:FUMAN_SCANNER_TARGET_TRADE_DATE
+    $previousTerminalTargetDate = $env:FUMAN_TERMINAL_TARGET_TRADE_DATE
+    try {
+      $env:FUMAN_SCANNER_TARGET_DATE = $TargetDate
+      $env:FUMAN_SCANNER_TARGET_TRADE_DATE = $TargetDate
+      $env:FUMAN_TERMINAL_TARGET_TRADE_DATE = $TargetDate
+      $verifierOutput = & $nodeExe "scripts\verify-strategy4-source-root.js" "--date=$TargetDate" 2>&1
+      $verifierExit = $LASTEXITCODE
+      $verifierOutput | Tee-Object -FilePath $log -Append | Out-Host
+      return ($verifierExit -eq 0)
+    } finally {
+      if ($null -ne $previousTargetDate) { $env:FUMAN_SCANNER_TARGET_DATE = $previousTargetDate } else { Remove-Item Env:FUMAN_SCANNER_TARGET_DATE -ErrorAction SilentlyContinue }
+      if ($null -ne $previousTargetTradeDate) { $env:FUMAN_SCANNER_TARGET_TRADE_DATE = $previousTargetTradeDate } else { Remove-Item Env:FUMAN_SCANNER_TARGET_TRADE_DATE -ErrorAction SilentlyContinue }
+      if ($null -ne $previousTerminalTargetDate) { $env:FUMAN_TERMINAL_TARGET_TRADE_DATE = $previousTerminalTargetDate } else { Remove-Item Env:FUMAN_TERMINAL_TARGET_TRADE_DATE -ErrorAction SilentlyContinue }
+    }
+  } finally {
+    Pop-Location
+  }
+}
+
 function Invoke-Strategy4SourceRepair {
   param([string]$Reason = "")
 
@@ -88,6 +114,9 @@ function Invoke-Strategy4SourceRepair {
     STRATEGY4_HISTORY_CACHE_ROWS = $env:STRATEGY4_HISTORY_CACHE_ROWS
     STRATEGY4_PREWARM_SUPABASE_ONLY = $env:STRATEGY4_PREWARM_SUPABASE_ONLY
     STRATEGY4_ALLOW_YAHOO_FALLBACK = $env:STRATEGY4_ALLOW_YAHOO_FALLBACK
+    FUMAN_SCANNER_TARGET_DATE = $env:FUMAN_SCANNER_TARGET_DATE
+    FUMAN_SCANNER_TARGET_TRADE_DATE = $env:FUMAN_SCANNER_TARGET_TRADE_DATE
+    FUMAN_TERMINAL_TARGET_TRADE_DATE = $env:FUMAN_TERMINAL_TARGET_TRADE_DATE
   }
 
   try {
@@ -95,11 +124,14 @@ function Invoke-Strategy4SourceRepair {
     $env:STRATEGY4_PREWARM_BATCH_SIZE = "80"
     $env:STRATEGY4_PREWARM_BATCHES_PER_RUN = "999"
     $env:STRATEGY4_PREWARM_SLEEP_MS = "0"
-    $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS = "2000"
+    $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS = "100"
     $env:STRATEGY4_HISTORY_LOOKBACK_DAYS = "420"
     $env:STRATEGY4_HISTORY_CACHE_ROWS = "260"
     $env:STRATEGY4_PREWARM_SUPABASE_ONLY = "0"
     $env:STRATEGY4_ALLOW_YAHOO_FALLBACK = "0"
+    $env:FUMAN_SCANNER_TARGET_DATE = $tradeDate
+    $env:FUMAN_SCANNER_TARGET_TRADE_DATE = $tradeDate
+    $env:FUMAN_TERMINAL_TARGET_TRADE_DATE = $tradeDate
 
     Push-Location $repo
     try {
@@ -120,6 +152,12 @@ function Invoke-Strategy4SourceRepair {
       $importExit = $LASTEXITCODE
       if ($importExit -ne 0) {
         Write-Log "Strategy4 source prewarm import failed with exit code $importExit"
+        return $false
+      }
+
+      $sourceRootOk = Invoke-Strategy4SourceRootVerifier -TargetDate $tradeDate
+      if (-not $sourceRootOk) {
+        Write-Log "Strategy4 source root verifier failed after repair/import"
         return $false
       }
     } finally {
@@ -162,6 +200,10 @@ try {
     $gateExit = $LASTEXITCODE
     Write-Log "Strategy4 source prewarm publish gate probe exit=$gateExit"
 
+    $env:FUMAN_SCANNER_TARGET_DATE = $tradeDate
+    $env:FUMAN_SCANNER_TARGET_TRADE_DATE = $tradeDate
+    $env:FUMAN_TERMINAL_TARGET_TRADE_DATE = $tradeDate
+
     . "${PSScriptRoot}\scanner-resource-health.ps1"
     $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy4" -LogPath $log
     $repairAttempted = $false
@@ -182,6 +224,14 @@ try {
       exit 3
     }
 
+    $sourceRootReady = Invoke-Strategy4SourceRootVerifier -TargetDate $tradeDate
+    if (-not $sourceRootReady) {
+      $reason = "Strategy4 source root verifier failed before ready receipt"
+      Write-Log $reason
+      Complete-Receipt "failed" 4 $false $reason $resourceGate $repairAttempted $repairOk
+      exit 4
+    }
+
     $reason = "source ready after prewarm: $($resourceGate.Reason)"
     Write-Log "Strategy4 source prewarm READY: $reason"
     Complete-Receipt "complete" 0 $true $reason $resourceGate $repairAttempted $repairOk
@@ -195,3 +245,5 @@ try {
   Complete-Receipt "failed" 1 $false $reason $null $false $false
   exit 1
 }
+
+
