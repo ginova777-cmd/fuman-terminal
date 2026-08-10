@@ -1,4 +1,4 @@
-const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260809-retired-gate-01";
+const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260714-22";
 const PROTECTED_NO_STALE_SW_EPOCH = "protected-no-stale-first-paint-20260724-01";
 const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-api-only-20260809-01";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
