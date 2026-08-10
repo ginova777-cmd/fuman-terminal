@@ -93,10 +93,6 @@
     "verify:strategy3-live-before": "node --use-system-ca scripts/verify-strategy3-live-readback.js --capture-before",
     "verify:strategy3-live-blocked": "node --use-system-ca scripts/verify-strategy3-live-readback.js --expect-blocked",
     "verify:strategy3-full-scan": "node --use-system-ca scripts/verify-strategy3-full-scan-coverage.js",
-    "verify:strategy3-list-churn": "node --use-system-ca scripts/verify-strategy3-list-source-churn.js",
-    "verify:strategy3-entry-window": "node --use-system-ca scripts/verify-strategy3-entry-window-evidence.js",
-    "verify:strategy3-canonical-closure": "node --use-system-ca scripts/verify-strategy3-canonical-closure.js",
-    "verify:strategy3-full-closure": "npm run verify:strategy3-full-scan && npm run verify:strategy3-list-churn && npm run verify:strategy3-entry-window && npm run verify:strategy3-canonical-closure && npm run verify:daytrade-strategy3-closure-live",
     "verify:strategy5-prewater": "node scripts/verify-strategy5-prewater-static-fields.js && node scripts/verify-strategy5-prewater-fixtures.js && node scripts/verify-strategy5-prewater-fixtures.js --sample-mutations && node scripts/verify-strategy5-prewater-fixtures.js --payload fixtures/strategy5-prewater-blocked-receipt.json --type receipt && node scripts/verify-strategy5-prewater-formal-payloads.js",
     "verify:strategy5-prewater:static": "node scripts/verify-strategy5-prewater-static-fields.js",
     "verify:strategy5-prewater:fixtures": "node scripts/verify-strategy5-prewater-fixtures.js",
@@ -216,7 +212,6 @@
     "verify:strategy4-match-yield": "node --use-system-ca scripts/verify-strategy4-match-yield-diagnostics.js",
     "verify:strategy4-canonical-closure": "node --use-system-ca scripts/verify-strategy4-canonical-closure.js",
     "verify:strategy4-full-closure": "npm run verify:strategy4-source-root && npm run verify:strategy4-match-yield && npm run verify:strategy4-canonical-closure && npm run verify:strategy4-88-data-chain",
-    "verify:strategy34-terminal-surface-closure": "node --use-system-ca scripts/verify-strategy34-terminal-surface-closure.js",
     "verify:strategy4-current-bad-source-drill": "node --use-system-ca scripts/strategy4-current-bad-source-drill.js",
     "verify:strategy4-prewater-fixtures": "node scripts/verify-strategy4-prewater-fixture.js --fixture=all",
     "verify:strategy4-business-fields": "node scripts/verify-strategy4-business-fields.js",
@@ -402,3 +397,4 @@
     "node": "24.x"
   }
 }
+

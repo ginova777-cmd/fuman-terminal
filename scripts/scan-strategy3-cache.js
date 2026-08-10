@@ -58,7 +58,6 @@ const STRATEGY3_MIN_TRADE_VOLUME_LOTS = Number(process.env.STRATEGY3_MIN_TRADE_V
 const STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE = process.env.STRATEGY3_REQUIRE_OUTSIDE_GT_INSIDE !== "0";
 const STRATEGY3_REQUIRE_NEAR_100_HIGH = process.env.STRATEGY3_REQUIRE_NEAR_100_HIGH === "1";
 const STRATEGY3_REQUIRE_OPENING_CANDIDATE = process.env.STRATEGY3_REQUIRE_OPENING_CANDIDATE === "1";
-const STRATEGY3_REQUIRE_DAYTRADE_MOTHER_POOL = process.env.STRATEGY3_REQUIRE_DAYTRADE_MOTHER_POOL !== "0";
 const STRATEGY3_OPENING_CANDIDATE_MIN_VOLUME_LOTS = Number(process.env.STRATEGY3_OPENING_CANDIDATE_MIN_VOLUME_LOTS || 3000);
 const STRATEGY3_OPENING_CANDIDATE_MIN_CLOSE_ZONE = Number(process.env.STRATEGY3_OPENING_CANDIDATE_MIN_CLOSE_ZONE || 0.7);
 const STRATEGY3_BOLLINGER_PERIOD = Number(process.env.STRATEGY3_BOLLINGER_PERIOD || 20);
@@ -2466,8 +2465,7 @@ async function buildMatches(stocks, issuedSharesMap, volumeAverageMap, sourceWar
   });
   const baseScored = allScored
     .filter((stock) => stock.close > 0 && strategy3HasSession1m(stock))
-    .filter((stock) => stock.strategy3FixedPass)
-    .filter((stock) => !STRATEGY3_REQUIRE_DAYTRADE_MOTHER_POOL || stock.inDaytradeMotherPool === true);
+    .filter((stock) => stock.strategy3FixedPass);
   const dailyEnhancementMap = await fetchStrategy3DailyEnhancementMap(baseScored, sourceWarnings);
   const enhancedScored = baseScored.map((stock) => {
     const enhancement = dailyEnhancementMap.get(normalizeCode(stock.code)) || buildStrategy3DailyEnhancement(stock, []);
@@ -2914,7 +2912,6 @@ async function main() {
   const matchDiagnostics = lastStrategy3MatchDiagnostics || {};
   const scanCoverage = {
     completeScan: true,
-    scanScope: STRATEGY3_REQUIRE_DAYTRADE_MOTHER_POOL ? "daytrade_mother_pool" : "full_universe",
     sourceUniverseCount: stocks.length,
     scannedCount: stocks.length,
     daytradeMotherPoolSource: daytradeMotherPool.source,
