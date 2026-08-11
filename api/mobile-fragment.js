@@ -76,7 +76,7 @@ function tabAuthorityKey(tab) {
 }
 
 function shouldUseLiveFragment(tab) {
-  return ["strategy2", "strategy4"].includes(String(tab || "").toLowerCase());
+  return ["strategy2", "strategy3", "strategy4"].includes(String(tab || "").toLowerCase());
 }
 
 function terminalAuthorityForTab(tab) {
