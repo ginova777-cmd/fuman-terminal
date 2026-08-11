@@ -66,11 +66,13 @@ assert(
 );
 assert(apiSource.includes("delete query.snapshot") && apiSource.includes('source: "market-ai-live"'), "market-ai-live must strip snapshot query during same-day detection");
 assert(apiSource.includes("requireLiveHeatmap") && apiSource.includes("isMarketAiDetectWindow(clock)") && apiSource.includes("HEATMAP_LIVE_TIMEOUT_MS"), "market-ai-live must require live heatmap throughout the active AI window");
+assert(apiSource.includes("const AI_WINDOW_END_SECONDS = 13 * 60 * 60 + 30 * 60;"), "market-ai-live AI window must end at 13:30 Asia/Taipei");
+assert(apiSource.includes('end: "13:30:00"') && !apiSource.includes('end: "13:00:00"'), "market-ai-live aiDetectWindow response must expose 09:00-13:30");
 assert(apiSource.includes("isMarketAiTodayRequiredWindow") && apiSource.includes("AI_TODAY_REQUIRED_START_SECONDS"), "market-ai-live must keep requiring today's live detection after the shared-source start until same-day data exists");
 assert(apiSource.includes("requiresTodayLiveSource") && apiSource.includes("allowLatestFallback: !requireTodayLiveSource"), "market-ai-live must not use latest snapshot fallback after today's shared-source window starts");
-assert(apiSource.includes("allowLatestFallback: !requireTodayLiveSource && !isMarketAiPostClose(clock)"), "market-ai-live must not use stale latest snapshot fallback after 13:30 post-close");
+assert(apiSource.includes("allowLatestFallback: !requireTodayLiveSource && (fastCachedPayload || !isMarketAiPostClose(clock))"), "market-ai-live must not use stale latest snapshot fallback after 13:30 post-close or during today live-source-required window");
 assert(apiSource.includes("cachedAllowed") && apiSource.includes("isTodayDate(cachedTradeDate, clock)"), "market-ai-live must not serve stale local cache after 13:30 post-close");
-assert(apiSource.includes("snapshot?.payload && !mustDetectToday && !isMarketAiPostClose(clock)"), "market-ai-live must rebuild live bundle instead of returning market_ai_live snapshot after 13:30 post-close");
+assert(apiSource.includes("snapshot?.payload && !mustDetectToday && (fastCachedPayload || !isMarketAiPostClose(clock))"), "market-ai-live must rebuild live bundle instead of returning market_ai_live snapshot after 13:30 post-close or when today detection is required");
 assert(apiSource.includes("cached && cachedAllowed && !isMarketAiPostClose(clock)"), "market-ai-live must rebuild live bundle instead of returning local cache after 13:30 post-close");
 assert(heatmapApiSource.includes("isUsableHeatmapMemoryPayload"), "heatmap API must reject unusable memory cache payloads");
 assert(heatmapApiSource.includes("stockCount < 500"), "heatmap memory cache must enforce minimum stock coverage");
@@ -228,6 +230,29 @@ assert.strictEqual(staleInsights.priorityObservation.stock, null);
 assert.strictEqual(staleInsights.priorityObservation.staleBlocked, true);
 assert.strictEqual(staleInsights.dataFreshness.heatmapIsToday, false);
 assert(staleInsights.priorityObservation.text.includes("20260629"));
+const preOpenClock = {
+  date: "2026-06-29",
+  ymd: "20260629",
+  time: "08:55:00",
+  seconds: 8 * 60 * 60 + 55 * 60,
+  weekday: "Mon",
+};
+const preOpenInsights = buildMarketAiInsights(
+  { dashboard: { tradeDate: "20260628" }, rows: [] },
+  {
+    resolvedTradeDate: "20260629",
+    stockCount: 1000,
+    sectors: [{ name: "測試弱勢", pct: -2.5, up: 100, down: 900, stocks: [] }],
+  },
+  { tradeDate: "20260629", rows: [] },
+  preOpenClock,
+  { taipeiDate: preOpenClock.date, today: preOpenClock.ymd, marketDataDate: "20260628", hasTodayMarketData: false, stale: true, closed: false }
+);
+assert.strictEqual(preOpenInsights.dashboard.bias, "等待開盤");
+assert.strictEqual(preOpenInsights.dataFreshness.preOpenMarketAi, true);
+assert(preOpenInsights.dashboard.action.includes("09:00-13:30"));
+assert(!preOpenInsights.todayPoints.join(" ").includes("空方壓制"));
+assert(!preOpenInsights.todayPoints.join(" ").includes("多方壓制"));
 
 const freshRadarInsights = buildMarketAiInsights(
   { dashboard: { tradeDate: "20260629" }, rows: [] },
@@ -249,8 +274,8 @@ const freshRadarInsights = buildMarketAiInsights(
   { ...session, marketDataDate: "20260629", hasTodayMarketData: true, stale: false }
 );
 assert.strictEqual(freshRadarInsights.dataFreshness.radarIsToday, true);
-assert.notStrictEqual(freshRadarInsights.priorityObservation.stock?.score, 100);
-assert.strictEqual(freshRadarInsights.priorityObservation.stock?.percentSource, "change_percent");
+assert.strictEqual(freshRadarInsights.priorityObservation.stock, null);
+assert.strictEqual(freshRadarInsights.groups.intraday.count, 0);
 const reconciledSession = reconcileMarketSessionWithFreshness(
   session,
   { heatmapTradeDate: "20260629", heatmapUsable: true, radarTradeDate: "20260629", radarIsToday: true },
@@ -301,3 +326,4 @@ assert(unhealthyTodayHeatmapInsights.dataFreshness.sourceIssues[0].includes("熱
 assert(unhealthyTodayHeatmapInsights.todayPoints.some((point) => point.includes("水源狀態")));
 
 console.log("[market-ai-freshness-guard] ok");
+

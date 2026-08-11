@@ -113,6 +113,10 @@ function isMarketAiDetectWindow(clock = taipeiClock()) {
   return clock.seconds >= AI_WINDOW_START_SECONDS && clock.seconds <= AI_WINDOW_END_SECONDS;
 }
 
+function isMarketAiPreOpenWindow(clock = taipeiClock()) {
+  return clock.seconds < AI_WINDOW_START_SECONDS;
+}
+
 function isMarketAiTodayRequiredWindow(clock = taipeiClock()) {
   return clock.seconds >= AI_TODAY_REQUIRED_START_SECONDS && clock.seconds <= AI_WINDOW_END_SECONDS;
 }
@@ -621,7 +625,8 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   const baseIsToday = isTodayDate(baseTradeDate, clock);
   const heatmapIssue = heatmapSourceIssue(heatmapPayload, heatmapIsToday, session, clock);
   const marketClosedDisplay = session?.marketOpen === false || session?.marketCalendar?.marketOpen === false || session?.closed === true;
-  const heatmapUsable = (marketClosedDisplay ? normalizeArray(heatmapPayload?.sectors).length > 0 : heatmapIsToday) && !heatmapIssue;
+  const preOpenMarketAi = !marketClosedDisplay && isMarketAiPreOpenWindow(clock);
+  const heatmapUsable = !preOpenMarketAi && (marketClosedDisplay ? normalizeArray(heatmapPayload?.sectors).length > 0 : heatmapIsToday) && !heatmapIssue;
   const heatmapQuoteCoverage = buildHeatmapQuoteCoverage(heatmapPayload || {});
   const sourceIssues = [
     heatmapIssue,
@@ -687,10 +692,10 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   const strongNames = strongSectors.map((sector) => sector.name || sector.industry).filter(Boolean).slice(0, 3);
   const weakNames = weakSectors.map((sector) => sector.name || sector.industry).filter(Boolean).slice(0, 3);
   const topStock = allGroupRows[0] || null;
-  const hasDirectionalBreadth = up + down > 0;
-  const confidence = !hasDirectionalBreadth ? "觀察" : Math.abs(up - down) >= Math.max(sample * 0.08, 60) ? "高" : Math.abs(up - down) >= Math.max(sample * 0.03, 25) ? "中" : "觀察";
-  const bias = hasDirectionalBreadth ? (up >= down ? "多方壓制" : "空方壓制") : "等待方向";
-  const action = hasDirectionalBreadth ? (up >= down ? "降低追價" : "等待方向") : "等待方向";
+  const hasDirectionalBreadth = !preOpenMarketAi && up + down > 0;
+  const confidence = preOpenMarketAi ? "觀察" : !hasDirectionalBreadth ? "觀察" : Math.abs(up - down) >= Math.max(sample * 0.08, 60) ? "高" : Math.abs(up - down) >= Math.max(sample * 0.03, 25) ? "中" : "觀察";
+  const bias = preOpenMarketAi ? "等待開盤" : hasDirectionalBreadth ? (up >= down ? "多方壓制" : "空方壓制") : "等待方向";
+  const action = preOpenMarketAi ? "等待 09:00-13:30 市場 AI 正式偵測，不使用昨日 cache 判斷多空。" : hasDirectionalBreadth ? (up >= down ? "降低追價" : "等待方向") : "等待方向";
   const tradeDate = heatmapUsable ? (heatmapPayload?.resolvedTradeDate || heatmapPayload?.tradeDate || heatmapPayload?.health?.today || clock.ymd) : radarIsToday ? radarTradeDate : clock.ymd;
   const priorityStaleBlocked = Boolean(staleSources.length && !topStock);
   const priorityObservation = topStock ? {
@@ -723,9 +728,11 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   ];
 
   const todayPoints = [
-    hasDirectionalBreadth
-      ? `市場廣度：樣本 ${sample.toLocaleString("zh-TW")}，上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，目前判定為${bias}。`
-      : `市場廣度：樣本 ${sample.toLocaleString("zh-TW")}，漲跌方向等待 heatmap snapshot 補齊，不用舊 fallback 假判斷。`,
+    preOpenMarketAi
+      ? "市場廣度：尚未進入 09:00-13:30 市場 AI 偵測窗，開盤前不使用昨日 cache 判斷多空。"
+      : hasDirectionalBreadth
+        ? `市場廣度：樣本 ${sample.toLocaleString("zh-TW")}，上漲 ${up.toLocaleString("zh-TW")} / 下跌 ${down.toLocaleString("zh-TW")}，目前判定為${bias}。`
+        : `市場廣度：樣本 ${sample.toLocaleString("zh-TW")}，漲跌方向等待 heatmap snapshot 補齊，不用舊 fallback 假判斷。`,
     sourceIssues.length ? `水源狀態：${sourceIssues[0]}。` : `水源狀態：今日正式水源可用。`,
     `族群聚焦：${strongNames.length ? strongNames.join("、") : "等待強勢族群成形"}。`,
     `優先觀察：${topStock ? `${topStock.code} ${topStock.name}，${topStock.reason}` : priorityObservation.text}。`,
@@ -794,6 +801,8 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
       sourceIssues,
       heatmapQuoteCoverage,
       priorityStaleBlocked,
+      preOpenMarketAi,
+      detectionWindow: "09:00-13:30",
     },
     fieldCompleteness: {
       todayPoints: todayPoints.length >= 4,
@@ -1429,7 +1438,7 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  if (cached && fastCachedPayload) {
+  if (cached && fastCachedPayload && !requireTodayLiveSource) {
     const closedForDisplay = isMarketAiPostClose(clock) || sessionForPayload.marketOpen === false || sessionForPayload.marketCalendar?.marketOpen === false;
     const basePayload = cachedResponsePayload(cached, breadth, clock, closedForDisplay ? "after-1330-cache" : "fast-shell-cache");
     const payload = closedForDisplay
@@ -1447,11 +1456,11 @@ module.exports = async function handler(request, response) {
   }
   const snapshot = await readSnapshot("market_ai_live", {
     tradeDate: clock.date,
-    allowLatestFallback: fastCachedPayload || (!requireTodayLiveSource && !isMarketAiPostClose(clock)),
+    allowLatestFallback: !requireTodayLiveSource && (fastCachedPayload || !isMarketAiPostClose(clock)),
     timeoutMs: SNAPSHOT_TIMEOUT_MS,
   });
 
-  if (snapshot?.payload && (fastCachedPayload || (!mustDetectToday && !isMarketAiPostClose(clock)))) {
+  if (snapshot?.payload && !mustDetectToday && (fastCachedPayload || !isMarketAiPostClose(clock))) {
     const payload = {
       ...snapshotResponsePayload(snapshot, breadth, clock),
       marketSession: sessionForPayload,
@@ -1550,7 +1559,6 @@ module.exports.__test = {
   requiresTodayDetection,
   canServeCachedPayload,
   heatmapQueryForMarketAi,
+  isMarketAiPreOpenWindow,
 };
-
-
 
