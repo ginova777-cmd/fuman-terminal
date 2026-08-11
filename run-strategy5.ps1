@@ -82,6 +82,11 @@ function Get-Strategy5ScanBlockedReason {
   return ""
 }
 
+function Get-Strategy5RunDateKey($RunId) {
+  $match = [regex]::Match([string]$RunId, "^strategy5-(?<date>\d{8})-\d{14}$")
+  if ($match.Success) { return $match.Groups["date"].Value }
+  return ""
+}
 function Invoke-NodeScan($scriptPath, $label) {
   for ($attempt = 1; $attempt -le 3; $attempt++) {
     Add-Content -LiteralPath $log -Encoding utf8 -Value "=== $label attempt $attempt $(Get-Date) ==="
@@ -112,7 +117,7 @@ function Invoke-Strategy5SnapshotRefresh($RunId = "", $Count = 0, $Warning = "")
     Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 desktop snapshot refresh skipped; helper not found."
   }
   if ($Warning) {
-    Write-Strategy5Receipt "complete" 0 $true $Count $RunId @($Warning) $Warning
+    Write-Strategy5Receipt "blocked" 0 $false $Count $RunId @($Warning) $Warning
   }
 }
 
@@ -171,6 +176,15 @@ try {
   }
 }
 
+$expectedRunDate = (Get-Date).ToString("yyyyMMdd")
+$actualRunDate = Get-Strategy5RunDateKey ([string]$verifiedPayload.runId)
+if ([string]::IsNullOrWhiteSpace($actualRunDate) -or $actualRunDate -ne $expectedRunDate) {
+  $actualLabel = if ($actualRunDate) { $actualRunDate } else { "missing" }
+  $reason = "strategy5 latest run is not today's formal result: expected=$expectedRunDate actual=$actualLabel runId=$($verifiedPayload.runId)"
+  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 scanner completed but current-day closure blocked; preserving previous good. reason=$reason"
+  Write-Strategy5Receipt "blocked" 0 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason
+  exit 0
+}
 $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
 if (Test-Path -LiteralPath $snapshotScript) {
   & $snapshotScript -Source "strategy5" -LogPath $log
