@@ -14,6 +14,7 @@ const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-lim
 
 const MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS || 1200);
 const MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS || 18000);
+const MOBILE_STRATEGY3_DIRECT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_STRATEGY3_DIRECT_TIMEOUT_MS || 30000);
 const MOBILE_FRAGMENT_HTML_SNAPSHOT_READ_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_HTML_SNAPSHOT_READ_TIMEOUT_MS || 900);
 const MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS || 72 * 60 * 60 * 1000);
 
@@ -315,7 +316,7 @@ function fetchStrategy3Internal(request, endpoint) {
   const url = new URL(endpoint, originFrom(request));
   const query = { ...Object.fromEntries(url.searchParams.entries()), live: "1", verify: "1", noSnapshot: "1" };
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("strategy3_internal_timeout")), 12000);
+    const timer = setTimeout(() => reject(new Error("strategy3_internal_timeout")), MOBILE_STRATEGY3_DIRECT_TIMEOUT_MS);
     const finish = (result) => {
       clearTimeout(timer);
       if (Number(result.statusCode || 0) >= 400 || result.payload?.ok === false) {
