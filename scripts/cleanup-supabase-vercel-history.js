@@ -19,12 +19,12 @@ const DEFAULT_DAILY_HISTORY_RETENTION_DAYS = Number(process.env.FUMAN_SUPABASE_D
 
 const RUN_TABLES = [
   { key: "strategy1", runsTable: "strategy1_open_buy_runs", resultsTable: "strategy1_open_buy_results", strategy: "strategy1", dateColumn: "finished_at" },
-  { key: "strategy2", runsTable: "strategy2_scan_runs", resultsTable: "strategy2_scan_results", strategy: "strategy2", dateColumn: "updated_at", retentionDays: 14, keepRuns: 60 },
+  { key: "strategy2", runsTable: "strategy2_scan_runs", resultsTable: "strategy2_scan_results", strategy: "strategy2", dateColumn: "updated_at", retentionDays: 14, keepRuns: 60, batchSize: 1 },
   { key: "strategy3", runsTable: "strategy3_scan_runs", resultsTable: "strategy3_scan_results", strategy: "strategy3", dateColumn: "finished_at" },
   { key: "strategy4", runsTable: "strategy4_scan_runs", resultsTable: "strategy4_scan_results", strategy: "strategy4", dateColumn: "finished_at" },
   { key: "strategy5", runsTable: "strategy5_scan_runs", resultsTable: "strategy5_scan_results", strategy: "strategy5", dateColumn: "finished_at" },
   { key: "institution", runsTable: "institution_scan_runs", resultsTable: "institution_scan_results", strategy: "institution", dateColumn: "finished_at" },
-  { key: "cb", runsTable: "cb_detect_scan_runs", resultsTable: "cb_detect_scan_results", strategy: "cb_detect", dateColumn: "finished_at" },
+  { key: "cb", runsTable: "cb_detect_scan_runs", resultsTable: "cb_detect_scan_results", strategy: "cb_detect", resultsStrategy: false, dateColumn: "finished_at" },
   { key: "warrant", runsTable: "warrant_flow_scan_runs", resultsTable: "warrant_flow_scan_results", strategy: "warrant_flow", dateColumn: "finished_at" },
 ];
 
@@ -212,11 +212,11 @@ async function cleanupSnapshotTable(config, args) {
   return { key: config.key, table: config.table, cutoff, retentionDays, candidates: count, ...deletion };
 }
 
-async function fetchRunRows(config, limit = 5000) {
+async function fetchRunRows(config, limit = 5000, includeStrategy = true) {
   const select = `run_id,strategy,status,complete,${config.dateColumn},updated_at,finished_at,started_at`;
   const filters = [
     `select=${encodeURIComponent(select)}`,
-    config.strategy ? `strategy=eq.${encodeURIComponent(config.strategy)}` : "",
+    includeStrategy && config.strategy ? `strategy=eq.${encodeURIComponent(config.strategy)}` : "",
     `order=${encodeURIComponent(`${config.dateColumn}.desc`)}`,
     `limit=${limit}`,
   ].filter(Boolean).join("&");
@@ -232,7 +232,13 @@ async function cleanupRunPair(config, args) {
   const retentionDays = config.retentionDays ?? args.supabaseRetentionDays;
   const keepRuns = config.keepRuns ?? args.keepRuns;
   const cutoffMs = Date.now() - retentionDays * 86400000;
-  const rows = await fetchRunRows(config);
+  let rows;
+  try {
+    rows = await fetchRunRows(config);
+  } catch (error) {
+    if (!config.strategy || !String(error?.message || error).includes("57014")) throw error;
+    rows = await fetchRunRows(config, 5000, false);
+  }
   const keepIds = new Set(rows.slice(0, keepRuns).map((row) => row.run_id));
   const candidates = rows
     .filter((row) => !keepIds.has(row.run_id))
@@ -244,10 +250,11 @@ async function cleanupRunPair(config, args) {
 
   let deletedResults = 0;
   let deletedRuns = 0;
-  const batches = chunks(candidates, args.batchSize);
+  const batches = chunks(candidates, config.batchSize ?? args.batchSize);
   for (const batch of batches) {
     const runQuery = `run_id=${encodeURIComponent(encodeIn(batch))}${config.strategy ? `&strategy=eq.${encodeURIComponent(config.strategy)}` : ""}`;
-    const resultDelete = await deleteRows(config.resultsTable, runQuery, args.apply).catch((error) => ({ deleted: 0, error: error.message }));
+    const resultsQuery = `run_id=${encodeURIComponent(encodeIn(batch))}${config.strategy && config.resultsStrategy !== false ? `&strategy=eq.${encodeURIComponent(config.strategy)}` : ""}`;
+    const resultDelete = await deleteRows(config.resultsTable, resultsQuery, args.apply).catch((error) => ({ deleted: 0, error: error.message }));
     if (resultDelete.error) throw new Error(`${config.resultsTable} cleanup failed: ${resultDelete.error}`);
     deletedResults += resultDelete.deleted || 0;
     const runDelete = await deleteRows(config.runsTable, runQuery, args.apply).catch((error) => ({ deleted: 0, error: error.message }));
@@ -367,6 +374,9 @@ async function cleanupVercelDeployments(args) {
   const project = vercelProject();
   if (!project.projectId) {
     return { ok: true, skipped: true, reason: "missing_vercel_project_id" };
+  }
+  if (!token && process.env.FUMAN_HISTORY_CLEANUP_ENABLE_VERCEL_CLI !== "1") {
+    return { ok: true, skipped: true, reason: "vercel_cli_disabled_without_token", project, dryRun: !args.apply };
   }
   const authMode = token ? "token" : "vercel-cli";
   let deployments = [];

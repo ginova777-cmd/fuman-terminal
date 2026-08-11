@@ -294,12 +294,24 @@ async function main() {
     issues,
     warnings
   );
-  evidence.commands.vercelProjectInventory = commandCheck(
-    "verify-vercel-project-inventory",
-    [process.execPath, "scripts/verify-vercel-project-inventory.js"],
-    issues,
-    warnings
-  );
+  if (!process.env.VERCEL_TOKEN && !process.env.FUMAN_VERCEL_TOKEN && process.env.FUMAN_COST_JANITOR_ENABLE_VERCEL_CLI !== "1") {
+    evidence.commands.vercelProjectInventory = {
+      label: "verify-vercel-project-inventory",
+      ok: true,
+      status: 0,
+      skipped: true,
+      reason: "vercel_cli_disabled_without_token",
+      source: "vercelCostHealthStatus",
+      parsed: evidence.statusFiles.vercelCostHealth?.payload || null,
+    };
+  } else {
+    evidence.commands.vercelProjectInventory = commandCheck(
+      "verify-vercel-project-inventory",
+      [process.execPath, "scripts/verify-vercel-project-inventory.js"],
+      issues,
+      warnings
+    );
+  }
   evidence.commands.retiredArtifactsClean = commandCheck(
     "verify-retired-artifacts-clean",
     [process.execPath, "scripts/verify-retired-artifacts-clean.js"],
