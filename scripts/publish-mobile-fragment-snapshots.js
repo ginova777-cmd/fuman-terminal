@@ -72,12 +72,20 @@ async function publishOne(tab, token) {
 async function main() {
   const token = await login();
   const results = [];
+  const failures = [];
   for (const tab of TABS) {
-    const result = await publishOne(tab, token);
-    results.push(result);
-    console.log(`[mobile-fragment-snapshot] ${tab} runId=${result.runId} bytes=${result.bytes} fetchMs=${result.elapsedMs}`);
+    try {
+      const result = await publishOne(tab, token);
+      results.push(result);
+      console.log(`[mobile-fragment-snapshot] ${tab} runId=${result.runId} bytes=${result.bytes} fetchMs=${result.elapsedMs}`);
+    } catch (error) {
+      const failure = { tab, error: error?.message || String(error) };
+      failures.push(failure);
+      console.error(`[mobile-fragment-snapshot] ${tab} failed: ${failure.error}`);
+    }
   }
-  console.log(JSON.stringify({ ok: true, baseUrl: BASE_URL, count: results.length, results }, null, 2));
+  console.log(JSON.stringify({ ok: failures.length === 0, baseUrl: BASE_URL, count: results.length, results, failures }, null, 2));
+  if (failures.length) process.exitCode = 1;
 }
 
 main().catch((error) => {
