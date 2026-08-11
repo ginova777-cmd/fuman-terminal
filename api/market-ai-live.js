@@ -1010,6 +1010,8 @@ async function buildSimpleMarketAiReport(request, clock, session, deps = {}) {
   const marketPayload = marketResult?.payload || {};
   const updatedAt = marketPayload.updatedAt || new Date().toISOString();
   const tradeDate = compactDate(marketPayload.today || marketPayload.resolvedTradeDate || marketPayload.sourceTradeDate || updatedAt) || clock.ymd;
+  const marketClosedDisplay = session?.marketOpen === false || session?.marketCalendar?.marketOpen === false || session?.closed === true;
+  const preOpenMarketAi = !marketClosedDisplay && isMarketAiPreOpenWindow(clock);
   const weighted = marketIndexItem(marketPayload, (name) => name.includes("加權") || name.includes("發行量"));
   const otc = marketIndexItem(marketPayload, (name) => name.includes("櫃買"));
   const futures = marketPayload.futuresNear || marketPayload.futures || null;
@@ -1022,13 +1024,16 @@ async function buildSimpleMarketAiReport(request, clock, session, deps = {}) {
   const otcScore = otcPct ?? weightedScore;
   const futuresScore = futuresPct ?? weightedScore;
   const trendScore = Number((weightedScore * 0.55 + otcScore * 0.25 + futuresScore * 0.20).toFixed(2));
-  const bias = pctValues.length === 0 ? "資料不足" : trendScore >= 0.35 ? "偏多" : trendScore <= -0.35 ? "偏空" : "中性整理";
-  const confidence = pctValues.length >= 3 && Math.abs(trendScore) >= 0.5 ? "中高" : pctValues.length >= 2 ? "中" : "低";
-  const action = bias === "偏多"
-    ? "只看指數方向偏多，仍以分批與停損控風險，不啟動個股雷達。"
-    : bias === "偏空"
-      ? "大盤偏弱，先降槓桿與觀察反彈品質，不用熱力圖硬找強勢股。"
-      : "盤面偏整理，維持觀察清單與資金控管，等待加權指數與台指期同向。";
+  const rawBias = pctValues.length === 0 ? "資料不足" : trendScore >= 0.35 ? "偏多" : trendScore <= -0.35 ? "偏空" : "中性整理";
+  const bias = preOpenMarketAi ? "等待開盤" : rawBias;
+  const confidence = preOpenMarketAi ? "觀察" : pctValues.length >= 3 && Math.abs(trendScore) >= 0.5 ? "中高" : pctValues.length >= 2 ? "中" : "低";
+  const action = preOpenMarketAi
+    ? "等待 09:00-13:30 市場 AI 正式偵測，不使用開盤前指數或昨日 cache 判斷多空。"
+    : rawBias === "偏多"
+      ? "只看指數方向偏多，仍以分批與停損控風險，不啟動個股雷達。"
+      : rawBias === "偏空"
+        ? "大盤偏弱，先降槓桿與觀察反彈品質，不用熱力圖硬找強勢股。"
+        : "盤面偏整理，維持觀察清單與資金控管，等待加權指數與台指期同向。";
   const riskText = pctValues.length < 2
     ? "可用指數資料不足，這份報告只能顯示保守結論，不寫 latest。"
     : "此模式不掃全市場、不訂 Fugle WebSocket；只適合簡報觀察，不作正式進場水源。";
@@ -1132,6 +1137,8 @@ async function buildSimpleMarketAiReport(request, clock, session, deps = {}) {
       reportWarnings: ok ? [] : [marketPayload.error || "market_index_source_unavailable"],
       heatmapQuoteCoverage: { status: "not_required", ok: true, reason: "simple_index_report_no_heatmap" },
       priorityStaleBlocked: false,
+      preOpenMarketAi,
+      detectionWindow: "09:00-13:30",
     },
     fieldCompleteness: {
       todayPoints: todayPoints.length >= 4,
@@ -1561,4 +1568,5 @@ module.exports.__test = {
   heatmapQueryForMarketAi,
   isMarketAiPreOpenWindow,
 };
+
 

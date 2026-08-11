@@ -68,6 +68,9 @@ assert(apiSource.includes("delete query.snapshot") && apiSource.includes('source
 assert(apiSource.includes("requireLiveHeatmap") && apiSource.includes("isMarketAiDetectWindow(clock)") && apiSource.includes("HEATMAP_LIVE_TIMEOUT_MS"), "market-ai-live must require live heatmap throughout the active AI window");
 assert(apiSource.includes("const AI_WINDOW_END_SECONDS = 13 * 60 * 60 + 30 * 60;"), "market-ai-live AI window must end at 13:30 Asia/Taipei");
 assert(apiSource.includes('end: "13:30:00"') && !apiSource.includes('end: "13:00:00"'), "market-ai-live aiDetectWindow response must expose 09:00-13:30");
+const preOpenBiasContracts = apiSource.match(/bias = preOpenMarketAi \? "等待開盤"/g) || [];
+assert(preOpenBiasContracts.length >= 2, "market-ai-live full and simple report branches must neutralize bias before 09:00");
+assert(apiSource.includes("不使用開盤前指數或昨日 cache 判斷多空"), "simple market-ai report must not turn pre-open index data into directional bias");
 assert(apiSource.includes("isMarketAiTodayRequiredWindow") && apiSource.includes("AI_TODAY_REQUIRED_START_SECONDS"), "market-ai-live must keep requiring today's live detection after the shared-source start until same-day data exists");
 assert(apiSource.includes("requiresTodayLiveSource") && apiSource.includes("allowLatestFallback: !requireTodayLiveSource"), "market-ai-live must not use latest snapshot fallback after today's shared-source window starts");
 assert(apiSource.includes("allowLatestFallback: !requireTodayLiveSource && (fastCachedPayload || !isMarketAiPostClose(clock))"), "market-ai-live must not use stale latest snapshot fallback after 13:30 post-close or during today live-source-required window");
@@ -326,4 +329,5 @@ assert(unhealthyTodayHeatmapInsights.dataFreshness.sourceIssues[0].includes("熱
 assert(unhealthyTodayHeatmapInsights.todayPoints.some((point) => point.includes("水源狀態")));
 
 console.log("[market-ai-freshness-guard] ok");
+
 
