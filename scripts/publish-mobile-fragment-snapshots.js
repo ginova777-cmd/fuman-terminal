@@ -1,4 +1,4 @@
-const { upsertSnapshot } = require("../lib/supabase-snapshots");
+const { upsertSnapshot, taipeiDateKey } = require("../lib/supabase-snapshots");
 const { resolveProtectedReadbackCredential } = require("../lib/protected-readback-credential");
 
 const AUTH_URL = "https://jxnqyqnigsppqsxinlrq.supabase.co";
@@ -27,6 +27,11 @@ function snapshotKey(tab) {
   return `mobile_fragment_${tab}`;
 }
 
+function runIdTradeDate(runId) {
+  const match = String(runId || "").match(/(?:^|-)20(\d{6})(?:-|$)/);
+  return match ? `20${match[1]}` : "";
+}
+
 async function fetchFragment(tab, token) {
   const url = `${BASE_URL}/api/mobile-fragment?tab=${encodeURIComponent(tab)}&live=1&verify=1&noSnapshot=1&publish_mobile_snapshot=${Date.now()}`;
   const startedAt = Date.now();
@@ -44,7 +49,11 @@ async function fetchFragment(tab, token) {
   const runId = attr(html, "data-run-id");
   if (key !== tab) throw new Error(`${tab} fragment key mismatch actual=${key || "<missing>"}`);
   if (!runId) throw new Error(`${tab} data-run-id missing`);
-  return { tab, html, runId, elapsedMs: Date.now() - startedAt };
+  const tradeDate = runIdTradeDate(runId);
+  const expectedTradeDate = taipeiDateKey();
+  if (!tradeDate) throw new Error(`${tab} runId date missing runId=${runId}`);
+  if (tradeDate !== expectedTradeDate) throw new Error(`${tab} stale runId=${runId} tradeDate=${tradeDate} expected=${expectedTradeDate}`);
+  return { tab, html, runId, tradeDate, elapsedMs: Date.now() - startedAt };
 }
 
 async function publishOne(tab, token) {
@@ -53,6 +62,7 @@ async function publishOne(tab, token) {
   const write = await upsertSnapshot(snapshotKey(tab), {
     ok: true,
     tab,
+    resolvedTradeDate: fragment.tradeDate,
     html: fragment.html,
     runId: fragment.runId,
     updatedAt,
@@ -61,6 +71,7 @@ async function publishOne(tab, token) {
     elapsedMs: fragment.elapsedMs,
   }, {
     snapshotId: fragment.runId,
+    tradeDate: fragment.tradeDate,
     source: "mobile-fragment-html",
     reason: "mobile-fragment-fast-readback-publish",
     timeoutMs: 12000,

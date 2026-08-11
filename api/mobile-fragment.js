@@ -77,7 +77,7 @@ function tabAuthorityKey(tab) {
 }
 
 function shouldUseLiveFragment(tab) {
-  return ["strategy2", "strategy3", "strategy4"].includes(String(tab || "").toLowerCase());
+  return ["strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"].includes(String(tab || "").toLowerCase());
 }
 
 function terminalAuthorityForTab(tab) {
@@ -191,13 +191,21 @@ async function readMobileFragmentHtmlSnapshot(tab) {
   };
 }
 
+function runIdTradeDate(runId) {
+  const match = String(runId || "").match(/(?:^|-)20(\d{6})(?:-|$)/);
+  return match ? `20${match[1]}` : "";
+}
+
 function writeMobileFragmentHtmlSnapshot(tab, html, payload = {}) {
   if (!tab || !htmlMatchesTab(tab, html)) return;
   const runId = extractRunId(payload, tab);
+  const tradeDate = runIdTradeDate(runId);
+  if (!tradeDate) return;
   const updatedAt = payload?.updatedAt || payload?.finishedAt || payload?.generatedAt || new Date().toISOString();
   upsertSnapshot(mobileFragmentSnapshotKey(tab), {
     ok: true,
     tab,
+    resolvedTradeDate: tradeDate,
     html,
     runId,
     updatedAt,
@@ -205,6 +213,7 @@ function writeMobileFragmentHtmlSnapshot(tab, html, payload = {}) {
     source: "api/mobile-fragment",
   }, {
     snapshotId: runId || `${tab}-${Date.now()}`,
+    tradeDate,
     source: "mobile-fragment-html",
     reason: "mobile-fragment-fast-readback",
     timeoutMs: 5000,
