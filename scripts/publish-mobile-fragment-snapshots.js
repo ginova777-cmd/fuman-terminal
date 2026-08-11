@@ -1,4 +1,5 @@
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
+const { resolveProtectedReadbackCredential } = require("../lib/protected-readback-credential");
 
 const AUTH_URL = "https://jxnqyqnigsppqsxinlrq.supabase.co";
 const AUTH_KEY = "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
@@ -12,21 +13,9 @@ function required(value, name) {
 }
 
 async function login() {
-  const email = required(process.env.FUMAN_TEST_MEMBER_EMAIL, "FUMAN_TEST_MEMBER_EMAIL");
-  const password = required(process.env.FUMAN_TEST_MEMBER_PASSWORD, "FUMAN_TEST_MEMBER_PASSWORD");
-  const response = await fetch(`${AUTH_URL}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: {
-      apikey: AUTH_KEY,
-      "content-type": "application/json",
-      accept: "application/json",
-    },
-    body: JSON.stringify({ email, password }),
-  });
-  const text = await response.text();
-  const json = JSON.parse(text || "{}");
-  if (!response.ok || !json.access_token) throw new Error(`member login failed status=${response.status} ${text.slice(0, 160)}`);
-  return json.access_token;
+  const credential = await resolveProtectedReadbackCredential({ timeoutMs: 30000 });
+  if (!credential.ok || !credential.token) throw new Error(`protected readback credential failed: ${credential.reason || "unknown"} ${credential.error || ""}`.trim());
+  return credential.token;
 }
 
 function attr(text, name) {
@@ -95,3 +84,5 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: error?.message || String(error) }, null, 2));
   process.exit(1);
 });
+
+

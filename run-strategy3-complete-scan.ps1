@@ -5,6 +5,7 @@ $env:FUMAN_RUNTIME_DIR = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } 
 $env:FUMAN_DATA_DIR = if ($env:FUMAN_DATA_DIR) { $env:FUMAN_DATA_DIR } else { Join-Path $env:FUMAN_RUNTIME_DIR "data" }
 $env:FUMAN_CACHE_DIR = if ($env:FUMAN_CACHE_DIR) { $env:FUMAN_CACHE_DIR } else { Join-Path $env:FUMAN_RUNTIME_DIR "cache" }
 $env:FUMAN_STATE_DIR = if ($env:FUMAN_STATE_DIR) { $env:FUMAN_STATE_DIR } else { Join-Path $env:FUMAN_RUNTIME_DIR "state" }
+if (-not $env:STRATEGY3_ALLOW_READY_SNAPSHOT) { $env:STRATEGY3_ALLOW_READY_SNAPSHOT = '1' }
 $env:NODE_OPTIONS = "--use-system-ca"
 foreach ($name in @("LINE_CHANNEL_ACCESS_TOKEN", "LINE_TARGET_ID", "LINE_TO", "LINE_USER_ID", "TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_TO")) {
   if (-not [Environment]::GetEnvironmentVariable($name, "Process")) {
@@ -337,6 +338,46 @@ if ($resourceGate.PreserveLatest) {
   Write-Strategy3CompleteLog "Strategy3 resource-gated scan blocked; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
   exit 0
 }
+$sessionReadyWaitSeconds = if ($env:STRATEGY3_SESSION_READY_WAIT_SECONDS) { [int]$env:STRATEGY3_SESSION_READY_WAIT_SECONDS } else { 3300 }
+$sessionReadyPollSeconds = if ($env:STRATEGY3_SESSION_READY_POLL_SECONDS) { [int]$env:STRATEGY3_SESSION_READY_POLL_SECONDS } else { 60 }
+$sessionReadyDeadline = (Get-Date).AddSeconds($sessionReadyWaitSeconds)
+while ($true) {
+  $sessionText = (& $nodeExe "scripts\check-strategy3-session-readiness.js" 2>&1) -join "`n"
+  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy3 pre-scan session readiness output: $sessionText"
+  $sessionGate = $null
+  try {
+    $sessionGate = $sessionText | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    $sessionGate = $null
+  }
+  if ($sessionGate -and $sessionGate.ready -eq $true) {
+    Write-Strategy3CompleteLog "Strategy3 pre-scan session readiness ready; session1m=$($sessionGate.sessionReadyCount)/$($sessionGate.minIntraday1mCandidates) latest=$($sessionGate.latestCandleTime)"
+    break
+  }
+  $reason = if ($sessionGate) {
+    "session readiness not ready; session1m=$($sessionGate.sessionReadyCount)/$($sessionGate.minIntraday1mCandidates); latest=$($sessionGate.latestCandleTime); reason=$($sessionGate.reason)"
+  } else {
+    "session readiness unreadable before scanner"
+  }
+  if ((Get-Date) -ge $sessionReadyDeadline) {
+    Write-Strategy3CompleteLog "Strategy3 source gate blocked new publish before scanner; preserving latest complete run. $reason"
+    $verifiedPayload = Assert-Strategy3CompleteApi -AllowPreviousComplete
+    $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
+    if (Test-Path -LiteralPath $snapshotScript) {
+      & $snapshotScript -Source "strategy3" -LogPath $log
+      if ($LASTEXITCODE -ne 0) {
+        throw "Strategy3 desktop snapshot refresh failed with exit code $LASTEXITCODE"
+      }
+    }
+    $blockedReceiptFile = Write-Strategy3BlockedReceipt $reason ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) "runner-session-readiness-gate"
+    Write-Strategy3Receipt "blocked_preserved" 0 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason, "blockedReceipt=$blockedReceiptFile") $reason
+    Write-Strategy3CompleteLog "Strategy3 session-readiness-gated scan blocked; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
+    exit 0
+  }
+  Write-Strategy3CompleteLog "Strategy3 pre-scan session readiness waiting; $reason"
+  Start-Sleep -Seconds $sessionReadyPollSeconds
+}
+
 $scannerError = ""
 try {
   & $nodeExe "scripts\scan-strategy3-cache.js" >> $log 2>&1
@@ -393,4 +434,5 @@ if (Test-Path -LiteralPath $snapshotScript) {
 
 Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 Write-Strategy3CompleteLog "Strategy3 complete scan end; Supabase complete run + no-store API is the terminal fast path"
+
 

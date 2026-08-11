@@ -160,21 +160,23 @@ async function mapLimit(items, limit, mapper) {
   return out;
 }
 
-async function patchExistingRows(rows) {
-  let updated = 0;
-  await mapLimit(rows, Number(process.env.STRATEGY3_READY_SNAPSHOT_PATCH_CONCURRENCY || 16), async (row) => {
-    const route = `/rest/v1/strategy3_ready_snapshot?${query({
-      requested_trade_date: `eq.${row.requested_trade_date}`,
-      symbol: `eq.${row.symbol}`,
-    })}`;
-    await request("PATCH", route, {
-      body: row,
-      headers: { Prefer: "return=minimal" },
-      timeout: 45000,
-    });
-    updated += 1;
+async function replaceRowsForDate(tradeDate, rows) {
+  await request("DELETE", `/rest/v1/strategy3_ready_snapshot?${query({ requested_trade_date: `eq.${tradeDate}` })}`, {
+    headers: { Prefer: "return=minimal" },
+    timeout: 45000,
   });
-  return updated;
+  let inserted = 0;
+  const chunkSize = Math.max(50, Math.min(Number(process.env.STRATEGY3_READY_SNAPSHOT_INSERT_CHUNK || 500), 1000));
+  for (let index = 0; index < rows.length; index += chunkSize) {
+    const chunk = rows.slice(index, index + chunkSize);
+    await request("POST", "/rest/v1/strategy3_ready_snapshot", {
+      body: chunk,
+      headers: { Prefer: "return=minimal" },
+      timeout: 90000,
+    });
+    inserted += chunk.length;
+  }
+  return inserted;
 }
 
 async function main() {
@@ -261,13 +263,13 @@ async function main() {
     };
   });
 
-  const updatedRows = await patchExistingRows(rows);
+  const updatedRows = await replaceRowsForDate(tradeDate, rows);
 
   console.log(JSON.stringify({
     ok: true,
     source: "strategy3_ready_snapshot_terminal_refresh",
     tradeDate,
-    insertedRows: rows.length,
+    insertedRows: updatedRows,
     updatedRows,
     sessionReadyCount,
     minIntraday1mCandidates: MIN_INTRADAY_1M_CANDIDATES,
@@ -288,4 +290,5 @@ main().catch((error) => {
   }));
   process.exit(1);
 });
+
 

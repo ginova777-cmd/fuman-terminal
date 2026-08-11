@@ -9,7 +9,10 @@ const MIN_INTRADAY_1M_CANDLES = Math.max(1, Number(process.env.STRATEGY3_FORMAL_
 const SESSION_LATEST_MINUTE = Number(process.env.STRATEGY3_SESSION_LATEST_MINUTE || (12 * 60 + 50));
 const STRATEGY3_INTRADAY_STATUS_VIEW = process.env.STRATEGY3_SUPABASE_1M_STATUS_VIEW || "v_fugle_daytrade_intraday_1m_status";
 const STRATEGY3_INTRADAY_1M_TABLE = process.env.STRATEGY3_SUPABASE_1M_TABLE || "fugle_daytrade_intraday_1m";
+const DAYTRADE_SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
+const ALLOW_READY_SNAPSHOT = process.env.STRATEGY3_ALLOW_READY_SNAPSHOT === "1";
 // Contract marker: 09:00-12:59 intraday status ready is evaluated from Strategy2 daytrade 1m readiness.
+// strategy3_ready_snapshot is diagnostic by default; it must not promote formal readiness unless STRATEGY3_ALLOW_READY_SNAPSHOT=1.
 
 function readSecret(file) {
   try { return fs.readFileSync(path.join(RUNTIME_DIR, "secrets", file), "utf8").trim(); } catch { return ""; }
@@ -105,15 +108,23 @@ async function getRowsPaged(route, pageSize = 1000) {
   }
 }
 
-async function fetchRawLatestValidDaySession() {
-  const latestRows = await getRows(`/rest/v1/${STRATEGY3_INTRADAY_1M_TABLE}?select=trade_date&order=trade_date.desc&limit=1`);
-  const tradeDate = String(latestRows?.[0]?.trade_date || "");
-  if (!tradeDate) return null;
+async function fetchDateFilteredStatusRows(tradeDate) {
+  const query = [
+    `/rest/v1/${STRATEGY3_INTRADAY_STATUS_VIEW}`,
+    "?trade_date=eq." + encodeURIComponent(tradeDate),
+    "&select=symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ma20_continuous,ready_ma35_continuous",
+    "&limit=5000",
+  ].join("");
+  return getRows(query);
+}
+
+async function fetchRawLatestValidDaySession(tradeDate) {
   const rows = await getRowsPaged([
     `/rest/v1/${STRATEGY3_INTRADAY_1M_TABLE}`,
-    "?select=symbol,candle_time,trade_date,updated_at",
+    "?trade_date=eq." + encodeURIComponent(tradeDate),
+    "&select=symbol,candle_time,trade_date,updated_at",
     "&order=symbol.asc,candle_time.desc",
-  ].join(""));
+  ].join(""), 1000);
   const byCode = new Map();
   for (const row of rows) {
     const symbol = String(row.symbol || "").replace(/\D/g, "").slice(0, 4);
@@ -126,20 +137,23 @@ async function fetchRawLatestValidDaySession() {
     if (row.updated_at && (!current.updated_at || Date.parse(row.updated_at) > Date.parse(current.updated_at))) current.updated_at = row.updated_at;
     byCode.set(symbol, current);
   }
-  for (const [symbol, row] of byCode) {
-    if (String(row.latest_candle_time || "").slice(0, 10) !== tradeDate) byCode.delete(symbol);
-  }
   const readyRows = [...byCode.values()].filter(isStrategy3DaytradeReadyRow);
   const latestCandleTime = readyRows.map((row) => row.latest_candle_time).filter(Boolean).sort((a, b) => Date.parse(b) - Date.parse(a))[0] || "";
-  return {
-    source: `${STRATEGY3_INTRADAY_1M_TABLE}:latest-valid-day`,
-    tradeDate,
-    rowCount: byCode.size,
-    readyCount: readyRows.length,
-    latestCandleTime,
-  };
+  return { source: "fugle_daytrade_intraday_1m:date-filtered", tradeDate, rowCount: byCode.size, readyCount: readyRows.length, latestCandleTime };
 }
 
+async function fetchStrategy3ReadySnapshot(tradeDate) {
+  const rows = await getRowsPaged([
+    "/rest/v1/strategy3_ready_snapshot",
+    "?requested_trade_date=eq." + encodeURIComponent(tradeDate),
+    "&select=symbol,latest_candle_time,after_1300_candle_count,source_status,refreshed_at",
+    "&limit=5000",
+  ].join(""), 1000);
+  const readyRows = rows.filter((row) => row.source_status === "ready" || Number(row.after_1300_candle_count || 0) >= MIN_INTRADAY_1M_CANDLES);
+  const latestCandleTime = readyRows.map((row) => row.latest_candle_time).filter(Boolean).sort((a, b) => Date.parse(b) - Date.parse(a))[0] || "";
+  const refreshedAt = rows.map((row) => row.refreshed_at).filter(Boolean).sort((a, b) => Date.parse(b) - Date.parse(a))[0] || "";
+  return { source: "strategy3_ready_snapshot", tradeDate, rowCount: rows.length, readyCount: readyRows.length, latestCandleTime, refreshedAt };
+}
 async function fetchStrategy2ReadinessStatus() {
   const rows = await getRows("/rest/v1/v_strategy2_readiness_status?select=status,reason,strategy2_ready_100,detection_expected_count,intraday_1m_ready_count,latest_run_id,checked_at&limit=1");
   return rows[0] || null;
@@ -150,48 +164,85 @@ function isStrategy3DaytradeReadyRow(row) {
   const continuous = Number(row.continuous_candle_count || 0);
   const minute = candleMinutes(row.latest_candle_time || row.intraday_1m_status_updated_at || row.updated_at);
   if (row.ready_ma20_continuous === true || continuous >= MIN_INTRADAY_1M_CANDLES) return true;
-  return count >= MIN_INTRADAY_1M_CANDLES || (count > 0 && minute != null && minute >= SESSION_LATEST_MINUTE);
+  return count >= MIN_INTRADAY_1M_CANDLES;
 }
 
+function numberValue(value) {
+  const number = Number(String(value ?? "").replace(/[,%]/g, "").trim());
+  return Number.isFinite(number) ? number : 0;
+}
+
+async function fetchDaytradeSourcePayloadReadiness() {
+  const rows = await getRows(`/rest/v1/source_status?source_name=eq.${encodeURIComponent(DAYTRADE_SOURCE_NAME)}&select=source_name,status,updated_at,payload&limit=1`);
+  const row = rows[0] || {};
+  const payload = row.payload || {};
+  return {
+    source: "source_status:fugle_daytrade_source.payload",
+    status: row.status || "",
+    updatedAt: row.updated_at || "",
+    readyCount: numberValue(payload.ready_ma20_continuous),
+    expected: numberValue(payload.active_symbols || payload.today_1m_symbols),
+    todaySymbols: numberValue(payload.today_1m_symbols),
+    todayRows: numberValue(payload.today_1m_rows),
+    staleSeconds: numberValue(payload.intraday_1m_stale_seconds),
+    latestCandleTime: payload.latest_candle_time || "",
+  };
+}
 async function main() {
   const tradeDate = argValue("--trade-date", process.env.STRATEGY3_TRADE_DATE || taipeiTradeDate());
   let strategy2Readiness = null;
   let statusRefresh = null;
   let statusRefreshWarning = "";
+  let sourceStatusReadiness = null;
   try {
     statusRefresh = await rpc("refresh_strategy2_readiness_cache", {});
     strategy2Readiness = await fetchStrategy2ReadinessStatus();
   } catch (error) {
     statusRefreshWarning = error?.message || String(error);
   }
-  const rows = await getRowsPaged([
-    `/rest/v1/${STRATEGY3_INTRADAY_STATUS_VIEW}`,
-    "?select=symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ma20_continuous,ready_ma35_continuous",
-  ].join(""));
+  try {
+    sourceStatusReadiness = await fetchDaytradeSourcePayloadReadiness();
+  } catch (error) {
+    statusRefreshWarning = [statusRefreshWarning, `source_status: ${error?.message || String(error)}`].filter(Boolean).join("; ");
+  }
+  let rows = [];
+  let statusViewWarning = "";
+  try {
+    rows = await fetchDateFilteredStatusRows(tradeDate);
+  } catch (error) {
+    statusViewWarning = error?.message || String(error);
+  }
   const latestCandleTime = rows.map((row) => row.latest_candle_time).filter(Boolean).sort((a, b) => Date.parse(b) - Date.parse(a))[0] || "";
   const sessionRows = rows.filter(isStrategy3DaytradeReadyRow);
   const strategy2IntradayReady = Number(strategy2Readiness?.intraday_1m_ready_count || 0);
   const strategy2Expected = Number(strategy2Readiness?.detection_expected_count || 0);
-  const rawLatestValidDay = Math.max(sessionRows.length, strategy2IntradayReady) < MIN_INTRADAY_1M_CANDIDATES
-    ? await fetchRawLatestValidDaySession().catch((error) => ({ error: error?.message || String(error), readyCount: 0, rowCount: 0 }))
+  const snapshotReadiness = ALLOW_READY_SNAPSHOT && Math.max(sessionRows.length, strategy2IntradayReady) < MIN_INTRADAY_1M_CANDIDATES
+    ? await fetchStrategy3ReadySnapshot(tradeDate).catch((error) => ({ error: error?.message || String(error), readyCount: 0, rowCount: 0, tradeDate }))
     : null;
-  const effectiveReadyCount = Math.max(sessionRows.length, strategy2IntradayReady, Number(rawLatestValidDay?.readyCount || 0));
+  const rawLatestValidDay = Math.max(sessionRows.length, strategy2IntradayReady) < MIN_INTRADAY_1M_CANDIDATES
+    ? await fetchRawLatestValidDaySession(tradeDate).catch((error) => ({ error: error?.message || String(error), readyCount: 0, rowCount: 0, tradeDate }))
+    : null;
+  const sourceStatusReady = Number(sourceStatusReadiness?.readyCount || 0);
+  const snapshotReady = ALLOW_READY_SNAPSHOT ? Number(snapshotReadiness?.readyCount || 0) : 0;
+  const effectiveReadyCount = Math.max(sessionRows.length, strategy2IntradayReady, Number(rawLatestValidDay?.readyCount || 0), sourceStatusReady, snapshotReady);
   const ready = effectiveReadyCount >= MIN_INTRADAY_1M_CANDIDATES;
   console.log(JSON.stringify({
     ok: true,
     ready,
-    source: rawLatestValidDay?.readyCount >= MIN_INTRADAY_1M_CANDIDATES ? rawLatestValidDay.source : STRATEGY3_INTRADAY_STATUS_VIEW,
+    source: snapshotReady >= MIN_INTRADAY_1M_CANDIDATES ? "strategy3_ready_snapshot" : (sourceStatusReady >= MIN_INTRADAY_1M_CANDIDATES ? "source_status:fugle_daytrade_source.payload" : (rawLatestValidDay?.readyCount >= MIN_INTRADAY_1M_CANDIDATES ? rawLatestValidDay.source : STRATEGY3_INTRADAY_STATUS_VIEW)),
+    snapshotReadinessPolicy: ALLOW_READY_SNAPSHOT ? "formal_allowed_by_env" : "diagnostic_only_not_formal",
     upstreamSource: "Strategy2 daytrade 1m",
     tradeDate: rawLatestValidDay?.readyCount >= MIN_INTRADAY_1M_CANDIDATES ? rawLatestValidDay.tradeDate : tradeDate,
     sessionReadyCount: effectiveReadyCount,
     viewReadyCount: sessionRows.length,
     rawLatestValidDay,
+    sourceStatusReadiness,
     strategy2IntradayReadyCount: strategy2IntradayReady,
     strategy2DetectionExpectedCount: strategy2Expected,
     minIntraday1mCandidates: MIN_INTRADAY_1M_CANDIDATES,
     minIntraday1mCandles: MIN_INTRADAY_1M_CANDLES,
     sessionLatestMinute: SESSION_LATEST_MINUTE,
-    latestCandleTime: latestCandleTime || rawLatestValidDay?.latestCandleTime || "",
+    latestCandleTime: latestCandleTime || snapshotReadiness?.latestCandleTime || rawLatestValidDay?.latestCandleTime || "",
     status: ready ? "ready" : "not_ready",
     reason: ready ? "Strategy2 daytrade intraday 1m source ready for Strategy3" : `Strategy2 daytrade intraday 1m ready ${effectiveReadyCount} below ${MIN_INTRADAY_1M_CANDIDATES}`,
     strategy2Readiness,
@@ -210,4 +261,10 @@ main().catch((error) => {
   }));
   process.exit(1);
 });
+
+
+
+
+
+
 

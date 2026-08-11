@@ -688,10 +688,14 @@ async function fetchStrategy3Entry1mMap(scanDate, rows = []) {
   const byCode = new Map();
   if (!tradeDate || !symbols.length) return { ok: false, byCode, missing: symbols, source: "fugle_daytrade_intraday_1m", reason: "missing_trade_date_or_symbols" };
   const table = process.env.STRATEGY3_SUPABASE_1M_TABLE || "fugle_daytrade_intraday_1m";
+  const entryWindowStartUtc = `${tradeDate}T04:50:00.000Z`;
+  const entryWindowEndUtc = `${tradeDate}T05:00:59.999Z`;
   for (const group of chunkValues(symbols, 80)) {
     const query = [
       "select=symbol,market,candle_time,open,high,low,close,volume,updated_at,trade_date",
       `trade_date=eq.${encodeURIComponent(tradeDate)}`,
+      `candle_time=gte.${encodeURIComponent(entryWindowStartUtc)}`,
+      `candle_time=lte.${encodeURIComponent(entryWindowEndUtc)}`,
       `symbol=in.(${group.map(encodeURIComponent).join(",")})`,
       "order=symbol.asc,candle_time.desc",
       `limit=${Math.max(1000, group.length * 260)}`,
@@ -1340,6 +1344,9 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: error?.message || String(error) }, null, 2));
   process.exit(1);
 });
+
+
+
 
 
 
