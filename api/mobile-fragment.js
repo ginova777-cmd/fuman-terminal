@@ -979,7 +979,7 @@ module.exports = async function handler(request, response) {
                 : fastWaitingPayload(tab, endpoint, error?.message || "strategy2_mobile_direct_timeout")))
             : tab === "strategy3"
               ? await fetchStrategy3Internal(request, endpoint)
-              : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000, authHeadersFrom(request)))
+              : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, ["ai", "chip"].includes(tab) ? 30000 : 12000, authHeadersFrom(request)))
       : snapshotPayload;
     const html = renderFragment(tab, config, payload);
     if (tab !== "ai") writeMobileFragmentHtmlSnapshot(tab, html, payload);
