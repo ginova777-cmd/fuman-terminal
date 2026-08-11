@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const strategy2Latest = require("./strategy2-latest");
+const strategy3Latest = require("./strategy3-latest");
 const strategy4Latest = require("./strategy4-latest");
 const strategy5Latest = require("./strategy5-latest");
 const {
@@ -305,6 +306,31 @@ function fetchStrategy2Internal(request, endpoint) {
       query,
       fumanInternalVerify: true,
     }, createCaptureResponse(finish)).catch((error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
+function fetchStrategy3Internal(request, endpoint) {
+  const url = new URL(endpoint, originFrom(request));
+  const query = { ...Object.fromEntries(url.searchParams.entries()), live: "1", verify: "1", noSnapshot: "1" };
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("strategy3_internal_timeout")), 12000);
+    const finish = (result) => {
+      clearTimeout(timer);
+      if (Number(result.statusCode || 0) >= 400 || result.payload?.ok === false) {
+        reject(new Error(result.payload?.detail || result.payload?.error || `HTTP ${result.statusCode}`));
+        return;
+      }
+      resolve(result.payload);
+    };
+    Promise.resolve(strategy3Latest({
+      ...request,
+      method: "GET",
+      url: endpoint,
+      query,
+      fumanInternalVerify: true,
+    }, createCaptureResponse(finish))).catch((error) => {
       clearTimeout(timer);
       reject(error);
     });
@@ -941,7 +967,9 @@ module.exports = async function handler(request, response) {
               .catch((error) => (hasUsableSnapshotPayload(snapshotPayload, tab)
                 ? snapshotPayload
                 : fastWaitingPayload(tab, endpoint, error?.message || "strategy2_mobile_direct_timeout")))
-            : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000, authHeadersFrom(request)))
+            : tab === "strategy3"
+              ? await fetchStrategy3Internal(request, endpoint)
+              : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, tab === "ai" ? 30000 : 12000, authHeadersFrom(request)))
       : snapshotPayload;
     const html = renderFragment(tab, config, payload);
     if (tab !== "ai") writeMobileFragmentHtmlSnapshot(tab, html, payload);

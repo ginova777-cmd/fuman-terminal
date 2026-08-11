@@ -28,7 +28,7 @@ function snapshotKey(tab) {
 }
 
 async function fetchFragment(tab, token) {
-  const url = `${BASE_URL}/api/mobile-fragment?tab=${encodeURIComponent(tab)}&publish_mobile_snapshot=${Date.now()}`;
+  const url = `${BASE_URL}/api/mobile-fragment?tab=${encodeURIComponent(tab)}&live=1&verify=1&noSnapshot=1&publish_mobile_snapshot=${Date.now()}`;
   const startedAt = Date.now();
   const response = await fetch(url, {
     cache: "no-store",
