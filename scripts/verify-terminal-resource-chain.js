@@ -427,6 +427,9 @@ async function fetchLatestRun(config) {
     date: compactDate(row.scan_date || row.finished_at || row.updated_at),
     updatedAt: row.finished_at || row.updated_at || "",
     count: cleanNumber(row.result_count),
+    recordCount: cleanNumber(row.record_count ?? row.payload?.recordCount ?? row.payload?.record_count),
+    eventCount: cleanNumber(row.event_count ?? row.payload?.eventCount ?? row.payload?.event_count),
+    entryCount: cleanNumber(row.entry_count ?? row.payload?.entryCount ?? row.payload?.entry_count),
     expectedTotal: cleanNumber(row.expected_total),
     scannedCount: cleanNumber(row.scanned_count),
     qualityStatus: row.quality_status || "",
@@ -582,6 +585,9 @@ function summarizePayload(payload, status = 200, elapsedMs = 0) {
     updatedAt: payload?.updatedAt || payload?.generatedAt || payload?.finishedAt || "",
     count: cleanNumber(payload?.count ?? payload?.matchCount ?? payload?.entryCount ?? rows.length),
     returnedCount: cleanNumber(payload?.returnedCount ?? rows.length),
+    recordCount: cleanNumber(firstPresent(payload?.recordCount, payload?.record_count, payload?.sourceCoverage?.recordCount, payload?.payload?.recordCount, payload?.payload?.record_count)),
+    eventCount: cleanNumber(firstPresent(payload?.eventCount, payload?.event_count, payload?.sourceCoverage?.eventCount, payload?.payload?.eventCount, payload?.payload?.event_count)),
+    entryCount: cleanNumber(firstPresent(payload?.entryCount, payload?.entry_count, payload?.payload?.entryCount, payload?.payload?.entry_count)),
     resultCount: cleanNumber(firstPresent(payload?.resultCount, payload?.payload?.resultCount, quality?.resultCount)),
     readbackCount: cleanNumber(firstPresent(payload?.readbackCount, payload?.payload?.readbackCount, quality?.readbackCount)),
     expectedTotal: cleanNumber(firstPresent(payload?.expectedTotal, payload?.payload?.expectedTotal, quality?.expectedTotal)),
@@ -913,6 +919,24 @@ function allowedStrategy2IntradayReceiptDrift(config, receipt, supabase, live, c
   if (mobile && mobile.runId && !String(mobile.runId).includes("waiting") && mobile.runId !== supabase.runId) return false;
   return true;
 }
+
+function strategy2CountContractIssues(config, receipt, supabase, live, compact, snapshot, mobile) {
+  if (config?.key !== "strategy2" || !supabase?.ok) return [];
+  const issues = [];
+  const recordCount = cleanNumber(supabase.recordCount);
+  const eventCount = cleanNumber(supabase.eventCount || supabase.count);
+  const entryCount = cleanNumber(supabase.entryCount);
+  if (recordCount <= 0) issues.push("strategy2 record_count missing");
+  if (eventCount <= 0) issues.push("strategy2 event_count missing");
+  if (entryCount <= 0) issues.push("strategy2 entry_count missing");
+  if (recordCount > 0 && cleanNumber(receipt?.scanned) !== recordCount) issues.push(`strategy2 receipt scanned != record_count (${cleanNumber(receipt?.scanned)} vs ${recordCount})`);
+  if (recordCount > 0 && snapshot?.status < 400 && cleanNumber(snapshot?.count || snapshot?.returnedCount) !== recordCount) issues.push(`strategy2 desktop artifact count != record_count (${cleanNumber(snapshot?.count || snapshot?.returnedCount)} vs ${recordCount})`);
+  if (recordCount > 0 && mobile?.status < 400 && cleanNumber(mobile?.count) !== recordCount) issues.push(`strategy2 mobile fragment count != record_count (${cleanNumber(mobile?.count)} vs ${recordCount})`);
+  if (eventCount > 0 && live?.status < 400 && cleanNumber(live?.count || live?.returnedCount) !== eventCount) issues.push(`strategy2 production API count != event_count (${cleanNumber(live?.count || live?.returnedCount)} vs ${eventCount})`);
+  if (eventCount > 0 && compact?.status < 400 && cleanNumber(compact?.count || compact?.returnedCount) !== eventCount) issues.push(`strategy2 terminal API count != event_count (${cleanNumber(compact?.count || compact?.returnedCount)} vs ${eventCount})`);
+  if (entryCount > 0 && cleanNumber(receipt?.matches) !== entryCount) issues.push(`strategy2 receipt matches != entry_count (${cleanNumber(receipt?.matches)} vs ${entryCount})`);
+  return issues;
+}
 function downstreamAuthoritativeDespiteReceiptDrift(config, supabase, live, compact, snapshot, mobile) {
   const expectedRunId = supabase?.runId || "";
   const expectedDate = supabase?.date || live?.date || compact?.date || "";
@@ -1130,7 +1154,7 @@ async function auditOne(config, desktopSnapshotPayload, fastBundlePayload, score
     ? scorecardMembershipProtectedSummary(scorecardPayload)
     : scorecardSummary(scorecardSourceReportForConfig(scorecardPayload, config));
   const scheduleStatus = scheduleStatusForConfig(config);
-  const rawIssues = issueList(config, receipt, sourceHealth, supabase, live, compact, desktopSnapshot, mobile, scorecard);
+  const rawIssues = [...issueList(config, receipt, sourceHealth, supabase, live, compact, desktopSnapshot, mobile, scorecard), ...strategy2CountContractIssues(config, receipt, supabase, live, compact, desktopSnapshot, mobile)];
   const issues = scheduleStatus.pendingNotDue ? [] : rawIssues;
   return {
     key: config.key,
@@ -1200,6 +1224,7 @@ function markdown(results, desktopSnapshot, fastBundle) {
     lines.push(`- terminal API top: ${(row.terminalApi?.top || []).join(" / ") || "--"}`);
     lines.push(`- desktop artifact top: ${(row.desktopSnapshot?.top || []).join(" / ") || "--"}`);
     if (row.mobileFragment) lines.push(`- mobile fragment top: ${(row.mobileFragment.top || []).join(" / ") || "--"}`);
+    if (row.key === "strategy2") lines.push(`- Count contract: records=${row.supabase?.recordCount || "--"} (receipt scanned=${row.receipt?.scanned || "--"}; desktop=${row.desktopSnapshot?.count || "--"}; mobile=${row.mobileFragment?.count || "--"}); events=${row.supabase?.eventCount || row.supabase?.count || "--"} (production=${row.live?.count || "--"}; terminal=${row.terminalApi?.count || "--"}); entries=${row.supabase?.entryCount || "--"} (receipt matches=${row.receipt?.matches || "--"})`);
     if (row.issues.length) lines.push(`- Issues: ${row.issues.join("；")}`);
     lines.push("");
   }
