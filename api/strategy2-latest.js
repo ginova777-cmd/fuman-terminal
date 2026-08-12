@@ -1026,7 +1026,7 @@ function strategy2CompletedRunSnapshotDisplayReady(payload = {}, qualityStatus =
     strategy2RunSnapshotReady(payload)
     && payload?.complete === true
     && payload?.runId
-    && payloadTradeDate === today
+    && payloadTradeDate === (payload?.marketSession?.today || taipeiClock().ymd)
     && (strategy2LatestRunQualityReady(runQuality) || runPublishAllowed)
     && payload?.cacheSource === "supabase-api"
     && payload?.fallbackUsed !== true
@@ -1598,7 +1598,7 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     runSnapshotReady
     && payload?.complete === true
     && payload?.runId
-    && payloadTradeDate === today
+    && payloadTradeDate === (payload?.marketSession?.today || taipeiClock().ymd)
     && runQuality?.publishAllowed === true
     && payload?.fallbackUsed !== true
     && payload?.noTodayDetections !== true
@@ -2282,6 +2282,7 @@ async function handler(request, response) {
 };
 
 module.exports = withEntitlementRequired(handler, "strategy2");
+
 
 
 
