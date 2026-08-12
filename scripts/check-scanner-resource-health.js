@@ -512,6 +512,7 @@ async function main() {
   let sourceStatus = null;
   let sourceGateIssues = [];
   let strategy3Session = null;
+  let strategy3LatestCompleteGate = null;
   let strategy4HardGateIssues = [];
   if (String(row.strategy || "").toLowerCase() === "strategy2") {
     try {
@@ -540,7 +541,41 @@ async function main() {
     }
   }
   if (String(row.strategy || "").toLowerCase() === "strategy3") {
-    if (process.env.STRATEGY3_RESOURCE_HEALTH_DEEP_DIAGNOSTIC === "1") {
+    const targetDate = scannerTargetIsoDate() || taipeiTradeDate();
+    const latestDate = normalizeIsoDate(row.latest_date || "");
+    let tradingDay = null;
+    let calendarWarning = "";
+    try {
+      tradingDay = await isTwseTradingDay(tradingDayProbeDate(), { stateDir: STATE_DIR });
+    } catch (error) {
+      calendarWarning = error?.message || String(error);
+    }
+    const dateMismatch = Boolean(targetDate && latestDate !== targetDate);
+    const formalTradingDay = tradingDay?.isTradingDay === true;
+    const failClosedForUnknownCalendar = !tradingDay;
+    const blockForPreviousCompleteRun = dateMismatch && (formalTradingDay || failClosedForUnknownCalendar);
+    strategy3LatestCompleteGate = {
+      ready: !blockForPreviousCompleteRun,
+      diagnosticOnly: blockForPreviousCompleteRun,
+      targetDate,
+      latestCompleteDate: latestDate,
+      tradingDay,
+      calendarWarning,
+      reason: blockForPreviousCompleteRun
+        ? `latest complete run ${latestDate || "missing"} is not target trading date ${targetDate}`
+        : "latest complete run date is current or formal trading-day gate is not active",
+    };
+    if (blockForPreviousCompleteRun) {
+      // A prior complete run is evidence for diagnostics only, never authorization for today's formal scan.
+      effectiveStatus = "not_ready";
+      strategy3Session = {
+        ready: false,
+        status: "latest_complete_date_mismatch",
+        source: "v_scanner_resource_health",
+        diagnosticOnly: true,
+        reason: strategy3LatestCompleteGate.reason,
+      };
+    } else if (process.env.STRATEGY3_RESOURCE_HEALTH_DEEP_DIAGNOSTIC === "1") {
       try {
         strategy3Session = await fetchStrategy3SessionReadinessStatus();
       } catch (error) {
@@ -596,7 +631,12 @@ async function main() {
       `execution=${Number(readiness.latest_execution_scanned || 0)}/${Number(readiness.latest_execution_expected || 0)}`,
     ].join("; ")
     : "";
-  const strategy3SessionReason = strategy3Session && strategy3Session.ready === false ? `diagnostic_only:${strategy3Session.reason}` : "";
+  const strategy3LatestCompleteReason = strategy3LatestCompleteGate?.diagnosticOnly
+    ? `diagnostic_only:${strategy3LatestCompleteGate.reason}`
+    : "";
+  const strategy3SessionReason = strategy3Session && strategy3Session.ready === false && !strategy3LatestCompleteGate?.diagnosticOnly
+    ? `diagnostic_only:${strategy3Session.reason}`
+    : "";
   const sourceGateReason = sourceGateIssues.length ? `source_status gate: ${sourceGateIssues.join("; ")}` : "";
   const strategy2DedicatedSourceReady = String(row.strategy || "").toLowerCase() === "strategy2"
     && sourceStatus
@@ -607,7 +647,7 @@ async function main() {
     : "";
   const dailyFallbackReason = dailyFallback?.ready ? `daily_after_close_fallback_ready: ${dailyFallback.reason}` : "";
   const strategy4HardGateReason = strategy4HardGateIssues.length ? `strategy4 source hard gate: ${strategy4HardGateIssues.join("; ")}` : "";
-  const reason = [strategy2DedicatedSourceReady ? "" : (row.reason || ""), strategy4HardGateReason, dailyFallbackReason, readinessDiagnostic, strategy3SessionReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
+  const reason = [strategy2DedicatedSourceReady ? "" : (row.reason || ""), strategy4HardGateReason, dailyFallbackReason, readinessDiagnostic, strategy3LatestCompleteReason, strategy3SessionReason, readinessWarning, sourceGateReason].filter(Boolean).join("; ");
   const readinessBlocked = Boolean(strategy2LegacyReadinessStrict && readiness && readiness.strategy2_ready_100 !== true && !strategy2DedicatedSourceReady);
   const strategy4DailyFallbackReady = String(row.strategy || "").toLowerCase() === "strategy4" && dailyFallback?.ready;
   const strategy4HardGateBlocked = String(row.strategy || "").toLowerCase() === "strategy4" && strategy4HardGateIssues.length > 0 && !strategy4DailyFallbackReady;
@@ -638,6 +678,7 @@ async function main() {
     updatedAt: row.updated_at || "",
     readiness,
     strategy3Session,
+    strategy3LatestCompleteGate,
     dailyFallback,
     sourceStatus,
     sourceGate: {
