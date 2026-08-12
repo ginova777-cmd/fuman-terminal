@@ -1594,17 +1594,19 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     : {};
   const immutableRunQualityStatus = runQuality.qualityStatus || runQuality.status || payload?.qualityStatus;
   const completedRunSnapshotDisplayReady = strategy2CompletedRunSnapshotDisplayReady(payload, immutableRunQualityStatus);
+  const persistedFormalRunAllowed = Boolean(
+    runSnapshotReady
+    && payload?.complete === true
+    && payload?.runId
+    && payloadTradeDate === today
+    && runQuality?.publishAllowed === true
+    && payload?.fallbackUsed !== true
+    && payload?.noTodayDetections !== true
+    && cleanNumber(payload?.count ?? payload?.resultCount ?? payload?.totalCount ?? payload?.readbackCount) > 0
+  );
   const publishedRunSnapshotAllowed = Boolean(
     completedRunSnapshotDisplayReady
-    || (
-      runSnapshotReady
-      && payload?.complete === true
-      && payload?.runId
-      && strategy2LatestRunQualityReady(immutableRunQualityStatus)
-      && payload?.cacheSource === "supabase-api"
-      && payload?.fallbackUsed !== true
-      && payload?.noTodayDetections !== true
-    )
+    || persistedFormalRunAllowed
   );
   const priorityFirstPublishAllowed = Boolean(
     payload?.complete === true
@@ -2280,6 +2282,7 @@ async function handler(request, response) {
 };
 
 module.exports = withEntitlementRequired(handler, "strategy2");
+
 
 
 
