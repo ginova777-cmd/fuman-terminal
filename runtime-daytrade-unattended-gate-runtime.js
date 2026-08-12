@@ -553,9 +553,9 @@ async function connectDb(dbUrl) {
     const client = new Client({
       connectionString: dbUrl,
       ssl: { rejectUnauthorized: false },
-      connectionTimeoutMillis: 3000,
-      query_timeout: 5000,
-      statement_timeout: 3000,
+      connectionTimeoutMillis: 8000,
+      query_timeout: 12000,
+      statement_timeout: 10000,
     });
     try {
       await client.connect();
@@ -868,8 +868,8 @@ function writeFinalVerdictArtifact(runId, triggerPhase = "0910") {
   return { output, files };
 }
 
-async function queryOne(client, sql, params = []) {
-  const result = await withDbRetry("queryOne", () => client.query(sql, params), { attempts: 1, baseDelayMs: 0 });
+async function queryOne(client, sql, params = [], label = "queryOne") {
+  const result = await withDbRetry(label, () => client.query(sql, params), { attempts: 3, baseDelayMs: 800 });
   return result.rows[0] || {};
 }
 
@@ -974,13 +974,13 @@ async function refreshPriorityPool(client) {
 }
 
 async function collectSourceSnapshot(client) {
-  const sourceStatus = await client.query(`
+  const sourceStatus = await withDbRetry("source_snapshot_status", () => client.query(`
     select source_name, trade_date, status, updated_at, stale_seconds, message,
            source_kind, is_realtime, is_fallback, is_formal_entry_eligible, payload
     from public.source_status
     where source_name = 'fugle_daytrade_source'
     order by source_name asc
-  `).then((result) => result.rows).catch((error) => [{ error: error.message }]);
+  `), { attempts: 3, baseDelayMs: 800 }).then((result) => result.rows).catch((error) => [{ error: error.message }]);
   const contractHealth = await queryOne(client, `select * from public.v_fugle_daytrade_source_contract_health limit 1`).catch((error) => ({ error: error.message }));
   const latestScorecard = await queryOne(client, `select * from public.v_fugle_daytrade_source_latest_scorecard limit 1`).catch((error) => ({ error: error.message }));
   const futoptHealth = await queryOne(client, `
