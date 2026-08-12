@@ -1598,7 +1598,7 @@ function attachStrategy2PublishGate(payload, sourceGate) {
     runSnapshotReady
     && payload?.complete === true
     && payload?.runId
-    && payloadTradeDate === (payload?.marketSession?.today || taipeiClock().ymd)
+    && compactDate(payload?.tradeDate || payload?.usedDate || payload?.sourceDate || payload?.date || payload?.marketSession?.marketDataDate || "") === (payload?.marketSession?.today || taipeiClock().ymd)
     && runQuality?.publishAllowed === true
     && payload?.fallbackUsed !== true
     && payload?.noTodayDetections !== true
@@ -2219,7 +2219,7 @@ async function handler(request, response) {
       };
       setStrategy2LiveShellCache(response, options);
       const gatedPayload = attachStrategy2PublishGate(payloadForPublishGate, sourceGate);
-      const approvedSnapshotFields = gatedPayload?.sourceGate?.publishAllowed === true
+      const approvedSnapshotFields = gatedPayload?.sourceGate?.currentGatePublishAllowed === true
         ? buildStrategy2SourceGateSnapshotFields(gatedPayload, gatedPayload.sourceGate, {
           ...(gatedPayload.sourceCoverage || {}),
           ready: true,
@@ -2282,6 +2282,8 @@ async function handler(request, response) {
 };
 
 module.exports = withEntitlementRequired(handler, "strategy2");
+
+
 
 
 
