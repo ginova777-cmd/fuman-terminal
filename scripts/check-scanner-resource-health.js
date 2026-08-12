@@ -84,28 +84,28 @@ function readSecret(name) {
 
 async function fetchHealthRows(strategy = "") {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("missing Supabase credentials");
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 25000);
-  try {
-    const select = "strategy,required_source,latest_date,row_count,status,reason,suggested_scanner_behavior,updated_at";
-    const filters = [`select=${encodeURIComponent(select)}`, "limit=10"];
-    if (strategy) filters.push(`strategy=eq.${encodeURIComponent(strategy)}`);
-    const url = `${SUPABASE_URL}/rest/v1/v_scanner_resource_health?${filters.join("&")}`;
-    const response = await fetch(url, {
-      headers: {
-        apikey: SUPABASE_KEY,
-        Authorization: `Bearer ${SUPABASE_KEY}`,
-        Accept: "application/json",
-      },
-      signal: controller.signal,
-    });
-    const text = await response.text();
-    if (!response.ok) throw new Error(`v_scanner_resource_health HTTP ${response.status}: ${text.slice(0, 240)}`);
-    const rows = JSON.parse(text || "[]");
-    return Array.isArray(rows) ? rows : [];
-  } finally {
-    clearTimeout(timer);
+  const select = "strategy,required_source,latest_date,row_count,status,reason,suggested_scanner_behavior,updated_at";
+  const filters = [`select=${encodeURIComponent(select)}`, "limit=10"];
+  if (strategy) filters.push(`strategy=eq.${encodeURIComponent(strategy)}`);
+  const url = `${SUPABASE_URL}/rest/v1/v_scanner_resource_health?${filters.join("&")}`;
+  let lastError = null;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 25000);
+    try {
+      const response = await fetch(url, { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`, Accept: "application/json" }, signal: controller.signal });
+      const text = await response.text();
+      if (response.ok) { const rows = JSON.parse(text || "[]"); return Array.isArray(rows) ? rows : []; }
+      lastError = new Error(`v_scanner_resource_health HTTP ${response.status}: ${text.slice(0, 240)}`);
+      if (!(response.status === 429 || response.status >= 500) || attempt === 3) throw lastError;
+    } catch (error) {
+      lastError = error;
+      const transient = /fetch failed|network|timeout|aborted|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|ECONNREFUSED|socket/i.test([error?.message, error?.cause?.message, error?.cause?.code, error?.code].filter(Boolean).join(" "));
+      if (!transient || attempt === 3) throw new Error(`resource_health_request_failed attempt=${attempt}/3: ${error?.message || String(error)}`);
+    } finally { clearTimeout(timer); }
+    await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
   }
+  throw lastError || new Error("resource_health_request_failed");
 }
 
 async function fetchStrategy2ReadinessStatus() {
@@ -578,8 +578,12 @@ async function main() {
     } else if (process.env.STRATEGY3_RESOURCE_HEALTH_DEEP_DIAGNOSTIC === "1") {
       try {
         strategy3Session = await fetchStrategy3SessionReadinessStatus();
+        if (strategy3Session && strategy3Session.ready === false && effectiveStatus === READY_STATUS) {
+          effectiveStatus = "not_ready";
+        }
       } catch (error) {
         readinessWarning = `strategy3 session readiness unavailable: ${error?.message || String(error)}`;
+        if (effectiveStatus === READY_STATUS) effectiveStatus = "failed";
       }
     } else {
       strategy3Session = {
@@ -704,6 +708,3 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, blocked: true, error: error?.message || String(error) }, null, 2));
   process.exitCode = 1;
 });
-
-
-

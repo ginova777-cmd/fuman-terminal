@@ -1,6 +1,6 @@
 param(
   [string]$TaskName = "Fuman Strategy4 Source Prewarm 1535",
-  [string]$StartTime = "13:45",
+  [string]$StartTime = "15:35",
   [int]$ExecutionHours = 2,
   [string]$ProjectRoot = "C:\fuman-terminal"
 )

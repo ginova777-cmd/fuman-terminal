@@ -68,6 +68,15 @@ async function latestRows(runId) {
   const rows = await supabaseRows(`${RESULTS_TABLE}?select=${select}&strategy=eq.strategy4&run_id=eq.${encodeURIComponent(runId)}&order=rank.asc&limit=500`);
   return Array.isArray(rows) ? rows : [];
 }
+function volumeFilterContract(run) {
+  const filter = safeObject(safeObject(run?.payload).volumeFilter);
+  return { enabled: filter.enabled === true, threshold: cleanNumber(filter.minAvgVolume5 || filter.threshold) };
+}
+function sameVolumeFilterContract(left, right) {
+  const a = volumeFilterContract(left);
+  const b = volumeFilterContract(right);
+  return a.enabled === b.enabled && (!a.enabled || a.threshold === b.threshold);
+}
 function eligibleCountFromRun(run) {
   const payload = safeObject(run?.payload);
   const total = cleanNumber(run?.expected_total || payload.total || payload.expectedTotal);
@@ -106,7 +115,10 @@ async function main() {
     && cleanNumber(run.scanned_count) >= cleanNumber(run.expected_total)
     && cleanNumber(run.result_count) >= MIN_NORMAL_COUNT
   );
-  const baselineCounts = normalHistory.map((run) => cleanNumber(run.result_count));
+  const activeVolumeFilter = volumeFilterContract(current);
+  // Baselines are meaningful only for the same persisted selection contract.
+  const compatibleNormalHistory = normalHistory.filter((run) => sameVolumeFilterContract(run, current));
+  const baselineCounts = compatibleNormalHistory.map((run) => cleanNumber(run.result_count));
   const baselineMedian = median(baselineCounts);
   const currentCount = cleanNumber(current.result_count);
   const expectedTotal = cleanNumber(current.expected_total);

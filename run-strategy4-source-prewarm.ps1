@@ -74,6 +74,46 @@ function Complete-Receipt($Status, $ExitCode, $SourceReady, $Reason, $ResourceGa
   Write-JsonFile $datedReceipt $payload
 }
 
+function Test-ProcessAliveById($ProcessId) {
+  if (-not $ProcessId) { return $false }
+  try { return $null -ne (Get-Process -Id ([int]$ProcessId) -ErrorAction Stop) } catch { return $false }
+}
+
+$lockDir = Join-Path $RuntimeRoot "data\locks"
+$lockFile = Join-Path $lockDir "strategy4-source-prewarm.lock.json"
+$lockAcquired = $false
+
+function Acquire-Strategy4SourcePrewarmLock() {
+  New-Item -ItemType Directory -Force -Path $lockDir | Out-Null
+  if (Test-Path -LiteralPath $lockFile) {
+    $existing = $null
+    try { $existing = Get-Content -LiteralPath $lockFile -Raw | ConvertFrom-Json } catch { $existing = $null }
+    if ($existing -and (Test-ProcessAliveById $existing.pid) -and ([int]$existing.pid -ne [int]$PID)) {
+      $reason = "strategy4_source_prewarm_lock_held:pid=$($existing.pid);startedAt=$($existing.startedAt)"
+      Write-Log $reason
+      Complete-Receipt "failed" 9 $false $reason $null $false $false
+      exit 9
+    }
+    Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue
+  }
+  Write-JsonFile $lockFile ([ordered]@{
+    contract = "strategy4-source-prewarm-single-lock-v1"
+    pid = $PID
+    tradeDate = $tradeDate
+    startedAt = $startedAt
+    log = $log
+  })
+  $script:lockAcquired = $true
+}
+
+function Release-Strategy4SourcePrewarmLock() {
+  if (-not $script:lockAcquired) { return }
+  try {
+    $existing = Get-Content -LiteralPath $lockFile -Raw | ConvertFrom-Json
+    if ([int]$existing.pid -eq [int]$PID) { Remove-Item -LiteralPath $lockFile -Force -ErrorAction SilentlyContinue }
+  } catch {}
+}
+
 function Invoke-Strategy4SourceRootVerifier {
   param([string]$TargetDate = $tradeDate)
 
@@ -102,77 +142,31 @@ function Invoke-Strategy4SourceRootVerifier {
 
 function Invoke-Strategy4SourceRepair {
   param([string]$Reason = "")
-
-  Write-Log "Strategy4 source prewarm/repair start. reason=$Reason"
-  $previousValues = @{
-    STRATEGY4_USE_MIS = $env:STRATEGY4_USE_MIS
-    STRATEGY4_PREWARM_BATCH_SIZE = $env:STRATEGY4_PREWARM_BATCH_SIZE
-    STRATEGY4_PREWARM_BATCHES_PER_RUN = $env:STRATEGY4_PREWARM_BATCHES_PER_RUN
-    STRATEGY4_PREWARM_SLEEP_MS = $env:STRATEGY4_PREWARM_SLEEP_MS
-    STRATEGY4_PREWARM_MAX_REMAINING_MISS = $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS
-    STRATEGY4_HISTORY_LOOKBACK_DAYS = $env:STRATEGY4_HISTORY_LOOKBACK_DAYS
-    STRATEGY4_HISTORY_CACHE_ROWS = $env:STRATEGY4_HISTORY_CACHE_ROWS
-    STRATEGY4_PREWARM_SUPABASE_ONLY = $env:STRATEGY4_PREWARM_SUPABASE_ONLY
-    STRATEGY4_ALLOW_YAHOO_FALLBACK = $env:STRATEGY4_ALLOW_YAHOO_FALLBACK
-    FUMAN_SCANNER_TARGET_DATE = $env:FUMAN_SCANNER_TARGET_DATE
-    FUMAN_SCANNER_TARGET_TRADE_DATE = $env:FUMAN_SCANNER_TARGET_TRADE_DATE
-    FUMAN_TERMINAL_TARGET_TRADE_DATE = $env:FUMAN_TERMINAL_TARGET_TRADE_DATE
+  if ($env:STRATEGY4_DISABLE_SOURCE_REPAIR -eq "1") {
+    Write-Log "Strategy4 Fugle source repair skipped by STRATEGY4_DISABLE_SOURCE_REPAIR=1. reason=$Reason"
+    return $false
   }
-
-  try {
-    $env:STRATEGY4_USE_MIS = "0"
-    $env:STRATEGY4_PREWARM_BATCH_SIZE = "80"
-    $env:STRATEGY4_PREWARM_BATCHES_PER_RUN = "999"
-    $env:STRATEGY4_PREWARM_SLEEP_MS = "0"
-    $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS = "100"
-    $env:STRATEGY4_HISTORY_LOOKBACK_DAYS = "420"
-    $env:STRATEGY4_HISTORY_CACHE_ROWS = "260"
-    $env:STRATEGY4_PREWARM_SUPABASE_ONLY = "0"
-    $env:STRATEGY4_ALLOW_YAHOO_FALLBACK = "0"
-    $env:FUMAN_SCANNER_TARGET_DATE = $tradeDate
-    $env:FUMAN_SCANNER_TARGET_TRADE_DATE = $tradeDate
-    $env:FUMAN_TERMINAL_TARGET_TRADE_DATE = $tradeDate
-
-    Push-Location $repo
-    try {
-      & $nodeExe "scripts\prewarm-strategy4-history-cache.js" *>&1 | Tee-Object -FilePath $log -Append
-      $prewarmExit = $LASTEXITCODE
-      if ($prewarmExit -ne 0) {
-        Write-Log "Strategy4 source prewarm failed with exit code $prewarmExit"
-        return $false
-      }
-
-      $importScript = Join-Path $repo "ops\public-slot\Import-Strategy4DailyCacheToSupabase.ps1"
-      if (-not (Test-Path -LiteralPath $importScript)) {
-        Write-Log "Strategy4 source prewarm import skipped; helper not found: $importScript"
-        return $false
-      }
-
-      & "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -File $importScript -RetainTradeDays 120 -BatchSize 500 *>&1 | Tee-Object -FilePath $log -Append
-      $importExit = $LASTEXITCODE
-      if ($importExit -ne 0) {
-        Write-Log "Strategy4 source prewarm import failed with exit code $importExit"
-        return $false
-      }
-
-      $sourceRootOk = Invoke-Strategy4SourceRootVerifier -TargetDate $tradeDate
-      if (-not $sourceRootOk) {
-        Write-Log "Strategy4 source root verifier failed after repair/import"
-        return $false
-      }
-    } finally {
-      Pop-Location
-    }
-
-    Write-Log "Strategy4 source prewarm/repair complete."
-    return $true
-  } finally {
-    foreach ($key in $previousValues.Keys) {
-      if ($null -ne $previousValues[$key]) { Set-Item -Path "Env:$key" -Value $previousValues[$key] }
-      else { Remove-Item "Env:$key" -ErrorAction SilentlyContinue }
+  $snapshotScript = Join-Path $repo "scripts\sync-strategy4-fugle-daily-snapshot.js"
+  if (-not (Test-Path -LiteralPath $snapshotScript)) {
+    Write-Log "Strategy4 Fugle snapshot script missing: $snapshotScript"
+    return $false
+  }
+  Write-Log "Strategy4 Fugle source repair start. reason=$Reason tradeDate=$tradeDate"
+  & $nodeExe "--use-system-ca" $snapshotScript "--date=$tradeDate" *>&1 | Tee-Object -FilePath $log -Append
+  if ($LASTEXITCODE -ne 0) {
+    Write-Log "Strategy4 Fugle snapshot repair failed with exit code $LASTEXITCODE"
+    return $false
+  }
+  if (Get-Command Invoke-Strategy4SourceRootVerifier -ErrorAction SilentlyContinue) {
+    if (-not (Invoke-Strategy4SourceRootVerifier -TargetDate $tradeDate)) {
+      Write-Log "Strategy4 source root verifier failed after Fugle snapshot repair"
+      return $false
     }
   }
+  Write-Log "Strategy4 Fugle source repair complete."
+  return $true
 }
+Acquire-Strategy4SourcePrewarmLock
 
 try {
   Write-Log "START Strategy4 source prewarm tradeDate=$tradeDate"
@@ -244,6 +238,6 @@ try {
   Write-Log "FAILED Strategy4 source prewarm: $reason"
   Complete-Receipt "failed" 1 $false $reason $null $false $false
   exit 1
+} finally {
+  Release-Strategy4SourcePrewarmLock
 }
-
-

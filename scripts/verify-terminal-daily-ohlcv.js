@@ -67,29 +67,31 @@ async function readUniverseCount(base, key) {
   }
 }
 async function readSummary() {
-  const base = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR }).replace(/\/+$/, '');
+  const base = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR }).replace(/\/+$/, "");
   const key = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
   const universe = await readUniverseCount(base, key);
   const url = new URL(`/rest/v1/${RESOURCE}`, base);
-  url.searchParams.set('select', 'trade_date,rows,ohlc_rows,ohlc_symbols');
-  url.searchParams.set('order', 'trade_date.desc');
-  url.searchParams.set('limit', String(Math.max(REQUIRED_DAYS + 5, 30)));
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-          headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" },
-    });
-    const text = await response.text();
-    let body = null;
-    try { body = text ? JSON.parse(text) : null; } catch {}
-    return { ok: response.ok, status: response.status, url: `${url.pathname}${url.search}`, rows: Array.isArray(body) ? body : [], error: response.ok ? '' : text.slice(0, 500), expectedSymbols: universe.count, universeError: universe.error };
-  } catch (error) {
-    return { ok: false, status: 0, url: `${url.pathname}${url.search}`, rows: [], error: String(error.message || error), expectedSymbols: universe.count, universeError: universe.error };
-  } finally {
-    clearTimeout(timer);
+  url.searchParams.set("select", "trade_date,rows,ohlc_rows,ohlc_symbols");
+  url.searchParams.set("order", "trade_date.desc");
+  url.searchParams.set("limit", String(Math.max(REQUIRED_DAYS + 5, 30)));
+  let last = { ok: false, status: 0, rows: [], error: "read_not_started", attempts: 0 };
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+    try {
+      const response = await fetch(url, { signal: controller.signal, headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" } });
+      const text = await response.text();
+      let body = null;
+      try { body = text ? JSON.parse(text) : null; } catch {}
+      last = { ok: response.ok, status: response.status, rows: Array.isArray(body) ? body : [], error: response.ok ? "" : text.slice(0, 500), attempts: attempt };
+      if (last.ok || !(response.status === 500 && /57014|statement timeout/i.test(text))) break;
+    } catch (error) {
+      last = { ok: false, status: 0, rows: [], error: String(error.message || error), attempts: attempt };
+      break;
+    } finally { clearTimeout(timer); }
+    await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
   }
+  return { ...last, url: `${url.pathname}${url.search}`, expectedSymbols: universe.count, universeError: universe.error };
 }
 
 function buildResult(read) {

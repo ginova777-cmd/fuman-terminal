@@ -72,18 +72,32 @@ function query(params = {}) {
 }
 
 async function request(method, route, options = {}) {
-  const response = await fetch(`${SUPABASE_URL}${route}`, {
-    method,
-    headers: headers(options.headers),
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    signal: AbortSignal.timeout ? AbortSignal.timeout(options.timeout || 45000) : undefined,
-  });
-  const text = await response.text();
-  if (!response.ok) {
-    throw new Error(`${method} ${route} HTTP ${response.status} ${text.slice(0, 500)}`.trim());
+  const attempts = Math.max(1, Number(process.env.STRATEGY3_READY_SNAPSHOT_HTTP_ATTEMPTS || 3));
+  let lastError = null;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(`${SUPABASE_URL}${route}`, {
+        method,
+        headers: headers(options.headers),
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal: AbortSignal.timeout ? AbortSignal.timeout(options.timeout || 45000) : undefined,
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        const detail = `${method} ${route} HTTP ${response.status} ${text.slice(0, 500)}`.trim();
+        if (attempt < attempts && (response.status === 429 || response.status >= 500)) { lastError = new Error(detail); await new Promise((resolve) => setTimeout(resolve, attempt * 1500)); continue; }
+        throw new Error(detail);
+      }
+      if (!text) return null;
+      try { return JSON.parse(text); } catch { return text; }
+    } catch (error) {
+      lastError = error;
+      const transient = /fetch failed|network|timeout|aborted|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|ECONNREFUSED|socket/i.test([error?.message, error?.cause?.message, error?.cause?.code, error?.code].filter(Boolean).join(" "));
+      if (!transient || attempt >= attempts) throw new Error(`strategy3_ready_snapshot_request_failed attempt=${attempt}/${attempts}: ${error?.message || String(error)}`);
+      await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+    }
   }
-  if (!text) return null;
-  try { return JSON.parse(text); } catch { return text; }
+  throw lastError || new Error("strategy3_ready_snapshot_request_failed");
 }
 
 async function fetchRows(table, params = {}, options = {}) {

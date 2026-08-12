@@ -116,70 +116,24 @@ function Invoke-Strategy4ScorecardSourceRefresh($RunId = "") {
 }
 function Invoke-Strategy4SourceRepair {
   param([string]$Reason = "")
-
   if ($env:STRATEGY4_DISABLE_SOURCE_REPAIR -eq "1") {
-    Write-Log "Strategy4 source repair skipped by STRATEGY4_DISABLE_SOURCE_REPAIR=1. reason=$Reason"
+    Write-Log "Strategy4 Fugle source repair skipped by STRATEGY4_DISABLE_SOURCE_REPAIR=1. reason=$Reason"
     return $false
   }
-
-  Write-Log "Strategy4 source repair start. reason=$Reason"
-  $previousValues = @{
-    STRATEGY4_USE_MIS = $env:STRATEGY4_USE_MIS
-    STRATEGY4_PREWARM_BATCH_SIZE = $env:STRATEGY4_PREWARM_BATCH_SIZE
-    STRATEGY4_PREWARM_BATCHES_PER_RUN = $env:STRATEGY4_PREWARM_BATCHES_PER_RUN
-    STRATEGY4_PREWARM_SLEEP_MS = $env:STRATEGY4_PREWARM_SLEEP_MS
-    STRATEGY4_PREWARM_MAX_REMAINING_MISS = $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS
-    STRATEGY4_HISTORY_LOOKBACK_DAYS = $env:STRATEGY4_HISTORY_LOOKBACK_DAYS
-    STRATEGY4_HISTORY_CACHE_ROWS = $env:STRATEGY4_HISTORY_CACHE_ROWS
-    STRATEGY4_PREWARM_SUPABASE_ONLY = $env:STRATEGY4_PREWARM_SUPABASE_ONLY
-    STRATEGY4_ALLOW_YAHOO_FALLBACK = $env:STRATEGY4_ALLOW_YAHOO_FALLBACK
+  $snapshotScript = Join-Path $repo "scripts\sync-strategy4-fugle-daily-snapshot.js"
+  if (-not (Test-Path -LiteralPath $snapshotScript)) {
+    Write-Log "Strategy4 Fugle snapshot script missing: $snapshotScript"
+    return $false
   }
-
-  try {
-    $env:STRATEGY4_USE_MIS = "0"
-    $env:STRATEGY4_PREWARM_BATCH_SIZE = "80"
-    $env:STRATEGY4_PREWARM_BATCHES_PER_RUN = if ([string]::IsNullOrWhiteSpace($env:STRATEGY4_INLINE_PREWARM_BATCHES_PER_RUN)) { "2" } else { $env:STRATEGY4_INLINE_PREWARM_BATCHES_PER_RUN }
-    $env:STRATEGY4_PREWARM_SLEEP_MS = "0"
-    $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS = "2000"
-    $env:STRATEGY4_HISTORY_LOOKBACK_DAYS = "420"
-    $env:STRATEGY4_HISTORY_CACHE_ROWS = "260"
-    $env:STRATEGY4_PREWARM_SUPABASE_ONLY = "0"
-    $env:STRATEGY4_ALLOW_YAHOO_FALLBACK = "0"
-
-    & $nodeExe "scripts\prewarm-strategy4-history-cache.js" *>&1 | Tee-Object -FilePath $log -Append
-    $prewarmExit = $LASTEXITCODE
-    if ($prewarmExit -ne 0) {
-      Write-Log "Strategy4 source repair prewarm failed with exit code $prewarmExit"
-      return $false
-    }
-
-    $importScript = Join-Path $repo "ops\public-slot\Import-Strategy4DailyCacheToSupabase.ps1"
-    if (-not (Test-Path -LiteralPath $importScript)) {
-      Write-Log "Strategy4 source repair import skipped; helper not found: $importScript"
-      return $false
-    }
-
-    & "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -File $importScript -RetainTradeDays 120 -BatchSize 500 *>&1 | Tee-Object -FilePath $log -Append
-    $importExit = $LASTEXITCODE
-    if ($importExit -ne 0) {
-      Write-Log "Strategy4 source repair import failed with exit code $importExit"
-      return $false
-    }
-
-    Write-Log "Strategy4 source repair complete."
-    return $true
-  } finally {
-    foreach ($key in $previousValues.Keys) {
-      if ($null -ne $previousValues[$key]) {
-        Set-Item -Path "Env:$key" -Value $previousValues[$key]
-      } else {
-        Remove-Item "Env:$key" -ErrorAction SilentlyContinue
-      }
-    }
+  Write-Log "Strategy4 Fugle source repair start. reason=$Reason tradeDate=$tradeDate"
+  & $nodeExe "--use-system-ca" $snapshotScript "--date=$tradeDate" *>&1 | Tee-Object -FilePath $log -Append
+  if ($LASTEXITCODE -ne 0) {
+    Write-Log "Strategy4 Fugle snapshot repair failed with exit code $LASTEXITCODE"
+    return $false
   }
+  Write-Log "Strategy4 Fugle source repair complete."
+  return $true
 }
-
-
 function Test-Strategy4PrewarmReceiptReady {
   $receiptPath = Join-Path $RuntimeRoot "data\scan-receipts\strategy4-source-prewarm-latest.json"
   if (-not (Test-Path -LiteralPath $receiptPath)) {
@@ -383,39 +337,12 @@ try {
   } elseif ($env:STRATEGY4_SKIP_SUPABASE_HISTORY_PREWARM -eq "1") {
     Write-Log "Strategy4 in-scan heavy prewarm skipped by STRATEGY4_SKIP_SUPABASE_HISTORY_PREWARM=1."
   } else {
-    Write-Log "=== Strategy4 Supabase daily volume cache prewarm start $(Get-Date) ==="
-  $previousPrewarmBatchSize = $env:STRATEGY4_PREWARM_BATCH_SIZE
-  $previousPrewarmBatches = $env:STRATEGY4_PREWARM_BATCHES_PER_RUN
-  $previousPrewarmSleep = $env:STRATEGY4_PREWARM_SLEEP_MS
-  $previousPrewarmMaxMiss = $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS
-  $previousPrewarmUseMis = $env:STRATEGY4_USE_MIS
-  $previousHistoryLookbackDays = $env:STRATEGY4_HISTORY_LOOKBACK_DAYS
-  $previousHistoryCacheRows = $env:STRATEGY4_HISTORY_CACHE_ROWS
-  try {
-    $env:STRATEGY4_USE_MIS = "0"
-    $env:STRATEGY4_PREWARM_BATCH_SIZE = "80"
-    $env:STRATEGY4_PREWARM_BATCHES_PER_RUN = if ([string]::IsNullOrWhiteSpace($env:STRATEGY4_INLINE_PREWARM_BATCHES_PER_RUN)) { "2" } else { $env:STRATEGY4_INLINE_PREWARM_BATCHES_PER_RUN }
-    $env:STRATEGY4_PREWARM_SLEEP_MS = "0"
-    $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS = "2000"
-    $env:STRATEGY4_HISTORY_LOOKBACK_DAYS = "420"
-    $env:STRATEGY4_HISTORY_CACHE_ROWS = "260"
-    & $nodeExe "scripts\prewarm-strategy4-history-cache.js" *>&1 | Tee-Object -FilePath $log -Append
-    $prewarmExit = $LASTEXITCODE
-  } finally {
-    if ($null -ne $previousPrewarmBatchSize) { $env:STRATEGY4_PREWARM_BATCH_SIZE = $previousPrewarmBatchSize } else { Remove-Item Env:STRATEGY4_PREWARM_BATCH_SIZE -ErrorAction SilentlyContinue }
-    if ($null -ne $previousPrewarmBatches) { $env:STRATEGY4_PREWARM_BATCHES_PER_RUN = $previousPrewarmBatches } else { Remove-Item Env:STRATEGY4_PREWARM_BATCHES_PER_RUN -ErrorAction SilentlyContinue }
-    if ($null -ne $previousPrewarmSleep) { $env:STRATEGY4_PREWARM_SLEEP_MS = $previousPrewarmSleep } else { Remove-Item Env:STRATEGY4_PREWARM_SLEEP_MS -ErrorAction SilentlyContinue }
-    if ($null -ne $previousPrewarmMaxMiss) { $env:STRATEGY4_PREWARM_MAX_REMAINING_MISS = $previousPrewarmMaxMiss } else { Remove-Item Env:STRATEGY4_PREWARM_MAX_REMAINING_MISS -ErrorAction SilentlyContinue }
-    if ($null -ne $previousPrewarmUseMis) { $env:STRATEGY4_USE_MIS = $previousPrewarmUseMis } else { Remove-Item Env:STRATEGY4_USE_MIS -ErrorAction SilentlyContinue }
-    if ($null -ne $previousHistoryLookbackDays) { $env:STRATEGY4_HISTORY_LOOKBACK_DAYS = $previousHistoryLookbackDays } else { Remove-Item Env:STRATEGY4_HISTORY_LOOKBACK_DAYS -ErrorAction SilentlyContinue }
-    if ($null -ne $previousHistoryCacheRows) { $env:STRATEGY4_HISTORY_CACHE_ROWS = $previousHistoryCacheRows } else { Remove-Item Env:STRATEGY4_HISTORY_CACHE_ROWS -ErrorAction SilentlyContinue }
-  }
-  if ($prewarmExit -ne 0) {
-    Write-Log "Strategy4 Supabase daily volume cache prewarm failed with exit code $prewarmExit"
-    Write-Strategy4Receipt "failed" $prewarmExit $false 0 "" @("prewarm exit code $prewarmExit") "critical scan failed during history cache prewarm"
-    exit $prewarmExit
-  }
-  Write-Log "=== Strategy4 Supabase daily volume cache prewarm end $(Get-Date) ==="
+    Write-Log "Strategy4 has no same-day prewarm receipt; running bounded Fugle snapshot repair."
+    if (-not (Invoke-Strategy4SourceRepair "same-day prewarm receipt missing")) {
+      Write-Strategy4Receipt "failed" 1 $false 0 "" @("Fugle snapshot repair failed") "critical scan failed during Fugle source repair"
+      exit 1
+    }
+    $env:STRATEGY4_SKIP_SUPABASE_HISTORY_PREWARM = "1"
   }
   & $nodeExe "scripts\scan-strategy4-cache.js" *>&1 | Tee-Object -FilePath $log -Append
   $scanExit = $LASTEXITCODE

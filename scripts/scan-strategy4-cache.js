@@ -922,7 +922,19 @@ async function assertStrategy4MatchYieldGuard(output, previousRaw) {
   let history = [];
   try { history = await fetchStrategy4RecentCompleteRuns(); } catch (error) { warnings.push("history_baseline_unavailable:" + (error?.message || String(error))); }
   const normalHistory = history.filter((run) => String(run.run_id || "") !== String(output.runId || "") && run.complete === true && String(run.status || "") === "complete" && ["complete", "degraded"].includes(String(run.quality_status || "")) && cleanNumber(run.expected_total) >= MIN_SOURCE_ROW_COUNT && cleanNumber(run.scanned_count) >= cleanNumber(run.expected_total) && cleanNumber(run.result_count) >= MATCH_YIELD_MIN_NORMAL_COUNT);
-  const baselineCounts = normalHistory.map((run) => cleanNumber(run.result_count));
+  const activeVolumeFilter = output?.volumeFilter || null;
+  const activeVolumeFilterEnabled = activeVolumeFilter?.enabled === true;
+  const activeVolumeThreshold = cleanNumber(activeVolumeFilter?.minAvgVolume5 || activeVolumeFilter?.threshold);
+  // A result count is comparable only when it was produced with the same
+  // volume-filter contract. Comparing pre-filter runs to filtered runs creates
+  // a false "yield collapse" even when the current full scan is healthy.
+  const compatibleNormalHistory = normalHistory.filter((run) => {
+    const filter = run?.payload?.volumeFilter || null;
+    if (!activeVolumeFilterEnabled) return filter?.enabled !== true;
+    return filter?.enabled === true
+      && cleanNumber(filter?.minAvgVolume5 || filter?.threshold) === activeVolumeThreshold;
+  });
+  const baselineCounts = compatibleNormalHistory.map((run) => cleanNumber(run.result_count));
   const baselineMedian = median(baselineCounts);
   const minByBaseline = baselineCounts.length >= MATCH_YIELD_MIN_BASELINE_SAMPLES ? Math.max(MIN_MATCH_COUNT, Math.floor(baselineMedian * MATCH_YIELD_MIN_RATIO_TO_BASELINE)) : 0;
   const minByEligible = eligibleCount >= MATCH_YIELD_MIN_NORMAL_COUNT ? Math.max(MIN_MATCH_COUNT, Math.floor(eligibleCount * MATCH_YIELD_MIN_RATIO_TO_ELIGIBLE)) : 0;
@@ -935,10 +947,10 @@ async function assertStrategy4MatchYieldGuard(output, previousRaw) {
   const minByPrevious = previousCompleteCount >= MIN_MATCH_COUNT ? Math.max(MIN_MATCH_COUNT, Math.floor(previousCompleteCount * MIN_MATCH_RATIO_TO_PREVIOUS)) : 0;
   const filterRuleChanged = volumeFilterRuleChanged(previousRaw, output);
   if (minByPrevious && currentCount < minByPrevious) {
-    if (ALLOW_FILTER_RULE_DROP && filterRuleChanged && currentCount >= MATCH_YIELD_MIN_NORMAL_COUNT) warnings.push("previous_drop_allowed_after_filter_rule_change current=" + currentCount + " previous=" + previousCompleteCount + " min=" + minByPrevious);
+    if (ALLOW_FILTER_RULE_DROP && filterRuleChanged && (!minByEligible || currentCount >= minByEligible)) warnings.push("previous_drop_allowed_after_filter_rule_change_and_eligible_floor current=" + currentCount + " previous=" + previousCompleteCount + " min=" + minByPrevious + " eligibleFloor=" + minByEligible);
     else issues.push("suspicious_match_drop current=" + currentCount + " previous=" + previousCompleteCount + " min=" + minByPrevious);
   }
-  const guard = { ok: issues.length === 0, checkedAt: new Date().toISOString(), currentCount, expectedTotal, scannedCount, eligibleCount, previousCompleteCount, minByPrevious, filterRuleChanged, baseline: { lookback: MATCH_YIELD_BASELINE_LOOKBACK, minNormalCount: MATCH_YIELD_MIN_NORMAL_COUNT, minBaselineSamples: MATCH_YIELD_MIN_BASELINE_SAMPLES, sampleCount: baselineCounts.length, counts: baselineCounts, median: baselineMedian, minByBaseline, minRatioToBaseline: MATCH_YIELD_MIN_RATIO_TO_BASELINE }, eligibleFloor: { minRatioToEligible: MATCH_YIELD_MIN_RATIO_TO_ELIGIBLE, minByEligible }, warnings, issues };
+  const guard = { ok: issues.length === 0, checkedAt: new Date().toISOString(), currentCount, expectedTotal, scannedCount, eligibleCount, previousCompleteCount, minByPrevious, filterRuleChanged, baseline: { lookback: MATCH_YIELD_BASELINE_LOOKBACK, minNormalCount: MATCH_YIELD_MIN_NORMAL_COUNT, minBaselineSamples: MATCH_YIELD_MIN_BASELINE_SAMPLES, sampleCount: baselineCounts.length, compatibleSampleCount: compatibleNormalHistory.length, counts: baselineCounts, median: baselineMedian, minByBaseline, minRatioToBaseline: MATCH_YIELD_MIN_RATIO_TO_BASELINE }, eligibleFloor: { minRatioToEligible: MATCH_YIELD_MIN_RATIO_TO_ELIGIBLE, minByEligible }, warnings, issues };
   if (issues.length) throw new Error("Strategy4 match yield guard failed: " + issues.join("; "));
   return guard;
 }
@@ -1213,12 +1225,35 @@ function mergeSourceCounts(sourceCounts, currentSourceCounts) {
   });
 }
 
+function strategy4RiskNumber(value) {
+  const number = Number(String(value ?? "").replace(/[,%%+]/g, "").trim());
+  return Number.isFinite(number) ? number : 0;
+}
+
+function strategy4RiskFields(item = {}) {
+  const mutaki = item.mutakiV17 && typeof item.mutakiV17 === "object" ? item.mutakiV17 : {};
+  return {
+    entryPrice: strategy4RiskNumber(item.entryPrice ?? item.entry_price ?? mutaki.entryPrice ?? item.price ?? item.close),
+    targetPrice: strategy4RiskNumber(item.targetPrice ?? item.target_price ?? mutaki.targetPrice ?? item.triangleBreakout?.resistance ?? item.priceTarget),
+    stopPrice: strategy4RiskNumber(item.stopPrice ?? item.stop_price ?? mutaki.stopPrice),
+    score: strategy4RiskNumber(item.score ?? item.swingScore),
+    zone: String(item.zone || item.swingZone || item.zoneLabel || item.swingZoneLabel || "").trim(),
+  };
+}
+
+function strategy4RiskFieldsValid(item = {}) {
+  const fields = strategy4RiskFields(item);
+  return fields.entryPrice > 0 && fields.targetPrice > 0 && fields.stopPrice > 0 && fields.score > 0 && Boolean(fields.zone);
+}
 function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, dataSourceCounts, complete, runMode, scanStamp, volumeFilter, quoteLiquidityFilter, supabaseCoverage, insufficientHistory = [] }) {
   const expectedMatchDate = normalizeIsoDate(scanStamp) || scanDateFromOutput({ scanStamp });
   const allMatches = [...currentMatches.values()];
   const staleMatches = allMatches.filter((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate) !== expectedMatchDate);
-  const matches = allMatches
-    .filter((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate) === expectedMatchDate)
+  const dateAlignedMatches = allMatches.filter((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate) === expectedMatchDate);
+  const invalidRiskMatches = dateAlignedMatches.filter((item) => !strategy4RiskFieldsValid(item));
+  // invalid_risk_row_filter_v1: published Strategy4 rows must have positive entry/target/stop/score and a zone.
+  const matches = dateAlignedMatches
+    .filter(strategy4RiskFieldsValid)
     .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0))
     .map((item, index) => ({ ...item, rank: index + 1 }));
   const noDataCount = noDataCodes.size;
@@ -1344,6 +1379,8 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     quoteLiquidityFilteredCodes: (quoteLiquidityFilter?.filtered || []).map((item) => item.code),
     staleFilteredCount: staleMatches.length,
     staleFilteredDates: [...new Set(staleMatches.map((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate)).filter(Boolean))].slice(0, 8),
+    invalidRiskFilteredCount: invalidRiskMatches.length,
+    invalidRiskFilteredCodes: invalidRiskMatches.map((item) => item.code).filter(Boolean).slice(0, 80),
     count: matches.length,
     triangleBreakoutCount,
     matches,
@@ -1535,6 +1572,11 @@ function buildSupabaseRunRow(output, runId) {
       misSourceCount: cleanNumber(output.misSourceCount),
       misSourceRatio: cleanNumber(output.misSourceRatio),
       conditionRefresh: output.conditionRefresh === true,
+      // Keep the selection contract with the published run. Closure checks must not compare filtered and legacy unfiltered runs.
+      volumeFilter: output.volumeFilter || null,
+      volumeFilteredCount: cleanNumber(output.volumeFilteredCount || output.volumeFilter?.filtered?.length),
+      quoteLiquidityFilter: output.quoteLiquidityFilter || null,
+      quoteLiquidityFilteredCount: cleanNumber(output.quoteLiquidityFilteredCount || output.quoteLiquidityFilter?.filtered?.length),
       dataSourceCounts: output.dataSourceCounts || {},
       supabaseCoverage: output.supabaseCoverage || null,
       supabasePublishGate: output.supabasePublishGate || null,
@@ -2129,4 +2171,5 @@ module.exports = {
   buildStrategy4PrePublishSelfTest,
   assertStrategy4MatchYieldGuard,
 };
+
 
