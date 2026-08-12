@@ -62,6 +62,34 @@
         "Run-DaytradeUnattendedGate.ps1",
         "-Phase 0900"
       ]
+    },
+    {
+      "name": "Fuman Daytrade Source Gate 0910",
+      "time": "09:10",
+      "expectedTriggers": [
+        "09:10"
+      ],
+      "allowedResults": [
+        0
+      ],
+      "expectedCommandContains": [
+        "Run-DaytradeUnattendedGate.ps1",
+        "-Phase 0910"
+      ]
+    },
+    {
+      "name": "Fuman Daytrade Source Gate 0935",
+      "time": "09:35",
+      "expectedTriggers": [
+        "09:35"
+      ],
+      "allowedResults": [
+        0
+      ],
+      "expectedCommandContains": [
+        "Run-DaytradeUnattendedGate.ps1",
+        "-Phase 0935"
+      ]
     }
   ],
   "finalVerdictTask": {
@@ -145,6 +173,7 @@
     "success_requires_rewater_verification_not_action_exit_only",
     "warmup_tasks_run_on_battery_power",
     "warmup_run_id_is_filesystem_safe",
-    "preflight_failure_evidence_is_immutable_and_reason_preserving"
+    "preflight_failure_evidence_is_immutable_and_reason_preserving",
+    "source_control_tasks_require_s4u_highest"
   ]
 }

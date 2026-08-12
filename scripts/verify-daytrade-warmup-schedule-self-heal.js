@@ -29,6 +29,7 @@ const REQUIRED_INVARIANTS = [
   "success_requires_rewater_verification_not_action_exit_only",
   "warmup_tasks_run_on_battery_power",
   "preflight_failure_evidence_is_immutable_and_reason_preserving",
+  "source_control_tasks_require_s4u_highest",
 ];
 const SELF_HEAL_RUNNER_PATH = path.join(ROOT, "scripts", "run-daytrade-warmup-self-heal.js");
 
@@ -82,7 +83,7 @@ function queryScheduledTask(name) {
     `$task = Get-ScheduledTask -TaskName '${name.replace(/'/g, "''")}'`,
     `$info = Get-ScheduledTaskInfo -TaskName '${name.replace(/'/g, "''")}'`,
     "$actions = @($task.Actions | ForEach-Object { [pscustomobject]@{ Execute = $_.Execute; Arguments = $_.Arguments } })",
-    "[pscustomobject]@{ TaskName = $task.TaskName; TaskPath = $task.TaskPath; State = $task.State.ToString(); LastTaskResult = $info.LastTaskResult; LastRunTime = $info.LastRunTime; NextRunTime = $info.NextRunTime; DisallowStartIfOnBatteries = $task.Settings.DisallowStartIfOnBatteries; StopIfGoingOnBatteries = $task.Settings.StopIfGoingOnBatteries; Actions = $actions } | ConvertTo-Json -Depth 8 -Compress",
+    "[pscustomobject]@{ TaskName = $task.TaskName; TaskPath = $task.TaskPath; State = $task.State.ToString(); LastTaskResult = $info.LastTaskResult; LastRunTime = $info.LastRunTime; NextRunTime = $info.NextRunTime; DisallowStartIfOnBatteries = $task.Settings.DisallowStartIfOnBatteries; StopIfGoingOnBatteries = $task.Settings.StopIfGoingOnBatteries; Principal = [pscustomobject]@{ UserId = $task.Principal.UserId; LogonType = $task.Principal.LogonType.ToString(); RunLevel = $task.Principal.RunLevel.ToString() }; Actions = $actions } | ConvertTo-Json -Depth 8 -Compress",
   ].join("; ");
   const result = spawnSync(ps, ["-NoProfile", "-Command", command], {
     encoding: "utf8",
@@ -117,6 +118,8 @@ function checkLiveTask({ contractTask, issues, role }) {
   }
   if (task.DisallowStartIfOnBatteries !== false) issues.push(`${role}:${contractTask.name}:live_disallow_start_on_battery`);
   if (task.StopIfGoingOnBatteries !== false) issues.push(`${role}:${contractTask.name}:live_stop_on_battery`);
+  if (String(task.Principal?.LogonType || "") !== "S4U") issues.push(`${role}:${contractTask.name}:live_logon_type_not_s4u:${task.Principal?.LogonType || "missing"}`);
+  if (String(task.Principal?.RunLevel || "") !== "Highest") issues.push(`${role}:${contractTask.name}:live_run_level_not_highest:${task.Principal?.RunLevel || "missing"}`);
   const actions = Array.isArray(task.Actions) ? task.Actions : (task.Actions ? [task.Actions] : []);
   const actionText = actions.map((action) => `${action.Execute || ""} ${action.Arguments || ""}`).join("\n");
   for (const needle of contractTask.expectedCommandContains || []) {
