@@ -139,11 +139,11 @@ if ($resourceGate.PreserveLatest) {
   "CB detect source gate blocked new publish; preserving latest complete run. $reason" >> $log
   try {
     $verifiedPayload = Assert-CbDetectApi
-    Write-CbDetectReceipt "blocked_preserved" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true
-    exit 0
+    Write-CbDetectReceipt "blocked_preserved" 3 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true
+    exit 3
   } catch {
-    Write-CbDetectReceipt "blocked" 0 $false 0 "" @($reason, $_.Exception.Message) $reason $true
-    exit 0
+    Write-CbDetectReceipt "blocked" 3 $false 0 "" @($reason, $_.Exception.Message) $reason $true
+    exit 3
   }
 }
 $codeRepo = "${PSScriptRoot}"

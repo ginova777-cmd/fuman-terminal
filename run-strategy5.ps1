@@ -116,9 +116,7 @@ function Invoke-Strategy5SnapshotRefresh($RunId = "", $Count = 0, $Warning = "")
   } else {
     Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 desktop snapshot refresh skipped; helper not found."
   }
-  if ($Warning) {
-    Write-Strategy5Receipt "blocked" 0 $false $Count $RunId @($Warning) $Warning
-  }
+
 }
 
 "=== Strategy5 scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
@@ -152,8 +150,8 @@ if ($scanExit -ne 0) {
 $scanBlockedReason = Get-Strategy5ScanBlockedReason
 if (-not [string]::IsNullOrWhiteSpace($scanBlockedReason)) {
   Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 scanner completed but formal publish blocked; preserving previous good. reason=$scanBlockedReason"
-  Write-Strategy5Receipt "blocked" 0 $false 0 "" @("formal publish blocked: $scanBlockedReason") $scanBlockedReason
-  exit 0
+  Write-Strategy5Receipt "blocked" 3 $false 0 "" @("formal publish blocked: $scanBlockedReason") $scanBlockedReason
+  exit 3
 }
 
 try {
@@ -190,8 +188,8 @@ if ([string]::IsNullOrWhiteSpace($actualRunDate) -or $actualRunDate -ne $expecte
   $actualLabel = if ($actualRunDate) { $actualRunDate } else { "missing" }
   $reason = "strategy5 latest run is not today's formal result: expected=$expectedRunDate actual=$actualLabel runId=$($verifiedPayload.runId)"
   Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 scanner completed but current-day closure blocked; preserving previous good. reason=$reason"
-  Write-Strategy5Receipt "blocked" 0 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason
-  exit 0
+  Write-Strategy5Receipt "blocked" 3 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason
+  exit 3
 }
 $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
 if (Test-Path -LiteralPath $snapshotScript) {

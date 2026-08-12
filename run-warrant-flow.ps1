@@ -136,9 +136,9 @@ if ($resourceGate.PreserveLatest) {
     Write-WarrantFlowReceipt "failed" 1 $false 0 "" @($_.Exception.Message) "critical scan failed during post-scan snapshot refresh"
     exit 1
   }
-  Write-WarrantFlowReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason
+  Write-WarrantFlowReceipt "blocked_preserved" 3 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason
   Write-FumanFlowHealth -Scope warrant -Status source_stale -Message "Warrant flow resource health blocked new publish; preserved latest complete run" -Detail @{ reason = $reason; log = $log; runId = [string]$verifiedPayload.runId; count = [int]$verifiedPayload.count }
-  exit 0
+  exit 3
 }
 $scanExit = Invoke-NodeScan "scripts\scan-warrant-flow-cache.js" "Warrant flow scan"
 if ($scanExit -ne 0) {

@@ -341,9 +341,9 @@ if (Test-InstitutionTransientResourceHealthFailure $resourceGate) {
   $verifiedPayload = Assert-InstitutionApi -AllowPreviousComplete
   Invoke-InstitutionSnapshotRefresh ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) $reason
   Write-InstitutionBlockedReceipt $reason ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count)
-  Write-InstitutionReceipt "blocked_preserved" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true
+  Write-InstitutionReceipt "blocked_preserved" 3 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason $true
   Write-FumanFlowHealth -Scope institution -Status source_stale -Message "Institution resource health blocked new publish; preserved latest complete run" -Detail @{ reason = $reason; log = $log; runId = [string]$verifiedPayload.runId; count = [int]$verifiedPayload.count }
-  exit 0
+  exit 3
 }
 $scanExit = Invoke-NodeScan "scripts\scan-institution-cache.js" "Institution scan"
 if ($scanExit -ne 0) {
@@ -355,10 +355,10 @@ if ($scanExit -ne 0) {
       $verifiedPayload = Assert-InstitutionApi -AllowPreviousComplete
       Invoke-InstitutionSnapshotRefresh ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) "source coverage insufficient; preserved latest complete run"
       Write-InstitutionBlockedReceipt "source coverage insufficient; preserved latest complete run" ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count)
-      Write-InstitutionReceipt "blocked_preserved" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @("source coverage insufficient; preserved latest complete run") "source coverage insufficient; preserved latest complete run" $true
+      Write-InstitutionReceipt "blocked_preserved" 3 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @("source coverage insufficient; preserved latest complete run") "source coverage insufficient; preserved latest complete run" $true
       Write-FumanFlowHealth -Scope institution -Status source_stale -Message "Institution source coverage insufficient; preserved latest complete run" -Detail @{ log = $log; runId = [string]$verifiedPayload.runId; count = [int]$verifiedPayload.count }
       "Institution deferred complete scan end; preserved runId=$($verifiedPayload.runId) count=$($verifiedPayload.count)" >> $log
-      exit 0
+      exit 3
     } catch {
       "Institution latest complete preservation failed: $($_.Exception.Message)" >> $log
     }

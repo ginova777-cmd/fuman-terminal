@@ -142,7 +142,7 @@ function Test-Strategy2LatestMatchesTarget($Payload, $TargetDate) {
 function Write-Strategy2BlockedPreserve($Reason, $Payload) {
   $runId = if ($null -ne $Payload) { [string]$Payload.runId } else { "" }
   $count = if ($null -ne $Payload) { [int]$Payload.count } else { 0 }
-  Write-Strategy2Receipt "blocked_preserved" 0 $false $count $runId @($Reason) $Reason $true $true
+  Write-Strategy2Receipt "blocked_preserved" 3 $false $count $runId @($Reason) $Reason $true $true
 }
 
 function Complete-Strategy2AfterWindowClosure($Payload, $Warnings = @()) {
@@ -227,7 +227,7 @@ if ($resourceGate.PreserveLatest) {
     $verifiedPayload = Assert-Strategy2ApiPreserve
     Write-Strategy2BlockedPreserve $reason $verifiedPayload
     "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
-    exit 0
+    exit 3
   }
 }
 
@@ -250,7 +250,7 @@ if (-not (Test-Strategy2LatestMatchesTarget $verifiedPayload $targetDate)) {
   $reason >> $log
   Write-Strategy2BlockedPreserve $reason $verifiedPayload
   "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
-  exit 0
+  exit 3
 }
 Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 
