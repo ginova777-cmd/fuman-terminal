@@ -85,9 +85,7 @@ function Invoke-Strategy4SnapshotRefresh($RunId = "", $Count = 0, $Warning = "")
   } else {
     Write-Log "Strategy4 desktop snapshot refresh skipped; helper not found."
   }
-  if ($Warning) {
-    Write-Strategy4Receipt "complete" 0 $true $Count $RunId @($Warning)
-  }
+
 }
 
 function Invoke-Strategy4ScorecardSourceRefresh($RunId = "") {
@@ -250,6 +248,28 @@ function Invoke-Strategy4InlineTerminalVerify {
       if ($null -ne $previousRuntime) { $env:FUMAN_RUNTIME_DIR = $previousRuntime } else { Remove-Item Env:FUMAN_RUNTIME_DIR -ErrorAction SilentlyContinue }
       if ($null -ne $previousAuditBase) { $env:FUMAN_AUDIT_BASE_URL = $previousAuditBase } else { Remove-Item Env:FUMAN_AUDIT_BASE_URL -ErrorAction SilentlyContinue }
     }
+  } finally {
+    Pop-Location
+  }
+}
+function Invoke-Strategy4StrictTriSurfaceVerify {
+  param([string]$RunId)
+  if ([string]::IsNullOrWhiteSpace($RunId)) { throw "Strategy4 strict tri-surface verify missing runId" }
+  $outDir = Join-Path $RuntimeRoot "outputs\strategy4-tri-surface-chain"
+  New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+  Push-Location $repo
+  try {
+    $expectedDate = (Get-Date).ToString("yyyyMMdd")
+    Write-Log "Strategy4 strict tri-surface verify start runId=$RunId expectedDate=$expectedDate"
+    & $nodeExe "scripts\verify-terminal-resource-chain.js" "--routes=strategy4" "--expected-date=$expectedDate" "--require-unattended" "--out=$outDir" *>&1 | Tee-Object -FilePath $log -Append
+    $verifyExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+    if ($verifyExit -ne 0) { throw "strategy4 strict tri-surface verifier exit=$verifyExit" }
+    $reportPath = Join-Path $outDir "terminal-resource-chain-audit.json"
+    $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+    $row = @($report.results | Where-Object { $_.key -eq "strategy4" }) | Select-Object -First 1
+    if ($report.ok -ne $true -or $null -eq $row -or $row.ok -ne $true) { throw "strategy4 strict tri-surface verifier ok=false" }
+    if ([string]$row.supabase.runId -ne $RunId) { throw "strategy4 strict tri-surface runId mismatch expected=$RunId actual=$($row.supabase.runId)" }
+    Write-Log "Strategy4 strict tri-surface verify ok runId=$RunId"
   } finally {
     Pop-Location
   }
@@ -487,7 +507,17 @@ try {
     try { Invoke-Strategy4ScorecardSync } catch { $postScanWarnings += "scorecard sync failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard sync warning after DB readback: $($_.Exception.Message)" }
     try { Invoke-Strategy4SnapshotRefresh ([string]$dbVerify.runId) } catch { $postScanWarnings += "desktop snapshot refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 desktop snapshot warning after DB readback: $($_.Exception.Message)" }
     try { Invoke-Strategy4ScorecardSourceRefresh ([string]$dbVerify.runId) } catch { $postScanWarnings += "scorecard sourceReports refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard/sourceReports warning after DB readback: $($_.Exception.Message)" }
-    try { Invoke-Strategy4InlineTerminalVerify ([string]$dbVerify.runId); $postScanWarnings += "inline terminal chain verified" } catch { $postScanWarnings += "inline terminal chain pending: $($_.Exception.Message)"; Write-Log "Strategy4 inline terminal warning after DB readback: $($_.Exception.Message)" }
+    try {
+      Write-Strategy4Receipt "verifying" 0 $false ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) $postScanWarnings
+      Invoke-Strategy4InlineTerminalVerify ([string]$dbVerify.runId)
+      Invoke-Strategy4StrictTriSurfaceVerify ([string]$dbVerify.runId)
+      $postScanWarnings += "strict tri-surface chain verified"
+    } catch {
+      $reason = "critical scan failed during strict tri-surface verification: $($_.Exception.Message)"
+      Write-Log "Strategy4 $reason"
+      Write-Strategy4Receipt "failed" 1 $false 0 "" @($postScanWarnings + $reason) $reason
+      exit 1
+    }
     Write-Strategy4Receipt "complete" 0 $true ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) $postScanWarnings
     Write-Log "Strategy4 DB readback verification ok after API verification failure: runId=$($dbVerify.runId) resultCount=$($dbVerify.resultCount) readbackCount=$($dbVerify.readbackCount)"
     Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
@@ -503,7 +533,17 @@ $postScanWarnings = @()
 try { Invoke-Strategy4SnapshotRefresh ([string]$strategy4Output.runId) } catch { $postScanWarnings += "desktop snapshot refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 desktop snapshot warning: $($_.Exception.Message)" }
 try { Invoke-Strategy4ScorecardSync } catch { $postScanWarnings += "scorecard sync failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard sync warning: $($_.Exception.Message)" }
 try { Invoke-Strategy4ScorecardSourceRefresh ([string]$strategy4Output.runId) } catch { $postScanWarnings += "scorecard sourceReports refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard/sourceReports warning: $($_.Exception.Message)" }
-try { Invoke-Strategy4InlineTerminalVerify ([string]$strategy4Output.runId); $postScanWarnings += "inline terminal chain verified" } catch { $postScanWarnings += "inline terminal chain pending: $($_.Exception.Message)"; Write-Log "Strategy4 inline terminal warning: $($_.Exception.Message)" }
+try {
+  Write-Strategy4Receipt "verifying" 0 $false ([int]$strategy4Output.count) ([string]$strategy4Output.runId) $postScanWarnings
+  Invoke-Strategy4InlineTerminalVerify ([string]$strategy4Output.runId)
+  Invoke-Strategy4StrictTriSurfaceVerify ([string]$strategy4Output.runId)
+  $postScanWarnings += "strict tri-surface chain verified"
+} catch {
+  $reason = "critical scan failed during strict tri-surface verification: $($_.Exception.Message)"
+  Write-Log "Strategy4 $reason"
+  Write-Strategy4Receipt "failed" 1 $false 0 "" @($postScanWarnings + $reason) $reason
+  exit 1
+}
 
 Write-Strategy4Receipt "complete" 0 $true ([int]$strategy4Output.count) ([string]$strategy4Output.runId) $postScanWarnings
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
