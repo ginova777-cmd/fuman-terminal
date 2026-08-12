@@ -391,11 +391,11 @@ try {
   $steps.Add((Invoke-NpmStep "predictive-preflight" "ops:predictive-preflight"))
   # A transient Water Root failure enters the bounded warmup/self-heal path before
   # the run stops. Rewater never backfills natural evidence or publishes scanners.
-  $waterRoot = Invoke-NpmStep "water-root" "verify:terminal-water-root" -MaxAttempts 3 -RetryDelaySeconds 20 -ToleratedExitCodes @(1)
+  $waterRoot = Invoke-NpmStep "water-root" "verify:terminal-water-root" -MaxAttempts 3 -RetryDelaySeconds 20 -ToleratedExitCodes @(1) -TimeoutSeconds 300
   $steps.Add($waterRoot)
   if ($waterRoot.toleratedExitCode -eq 1) {
     $steps.Add((Invoke-NpmStep "warmup-self-heal" "daytrade-warmup:root:apply" -ToleratedExitCodes @(1)))
-    $steps.Add((Invoke-NpmStep "water-root-after-rewater" "verify:terminal-water-root" -MaxAttempts 3 -RetryDelaySeconds 20 -ToleratedExitCodes @(1)))
+    $steps.Add((Invoke-NpmStep "water-root-after-rewater" "verify:terminal-water-root" -MaxAttempts 3 -RetryDelaySeconds 20 -ToleratedExitCodes @(1) -TimeoutSeconds 300))
   }
     $steps.Add((Invoke-NpmStep "daily-manifest" "manifest:daily-terminal-run" -TimeoutSeconds 600 -ToleratedExitCodes @(1)))
   # Read current live/terminal alignment before planning recovery; otherwise the queue can plan from stale manifest data.
