@@ -299,9 +299,16 @@ if ($resourceGate.PreserveLatest) {
   if ($resourceGate.PreserveLatest) {
     $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
     Write-Log "Strategy4 source gate still blocked after repair; preserving latest complete run. $reason"
-    $latestPayload = Assert-Strategy4LatestApi
-    Invoke-Strategy4SnapshotRefresh ([string]$latestPayload.runId) ([int]$latestPayload.count) $reason
-    exit 0
+    $warnings = @($reason, "source repair attempted=true", "source repair ok=$repairOk")
+    try {
+      $latestPayload = Assert-Strategy4LatestApi
+      Invoke-Strategy4SnapshotRefresh ([string]$latestPayload.runId) ([int]$latestPayload.count) $reason
+    } catch {
+      $warnings += "latest snapshot preservation failed: $($_.Exception.Message)"
+      Write-Log "Strategy4 latest snapshot preservation warning: $($_.Exception.Message)"
+    }
+    Write-Strategy4Receipt "failed" 3 $false 0 "" $warnings $reason
+    exit 3
   }
   Write-Log "Strategy4 source gate recovered after repair; continuing full scan."
 }
