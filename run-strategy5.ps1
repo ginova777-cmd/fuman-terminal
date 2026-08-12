@@ -129,9 +129,17 @@ $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy5" -LogPath 
 if ($resourceGate.PreserveLatest) {
   $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
   Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 source gate blocked new publish; preserving latest complete run. $reason"
-  $verifiedPayload = Invoke-Strategy5InlineTerminalVerify
-  Invoke-Strategy5SnapshotRefresh ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) $reason
-  exit 0
+  $warnings = @($reason)
+  try {
+    $verifiedPayload = Invoke-Strategy5InlineTerminalVerify
+    Invoke-Strategy5SnapshotRefresh ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count)
+    $warnings += "previous complete run verified: $($verifiedPayload.runId)"
+  } catch {
+    $warnings += "previous complete run verification failed: $($_.Exception.Message)"
+    Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 previous complete run preservation warning: $($_.Exception.Message)"
+  }
+  Write-Strategy5Receipt "failed" 3 $false 0 "" $warnings $reason
+  exit 3
 }
 
 $scanExit = Invoke-NodeScan "scripts\scan-strategy5-cache.js" "Strategy5 scan"
