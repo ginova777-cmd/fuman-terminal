@@ -633,7 +633,7 @@ main().catch((error) => {
     error: error?.message || String(error),
   };
   let file = "";
-  try { file = writeReceipt(strategy, receipt, { dryRun }); } catch {}
+  try { file = writeReceipt(strategy, receipt, { dryRun: receipt.dry_run === true }); } catch {}
   console.error(JSON.stringify({ ok: false, strategy, error: receipt.error, receipt_path: file }, null, 2));
   process.exit(1);
 });
