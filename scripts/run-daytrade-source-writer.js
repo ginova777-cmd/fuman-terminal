@@ -4776,11 +4776,19 @@ async function main() {
 }
 
 main().catch((error) => {
+  const cause = error && typeof error === "object" ? (error.cause || {}) : {};
   console.error(JSON.stringify({
     ok: false,
     sourceName: SOURCE_NAME,
     mode: APPLY ? "apply" : "dry-run",
     error: error.message || String(error),
+    errorDetail: {
+      name: error?.name || "",
+      code: error?.code || cause?.code || "",
+      causeMessage: cause?.message || "",
+      hostname: cause?.hostname || "",
+      syscall: cause?.syscall || "",
+    },
     checkedAt: nowIso(),
   }, null, 2));
   process.exit(1);
