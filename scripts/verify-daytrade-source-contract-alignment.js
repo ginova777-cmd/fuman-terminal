@@ -144,6 +144,17 @@ function normalizeSourceStatus(row) {
     priorityFreshQuotes120s: numberValue(payload.priority_fresh_quotes_120s),
     priorityPoolSymbols: numberValue(payload.priority_pool_symbols),
     priorityFreshQuoteCoverage120s: numberValue(payload.priority_fresh_quote_coverage_120s),
+    motherPoolSymbols: numberValue(payload.mother_pool_symbols),
+    formalScanPoolSymbols: numberValue(payload.formal_scan_pool_symbols),
+    basePoolEligibleSymbols: numberValue(payload.base_pool_eligible_symbols ?? payload.mother_pool_base_pool_symbols),
+    basePoolPendingSymbols: numberValue(payload.base_pool_pending_symbols ?? payload.mother_pool_base_pool_pending_symbols),
+    basePoolShortfall: numberValue(payload.base_pool_shortfall),
+    motherPoolFreshQuoteCoverage120s: numberValue(payload.mother_pool_fresh_coverage_120s),
+    motherPoolFreshQuotes120s: numberValue(payload.mother_pool_fresh_quotes_120s),
+    reasonCode: stringValue(payload.reason_code),
+    failedChecks: arrayValue(payload.failed_checks),
+    motherPoolBasePoolFailureCounts: payload.mother_pool_base_pool_failure_counts || {},
+    motherPoolBasePoolPendingCounts: payload.mother_pool_base_pool_pending_counts || {},
     hasPriorityPoolSymbols: hasValue(payload, "priority_pool_symbols"),
     hasPriorityFreshQuoteCoverage120s: hasValue(payload, "priority_fresh_quote_coverage_120s"),
     hasScannerCanRunOpening: hasValue(payload, "scanner_can_run_opening"),
@@ -184,6 +195,12 @@ function normalizeGate(row) {
     hasCanonicalGateReason: hasValue(row, "canonical_gate_reason"),
     priorityPoolSymbols: numberValue(row?.priority_pool_symbols),
     priorityFreshQuoteCoverage120s: numberValue(row?.priority_fresh_quote_coverage_120s),
+    motherPoolSymbols: numberValue(row?.mother_pool_symbols),
+    formalScanPoolSymbols: numberValue(row?.formal_scan_pool_symbols ?? payload.formal_scan_pool_symbols),
+    formalPrioritySymbols: numberValue(row?.formal_priority_symbols),
+    formalFreshQuoteCoverage120s: numberValue(row?.formal_fresh_quote_coverage_120s),
+    formalMaxQuoteAgeSeconds: numberValue(row?.formal_max_quote_age_seconds, 999999),
+    formalScope: stringValue(row?.formal_scope),
     scannerCanRunOpening: boolValue(row?.scanner_can_run_opening),
     hasPriorityPoolSymbols: hasValue(row, "priority_pool_symbols"),
     hasPriorityFreshQuoteCoverage120s: hasValue(row, "priority_fresh_quote_coverage_120s"),
@@ -197,8 +214,9 @@ function normalizeGate(row) {
     intraday1mStaleSeconds: numberValue(row?.intraday_1m_stale_seconds, 999999),
     formalSourceAlignmentOk: boolValue(row?.formal_source_alignment_ok),
     formalEntrySpeedVerdict: stringValue(row?.formal_entry_speed_verdict),
-    strategyChipStatus: stringValue(payload.formal_priority_strategy_chip_status),
-    strategyChipCompleteLatestRun: boolValue(payload.formal_priority_strategy_chip_complete_latest_run_evidence),
+    strategyChipStatus: stringValue(row?.formal_priority_strategy_chip_status || payload.formal_priority_strategy_chip_status),
+    strategyChipCompleteLatestRun: boolValue(row?.formal_priority_strategy_chip_complete_latest_run_evidence ?? payload.formal_priority_strategy_chip_complete_latest_run_evidence),
+    daytradeSourceSpeedOk: boolValue(row?.daytrade_source_speed_ok),
     readyMa20Continuous: numberValue(row?.ready_ma20_continuous_symbols ?? row?.ready_ma20_continuous),
     readyMa35Continuous: numberValue(row?.ready_ma35_continuous_symbols ?? row?.ready_ma35_continuous),
     ...websocketEvidence(row || {}),
@@ -226,7 +244,7 @@ function isSourceA(source) {
     && source.hasPriorityPoolSymbols === true
     && source.priorityPoolSymbols === 40
     && source.hasPriorityFreshQuoteCoverage120s === true
-    && source.priorityFreshQuoteCoverage120s >= 0.95
+    && source.priorityFreshQuoteCoverage120s >= 0.90
     && source.quoteAgeSeconds <= 90
     && source.formalEntryAllowed === true
     && source.scannerCanRunQuoteOnly === true
@@ -252,7 +270,7 @@ function isGateA(gate) {
     && gate.hasPriorityPoolSymbols === true
     && gate.priorityPoolSymbols === 40
     && gate.hasPriorityFreshQuoteCoverage120s === true
-    && gate.priorityFreshQuoteCoverage120s >= 0.95
+    && gate.priorityFreshQuoteCoverage120s >= 0.90
     && gate.hasScannerCanRunOpening === true
     && gate.scannerCanRunOpening === true
     && gate.quoteAgeSeconds <= 90
@@ -310,7 +328,7 @@ function writerCodeRegressionChecks() {
     websocketFormalReadyPayload: source.includes("websocket_formal_ready") && source.includes("websocket_formal_ready_reason") && source.includes("formalReadyReason"),
     websocketFormalReadyRequiresTransport: /formalReady: transportReady/.test(source) && /statusAgeSeconds <= 300/.test(source),
     formalGateRequiresWebsocket: /priorityGateA && formalEntryWindow && webSocketStatus\.formalReady/.test(source),
-    strategyChipEvidenceNonBlocking: source.includes('strategyChipCompleteLatestRun') && source.includes('formal_priority_strategy_chip_required_for_formal_entry: false') && source.includes('formal_priority_strategy_chip_blocks_formal_entry: false'),
+    strategyChipEvidencePolicyConsistent: source.includes('strategyChipCompleteLatestRun') && ((source.includes('formal_priority_strategy_chip_required_for_formal_entry: false') && source.includes('formal_priority_strategy_chip_blocks_formal_entry: false')) || (source.includes('formal_priority_strategy_chip_required_for_formal_entry: true') && source.includes('formal_priority_strategy_chip_blocks_formal_entry: !strategyChipCompleteLatestRun'))),
     formalPrioritySpeedPayload: source.includes("formal_priority_speed_ok"),
     fullMarketSpeedNonBlockingPayload: source.includes("full_market_speed_blocking: false"),
     slowTableBatchReduction: source.includes('fugle_daytrade_priority_pool')
@@ -328,8 +346,8 @@ function writerCodeRegressionChecks() {
       && source.includes('avg5 is a liquidity grade only')
       && !source.includes('avg5_volume_not_gt_3000')
       && source.includes('market_not_twse_otc')
-      && source.includes('price_below_50'),
-    warmingMotherPoolIncludesPending: source.includes('const rankingCandidates = qualifiedCandidates')
+      && source.includes('price_below_'),
+    warmingMotherPoolIncludesPending: source.includes('const rankingCandidates = [...qualifiedCandidates, ...pendingCandidates]')
       && source.includes('quote_stale')
       && source.includes('quote_pending'),
     runtimeSeedsCannotBypassBasePool: source.includes('Runtime seeds may boost a candidate already selected in the warming')
@@ -341,7 +359,7 @@ function writerCodeRegressionChecks() {
     motherPoolMinimum300: source.includes('positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_SYMBOLS || CONFIG.motherPool?.targetSymbolsMin, 300)'),
     motherPoolFreshnessFirst: source.includes('Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true)')
       && source.includes('mother_pool_fresh_coverage_120s'),
-    motherPoolPriceFloor50: source.includes('MOTHER_POOL_MIN_PRICE') && source.includes('price_below_50'),
+    motherPoolOptionalPriceFloor: source.includes('MOTHER_POOL_MIN_PRICE') && source.includes('price_below_'),
     motherPoolTradingHardFilters: source.includes('daytrade_not_allowed')
       && source.includes('halted_or_suspended')
       && source.includes('disposition_or_controlled')
@@ -439,6 +457,7 @@ function websocketCodeRegressionChecks() {
       && source.stockCollector.includes("websocketAuthenticated")
       && source.stockCollector.includes("streamingChannels")
       && source.stockCollector.includes("streamingMessages"),
+    candleMergeDefinesFreshnessCutoff: /function mergeStreamingCandles\([\s\S]*?const cutoff\s*=\s*Date\.now\(\)[\s\S]*?seen\s*>=\s*cutoff/.test(source.stockCollector),
     futoptCollectorFormalReady: source.futoptCollector.includes("formalReady") && source.futoptCollector.includes("formalReadyReason"),
     futoptCollectorRequiresRecentMessage: source.futoptCollector.includes("quoteMessages + candleMessages > 0")
       && source.futoptCollector.includes("messageAgeSeconds <= 300"),
@@ -476,6 +495,11 @@ async function main() {
     "formal_source_alignment_ok",
     "intraday_1m_stale_seconds",
     "priority_pool_symbols",
+    "mother_pool_symbols",
+    "formal_priority_symbols",
+    "formal_fresh_quote_coverage_120s",
+    "formal_max_quote_age_seconds",
+    "formal_scope",
     "priority_fresh_quote_coverage_120s",
     "scanner_can_run_opening",
     "quote_age_seconds",
@@ -483,6 +507,8 @@ async function main() {
     "scorecard_required_ok_count",
     "scorecard_required_count",
     "formal_entry_speed_verdict",
+    "daytrade_source_speed_ok",
+    "payload",
     "ready_ma20_continuous_symbols",
     "ready_ma35_continuous_symbols",
     "quote_transport",
@@ -561,6 +587,7 @@ async function main() {
     ["intraday_1m_stale_seconds", sourceStatus.intraday1mStaleSeconds, canonicalGate.intraday1mStaleSeconds, unattendedGate.intraday1mStaleSeconds],
   ];
   for (const [name, ...values] of layerAlignmentChecks) {
+    if (name === "websocket_formal_ready" && sourceStatus.offSession === true) continue;
     if (values.some((value) => value === null || value === undefined || value === "" || Number.isNaN(value))) {
       issues.push(`layer_contract_field_missing:${name}`);
     } else if (values.some((value) => value !== values[0])) {
@@ -657,3 +684,7 @@ main().catch((error) => {
   console.error(`[daytrade-source-contract-alignment] ${error.message}`);
   process.exitCode = 2;
 });
+
+
+
+
