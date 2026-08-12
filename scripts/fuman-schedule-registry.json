@@ -56,14 +56,14 @@
       "Fuman Fugle Daytrade WebSocket Collector 0600-1330",
       "Fuman Daytrade Warmup Nine-Day Audit 0915",
       "Fuman Opening Report 0830 LINE",
-      "Fuman Strategy3 LINE Card 1308",
-      "Fuman Strategy4 LINE Card 1610",
       "Fuman Terminal Full Unattended Final Audit"
     ],
     "expectedDisabledTasks": [
       "Fuman Terminal Autonomous Ops 5m",
       "Fuman Terminal Autonomous Ops User 5m",
-      "Fuman Public Slot Shared Source 0800"
+      "Fuman Public Slot Shared Source 0800",
+      "Fuman Strategy3 LINE Card 1308",
+      "Fuman Strategy4 LINE Card 1610"
     ],
     "retiredTasks": [
       "Fuman 即時雷達",
@@ -1019,9 +1019,9 @@
     {
       "taskName": "\\\\Fuman Strategy3 LINE Card 1308",
       "displayName": "Fuman Strategy3 LINE Card 1308",
-      "description": "Strategy3 LINE card notification after Strategy3 13:00 scan window. Waiting/not-run before due is allowed.",
+      "description": "Retired LINE notification loop. Receipt-based total-control verification owns post-scan validation.",
       "time": "13:08",
-      "expectedState": "Ready",
+      "expectedState": "Disabled",
       "expectedTriggers": [
         "13:08"
       ]
@@ -1029,9 +1029,9 @@
     {
       "taskName": "\\\\Fuman Strategy4 LINE Card 1610",
       "displayName": "Fuman Strategy4 LINE Card 1610",
-      "description": "Strategy4 LINE card notification after Strategy4 16:00 scan window. Waiting/not-run before due is allowed.",
+      "description": "Retired LINE notification loop. Receipt-based total-control verification owns post-scan validation.",
       "time": "16:10",
-      "expectedState": "Ready",
+      "expectedState": "Disabled",
       "expectedTriggers": [
         "16:10"
       ]
