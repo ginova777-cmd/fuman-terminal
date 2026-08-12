@@ -1058,7 +1058,7 @@ function scanAuditTime(value) {
 }
 
 function scanAuditStatus(status) {
-  return ({ complete: "完成", failed: "失敗", degraded: "未完成驗收", running: "掃描中", overdue: "逾時未收 receipt", pending: "待執行" })[String(status || "")] || "未知";
+  return ({ complete: "完成", late_complete: "逾時完成", failed: "失敗", degraded: "未完成驗收", running: "掃描中", overdue: "逾時未收 receipt", pending: "待執行" })[String(status || "")] || "未知";
 }
 
 function renderScanAudit(payload) {
@@ -1074,7 +1074,7 @@ function renderScanAudit(payload) {
         <tbody>${modules.map((row) => {
           const actual = row.actualStartedAt ? `${scanAuditTime(row.actualStartedAt)}${row.actualFinishedAt ? ` - ${scanAuditTime(row.actualFinishedAt)}` : ""}` : "--";
           const count = row.verifiedCount ? `${esc(String(row.count || 0))} / ${esc(String(row.verifiedCount))}` : esc(String(row.count || 0));
-          const verified = row.status === "complete" ? "電腦 / 88 / 手機一致" : (row.triSurfaceStatus || "未完成");
+          const verified = ["complete", "late_complete"].includes(row.status) ? `電腦 / 88 / 手機一致${row.status === "late_complete" ? "（逾時）" : ""}` : (row.triSurfaceStatus || "未完成");
           const runId = row.runId || (row.previousGoodRunId ? `保留 ${row.previousGoodRunId}` : "--");
           return `<tr><td>${esc(row.label || row.key || "--")}</td><td>${esc(row.scheduledAt || "--")}</td><td>${esc(actual)}</td><td>${esc(row.receiptDate || audit.marketDate || "--")}</td><td>${esc(runId)}</td><td>${count}</td><td>${esc(verified)}</td><td class="scan-audit-detail">${esc(scanAuditStatus(row.status))}｜${esc(row.reason || "--")}</td></tr>`;
         }).join("")}</tbody>

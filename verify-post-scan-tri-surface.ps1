@@ -43,7 +43,11 @@ function Update-PostScanReceiptEvidence {
     $Row
   )
 
-  $receiptKey = if ($Route -eq "cb") { "cb-detect" } else { $Route }
+  $receiptKey = switch ($Route) {
+    "cb" { "cb-detect" }
+    "warrant" { "warrant-flow" }
+    default { $Route }
+  }
   $receiptPath = Join-Path $RuntimeRoot ("data\scan-receipts\{0}.json" -f $receiptKey)
   if (-not (Test-Path -LiteralPath $receiptPath)) { return }
   try {
@@ -133,3 +137,4 @@ function Assert-PostScanTriSurfaceClosure {
   Write-PostScanTriSurfaceReceipt -RuntimeRoot $runtimeRoot -Route $Route -RunId $RunId -ExpectedDate $expectedDate -LogPath $LogPath -ReportPath $reportPath -Status "failed" -Attempts 6 -Reason $lastError
   throw "post-scan $Route strict tri-surface closure failed: $lastError"
 }
+
