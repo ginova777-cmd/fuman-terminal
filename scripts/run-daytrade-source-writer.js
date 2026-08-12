@@ -113,6 +113,8 @@ const ONCE = hasFlag("once") || envFlag("FUMAN_DAYTRADE_WRITER_ONCE");
 const MAX_RUN_SECONDS = positiveNumber(argValue("max-seconds", process.env.FUMAN_DAYTRADE_WRITER_MAX_SECONDS || 0), 0);
 const SUPABASE_READ_TIMEOUT_MS = Math.max(3000, Number(process.env.DAYTRADE_SUPABASE_READ_TIMEOUT_MS || 8000));
 const SUPABASE_WRITE_TIMEOUT_MS = Math.max(5000, Number(process.env.DAYTRADE_SUPABASE_WRITE_TIMEOUT_MS || 12000));
+const SUPABASE_TRANSIENT_RETRIES = Math.max(0, Math.min(4, Number(process.env.DAYTRADE_SUPABASE_TRANSIENT_RETRIES || 2)));
+const SUPABASE_RETRY_BASE_DELAY_MS = Math.max(100, Math.min(5000, Number(process.env.DAYTRADE_SUPABASE_RETRY_BASE_DELAY_MS || 500)));
 
 const DEFAULT_CONFIG = {
   loopSeconds: 5,
@@ -423,11 +425,36 @@ function requireSupabaseKey(write = false) {
   if (!key) throw new Error(write ? "missing Supabase service role key" : "missing Supabase read key");
   return key;
 }
+function retryableSupabaseFetchError(error) {
+  const text = [error?.message, error?.cause?.message, error?.cause?.code, error?.code]
+    .filter(Boolean)
+    .join(" ");
+  return /fetch failed|network|timeout|aborted|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|ECONNREFUSED|socket/i.test(text);
+}
+
+async function supabaseFetch(url, options = {}, timeoutMs = SUPABASE_READ_TIMEOUT_MS) {
+  let lastError = null;
+  const { signal: _ignoredSignal, ...requestOptions } = options;
+  for (let attempt = 0; attempt <= SUPABASE_TRANSIENT_RETRIES; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, { ...requestOptions, signal: controller.signal });
+    } catch (error) {
+      lastError = error;
+      if (attempt >= SUPABASE_TRANSIENT_RETRIES || !retryableSupabaseFetchError(error)) throw error;
+      await sleep(SUPABASE_RETRY_BASE_DELAY_MS * (attempt + 1));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastError || new Error("supabase fetch failed");
+}
 
 async function supabaseGet(resource, query = "", options = {}) {
   const key = requireSupabaseKey(Boolean(options.service));
   const url = `${SUPABASE_URL}/rest/v1/${resource}${query ? `?${query}` : ""}`;
-  const response = await fetch(url, {
+  const response = await supabaseFetch(url, {
     method: "GET",
     headers: headers(key),
     signal: AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_READ_TIMEOUT_MS) : undefined,
@@ -443,7 +470,7 @@ async function supabaseGetPaged(resource, query = "", options = {}) {
   const rows = [];
   for (let offset = 0; offset < 20000; offset += pageSize) {
     const url = `${SUPABASE_URL}/rest/v1/${resource}${query ? `?${query}` : ""}`;
-    const response = await fetch(url, {
+    const response = await supabaseFetch(url, {
       method: "GET",
       headers: {
         ...headers(key),
@@ -463,7 +490,7 @@ async function supabaseGetPaged(resource, query = "", options = {}) {
 
 async function supabaseRpc(resource, body, options = {}) {
   const key = requireSupabaseKey(Boolean(options.service));
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${resource}`, {
+  const response = await supabaseFetch(`${SUPABASE_URL}/rest/v1/rpc/${resource}`, {
     method: 'POST',
     headers: headers(key),
     body: JSON.stringify(body || {}),
