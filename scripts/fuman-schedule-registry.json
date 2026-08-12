@@ -550,7 +550,7 @@
       "taskName": "\\Fuman Scorecard Daily Automation 1400",
       "displayName": "Fuman Scorecard Daily Automation 1400",
       "description": "Scorecard daily automation.",
-      "time": "14:00",
+      "time": "13:45",
       "expectedState": "Ready"
     },
     {
@@ -656,11 +656,11 @@
     {
       "taskName": "\\Fuman Strategy4 Source Prewarm 1535",
       "displayName": "Fuman Strategy4 Source Prewarm 1535",
-      "description": "Strategy4 source prewarm before 16:00 publish scan.",
-      "time": "15:35",
+      "description": "Strategy4 source full prewarm before the 16:00 formal scan.",
+      "time": "13:45",
       "expectedState": "Ready",
       "expectedTriggers": [
-        "15:35"
+        "13:45"
       ]
     },
     {
