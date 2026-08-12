@@ -125,7 +125,14 @@ async function main() {
       const symbol = normalizeSymbol(item.symbol); if (!symbol) continue;
       const localRows = bySymbol.get(symbol) || [];
       const auditBefore = buildTimelineAudit({ symbol, tradeDate, rows: localRows, expectedMinutes });
-      if (!auditBefore.missing_minutes.length) { await supabaseUpsert("fugle_daytrade_intraday_1m_timeline_audit", [{ ...auditBefore, checked_at: new Date().toISOString(), payload: { source: "gap-repair", synthesize: SYNTHESIZE } }], "symbol,trade_date", serviceKey); continue; }
+      if (!auditBefore.missing_minutes.length) {
+        if (APPLY) {
+          await supabaseUpsert("fugle_daytrade_intraday_1m_timeline_audit", [{ ...auditBefore, checked_at: new Date().toISOString(), payload: { source: "gap-repair", synthesize: SYNTHESIZE, apply: true } }], "symbol,trade_date", serviceKey);
+        } else {
+          console.log(JSON.stringify(auditBefore));
+        }
+        continue;
+      }
       repairedSymbols += 1;
       const have = new Set(localRows.filter((row) => !isSynthetic(row) && row.volume_strategy_usable !== false && !String(row.source || "").includes("quote_derived")).map((row) => rowMinute(row.candle_time)));
       let fetched = [];
