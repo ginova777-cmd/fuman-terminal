@@ -432,6 +432,16 @@ if (Test-Path -LiteralPath $snapshotScript) {
   Write-Strategy3CompleteLog "Strategy3 desktop snapshot refresh skipped; helper not found."
 }
 
+. "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
+Write-Strategy3Receipt "verifying" 0 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
+try {
+  Assert-PostScanTriSurfaceClosure -Route "strategy3" -RunId ([string]$verifiedPayload.runId) -LogPath $log | Out-Null
+} catch {
+  $reason = "critical scan failed during strict tri-surface verification: $($_.Exception.Message)"
+  Write-Strategy3CompleteLog "Strategy3 $reason"
+  Write-Strategy3Receipt "failed" 1 $false 0 "" @($reason) $reason
+  exit 1
+}
 Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 Write-Strategy3CompleteLog "Strategy3 complete scan end; Supabase complete run + no-store API is the terminal fast path"
 

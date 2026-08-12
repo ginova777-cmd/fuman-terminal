@@ -182,6 +182,16 @@ try {
     "CB detect desktop snapshot refresh skipped; helper not found." >> $log
     $warnings += "desktop snapshot refresh helper not found"
   }
+  . "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
+  Write-CbDetectReceipt "verifying" 0 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) $warnings
+  try {
+    Assert-PostScanTriSurfaceClosure -Route "cb" -RunId ([string]$verifiedPayload.runId) -LogPath $log | Out-Null
+  } catch {
+    $reason = "critical scan failed during strict tri-surface verification: $($_.Exception.Message)"
+    "$reason" >> $log
+    Write-CbDetectReceipt "failed" 1 $false 0 "" @($warnings + $reason) $reason
+    exit 1
+  }
   Write-CbDetectReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) $warnings
 } finally {
   Pop-Location

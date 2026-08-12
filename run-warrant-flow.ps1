@@ -170,6 +170,16 @@ try {
   Write-WarrantFlowReceipt "failed" 1 $false 0 "" @($_.Exception.Message) "critical scan failed during API verification"
   exit 1
 }
+. "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
+Write-WarrantFlowReceipt "verifying" 0 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
+try {
+  Assert-PostScanTriSurfaceClosure -Route "warrant" -RunId ([string]$verifiedPayload.runId) -LogPath $log | Out-Null
+} catch {
+  $reason = "critical scan failed during strict tri-surface verification: $($_.Exception.Message)"
+  "$reason" >> $log
+  Write-WarrantFlowReceipt "failed" 1 $false 0 "" @($reason) $reason
+  exit 1
+}
 Write-WarrantFlowReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 Write-FumanFlowHealth -Scope warrant -Status ok -Message "Warrant flow scan completed through API-only terminal pipeline" -Detail @{ log = $log; runId = [string]$verifiedPayload.runId }
 "Warrant flow API-only: legacy static publish steps are disabled; terminal reads Supabase/API plus desktop snapshot." >> $log

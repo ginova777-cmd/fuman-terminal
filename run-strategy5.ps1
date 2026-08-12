@@ -205,6 +205,16 @@ if (Test-Path -LiteralPath $snapshotScript) {
   Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 desktop snapshot refresh skipped; helper not found."
 }
 
+. "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
+Write-Strategy5Receipt "verifying" 0 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
+try {
+  Assert-PostScanTriSurfaceClosure -Route "strategy5" -RunId ([string]$verifiedPayload.runId) -LogPath $log | Out-Null
+} catch {
+  $reason = "critical scan failed during strict tri-surface verification: $($_.Exception.Message)"
+  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 $reason"
+  Write-Strategy5Receipt "failed" 1 $false 0 "" @($reason) $reason
+  exit 1
+}
 Write-Strategy5Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 API-only: scanner success verifies /api/strategy5-latest through scorecard source report; terminal reads Supabase/API plus desktop snapshot."
 

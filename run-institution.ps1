@@ -379,6 +379,16 @@ try {
 
 Invoke-InstitutionSnapshotRefresh ([string]$verifiedPayload.runId)
 
+. "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
+Write-InstitutionReceipt "verifying" 0 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
+try {
+  Assert-PostScanTriSurfaceClosure -Route "institution" -RunId ([string]$verifiedPayload.runId) -LogPath $log | Out-Null
+} catch {
+  $reason = "critical scan failed during strict tri-surface verification: $($_.Exception.Message)"
+  "$reason" >> $log
+  Write-InstitutionReceipt "failed" 1 $false 0 "" @($reason) $reason
+  exit 1
+}
 Write-InstitutionReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 Write-FumanFlowHealth -Scope institution -Status ok -Message "Institution scan completed through API-only terminal pipeline" -Detail @{ log = $log; runId = [string]$verifiedPayload.runId }
 "Institution API-only: slim generation, local mirror, and cache sync are disabled; terminal reads Supabase/API plus desktop snapshot." >> $log
