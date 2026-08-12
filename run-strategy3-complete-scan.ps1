@@ -379,10 +379,10 @@ if ($resourceGate.PreserveLatest -and $resourceGate.Status -eq "not_ready" -and 
     }
   }
 }
-if ($resourceGate.PreserveLatest) {
-  $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
-  Write-Strategy3CompleteLog "Strategy3 source gate blocked new publish. $reason"
-  Invoke-Strategy3PreserveFailure -Reason $reason -Stage "runner-resource-gate"
+$initialResourceGateBlocked = [bool]$resourceGate.PreserveLatest
+$initialResourceGateReason = if ($initialResourceGateBlocked) { "resource health $($resourceGate.Status): $($resourceGate.Reason)" } else { "" }
+if ($initialResourceGateBlocked) {
+  Write-Strategy3CompleteLog "Strategy3 initial resource gate is not ready; entering bounded formal-session retry instead of failing on one transient read. $initialResourceGateReason"
 }
 $sessionReadyWaitSeconds = if ($env:STRATEGY3_SESSION_READY_WAIT_SECONDS) { [int]$env:STRATEGY3_SESSION_READY_WAIT_SECONDS } else { 3300 }
 $sessionReadyPollSeconds = if ($env:STRATEGY3_SESSION_READY_POLL_SECONDS) { [int]$env:STRATEGY3_SESSION_READY_POLL_SECONDS } else { 60 }
@@ -398,7 +398,17 @@ while ($true) {
   }
   if ($sessionGate -and $sessionGate.ready -eq $true) {
     Write-Strategy3CompleteLog "Strategy3 pre-scan session readiness ready; session1m=$($sessionGate.sessionReadyCount)/$($sessionGate.minIntraday1mCandidates) latest=$($sessionGate.latestCandleTime)"
-    break
+    if ($initialResourceGateBlocked) {
+      $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy3" -LogPath $log
+      if ($resourceGate.PreserveLatest) {
+        $initialResourceGateReason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
+        Write-Strategy3CompleteLog "Strategy3 resource gate remains blocked after formal-session readiness recovered. $initialResourceGateReason"
+      } else {
+        $initialResourceGateBlocked = $false
+        Write-Strategy3CompleteLog "Strategy3 resource gate recovered after formal-session retry."
+      }
+    }
+    if (-not $initialResourceGateBlocked) { break }
   }
   $reason = if ($sessionGate) {
     "session readiness not ready; session1m=$($sessionGate.sessionReadyCount)/$($sessionGate.minIntraday1mCandidates); latest=$($sessionGate.latestCandleTime); reason=$($sessionGate.reason)"
@@ -407,6 +417,7 @@ while ($true) {
   }
   if ((Get-Date) -ge $sessionReadyDeadline) {
     Write-Strategy3CompleteLog "Strategy3 source gate blocked new publish before scanner. $reason"
+    if ($initialResourceGateBlocked -and $initialResourceGateReason) { $reason = "$reason; $initialResourceGateReason" }
     Invoke-Strategy3PreserveFailure -Reason $reason -Stage "runner-session-readiness-gate"
   }
   Write-Strategy3CompleteLog "Strategy3 pre-scan session readiness waiting; $reason"
