@@ -137,6 +137,19 @@
         2147946720,
         -2147020576
       ]
+    },
+    {
+      "name": "Fuman Fugle Daytrade WebSocket Collector 0600-1330",
+      "time": "06:00-13:30",
+      "expectedTriggers": [
+        "06:00"
+      ],
+      "allowedResults": [
+        0
+      ],
+      "expectedCommandContains": [
+        "Run-DaytradeWebSocketCollector.ps1"
+      ]
     }
   ],
   "requiredPackageScripts": [

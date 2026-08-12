@@ -9,6 +9,7 @@ const {
   cleanNumber,
   normalizeFugleAggregate,
   normalizeFugleCandle,
+  normalizeFugleCandles,
   normalizeFugleTrade,
   readJson,
   writeJson,
@@ -25,6 +26,10 @@ const FINMIND_TOKEN_FILES = [
 ];
 const LOOP_MS = Math.max(1000, Number(process.env.FUGLE_COLLECTOR_LOOP_MS || 1000));
 const COLLECTOR_MODE = String(process.env.FUGLE_COLLECTOR_MODE || "streaming").toLowerCase();
+const COLLECTOR_ROLE = String(process.env.FUGLE_COLLECTOR_ROLE || "default").toLowerCase();
+const SOURCE_HOST_ID = String(process.env.FUMAN_DAYTRADE_SOURCE_HOST_ID || process.env.FUMAN_SOURCE_HOST_ID || process.env.COMPUTERNAME || "unknown").trim();
+const SOURCE_HOST_ROLE = String(process.env.FUMAN_DAYTRADE_SOURCE_ROLE || "").trim().toLowerCase();
+const SOURCE_HOST_APPROVAL_FILE = path.join(RUNTIME_DIR, "config", "daytrade-source-host-approval.json");
 const STREAMING_URL = process.env.FUGLE_STREAMING_URL || "wss://api.fugle.tw/marketdata/v1.0/stock/streaming";
 const STREAMING_CHANNELS = [...new Set(String(process.env.FUGLE_STREAMING_CHANNELS || process.env.FUGLE_STREAMING_CHANNEL || "trades,aggregates,candles")
   .split(",")
@@ -32,11 +37,12 @@ const STREAMING_CHANNELS = [...new Set(String(process.env.FUGLE_STREAMING_CHANNE
   .filter(Boolean))];
 if (!STREAMING_CHANNELS.length) STREAMING_CHANNELS.push("trades", "aggregates");
 const STREAMING_CHANNEL = STREAMING_CHANNELS.join(",");
-const INTRADAY_ODD_LOT = false;
 const STREAMING_MAX_SYMBOLS = Math.max(1, Number(process.env.FUGLE_STREAMING_MAX_SYMBOLS || process.env.FUGLE_STREAMING_MAX_SUBSCRIPTIONS || 600));
 const STREAMING_MAX_TOTAL_SUBSCRIPTIONS = Math.max(STREAMING_CHANNELS.length, Number(process.env.FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS || 1800));
+const STREAMING_CANDLE_SYMBOLS = Math.max(0, Number(process.env.FUGLE_STREAMING_CANDLE_SYMBOLS || 1000));
 const STREAMING_SUBSCRIBE_CHUNK_SIZE = Math.max(1, Math.min(50, Number(process.env.FUGLE_STREAMING_SUBSCRIBE_CHUNK_SIZE || 50)));
-const STREAMING_RESUBSCRIBE_MS = Math.max(30000, Number(process.env.FUGLE_STREAMING_RESUBSCRIBE_MS || 60000));
+const STREAMING_RESUBSCRIBE_MS = Math.max(30000, Number(process.env.FUGLE_STREAMING_RESUBSCRIBE_MS || (COLLECTOR_ROLE === "daytrade" ? 16200000 : 30000)));
+const STREAMING_PINNED_PRIORITY_SYMBOLS = Math.max(0, Number(process.env.FUGLE_STREAMING_PINNED_PRIORITY_SYMBOLS || 40));
 const STREAMING_RECONNECT_INITIAL_MS = Math.max(1000, Number(
   process.env.FUGLE_STREAMING_RECONNECT_INITIAL_MS
   || process.env.FUGLE_STREAMING_RECONNECT_MS
@@ -46,6 +52,7 @@ const STREAMING_RECONNECT_MAX_MS = Math.max(STREAMING_RECONNECT_INITIAL_MS, Numb
   process.env.FUGLE_STREAMING_RECONNECT_MAX_MS
   || 30000,
 ));
+const STREAMING_STALE_RECONNECT_MS = Math.max(30000, Number(process.env.FUGLE_STREAMING_STALE_RECONNECT_MS || 120000));
 const STREAMING_STATUS_MS = Math.max(1000, Number(process.env.FUGLE_STREAMING_STATUS_MS || 5000));
 const BATCH_SIZE = Math.max(1, Number(process.env.FUGLE_COLLECTOR_BATCH_SIZE || 120));
 const PER_SYMBOL_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_DELAY_MS || process.env.FUGLE_COLLECTOR_PER_SYMBOL_DELAY_MS || 80));
@@ -67,7 +74,8 @@ const OPENING_BOOST_TARGET_COVERAGE = Math.max(0.5, Math.min(1, Number(process.e
 const STATE_DIR = path.dirname(FUGLE_WS_STATUS_FILE);
 const RATE_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-rate-state.json");
 const UNSUPPORTED_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-unsupported-symbols.json");
-const PRIORITY_SYMBOLS_FILE = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-ws-priority-symbols.json");
+const DAYTRADE_PRIORITY_SYMBOLS_CONTRACT_FILE = "fugle-daytrade-ws-priority-symbols.json";
+const PRIORITY_SYMBOLS_FILE = process.env.FUGLE_WS_PRIORITY_SYMBOLS_FILE || path.join(RUNTIME_DIR, "cache", "intraday", COLLECTOR_ROLE === "daytrade" ? DAYTRADE_PRIORITY_SYMBOLS_CONTRACT_FILE : "fugle-ws-priority-symbols.json");
 const ADAPTIVE_INITIAL_RPM = Math.max(10, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_INITIAL_RPM || 60));
 const ADAPTIVE_MIN_RPM = Math.max(5, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MIN_RPM || 20));
 const ADAPTIVE_MAX_RPM = Math.max(ADAPTIVE_MIN_RPM, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MAX_RPM || 180));
@@ -86,6 +94,18 @@ let last429At = "";
 let cooldownUntil = 0;
 let finmindCooldownUntil = 0;
 let lastFinmindError = "";
+
+function assertApprovedDaytradeSourceHost() {
+  if (COLLECTOR_ROLE !== "daytrade") return { ok: true, status: "not_required" };
+  let approval = null;
+  try { approval = JSON.parse(fs.readFileSync(SOURCE_HOST_APPROVAL_FILE, "utf8")); } catch {
+    throw new Error("daytrade_source_host_approval_missing");
+  }
+  if (approval?.approved !== true || String(approval.sourceRole || "") !== "writer" || String(approval.hostId || "") !== SOURCE_HOST_ID || SOURCE_HOST_ROLE !== "writer") {
+    throw new Error("daytrade_source_host_not_approved");
+  }
+  return { ok: true, status: "approved", file: SOURCE_HOST_APPROVAL_FILE };
+}
 
 function readSecret(paths) {
   for (const file of paths) {
@@ -113,12 +133,35 @@ function volumeToLots(value) {
 
 function readSymbols() {
   const payload = readJson(FUGLE_WS_SYMBOLS_FILE, {});
-  return [...new Set((payload.symbols || [])
-    .map(normalizeCode)
-    .filter((code) => /^\d{4}$/.test(code) && !code.startsWith("00")))];
+  const primary = normalizeSymbolList(payload.symbols);
+  if (primary.length || COLLECTOR_ROLE !== "daytrade") return primary;
+  return readDaytradeSymbolBootstrap();
 }
 
+function normalizeSymbolList(values) {
+  return [...new Set((Array.isArray(values) ? values : []).map((value) => normalizeCode(value?.symbol || value?.code || value)).filter((code) => /^\d{4}$/.test(code) && !code.startsWith("00")))];
+}
+
+function readDaytradeSymbolBootstrap() {
+  if (COLLECTOR_ROLE !== "daytrade") return [];
+  const bridge = readJson(PRIORITY_SYMBOLS_FILE, {});
+  return normalizeSymbolList([
+    ...(bridge.symbols || []),
+    ...(bridge.daytradeMotherPoolSymbols || []),
+    ...(bridge.daytradePrioritySymbols || []),
+    ...(bridge.daytradeHotPoolSymbols || []),
+    ...(bridge.daytradePriorityExtensionSymbols || []),
+  ]);
+}
+
+function symbolSource() {
+  const payload = readJson(FUGLE_WS_SYMBOLS_FILE, {});
+  if (normalizeSymbolList(payload.symbols).length) return "daytrade_symbols_cache";
+  if (readDaytradeSymbolBootstrap().length) return "priority_bridge_bootstrap_codes_only";
+  return "empty";
+}
 function writeStatus(extra = {}) {
+  const currentSymbolSource = symbolSource();
   writeJson(FUGLE_WS_STATUS_FILE, {
     ok: extra.ok !== false,
     pid: process.pid,
@@ -158,6 +201,8 @@ function writeStatus(extra = {}) {
     adaptive429MaxCooldownMs: ADAPTIVE_429_MAX_COOLDOWN_MS,
     adaptivePriorityOnlyAfter429Ms: ADAPTIVE_PRIORITY_ONLY_AFTER_429_MS,
     updatedAt: nowIso(),
+    symbolSource: currentSymbolSource,
+    symbolBootstrapOnly: currentSymbolSource === "priority_bridge_bootstrap_codes_only",
     ...extra,
   });
 }
@@ -374,6 +419,7 @@ function readPrioritySymbols(symbols) {
     dynamic: 0,
     hot: 0,
     daytrade: 0,
+    daytradeCandlePriority: 0,
     terminalPriority: 0,
     openingPriority: 0,
     symbols: 0,
@@ -397,6 +443,7 @@ function readPrioritySymbols(symbols) {
     counts[key] = count;
   };
 
+  addMany("daytradeCandlePriority", payload.daytradeCandlePrioritySymbols, { priority: true });
   addMany("daytrade", payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, { priority: true });
   addMany("terminalPriority", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, { priority: true });
   addMany("openingPriority", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, { priority: true });
@@ -956,13 +1003,56 @@ function chunkArray(values, size) {
   return out;
 }
 
-function selectStreamingSymbols() {
+function selectStreamingSymbols(rotationCursor = 0) {
   const allSymbols = readSymbols();
   const priority = readPrioritySymbols(allSymbols);
-  const maxSymbolsBySubscriptionBudget = Math.max(1, Math.floor(STREAMING_MAX_TOTAL_SUBSCRIPTIONS / Math.max(1, STREAMING_CHANNELS.length)));
-  const symbolLimit = Math.min(STREAMING_MAX_SYMBOLS, maxSymbolsBySubscriptionBudget);
+  const formalChannelCount = Math.max(1, STREAMING_CHANNELS.length);
+  const quoteRadarChannel = STREAMING_CHANNELS.includes("aggregates") ? "aggregates" : STREAMING_CHANNELS.includes("trades") ? "trades" : STREAMING_CHANNELS[0];
+  const aggregateRadarChannel = STREAMING_CHANNELS.includes("aggregates") ? "aggregates" : "";
+  const taipeiParts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" }).formatToParts(new Date());
+  const taipeiValues = Object.fromEntries(taipeiParts.map((part) => [part.type, part.value]));
+  const taipeiMinute = Number(taipeiValues.hour) * 60 + Number(taipeiValues.minute);
+  if (aggregateRadarChannel && taipeiMinute < 525) {
+    const seen = new Set();
+    const selected = [];
+    for (const value of [...priority.symbols, ...allSymbols]) {
+      const symbol = normalizeCode(value);
+      if (/^\d{4}$/.test(symbol) && !seen.has(symbol)) {
+        seen.add(symbol);
+        selected.push(symbol);
+      }
+      if (selected.length >= Math.min(STREAMING_MAX_SYMBOLS, STREAMING_MAX_TOTAL_SUBSCRIPTIONS)) break;
+    }
+    return {
+      allSymbols, priority, selected,
+      formalSymbols: [], candleRadarSymbols: [], candleChannel: "",
+      quoteRadarSymbols: [], aggregateRadarSymbols: selected,
+      quoteRadarChannel, aggregateRadarChannel,
+      formalChannelCount, formalExtraChannelCount: 0,
+      subscriptionCount: selected.length, requested: allSymbols.length,
+      symbolLimit: selected.length, pinnedPriorityCount: 0,
+      rotationCursor: 0, nextRotationCursor: 0,
+      rotationUniverse: allSymbols.length, rotationWindow: selected.length,
+      totalSubscriptionLimit: STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
+      candleCoverageTarget: 0,
+      subscriptionPlan: "preopen_0600_0844_full_market_aggregate_radar",
+    };
+  }
+  const formalExtraChannelCount = Math.max(0, formalChannelCount - 1);
+  const pinnedPriorityCount = Math.min(
+    STREAMING_PINNED_PRIORITY_SYMBOLS,
+    priority.symbols.length,
+    STREAMING_MAX_SYMBOLS,
+    Math.floor(STREAMING_MAX_TOTAL_SUBSCRIPTIONS / Math.max(1, formalExtraChannelCount + 1)),
+  );
+  const quoteRadarCapacity = Math.max(
+    0,
+    STREAMING_MAX_TOTAL_SUBSCRIPTIONS - (pinnedPriorityCount * formalExtraChannelCount),
+  );
+  const symbolLimit = Math.min(STREAMING_MAX_SYMBOLS, quoteRadarCapacity);
   const seen = new Set();
   const ordered = [];
+  const rotating = [];
   const add = (code) => {
     const symbol = normalizeCode(code);
     if (/^\d{4}$/.test(symbol) && !seen.has(symbol)) {
@@ -970,19 +1060,77 @@ function selectStreamingSymbols() {
       ordered.push(symbol);
     }
   };
-  for (const code of priority.symbols) add(code);
-  for (const code of allSymbols) add(code);
+  for (const code of priority.symbols.slice(0, pinnedPriorityCount)) add(code);
+  const rotatingSeen = new Set(ordered);
+  const addRotating = (code) => {
+    const symbol = normalizeCode(code);
+    if (/^\d{4}$/.test(symbol) && !rotatingSeen.has(symbol)) {
+      rotatingSeen.add(symbol);
+      rotating.push(symbol);
+    }
+  };
+  for (const code of priority.symbols.slice(pinnedPriorityCount)) addRotating(code);
+  for (const code of allSymbols) addRotating(code);
+  const rotatingCapacity = Math.max(0, symbolLimit - ordered.length);
+  const safeCursor = rotating.length ? ((Math.trunc(rotationCursor) % rotating.length) + rotating.length) % rotating.length : 0;
+  for (let index = 0; index < Math.min(rotatingCapacity, rotating.length); index += 1) {
+    ordered.push(rotating[(safeCursor + index) % rotating.length]);
+  }
+  const selected = ordered.slice(0, symbolLimit);
+  const formalSymbols = selected.slice(0, pinnedPriorityCount);
+  const candleChannel = STREAMING_CHANNELS.includes("candles") ? "candles" : "";
+  const candleRadarSymbols = candleChannel
+    ? selected.slice(pinnedPriorityCount, pinnedPriorityCount + Math.max(0, STREAMING_CANDLE_SYMBOLS - formalSymbols.length))
+    : [];
+  // Reserve the remaining subscription budget for the trades quote radar.
+  // Aggregate subscriptions are already retained for every formal priority symbol.
+  const formalSubscriptionCount = formalSymbols.length * formalChannelCount;
+  const tradeRadarCapacity = Math.max(
+    0,
+    STREAMING_MAX_TOTAL_SUBSCRIPTIONS - formalSubscriptionCount - candleRadarSymbols.length,
+  );
+  const quoteRadarSymbols = selected.slice(pinnedPriorityCount, pinnedPriorityCount + tradeRadarCapacity);
+  const aggregateRadarSymbols = [];
+  const subscriptionCount = formalSymbols.length + quoteRadarSymbols.length + (formalSymbols.length * formalExtraChannelCount) + candleRadarSymbols.length + aggregateRadarSymbols.length;
   return {
     allSymbols,
     priority,
-    selected: ordered.slice(0, symbolLimit),
-    requested: ordered.length,
+    selected,
+    formalSymbols,
+    candleRadarSymbols,
+    candleChannel,
+    quoteRadarSymbols,
+    aggregateRadarSymbols,
+    quoteRadarChannel,
+    aggregateRadarChannel,
+    formalChannelCount,
+    formalExtraChannelCount,
+    subscriptionCount,
+    requested: pinnedPriorityCount + rotating.length,
     symbolLimit,
+    pinnedPriorityCount,
+    rotationCursor: safeCursor,
+    nextRotationCursor: rotating.length ? (safeCursor + Math.max(1, rotatingCapacity)) % rotating.length : 0,
+    rotationUniverse: rotating.length,
+    rotationWindow: Math.min(rotatingCapacity, rotating.length),
     totalSubscriptionLimit: STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
+    candleCoverageTarget: candleChannel ? Math.min(STREAMING_CANDLE_SYMBOLS, selected.length) : 0,
+    subscriptionPlan: "formal_priority_all_channels_plus_candle_radar_plus_trades_quote_radar_plus_aggregate_formal_priority",
   };
 }
-
-function mergeStreamingQuotes(newQuotes) {
+let pendingStreamingQuotes = [];
+let streamingQuoteFlushTimer = null;
+function mergeStreamingQuotes(newQuotes, flush = false) {
+  if (!flush) {
+    pendingStreamingQuotes.push(...newQuotes);
+    if (!streamingQuoteFlushTimer) streamingQuoteFlushTimer = setTimeout(() => {
+      const batch = pendingStreamingQuotes;
+      pendingStreamingQuotes = [];
+      streamingQuoteFlushTimer = null;
+      mergeStreamingQuotes(batch, true);
+    }, 500);
+    return pendingStreamingQuotes.length;
+  }
   const current = readJson(FUGLE_WS_QUOTES_FILE, {});
   const rows = Array.isArray(current.quotes) ? current.quotes : [];
   const cutoff = Date.now() - QUOTE_TTL_MS;
@@ -1005,10 +1153,23 @@ function mergeStreamingQuotes(newQuotes) {
   return quotes.length;
 }
 
-function mergeStreamingCandles(newCandles) {
+let pendingStreamingCandles = [];
+let streamingCandleFlushTimer = null;
+function mergeStreamingCandles(newCandles, flush = false) {
+  if (!flush) {
+    pendingStreamingCandles.push(...newCandles);
+    if (!streamingCandleFlushTimer) streamingCandleFlushTimer = setTimeout(() => {
+      const batch = pendingStreamingCandles;
+      pendingStreamingCandles = [];
+      streamingCandleFlushTimer = null;
+      mergeStreamingCandles(batch, true);
+    }, 500);
+    return pendingStreamingCandles.length;
+  }
   const current = readJson(FUGLE_WS_CANDLES_FILE, {});
   const rows = Array.isArray(current.candles) ? current.candles : [];
-  const cutoff = Date.now() - Math.max(QUOTE_TTL_MS, 10 * 60 * 1000);
+  // Keep the complete trading session so MA20/MA35/MA58 readiness can accumulate.
+  const cutoff = Date.now() - Math.max(QUOTE_TTL_MS, 8 * 60 * 60 * 1000);
   const byKey = new Map();
   for (const row of rows) {
     const seen = Date.parse(row.candleSeenAt || row.updatedAt || current.updatedAt || "");
@@ -1048,18 +1209,14 @@ async function runStreamingCollector() {
     return;
   }
 
+  let rotationCursor = 0;
   const runOnce = () => new Promise((resolve) => {
-    let selection = selectStreamingSymbols();
+    let selection = selectStreamingSymbols(rotationCursor);
+    rotationCursor = selection.nextRotationCursor;
     let chunks = chunkArray(selection.selected, STREAMING_SUBSCRIBE_CHUNK_SIZE);
     let ws;
     let openedAt = "";
     let authenticated = false;
-    let authenticatedAt = "";
-    let authenticationCount = 0;
-    let subscriptionAckCount = 0;
-    const subscriptionAckChannels = new Set();
-    let subscriptionAckReady = false;
-    let lastCandleTime = "";
     let messages = 0;
     let quoteMessages = 0;
     let candleMessages = 0;
@@ -1076,9 +1233,16 @@ async function runStreamingCollector() {
     let lastForbiddenChannel = "";
     let lastSubscribeCycleAt = "";
     let lastSubscribeSignature = "";
+    let runLastMessageAt = "";
+    let staleRecoveryTriggered = false;
+    const staleDataWindow = STREAMING_STALE_RECONNECT_MS;
+    let staleRecoveryTimer;
     let closed = false;
     const writeStreamingStatus = (extra = {}) => {
-      const freshCount = countFreshCachedQuotes(selection.selected);
+      const freshCount = countFreshCachedQuotes(selection.allSymbols);
+      const priorityFreshCount = countFreshCachedQuotes(selection.priority.symbols);
+      const openedAtMs = openedAt ? Date.parse(openedAt) : 0;
+      const elapsedSeconds = openedAtMs > 0 ? Math.max(0.001, (Date.now() - openedAtMs) / 1000) : 0;
       writeStatus({
         mode: "streaming",
         channel: `websocket:${STREAMING_CHANNEL}`,
@@ -1091,31 +1255,24 @@ async function runStreamingCollector() {
         streamingOpenedAt: openedAt,
         websocketConnected: Boolean(ws && ws.readyState === WebSocket.OPEN),
         websocketAuthenticated: authenticated,
-        authenticatedAt,
-        authenticationCount,
-        intradayOddLot: INTRADAY_ODD_LOT,
-        subscriptionMode: "one-symbol-one-channel",
-        subscriptionAckCount,
-        subscriptionAckExpected: selection.selected.length * STREAMING_CHANNELS.length,
-        subscriptionAckChannels: [...subscriptionAckChannels],
-        subscriptionAckReady,
-        reconnectRequiresReauth: true,
-        lastCandleTime,
         streamingMessages: messages,
         streamingQuotes: quoteMessages,
+        streamingQuoteSpeedPerSec: elapsedSeconds > 0 ? Number((quoteMessages / elapsedSeconds).toFixed(4)) : 0,
         streamingCandles: candleMessages,
         streamingChannelMessages: channelMessages,
         streamingChannelQuotes: channelQuotes,
         streamingChannelCandles: channelCandles,
         lastMessageAt,
-        subscribed: selection.selected.length * STREAMING_CHANNELS.length,
+        subscribed: selection.subscriptionCount,
         subscribedSymbols: selection.selected.length,
         subscribedChannels: STREAMING_CHANNELS.length,
         pending: Math.max(0, selection.requested - selection.selected.length),
         requestedSymbols: selection.requested,
         allSymbols: selection.allSymbols.length,
         prioritySymbols: selection.priority.symbols.length,
-        priorityFreshCount: freshCount,
+        freshSymbols120s: freshCount,
+        priorityFreshCount,
+        priorityFreshSymbols120s: priorityFreshCount,
         prioritySource: selection.priority.source,
         priorityFileUpdatedAt: selection.priority.updatedAt,
         priorityDaytradeSymbols: selection.priority.counts.daytrade,
@@ -1135,9 +1292,30 @@ async function runStreamingCollector() {
         priorityHotSymbols: selection.priority.counts.hot,
         subscriptionLimit: STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
         subscriptionSymbolLimit: selection.symbolLimit,
-        subscriptionLimitApplied: selection.requested > selection.selected.length || selection.selected.length * STREAMING_CHANNELS.length >= STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
+        subscriptionLimitApplied: selection.requested > selection.selected.length || selection.subscriptionCount >= STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
+        pinnedPrioritySymbols: selection.pinnedPriorityCount,
+        formalSubscribedSymbols: selection.formalSymbols.length,
+        formalSubscribedChannels: selection.formalChannelCount,
+        candleRadarSymbols: selection.candleRadarSymbols.length,
+        candleChannel: selection.candleChannel,
+        candleCoverageTarget: selection.candleCoverageTarget,
+        quoteRadarSymbols: selection.quoteRadarSymbols.length,
+        quoteRadarChannel: selection.quoteRadarChannel,
+        aggregateRadarSymbols: selection.aggregateRadarSymbols.length,
+        aggregateRadarChannel: selection.aggregateRadarChannel,
+        candleSubscribedSymbols: selection.formalSymbols.length + selection.candleRadarSymbols.length,
+        tradeSubscribedSymbols: selection.formalSymbols.length + selection.quoteRadarSymbols.length,
+        aggregateSubscribedSymbols: selection.formalSymbols.length + selection.aggregateRadarSymbols.length,
+        subscriptionPlan: selection.subscriptionPlan,
+        rotationCursor: selection.rotationCursor,
+        nextRotationCursor: selection.nextRotationCursor,
+        rotationUniverse: selection.rotationUniverse,
+        rotationWindow: selection.rotationWindow,
+        rotationCoverageSeconds: selection.rotationWindow > 0
+          ? Number(((Math.ceil(selection.rotationUniverse / selection.rotationWindow) * STREAMING_RESUBSCRIBE_MS) / 1000).toFixed(3))
+          : 0,
         subscribeChunkSize: STREAMING_SUBSCRIBE_CHUNK_SIZE,
-        subscribeChunks: chunks.length * STREAMING_CHANNELS.length,
+        subscribeChunks: selection.subscriptionCount,
         subscribeChunksSent: chunksSent,
         subscribeCycles: cycles,
         lastSubscribeCycleAt,
@@ -1150,48 +1328,74 @@ async function runStreamingCollector() {
         subscribeForbiddenLastMessage: lastForbiddenMessage,
         reconnectInitialMs: STREAMING_RECONNECT_INITIAL_MS,
         reconnectMaxMs: STREAMING_RECONNECT_MAX_MS,
+        staleDataWindow,
+        staleRecoveryTriggered,
+        collectorRole: COLLECTOR_ROLE,
+        sourceHostId: SOURCE_HOST_ID,
+        sourceHostRole: SOURCE_HOST_ROLE,
+        sourceHostApprovalFile: SOURCE_HOST_APPROVAL_FILE,
         ...extra,
       });
     };
-    const subscribe = () => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
-      selection = selectStreamingSymbols();
-      chunks = chunkArray(selection.selected, STREAMING_SUBSCRIBE_CHUNK_SIZE);
-      const signature = `${STREAMING_CHANNELS.join(",")}|${selection.selected.join(",")}`;
-      if (lastSubscribeSignature && signature === lastSubscribeSignature) {
-        writeStreamingStatus();
-        return;
-      }
-      if (lastSubscribeSignature && signature !== lastSubscribeSignature) {
-        ws.close(1000, "priority selection changed; reconnect before resubscribe");
-        return;
-      }
-      lastSubscribeSignature = signature;
-      cycles += 1;
-      lastSubscribeCycleAt = nowIso();
-      for (const channel of STREAMING_CHANNELS) {
-        for (const chunk of chunks) {
-          for (const symbol of chunk) {
-            ws.send(JSON.stringify({ event: "subscribe", data: {
-              channel,
-              symbol,
-              intradayOddLot: INTRADAY_ODD_LOT,
-            } }));
-            chunksSent += 1;
-          }
+    let subscribeInProgress = false;
+    const subscribe = async () => {
+      if (!ws || ws.readyState !== WebSocket.OPEN || subscribeInProgress) return;
+      subscribeInProgress = true;
+      try {
+        selection = selectStreamingSymbols(rotationCursor);
+        rotationCursor = selection.nextRotationCursor;
+        chunks = chunkArray(selection.selected, STREAMING_SUBSCRIBE_CHUNK_SIZE);
+        const signature = `${selection.subscriptionPlan}|${STREAMING_CHANNELS.join(",")}|formal:${selection.formalSymbols.join(",")}|candles:${selection.candleChannel}:${selection.candleRadarSymbols.join(",")}|trades:${selection.quoteRadarChannel}:${selection.quoteRadarSymbols.join(",")}|aggregates:${selection.aggregateRadarChannel}:${selection.aggregateRadarSymbols.join(",")}`;
+        if (lastSubscribeSignature && signature === lastSubscribeSignature) {
+          writeStreamingStatus();
+          return;
         }
+        if (lastSubscribeSignature && signature !== lastSubscribeSignature) {
+          ws.close(1000, "priority selection changed; reconnect before resubscribe");
+          return;
+        }
+        lastSubscribeSignature = signature;
+        cycles += 1;
+        lastSubscribeCycleAt = nowIso();
+        let sent = 0;
+        const sendSubscription = async (channel, symbol) => {
+          if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          ws.send(JSON.stringify({ event: "subscribe", data: { channel, symbol } }));
+          chunksSent += 1;
+          sent += 1;
+          if (sent % 20 === 0) await new Promise((resolve) => setTimeout(resolve, 25));
+        };
+        // Candles are the formal 1m source. Subscribe them before high-volume
+        // trades/aggregates so quote traffic cannot starve the candle plan.
+        if (selection.candleChannel) {
+          for (const symbol of selection.formalSymbols) await sendSubscription(selection.candleChannel, symbol);
+          for (const symbol of selection.candleRadarSymbols) await sendSubscription(selection.candleChannel, symbol);
+        }
+        if (STREAMING_CHANNELS.includes("aggregates")) {
+          for (const symbol of selection.formalSymbols) await sendSubscription("aggregates", symbol);
+        }
+        if (STREAMING_CHANNELS.includes("trades")) {
+          for (const symbol of selection.formalSymbols) await sendSubscription("trades", symbol);
+        }
+        for (const symbol of selection.quoteRadarSymbols) await sendSubscription(selection.quoteRadarChannel, symbol);
+        if (selection.aggregateRadarChannel) {
+          for (const symbol of selection.aggregateRadarSymbols) await sendSubscription(selection.aggregateRadarChannel, symbol);
+        }
+        writeStreamingStatus();
+      } finally {
+        subscribeInProgress = false;
       }
-      writeStreamingStatus();
     };
 
     try {
       ws = new WebSocket(STREAMING_URL);
       ws.addEventListener("open", () => {
         openedAt = nowIso();
+        runLastMessageAt = "";
+        staleRecoveryTriggered = false;
         ws.send(JSON.stringify({ event: "auth", data: { apikey: apiKey } }));
-        authenticated = false;
-        subscriptionAckReady = false;
-        subscriptionAckChannels.clear();
+        // Fugle can acknowledge authentication after the old 800ms timer. Subscribe only
+        // after the authenticated event so the initial batch is not discarded.
         writeStreamingStatus();
       });
       ws.addEventListener("message", (event) => {
@@ -1199,19 +1403,9 @@ async function runStreamingCollector() {
         let payload = null;
         try { payload = JSON.parse(String(event.data || "")); } catch {}
         const text = String(event.data || "");
-        const eventName = String(payload?.event || payload?.type || "").toLowerCase();
-        if (eventName === "authenticated" || eventName === "auth") {
+        if (/authenticated|auth/i.test(text)) {
           authenticated = true;
-          authenticatedAt = nowIso();
-          authenticationCount += 1;
-          subscribe();
-        }
-        if (/^(subscribe|subscribed|subscription|subscriptions|ack)$/.test(eventName)) {
-          subscriptionAckCount += 1;
-          const ackData = payload?.data || {};
-          const ackChannel = String(ackData.channel || payload?.channel || "").toLowerCase();
-          if (ackChannel) subscriptionAckChannels.add(ackChannel);
-          subscriptionAckReady = subscriptionAckCount > 0 && subscriptionAckChannels.size >= STREAMING_CHANNELS.length;
+          if (!lastSubscribeSignature) subscribe();
         }
         const notice = getStreamingNotice(payload, text);
         if (/forbidden|rate.?limit|subscribe.?limit|exceed/i.test(notice.noticeText)) {
@@ -1231,13 +1425,13 @@ async function runStreamingCollector() {
           || STREAMING_CHANNELS[0];
         if (Object.prototype.hasOwnProperty.call(channelMessages, inferredChannel)) channelMessages[inferredChannel] += 1;
         if (inferredChannel === "candles") {
-          const candle = normalizeFugleCandle(payload);
-          if (candle) {
-            candleMessages += 1;
+          const candles = normalizeFugleCandles(payload);
+          if (candles.length) {
+            candleMessages += candles.length;
             if (Object.prototype.hasOwnProperty.call(channelCandles, inferredChannel)) channelCandles[inferredChannel] += 1;
             lastMessageAt = nowIso();
-            lastCandleTime = candle.candleTime || lastCandleTime;
-            mergeStreamingCandles([candle]);
+            runLastMessageAt = lastMessageAt;
+            mergeStreamingCandles(candles);
           }
           return;
         }
@@ -1248,6 +1442,7 @@ async function runStreamingCollector() {
           quoteMessages += 1;
           if (Object.prototype.hasOwnProperty.call(channelQuotes, inferredChannel)) channelQuotes[inferredChannel] += 1;
           lastMessageAt = nowIso();
+          runLastMessageAt = lastMessageAt;
           mergeStreamingQuotes([quote]);
         }
       });
@@ -1256,6 +1451,9 @@ async function runStreamingCollector() {
       });
       ws.addEventListener("close", () => {
         closed = true;
+        clearInterval(statusTimer);
+        clearInterval(subscribeTimer);
+        clearInterval(staleRecoveryTimer);
         writeStreamingStatus({ websocketConnected: false });
         resolve();
       });
@@ -1267,6 +1465,18 @@ async function runStreamingCollector() {
         if (closed) clearInterval(subscribeTimer);
         else subscribe();
       }, STREAMING_RESUBSCRIBE_MS);
+      staleRecoveryTimer = setInterval(() => {
+        if (closed) {
+          clearInterval(staleRecoveryTimer);
+          return;
+        }
+        const lastDataMs = Date.parse(runLastMessageAt || openedAt || "");
+        if (ws && ws.readyState === WebSocket.OPEN && lastDataMs > 0 && Date.now() - lastDataMs > staleDataWindow && !staleRecoveryTriggered) {
+          staleRecoveryTriggered = true;
+          writeStreamingStatus({ ok: false, websocketError: "reconnect_stale_source", staleDataWindow, staleRecoveryTriggered: true });
+          ws.close(1000, "stale source self-heal");
+        }
+      }, Math.min(STREAMING_STATUS_MS, 5000));
     } catch (error) {
       writeStreamingStatus({ ok: false, websocketError: error?.message || String(error) });
       resolve();

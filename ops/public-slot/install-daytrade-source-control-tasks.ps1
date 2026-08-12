@@ -7,15 +7,17 @@ $ErrorActionPreference = "Stop"
 $pwsh = "C:\Program Files\PowerShell\7\pwsh.exe"
 $gateInstaller = Join-Path $FumanRoot "ops\public-slot\install-daytrade-source-gate-tasks.ps1"
 $watchdogInstaller = Join-Path $FumanRoot "ops\public-slot\install-daytrade-unattended-watchdog-task.ps1"
+$websocketInstaller = Join-Path $FumanRoot "ops\public-slot\install-daytrade-websocket-collector-task.ps1"
 $preflight = Join-Path $RuntimeDir "ops\Run-DaytradePreflight0830.ps1"
 $finalVerdict = Join-Path $RuntimeDir "ops\Run-DaytradeFinalVerdict.ps1"
-foreach ($path in @($pwsh, $gateInstaller, $watchdogInstaller, $preflight, $finalVerdict)) {
+foreach ($path in @($pwsh, $gateInstaller, $watchdogInstaller, $websocketInstaller, $preflight, $finalVerdict)) {
   if (-not (Test-Path -LiteralPath $path)) { throw "Missing source-control dependency: $path" }
 }
 
 # Gate phases and watchdog have their own installers; keep all source-control tasks on the same S4U principal.
 & $gateInstaller -FumanRoot $FumanRoot -RuntimeDir $RuntimeDir
 & $watchdogInstaller -FumanRoot $FumanRoot -RuntimeDir $RuntimeDir
+& $websocketInstaller -FumanRoot $FumanRoot -RuntimeDir $RuntimeDir -Force
 
 $settings = New-ScheduledTaskSettingsSet `
   -AllowStartIfOnBatteries `
@@ -47,5 +49,5 @@ foreach ($task in $tasks) {
     -Force | Out-Null
 }
 
-Get-ScheduledTask -TaskName 'Fuman Daytrade Source Gate *','Fuman Daytrade Source Preflight 0830','Fuman Daytrade Source Final Verdict 0912','Fuman Fugle Daytrade Watchdog Every Minute' |
+Get-ScheduledTask -TaskName 'Fuman Daytrade Source Gate *','Fuman Daytrade Source Preflight 0830','Fuman Daytrade Source Final Verdict 0912','Fuman Fugle Daytrade Watchdog Every Minute','Fuman Fugle Daytrade WebSocket Collector 0600-1330' |
   Select-Object TaskName, State, @{ N = 'UserId'; E = { $_.Principal.UserId } }, @{ N = 'LogonType'; E = { $_.Principal.LogonType } }, @{ N = 'RunLevel'; E = { $_.Principal.RunLevel } }
