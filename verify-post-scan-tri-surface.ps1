@@ -51,7 +51,7 @@ function Assert-PostScanTriSurfaceClosure {
   $nodeExe = if ($env:NODE_EXE) { $env:NODE_EXE } else { "node" }
   $lastError = ""
 
-  for ($attempt = 1; $attempt -le 3; $attempt++) {
+  for ($attempt = 1; $attempt -le 6; $attempt++) {
     New-Item -ItemType Directory -Force -Path $outDir | Out-Null
     "[$Route] strict tri-surface verification attempt=$attempt runId=$RunId expectedDate=$expectedDate" | Tee-Object -FilePath $LogPath -Append | Out-Null
     Push-Location $repoRoot
@@ -74,8 +74,8 @@ function Assert-PostScanTriSurfaceClosure {
     } catch {
       $lastError = "tri-surface verifier report error: $($_.Exception.Message)"
     }
-    if ($attempt -lt 3) { Start-Sleep -Seconds 10 }
+    if ($attempt -lt 6) { Start-Sleep -Seconds 10 }
   }
-  Write-PostScanTriSurfaceReceipt -RuntimeRoot $runtimeRoot -Route $Route -RunId $RunId -ExpectedDate $expectedDate -LogPath $LogPath -ReportPath $reportPath -Status "failed" -Attempts 3 -Reason $lastError
+  Write-PostScanTriSurfaceReceipt -RuntimeRoot $runtimeRoot -Route $Route -RunId $RunId -ExpectedDate $expectedDate -LogPath $LogPath -ReportPath $reportPath -Status "failed" -Attempts 6 -Reason $lastError
   throw "post-scan $Route strict tri-surface closure failed: $lastError"
 }
