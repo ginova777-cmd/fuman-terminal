@@ -4730,7 +4730,7 @@
 
   function ensureWatchlistShell() {
     if (window.FUMAN_WATCHLIST_SHELL_INSTANCE) return Promise.resolve(window.FUMAN_WATCHLIST_SHELL_INSTANCE);
-    const version = "watchlist-rich-shell-20260714-detail-sync-01";
+    const version = "watchlist-rich-shell-20260813-daily-kline-01";
     return loadScriptOnce(`terminal-watchlist-shell.js?v=${encodeURIComponent(version)}`, "data-fuman-watchlist-shell")
       .then(() => window.FUMAN_WATCHLIST_SHELL_MODULE?.install?.({}) || window.FUMAN_WATCHLIST_SHELL_INSTANCE || null)
       .catch(() => null);

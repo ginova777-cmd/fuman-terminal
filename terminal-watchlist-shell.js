@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260714-detail-sync-01";
+  const VERSION = "watchlist-rich-shell-20260813-daily-kline-01";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   const WATCHLIST_MAX_ITEMS = 10;
@@ -27,6 +27,9 @@
   let matchIndexPromise = null;
   let matchIndexLoaded = false;
   const matchIndexByCode = new Map();
+  const dailyKlineCache = new Map();
+  const dailyKlinePending = new Set();
+  const dailyKlineRanges = new Map();
 
   function normalizeCode(value) {
     return String(value ?? "").trim().match(/\d{4}/)?.[0] || "";
@@ -224,6 +227,117 @@
     const n = number(value);
     return `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
   }
+  function shortDate(value) {
+    const text = String(value || "");
+    return /^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text.slice(5, 7)}/${text.slice(8, 10)}` : "--";
+  }
+
+  function dailyKlineEntry(code) {
+    return dailyKlineCache.get(normalizeCode(code)) || null;
+  }
+
+  function averageSeries(rows, period) {
+    return rows.map((row, index) => {
+      if (index + 1 < period) return null;
+      let total = 0;
+      for (let cursor = index - period + 1; cursor <= index; cursor += 1) total += number(rows[cursor].close);
+      return total / period;
+    });
+  }
+
+  function klineSvg(rows) {
+    const width = 860;
+    const height = 308;
+    const left = 42;
+    const right = 14;
+    const top = 14;
+    const priceBottom = 218;
+    const volumeTop = 238;
+    const volumeBottom = 284;
+    const plotWidth = width - left - right;
+    const bars = rows.filter((row) => number(row.open) > 0 && number(row.high) > 0 && number(row.low) > 0 && number(row.close) > 0);
+    if (bars.length < 20) return '<div class="watch-kline-empty">正式日 K 資料不足，暫不繪圖。</div>';
+    const maxHigh = Math.max(...bars.map((row) => number(row.high)));
+    const minLow = Math.min(...bars.map((row) => number(row.low)));
+    const spread = Math.max(maxHigh - minLow, maxHigh * 0.04, 1);
+    const high = maxHigh + spread * 0.08;
+    const low = Math.max(0, minLow - spread * 0.08);
+    const priceHeight = priceBottom - top;
+    const x = (index) => left + ((index + 0.5) / bars.length) * plotWidth;
+    const y = (value) => top + ((high - value) / (high - low)) * priceHeight;
+    const volumeMax = Math.max(1, ...bars.map((row) => number(row.volumeLots)));
+    const step = plotWidth / bars.length;
+    const bodyWidth = Math.max(2, Math.min(10, step * 0.58));
+    const grid = [0, 0.5, 1].map((ratio) => {
+      const yy = top + priceHeight * ratio;
+      const label = (high - (high - low) * ratio).toFixed(1);
+      return `<line x1="${left}" y1="${yy}" x2="${width - right}" y2="${yy}" class="watch-kline-grid"/><text x="2" y="${yy + 4}" class="watch-kline-axis">${label}</text>`;
+    }).join("");
+    const candles = bars.map((bar, index) => {
+      const up = number(bar.close) >= number(bar.open);
+      const color = up ? "#ff5872" : "#21c79a";
+      const xx = x(index);
+      const openY = y(number(bar.open));
+      const closeY = y(number(bar.close));
+      const wickTop = y(number(bar.high));
+      const wickBottom = y(number(bar.low));
+      const bodyTop = Math.min(openY, closeY);
+      const bodyHeight = Math.max(1.5, Math.abs(closeY - openY));
+      const volumeHeight = (number(bar.volumeLots) / volumeMax) * (volumeBottom - volumeTop);
+      return `<line x1="${xx}" y1="${wickTop}" x2="${xx}" y2="${wickBottom}" stroke="${color}" stroke-width="1.3"/><rect x="${xx - bodyWidth / 2}" y="${bodyTop}" width="${bodyWidth}" height="${bodyHeight}" rx="1" fill="${color}"/><rect x="${xx - bodyWidth / 2}" y="${volumeBottom - volumeHeight}" width="${bodyWidth}" height="${Math.max(1, volumeHeight)}" rx="1" fill="${color}" opacity=".62"><title>${bar.date}｜成交 ${number(bar.volumeLots).toLocaleString("zh-TW", { maximumFractionDigits: 0 })} 張</title></rect>`;
+    }).join("");
+    const line = (period, color) => {
+      const values = averageSeries(bars, period);
+      const points = values.map((value, index) => value ? `${x(index)},${y(value)}` : "").filter(Boolean).join(" ");
+      return points ? `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>` : "";
+    };
+    const labels = [0, Math.floor((bars.length - 1) / 3), Math.floor((bars.length - 1) * 2 / 3), bars.length - 1]
+      .map((index) => `<text x="${x(index)}" y="${height - 4}" text-anchor="middle" class="watch-kline-axis">${shortDate(bars[index].date)}</text>`).join("");
+    return `<svg class="watch-kline-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="日 K 線與成交量">${grid}<line x1="${left}" y1="${volumeTop - 8}" x2="${width - right}" y2="${volumeTop - 8}" class="watch-kline-divider"/>${candles}${line(5, "#f4c656")}${line(10, "#4aa7ff")}${line(20, "#b18ae3")}${labels}</svg>`;
+  }
+
+  function dailyKlineHtml(row) {
+    const code = normalizeCode(row?.code);
+    const range = [60, 120, 240].includes(dailyKlineRanges.get(code)) ? dailyKlineRanges.get(code) : 120;
+    const payload = dailyKlineEntry(code);
+    const controls = [60, 120, 240].map((value) => `<button type="button" class="watch-kline-range ${range === value ? "active" : ""}" data-watch-k-range="${value}" aria-pressed="${range === value ? "true" : "false"}">${value} 日</button>`).join("");
+    if (!payload) {
+      return `<section class="watch-kline-panel"><header class="watch-kline-head"><div><span>日 K</span><strong>正式 OHLCV 載入中</strong></div><div class="watch-kline-controls">${controls}</div></header><div class="watch-kline-loading">讀取 ${escapeText(code)} 正式日 OHLCV...</div></section>`;
+    }
+    if (payload.ok !== true || !Array.isArray(payload.bars) || !payload.bars.length) {
+      return `<section class="watch-kline-panel"><header class="watch-kline-head"><div><span>日 K</span><strong>正式 OHLCV 無法顯示</strong></div><div class="watch-kline-controls">${controls}</div></header><div class="watch-kline-empty">${escapeText(payload.error || "日 K 正式來源暫時無資料")}</div></section>`;
+    }
+    const bars = payload.bars.slice(-range);
+    const last = bars[bars.length - 1];
+    const previous = bars[bars.length - 2] || last;
+    const change = number(last.close) - number(previous.close);
+    const pct = previous.close ? change / number(previous.close) * 100 : 0;
+    const source = String(payload.source || "正式日 OHLCV").replace(/^supabase:/, "");
+    return `<section class="watch-kline-panel"><header class="watch-kline-head"><div><span>日 K</span><strong>${shortDate(last.date)}　開 ${formatPrice(last.open)}　高 ${formatPrice(last.high)}　低 ${formatPrice(last.low)}　收 <b class="${change >= 0 ? "watch-up" : "watch-down"}">${formatPrice(last.close)}</b></strong><small>${escapeText(source)}｜${bars.length} 根｜${change >= 0 ? "+" : ""}${pct.toFixed(2)}%</small></div><div class="watch-kline-controls">${controls}</div></header><div class="watch-kline-legend"><span class="ma5">MA5</span><span class="ma10">MA10</span><span class="ma20">MA20</span><span>下方為成交量（張）</span></div>${klineSvg(bars)}</section>`;
+  }
+
+  async function hydrateDailyKline(code, force = false) {
+    const target = normalizeCode(code);
+    if (!target || dailyKlinePending.has(target) || (!force && dailyKlineCache.has(target))) return dailyKlineCache.get(target) || null;
+    dailyKlinePending.add(target);
+    try {
+      const response = await fetch(`/api/daily-kline?code=${encodeURIComponent(target)}&limit=260&t=${Date.now()}`, { cache: "no-store" });
+      const payload = await response.json().catch(() => null);
+      const next = response.ok && payload?.ok === true ? payload : { ok: false, error: payload?.error || `daily_kline_http_${response.status}` };
+      dailyKlineCache.set(target, next);
+      if (selectedCode === target) {
+        const active = readRows().map(mergeQuote).find((row) => row.code === target);
+        if (active) renderAnalysis(active);
+      }
+      return next;
+    } catch {
+      const failure = { ok: false, error: "daily_kline_network_error" };
+      dailyKlineCache.set(target, failure);
+      return failure;
+    } finally {
+      dailyKlinePending.delete(target);
+    }
+  }
   function normalizeMatchLabel(match) {
     if (!match) return "";
     if (typeof match === "string") return match.trim();
@@ -388,6 +502,17 @@
         refreshSelected();
         return;
       }
+      const range = event.target.closest("[data-watch-k-range]");
+      if (range) {
+        event.preventDefault();
+        const value = Number(range.dataset.watchKRange);
+        if ([60, 120, 240].includes(value) && selectedCode) {
+          dailyKlineRanges.set(selectedCode, value);
+          const active = readRows().map(mergeQuote).find((row) => row.code === selectedCode);
+          if (active) renderAnalysis(active);
+        }
+        return;
+      }
       const card = event.target.closest(".watchlist-card[data-code]");
       if (card) {
         event.preventDefault();
@@ -530,6 +655,10 @@
       hydrateMeta(row.code);
       hydrateQuote(row.code);
     });
+    if (selectedCode) {
+      dailyKlineCache.delete(selectedCode);
+      hydrateDailyKline(selectedCode, true).catch(() => {});
+    }
     render();
   }
 
@@ -612,6 +741,7 @@
     const action = pct >= 3 ? "等待拉回" : "等待轉強";
     const score = Math.max(0, Math.min(100, Math.round(50 + pct * 8)));
     const matchSummary = strategyMatchSummary(row, score, pct);
+    const kline = dailyKlineHtml(row);
     ensureMatchIndexForAnalysis(row.code);
     panel.innerHTML = `
       <div class="watch-analysis-panel ta-dashboard blackbean-stock-detail">
@@ -621,6 +751,7 @@
           <article class="watch-metric"><span>漲跌幅</span><strong class="${pct >= 0 ? "watch-up" : "watch-down"}">${formatPct(pct)}</strong><em>前收 ${formatPrice(prev)} → 現價 <b class="${pct >= 0 ? "watch-up" : "watch-down"}">${formatPrice(close)}</b></em></article>
           <article class="watch-metric watch-match-metric"><span>符合策略</span><strong>${matchSummary.labels.length ? matchSummary.labels.map((label) => `<b>${escapeText(label)}</b>`).join("") : "無"}</strong><em>${escapeText(matchSummary.detail)}</em></article>
         </section>
+        ${kline}
         <section class="watch-detail-sections">
           <article class="watch-detail-section-card trend"><span>趨勢</span><strong>${trend}</strong><b>${formatPct(pct)}</b><em>收盤位於日內區間參考。</em></article>
           <article class="watch-detail-section-card price"><span>價位</span><strong class="${pct >= 0 ? "watch-up" : "watch-down"}">現價 ${formatPrice(close)}</strong><b>${formatPrice(support)} / ${formatPrice(pressure1)}</b><em>支撐觀察：${formatPrice(support)}；壓力觀察：${formatPrice(pressure1)}、${formatPrice(pressure2)}、${formatPrice(pressure3)}。</em></article>
@@ -634,6 +765,7 @@
         </section>
       </div>
     `;
+    hydrateDailyKline(row.code).catch(() => {});
   }
 
   async function hydrateMeta(code) {
@@ -738,7 +870,7 @@
       #watchlist-view .watchlist-rich-shell-head { padding:18px 20px; border-bottom:1px solid rgba(226,178,87,.18); }
       #watchlist-view .watchlist-rich-shell-head h2 { margin:0 0 8px; color:#f7f7f8; font-size:18px; }
       #watchlist-view .watchlist-rich-shell-head p, #watchlist-view .watchlist-list-card p { margin:0; color:#91a0bb; font-size:13px; }
-      #watchlist-view .watchlist-layout { display:grid; grid-template-columns:396px minmax(0,1fr); gap:16px; padding:16px 18px 18px; min-height:620px; background:rgba(6,13,22,.55); }
+      #watchlist-view .watchlist-layout { display:grid; grid-template-columns:300px minmax(0,1fr); gap:16px; padding:16px 18px 18px; min-height:620px; background:rgba(6,13,22,.55); }
       #watchlist-view .watchlist-list-card { border:1px solid rgba(226,178,87,.35); border-radius:8px; padding:14px; background:rgba(10,20,30,.78); }
       #watchlist-view .watchlist-list-title { display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; }
       #watchlist-view .watchlist-list-title h3 { margin:0; color:#f7f7f8; font-size:16px; }
@@ -773,6 +905,23 @@
       #watchlist-view .watch-match-metric strong { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:14px; line-height:1.25; }
       #watchlist-view .watch-match-metric strong b { display:inline-flex; align-items:center; min-height:24px; border:1px solid rgba(48,211,162,.35); border-radius:999px; padding:3px 8px; background:rgba(48,211,162,.12); color:#e8fff7; font-size:12px; line-height:1.2; white-space:normal; }
       #watchlist-view .watch-metric em, #watchlist-view .watch-detail-section-card em { display:block; margin-top:8px; color:#91a0bb; font-size:12px; line-height:1.6; font-style:normal; }
+      #watchlist-view .watch-kline-panel { border:1px solid rgba(139,164,199,.28); border-radius:8px; background:#0b1420; margin:0 0 18px; overflow:hidden; }
+      #watchlist-view .watch-kline-head { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; padding:15px 17px 10px; border-bottom:1px solid rgba(139,164,199,.18); }
+      #watchlist-view .watch-kline-head span { display:block; color:#94a8c2; font-size:12px; font-weight:900; margin-bottom:5px; }
+      #watchlist-view .watch-kline-head strong { display:block; color:#eaf2ff; font-size:14px; font-weight:900; line-height:1.5; }
+      #watchlist-view .watch-kline-head small { display:block; margin-top:3px; color:#71839c; font-size:11px; }
+      #watchlist-view .watch-kline-controls { display:flex; gap:5px; flex-shrink:0; }
+      #watchlist-view .watch-kline-range { min-width:47px; height:30px; border:1px solid #29394e; border-radius:5px; background:#111c2c; color:#a5b4c8; font-size:12px; font-weight:900; cursor:pointer; }
+      #watchlist-view .watch-kline-range.active { border-color:#e8b44b; background:#e8b44b; color:#161d29; }
+      #watchlist-view .watch-kline-legend { display:flex; flex-wrap:wrap; gap:11px; padding:9px 17px 0; color:#71839c; font-size:11px; font-weight:800; }
+      #watchlist-view .watch-kline-legend .ma5 { color:#f4c656; }
+      #watchlist-view .watch-kline-legend .ma10 { color:#4aa7ff; }
+      #watchlist-view .watch-kline-legend .ma20 { color:#b18ae3; }
+      #watchlist-view .watch-kline-svg { display:block; width:100%; height:300px; padding:3px 10px 8px 0; box-sizing:border-box; }
+      #watchlist-view .watch-kline-grid { stroke:rgba(135,157,189,.17); stroke-width:1; stroke-dasharray:3 4; }
+      #watchlist-view .watch-kline-divider { stroke:rgba(135,157,189,.24); stroke-width:1; }
+      #watchlist-view .watch-kline-axis { fill:#687b94; font-size:11px; font-weight:700; }
+      #watchlist-view .watch-kline-loading, #watchlist-view .watch-kline-empty { min-height:210px; display:grid; place-items:center; color:#8fa2bd; font-size:13px; font-weight:800; text-align:center; padding:16px; }
       #watchlist-view .watch-detail-sections { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:14px; margin-bottom:18px; }
       #watchlist-view .watch-detail-section-card { min-height:160px; border-top:4px solid #f24b62; }
       #watchlist-view .watch-detail-section-card.price { border-top-color:#727888; }
