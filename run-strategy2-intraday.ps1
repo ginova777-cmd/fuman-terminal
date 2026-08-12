@@ -252,6 +252,6 @@ if (-not (Test-Strategy2LatestMatchesTarget $verifiedPayload $targetDate)) {
   "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log
   exit 3
 }
-Write-Strategy2Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
+Write-Strategy2Receipt "published_pending_closure" 0 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @("intraday result published; awaiting after-window strict tri-surface closure")
 
 "=== Strategy2 intraday patrol end $(Get-Date) ===" >> $log

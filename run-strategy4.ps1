@@ -286,7 +286,7 @@ $datePreflightExit = $LASTEXITCODE
 if ($datePreflightExit -eq 10) {
   $reason = "Strategy4 date preflight skipped formal scan because market is closed; preserving previous good."
   Write-Log $reason
-  Write-Strategy4Receipt "complete" 0 $true 0 "" @($reason)
+  Write-Strategy4Receipt "skipped_market_closed" 0 $false 0 "" @($reason) $reason
   exit 0
 }
 if ($datePreflightExit -ne 0) {
