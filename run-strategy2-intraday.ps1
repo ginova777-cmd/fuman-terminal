@@ -145,13 +145,29 @@ function Write-Strategy2BlockedPreserve($Reason, $Payload) {
   Write-Strategy2Receipt "blocked_preserved" 0 $false $count $runId @($Reason) $Reason $true $true
 }
 
+function Complete-Strategy2AfterWindowClosure($Payload, $Warnings = @()) {
+  . "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
+  $runId = [string]$Payload.runId
+  $count = [int]$Payload.count
+  Write-Strategy2Receipt "verifying" 0 $false $count $runId $Warnings
+  try {
+    Assert-PostScanTriSurfaceClosure -Route "strategy2" -RunId $runId -LogPath $log | Out-Null
+  } catch {
+    $reason = "critical scan failed during strict tri-surface verification: $($_.Exception.Message)"
+    $reason >> $log
+    Write-Strategy2Receipt "failed" 1 $false 0 "" @($Warnings + $reason) $reason
+    exit 1
+  }
+  Write-Strategy2Receipt "complete" 0 $true $count $runId $Warnings
+}
+
 function Invoke-Strategy2AfterWindowRepair($Reason) {
   $targetDate = Get-Strategy2TaipeiDateKey
   $latest = Assert-Strategy2SupabaseLatest
   $latestDate = Get-Strategy2RunIdDate $latest.runId
   if ($latestDate -eq $targetDate) {
     "Strategy2 after-window latest already matches target date $targetDate runId=$($latest.runId); preserving latest." >> $log
-    Write-Strategy2Receipt "complete" 0 $true ([int]$latest.count) ([string]$latest.runId) @($Reason) $Reason $true $true
+    Complete-Strategy2AfterWindowClosure $latest @($Reason, "preservedLatest=true", "publishBlocked=true")
     return $true
   }
 
@@ -179,7 +195,7 @@ function Invoke-Strategy2AfterWindowRepair($Reason) {
     Write-Strategy2Receipt "failed" 1 $false 0 ([string]$after.runId) @("after-window repair produced run date $afterDate, expected $targetDate", $Reason) "after-window repair did not produce target-date run"
     exit 1
   }
-  Write-Strategy2Receipt "complete" 0 $true ([int]$after.count) ([string]$after.runId) @("after-window 1m replay repair complete", $Reason)
+  Complete-Strategy2AfterWindowClosure $after @("after-window 1m replay repair complete", $Reason)
   return $true
 }
 "=== Strategy2 intraday patrol start $(Get-Date) ===" | Out-File $log -Encoding utf8
