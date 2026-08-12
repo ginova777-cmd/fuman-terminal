@@ -212,6 +212,7 @@
     "verify:strategy4-match-yield": "node --use-system-ca scripts/verify-strategy4-match-yield-diagnostics.js",
     "verify:strategy4-canonical-closure": "node --use-system-ca scripts/verify-strategy4-canonical-closure.js",
     "verify:strategy4-full-closure": "npm run verify:strategy4-source-root && npm run verify:strategy4-match-yield && npm run verify:strategy4-canonical-closure && npm run verify:strategy4-88-data-chain",
+    "verify:strategy4-daily-publish": "node --use-system-ca scripts/verify-strategy4-daily-publish.js",
     "verify:strategy4-current-bad-source-drill": "node --use-system-ca scripts/strategy4-current-bad-source-drill.js",
     "verify:strategy4-prewater-fixtures": "node scripts/verify-strategy4-prewater-fixture.js --fixture=all",
     "verify:strategy4-business-fields": "node scripts/verify-strategy4-business-fields.js",

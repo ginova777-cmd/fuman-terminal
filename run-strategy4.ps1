@@ -233,6 +233,8 @@ function Invoke-Strategy4ClosureAndLine {
   $lineFile = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-$((Get-Date).ToString('yyyyMMdd')).json"
   $lineReceipt = Get-Content -LiteralPath $lineFile -Raw | ConvertFrom-Json
   if ($lineReceipt.line_push_ok -ne $true -or [string]$lineReceipt.runId -ne $RunId -or [int]$lineReceipt.count -ne $ExpectedCount) { throw "Strategy4 LINE receipt mismatch push=$($lineReceipt.line_push_ok) runId=$($lineReceipt.runId) count=$($lineReceipt.count)" }
+  & $nodeExe "--use-system-ca" "scripts\verify-strategy4-daily-publish.js" "--expect-run-id=$RunId" "--expect-count=$ExpectedCount" *>&1 | Tee-Object -FilePath $log -Append
+  if ($LASTEXITCODE -ne 0) { throw "Strategy4 formal daily publish verifier failed exit=$LASTEXITCODE" }
   Write-Log "Strategy4 LINE closure complete runId=$RunId count=$ExpectedCount"
 }
 . "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
