@@ -44,6 +44,7 @@ function Write-Strategy4Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     label = "strategy4 full scan"
     tier = "critical"
     startedAt = $scanStartedAt
+    marketDate = (Get-Date).ToString("yyyyMMdd")
     finishedAt = (Get-Date).ToString("o")
     status = $Status
     exitCode = $ExitCode
@@ -255,27 +256,13 @@ function Invoke-Strategy4InlineTerminalVerify {
     Pop-Location
   }
 }
+. "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
 function Invoke-Strategy4StrictTriSurfaceVerify {
   param([string]$RunId)
   if ([string]::IsNullOrWhiteSpace($RunId)) { throw "Strategy4 strict tri-surface verify missing runId" }
-  $outDir = Join-Path $RuntimeRoot "outputs\strategy4-tri-surface-chain"
-  New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-  Push-Location $repo
-  try {
-    $expectedDate = (Get-Date).ToString("yyyyMMdd")
-    Write-Log "Strategy4 strict tri-surface verify start runId=$RunId expectedDate=$expectedDate"
-    & $nodeExe "scripts\verify-terminal-resource-chain.js" "--routes=strategy4" "--expected-date=$expectedDate" "--require-unattended" "--out=$outDir" *>&1 | Tee-Object -FilePath $log -Append
-    $verifyExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
-    if ($verifyExit -ne 0) { throw "strategy4 strict tri-surface verifier exit=$verifyExit" }
-    $reportPath = Join-Path $outDir "terminal-resource-chain-audit.json"
-    $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
-    $row = @($report.results | Where-Object { $_.key -eq "strategy4" }) | Select-Object -First 1
-    if ($report.ok -ne $true -or $null -eq $row -or $row.ok -ne $true) { throw "strategy4 strict tri-surface verifier ok=false" }
-    if ([string]$row.supabase.runId -ne $RunId) { throw "strategy4 strict tri-surface runId mismatch expected=$RunId actual=$($row.supabase.runId)" }
-    Write-Log "Strategy4 strict tri-surface verify ok runId=$RunId"
-  } finally {
-    Pop-Location
-  }
+  Write-Log "Strategy4 strict tri-surface closure start runId=$RunId"
+  Assert-PostScanTriSurfaceClosure -Route "strategy4" -RunId $RunId -LogPath $log | Out-Null
+  Write-Log "Strategy4 strict tri-surface closure verified runId=$RunId"
 }
 Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
 . "${PSScriptRoot}\schedule-guard.ps1"

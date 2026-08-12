@@ -39,6 +39,7 @@ function Write-Strategy3Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     label = "strategy3 raw refresh"
     tier = "critical"
     startedAt = $scanStartedAt
+    marketDate = (Get-Date).ToString("yyyyMMdd")
     finishedAt = (Get-Date).ToString("o")
     status = $Status
     exitCode = $ExitCode
