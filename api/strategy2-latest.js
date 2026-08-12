@@ -2224,7 +2224,7 @@ async function handler(request, response) {
           status: "ready",
         })
         : {};
-      const responsePayload = gatedPayload?.sourceGate?.publishAllowed === true
+      const responsePayload = gatedPayload?.publishAllowed === true
         ? {
           ...gatedPayload,
           ...approvedSnapshotFields,
@@ -2280,6 +2280,7 @@ async function handler(request, response) {
 };
 
 module.exports = withEntitlementRequired(handler, "strategy2");
+
 
 
 
