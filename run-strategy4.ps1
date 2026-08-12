@@ -216,6 +216,25 @@ function Invoke-Strategy4InlineTerminalVerify {
     Pop-Location
   }
 }
+function Invoke-Strategy4ClosureAndLine {
+  param([string]$RunId, [int]$ExpectedCount)
+  if ([string]::IsNullOrWhiteSpace($RunId) -or $ExpectedCount -le 0) { throw "Strategy4 LINE closure missing runId or count" }
+  $commands = @(
+    @("scripts\verify-strategy4-source-root.js"), @("scripts\verify-strategy4-match-yield-diagnostics.js"), @("scripts\verify-strategy4-canonical-closure.js"), @("scripts\verify-strategy4-88-data-chain.js"), @("scripts\verify-terminal-daily-ohlcv.js")
+  )
+  foreach ($command in $commands) {
+    & $nodeExe "--use-system-ca" @command *>&1 | Tee-Object -FilePath $log -Append
+    if ($LASTEXITCODE -ne 0) { throw "Strategy4 closure verifier failed: $($command[0]) exit=$LASTEXITCODE" }
+  }
+  & $nodeExe "--use-system-ca" "scripts\send-strategy-line-card.js" "--strategy=strategy4" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
+  if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE dry-run failed exit=$LASTEXITCODE" }
+  & $nodeExe "--use-system-ca" "scripts\send-strategy-line-card.js" "--strategy=strategy4" *>&1 | Tee-Object -FilePath $log -Append
+  if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE push failed exit=$LASTEXITCODE" }
+  $lineFile = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-$((Get-Date).ToString('yyyyMMdd')).json"
+  $lineReceipt = Get-Content -LiteralPath $lineFile -Raw | ConvertFrom-Json
+  if ($lineReceipt.line_push_ok -ne $true -or [string]$lineReceipt.runId -ne $RunId -or [int]$lineReceipt.count -ne $ExpectedCount) { throw "Strategy4 LINE receipt mismatch push=$($lineReceipt.line_push_ok) runId=$($lineReceipt.runId) count=$($lineReceipt.count)" }
+  Write-Log "Strategy4 LINE closure complete runId=$RunId count=$ExpectedCount"
+}
 . "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
 function Invoke-Strategy4StrictTriSurfaceVerify {
   param([string]$RunId)
@@ -444,6 +463,7 @@ try {
     }
     Write-Strategy4Receipt "complete" 0 $true ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) $postScanWarnings
     Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId ([string]$dbVerify.runId) -ExpectedDate ((Get-Date).ToString("yyyyMMdd")) -Row $triSurfaceRow
+    try { Invoke-Strategy4ClosureAndLine ([string]$dbVerify.runId) ([int]$dbVerify.resultCount) } catch { $reason = "critical scan failed during Strategy4 LINE closure: $($_.Exception.Message)"; Write-Log $reason; Write-Strategy4Receipt "failed" 1 $false 0 "" @($postScanWarnings + $reason) $reason; exit 1 }
     Write-Log "Strategy4 DB readback verification ok after API verification failure: runId=$($dbVerify.runId) resultCount=$($dbVerify.resultCount) readbackCount=$($dbVerify.readbackCount)"
     Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
     exit 0
@@ -472,4 +492,5 @@ try {
 
 Write-Strategy4Receipt "complete" 0 $true ([int]$strategy4Output.count) ([string]$strategy4Output.runId) $postScanWarnings
 Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId ([string]$strategy4Output.runId) -ExpectedDate ((Get-Date).ToString("yyyyMMdd")) -Row $triSurfaceRow
+try { Invoke-Strategy4ClosureAndLine ([string]$strategy4Output.runId) ([int]$strategy4Output.count) } catch { $reason = "critical scan failed during Strategy4 LINE closure: $($_.Exception.Message)"; Write-Log $reason; Write-Strategy4Receipt "failed" 1 $false 0 "" @($postScanWarnings + $reason) $reason; exit 1 }
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="

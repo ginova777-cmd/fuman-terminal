@@ -325,6 +325,25 @@ function Invoke-Strategy3PreserveFailure {
   }
   exit 3
 }
+function Invoke-Strategy3ClosureAndLine {
+  param([string]$RunId, [int]$ExpectedCount)
+  if ([string]::IsNullOrWhiteSpace($RunId) -or $ExpectedCount -le 0) { throw "Strategy3 LINE closure missing runId or count" }
+  $commands = @(
+    @("scripts\verify-strategy3-canonical-closure.js"), @("scripts\verify-strategy3-entry-window-evidence.js"), @("scripts\verify-strategy3-list-source-churn.js"), @("scripts\verify-daytrade-strategy3-closure-live.js")
+  )
+  foreach ($command in $commands) {
+    & $nodeExe "--use-system-ca" @command *>&1 | Tee-Object -FilePath $log -Append
+    if ($LASTEXITCODE -ne 0) { throw "Strategy3 closure verifier failed: $($command[0]) exit=$LASTEXITCODE" }
+  }
+  & $nodeExe "--use-system-ca" "scripts\send-strategy-line-card.js" "--strategy=strategy3" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
+  if ($LASTEXITCODE -ne 0) { throw "Strategy3 LINE dry-run failed exit=$LASTEXITCODE" }
+  & $nodeExe "--use-system-ca" "scripts\send-strategy-line-card.js" "--strategy=strategy3" *>&1 | Tee-Object -FilePath $log -Append
+  if ($LASTEXITCODE -ne 0) { throw "Strategy3 LINE push failed exit=$LASTEXITCODE" }
+  $lineFile = Join-Path $env:FUMAN_RUNTIME_DIR "data\line-cards\strategy3-line-card-$((Get-Date).ToString('yyyyMMdd')).json"
+  $lineReceipt = Get-Content -LiteralPath $lineFile -Raw | ConvertFrom-Json
+  if ($lineReceipt.line_push_ok -ne $true -or [string]$lineReceipt.runId -ne $RunId -or [int]$lineReceipt.count -ne $ExpectedCount) { throw "Strategy3 LINE receipt mismatch push=$($lineReceipt.line_push_ok) runId=$($lineReceipt.runId) count=$($lineReceipt.count)" }
+  Write-Strategy3CompleteLog "Strategy3 LINE closure complete runId=$RunId count=$ExpectedCount"
+}
 Write-Strategy3CompleteLog "Strategy3 complete scan start"
 Write-Strategy3CompleteLog "Strategy3 ready snapshot refresh start"
 & $nodeExe "scripts\refresh-strategy3-ready-snapshot.js" >> $log 2>&1
@@ -335,7 +354,13 @@ if ($refreshExitCode -ne 0) {
   Write-Strategy3CompleteLog "Strategy3 ready snapshot refresh ok"
 }
 . "${PSScriptRoot}\scanner-resource-health.ps1"
-$resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy3" -LogPath $log
+$previousStrategy3DeepDiagnostic = $env:STRATEGY3_RESOURCE_HEALTH_DEEP_DIAGNOSTIC
+$env:STRATEGY3_RESOURCE_HEALTH_DEEP_DIAGNOSTIC = "1"
+try {
+  $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy3" -LogPath $log
+} finally {
+  if ($null -eq $previousStrategy3DeepDiagnostic) { Remove-Item Env:\STRATEGY3_RESOURCE_HEALTH_DEEP_DIAGNOSTIC -ErrorAction SilentlyContinue } else { $env:STRATEGY3_RESOURCE_HEALTH_DEEP_DIAGNOSTIC = $previousStrategy3DeepDiagnostic }
+}
 $sessionGate = $null
 if ($resourceGate.PreserveLatest -and $resourceGate.Status -eq "not_ready" -and $resourceGate.Reason -match "intraday1m|latest_candle_date|ready_snapshot|snapshot_rows|sessionReadyCount") {
   $sessionText = (& $nodeExe "scripts\check-strategy3-session-readiness.js" 2>&1) -join "`n"
@@ -443,6 +468,8 @@ try {
 }
 Write-Strategy3Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 Update-PostScanReceiptEvidence -RuntimeRoot $env:FUMAN_RUNTIME_DIR -Route "strategy3" -RunId ([string]$verifiedPayload.runId) -ExpectedDate ((Get-Date).ToString("yyyyMMdd")) -Row $triSurfaceRow
+try { Invoke-Strategy3ClosureAndLine ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) } catch { $reason = "critical scan failed during Strategy3 LINE closure: $($_.Exception.Message)"; Write-Strategy3CompleteLog $reason; Write-Strategy3Receipt "failed" 1 $false 0 "" @($reason) $reason; exit 1 }
 Write-Strategy3CompleteLog "Strategy3 complete scan end; Supabase complete run + no-store API is the terminal fast path"
+
 
 
