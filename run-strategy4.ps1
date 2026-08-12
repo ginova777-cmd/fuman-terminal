@@ -62,6 +62,9 @@ function Write-Strategy4Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
   $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "strategy4.json") -Encoding utf8
 }
 
+Write-Strategy4Receipt "running" 0 $false 0 "" @("formal runner entered; awaiting source gate and tri-surface closure") "strategy4_runner_started"
+Write-Log "Strategy4 formal runner entered; receipt status=running."
+
 function Assert-Strategy4LatestApi {
   $apiUrl = "https://fuman-terminal.vercel.app/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70&live=1&fresh=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
   $apiResponse = Invoke-WebRequest -Uri $apiUrl -UseBasicParsing -TimeoutSec 45
