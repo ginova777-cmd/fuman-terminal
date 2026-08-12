@@ -34,6 +34,37 @@ function Write-PostScanTriSurfaceReceipt {
   $payload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "$Route.json") -Encoding utf8
 }
 
+function Update-PostScanReceiptEvidence {
+  param(
+    [string]$RuntimeRoot,
+    [string]$Route,
+    [string]$RunId,
+    [string]$ExpectedDate,
+    $Row
+  )
+
+  $receiptPath = Join-Path $RuntimeRoot ("data\scan-receipts\{0}.json" -f $Route)
+  if (-not (Test-Path -LiteralPath $receiptPath)) { return }
+  try {
+    $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+    if ([string]$receipt.runId -ne $RunId) { return }
+    $fields = [ordered]@{
+      triSurfaceStatus = "complete"
+      triSurfaceVerifiedAt = (Get-Date).ToString("o")
+      triSurfaceExpectedDate = $ExpectedDate
+      verifiedResultCount = [int]$Row.supabase.count
+      desktopRunId = [string]$Row.desktopSnapshot.runId
+      mobileRunId = [string]$Row.mobileFragment.runId
+      scorecardRunId = [string]$Row.scorecard.runId
+    }
+    foreach ($entry in $fields.GetEnumerator()) {
+      $receipt | Add-Member -NotePropertyName $entry.Key -NotePropertyValue $entry.Value -Force
+    }
+    $receipt | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $receiptPath -Encoding utf8
+  } catch {
+    "[$Route] receipt evidence update warning: $($_.Exception.Message)" | Out-File -LiteralPath (Join-Path $RuntimeRoot "logs\post-scan-tri-surface-evidence-warnings.log") -Append -Encoding utf8
+  }
+}
 function Assert-PostScanTriSurfaceClosure {
   param(
     [Parameter(Mandatory = $true)][string]$Route,
@@ -66,6 +97,7 @@ function Assert-PostScanTriSurfaceClosure {
       $row = @($report.results | Where-Object { $_.key -eq $Route }) | Select-Object -First 1
       if ($verifyExit -eq 0 -and $report.ok -eq $true -and $null -ne $row -and $row.ok -eq $true -and [string]$row.supabase.runId -eq $RunId) {
         Write-PostScanTriSurfaceReceipt -RuntimeRoot $runtimeRoot -Route $Route -RunId $RunId -ExpectedDate $expectedDate -LogPath $LogPath -ReportPath $reportPath -Status "complete" -Attempts $attempt -Row $row
+        Update-PostScanReceiptEvidence -RuntimeRoot $runtimeRoot -Route $Route -RunId $RunId -ExpectedDate $expectedDate -Row $row
         "[$Route] strict tri-surface verification passed runId=$RunId" | Tee-Object -FilePath $LogPath -Append | Out-Null
         return $row
       }
