@@ -66,6 +66,26 @@ function Update-PostScanReceiptEvidence {
     "[$Route] receipt evidence update warning: $($_.Exception.Message)" | Out-File -LiteralPath (Join-Path $RuntimeRoot "logs\post-scan-tri-surface-evidence-warnings.log") -Append -Encoding utf8
   }
 }
+function Invoke-PostScanSurfacePublication {
+  param(
+    [Parameter(Mandatory = $true)][string]$Route,
+    [Parameter(Mandatory = $true)][string]$LogPath,
+    [Parameter(Mandatory = $true)][string]$NodeExe,
+    [Parameter(Mandatory = $true)][string]$RepoRoot
+  )
+  $mobileTab = if ($Route -eq "institution") { "chip" } else { $Route }
+  "[$Route] post-scan publication start: /88 source report + mobile fragment=$mobileTab" | Tee-Object -FilePath $LogPath -Append | Out-Null
+  Push-Location $RepoRoot
+  try {
+    & npm.cmd run scorecard:terminal-source *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
+    $scorecardExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+    if ($scorecardExit -ne 0) { throw "scorecard source refresh exit=$scorecardExit" }
+    & $NodeExe "--use-system-ca" "scripts\publish-mobile-fragment-snapshots.js" "--tabs=$mobileTab" *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
+    $mobileExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+    if ($mobileExit -ne 0) { throw "mobile fragment publish exit=$mobileExit tab=$mobileTab" }
+  } finally { Pop-Location }
+  "[$Route] post-scan publication complete" | Tee-Object -FilePath $LogPath -Append | Out-Null
+}
 function Assert-PostScanTriSurfaceClosure {
   param(
     [Parameter(Mandatory = $true)][string]$Route,
@@ -82,6 +102,7 @@ function Assert-PostScanTriSurfaceClosure {
   $reportPath = Join-Path $outDir "terminal-resource-chain-audit.json"
   $nodeExe = if ($env:NODE_EXE) { $env:NODE_EXE } else { "node" }
   $lastError = ""
+  Invoke-PostScanSurfacePublication -Route $Route -LogPath $LogPath -NodeExe $nodeExe -RepoRoot $repoRoot
 
   for ($attempt = 1; $attempt -le 6; $attempt++) {
     New-Item -ItemType Directory -Force -Path $outDir | Out-Null
