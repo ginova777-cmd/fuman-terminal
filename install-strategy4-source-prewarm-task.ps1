@@ -19,18 +19,21 @@ if (-not (Test-Path -LiteralPath $pwsh)) {
 
 $action = New-ScheduledTaskAction `
   -Execute $pwsh `
-  -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`""
+  -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`"" `
+  -WorkingDirectory $ProjectRoot
 
 $trigger = New-ScheduledTaskTrigger -Daily -At $StartTime
 $settings = New-ScheduledTaskSettingsSet `
   -AllowStartIfOnBatteries `
   -DontStopIfGoingOnBatteries `
-  -ExecutionTimeLimit (New-TimeSpan -Hours $ExecutionHours)
+  -StartWhenAvailable `
+  -ExecutionTimeLimit (New-TimeSpan -Hours $ExecutionHours) `
+  -MultipleInstances IgnoreNew
 
 $principal = New-ScheduledTaskPrincipal `
   -UserId "$env:USERDOMAIN\$env:USERNAME" `
   -LogonType Interactive `
-  -RunLevel Highest
+  -RunLevel Limited
 
 Register-ScheduledTask `
   -TaskName $TaskName `
