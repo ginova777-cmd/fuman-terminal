@@ -207,7 +207,7 @@ if (Test-Path -LiteralPath $snapshotScript) {
 . "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
 Write-Strategy5Receipt "verifying" 0 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 try {
-  Assert-PostScanTriSurfaceClosure -Route "strategy5" -RunId ([string]$verifiedPayload.runId) -LogPath $log | Out-Null
+  $triSurfaceRow = Assert-PostScanTriSurfaceClosure -Route "strategy5" -RunId ([string]$verifiedPayload.runId) -LogPath $log
 } catch {
   $reason = "critical scan failed during strict tri-surface verification: $($_.Exception.Message)"
   Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 $reason"
@@ -215,6 +215,7 @@ try {
   exit 1
 }
 Write-Strategy5Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
+Update-PostScanReceiptEvidence -RuntimeRoot $env:FUMAN_RUNTIME_DIR -Route "strategy5" -RunId ([string]$verifiedPayload.runId) -ExpectedDate ((Get-Date).ToString("yyyyMMdd")) -Row $triSurfaceRow
 Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 API-only: scanner success verifies /api/strategy5-latest through scorecard source report; terminal reads Supabase/API plus desktop snapshot."
 
 Remove-Item Env:STRATEGY5_USE_MIS -ErrorAction SilentlyContinue

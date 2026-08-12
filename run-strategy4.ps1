@@ -261,8 +261,9 @@ function Invoke-Strategy4StrictTriSurfaceVerify {
   param([string]$RunId)
   if ([string]::IsNullOrWhiteSpace($RunId)) { throw "Strategy4 strict tri-surface verify missing runId" }
   Write-Log "Strategy4 strict tri-surface closure start runId=$RunId"
-  Assert-PostScanTriSurfaceClosure -Route "strategy4" -RunId $RunId -LogPath $log | Out-Null
+  $row = Assert-PostScanTriSurfaceClosure -Route "strategy4" -RunId $RunId -LogPath $log
   Write-Log "Strategy4 strict tri-surface closure verified runId=$RunId"
+  return $row
 }
 Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
 . "${PSScriptRoot}\schedule-guard.ps1"
@@ -500,7 +501,7 @@ try {
     try {
       Write-Strategy4Receipt "verifying" 0 $false ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) $postScanWarnings
       Invoke-Strategy4InlineTerminalVerify ([string]$dbVerify.runId)
-      Invoke-Strategy4StrictTriSurfaceVerify ([string]$dbVerify.runId)
+      $triSurfaceRow = Invoke-Strategy4StrictTriSurfaceVerify ([string]$dbVerify.runId)
       $postScanWarnings += "strict tri-surface chain verified"
     } catch {
       $reason = "critical scan failed during strict tri-surface verification: $($_.Exception.Message)"
@@ -509,6 +510,7 @@ try {
       exit 1
     }
     Write-Strategy4Receipt "complete" 0 $true ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) $postScanWarnings
+    Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId ([string]$dbVerify.runId) -ExpectedDate ((Get-Date).ToString("yyyyMMdd")) -Row $triSurfaceRow
     Write-Log "Strategy4 DB readback verification ok after API verification failure: runId=$($dbVerify.runId) resultCount=$($dbVerify.resultCount) readbackCount=$($dbVerify.readbackCount)"
     Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
     exit 0
@@ -526,7 +528,7 @@ try { Invoke-Strategy4ScorecardSourceRefresh ([string]$strategy4Output.runId) } 
 try {
   Write-Strategy4Receipt "verifying" 0 $false ([int]$strategy4Output.count) ([string]$strategy4Output.runId) $postScanWarnings
   Invoke-Strategy4InlineTerminalVerify ([string]$strategy4Output.runId)
-  Invoke-Strategy4StrictTriSurfaceVerify ([string]$strategy4Output.runId)
+  $triSurfaceRow = Invoke-Strategy4StrictTriSurfaceVerify ([string]$strategy4Output.runId)
   $postScanWarnings += "strict tri-surface chain verified"
 } catch {
   $reason = "critical scan failed during strict tri-surface verification: $($_.Exception.Message)"
@@ -536,4 +538,5 @@ try {
 }
 
 Write-Strategy4Receipt "complete" 0 $true ([int]$strategy4Output.count) ([string]$strategy4Output.runId) $postScanWarnings
+Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId ([string]$strategy4Output.runId) -ExpectedDate ((Get-Date).ToString("yyyyMMdd")) -Row $triSurfaceRow
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="

@@ -152,7 +152,7 @@ function Complete-Strategy2AfterWindowClosure($Payload, $Warnings = @()) {
   $count = [int]$Payload.count
   Write-Strategy2Receipt "verifying" 0 $false $count $runId $Warnings
   try {
-    Assert-PostScanTriSurfaceClosure -Route "strategy2" -RunId $runId -LogPath $log | Out-Null
+    $triSurfaceRow = Assert-PostScanTriSurfaceClosure -Route "strategy2" -RunId $runId -LogPath $log
   } catch {
     $reason = "critical scan failed during strict tri-surface verification: $($_.Exception.Message)"
     $reason >> $log
@@ -160,6 +160,7 @@ function Complete-Strategy2AfterWindowClosure($Payload, $Warnings = @()) {
     exit 1
   }
   Write-Strategy2Receipt "complete" 0 $true $count $runId $Warnings
+Update-PostScanReceiptEvidence -RuntimeRoot $env:FUMAN_RUNTIME_DIR -Route "strategy2" -RunId $runId -ExpectedDate ((Get-Date).ToString("yyyyMMdd")) -Row $triSurfaceRow
 }
 
 function Invoke-Strategy2AfterWindowRepair($Reason) {

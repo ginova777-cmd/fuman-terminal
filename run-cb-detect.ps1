@@ -186,7 +186,7 @@ try {
   . "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
   Write-CbDetectReceipt "verifying" 0 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) $warnings
   try {
-    Assert-PostScanTriSurfaceClosure -Route "cb" -RunId ([string]$verifiedPayload.runId) -LogPath $log | Out-Null
+    $triSurfaceRow = Assert-PostScanTriSurfaceClosure -Route "cb" -RunId ([string]$verifiedPayload.runId) -LogPath $log
   } catch {
     $reason = "critical scan failed during strict tri-surface verification: $($_.Exception.Message)"
     "$reason" >> $log
@@ -194,6 +194,7 @@ try {
     exit 1
   }
   Write-CbDetectReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) $warnings
+Update-PostScanReceiptEvidence -RuntimeRoot $env:FUMAN_RUNTIME_DIR -Route "cb" -RunId ([string]$verifiedPayload.runId) -ExpectedDate ((Get-Date).ToString("yyyyMMdd")) -Row $triSurfaceRow
 } finally {
   Pop-Location
 }
