@@ -1,6 +1,7 @@
 param(
   [string]$TaskName = "Fuman Strategy4 Cache 1600",
-  [string]$StartTime = "16:00"
+  [string]$StartTime = "16:00",
+  [int]$ExecutionHours = 4
 )
 
 $ErrorActionPreference = "Stop"
@@ -10,9 +11,28 @@ $script = Join-Path $root "run-strategy4.ps1"
 if (-not (Test-Path -LiteralPath $script)) { throw "Strategy4 runner missing: $script" }
 if (-not (Test-Path -LiteralPath $pwsh)) { throw "PowerShell 7 missing: $pwsh" }
 
-$taskRun = "`"$pwsh`" -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$script`""
-schtasks.exe /Create /F /SC DAILY /ST $StartTime /TN $TaskName /TR $taskRun | Out-Host
-if ($LASTEXITCODE -ne 0) { throw "Failed to register $TaskName (exit=$LASTEXITCODE)" }
-Write-Host "排程名稱：$TaskName"
-Write-Host "時間：每日 $StartTime"
-Write-Host "執行：$taskRun"
+$action = New-ScheduledTaskAction `
+  -Execute $pwsh `
+  -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$script`"" `
+  -WorkingDirectory $root
+$trigger = New-ScheduledTaskTrigger -Daily -At $StartTime
+$settings = New-ScheduledTaskSettingsSet `
+  -AllowStartIfOnBatteries `
+  -DontStopIfGoingOnBatteries `
+  -StartWhenAvailable `
+  -ExecutionTimeLimit (New-TimeSpan -Hours $ExecutionHours) `
+  -MultipleInstances IgnoreNew
+$principal = New-ScheduledTaskPrincipal `
+  -UserId "$env:USERDOMAIN\$env:USERNAME" `
+  -LogonType Interactive `
+  -RunLevel Limited
+
+Register-ScheduledTask `
+  -TaskName $TaskName `
+  -Action $action `
+  -Trigger $trigger `
+  -Settings $settings `
+  -Principal $principal `
+  -Force | Out-Null
+
+Write-Host "[strategy4] installed task=$TaskName start=$StartTime executionLimit=${ExecutionHours}h script=$script"
