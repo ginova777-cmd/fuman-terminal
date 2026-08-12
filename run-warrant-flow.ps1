@@ -39,7 +39,12 @@ function Write-WarrantFlowReceipt($Status, $ExitCode, $Complete, $Matches, $RunI
     blockingReason = $BlockingReason
     log = $log
   }
-  $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "warrant-flow.json") -Encoding utf8
+  $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "warrant-flow.json") -Encoding utf8  try {
+    & $nodeExe "--use-system-ca" (Join-Path $PSScriptRoot "scripts\publish-scorecard-scan-audit.js") >> $log 2>&1
+    if ($LASTEXITCODE -ne 0) { "scorecard scan audit publish failed exit=$LASTEXITCODE" >> $log }
+  } catch {
+    "scorecard scan audit publish exception: $($_.Exception.Message)" >> $log
+  }
 }
 
 function Assert-WarrantFlowApi {

@@ -498,6 +498,7 @@
   <section class="grid" id="metrics" data-testid="scorecard-metrics"></section>
   <section class="status-line" id="sourceStatus" data-testid="scorecard-source-status" hidden></section>
   <section class="status-line" id="scorecardSourceReports" data-testid="scorecard-source-reports" hidden>sourceReports 讀取中...</section>
+  <section class="panel" id="scanAudit" data-testid="scorecard-scan-audit" hidden></section>
   <section class="status-line" id="scorecardStrategy4Live" data-testid="scorecard-strategy4-live-status" hidden>策略4 latest run 讀取中...</section>
   <section class="audit-panel" id="auditPanel" data-testid="scorecard-audit-panel" hidden></section>
   <section class="summary" id="strategySummary" data-testid="scorecard-strategy-summary"></section>
@@ -1050,6 +1051,37 @@ function renderSevenStrategyDailyHistory() {
   `;
 }
 
+function scanAuditTime(value) {
+  if (!value) return "--";
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toLocaleString("zh-TW", { timeZone: "Asia/Taipei", hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function scanAuditStatus(status) {
+  return ({ complete: "完成", failed: "失敗", degraded: "未完成驗收", running: "掃描中", overdue: "逾時未收 receipt", pending: "待執行" })[String(status || "")] || "未知";
+}
+
+function renderScanAudit(payload) {
+  const audit = payload?.scanAudit;
+  const node = byId("scanAudit");
+  const modules = Array.isArray(audit?.modules) ? audit.modules : [];
+  node.hidden = modules.length === 0;
+  if (!modules.length) return;
+  node.innerHTML = `
+    <div class="table-wrap">
+      <table style="min-width: 1180px">
+        <thead><tr><th>模組</th><th>應掃時間</th><th>實際掃描</th><th>資料日</th><th>runId</th><th>筆數</th><th>三端驗收</th><th>狀態 / 原因</th></tr></thead>
+        <tbody>${modules.map((row) => {
+          const actual = row.actualStartedAt ? `${scanAuditTime(row.actualStartedAt)}${row.actualFinishedAt ? ` - ${scanAuditTime(row.actualFinishedAt)}` : ""}` : "--";
+          const count = row.verifiedCount ? `${esc(String(row.count || 0))} / ${esc(String(row.verifiedCount))}` : esc(String(row.count || 0));
+          const verified = row.status === "complete" ? "電腦 / 88 / 手機一致" : (row.triSurfaceStatus || "未完成");
+          const runId = row.runId || (row.previousGoodRunId ? `保留 ${row.previousGoodRunId}` : "--");
+          return `<tr><td>${esc(row.label || row.key || "--")}</td><td>${esc(row.scheduledAt || "--")}</td><td>${esc(actual)}</td><td>${esc(row.receiptDate || audit.marketDate || "--")}</td><td>${esc(runId)}</td><td>${count}</td><td>${esc(verified)}</td><td class="scan-audit-detail">${esc(scanAuditStatus(row.status))}｜${esc(row.reason || "--")}</td></tr>`;
+        }).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
 function sourceStatus(payload, latestDate) {
   const qualityStatus = String(payload?.qualityStatus || "unknown").trim() || "unknown";
   const cacheSource = payload?.cacheSource || payload?.source || "scorecard";
@@ -1221,6 +1253,7 @@ function render() {
   reportsNode.className = `status-line ${reportsStatus.qualityStatus}`;
   reportsNode.textContent = reportsStatus.text;
   renderAuditPanel(rows);
+  renderScanAudit(payload);
 
   byId("metrics").innerHTML = [
     metric("逐筆筆數", count(summary.rows), "", "scorecard-metric-rows"),

@@ -5,6 +5,7 @@ const path = require("path");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 const { isTwseTradingDay } = require("./twse-trading-day");
 const { RULE_CONTRACT, applyScorecardRuleMetadata, verifyScorecardStrategyRules } = require("../lib/scorecard-rule-locks");
+const { buildScanAudit } = require("../lib/scorecard-scan-audit");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -1297,6 +1298,7 @@ async function main() {
       })),
     },
     sourceReports: activeReports,
+    scanAudit: buildScanAudit({ runtimeDir: RUNTIME_DIR }),
   };
   const ruleVerification = verifyScorecardStrategyRules(payload, { source: "terminal-complete-run-scorecard", requireContract: true });
   payload.ruleVerification = ruleVerification;

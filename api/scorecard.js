@@ -65,6 +65,7 @@ function sanitizeScorecardSourceQuery(sourceQuery = {}) {
     : sourceQuery.latestDateCandidates;
   return { ...sourceQuery, latestDateCandidates };
 }
+const SCORECARD_SCAN_AUDIT_SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SCAN_AUDIT_SNAPSHOT_KEY || "scorecard_scan_audit_latest";
 const SCORECARD_REQUIRED_FIELDS = [
   "record_date",
   "strategy",
@@ -1871,6 +1872,26 @@ function scorecardLiveSnapshotReadbackEnabled(request) {
     && (request.query?.live === "1" || request.query?.snapshotLive === "1");
 }
 
+async function withScanAudit(payload, options = {}) {
+  const snapshot = await readSnapshot(SCORECARD_SCAN_AUDIT_SNAPSHOT_KEY, {
+    allowLatestFallback: true,
+    timeoutMs: Math.min(8000, Number(options.timeoutMs || SCORECARD_SNAPSHOT_TIMEOUT_MS) || SCORECARD_SNAPSHOT_TIMEOUT_MS),
+  }).catch(() => null);
+  const scanAudit = snapshot?.payload;
+  if (!scanAudit || typeof scanAudit !== "object" || !Array.isArray(scanAudit.modules)) return payload;
+  return {
+    ...payload,
+    scanAudit: {
+      ...scanAudit,
+      snapshot: {
+        key: snapshot.key || SCORECARD_SCAN_AUDIT_SNAPSHOT_KEY,
+        tradeDate: snapshot.tradeDate || "",
+        updatedAt: snapshot.updatedAt || scanAudit.updatedAt || "",
+      },
+    },
+  };
+}
+
 async function buildPayload(requestedDate = "", options = {}) {
   const liveSourceReports = options.liveSourceReports === true;
   const noCache = options.noCache === true || liveSourceReports;
@@ -1905,6 +1926,7 @@ async function buildPayload(requestedDate = "", options = {}) {
       ? selectPayloadDate(await withLiveSourceReports(basePayload, options), requestedDate)
       : selectPayloadDate(basePayload, requestedDate);
   }
+  payload = await withScanAudit(payload, options);
   if (!noCache) payloadMemoryCache.set(cacheKey, { cachedAt: Date.now(), payload });
   return payload;
 }
