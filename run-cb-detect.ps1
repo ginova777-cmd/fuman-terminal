@@ -90,7 +90,8 @@ function Write-CbDetectReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, 
     scanner_block_reason = $BlockingReason
     log = $log
   }
-  $receipt | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $receiptDir "cb-detect.json") -Encoding utf8  try {
+  $receipt | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $receiptDir "cb-detect.json") -Encoding utf8
+  try {
     & $nodeExe "--use-system-ca" (Join-Path $PSScriptRoot "scripts\publish-scorecard-scan-audit.js") >> $log 2>&1
     if ($LASTEXITCODE -ne 0) { "scorecard scan audit publish failed exit=$LASTEXITCODE" >> $log }
   } catch {
