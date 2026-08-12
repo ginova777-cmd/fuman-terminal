@@ -43,7 +43,8 @@ function Update-PostScanReceiptEvidence {
     $Row
   )
 
-  $receiptPath = Join-Path $RuntimeRoot ("data\scan-receipts\{0}.json" -f $Route)
+  $receiptKey = if ($Route -eq "cb") { "cb-detect" } else { $Route }
+  $receiptPath = Join-Path $RuntimeRoot ("data\scan-receipts\{0}.json" -f $receiptKey)
   if (-not (Test-Path -LiteralPath $receiptPath)) { return }
   try {
     $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
