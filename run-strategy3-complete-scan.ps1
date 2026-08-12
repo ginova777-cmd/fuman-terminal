@@ -293,6 +293,31 @@ function Test-Strategy3ControlledSourceNotReady($Message) {
     -or $text -match "v_strategy3_quote_ready .*statement timeout"
 }
 
+function Invoke-Strategy3PreserveFailure {
+  param(
+    [Parameter(Mandatory = $true)][string]$Reason,
+    [Parameter(Mandatory = $true)][string]$Stage
+  )
+
+  try {
+    $verifiedPayload = Assert-Strategy3CompleteApi -AllowPreviousComplete
+    $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
+    if (Test-Path -LiteralPath $snapshotScript) {
+      & $snapshotScript -Source "strategy3" -LogPath $log
+      if ($LASTEXITCODE -ne 0) { throw "Strategy3 desktop snapshot refresh failed with exit code $LASTEXITCODE" }
+    }
+    $blockedReceiptFile = Write-Strategy3BlockedReceipt $Reason ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) $Stage
+    Write-Strategy3Receipt "blocked_preserved" 3 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($Reason, "blockedReceipt=$blockedReceiptFile") $Reason
+    Write-Strategy3CompleteLog "Strategy3 $Stage blocked; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
+  } catch {
+    $failureReason = "$Reason; preserve readback/snapshot unavailable: $($_.Exception.Message)"
+    $blockedReceiptFile = ""
+    try { $blockedReceiptFile = Write-Strategy3BlockedReceipt $failureReason "" 0 $Stage } catch { $failureReason = "$failureReason; blocked evidence write failed: $($_.Exception.Message)" }
+    Write-Strategy3Receipt "failed" 3 $false 0 "" @($failureReason, "blockedReceipt=$blockedReceiptFile") $failureReason
+    Write-Strategy3CompleteLog "Strategy3 $Stage failed closed before preserve receipt: $failureReason"
+  }
+  exit 3
+}
 Write-Strategy3CompleteLog "Strategy3 complete scan start"
 Write-Strategy3CompleteLog "Strategy3 ready snapshot refresh start"
 & $nodeExe "scripts\refresh-strategy3-ready-snapshot.js" >> $log 2>&1
@@ -324,19 +349,8 @@ if ($resourceGate.PreserveLatest -and $resourceGate.Status -eq "not_ready" -and 
 }
 if ($resourceGate.PreserveLatest) {
   $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"
-  Write-Strategy3CompleteLog "Strategy3 source gate blocked new publish; preserving latest complete run. $reason"
-  $verifiedPayload = Assert-Strategy3CompleteApi -AllowPreviousComplete
-  $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
-  if (Test-Path -LiteralPath $snapshotScript) {
-    & $snapshotScript -Source "strategy3" -LogPath $log
-    if ($LASTEXITCODE -ne 0) {
-      throw "Strategy3 desktop snapshot refresh failed with exit code $LASTEXITCODE"
-    }
-  }
-  $blockedReceiptFile = Write-Strategy3BlockedReceipt $reason ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) "runner-resource-gate"
-  Write-Strategy3Receipt "blocked_preserved" 3 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason, "blockedReceipt=$blockedReceiptFile") $reason
-  Write-Strategy3CompleteLog "Strategy3 resource-gated scan blocked; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
-  exit 3
+  Write-Strategy3CompleteLog "Strategy3 source gate blocked new publish. $reason"
+  Invoke-Strategy3PreserveFailure -Reason $reason -Stage "runner-resource-gate"
 }
 $sessionReadyWaitSeconds = if ($env:STRATEGY3_SESSION_READY_WAIT_SECONDS) { [int]$env:STRATEGY3_SESSION_READY_WAIT_SECONDS } else { 3300 }
 $sessionReadyPollSeconds = if ($env:STRATEGY3_SESSION_READY_POLL_SECONDS) { [int]$env:STRATEGY3_SESSION_READY_POLL_SECONDS } else { 60 }
@@ -360,19 +374,8 @@ while ($true) {
     "session readiness unreadable before scanner"
   }
   if ((Get-Date) -ge $sessionReadyDeadline) {
-    Write-Strategy3CompleteLog "Strategy3 source gate blocked new publish before scanner; preserving latest complete run. $reason"
-    $verifiedPayload = Assert-Strategy3CompleteApi -AllowPreviousComplete
-    $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
-    if (Test-Path -LiteralPath $snapshotScript) {
-      & $snapshotScript -Source "strategy3" -LogPath $log
-      if ($LASTEXITCODE -ne 0) {
-        throw "Strategy3 desktop snapshot refresh failed with exit code $LASTEXITCODE"
-      }
-    }
-    $blockedReceiptFile = Write-Strategy3BlockedReceipt $reason ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) "runner-session-readiness-gate"
-    Write-Strategy3Receipt "blocked_preserved" 3 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason, "blockedReceipt=$blockedReceiptFile") $reason
-    Write-Strategy3CompleteLog "Strategy3 session-readiness-gated scan blocked; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
-    exit 3
+    Write-Strategy3CompleteLog "Strategy3 source gate blocked new publish before scanner. $reason"
+    Invoke-Strategy3PreserveFailure -Reason $reason -Stage "runner-session-readiness-gate"
   }
   Write-Strategy3CompleteLog "Strategy3 pre-scan session readiness waiting; $reason"
   Start-Sleep -Seconds $sessionReadyPollSeconds
@@ -390,20 +393,9 @@ try {
   if (-not (Test-Strategy3ControlledSourceNotReady "$scannerError`n$tailText")) {
     throw
   }
-  Write-Strategy3CompleteLog "Strategy3 source not ready; preserving latest complete run instead of poisoning receipt. error=$scannerError"
-  $verifiedPayload = Assert-Strategy3CompleteApi -AllowPreviousComplete
-  $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
-  if (Test-Path -LiteralPath $snapshotScript) {
-    & $snapshotScript -Source "strategy3" -LogPath $log
-    if ($LASTEXITCODE -ne 0) {
-      throw "Strategy3 desktop snapshot refresh failed with exit code $LASTEXITCODE"
-    }
-  }
-  $reason = "source not ready; preserved latest complete run: $scannerError"
-  $blockedReceiptFile = Write-Strategy3BlockedReceipt $reason ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) "runner-scanner-controlled-failure"
-  Write-Strategy3Receipt "blocked_preserved" 3 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason, "blockedReceipt=$blockedReceiptFile") $reason
-  Write-Strategy3CompleteLog "Strategy3 deferred complete scan blocked; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
-  exit 3
+  Write-Strategy3CompleteLog "Strategy3 source not ready; fail-closing with preserve evidence. error=$scannerError"
+  $reason = "source not ready: $scannerError"
+  Invoke-Strategy3PreserveFailure -Reason $reason -Stage "runner-scanner-controlled-failure"
 }
 
 $apiVerified = $false
