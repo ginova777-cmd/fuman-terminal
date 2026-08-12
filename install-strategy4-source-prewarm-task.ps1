@@ -27,6 +27,8 @@ $settings = New-ScheduledTaskSettingsSet `
   -AllowStartIfOnBatteries `
   -DontStopIfGoingOnBatteries `
   -StartWhenAvailable `
+  -WakeToRun `
+  -DontStopOnIdleEnd `
   -ExecutionTimeLimit (New-TimeSpan -Hours $ExecutionHours) `
   -MultipleInstances IgnoreNew
 
@@ -44,3 +46,4 @@ Register-ScheduledTask `
   -Force | Out-Null
 
 Write-Host "[strategy4-source-prewarm] installed task=$TaskName start=$StartTime executionLimit=${ExecutionHours}h script=$scriptPath"
+
