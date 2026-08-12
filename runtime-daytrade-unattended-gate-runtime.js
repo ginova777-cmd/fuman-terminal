@@ -3,6 +3,8 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
+const dns = require("dns");
+try { dns.setDefaultResultOrder("ipv4first"); } catch {}
 const { spawnSync } = require("child_process");
 const { Client } = require("pg");
 
@@ -497,6 +499,10 @@ function isTransientDbError(error) {
     || text.includes("terminating connection")
     || text.includes("connection terminated")
     || text.includes("econnreset")
+    || text.includes("enotfound")
+    || text.includes("eai_again")
+    || text.includes("getaddrinfo")
+    || text.includes("econnrefused")
     || text.includes("57014");
 }
 
@@ -540,7 +546,7 @@ function gateWriteFailure(error, phase, runId, step) {
 }
 
 async function connectDb(dbUrl) {
-  const attempts = Math.max(1, safeNumber(process.env.DAYTRADE_DB_CONNECT_ATTEMPTS, 2));
+  const attempts = Math.max(1, safeNumber(process.env.DAYTRADE_DB_CONNECT_ATTEMPTS, 4));
   const baseDelayMs = Math.max(0, safeNumber(process.env.DAYTRADE_DB_CONNECT_RETRY_DELAY_MS, 500));
   let lastError = null;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
