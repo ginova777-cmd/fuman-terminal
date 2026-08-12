@@ -5,17 +5,14 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
-$cmd = Join-Path $root "run-strategy4-task-wrapper.cmd"
-if (-not (Test-Path -LiteralPath $cmd)) { throw "Strategy4 task wrapper cmd missing: $cmd" }
+$pwsh = "C:\Program Files\PowerShell\7\pwsh.exe"
+$script = Join-Path $root "run-strategy4.ps1"
+if (-not (Test-Path -LiteralPath $script)) { throw "Strategy4 runner missing: $script" }
+if (-not (Test-Path -LiteralPath $pwsh)) { throw "PowerShell 7 missing: $pwsh" }
 
-$action = New-ScheduledTaskAction -Execute "C:\Windows\System32\cmd.exe" -Argument ("/d /c call `"{0}`"" -f $cmd) -WorkingDirectory $root
-$trigger = New-ScheduledTaskTrigger -Daily -At ([datetime]::ParseExact($StartTime, "HH:mm", $null))
-$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 30)
-$settings.DisallowStartIfOnBatteries = $false
-$settings.StopIfGoingOnBatteries = $false
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Description "Strategy4 formal scan with cmd-hosted unattended startup/timeout receipt guard." -Force | Out-Null
-
+$taskRun = "`"$pwsh`" -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$script`""
+schtasks.exe /Create /F /SC DAILY /ST $StartTime /TN $TaskName /TR $taskRun | Out-Host
+if ($LASTEXITCODE -ne 0) { throw "Failed to register $TaskName (exit=$LASTEXITCODE)" }
 Write-Host "排程名稱：$TaskName"
 Write-Host "時間：每日 $StartTime"
-Write-Host "執行：cmd.exe /d /c call $cmd"
-Write-Host "工作目錄：$root"
+Write-Host "執行：$taskRun"
