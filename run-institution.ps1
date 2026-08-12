@@ -65,6 +65,7 @@ function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunI
     label = "institution raw refresh"
     tier = "critical"
     startedAt = $scanStartedAt
+    marketDate = (Get-Date).ToString("yyyyMMdd")
     finishedAt = (Get-Date).ToString("o")
     source_snapshot_captured_at = $scanStartedAt
     institution_source_status_at_run = $sourceStatusAtRun
@@ -144,6 +145,7 @@ function Write-InstitutionBlockedReceipt($Reason, $RunId = "", $Count = 0) {
     label = "institution blocked publish"
     tier = "critical"
     startedAt = $scanStartedAt
+    marketDate = (Get-Date).ToString("yyyyMMdd")
     finishedAt = (Get-Date).ToString("o")
     source_snapshot_captured_at = $scanStartedAt
     institution_source_status_at_run = $sourceStatusAtRun

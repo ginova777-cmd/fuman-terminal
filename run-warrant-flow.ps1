@@ -23,6 +23,7 @@ function Write-WarrantFlowReceipt($Status, $ExitCode, $Complete, $Matches, $RunI
     label = "warrant flow full scan"
     tier = "critical"
     startedAt = $scanStartedAt
+    marketDate = (Get-Date).ToString("yyyyMMdd")
     finishedAt = (Get-Date).ToString("o")
     status = $Status
     exitCode = $ExitCode

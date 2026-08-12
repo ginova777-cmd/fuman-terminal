@@ -32,6 +32,7 @@ function Write-CbDetectReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, 
     label = "CB detect full scan"
     tier = "critical"
     startedAt = $scanStartedAt
+    marketDate = (Get-Date).ToString("yyyyMMdd")
     finishedAt = (Get-Date).ToString("o")
     source_snapshot_captured_at = $scanStartedAt
     status = $Status
