@@ -321,7 +321,7 @@ function Invoke-InstitutionSnapshotRefresh($RunId = "", $Count = 0, $Warning = "
     "Institution desktop snapshot refresh skipped; helper not found." >> $log
   }
   if ($Warning) {
-    Write-InstitutionReceipt "complete" 0 $true $Count $RunId @($Warning)
+    "Institution snapshot refresh warning: $Warning" >> $log
   }
 }
 
