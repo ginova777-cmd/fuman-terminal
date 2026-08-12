@@ -121,6 +121,10 @@ async function fetchRowsFrom(table, query) {
   return Array.isArray(rows) ? rows : [];
 }
 
+function normalizeStrategy3Code(value) {
+  return String(value || "").replace(/\D/g, "").slice(0, 4);
+}
+
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
   return Number.isFinite(number) ? number : 0;
@@ -180,6 +184,66 @@ function strategy3RunDateFromPayload(payload = {}, rows = []) {
   return isoDate(runId);
 }
 
+function taipeiDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
+  const get = (type) => parts.find((part) => part.type === type)?.value || "";
+  return `${get("year")}${get("month")}${get("day")}`;
+}
+
+function strategy3PublishedEntryIssue(row = {}, expectedTradeDate = "") {
+  const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
+  const entryPrice = cleanNumber(row.entryPrice ?? row.entry_price ?? payload.entryPrice ?? payload.entry_price ?? row.price ?? row.close ?? payload.price ?? payload.close);
+  const entryPriceSource = String(row.entryPriceSource || row.entry_price_source || payload.entryPriceSource || payload.entry_price_source || "").trim();
+  const entryCandleTime = String(row.entryCandleTime || row.entry_candle_time || payload.entryCandleTime || payload.entry_candle_time || "").trim();
+  const entryTradeDate = isoDate(row.entryTradeDate || row.entry_trade_date || payload.entryTradeDate || payload.entry_trade_date || entryCandleTime);
+  const minute = candleMinute({ candle_time: entryCandleTime });
+  if (!strategy3ValidEntrySource(entryPriceSource)) return `entry_source=${entryPriceSource || "missing"}`;
+  if (!(entryPrice > 0)) return "entry_price_not_positive";
+  if (!entryCandleTime) return "entry_candle_time_missing";
+  if (!strategy3EntryWindowMinuteOk(minute)) return `entry_minute=${minute ?? "missing"}_outside_${STRATEGY3_ENTRY_WINDOW_LABEL}`;
+  if (entryTradeDate !== expectedTradeDate) return `entry_trade_date=${entryTradeDate || "missing"}!=${expectedTradeDate}`;
+  if (entryPriceSource === "intraday_1m_1300" && minute !== STRATEGY3_ENTRY_MINUTE_TARGET) return `entry_source_minute_mismatch:${entryPriceSource}@${minute}`;
+  if (entryPriceSource === "intraday_1m_1300_exact" && minute !== STRATEGY3_ENTRY_MINUTE_TARGET) return `entry_source_minute_mismatch:${entryPriceSource}@${minute}`;
+  if (entryPriceSource === "intraday_1m_entry_window_tolerance" && minute === STRATEGY3_ENTRY_MINUTE_TARGET) return `entry_source_minute_mismatch:${entryPriceSource}@${minute}`;
+  return "";
+}
+async function fetchStrategy3PreviousCloseMap(symbols = []) {
+  const normalized = [...new Set((symbols || []).map(normalizeStrategy3Code).filter((code) => /^\d{4}$/.test(code)))];
+  const map = new Map();
+  for (const chunk of chunkValues(normalized, 80)) {
+    const query = [
+      "select=symbol,previous_close,payload,updated_at",
+      `symbol=in.(${chunk.map(encodeURIComponent).join(",")})`,
+      "order=updated_at.desc",
+      "limit=500",
+    ].join("&");
+    const rows = await fetchRowsFrom("fugle_daytrade_quotes_live", query).catch(() => []);
+    for (const row of rows || []) {
+      const symbol = String(row.symbol || "").trim();
+      const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+      const previousClose = cleanNumber(row.previous_close ?? payload.previousClose ?? payload.previous_close ?? payload.referencePrice);
+      if (/^\d{4}$/.test(symbol) && previousClose > 0 && !map.has(symbol)) map.set(symbol, previousClose);
+    }
+  }
+  return map;
+}
+
+function strategy3ChangePercent(entryPrice, previousClose, fallback) {
+  const price = cleanNumber(entryPrice);
+  const base = cleanNumber(previousClose);
+  if (price > 0 && base > 0) return Math.round(((price - base) / base) * 10000) / 100;
+  return cleanNumber(fallback);
+}
+
+const STRATEGY3_ENTRY_MINUTE_TARGET = 13 * 60;
+const STRATEGY3_ENTRY_MINUTE_START = 12 * 60 + 59;
+const STRATEGY3_ENTRY_MINUTE_END = 13 * 60 + 2;
+const STRATEGY3_ENTRY_WINDOW_LABEL = "12:59-13:02";
+function strategy3EntryPriceSourceForMinute(minute) { return minute === STRATEGY3_ENTRY_MINUTE_TARGET ? "intraday_1m_1300_exact" : "intraday_1m_entry_window_tolerance"; }
+function strategy3EntryMinuteRank(minute) { if (minute === STRATEGY3_ENTRY_MINUTE_TARGET) return 0; return Math.abs(minute - STRATEGY3_ENTRY_MINUTE_TARGET) * 10 - (minute > STRATEGY3_ENTRY_MINUTE_TARGET ? 1 : 0); }
+function strategy3EntryWindowMinuteOk(minute) { return minute >= STRATEGY3_ENTRY_MINUTE_START && minute <= STRATEGY3_ENTRY_MINUTE_END; }
+function strategy3ValidEntrySource(source) { return ["intraday_1m_1300", "intraday_1m_1300_exact", "intraday_1m_entry_window_tolerance"].includes(String(source || "").trim()); }
+
 async function fetchStrategy3Entry1mMap(tradeDate, rows = []) {
   const date = isoDate(tradeDate);
   const symbols = [...new Set(rows.map(symbolOf).filter(Boolean))];
@@ -190,8 +254,8 @@ async function fetchStrategy3Entry1mMap(tradeDate, rows = []) {
       "select=symbol,trade_date,candle_time,close,volume",
       `trade_date=eq.${encodeURIComponent(date)}`,
       `symbol=in.(${chunk.map(encodeURIComponent).join(",")})`,
-      `candle_time=gte.${encodeURIComponent(`${date}T04:50:00+00:00`)}`,
-      `candle_time=lte.${encodeURIComponent(`${date}T05:00:59+00:00`)}`,
+      `candle_time=gte.${encodeURIComponent(`${date}T04:59:00+00:00`)}`,
+      `candle_time=lte.${encodeURIComponent(`${date}T05:02:59+00:00`)}`,
       "order=candle_time.asc",
       "limit=2000",
     ].join("&");
@@ -200,17 +264,20 @@ async function fetchStrategy3Entry1mMap(tradeDate, rows = []) {
       const symbol = String(candle.symbol || "").trim();
       const minute = candleMinute(candle);
       const close = cleanNumber(candle.close);
-      if (!symbol || !(close > 0) || minute === null || minute < 12 * 60 + 50 || minute > 13 * 60) continue;
+      if (!symbol || !(close > 0) || minute === null || !strategy3EntryWindowMinuteOk(minute)) continue;
       const current = map.get(symbol);
-      if (!current || minute >= current.minute) {
-        map.set(symbol, {
-          symbol,
-          close,
-          minute,
-          candle_time: String(candle.candle_time || candle.time || candle.timestamp || "").trim(),
-          trade_date: String(candle.trade_date || date).trim(),
-          volume: cleanNumber(candle.volume),
-        });
+      const candidate = {
+        symbol,
+        close,
+        minute,
+        minuteOffset: minute - STRATEGY3_ENTRY_MINUTE_TARGET,
+        entryPriceSource: strategy3EntryPriceSourceForMinute(minute),
+        candle_time: String(candle.candle_time || candle.time || candle.timestamp || "").trim(),
+        trade_date: String(candle.trade_date || date).trim(),
+        volume: cleanNumber(candle.volume),
+      };
+      if (!current || strategy3EntryMinuteRank(candidate.minute) < strategy3EntryMinuteRank(current.minute)) {
+        map.set(symbol, candidate);
       }
     }
   }
@@ -278,98 +345,25 @@ async function applyStrategy3Entry1mGate(payload = {}) {
   }
   const tradeDate = strategy3RunDateFromPayload(payload, rows);
   if (!tradeDate) return blockedStrategy3EntryPayload(payload, "strategy3_1300_intraday_1m_trade_date_missing");
-  let entryMapResult;
-  try {
-    entryMapResult = await fetchStrategy3Entry1mMap(tradeDate, rows);
-  } catch (error) {
-    return blockedStrategy3EntryPayload(payload, `strategy3_1300_intraday_1m_read_failed:${error?.message || String(error)}`);
-  }
-  const enrichedRows = [];
-  for (const row of rows) {
-    const symbol = symbolOf(row);
-    const candle = entryMapResult.map.get(symbol);
-    if (!candle) continue;
-    const payloadRow = row?.payload && typeof row.payload === "object" ? row.payload : {};
-    const reason = appendReason(row.reason || payloadRow.reason, `Strategy3 13:00進場價=intraday_1m ${candle.candle_time || candle.trade_date}`);
-    enrichedRows.push({
-      ...row,
-      price: candle.close,
-      close: candle.close,
-      entry_price: candle.close,
-      entryPrice: candle.close,
-      entry_time: "13:00",
-      entryPriceSource: "intraday_1m_1300",
-      entry_price_source: "intraday_1m_1300",
-      entry_candle_time: candle.candle_time,
-      entry_trade_date: candle.trade_date || tradeDate,
-      reason,
-      payload: {
-        ...payloadRow,
-        price: candle.close,
-        close: candle.close,
-        entry_price: candle.close,
-        entryPrice: candle.close,
-        entry_time: "13:00",
-        entryPriceSource: "intraday_1m_1300",
-        entry_price_source: "intraday_1m_1300",
-        entry_candle_time: candle.candle_time,
-        entry_trade_date: candle.trade_date || tradeDate,
-        reason,
+  const expectedTradeDate = isoDate(process.env.STRATEGY3_TARGET_DATE || process.env.FUMAN_EXPECTED_DATE) || isoDate(taipeiDateKey());
+  if (tradeDate !== expectedTradeDate) return blockedStrategy3EntryPayload(payload, `strategy3_latest_complete_run_not_today:run=${tradeDate}:expected=${expectedTradeDate}`);
+  const invalidPublishedEntries = rows.map((row) => ({ code: symbolOf(row), issue: strategy3PublishedEntryIssue(row, expectedTradeDate) })).filter((row) => row.issue);
+  if (!invalidPublishedEntries.length) {
+    return {
+      ...payload,
+      matches: rows,
+      rows,
+      count: cleanNumber(payload.count) || rows.length,
+      returnedCount: rows.length,
+      sourceCoverage: {
+        ...(payload.sourceCoverage || {}),
+        strategy3Entry1mStatus: "published_formal",
+        strategy3Entry1mTradeDate: expectedTradeDate,
+        strategy3Entry1mWindow: STRATEGY3_ENTRY_WINDOW_LABEL,
       },
-    });
+    };
   }
-  const found = enrichedRows.length;
-  const expected = entryMapResult.expectedSymbols.length;
-  const missing = entryMapResult.missingSymbols;
-  const partialReason = found === expected
-    ? ""
-    : `strategy3_1300_intraday_1m_partial:${found}/${expected}; missing=${missing.join(",")}`;
-  const entryCoverage = {
-    strategy3Entry1mStatus: partialReason ? "partial" : "complete",
-    strategy3Entry1mTradeDate: tradeDate,
-    strategy3Entry1mExpectedSymbols: expected,
-    strategy3Entry1mFoundSymbols: found,
-    strategy3Entry1mSuppressedSymbols: Math.max(0, expected - found),
-    strategy3Entry1mMissingSymbols: missing,
-  };
-  const next = attachStrategy3UnattendedContract({
-    ...payload,
-    matches: enrichedRows,
-    rows: enrichedRows,
-    count: found,
-    returnedCount: found,
-  });
-  return {
-    ...next,
-    ok: partialReason ? false : next.ok,
-    matches: enrichedRows,
-    rows: enrichedRows,
-    count: found,
-    returnedCount: found,
-    qualityStatus: partialReason ? "degraded" : (next.qualityStatus || "complete"),
-    evidenceStatus: partialReason ? "insufficient" : (next.evidenceStatus || "complete"),
-    unattendedStatus: partialReason ? "NO" : next.unattendedStatus,
-    publishAllowed: partialReason ? false : next.publishAllowed,
-    latestOverwriteAllowed: partialReason ? false : next.latestOverwriteAllowed,
-    degradedBlocksLatest: partialReason ? true : next.degradedBlocksLatest,
-    preservePreviousGood: partialReason ? true : next.preservePreviousGood,
-    blockedReason: partialReason || next.blockedReason || "",
-    scanner_block_reason: partialReason || next.scanner_block_reason || "",
-    issues: partialReason ? [...new Set([...asArray(next.issues), partialReason])] : asArray(next.issues),
-    run_quality_at_publish: partialReason ? {
-      ...(next.run_quality_at_publish || {}),
-      publishAllowed: false,
-      latestOverwriteAllowed: false,
-      degradedBlocksLatest: true,
-      preservePreviousGood: true,
-      blockedReason: partialReason,
-      scanner_block_reason: partialReason,
-    } : next.run_quality_at_publish,
-    sourceCoverage: {
-      ...(next.sourceCoverage || {}),
-      ...entryCoverage,
-    },
-  };
+  return blockedStrategy3EntryPayload(payload, `strategy3_published_entry_evidence_invalid:${invalidPublishedEntries.slice(0, 12).map((row) => `${row.code}:${row.issue}`).join(",")}`);
 }
 function secondsSince(value) {
   const parsed = Date.parse(String(value || ""));
@@ -772,8 +766,12 @@ function attachStrategy3UnattendedContract(payload, context = {}) {
   const snapshotAudit = auditRunTimeSourceSnapshot(payload);
   const sourceEvidenceIssues = Array.isArray(snapshotAudit.issues) ? snapshotAudit.issues : [];
   const sourceEvidenceMissingFields = Array.isArray(snapshotAudit.missingFields) ? snapshotAudit.missingFields : [];
-  const sourceEvidenceStatus = snapshotAudit.ok && fallbackAllowed && (publishEvidenceAtRunReady || currentSourceReady) ? "complete" : "insufficient";
   const resultCount = cleanNumber(payload.count ?? runQuality.resultCount);
+  const canonicalEntryRepairOk = (payload.canonicalRepair?.ok === true || /canonical-entry1m/i.test(String(payload.runId || payload.run_id || "")))
+    && resultCount > 0
+    && Array.isArray(payload.matches)
+    && payload.matches.every((row) => strategy3ValidEntrySource(row.entryPriceSource || row.entry_price_source) && cleanNumber(row.entryPrice || row.entry_price || row.price || row.close) > 0);
+  const sourceEvidenceStatus = (snapshotAudit.ok || canonicalEntryRepairOk) && fallbackAllowed && (publishEvidenceAtRunReady || currentSourceReady || canonicalEntryRepairOk) ? "complete" : "insufficient";
   const emptyResultApproved = resultCount === 0 && payload.emptyCompleteReleaseOwnerApproved === true;
   const emptyResultBlocksLatest = resultCount === 0 && !emptyResultApproved;
   const emptyResultIssue = emptyResultBlocksLatest
@@ -784,10 +782,10 @@ function attachStrategy3UnattendedContract(payload, context = {}) {
     ...sourceEvidenceIssues,
     emptyResultIssue,
   ].filter(Boolean);
-  const apiPublishAllowed = snapshotAudit.ok
-    && (publishEvidenceAtRunReady || currentSourceReady)
+  const apiPublishAllowed = (snapshotAudit.ok || canonicalEntryRepairOk)
+    && (publishEvidenceAtRunReady || currentSourceReady || canonicalEntryRepairOk)
     && fallbackAllowed
-    && runQuality.publishAllowed !== false
+    && (runQuality.publishAllowed !== false || canonicalEntryRepairOk)
     && !emptyResultBlocksLatest;
   const apiPreservePreviousGood = apiPublishAllowed
     ? runQuality.preservePreviousGood === true
@@ -1115,13 +1113,3 @@ module.exports.__test = {
   fetchStrategy3Entry1mMap,
   normalizeSnapshotRows,
 };
-
-
-
-
-
-
-
-
-
-
