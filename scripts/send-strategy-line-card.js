@@ -68,13 +68,15 @@ function nowTaipeiIso() {
   return new Date().toLocaleString("sv-SE", { timeZone: "Asia/Taipei", hour12: false }).replace(" ", "T") + "+08:00";
 }
 
-function receiptPath(strategy, date = compactDate()) {
-  return path.join(OUT_DIR, `${strategy}-line-card-${date}.json`);
+function receiptPath(strategy, date = compactDate(), options = {}) {
+  const suffix = options.dryRun ? ".dry-run" : "";
+  return path.join(OUT_DIR, `${strategy}-line-card-${date}${suffix}.json`);
 }
 
-function writeReceipt(strategy, receipt) {
+function writeReceipt(strategy, receipt, options = {}) {
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  const file = receiptPath(strategy, receipt.date || compactDate());
+  const dryRun = options.dryRun === true || receipt.dry_run === true;
+  const file = receiptPath(strategy, receipt.date || compactDate(), { dryRun });
   fs.writeFileSync(file, JSON.stringify({ ...receipt, receipt_path: file }, null, 2), "utf8");
   return file;
 }
@@ -107,6 +109,13 @@ function price(value) {
   return n.toFixed(2).replace(/0$/, "").replace(/\.0$/, "");
 }
 
+function signedPrice(value) {
+  const raw = String(value ?? "").replace(/[,+%]/g, "").trim();
+  if (!raw) return "-";
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return "-";
+  return n.toFixed(2).replace(/0$/, "").replace(/\.0$/, "");
+}
 function rowCode(row) {
   return text(row.code || row.symbol || row.stock_id || row.stockId, "-");
 }
@@ -251,6 +260,24 @@ function rowBox(row, index, strategy) {
   };
 }
 
+function strategy4CompactTextBlocks(rows) {
+  const lines = rows.map((row, index) => {
+    const codeName = `${rowCode(row)} ${rowName(row)}`.slice(0, 18);
+    return `${String(index + 1).padStart(2, "0")} ${codeName} 進${rowEntryPrice(row)} 目${rowTargetPrice(row)}`;
+  });
+  const chunks = [];
+  for (let i = 0; i < lines.length; i += 18) chunks.push(lines.slice(i, i + 18));
+  return chunks.map((chunk) => ({
+    type: "box",
+    layout: "vertical",
+    backgroundColor: "#101827",
+    borderColor: "#273951",
+    borderWidth: "1px",
+    cornerRadius: "6px",
+    paddingAll: "8px",
+    contents: [boxText(chunk.join("\n"), { size: "xxs", color: "#ffffff", wrap: true })],
+  }));
+}
 function buildCard(strategy, payload, receipt = {}) {
   const isStrategy4 = strategy === "strategy4";
   const title = isStrategy4 ? "FUMAN 16:00" : "FUMAN 13:00";
@@ -260,6 +287,8 @@ function buildCard(strategy, payload, receipt = {}) {
   const blockedReason = text(payload.blockedReason || payload.scanner_block_reason || payload.error || receipt.blockingReason || "", "");
   const ok = payload.ok === true && count > 0 && !blockedReason;
   const displayRows = matches;
+  const rowContents = isStrategy4 ? strategy4CompactTextBlocks(displayRows) : displayRows.map((row, index) => rowBox(row, index, strategy));
+  // strategy4_compact_text_rows_v1 keeps all Strategy4 rows in one LINE bubble under 30KB.
   const scanDate = text(payload.scanStamp || payload.scanDate || payload.usedDate || receipt.startedAt || nowTaipeiIso(), "-");
   const runId = text(payload.runId || receipt.runId, "-");
   const expected = cleanNumber(payload.expectedTotal || payload.sourceHealth?.expectedTotal || receipt.total);
@@ -316,7 +345,7 @@ function buildCard(strategy, payload, receipt = {}) {
           ],
         },
         boxText(matches.length ? `全部標的 ${matches.length} 檔` : (ok ? "全部標的" : "狀態"), { size: "md", weight: "bold", color: "#ffd76a" }),
-        ...(displayRows.length ? displayRows.map((row, index) => rowBox(row, index, strategy)) : [
+        ...(displayRows.length ? rowContents : [
           { type: "box", layout: "vertical", backgroundColor: "#101827", borderColor: "#273951", borderWidth: "1px", cornerRadius: "6px", paddingAll: "12px", contents: [boxText("目前無可回讀標的", { size: "sm", color: "#ffffff", align: "center" })] },
         ]),
         { type: "box", layout: "vertical", backgroundColor: "#f2bd4b", cornerRadius: "6px", paddingAll: "10px", contents: [boxText(summary, { size: "sm", weight: "bold", color: "#090909" })] },
@@ -516,10 +545,16 @@ async function main() {
   const dateAligned = dataDate === today;
   const staleReason = dateAligned ? "" : `strategy_line_card_date_mismatch:today=${today};dataDate=${dataDate || "unknown"};runId=${runId || "missing"}`;
   const blockedReason = [baseBlockedReason, staleReason].filter(Boolean).join("; ");
-  const publicCount = dateAligned ? count : 0;
-  const publicRunId = dateAligned ? runId : "";
+  const readyForLine = dateAligned
+    && payload.ok === true
+    && count > 0
+    && Boolean(runId)
+    && !blockedReason
+    && (payload.httpStatusCode == null || Number(payload.httpStatusCode) < 400);
+  const publicCount = dateAligned && readyForLine ? count : 0;
+  const publicRunId = dateAligned && readyForLine ? runId : "";
   const receipt = {
-    ok: dateAligned,
+    ok: readyForLine,
     date: today,
     strategy,
     checked_at: nowTaipeiIso(),
@@ -527,17 +562,17 @@ async function main() {
     message_type: "flex",
     api_http_status: payload.httpStatusCode || null,
     payload_ok: payload.ok === true,
-    status: !dateAligned ? "fail_closed_no_today_run" : (payload.ok === true && count > 0 && !blockedReason ? "ready" : "blocked_or_empty"),
-    reason_code: !dateAligned ? "strategy_line_card_date_mismatch" : "",
+    status: !dateAligned ? "fail_closed_no_today_run" : (readyForLine ? "ready" : "blocked_or_empty"),
+    reason_code: !dateAligned ? "strategy_line_card_date_mismatch" : (readyForLine ? "" : "strategy_line_card_not_ready"),
     line_push_ok: false,
     line_target_configured: Boolean(lineEnv.token && lineEnv.to),
     line_target_valid: !invalidLineTarget(lineEnv.to),
     count: publicCount,
     runId: publicRunId,
-    previous_good_runId: dateAligned ? "" : runId,
-    previous_good_count: dateAligned ? 0 : count,
-    accepted_symbols: dateAligned && Array.isArray(payload.matches) ? payload.matches.map(rowCode).filter(Boolean) : [],
-    accepted_rows: dateAligned && Array.isArray(payload.matches) ? payload.matches.map((row, index) => ({
+    previous_good_runId: readyForLine ? "" : runId,
+    previous_good_count: readyForLine ? 0 : count,
+    accepted_symbols: readyForLine && Array.isArray(payload.matches) ? payload.matches.map(rowCode).filter(Boolean) : [],
+    accepted_rows: readyForLine && Array.isArray(payload.matches) ? payload.matches.map((row, index) => ({
       rank: index + 1,
       code: rowCode(row),
       name: rowName(row),
@@ -546,7 +581,7 @@ async function main() {
       changePercent: rowPct(row),
       score: rowScore(row),
       targetPrice: rowTargetPrice(row),
-      stopPrice: price(row.stopPrice ?? row.mutakiV17?.stopPrice ?? row.payload?.stopPrice ?? row.payload?.mutakiV17?.stopPrice),
+      stopPrice: signedPrice(row.stopPrice ?? row.mutakiV17?.stopPrice ?? row.payload?.stopPrice ?? row.payload?.mutakiV17?.stopPrice),
       riskReward: cleanNumber(row.riskReward ?? row.mutakiV17?.riskReward ?? row.payload?.riskReward ?? row.payload?.mutakiV17?.riskReward),
       zone: text(row.zone || row.swingZone || row.payload?.zone || row.payload?.swingZone, ""),
       zoneLabel: text(row.zoneLabel || row.swingZoneLabel || row.zone_label || row.payload?.zoneLabel || row.payload?.swingZoneLabel || row.payload?.zone_label, ""),
@@ -567,9 +602,9 @@ async function main() {
     api_error: apiError,
   };
 
-  if (!dateAligned) {
-    const file = writeReceipt(strategy, receipt);
-    console.log(JSON.stringify({ ok: false, dry_run: dryRun, strategy, line_push_ok: false, status: receipt.status, reason_code: receipt.reason_code, count: publicCount, runId: publicRunId, previous_good_runId: receipt.previous_good_runId, dataDate, blockedReason, receipt_path: file }, null, 2));
+  if (!readyForLine) {
+    const file = writeReceipt(strategy, receipt, { dryRun });
+    console.log(JSON.stringify({ ok: false, dry_run: dryRun, strategy, line_push_ok: false, status: receipt.status, reason_code: receipt.reason_code, count: publicCount, runId: publicRunId, previous_good_runId: receipt.previous_good_runId, previous_good_count: receipt.previous_good_count, dataDate, dateAligned, payload_ok: receipt.payload_ok, api_http_status: receipt.api_http_status, blockedReason, receipt_path: file }, null, 2));
     if (!dryRun) process.exitCode = 2;
     return;
   }
@@ -581,7 +616,7 @@ async function main() {
     await sendLineFlex(altText, card, { idempotencyKey: `strategy-line-card:${strategy}:${receipt.date}:${receipt.runId || "no-run"}:${receipt.status}` });
     receipt.line_push_ok = true;
   }
-  const file = writeReceipt(strategy, receipt);
+  const file = writeReceipt(strategy, receipt, { dryRun });
   console.log(JSON.stringify({ ok: true, dry_run: dryRun, strategy, line_push_ok: receipt.line_push_ok, status: receipt.status, count, runId: receipt.runId, blockedReason, receipt_path: file }, null, 2));
 }
 
@@ -598,10 +633,13 @@ main().catch((error) => {
     error: error?.message || String(error),
   };
   let file = "";
-  try { file = writeReceipt(strategy, receipt); } catch {}
+  try { file = writeReceipt(strategy, receipt, { dryRun }); } catch {}
   console.error(JSON.stringify({ ok: false, strategy, error: receipt.error, receipt_path: file }, null, 2));
   process.exit(1);
 });
+
+
+
 
 
 
