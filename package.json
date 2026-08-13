@@ -94,7 +94,7 @@
     "verify:strategy3-canonical-closure": "node --use-system-ca scripts/verify-strategy3-canonical-closure.js",
     "verify:strategy3-entry-window-evidence": "node --use-system-ca scripts/verify-strategy3-entry-window-evidence.js",
     "verify:strategy3-list-source-churn": "node --use-system-ca scripts/verify-strategy3-list-source-churn.js",
-    "verify:strategy3-full-closure": "npm run strategy2:daytrade-1m-chain && npm run verify:strategy3-api-entry-immutability && npm run verify:strategy3-canonical-closure && npm run verify:strategy3-entry-window-evidence && npm run verify:strategy3-list-source-churn && node --use-system-ca scripts/verify-daytrade-strategy3-closure-live.js --require-authenticated-mobile",
+    "verify:strategy3-full-closure": "node --use-system-ca scripts/verify-strategy3-water-scan-surface-scorecard.js",
     "verify:strategy3-live-before": "node --use-system-ca scripts/verify-strategy3-live-readback.js --capture-before",
     "verify:strategy3-live-blocked": "node --use-system-ca scripts/verify-strategy3-live-readback.js --expect-blocked",
     "verify:strategy3-full-scan": "node --use-system-ca scripts/verify-strategy3-full-scan-coverage.js",

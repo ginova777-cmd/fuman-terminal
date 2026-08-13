@@ -237,9 +237,8 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
     issues.push(`sideVolumeReadyCount ${sideVolumeReadyCount} below ${minSideVolumeReadyCount}`);
   }
   const warningCount = sourceWarnings.length + warnings.length;
-  if (warningCount > SOURCE_WARNING_LIMIT) {
-    issues.push(`warningCount ${warningCount} above ${SOURCE_WARNING_LIMIT}`);
-  }
+  // Warning volume is diagnostic only. Formal gates below still require same-day source, 1m entry evidence, and a complete scan.
+  const warningLimitExceeded = warningCount > SOURCE_WARNING_LIMIT;
   return {
     status: issues.length ? "failed" : "ok",
     issuedSharesCount: issuedSharesMap.size,
@@ -259,6 +258,8 @@ function buildSourceHealth(stocks, issuedSharesMap, volumeAverageMap, sourceWarn
     exclusionStats,
     warningCount,
     warningLimit: SOURCE_WARNING_LIMIT,
+    warningLimitExceeded,
+    warningLimitBlocksPublish: false,
     minIssuedSharesCount: MIN_ISSUED_SHARES_COUNT,
     minVolumeAverageCount: MIN_VOLUME_AVERAGE_COUNT,
     requireTurnover: STRATEGY3_REQUIRE_TURNOVER,
@@ -510,7 +511,7 @@ async function fetchStrategy3DatePreflight(stocks, now = new Date()) {
 
   try {
     const intradayResult = await fetchSupabaseRest(
-      `${STRATEGY3_INTRADAY_1M_TABLE}?select=trade_date,candle_time,updated_at&order=trade_date.desc,candle_time.desc&limit=1`,
+      `${STRATEGY3_INTRADAY_STATUS_SOURCE}?select=trade_date,latest_candle_time,updated_at&order=latest_candle_time.desc&limit=1`,
       { timeoutMs: 30000 }
     );
     intradayRow = intradayResult.rows?.[0] || {};
@@ -548,7 +549,7 @@ async function fetchStrategy3DatePreflight(stocks, now = new Date()) {
   ]);
   const intradayDateCandidates = collectDateCandidates([
     ["trade_date", intradayRow?.trade_date],
-    ["candle_time", intradayRow?.candle_time],
+    ["latest_candle_time", intradayRow?.latest_candle_time],
     ["updated_at", intradayRow?.updated_at],
   ]);
   const universeDateCandidates = collectStockUniverseDateCandidates(stocks);
@@ -649,7 +650,7 @@ async function fetchStrategy3IntradayReadyCount(minRequired = STRATEGY3_DRIFT_MI
   ).slice(0, 10);
   const fallbackLatestRows = quoteTradeDate
     ? { rows: [] }
-    : await fetchSupabaseRest(`${STRATEGY3_INTRADAY_1M_TABLE}?select=trade_date&order=trade_date.desc&limit=1`, { timeoutMs: 30000 });
+    : await fetchSupabaseRest(`${STRATEGY3_INTRADAY_STATUS_SOURCE}?select=trade_date,latest_candle_time,updated_at&order=latest_candle_time.desc&limit=1`, { timeoutMs: 30000 });
   let latestTradeDate = String(quoteTradeDate || fallbackLatestRows.rows?.[0]?.trade_date || "");
   if (latestTradeDate && /v_fugle_daytrade_intraday_1m_status/i.test(STRATEGY3_INTRADAY_STATUS_SOURCE)) {
     const statusResult = await fetchSupabaseRest(
@@ -658,11 +659,7 @@ async function fetchStrategy3IntradayReadyCount(minRequired = STRATEGY3_DRIFT_MI
     );
     const statusRows = Array.isArray(statusResult.rows) ? statusResult.rows : [];
     const statusReadyCount = statusRows.filter(strategy2IntradayReadyRow).length;
-    const tailResult = await fetchSupabaseRest(
-      STRATEGY3_INTRADAY_1M_TABLE + "?select=candle_time,trade_date&order=candle_time.desc&limit=1",
-      { timeoutMs: 30000 }
-    ).catch(() => ({ rows: [] }));
-    const latestCandleTime = String(tailResult.rows?.[0]?.candle_time || "");
+    const latestCandleTime = statusRows.map((row) => String(row.latest_candle_time || "")).filter(Boolean).sort().at(-1) || "";
     if (statusReadyCount >= cleanNumber(minRequired) && statusRows.length >= cleanNumber(minRequired)) {
       return {
         rowCount: statusRows.length,

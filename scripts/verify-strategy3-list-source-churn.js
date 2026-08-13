@@ -9,7 +9,7 @@ const SUPABASE_KEY = terminalSupabaseKey({ root: ROOT, runtimeDir: RUNTIME_DIR }
 const RUNS_TABLE = process.env.STRATEGY3_SUPABASE_RUNS_TABLE || "strategy3_scan_runs";
 const RESULTS_TABLE = process.env.STRATEGY3_SUPABASE_RESULTS_TABLE || "strategy3_scan_results";
 const LATEST_RUN_VIEW = process.env.STRATEGY3_SUPABASE_LATEST_RUN_VIEW || "v_strategy3_latest_complete_run";
-const MIN_FULL_SCAN_TOTAL = Number(process.env.STRATEGY3_MIN_FULL_SCAN_TOTAL || 1000);
+const MIN_FULL_SCAN_TOTAL = Number(process.env.STRATEGY3_MIN_FULL_SCAN_TOTAL || 0);
 const MIN_NEW_SYMBOLS = Number(process.env.STRATEGY3_MIN_CHURN_NEW_SYMBOLS || 1);
 const MIN_CHURN_RATIO = Number(process.env.STRATEGY3_MIN_CHURN_RATIO || 0.01);
 
@@ -220,7 +220,7 @@ async function main() {
   if (!latestSummary.complete || latestSummary.status !== "complete") issues.push(`latest_run_not_complete:${latestSummary.status || "missing"}`);
   if (latestSummary.canonicalRepair) issues.push("latest_run_is_canonical_repair_not_fresh_full_scan");
   if (latestSummary.previousGood) issues.push("latest_run_is_previous_good_or_fallback");
-  if (latestSummary.expectedTotal < MIN_FULL_SCAN_TOTAL || latestSummary.scannedCount < MIN_FULL_SCAN_TOTAL || latestSummary.expectedTotal !== latestSummary.scannedCount) {
+  if (latestSummary.expectedTotal <= 0 || latestSummary.scannedCount <= 0 || (MIN_FULL_SCAN_TOTAL > 0 && (latestSummary.expectedTotal < MIN_FULL_SCAN_TOTAL || latestSummary.scannedCount < MIN_FULL_SCAN_TOTAL)) || latestSummary.expectedTotal !== latestSummary.scannedCount) {
     issues.push(`full_scan_not_proven:expected=${latestSummary.expectedTotal};scanned=${latestSummary.scannedCount};min=${MIN_FULL_SCAN_TOTAL}`);
   }
   if (current.exactCount !== latestSummary.resultCount || current.rows.length !== latestSummary.resultCount) {

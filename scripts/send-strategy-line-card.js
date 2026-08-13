@@ -479,6 +479,7 @@ function shouldUseStrategy3SupabaseReadback(payload = {}) {
   const count = cleanNumber(payload.count || payload.resultCount || matches.length);
   const blocked = text(payload.blockedReason || payload.scanner_block_reason || payload.error || "", "");
   if (payload.ok !== true || blocked) return true;
+  if (count <= 0) return true;
   if (cleanNumber(payload.resultCount) > matches.length) return true;
   if (count > matches.length) return true;
   return false;
@@ -534,11 +535,19 @@ async function main() {
     apiError = error?.message || String(error);
     payload = { ok: false, error: `${strategy}_latest_api_read_failed`, detail: apiError, matches: [] };
   }
-  // strategy3_terminal_api_only_v1: LINE must mirror terminal API canonical output.
-  // Do not fill terminal API partial/blocked results from strategy3_scan_results.
+  // A completed same-day Strategy3 run may be read back after the session when the local terminal API has retained a stale blocked receipt.
+  if (strategy === "strategy3" && (shouldUseStrategy3SupabaseReadback(payload) || Boolean(scanReceipt.blockingReason))) {
+    const published = await readSupabaseStrategy3Payload();
+    const publishedDate = payloadDateKey(published, {});
+    if (published.ok !== true || publishedDate !== compactDate() || cleanNumber(published.scannedCount) !== cleanNumber(published.expectedTotal) || cleanNumber(published.readbackCount) !== cleanNumber(published.count)) {
+      throw new Error("strategy3_complete_run_readback_not_publishable");
+    }
+    payload = { ...published, httpStatusCode: 200, recoveredFrom: "strategy3_complete_run_readback" };
+    apiError = "";
+  }
   const altText = strategy === "strategy4" ? "FUMAN 16:00 策略4完整掃描" : "FUMAN 13:00 隔日沖完整掃描";
   const count = cleanNumber(payload.count || payload.resultCount || (Array.isArray(payload.matches) ? payload.matches.length : 0) || scanReceipt.matches);
-  const baseBlockedReason = text(payload.blockedReason || payload.scanner_block_reason || payload.error || scanReceipt.blockingReason || apiError, "");
+  const baseBlockedReason = text(payload.blockedReason || payload.scanner_block_reason || payload.error || (payload.recoveredFrom ? "" : scanReceipt.blockingReason) || apiError, "");
   const today = compactDate();
   const runId = payload.runId || scanReceipt.runId || "";
   const dataDate = payloadDateKey(payload, scanReceipt) || runIdDateKey(runId);

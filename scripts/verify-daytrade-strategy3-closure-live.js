@@ -8,6 +8,7 @@ const RETRY_DELAY_MS = Number(process.env.FUMAN_LIVE_CLOSURE_RETRY_DELAY_MS || 1
 const ROOT = require("path").resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const AUTH_BEARER = String(process.env.FUMAN_MOBILE_AUTH_BEARER || process.env.FUMAN_PRODUCTION_BEARER || "").trim();
+const PRODUCTION_VERIFY_TOKEN = String(process.env.FUMAN_PRODUCTION_VERIFY_TOKEN || "").trim();
 const REQUIRE_AUTHENTICATED_MOBILE = process.argv.includes("--require-authenticated-mobile");
 
 function numberValue(value, fallback = 0) {
@@ -27,6 +28,8 @@ function taipeiDate() {
 }
 function dateOf(value) { const match = String(value || "").match(/\d{4}-\d{2}-\d{2}/); return match ? match[0] : ""; }
 function htmlRunId(text) { const match = String(text || "").match(/data-run-id="([^"]+)"/i); return match ? match[1] : ""; }
+function htmlNumberAttribute(text, attribute) { const match = String(text || "").match(new RegExp(attribute + "=\\\"(\\d+)\\\"", "i")); return match ? numberValue(match[1]) : 0; }
+function htmlBooleanAttribute(text, attribute) { const match = String(text || "").match(new RegExp(attribute + "=\\\"([^\\\"]+)\\\"", "i")); return match ? match[1] === "1" : false; }
 
 function addTs(pathname) {
   const joiner = pathname.includes("?") ? "&" : "?";
@@ -44,7 +47,7 @@ async function fetchText(pathname) {
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
       const response = await fetch(`${BASE_URL}${addTs(pathname)}`, {
-        headers: { Accept: "application/json,text/html,*/*", ...(AUTH_BEARER ? { Authorization: "Bearer " + AUTH_BEARER } : {}) },
+        headers: { Accept: "application/json,text/html,*/*", ...(AUTH_BEARER ? { Authorization: "Bearer " + AUTH_BEARER } : {}), ...((pathname.includes("/api/mobile-fragment?tab=strategy3") && PRODUCTION_VERIFY_TOKEN) ? { "x-fuman-production-verify": PRODUCTION_VERIFY_TOKEN } : {}) },
         cache: "no-store",
         signal: controller.signal,
       });
@@ -232,10 +235,12 @@ function verify(summary) {
   if (!summary.desktopHome.ok) issues.push(`desktop_home_http_${summary.desktopHome.status}`);
   if (!summary.desktopHome.markerFound) issues.push("desktop_home_strategy3_ui_marker_missing");
   if (!summary.mobileBoot.ok) issues.push(`mobile_boot_http_${summary.mobileBoot.status}`);
-  if (REQUIRE_AUTHENTICATED_MOBILE && !AUTH_BEARER) issues.push("mobile_authenticated_bearer_missing");
+  if (REQUIRE_AUTHENTICATED_MOBILE && !AUTH_BEARER && !PRODUCTION_VERIFY_TOKEN) issues.push("mobile_authenticated_verification_credential_missing");
   if (REQUIRE_AUTHENTICATED_MOBILE && summary.mobileStrategy3.status !== 200) issues.push("mobile_strategy3_authenticated_http_" + summary.mobileStrategy3.status);
   if (!REQUIRE_AUTHENTICATED_MOBILE && !summary.mobileStrategy3.ok && !protectedMobileStrategy3) issues.push(`mobile_strategy3_http_${summary.mobileStrategy3.status}`);
   if (summary.mobileStrategy3.ok && summary.mobileStrategy3.runId !== strategy3Report.runId) issues.push("mobile_strategy3_runId_mismatch mobile=" + (summary.mobileStrategy3.runId || "missing") + " published=" + strategy3Report.runId);
+  if (REQUIRE_AUTHENTICATED_MOBILE && summary.mobileStrategy3.count !== strategy3Report.resultCount) issues.push("mobile_strategy3_count_mismatch mobile=" + summary.mobileStrategy3.count + " published=" + strategy3Report.resultCount);
+  if (REQUIRE_AUTHENTICATED_MOBILE && !summary.mobileStrategy3.formalDisplayAllowed) issues.push("mobile_strategy3_formal_display_not_allowed");
 
   return {
     ok: issues.length === 0,
@@ -256,7 +261,7 @@ async function main() {
   await sleep(250);
   const mobileBootResponse = await fetchJson("/api/mobile-boot");
   await sleep(250);
-  const mobileStrategy3Response = await fetchText("/api/mobile-fragment?tab=strategy3");
+  const mobileStrategy3Response = await fetchText("/api/mobile-fragment?tab=strategy3&verify=1");
   await sleep(250);
   const scorecardResponse = await fetchJson("/api/scorecard");
   await sleep(250);
@@ -348,6 +353,8 @@ async function main() {
       status: mobileStrategy3Response.status,
       ok: mobileStrategy3Response.ok && mobileStrategy3Response.text.includes("策略3"),
       runId: htmlRunId(mobileStrategy3Response.text),
+      count: htmlNumberAttribute(mobileStrategy3Response.text, "data-result-count"),
+      formalDisplayAllowed: htmlBooleanAttribute(mobileStrategy3Response.text, "data-formal-display-allowed"),
       bytes: mobileStrategy3Response.text.length,
     },
   };

@@ -18,6 +18,15 @@ const MOBILE_STRATEGY3_DIRECT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_STRAT
 const MOBILE_FRAGMENT_HTML_SNAPSHOT_READ_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_HTML_SNAPSHOT_READ_TIMEOUT_MS || 900);
 const MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS || 72 * 60 * 60 * 1000);
 
+function productionVerificationAllowed(request, url, tab) {
+  const expected = String(process.env.FUMAN_PRODUCTION_VERIFY_TOKEN || "").trim();
+  const supplied = String(request.headers?.["x-fuman-production-verify"] || "").trim();
+  if (tab !== "strategy3" || url.searchParams.get("verify") !== "1" || !expected || !supplied) return false;
+  const expectedBuffer = Buffer.from(expected);
+  const suppliedBuffer = Buffer.from(supplied);
+  return expectedBuffer.length === suppliedBuffer.length && crypto.timingSafeEqual(expectedBuffer, suppliedBuffer);
+}
+
 const TAB_CONFIG = {
   ai: {
     title: "AI 判讀",
@@ -760,7 +769,7 @@ function renderFragment(tab, config, payload) {
 
   const points = config.points.map((point, index) => `<p><b>${index + 1}</b>${esc(point)}</p>`).join("");
   const list = rows.length ? rows.map((row, index) => rowHtml(row, index, tab)).join("") : `<div class="empty-state">等待最新 complete run。</div>`;
-  return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}" data-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-today-authoritative="${todayAuthoritative === true ? "1" : "0"}" data-display-mode="${esc(displayMode)}">
+  return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}" data-result-count="${rows.length}" data-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-today-authoritative="${todayAuthoritative === true ? "1" : "0"}" data-display-mode="${esc(displayMode)}">
       <article class="mobile-terminal-head">
         <small>${validationDisplayAllowed ? "盤後驗證回測 / 非正式推薦" : "API-only complete run"}</small>
         <strong>${esc(config.title)}</strong>
@@ -932,6 +941,7 @@ module.exports = async function handler(request, response) {
     sendHtml(request, response, 404, '<div class="empty-state">未知分頁。</div>', { tab });
     return;
   }
+  if (productionVerificationAllowed(request, url, tab)) request.fumanInternalVerify = true;
   if (tab !== "ai") {
     const entitlement = await verifyRequestEntitlement(request, { scope: `mobile-fragment:${tab}` });
     if (!entitlement.ok) {
