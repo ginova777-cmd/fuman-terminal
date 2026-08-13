@@ -16,6 +16,7 @@ const compact = compactDate(today);
 const apiSource = read("api/market-ai-live.js");
 const appSource = read("terminal-app.js");
 const runnerSource = read("scripts/run-opening-report-0830-production.js");
+const desktopFastShellSource = read("terminal-desktop-fast-shell.js");
 const pkg = readJson(path.join(ROOT, "package.json"));
 
 assert(apiSource.includes("function readOpeningMorningReport"), "market-ai-live missing readOpeningMorningReport");
@@ -27,6 +28,7 @@ assert(apiSource.includes("readOpeningMorningReportSnapshot") && apiSource.inclu
 assert(runnerSource.includes("upsertSnapshot") && runnerSource.includes("syncTerminalBriefingSnapshot") && runnerSource.includes("opening_report_0830_terminal_briefing"), "08:30 runner must upsert terminal briefing snapshot");
 assert(appSource.includes("installOpeningReport0830TerminalBriefing"), "terminal app missing 08:30 briefing installer");
 assert(appSource.includes("window.__fumanRenderOpeningReport0830=renderBriefing") && appSource.includes("__fumanRenderOpeningReport0830?.(payload?.openingMorningReport"), "opening report render hook missing from live renderer");
+assert(desktopFastShellSource.includes("renderOpeningReport0830DesktopBriefing") && desktopFastShellSource.includes("aiPayload?.openingMorningReport") && desktopFastShellSource.includes("data-opening-report-0830-briefing"), "desktop fast shell must render opening report briefing");
 assert(appSource.includes("今日推薦"), "terminal display must use 今日推薦 instead of Mother Pool Bridge");
 assert(appSource.includes("08:30-08:59"), "terminal briefing display window missing");
 assert(appSource.includes("priority_scan_only"), "terminal briefing must expose priority_scan_only action");
