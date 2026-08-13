@@ -778,11 +778,16 @@ async function fetchStrategy3PayloadForScanDate(scanDate) {
     };
   });
   const entryMapResult = await fetchStrategy3Entry1mMap(scanDate, rows);
+  const acceptedEntrySources = new Set(["intraday_1m_1300", "intraday_1m_1300_exact", "intraday_1m_entry_window_tolerance", "intraday_1m_tail_volume_confirmed"]);
   const enrichedRows = applyStrategy3Entry1m(rows, entryMapResult)
-    .filter((row) => cleanText(row.entry_price_source || row.entryPriceSource) === "intraday_1m_1300");
+    .filter((row) => acceptedEntrySources.has(cleanText(row.entry_price_source || row.entryPriceSource)));
+  const emittedSymbols = new Set(enrichedRows.map((row) => codeOf(row, "")));
+  const missingSymbols = rows.map((row) => codeOf(row, "")).filter((code) => code && !emittedSymbols.has(code));
+  const tailVolumeRows = enrichedRows.filter((row) => cleanText(row.entry_price_source || row.entryPriceSource) === "intraday_1m_tail_volume_confirmed");
+  const evidenceComplete = enrichedRows.length === rows.length && missingSymbols.length === 0;
   return {
-    ok: enrichedRows.length > 0,
-    source: "supabase:strategy3_scan_results+fugle_daytrade_intraday_1m_1300",
+    ok: evidenceComplete && enrichedRows.length > 0,
+    source: "supabase:strategy3_scan_results+fugle_daytrade_intraday_1m_entry_evidence",
     runId: cleanText(run.run_id),
     usedDate: scanDate,
     date: scanDate,
@@ -791,21 +796,22 @@ async function fetchStrategy3PayloadForScanDate(scanDate) {
     matches: enrichedRows,
     rows: enrichedRows,
     publishAllowed: enrichedRows.length > 0,
-    qualityStatus: entryMapResult.ok === true ? "complete" : "degraded",
-    evidenceStatus: entryMapResult.ok === true ? "complete" : "degraded",
+    qualityStatus: evidenceComplete ? "complete" : "degraded",
+    evidenceStatus: evidenceComplete ? "complete" : "degraded",
     sourceCoverage: {
-      ok: entryMapResult.ok === true,
+      ok: evidenceComplete,
       source: entryMapResult.source,
       tradeDate: entryMapResult.tradeDate,
       expectedSymbols: entryMapResult.expected,
       foundSymbols: entryMapResult.found,
       emittedSymbols: enrichedRows.length,
-      suppressedSymbols: entryMapResult.missing.length,
-      missingSymbols: entryMapResult.missing,
+      suppressedSymbols: missingSymbols.length,
+      missingSymbols,
+      tailVolumeConfirmedSymbols: tailVolumeRows.length,
     },
-    reason: entryMapResult.ok === true
-      ? `scorecard_source_previous_trading_day:${scanDate}; strategy3_1300_intraday_1m_ready`
-      : `strategy3_1300_intraday_1m_partial:${enrichedRows.length}/${entryMapResult.expected}; missing=${entryMapResult.missing.slice(0, 20).join(",")}`,
+    reason: evidenceComplete
+      ? `scorecard_source_previous_trading_day:${scanDate}; strategy3_entry_evidence_ready; tail_volume=${tailVolumeRows.length}`
+      : `strategy3_entry_evidence_partial:${enrichedRows.length}/${rows.length}; missing=${missingSymbols.slice(0, 20).join(",")}`,
   };
 }
 

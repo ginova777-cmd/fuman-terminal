@@ -491,6 +491,157 @@ async function fetchSupabaseCountAtLeast(pathname, minRequired, options = {}) {
   return Math.max(cleanNumber(limited.rows?.length), limited.rows?.length || 0);
 }
 
+function strategy3EvidenceDate(value) {
+  const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
+  return /^\d{8}$/.test(digits) ? `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}` : "";
+}
+
+function strategy3EntryCode(stock = {}) {
+  return normalizeCode(stock.code || stock.symbol || stock.stock_id || stock.payload?.code || stock.payload?.symbol);
+}
+
+const STRATEGY3_EXACT_ENTRY_START = 12 * 60 + 59;
+const STRATEGY3_EXACT_ENTRY_TARGET = 13 * 60;
+const STRATEGY3_EXACT_ENTRY_END = 13 * 60 + 2;
+const STRATEGY3_TAIL_ENTRY_START = 12 * 60 + 45;
+const STRATEGY3_TAIL_ENTRY_END = 12 * 60 + 58;
+const STRATEGY3_TAIL_VOLUME_RATIO_MIN = Number(process.env.STRATEGY3_TAIL_VOLUME_RATIO_MIN || 1);
+const STRATEGY3_TAIL_HISTORY_MIN = Number(process.env.STRATEGY3_TAIL_HISTORY_MIN || 5);
+
+function strategy3ExactEntrySource(minute) {
+  return minute === STRATEGY3_EXACT_ENTRY_TARGET
+    ? "intraday_1m_1300_exact"
+    : "intraday_1m_entry_window_tolerance";
+}
+
+function strategy3MinuteRank(minute) {
+  if (minute === STRATEGY3_EXACT_ENTRY_TARGET) return 0;
+  return Math.abs(minute - STRATEGY3_EXACT_ENTRY_TARGET) * 10 - (minute > STRATEGY3_EXACT_ENTRY_TARGET ? 1 : 0);
+}
+
+function strategy3TailVolumeEvidence(candles = []) {
+  const tail = candles
+    .filter((candle) => candle.minute >= STRATEGY3_TAIL_ENTRY_START && candle.minute <= STRATEGY3_TAIL_ENTRY_END && candle.close > 0)
+    .sort((a, b) => b.minute - a.minute || Date.parse(b.candleTime) - Date.parse(a.candleTime))[0];
+  if (!tail) return null;
+  const history = candles
+    .filter((candle) => candle.minute < tail.minute && candle.minute >= tail.minute - 10 && candle.close > 0 && candle.volume > 0)
+    .sort((a, b) => b.minute - a.minute)
+    .slice(0, STRATEGY3_TAIL_HISTORY_MIN);
+  if (history.length < STRATEGY3_TAIL_HISTORY_MIN || !(tail.volume > 0)) return null;
+  const averageVolume = history.reduce((sum, candle) => sum + candle.volume, 0) / history.length;
+  const averageClose = history.reduce((sum, candle) => sum + candle.close, 0) / history.length;
+  const volumeRatio = averageVolume > 0 ? tail.volume / averageVolume : 0;
+  const closeStrength = tail.close >= tail.open && tail.close >= averageClose;
+  if (!closeStrength || volumeRatio < STRATEGY3_TAIL_VOLUME_RATIO_MIN) return null;
+  return {
+    ...tail,
+    entryPriceSource: "intraday_1m_tail_volume_confirmed",
+    volumeRatio: Math.round(volumeRatio * 100) / 100,
+    averageVolume: Math.round(averageVolume * 100) / 100,
+    averageClose: Math.round(averageClose * 100) / 100,
+    historyCount: history.length,
+  };
+}
+
+async function fetchStrategy3EntryEvidence(tradeDate, symbols = []) {
+  const date = strategy3EvidenceDate(tradeDate);
+  const normalized = [...new Set((symbols || []).map(normalizeCode).filter((code) => /^\d{4}$/.test(code)))];
+  const byCode = new Map();
+  if (!date || !normalized.length) return { date, expectedSymbols: normalized, byCode, missingSymbols: normalized };
+  for (const chunk of normalized.reduce((groups, code, index) => {
+    const group = Math.floor(index / 100);
+    groups[group] = groups[group] || [];
+    groups[group].push(code);
+    return groups;
+  }, [])) {
+    const query = [
+      "select=symbol,trade_date,candle_time,open,close,volume",
+      `trade_date=eq.${encodeURIComponent(date)}`,
+      `symbol=in.(${chunk.map(encodeURIComponent).join(",")})`,
+      `candle_time=gte.${encodeURIComponent(`${date}T04:40:00+00:00`)}`,
+      `candle_time=lte.${encodeURIComponent(`${date}T05:02:59+00:00`)}`,
+      "order=candle_time.asc",
+      "limit=12000",
+    ].join("&");
+    const result = await fetchSupabaseRest(`${STRATEGY3_INTRADAY_1M_TABLE}?${query}`, { timeoutMs: 30000 });
+    const candlesByCode = new Map();
+    for (const row of result.rows || []) {
+      const code = normalizeCode(row.symbol || row.code);
+      const minute = candleMinutes({ candleTime: row.candle_time || row.time || row.timestamp || row.updated_at });
+      const close = cleanNumber(row.close);
+      if (!/^\d{4}$/.test(code) || !(close > 0) || minute == null) continue;
+      const candle = { code, minute, close, open: cleanNumber(row.open) || close, volume: cleanNumber(row.volume), candleTime: String(row.candle_time || row.time || row.timestamp || "").trim(), tradeDate: String(row.trade_date || date).trim() };
+      const list = candlesByCode.get(code) || [];
+      list.push(candle);
+      candlesByCode.set(code, list);
+    }
+    for (const [code, candles] of candlesByCode) {
+      const exact = candles
+        .filter((candle) => candle.minute >= STRATEGY3_EXACT_ENTRY_START && candle.minute <= STRATEGY3_EXACT_ENTRY_END)
+        .sort((a, b) => strategy3MinuteRank(a.minute) - strategy3MinuteRank(b.minute))[0];
+      if (exact) {
+        byCode.set(code, { ...exact, entryPriceSource: strategy3ExactEntrySource(exact.minute), evidenceKind: "entry_window" });
+        continue;
+      }
+      const tail = strategy3TailVolumeEvidence(candles);
+      if (tail) byCode.set(code, { ...tail, evidenceKind: "tail_volume" });
+    }
+  }
+  return { date, expectedSymbols: normalized, byCode, missingSymbols: normalized.filter((code) => !byCode.has(code)) };
+}
+
+async function enforceStrategy3EntryEvidence(output = {}) {
+  const matches = Array.isArray(output.matches) ? output.matches : [];
+  if (!matches.length) return output;
+  const tradeDate = String(output.usedDate || output.tradeDate || "");
+  const evidence = await fetchStrategy3EntryEvidence(tradeDate, matches.map(strategy3EntryCode));
+  if (!evidence.date || !evidence.byCode.size) throw new Error(`Strategy3 Fugle 1m entry evidence empty:${evidence.byCode.size}/${evidence.expectedSymbols.length}`);
+  const suppressed = evidence.missingSymbols;
+  const enriched = matches.flatMap((stock) => {
+    const candle = evidence.byCode.get(strategy3EntryCode(stock));
+    if (!candle) return [];
+    const tail = candle.evidenceKind === "tail_volume";
+    const note = tail
+      ? `Strategy3 尾盤帶量確認=${candle.entryPriceSource} ${candle.candleTime}；量比=${candle.volumeRatio}；收盤>=前五根均價`
+      : `Strategy3 13:00進場價=${candle.entryPriceSource} ${candle.candleTime}；容錯窗=12:59-13:02`;
+    const reason = appendStrategy3Reason(stock.reason || stock.tvReason || stock.tvOvernightEntry?.reason, note);
+    return {
+      ...stock,
+      price: candle.close,
+      close: candle.close,
+      entry_price: candle.close,
+      entryPrice: candle.close,
+      entry_time: tail ? "tail-volume" : "13:00",
+      entryTime: tail ? "tail-volume" : "13:00",
+      entryWindow: tail ? "12:45-12:58_tail_volume" : "12:59-13:02",
+      entryWindowStart: tail ? "12:45" : "12:59",
+      entryWindowEnd: tail ? "12:58" : "13:02",
+      entryMinute: candle.minute,
+      entryPriceSource: candle.entryPriceSource,
+      entry_price_source: candle.entryPriceSource,
+      entry_candle_time: candle.candleTime,
+      entryCandleTime: candle.candleTime,
+      entry_trade_date: candle.tradeDate || evidence.date,
+      entryTradeDate: candle.tradeDate || evidence.date,
+      tailVolumeRatio: tail ? candle.volumeRatio : null,
+      tailVolumeAverage: tail ? candle.averageVolume : null,
+      tailVolumeHistoryCount: tail ? candle.historyCount : null,
+      reason,
+      tvReason: reason,
+      matches: [...(Array.isArray(stock.matches) ? stock.matches : []), { id: tail ? "intraday_1m_tail_volume_confirmed" : candle.entryPriceSource, reason: note }],
+    };
+  });
+  const exactCount = enriched.filter((row) => row.entryPriceSource === "intraday_1m_1300_exact").length;
+  const toleranceCount = enriched.filter((row) => row.entryPriceSource === "intraday_1m_entry_window_tolerance").length;
+  const tailVolumeCount = enriched.filter((row) => row.entryPriceSource === "intraday_1m_tail_volume_confirmed").length;
+  output.matches = enriched;
+  output.count = enriched.length;
+  output.sourceCoverage = { ...(output.sourceCoverage || {}), strategy3EntryEvidenceStatus: suppressed.length ? "partial" : "complete", strategy3EntryEvidenceTradeDate: evidence.date, strategy3EntryExactSymbols: exactCount, strategy3EntryToleranceSymbols: toleranceCount, strategy3EntryTailVolumeSymbols: tailVolumeCount, strategy3EntryExpectedSymbols: evidence.expectedSymbols.length, strategy3EntryFoundSymbols: evidence.byCode.size, strategy3EntrySuppressedSymbols: suppressed.length, strategy3EntryMissingSymbols: suppressed };
+  output.scanCoverage = { ...(output.scanCoverage || {}), resultCount: enriched.length, fixedPassCandidates: enriched.length, tailVolumeConfirmedCandidates: tailVolumeCount };
+  output.entryPriceGuard = { ok: enriched.length > 0, source: STRATEGY3_INTRADAY_1M_TABLE, rule: "strategy3_entry_window_or_tail_volume_before_publish", tradeDate: evidence.date, exactCount, toleranceCount, tailVolumeCount, tailVolumeRatioMin: STRATEGY3_TAIL_VOLUME_RATIO_MIN, tailHistoryMin: STRATEGY3_TAIL_HISTORY_MIN, expectedSymbols: evidence.expectedSymbols.length, count: enriched.length, suppressedSymbols: suppressed, checkedAt: new Date().toISOString() };
+  return output;
+}
 async function fetchStrategy3DatePreflight(stocks, now = new Date()) {
   const targetDate = strategy3TargetDateKey(now);
   const taipeiToday = taipeiTodayDateKey(now);
@@ -2961,6 +3112,7 @@ async function main() {
     matches,
   };
 
+  await enforceStrategy3EntryEvidence(output);
   const sourceSnapshotFields = buildStrategy3RunTimeSourceSnapshotFields(output, "prepublish", "complete");
   const sourceSnapshotAudit = auditRunTimeSourceSnapshotQuality({
     ...output,

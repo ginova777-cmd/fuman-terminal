@@ -604,6 +604,8 @@ async function main() {
       entryWindow: text(row.entryWindow || row.payload?.entryWindow, ""),
       entryWindowStart: text(row.entryWindowStart || row.payload?.entryWindowStart, ""),
       entryWindowEnd: text(row.entryWindowEnd || row.payload?.entryWindowEnd, ""),
+      tailVolumeRatio: cleanNumber(row.tailVolumeRatio || row.payload?.tailVolumeRatio),
+      tailVolumeHistoryCount: cleanNumber(row.tailVolumeHistoryCount || row.payload?.tailVolumeHistoryCount),
     })).filter((row) => row.code) : [],
     dataDate,
     dateAligned,

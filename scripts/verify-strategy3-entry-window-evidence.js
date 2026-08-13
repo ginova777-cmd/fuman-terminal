@@ -14,7 +14,11 @@ const RUN_VIEW = process.env.STRATEGY3_SUPABASE_LATEST_RUN_VIEW || "v_strategy3_
 const ENTRY_WINDOW_START = 12 * 60 + 59;
 const ENTRY_WINDOW_TARGET = 13 * 60;
 const ENTRY_WINDOW_END = 13 * 60 + 2;
-const VALID_SOURCES = new Set(["intraday_1m_1300", "intraday_1m_1300_exact", "intraday_1m_entry_window_tolerance"]);
+const TAIL_WINDOW_START = 12 * 60 + 45;
+const TAIL_WINDOW_END = 12 * 60 + 58;
+const TAIL_VOLUME_RATIO_MIN = Number(process.env.STRATEGY3_TAIL_VOLUME_RATIO_MIN || 1);
+const TAIL_HISTORY_MIN = Number(process.env.STRATEGY3_TAIL_HISTORY_MIN || 5);
+const VALID_SOURCES = new Set(["intraday_1m_1300", "intraday_1m_1300_exact", "intraday_1m_entry_window_tolerance", "intraday_1m_tail_volume_confirmed"]);
 
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,％%+]/g, "").trim());
@@ -59,6 +63,7 @@ function sourceExpectedForMinute(minute) {
 }
 
 function sourceOkForMinute(source, minute) {
+  if (source === "intraday_1m_tail_volume_confirmed") return minute >= TAIL_WINDOW_START && minute <= TAIL_WINDOW_END;
   if (source === "intraday_1m_1300") return minute === ENTRY_WINDOW_TARGET;
   return source === sourceExpectedForMinute(minute);
 }
@@ -85,6 +90,8 @@ function normalizeRow(row = {}, index = 0) {
     entryWindow: String(payload.entryWindow || row.entryWindow || ""),
     entryWindowStart: String(payload.entryWindowStart || row.entryWindowStart || ""),
     entryWindowEnd: String(payload.entryWindowEnd || row.entryWindowEnd || ""),
+    tailVolumeRatio: cleanNumber(payload.tailVolumeRatio ?? row.tailVolumeRatio),
+    tailVolumeHistoryCount: cleanNumber(payload.tailVolumeHistoryCount ?? row.tailVolumeHistoryCount),
   };
 }
 
@@ -134,12 +141,20 @@ function validateRows(label, rows, expectedTradeDate) {
     if (!VALID_SOURCES.has(row.entryPriceSource)) issues.push(label + ":" + row.code + ":entry_source=" + (row.entryPriceSource || "missing"));
     if (!(row.price > 0)) issues.push(label + ":" + row.code + ":entry_price_not_positive");
     if (!row.entryCandleTime) issues.push(label + ":" + row.code + ":entry_candle_time_missing");
-    if (row.entryMinute < ENTRY_WINDOW_START || row.entryMinute > ENTRY_WINDOW_END) issues.push(label + ":" + row.code + ":entry_minute=" + (row.entryMinute || "missing") + "_outside_12:59-13:02");
+    const tailVolume = row.entryPriceSource === "intraday_1m_tail_volume_confirmed";
+    if (tailVolume) {
+      if (row.entryMinute < TAIL_WINDOW_START || row.entryMinute > TAIL_WINDOW_END) issues.push(label + ":" + row.code + ":tail_entry_minute_outside_12:45-12:58");
+      if (row.tailVolumeRatio < TAIL_VOLUME_RATIO_MIN) issues.push(label + ":" + row.code + ":tail_volume_ratio_below_min");
+      if (row.tailVolumeHistoryCount < TAIL_HISTORY_MIN) issues.push(label + ":" + row.code + ":tail_volume_history_below_min");
+      if (row.entryWindow && row.entryWindow !== "12:45-12:58_tail_volume") issues.push(label + ":" + row.code + ":tail_entry_window=" + row.entryWindow);
+    } else {
+      if (row.entryMinute < ENTRY_WINDOW_START || row.entryMinute > ENTRY_WINDOW_END) issues.push(label + ":" + row.code + ":entry_minute=" + (row.entryMinute || "missing") + "_outside_12:59-13:02");
+      if (row.entryWindow && row.entryWindow !== "12:59-13:02") issues.push(label + ":" + row.code + ":entry_window=" + row.entryWindow);
+      if (row.entryWindowStart && row.entryWindowStart !== "12:59") issues.push(label + ":" + row.code + ":entry_window_start=" + row.entryWindowStart);
+      if (row.entryWindowEnd && row.entryWindowEnd !== "13:02") issues.push(label + ":" + row.code + ":entry_window_end=" + row.entryWindowEnd);
+    }
     if (!sourceOkForMinute(row.entryPriceSource, row.entryMinute)) issues.push(label + ":" + row.code + ":entry_source_minute_mismatch:" + row.entryPriceSource + "@" + row.entryMinute);
     if (row.entryTradeDate && expectedTradeDate && row.entryTradeDate !== expectedTradeDate) issues.push(label + ":" + row.code + ":entry_trade_date=" + row.entryTradeDate + "!=" + expectedTradeDate);
-    if (row.entryWindow && row.entryWindow !== "12:59-13:02") issues.push(label + ":" + row.code + ":entry_window=" + row.entryWindow);
-    if (row.entryWindowStart && row.entryWindowStart !== "12:59") issues.push(label + ":" + row.code + ":entry_window_start=" + row.entryWindowStart);
-    if (row.entryWindowEnd && row.entryWindowEnd !== "13:02") issues.push(label + ":" + row.code + ":entry_window_end=" + row.entryWindowEnd);
   }
   return issues;
 }
@@ -175,6 +190,7 @@ async function main() {
   issues.push(...compareLineToPublished(rows, line.rows));
   const exactRows = rows.filter((row) => row.entryPriceSource === "intraday_1m_1300_exact");
   const toleranceRows = rows.filter((row) => row.entryPriceSource === "intraday_1m_entry_window_tolerance");
+  const tailVolumeRows = rows.filter((row) => row.entryPriceSource === "intraday_1m_tail_volume_confirmed");
   const output = {
     ok: issues.length === 0,
     verifier: "verify-strategy3-entry-window-evidence",
@@ -182,9 +198,11 @@ async function main() {
     runId: run.run_id,
     scanDate: expectedTradeDate,
     count: rows.length,
-    entryWindow: "12:59-13:02",
+    entryWindow: "12:59-13:02_or_12:45-12:58_tail_volume",
     exactCount: exactRows.length,
     toleranceCount: toleranceRows.length,
+    tailVolumeCount: tailVolumeRows.length,
+    tailVolumeRule: "same_day_fugle_1m; close>=open; close>=previous_5_close_average; volume>=previous_5_volume_average",
     line: { runId: line.receipt.runId, count: line.rows.length, status: line.receipt.status, dryRun: true },
     sample: rows.slice(0, 8).map((row) => ({ rank: row.rank, code: row.code, name: row.name, entryPrice: row.entryPrice, entryPriceSource: row.entryPriceSource, entryCandleTime: row.entryCandleTime })),
     issues,

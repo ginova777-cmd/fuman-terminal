@@ -85,12 +85,18 @@ function enforce(stage) {
 
   if (stage.key === "entry_1m_evidence") {
     if (dateOf(payload.scanDate) !== TRADE_DATE) issues.push("strategy3_entry_evidence_date_not_today");
-    if (payload.entryWindow !== "12:59-13:02") issues.push("strategy3_entry_window_contract_invalid");
-    if (!(Number(payload.exactCount) + Number(payload.toleranceCount) > 0)) issues.push("strategy3_entry_evidence_empty");
+    if (payload.entryWindow !== "12:59-13:02_or_12:45-12:58_tail_volume") issues.push("strategy3_entry_window_contract_invalid");
+    if (!(Number(payload.exactCount) + Number(payload.toleranceCount) + Number(payload.tailVolumeCount) > 0)) issues.push("strategy3_entry_evidence_empty");
     if (payload.line?.runId !== payload.runId) issues.push("strategy3_line_runId_mismatch");
     if (Number(payload.line?.count) !== Number(payload.count)) issues.push("strategy3_line_count_mismatch");
   }
 
+  if (stage.key === "strategy3_scorecard_source") {
+    if (dateOf(payload.scanDate) !== TRADE_DATE) issues.push("strategy3_scorecard_date_not_today");
+    if (!payload.runId || !String(payload.runId).includes(TRADE_DATE.replace(/-/g, ""))) issues.push("strategy3_scorecard_runId_not_today");
+    if (!(Number(payload.count) > 0)) issues.push("strategy3_scorecard_count_empty");
+    if (Number(payload.scorecard?.records) !== Number(payload.count)) issues.push("strategy3_scorecard_records_not_aligned");
+  }
   if (stage.key === "desktop_mobile_scorecard") {
     if (payload.expectedTradeDate !== TRADE_DATE) issues.push("surface_expected_date_mismatch");
     if (payload.verification?.ok !== true) issues.push("desktop_mobile_scorecard_alignment_failed");
@@ -108,14 +114,26 @@ const stages = [
   ["strategy3_complete_scan", "verify-strategy3-canonical-closure.js"],
   ["entry_1m_evidence", "verify-strategy3-entry-window-evidence.js"],
   ["scan_churn", "verify-strategy3-list-source-churn.js"],
+  ["strategy3_scorecard_source", "verify-strategy3-scorecard-source.js"],
   ["desktop_mobile_scorecard", "verify-daytrade-strategy3-closure-live.js", ["--require-authenticated-mobile"]],
 ].map(([key, scriptName, args]) => enforce(runStage(key, scriptName, args || [])));
 
-const issues = stages.flatMap((stage) => stage.issues.map((issue) => stage.key + ":" + issue));
+const scanStage = stages.find((stage) => stage.key === "strategy3_complete_scan")?.payload || {};
+const scorecardStage = stages.find((stage) => stage.key === "strategy3_scorecard_source")?.payload || {};
+const surfaceStage = stages.find((stage) => stage.key === "desktop_mobile_scorecard")?.payload || {};
+const chainIssues = [];
+const canonicalRunId = scanStage.runId || "";
+const canonicalCount = Number(scanStage.count || 0);
+if (canonicalRunId && scorecardStage.runId !== canonicalRunId) chainIssues.push("strategy3_scorecard_chain_runId_mismatch");
+if (canonicalCount > 0 && Number(scorecardStage.count) !== canonicalCount) chainIssues.push("strategy3_scorecard_chain_count_mismatch");
+if (canonicalRunId && surfaceStage.strategy3SourceReport?.runId !== canonicalRunId) chainIssues.push("strategy3_surface_chain_runId_mismatch");
+if (canonicalCount > 0 && Number(surfaceStage.mobileStrategy3?.count) !== canonicalCount) chainIssues.push("strategy3_mobile_chain_count_mismatch");
+const issues = [...stages.flatMap((stage) => stage.issues.map((issue) => stage.key + ":" + issue)), ...chainIssues];
 const result = {
   ok: issues.length === 0,
   status: issues.length === 0 ? "STRATEGY3_FORMAL_CLOSURE_PASS" : "STRATEGY3_FORMAL_CLOSURE_FAIL",
-  contract: "strategy3-water-scan-desktop-mobile-scorecard-v1",
+  contract: "strategy3-water-scan-desktop-mobile-scorecard-v2",
+  flow: ["same_day_fugle_1m_water", "complete_scan", "desktop_terminal", "production_mobile", "strategy3_scorecard_source"],
   tradeDate: TRADE_DATE,
   stages: stages.map((stage) => ({
     key: stage.key,
