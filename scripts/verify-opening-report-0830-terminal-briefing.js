@@ -30,6 +30,8 @@ assert(appSource.includes("今日推薦"), "terminal display must use 今日推�
 assert(appSource.includes("08:30-08:59"), "terminal briefing display window missing");
 assert(appSource.includes("priority_scan_only"), "terminal briefing must expose priority_scan_only action");
 assert(!/Mother Pool Bridge/.test(appSource), "terminal user-facing app must not display Mother Pool Bridge");
+assert(runnerSource.includes("collectLineTargets") && runnerSource.includes("FUMAN_LINE_TO_GROUP") && runnerSource.includes("has_group_target"), "08:30 runner must support personal and group LINE targets");
+assert(runnerSource.includes("upsertSnapshot") && runnerSource.includes("syncTerminalBriefingSnapshot") && runnerSource.includes("opening_report_0830_terminal_briefing"), "08:30 runner must upsert terminal briefing snapshot");
 assert(pkg.scripts["verify:opening-report-0830-terminal-briefing"] === "node scripts/verify-opening-report-0830-terminal-briefing.js", "package script missing");
 assert(marketAiLive.__test?.readOpeningMorningReport, "market-ai-live __test missing readOpeningMorningReport");
 assert(marketAiLive.__test?.readOpeningMorningReportSnapshot, "market-ai-live __test missing readOpeningMorningReportSnapshot");

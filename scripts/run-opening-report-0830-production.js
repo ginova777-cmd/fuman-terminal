@@ -252,9 +252,52 @@ function runBridge(inputPath, receiptPath, tradeDate) {
   return { exitCode: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
-async function pushLine({ cardText, runId, dryRun }) {
+function splitLineTargets(value) {
+  return String(value || "")
+    .split(/[\s,;]+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function lineTargetType(target) {
+  const first = String(target || "")[0] || "";
+  if (first === "U") return "user";
+  if (first === "C") return "group";
+  if (first === "R") return "room";
+  return "unknown";
+}
+
+function collectLineTargets() {
+  const envNames = [
+    "FUMAN_LINE_TO",
+    "FUMAN_LINE_TO_USER",
+    "FUMAN_LINE_USER_ID",
+    "FUMAN_LINE_TO_GROUP",
+    "FUMAN_LINE_GROUP_ID",
+    "FUMAN_LINE_TO_ROOM",
+    "FUMAN_LINE_ROOM_ID",
+    "LINE_TO",
+    "LINE_TARGET_ID",
+    "LINE_USER_ID",
+    "LINE_GROUP_ID",
+  ];
+  const seen = new Set();
+  const targets = [];
+  for (const envName of envNames) {
+    const env = windowsUserEnv(envName);
+    for (const target of splitLineTargets(env.value)) {
+      if (seen.has(target)) continue;
+      seen.add(target);
+      targets.push({ target, env_name: envName, source: env.source, target_type: lineTargetType(target) });
+    }
+  }
+  return targets;
+}
+
+async function pushLine({ cardText, flexCard, runId, dryRun }) {
   const token = windowsUserEnv("FUMAN_LINE_CHANNEL_ACCESS_TOKEN");
-  const to = windowsUserEnv("FUMAN_LINE_TO");
+  const targets = collectLineTargets();
+  const invalidTargets = targets.filter((row) => invalidLineTarget(row.target));
   const base = {
     line_push_attempted: !dryRun,
     line_push_ok: false,
@@ -263,35 +306,72 @@ async function pushLine({ cardText, runId, dryRun }) {
     non_retryable_error: "",
     token_source: token.source === "process_env" ? "windows_user_env" : token.source,
     token_logged: false,
+    target_logged: false,
     report_run_id: runId,
     checked_at: timestamp()
   };
-  if (!token.value || !to.value) return { ...base, reason_code: "line_env_missing", missing_env: [!token.value ? "FUMAN_LINE_CHANNEL_ACCESS_TOKEN" : "", !to.value ? "FUMAN_LINE_TO" : ""].filter(Boolean) };
-  if (dryRun) return { ...base, line_push_attempted: false, line_push_ok: true, reason_code: "line_dry_run_env_present" };
-  const body = { to: to.value, messages: [{ type: "text", text: cardText.slice(0, 4500) }] };
-  const result = await fetchWithRetry("https://api.line.me/v2/bot/message/push", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${token.value}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    timeoutMs: 9000
-  });
+  if (!token.value || targets.length === 0) {
+    return { ...base, reason_code: "line_env_missing", missing_env: [!token.value ? "FUMAN_LINE_CHANNEL_ACCESS_TOKEN" : "", targets.length === 0 ? "FUMAN_LINE_TO_OR_TARGET_ENV" : ""].filter(Boolean), target_count: targets.length };
+  }
+  if (invalidTargets.length) {
+    return { ...base, reason_code: "line_target_invalid", missing_env: invalidTargets.map((row) => row.env_name), target_count: targets.length, target_types: targets.map((row) => row.target_type) };
+  }
+  const messages = flexCard
+    ? [{ type: "flex", altText: String(cardText || "Fuman 08:30 開盤前日報").slice(0, 400), contents: flexCard }]
+    : [{ type: "text", text: String(cardText || "").slice(0, 4500) }];
+  if (dryRun) {
+    return {
+      ...base,
+      line_push_attempted: false,
+      line_push_ok: true,
+      reason_code: "line_dry_run_flex_card_ready",
+      message_type: flexCard ? "flex" : "text",
+      target_count: targets.length,
+      delivered_count: targets.length,
+      target_types: targets.map((row) => row.target_type),
+      has_user_target: targets.some((row) => row.target_type === "user"),
+      has_group_target: targets.some((row) => row.target_type === "group"),
+    };
+  }
+  const results = [];
+  for (const row of targets) {
+    const body = { to: row.target, messages };
+    const result = await fetchWithRetry("https://api.line.me/v2/bot/message/push", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + token.value, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      timeoutMs: 9000
+    });
+    results.push({ target_type: row.target_type, env_name: row.env_name, ok: result.ok, status: result.status, attempts: result.attempts.length, text: result.text || "" });
+  }
+  const failed = results.filter((row) => !row.ok);
   return {
     ...base,
     line_push_attempted: true,
-    line_push_ok: result.ok,
-    attempts: result.attempts.length,
-    retryable_errors: result.attempts.filter((row) => row.retryable && row.status !== 200),
-    non_retryable_error: result.ok || retryableStatus(result.status) ? "" : `http_${result.status}`,
-    reason_code: result.ok ? "line_push_ok" : "line_push_failed"
+    line_push_ok: failed.length === 0,
+    message_type: flexCard ? "flex" : "text",
+    target_count: targets.length,
+    delivered_count: results.filter((row) => row.ok).length,
+    target_types: targets.map((row) => row.target_type),
+    has_user_target: targets.some((row) => row.target_type === "user"),
+    has_group_target: targets.some((row) => row.target_type === "group"),
+    attempts: results.reduce((sum, row) => sum + row.attempts, 0),
+    retryable_errors: [],
+    non_retryable_error: failed.length ? "line_targets_failed_" + failed.length : "",
+    line_error_detail: failed.map((row) => row.target_type + ":http_" + row.status + " " + String(row.text || "").slice(0, 160)).join("; "),
+    reason_code: failed.length ? "line_push_failed" : "line_push_ok"
   };
 }
 
 async function syncTerminalBriefingSnapshot(tradeDate, runId) {
   try {
-    const compact = tradeDate.replace(/\D/g, "");
+    if (typeof upsertSnapshot !== "function") {
+      return { ok: false, reason_code: "opening_report_0830_terminal_snapshot_writer_missing" };
+    }
+    const compact = String(tradeDate || "").replace(/\D/g, "").slice(0, 8);
     const marketAiLive = require("../api/market-ai-live");
     const briefing = marketAiLive.__test.readOpeningMorningReport({
-      date: tradeDate,
+      date: compact ? compact.slice(0, 4) + "-" + compact.slice(4, 6) + "-" + compact.slice(6, 8) : tradeDate,
       ymd: compact,
       seconds: 8 * 60 * 60 + 30 * 60,
       time: "08:30:00",
@@ -316,6 +396,7 @@ async function syncTerminalBriefingSnapshot(tradeDate, runId) {
     };
   }
 }
+
 async function main() {
   const tradeDate = argValue("--date", process.env.FUMAN_TRADE_DATE || taipeiDateKey());
   const compact = tradeDate.replace(/\D/g, "");

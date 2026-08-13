@@ -38,6 +38,11 @@ function main() {
   const lineReceipt = receipt?.line_push_receipt ? readJson(receipt.line_push_receipt) : null;
   if (receipt?.line_push_attempted && lineReceipt?.line_push_ok !== true) issues.push("line_push_attempted_but_not_ok");
   if (lineReceipt && lineReceipt.token_logged !== false) issues.push("line_token_logging_guard_failed");
+  if (receipt?.line_push_attempted && Number(lineReceipt?.target_count || 0) < 2) issues.push("line_target_count_less_than_2");
+  if (receipt?.line_push_attempted && lineReceipt?.has_user_target !== true) issues.push("line_user_target_missing");
+  if (receipt?.line_push_attempted && lineReceipt?.has_group_target !== true) issues.push("line_group_target_missing");
+  if (lineReceipt && lineReceipt.target_logged !== false) issues.push("line_target_logging_guard_failed");
+  if (receipt && receipt.terminal_briefing_snapshot?.ok !== true) issues.push("terminal_briefing_snapshot_not_synced");
   const bridgeRows = Array.isArray(receipt?.bridge_results) ? receipt.bridge_results : [];
   for (const row of bridgeRows) {
     const input = readJson(row.inputPath);
