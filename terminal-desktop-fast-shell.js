@@ -12624,6 +12624,56 @@
       #market-view .opening-report-0830-priority strong {
         font-size: 17px !important;
       }
+
+      /* market-ai-report-layout-v5-20260813 */
+      #market-view .market-ai-panel.market-ai-visual-dashboard {
+        min-height: 0 !important;
+        align-content: start !important;
+        padding-bottom: 0 !important;
+      }
+      #market-view .market-ai-hero-metrics .market-ai-index-chip small {
+        display: none !important;
+      }
+      #market-view .market-ai-hero-metrics .market-ai-index-chip {
+        min-height: 112px !important;
+        grid-template-rows: 1fr auto !important;
+        align-content: center !important;
+      }
+      #market-view .market-ai-hero-metrics .market-ai-index-chip em {
+        font-size: 18px !important;
+        line-height: 1.1 !important;
+        padding: 5px 11px !important;
+      }
+      #market-view .opening-report-0830-run {
+        display: none !important;
+      }
+      #market-view .opening-report-0830-briefing {
+        padding: 16px 18px !important;
+        width: calc(100% - 24px) !important;
+        margin-bottom: 0 !important;
+      }
+      #market-view .opening-report-0830-grid,
+      #market-view .opening-report-0830-bottom {
+        gap: 12px !important;
+      }
+      #market-view .opening-report-0830-card {
+        padding: 14px !important;
+        min-height: 122px !important;
+      }
+      #market-view .opening-report-0830-priority {
+        gap: 10px !important;
+        margin-top: 10px !important;
+      }
+      #market-view .opening-report-0830-priority article {
+        padding: 12px !important;
+        min-height: 92px !important;
+      }
+      #market-view .opening-report-0830-symbols {
+        gap: 7px !important;
+      }
+      #market-view .opening-report-0830-symbols span {
+        padding: 4px 10px !important;
+      }
       @media (max-width: 1180px) {
         #market-view .market-ai-hero-board {
           grid-template-columns: 1fr !important;
