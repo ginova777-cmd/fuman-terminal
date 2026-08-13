@@ -6999,6 +6999,7 @@
   let strategy2ValidationBacktest = null;
   let strategy2ValidationBacktestPromise = null;
   let strategy2ValidationBacktestExpiryTimer = 0;
+  let strategy2ActiveShell = null;
   function scheduleStrategy2ValidationBacktestExpiry(report) { window.clearTimeout(strategy2ValidationBacktestExpiryTimer); const delay = Date.parse(report?.expiresAt || "") - Date.now(); if (Number.isFinite(delay) && delay > 0) strategy2ValidationBacktestExpiryTimer = window.setTimeout(() => { strategy2ValidationBacktest = { expired: true }; refreshStrategy2ValidationBacktestShell(); loadStrategy2ValidationBacktest(true); }, delay + 80); }
   function strategy2ValidationTimelineRows() {
     const report = strategy2ValidationBacktest;
@@ -7039,8 +7040,8 @@
     if (latestTarget) latestTarget.innerHTML = strategy2RowsHtml(latestRows, "latest");
     return rows;
   }  function strategy2ValidationBacktestHtml() { return ""; }
-  function refreshStrategy2ValidationBacktestShell() { const shell=document.querySelector(".strategy2-battle-shell"); if(shell) refreshStrategy2MergedHistory(shell); }
-  function loadStrategy2ValidationBacktest(force=false) { if(!force&&strategy2ValidationBacktestPromise)return strategy2ValidationBacktestPromise; strategy2ValidationBacktestPromise=fetch(`/api/strategy2-ps1-backtest?t=${Date.now()}`,{cache:"no-store"}).then((response)=>response.ok?response.json():null).then((payload)=>{if(payload?.ok&&payload.kind==="validation_backtest"&&payload.formalRun===false&&payload.publishAllowed===false){strategy2ValidationBacktest=payload;scheduleStrategy2ValidationBacktestExpiry(payload);}else strategy2ValidationBacktest={expired:true};refreshStrategy2ValidationBacktestShell();return strategy2ValidationBacktest;}).catch(()=>null).finally(()=>{strategy2ValidationBacktestPromise=null;});return strategy2ValidationBacktestPromise; }
+  function refreshStrategy2ValidationBacktestShell() { const shell = strategy2ActiveShell?.isConnected ? strategy2ActiveShell : document.querySelector(".strategy2-battle-shell"); if(shell) refreshStrategy2MergedHistory(shell); }
+  function loadStrategy2ValidationBacktest(force=false) { if(!force&&strategy2ValidationBacktestPromise)return strategy2ValidationBacktestPromise; strategy2ValidationBacktestPromise=fetch(`/api/strategy2-ps1-backtest?t=${Date.now()}`,{cache:"no-store"}).then((response)=>response.ok?response.json():null).then((payload)=>{if(payload?.ok&&payload.kind==="validation_backtest"&&payload.formalRun===false&&payload.publishAllowed===false){strategy2ValidationBacktest=payload;scheduleStrategy2ValidationBacktestExpiry(payload);}else strategy2ValidationBacktest={expired:true};refreshStrategy2ValidationBacktestShell();window.requestAnimationFrame(() => refreshStrategy2ValidationBacktestShell());return strategy2ValidationBacktest;}).catch(()=>null).finally(()=>{strategy2ValidationBacktestPromise=null;});return strategy2ValidationBacktestPromise; }
   function strategy2BattleShellHtml(key, meta) {
     const routeMeta = strategy2HealthMeta() || {};
     return `
@@ -7084,6 +7085,7 @@
   }
 
   function updateStrategy2BattleShell(shell, key, meta) {
+    strategy2ActiveShell = shell || strategy2ActiveShell;
     shell?.querySelectorAll("[data-strategy2-health-banner], [data-strategy2-validation-backtest]").forEach((node) => node.remove());
     if (!shell) return;
     shell.dataset.routeShell = key;
@@ -12409,6 +12411,7 @@
     }, true);
   })();
 })();
+
 
 
 
