@@ -7047,14 +7047,23 @@
   }
 
   function refreshStrategy2MergedHistory(shell, liveRows = [...canvasState.filtered]) {
-    if (!shell) return;
+    if (!shell) return [];
     const rows = [...liveRows, ...strategy2ValidationTimelineRows()].sort(strategy2SortRows);
-    const count = shell.querySelector("[data-strategy2-history-count]");
-    const target = shell.querySelector("[data-strategy2-history-rows]");
-    if (count) count.textContent = `${rows.length} 筆`;
-    if (target) target.innerHTML = strategy2RowsHtml(rows, "history");
-  }
-  function strategy2ValidationBacktestHtml() {
+    const latestRows = rows.slice(0, 10);
+    const historyCount = shell.querySelector("[data-strategy2-history-count]");
+    const historyTarget = shell.querySelector("[data-strategy2-history-rows]");
+    const latestCount = shell.querySelector("[data-strategy2-entry-count]");
+    const latestTitle = shell.querySelector("[data-strategy2-entry-title]");
+    const latestNote = shell.querySelector("[data-strategy2-entry-note]");
+    const latestTarget = shell.querySelector("[data-strategy2-entry-rows]");
+    if (historyCount) historyCount.textContent = `${rows.length} 筆`;
+    if (historyTarget) historyTarget.innerHTML = strategy2RowsHtml(rows, "history");
+    if (latestTitle) latestTitle.textContent = "最後十筆偵測紀錄（最新在上）";
+    if (latestCount) latestCount.textContent = `${latestRows.length} 筆`;
+    if (latestNote) latestNote.textContent = "完整逐筆紀錄保留在下方";
+    if (latestTarget) latestTarget.innerHTML = strategy2RowsHtml(latestRows, "history");
+    return rows;
+  }  function strategy2ValidationBacktestHtml() {
     const report = strategy2ValidationBacktest;
     if (report?.expired) return "";
     if (!report?.ok) return '<section class="strategy2-validation-band is-loading" data-strategy2-validation-backtest><strong>策略2驗證回測</strong><span>正在讀取今日水源到策略的驗證資料</span><small>非正式發布</small></section>';
@@ -7083,7 +7092,7 @@
       + '<section class="strategy2-validation-band" data-validation-run-id="' + escapeHtml(report.runId || "") + '"><div class="strategy2-validation-title"><strong>策略2今日驗證回測</strong><span>水源 -> 策略 -> 顯示</span></div><div class="strategy2-validation-flow"><span><b>Mother Pool</b> ' + escapeHtml(String(source?.motherPool?.count || scanned)) + '</span><i>-></i><span><b>今日 1 分K</b> ' + escapeHtml(String(minuteCount)) + '</span><i>-></i><span><b>命中標的</b> ' + escapeHtml(String(matched)) + '</span><i>-></i><span><b>型態訊號</b> ' + escapeHtml(String(events)) + '</span></div><div class="strategy2-validation-meta"><span>資料日 ' + escapeHtml(report.tradeDate || "--") + '</span><span>DATA_GAP ' + escapeHtml(String(gap)) + '</span><span>' + escapeHtml(generated || "--") + '</span><small>驗證用，未發布</small></div></section>'
       + '</div>';
   }
-  function refreshStrategy2ValidationBacktestShell() { const shell=document.querySelector(".strategy2-battle-shell"); if(!shell)return; const existing=shell.querySelector("[data-strategy2-validation-backtest]"); const html=strategy2ValidationBacktestHtml(); if(existing)existing.outerHTML=html; else { const health=shell.querySelector("[data-strategy2-health-banner]"); if(health)health.insertAdjacentHTML("afterend",html); else shell.querySelector(".strategy2-battle-header")?.insertAdjacentHTML("afterend",html); } refreshStrategy2MergedHistory(shell); }
+  function refreshStrategy2ValidationBacktestShell() { const shell=document.querySelector(".strategy2-battle-shell"); if(shell) refreshStrategy2MergedHistory(shell); }
   function loadStrategy2ValidationBacktest(force=false) { if(!force&&strategy2ValidationBacktestPromise)return strategy2ValidationBacktestPromise; strategy2ValidationBacktestPromise=fetch(`/api/strategy2-ps1-backtest?t=${Date.now()}`,{cache:"no-store"}).then((response)=>response.ok?response.json():null).then((payload)=>{if(payload?.ok&&payload.kind==="validation_backtest"&&payload.formalRun===false&&payload.publishAllowed===false){strategy2ValidationBacktest=payload;scheduleStrategy2ValidationBacktestExpiry(payload);}else strategy2ValidationBacktest={expired:true};refreshStrategy2ValidationBacktestShell();return strategy2ValidationBacktest;}).catch(()=>null).finally(()=>{strategy2ValidationBacktestPromise=null;});return strategy2ValidationBacktestPromise; }
   function strategy2BattleShellHtml(key, meta) {
     const routeMeta = strategy2HealthMeta() || {};
@@ -7101,16 +7110,14 @@
             <button type="button" class="strategy2-battle-refresh" data-canvas-refresh>刷新</button>
           </div>
         </div>
-        ${strategy2HealthBannerHtml()}
-        ${strategy2ValidationBacktestHtml()}
         <div class="strategy2-battle-board">
-          <section class="strategy2-battle-panel strategy2-entry-panel" aria-label="即時進場">
+          <section class="strategy2-battle-panel strategy2-entry-panel" aria-label="最後十筆偵測紀錄">
             <header>
               <div>
-                <span data-strategy2-entry-title>即時進場（最新在上）</span>
+                <span data-strategy2-entry-title>最後十筆偵測紀錄（最新在上）</span>
                 <strong data-strategy2-entry-count>0 筆</strong>
               </div>
-              <small data-strategy2-entry-note>進場黃字，預備進場深藍</small>
+              <small data-strategy2-entry-note>完整逐筆紀錄保留在下方</small>
             </header>
             <div class="strategy2-battle-scroll" data-strategy2-entry-rows></div>
           </section>
@@ -7156,15 +7163,8 @@
     const historyCountNode = shell.querySelector("[data-strategy2-history-count]");
     const entryRows = shell.querySelector("[data-strategy2-entry-rows]");
     const historyRows = shell.querySelector("[data-strategy2-history-rows]");
-    const oldBanner = shell.querySelector("[data-strategy2-health-banner]");
-    const nextBanner = strategy2HealthBannerHtml();
     const afterhoursHold = strategy2AfterhoursHoldActive();
-    if (oldBanner) oldBanner.remove();
-    if (nextBanner) {
-      const header = shell.querySelector(".strategy2-battle-header");
-      if (header) header.insertAdjacentHTML("afterend", nextBanner);
-    }
-    refreshStrategy2ValidationBacktestShell();
+    refreshStrategy2MergedHistory(shell, rows);
     loadStrategy2ValidationBacktest(false);
     if (title) title.textContent = meta.title;
     if (summary) {
@@ -7176,13 +7176,6 @@
     if (status) status.textContent = String(canvasState.source || "").includes("snapshot-first")
       ? "快照先顯示｜即時刷新中"
       : canvasState.source || "api";
-    if (entryTitle) entryTitle.textContent = afterhoursHold ? "今日進場保留（24:00 重置）" : "即時進場（最新在上）";
-    if (entryCountNode) entryCountNode.textContent = `${entryCount} 進場 / ${prepareCount} 預備`;
-    if (entryNote) entryNote.textContent = afterhoursHold
-      ? "收盤後保留今日進場圖卡，24:00 重置"
-      : entryCount ? "黃色為進場列，深藍為預備進場" : "深藍為預備進場，黃字只留給真正進場";
-    if (entryRows) entryRows.innerHTML = strategy2RowsHtml(liveRows, "entry");
-    refreshStrategy2MergedHistory(shell, rows);
   }
 
   function radarDomTimeValue(row) {
@@ -12467,6 +12460,7 @@
     }, true);
   })();
 })();
+
 
 
 
