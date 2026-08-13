@@ -16,6 +16,7 @@ const compact = compactDate(today);
 const apiSource = read("api/market-ai-live.js");
 const appSource = read("terminal-app.js");
 const runnerSource = read("scripts/run-opening-report-0830-production.js");
+const wrapperSource = read("run-opening-report-0830-production-wrapper.ps1");
 const desktopFastShellSource = read("terminal-desktop-fast-shell.js");
 const indexSource = read("index.html");
 const pkg = readJson(path.join(ROOT, "package.json"));
@@ -27,6 +28,7 @@ assert(apiSource.includes("opening_report_0830_final_receipt_missing"), "missing
 assert(apiSource.includes("readOpeningShortwave") && apiSource.includes("strategy5"), "shortwave sources must include Strategy5 previous closed run");
 assert(apiSource.includes("readOpeningMorningReportSnapshot") && apiSource.includes("opening_report_0830_terminal_briefing"), "market-ai-live must read opening report terminal briefing snapshot");
 assert(runnerSource.includes("upsertSnapshot") && runnerSource.includes("syncTerminalBriefingSnapshot") && runnerSource.includes("opening_report_0830_terminal_briefing"), "08:30 runner must upsert terminal briefing snapshot");
+assert(wrapperSource.includes("opening-report-0830-wrapper-v4") && wrapperSource.includes("success_gate = \"delivery_chain\"") && wrapperSource.includes("verify-opening-report-0830-delivery-chain.js") && wrapperSource.includes("production_verifier_does_not_affect_ok"), "08:30 wrapper must use delivery-chain as success gate");
 assert(appSource.includes("installOpeningReport0830TerminalBriefing"), "terminal app missing 08:30 briefing installer");
 assert(appSource.includes("opening-report-0830-sunlight-polish-20260813") && appSource.includes("body.fuman-light-theme .opening-report-0830-briefing"), "terminal app sunlight briefing polish missing");
 assert(appSource.includes("window.__fumanRenderOpeningReport0830=renderBriefing") && appSource.includes("__fumanRenderOpeningReport0830?.(payload?.openingMorningReport"), "opening report render hook missing from live renderer");
