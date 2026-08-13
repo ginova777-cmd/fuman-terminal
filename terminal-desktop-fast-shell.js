@@ -6591,14 +6591,7 @@
             ]).map((item) => `<div><strong>${escapeHtml(item.title || "風險")}</strong><p>${escapeHtml(item.text || item.reason || "")}</p></div>`).join("")}
           </article>
         </section>
-        <section class="market-ai-block market-ai-hot-section">
-          <header><div><h4>熱門觀察股</h4><p>精選前 10 檔</p></div><span>API · ${escapeHtml(dateLabel)}</span></header>
-          <div class="market-ai-filter-row">
-            ${tabs.map(([key, label, klass, rows]) => `<button type="button" class="${key === activeFilter ? "active" : ""}" data-market-ai-filter="${escapeHtml(key)}">${escapeHtml(label)} <b>${rows.length}</b></button>`).join("")}
-          </div>
-          <div class="market-ai-current-rule"><small>目前排序</small><strong>${escapeHtml(activeFilterTitle)}</strong><span>${escapeHtml(activeFilterNote)}</span></div>
-          <div class="market-ai-hot">${rowHtml(activeTab[3] || [], activeFilter)}</div>
-        </section>
+        ${""}
     `;
     renderOpeningReport0830DesktopBriefing(aiPayload);
     const hotSection = panels.ai.querySelector(".market-ai-hot-section");

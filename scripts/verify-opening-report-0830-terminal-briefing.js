@@ -29,6 +29,7 @@ assert(runnerSource.includes("upsertSnapshot") && runnerSource.includes("syncTer
 assert(appSource.includes("installOpeningReport0830TerminalBriefing"), "terminal app missing 08:30 briefing installer");
 assert(appSource.includes("window.__fumanRenderOpeningReport0830=renderBriefing") && appSource.includes("__fumanRenderOpeningReport0830?.(payload?.openingMorningReport"), "opening report render hook missing from live renderer");
 assert(desktopFastShellSource.includes("renderOpeningReport0830DesktopBriefing") && desktopFastShellSource.includes("aiPayload?.openingMorningReport") && desktopFastShellSource.includes("data-opening-report-0830-briefing"), "desktop fast shell must render opening report briefing");
+assert(!desktopFastShellSource.includes("<h4>熱門觀察股</h4>") && !desktopFastShellSource.includes("market-ai-block market-ai-hot-section"), "desktop fast shell must not render hot stock block inside 0830 briefing layout");
 assert(appSource.includes("今日推薦"), "terminal display must use 今日推薦 instead of Mother Pool Bridge");
 assert(appSource.includes("08:30-08:59"), "terminal briefing display window missing");
 assert(appSource.includes("priority_scan_only"), "terminal briefing must expose priority_scan_only action");
