@@ -405,7 +405,8 @@
     "verify:terminal-no-fake-unattended": "node --use-system-ca scripts/verify-terminal-no-fake-unattended.js",
     "verify:opening-report-0830-terminal-briefing": "node scripts/verify-opening-report-0830-terminal-briefing.js",
     "verify:opening-report-0830-production:line": "node --use-system-ca scripts/verify-opening-report-0830-production.js --require-line",
-    "verify:opening-report-0830-delivery-chain": "node --use-system-ca scripts/verify-opening-report-0830-delivery-chain.js"
+    "verify:opening-report-0830-delivery-chain": "node --use-system-ca scripts/verify-opening-report-0830-delivery-chain.js",
+    "verify:opening-report-0830-unattended-readiness": "node --use-system-ca scripts/verify-opening-report-0830-unattended-readiness.js"
   },
   "engines": {
     "node": "24.x"

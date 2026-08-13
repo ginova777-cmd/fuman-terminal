@@ -44,6 +44,7 @@ assert(runnerSource.includes("collectLineTargets") && runnerSource.includes("FUM
 assert(runnerSource.includes("upsertSnapshot") && runnerSource.includes("syncTerminalBriefingSnapshot") && runnerSource.includes("opening_report_0830_terminal_briefing"), "08:30 runner must upsert terminal briefing snapshot");
 assert(pkg.scripts["verify:opening-report-0830-terminal-briefing"] === "node scripts/verify-opening-report-0830-terminal-briefing.js", "package script missing");
 assert(pkg.scripts["verify:opening-report-0830-delivery-chain"] === "node --use-system-ca scripts/verify-opening-report-0830-delivery-chain.js", "delivery chain verifier package script missing");
+assert(pkg.scripts["verify:opening-report-0830-unattended-readiness"] === "node --use-system-ca scripts/verify-opening-report-0830-unattended-readiness.js", "unattended readiness verifier package script missing");
 assert(pkg.scripts["verify:opening-report-0830-production:line"] === "node --use-system-ca scripts/verify-opening-report-0830-production.js --require-line", "production line verifier package script missing");
 assert(indexSource.includes("sunlight-polish=20260813-01"), "index cache bust missing sunlight polish version");
 assert(indexSource.includes("compact-layout=20260813-06"), "index cache bust missing compact layout version");
@@ -74,6 +75,7 @@ const receiptPath = path.join(RUNTIME_ROOT, "data", "opening-report-0830", "open
 fs.mkdirSync(path.dirname(receiptPath), { recursive: true });
 fs.writeFileSync(receiptPath, JSON.stringify({ ok: true, contract: "opening-report-0830-terminal-briefing-verifier-v1", checked_at: new Date().toISOString(), date: compact, briefing_status: briefing.ok ? "PASS" : "FAIL_CLOSED", reason_code: briefing.reason_code, run_id: briefing.run_id || "", display_label: briefing.display_label, industry_bias_count: briefing.industry_bias?.count || 0 }, null, 2) + "\n", "utf8");
 console.log(JSON.stringify({ ok: true, receipt: receiptPath, briefing_status: briefing.ok ? "PASS" : "FAIL_CLOSED", reason_code: briefing.reason_code, run_id: briefing.run_id || "" }, null, 2));
+
 
 
 
