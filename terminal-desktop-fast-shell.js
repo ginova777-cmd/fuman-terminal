@@ -12631,8 +12631,16 @@
         align-content: start !important;
         padding-bottom: 0 !important;
       }
+      /* market-ai-index-label-restore-v6-20260813 */
       #market-view .market-ai-hero-metrics .market-ai-index-chip small {
-        display: none !important;
+        display: block !important;
+        font-size: 16px !important;
+        line-height: 1.22 !important;
+        color: #b9d8ff !important;
+        font-weight: 800 !important;
+      }
+      body.fuman-light-theme #market-view .market-ai-hero-metrics .market-ai-index-chip small {
+        color: #23364f !important;
       }
       #market-view .market-ai-hero-metrics .market-ai-index-chip {
         min-height: 112px !important;
