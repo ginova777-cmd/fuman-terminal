@@ -291,6 +291,7 @@ function createCaptureResponse(resolve) {
 }
 
 function fetchStrategy2Internal(request, endpoint) {
+  if (shouldUseStrategy2PostcloseValidation()) return fetchStrategy2BacktestInternal(request);
   const url = new URL(endpoint, originFrom(request));
   const query = { ...Object.fromEntries(url.searchParams.entries()), verify: "1" };
   delete query.live;
@@ -460,7 +461,7 @@ function strategy2TimeValue(row) {
 
 function inStrategy2Window(row) {
   const seconds = strategy2TimeValue(row);
-  return seconds >= 8 * 3600 + 45 * 60 && seconds <= 12 * 3600;
+  return seconds >= 8 * 3600 + 45 * 60 && seconds <= 13 * 3600 + 30 * 60;
 }
 
 function isEvidenceLikeRow(row) {
@@ -726,7 +727,7 @@ function renderFragment(tab, config, payload) {
   if (tab === "ai") return renderAiFragment(tab, config, payload);
   payload = attachTerminalAuthority(tab, payload);
   const rows = normalizeRows(payload, tab);
-  const reportedCount = Number(payload?.count ?? payload?.total ?? payload?.result_count ?? 0) || 0;
+  const reportedCount = Number(payload?.count ?? payload?.total ?? payload?.result_count ?? payload?.matchCount ?? 0) || 0;
   const count = Math.max(reportedCount, rows.length);
   const updatedAt = payload?.updatedAt || payload?.finishedAt || payload?.generatedAt || payload?.scanTime || payload?.date || "";
   const runId = extractRunId(payload, tab);
@@ -736,6 +737,7 @@ function renderFragment(tab, config, payload) {
   const publishAllowed = payload?.publishAllowed ?? payload?.run_quality_at_publish?.publishAllowed;
   const preservePreviousGood = payload?.preservePreviousGood ?? payload?.run_quality_at_publish?.preservePreviousGood;
   const displayMode = payload?.displayMode || payload?.terminalAuthority?.displayMode || "";
+  const validationDisplayAllowed = payload?.kind === "validation_backtest" && payload?.validationDisplayAllowed === true;
   const formalDisplayAllowed = payload?.formalDisplayAllowed ?? payload?.terminalAuthority?.formalDisplayAllowed;
   const todayAuthoritative = payload?.todayAuthoritative ?? payload?.terminalAuthority?.todayAuthoritative;
   const authorityBlockReason = payload?.displayBlockReason || payload?.terminalAuthority?.displayBlockReason || "";
@@ -743,7 +745,7 @@ function renderFragment(tab, config, payload) {
   const publishLabel = publishAllowed === false ? "publish blocked" : publishAllowed === true ? "publish allowed" : "";
   const preserveLabel = preservePreviousGood === true ? "preserve previous good" : "";
   const statusLine = [
-    config.subtitle,
+    validationDisplayAllowed ? "盤後驗證回測（非正式推薦）" : config.subtitle,
     runId ? `run ${runId}` : "",
     quality ? `quality ${quality}` : "",
     evidenceStatus ? `evidence ${evidenceStatus}` : "",
@@ -752,7 +754,7 @@ function renderFragment(tab, config, payload) {
     displayMode ? `display ${displayMode}` : "",
     todayAuthoritative === false ? "today-authority blocked" : "",
   ].filter(Boolean).join("｜");
-  const blockedHtml = formalDisplayAllowed === false || publishAllowed === false || evidenceStatus === "insufficient" || unattendedStatus === "NO"
+  const blockedHtml = !validationDisplayAllowed && (formalDisplayAllowed === false || publishAllowed === false || evidenceStatus === "insufficient" || unattendedStatus === "NO")
     ? `<p class="mobile-terminal-blocked" data-mobile-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-mobile-display-mode="${esc(displayMode)}" data-mobile-blocked-reason="${esc(blockedReason)}">${esc(blockedReason || "source not ready; latest preserved")}</p>`
     : "";
 
@@ -760,7 +762,7 @@ function renderFragment(tab, config, payload) {
   const list = rows.length ? rows.map((row, index) => rowHtml(row, index, tab)).join("") : `<div class="empty-state">等待最新 complete run。</div>`;
   return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}" data-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-today-authoritative="${todayAuthoritative === true ? "1" : "0"}" data-display-mode="${esc(displayMode)}">
       <article class="mobile-terminal-head">
-        <small>API-only complete run</small>
+        <small>${validationDisplayAllowed ? "盤後驗證回測 / 非正式推薦" : "API-only complete run"}</small>
         <strong>${esc(config.title)}</strong>
         <p>${esc(statusLine)}</p>
         ${blockedHtml}
@@ -989,4 +991,5 @@ module.exports = async function handler(request, response) {
     sendHtml(request, response, 503, `<div class="empty-state">手機 API fragment 暫時無法取得：${esc(error?.message || error)}</div>`, { tab });
   }
 };
+
 
