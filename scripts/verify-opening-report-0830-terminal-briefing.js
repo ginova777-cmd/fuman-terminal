@@ -26,6 +26,7 @@ assert(apiSource.includes("readOpeningShortwave") && apiSource.includes("strateg
 assert(apiSource.includes("readOpeningMorningReportSnapshot") && apiSource.includes("opening_report_0830_terminal_briefing"), "market-ai-live must read opening report terminal briefing snapshot");
 assert(runnerSource.includes("upsertSnapshot") && runnerSource.includes("syncTerminalBriefingSnapshot") && runnerSource.includes("opening_report_0830_terminal_briefing"), "08:30 runner must upsert terminal briefing snapshot");
 assert(appSource.includes("installOpeningReport0830TerminalBriefing"), "terminal app missing 08:30 briefing installer");
+assert(appSource.includes("window.__fumanRenderOpeningReport0830=renderBriefing") && appSource.includes("__fumanRenderOpeningReport0830?.(payload?.openingMorningReport"), "opening report render hook missing from live renderer");
 assert(appSource.includes("今日推薦"), "terminal display must use 今日推薦 instead of Mother Pool Bridge");
 assert(appSource.includes("08:30-08:59"), "terminal briefing display window missing");
 assert(appSource.includes("priority_scan_only"), "terminal briefing must expose priority_scan_only action");
