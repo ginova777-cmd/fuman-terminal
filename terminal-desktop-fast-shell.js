@@ -159,6 +159,7 @@
   installMemberBearerFetchBridge20260714();
 
   installStyle();
+  installSunlightModePolish();
   installDesktopThemeToggle();
   purgeApiOnlyStrategySnapshots();
   installProtectedRouteSnapshotRetirement20260717();
@@ -12363,6 +12364,131 @@
     keepDesktopFastStyleLast();
   }
 
+
+  function installSunlightModePolish() {
+    if (document.getElementById("fuman-sunlight-mode-polish-20260813")) return;
+    const style = document.createElement("style");
+    style.id = "fuman-sunlight-mode-polish-20260813";
+    style.textContent = `
+      body.fuman-light-theme #market-view {
+        background:
+          linear-gradient(180deg, #f8fafc 0%, #f3f7fb 42%, #eef5f8 100%) !important;
+        color: #10233a !important;
+      }
+      body.fuman-light-theme #market-view .page-header h1,
+      body.fuman-light-theme #market-view .market-ai-hero-copy strong,
+      body.fuman-light-theme #market-view .opening-report-0830-card h4,
+      body.fuman-light-theme #market-view .opening-report-0830-priority b {
+        color: #10233a !important;
+        text-shadow: none !important;
+      }
+      body.fuman-light-theme #market-view .page-header p,
+      body.fuman-light-theme #market-view .market-ai-hero-copy p,
+      body.fuman-light-theme #market-view .opening-report-0830-card p,
+      body.fuman-light-theme #market-view .opening-report-0830-priority span {
+        color: #29425c !important;
+      }
+      body.fuman-light-theme #market-view .market-ai-panel {
+        border-color: #d7b469 !important;
+        background:
+          radial-gradient(circle at 16% 0%, rgba(241, 169, 55, 0.18), transparent 32%),
+          linear-gradient(180deg, rgba(255, 252, 246, 0.98), rgba(242, 248, 251, 0.98)) !important;
+        box-shadow: 0 18px 46px rgba(24, 43, 68, 0.12) !important;
+      }
+      body.fuman-light-theme #market-view .market-ai-panel.market-ai-visual-dashboard {
+        background: transparent !important;
+        box-shadow: none !important;
+      }
+      body.fuman-light-theme #market-view .market-ai-hero-board {
+        border-color: rgba(211, 150, 45, 0.54) !important;
+        background:
+          linear-gradient(135deg, rgba(255, 249, 239, 0.98), rgba(238, 248, 250, 0.98)) !important;
+        box-shadow: 0 16px 34px rgba(24, 43, 68, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+      }
+      body.fuman-light-theme #market-view .market-ai-hero-board.market-ai-bullish {
+        border-color: rgba(228, 69, 87, 0.52) !important;
+        background: linear-gradient(135deg, #fff1f3 0%, #fffaf0 54%, #eff8fb 100%) !important;
+      }
+      body.fuman-light-theme #market-view .market-ai-hero-board.market-ai-bearish {
+        border-color: rgba(27, 151, 101, 0.48) !important;
+        background: linear-gradient(135deg, #eefaf3 0%, #fffaf0 54%, #eff8fb 100%) !important;
+      }
+      body.fuman-light-theme #market-view .market-ai-hero-board.market-ai-bullish .market-ai-hero-copy strong,
+      body.fuman-light-theme #market-view .opening-report-0830-up {
+        color: #e23a50 !important;
+      }
+      body.fuman-light-theme #market-view .market-ai-hero-board.market-ai-bearish .market-ai-hero-copy strong,
+      body.fuman-light-theme #market-view .opening-report-0830-down {
+        color: #15915f !important;
+      }
+      body.fuman-light-theme #market-view .opening-report-0830-flat {
+        color: #9a6410 !important;
+      }
+      body.fuman-light-theme #market-view .market-ai-index-chip,
+      body.fuman-light-theme #market-view .opening-report-0830-card,
+      body.fuman-light-theme #market-view .opening-report-0830-priority article,
+      body.fuman-light-theme #market-view .opening-report-0830-run span {
+        border-color: #d7c7ad !important;
+        background: rgba(255, 255, 255, 0.94) !important;
+        box-shadow: 0 10px 24px rgba(24, 43, 68, 0.08) !important;
+        color: #10233a !important;
+      }
+      body.fuman-light-theme #market-view .market-ai-index-chip small,
+      body.fuman-light-theme #market-view .opening-report-0830-title span,
+      body.fuman-light-theme #market-view .opening-report-0830-run span {
+        color: #38516b !important;
+      }
+      body.fuman-light-theme #market-view .market-ai-index-chip b {
+        color: #10233a !important;
+      }
+      body.fuman-light-theme #market-view .market-ai-index-chip em {
+        background: #eef4f7 !important;
+        color: #10233a !important;
+      }
+      body.fuman-light-theme #market-view .market-ai-index-chip em.up {
+        color: #e23a50 !important;
+      }
+      body.fuman-light-theme #market-view .market-ai-index-chip em.down {
+        color: #15915f !important;
+      }
+      body.fuman-light-theme #market-view .opening-report-0830-briefing {
+        border: 1px solid rgba(206, 151, 42, 0.78) !important;
+        background:
+          linear-gradient(180deg, rgba(255, 249, 238, 0.98) 0%, rgba(255, 253, 248, 0.98) 52%, rgba(238, 248, 250, 0.98) 100%) !important;
+        color: #10233a !important;
+        box-shadow: 0 16px 36px rgba(24, 43, 68, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.92) !important;
+        width: calc(100% - 42px) !important;
+        margin: 12px auto 16px !important;
+        border-radius: 8px !important;
+      }
+      body.fuman-light-theme #market-view .opening-report-0830-head {
+        border-bottom-color: rgba(206, 151, 42, 0.48) !important;
+      }
+      body.fuman-light-theme #market-view .opening-report-0830-title b {
+        color: #9b6414 !important;
+      }
+      body.fuman-light-theme #market-view .opening-report-0830-bias {
+        color: #e23a50 !important;
+      }
+      body.fuman-light-theme #market-view .opening-report-0830-minirow {
+        border-top-color: rgba(158, 174, 193, 0.36) !important;
+        color: #10233a !important;
+      }
+      body.fuman-light-theme #market-view .opening-report-0830-priority article {
+        border-left-color: #e23a50 !important;
+      }
+      body.fuman-light-theme #market-view .opening-report-0830-symbols span {
+        border-color: #cfbea4 !important;
+        background: #f5f8fb !important;
+        color: #10233a !important;
+      }
+      body.fuman-light-theme #market-view .opening-report-0830-gap {
+        color: #a66100 !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
   (function installMarketAiWatchlistActions() {
     if (window.__fumanDesktopMarketAiWatchlistActions === "20260709-01") return;
     window.__fumanDesktopMarketAiWatchlistActions = "20260709-01";
@@ -12411,6 +12537,11 @@
     }, true);
   })();
 })();
+
+
+
+
+
 
 
 
