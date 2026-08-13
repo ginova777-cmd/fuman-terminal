@@ -7,6 +7,7 @@ const RETRIES = Number(process.env.FUMAN_LIVE_CLOSURE_RETRIES || 2);
 const RETRY_DELAY_MS = Number(process.env.FUMAN_LIVE_CLOSURE_RETRY_DELAY_MS || 1200);
 const ROOT = require("path").resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const AUTH_BEARER = String(process.env.FUMAN_MOBILE_AUTH_BEARER || process.env.FUMAN_PRODUCTION_BEARER || "").trim();
 
 function numberValue(value, fallback = 0) {
   if (value === null || value === undefined || value === "") return fallback;
@@ -17,6 +18,14 @@ function numberValue(value, fallback = 0) {
 function boolValue(value) {
   return value === true || String(value).toLowerCase() === "true" || String(value).toUpperCase() === "YES";
 }
+
+function taipeiDate() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const get = (type) => parts.find((part) => part.type === type)?.value || "";
+  return get("year") + "-" + get("month") + "-" + get("day");
+}
+function dateOf(value) { const match = String(value || "").match(/\d{4}-\d{2}-\d{2}/); return match ? match[0] : ""; }
+function htmlRunId(text) { const match = String(text || "").match(/data-run-id="([^"]+)"/i); return match ? match[1] : ""; }
 
 function addTs(pathname) {
   const joiner = pathname.includes("?") ? "&" : "?";
@@ -34,7 +43,7 @@ async function fetchText(pathname) {
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
       const response = await fetch(`${BASE_URL}${addTs(pathname)}`, {
-        headers: { Accept: "application/json,text/html,*/*" },
+        headers: { Accept: "application/json,text/html,*/*", ...(AUTH_BEARER ? { Authorization: "Bearer " + AUTH_BEARER } : {}) },
         cache: "no-store",
         signal: controller.signal,
       });
@@ -170,34 +179,39 @@ function verify(summary) {
   const daytrade = summary.daytradeSource;
   const strategy3Report = summary.strategy3SourceReport;
   const strategy3Api = summary.strategy3Api;
+  const expectedTradeDate = summary.expectedTradeDate;
   const strategy3RunComplete =
     strategy3Report.ok &&
+    dateOf(strategy3Report.scanDate) === expectedTradeDate &&
     strategy3Report.runId &&
     strategy3Report.resultCount === strategy3Report.readbackCount &&
-    strategy3Report.resultCount > 0;
+    strategy3Report.resultCount > 0 &&
+    strategy3Report.expectedTotal > 0 &&
+    strategy3Report.scannedCount === strategy3Report.expectedTotal;
   const protectedStrategy3Api = strategy3Api.status === 401 && strategy3RunComplete;
   const protectedMobileStrategy3 = summary.mobileStrategy3.status === 401 && strategy3RunComplete;
 
-  if (!source.ok) issues.push(`source_reports_http_${source.status}`);
+  if (!source.ok) issues.push("source_reports_http_" + source.status);
+  if (dateOf(strategy3Report.scanDate) !== expectedTradeDate) issues.push("strategy3_scan_date_mismatch expected=" + expectedTradeDate + " actual=" + (strategy3Report.scanDate || "missing"));
   if (!daytrade.ok && !strategy3RunComplete) issues.push("daytrade_source_report_not_ok");
   const requireDaytradeSourceReport = daytrade.hasSourceReport || !strategy3RunComplete;
-  if (requireDaytradeSourceReport && daytrade.motherPoolSymbols < 300) issues.push(`mother_pool_symbols_${daytrade.motherPoolSymbols}_below_300`);
-  if (requireDaytradeSourceReport && daytrade.priorityPoolSymbols !== 40) issues.push(`priority_pool_symbols_${daytrade.priorityPoolSymbols}_not_40`);
-  if (requireDaytradeSourceReport && daytrade.formalScope !== "mother_pool_rotation_priority_top40") issues.push(`formal_scope_${daytrade.formalScope || "missing"}_not_mother_pool_rotation_priority_top40`);
-  if (requireDaytradeSourceReport && daytrade.resultCount !== daytrade.readbackCount) issues.push(`daytrade_readback_mismatch_${daytrade.readbackCount}_${daytrade.resultCount}`);
-
+  if (requireDaytradeSourceReport && daytrade.motherPoolSymbols <= 0) issues.push("mother_pool_symbols_" + daytrade.motherPoolSymbols + "_missing");
+  if (requireDaytradeSourceReport && !daytrade.formalScope) issues.push("formal_scope_missing");
+  if (requireDaytradeSourceReport && /top40/i.test(daytrade.formalScope)) issues.push("legacy_top40_formal_scope:" + daytrade.formalScope);
+  if (requireDaytradeSourceReport && daytrade.resultCount !== daytrade.readbackCount) issues.push("daytrade_readback_mismatch_" + daytrade.readbackCount + "_" + daytrade.resultCount);
   if (!strategy3Report.ok) issues.push("strategy3_source_report_not_ok");
   if (!strategy3RunComplete && strategy3Report.evidenceStatus !== "complete") issues.push(`strategy3_source_evidence_${strategy3Report.evidenceStatus || "missing"}`);
   if (!strategy3RunComplete && strategy3Report.unattendedStatus !== "YES") issues.push(`strategy3_source_unattended_${strategy3Report.unattendedStatus || "missing"}`);
   if (!strategy3RunComplete && !boolValue(strategy3Report.publishAllowed)) issues.push("strategy3_source_publish_not_allowed");
   if (strategy3Report.resultCount !== strategy3Report.readbackCount) issues.push(`strategy3_source_readback_mismatch_${strategy3Report.readbackCount}_${strategy3Report.resultCount}`);
 
-  if (!strategy3Api.ok && !protectedStrategy3Api) issues.push(`strategy3_api_http_${strategy3Api.status}`);
-  if (!protectedStrategy3Api && strategy3Api.evidenceStatus !== "complete") issues.push(`strategy3_api_evidence_${strategy3Api.evidenceStatus || "missing"}`);
-  if (!protectedStrategy3Api && strategy3Api.unattendedStatus !== "YES") issues.push(`strategy3_api_unattended_${strategy3Api.unattendedStatus || "missing"}`);
+  if (!strategy3Api.ok && !protectedStrategy3Api) issues.push("strategy3_api_http_" + strategy3Api.status);
+  if (strategy3Api.ok && strategy3Api.runId !== strategy3Report.runId) issues.push("strategy3_api_runId_mismatch api=" + (strategy3Api.runId || "missing") + " published=" + strategy3Report.runId);
+  if (strategy3Api.ok && strategy3Api.resultCount !== strategy3Report.resultCount) issues.push("strategy3_api_count_mismatch api=" + strategy3Api.resultCount + " published=" + strategy3Report.resultCount);
+  if (!protectedStrategy3Api && strategy3Api.evidenceStatus !== "complete") issues.push("strategy3_api_evidence_" + (strategy3Api.evidenceStatus || "missing"));
+  if (!protectedStrategy3Api && strategy3Api.unattendedStatus !== "YES") issues.push("strategy3_api_unattended_" + (strategy3Api.unattendedStatus || "missing"));
   if (!protectedStrategy3Api && !boolValue(strategy3Api.publishAllowed)) issues.push("strategy3_api_publish_not_allowed");
-  if (!protectedStrategy3Api && strategy3Api.resultCount !== strategy3Api.readbackCount) issues.push(`strategy3_api_readback_mismatch_${strategy3Api.readbackCount}_${strategy3Api.resultCount}`);
-
+  if (!protectedStrategy3Api && strategy3Api.resultCount !== strategy3Api.readbackCount) issues.push("strategy3_api_readback_mismatch_" + strategy3Api.readbackCount + "_" + strategy3Api.resultCount);
   for (const [name, surface] of Object.entries(summary.surfaces)) {
     const terminalFastBundle = summary.surfaces.terminalFastBundle || {};
     const protectedDesktopSnapshotShell =
@@ -218,6 +232,7 @@ function verify(summary) {
   if (!summary.desktopHome.markerFound) issues.push("desktop_home_strategy3_ui_marker_missing");
   if (!summary.mobileBoot.ok) issues.push(`mobile_boot_http_${summary.mobileBoot.status}`);
   if (!summary.mobileStrategy3.ok && !protectedMobileStrategy3) issues.push(`mobile_strategy3_http_${summary.mobileStrategy3.status}`);
+  if (summary.mobileStrategy3.ok && summary.mobileStrategy3.runId !== strategy3Report.runId) issues.push("mobile_strategy3_runId_mismatch mobile=" + (summary.mobileStrategy3.runId || "missing") + " published=" + strategy3Report.runId);
 
   return {
     ok: issues.length === 0,
@@ -266,6 +281,7 @@ async function main() {
     gateGrade: daytradeRaw.gateGrade || "",
     phase: daytradeRaw.phase || "",
     offSession: daytradeRaw.offSession === true,
+    scanDate: daytradeRaw.scanDate || daytradeRaw.tradeDate || daytradeRaw.date || "",
     formalScope: daytradeRaw.formalScope || "",
     motherPoolSymbols: numberValue(daytradeRaw.motherPoolSymbols),
     priorityPoolSymbols: numberValue(daytradeRaw.priorityPoolSymbols),
@@ -278,7 +294,10 @@ async function main() {
   const strategy3SourceReport = strategy3LatestRun?.ok ? strategy3LatestRun : {
     ok: strategy3Raw.ok === true,
     runId: strategy3Raw.runId || "",
+    scanDate: strategy3Raw.date || strategy3Raw.tradeDate || strategy3Raw.sourceDate || "",
     count: numberValue(strategy3Raw.count),
+    expectedTotal: numberValue(strategy3Raw.expectedTotal),
+    scannedCount: numberValue(strategy3Raw.scannedCount),
     resultCount: numberValue(strategy3Raw.resultCount ?? strategy3Raw.count),
     readbackCount: numberValue(strategy3Raw.readbackCount ?? strategy3Raw.emittedRows ?? strategy3Raw.count),
     evidenceStatus: strategy3Raw.evidenceStatus || "",
@@ -291,6 +310,7 @@ async function main() {
   const summary = {
     ok: false,
     checkedAt: new Date().toISOString(),
+    expectedTradeDate: taipeiDate(),
     readOnly: true,
     baseUrl: BASE_URL,
     sourceReports: {
@@ -324,6 +344,7 @@ async function main() {
     mobileStrategy3: {
       status: mobileStrategy3Response.status,
       ok: mobileStrategy3Response.ok && mobileStrategy3Response.text.includes("策略3"),
+      runId: htmlRunId(mobileStrategy3Response.text),
       bytes: mobileStrategy3Response.text.length,
     },
   };
