@@ -120,7 +120,7 @@ function strategy3CompletePayloadIsAuthoritative(payload = {}) {
   const count = Number(payload.resultCount ?? payload.count ?? (Array.isArray(payload.matches) ? payload.matches.length : 0));
   const expected = Number(payload.expectedTotal ?? payload.expected_total ?? 0);
   const scanned = Number(payload.scannedCount ?? payload.scanned_count ?? 0);
-  return runDate === compactDate(new Date())
+  return runDate === compactDate()
     && Boolean(runId)
     && count > 0
     && expected > 0
