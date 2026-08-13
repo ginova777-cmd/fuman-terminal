@@ -32,6 +32,7 @@ assert(appSource.includes("opening-report-0830-sunlight-polish-20260813") && app
 assert(appSource.includes("window.__fumanRenderOpeningReport0830=renderBriefing") && appSource.includes("__fumanRenderOpeningReport0830?.(payload?.openingMorningReport"), "opening report render hook missing from live renderer");
 assert(desktopFastShellSource.includes("renderOpeningReport0830DesktopBriefing") && desktopFastShellSource.includes("aiPayload?.openingMorningReport") && desktopFastShellSource.includes("data-opening-report-0830-briefing"), "desktop fast shell must render opening report briefing");
 assert(desktopFastShellSource.includes("fuman-sunlight-mode-polish-20260813") && desktopFastShellSource.includes("body.fuman-light-theme #market-view .opening-report-0830-briefing") && desktopFastShellSource.includes("body.fuman-light-theme #market-view .opening-report-0830-card"), "desktop sunlight mode briefing polish missing");
+assert(desktopFastShellSource.includes("fuman-market-ai-compact-layout-polish-20260813") && desktopFastShellSource.includes("--fuman-ai-hero-height: 128px") && desktopFastShellSource.includes("#market-view .market-ai-hero-metrics .market-ai-index-chip"), "desktop compact market ai layout polish missing");
 assert(!desktopFastShellSource.includes("<h4>熱門觀察股</h4>") && !desktopFastShellSource.includes("market-ai-block market-ai-hot-section"), "desktop fast shell must not render hot stock block inside 0830 briefing layout");
 assert(appSource.includes("今日推薦"), "terminal display must use 今日推薦 instead of Mother Pool Bridge");
 assert(appSource.includes("08:30-08:59"), "terminal briefing display window missing");
@@ -41,6 +42,7 @@ assert(runnerSource.includes("collectLineTargets") && runnerSource.includes("FUM
 assert(runnerSource.includes("upsertSnapshot") && runnerSource.includes("syncTerminalBriefingSnapshot") && runnerSource.includes("opening_report_0830_terminal_briefing"), "08:30 runner must upsert terminal briefing snapshot");
 assert(pkg.scripts["verify:opening-report-0830-terminal-briefing"] === "node scripts/verify-opening-report-0830-terminal-briefing.js", "package script missing");
 assert(indexSource.includes("sunlight-polish=20260813-01"), "index cache bust missing sunlight polish version");
+assert(indexSource.includes("compact-layout=20260813-01"), "index cache bust missing compact layout version");
 assert(marketAiLive.__test?.readOpeningMorningReport, "market-ai-live __test missing readOpeningMorningReport");
 assert(marketAiLive.__test?.readOpeningMorningReportSnapshot, "market-ai-live __test missing readOpeningMorningReportSnapshot");
 

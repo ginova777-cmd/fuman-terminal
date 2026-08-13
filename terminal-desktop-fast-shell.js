@@ -160,6 +160,7 @@
 
   installStyle();
   installSunlightModePolish();
+  installMarketAiCompactLayoutPolish();
   installDesktopThemeToggle();
   purgeApiOnlyStrategySnapshots();
   installProtectedRouteSnapshotRetirement20260717();
@@ -12513,6 +12514,94 @@
       }
       body.fuman-light-theme #market-view .opening-report-0830-gap {
         color: #a66100 !important;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+
+  function installMarketAiCompactLayoutPolish() {
+    if (document.getElementById("fuman-market-ai-compact-layout-polish-20260813")) return;
+    const style = document.createElement("style");
+    style.id = "fuman-market-ai-compact-layout-polish-20260813";
+    style.textContent = `
+      #market-view.market-ai-mode {
+        --fuman-ai-hero-height: 128px;
+      }
+      #market-view .market-ai-panel.market-ai-visual-dashboard {
+        gap: 8px !important;
+        min-height: 760px !important;
+      }
+      #market-view .market-ai-hero-board {
+        grid-template-columns: minmax(520px, 1fr) minmax(520px, 0.54fr) !important;
+        gap: 12px !important;
+        min-height: var(--fuman-ai-hero-height) !important;
+        padding: 12px 14px !important;
+        align-items: center !important;
+      }
+      #market-view .market-ai-hero-copy {
+        align-self: center !important;
+      }
+      #market-view .market-ai-hero-copy small,
+      #market-view .market-ai-hero-action small {
+        font-size: 11px !important;
+      }
+      #market-view .market-ai-hero-title-row {
+        margin: 4px 0 !important;
+        gap: 10px !important;
+      }
+      #market-view .market-ai-hero-copy strong {
+        margin: 4px 0 !important;
+        font-size: clamp(26px, 2.4vw, 36px) !important;
+        line-height: 1.04 !important;
+      }
+      #market-view .market-ai-hero-copy p {
+        max-width: 920px !important;
+        font-size: 12px !important;
+        line-height: 1.45 !important;
+      }
+      #market-view .market-ai-hero-metrics {
+        gap: 10px !important;
+        align-items: stretch !important;
+      }
+      #market-view .market-ai-hero-metrics .market-ai-index-chip,
+      #market-view .market-ai-index-metrics .market-ai-index-chip {
+        min-height: 104px !important;
+        padding: 12px 14px !important;
+        gap: 5px !important;
+      }
+      #market-view .market-ai-index-chip small {
+        font-size: 13px !important;
+        line-height: 1.15 !important;
+      }
+      #market-view .market-ai-index-chip b,
+      #market-view .market-ai-hero-metrics b {
+        font-size: 28px !important;
+        line-height: 1.06 !important;
+      }
+      #market-view .market-ai-index-chip em {
+        font-size: 13px !important;
+        padding: 3px 7px !important;
+      }
+      #market-view .opening-report-0830-briefing {
+        margin-top: 6px !important;
+      }
+      @media (max-width: 1180px) {
+        #market-view .market-ai-hero-board {
+          grid-template-columns: 1fr !important;
+          min-height: auto !important;
+        }
+        #market-view .market-ai-hero-metrics {
+          grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+        }
+      }
+      @media (max-width: 760px) {
+        #market-view .market-ai-hero-metrics {
+          grid-template-columns: 1fr !important;
+        }
+      }
+      body.fuman-light-theme #market-view .market-ai-hero-board {
+        min-height: var(--fuman-ai-hero-height) !important;
       }
     `;
     document.head.appendChild(style);
