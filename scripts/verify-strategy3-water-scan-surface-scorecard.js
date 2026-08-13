@@ -38,8 +38,8 @@ function runStage(key, scriptName, args = []) {
     timeout: 120000,
     env: processEnv(),
   });
-  const payload = parseJsonOutput(process.stdout);
-  const errorText = String(process.stderr || "").trim();
+  const payload = parseJsonOutput(child.stdout);
+  const errorText = String(child.stderr || "").trim();
   const issues = Array.isArray(payload?.issues)
     ? payload.issues
     : Array.isArray(payload?.verification?.issues)
