@@ -6913,10 +6913,12 @@
 
   function strategy2RowsHtml(rows, mode = "history") {
     const isEntryTable = mode === "entry";
+    const isLatestCards = mode === "latest";
+    const usesEntryCards = isEntryTable || isLatestCards;
     if (!rows.length) {
-      return `<div class="strategy2-empty">${isEntryTable ? "目前沒有即時進場 / 預備進場訊號" : "目前沒有今日歷史紀錄"}</div>`;
+      return `<div class="strategy2-empty">${usesEntryCards ? "目前沒有最後十筆偵測紀錄" : "目前沒有今日歷史紀錄"}</div>`;
     }
-    if (isEntryTable) {
+    if (usesEntryCards) {
       return `
         <div class="strategy2-entry-cards">
           ${rows.map((row) => {
@@ -6928,7 +6930,7 @@
             const pct = row?.pct || "--";
             const score = row?.score || "--";
             const time = strategy2TimeLabel(row);
-            const state = tone === "entry" ? "真正進場" : "預備進場";
+            const state = isLatestCards ? "盤中偵測" : (tone === "entry" ? "真正進場" : "預備進場");
             return `
               <article class="strategy2-entry-card strategy2-card-${escapeHtml(tone)}">
                 <aside class="strategy2-card-time">
@@ -7034,7 +7036,7 @@
     if (latestTitle) latestTitle.textContent = "最後十筆偵測紀錄（最新在上）";
     if (latestCount) latestCount.textContent = `${latestRows.length} 筆`;
     if (latestNote) latestNote.textContent = "完整逐筆紀錄保留在下方";
-    if (latestTarget) latestTarget.innerHTML = strategy2RowsHtml(latestRows, "history");
+    if (latestTarget) latestTarget.innerHTML = strategy2RowsHtml(latestRows, "latest");
     return rows;
   }  function strategy2ValidationBacktestHtml() { return ""; }
   function refreshStrategy2ValidationBacktestShell() { const shell=document.querySelector(".strategy2-battle-shell"); if(shell) refreshStrategy2MergedHistory(shell); }
@@ -12407,6 +12409,7 @@
     }, true);
   })();
 })();
+
 
 
 
