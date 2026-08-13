@@ -6912,6 +6912,35 @@
     return formatPriceValue(value) || String(value || "--");
   }
 
+  function strategy2LatestCardsHtml(rows) {
+    if (!rows.length) return '<div class="strategy2-empty">目前沒有最後十筆偵測紀錄</div>';
+    return '<div class="strategy2-entry-cards">' + rows.map((row) => {
+      const code = row?.code || "--";
+      const title = row?.title || row?.name || code;
+      const price = strategy2PriceLabel(row);
+      const pct = row?.pct || "--";
+      const signal = row?.strategy || row?.score || row?.signalId || "--";
+      const time = strategy2TimeLabel(row);
+      const note = strategy2NoteLabel(row, "history", true);
+      const support = row?.supportPrice ?? "--";
+      const target = row?.targetPrice ?? "--";
+      const stop = row?.stopLoss ?? "--";
+      return '<article class="strategy2-entry-card strategy2-card-entry" data-strategy2-latest-card>'
+        + '<aside class="strategy2-card-time"><small>偵測時間</small><strong>' + escapeHtml(time) + '</strong><em>盤中偵測</em></aside>'
+        + '<div class="strategy2-card-code">' + escapeHtml(code) + '</div>'
+        + '<div class="strategy2-card-name"><strong>' + escapeHtml(title) + '</strong><span>' + escapeHtml(code) + '</span></div>'
+        + '<div class="strategy2-card-metric price"><small>現價</small><strong>' + escapeHtml(price) + '</strong></div>'
+        + '<div class="strategy2-card-metric score"><small>策略</small><strong>' + escapeHtml(signal) + '</strong></div>'
+        + '<div class="strategy2-card-metric change hot"><small>漲幅</small><strong>' + escapeHtml(pct) + '</strong></div>'
+        + '<div class="strategy2-card-line now"><b>現況</b><span>現價 ' + escapeHtml(price) + '｜盤中偵測｜' + escapeHtml(signal) + '</span></div>'
+        + '<div class="strategy2-card-line key"><b>關鍵價</b><span>支撐 ' + escapeHtml(String(support)) + '｜目標 ' + escapeHtml(String(target)) + '</span></div>'
+        + '<div class="strategy2-card-line watch"><b>觀察</b><span>' + escapeHtml(note) + '</span></div>'
+        + '<div class="strategy2-card-line power"><b>盤力</b><span>今日 1 分 K 型態命中，持續以量價與均線確認。</span></div>'
+        + '<div class="strategy2-card-line risk"><b>風控</b><span>停損 ' + escapeHtml(String(stop)) + '；跌破關鍵價先降碼。</span></div>'
+        + '<div class="strategy2-card-line action"><b>操作</b><span>等待價格延續與量能確認，再依策略條件處理。</span></div>'
+        + '</article>';
+    }).join("") + '</div>';
+  }
   function strategy2RowsHtml(rows, mode = "history") {
     const isEntryTable = mode === "entry";
     const isLatestCards = mode === "latest";
@@ -7038,7 +7067,7 @@
     if (latestTitle) latestTitle.textContent = "最後十筆偵測紀錄（最新在上）";
     if (latestCount) latestCount.textContent = `${latestRows.length} 筆`;
     if (latestNote) latestNote.textContent = "完整逐筆紀錄保留在下方";
-    if (latestTarget) latestTarget.innerHTML = strategy2RowsHtml(latestRows, "latest");
+    if (latestTarget) latestTarget.innerHTML = strategy2LatestCardsHtml(latestRows);
     return rows;
   }  function strategy2ValidationBacktestHtml() { return ""; }
   function refreshStrategy2ValidationBacktestShell() { const shell = strategy2ActiveShell?.isConnected ? strategy2ActiveShell : document.querySelector(".strategy2-battle-shell"); if(shell) refreshStrategy2MergedHistory(shell); }
@@ -12537,9 +12566,6 @@
     }, true);
   })();
 })();
-
-
-
 
 
 
