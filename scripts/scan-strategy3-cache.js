@@ -638,7 +638,7 @@ async function enforceStrategy3EntryEvidence(output = {}) {
   output.matches = enriched;
   output.count = enriched.length;
   output.sourceCoverage = { ...(output.sourceCoverage || {}), strategy3EntryEvidenceStatus: suppressed.length ? "partial" : "complete", strategy3EntryEvidenceTradeDate: evidence.date, strategy3EntryExactSymbols: exactCount, strategy3EntryToleranceSymbols: toleranceCount, strategy3EntryTailVolumeSymbols: tailVolumeCount, strategy3EntryExpectedSymbols: evidence.expectedSymbols.length, strategy3EntryFoundSymbols: evidence.byCode.size, strategy3EntrySuppressedSymbols: suppressed.length, strategy3EntryMissingSymbols: suppressed };
-  output.scanCoverage = { ...(output.scanCoverage || {}), resultCount: enriched.length, fixedPassCandidates: enriched.length, tailVolumeConfirmedCandidates: tailVolumeCount };
+  output.scanCoverage = { ...(output.scanCoverage || {}), scanScope: "daytrade_mother_pool", resultCount: enriched.length, fixedPassCandidates: enriched.length, tailVolumeConfirmedCandidates: tailVolumeCount, resultInMotherPool: enriched.filter((row) => row.inDaytradeMotherPool === true).length };
   output.entryPriceGuard = { ok: enriched.length > 0, source: STRATEGY3_INTRADAY_1M_TABLE, rule: "strategy3_entry_window_or_tail_volume_before_publish", tradeDate: evidence.date, exactCount, toleranceCount, tailVolumeCount, tailVolumeRatioMin: STRATEGY3_TAIL_VOLUME_RATIO_MIN, tailHistoryMin: STRATEGY3_TAIL_HISTORY_MIN, expectedSymbols: evidence.expectedSymbols.length, count: enriched.length, suppressedSymbols: suppressed, checkedAt: new Date().toISOString() };
   return output;
 }

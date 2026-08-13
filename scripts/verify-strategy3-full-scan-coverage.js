@@ -155,6 +155,18 @@ async function fetchEntryCandles(tradeDate, symbols, key) {
   return bySymbol;
 }
 
+function resultEntryEvidence(row = {}) {
+  const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+  const source = cleanText(payload.entryPriceSource || payload.entry_price_source || row.entryPriceSource || row.entry_price_source || "");
+  const time = cleanText(payload.entryCandleTime || payload.entry_candle_time || row.entryCandleTime || row.entry_candle_time || "");
+  const minute = candleMinute({ candle_time: time });
+  const tail = source === "intraday_1m_tail_volume_confirmed";
+  const strict = ["intraday_1m_1300", "intraday_1m_1300_exact", "intraday_1m_entry_window_tolerance"].includes(source) && minute >= 12 * 60 + 59 && minute <= 13 * 60 + 2;
+  const tailRatio = cleanNumber(payload.tailVolumeRatio ?? row.tailVolumeRatio);
+  const tailHistory = cleanNumber(payload.tailVolumeHistoryCount ?? row.tailVolumeHistoryCount);
+  const tailOk = tail && minute >= 12 * 60 + 45 && minute <= 12 * 60 + 58 && tailRatio >= Number(process.env.STRATEGY3_TAIL_VOLUME_RATIO_MIN || 1) && tailHistory >= Number(process.env.STRATEGY3_TAIL_HISTORY_MIN || 5);
+  return { ok: strict || tailOk, source, time, minute, tailRatio, tailHistory };
+}
 function addIssue(issues, ok, code, detail = {}) {
   if (!ok) issues.push({ code, ...detail });
 }
@@ -219,10 +231,12 @@ async function main() {
     scanScope,
     required: "daytrade_mother_pool",
   });
-  addIssue(issues, entryMap.size === symbols.length && symbols.length === resultCount, "strategy3_1300_entry_1m_not_full", {
+  const invalidEntryEvidence = results.map((row) => ({ symbol: symbolOf(row), ...resultEntryEvidence(row) })).filter((row) => !row.ok);
+  addIssue(issues, invalidEntryEvidence.length === 0 && symbols.length === resultCount, "strategy3_entry_evidence_not_full", {
     expectedEntryEvidence: symbols.length,
-    foundEntryEvidence: entryMap.size,
+    strictEntryEvidence: entryMap.size,
     missingEntrySymbols,
+    invalidEntryEvidence: invalidEntryEvidence.slice(0, 20),
   });
 
   const receipt = {
@@ -236,7 +250,7 @@ async function main() {
     allowed_action: issues.length
       ? (issues[0]?.code === "strategy3_result_not_all_in_daytrade_mother_pool"
         ? "rerun_strategy3_with_daytrade_mother_pool_scope_then_rerun_full_scan_verifier"
-        : "repair_missing_1300_intraday_1m_then_rerun_strategy3_full_scan_verifier")
+        : "repair_strategy3_entry_evidence_then_rerun_full_scan_verifier")
       : "strategy3_full_scan_can_be_accepted",
     fullScan: {
       expectedTotal,
