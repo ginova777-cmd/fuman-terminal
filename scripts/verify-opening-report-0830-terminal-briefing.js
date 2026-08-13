@@ -41,6 +41,8 @@ assert(!/Mother Pool Bridge/.test(appSource), "terminal user-facing app must not
 assert(runnerSource.includes("collectLineTargets") && runnerSource.includes("FUMAN_LINE_TO_GROUP") && runnerSource.includes("has_group_target"), "08:30 runner must support personal and group LINE targets");
 assert(runnerSource.includes("upsertSnapshot") && runnerSource.includes("syncTerminalBriefingSnapshot") && runnerSource.includes("opening_report_0830_terminal_briefing"), "08:30 runner must upsert terminal briefing snapshot");
 assert(pkg.scripts["verify:opening-report-0830-terminal-briefing"] === "node scripts/verify-opening-report-0830-terminal-briefing.js", "package script missing");
+assert(pkg.scripts["verify:opening-report-0830-delivery-chain"] === "node --use-system-ca scripts/verify-opening-report-0830-delivery-chain.js", "delivery chain verifier package script missing");
+assert(pkg.scripts["verify:opening-report-0830-production:line"] === "node --use-system-ca scripts/verify-opening-report-0830-production.js --require-line", "production line verifier package script missing");
 assert(indexSource.includes("sunlight-polish=20260813-01"), "index cache bust missing sunlight polish version");
 assert(indexSource.includes("compact-layout=20260813-06"), "index cache bust missing compact layout version");
 assert(marketAiLive.__test?.readOpeningMorningReport, "market-ai-live __test missing readOpeningMorningReport");
