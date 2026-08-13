@@ -351,7 +351,7 @@ async function main() {
     },
     mobileStrategy3: {
       status: mobileStrategy3Response.status,
-      ok: mobileStrategy3Response.ok && mobileStrategy3Response.text.includes("策略3"),
+      ok: mobileStrategy3Response.ok && mobileStrategy3Response.text.includes("data-mobile-fragment-key=\"strategy3\""),
       runId: htmlRunId(mobileStrategy3Response.text),
       count: htmlNumberAttribute(mobileStrategy3Response.text, "data-result-count"),
       formalDisplayAllowed: htmlBooleanAttribute(mobileStrategy3Response.text, "data-formal-display-allowed"),

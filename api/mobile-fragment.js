@@ -114,9 +114,27 @@ function terminalAuthorityForTab(tab) {
   };
 }
 
+function strategy3CompletePayloadIsAuthoritative(payload = {}) {
+  const runId = String(payload.runId || payload.run_id || "");
+  const runDate = compactDate(payload.scanDate || payload.usedDate || payload.tradeDate || payload.date || runId);
+  const count = Number(payload.resultCount ?? payload.count ?? (Array.isArray(payload.matches) ? payload.matches.length : 0));
+  const expected = Number(payload.expectedTotal ?? payload.expected_total ?? 0);
+  const scanned = Number(payload.scannedCount ?? payload.scanned_count ?? 0);
+  return runDate === compactDate(new Date())
+    && Boolean(runId)
+    && count > 0
+    && expected > 0
+    && scanned === expected
+    && payload.publishAllowed === true
+    && String(payload.evidenceStatus || "").toLowerCase() === "complete"
+    && String(payload.unattendedStatus || "").toUpperCase() === "YES";
+}
 function attachTerminalAuthority(tab, payload = {}) {
   const terminalAuthority = payload?.terminalAuthority || terminalAuthorityForTab(tab);
   if (!terminalAuthority) return payload;
+  if (tab === "strategy3" && strategy3CompletePayloadIsAuthoritative(payload)) {
+    return { ...payload, terminalAuthority, todayAuthoritative: true, formalDisplayAllowed: true, displayMode: "COMPLETE_RUN", displayBlockReason: "", moduleStatus: "complete" };
+  }
   return {
     ...payload,
     terminalAuthority,
