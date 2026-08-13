@@ -2465,27 +2465,7 @@
     return String(meta?.marketSession?.session || "") === "afterhours_hold_until_midnight";
   }
 
-  function strategy2HealthBannerHtml(meta = strategy2HealthMeta()) {
-    if (!meta || typeof meta !== "object") return "";
-    const status = String(meta.selfCheck?.status || meta.qualityStatus || "").toLowerCase();
-    const blocked = meta.publishBlocked === true || /blocked|not_ready/.test(status);
-    const degraded = blocked || /degraded|stale|not_ready|blocked|preserved/.test(status);
-    if (!degraded) return "";
-    const title = blocked ? "策略2資料阻擋" : "策略2降級運行";
-    const reason = meta.reason || meta.selfCheck?.dataReadiness?.reason || meta.sourceCoverage?.reason || "正式資料源尚未通過 freshness gate";
-    const detail = [
-      meta.runId ? `run ${meta.runId}` : "",
-      meta.updatedAt ? `更新 ${meta.updatedAt}` : "",
-      meta.cacheSource ? `來源 ${meta.cacheSource}` : "",
-    ].filter(Boolean).join(" ｜ ");
-    return `
-      <section class="strategy2-health-banner ${blocked ? "blocked" : "degraded"}" data-strategy2-health-banner>
-        <strong>${escapeHtml(title)}</strong>
-        <span>${escapeHtml(reason)}</span>
-        <small>${escapeHtml(detail)}</small>
-      </section>
-    `;
-  }
+  function strategy2HealthBannerHtml() { return ""; }
 
   function installStrategy2SnapshotFirstPrime() {
     if (document.documentElement.dataset.fumanStrategy2SnapshotFirstPrimeReady === "1") return;
@@ -7056,35 +7036,7 @@
     if (latestNote) latestNote.textContent = "完整逐筆紀錄保留在下方";
     if (latestTarget) latestTarget.innerHTML = strategy2RowsHtml(latestRows, "history");
     return rows;
-  }  function strategy2ValidationBacktestHtml() {
-    const report = strategy2ValidationBacktest;
-    if (report?.expired) return "";
-    if (!report?.ok) return '<section class="strategy2-validation-band is-loading" data-strategy2-validation-backtest><strong>策略2驗證回測</strong><span>正在讀取今日水源到策略的驗證資料</span><small>非正式發布</small></section>';
-    const source = report.sourceChain || {};
-    const minuteCount = Number(report.symbolsWithTodayCandles || 0);
-    const scanned = Number(report.scannedSymbols || 0);
-    const matched = Number(report.matchedSymbols || 0);
-    const gap = Number(report.dataGapCount || 0);
-    const generated = String(report.generatedAt || "").replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
-    const rows = Array.isArray(report.matches) ? report.matches : [];
-    // Keep every detected record; chronological order makes the 09:00–12:00 patrol auditable.
-    const timelineRows = rows.filter((row) => {
-      const minute = String(row?.entryAt || "").match(/(\d{2}:\d{2})(?::\d{2})?/)?.[1] || "";
-      return minute >= "09:00" && minute <= "12:00";
-    }).sort((a, b) => String(a?.entryAt || "").localeCompare(String(b?.entryAt || "")) || String(a?.code || "").localeCompare(String(b?.code || "")) || String(a?.signalId || "").localeCompare(String(b?.signalId || "")));
-    const events = timelineRows.length;
-    const firstEntryTime = String(timelineRows[0]?.entryAt || "").match(/(\d{2}:\d{2})(?::\d{2})?/)?.[1] || "--:--";
-    const lastEntryTime = String(timelineRows[timelineRows.length - 1]?.entryAt || "").match(/(\d{2}:\d{2})(?::\d{2})?/)?.[1] || "--:--";
-    const recordRows = timelineRows.map((row) => {
-      const time = String(row?.entryAt || "").match(/(\d{2}:\d{2})(?::\d{2})?/)?.[1] || "--:--";
-      const pct = Number(row?.changeFromEntryPct);
-      const pctText = Number.isFinite(pct) ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%` : "--";
-      return '<tr title="' + escapeHtml(row?.reason || "") + '"><td>' + escapeHtml(time) + '</td><td><strong>' + escapeHtml(row?.code || "--") + '</strong><span>' + escapeHtml(row?.name || "") + '</span></td><td>' + escapeHtml(row?.strategy || row?.signalId || "--") + '</td><td>' + escapeHtml(String(row?.entryPrice ?? "--")) + '</td><td>' + escapeHtml(String(row?.supportPrice ?? "--")) + '</td><td>' + escapeHtml(String(row?.targetPrice ?? "--")) + '</td><td>' + escapeHtml(String(row?.stopLoss ?? "--")) + '</td><td class="' + (pct >= 0 ? "is-up" : "is-down") + '">' + escapeHtml(pctText) + '</td></tr>';
-    }).join("");
-    return '<div data-strategy2-validation-backtest>'
-      + '<section class="strategy2-validation-band" data-validation-run-id="' + escapeHtml(report.runId || "") + '"><div class="strategy2-validation-title"><strong>策略2今日驗證回測</strong><span>水源 -> 策略 -> 顯示</span></div><div class="strategy2-validation-flow"><span><b>Mother Pool</b> ' + escapeHtml(String(source?.motherPool?.count || scanned)) + '</span><i>-></i><span><b>今日 1 分K</b> ' + escapeHtml(String(minuteCount)) + '</span><i>-></i><span><b>命中標的</b> ' + escapeHtml(String(matched)) + '</span><i>-></i><span><b>型態訊號</b> ' + escapeHtml(String(events)) + '</span></div><div class="strategy2-validation-meta"><span>資料日 ' + escapeHtml(report.tradeDate || "--") + '</span><span>DATA_GAP ' + escapeHtml(String(gap)) + '</span><span>' + escapeHtml(generated || "--") + '</span><small>驗證用，未發布</small></div></section>'
-      + '</div>';
-  }
+  }  function strategy2ValidationBacktestHtml() { return ""; }
   function refreshStrategy2ValidationBacktestShell() { const shell=document.querySelector(".strategy2-battle-shell"); if(shell) refreshStrategy2MergedHistory(shell); }
   function loadStrategy2ValidationBacktest(force=false) { if(!force&&strategy2ValidationBacktestPromise)return strategy2ValidationBacktestPromise; strategy2ValidationBacktestPromise=fetch(`/api/strategy2-ps1-backtest?t=${Date.now()}`,{cache:"no-store"}).then((response)=>response.ok?response.json():null).then((payload)=>{if(payload?.ok&&payload.kind==="validation_backtest"&&payload.formalRun===false&&payload.publishAllowed===false){strategy2ValidationBacktest=payload;scheduleStrategy2ValidationBacktestExpiry(payload);}else strategy2ValidationBacktest={expired:true};refreshStrategy2ValidationBacktestShell();return strategy2ValidationBacktest;}).catch(()=>null).finally(()=>{strategy2ValidationBacktestPromise=null;});return strategy2ValidationBacktestPromise; }
   function strategy2BattleShellHtml(key, meta) {
@@ -7130,6 +7082,7 @@
   }
 
   function updateStrategy2BattleShell(shell, key, meta) {
+    shell?.querySelectorAll("[data-strategy2-health-banner], [data-strategy2-validation-backtest]").forEach((node) => node.remove());
     if (!shell) return;
     shell.dataset.routeShell = key;
     shell.dataset.routeSource = canvasState.source || "";
@@ -10034,6 +9987,7 @@
         color: #aab6cc;
         font-weight: 800;
       }
+      .strategy2-battle-shell [data-strategy2-health-banner],.strategy2-battle-shell [data-strategy2-validation-backtest]{display:none!important;}
       .strategy2-validation-band{display:grid;grid-template-columns:minmax(180px,.9fr) minmax(0,2fr) auto;align-items:center;gap:14px;border:1px solid rgba(45,212,191,.36);border-radius:8px;padding:11px 14px;background:rgba(6,78,59,.22);color:#ccfbf1;font:800 12px/1.35 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
       .strategy2-validation-band.is-loading{border-color:rgba(148,163,184,.26);background:rgba(15,23,42,.62);color:#cbd5e1}.strategy2-validation-title{display:grid;gap:2px}.strategy2-validation-title strong{color:#5eead4;font-size:14px}.strategy2-validation-title span,.strategy2-validation-meta{color:#94a3b8}.strategy2-validation-flow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}.strategy2-validation-flow span{white-space:nowrap}.strategy2-validation-flow b{color:#e2e8f0}.strategy2-validation-flow i{color:#2dd4bf;font-style:normal}.strategy2-validation-meta{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px}.strategy2-validation-meta small{border:1px solid rgba(250,204,21,.42);border-radius:6px;padding:2px 6px;color:#fde68a;background:rgba(120,53,15,.24);font-weight:900;white-space:nowrap}      .strategy2-battle-refresh {
         min-height: 38px;
@@ -12453,6 +12407,8 @@
     }, true);
   })();
 })();
+
+
 
 
 
