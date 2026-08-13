@@ -2,6 +2,7 @@
 
 const assert = require("assert");
 const childProcess = require("child_process");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 
@@ -9,6 +10,19 @@ const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
 const RECEIPT_DIR = path.join(RUNTIME_ROOT, "data", "opening-report-0830");
 const AUTOMATION_PATH = path.join(process.env.USERPROFILE || "C:\\Users\\ginov", ".codex", "automations", "fuman-2", "automation.toml");
+const RELEASE_ROOT = process.env.FUMAN_RELEASE_ROOT || "C:\\Users\\ginov\\Documents\\Codex\\fuman-terminal-release-main";
+const FORMAL_ROOT = process.env.FUMAN_FORMAL_ROOT || "C:\\fuman-terminal";
+const FORMAL_SYNC_FILES = [
+  "api/market-ai-live.js",
+  "scripts/run-opening-report-0830-production.js",
+  "run-opening-report-0830-production-wrapper.ps1",
+  "terminal-app.js",
+  "terminal-desktop-fast-shell.js",
+  "index.html",
+  "scripts/verify-opening-report-0830-terminal-briefing.js",
+  "scripts/verify-opening-report-0830-delivery-chain.js",
+  "scripts/verify-opening-report-0830-unattended-readiness.js"
+];
 
 function compactDate(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
@@ -29,6 +43,10 @@ function read(file) {
 
 function readJson(file) {
   return JSON.parse(read(file));
+}
+
+function hashFile(file) {
+  return crypto.createHash("sha256").update(fs.readFileSync(file, "utf8").replace(/\r\n/g, "\n")).digest("hex");
 }
 
 function run(command, args, options = {}) {
@@ -138,6 +156,43 @@ function verifyRuntimeReceipts(compact) {
   };
 }
 
+function verifyFormalSourceSync() {
+  const rows = FORMAL_SYNC_FILES.map((relativePath) => {
+    const releasePath = path.join(RELEASE_ROOT, relativePath);
+    const formalPath = path.join(FORMAL_ROOT, relativePath);
+    const releaseExists = fs.existsSync(releasePath);
+    const formalExists = fs.existsSync(formalPath);
+    const releaseHash = releaseExists ? hashFile(releasePath) : "";
+    const formalHash = formalExists ? hashFile(formalPath) : "";
+    return {
+      file: relativePath,
+      ok: releaseExists && formalExists && releaseHash === formalHash,
+      release_exists: releaseExists,
+      formal_exists: formalExists,
+      hash_match: Boolean(releaseHash && formalHash && releaseHash === formalHash)
+    };
+  });
+  const mismatches = rows.filter((row) => !row.ok);
+  const releasePkg = readJson(path.join(RELEASE_ROOT, "package.json"));
+  const formalPkg = readJson(path.join(FORMAL_ROOT, "package.json"));
+  const requiredScripts = [
+    "verify:opening-report-0830-terminal-briefing",
+    "verify:opening-report-0830-delivery-chain",
+    "verify:opening-report-0830-unattended-readiness"
+  ];
+  const packageScriptMismatches = requiredScripts.filter((name) => releasePkg.scripts?.[name] !== formalPkg.scripts?.[name]);
+  return {
+    ok: mismatches.length === 0 && packageScriptMismatches.length === 0,
+    canonical_release_root: RELEASE_ROOT,
+    formal_root: FORMAL_ROOT,
+    checked_files: rows.length,
+    mismatch_count: mismatches.length,
+    mismatches,
+    package_scripts_ok: packageScriptMismatches.length === 0,
+    package_script_mismatches: packageScriptMismatches
+  };
+}
+
 function main() {
   const compact = compactDate(process.env.FUMAN_TRADE_DATE || taipeiDateKey());
   const checks = {
@@ -145,6 +200,7 @@ function main() {
     wrapper: verifyWrapper(),
     package_scripts: verifyPackageScripts(),
     codex_heartbeat: verifyAutomation(),
+    formal_source_sync: verifyFormalSourceSync(),
     runtime_delivery_chain: verifyRuntimeReceipts(compact)
   };
   const failed = Object.entries(checks).find(([, check]) => !check.ok);
@@ -165,3 +221,7 @@ function main() {
 }
 
 main();
+
+
+
+
