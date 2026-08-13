@@ -6974,11 +6974,18 @@
     const minuteCount = Number(report.symbolsWithTodayCandles || 0);
     const scanned = Number(report.scannedSymbols || 0);
     const matched = Number(report.matchedSymbols || 0);
-    const events = Number(report.matchCount || 0);
     const gap = Number(report.dataGapCount || 0);
     const generated = String(report.generatedAt || "").replace("T", " ").replace(/\.\d{3}Z$/, " UTC");
     const rows = Array.isArray(report.matches) ? report.matches : [];
-    const recordRows = rows.map((row) => {
+    // Keep every detected record; chronological order makes the 09:00–12:00 patrol auditable.
+    const timelineRows = rows.filter((row) => {
+      const minute = String(row?.entryAt || "").match(/(\d{2}:\d{2})(?::\d{2})?/)?.[1] || "";
+      return minute >= "09:00" && minute <= "12:00";
+    }).sort((a, b) => String(a?.entryAt || "").localeCompare(String(b?.entryAt || "")) || String(a?.code || "").localeCompare(String(b?.code || "")) || String(a?.signalId || "").localeCompare(String(b?.signalId || "")));
+    const events = timelineRows.length;
+    const firstEntryTime = String(timelineRows[0]?.entryAt || "").match(/(\d{2}:\d{2})(?::\d{2})?/)?.[1] || "--:--";
+    const lastEntryTime = String(timelineRows[timelineRows.length - 1]?.entryAt || "").match(/(\d{2}:\d{2})(?::\d{2})?/)?.[1] || "--:--";
+    const recordRows = timelineRows.map((row) => {
       const time = String(row?.entryAt || "").match(/(\d{2}:\d{2})(?::\d{2})?/)?.[1] || "--:--";
       const pct = Number(row?.changeFromEntryPct);
       const pctText = Number.isFinite(pct) ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%` : "--";
@@ -6986,7 +6993,7 @@
     }).join("");
     return '<div data-strategy2-validation-backtest>'
       + '<section class="strategy2-validation-band" data-validation-run-id="' + escapeHtml(report.runId || "") + '"><div class="strategy2-validation-title"><strong>策略2今日驗證回測</strong><span>水源 -> 策略 -> 顯示</span></div><div class="strategy2-validation-flow"><span><b>Mother Pool</b> ' + escapeHtml(String(source?.motherPool?.count || scanned)) + '</span><i>-></i><span><b>今日 1 分K</b> ' + escapeHtml(String(minuteCount)) + '</span><i>-></i><span><b>命中標的</b> ' + escapeHtml(String(matched)) + '</span><i>-></i><span><b>型態訊號</b> ' + escapeHtml(String(events)) + '</span></div><div class="strategy2-validation-meta"><span>資料日 ' + escapeHtml(report.tradeDate || "--") + '</span><span>DATA_GAP ' + escapeHtml(String(gap)) + '</span><span>' + escapeHtml(generated || "--") + '</span><small>驗證用，未發布</small></div></section>'
-      + '<details class="strategy2-validation-records" open><summary><span>今日回測紀錄</span><strong>' + escapeHtml(String(events)) + ' 筆訊號 / ' + escapeHtml(String(matched)) + ' 檔</strong><small>點此收起</small></summary><div class="strategy2-validation-record-scroll"><table><thead><tr><th>時間</th><th>標的</th><th>策略</th><th>進場</th><th>支撐</th><th>目標</th><th>停損</th><th>收盤差</th></tr></thead><tbody>' + (recordRows || '<tr><td colspan="8">今天沒有回測命中紀錄。</td></tr>') + '</tbody></table></div></details>'
+      + '<details class="strategy2-validation-records" open><summary><span>09:00–12:00 逐筆偵測紀錄</span><strong>' + escapeHtml(String(events)) + ' 筆 / ' + escapeHtml(String(matched)) + ' 檔</strong><small>' + escapeHtml(firstEntryTime + ' 至 ' + lastEntryTime) + '，點此收起</small></summary><div class="strategy2-validation-record-scroll"><table><thead><tr><th>時間</th><th>標的</th><th>策略</th><th>進場</th><th>支撐</th><th>目標</th><th>停損</th><th>收盤差</th></tr></thead><tbody>' + (recordRows || '<tr><td colspan="8">09:00–12:00 沒有命中紀錄。</td></tr>') + '</tbody></table></div></details>'
       + '</div>';
   }
   function refreshStrategy2ValidationBacktestShell() { const shell=document.querySelector(".strategy2-battle-shell"); if(!shell)return; const existing=shell.querySelector("[data-strategy2-validation-backtest]"); const html=strategy2ValidationBacktestHtml(); if(existing)existing.outerHTML=html; else { const health=shell.querySelector("[data-strategy2-health-banner]"); if(health)health.insertAdjacentHTML("afterend",html); else shell.querySelector(".strategy2-battle-header")?.insertAdjacentHTML("afterend",html); } }
