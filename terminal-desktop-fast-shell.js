@@ -12587,33 +12587,42 @@
         margin-top: 8px !important;
       }
       /* opening-report-0830-readable-type-20260813 */
+      /* market-ai-readable-zh-type-20260813 */
+      #market-view .page-header h1 {
+        font-size: 28px !important;
+        line-height: 1.18 !important;
+      }
+      #market-view .page-header p {
+        font-size: 14px !important;
+        line-height: 1.45 !important;
+      }
       #market-view .opening-report-0830-title b {
-        font-size: 18px !important;
+        font-size: 22px !important;
       }
       #market-view .opening-report-0830-title span,
       #market-view .opening-report-0830-run span {
-        font-size: 12px !important;
+        font-size: 14px !important;
       }
       #market-view .opening-report-0830-card h4 {
-        font-size: 15px !important;
+        font-size: 18px !important;
       }
       #market-view .opening-report-0830-card p,
       #market-view .opening-report-0830-priority span,
       #market-view .opening-report-0830-symbols span {
-        font-size: 13px !important;
-        line-height: 1.55 !important;
+        font-size: 15px !important;
+        line-height: 1.66 !important;
       }
       #market-view .opening-report-0830-minirow {
-        font-size: 13px !important;
-      }
-      #market-view .opening-report-0830-bias {
-        font-size: 26px !important;
-      }
-      #market-view .opening-report-0830-priority b {
         font-size: 15px !important;
       }
+      #market-view .opening-report-0830-bias {
+        font-size: 30px !important;
+      }
+      #market-view .opening-report-0830-priority b {
+        font-size: 17px !important;
+      }
       #market-view .opening-report-0830-priority strong {
-        font-size: 13px !important;
+        font-size: 15px !important;
       }
       @media (max-width: 1180px) {
         #market-view .market-ai-hero-board {
@@ -12684,6 +12693,10 @@
     }, true);
   })();
 })();
+
+
+
+
 
 
 
