@@ -153,6 +153,7 @@
   const strategy4DailyKlineCache = new Map();
   const strategy4DailyKlinePending = new Set();
   const strategy4DailyKlineRanges = new Map();
+  let strategy4CanvasPointerOpenedAt = 0;
 
   installRetiredSurfaceCacheMigration20260714();
   installMemberBearerFetchBridge20260714();
@@ -3942,6 +3943,10 @@
       }
       const canvas = event.target.closest?.(".desktop-route-canvas");
       if (!canvas) return;
+      if (isStrategy4Route(canvasState.route) && Date.now() - strategy4CanvasPointerOpenedAt < 650) {
+        event.preventDefault();
+        return;
+      }
       const index = canvasHitIndex(canvas, event);
       if (index < 0) return;
       if (isStrategy4Route(canvasState.route) && canvasState.selectedIndex === index) {
@@ -3953,6 +3958,23 @@
       }
       canvasState.selectedIndex = index;
       showCanvasDetail(canvasState.filtered[index], index);
+      scheduleCanvasDraw();
+      event.preventDefault();
+    }, true);
+
+    document.addEventListener("pointerup", (event) => {
+      const canvas = event.target.closest?.(".desktop-route-canvas");
+      if (!canvas || !isStrategy4Route(canvasState.route)) return;
+      const index = canvasHitIndex(canvas, event);
+      if (index < 0) return;
+      strategy4CanvasPointerOpenedAt = Date.now();
+      if (canvasState.selectedIndex === index) {
+        canvasState.selectedIndex = -1;
+        hideCanvasDetail();
+      } else {
+        canvasState.selectedIndex = index;
+        showCanvasDetail(canvasState.filtered[index], index);
+      }
       scheduleCanvasDraw();
       event.preventDefault();
     }, true);

@@ -38,7 +38,7 @@ async function main() {
     "MA5", "MA10", "MA20", "下方為成交量（張）", ".watch-kline-panel", ".watch-kline-svg", "height:300px", ".watch-kline-range.active",
   ]) failWhen(!watchlist.includes(marker), `watchlist daily-K contract missing: ${marker}`);
   for (const marker of ['contract: "terminal-daily-kline-v1"', "strategy4_daily_ohlcv_view", "open", "high", "low", "close", "volumeLots"]) failWhen(!api.includes(marker), `daily-K API contract missing: ${marker}`);
-  for (const marker of ["strategy4DailyKlineHtml", "strategy4DailyKlineSvg", "hydrateStrategy4DailyKline", "/api/daily-kline?code=${encodeURIComponent(code)}&limit=260", "data-strategy4-kline-range", "canvasState.selectedIndex === index", "hideCanvasDetail()", "desktop-strategy4-canvas-detail"]) failWhen(!desktop.includes(marker), `strategy4 daily-K contract missing: ${marker}`);
+  for (const marker of ["strategy4DailyKlineHtml", "strategy4DailyKlineSvg", "hydrateStrategy4DailyKline", "/api/daily-kline?code=${encodeURIComponent(code)}&limit=260", "data-strategy4-kline-range", "canvasState.selectedIndex === index", "hideCanvasDetail()", "desktop-strategy4-canvas-detail", "strategy4CanvasPointerOpenedAt", "document.addEventListener(\"pointerup\""]) failWhen(!desktop.includes(marker), `strategy4 daily-K contract missing: ${marker}`);
   failWhen(!/verify:watchlist-daily-kline/.test(pkg), "package.json missing verify:watchlist-daily-kline script");
   const live = { skipped: SKIP_LIVE };
   if (!SKIP_LIVE) {
