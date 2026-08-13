@@ -1493,6 +1493,21 @@ function readOpeningMorningReport(clock = taipeiClock()) {
   };
 }
 
+async function readOpeningMorningReportSnapshot(clock = taipeiClock()) {
+  const snapshot = await readSnapshot("opening_report_0830_terminal_briefing", {
+    tradeDate: clock.date,
+    allowLatestFallback: false,
+    timeoutMs: Number(process.env.FUMAN_OPENING_REPORT_0830_SNAPSHOT_TIMEOUT_MS || 2000),
+  }).catch(() => null);
+  const payload = snapshot?.payload;
+  if (!payload || payload.contract !== "opening-report-0830-terminal-briefing-v1") return null;
+  if (compactDate(payload.date) !== clock.ymd) return null;
+  return {
+    ...payload,
+    cacheSource: "supabase:market_snapshots",
+    snapshot_updated_at: snapshot.updatedAt || "",
+  };
+}
 function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), session = {}) {
   const freshness = payload?.dataFreshness || {};
   const dataSources = payload?.dashboard?.dataSources || {};
@@ -1577,7 +1592,7 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
   });
   const withOpeningMorningReport = {
     ...evidencedPayload,
-    openingMorningReport: readOpeningMorningReport(clock),
+    openingMorningReport: session?.openingMorningReport || readOpeningMorningReport(clock),
   };
   return displayOnlyReport ? normalizeDisplayOnlyMarketAiEvidence(withOpeningMorningReport) : withOpeningMorningReport;
 }
@@ -1604,7 +1619,8 @@ module.exports = async function handler(request, response) {
   const session = applyMarketCalendarToSession(rawSession, marketCalendar);
   const requireTodayLiveSource = marketCalendar?.marketOpen === false ? false : requiresTodayLiveSource(clock, session);
   const mustDetectToday = marketCalendar?.marketOpen === false ? false : requiresTodayDetection(clock, session);
-  const sessionForPayload = { ...session, requiresTodayDetection: mustDetectToday, requiresTodayLiveSource: requireTodayLiveSource };
+  const openingMorningReportSnapshot = await readOpeningMorningReportSnapshot(clock);
+  const sessionForPayload = { ...session, requiresTodayDetection: mustDetectToday, requiresTodayLiveSource: requireTodayLiveSource, openingMorningReport: openingMorningReportSnapshot };
 
   if (usesSimpleMarketAiReport(request)) {
     const simplePayload = await buildSimpleMarketAiReport(request, clock, {
@@ -1754,7 +1770,9 @@ module.exports.__test = {
   heatmapQueryForMarketAi,
   isMarketAiPreOpenWindow,
   readOpeningMorningReport,
+  readOpeningMorningReportSnapshot,
 };
+
 
 
 

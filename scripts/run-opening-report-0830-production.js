@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { upsertSnapshot } = require("../lib/supabase-snapshots");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
@@ -285,6 +286,36 @@ async function pushLine({ cardText, runId, dryRun }) {
   };
 }
 
+async function syncTerminalBriefingSnapshot(tradeDate, runId) {
+  try {
+    const compact = tradeDate.replace(/\D/g, "");
+    const marketAiLive = require("../api/market-ai-live");
+    const briefing = marketAiLive.__test.readOpeningMorningReport({
+      date: tradeDate,
+      ymd: compact,
+      seconds: 8 * 60 * 60 + 30 * 60,
+      time: "08:30:00",
+    });
+    const payload = {
+      ...briefing,
+      source: "opening_report_0830_terminal_briefing",
+      updatedAt: timestamp(),
+    };
+    return await upsertSnapshot("opening_report_0830_terminal_briefing", payload, {
+      tradeDate,
+      snapshotId: runId,
+      source: "opening_report_0830_terminal_briefing",
+      reason: "opening-report-0830-production",
+      locked: false,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      reason_code: "opening_report_0830_terminal_snapshot_sync_failed",
+      error: error?.message || String(error),
+    };
+  }
+}
 async function main() {
   const tradeDate = argValue("--date", process.env.FUMAN_TRADE_DATE || taipeiDateKey());
   const compact = tradeDate.replace(/\D/g, "");
@@ -335,7 +366,10 @@ async function main() {
     checked_at: timestamp()
   };
   writeJson(finalPath, final);
-  console.log(JSON.stringify({ ok: final.ok, final_receipt: finalPath, report_path: reportPath, run_id: runId, report_status: final.report_status }, null, 2));
+  const terminalBriefingSnapshot = await syncTerminalBriefingSnapshot(tradeDate, runId);
+  final.terminal_briefing_snapshot = terminalBriefingSnapshot;
+  writeJson(finalPath, final);
+  console.log(JSON.stringify({ ok: final.ok, final_receipt: finalPath, report_path: reportPath, run_id: runId, report_status: final.report_status, terminal_briefing_snapshot_ok: terminalBriefingSnapshot.ok === true }, null, 2));
   if (hasFlag("--self-test") && !final.industry_bias_exported) process.exitCode = 1;
 }
 
@@ -343,3 +377,4 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, reason_code: "opening_report_0830_runner_error", error: error?.stack || error?.message || String(error) }, null, 2));
   process.exitCode = 1;
 });
+

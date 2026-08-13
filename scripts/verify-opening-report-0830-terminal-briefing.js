@@ -15,13 +15,16 @@ const compact = compactDate(today);
 
 const apiSource = read("api/market-ai-live.js");
 const appSource = read("terminal-app.js");
+const runnerSource = read("scripts/run-opening-report-0830-production.js");
 const pkg = readJson(path.join(ROOT, "package.json"));
 
 assert(apiSource.includes("function readOpeningMorningReport"), "market-ai-live missing readOpeningMorningReport");
-assert(apiSource.includes("openingMorningReport: readOpeningMorningReport(clock)"), "market-ai-live response missing openingMorningReport");
+assert(apiSource.includes("openingMorningReport: session?.openingMorningReport || readOpeningMorningReport(clock)"), "market-ai-live response missing openingMorningReport snapshot/local fallback");
 assert(apiSource.includes("opening-report-0830-terminal-briefing-v1"), "opening report terminal contract missing");
 assert(apiSource.includes("opening_report_0830_final_receipt_missing"), "missing final receipt fail-closed reason missing");
 assert(apiSource.includes("readOpeningShortwave") && apiSource.includes("strategy5"), "shortwave sources must include Strategy5 previous closed run");
+assert(apiSource.includes("readOpeningMorningReportSnapshot") && apiSource.includes("opening_report_0830_terminal_briefing"), "market-ai-live must read opening report terminal briefing snapshot");
+assert(runnerSource.includes("upsertSnapshot") && runnerSource.includes("syncTerminalBriefingSnapshot") && runnerSource.includes("opening_report_0830_terminal_briefing"), "08:30 runner must upsert terminal briefing snapshot");
 assert(appSource.includes("installOpeningReport0830TerminalBriefing"), "terminal app missing 08:30 briefing installer");
 assert(appSource.includes("今日推薦"), "terminal display must use 今日推薦 instead of Mother Pool Bridge");
 assert(appSource.includes("08:30-08:59"), "terminal briefing display window missing");
@@ -29,6 +32,7 @@ assert(appSource.includes("priority_scan_only"), "terminal briefing must expose 
 assert(!/Mother Pool Bridge/.test(appSource), "terminal user-facing app must not display Mother Pool Bridge");
 assert(pkg.scripts["verify:opening-report-0830-terminal-briefing"] === "node scripts/verify-opening-report-0830-terminal-briefing.js", "package script missing");
 assert(marketAiLive.__test?.readOpeningMorningReport, "market-ai-live __test missing readOpeningMorningReport");
+assert(marketAiLive.__test?.readOpeningMorningReportSnapshot, "market-ai-live __test missing readOpeningMorningReportSnapshot");
 
 const briefing = marketAiLive.__test.readOpeningMorningReport({
   date: compact.slice(0,4) + "-" + compact.slice(4,6) + "-" + compact.slice(6,8),
@@ -54,3 +58,5 @@ const receiptPath = path.join(RUNTIME_ROOT, "data", "opening-report-0830", "open
 fs.mkdirSync(path.dirname(receiptPath), { recursive: true });
 fs.writeFileSync(receiptPath, JSON.stringify({ ok: true, contract: "opening-report-0830-terminal-briefing-verifier-v1", checked_at: new Date().toISOString(), date: compact, briefing_status: briefing.ok ? "PASS" : "FAIL_CLOSED", reason_code: briefing.reason_code, run_id: briefing.run_id || "", display_label: briefing.display_label, industry_bias_count: briefing.industry_bias?.count || 0 }, null, 2) + "\n", "utf8");
 console.log(JSON.stringify({ ok: true, receipt: receiptPath, briefing_status: briefing.ok ? "PASS" : "FAIL_CLOSED", reason_code: briefing.reason_code, run_id: briefing.run_id || "" }, null, 2));
+
+
