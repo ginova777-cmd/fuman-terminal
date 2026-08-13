@@ -150,6 +150,9 @@
     rows: [],
     filtered: [],
   };
+  const strategy4DailyKlineCache = new Map();
+  const strategy4DailyKlinePending = new Set();
+  const strategy4DailyKlineRanges = new Map();
 
   installRetiredSurfaceCacheMigration20260714();
   installMemberBearerFetchBridge20260714();
@@ -3626,7 +3629,100 @@
     `;
   }
 
-  function showCanvasDetail(row, index) {
+  function strategy4DailyKlineCode(row) {
+    return String(row?.code || "").match(/\d{4}/)?.[0] || "";
+  }
+
+  function strategy4DailyKlineAverage(bars, period) {
+    return bars.map((bar, index) => {
+      if (index + 1 < period) return null;
+      let total = 0;
+      for (let cursor = index - period + 1; cursor <= index; cursor += 1) total += cleanNumber(bars[cursor].close);
+      return total / period;
+    });
+  }
+
+  function strategy4DailyKlineSvg(rows) {
+    const bars = rows.filter((bar) => cleanNumber(bar.open) > 0 && cleanNumber(bar.high) > 0 && cleanNumber(bar.low) > 0 && cleanNumber(bar.close) > 0);
+    if (bars.length < 20) return '<div class="desktop-strategy4-kline-empty">正式日 K 資料不足，暫不繪圖。</div>';
+    const width = 920;
+    const height = 318;
+    const left = 44;
+    const right = 16;
+    const top = 16;
+    const priceBottom = 224;
+    const volumeTop = 244;
+    const volumeBottom = 290;
+    const plotWidth = width - left - right;
+    const maxHigh = Math.max(...bars.map((bar) => cleanNumber(bar.high)));
+    const minLow = Math.min(...bars.map((bar) => cleanNumber(bar.low)));
+    const spread = Math.max(maxHigh - minLow, maxHigh * 0.04, 1);
+    const high = maxHigh + spread * 0.08;
+    const low = Math.max(0, minLow - spread * 0.08);
+    const priceHeight = priceBottom - top;
+    const x = (index) => left + ((index + 0.5) / bars.length) * plotWidth;
+    const y = (value) => top + ((high - value) / Math.max(high - low, 1)) * priceHeight;
+    const volumeMax = Math.max(1, ...bars.map((bar) => cleanNumber(bar.volumeLots)));
+    const step = plotWidth / bars.length;
+    const bodyWidth = Math.max(2, Math.min(10, step * 0.58));
+    const grid = [0, 0.5, 1].map((ratio) => {
+      const yy = top + priceHeight * ratio;
+      const label = (high - (high - low) * ratio).toFixed(1);
+      return `<line x1="${left}" y1="${yy}" x2="${width - right}" y2="${yy}" class="grid"/><text x="2" y="${yy + 4}" class="axis">${label}</text>`;
+    }).join("");
+    const candles = bars.map((bar, index) => {
+      const up = cleanNumber(bar.close) >= cleanNumber(bar.open);
+      const color = up ? "#ff5872" : "#21c79a";
+      const xx = x(index);
+      const openY = y(cleanNumber(bar.open));
+      const closeY = y(cleanNumber(bar.close));
+      const volumeHeight = (cleanNumber(bar.volumeLots) / volumeMax) * (volumeBottom - volumeTop);
+      return `<line x1="${xx}" y1="${y(cleanNumber(bar.high))}" x2="${xx}" y2="${y(cleanNumber(bar.low))}" stroke="${color}" stroke-width="1.3"/><rect x="${xx - bodyWidth / 2}" y="${Math.min(openY, closeY)}" width="${bodyWidth}" height="${Math.max(1.5, Math.abs(closeY - openY))}" rx="1" fill="${color}"/><rect x="${xx - bodyWidth / 2}" y="${volumeBottom - volumeHeight}" width="${bodyWidth}" height="${Math.max(1, volumeHeight)}" rx="1" fill="${color}" opacity=".62"><title>${escapeHtml(bar.date || "")}｜成交 ${cleanNumber(bar.volumeLots).toLocaleString("zh-TW", { maximumFractionDigits: 0 })} 張</title></rect>`;
+    }).join("");
+    const averageLine = (period, color) => {
+      const points = strategy4DailyKlineAverage(bars, period).map((value, index) => value ? `${x(index)},${y(value)}` : "").filter(Boolean).join(" ");
+      return points ? `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>` : "";
+    };
+    const shortDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value).slice(5).replace("-", "/") : "--";
+    const labels = [0, Math.floor((bars.length - 1) / 3), Math.floor((bars.length - 1) * 2 / 3), bars.length - 1].map((index) => `<text x="${x(index)}" y="${height - 5}" text-anchor="middle" class="axis">${shortDate(bars[index].date)}</text>`).join("");
+    return `<svg class="desktop-strategy4-kline-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="策略4正式日 K 線與成交量">${grid}<line x1="${left}" y1="${volumeTop - 8}" x2="${width - right}" y2="${volumeTop - 8}" class="divider"/>${candles}${averageLine(5, "#f4c656")}${averageLine(10, "#4aa7ff")}${averageLine(20, "#b18ae3")}${labels}</svg>`;
+  }
+
+  function strategy4DailyKlineHtml(row) {
+    const code = strategy4DailyKlineCode(row);
+    const range = [60, 120, 240].includes(strategy4DailyKlineRanges.get(code)) ? strategy4DailyKlineRanges.get(code) : 120;
+    const payload = strategy4DailyKlineCache.get(code);
+    const controls = [60, 120, 240].map((value) => `<button type="button" class="desktop-strategy4-kline-range ${range === value ? "active" : ""}" data-strategy4-kline-range="${value}" aria-pressed="${range === value ? "true" : "false"}">${value} 日</button>`).join("");
+    if (!payload) return `<section class="desktop-strategy4-kline-panel"><header class="desktop-strategy4-kline-head"><div><span>日 K</span><strong>正式 OHLCV 載入中</strong></div><div class="desktop-strategy4-kline-controls">${controls}</div></header><div class="desktop-strategy4-kline-empty">讀取 ${escapeHtml(code || "--")} 正式日 OHLCV...</div></section>`;
+    if (payload.ok !== true || !Array.isArray(payload.bars) || !payload.bars.length) return `<section class="desktop-strategy4-kline-panel"><header class="desktop-strategy4-kline-head"><div><span>日 K</span><strong>正式 OHLCV 無法顯示</strong></div><div class="desktop-strategy4-kline-controls">${controls}</div></header><div class="desktop-strategy4-kline-empty">${escapeHtml(payload.error || "日 K 正式來源暫時無資料")}</div></section>`;
+    const bars = payload.bars.slice(-range);
+    const last = bars[bars.length - 1];
+    const previous = bars[bars.length - 2] || last;
+    const change = cleanNumber(last.close) - cleanNumber(previous.close);
+    const percent = cleanNumber(previous.close) ? (change / cleanNumber(previous.close)) * 100 : 0;
+    const source = String(payload.source || "正式日 OHLCV").replace(/^supabase:/, "");
+    return `<section class="desktop-strategy4-kline-panel"><header class="desktop-strategy4-kline-head"><div><span>日 K</span><strong>${escapeHtml(String(last.date || "").slice(5).replace("-", "/"))}　開 ${escapeHtml(formatPriceValue(last.open) || "--")}　高 ${escapeHtml(formatPriceValue(last.high) || "--")}　低 ${escapeHtml(formatPriceValue(last.low) || "--")}　收 <b class="${change >= 0 ? "is-up" : "is-down"}">${escapeHtml(formatPriceValue(last.close) || "--")}</b></strong><small>${escapeHtml(source)}｜${bars.length} 根｜${change >= 0 ? "+" : ""}${percent.toFixed(2)}%</small></div><div class="desktop-strategy4-kline-controls">${controls}</div></header><div class="desktop-strategy4-kline-legend"><span class="ma5">MA5</span><span class="ma10">MA10</span><span class="ma20">MA20</span><span>下方為成交量（張）</span></div>${strategy4DailyKlineSvg(bars)}</section>`;
+  }
+
+  async function hydrateStrategy4DailyKline(row) {
+    const code = strategy4DailyKlineCode(row);
+    if (!code || strategy4DailyKlinePending.has(code) || strategy4DailyKlineCache.has(code)) return strategy4DailyKlineCache.get(code) || null;
+    strategy4DailyKlinePending.add(code);
+    try {
+      const response = await fetch(`/api/daily-kline?code=${encodeURIComponent(code)}&limit=260&t=${Date.now()}`, { cache: "no-store" });
+      const payload = await response.json().catch(() => null);
+      strategy4DailyKlineCache.set(code, response.ok && payload?.ok === true ? payload : { ok: false, error: payload?.error || `daily_kline_http_${response.status}` });
+    } catch {
+      strategy4DailyKlineCache.set(code, { ok: false, error: "daily_kline_network_error" });
+    } finally {
+      strategy4DailyKlinePending.delete(code);
+      const selected = canvasState.filtered[canvasState.selectedIndex];
+      if (isStrategy4Route(canvasState.route) && strategy4DailyKlineCode(selected) === code) showCanvasDetail(selected, canvasState.selectedIndex, true);
+    }
+    return strategy4DailyKlineCache.get(code) || null;
+  }
+
+  function showCanvasDetail(row, index, preserveScroll = false) {
     const detail = currentCanvasShell()?.querySelector(".desktop-canvas-detail");
     if (!detail || !row) return;
     const signalChips = (row.signals || []).slice(0, 8).map((signal) => `
@@ -3635,6 +3731,8 @@
         ${signal.reason ? `<small>${escapeHtml(signal.reason)}</small>` : ""}
       </span>
     `).join("");
+    const strategy4Detail = isStrategy4Route(canvasState.route);
+    detail.classList.toggle("desktop-strategy4-canvas-detail", strategy4Detail);
     detail.hidden = false;
     detail.innerHTML = `
       <div class="desktop-canvas-detail-panel">
@@ -3643,7 +3741,8 @@
         <h3>${escapeHtml(row.code || "--")} ${escapeHtml(row.title || "")}</h3>
         ${row.subStrategy ? `<div class="desktop-canvas-detail-substrategy">${escapeHtml(row.subStrategy)}</div>` : ""}
         <p>${escapeHtml(row.reason || row.line || "目前沒有更多說明。")}</p>
-        ${isStrategy4Route(canvasState.route) ? strategy4TriangleDetailHtml(row) : ""}
+        ${strategy4Detail ? strategy4DailyKlineHtml(row) : ""}
+        ${strategy4Detail ? strategy4TriangleDetailHtml(row) : ""}
         ${signalChips ? `<div class="desktop-canvas-signal-list">${signalChips}</div>` : ""}
         <div class="desktop-canvas-detail-grid">
           ${isStrategy4Route(canvasState.route) ? `
@@ -3659,6 +3758,10 @@
         </div>
       </div>
     `;
+    if (strategy4Detail) {
+      hydrateStrategy4DailyKline(row).catch(() => {});
+      if (!preserveScroll) requestAnimationFrame(() => detail.scrollIntoView({ behavior: "smooth", block: "start" }));
+    }
   }
 
   function installCanvasHandlers() {
@@ -3707,7 +3810,22 @@
       const close = event.target.closest?.("[data-canvas-detail-close]");
       if (close) {
         event.preventDefault();
+        canvasState.selectedIndex = -1;
         hideCanvasDetail();
+        scheduleCanvasDraw();
+        return;
+      }
+      const klineRange = event.target.closest?.("[data-strategy4-kline-range]");
+      if (klineRange) {
+        event.preventDefault();
+        if (!isStrategy4Route(canvasState.route)) return;
+        const selected = canvasState.filtered[canvasState.selectedIndex];
+        const code = strategy4DailyKlineCode(selected);
+        const value = Number(klineRange.dataset.strategy4KlineRange);
+        if (code && [60, 120, 240].includes(value)) {
+          strategy4DailyKlineRanges.set(code, value);
+          showCanvasDetail(selected, canvasState.selectedIndex, true);
+        }
         return;
       }
       const refresh = event.target.closest?.("[data-canvas-refresh]");
@@ -3826,6 +3944,13 @@
       if (!canvas) return;
       const index = canvasHitIndex(canvas, event);
       if (index < 0) return;
+      if (isStrategy4Route(canvasState.route) && canvasState.selectedIndex === index) {
+        canvasState.selectedIndex = -1;
+        hideCanvasDetail();
+        scheduleCanvasDraw();
+        event.preventDefault();
+        return;
+      }
       canvasState.selectedIndex = index;
       showCanvasDetail(canvasState.filtered[index], index);
       scheduleCanvasDraw();
@@ -10602,6 +10727,28 @@
       .desktop-canvas-detail[hidden] {
         display: none !important;
       }
+      .desktop-canvas-detail.desktop-strategy4-canvas-detail { position: static; bottom: auto; z-index: auto; margin-top: 14px; }
+      .desktop-strategy4-canvas-detail .desktop-canvas-detail-panel { border-color: rgba(232,180,75,0.58); }
+      .desktop-strategy4-kline-panel { margin-top: 14px; overflow: hidden; border: 1px solid rgba(139,164,199,0.28); border-radius: 8px; background: rgba(8,16,29,0.78); }
+      .desktop-strategy4-kline-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 15px 17px 10px; border-bottom: 1px solid rgba(139,164,199,0.18); }
+      .desktop-strategy4-kline-head span, .desktop-strategy4-kline-head strong, .desktop-strategy4-kline-head small { display: block; }
+      .desktop-strategy4-kline-head span { margin-bottom: 5px; color: #94a8c2; font-size: 12px; font-weight: 900; }
+      .desktop-strategy4-kline-head strong { color: #eaf2ff; font-size: 14px; font-weight: 900; line-height: 1.5; }
+      .desktop-strategy4-kline-head small { margin-top: 3px; color: #71839c; font-size: 11px; }
+      .desktop-strategy4-kline-head b.is-up { color: #ff5872; }
+      .desktop-strategy4-kline-head b.is-down { color: #21c79a; }
+      .desktop-strategy4-kline-controls { display: flex; flex-shrink: 0; gap: 5px; }
+      .desktop-strategy4-kline-range { min-width: 47px; height: 30px; border: 1px solid #29394e; border-radius: 5px; background: #111c2c; color: #a5b4c8; font-size: 12px; font-weight: 900; cursor: pointer; }
+      .desktop-strategy4-kline-range.active { border-color: #e8b44b; background: #e8b44b; color: #161d29; }
+      .desktop-strategy4-kline-legend { display: flex; flex-wrap: wrap; gap: 11px; padding: 9px 17px 0; color: #71839c; font-size: 11px; font-weight: 800; }
+      .desktop-strategy4-kline-legend .ma5 { color: #f4c656; }
+      .desktop-strategy4-kline-legend .ma10 { color: #4aa7ff; }
+      .desktop-strategy4-kline-legend .ma20 { color: #b18ae3; }
+      .desktop-strategy4-kline-svg { display: block; width: 100%; height: 318px; padding: 3px 10px 8px 0; box-sizing: border-box; }
+      .desktop-strategy4-kline-svg .grid { stroke: rgba(135,157,189,0.17); stroke-width: 1; stroke-dasharray: 3 4; }
+      .desktop-strategy4-kline-svg .divider { stroke: rgba(135,157,189,0.24); stroke-width: 1; }
+      .desktop-strategy4-kline-svg .axis { fill: #687b94; font-size: 11px; font-weight: 700; }
+      .desktop-strategy4-kline-empty { display: grid; min-height: 210px; place-items: center; padding: 16px; color: #8fa2bd; font-size: 13px; font-weight: 800; text-align: center; }
       .desktop-canvas-detail-panel {
         position: relative;
         border: 1px solid rgba(255,112,55,0.58);
