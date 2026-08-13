@@ -6966,6 +6966,35 @@
   let strategy2ValidationBacktestPromise = null;
   let strategy2ValidationBacktestExpiryTimer = 0;
   function scheduleStrategy2ValidationBacktestExpiry(report) { window.clearTimeout(strategy2ValidationBacktestExpiryTimer); const delay = Date.parse(report?.expiresAt || "") - Date.now(); if (Number.isFinite(delay) && delay > 0) strategy2ValidationBacktestExpiryTimer = window.setTimeout(() => { strategy2ValidationBacktest = { expired: true }; refreshStrategy2ValidationBacktestShell(); loadStrategy2ValidationBacktest(true); }, delay + 80); }
+  function strategy2ValidationTimelineRows() {
+    const report = strategy2ValidationBacktest;
+    if (!report?.ok || report?.expired) return [];
+    return (Array.isArray(report.matches) ? report.matches : []).filter((row) => {
+      const minute = String(row?.entryAt || "").match(/(\d{2}:\d{2})(?::\d{2})?/)?.[1] || "";
+      return minute >= "09:00" && minute <= "12:00";
+    }).map((row) => {
+      const pct = Number(row?.changeFromEntryPct);
+      return {
+        ...row,
+        title: row?.name || row?.code || "--",
+        timestamp: row?.entryAt || "",
+        score: row?.strategy || row?.signalId || "--",
+        pct: Number.isFinite(pct) ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%` : "--",
+        state: "歷史驗證",
+        stateId: "history",
+        reason: `${row?.strategy || row?.signalId || "策略2"}｜${row?.reason || ""}`,
+      };
+    });
+  }
+
+  function refreshStrategy2MergedHistory(shell, liveRows = [...canvasState.filtered]) {
+    if (!shell) return;
+    const rows = [...liveRows, ...strategy2ValidationTimelineRows()].sort(strategy2SortRows);
+    const count = shell.querySelector("[data-strategy2-history-count]");
+    const target = shell.querySelector("[data-strategy2-history-rows]");
+    if (count) count.textContent = `${rows.length} 筆`;
+    if (target) target.innerHTML = strategy2RowsHtml(rows, "history");
+  }
   function strategy2ValidationBacktestHtml() {
     const report = strategy2ValidationBacktest;
     if (report?.expired) return "";
@@ -6993,10 +7022,9 @@
     }).join("");
     return '<div data-strategy2-validation-backtest>'
       + '<section class="strategy2-validation-band" data-validation-run-id="' + escapeHtml(report.runId || "") + '"><div class="strategy2-validation-title"><strong>策略2今日驗證回測</strong><span>水源 -> 策略 -> 顯示</span></div><div class="strategy2-validation-flow"><span><b>Mother Pool</b> ' + escapeHtml(String(source?.motherPool?.count || scanned)) + '</span><i>-></i><span><b>今日 1 分K</b> ' + escapeHtml(String(minuteCount)) + '</span><i>-></i><span><b>命中標的</b> ' + escapeHtml(String(matched)) + '</span><i>-></i><span><b>型態訊號</b> ' + escapeHtml(String(events)) + '</span></div><div class="strategy2-validation-meta"><span>資料日 ' + escapeHtml(report.tradeDate || "--") + '</span><span>DATA_GAP ' + escapeHtml(String(gap)) + '</span><span>' + escapeHtml(generated || "--") + '</span><small>驗證用，未發布</small></div></section>'
-      + '<details class="strategy2-validation-records" open><summary><span>09:00–12:00 逐筆偵測紀錄</span><strong>' + escapeHtml(String(events)) + ' 筆 / ' + escapeHtml(String(matched)) + ' 檔</strong><small>' + escapeHtml(firstEntryTime + ' 至 ' + lastEntryTime) + '，點此收起</small></summary><div class="strategy2-validation-record-scroll"><table><thead><tr><th>時間</th><th>標的</th><th>策略</th><th>進場</th><th>支撐</th><th>目標</th><th>停損</th><th>收盤差</th></tr></thead><tbody>' + (recordRows || '<tr><td colspan="8">09:00–12:00 沒有命中紀錄。</td></tr>') + '</tbody></table></div></details>'
       + '</div>';
   }
-  function refreshStrategy2ValidationBacktestShell() { const shell=document.querySelector(".strategy2-battle-shell"); if(!shell)return; const existing=shell.querySelector("[data-strategy2-validation-backtest]"); const html=strategy2ValidationBacktestHtml(); if(existing)existing.outerHTML=html; else { const health=shell.querySelector("[data-strategy2-health-banner]"); if(health)health.insertAdjacentHTML("afterend",html); else shell.querySelector(".strategy2-battle-header")?.insertAdjacentHTML("afterend",html); } }
+  function refreshStrategy2ValidationBacktestShell() { const shell=document.querySelector(".strategy2-battle-shell"); if(!shell)return; const existing=shell.querySelector("[data-strategy2-validation-backtest]"); const html=strategy2ValidationBacktestHtml(); if(existing)existing.outerHTML=html; else { const health=shell.querySelector("[data-strategy2-health-banner]"); if(health)health.insertAdjacentHTML("afterend",html); else shell.querySelector(".strategy2-battle-header")?.insertAdjacentHTML("afterend",html); } refreshStrategy2MergedHistory(shell); }
   function loadStrategy2ValidationBacktest(force=false) { if(!force&&strategy2ValidationBacktestPromise)return strategy2ValidationBacktestPromise; strategy2ValidationBacktestPromise=fetch(`/api/strategy2-ps1-backtest?t=${Date.now()}`,{cache:"no-store"}).then((response)=>response.ok?response.json():null).then((payload)=>{if(payload?.ok&&payload.kind==="validation_backtest"&&payload.formalRun===false&&payload.publishAllowed===false){strategy2ValidationBacktest=payload;scheduleStrategy2ValidationBacktestExpiry(payload);}else strategy2ValidationBacktest={expired:true};refreshStrategy2ValidationBacktestShell();return strategy2ValidationBacktest;}).catch(()=>null).finally(()=>{strategy2ValidationBacktestPromise=null;});return strategy2ValidationBacktestPromise; }
   function strategy2BattleShellHtml(key, meta) {
     const routeMeta = strategy2HealthMeta() || {};
@@ -7094,9 +7122,8 @@
     if (entryNote) entryNote.textContent = afterhoursHold
       ? "收盤後保留今日進場圖卡，24:00 重置"
       : entryCount ? "黃色為進場列，深藍為預備進場" : "深藍為預備進場，黃字只留給真正進場";
-    if (historyCountNode) historyCountNode.textContent = `${rows.length} 筆`;
     if (entryRows) entryRows.innerHTML = strategy2RowsHtml(liveRows, "entry");
-    if (historyRows) historyRows.innerHTML = strategy2RowsHtml(rows, "history");
+    refreshStrategy2MergedHistory(shell, rows);
   }
 
   function radarDomTimeValue(row) {
@@ -9963,19 +9990,7 @@
         font-weight: 800;
       }
       .strategy2-validation-band{display:grid;grid-template-columns:minmax(180px,.9fr) minmax(0,2fr) auto;align-items:center;gap:14px;border:1px solid rgba(45,212,191,.36);border-radius:8px;padding:11px 14px;background:rgba(6,78,59,.22);color:#ccfbf1;font:800 12px/1.35 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;}
-      .strategy2-validation-band.is-loading{border-color:rgba(148,163,184,.26);background:rgba(15,23,42,.62);color:#cbd5e1}.strategy2-validation-title{display:grid;gap:2px}.strategy2-validation-title strong{color:#5eead4;font-size:14px}.strategy2-validation-title span,.strategy2-validation-meta{color:#94a3b8}.strategy2-validation-flow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}.strategy2-validation-flow span{white-space:nowrap}.strategy2-validation-flow b{color:#e2e8f0}.strategy2-validation-flow i{color:#2dd4bf;font-style:normal}.strategy2-validation-meta{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px}.strategy2-validation-meta small{border:1px solid rgba(250,204,21,.42);border-radius:6px;padding:2px 6px;color:#fde68a;background:rgba(120,53,15,.24);font-weight:900;white-space:nowrap}
-      .strategy2-validation-records { border: 1px solid rgba(45, 212, 191, 0.26); border-radius: 8px; background: rgba(2, 6, 23, 0.5); overflow: hidden; }
-      .strategy2-validation-records summary { display: flex; align-items: center; gap: 10px; padding: 10px 14px; cursor: pointer; color: #ccfbf1; list-style: none; font: 800 13px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-      .strategy2-validation-records summary::-webkit-details-marker { display: none; }
-      .strategy2-validation-records summary strong { color: #5eead4; }
-      .strategy2-validation-records summary small { margin-left: auto; color: #94a3b8; font-weight: 800; }
-      .strategy2-validation-record-scroll { max-height: 360px; overflow: auto; border-top: 1px solid rgba(148, 163, 184, 0.14); }
-      .strategy2-validation-records table { width: 100%; border-collapse: collapse; font: 800 12px/1.35 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-      .strategy2-validation-records th { position: sticky; top: 0; z-index: 1; padding: 8px 10px; text-align: left; color: #94a3b8; background: #0f172a; white-space: nowrap; }
-      .strategy2-validation-records td { padding: 8px 10px; border-top: 1px solid rgba(148, 163, 184, 0.1); color: #dbeafe; white-space: nowrap; }
-      .strategy2-validation-records td:nth-child(2) span { display: block; margin-top: 2px; color: #94a3b8; font-size: 11px; }
-      .strategy2-validation-records td.is-up { color: #5eead4; }
-      .strategy2-validation-records td.is-down { color: #fda4af; }      .strategy2-battle-refresh {
+      .strategy2-validation-band.is-loading{border-color:rgba(148,163,184,.26);background:rgba(15,23,42,.62);color:#cbd5e1}.strategy2-validation-title{display:grid;gap:2px}.strategy2-validation-title strong{color:#5eead4;font-size:14px}.strategy2-validation-title span,.strategy2-validation-meta{color:#94a3b8}.strategy2-validation-flow{display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap}.strategy2-validation-flow span{white-space:nowrap}.strategy2-validation-flow b{color:#e2e8f0}.strategy2-validation-flow i{color:#2dd4bf;font-style:normal}.strategy2-validation-meta{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px}.strategy2-validation-meta small{border:1px solid rgba(250,204,21,.42);border-radius:6px;padding:2px 6px;color:#fde68a;background:rgba(120,53,15,.24);font-weight:900;white-space:nowrap}      .strategy2-battle-refresh {
         min-height: 38px;
         border: 1px solid rgba(250, 204, 21, 0.42);
         border-radius: 10px;
@@ -12386,6 +12401,8 @@
     }, true);
   })();
 })();
+
+
 
 
 
