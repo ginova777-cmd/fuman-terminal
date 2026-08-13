@@ -641,7 +641,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
 
   const sectors = heatmapUsable ? normalizeArray(heatmapPayload?.sectors) : [];
   const sectorStocks = heatmapUsable ? heatmapStocks(heatmapPayload) : [];
-  const radarRows = [];
+  const radarRows = filterRowsForToday(rowsFromPayload(radarPayload), clock, radarIsToday);
   const baseRows = filterRowsForToday(rowsFromPayload(payload), clock, baseIsToday);
   const heatmapUp = sectors.reduce((sum, sector) => sum + cleanNumber(sector?.up), 0);
   const heatmapDown = sectors.reduce((sum, sector) => sum + cleanNumber(sector?.down), 0);
@@ -689,9 +689,10 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   ).slice(0, 20);
 
   const allGroupRows = allRows.slice(0, 30);
+  const isPriorityCandidate = (row) => !/short|空|弱|風險/i.test(`${row.side} ${row.reason} ${row.tags.join(" ")}`) && cleanNumber(row.pct) >= 0;
   const strongNames = strongSectors.map((sector) => sector.name || sector.industry).filter(Boolean).slice(0, 3);
   const weakNames = weakSectors.map((sector) => sector.name || sector.industry).filter(Boolean).slice(0, 3);
-  const topStock = allGroupRows[0] || null;
+  const topStock = allGroupRows.find(isPriorityCandidate) || null;
   const hasDirectionalBreadth = !preOpenMarketAi && up + down > 0;
   const confidence = preOpenMarketAi ? "觀察" : !hasDirectionalBreadth ? "觀察" : Math.abs(up - down) >= Math.max(sample * 0.08, 60) ? "高" : Math.abs(up - down) >= Math.max(sample * 0.03, 25) ? "中" : "觀察";
   const bias = preOpenMarketAi ? "等待開盤" : hasDirectionalBreadth ? (up >= down ? "多方壓制" : "空方壓制") : "等待方向";
@@ -1311,6 +1312,187 @@ function normalizeDisplayOnlyMarketAiEvidence(payload = {}) {
   };
 }
 
+function secondsBetween(clock, startHour, startMinute, endHour, endMinute) {
+  const start = startHour * 60 * 60 + startMinute * 60;
+  const end = endHour * 60 * 60 + endMinute * 60 + 59;
+  return Number(clock?.seconds || 0) >= start && Number(clock?.seconds || 0) <= end;
+}
+
+function safeReadJson(file) {
+  try {
+    if (!file || !fs.existsSync(file)) return null;
+    return readJson(file);
+  } catch {
+    return null;
+  }
+}
+
+function listOpeningIndustryBiasFiles(clock = taipeiClock()) {
+  const stateDir = path.join(RUNTIME_ROOT, "state");
+  if (!fs.existsSync(stateDir)) return [];
+  return fs.readdirSync(stateDir)
+    .filter((name) => /^opening_report_0830\.industry_bias\..*\.json$/.test(name))
+    .map((name) => {
+      const file = path.join(stateDir, name);
+      const payload = safeReadJson(file);
+      return { file, payload };
+    })
+    .filter((row) => compactDate(row.payload?.date) === clock.ymd && row.payload?.source === "opening_report_0830");
+}
+
+function namesByTier(payload, tier) {
+  return normalizeArray(payload?.mapped_symbols)
+    .filter((row) => String(row?.tier || "").toUpperCase() === tier)
+    .map((row) => ({ symbol: String(row?.symbol || ""), name: String(row?.name || row?.symbol || "") }))
+    .filter((row) => row.symbol || row.name);
+}
+
+function openingBiasScore(payload = {}) {
+  const bias = String(payload.bias || "").toLowerCase();
+  const directionScore = bias.includes("positive") ? 3 : bias.includes("neutral") ? 2 : bias.includes("negative") ? 1 : 0;
+  const confidence = Number(payload.confidence || 0);
+  const avg = Number(payload?.overseas_leader_detection?.average_percent);
+  return directionScore * 10000 + (Number.isFinite(avg) ? avg : -99) * 100 + confidence * 10;
+}
+
+function readOpeningShortwave(clock = taipeiClock()) {
+  const dir = path.join(RUNTIME_ROOT, "data", "line-cards");
+  const allowed = new Set(["strategy3", "strategy4", "strategy5"]);
+  if (!fs.existsSync(dir)) return { status: "source_gap", reason_code: "shortwave_line_card_dir_missing", rows: [], allowed_sources: [...allowed] };
+  const rows = fs.readdirSync(dir)
+    .filter((name) => /^strategy[345]-line-card-\d{8}(?:\.dry-run)?\.json$/.test(name))
+    .map((name) => {
+      const source = name.match(/^(strategy[345])-/)?.[1] || "";
+      const file = path.join(dir, name);
+      const payload = safeReadJson(file);
+      const date = compactDate(payload?.date || payload?.tradeDate || payload?.scanDate || name);
+      return { source, file, payload, date, mtime: fs.statSync(file).mtimeMs };
+    })
+    .filter((row) => allowed.has(row.source) && row.date && row.date < clock.ymd)
+    .sort((a, b) => b.mtime - a.mtime)
+    .slice(0, 3);
+  return {
+    status: rows.length ? "previous_closed_run_only" : "source_gap",
+    reason_code: rows.length ? "shortwave_previous_closed_run_only" : "shortwave_no_closed_run",
+    allowed_sources: [...allowed],
+    rows: rows.map((row) => ({ source: row.source, date: row.date, file: row.file, run_id: row.payload?.run_id || row.payload?.runId || "", count: count(row.payload) })),
+  };
+}
+
+function readOpeningMorningReport(clock = taipeiClock()) {
+  const compact = clock.ymd;
+  const date = `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}`;
+  const reportDir = path.join(RUNTIME_ROOT, "data", "opening-report-0830");
+  const finalReceiptPath = path.join(reportDir, `opening-report-0830-final-receipt-${compact}.json`);
+  const overseasLeadersPath = path.join(reportDir, `overseas-leaders-0830-${compact}.json`);
+  const lineReceiptPath = path.join(reportDir, `line-push-receipt-${compact}.json`);
+  const finalReceipt = safeReadJson(finalReceiptPath);
+  const overseasLeaders = safeReadJson(overseasLeadersPath);
+  const lineReceipt = safeReadJson(lineReceiptPath);
+  const visibleWindow = {
+    timezone: "Asia/Taipei",
+    start: "08:30:00",
+    end: "08:59:59",
+    active: secondsBetween(clock, 8, 30, 8, 59),
+    label: "08:30-08:59",
+  };
+  if (!finalReceipt) {
+    return {
+      contract: "opening-report-0830-terminal-briefing-v1",
+      ok: false,
+      visible_window: visibleWindow,
+      display_label: "今日推薦",
+      date,
+      reason_code: "opening_report_0830_final_receipt_missing",
+      final_receipt_path: finalReceiptPath,
+    };
+  }
+  const finalDateOk = compactDate(finalReceipt.date) === compact;
+  const industryRows = listOpeningIndustryBiasFiles(clock)
+    .map((row) => ({
+      industry: row.payload.industry,
+      display_name: row.payload.display_name || row.payload.industry,
+      bias: row.payload.bias || "",
+      confidence: Number(row.payload.confidence || 0),
+      evidence_summary: row.payload.evidence_summary || "",
+      overseas_leader_detection: row.payload.overseas_leader_detection || {},
+      a_symbols: namesByTier(row.payload, "A"),
+      b_symbols: namesByTier(row.payload, "B"),
+      allowed_action: row.payload.allowed_action || "",
+      forbidden_action: row.payload.forbidden_action || "",
+      file: row.file,
+      score: openingBiasScore(row.payload),
+    }))
+    .sort((a, b) => b.score - a.score);
+  const marketItems = normalizeArray(finalReceipt?.overseas_market_snapshot?.items).map((row) => ({
+    key: row.key || "",
+    label: row.label || row.key || "",
+    percent: Number(row.percent),
+    display: row.display || "",
+    direction: row.direction || "",
+    source_time: row.source_time || "",
+    reason_code: row.reason_code || "",
+  }));
+  const topPriority = industryRows.slice(0, 4);
+  const recommended = topPriority.flatMap((row) => row.a_symbols.slice(0, 4).map((stock) => ({ ...stock, industry: row.display_name, bias: row.bias })));
+  const bridgeStatus = finalReceipt.mother_pool_bridge_attempted
+    ? (finalReceipt.mother_pool_bridge_ok ? "applied" : "fail_closed_optional")
+    : "priority_scan_only";
+  const issues = [];
+  if (!finalDateOk) issues.push("final_receipt_date_mismatch");
+  if (industryRows.length < 19) issues.push("industry_bias_json_incomplete");
+  if (finalReceipt.line_required === true && finalReceipt.line_delivery_ok !== true) issues.push("line_delivery_not_ok");
+  return {
+    contract: "opening-report-0830-terminal-briefing-v1",
+    ok: issues.length === 0,
+    visible_window: visibleWindow,
+    display_label: "今日推薦",
+    date,
+    run_id: finalReceipt.run_id || "",
+    report_status: finalReceipt.report_status || "",
+    watchlist_only: finalReceipt.watchlist_only !== false,
+    formal_candidates: Number(finalReceipt.formal_candidates || 0),
+    allowed_action: "priority_scan_only",
+    forbidden_action: "publish_formal_candidate_without_taiwan_evidence",
+    bridge_status: bridgeStatus,
+    line: {
+      required: finalReceipt.line_required === true,
+      ok: finalReceipt.line_delivery_ok === true || lineReceipt?.line_push_ok === true,
+      receipt_path: lineReceiptPath,
+      target_count: lineReceipt?.target_count || 0,
+    },
+    market_snapshot: {
+      ok: finalReceipt.overseas_sources_ok === true,
+      checked_at: finalReceipt?.overseas_market_snapshot?.checked_at || "",
+      cutoff: finalReceipt?.overseas_market_snapshot?.cutoff || "",
+      items: marketItems,
+    },
+    institutional: finalReceipt.institutional || { status: "source_gap", reason_code: "institutional_not_written_by_0830_runner" },
+    shortwave: finalReceipt.shortwave || readOpeningShortwave(clock),
+    event_digest: finalReceipt.event_digest || { status: "source_gap", reason_code: "event_digest_not_written_by_0830_runner" },
+    priority_industries: topPriority,
+    recommended_symbols: recommended.slice(0, 16),
+    industry_bias: {
+      status: industryRows.length >= 19 ? "ok" : "incomplete",
+      count: industryRows.length,
+      required: 19,
+    },
+    paths: {
+      final_receipt: finalReceiptPath,
+      overseas_leaders: overseasLeadersPath,
+      report: finalReceipt.report_path || path.join(reportDir, `opening-report-0830-${compact}.md`),
+    },
+    overseas_leaders: overseasLeaders ? {
+      ok: overseasLeaders.ok === true,
+      total_leaders: overseasLeaders.total_leaders || 0,
+      valid_leaders: overseasLeaders.valid_leaders || 0,
+      unavailable_leaders: overseasLeaders.unavailable_leaders || 0,
+    } : null,
+    issues,
+    reason_code: issues[0] || "opening_report_0830_terminal_briefing_ok",
+  };
+}
+
 function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), session = {}) {
   const freshness = payload?.dataFreshness || {};
   const dataSources = payload?.dashboard?.dataSources || {};
@@ -1393,7 +1575,11 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
         : { status: "live-api", allowed: true, reason: "market-ai is an on-demand live surface" },
     }),
   });
-  return displayOnlyReport ? normalizeDisplayOnlyMarketAiEvidence(evidencedPayload) : evidencedPayload;
+  const withOpeningMorningReport = {
+    ...evidencedPayload,
+    openingMorningReport: readOpeningMorningReport(clock),
+  };
+  return displayOnlyReport ? normalizeDisplayOnlyMarketAiEvidence(withOpeningMorningReport) : withOpeningMorningReport;
 }
 
 module.exports = async function handler(request, response) {
@@ -1567,6 +1753,10 @@ module.exports.__test = {
   canServeCachedPayload,
   heatmapQueryForMarketAi,
   isMarketAiPreOpenWindow,
+  readOpeningMorningReport,
 };
+
+
+
 
 

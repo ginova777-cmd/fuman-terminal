@@ -1446,3 +1446,69 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   }
 })();
 
+;(function installOpeningReport0830TerminalBriefing(){
+  if(window.__fumanOpeningReport0830TerminalBriefing==="20260813-01")return;
+  window.__fumanOpeningReport0830TerminalBriefing="20260813-01";
+  const endpoint="/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40";
+  let lastSig="",loading=false;
+  const esc=value=>String(value??"").replace(/[&<>"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+  const arr=value=>Array.isArray(value)?value:[];
+  function installStyle(){
+    if(document.querySelector("#fuman-opening-report-0830-briefing-style"))return;
+    const style=document.createElement("style");
+    style.id="fuman-opening-report-0830-briefing-style";
+    style.textContent=`
+      .opening-report-0830-briefing{border:2px solid #ff3d5f;background:#07101c;margin:10px auto 14px;width:calc(100% - 26px);padding:10px 12px;color:#f8fbff;box-shadow:0 0 0 1px rgba(255,61,95,.18) inset;}
+      .opening-report-0830-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;border-bottom:1px solid rgba(255,194,71,.55);padding-bottom:8px;margin-bottom:8px;}
+      .opening-report-0830-title b{display:block;color:#ffc247;font-size:16px;line-height:1.35}.opening-report-0830-title span{display:block;color:#dbeafe;font-size:12px;margin-top:2px}.opening-report-0830-run{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.opening-report-0830-run span{border:1px solid rgba(134,183,255,.38);background:#101a2b;color:#f8fbff;border-radius:999px;padding:3px 8px;font-size:11px;white-space:nowrap}
+      .opening-report-0830-grid{display:grid;grid-template-columns:1.15fr 1.6fr 1.25fr;gap:8px}.opening-report-0830-card{background:#0d1728;border:1px solid #2d3b55;padding:9px;min-height:88px}.opening-report-0830-card h4{margin:0 0 7px;color:#f8fbff;font-size:14px}.opening-report-0830-card p{margin:0;color:#dbeafe;font-size:12px;line-height:1.45}.opening-report-0830-bias{font-size:22px;font-weight:800;color:#ff5875;margin:4px 0}.opening-report-0830-minirow{display:grid;grid-template-columns:1fr auto;gap:10px;border-top:1px solid rgba(45,59,85,.7);padding:4px 0;color:#f8fbff;font-size:12px}.opening-report-0830-minirow:first-of-type{border-top:0}.opening-report-0830-up{color:#ff5875!important}.opening-report-0830-down{color:#42f0a2!important}.opening-report-0830-flat{color:#ffe07a!important}.opening-report-0830-priority{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:8px}.opening-report-0830-priority article{background:#0b1424;border-left:3px solid #ff5875;padding:8px;min-height:78px}.opening-report-0830-priority b{display:block;color:#f8fbff;font-size:13px;margin-bottom:4px}.opening-report-0830-priority strong{display:block;font-size:12px;margin-bottom:3px}.opening-report-0830-priority span{display:block;color:#dbeafe;font-size:11px;line-height:1.35}.opening-report-0830-bottom{display:grid;grid-template-columns:1.1fr 1.1fr 1fr;gap:8px;margin-top:8px}.opening-report-0830-symbols{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}.opening-report-0830-symbols span{background:#17243a;border:1px solid #39506f;color:#f8fbff;border-radius:999px;padding:2px 7px;font-size:11px}.opening-report-0830-gap{color:#ffe07a!important}`;
+    document.head.appendChild(style);
+  }
+  function toneClass(value){const text=String(value||"").toLowerCase();return text.includes("negative")||text.includes("偏弱")?"opening-report-0830-down":text.includes("neutral")||text.includes("分歧")||text.includes("中性")?"opening-report-0830-flat":"opening-report-0830-up"}
+  function pct(value){const n=Number(value);return Number.isFinite(n)?`${n>0?"+":""}${n.toFixed(2)}%`:"--"}
+  function names(rows,max=4){const list=arr(rows).map(row=>row.name||row.symbol).filter(Boolean);return list.length?`${list.slice(0,max).join("、")}${list.length>max?" +"+(list.length-max):""}`:"--"}
+  function renderBriefing(data){
+    if(!marketAiPanel||!data)return false;
+    const active=data?.visible_window?.active===true;
+    const hasToday=data?.ok===true||String(data?.reason_code||"")!=="opening_report_0830_final_receipt_missing";
+    if(!active&&!hasToday){marketAiPanel.querySelector?.("[data-opening-report-0830-briefing]")?.remove();return false}
+    installStyle();
+    const sig=JSON.stringify([data.run_id,data.report_status,data.reason_code,data.industry_bias?.count,arr(data.priority_industries).map(x=>`${x.industry}:${x.bias}:${x.confidence}`).join("|")]);
+    if(sig===lastSig&&marketAiPanel.querySelector?.("[data-opening-report-0830-briefing]"))return true;
+    lastSig=sig;
+    const rows=arr(data.market_snapshot?.items).slice(0,4);
+    const priorities=arr(data.priority_industries).slice(0,4);
+    const recommended=arr(data.recommended_symbols).slice(0,8);
+    const node=document.createElement("section");
+    node.className="opening-report-0830-briefing";
+    node.dataset.openingReport0830Briefing="1";
+    node.innerHTML=`<header class="opening-report-0830-head"><div class="opening-report-0830-title"><b>${esc(data.date||"")} 晨報｜${esc(rows[1]?.label||"全球盤面")} ${pct(rows[1]?.percent)}｜${esc(priorities[0]?.display_name||"今日推薦")}</b><span>資料截點 08:30｜顯示窗 ${esc(data?.visible_window?.label||"08:30-08:59")}｜正式可沖仍等台股 evidence / Formal Gate</span></div><div class="opening-report-0830-run"><span>runId ${esc(String(data.run_id||"").slice(0,30)||"--")}</span><span>${esc(data.report_status||"WAIT")}</span><span>${esc(data.allowed_action||"priority_scan_only")}</span></div></header><div class="opening-report-0830-grid"><article class="opening-report-0830-card"><h4>大盤紅綠燈</h4><div class="opening-report-0830-bias ${toneClass(priorities[0]?.bias)}">${esc(priorities[0]?.bias?.includes?.("negative")?"偏弱":priorities[0]?.bias?.includes?.("neutral")?"分歧":"偏多")}</div><p>${esc(priorities[0]?.evidence_summary||data.reason_code||"等待 08:30 晨報來源")}</p></article><article class="opening-report-0830-card"><h4>全球速覽</h4>${rows.length?rows.map(row=>`<div class="opening-report-0830-minirow"><span>${esc(row.label)}</span><b class="${toneClass(row.direction||row.display)}">${pct(row.percent)}</b></div>`).join(""):`<p class="opening-report-0830-gap">${esc(data.reason_code||"market_snapshot_missing")}</p>`}</article><article class="opening-report-0830-card"><h4>台股前線</h4><p>三大法人：${esc(data.institutional?.reason_code||data.institutional?.status||"等待來源寫入")}</p><p>短波訊號：${esc(data.shortwave?.reason_code||data.shortwave?.status||"等待來源寫入")}；允許 Strategy3/4/5 前日閉環。</p></article></div><section class="opening-report-0830-priority">${priorities.length?priorities.map((item,index)=>`<article><b>${index+1}. ${esc(item.display_name||item.industry)}</b><strong class="${toneClass(item.bias)}">${esc(item.bias||"觀察")}</strong><span>${esc(names(item.a_symbols,4))}</span></article>`).join(""):`<article><b>今日推薦</b><strong class="opening-report-0830-gap">等待 08:30</strong><span>${esc(data.reason_code||"opening_report_missing")}</span></article>`}</section><div class="opening-report-0830-bottom"><article class="opening-report-0830-card"><h4>短波訊號關注</h4><p>${esc(data.shortwave?.status||"source_gap")}；Strategy5 共振策略可列入，但只讀前日閉環 runId。</p></article><article class="opening-report-0830-card"><h4>大事紀要</h4><p>${esc(data.event_digest?.reason_code||data.event_digest?.status||"等待 08:30 前新聞來源寫入")}</p></article><article class="opening-report-0830-card"><h4>今日推薦</h4><p>只做母池 priority scan，不直接 publish。</p><div class="opening-report-0830-symbols">${recommended.length?recommended.map(stock=>`<span>${esc(stock.name||stock.symbol)}</span>`).join(""):`<span>${esc(data.bridge_status||"priority_scan_only")}</span>`}</div></article></div>`;
+    marketAiPanel.querySelector?.("[data-opening-report-0830-briefing]")?.remove();
+    const anchor=marketAiPanel.querySelector?.(".market-ai-summary");
+    if(anchor)anchor.insertAdjacentElement("afterend",node);else marketAiPanel.prepend(node);
+    return true;
+  }
+  async function loadBriefing(){
+    if(loading||!marketAiPanel||marketMode!=="ai")return;
+    loading=true;
+    try{
+      const response=await fetch(`${endpoint}&t=${Date.now()}`,{cache:"no-store",headers:{"Cache-Control":"no-store"}});
+      if(!response.ok)throw new Error(`opening_report_0830_http_${response.status}`);
+      const payload=await response.json();
+      window.__fumanOpeningReport0830Payload=payload.openingMorningReport||null;
+      renderBriefing(payload.openingMorningReport);
+    }catch(error){
+      renderBriefing({ok:false,display_label:"今日推薦",reason_code:error?.message||"opening_report_0830_terminal_fetch_failed",visible_window:{active:true,label:"08:30-08:59"},priority_industries:[],market_snapshot:{items:[]}});
+    }finally{loading=false}
+  }
+  const kick=()=>{if(marketMode==="ai"&&isViewActive?.("market"))setTimeout(loadBriefing,350)};
+  document.addEventListener("click",event=>{event.target.closest?.("[data-market-mode]")&&kick()},true);
+  window.addEventListener("focus",kick,{passive:true});
+  setInterval(kick,45000);
+  const mo=new MutationObserver(()=>{const data=window.__fumanOpeningReport0830Payload;if(data&&marketMode==="ai")renderBriefing(data)});
+  if(document.body)mo.observe(document.body,{subtree:true,childList:true});
+  setTimeout(kick,1200);
+})();
+
+
+

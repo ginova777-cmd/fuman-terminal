@@ -398,9 +398,12 @@
     "verify:daytrade-warmup-nine-day": "node --use-system-ca scripts/verify-daytrade-warmup-nine-day-window.js",
     "verify:terminal-power-recovery": "node --use-system-ca scripts/verify-terminal-power-recovery.js",
     "verify:terminal-recovery-queue": "node --use-system-ca scripts/verify-terminal-recovery-queue.js",
-    "verify:terminal-no-fake-unattended": "node --use-system-ca scripts/verify-terminal-no-fake-unattended.js"
+    "verify:terminal-no-fake-unattended": "node --use-system-ca scripts/verify-terminal-no-fake-unattended.js",
+    "verify:opening-report-0830-terminal-briefing": "node scripts/verify-opening-report-0830-terminal-briefing.js"
   },
   "engines": {
     "node": "24.x"
   }
 }
+
+
