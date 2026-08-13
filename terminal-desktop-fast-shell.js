@@ -6851,10 +6851,10 @@
         <div class="desktop-strategy4-zone-filters" data-strategy4-zone-filters hidden></div>
         <div class="desktop-strategy4-signal-filters" data-strategy4-signal-filters hidden></div>
         <div class="desktop-strategy4-signal-filters" data-chip-canvas-filters hidden></div>
+        <div class="desktop-canvas-detail" hidden></div>
         <canvas class="desktop-route-canvas" tabindex="0" aria-label="${escapeHtml(meta.title)} Canvas 快速列表"></canvas>
         <div class="desktop-canvas-empty-note" data-canvas-empty-note hidden></div>
         <div class="desktop-canvas-pagination" data-canvas-pagination hidden></div>
-        <div class="desktop-canvas-detail" hidden></div>
       </section>
     `;
   }

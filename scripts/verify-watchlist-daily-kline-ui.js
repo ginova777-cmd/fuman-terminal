@@ -39,7 +39,7 @@ async function main() {
   ]) failWhen(!watchlist.includes(marker), `watchlist daily-K contract missing: ${marker}`);
   for (const marker of ['contract: "terminal-daily-kline-v1"', "strategy4_daily_ohlcv_view", "open", "high", "low", "close", "volumeLots"]) failWhen(!api.includes(marker), `daily-K API contract missing: ${marker}`);
   for (const marker of ["strategy4DailyKlineHtml", "strategy4DailyKlineSvg", "hydrateStrategy4DailyKline", "/api/daily-kline?code=${encodeURIComponent(code)}&limit=260", "data-strategy4-kline-range", "canvasState.selectedIndex === index", "hideCanvasDetail()", "desktop-strategy4-canvas-detail", "strategy4CanvasPointerOpenedAt", "document.addEventListener(\"pointerup\""]) failWhen(!desktop.includes(marker), `strategy4 daily-K contract missing: ${marker}`);
-  failWhen(!/verify:watchlist-daily-kline/.test(pkg), "package.json missing verify:watchlist-daily-kline script");
+  failWhen(desktop.indexOf('<div class="desktop-canvas-detail" hidden></div>') > desktop.indexOf('<canvas class="desktop-route-canvas"'), "strategy4 daily-K detail must render before the Canvas list");  failWhen(!/verify:watchlist-daily-kline/.test(pkg), "package.json missing verify:watchlist-daily-kline script");
   const live = { skipped: SKIP_LIVE };
   if (!SKIP_LIVE) {
     const response = await requestJson("/api/daily-kline?code=2464&limit=60", 30000);
