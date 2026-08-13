@@ -1,3 +1,5 @@
+const fs = require("fs");
+const path = require("path");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 const DEFAULT_BASE_URL = "https://fuman-terminal.vercel.app";
@@ -5,10 +7,27 @@ const BASE_URL = String(process.env.FUMAN_PRODUCTION_BASE_URL || DEFAULT_BASE_UR
 const TIMEOUT_MS = Number(process.env.FUMAN_LIVE_CLOSURE_TIMEOUT_MS || 30000);
 const RETRIES = Number(process.env.FUMAN_LIVE_CLOSURE_RETRIES || 2);
 const RETRY_DELAY_MS = Number(process.env.FUMAN_LIVE_CLOSURE_RETRY_DELAY_MS || 1200);
-const ROOT = require("path").resolve(__dirname, "..");
+const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const AUTH_BEARER = String(process.env.FUMAN_MOBILE_AUTH_BEARER || process.env.FUMAN_PRODUCTION_BEARER || "").trim();
-const PRODUCTION_VERIFY_TOKEN = String(process.env.FUMAN_PRODUCTION_VERIFY_TOKEN || "").trim();
+function localEnvironmentValue(...names) {
+  for (const name of names) {
+    if (String(process.env[name] || "").trim()) return String(process.env[name]).trim();
+  }
+  for (const file of [path.join(ROOT, ".env.production.local"), path.join(ROOT, ".env.local")]) {
+    if (!fs.existsSync(file)) continue;
+    const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
+    for (const name of names) {
+      const line = lines.find((entry) => entry.startsWith(`${name}=`));
+      if (!line) continue;
+      const value = line.slice(name.length + 1).trim().replace(/^['\"]|['\"]$/g, "");
+      if (value) return value;
+    }
+  }
+  return "";
+}
+
+const AUTH_BEARER = localEnvironmentValue("FUMAN_MOBILE_AUTH_BEARER", "FUMAN_PRODUCTION_BEARER");
+const PRODUCTION_VERIFY_TOKEN = localEnvironmentValue("FUMAN_PRODUCTION_VERIFY_TOKEN");
 const REQUIRE_AUTHENTICATED_MOBILE = process.argv.includes("--require-authenticated-mobile");
 
 function numberValue(value, fallback = 0) {
