@@ -8,6 +8,7 @@ const RETRY_DELAY_MS = Number(process.env.FUMAN_LIVE_CLOSURE_RETRY_DELAY_MS || 1
 const ROOT = require("path").resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const AUTH_BEARER = String(process.env.FUMAN_MOBILE_AUTH_BEARER || process.env.FUMAN_PRODUCTION_BEARER || "").trim();
+const REQUIRE_AUTHENTICATED_MOBILE = process.argv.includes("--require-authenticated-mobile");
 
 function numberValue(value, fallback = 0) {
   if (value === null || value === undefined || value === "") return fallback;
@@ -231,7 +232,9 @@ function verify(summary) {
   if (!summary.desktopHome.ok) issues.push(`desktop_home_http_${summary.desktopHome.status}`);
   if (!summary.desktopHome.markerFound) issues.push("desktop_home_strategy3_ui_marker_missing");
   if (!summary.mobileBoot.ok) issues.push(`mobile_boot_http_${summary.mobileBoot.status}`);
-  if (!summary.mobileStrategy3.ok && !protectedMobileStrategy3) issues.push(`mobile_strategy3_http_${summary.mobileStrategy3.status}`);
+  if (REQUIRE_AUTHENTICATED_MOBILE && !AUTH_BEARER) issues.push("mobile_authenticated_bearer_missing");
+  if (REQUIRE_AUTHENTICATED_MOBILE && summary.mobileStrategy3.status !== 200) issues.push("mobile_strategy3_authenticated_http_" + summary.mobileStrategy3.status);
+  if (!REQUIRE_AUTHENTICATED_MOBILE && !summary.mobileStrategy3.ok && !protectedMobileStrategy3) issues.push(`mobile_strategy3_http_${summary.mobileStrategy3.status}`);
   if (summary.mobileStrategy3.ok && summary.mobileStrategy3.runId !== strategy3Report.runId) issues.push("mobile_strategy3_runId_mismatch mobile=" + (summary.mobileStrategy3.runId || "missing") + " published=" + strategy3Report.runId);
 
   return {
