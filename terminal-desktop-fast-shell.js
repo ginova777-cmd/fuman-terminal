@@ -1991,6 +1991,7 @@
   }
 
   function strategy2Tone(row) {
+    if (row?.formalCandidate === false && (row?.observationKind || /strategy2_(realtime_quote|preopen_futopt)/.test(String(row?.eventOrigin || "")))) return "prepare";
     const text = strategy2Text(row);
     const lower = text.toLowerCase();
     const combo = `${lower} ${text}`;
@@ -2012,11 +2013,10 @@
   }
 
   function strategy2DisplayState(row, fallback) {
-    return row?.scanMode === "postclose_diagnostic_replay" || row?.eventOrigin === "postclose_diagnostic_replay"
-      ? "盤後診斷回放"
-      : fallback;
+    if (row?.scanMode === "postclose_diagnostic_replay" || row?.eventOrigin === "postclose_diagnostic_replay") return "盤後診斷回放";
+    if (row?.observationKind || /strategy2_(realtime_quote|preopen_futopt)/.test(String(row?.eventOrigin || ""))) return row?.stateLabel || "策略命中觀察";
+    return fallback;
   }
-
   function routePayloadHasDrawableRows(payload) {
     return ["matches", "rows", "data", "results", "items"].some((key) => Array.isArray(payload?.[key]) && payload[key].some((item) => item && typeof item === "object"));
   }

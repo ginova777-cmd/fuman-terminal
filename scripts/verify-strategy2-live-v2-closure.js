@@ -141,6 +141,7 @@ function callScorecard() {
   if (!desktop.includes("/api/strategy2-latest")) issues.push("desktop_missing_v2_strategy2_endpoint");
   if (!desktop.includes("strategy2TaipeiTime") || !desktop.includes("timeZone: \"Asia/Taipei\"")) issues.push("desktop_missing_taipei_time_display");
   if (!api.includes("REALTIME_SNAPSHOT_KEY") || !api.includes("formalEvents") || !api.includes("observations")) issues.push("api_missing_realtime_observation_merge");
+  if (!desktop.includes("strategy2_(realtime_quote|preopen_futopt)") || !desktop.includes("策略命中觀察")) issues.push("desktop_missing_realtime_observation_label_guard");
   if (desktop.includes("strategy2-ps1-backtest")) issues.push("desktop_legacy_backtest_route_present");
   if (!mobile.includes('tab === "strategy2"') || !mobile.includes("fetchStrategy2Internal")) issues.push("mobile_missing_v2_direct_read");
   if (!mobile.includes('tab !== "ai" && tab !== "strategy2"')) issues.push("mobile_strategy2_html_snapshot_not_bypassed");
