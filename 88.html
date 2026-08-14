@@ -1319,7 +1319,7 @@ async function load(date = "") {
   byId("rows").innerHTML = `<tr><td colspan="13" class="empty">載入中...</td></tr>`;
   try {
     const dateQuery = date ? `&date=${encodeURIComponent(date)}` : "";
-    const response = await fetch(`/api/scorecard?t=${Date.now()}${dateQuery}`, { cache: "no-store" });
+    const response = await fetch(`/api/scorecard?t=${Date.now()}${dateQuery}&live=1&refreshSourceReports=1&strictLiveReports=1&noCache=1`, { cache: "no-store" });
     payload = await response.json();
     if (isMembershipFailure(response, payload)) {
       renderMembershipLock(payload.reason || payload.error || `HTTP ${response.status}`);

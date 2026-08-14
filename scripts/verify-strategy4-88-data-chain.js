@@ -192,9 +192,10 @@ async function main() {
   addCheck(checks, summaries.mobileFragment.runId === runId, "mobile_fragment_internal_run_id", summaries.mobileFragment);
   addCheck(checks, summaries.scorecard.runId === runId, "scorecard_source_row_internal_run_id", summaries.scorecard);
   addCheck(checks, summaries.sourceReports.runId === runId, "source_reports_internal_run_id", summaries.sourceReports);
-  addCheck(checks, page88Local.includes("/api/scorecard?t=") && page88Local.includes("scorecardStrategy4Live"), "page_88_scorecard_strategy4_data_chain_hook", {
+  addCheck(checks, page88Local.includes("/api/scorecard?t=") && page88Local.includes("refreshSourceReports=1") && page88Local.includes("strictLiveReports=1") && page88Local.includes("scorecardStrategy4Live"), "page_88_scorecard_strategy4_data_chain_hook", {
     file: path.join(root, "88.html"),
     callsScorecard: page88Local.includes("/api/scorecard?t="),
+    liveSourceReportsQuery: page88Local.includes("refreshSourceReports=1") && page88Local.includes("strictLiveReports=1"),
     hasStrategy4LiveHook: page88Local.includes("scorecardStrategy4Live"),
   });
   addCheck(checks, prod88.status === 200 && prod88.text.includes("/api/scorecard?t="), "production_88_shell_calls_scorecard", {

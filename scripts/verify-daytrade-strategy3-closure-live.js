@@ -252,6 +252,7 @@ function verify(summary) {
   if (strategy3ScorecardRecord.runId !== strategy3Report.runId) issues.push(`scorecard_strategy3_runId_mismatch scorecard=${strategy3ScorecardRecord.runId || "missing"} published=${strategy3Report.runId}`);
   if (strategy3ScorecardRecord.resultCount !== strategy3Report.resultCount) issues.push(`scorecard_strategy3_count_mismatch scorecard=${strategy3ScorecardRecord.resultCount} published=${strategy3Report.resultCount}`);
   if (!summary.page88.ok) issues.push(`page88_http_${summary.page88.status}`);
+  if (!summary.page88.liveSourceReportsQuery) issues.push("page88_live_source_reports_query_missing");
   if (!summary.desktopHome.ok) issues.push(`desktop_home_http_${summary.desktopHome.status}`);
   if (!summary.desktopHome.markerFound) issues.push("desktop_home_strategy3_ui_marker_missing");
   if (!summary.mobileBoot.ok) issues.push(`mobile_boot_http_${summary.mobileBoot.status}`);
@@ -379,7 +380,7 @@ async function main() {
     },
     scorecard: scorecardSummary(scorecardResponse),
     scorecardHealth: healthSummary(scorecardHealthResponse),
-    page88: htmlSummary(page88Response),
+    page88: { ...htmlSummary(page88Response), liveSourceReportsQuery: page88Response.text.includes("refreshSourceReports=1") && page88Response.text.includes("strictLiveReports=1") },
     desktopHome: htmlSummary(desktopHomeResponse, "strategy3-card-ui=20260709-04"),
     mobileBoot: {
       status: mobileBootResponse.status,
