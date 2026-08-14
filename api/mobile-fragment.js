@@ -120,8 +120,15 @@ function directStrategy3FormalRun(payload = {}) {
   const evidenceStatus = String(payload?.evidenceStatus || payload?.run_quality_at_publish?.evidenceStatus || "").toLowerCase();
   const unattendedStatus = String(payload?.unattendedStatus || payload?.run_quality_at_publish?.unattendedStatus || "").toUpperCase();
   const publishAllowed = payload?.publishAllowed ?? payload?.run_quality_at_publish?.publishAllowed;
-  return runDate === taipeiDateKey()
-    && scanDate === taipeiDateKey()
+  const normalizeDate = (value) => {
+    const digits = String(value || "").replace(/\D/g, "");
+    return /^\d{8}$/.test(digits)
+      ? `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`
+      : String(value || "").slice(0, 10);
+  };
+  const today = normalizeDate(taipeiDateKey());
+  return normalizeDate(runDate) === today
+    && normalizeDate(scanDate) === today
     && publishAllowed === true
     && evidenceStatus === "complete"
     && unattendedStatus === "YES"
