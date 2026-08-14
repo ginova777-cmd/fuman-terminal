@@ -5,6 +5,7 @@ const { readSnapshot } = require("../lib/supabase-snapshots");
 const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 
 const SNAPSHOT_KEY = "strategy2_live_v2";
+const REALTIME_SNAPSHOT_KEY = "strategy2_v2_realtime_observation";
 const CONTRACT = "strategy2-live-v2-fugle-mother-pool-1m";
 
 function taipeiDate() {
@@ -50,6 +51,9 @@ function emptyPayload(today, reason) {
     count: 0,
     dataGapCount: 0,
     records: [],
+    formalEvents: [],
+    observations: [],
+    preopenFutures: [],
     events: [],
     rows: [],
     matches: [],
@@ -68,21 +72,41 @@ async function strategy2Latest(request, response) {
   });
   const today = taipeiDate();
   const query = request.query || {};
-  const snapshot = await readSnapshot(SNAPSHOT_KEY, { tradeDate: today.replace(/\D/g, ""), allowLatestFallback: false, timeoutMs: 7000 });
+  const [snapshot, realtimeSnapshot] = await Promise.all([
+    readSnapshot(SNAPSHOT_KEY, { tradeDate: today.replace(/\D/g, ""), allowLatestFallback: false, timeoutMs: 7000 }),
+    readSnapshot(REALTIME_SNAPSHOT_KEY, { tradeDate: today.replace(/\D/g, ""), allowLatestFallback: false, timeoutMs: 5000 }),
+  ]);
   const payload = snapshot?.payload && typeof snapshot.payload === "object" ? snapshot.payload : null;
+  const realtimePayload = realtimeSnapshot?.payload && realtimeSnapshot.payload?.dataDate === today ? realtimeSnapshot.payload : null;
   if (!payload) return response.status(200).json(emptyPayload(today, "strategy2_v2_today_snapshot_missing"));
   if (payload.strategyContract !== CONTRACT || payload.version !== "v2") return response.status(200).json(emptyPayload(today, "strategy2_v2_contract_mismatch"));
   if (String(payload.dataDate || payload.date || "") !== today) return response.status(200).json(emptyPayload(today, "strategy2_v2_snapshot_not_today"));
   if (!String(payload.runId || "").startsWith("strategy2-v2-")) return response.status(200).json(emptyPayload(today, "strategy2_v2_runid_invalid"));
   const limit = Number(query.limit || 240);
-  const events = cleanRows(payload.events || payload.rows || payload.matches, limit);
-  const records = cleanRows(payload.records || events, limit);
+  const formalEvents = cleanRows(payload.events || payload.rows || payload.matches, limit);
+  const observations = cleanRows(realtimePayload?.observations, limit);
+  const preopenFutures = cleanRows(realtimePayload?.preopenFutures, 20);
+  const events = cleanRows([...observations, ...formalEvents]
+    .sort((left, right) => String(right?.entryAt || right?.timestamp || "").localeCompare(String(left?.entryAt || left?.timestamp || ""))), limit);
+  const records = events;
   return response.status(200).json({
     ...payload,
     ok: true,
     date: today,
     dataDate: today,
     tradeDate: today,
+    formalEvents,
+    observations,
+    preopenFutures,
+    realtimeObserver: realtimePayload ? {
+      runId: realtimePayload.runId || "",
+      updatedAt: realtimePayload.updatedAt || "",
+      phase: realtimePayload.phase || "",
+      status: realtimePayload.status || "",
+      pollIntervalSeconds: Number(realtimePayload.pollIntervalSeconds || 0),
+      sourceHealth: realtimePayload.sourceHealth || {},
+      errors: Array.isArray(realtimePayload.errors) ? realtimePayload.errors : [],
+    } : null,
     events,
     records,
     rows: events,
@@ -90,9 +114,11 @@ async function strategy2Latest(request, response) {
     count: Number(payload.resultCount ?? events.length),
     resultCount: Number(payload.resultCount ?? events.length),
     returnedCount: events.length,
+    observationCount: observations.length,
+    formalReturnedCount: formalEvents.length,
     fallbackUsed: false,
     previousGoodRunId: "",
-    cacheSource: "supabase:market_snapshots:strategy2_live_v2",
+    cacheSource: "supabase:market_snapshots:strategy2_live_v2+strategy2_v2_realtime_observation",
     transport: { ...(payload.transport || {}), source: "strategy2-live-v2", snapshotKey: SNAPSHOT_KEY, via: "api/strategy2-latest", fetchedAt: new Date().toISOString() },
   });
 }

@@ -92,6 +92,7 @@ function callScorecard() {
   const diagnostic = process.argv.includes("--diagnostic");
   const issues = [];
   const scanner = read("scripts/run-strategy2-live-v2.js");
+  const realtimeObserver = read("scripts/run-strategy2-realtime-observer.js");
   const sourceWriter = read("scripts/run-daytrade-source-writer.js");
   const api = read("api/strategy2-latest.js");
   const desktop = read("terminal-desktop-fast-shell.js");
@@ -111,7 +112,9 @@ function callScorecard() {
     "offset: String(offset)",
     "scanTimelineSignals",
     "indicatorSeries",
-    "terminalSnapshotPayload",  ]) {
+    "terminalSnapshotPayload",
+    "13 * 60 + 30",
+  ]) {
     if (!scanner.includes(marker)) issues.push(`scanner_missing:${marker}`);
   }
   for (const forbidden of ["priority_top40", "previous_good", "runtime-session-history", "fugle_shared_source", "strategy2-ps1"]) {
@@ -123,8 +126,22 @@ function callScorecard() {
   }
   if (!sourceWriter.includes("fugle_websocket_candles_full_dynamic_mother_pool")) issues.push("source_writer_missing_full_mother_pool_mirror");
   if (!runner.includes("check-market-calendar-action.js") || !runner.includes("--label=strategy2-live-v2")) issues.push("runner_missing_market_calendar_guard");
+  if (!runner.includes("run-strategy2-realtime-observer.js") || !runner.includes("cadence=3s") || !runner.includes("08:45-13:30")) issues.push("runner_missing_realtime_observer_or_ps1_window");
+  for (const marker of [
+    "fugle_daytrade_quotes_live",
+    "fugle_daytrade_futopt_quotes_live",
+    "futopt_tickers",
+    "fugle_preopen_snapshot",
+    "v_strategy12_stock_future_contract_health",
+    "pollIntervalSeconds: 3",
+    "strategy2-v2-realtime-quote-observation-v1",
+  ]) {
+    if (!realtimeObserver.includes(marker)) issues.push("realtime_observer_missing:" + marker);
+  }
   if (!desktop.includes("/api/strategy2-latest")) issues.push("desktop_missing_v2_strategy2_endpoint");
-  if (!desktop.includes("strategy2TaipeiTime") || !desktop.includes("timeZone: \"Asia/Taipei\"")) issues.push("desktop_missing_taipei_time_display");  if (desktop.includes("strategy2-ps1-backtest")) issues.push("desktop_legacy_backtest_route_present");
+  if (!desktop.includes("strategy2TaipeiTime") || !desktop.includes("timeZone: \"Asia/Taipei\"")) issues.push("desktop_missing_taipei_time_display");
+  if (!api.includes("REALTIME_SNAPSHOT_KEY") || !api.includes("formalEvents") || !api.includes("observations")) issues.push("api_missing_realtime_observation_merge");
+  if (desktop.includes("strategy2-ps1-backtest")) issues.push("desktop_legacy_backtest_route_present");
   if (!mobile.includes('tab === "strategy2"') || !mobile.includes("fetchStrategy2Internal")) issues.push("mobile_missing_v2_direct_read");
   if (!mobile.includes('tab !== "ai" && tab !== "strategy2"')) issues.push("mobile_strategy2_html_snapshot_not_bypassed");
   if (!scorecard.includes("strategy2_v2_not_formal_or_not_today_no_scorecard_records")) issues.push("scorecard_missing_v2_formal_gate");
@@ -134,6 +151,10 @@ function callScorecard() {
   if (!retiredBacktest.includes("strategy2_ps1_backtest_retired") || !retiredBacktest.includes(CONTRACT)) issues.push("legacy_strategy2_backtest_not_retired");
 
   const receipt = readJson(RECEIPT);
+  const realtimeReceipt = readJson(path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2-v2-realtime.json"));
+  if (!realtimeReceipt) issues.push("realtime_observer_receipt_missing");
+  if (realtimeReceipt && realtimeReceipt.strategyContract !== "strategy2-v2-realtime-quote-observation-v1") issues.push("realtime_observer_contract_mismatch");
+  if (realtimeReceipt && realtimeReceipt.dataDate !== taipeiDate()) issues.push("realtime_observer_date_not_today");
   if (!receipt) issues.push("v2_receipt_missing");
   if (receipt) {
     if (receipt.strategyContract !== CONTRACT) issues.push("receipt_contract_mismatch");
@@ -157,7 +178,7 @@ function callScorecard() {
   if (payload.fallbackUsed === true || payload.previousGoodRunId) issues.push("api_old_fallback_detected");
   if (payload.strategyContract !== CONTRACT) issues.push("api_contract_mismatch");
   if (Number(payload.scannedCount || 0) + Number(payload.dataGapCount || 0) !== Number(payload.expectedCount || 0)) issues.push("api_full_scan_accounting_mismatch");
-  const apiEvents = Array.isArray(payload.events) ? payload.events : [];
+  const apiEvents = Array.isArray(payload.formalEvents) ? payload.formalEvents : (Array.isArray(payload.events) ? payload.events : []);
   const timelineEvents = apiEvents.map((row) => ({
     code: String(row?.code || row?.symbol || ""),
     at: row?.entryAt || row?.entryCandleTime || row?.timestamp || "",
@@ -165,11 +186,11 @@ function callScorecard() {
   const invalidTimeline = timelineEvents.filter((row) => !row.code || taipeiMinute(row.at) === null);
   const outsideStrategy2Window = timelineEvents.filter((row) => {
     const minute = taipeiMinute(row.at);
-    return minute !== null && (minute < 540 || minute > 720);
+    return minute !== null && (minute < 540 || minute > 810);
   });
   if (Number(payload.count || 0) !== timelineEvents.length) issues.push("api_timeline_count_mismatch");
   if (invalidTimeline.length) issues.push("api_timeline_invalid_timestamp:" + invalidTimeline.length);
-  if (outsideStrategy2Window.length) issues.push("api_timeline_outside_0900_1200:" + outsideStrategy2Window.length);
+  if (outsideStrategy2Window.length) issues.push("api_timeline_outside_0900_1330:" + outsideStrategy2Window.length);
   if (new Set(timelineEvents.map((row) => row.code)).size !== timelineEvents.length) issues.push("api_timeline_duplicate_symbol_detected");
   const terminalBundle = await callTerminalFastBundle();
   const desktopPayload = Object.entries(terminalBundle.payload?.endpoints || {})
@@ -216,9 +237,13 @@ function callScorecard() {
     mode: diagnostic ? "diagnostic" : "formal",
     checkedAt: new Date().toISOString(),
     receipt: receipt ? {
-      status: receipt.status, dataDate: receipt.dataDate, runId: receipt.runId,
-      expectedCount: receipt.expectedCount, scannedCount: receipt.scannedCount,
-      resultCount: receipt.resultCount, dataGapCount: receipt.dataGapCount,
+      status: receipt.status,
+      dataDate: receipt.dataDate,
+      runId: receipt.runId,
+      expectedCount: receipt.expectedCount,
+      scannedCount: receipt.scannedCount,
+      resultCount: receipt.resultCount,
+      dataGapCount: receipt.dataGapCount,
       formalDisplayAllowed: receipt.formalDisplayAllowed,
     } : null,
     water: backfill ? {
@@ -228,9 +253,25 @@ function callScorecard() {
       dataGapCount: backfill.dataGapCount,
       rowsWritten: backfill.rowsWritten,
     } : null,
+    realtime: realtimeReceipt ? {
+      phase: realtimeReceipt.phase || "",
+      status: realtimeReceipt.status || "",
+      pollIntervalSeconds: realtimeReceipt.pollIntervalSeconds || 0,
+      observationCount: realtimeReceipt.observationCount || 0,
+      sourceHealth: realtimeReceipt.sourceHealth || {},
+    } : null,
     surfaces: {
-      desktop: { status: terminalBundle.status, runId: desktopPayload?.runId || "", dataDate: desktopPayload?.dataDate || "", count: desktopPayload?.count || 0 },
-      mobile: { status: mobileFragment.status, matchedRunId: receipt?.runId ? mobileHtml.includes(receipt.runId) : false },
+      desktop: {
+        status: terminalBundle.status,
+        runId: desktopPayload?.runId || "",
+        dataDate: desktopPayload?.dataDate || "",
+        count: desktopPayload?.count || 0,
+        observationCount: desktopPayload?.observationCount || 0,
+      },
+      mobile: {
+        status: mobileFragment.status,
+        matchedRunId: receipt?.runId ? mobileHtml.includes(receipt.runId) : false,
+      },
       scorecard: {
         status: scorecardResponse.status,
         runId: scorecardReport?.runId || "",
@@ -239,13 +280,22 @@ function callScorecard() {
         reason: scorecardReport?.reason || "",
       },
     },
-    api: { status: endpoint.status, runId: payload.runId || "", dataDate: payload.dataDate || "", count: payload.count || 0, statusText: payload.status || "" },
+    api: {
+      status: endpoint.status,
+      runId: payload.runId || "",
+      dataDate: payload.dataDate || "",
+      count: payload.count || 0,
+      formalReturnedCount: payload.formalReturnedCount || 0,
+      observationCount: payload.observationCount || 0,
+      statusText: payload.status || "",
+    },
     timeline: {
       eventCount: timelineEvents.length,
       distinctCodes: new Set(timelineEvents.map((row) => row.code)).size,
       firstTaipeiTime: timelineEvents.length ? taipeiTime(timelineEvents.map((row) => row.at).sort((a, b) => Date.parse(a) - Date.parse(b))[0]) : "",
       lastTaipeiTime: timelineEvents.length ? taipeiTime(timelineEvents.map((row) => row.at).sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1)) : "",
-    },    issues,
+    },
+    issues,
   };
   console.log(JSON.stringify(output, null, 2));
   if (issues.length) process.exit(1);

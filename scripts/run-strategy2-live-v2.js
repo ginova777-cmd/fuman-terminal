@@ -260,7 +260,7 @@ function scanTimelineSignals(row, candles, clock, scanMode) {
   for (let index = MIN_CANDLES - 1; index < candles.length; index += 1) {
     const candleTime = candles[index]?.candle_time || "";
     const minute = taipeiMinute(candleTime);
-    if (minute < 9 * 60 || minute > 12 * 60) continue;
+    if (minute < 9 * 60 || minute > 13 * 60 + 30) continue;
     const indicators = indicatorAt(series, candles, index);
     const latest = candles[index];
     const signalState = evaluateSignalSet(row, indicators, latest, openingHigh, openingOpen);
@@ -418,7 +418,7 @@ async function main() {
   const freshCount = eligible.filter((row) => quoteFresh(row, now)).length;
   const freshCoverage = eligible.length ? freshCount / eligible.length : 0;
   const fullScanComplete = records.length + dataGaps.length === eligible.length;
-  const liveWindow = clock.minuteOfDay >= 9 * 60 && clock.minuteOfDay <= 12 * 60;
+  const liveWindow = clock.minuteOfDay >= 9 * 60 && clock.minuteOfDay <= 13 * 60 + 30;
   const formal = !diagnosticReplay && liveWindow && fullScanComplete && eligible.length > 0 && freshCoverage >= 0.95;
   const runId = `strategy2-v2-${clock.ymd}-${String(clock.hour).padStart(2, "0")}${String(clock.minute).padStart(2, "0")}${String(clock.second).padStart(2, "0")}`;
   const status = formal ? (finalize ? "complete" : "live") : diagnosticReplay ? "diagnostic_replay" : "blocked";
@@ -445,7 +445,7 @@ async function main() {
     preservePreviousGood: false,
     fallbackUsed: false,
     previousGoodRunId: "",
-    scanWindow: { start: "09:00", end: "12:00", timezone: "Asia/Taipei" },
+    scanWindow: { start: "09:00", end: "13:30", timezone: "Asia/Taipei" },
     expectedCount: eligible.length,
     scannedCount: records.length,
     dataGapCount: dataGaps.length,
