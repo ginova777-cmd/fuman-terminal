@@ -113,7 +113,10 @@ function directStrategy3FormalRun(payload = {}) {
   if (String(payload?.strategy || "").toLowerCase() !== "strategy3") return false;
   const runId = extractRunId(payload, "strategy3");
   const runDate = runIdTradeDate(runId);
-  const scanDate = String(payload?.scanDate || payload?.usedDate || payload?.tradeDate || "").slice(0, 10);
+  const rawScanDate = String(payload?.scanDate || payload?.usedDate || payload?.tradeDate || "");
+  const scanDate = /^\d{8}$/.test(rawScanDate)
+    ? `${rawScanDate.slice(0, 4)}-${rawScanDate.slice(4, 6)}-${rawScanDate.slice(6, 8)}`
+    : rawScanDate.slice(0, 10);
   const evidenceStatus = String(payload?.evidenceStatus || payload?.run_quality_at_publish?.evidenceStatus || "").toLowerCase();
   const unattendedStatus = String(payload?.unattendedStatus || payload?.run_quality_at_publish?.unattendedStatus || "").toUpperCase();
   const publishAllowed = payload?.publishAllowed ?? payload?.run_quality_at_publish?.publishAllowed;
