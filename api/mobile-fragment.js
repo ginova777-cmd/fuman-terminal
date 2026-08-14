@@ -112,7 +112,7 @@ function taipeiDateKey() {
 }
 
 function directStrategy3FormalRun(payload = {}) {
-  if (String(payload?.strategy || "").toLowerCase() !== "strategy3") return false;
+  // This function is called only for the strategy3 tab; the API contract has no strategy field.
   const runId = extractRunId(payload, "strategy3");
   const runDate = runIdTradeDate(runId);
   const rawScanDate = String(payload?.scanDate || payload?.usedDate || payload?.tradeDate || "");
