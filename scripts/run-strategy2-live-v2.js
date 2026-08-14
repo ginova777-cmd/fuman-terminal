@@ -74,7 +74,7 @@ function latestEma(values, period) {
   return emaSeries(values, period).at(-1) || 0;
 }
 
-function indicatorSet(candles) {
+function indicatorSeries(candles) {
   const closes = candles.map((row) => number(row.close));
   const highs = candles.map((row) => number(row.high));
   const lows = candles.map((row) => number(row.low));
@@ -82,40 +82,67 @@ function indicatorSet(candles) {
   const ema3 = emaSeries(closes, 3);
   const ema5 = emaSeries(closes, 5);
   const ema10 = emaSeries(closes, 10);
+  const ema12 = emaSeries(closes, 12);
+  const ema26 = emaSeries(closes, 26);
   const ema30 = emaSeries(closes, 30);
   const ema58 = emaSeries(closes, 58);
-  const macdLine = closes.map((_, index) => (emaSeries(closes.slice(0, index + 1), 12).at(-1) || 0) - (emaSeries(closes.slice(0, index + 1), 26).at(-1) || 0));
+  const macdLine = closes.map((_, index) => (ema12[index] || 0) - (ema26[index] || 0));
   const signal = emaSeries(macdLine, 9);
   const histogram = macdLine.map((value, index) => value - (signal[index] || 0));
-  const kValues = closes.map((close, index) => {
+  const k = [];
+  const d = [];
+  const prefixHigh = [];
+  const prefixLow = [];
+  const averageVolume5 = [];
+  let runningHigh = -Infinity;
+  let runningLow = Infinity;
+  let rollingVolume = 0;
+  for (let index = 0; index < closes.length; index += 1) {
+    runningHigh = Math.max(runningHigh, highs[index] || 0);
+    runningLow = Math.min(runningLow, lows[index] || 0);
+    prefixHigh.push(runningHigh);
+    prefixLow.push(runningLow);
     const start = Math.max(0, index - 8);
-    const high = Math.max(...highs.slice(start, index + 1));
-    const low = Math.min(...lows.slice(start, index + 1));
-    return high > low ? ((close - low) / (high - low)) * 100 : 50;
-  });
-  const dValues = kValues.map((_, index) => average(kValues.slice(Math.max(0, index - 2), index + 1)));
+    const localHigh = Math.max(...highs.slice(start, index + 1));
+    const localLow = Math.min(...lows.slice(start, index + 1));
+    k.push(localHigh > localLow ? ((closes[index] - localLow) / (localHigh - localLow)) * 100 : 50);
+    d.push(average(k.slice(Math.max(0, index - 2), index + 1)));
+    rollingVolume += volumes[index] || 0;
+    if (index >= 5) rollingVolume -= volumes[index - 5] || 0;
+    averageVolume5.push(rollingVolume / Math.min(5, index + 1));
+  }
+  return { closes, highs, lows, volumes, ema3, ema5, ema10, ema30, ema58, macdLine, histogram, k, d, prefixHigh, prefixLow, averageVolume5 };
+}
+
+function indicatorAt(series, candles, index) {
   return {
-    close: closes.at(-1) || 0,
-    previousClose: closes.at(-2) || 0,
-    open: number(candles.at(-1)?.open),
-    high: Math.max(...highs),
-    low: Math.min(...lows),
-    ema3: ema3.at(-1) || 0,
-    ema3Previous: ema3.at(-2) || 0,
-    ema5: ema5.at(-1) || 0,
-    ema10: ema10.at(-1) || 0,
-    ema30: ema30.at(-1) || 0,
-    ema58: ema58.at(-1) || 0,
-    macd: macdLine.at(-1) || 0,
-    macdHistogram: histogram.at(-1) || 0,
-    macdHistogramPrevious: histogram.at(-2) || 0,
-    k: kValues.at(-1) || 0,
-    d: dValues.at(-1) || 0,
-    previousK: kValues.at(-2) || 0,
-    previousD: dValues.at(-2) || 0,
-    averageVolume5: average(volumes.slice(-5)),
-    currentVolume: volumes.at(-1) || 0,
+    close: series.closes[index] || 0,
+    previousClose: series.closes[index - 1] || 0,
+    open: number(candles[index]?.open),
+    high: series.prefixHigh[index] || 0,
+    low: series.prefixLow[index] || 0,
+    ema3: series.ema3[index] || 0,
+    ema3Previous: series.ema3[index - 1] || 0,
+    ema5: series.ema5[index] || 0,
+    ema10: series.ema10[index] || 0,
+    ema30: series.ema30[index] || 0,
+    ema58: series.ema58[index] || 0,
+    macd: series.macdLine[index] || 0,
+    macdHistogram: series.histogram[index] || 0,
+    macdHistogramPrevious: series.histogram[index - 1] || 0,
+    k: series.k[index] || 0,
+    d: series.d[index] || 0,
+    previousK: series.k[index - 1] || 0,
+    previousD: series.d[index - 1] || 0,
+    averageVolume5: series.averageVolume5[index] || 0,
+    currentVolume: series.volumes[index] || 0,
   };
+}
+
+function indicatorSet(candles) {
+  if (!candles.length) return {};
+  const series = indicatorSeries(candles);
+  return indicatorAt(series, candles, candles.length - 1);
 }
 
 function dynamicGates(high, low) {
@@ -156,12 +183,7 @@ function motherEligibility(row) {
   return issues;
 }
 
-function detectLiveSignals(row, candles) {
-  const indicators = indicatorSet(candles);
-  const latest = candles.at(-1) || {};
-  const firstAfterOpen = candles.find((candle) => taipeiMinute(candle.candle_time) >= 9 * 60) || candles[0];
-  const openingHigh = number(firstAfterOpen?.high);
-  const openingOpen = number(firstAfterOpen?.open);
+function evaluateSignalSet(row, indicators, latest, openingHigh, openingOpen) {
   const gates = dynamicGates(indicators.high, indicators.low);
   const bullishKd = indicators.k > indicators.d && (indicators.k > indicators.previousK || indicators.k > indicators.previousD);
   const bullishMacd = indicators.macdHistogram > 0 && indicators.macdHistogram >= indicators.macdHistogramPrevious;
@@ -174,11 +196,91 @@ function detectLiveSignals(row, candles) {
   const ppp = indicators.close > indicators.ema3 && indicators.ema3 > indicators.ema5 && indicators.ema5 > indicators.ema10 && indicators.ema10 > indicators.ema30 && ma3Up && nearSupport && (bullishKd || bullishMacd);
   const volumeConfirm = number(row.volume_vs_avg5_ratio || row.relative_volume_ratio) >= 2 || number(row.total_volume) >= number(row.avg5_volume) * 2;
   const signals = [];
-  if (breakout) signals.push({ id: "s2v2_opening_breakout", label: "開盤區間突破", reason: `突破 09:00 首根高點 ${round(openingHigh)}，EMA3上揚，KD/MACD轉多` });
+  if (breakout) signals.push({ id: "s2v2_opening_breakout", label: "開盤區間突破", reason: "突破 09:00 首根高點 " + round(openingHigh) + "，EMA3上揚，KD/MACD轉多" });
   if (reclaim) signals.push({ id: "s2v2_ma3_reclaim", label: "MA3 收復", reason: "回到 EMA3 上方，紅K，KD/MACD轉多" });
   if (ppp) signals.push({ id: "s2v2_ppp_pullback", label: "PPP 強勢回踩", reason: "EMA3/5/10/30 多頭，回踩支撐後站回 EMA3" });
   if (!signals.length && volumeConfirm && aboveOpen && ma3Up && (bullishKd || bullishMacd)) signals.push({ id: "s2v2_volume_momentum", label: "量價動能", reason: "相對量放大、站上開盤、EMA3 與 KD/MACD 轉多" });
-  return { indicators, latest, gates, signals, openingHigh, openingOpen, volumeConfirm };
+  return { gates, signals, volumeConfirm };
+}
+
+function detectLiveSignals(row, candles) {
+  const series = indicatorSeries(candles);
+  const latest = candles.at(-1) || {};
+  const firstAfterOpen = candles.find((candle) => taipeiMinute(candle.candle_time) >= 9 * 60) || candles[0];
+  const openingHigh = number(firstAfterOpen?.high);
+  const openingOpen = number(firstAfterOpen?.open);
+  const indicators = indicatorAt(series, candles, candles.length - 1);
+  const signalState = evaluateSignalSet(row, indicators, latest, openingHigh, openingOpen);
+  return { indicators, latest, ...signalState, openingHigh, openingOpen };
+}
+
+function buildScanBase(row, scan, clock, scanMode) {
+  return {
+    code: String(row.symbol),
+    symbol: String(row.symbol),
+    name: String(row.name || row.symbol),
+    market: row.market || "",
+    price: round(scan.indicators.close),
+    entryPrice: round(scan.indicators.close),
+    entryAt: scan.latest.candle_time,
+    timestamp: scan.latest.candle_time,
+    scanDate: clock.date,
+    tradeDate: clock.date,
+    source: SOURCE_NAME,
+    scanMode,
+    entryPriceSource: "fugle_daytrade_intraday_1m_live",
+    entryCandleTime: scan.latest.candle_time,
+    entryTradeDate: clock.date,
+    motherPoolScore: number(row.mother_pool_score || row.mother_score),
+    priorityScore: number(row.priority_score),
+    totalVolume: number(row.total_volume),
+    tradeValue: number(row.trade_value),
+    volumeVsAvg5Ratio: round(row.volume_vs_avg5_ratio || row.relative_volume_ratio),
+    scanEvidence: {
+      motherPoolSource: SOURCE_NAME,
+      motherPoolRuleHits: row.mother_pool_rule_hits || [],
+      poolReasons: row.pool_reasons || row.mother_reason || "",
+      candleCount: scan.candleCount || 0,
+      latestCandleTime: scan.latest.candle_time,
+      ma3: round(scan.indicators.ema3), ma5: round(scan.indicators.ema5), ma10: round(scan.indicators.ema10), ma30: round(scan.indicators.ema30), ma58: round(scan.indicators.ema58),
+      k: round(scan.indicators.k), d: round(scan.indicators.d), macdHistogram: round(scan.indicators.macdHistogram, 4),
+      volumeConfirm: scan.volumeConfirm,
+    },
+    ...(scan.gates || {}),
+  };
+}
+
+// Reconstruct one first-valid 09:00-12:00 entry per stock from formal Fugle 1m candles.
+// Subsequent same-day oscillations are not duplicate strategy entries.
+function scanTimelineSignals(row, candles, clock, scanMode) {
+  const series = indicatorSeries(candles);
+  const firstAfterOpen = candles.find((candle) => taipeiMinute(candle.candle_time) >= 9 * 60) || candles[0];
+  const openingHigh = number(firstAfterOpen?.high);
+  const openingOpen = number(firstAfterOpen?.open);
+  for (let index = MIN_CANDLES - 1; index < candles.length; index += 1) {
+    const candleTime = candles[index]?.candle_time || "";
+    const minute = taipeiMinute(candleTime);
+    if (minute < 9 * 60 || minute > 12 * 60) continue;
+    const indicators = indicatorAt(series, candles, index);
+    const latest = candles[index];
+    const signalState = evaluateSignalSet(row, indicators, latest, openingHigh, openingOpen);
+    if (!signalState.signals.length) continue;
+    const scan = { indicators, latest, ...signalState, openingHigh, openingOpen, candleCount: index + 1 };
+    const signal = scan.signals[0];
+    const base = buildScanBase(row, scan, clock, scanMode);
+    return [{
+      ...base,
+      stateId: "entry",
+      stateLabel: scanMode === "postclose_diagnostic_replay" ? "盤後診斷回放候選" : "正式進場候選",
+      formalCandidate: scanMode !== "postclose_diagnostic_replay",
+      eventOrigin: scanMode,
+      signalId: signal.id,
+      signal: signal.label,
+      reason: signal.reason,
+      score: round(number(row.mother_pool_score || row.mother_score) + number(row.priority_score) + (scan.volumeConfirm ? 12 : 0)),
+    }];
+  }
+  return [];
 }
 
 function sourceConfig() {
@@ -226,12 +328,15 @@ async function readCandles(config, date, symbols) {
   return rows;
 }
 function historyPayload(report) {
-  const file = path.join(DATA_DIR, "strategy2-v2-history", `${report.dataDate}.json`);
+  const file = path.join(DATA_DIR, "strategy2-v2-history", report.dataDate + ".json");
   let previous = {};
   try { previous = JSON.parse(fs.readFileSync(file, "utf8")); } catch {}
   const byKey = new Map();
-  for (const row of [...(Array.isArray(previous.events) ? previous.events : []), ...report.events]) {
-    const key = `${row.code}|${row.signalId}|${row.entryAt}`;
+  const sourceEvents = report.mode === "postclose_diagnostic_replay"
+    ? report.events
+    : [...(Array.isArray(previous.events) ? previous.events : []), ...report.events];
+  for (const row of sourceEvents) {
+    const key = String(row.code) + "|" + String(row.signalId) + "|" + String(row.entryAt);
     byKey.set(key, row);
   }
   const events = [...byKey.values()].sort((a, b) => String(b.entryAt).localeCompare(String(a.entryAt)));
@@ -246,6 +351,21 @@ function historyPayload(report) {
     records: events,
     sourceCoverage: report.sourceCoverage,
   };
+}
+
+function terminalSnapshotPayload(report) {
+  const events = report.events.map((row) => ({
+    code: row.code, symbol: row.symbol, name: row.name, market: row.market,
+    price: row.price, entryPrice: row.entryPrice, entryAt: row.entryAt, timestamp: row.timestamp,
+    scanDate: row.scanDate, tradeDate: row.tradeDate, source: row.source, scanMode: row.scanMode,
+    entryPriceSource: row.entryPriceSource, entryCandleTime: row.entryCandleTime, entryTradeDate: row.entryTradeDate,
+    stateId: row.stateId, stateLabel: row.stateLabel, formalCandidate: row.formalCandidate, eventOrigin: row.eventOrigin,
+    signalId: row.signalId, signal: row.signal, reason: row.reason, score: row.score,
+    upperGate: row.upperGate, middleGate: row.middleGate, lowerGate: row.lowerGate, dynamicHigh: row.dynamicHigh, dynamicLow: row.dynamicLow,
+    totalVolume: row.totalVolume, tradeValue: row.tradeValue, volumeVsAvg5Ratio: row.volumeVsAvg5Ratio,
+  }));
+  const { records, rows, matches, events: ignoredEvents, ...base } = report;
+  return { ...base, events };
 }
 
 async function main() {
@@ -287,53 +407,14 @@ async function main() {
       dataGaps.push({ code, name: row.name || "", candleCount: candles.length, firstCandleTime: candles[0]?.candle_time || "", lastCandleTime: candles.at(-1)?.candle_time || "", reason: "formal_1m_below_ma35_readiness" });
       continue;
     }
-    const scan = detectLiveSignals(row, candles);
-    const base = {
-      code,
-      symbol: code,
-      name: String(row.name || code),
-      market: row.market || "",
-      price: round(scan.indicators.close),
-      entryPrice: round(scan.indicators.close),
-      entryAt: scan.latest.candle_time,
-      timestamp: scan.latest.candle_time,
-      scanDate: clock.date,
-      tradeDate: clock.date,
-      source: SOURCE_NAME,
-      entryPriceSource: "fugle_daytrade_intraday_1m_live",
-      entryCandleTime: scan.latest.candle_time,
-      entryTradeDate: clock.date,
-      motherPoolScore: number(row.mother_pool_score || row.mother_score),
-      priorityScore: number(row.priority_score),
-      totalVolume: number(row.total_volume),
-      tradeValue: number(row.trade_value),
-      volumeVsAvg5Ratio: round(row.volume_vs_avg5_ratio || row.relative_volume_ratio),
-      scanEvidence: {
-        motherPoolSource: SOURCE_NAME,
-        motherPoolRuleHits: row.mother_pool_rule_hits || [],
-        poolReasons: row.pool_reasons || row.mother_reason || "",
-        candleCount: candles.length,
-        latestCandleTime: scan.latest.candle_time,
-        ma3: round(scan.indicators.ema3), ma5: round(scan.indicators.ema5), ma10: round(scan.indicators.ema10), ma30: round(scan.indicators.ema30), ma58: round(scan.indicators.ema58),
-        k: round(scan.indicators.k), d: round(scan.indicators.d), macdHistogram: round(scan.indicators.macdHistogram, 4),
-        volumeConfirm: scan.volumeConfirm,
-      },
-      ...(scan.gates || {}),
-    };
-    records.push({ ...base, stateId: "scanned", stateLabel: "完整掃描", formalCandidate: false, signals: scan.signals.map((signal) => signal.id) });
-    for (const signal of scan.signals) {
-      events.push({
-        ...base,
-        stateId: "entry",
-        stateLabel: "正式進場候選",
-        formalCandidate: true,
-        signalId: signal.id,
-        signal: signal.label,
-        reason: signal.reason,
-        score: round(number(row.mother_pool_score || row.mother_score) + number(row.priority_score) + (scan.volumeConfirm ? 12 : 0)),
-      });
-    }
+    const latestScan = detectLiveSignals(row, candles);
+    latestScan.candleCount = candles.length;
+    const scanMode = diagnosticReplay ? "postclose_diagnostic_replay" : "live_window";
+    const base = buildScanBase(row, latestScan, clock, scanMode);
+    records.push({ ...base, stateId: "scanned", stateLabel: "完整掃描", formalCandidate: false, signals: latestScan.signals.map((signal) => signal.id) });
+    events.push(...scanTimelineSignals(row, candles, clock, scanMode));
   }
+  events.sort((a, b) => String(b.entryAt).localeCompare(String(a.entryAt)));
   const freshCount = eligible.filter((row) => quoteFresh(row, now)).length;
   const freshCoverage = eligible.length ? freshCount / eligible.length : 0;
   const fullScanComplete = records.length + dataGaps.length === eligible.length;
@@ -396,7 +477,8 @@ async function main() {
   const receiptFile = path.join(DATA_DIR, "scan-receipts", "strategy2-v2.json");
   writeJson(latestFile, report);
   writeJson(path.join(DATA_DIR, "strategy2-v2-history", `${clock.date}.json`), historyPayload(report));
-  const snapshot = await upsertSnapshot(SNAPSHOT_KEY, report, { tradeDate: clock.ymd, snapshotId: runId, source: "strategy2-live-v2", reason: report.reason, locked: Boolean(report.complete) });
+  const snapshotPayload = terminalSnapshotPayload(report);
+  const snapshot = await upsertSnapshot(SNAPSHOT_KEY, snapshotPayload, { tradeDate: clock.ymd, snapshotId: runId, source: "strategy2-live-v2", reason: report.reason, locked: Boolean(report.complete) });
   let scorecardSnapshot = { ok: false, skipped: true, reason: "not_formal_finalization" };
   if (report.publishAllowed) {
     const scorecard = { ...report, source: "strategy2-v2-scorecard-source", scorecardEligible: true, records: report.events, rows: report.events };

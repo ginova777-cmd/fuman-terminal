@@ -11,6 +11,24 @@ function taipeiDate() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 
+function taipeiMinute(value) {
+  const timestamp = Date.parse(String(value || ""));
+  if (!Number.isFinite(timestamp)) return null;
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date(timestamp));
+  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+  return Number.isFinite(hour) && Number.isFinite(minute) ? (hour * 60) + minute : null;
+}
+
+function taipeiTime(value) {
+  const timestamp = Date.parse(String(value || ""));
+  if (!Number.isFinite(timestamp)) return "";
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  }).format(new Date(timestamp));
+}
 function read(file) {
   return fs.readFileSync(path.join(ROOT, file), "utf8");
 }
@@ -91,7 +109,9 @@ function callScorecard() {
     "noTop40Gate: true",
     "noPreviousGoodFallback: true",
     "offset: String(offset)",
-  ]) {
+    "scanTimelineSignals",
+    "indicatorSeries",
+    "terminalSnapshotPayload",  ]) {
     if (!scanner.includes(marker)) issues.push(`scanner_missing:${marker}`);
   }
   for (const forbidden of ["priority_top40", "previous_good", "runtime-session-history", "fugle_shared_source", "strategy2-ps1"]) {
@@ -104,7 +124,7 @@ function callScorecard() {
   if (!sourceWriter.includes("fugle_websocket_candles_full_dynamic_mother_pool")) issues.push("source_writer_missing_full_mother_pool_mirror");
   if (!runner.includes("check-market-calendar-action.js") || !runner.includes("--label=strategy2-live-v2")) issues.push("runner_missing_market_calendar_guard");
   if (!desktop.includes("/api/strategy2-latest")) issues.push("desktop_missing_v2_strategy2_endpoint");
-  if (desktop.includes("strategy2-ps1-backtest")) issues.push("desktop_legacy_backtest_route_present");
+  if (!desktop.includes("strategy2TaipeiTime") || !desktop.includes("timeZone: \"Asia/Taipei\"")) issues.push("desktop_missing_taipei_time_display");  if (desktop.includes("strategy2-ps1-backtest")) issues.push("desktop_legacy_backtest_route_present");
   if (!mobile.includes('tab === "strategy2"') || !mobile.includes("fetchStrategy2Internal")) issues.push("mobile_missing_v2_direct_read");
   if (!mobile.includes('tab !== "ai" && tab !== "strategy2"')) issues.push("mobile_strategy2_html_snapshot_not_bypassed");
   if (!scorecard.includes("strategy2_v2_not_formal_or_not_today_no_scorecard_records")) issues.push("scorecard_missing_v2_formal_gate");
@@ -137,7 +157,20 @@ function callScorecard() {
   if (payload.fallbackUsed === true || payload.previousGoodRunId) issues.push("api_old_fallback_detected");
   if (payload.strategyContract !== CONTRACT) issues.push("api_contract_mismatch");
   if (Number(payload.scannedCount || 0) + Number(payload.dataGapCount || 0) !== Number(payload.expectedCount || 0)) issues.push("api_full_scan_accounting_mismatch");
-
+  const apiEvents = Array.isArray(payload.events) ? payload.events : [];
+  const timelineEvents = apiEvents.map((row) => ({
+    code: String(row?.code || row?.symbol || ""),
+    at: row?.entryAt || row?.entryCandleTime || row?.timestamp || "",
+  })).filter((row) => row.code || row.at);
+  const invalidTimeline = timelineEvents.filter((row) => !row.code || taipeiMinute(row.at) === null);
+  const outsideStrategy2Window = timelineEvents.filter((row) => {
+    const minute = taipeiMinute(row.at);
+    return minute !== null && (minute < 540 || minute > 720);
+  });
+  if (Number(payload.count || 0) !== timelineEvents.length) issues.push("api_timeline_count_mismatch");
+  if (invalidTimeline.length) issues.push("api_timeline_invalid_timestamp:" + invalidTimeline.length);
+  if (outsideStrategy2Window.length) issues.push("api_timeline_outside_0900_1200:" + outsideStrategy2Window.length);
+  if (new Set(timelineEvents.map((row) => row.code)).size !== timelineEvents.length) issues.push("api_timeline_duplicate_symbol_detected");
   const terminalBundle = await callTerminalFastBundle();
   const desktopPayload = Object.entries(terminalBundle.payload?.endpoints || {})
     .find(([endpoint]) => String(endpoint).startsWith("/api/strategy2-latest"))?.[1] || null;
@@ -207,7 +240,12 @@ function callScorecard() {
       },
     },
     api: { status: endpoint.status, runId: payload.runId || "", dataDate: payload.dataDate || "", count: payload.count || 0, statusText: payload.status || "" },
-    issues,
+    timeline: {
+      eventCount: timelineEvents.length,
+      distinctCodes: new Set(timelineEvents.map((row) => row.code)).size,
+      firstTaipeiTime: timelineEvents.length ? taipeiTime(timelineEvents.map((row) => row.at).sort((a, b) => Date.parse(a) - Date.parse(b))[0]) : "",
+      lastTaipeiTime: timelineEvents.length ? taipeiTime(timelineEvents.map((row) => row.at).sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1)) : "",
+    },    issues,
   };
   console.log(JSON.stringify(output, null, 2));
   if (issues.length) process.exit(1);

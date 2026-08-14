@@ -1942,13 +1942,27 @@
       .slice(0, Math.max(minLimit, Math.min(maxLimit, limit)));
   }
 
+  function strategy2TaipeiTime(raw) {
+    const value = String(raw || "").trim();
+    const stamp = Date.parse(value);
+    if (Number.isFinite(stamp) && /^\d{4}-\d{2}-\d{2}T/.test(value)) {
+      try {
+        return new Intl.DateTimeFormat("en-GB", {
+          timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+        }).format(new Date(stamp));
+      } catch {}
+    }
+    const hms = value.match(/\d{1,2}:\d{2}(?::\d{2})?/);
+    return hms ? hms[0] : value || "--";
+  }
+
   function strategy2TimeValue(row) {
     const raw = String(row?.timestamp || row?.entryAt || row?.time || row?.firstAAt || row?.latestAAt || row?.firstBAt || row?.latestBAt || row?.latestSeenAt || row?.seenAt || row?.detectedAt || row?.quoteTime || "").trim();
     if (!raw) return 0;
-    const hms = raw.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
-    if (hms) return cleanNumber(hms[1]) * 3600 + cleanNumber(hms[2]) * 60 + cleanNumber(hms[3] || 0);
     const stamp = Date.parse(raw);
-    return Number.isFinite(stamp) ? stamp : 0;
+    if (Number.isFinite(stamp) && /^\d{4}-\d{2}-\d{2}T/.test(raw)) return stamp;
+    const hms = raw.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    return hms ? cleanNumber(hms[1]) * 3600 + cleanNumber(hms[2]) * 60 + cleanNumber(hms[3] || 0) : 0;
   }
 
   function strategy2SortRows(a, b) {
@@ -1994,9 +2008,13 @@
   }
 
   function strategy2TimeLabel(row) {
-    const raw = String(row?.timestamp || row?.entryAt || row?.time || row?.firstAAt || row?.latestAAt || row?.firstBAt || row?.latestBAt || row?.latestSeenAt || "").trim();
-    const hms = raw.match(/\d{1,2}:\d{2}(?::\d{2})?/);
-    return hms ? hms[0] : raw || "--";
+    return strategy2TaipeiTime(row?.timestamp || row?.entryAt || row?.time || row?.firstAAt || row?.latestAAt || row?.firstBAt || row?.latestBAt || row?.latestSeenAt || "");
+  }
+
+  function strategy2DisplayState(row, fallback) {
+    return row?.scanMode === "postclose_diagnostic_replay" || row?.eventOrigin === "postclose_diagnostic_replay"
+      ? "盤後診斷回放"
+      : fallback;
   }
 
   function routePayloadHasDrawableRows(payload) {
@@ -7098,14 +7116,15 @@
       const support = row?.supportPrice ?? "--";
       const target = row?.targetPrice ?? "--";
       const stop = row?.stopLoss ?? "--";
+      const state = strategy2DisplayState(row, "盤中偵測");
       return '<article class="strategy2-entry-card strategy2-card-entry" data-strategy2-latest-card>'
-        + '<aside class="strategy2-card-time"><small>偵測時間</small><strong>' + escapeHtml(time) + '</strong><em>盤中偵測</em></aside>'
+        + '<aside class="strategy2-card-time"><small>偵測時間</small><strong>' + escapeHtml(time) + '</strong><em>' + escapeHtml(state) + '</em></aside>'
         + '<div class="strategy2-card-code">' + escapeHtml(code) + '</div>'
         + '<div class="strategy2-card-name"><strong>' + escapeHtml(title) + '</strong><span>' + escapeHtml(code) + '</span></div>'
         + '<div class="strategy2-card-metric price"><small>現價</small><strong>' + escapeHtml(price) + '</strong></div>'
         + '<div class="strategy2-card-metric score"><small>策略</small><strong>' + escapeHtml(signal) + '</strong></div>'
         + '<div class="strategy2-card-metric change hot"><small>漲幅</small><strong>' + escapeHtml(pct) + '</strong></div>'
-        + '<div class="strategy2-card-line now"><b>現況</b><span>現價 ' + escapeHtml(price) + '｜盤中偵測｜' + escapeHtml(signal) + '</span></div>'
+        + '<div class="strategy2-card-line now"><b>現況</b><span>現價 ' + escapeHtml(price) + '｜' + escapeHtml(state) + '｜' + escapeHtml(signal) + '</span></div>'
         + '<div class="strategy2-card-line key"><b>關鍵價</b><span>支撐 ' + escapeHtml(String(support)) + '｜目標 ' + escapeHtml(String(target)) + '</span></div>'
         + '<div class="strategy2-card-line watch"><b>觀察</b><span>' + escapeHtml(note) + '</span></div>'
         + '<div class="strategy2-card-line power"><b>盤力</b><span>今日 1 分 K 型態命中，持續以量價與均線確認。</span></div>'
@@ -7133,7 +7152,7 @@
             const pct = row?.pct || "--";
             const score = row?.score || "--";
             const time = strategy2TimeLabel(row);
-            const state = isLatestCards ? "盤中偵測" : (tone === "entry" ? "真正進場" : "預備進場");
+            const state = isLatestCards ? strategy2DisplayState(row, "盤中偵測") : (tone === "entry" ? "真正進場" : "預備進場");
             return `
               <article class="strategy2-entry-card strategy2-card-${escapeHtml(tone)}">
                 <aside class="strategy2-card-time">
@@ -12922,24 +12941,3 @@
     }, true);
   })();
 })();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
