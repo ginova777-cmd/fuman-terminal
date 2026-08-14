@@ -407,4 +407,11 @@ if ($EffectiveNoLiveVerify) {
 }
 Invoke-Step "node" $noRollbackArgs
 
+Write-Step "verify Strategy2 V2 final closure after afternoon /88 import"
+Invoke-Step "node" @(
+  "--use-system-ca",
+  "scripts\verify-strategy2-live-v2-closure.js",
+  "--require-scorecard"
+)
+
 Write-Step ("ok latestDate={0} rows={1}" -f $sourceLatestDate, $sourceRows)

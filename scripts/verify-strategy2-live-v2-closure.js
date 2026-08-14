@@ -6,6 +6,7 @@ const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const RECEIPT = path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2-v2.json");
 const CONTRACT = "strategy2-live-v2-fugle-mother-pool-1m";
+const SCORECARD_IMPORT_CONTRACT = "strategy2_v2_afternoon_scorecard_import_v1";
 
 function taipeiDate() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -90,6 +91,9 @@ function callScorecard() {
 
 (async () => {
   const diagnostic = process.argv.includes("--diagnostic");
+  // The 13:30 scanner closes the live surfaces; /88 is imported once at 14:00.
+  const scorecardDeferred = !diagnostic && process.argv.includes("--scorecard-deferred");
+  const requireScorecard = !diagnostic && !scorecardDeferred;
   const issues = [];
   const scanner = read("scripts/run-strategy2-live-v2.js");
   const realtimeObserver = read("scripts/run-strategy2-realtime-observer.js");
@@ -117,6 +121,8 @@ function callScorecard() {
   ]) {
     if (!scanner.includes(marker)) issues.push(`scanner_missing:${marker}`);
   }
+  if (!scanner.includes(SCORECARD_IMPORT_CONTRACT)) issues.push("scanner_missing_afternoon_scorecard_import_contract");
+  if (scanner.includes("SCORECARD_SNAPSHOT_KEY")) issues.push("scanner_must_not_write_intraday_scorecard_snapshot");
   for (const forbidden of ["priority_top40", "previous_good", "runtime-session-history", "fugle_shared_source", "strategy2-ps1"]) {
     if (scanner.includes(forbidden)) issues.push(`scanner_forbidden:${forbidden}`);
     if (api.includes(forbidden)) issues.push(`api_forbidden:${forbidden}`);
@@ -127,6 +133,7 @@ function callScorecard() {
   if (!sourceWriter.includes("fugle_websocket_candles_full_dynamic_mother_pool")) issues.push("source_writer_missing_full_mother_pool_mirror");
   if (!runner.includes("check-market-calendar-action.js") || !runner.includes("--label=strategy2-live-v2")) issues.push("runner_missing_market_calendar_guard");
   if (!runner.includes("run-strategy2-realtime-observer.js") || !runner.includes("cadence=3s") || !runner.includes("08:45-13:30")) issues.push("runner_missing_realtime_observer_or_ps1_window");
+  if (!runner.includes("--scorecard-deferred")) issues.push("runner_must_defer_scorecard_until_1400");
   for (const marker of [
     "fugle_daytrade_quotes_live",
     "fugle_daytrade_futopt_quotes_live",
@@ -147,6 +154,7 @@ function callScorecard() {
   if (!mobile.includes('tab !== "ai" && tab !== "strategy2"')) issues.push("mobile_strategy2_html_snapshot_not_bypassed");
   if (!scorecard.includes("strategy2_v2_not_formal_or_not_today_no_scorecard_records")) issues.push("scorecard_missing_v2_formal_gate");
   if (!scorecard.includes("strategy2_v2_formal_scorecard_source")) issues.push("scorecard_missing_v2_formal_source_contract");
+  if (!scorecard.includes("strategy2_v2_scorecard_import_pending_1400") || !scorecard.includes(SCORECARD_IMPORT_CONTRACT)) issues.push("scorecard_missing_afternoon_import_gate");
   if (!genericLatest.includes("if (!DIRECT_AUTHORITATIVE_KEYS.has(key))")) issues.push("generic_api_may_read_legacy_strategy2_status");
   if (!oldStream.includes("strategy2_stream_retired") || !oldStream.includes(CONTRACT)) issues.push("legacy_strategy2_stream_not_retired");
   if (!retiredBacktest.includes("strategy2_ps1_backtest_retired") || !retiredBacktest.includes(CONTRACT)) issues.push("legacy_strategy2_backtest_not_retired");
@@ -165,8 +173,10 @@ function callScorecard() {
     if (Number(receipt.scannedCount || 0) + Number(receipt.dataGapCount || 0) !== Number(receipt.expectedCount || 0)) issues.push("receipt_full_scan_accounting_mismatch");
     if (!diagnostic && receipt.status !== "complete") issues.push(`receipt_not_complete:${receipt.status || "missing"}`);
     if (diagnostic && receipt.status !== "diagnostic_replay") issues.push(`receipt_not_diagnostic:${receipt.status || "missing"}`);
-    if (diagnostic && receipt.scorecardSnapshot?.skipped !== true) issues.push("diagnostic_must_not_write_scorecard");
-    if (!diagnostic && receipt.scorecardSnapshot?.ok !== true) issues.push("formal_scorecard_snapshot_missing");
+    if (diagnostic && receipt.scorecardImport?.status !== "not_eligible") issues.push("diagnostic_must_not_stage_scorecard_import");
+    if (!diagnostic && receipt.scorecardImport?.contract !== SCORECARD_IMPORT_CONTRACT) issues.push("receipt_scorecard_import_contract_mismatch");
+    if (!diagnostic && receipt.scorecardImport?.scheduledAt !== "14:00") issues.push("receipt_scorecard_import_time_not_1400");
+    if (scorecardDeferred && receipt.scorecardImport?.status !== "pending_daily_scorecard_import") issues.push("receipt_scorecard_import_not_pending_after_live_close");
     if (Number(receipt.sourceCoverage?.eligibleMotherPoolRows || 0) !== Number(receipt.expectedCount || 0)) issues.push("eligible_mother_pool_count_mismatch");
     if (Number(receipt.sourceCoverage?.intraday1mReadySymbols || 0) !== Number(receipt.scannedCount || 0)) issues.push("ready_1m_count_mismatch");
   }
@@ -218,13 +228,27 @@ function callScorecard() {
     .find((report) => String(report?.key || "").toLowerCase() === "strategy2") || null;
   const visibleStrategy2Rows = (Array.isArray(scorecardPayload.records) ? scorecardPayload.records : [])
     .filter((row) => String(row?.strategy || "") === "策略2成績單");
+  const visibleStrategy2TodayRows = visibleStrategy2Rows.filter((row) => {
+    const recordDate = String(row?.record_date || row?.recordDate || row?.date || "");
+    return !receipt?.dataDate || recordDate === receipt.dataDate;
+  });
   if (scorecardResponse.status !== 200) issues.push(`scorecard_http_${scorecardResponse.status}`);
   if (!scorecardReport) issues.push("scorecard_strategy2_report_missing");
   if (receipt?.runId && scorecardReport?.runId !== receipt.runId) issues.push("scorecard_runid_mismatch");
   if (receipt?.dataDate && scorecardReport?.date !== receipt.dataDate) issues.push("scorecard_date_mismatch");
   if (diagnostic && visibleStrategy2Rows.length) issues.push("diagnostic_old_strategy2_scorecard_rows_visible");
   if (diagnostic && scorecardReport?.reason !== "strategy2_v2_not_formal_or_not_today_no_scorecard_records") issues.push("diagnostic_scorecard_reason_mismatch");
-  if (!diagnostic && scorecardReport?.ok !== true) issues.push("formal_scorecard_report_not_complete");
+  if (scorecardDeferred) {
+    if (scorecardReport?.ok === true || scorecardReport?.publishAllowed === true) issues.push("scorecard_import_visible_before_1400");
+    if (scorecardReport?.reason !== "strategy2_v2_scorecard_import_pending_1400") issues.push("scorecard_pending_reason_mismatch");
+    if (visibleStrategy2TodayRows.length) issues.push("scorecard_today_rows_visible_before_1400");
+  }
+  if (requireScorecard) {
+    if (scorecardReport?.ok !== true) issues.push("formal_scorecard_report_not_complete");
+    if (scorecardReport?.reason !== "strategy2_v2_formal_scorecard_source") issues.push("formal_scorecard_reason_mismatch");
+    if (Number(scorecardReport?.count || 0) !== Number(receipt?.resultCount || 0)) issues.push("scorecard_result_count_mismatch");
+    if (visibleStrategy2TodayRows.length !== Number(receipt?.resultCount || 0)) issues.push("scorecard_today_rows_mismatch");
+  }
   const backfill = readJson(path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy2-v2-fugle-backfill-${taipeiDate().replace(/-/g, "")}.json`));
   if (diagnostic && backfill?.apply === true) {
     if (Number(backfill.motherPoolSymbols || 0) !== Number(receipt?.expectedCount || 0)) issues.push("backfill_mother_pool_count_mismatch");
@@ -235,7 +259,9 @@ function callScorecard() {
   const output = {
     ok: issues.length === 0,
     verifier: "verify-strategy2-live-v2-closure",
-    mode: diagnostic ? "diagnostic" : "formal",
+    mode: diagnostic ? "diagnostic" : scorecardDeferred ? "live-surfaces-scorecard-pending" : "full-closure-after-scorecard",
+    scorecardImportPhase: diagnostic ? "not_applicable" : scorecardDeferred ? "pending_until_1400" : "verified_after_1400",
+    fullClosure: !diagnostic && requireScorecard && issues.length === 0,
     checkedAt: new Date().toISOString(),
     receipt: receipt ? {
       status: receipt.status,
@@ -278,6 +304,7 @@ function callScorecard() {
         runId: scorecardReport?.runId || "",
         date: scorecardReport?.date || "",
         visibleStrategy2Rows: visibleStrategy2Rows.length,
+        visibleStrategy2TodayRows: visibleStrategy2TodayRows.length,
         reason: scorecardReport?.reason || "",
       },
     },

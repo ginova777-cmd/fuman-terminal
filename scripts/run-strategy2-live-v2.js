@@ -9,7 +9,7 @@ const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const DATA_DIR = path.join(RUNTIME_DIR, "data");
 const SNAPSHOT_KEY = "strategy2_live_v2";
-const SCORECARD_SNAPSHOT_KEY = "strategy2_v2_scorecard_source";
+const SCORECARD_IMPORT_CONTRACT = "strategy2_v2_afternoon_scorecard_import_v1";
 const CONTRACT = "strategy2-live-v2-fugle-mother-pool-1m";
 const SOURCE_NAME = "fugle_daytrade_source";
 const MIN_PRICE = 50;
@@ -479,21 +479,25 @@ async function main() {
   writeJson(path.join(DATA_DIR, "strategy2-v2-history", `${clock.date}.json`), historyPayload(report));
   const snapshotPayload = terminalSnapshotPayload(report);
   const snapshot = await upsertSnapshot(SNAPSHOT_KEY, snapshotPayload, { tradeDate: clock.ymd, snapshotId: runId, source: "strategy2-live-v2", reason: report.reason, locked: Boolean(report.complete) });
-  let scorecardSnapshot = { ok: false, skipped: true, reason: "not_formal_finalization" };
-  if (report.publishAllowed) {
-    const scorecard = { ...report, source: "strategy2-v2-scorecard-source", scorecardEligible: true, records: report.events, rows: report.events };
-    writeJson(path.join(DATA_DIR, "strategy2-v2-scorecard-source.json"), scorecard);
-    scorecardSnapshot = await upsertSnapshot(SCORECARD_SNAPSHOT_KEY, scorecard, { tradeDate: clock.ymd, snapshotId: runId, source: "strategy2-v2-scorecard-source", reason: "formal_live_window_finalization", locked: true });
-  }
+  // /88 is intentionally a single afternoon import. The live scanner stages no
+  // scorecard snapshot, so a completed 13:30 scan cannot look published early.
+  const scorecardImport = {
+    contract: SCORECARD_IMPORT_CONTRACT,
+    mode: "single_daily_import",
+    scheduledAt: "14:00",
+    status: report.publishAllowed ? "pending_daily_scorecard_import" : "not_eligible",
+    dataDate: report.dataDate,
+    runId,
+  };
   const receipt = {
     strategy: "strategy2", version: "v2", strategyContract: CONTRACT, status: report.status, complete: report.complete,
     formalDisplayAllowed: report.formalDisplayAllowed, publishAllowed: report.publishAllowed, dataDate: report.dataDate, runId, expectedCount: report.expectedCount,
     scannedCount: report.scannedCount, resultCount: report.resultCount, dataGapCount: report.dataGapCount, qualityStatus: report.qualityStatus,
     unattendedStatus: report.unattendedStatus, previousGoodRunId: "", fallbackUsed: false, sourceCoverage: report.sourceCoverage,
-    snapshot, scorecardSnapshot, startedAt: report.startedAt, finishedAt: report.finishedAt, reason: report.reason,
+    snapshot, scorecardImport, startedAt: report.startedAt, finishedAt: report.finishedAt, reason: report.reason,
   };
   writeJson(receiptFile, receipt);
-  console.log(JSON.stringify({ ok: true, status: report.status, formalDisplayAllowed: report.formalDisplayAllowed, runId, dataDate: report.dataDate, expectedCount: report.expectedCount, scannedCount: report.scannedCount, resultCount: report.resultCount, dataGapCount: report.dataGapCount, snapshot: snapshot.ok, scorecardSnapshot: scorecardSnapshot.ok, receiptPath: receiptFile }, null, 2));
+  console.log(JSON.stringify({ ok: true, status: report.status, formalDisplayAllowed: report.formalDisplayAllowed, runId, dataDate: report.dataDate, expectedCount: report.expectedCount, scannedCount: report.scannedCount, resultCount: report.resultCount, dataGapCount: report.dataGapCount, snapshot: snapshot.ok, scorecardImport: scorecardImport.status, receiptPath: receiptFile }, null, 2));
 }
 
 main().catch((error) => {

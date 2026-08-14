@@ -8,6 +8,8 @@ const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
+const STRATEGY2_SCORECARD_IMPORT_CONTRACT = "strategy2_v2_afternoon_scorecard_import_v1";
+const STRATEGY2_SCORECARD_IMPORT_PENDING_REASON = "strategy2_v2_scorecard_import_pending_1400";
 const SCORECARD_SNAPSHOT_TIMEOUT_MS = Math.max(300, Number(process.env.FUMAN_SCORECARD_SNAPSHOT_TIMEOUT_MS || 8000) || 8000);
 const SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS = Math.max(
   SCORECARD_SNAPSHOT_TIMEOUT_MS,
@@ -941,6 +943,36 @@ function buildStrategy2SourceReport(result) {
     reason: isFormalV2 ? "strategy2_v2_formal_scorecard_source" : "strategy2_v2_not_formal_or_not_today_no_scorecard_records",
   };
 }
+function isStrategy2ScorecardImportComplete(payload, liveReport) {
+  const runId = cleanText(liveReport?.runId);
+  const date = cleanText(liveReport?.date);
+  return (Array.isArray(payload?.sourceReports) ? payload.sourceReports : []).some((report) => (
+    cleanText(report?.key).toLowerCase() === "strategy2"
+    && cleanText(report?.runId) === runId
+    && cleanText(report?.date) === date
+    && report?.ok === true
+    && cleanText(report?.reason) !== STRATEGY2_SCORECARD_IMPORT_PENDING_REASON
+  ));
+}
+
+function pendingStrategy2ScorecardImportReport(liveReport) {
+  return {
+    ...liveReport,
+    ok: false,
+    evidenceStatus: "pending_scorecard_import_1400",
+    publishAllowed: false,
+    latestOverwriteAllowed: false,
+    blockedReason: STRATEGY2_SCORECARD_IMPORT_PENDING_REASON,
+    reason: STRATEGY2_SCORECARD_IMPORT_PENDING_REASON,
+    scorecardImport: {
+      contract: STRATEGY2_SCORECARD_IMPORT_CONTRACT,
+      mode: "single_daily_import",
+      scheduledAt: "14:00",
+      status: "pending_daily_scorecard_import",
+    },
+  };
+}
+
 function buildStrategy3SourceReport(result) {
   const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
   const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
@@ -1244,10 +1276,15 @@ function alignPayloadDateWithSourceReports(payload) {
 
 
 async function withCurrentStrategy2V2SourceReport(payload) {
-  // Strategy2 is always overwritten by its direct same-day V2 report. A cached
-  // scorecard must never keep an older Strategy2 run visible as the latest result.
+  // The scanner is live through 13:30, but /88 imports its formal Strategy2 rows
+  // once at 14:00. Before that import, surface a dated pending report instead of
+  // a false /88 success or a stale previous run.
   const strategy2Report = buildStrategy2SourceReport(await callStrategy2Latest());
-  return mergeSourceReport(payload, strategy2Report);
+  const formalButNotImported = strategy2Report.ok === true
+    && !isStrategy2ScorecardImportComplete(payload, strategy2Report);
+  return mergeSourceReport(payload, formalButNotImported
+    ? pendingStrategy2ScorecardImportReport(strategy2Report)
+    : strategy2Report);
 }
 async function withFreshStrategySourceReports(payload) {
   let nextPayload = payload;

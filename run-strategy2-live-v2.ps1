@@ -88,7 +88,9 @@ try {
     Start-Sleep -Seconds 3
   }
   Invoke-Strategy2V2 @("--once", "--finalize")
-  & $node "--use-system-ca" "scripts\verify-strategy2-live-v2-closure.js" *>&1 | Tee-Object -FilePath $log -Append
+  # /88 is published once by the 14:00 scorecard task. At 13:30 only verify
+  # Fugle water, complete scan, desktop, and mobile; /88 is pending by design.
+  & $node "--use-system-ca" "scripts\verify-strategy2-live-v2-closure.js" "--scorecard-deferred" *>&1 | Tee-Object -FilePath $log -Append
   exit $LASTEXITCODE
 }
 finally {
