@@ -824,7 +824,7 @@ function renderFragment(tab, config, payload) {
 
   const points = config.points.map((point, index) => `<p><b>${index + 1}</b>${esc(point)}</p>`).join("");
   const list = rows.length ? rows.map((row, index) => rowHtml(row, index, tab)).join("") : `<div class="empty-state">等待最新 complete run。</div>`;
-  return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}" data-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-today-authoritative="${todayAuthoritative === true ? "1" : "0"}" data-display-mode="${esc(displayMode)}">
+  return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}" data-result-count="${rows.length}" data-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-today-authoritative="${todayAuthoritative === true ? "1" : "0"}" data-display-mode="${esc(displayMode)}">
       <article class="mobile-terminal-head">
         <small>${validationDisplayAllowed ? "盤後驗證回測 / 非正式推薦" : "API-only complete run"}</small>
         <strong>${esc(config.title)}</strong>
