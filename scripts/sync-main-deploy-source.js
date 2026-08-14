@@ -54,7 +54,6 @@ const FILES = [
   "lib/chip-trade-exclusions.js",
   "lib/scorecard-rule-locks.js",
   "lib/supabase-public-slot.js",
-  "lib/strategy2-source-publish-gate.js",
   "lib/run-time-source-snapshot-contract.js",
   "lib/strategy-cache-status.js",
   "fuman-sw.js",
@@ -124,7 +123,6 @@ const FILES = [
   "scripts/verify-terminal-ops-production-live.js",
   "scripts/write-production-unattended-readiness-report.js",
   "scripts/verify-daytrade-mother-pool-contract.js",
-  "scripts/verify-strategy2-terminal-visible-readback.js",
   "scripts/verify-strategy3-live-readback.js",
   "scripts/verify-strategy4-88-data-chain.js",
   "scripts/verify-terminal-auto-roll-forward.js",
@@ -152,14 +150,15 @@ const FILES = [
   "scripts/generate-chip-trade-exclusions.js",
   "scripts/generate-institution-tdcc-breakout.js",
   "scripts/intraday-radar-rules.js",
+  "scripts/run-strategy2-live-v2.js",
+  "scripts/backfill-strategy2-v2-fugle-candles.js",
+  "scripts/verify-strategy2-live-v2-closure.js",
   "scripts/scan-intraday-signals.js",
   "scripts/fugle-websocket-collector.js",
   "scripts/sync-official-chip-data.js",
   "scripts/verify-chip-source-health.js",
   "scripts/check-scanner-resource-health.js",
   "scripts/check-publish-source-gate.js",
-  "scripts/check-strategy2-readiness-gate.js",
-  "scripts/check-strategy2-trading-day.js",
   "scripts/install-chip-source-sync-task.ps1",
   "scripts/prepare-deploy.js",
   "scripts/deploy-production-safe.js",
@@ -184,8 +183,6 @@ const FILES = [
   "scripts/scan-institution-cache.js",
   "scripts/scan-realtime-radar-cache.js",
   "scripts/scan-strategy3-cache.js",
-  "scripts/publish-strategy2-complete-run.js",
-  "scripts/publish-strategy2-latest-snapshot.js",
   "scripts/publish-mobile-update-event.js",
   "scripts/scan-strategy5-cache.js",
   "scripts/scan-strategy4-cache.js",
@@ -208,7 +205,6 @@ const FILES = [
   "scripts/verify-cb-alert-path.js",
   "scripts/verify-cost-governance-audit.js",
   "scripts/verify-supabase-publish-hard-gate.js",
-  "scripts/verify-strategy2-source-publish-gate.js",
   "scripts/verify-api-unattended-scorecard.js",
   "scripts/verify-production-api-freshness-contract.js",
   "scripts/verify-realtime-radar-frontend-contract.js",
@@ -247,7 +243,6 @@ const FILES = [
   "scripts/verify-membership-e2e-layering.js",
   "scripts/verify-membership-access-contract.js",
   "scripts/verify-server-entitlement-guard.js",
-  "scripts/verify-strategy2-e2e-closure.js",
   "scripts/verify-strategy5-e2e-closure.js",
   "scripts/verify-institution-e2e-closure.js",
   "scripts/verify-cb-e2e-closure.js",
@@ -305,7 +300,7 @@ const FILES = [
   "ops/install-api-unattended-patrol-task.ps1",
   "VERCEL-COST-UPLOAD-GUARD.md",
   "install-api-only-cleanup-task.ps1",
-  "run-strategy2-intraday.ps1",
+  "run-strategy2-live-v2.ps1",
   "run-strategy3.ps1",
   "run-strategy3-complete-scan.ps1",
   "run-strategy4.ps1",
@@ -485,17 +480,3 @@ for (const directory of DIRECTORIES) {
 }
 
 console.log(`[sync-source] ok copied=${copied} copiedFromDirs=${copiedFromDirs} retiredDeleted=${retiredDeleted} deploy=${DEPLOY_ROOT}`);
-
-
-
-
-
-
-
-
-
-
-
-
-
-

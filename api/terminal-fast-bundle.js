@@ -269,12 +269,45 @@ function buildOpsAuthorityIndex() {
   };
 }
 
+function strategy2V2Authority(payload = {}) {
+  const isFormal = payload.status === "complete"
+    && payload.complete === true
+    && payload.publishAllowed === true
+    && payload.formalDisplayAllowed === true;
+  const dataDate = String(payload.dataDate || payload.tradeDate || payload.date || "");
+  const diagnostic = payload.status === "diagnostic_replay";
+  return {
+    key: "strategy2",
+    runId: String(payload.runId || ""),
+    tradeDate: dataDate,
+    sourceDate: dataDate,
+    moduleStatus: isFormal ? "complete" : diagnostic ? "diagnostic" : "waiting",
+    todayAuthoritative: Boolean(dataDate),
+    formalDisplayAllowed: isFormal,
+    displayMode: isFormal ? "V2_FORMAL_COMPLETE" : diagnostic ? "V2_DIAGNOSTIC_VISIBLE_NOT_FORMAL" : "V2_WAITING_FOR_LIVE_SCAN",
+    displayBlockReason: isFormal ? "" : String(payload.reason || "strategy2_v2_not_formal"),
+    pendingNotDue: !dataDate,
+    evidenceStatus: isFormal ? "complete" : diagnostic ? "diagnostic_only" : "waiting",
+    publishAllowed: isFormal,
+    fallback: false,
+    resultCount: Number(payload.resultCount ?? payload.count ?? 0),
+    readbackCount: Number(payload.resultCount ?? payload.count ?? 0),
+  };
+}
+
 function attachOpsAuthorityToEndpoints(endpoints = {}, authority = {}) {
   for (const [endpoint, payload] of Object.entries(endpoints || {})) {
     if (!payload || typeof payload !== "object") continue;
     const key = opsModuleKeyForEndpoint(endpoint);
-    const row = key ? authority.byKey?.[key] : null;
+    const v2Strategy2 = key === "strategy2"
+      && payload.strategyContract === "strategy2-live-v2-fugle-mother-pool-1m"
+      && payload.version === "v2";
+    const row = v2Strategy2 ? strategy2V2Authority(payload) : key ? authority.byKey?.[key] : null;
     if (!row) continue;
+    if (v2Strategy2) {
+      authority.byKey = { ...(authority.byKey || {}), strategy2: row };
+      authority.source = `${authority.source || "runtime-output-artifacts"}+strategy2-v2-direct`;
+    }
     payload.terminalAuthority = row;
     payload.todayAuthoritative = row.todayAuthoritative;
     payload.formalDisplayAllowed = row.formalDisplayAllowed;
@@ -284,7 +317,6 @@ function attachOpsAuthorityToEndpoints(endpoints = {}, authority = {}) {
   }
   return endpoints;
 }
-
 function summarize(payload) {
   if (!payload || typeof payload !== "object") return { ok: false, count: 0 };
   const rows = Array.isArray(payload.matches) ? payload.matches
@@ -325,9 +357,33 @@ function publicEndpointMap(results) {
 }
 
 function sanitizeStrategy2Endpoints(endpoints = {}) {
-  // Preserve source evidence and runIds exactly; only remove retired endpoints.
   stripRetiredTerminalEndpoints(endpoints);
   return endpoints;
+}
+
+async function ensureStrategy2V2Endpoint(request, endpoints) {
+  for (const endpoint of Object.keys(endpoints || {})) {
+    if (new URL(String(endpoint || "/"), "https://fuman.local").pathname === "/api/strategy2-latest") delete endpoints[endpoint];
+  }
+  const direct = await callJson("/api/strategy2-latest", strategy2Latest, request, {
+    ...compactQuery(240), today: "1", live: "1",
+  }, 8000);
+  const payload = direct.payload && typeof direct.payload === "object" ? direct.payload : {};
+  const contractOk = payload.strategyContract === "strategy2-live-v2-fugle-mother-pool-1m" && payload.version === "v2";
+  const endpoint = direct.label || buildEndpoint("/api/strategy2-latest", { ...compactQuery(240), today: "1", live: "1" });
+  endpoints[endpoint] = contractOk ? payload : {
+    ok: false,
+    strategy: "strategy2",
+    version: "v2",
+    strategyContract: "strategy2-live-v2-fugle-mother-pool-1m",
+    status: "strategy2_v2_endpoint_unavailable",
+    dataDate: "",
+    runId: "",
+    rows: [], records: [], events: [], count: 0, resultCount: 0,
+    fallbackUsed: false, previousGoodRunId: "",
+    reason: payload.error || payload.reason || "strategy2_v2_direct_contract_failed",
+  };
+  return endpoints[endpoint];
 }
 
 function sanitizeStrategy2BundlePayload(payload) {
@@ -370,77 +426,8 @@ async function repairStrategy5FullSnapshot() {
   return null;
 }
 
-async function repairStrategy2LatestSnapshot(request, endpoints) {
-  const currentEntry = Object.entries(endpoints || {})
-    .find(([endpoint]) => isStrategy2SnapshotEndpoint(endpoint));
-  const [currentEndpoint, currentPayload] = currentEntry || ["", null];
-  const result = await callJson("/api/strategy2-latest", strategy2Latest, request, {
-    ...compactQuery(240),
-    live: "1",
-    today: "1",
-    verify: "1",
-    noSnapshot: "1",
-  }, 9000);
-  const replacement = result?.payload;
-  const replacementRunId = String(replacement?.runId || replacement?.transport?.runId || "").trim();
-  const currentRunId = String(currentPayload?.runId || currentPayload?.transport?.runId || "").trim();
-  if (Number(result?.statusCode || 0) >= 400 || replacement?.ok === false) return;
-  if (!replacementRunId.startsWith("strategy2-")) return;
-  const currentNeedsEvidenceRepair = currentRunId === replacementRunId && (
-    currentPayload?.evidenceStatus !== "complete"
-    || currentPayload?.publishAllowed !== true
-    || JSON.stringify(currentPayload || {}).includes("source_quality_fail")
-  );
-  if (replacementRunId === currentRunId && !currentNeedsEvidenceRepair) return;
-  if (replacement?.complete === false || replacement?.qualityStatus === "degraded") return;
-  Object.keys(endpoints || {}).forEach((endpoint) => {
-    if (isStrategy2SnapshotEndpoint(endpoint)) delete endpoints[endpoint];
-  });
-  endpoints["/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=240&today=1&live=1&verify=1&noSnapshot=1"] = shapeTopPayload(request, {
-    ...replacement,
-    transport: {
-      ...(replacement.transport || {}),
-      fastBundleRepair: "strategy2-latest-complete-run",
-      staleSnapshotEndpoint: currentEndpoint || "",
-      staleSnapshotRunId: currentRunId || "",
-      snapshotEndpointWasMissing: !currentEndpoint,
-      fetchedAt: new Date().toISOString(),
-    },
-  });
-}
-function endpointHasRunId(endpoints = {}, prefix = "", expectedRunId = "") {
-  return Object.entries(endpoints || {}).some(([endpoint, payload]) => {
-    if (!String(endpoint || "").startsWith(prefix)) return false;
-    const runId = String(payload?.runId || payload?.transport?.runId || "").trim();
-    return expectedRunId ? runId === expectedRunId : Boolean(runId);
-  });
-}
-
-async function repairStrategy3LatestSnapshot(request, endpoints, expectedRunId = "") {
-  if (endpointHasRunId(endpoints, "/api/strategy3-latest", expectedRunId)) return;
-  const result = await callJson("/api/strategy3-latest", strategy3Latest, request, {
-    ...compactQuery(60),
-    live: "1",
-    verify: "1",
-    noSnapshot: "1",
-  }, 12000);
-  const replacement = result?.payload;
-  const replacementRunId = String(replacement?.runId || replacement?.transport?.runId || "").trim();
-  if (Number(result?.statusCode || 0) >= 500) return;
-  if (!replacementRunId.startsWith("strategy3-")) return;
-  if (expectedRunId && replacementRunId !== expectedRunId) return;
-  Object.keys(endpoints || {}).forEach((endpoint) => {
-    if (String(endpoint || "").startsWith("/api/strategy3-latest")) delete endpoints[endpoint];
-  });
-  endpoints["/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60&live=1&verify=1&noSnapshot=1"] = shapeTopPayload(request, {
-    ...replacement,
-    transport: {
-      ...(replacement.transport || {}),
-      fastBundleRepair: "strategy3-latest-ops-authority-runid",
-      expectedRunId,
-      fetchedAt: new Date().toISOString(),
-    },
-  });
+async function repairStrategy3LatestSnapshot() {
+  return null;
 }
 
 function isStrategy4Endpoint(endpoint) {
@@ -458,17 +445,10 @@ async function repairStrategy4LatestSnapshot() {
   return null;
 }
 
-function isStrategy2SnapshotEndpoint(endpoint) {
-  const value = String(endpoint || "");
-  return value.startsWith("/api/strategy2-latest");
-}
-
 function isSoftSnapshotEndpoint(endpoint) {
-  return isStrategy2SnapshotEndpoint(endpoint)
-    || String(endpoint || "").startsWith("/api/warrant-flow-latest")
+  return String(endpoint || "").startsWith("/api/warrant-flow-latest")
     || String(endpoint || "").startsWith("/api/cb-detect-latest");
 }
-
 function isOptionalLiveSnapshotEndpoint(endpoint) {
   return false;
 }
@@ -498,13 +478,10 @@ function isDisplayableFailClosedPayload(payload) {
 }
 function buildSoftSnapshotFallback(endpoint, result, via) {
   const isWarrant = String(endpoint || "").startsWith("/api/warrant-flow-latest");
-  const isStrategy2 = isStrategy2SnapshotEndpoint(endpoint);
   const original = result?.payload && typeof result.payload === "object" ? result.payload : {};
   const source = isWarrant
     ? "supabase:warrant_flow_scan_results"
-    : isStrategy2
-      ? "supabase:strategy2_scan_results"
-      : "supabase:cb_detect_cache";
+    : "supabase:cb_detect_cache";
   const reason = original.detail || original.error || original.reason || "snapshot-soft-fallback";
   return {
     ...original,
@@ -555,8 +532,10 @@ function findWatchlistEndpoint(endpoints = {}) {
 async function ensureWatchlistMatchIndexEndpoint(request, endpoints, options = {}) {
   const endpoint = "/api/watchlist-match-index?compact=1&shell=1&limit=80";
   const existing = findWatchlistEndpoint(endpoints);
-  if (existing?.[1]?.strategies?.strategy2) return;
-  if (!existing) {
+  if (options.forceStrategy2Refresh && existing) delete endpoints[existing[0]];
+  const currentExisting = findWatchlistEndpoint(endpoints);
+  if (currentExisting?.[1]?.strategies?.strategy2) return;
+  if (!currentExisting) {
     endpoints[endpoint] = buildWatchlistMatchIndex(endpoints, {
       cacheSource: options.cacheSource || "api/terminal-fast-bundle",
       via: options.via || "api/terminal-fast-bundle",
@@ -582,6 +561,7 @@ async function ensureWatchlistMatchIndexEndpoint(request, endpoints, options = {
 
 function isMiss(item) {
   if (isOptionalLiveSnapshotEndpoint(item.label)) return false;
+  if (isDisplayableFailClosedPayload(item.payload)) return false;
   if (isSoftSnapshotEndpoint(item.label)) return false;
   return Number(item.statusCode || 0) >= 500 || item.payload?.ok === false;
 }
@@ -669,12 +649,9 @@ module.exports = async function handler(request, response) {
       let realtimeRadarRepairs = isReleaseReadbackSnapshot ? { skipped: "release-readback-snapshot" } : {};
       if (!isReleaseReadbackSnapshot && liveFallbackEnabled(request)) {
         await repairStrategy5FullSnapshot(request, endpoints);
-        await repairStrategy2LatestSnapshot(request, endpoints);
-        await repairStrategy3LatestSnapshot(request, endpoints, opsAuthority.byKey?.strategy3?.runId || "");
+        await repairStrategy3LatestSnapshot(request, endpoints);
       }
-      if (entitlement?.ok && !endpointHasRunId(endpoints, "/api/strategy3-latest", opsAuthority.byKey?.strategy3?.runId || "")) {
-        await repairStrategy3LatestSnapshot(request, endpoints, opsAuthority.byKey?.strategy3?.runId || "");
-      }
+      await ensureStrategy2V2Endpoint(request, endpoints);
       if (liveFallbackEnabled(request)) {
         await repairStrategy5FullSnapshot(request, endpoints);
         await repairStrategy4LatestSnapshot(request, endpoints);
@@ -682,6 +659,7 @@ module.exports = async function handler(request, response) {
           cacheSource: "api/terminal-fast-bundle:snapshot-derived",
           via: "api/terminal-fast-bundle:snapshot",
           updatedAt: snapshot.payload.updatedAt || snapshot.updatedAt || new Date().toISOString(),
+          forceStrategy2Refresh: true,
         });
       }
       sanitizeStrategy2Endpoints(endpoints);
@@ -750,9 +728,11 @@ module.exports = async function handler(request, response) {
   const results = Object.fromEntries(rows.map((item) => [item.label, item]));
   const endpoints = publicEndpointMap(results);
   applySoftSnapshotFallbacks(results, endpoints, "api/terminal-fast-bundle");
+  await ensureStrategy2V2Endpoint(request, endpoints);
   await ensureWatchlistMatchIndexEndpoint(request, endpoints, {
     cacheSource: "api/terminal-fast-bundle",
     via: "api/terminal-fast-bundle",
+    forceStrategy2Refresh: true,
   });
   sanitizeStrategy2Endpoints(endpoints);
   attachOpsAuthorityToEndpoints(endpoints, opsAuthority);

@@ -118,12 +118,13 @@ module.exports = async function handler(request, response) {
   try {
     const directPayload = DIRECT_AUTHORITATIVE_KEYS.has(key) ? await fetchDirectPayload(key, request) : null;
     let row = null;
-    try {
-      row = await fetchStatusRow(key);
-    } catch (error) {
-      if (!directPayload) throw error;
-    }
-    if (!row && !directPayload) {
+    if (!DIRECT_AUTHORITATIVE_KEYS.has(key)) {
+      try {
+        row = await fetchStatusRow(key);
+      } catch (error) {
+        if (!directPayload) throw error;
+      }
+    }    if (!row && !directPayload) {
       response.status(404).json({ ok: false, error: "strategy_not_found", strategyKey: key });
       return;
     }

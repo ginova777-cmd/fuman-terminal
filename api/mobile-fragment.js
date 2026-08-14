@@ -18,15 +18,6 @@ const MOBILE_STRATEGY3_DIRECT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_STRAT
 const MOBILE_FRAGMENT_HTML_SNAPSHOT_READ_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_HTML_SNAPSHOT_READ_TIMEOUT_MS || 900);
 const MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS || 72 * 60 * 60 * 1000);
 
-function productionVerificationAllowed(request, url, tab) {
-  const expected = String(process.env.FUMAN_PRODUCTION_VERIFY_TOKEN || "").trim();
-  const supplied = String(request.headers?.["x-fuman-production-verify"] || "").trim();
-  if (tab !== "strategy3" || url.searchParams.get("verify") !== "1" || !expected || !supplied) return false;
-  const expectedBuffer = Buffer.from(expected);
-  const suppliedBuffer = Buffer.from(supplied);
-  return expectedBuffer.length === suppliedBuffer.length && crypto.timingSafeEqual(expectedBuffer, suppliedBuffer);
-}
-
 const TAB_CONFIG = {
   ai: {
     title: "AI 判讀",
@@ -36,7 +27,7 @@ const TAB_CONFIG = {
   },
   strategy2: {
     title: "當沖",
-    subtitle: "2 分 K 即時偵測",
+    subtitle: "Fugle Mother Pool 1 分 K LIVE 掃描",
     endpoint: "/api/strategy2-latest",
     points: ["只看進場區", "等待量價確認", "盤中訊號掃描端完成"],
   },
@@ -114,27 +105,79 @@ function terminalAuthorityForTab(tab) {
   };
 }
 
-function strategy3CompletePayloadIsAuthoritative(payload = {}) {
-  const runId = String(payload.runId || payload.run_id || "");
-  const runDate = compactDate(payload.scanDate || payload.usedDate || payload.tradeDate || payload.date || runId);
-  const count = Number(payload.resultCount ?? payload.count ?? (Array.isArray(payload.matches) ? payload.matches.length : 0));
-  const expected = Number(payload.expectedTotal ?? payload.expected_total ?? 0);
-  const scanned = Number(payload.scannedCount ?? payload.scanned_count ?? 0);
-  return runDate === compactDate()
-    && Boolean(runId)
-    && count > 0
-    && expected > 0
-    && scanned === expected
-    && payload.publishAllowed === true
-    && String(payload.evidenceStatus || "").toLowerCase() === "complete"
-    && String(payload.unattendedStatus || "").toUpperCase() === "YES";
+function taipeiDateKey() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
+
+function directStrategy3FormalRun(payload = {}) {
+  if (String(payload?.strategy || "").toLowerCase() !== "strategy3") return false;
+  const runId = extractRunId(payload, "strategy3");
+  const runDate = runIdTradeDate(runId);
+  const scanDate = String(payload?.scanDate || payload?.usedDate || payload?.tradeDate || "").slice(0, 10);
+  const evidenceStatus = String(payload?.evidenceStatus || payload?.run_quality_at_publish?.evidenceStatus || "").toLowerCase();
+  const unattendedStatus = String(payload?.unattendedStatus || payload?.run_quality_at_publish?.unattendedStatus || "").toUpperCase();
+  const publishAllowed = payload?.publishAllowed ?? payload?.run_quality_at_publish?.publishAllowed;
+  return runDate === taipeiDateKey()
+    && scanDate === taipeiDateKey()
+    && publishAllowed === true
+    && evidenceStatus === "complete"
+    && unattendedStatus === "YES"
+    && payload?.preservePreviousGood !== true;
+}
+
+function strategy2V2TerminalAuthority(payload = {}) {
+  const isFormal = payload.status === "complete"
+    && payload.complete === true
+    && payload.publishAllowed === true
+    && payload.formalDisplayAllowed === true;
+  const dataDate = String(payload.dataDate || payload.tradeDate || payload.date || "");
+  const diagnostic = payload.status === "diagnostic_replay";
+  return {
+    key: "strategy2",
+    runId: String(payload.runId || ""),
+    tradeDate: dataDate,
+    sourceDate: dataDate,
+    moduleStatus: isFormal ? "complete" : diagnostic ? "diagnostic" : "waiting",
+    todayAuthoritative: Boolean(dataDate),
+    formalDisplayAllowed: isFormal,
+    displayMode: isFormal ? "V2_FORMAL_COMPLETE" : diagnostic ? "V2_DIAGNOSTIC_VISIBLE_NOT_FORMAL" : "V2_WAITING_FOR_LIVE_SCAN",
+    displayBlockReason: isFormal ? "" : String(payload.reason || "strategy2_v2_not_formal"),
+    pendingNotDue: !dataDate,
+    evidenceStatus: isFormal ? "complete" : diagnostic ? "diagnostic_only" : "waiting",
+    publishAllowed: isFormal,
+    fallback: false,
+  };
+}
+
 function attachTerminalAuthority(tab, payload = {}) {
-  const terminalAuthority = payload?.terminalAuthority || terminalAuthorityForTab(tab);
-  if (!terminalAuthority) return payload;
-  if (tab === "strategy3" && strategy3CompletePayloadIsAuthoritative(payload)) {
-    return { ...payload, terminalAuthority, todayAuthoritative: true, formalDisplayAllowed: true, displayMode: "COMPLETE_RUN", displayBlockReason: "", moduleStatus: "complete" };
+  const isStrategy2V2 = String(tab || "").toLowerCase() === "strategy2"
+    && payload?.strategyContract === "strategy2-live-v2-fugle-mother-pool-1m"
+    && payload?.version === "v2";
+  let terminalAuthority = isStrategy2V2 ? strategy2V2TerminalAuthority(payload) : (payload?.terminalAuthority || terminalAuthorityForTab(tab));
+  // A same-day Strategy3 complete run is authoritative on its own. The nightly
+  // aggregate scorecard may still be rebuilding other modules and must not hide it.
+  if (String(tab || "").toLowerCase() === "strategy3" && directStrategy3FormalRun(payload)) {
+    const runId = extractRunId(payload, "strategy3");
+    if (!terminalAuthority || terminalAuthority.runId !== runId || terminalAuthority.formalDisplayAllowed !== true) {
+      terminalAuthority = {
+        ...(terminalAuthority || {}),
+        key: "strategy3",
+        runId,
+        tradeDate: taipeiDateKey(),
+        sourceDate: taipeiDateKey(),
+        moduleStatus: "complete",
+        todayAuthoritative: true,
+        formalDisplayAllowed: true,
+        displayMode: "direct_strategy3_complete_run",
+        displayBlockReason: "",
+        pendingNotDue: false,
+        evidenceStatus: "complete",
+        publishAllowed: true,
+        fallback: false,
+      };
+    }
   }
+  if (!terminalAuthority) return payload;
   return {
     ...payload,
     terminalAuthority,
@@ -144,9 +187,7 @@ function attachTerminalAuthority(tab, payload = {}) {
     displayBlockReason: terminalAuthority.displayBlockReason,
     moduleStatus: terminalAuthority.moduleStatus,
   };
-}
-
-function setNoStore(response, contentType = "text/html; charset=utf-8") {
+}function setNoStore(response, contentType = "text/html; charset=utf-8") {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
   response.setHeader("Vercel-CDN-Cache-Control", "no-store");
@@ -318,7 +359,6 @@ function createCaptureResponse(resolve) {
 }
 
 function fetchStrategy2Internal(request, endpoint) {
-  if (shouldUseStrategy2PostcloseValidation()) return fetchStrategy2BacktestInternal(request);
   const url = new URL(endpoint, originFrom(request));
   const query = { ...Object.fromEntries(url.searchParams.entries()), verify: "1" };
   delete query.live;
@@ -515,25 +555,10 @@ function isValidBusinessRow(row, tab = "") {
   }
   return !isEvidenceLikeRow(row);
 }
-function hidePreviousGoodRows(rows, payload, tab = "") {
-  if (tab !== "strategy2") return rows;
-  const evidenceStatus = String(payload?.evidenceStatus || payload?.run_quality_at_publish?.evidenceStatus || "").toLowerCase();
-  const unattendedStatus = String(payload?.unattendedStatus || payload?.run_quality_at_publish?.unattendedStatus || "").toUpperCase();
-  const cacheSource = String(payload?.cacheSource || payload?.source || payload?.transport?.source || "").toLowerCase();
-  const previousGoodLike = payload?.preservePreviousGood === true
-    || payload?.fallbackUsed === true
-    || payload?.publishAllowed === false
-    || payload?.publishBlocked === true
-    || /previous-good|previous_good|fallback|snapshot-soft-fallback|runtime-session-history/.test(cacheSource)
-    || (evidenceStatus && evidenceStatus !== "complete")
-    || (unattendedStatus && unattendedStatus !== "YES");
-  if (!previousGoodLike) return rows;
-  payload.previousGoodRowsHidden = rows.length > 0;
-  payload.previousGoodRowsHiddenCount = rows.length;
-  payload.previousGoodDisplayPolicy = "mobile formal terminal hides previous-good rows unless publishAllowed/evidence/unattended are complete";
-  return [];
+function hidePreviousGoodRows(rows) {
+  // Strategy2 is V2 direct-only; there is no previous-good row path to filter.
+  return rows;
 }
-
 function normalizeRows(payload, tab = "") {
   const rows = arrayAt(payload, [
     "matches",
@@ -787,7 +812,7 @@ function renderFragment(tab, config, payload) {
 
   const points = config.points.map((point, index) => `<p><b>${index + 1}</b>${esc(point)}</p>`).join("");
   const list = rows.length ? rows.map((row, index) => rowHtml(row, index, tab)).join("") : `<div class="empty-state">等待最新 complete run。</div>`;
-  return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}" data-result-count="${rows.length}" data-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-today-authoritative="${todayAuthoritative === true ? "1" : "0"}" data-display-mode="${esc(displayMode)}">
+  return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}" data-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-today-authoritative="${todayAuthoritative === true ? "1" : "0"}" data-display-mode="${esc(displayMode)}">
       <article class="mobile-terminal-head">
         <small>${validationDisplayAllowed ? "盤後驗證回測 / 非正式推薦" : "API-only complete run"}</small>
         <strong>${esc(config.title)}</strong>
@@ -959,7 +984,6 @@ module.exports = async function handler(request, response) {
     sendHtml(request, response, 404, '<div class="empty-state">未知分頁。</div>', { tab });
     return;
   }
-  if (productionVerificationAllowed(request, url, tab)) request.fumanInternalVerify = true;
   if (tab !== "ai") {
     const entitlement = await verifyRequestEntitlement(request, { scope: `mobile-fragment:${tab}` });
     if (!entitlement.ok) {
@@ -972,7 +996,8 @@ module.exports = async function handler(request, response) {
       return;
     }
     const bypassHtmlSnapshot = shouldUseLiveFragment(tab) && (url.searchParams.get("live") === "1" || url.searchParams.get("verify") === "1" || url.searchParams.get("noSnapshot") === "1");
-    const htmlSnapshot = bypassHtmlSnapshot ? null : await readMobileFragmentHtmlSnapshot(tab);
+    const htmlSnapshot = (bypassHtmlSnapshot || tab === "strategy2") ? null : await readMobileFragmentHtmlSnapshot(
+      tab);
     if (htmlSnapshot?.html) {
       response.setHeader("ETag", `"${crypto.createHash("sha1").update(htmlSnapshot.html).digest("hex").slice(0, 16)}"`);
       sendHtml(request, response, 200, htmlSnapshot.html, { tab, snapshotHit: true, runId: htmlSnapshot.runId });
@@ -1012,12 +1037,11 @@ module.exports = async function handler(request, response) {
               : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, ["ai", "chip"].includes(tab) ? 30000 : 12000, authHeadersFrom(request)))
       : snapshotPayload;
     const html = renderFragment(tab, config, payload);
-    if (tab !== "ai") writeMobileFragmentHtmlSnapshot(tab, html, payload);
+    if (tab !== "ai" && tab !== "strategy2") writeMobileFragmentHtmlSnapshot(tab, html, payload);
     response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);
     sendHtml(request, response, 200, html, { tab });
   } catch (error) {
     sendHtml(request, response, 503, `<div class="empty-state">手機 API fragment 暫時無法取得：${esc(error?.message || error)}</div>`, { tab });
   }
 };
-
 

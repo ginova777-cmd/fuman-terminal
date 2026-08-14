@@ -87,91 +87,6 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
-function latestStrategy2HistoryPayload() {
-  const dirs = [
-    path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "data", "strategy2-intraday-history"),
-    path.join(process.cwd(), "data", "strategy2-intraday-history"),
-  ];
-  const files = dirs.flatMap((dir) => {
-    try {
-      return fs.readdirSync(dir)
-        .filter((name) => /^\d{4}-\d{2}-\d{2}\.json$/.test(name))
-        .map((name) => path.join(dir, name));
-    } catch {
-      return [];
-    }
-  });
-  return files
-    .map((file) => {
-      try {
-        const payload = JSON.parse(fs.readFileSync(file, "utf8"));
-        const stat = fs.statSync(file);
-        return { file, payload, mtime: stat.mtimeMs };
-      } catch {
-        return null;
-      }
-    })
-    .filter((item) => item?.payload && Array.isArray(item.payload.records) && item.payload.records.length)
-    .sort((a, b) => String(b.payload.date || "").localeCompare(String(a.payload.date || "")) || b.mtime - a.mtime)[0]?.payload || null;
-}
-
-function readStrategy2ScorecardFallbackResult(reason = "strategy2_scorecard_display_only_previous_good") {
-  const payload = latestStrategy2HistoryPayload();
-  if (!payload) return null;
-  const rows = Array.isArray(payload.records) ? payload.records : [];
-  const runId = cleanText(payload.runId || payload.latestRunId || payload.transport?.runId);
-  const date = cleanText(payload.date || rows[0]?.date);
-  const updatedAt = cleanText(payload.updatedAt || rows[0]?.timestamp || new Date().toISOString());
-  return {
-    statusCode: 200,
-    payload: {
-      ...payload,
-      ok: false,
-      status: "blocked",
-      qualityStatus: "degraded",
-      runId,
-      latestRunId: runId,
-      rows,
-      count: rows.length,
-      resultCount: rows.length,
-      readbackCount: rows.length,
-      date,
-      tradeDate: date,
-      usedDate: date,
-      sourceDate: date,
-      updatedAt,
-      source_snapshot_captured_at: updatedAt,
-      evidenceStatus: "source_quality_fail",
-      unattendedStatus: "NO",
-      publishAllowed: false,
-      latestOverwriteAllowed: false,
-      preservePreviousGood: true,
-      fallbackUsed: true,
-      fallbackAllowed: false,
-      fallbackScope: ["repo-bundled-strategy2-history", "display-only-previous-good", "scorecard-source-timeout"],
-      degradedBlocksLatest: true,
-      latestWriteAttempted: false,
-      latestPointerUpdated: false,
-      blockedReason: reason,
-      scanner_block_reason: reason,
-      reason,
-      run_quality_at_publish: {
-        publishAllowed: false,
-        latestOverwriteAllowed: false,
-        preservePreviousGood: true,
-        fallbackUsed: true,
-        fallbackAllowed: false,
-        degradedBlocksLatest: true,
-        evidenceStatus: "source_quality_fail",
-        unattendedStatus: "NO",
-        blockedReason: reason,
-        scanner_block_reason: reason,
-      },
-      transport: { ...(payload.transport || {}), runId, source: "repo-bundled-strategy2-history", reason },
-    },
-  };
-}
-
 function reportStatusFromBool(ok) {
   return ok ? "complete" : "insufficient";
 }
@@ -229,7 +144,6 @@ async function latestRunFallbackPayload({ table, strategy = "", order = "finishe
 }
 const RELEASE_SOURCE_REPORT_DATE = "20260713";
 const RELEASE_SOURCE_REPORTS = [
-  { key: "strategy2", strategy: "strategy2", endpoint: "/api/strategy2-latest", runId: "strategy2-20260713-210234", count: 35, emittedRows: 35, date: "20260713", reason: "scorecard_release_latest_pointer" },
   { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", runId: "strategy3-20260713-20260713130531", count: 77, emittedRows: 77, date: "20260713", reason: "scorecard_release_latest_pointer" },
   { key: "strategy4", strategy: "strategy4", endpoint: "/api/strategy4-latest", runId: "strategy4-20260713-20260713095129", count: 332, emittedRows: 70, date: "20260713", reason: "scorecard_release_latest_pointer" },
   { key: "strategy5", strategy: "strategy5", endpoint: "/api/strategy5-latest", runId: "strategy5-20260714-20260714140711", count: 54, emittedRows: 54, date: "20260714", reason: "scorecard_release_latest_pointer" },
@@ -285,7 +199,6 @@ function releaseSourceReports() {
   });
 }
 const LIGHTWEIGHT_SOURCE_REPORTS = [
-  { key: "strategy2", strategy: "strategy2", endpoint: "/api/strategy2-latest", table: "v_strategy2_latest_complete_run", strategyFilter: "strategy2", order: "" },
   { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", table: "v_strategy3_latest_complete_run", strategyFilter: "strategy3", order: "" },
   { key: "strategy4", strategy: "strategy4", endpoint: "/api/strategy4-latest", table: "strategy4_scan_runs", strategyFilter: "strategy4", order: "finished_at.desc" },
   { key: "strategy5", strategy: "strategy5", endpoint: "/api/strategy5-latest", table: "v_strategy5_latest_complete_run", strategyFilter: "strategy5", order: "" },
@@ -509,9 +422,9 @@ function callStrategy2Latest(timeoutMs = Number(process.env.STRATEGY2_SCORECARD_
         verify: "1",
         top: "1",
       };
-      timer = setTimeout(() => resolve(readStrategy2ScorecardFallbackResult("strategy2_source_report_timeout_display_only_previous_good") || {
+      timer = setTimeout(() => resolve({
         statusCode: 504,
-        payload: { ok: false, error: "strategy2_source_report_timeout" },
+        payload: { ok: false, error: "strategy2_v2_source_report_timeout", reason: "strategy2_v2_direct_timeout_no_fallback" },
       }), timeoutMs);
       const finish = (result) => {
         clearTimeout(timer);
@@ -999,30 +912,35 @@ function buildStrategy4SourceReport(result) {
 
 function buildStrategy2SourceReport(result) {
   const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
-  const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
-    ? payload.run_quality_at_publish
-    : {};
+  const today = taipeiDateKey();
+  const runId = cleanText(payload.runId || payload.transport?.runId);
+  const date = cleanText(payload.dataDate || payload.tradeDate || payload.date);
+  const isFormalV2 = payload.strategyContract === "strategy2-live-v2-fugle-mother-pool-1m"
+    && payload.status === "complete"
+    && payload.complete === true
+    && payload.publishAllowed === true
+    && date === today
+    && /^strategy2-v2-/.test(runId);
   return {
     key: "strategy2",
-    strategy: "策略2當沖成績單",
+    strategy: "策略2成績單",
     endpoint: "/api/strategy2-latest",
     statusCode: Number(result?.statusCode || 0) || 0,
-    ok: payload.ok !== false && Number(result?.statusCode || 0) < 400,
-    runId: cleanText(payload.runId || payload.transport?.runId),
+    ok: Number(result?.statusCode || 0) < 400 && isFormalV2,
+    runId,
     count: cleanNumber(payload.count ?? payload.resultCount ?? payload.total),
     emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : 0,
-    date: cleanText(payload.usedDate || payload.tradeDate || payload.sourceDate || payload.date),
-    evidenceStatus: cleanText(payload.evidenceStatus || payload.unattended?.evidenceStatus || quality.evidenceStatus),
-    unattendedStatus: cleanText(payload.unattendedStatus || payload.unattended?.status || quality.unattendedStatus),
-    publishAllowed: payload.publishAllowed === true || quality.publishAllowed === true,
-    latestOverwriteAllowed: payload.latestOverwriteAllowed === true || quality.latestOverwriteAllowed === true,
-    preservePreviousGood: payload.preservePreviousGood === true || quality.preservePreviousGood === true,
-    fallbackUsed: payload.fallbackUsed === true || quality.fallbackUsed === true,
-    blockedReason: cleanText(payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
-    reason: cleanText(payload.reason || payload.detail || payload.error || payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
+    date,
+    evidenceStatus: isFormalV2 ? "complete" : "not_formal_v2_complete",
+    unattendedStatus: cleanText(payload.unattendedStatus || "NO"),
+    publishAllowed: isFormalV2,
+    latestOverwriteAllowed: isFormalV2,
+    preservePreviousGood: false,
+    fallbackUsed: false,
+    blockedReason: isFormalV2 ? "" : "strategy2_v2_requires_today_complete_finalization",
+    reason: isFormalV2 ? "strategy2_v2_formal_scorecard_source" : "strategy2_v2_not_formal_or_not_today_no_scorecard_records",
   };
 }
-
 function buildStrategy3SourceReport(result) {
   const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
   const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
@@ -1221,7 +1139,7 @@ async function buildDaytradeSourceReport() {
       phase: cleanText(payload.phase),
       offSession,
       formalEntryAllowed: formalAllowed,
-      formalScope: cleanText(payload.formal_scope || "priority_top40"),
+      formalScope: cleanText(payload.formal_scope || "mother_pool_complete_dynamic_scan"),
       motherPoolSymbols,
       priorityPoolSymbols,
       stockGroupContractSource: cleanText(payload.stock_group_contract_source),
@@ -1325,6 +1243,12 @@ function alignPayloadDateWithSourceReports(payload) {
 }
 
 
+async function withCurrentStrategy2V2SourceReport(payload) {
+  // Strategy2 is always overwritten by its direct same-day V2 report. A cached
+  // scorecard must never keep an older Strategy2 run visible as the latest result.
+  const strategy2Report = buildStrategy2SourceReport(await callStrategy2Latest());
+  return mergeSourceReport(payload, strategy2Report);
+}
 async function withFreshStrategySourceReports(payload) {
   let nextPayload = payload;
   try {
@@ -1373,7 +1297,11 @@ async function withLiveSourceReports(payload, options = {}) {
       && !isRetiredScorecardSurfaceName(report?.strategy)
       && !isRetiredScorecardSurfaceName(report?.endpoint));
   const refreshFreshStrategyReports = options.freshStrategySourceReports === true;
-  const maybeFreshStrategyReports = (nextPayload) => refreshFreshStrategyReports ? withFreshStrategySourceReports(nextPayload) : Promise.resolve(nextPayload);
+  const maybeFreshStrategyReports = async (nextPayload) => {
+    const strategy2Report = buildStrategy2SourceReport(await callStrategy2Latest());
+    const withStrategy2 = mergeSourceReport(nextPayload, strategy2Report);
+    return refreshFreshStrategyReports ? withFreshStrategySourceReports(withStrategy2) : withStrategy2;
+  };
   const releaseReports = releaseSourceReports();
   const lightweightReports = await Promise.all(LIGHTWEIGHT_SOURCE_REPORTS.map(buildLightweightSourceReport));
   const mergeLightweightReports = (reports) => {
@@ -1926,6 +1854,7 @@ async function buildPayload(requestedDate = "", options = {}) {
       ? selectPayloadDate(await withLiveSourceReports(basePayload, options), requestedDate)
       : selectPayloadDate(basePayload, requestedDate);
   }
+  payload = selectPayloadDate(await withCurrentStrategy2V2SourceReport(payload), requestedDate);
   payload = await withScanAudit(payload, options);
   if (!noCache) payloadMemoryCache.set(cacheKey, { cachedAt: Date.now(), payload });
   return payload;
@@ -1970,4 +1899,3 @@ module.exports.__test = {
   withScorecardContract,
   buildPayload,
 };
-

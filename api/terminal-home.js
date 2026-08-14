@@ -165,7 +165,7 @@ function buildHomePayload(base, parts) {
   const statusEntries = {
     "institution-latest.json": buildStatusEntry(institution, "supabase:institution_scan_results"),
     "warrant-flow-latest.json": buildStatusEntry(warrant, "supabase:warrant_flow_scan_results"),
-    "strategy2-intraday-latest.json": buildStatusEntry(strategy2, "supabase:strategy2_latest"),
+    "strategy2-v2-latest.json": buildStatusEntry(strategy2, "supabase:market_snapshots:strategy2_live_v2"),
     "strategy3-latest.json": buildStatusEntry(strategy3, "supabase:strategy3_scan_results"),
     "strategy4-latest.json": buildStatusEntry(strategy4, "supabase:strategy4_scan_results"),
     "strategy5-latest.json": buildStatusEntry(strategy5, "supabase:strategy5_scan_results"),

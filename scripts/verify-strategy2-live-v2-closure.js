@@ -1,0 +1,217 @@
+"use strict";
+
+const fs = require("fs");
+const path = require("path");
+const ROOT = path.resolve(__dirname, "..");
+const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const RECEIPT = path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2-v2.json");
+const CONTRACT = "strategy2-live-v2-fugle-mother-pool-1m";
+
+function taipeiDate() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+
+function read(file) {
+  return fs.readFileSync(path.join(ROOT, file), "utf8");
+}
+
+function readJson(file) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
+}
+
+function callHandler(handler, request) {
+  return new Promise((resolve) => {
+    const response = {
+      statusCode: 200,
+      setHeader() {},
+      status(code) { this.statusCode = code; return this; },
+      json(payload) { resolve({ status: this.statusCode, payload }); },
+      send(payload) { resolve({ status: this.statusCode, payload }); },
+      end(payload) { resolve({ status: this.statusCode, payload }); },
+    };
+    Promise.resolve(handler({ ...request, fumanInternalVerify: true }, response))
+      .catch((error) => resolve({ status: 500, payload: { error: error?.message || String(error) } }));
+  });
+}
+
+function callLocalApi() {
+  return callHandler(require("../api/strategy2-latest"), {
+    method: "GET",
+    query: { limit: "500", live: "1", today: "1" },
+    headers: {},
+    url: "/api/strategy2-latest?limit=500&live=1&today=1",
+  });
+}
+
+function callMobileFragment() {
+  return callHandler(require("../api/mobile-fragment"), {
+    method: "GET",
+    query: { tab: "strategy2", live: "1", verify: "1" },
+    headers: {},
+    url: "/api/mobile-fragment?tab=strategy2&live=1&verify=1",
+  });
+}
+
+function callTerminalFastBundle() {
+  return callHandler(require("../api/terminal-fast-bundle"), {
+    method: "GET",
+    query: { verify: "1" },
+    headers: {},
+    url: "/api/terminal-fast-bundle?verify=1",
+  });
+}
+
+function callScorecard() {
+  return callHandler(require("../api/scorecard"), {
+    method: "GET",
+    query: {},
+    headers: {},
+    url: "/api/scorecard",
+  });
+}
+
+(async () => {
+  const diagnostic = process.argv.includes("--diagnostic");
+  const issues = [];
+  const scanner = read("scripts/run-strategy2-live-v2.js");
+  const sourceWriter = read("scripts/run-daytrade-source-writer.js");
+  const api = read("api/strategy2-latest.js");
+  const desktop = read("terminal-desktop-fast-shell.js");
+  const mobile = read("api/mobile-fragment.js");
+  const scorecard = read("api/scorecard.js");
+  const genericLatest = read("api/latest-strategy.js");
+  const oldStream = read("api/strategy2-stream.js");
+  const runner = read("run-strategy2-live-v2.ps1");
+  const retiredBacktest = read("api/strategy2-ps1-backtest.js");
+
+  for (const marker of [
+    "v_fugle_daytrade_mother_pool",
+    "fugle_daytrade_intraday_1m",
+    "strategy2_live_v2",
+    "noTop40Gate: true",
+    "noPreviousGoodFallback: true",
+    "offset: String(offset)",
+  ]) {
+    if (!scanner.includes(marker)) issues.push(`scanner_missing:${marker}`);
+  }
+  for (const forbidden of ["priority_top40", "previous_good", "runtime-session-history", "fugle_shared_source", "strategy2-ps1"]) {
+    if (scanner.includes(forbidden)) issues.push(`scanner_forbidden:${forbidden}`);
+    if (api.includes(forbidden)) issues.push(`api_forbidden:${forbidden}`);
+  }
+  for (const forbidden of ["v_strategy2_intraday_ready", "v_strategy2_latest_complete_run", "strategy2_scan_results", "priority_top40", "top40"]) {
+    if (sourceWriter.includes(forbidden)) issues.push(`source_writer_legacy_reference:${forbidden}`);
+  }
+  if (!sourceWriter.includes("fugle_websocket_candles_full_dynamic_mother_pool")) issues.push("source_writer_missing_full_mother_pool_mirror");
+  if (!runner.includes("check-market-calendar-action.js") || !runner.includes("--label=strategy2-live-v2")) issues.push("runner_missing_market_calendar_guard");
+  if (!desktop.includes("/api/strategy2-latest")) issues.push("desktop_missing_v2_strategy2_endpoint");
+  if (desktop.includes("strategy2-ps1-backtest")) issues.push("desktop_legacy_backtest_route_present");
+  if (!mobile.includes('tab === "strategy2"') || !mobile.includes("fetchStrategy2Internal")) issues.push("mobile_missing_v2_direct_read");
+  if (!mobile.includes('tab !== "ai" && tab !== "strategy2"')) issues.push("mobile_strategy2_html_snapshot_not_bypassed");
+  if (!scorecard.includes("strategy2_v2_not_formal_or_not_today_no_scorecard_records")) issues.push("scorecard_missing_v2_formal_gate");
+  if (!scorecard.includes("strategy2_v2_formal_scorecard_source")) issues.push("scorecard_missing_v2_formal_source_contract");
+  if (!genericLatest.includes("if (!DIRECT_AUTHORITATIVE_KEYS.has(key))")) issues.push("generic_api_may_read_legacy_strategy2_status");
+  if (!oldStream.includes("strategy2_stream_retired") || !oldStream.includes(CONTRACT)) issues.push("legacy_strategy2_stream_not_retired");
+  if (!retiredBacktest.includes("strategy2_ps1_backtest_retired") || !retiredBacktest.includes(CONTRACT)) issues.push("legacy_strategy2_backtest_not_retired");
+
+  const receipt = readJson(RECEIPT);
+  if (!receipt) issues.push("v2_receipt_missing");
+  if (receipt) {
+    if (receipt.strategyContract !== CONTRACT) issues.push("receipt_contract_mismatch");
+    if (receipt.dataDate !== taipeiDate()) issues.push("receipt_date_not_today");
+    if (!String(receipt.runId || "").startsWith("strategy2-v2-")) issues.push("receipt_runid_invalid");
+    if (receipt.fallbackUsed === true || receipt.previousGoodRunId) issues.push("receipt_old_fallback_detected");
+    if (Number(receipt.scannedCount || 0) + Number(receipt.dataGapCount || 0) !== Number(receipt.expectedCount || 0)) issues.push("receipt_full_scan_accounting_mismatch");
+    if (!diagnostic && receipt.status !== "complete") issues.push(`receipt_not_complete:${receipt.status || "missing"}`);
+    if (diagnostic && receipt.status !== "diagnostic_replay") issues.push(`receipt_not_diagnostic:${receipt.status || "missing"}`);
+    if (diagnostic && receipt.scorecardSnapshot?.skipped !== true) issues.push("diagnostic_must_not_write_scorecard");
+    if (!diagnostic && receipt.scorecardSnapshot?.ok !== true) issues.push("formal_scorecard_snapshot_missing");
+    if (Number(receipt.sourceCoverage?.eligibleMotherPoolRows || 0) !== Number(receipt.expectedCount || 0)) issues.push("eligible_mother_pool_count_mismatch");
+    if (Number(receipt.sourceCoverage?.intraday1mReadySymbols || 0) !== Number(receipt.scannedCount || 0)) issues.push("ready_1m_count_mismatch");
+  }
+
+  const endpoint = await callLocalApi();
+  if (endpoint.status !== 200) issues.push(`api_http_${endpoint.status}`);
+  const payload = endpoint.payload || {};
+  if (receipt?.runId && payload.runId !== receipt.runId) issues.push("api_runid_mismatch");
+  if (receipt?.dataDate && payload.dataDate !== receipt.dataDate) issues.push("api_date_mismatch");
+  if (payload.fallbackUsed === true || payload.previousGoodRunId) issues.push("api_old_fallback_detected");
+  if (payload.strategyContract !== CONTRACT) issues.push("api_contract_mismatch");
+  if (Number(payload.scannedCount || 0) + Number(payload.dataGapCount || 0) !== Number(payload.expectedCount || 0)) issues.push("api_full_scan_accounting_mismatch");
+
+  const terminalBundle = await callTerminalFastBundle();
+  const desktopPayload = Object.entries(terminalBundle.payload?.endpoints || {})
+    .find(([endpoint]) => String(endpoint).startsWith("/api/strategy2-latest"))?.[1] || null;
+  if (terminalBundle.status !== 200) issues.push(`desktop_fast_bundle_http_${terminalBundle.status}`);
+  if (!desktopPayload) issues.push("desktop_fast_bundle_strategy2_missing");
+  if (desktopPayload?.strategyContract !== CONTRACT) issues.push("desktop_fast_bundle_contract_mismatch");
+  if (receipt?.runId && desktopPayload?.runId !== receipt.runId) issues.push("desktop_fast_bundle_runid_mismatch");
+  if (receipt?.dataDate && desktopPayload?.dataDate !== receipt.dataDate) issues.push("desktop_fast_bundle_date_mismatch");
+  if (desktopPayload?.fallbackUsed === true || desktopPayload?.previousGoodRunId) issues.push("desktop_fast_bundle_old_fallback_detected");
+  if (receipt?.runId && desktopPayload?.terminalAuthority?.runId !== receipt.runId) issues.push("desktop_terminal_authority_runid_mismatch");
+  if (desktopPayload?.terminalAuthority?.fallback === true) issues.push("desktop_terminal_authority_old_fallback_detected");
+  if (String(desktopPayload?.terminalAuthority?.displayMode || "").includes("PREVIOUS_GOOD")) issues.push("desktop_terminal_authority_previous_good_mode_detected");
+  const mobileFragment = await callMobileFragment();
+  const mobileHtml = String(mobileFragment.payload || "");
+  if (mobileFragment.status !== 200) issues.push(`mobile_http_${mobileFragment.status}`);
+  if (receipt?.runId && !mobileHtml.includes(receipt.runId)) issues.push("mobile_runid_mismatch");
+  if (mobileHtml.includes("blocked_preserved") || mobileHtml.includes("strategy2-20260812-")) issues.push("mobile_old_strategy2_state_detected");
+  if (receipt?.status === "diagnostic_replay" && !mobileHtml.includes("V2_DIAGNOSTIC_VISIBLE_NOT_FORMAL")) issues.push("mobile_v2_diagnostic_authority_missing");
+
+  const scorecardResponse = await callScorecard();
+  const scorecardPayload = scorecardResponse.payload && typeof scorecardResponse.payload === "object" ? scorecardResponse.payload : {};
+  const scorecardReport = (Array.isArray(scorecardPayload.sourceReports) ? scorecardPayload.sourceReports : [])
+    .find((report) => String(report?.key || "").toLowerCase() === "strategy2") || null;
+  const visibleStrategy2Rows = (Array.isArray(scorecardPayload.records) ? scorecardPayload.records : [])
+    .filter((row) => String(row?.strategy || "") === "策略2成績單");
+  if (scorecardResponse.status !== 200) issues.push(`scorecard_http_${scorecardResponse.status}`);
+  if (!scorecardReport) issues.push("scorecard_strategy2_report_missing");
+  if (receipt?.runId && scorecardReport?.runId !== receipt.runId) issues.push("scorecard_runid_mismatch");
+  if (receipt?.dataDate && scorecardReport?.date !== receipt.dataDate) issues.push("scorecard_date_mismatch");
+  if (diagnostic && visibleStrategy2Rows.length) issues.push("diagnostic_old_strategy2_scorecard_rows_visible");
+  if (diagnostic && scorecardReport?.reason !== "strategy2_v2_not_formal_or_not_today_no_scorecard_records") issues.push("diagnostic_scorecard_reason_mismatch");
+  if (!diagnostic && scorecardReport?.ok !== true) issues.push("formal_scorecard_report_not_complete");
+  const backfill = readJson(path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy2-v2-fugle-backfill-${taipeiDate().replace(/-/g, "")}.json`));
+  if (diagnostic && backfill?.apply === true) {
+    if (Number(backfill.motherPoolSymbols || 0) !== Number(receipt?.expectedCount || 0)) issues.push("backfill_mother_pool_count_mismatch");
+    if (Number(backfill.readySymbols || 0) < Number(receipt?.scannedCount || 0)) issues.push("backfill_ready_coverage_below_scanned");
+    if (backfill.formalCandidateCreated || backfill.scorecardWritten) issues.push("backfill_must_remain_diagnostic_only");
+  }
+
+  const output = {
+    ok: issues.length === 0,
+    verifier: "verify-strategy2-live-v2-closure",
+    mode: diagnostic ? "diagnostic" : "formal",
+    checkedAt: new Date().toISOString(),
+    receipt: receipt ? {
+      status: receipt.status, dataDate: receipt.dataDate, runId: receipt.runId,
+      expectedCount: receipt.expectedCount, scannedCount: receipt.scannedCount,
+      resultCount: receipt.resultCount, dataGapCount: receipt.dataGapCount,
+      formalDisplayAllowed: receipt.formalDisplayAllowed,
+    } : null,
+    water: backfill ? {
+      diagnosticOnly: backfill.diagnosticOnly,
+      motherPoolSymbols: backfill.motherPoolSymbols,
+      readySymbols: backfill.readySymbols,
+      dataGapCount: backfill.dataGapCount,
+      rowsWritten: backfill.rowsWritten,
+    } : null,
+    surfaces: {
+      desktop: { status: terminalBundle.status, runId: desktopPayload?.runId || "", dataDate: desktopPayload?.dataDate || "", count: desktopPayload?.count || 0 },
+      mobile: { status: mobileFragment.status, matchedRunId: receipt?.runId ? mobileHtml.includes(receipt.runId) : false },
+      scorecard: {
+        status: scorecardResponse.status,
+        runId: scorecardReport?.runId || "",
+        date: scorecardReport?.date || "",
+        visibleStrategy2Rows: visibleStrategy2Rows.length,
+        reason: scorecardReport?.reason || "",
+      },
+    },
+    api: { status: endpoint.status, runId: payload.runId || "", dataDate: payload.dataDate || "", count: payload.count || 0, statusText: payload.status || "" },
+    issues,
+  };
+  console.log(JSON.stringify(output, null, 2));
+  if (issues.length) process.exit(1);
+})().catch((error) => {
+  console.error(JSON.stringify({ ok: false, verifier: "verify-strategy2-live-v2-closure", error: error?.message || String(error) }, null, 2));
+  process.exit(1);
+});
