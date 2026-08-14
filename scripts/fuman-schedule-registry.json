@@ -1064,6 +1064,19 @@
       "time": "every 5 minutes",
       "expectedState": "Disabled",
       "expectedTriggers": []
+    },
+    {
+      "taskName": "\\Fuman Strategy2 V2 Unattended",
+      "displayName": "Fuman Strategy2 V2 Unattended",
+      "description": "唯一正式 Strategy2 S4U runner：08:45 啟動 Fugle 動態 Mother Pool / quote observer，09:00-13:30 以當日正式 1 分 K LIVE scan；實際 task launch、receipt 與三端 closure 均須驗證。",
+      "time": "08:45-13:30 (交易日)",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:45"
+      ],
+      "runner": "run-strategy2-live-v2.ps1",
+      "sourceContract": "strategy2-live-v2-fugle-mother-pool-1m",
+      "unattendedStatus": "s4u_background_ready_with_launch_evidence"
     }
   ]
 }
