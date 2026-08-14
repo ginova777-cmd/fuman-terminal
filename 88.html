@@ -1123,9 +1123,11 @@ function sourceReportsStatus(payload) {
   const text = ordered.map((report) => {
     const key = report.key || report.strategy || report.label || "--";
     const runId = report.runId || report.run_id || "--";
+    const dataDate = report.dataDate || report.date || report.tradeDate || report.scanDate || report.sourceDate || "--";
+    const count = Number(report.resultCount ?? report.count ?? report.emittedRows ?? 0) || 0;
     const evidence = report.evidenceStatus || report.sourceEvidenceStatus || "--";
     const publish = report.publishAllowed === true ? "allowed" : report.publishAllowed === false ? "blocked" : "--";
-    return `${key}=${runId}｜evidence=${evidence}｜publish=${publish}`;
+    return `${key}=${runId}｜date=${dataDate}｜count=${count}｜evidence=${evidence}｜publish=${publish}`;
   }).join("；");
   const blocked = ordered.some((report) => report.evidenceStatus === "insufficient" || report.publishAllowed === false || report.blockedReason);
   return { qualityStatus: blocked ? "partial" : "complete", text };
