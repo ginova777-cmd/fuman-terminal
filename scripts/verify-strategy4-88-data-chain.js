@@ -2,6 +2,9 @@
 
 const fs = require("fs");
 const path = require("path");
+const { resolveProtectedReadbackCredential } = require("../lib/protected-readback-credential");
+
+let AUTH_BEARER = "";
 
 const BASE_URL = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const EXPECTED_RUN_ID = String(process.env.EXPECTED_STRATEGY4_RUN_ID || "").trim();
@@ -13,6 +16,8 @@ process.env.FUMAN_SCORECARD_LIVE_SNAPSHOT_READBACK ||= "1";
 process.env.FUMAN_DATA_DIR ||= "C:/fuman-runtime/data";
 process.env.FUMAN_CACHE_DIR ||= "C:/fuman-runtime/cache";
 process.env.FUMAN_STATE_DIR ||= "C:/fuman-runtime/state";
+// Internal closure readback must fan out to the freshly published protected route; public production remains membership-gated.
+process.env.FUMAN_TERMINAL_FAST_BUNDLE_LIVE_FANOUT = '1';
 
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, ""));
@@ -45,7 +50,7 @@ function responseCapture(resolve) {
 function callInternal(modulePath, url, query = {}) {
   return new Promise((resolve, reject) => {
     const handler = require(modulePath);
-    Promise.resolve(handler({ method: "GET", url, query, headers: { host: "localhost" }, fumanInternalVerify: true }, responseCapture(resolve))).catch(reject);
+    Promise.resolve(handler({ method: "GET", url, query, headers: { host: "localhost", ...(AUTH_BEARER ? { Authorization: "Bearer " + AUTH_BEARER } : {}) }, fumanInternalVerify: true }, responseCapture(resolve))).catch(reject);
   });
 }
 
@@ -64,11 +69,11 @@ function mobileRunId(text) {
   return String(text || "").match(/strategy4-\d{8}-\d{14}/)?.[0] || "";
 }
 
-async function fetchText(pathname, timeoutMs = 45000) {
+async function fetchText(pathname, timeoutMs = 45000, authenticated = false) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(`${BASE_URL}${pathname}`, { cache: "no-store", headers: { "Cache-Control": "no-cache" }, signal: controller.signal });
+    const response = await fetch(`${BASE_URL}${pathname}`, { cache: "no-store", headers: { "Cache-Control": "no-cache", ...(authenticated && AUTH_BEARER ? { Authorization: "Bearer " + AUTH_BEARER } : {}) }, signal: controller.signal });
     return { status: response.status, ok: response.ok, text: await response.text(), contentType: response.headers.get("content-type") || "" };
   } finally {
     clearTimeout(timer);
@@ -102,6 +107,9 @@ function addCheck(checks, ok, code, evidence = {}) {
 }
 
 async function main() {
+  const credential = await resolveProtectedReadbackCredential({ timeoutMs: 30000 });
+  if (credential?.ok && credential?.token) AUTH_BEARER = String(credential.token);
+  if (!AUTH_BEARER) throw new Error("strategy4_closure_authenticated_readback_credential_missing");
   const root = path.resolve(__dirname, "..");
   const terminalRoot = process.env.FUMAN_TERMINAL_ROOT || "C:/fuman-terminal";
   const modules = {
@@ -121,9 +129,11 @@ async function main() {
     callInternal(modules.scorecard, "/api/scorecard?t=1&refreshSourceReports=1&strictLiveReports=1&noCache=1", { t: "1", refreshSourceReports: "1", strictLiveReports: "1", noCache: "1" }),
     callInternal(modules.sourceReports, "/api/source-reports?live=1&refreshSourceReports=1&strictLiveReports=1", { live: "1", refreshSourceReports: "1", strictLiveReports: "1" }),
   ]);
-  const [prodBundle, prodLatest, prodMobile, prodScorecard, prodSourceReports, prod88] = await Promise.all([
+  const [prodBundle, prodAuthenticatedBundle, prodLatest, prodAuthenticatedLatest, prodMobile, prodScorecard, prodSourceReports, prod88] = await Promise.all([
     fetchText("/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=80&live=1"),
+    fetchText("/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=80&live=1", 45000, true),
     fetchText("/api/strategy4-latest?canvas=1&compact=1&shell=1&live=1&limit=70"),
+    fetchText("/api/strategy4-latest?canvas=1&compact=1&shell=1&live=1&limit=70", 45000, true),
     fetchText("/api/mobile-fragment?tab=strategy4&live=1"),
     fetchText("/api/scorecard?t=1"),
     fetchText("/api/source-reports?live=1"),
@@ -131,11 +141,14 @@ async function main() {
   ]);
 
   const bundleStrategy4 = strategy4FromBundle(bundle.payload);
+  const authenticatedBundleStrategy4 = strategy4FromBundle(parseJson(prodAuthenticatedBundle.text) || {});
+  const authenticatedLatestStrategy4 = parseJson(prodAuthenticatedLatest.text) || {};
   const scorecardStrategy4 = strategy4SourceRow(scorecard.payload);
   const sourceReportsStrategy4 = strategy4SourceRow(sourceReports.payload);
   const summaries = {
-    strategy4Latest: summarizeStrategy4(latest.payload),
-    terminalFastBundle: summarizeStrategy4(bundleStrategy4.payload || {}),
+    // The live protected endpoint is authoritative. Local invocation may be membership-redacted.
+    strategy4Latest: summarizeStrategy4(latest.payload?.runId ? latest.payload : authenticatedLatestStrategy4),
+    terminalFastBundle: summarizeStrategy4(bundleStrategy4.payload?.runId ? bundleStrategy4.payload : authenticatedBundleStrategy4.payload || {}),
     mobileFragment: { runId: mobileRunId(mobile.text), status: mobile.status },
     scorecard: summarizeStrategy4(scorecardStrategy4 || {}),
     sourceReports: summarizeStrategy4(sourceReportsStrategy4 || {}),
@@ -174,8 +187,8 @@ async function main() {
   addCheck(checks, summaries.strategy4Latest.fallbackUsed === false, "strategy4_latest_no_fallback", summaries.strategy4Latest);
   addCheck(checks, blankCountTotal(summaries.strategy4Latest.blankCounts) === 0, "strategy4_latest_blank_counts_zero", summaries.strategy4Latest.blankCounts);
   addCheck(checks, summaries.strategy4Latest.sampleMissingRows.length === 0, "strategy4_latest_sample_missing_rows_empty", summaries.strategy4Latest.sampleMissingRows);
-  addCheck(checks, summaries.terminalFastBundle.runId === runId, "terminal_fast_bundle_internal_run_id", { endpoint: bundleStrategy4.endpoint, ...summaries.terminalFastBundle });
-  addCheck(checks, summaries.terminalFastBundle.count === summaries.strategy4Latest.count && (!summaries.terminalFastBundle.resultCount || summaries.terminalFastBundle.resultCount === summaries.strategy4Latest.resultCount), "terminal_fast_bundle_counts", summaries.terminalFastBundle);
+  addCheck(checks, summaries.terminalFastBundle.runId === runId, "terminal_fast_bundle_authenticated_run_id", { endpoint: bundleStrategy4.endpoint || authenticatedBundleStrategy4.endpoint, ...summaries.terminalFastBundle });
+  addCheck(checks, summaries.terminalFastBundle.count === summaries.strategy4Latest.count && summaries.terminalFastBundle.resultCount === summaries.strategy4Latest.resultCount, "terminal_fast_bundle_authenticated_counts", summaries.terminalFastBundle);
   addCheck(checks, summaries.mobileFragment.runId === runId, "mobile_fragment_internal_run_id", summaries.mobileFragment);
   addCheck(checks, summaries.scorecard.runId === runId, "scorecard_source_row_internal_run_id", summaries.scorecard);
   addCheck(checks, summaries.sourceReports.runId === runId, "source_reports_internal_run_id", summaries.sourceReports);
@@ -214,7 +227,7 @@ async function main() {
     internalReadback: summaries,
     productionGuestReadback: {
       terminalFastBundle: { status: prodBundle.status, redacted: prodBundleRedacted },
-      strategy4Latest: { status: prodLatest.status, protected: prodProtected.strategy4Latest },
+      strategy4Latest: { status: prodLatest.status, protected: prodProtected.strategy4Latest, authenticatedStatus: prodAuthenticatedLatest.status, authenticatedRunId: summarizeStrategy4(authenticatedLatestStrategy4).runId },
       mobileFragment: { status: prodMobile.status, protected: prodProtected.mobileFragment },
       scorecard: { status: prodScorecard.status, protected: prodProtected.scorecard, publicRunAligned: prodProtected.scorecardPublicRunAligned, runId: prodScorecardStrategy4RunId },
       sourceReports: { status: prodSourceReports.status, protected: prodProtected.sourceReports, publicRunAligned: prodProtected.sourceReportsPublicRunAligned, runId: prodSourceReportsStrategy4RunId },

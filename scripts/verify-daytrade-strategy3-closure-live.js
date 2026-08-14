@@ -1,4 +1,5 @@
 const fs = require("fs");
+const { resolveProtectedReadbackCredential } = require("../lib/protected-readback-credential");
 const path = require("path");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
@@ -26,9 +27,10 @@ function localEnvironmentValue(...names) {
   return "";
 }
 
-const AUTH_BEARER = localEnvironmentValue("FUMAN_MOBILE_AUTH_BEARER", "FUMAN_PRODUCTION_BEARER");
+let AUTH_BEARER = localEnvironmentValue("FUMAN_MOBILE_AUTH_BEARER", "FUMAN_PRODUCTION_BEARER");
 const PRODUCTION_VERIFY_TOKEN = localEnvironmentValue("FUMAN_PRODUCTION_VERIFY_TOKEN");
-const REQUIRE_AUTHENTICATED_MOBILE = process.argv.includes("--require-authenticated-mobile");
+// A formal closure is only meaningful when the authenticated mobile fragment was read back.
+const REQUIRE_AUTHENTICATED_MOBILE = true;
 
 function numberValue(value, fallback = 0) {
   if (value === null || value === undefined || value === "") return fallback;
@@ -45,7 +47,7 @@ function taipeiDate() {
   const get = (type) => parts.find((part) => part.type === type)?.value || "";
   return get("year") + "-" + get("month") + "-" + get("day");
 }
-function dateOf(value) { const match = String(value || "").match(/\d{4}-\d{2}-\d{2}/); return match ? match[0] : ""; }
+function dateOf(value) { const text = String(value || ""); const iso = text.match(/\d{4}-\d{2}-\d{2}/); if (iso) return iso[0]; const compact = text.match(/\b(\d{4})(\d{2})(\d{2})\b/); return compact ? `${compact[1]}-${compact[2]}-${compact[3]}` : ""; }
 function htmlRunId(text) { const match = String(text || "").match(/data-run-id="([^"]+)"/i); return match ? match[1] : ""; }
 function htmlNumberAttribute(text, attribute) { const match = String(text || "").match(new RegExp(attribute + "=\\\"(\\d+)\\\"", "i")); return match ? numberValue(match[1]) : 0; }
 function htmlBooleanAttribute(text, attribute) { const match = String(text || "").match(new RegExp(attribute + "=\\\"([^\\\"]+)\\\"", "i")); return match ? match[1] === "1" : false; }
@@ -121,12 +123,16 @@ function apiSummary(response, fallbackCountKeys = ["count", "resultCount"]) {
 
 function snapshotSummary(response) {
   const json = response.json || {};
+  const strategy3Payload = Object.entries(json.endpoints || {}).find(([endpoint]) =>
+    new URL(String(endpoint || "/"), "https://fuman.local").pathname === "/api/strategy3-latest"
+  )?.[1] || {};
   return {
     status: response.status,
     ok: response.ok && !response.parseError,
     partial: Boolean(json.partial || json.isPartial),
     misses: Array.isArray(json.misses) ? json.misses : Array.isArray(json.missing) ? json.missing : [],
-    runId: json.strategy3?.runId || json.strategies?.strategy3?.runId || json.runId || "",
+    runId: strategy3Payload.runId || strategy3Payload.run_id || json.strategy3?.runId || json.strategies?.strategy3?.runId || json.runId || "",
+    resultCount: numberValue(strategy3Payload.resultCount ?? strategy3Payload.result_count ?? strategy3Payload.count),
     parseError: response.parseError || "",
   };
 }
@@ -201,6 +207,7 @@ function verify(summary) {
   const source = summary.sourceReports;
   const daytrade = summary.daytradeSource;
   const strategy3Report = summary.strategy3SourceReport;
+  const strategy3ScorecardRecord = summary.strategy3ScorecardRecord;
   const strategy3Api = summary.strategy3Api;
   const expectedTradeDate = summary.expectedTradeDate;
   const strategy3RunComplete =
@@ -211,66 +218,70 @@ function verify(summary) {
     strategy3Report.resultCount > 0 &&
     strategy3Report.expectedTotal > 0 &&
     strategy3Report.scannedCount === strategy3Report.expectedTotal;
-  const protectedStrategy3Api = strategy3Api.status === 401 && strategy3RunComplete;
-  const protectedMobileStrategy3 = summary.mobileStrategy3.status === 401 && strategy3RunComplete;
 
   if (!source.ok) issues.push("source_reports_http_" + source.status);
+  // Strategy3 closes against its own live source report. The aggregate /88 latestDate is not
+  // authoritative before the other scheduled modules have completed. Candidate membership and
+  // Fugle 1m provenance are verified by the dedicated Mother Pool and entry-evidence stages.
   if (dateOf(strategy3Report.scanDate) !== expectedTradeDate) issues.push("strategy3_scan_date_mismatch expected=" + expectedTradeDate + " actual=" + (strategy3Report.scanDate || "missing"));
-  if (!daytrade.ok && !strategy3RunComplete) issues.push("daytrade_source_report_not_ok");
-  const requireDaytradeSourceReport = daytrade.hasSourceReport || !strategy3RunComplete;
-  if (requireDaytradeSourceReport && daytrade.motherPoolSymbols <= 0) issues.push("mother_pool_symbols_" + daytrade.motherPoolSymbols + "_missing");
-  if (requireDaytradeSourceReport && !daytrade.formalScope) issues.push("formal_scope_missing");
-  if (requireDaytradeSourceReport && /top40/i.test(daytrade.formalScope)) issues.push("legacy_top40_formal_scope:" + daytrade.formalScope);
-  if (requireDaytradeSourceReport && daytrade.resultCount !== daytrade.readbackCount) issues.push("daytrade_readback_mismatch_" + daytrade.readbackCount + "_" + daytrade.resultCount);
   if (!strategy3Report.ok) issues.push("strategy3_source_report_not_ok");
-  if (!strategy3RunComplete && strategy3Report.evidenceStatus !== "complete") issues.push(`strategy3_source_evidence_${strategy3Report.evidenceStatus || "missing"}`);
-  if (!strategy3RunComplete && strategy3Report.unattendedStatus !== "YES") issues.push(`strategy3_source_unattended_${strategy3Report.unattendedStatus || "missing"}`);
-  if (!strategy3RunComplete && !boolValue(strategy3Report.publishAllowed)) issues.push("strategy3_source_publish_not_allowed");
+  if (strategy3Report.evidenceStatus !== "complete") issues.push(`strategy3_source_evidence_${strategy3Report.evidenceStatus || "missing"}`);
+  if (strategy3Report.unattendedStatus !== "YES") issues.push(`strategy3_source_unattended_${strategy3Report.unattendedStatus || "missing"}`);
+  if (!boolValue(strategy3Report.publishAllowed)) issues.push("strategy3_source_publish_not_allowed");
   if (strategy3Report.resultCount !== strategy3Report.readbackCount) issues.push(`strategy3_source_readback_mismatch_${strategy3Report.readbackCount}_${strategy3Report.resultCount}`);
 
-  if (!strategy3Api.ok && !protectedStrategy3Api) issues.push("strategy3_api_http_" + strategy3Api.status);
+  if (!strategy3Api.ok) issues.push("strategy3_api_http_" + strategy3Api.status);
   if (strategy3Api.ok && strategy3Api.runId !== strategy3Report.runId) issues.push("strategy3_api_runId_mismatch api=" + (strategy3Api.runId || "missing") + " published=" + strategy3Report.runId);
   if (strategy3Api.ok && strategy3Api.resultCount !== strategy3Report.resultCount) issues.push("strategy3_api_count_mismatch api=" + strategy3Api.resultCount + " published=" + strategy3Report.resultCount);
-  if (!protectedStrategy3Api && strategy3Api.evidenceStatus !== "complete") issues.push("strategy3_api_evidence_" + (strategy3Api.evidenceStatus || "missing"));
-  if (!protectedStrategy3Api && strategy3Api.unattendedStatus !== "YES") issues.push("strategy3_api_unattended_" + (strategy3Api.unattendedStatus || "missing"));
-  if (!protectedStrategy3Api && !boolValue(strategy3Api.publishAllowed)) issues.push("strategy3_api_publish_not_allowed");
-  if (!protectedStrategy3Api && strategy3Api.resultCount !== strategy3Api.readbackCount) issues.push("strategy3_api_readback_mismatch_" + strategy3Api.readbackCount + "_" + strategy3Api.resultCount);
+  if (strategy3Api.evidenceStatus !== "complete") issues.push("strategy3_api_evidence_" + (strategy3Api.evidenceStatus || "missing"));
+  if (strategy3Api.unattendedStatus !== "YES") issues.push("strategy3_api_unattended_" + (strategy3Api.unattendedStatus || "missing"));
+  if (!boolValue(strategy3Api.publishAllowed)) issues.push("strategy3_api_publish_not_allowed");
+  if (strategy3Api.resultCount !== strategy3Api.readbackCount) issues.push("strategy3_api_readback_mismatch_" + strategy3Api.readbackCount + "_" + strategy3Api.resultCount);
   for (const [name, surface] of Object.entries(summary.surfaces)) {
-    const terminalFastBundle = summary.surfaces.terminalFastBundle || {};
-    const protectedDesktopSnapshotShell =
-      name === "desktopRouteSnapshot" &&
-      strategy3RunComplete &&
-      surface.status === 200 &&
-      terminalFastBundle.ok === true &&
-      (!terminalFastBundle.runId || terminalFastBundle.runId === strategy3Report.runId);
     if (!surface.ok) issues.push(`${name}_not_ok`);
-    if (!protectedDesktopSnapshotShell && Array.isArray(surface.misses) && surface.misses.length) issues.push(`${name}_misses_${surface.misses.join(",")}`);
-    if (!protectedDesktopSnapshotShell && surface.partial) issues.push(`${name}_partial_true`);
+    if (Array.isArray(surface.misses) && surface.misses.length) issues.push(`${name}_misses_${surface.misses.join(",")}`);
+    if (surface.partial) issues.push(`${name}_partial_true`);
+    if (surface.runId !== strategy3Report.runId) issues.push(`${name}_runId_mismatch surface=${surface.runId || "missing"} published=${strategy3Report.runId}`);
+    if (surface.resultCount !== strategy3Report.resultCount) issues.push(`${name}_count_mismatch surface=${surface.resultCount} published=${strategy3Report.resultCount}`);
   }
 
-  if (!summary.scorecard.ok && !(summary.scorecard.status === 401 && (summary.scorecardHealth.ok || strategy3RunComplete))) issues.push(`scorecard_http_${summary.scorecard.status}`);
-  if (!summary.scorecardHealth.ok && !strategy3RunComplete) issues.push(`scorecard_health_not_ok:${summary.scorecardHealth.issues.join(",") || summary.scorecardHealth.status}`);
+  if (!summary.scorecard.ok) issues.push(`scorecard_http_${summary.scorecard.status}`);
+  // Per-strategy /88 source report is the formal scorecard leg; aggregate scorecard health
+  // remains a separate end-of-day operation and must not invalidate this completed run.
+  if (dateOf(strategy3ScorecardRecord.scanDate) !== expectedTradeDate) issues.push(`scorecard_strategy3_date_mismatch expected=${expectedTradeDate} actual=${strategy3ScorecardRecord.scanDate || "missing"}`);
+  if (strategy3ScorecardRecord.runId !== strategy3Report.runId) issues.push(`scorecard_strategy3_runId_mismatch scorecard=${strategy3ScorecardRecord.runId || "missing"} published=${strategy3Report.runId}`);
+  if (strategy3ScorecardRecord.resultCount !== strategy3Report.resultCount) issues.push(`scorecard_strategy3_count_mismatch scorecard=${strategy3ScorecardRecord.resultCount} published=${strategy3Report.resultCount}`);
   if (!summary.page88.ok) issues.push(`page88_http_${summary.page88.status}`);
   if (!summary.desktopHome.ok) issues.push(`desktop_home_http_${summary.desktopHome.status}`);
   if (!summary.desktopHome.markerFound) issues.push("desktop_home_strategy3_ui_marker_missing");
   if (!summary.mobileBoot.ok) issues.push(`mobile_boot_http_${summary.mobileBoot.status}`);
-  if (REQUIRE_AUTHENTICATED_MOBILE && !AUTH_BEARER && !PRODUCTION_VERIFY_TOKEN) issues.push("mobile_authenticated_verification_credential_missing");
-  if (REQUIRE_AUTHENTICATED_MOBILE && summary.mobileStrategy3.status !== 200) issues.push("mobile_strategy3_authenticated_http_" + summary.mobileStrategy3.status);
-  if (!REQUIRE_AUTHENTICATED_MOBILE && !summary.mobileStrategy3.ok && !protectedMobileStrategy3) issues.push(`mobile_strategy3_http_${summary.mobileStrategy3.status}`);
+  if (!AUTH_BEARER && !PRODUCTION_VERIFY_TOKEN) issues.push("mobile_authenticated_verification_credential_missing");
+  if (summary.mobileStrategy3.status !== 200) issues.push("mobile_strategy3_authenticated_http_" + summary.mobileStrategy3.status);
+  if (!summary.mobileStrategy3.ok) issues.push(`mobile_strategy3_http_${summary.mobileStrategy3.status}`);
   if (summary.mobileStrategy3.ok && summary.mobileStrategy3.runId !== strategy3Report.runId) issues.push("mobile_strategy3_runId_mismatch mobile=" + (summary.mobileStrategy3.runId || "missing") + " published=" + strategy3Report.runId);
-  if (REQUIRE_AUTHENTICATED_MOBILE && summary.mobileStrategy3.count !== strategy3Report.resultCount) issues.push("mobile_strategy3_count_mismatch mobile=" + summary.mobileStrategy3.count + " published=" + strategy3Report.resultCount);
-  if (REQUIRE_AUTHENTICATED_MOBILE && !summary.mobileStrategy3.formalDisplayAllowed) issues.push("mobile_strategy3_formal_display_not_allowed");
+  if (summary.mobileStrategy3.count !== strategy3Report.resultCount) issues.push("mobile_strategy3_count_mismatch mobile=" + summary.mobileStrategy3.count + " published=" + strategy3Report.resultCount);
+  if (!summary.mobileStrategy3.formalDisplayAllowed) issues.push("mobile_strategy3_formal_display_not_allowed");
 
   return {
     ok: issues.length === 0,
     issues,
     computationClosureOk: strategy3RunComplete,
-    protectedDisplayOk: protectedStrategy3Api && protectedMobileStrategy3,
+    authenticatedDisplayOk: strategy3Api.ok && summary.mobileStrategy3.ok,
   };
 }
 
+async function armAuthenticatedMobileReadback() {
+  if (AUTH_BEARER) return { ok: true, source: "environment" };
+  const credential = await resolveProtectedReadbackCredential({ timeoutMs: TIMEOUT_MS });
+  if (credential?.ok && credential?.token) {
+    AUTH_BEARER = String(credential.token);
+    return { ok: true, source: credential.source || "protected-readback-credential" };
+  }
+  return { ok: false, source: credential?.source || "none", reason: credential?.reason || "credential_not_armed" };
+}
 async function main() {
-  const sourceReportsResponse = await fetchJson("/api/source-reports");
+  const protectedReadback = await armAuthenticatedMobileReadback();
+  const sourceReportsResponse = await fetchJson("/api/source-reports?live=1&refreshSourceReports=1&strictLiveReports=1");
   await sleep(250);
   const strategy3ApiResponse = await fetchJson("/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=120&live=1");
   await sleep(250);
@@ -282,7 +293,7 @@ async function main() {
   await sleep(250);
   const mobileStrategy3Response = await fetchText("/api/mobile-fragment?tab=strategy3&verify=1");
   await sleep(250);
-  const scorecardResponse = await fetchJson("/api/scorecard");
+  const scorecardResponse = await fetchJson("/api/scorecard?live=1&refreshSourceReports=1&strictLiveReports=1&noCache=1");
   await sleep(250);
   const scorecardHealthResponse = await fetchJson("/api/scorecard-health");
   await sleep(250);
@@ -353,6 +364,13 @@ async function main() {
     },
     daytradeSource,
     strategy3SourceReport,
+    strategy3ScorecardRecord: {
+      ok: strategy3Raw.ok === true,
+      runId: strategy3Raw.runId || "",
+      scanDate: strategy3Raw.date || strategy3Raw.tradeDate || strategy3Raw.sourceDate || "",
+      resultCount: numberValue(strategy3Raw.resultCount ?? strategy3Raw.count),
+      readbackCount: numberValue(strategy3Raw.readbackCount ?? strategy3Raw.emittedRows ?? strategy3Raw.count),
+    },
     strategy3LatestRun,
     strategy3Api: apiSummary(strategy3ApiResponse),
     surfaces: {
