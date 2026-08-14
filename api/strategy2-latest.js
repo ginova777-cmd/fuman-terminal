@@ -2,6 +2,7 @@
 
 const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const { readSnapshot } = require("../lib/supabase-snapshots");
+const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 
 const SNAPSHOT_KEY = "strategy2_live_v2";
 const CONTRACT = "strategy2-live-v2-fugle-mother-pool-1m";
@@ -60,6 +61,11 @@ function emptyPayload(today, reason) {
 
 async function strategy2Latest(request, response) {
   cacheHeaders(response);
+  wrapJsonRunTimeSourceEvidence(response, {
+    strategy: "strategy2",
+    endpoint: "api/strategy2-latest",
+    evidenceStatusOnQualityFail: "insufficient",
+  });
   const today = taipeiDate();
   const query = request.query || {};
   const snapshot = await readSnapshot(SNAPSHOT_KEY, { tradeDate: today.replace(/\D/g, ""), allowLatestFallback: false, timeoutMs: 7000 });
