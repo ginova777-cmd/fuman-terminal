@@ -1528,3 +1528,93 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
 
 
 
+
+
+;(function installStrategySameDayDisplayCache(){
+  if(window.__fumanStrategySameDayDisplayCache==="20260815-01")return;
+  window.__fumanStrategySameDayDisplayCache="20260815-01";
+  const PREFIX="fuman_strategy_display_cache_v1";
+  const rowsOf=value=>typeof normalizeArray==="function"?normalizeArray(value):Array.isArray(value)?value:[];
+  const digits=value=>String(value??"").replace(/\D/g,"").slice(0,8);
+  const taipeiDate=()=>{
+    try{
+      const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());
+      const byType=Object.fromEntries(parts.map(part=>[part.type,part.value]));
+      return String(byType.year||"")+String(byType.month||"")+String(byType.day||"");
+    }catch(error){return digits(new Date().toISOString())}
+  };
+  const dateFromRunId=runId=>digits(String(runId||"").match(/20\d{6}/)?.[0]||"");
+  const sameToday=value=>digits(value)===taipeiDate();
+  const cacheKey=name=>PREFIX+":"+name;
+  function read(name){
+    try{
+      const cached=JSON.parse(localStorage.getItem(cacheKey(name))||"null");
+      if(!cached||cached.tradeDate!==taipeiDate()||!cached.runId||!Array.isArray(cached.rows)||!cached.rows.length){
+        localStorage.removeItem(cacheKey(name));
+        return null;
+      }
+      return cached;
+    }catch(error){return null}
+  }
+  function write(name,value){
+    try{localStorage.setItem(cacheKey(name),JSON.stringify(value))}catch(error){}
+  }
+  function markVerifying(label,cached){
+    if(!isViewActive?.("strategy")||!strategySummary)return;
+    strategySummary.dataset.fumanDisplayCache="same-day-verifying";
+    strategySummary.textContent=label+"｜同日已驗證快取｜runId="+cached.runId+"｜背景驗證中";
+  }
+  function clearVerifying(){
+    if(strategySummary?.dataset?.fumanDisplayCache==="same-day-verifying")delete strategySummary.dataset.fumanDisplayCache;
+  }
+  function payloadDate(payload,runId){
+    return digits(payload?.usedDate||payload?.tradeDate||payload?.date||payload?.quoteDate)||dateFromRunId(runId);
+  }
+
+  const originalStrategy3Loader=typeof loadStrategy3Cache==="function"?loadStrategy3Cache:null;
+  if(originalStrategy3Loader){
+    loadStrategy3Cache=async function(force=false){
+      const cached=!force?read("strategy3"):null;
+      if(cached&&!rowsOf(strategy3Data).length){
+        strategy3Data=rowsOf(cached.rows);
+        const updatedAt=Date.parse(cached.updatedAt||"");
+        strategy3UpdatedAt=Number.isFinite(updatedAt)?updatedAt:Date.now();
+        if(typeof strategy3UsedDateKey!=="undefined")strategy3UsedDateKey=cached.tradeDate;
+        window.__fumanStrategy3FormalPayload=cached.payload||window.__fumanStrategy3FormalPayload;
+        renderStrategyScanner?.();
+        markVerifying("隔日沖",cached);
+      }
+      const result=await originalStrategy3Loader.call(this,force);
+      const payload=result&&typeof result==="object"?result:window.__fumanStrategy3FormalPayload;
+      const rows=rowsOf(payload?.matches||payload?.rows||strategy3Data);
+      const runId=String(payload?.runId||payload?.run_id||payload?.transport?.runId||"");
+      const tradeDate=payloadDate(payload,runId);
+      if(sameToday(tradeDate)&&runId&&rows.length){
+        write("strategy3",{tradeDate,runId,updatedAt:payload?.updatedAt||payload?.generatedAt||new Date().toISOString(),rows,payload});
+      }
+      clearVerifying();
+      return result;
+    };
+  }
+
+  const originalStrategy4Loader=typeof loadStrategy4Cache==="function"?loadStrategy4Cache:null;
+  if(originalStrategy4Loader){
+    loadStrategy4Cache=async function(force=false,allowFullFallback=false){
+      const cached=!force?read("strategy4"):null;
+      if(cached&&!Object.keys(strategy4ScanMatches||{}).length){
+        mergeStrategy4Cache?.({runId:cached.runId,updatedAt:cached.updatedAt,total:cached.total,scannedCodes:cached.scannedCodes,matches:cached.rows});
+        renderStrategyScanner?.();
+        markVerifying("波段",cached);
+      }
+      const result=await originalStrategy4Loader.call(this,force,allowFullFallback);
+      const rows=rowsOf(Object.values(strategy4ScanMatches||{}));
+      const runId=String(strategy4ApiRunId||"");
+      const tradeDate=dateFromRunId(runId);
+      if(sameToday(tradeDate)&&/^strategy4-/i.test(runId)&&rows.length){
+        write("strategy4",{tradeDate,runId,updatedAt:new Date(strategy4ScanLastAt||Date.now()).toISOString(),total:strategy4ScanTotal,scannedCodes:[...(strategy4ScannedCodes||[])],rows});
+      }
+      clearVerifying();
+      return result;
+    };
+  }
+})();
