@@ -394,8 +394,7 @@
     "strategy2:v2:diagnostic": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-strategy2-live-v2.ps1 -DiagnosticReplay",
     "strategy2:v2:backfill-diagnostic": "node --use-system-ca scripts/backfill-strategy2-v2-fugle-candles.js --apply",
     "verify:strategy2-v2-closure": "node --use-system-ca scripts/verify-strategy2-live-v2-closure.js",
-    "verify:strategy2-v2-schedule": "node scripts/verify-strategy2-v2-schedule.js",
-    "verify:terminal-egress-guard": "node scripts/verify-terminal-egress-guard.js"
+    "verify:strategy2-v2-schedule": "node scripts/verify-strategy2-v2-schedule.js"
   },
   "engines": {
     "node": "24.x"
