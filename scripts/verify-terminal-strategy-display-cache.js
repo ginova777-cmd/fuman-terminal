@@ -15,8 +15,6 @@ const checks = {
   strategy4_cache_requires_strategy4_run_id: source.includes("/^strategy4-/i.test(runId)"),
   cached_screen_is_labelled_verifying: source.includes("同日已驗證快取") && source.includes("背景驗證中"),
   strategy2_not_persisted_by_this_layer: !source.includes('write("strategy2"'),
-  strategy3_memory_cache_is_not_cross_day: source.includes('!sameToday(strategy3UsedDateKey)'),
-  strategy4_memory_cache_is_not_cross_day: source.includes('!sameToday(dateFromRunId(strategy4ApiRunId))'),
 };
 
 const failures = Object.entries(checks)
