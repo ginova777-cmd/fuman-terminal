@@ -395,8 +395,7 @@
     "strategy2:v2:backfill-diagnostic": "node --use-system-ca scripts/backfill-strategy2-v2-fugle-candles.js --apply",
     "verify:strategy2-v2-closure": "node --use-system-ca scripts/verify-strategy2-live-v2-closure.js",
     "verify:strategy2-v2-schedule": "node scripts/verify-strategy2-v2-schedule.js",
-    "verify:terminal-egress-guard": "node scripts/verify-terminal-egress-guard.js",
-    "verify:terminal-strategy-display-cache": "node scripts/verify-terminal-strategy-display-cache.js"
+    "verify:terminal-egress-guard": "node scripts/verify-terminal-egress-guard.js"
   },
   "engines": {
     "node": "24.x"
