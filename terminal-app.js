@@ -1575,7 +1575,12 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   if(originalStrategy3Loader){
     loadStrategy3Cache=async function(force=false){
       const cached=!force?read("strategy3"):null;
-      if(cached&&!rowsOf(strategy3Data).length){
+      if(!cached&&typeof strategy3UsedDateKey!=="undefined"&&strategy3UsedDateKey&&!sameToday(strategy3UsedDateKey)){
+        strategy3Data=[];
+        strategy3UpdatedAt=0;
+        renderStrategyScanner?.();
+      }
+      if(cached){
         strategy3Data=rowsOf(cached.rows);
         const updatedAt=Date.parse(cached.updatedAt||"");
         strategy3UpdatedAt=Number.isFinite(updatedAt)?updatedAt:Date.now();
@@ -1601,7 +1606,15 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   if(originalStrategy4Loader){
     loadStrategy4Cache=async function(force=false,allowFullFallback=false){
       const cached=!force?read("strategy4"):null;
-      if(cached&&!Object.keys(strategy4ScanMatches||{}).length){
+      if(!cached&&strategy4ApiRunId&&!sameToday(dateFromRunId(strategy4ApiRunId))){
+        strategy4ScanMatches={};
+        strategy4ScannedCodes=new Set();
+        strategy4ScanTotal=0;
+        strategy4ScanLastAt=0;
+        strategy4ApiRunId="";
+        renderStrategyScanner?.();
+      }
+      if(cached){
         mergeStrategy4Cache?.({runId:cached.runId,updatedAt:cached.updatedAt,total:cached.total,scannedCodes:cached.scannedCodes,matches:cached.rows});
         renderStrategyScanner?.();
         markVerifying("波段",cached);
