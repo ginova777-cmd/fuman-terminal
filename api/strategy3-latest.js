@@ -1,6 +1,11 @@
 "use strict";
 
 const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
+const {
+  taipeiDate,
+  readJson,
+  scanReceiptPath,
+} = require("../scripts/strategy3-v2-contract");
 
 const STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS = Number(
   process.env.STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS
@@ -8,8 +13,6 @@ const STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS = Number(
     || 2500
 );
 
-// Keep the existing handler implementation, but rewrite only its diagnostic
-// source-status probe to the dedicated daytrade source before loading it.
 if (typeof globalThis.fetch === "function" && !globalThis.__fumanStrategy3DedicatedSourceFetch) {
   const nativeFetch = globalThis.fetch.bind(globalThis);
   const legacySource = ["fugle", "shared", "source"].join("_");
@@ -29,11 +32,37 @@ if (typeof globalThis.fetch === "function" && !globalThis.__fumanStrategy3Dedica
 }
 
 const legacyHandler = require("./strategy3-latest.shared-probe-legacy.js");
+const strategy3V2Latest = require("./strategy3-v2-latest.js");
+
+function requestQuery(request) {
+  if (request?.query && typeof request.query === "object") return request.query;
+  try {
+    const url = new URL(request?.url || "", "https://fuman-terminal.local");
+    return Object.fromEntries(url.searchParams.entries());
+  } catch {
+    return {};
+  }
+}
+
+function shouldUseStrategy3V2(request) {
+  const query = requestQuery(request);
+  if (String(query.legacy || query.v1 || "").trim() === "1") return false;
+  const date = String(query.date || taipeiDate()).replace(/\D/g, "").slice(0, 8);
+  const receipt = readJson(scanReceiptPath(date), null);
+  return receipt?.ok === true && String(receipt?.status || "").toUpperCase() === "COMPLETE";
+}
 
 module.exports = async function strategy3LatestWithEvidence(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
   response.setHeader("Vercel-CDN-Cache-Control", "no-store");
+  if (shouldUseStrategy3V2(request)) {
+    const result = await strategy3V2Latest(request, response);
+    response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
+    response.setHeader("CDN-Cache-Control", "no-store");
+    response.setHeader("Vercel-CDN-Cache-Control", "no-store");
+    return result;
+  }
   wrapJsonRunTimeSourceEvidence(response, {
     strategy: "strategy3",
     endpoint: "api/strategy3-latest",
@@ -47,3 +76,4 @@ module.exports = async function strategy3LatestWithEvidence(request, response) {
 };
 
 Object.assign(module.exports, legacyHandler);
+module.exports.STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS = STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS;
