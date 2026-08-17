@@ -14,7 +14,6 @@ const viewPanels = {
   market: document.querySelector("#market-view"),
   strategy: document.querySelector("#strategy-view"),
   "chip-trade": document.querySelector("#chip-trade-view"),
-  "warrant-flow": document.querySelector("#warrant-flow-view"),
 };
 let strategyCards = [...document.querySelectorAll(".strategy-card[data-strategy]")];
 const strategyTable = document.querySelector("#strategy-table");
@@ -1264,10 +1263,7 @@ function runMobileAutoOrganize() {
     loadChipTradeData();
     return;
   }
-  if (active === "warrant-flow") {
-    loadWarrantFlow(true);
-    return;
-  }
+  if (active === "warrant-flow") return;
   renderWatchlist?.();
   refreshSelectedWatchlistQuote?.();
 }
@@ -1316,7 +1312,6 @@ function applyStaticTitleIcons() {
   }
   setTitleWithSchedule(document.querySelector("#watchlist-view .page-header h1"), "☆", "自選股", "watchlist");
   setTitleWithSchedule(document.querySelector("#chip-trade-view .page-header h1"), "◆", "外資 + 投信連買", "chip");
-  setTitleWithSchedule(document.querySelector("#warrant-flow-view .page-header h1"), "◒", "權證走向", "warrant");
 }
 
 function escapeAttr(value) {
@@ -1409,7 +1404,6 @@ const endpoints = {
   realtime: "/api/realtime",
   scanOpenBuy: "/api/scan-open-buy",
   scanStrategy4: "/api/scan-strategy4",
-  scanWarrantFlow: "/api/scan-warrant-flow",
   exportAuth: "/api/export-auth",
   openBuyCache: "/api/open-buy-latest",
   openBuyBackup: "",
@@ -1421,7 +1415,6 @@ const endpoints = {
   strategy5Backup: "",
   institutionCache: "/api/institution-latest",
   institutionBackup: "",
-  warrantFlowCache: "/api/warrant-flow-latest",
   warrantFlowBackup: "",
   strategyStocks: "/api/stocks",
   stocks: "https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL",
@@ -1530,7 +1523,6 @@ let warrantFlowKeyword = "";
 let warrantFlowSearchTimer = null;
 let warrantFlowPage = 1;
 let chipTradePage = 1;
-const WARRANT_FLOW_LOCAL_CACHE_KEY = "fuman_warrant_flow_cache_v1";
 const CACHE_FRESH_MS = 10 * 60 * 1000;
 const MARKET_REFRESH_MS = 30 * 1000;
 const MARKET_REFRESH_HIDDEN_MS = 90 * 1000;
@@ -1999,29 +1991,9 @@ function hasFreshWarrantFlow() {
   return warrantFlowData.length > 0 && warrantFlowUpdatedAt && (Date.now() - warrantFlowUpdatedAt) < CACHE_FRESH_MS;
 }
 
-function saveWarrantFlowLocalCache() {
-  try {
-    if (!warrantFlowData.length) return;
-    localStorage.setItem(WARRANT_FLOW_LOCAL_CACHE_KEY, JSON.stringify({
-      source: "github-actions",
-      updatedAt: warrantFlowUpdatedAt || Date.now(),
-      matches: warrantFlowData,
-    }));
-  } catch (error) {}
-}
+function saveWarrantFlowLocalCache() { return false; }
 
-function loadWarrantFlowLocalCache() {
-  try {
-    const payload = JSON.parse(localStorage.getItem(WARRANT_FLOW_LOCAL_CACHE_KEY) || "{}");
-    if (!String(payload.source || "").includes("github-actions")) return false;
-    if (!Array.isArray(payload.matches) || !payload.matches.length) return false;
-    warrantFlowData = payload.matches;
-    warrantFlowUpdatedAt = cleanNumber(payload.updatedAt) || Date.now();
-    return true;
-  } catch (error) {
-    return false;
-  }
-}
+function loadWarrantFlowLocalCache() { return false; }
 
 function showExportNotice(message) {
   if (terminalMessage) terminalMessage.textContent = message;
@@ -5899,124 +5871,9 @@ function getWarrantPriorityRows() {
   return warrantFlowPriorityCache;
 }
 
-function renderWarrantFlow() {
-  const panel = viewPanels["warrant-flow"];
-  if (!panel) return;
-  const keyword = warrantFlowKeyword.trim().toLowerCase();
-  const allRows = getWarrantPriorityRows();
-  const filteredRows = keyword
-    ? allRows.filter((item) =>
-      item.code.includes(keyword) ||
-      item.name.toLowerCase().includes(keyword) ||
-      item.underlyingName.toLowerCase().includes(keyword))
-    : allRows;
-  const pageSize = 10;
-  const pageCount = Math.max(1, Math.ceil(filteredRows.length / pageSize));
-  warrantFlowPage = Math.min(Math.max(1, warrantFlowPage), pageCount);
-  const pageStart = (warrantFlowPage - 1) * pageSize;
-  const rows = filteredRows.slice(pageStart, pageStart + pageSize);
-  const listLabel = keyword
-    ? `搜尋結果 ${filteredRows.length} 筆｜第 ${warrantFlowPage}/${pageCount} 頁`
-    : `優先區權證 ${allRows.length} 筆｜第 ${warrantFlowPage}/${pageCount} 頁`;
-  const helperText = keyword
-    ? "搜尋只查優先區權證候選；不在優先區的 A 級權證已剔除。"
-    : "只顯示優先區：A級、認購熱、認售低、價平/價內足夠，且股票未過熱。";
-  const pagination = buildTerminalPagination("warrant", warrantFlowPage, pageCount, filteredRows.length);
-  const renderSignature = `${warrantFlowUpdatedAt || 0}:${keyword}:${warrantFlowPage}:${filteredRows.length}:${rows.map((item) => `${item.code}:${item.rank}:${item.priority.score}`).join("|")}`;
-  if (renderSignature === warrantFlowLastRenderSignature) return;
-  warrantFlowLastRenderSignature = renderSignature;
+function renderWarrantFlow() { return; }
 
-  const body = rows.length ? rows.map((item) => {
-    const sign = item.stockPercent >= 0 ? "+" : "";
-    const hot = item.score >= 82 ? "hot" : item.score >= 68 ? "mid" : "low";
-    return `
-      <tr>
-        <td><span class="swing-score">${item.rank || "--"}</span></td>
-        <td><span class="code">${item.code || "--"}</span></td>
-        <td>${item.name}</td>
-        <td class="price">${formatNumber(item.stockClose, item.stockClose >= 100 ? 0 : 2)}</td>
-        <td class="price">${formatWarrantMoney(item.callValue)}</td>
-        <td>${formatWarrantMoney(item.putValue)}</td>
-        <td><b class="swing-stage ${hot}">${item.callPutRatio >= 99 ? "99+" : item.callPutRatio}</b></td>
-        <td>${item.callCount} / ${item.putCount}</td>
-        <td>${item.reason}　判斷：${item.priority.label}。</td>
-      </tr>
-    `;
-  }).join("") : `
-    <tr><td colspan="9">${keyword ? "優先區名單內找不到這檔股票；代表目前 A 級權證尚未進優先觀察區。" : "權證資金走向讀取中。只顯示優先區權證候選。"}</td></tr>
-  `;
-
-  panel.innerHTML = `
-    <section class="swing-dashboard">
-      <div class="swing-topbar">
-        <div>
-          <h2 data-warrant-refresh title="重新整理權證資金走向">${titleWithSchedule("◒", "策略6：權證資金走向", "warrant")}</h2>
-          <p>${helperText}</p>
-        </div>
-        <div class="swing-controls">
-          <label>更新模式：<select><option>每日 06:00 / 21:00 完整掃</option></select></label>
-          <label>模式：<select><option>權證先熱股票未噴</option></select></label>
-        </div>
-      </div>
-      <section class="swing-panel">
-        <div class="swing-tabs">
-          <button class="active" type="button" data-warrant-refresh>${listLabel}</button>
-          <div class="swing-actions warrant-search-box">
-            <small class="warrant-search-hint">🔥 可搜尋全台股票權證熱度</small>
-            <div class="warrant-search-row">
-              <input id="warrant-flow-search" type="search" placeholder="搜尋股票代號/名稱" value="${escapeAttr(warrantFlowKeyword)}" data-warrant-flow-search>
-              <button id="warrant-flow-refresh" type="button" data-warrant-refresh>重新整理</button>
-            </div>
-          </div>
-        </div>
-        <table class="swing-table">
-          <thead>
-            <tr>
-              <th>排名</th><th>股票代號</th><th>標的名稱</th><th>收盤價</th><th>認購金額</th><th>認售金額</th><th>購/售比</th><th>購/售檔數</th><th>原因</th>
-            </tr>
-          </thead>
-          <tbody>${body}</tbody>
-        </table>
-        ${pagination}
-      </section>
-    </section>
-  `;
-}
-
-async function loadWarrantFlow(force = false) {
-  if (warrantFlowLoading) return;
-  if (!warrantFlowData.length) {
-    loadWarrantFlowLocalCache();
-  }
-  warrantFlowLoading = true;
-  const panel = viewPanels["warrant-flow"];
-  if (panel && !warrantFlowData.length) {
-    panel.innerHTML = `<div class="empty-state">正在讀取權證資金走向...</div>`;
-  }
-  try {
-    if (!latestStocks.length) loadStrategyStocks();
-    let payload = await fetchJson(`${endpoints.warrantFlowCache}?t=${Date.now()}`, 10000);
-    const cachedMatches = normalizeArray(payload?.matches);
-    if (!normalizeArray(payload?.matches).length) {
-      payload = await fetchJson(`${endpoints.warrantFlowBackup}?t=${Date.now()}`, 10000);
-    }
-    warrantFlowData = normalizeArray(payload.matches);
-    warrantFlowPrioritySignature = "";
-    warrantFlowLastRenderSignature = "";
-    warrantFlowPage = 1;
-    const updatedAt = Date.parse(payload?.updatedAt || "");
-    warrantFlowUpdatedAt = Number.isFinite(updatedAt) ? updatedAt : Date.now();
-    saveWarrantFlowLocalCache();
-    applyStaticTitleIcons();
-    renderWarrantFlow();
-  } catch (error) {
-    if (panel && !warrantFlowData.length) {
-      panel.innerHTML = `<div class="empty-state">權證資料暫時讀取失敗，請稍後再試。</div>`;
-    }
-  } finally {
-    warrantFlowLoading = false;
-  }
-}
+async function loadWarrantFlow(force = false) { return null; }
 
 async function loadStrategyStocks() {
   if (latestStocks.length) return latestStocks;
@@ -6886,7 +6743,6 @@ function showView(viewName, activeLink) {
   if (viewName === "realtime-radar") deferUiWork(renderRealtimeRadar);
   if (viewName === "strategy") deferUiWork(renderStrategyScanner);
   if (viewName === "chip-trade") deferUiWork(loadChipTradeData);
-  if (viewName === "warrant-flow") deferUiWork(loadWarrantFlow);
   deferUiWork(ensureMobileAutoOrganizeButton);
   deferUiWork(normalizeMobileHorizontalPosition, 60);
   const focusTarget = activeLink?.dataset.focus ? document.querySelector(`#${activeLink.dataset.focus}`) : null;
@@ -7356,7 +7212,6 @@ async function pollCompleteRunUpdates(initial = false) {
     { key: "strategy4", url: endpoints.strategy4Cache, refresh: () => loadStrategy4Cache(true) },
     { key: "strategy5", url: endpoints.strategy5Cache, refresh: () => loadStrategy5Cache(true) },
     { key: "institution", url: endpoints.institutionCache, refresh: () => loadInstitution() },
-    { key: "warrant", url: endpoints.warrantFlowCache, refresh: () => loadWarrantFlow(true) },
   ];
   try {
     const results = await Promise.allSettled(targets.map((target) => pollCompleteRunTarget(target, initial)));
@@ -8419,14 +8274,6 @@ document.addEventListener("input", (event) => {
   scheduleStrategySearchRender();
 });
 
-document.addEventListener("input", (event) => {
-  const input = event.target.closest("[data-warrant-flow-search]");
-  if (!input) return;
-  warrantFlowKeyword = input.value || "";
-  warrantFlowPage = 1;
-  clearTimeout(warrantFlowSearchTimer);
-  warrantFlowSearchTimer = setTimeout(renderWarrantFlow, 450);
-});
 
 document.addEventListener("click", (event) => {
   const pageButton = event.target.closest("[data-terminal-page]");
@@ -8473,11 +8320,7 @@ document.addEventListener("click", (event) => {
   renderStrategyScanner();
 });
 
-document.addEventListener("click", (event) => {
-  const refreshTarget = event.target.closest("[data-warrant-refresh]");
-  if (!refreshTarget) return;
-  loadWarrantFlow(true);
-});
+
 
 document.addEventListener("click", (event) => {
   const exportButton = event.target.closest("[data-export-action]");

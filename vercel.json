@@ -68,7 +68,6 @@
       "destination": "/api/desktop-static-disabled"
     },
     {
-      "source": "/data/(open-buy|strategy2-intraday|strategy3|strategy4|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect)(.*).json",
       "destination": "/api/desktop-static-disabled"
     }
   ],
@@ -282,7 +281,6 @@
       ]
     },
     {
-      "source": "/data/mobile-(strategy1|strategy2|strategy3|strategy4|strategy5|chip|cb|warrant)-ultra.html",
       "headers": [
         {
           "key": "Cache-Control",
@@ -538,7 +536,6 @@
       ]
     },
     {
-      "source": "/data/(strategy3|strategy4|strategy5|open-buy|institution|warrant-flow)-latest.json",
       "headers": [
         {
           "key": "Cache-Control",

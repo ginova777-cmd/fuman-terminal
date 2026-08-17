@@ -588,10 +588,6 @@ async function main() {
     minCount: 1,
     requireNoStore: true,
   }));
-  checks.push(await checkApi("權證走向 API", "/api/warrant-flow-latest", {
-    minCount: 1,
-    requireNoStore: true,
-  }));
 
   const issues = checks.flatMap((check) => check.issues || []);
   const criticalCount = issues.filter((item) => item.severity === "critical").length;

@@ -6,7 +6,6 @@ param(
 
 $ErrorActionPreference = "Continue"
 
-$keywords = "Fuman|雷達|策略|scan|radar|intraday|cache|flow|warrant|open|trade"
 $exportPath = "C:\fuman-runtime\logs\fuman-schedule-status-latest.csv"
 
 function Get-FumanTaskDescription($TaskName) {
@@ -31,15 +30,9 @@ function Get-FumanTaskDescription($TaskName) {
     "Fuman Market Overview Patrol" { return "舊版市場總覽任務；目前停用，正式任務請看 Fuman Market Overview Patrol 0900" }
     "Fuman 即時雷達" { return "即時雷達，08:58 開盤前啟動" }
     "Fuman Daily Health Summary 1545" { return "綜合策略每日健康摘要，15:45 發送" }
-    "Fuman Flow Cache 0600" { return "買賣超與權證走向，早上 06:00 合併掃描並發布終端" }
-    "Fuman Flow Cache 2100" { return "買賣超與權證走向，晚上 21:00 合併掃描並發布終端" }
     "Fuman 買賣超 Cache 2100" { return "買賣超資料，晚上 21:00 快取並發布終端" }
-    "Fuman 權證走向 Cache 0500" { return "權證資金走向，早上 05:00 快取並發布終端" }
-    "Fuman 權證走向 Cache 2200" { return "權證資金走向，晚上 22:00 快取並發布終端" }
     "Fuman 買賣超 Cache 0600" { return "舊版買賣超單獨任務；預期停用，已由 Fuman Flow Cache 0600 接手" }
     "Fuman 買賣超 Cache 2102" { return "舊版買賣超單獨任務；預期停用，已由 Fuman Flow Cache 2100 接手" }
-    "Fuman 權證走向 Cache 0600" { return "舊版權證走向單獨任務；預期停用，已由 Fuman Flow Cache 0600 接手" }
-    "Fuman 權證走向 Cache 2100" { return "舊版權證走向單獨任務；預期停用，已由 Fuman Flow Cache 2100 接手" }
     default { return "" }
   }
 }
@@ -47,12 +40,8 @@ function Get-FumanTaskDescription($TaskName) {
 function Get-ExpectedDisabledReason($TaskName) {
   switch -Wildcard ($TaskName) {
     "Fuman 買賣超 Cache 2100" { return "買賣超資料，晚上 21:00 快取並發布終端" }
-    "Fuman 權證走向 Cache 0500" { return "權證資金走向，早上 05:00 快取並發布終端" }
-    "Fuman 權證走向 Cache 2200" { return "權證資金走向，晚上 22:00 快取並發布終端" }
     "Fuman 買賣超 Cache 0600" { return "預期停用：已由 Fuman Flow Cache 0600 合併掃描取代" }
     "Fuman 買賣超 Cache 2102" { return "預期停用：已由 Fuman Flow Cache 2100 合併掃描取代" }
-    "Fuman 權證走向 Cache 0600" { return "預期停用：已由 Fuman Flow Cache 0600 合併掃描取代" }
-    "Fuman 權證走向 Cache 2100" { return "預期停用：已由 Fuman Flow Cache 2100 合併掃描取代" }
     "Fuman Market Overview Patrol" { return "預期停用：舊版任務，已由 Fuman Market Overview Patrol 0900 取代" }
     default { return "" }
   }

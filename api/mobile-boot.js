@@ -7,7 +7,6 @@ const {
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
 
-const FRAGMENT_TABS = ["strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"];
 const PUBLIC_FRAGMENT_TABS = [];
 const TAB_ENDPOINTS = {
   strategy2: "/api/strategy2-latest",
@@ -15,8 +14,6 @@ const TAB_ENDPOINTS = {
   strategy4: "/api/strategy4-latest",
   strategy5: "/api/strategy5-latest",
   chip: "/api/institution-latest",
-  cb: "/api/cb-detect-latest",
-  warrant: "/api/warrant-flow-latest",
 };
 const MARKET_CORE_ENDPOINT = "/api/market?canvas=1&compact=1&shell=1&limit=4";
 const MOBILE_BOOT_SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_BOOT_SNAPSHOT_TIMEOUT_MS || 650);

@@ -8,10 +8,7 @@ const strategy4Latest = require("./strategy4-latest");
 const strategy5Latest = require("./strategy5-latest");
 const latestSignals = require("./latest-signals");
 const marketAiLive = require("./market-ai-live");
-const institutionLatest = require("./institution-latest");
-const cbDetectLatest = require("./cb-detect-latest");
-const warrantFlowLatest = require("./warrant-flow-latest");
-const desktopRouteSnapshot = require("./desktop-route-snapshot");
+const institutionLatest = require("./institution-latest");const desktopRouteSnapshot = require("./desktop-route-snapshot");
 const watchlistMatchIndex = require("./watchlist-match-index");
 const { shapeTopPayload } = require("./_http-cache");
 const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cache");
@@ -29,7 +26,7 @@ function isPublicBundleEndpoint(endpoint) {
 }
 
 function sanitizePublicEndpointPayload(value) {
-  const protectedPattern = /strategy[1-5]|open-buy|institution|cb-detect|warrant-flow|latest-strategy|latest-signals/i;
+  const protectedPattern = /strategy[1-5]|open-buy|institution|latest-strategy|latest-signals/i;
   if (typeof value === "string") {
     return protectedPattern.test(value) ? value.replace(protectedPattern, "protected-source") : value;
   }
@@ -228,10 +225,7 @@ function opsModuleKeyForEndpoint(endpoint) {
   if (path.includes("strategy3-latest")) return "strategy3";
   if (path.includes("strategy4-latest") || path.includes("latest-signals")) return "strategy4";
   if (path.includes("strategy5-latest")) return "strategy5";
-  if (path.includes("institution-latest")) return "institution";
-  if (path.includes("cb-detect-latest")) return "cb";
-  if (path.includes("warrant-flow-latest")) return "warrant";
-  return "";
+  if (path.includes("institution-latest")) return "institution";  return "";
 }
 
 function compactOpsAuthority(row = {}) {
@@ -446,8 +440,7 @@ async function repairStrategy4LatestSnapshot() {
 }
 
 function isSoftSnapshotEndpoint(endpoint) {
-  return String(endpoint || "").startsWith("/api/warrant-flow-latest")
-    || String(endpoint || "").startsWith("/api/cb-detect-latest");
+  return isStrategy2SnapshotEndpoint(endpoint);
 }
 function isOptionalLiveSnapshotEndpoint(endpoint) {
   return false;
@@ -477,16 +470,12 @@ function isDisplayableFailClosedPayload(payload) {
     || /insufficient|degraded|blocked|source_quality_fail|market_closed|previous_good/.test(text);
 }
 function buildSoftSnapshotFallback(endpoint, result, via) {
-  const isWarrant = String(endpoint || "").startsWith("/api/warrant-flow-latest");
   const original = result?.payload && typeof result.payload === "object" ? result.payload : {};
-  const source = isWarrant
-    ? "supabase:warrant_flow_scan_results"
-    : "supabase:cb_detect_cache";
   const reason = original.detail || original.error || original.reason || "snapshot-soft-fallback";
   return {
     ...original,
     ok: true,
-    source: original.source || source,
+    source: original.source || "supabase:strategy2_scan_results",
     cacheSource: "snapshot-soft-fallback",
     complete: original.complete === true,
     qualityStatus: original.qualityStatus || "waiting_snapshot",
@@ -500,8 +489,6 @@ function buildSoftSnapshotFallback(endpoint, result, via) {
     records: Array.isArray(original.records) ? original.records : [],
     events: Array.isArray(original.events) ? original.events : [],
     matches: Array.isArray(original.matches) ? original.matches : [],
-    volumeMatches: Array.isArray(original.volumeMatches) ? original.volumeMatches : [],
-    singleSignals: Array.isArray(original.singleSignals) ? original.singleSignals : [],
     updatedAt: original.updatedAt || new Date().toISOString(),
     reason,
     displayOnlyFallback: true,
@@ -715,10 +702,7 @@ module.exports = async function handler(request, response) {
     ["/api/strategy5-latest", strategy5Latest, compactQuery(140), 8000],
     ["/api/latest-signals?strategy=strategy4", latestSignals, { strategy: "strategy4", compact: "1", shell: "1", limit: "70" }, 2300],
     ["/api/market-ai-live", marketAiLive, { canvas: "1", compact: "1", shell: "1", limit: "40" }, 2300],
-    ["/api/institution-latest", institutionLatest, compactQuery(60), 2200],
-    ["/api/cb-detect-latest", cbDetectLatest, compactQuery(60), 2200],
-    ["/api/warrant-flow-latest", warrantFlowLatest, compactQuery(60), 7000],
-    ["/api/watchlist-match-index", watchlistMatchIndex, { compact: "1", shell: "1", limit: "80" }, 3000],
+    ["/api/institution-latest", institutionLatest, compactQuery(60), 2200],    ["/api/watchlist-match-index", watchlistMatchIndex, { compact: "1", shell: "1", limit: "80" }, 3000],
   ];
 
   const runnableTasks = entitlement.ok ? tasks : tasks.filter(([endpoint]) => isPublicBundleEndpoint(endpoint));

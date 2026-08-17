@@ -12,8 +12,6 @@ const SOURCES = [
   { key: "strategy4", label: "策略4-波段", api: "strategy4-latest", fields: ["matches", "rows"] },
   { key: "strategy5", label: "策略5-綜合策略", api: "strategy5-latest", fields: ["matches", "rows"] },
   { key: "institution", label: "買賣超", api: "institution-latest", fields: ["data", "rows", "matches"], objectFields: ["data"] },
-  { key: "warrant", label: "權證", api: "warrant-flow-latest", fields: ["matches", "rows", "volumeMatches", "singleSignals"], codeField: "underlyingCode" },
-  { key: "cb", label: "CB名單", api: "cb-detect-latest", fields: ["rows", "matches"] },
 ];
 
 function cleanNumber(value) {
@@ -84,20 +82,6 @@ function detailsFor(row, key) {
       row.foreign > 0 ? "外資買超" : row.foreign < 0 ? "外資賣超" : "",
       row.trust > 0 ? "投信買超" : row.trust < 0 ? "投信賣超" : "",
       row.jointStreak ? `連買${row.jointStreak}日` : "",
-    ],
-    warrant: [
-      row.signalGrade ? `等級${row.signalGrade}` : "",
-      row.actionLabel,
-      row.stockSetupLabel,
-      row.branchLabel,
-      row.level ? `Level ${row.level}` : "",
-    ],
-    cb: [
-      row.entryLabel,
-      row.tradableLabel,
-      row.conversionPriceLabel,
-      row.sourceLayer,
-      row.cbName,
     ],
   };
   return [...new Set((sources[key] || []).map(signalText).map((item) => String(item || "").trim()).filter(Boolean))].slice(0, 12);

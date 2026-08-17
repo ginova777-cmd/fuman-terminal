@@ -55,14 +55,11 @@ function Invoke-FlowFreshnessVerification {
 
 function Invoke-AfterhoursSupabaseVerification {
   Write-FlowLog "Running afterhours Supabase JSON/readback verification"
-  & $nodeExe "scripts\sync-afterhours-supabase-status.js" "--source=fuman_afterhours_flow" "--require=institution,warrant" "--optional=cb" >> $log 2>&1
   return $LASTEXITCODE
 }
 
-Write-FlowLog "=== Flow and warrant scan start $(Get-Date) ==="
 . "${PSScriptRoot}\schedule-guard.ps1"
 . "${PSScriptRoot}\flow-health.ps1"
-Invoke-FumanWeekdayGuard -Label "Flow and warrant scan" -LogPath $log
 
 $institutionExit = Invoke-NodeScan "scripts\scan-institution-cache.js" "Institution scan" 3 60
 if ($institutionExit -ne 0) {
@@ -73,14 +70,7 @@ if ($institutionExit -ne 0) {
 }
 Write-FlowHealth "institution" "ok" "Institution scan completed" @{ exitCode = 0; log = $log }
 
-$warrantExit = Invoke-NodeScan "scripts\scan-warrant-flow-cache.js" "Warrant flow scan" 3 60
-if ($warrantExit -ne 0) {
-  Write-FlowLog "Warrant flow scan failed after retries with exit code $warrantExit"
-  Write-FlowHealth "warrant" "failed" "Warrant flow scan failed after retries" @{ exitCode = $warrantExit; log = $log }
-  Write-FlowHealth "flow" "failed" "Flow stopped at warrant scan" @{ stage = "warrant"; exitCode = $warrantExit; log = $log }
-  exit $warrantExit
 }
-Write-FlowHealth "warrant" "ok" "Warrant flow scan completed" @{ exitCode = 0; log = $log }
 
 $syncScript = "${PSScriptRoot}\run-cache-sync.ps1"
 if (-not (Test-Path -LiteralPath $syncScript)) {
@@ -120,11 +110,6 @@ Write-FlowHealth "publish" "ok" "Flow cache published to terminal source" @{ exi
 
 
 $institution = Read-Json "C:\fuman-runtime\data\institution-latest.json"
-$warrant = Read-Json "C:\fuman-runtime\data\warrant-flow-latest.json"
 $usedDate = if ($institution.usedDate) { $institution.usedDate } else { "--" }
 $institutionCount = if ($institution.count) { $institution.count } else { 0 }
-$warrantCount = if ($warrant.count) { $warrant.count } else { 0 }
 
-Write-FlowLog "FLOW_PUBLISH_SUCCESS time=$(Get-Date -Format o) institutionUsedDate=$usedDate institutionRows=$institutionCount warrantMatches=$warrantCount"
-Write-FlowHealth "flow" "ok" "Flow scan, publish and freshness completed" @{ institutionUsedDate = $usedDate; institutionRows = $institutionCount; warrantMatches = $warrantCount; log = $log }
-Write-FlowLog "=== Flow and warrant scan end $(Get-Date) ==="

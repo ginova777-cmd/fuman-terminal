@@ -31,7 +31,6 @@ const STATIC_ASSETS = [
   `/terminal-watchlist-shell.js?v=${WATCHLIST_SHELL_ASSET_EPOCH}`,
   "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260714-22",
   "/terminal-chip-flow.js?v=public-terminal-fast-20260714-22",
-  "/terminal-warrant-flow.js?v=public-terminal-fast-20260714-22",
   "/terminal-watchlist-module.js?v=public-terminal-fast-20260714-22",
   "/terminal-intraday-radar.css?v=public-terminal-fast-20260714-22",
   "/terminal-utility.css?v=public-terminal-fast-20260714-22",
@@ -76,8 +75,6 @@ const LIVE_PATTERNS = [
   /\/api\/strategy4-latest/i,
   /\/api\/strategy5-latest/i,
   /\/api\/institution-latest/i,
-  /\/api\/warrant-flow-latest/i,
-  /\/api\/cb-detect-latest/i,
   /\/api\/mobile-boot/i,
   /\/api\/mobile-fragment/i,
   /\/api\/terminal-home/i,
@@ -135,7 +132,6 @@ function isOpenBuyStaticDataRequest(url) {
 }
 
 function isDesktopApiOnlyStaticDataRequest(url) {
-  return /^\/data\/(?:strategy2-intraday|strategy3|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect)(?:-|$).*\.json$/i.test(url.pathname);
 }
 
 function strategy4StaticDisabledResponse() {
@@ -210,7 +206,6 @@ async function prefetchAssetList(assets) {
   await Promise.allSettled(assets.map(async (pathname) => {
     if (/^\/data\/strategy4(?:-|$).*\.json$/i.test(pathname)) return;
     if (/^\/data\/open-buy(?:-|$).*\.json$/i.test(pathname)) return;
-    if (/^\/data\/(?:strategy2-intraday|strategy3|strategy5|institution|warrant-flow|warrant-priority|warrant-single-signal|cb-detect)(?:-|$).*\.json$/i.test(pathname)) return;
     const request = new Request(pathname, { cache: "reload" });
     const response = await fetch(request);
     if (response.ok) await cache.put(request, response.clone());

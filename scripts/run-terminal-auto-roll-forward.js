@@ -459,7 +459,6 @@ function manifestDerivedJobs(displayTradeDate = currentTradeDate()) {
   const modules = Array.isArray(manifest.modules) ? manifest.modules : Array.isArray(manifest.moduleResults) ? manifest.moduleResults : [];
   const jobs = [];
   const blockedKeys = [];
-  const scanKeys = new Set(["strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"]);
   for (const row of modules) {
     const key = String(row.key || row.module || row.strategy || "").toLowerCase();
     if (!key || key === "scorecard") continue;
@@ -529,7 +528,6 @@ function resourceChainAuditDerivedJobs(displayTradeDate = currentTradeDate()) {
   const rows = Array.isArray(audit.results) ? audit.results : [];
   const jobs = [];
   const blockedKeys = [];
-  const scanKeys = new Set(["strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"]);
   for (const auditRow of rows) {
     const key = String(auditRow.key || "").toLowerCase();
     if (!key || key === "scorecard" || auditRow.ok === true) continue;
@@ -922,8 +920,6 @@ function scannerRunnerForKey(key = "", fallbackCommand = "") {
     strategy4: "run-strategy4.ps1",
     strategy5: "run-strategy5.ps1",
     institution: "run-institution.ps1",
-    cb: "run-cb-detect.ps1",
-    warrant: "run-warrant-flow.ps1",
   };
   const scriptName = map[String(key || "").toLowerCase()];
   if (scriptName) {
@@ -953,7 +949,6 @@ function scannerClosureStepsForKey(key = "") {
     strategy5: ["verify:strategy5-e2e-closure"],
     institution: ["verify:institution-e2e-closure"],
     cb: ["verify:cb-e2e-closure"],
-    warrant: ["verify:warrant-e2e-closure"],
   };
   return (map[String(key || "").toLowerCase()] || []).map((script) => npmRun(script));
 }
@@ -994,7 +989,6 @@ function compactJob(row = {}) {
 }
 
 function blockerRank(action = {}) {
-  const keyRank = { strategy2: 0, strategy3: 1, strategy4: 2, strategy5: 3, institution: 4, warrant: 5, cb: 6, scorecard: 7 };
   const waitingRank = action.state === "WAITING_FORMAL_WINDOW" || action.deferredUntilNextFormalWindow || action.deferredUntilNextTradingDay ? 1 : 0;
   const severityRank = action.reasonSeverity === "critical" ? 0 : 1;
   return [waitingRank, severityRank, Number(action.priority ?? 80), keyRank[action.key] ?? 50, String(action.key || "")];

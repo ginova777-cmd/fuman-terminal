@@ -2,7 +2,6 @@ param(
   [switch]$SkipRealtime,
   [switch]$SkipStrategy2,
   [switch]$SkipInstitution,
-  [switch]$SkipWarrant,
   [switch]$SkipDesktopSnapshot,
   [switch]$ContinueOnCriticalFailure
 )
@@ -21,7 +20,6 @@ $log = Join-Path $logDir ("full-scan-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHm
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $receipts = New-Object System.Collections.Generic.List[object]
 $criticalFailures = New-Object System.Collections.Generic.List[string]
-$strictRequiredStrategies = @("strategy3", "institution", "warrant-flow", "strategy4", "strategy5", "cb-detect")
 $env:NOTIFY_FAST_MODE = "1"
 $env:NOTIFY_PUSH_TIMEOUT_MS = "1500"
 $env:NOTIFY_PUSH_RETRIES = "1"
@@ -586,13 +584,9 @@ try {
   if (-not $SkipInstitution) {
     Invoke-RunnerTask "institution" "institution full scan" "critical" "run-institution.ps1"
   }
-  if (-not $SkipWarrant) {
-    Invoke-RunnerTask "warrant-flow" "warrant flow full scan" "critical" "run-warrant-flow.ps1"
-  }
 
   Invoke-RunnerTask "strategy4" "strategy4 full scan" "critical" "run-strategy4.ps1"
   Invoke-RunnerTask "strategy5" "strategy5 full scan" "critical" "run-strategy5.ps1"
-  Invoke-RunnerTask "cb-detect" "CB detect full scan" "critical" "run-cb-detect.ps1"
 
   $receiptItems = @($receipts.ToArray())
   $strictFailureItems = @(Get-FullScanStrictFailures $receiptItems)

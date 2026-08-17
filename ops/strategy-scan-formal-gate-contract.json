@@ -13,13 +13,31 @@
     "mustCallBefore": "Invoke-RunnerTask \"strategy3\""
   },
   "criticalRunners": [
-    { "strategy": "strategy2", "script": "run-strategy2-intraday.ps1", "gateStrategy": "strategy2" },
-    { "strategy": "strategy3", "script": "run-strategy3-complete-scan.ps1", "gateStrategy": "strategy3" },
-    { "strategy": "strategy4", "script": "run-strategy4.ps1", "gateStrategy": "strategy4" },
-    { "strategy": "strategy5", "script": "run-strategy5.ps1", "gateStrategy": "strategy5" },
-    { "strategy": "institution", "script": "run-institution.ps1", "gateStrategy": "institution" },
-    { "strategy": "cb-detect", "script": "run-cb-detect.ps1", "gateStrategy": "cb-detect" },
-    { "strategy": "warrant-flow", "script": "run-warrant-flow.ps1", "gateStrategy": "warrant" }
+    {
+      "strategy": "strategy2",
+      "script": "run-strategy2-intraday.ps1",
+      "gateStrategy": "strategy2"
+    },
+    {
+      "strategy": "strategy3",
+      "script": "run-strategy3-complete-scan.ps1",
+      "gateStrategy": "strategy3"
+    },
+    {
+      "strategy": "strategy4",
+      "script": "run-strategy4.ps1",
+      "gateStrategy": "strategy4"
+    },
+    {
+      "strategy": "strategy5",
+      "script": "run-strategy5.ps1",
+      "gateStrategy": "strategy5"
+    },
+    {
+      "strategy": "institution",
+      "script": "run-institution.ps1",
+      "gateStrategy": "institution"
+    }
   ],
   "requiredRunnerPatterns": [
     "scanner-resource-health.ps1",
@@ -28,7 +46,10 @@
     "source gate blocked",
     "preserving latest"
   ],
-  "strongReceiptRunners": ["strategy3", "institution", "cb-detect"],
+  "strongReceiptRunners": [
+    "strategy3",
+    "institution"
+  ],
   "strongReceiptPatterns": [
     "preservePreviousGood",
     "publishAllowed",
@@ -42,7 +63,6 @@
     "full_scan_runs_self_heal_apply_when_formal_entry_fails",
     "full_scan_blocks_strategy_scans_when_formal_entry_fails",
     "each_critical_runner_has_resource_health_gate",
-    "cb_detect_no_longer_bypasses_source_gate",
     "formal_entry_gate_excludes_membership_ui_88_desktop_mobile"
   ]
 }

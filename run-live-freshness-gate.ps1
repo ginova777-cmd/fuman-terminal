@@ -1,7 +1,6 @@
 param(
   [switch]$SkipRealtime,
   [switch]$SkipStrategy2,
-  [switch]$SkipWarrant,
   [switch]$SkipInstitution,
   [switch]$SkipTerminalCopy,
   [switch]$SkipRawRefresh,
@@ -282,7 +281,7 @@ try {
   Set-FumanRuntimeEnv
   $fastStrategy2Only = $Fast -and $env:FUMAN_FAST_GATE_ALLOW_DAILY_REFRESH -ne "1"
   if ($fastStrategy2Only) {
-    Write-GateLog "Fast gate strategy2-only mode: daily scanners, realtime radar, STAR preopen, institution, warrant, strategy3, strategy4, strategy5, and CB raw refresh are skipped."
+    Write-GateLog "Fast gate strategy2-only mode: daily scanners, realtime radar, STAR preopen, institution, strategy3, strategy4, and strategy5 raw refresh are skipped."
   }
 
   if ($SkipRawRefresh) {
@@ -339,15 +338,6 @@ try {
     }
   }
 
-  if (-not $SkipRawRefresh -and -not $SkipWarrant -and -not $fastStrategy2Only) {
-    Push-Location $syncRoot
-    try {
-      $null = Invoke-GateCommand "warrant flow raw refresh" { & $nodeExe "scripts\scan-warrant-flow-cache.js" } -AllowFailure
-    } finally {
-      Pop-Location
-    }
-  }
-
   if (-not $SkipRawRefresh -and -not $Fast) {
     Push-Location $syncRoot
     try {
@@ -380,7 +370,6 @@ try {
           $env:STRATEGY5_USE_MIS = $previousStrategy5UseMis
         }
       }
-      $null = Invoke-GateCommand "cb detect raw refresh" { & $nodeExe "scripts\generate-cb-detect.js" } -AllowFailure
     } finally {
       Pop-Location
     }

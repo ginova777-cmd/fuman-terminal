@@ -58,17 +58,10 @@ const TASKS = [
   },
   {
     key: "cb",
-    strategy: "CB成績單",
-    endpoint: "/api/cb-detect-latest",
-    modulePath: "../api/cb-detect-latest",
     arrayKeys: ["rows", "matches"],
     limit: 120,
   },
   {
-    key: "warrant",
-    strategy: "權證成績單",
-    endpoint: "/api/warrant-flow-latest",
-    modulePath: "../api/warrant-flow-latest",
     arrayKeys: ["rows", "matches", "volumeMatches", "singleSignals"],
     limit: 120,
   },
@@ -270,8 +263,6 @@ function arraysFromTaskPayload(task, payload) {
   }
   const seen = new Set();
   return rows.filter((row, index) => {
-    const code = cleanText(row.code || row.symbol || row.ticker || row.underlyingCode || row.cbCode || row.warrantCode || index);
-    const key = `${row._scorecardArrayKey || "rows"}:${code}:${cleanText(row.name || row.cbName || row.warrantName)}:${index}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -352,11 +343,9 @@ function rowPublishDecision(task, payload = {}, result = {}, context = {}) {
 }
 
 function codeOf(row, fallback) {
-  return cleanText(row.code || row.symbol || row.ticker || row.underlyingCode || row.cbCode || row.warrantCode || fallback);
 }
 
 function nameOf(row, code) {
-  return cleanText(row.rawName || row.name || row.displayName || row.underlyingName || row.cbName || row.warrantName || code);
 }
 
 function priceOf(row) {
@@ -471,8 +460,6 @@ function fallbackEntryTime(task, payload) {
   if (task.key === "strategy4") return "13:30";
   if (task.key === "strategy5") return "14:00";
   if (task.key === "institution") return "14:00";
-  if (task.key === "warrant") return "14:00";
-  if (task.key === "cb") return taipeiTime(payload.updatedAt || payload.generatedAt || payload.finishedAt || payload.timestamp) || "14:00";
   return taipeiTime(payload.updatedAt || payload.generatedAt || payload.finishedAt || payload.timestamp);
 }
 
@@ -489,9 +476,6 @@ function entryTimeOf(task, payload, row) {
         || payload.generatedAt
         || payload.timestamp,
     );
-  }
-  if (["strategy3", "strategy5", "institution", "warrant"].includes(task.key)) {
-    return fallbackEntryTime(task, payload);
   }
   const latest = row?.latestRecord && typeof row.latestRecord === "object" ? row.latestRecord : {};
   if (task.key === "strategy2") {

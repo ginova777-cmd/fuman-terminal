@@ -76,8 +76,6 @@ $rules = @{
   }
   "run-flow.ps1" = @{
     Log = "flow-*.log"
-    Done = @("FLOW_PUBLISH_SUCCESS", "Flow and warrant scan end")
-    Detail = @("FLOW_PUBLISH_SUCCESS", "institutionRows=\d+", "warrantMatches=\d+")
   }
   "run-flow-watchdog.ps1" = @{
     Log = "flow-watchdog-*.log"
@@ -88,12 +86,7 @@ $rules = @{
     Log = "institution-20*.log"
     Done = @("Institution scan end")
     Detail = @("Institution scan end")
-  }
-  "run-warrant-flow.ps1" = @{
-    Log = "warrant-flow-*.log"
-    Done = @("Warrant flow scan end")
-    Detail = @("Warrant flow scan end")
-  }
+  }
   "Run-DaytradeSourceWriter.ps1" = @{
     Log = "daytrade-source-writer-*.wrapper.log"
     Done = @("DONE ok")
@@ -411,7 +404,6 @@ function Test-MarketClosedAllowedFailure($TaskName, $Result, $MarketCalendar) {
   $normalized = (Normalize-TaskName $TaskName).Trim()
   $closedAllowedResults = @{
     "Fuman Freshness Gate Fast 0845-1645" = @(1)
-    "Fuman 權證走向 Cache 2030" = @(1, 3221225786, -1073741510)
   }
   if (-not $closedAllowedResults.ContainsKey($normalized)) { return $false }
   return @($closedAllowedResults[$normalized]) -contains [int64]$Result

@@ -24,10 +24,10 @@
   const MARKET_ROUTE = "market|市場總覽";
   const REALTIME_RADAR_ROUTE = "";
   const CHIP_TRADE_ROUTE = "chip-trade|買賣超";
-  const CB_DETECT_ROUTE = "cb-detect|CB可轉債";
-  const FIXED_ROUTE_KEYS = [MARKET_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向", "watchlist|自選股"];
+  const CB_DETECT_ROUTE = "";
+  const FIXED_ROUTE_KEYS = [MARKET_ROUTE, CHIP_TRADE_ROUTE, "watchlist|自選股"];
   const FIXED_CANVAS_PERSIST_ROUTES = [];
-  const API_ONLY_FIXED_ROUTE_KEYS = [MARKET_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向"];
+  const API_ONLY_FIXED_ROUTE_KEYS = [MARKET_ROUTE, CHIP_TRADE_ROUTE];
   const CANVAS_REFRESH_TTL_MS = 18000;
   const API_ONLY_POLL_MS = 30000;
   const CHIP_TRADE_FIELD_CONTRACT_VERSION = "buy-sell-derived-fields-20260629-01";
@@ -48,8 +48,6 @@
     "strategy|策略5": "/api/strategy5-latest",
     [MARKET_ROUTE]: "/api/market",
     "chip-trade|買賣超": "/api/institution-latest",
-    "cb-detect|CB可轉債": "/api/cb-detect-latest",
-    "warrant-flow|權證走向": "/api/warrant-flow-latest",
   };
   const CANVAS_ROUTE_OPTIONS = {
     [MARKET_ROUTE]: { limit: 24, ttl: 14000, live: true, today: true },
@@ -58,8 +56,6 @@
     "strategy|策略4": { limit: 70, ttl: 24000 },
     "strategy|策略5": { limit: 140, ttl: 22000 },
     "chip-trade|買賣超": { limit: 60, ttl: 32000 },
-    "cb-detect|CB可轉債": { limit: 60, ttl: 32000 },
-    "warrant-flow|權證走向": { limit: 60, ttl: 32000 },
   };
   const CHIP_TRADE_DEFAULT_FILTER = "foreignTrustVolumePct";
   const CHIP_TRADE_FILTERS = [
@@ -340,8 +336,6 @@
     if (view === "market") return MARKET_ROUTE;
     if (view === "realtime-radar") return "";
     if (view === "chip-trade") return "chip-trade|買賣超";
-    if (view === "cb-detect") return "cb-detect|CB可轉債";
-    if (view === "warrant-flow") return "warrant-flow|權證走向";
     if (view === "watchlist") return "watchlist|自選股";
     return "";
   }
@@ -661,7 +655,6 @@
       "strategy|策略5",
       "chip-trade|買賣超",
       "cb-detect|CB可轉債",
-      "warrant-flow|權證走向",
       "watchlist|自選股",
     ];
     const linkForRoute = (route) => Array.from(document.querySelectorAll(NAV_SELECTOR))
@@ -825,22 +818,6 @@
         summary: "外資、投信與法人買賣超資料以快照先開，完整表格背景更新。",
       };
     }
-    if (view === "cb-detect") {
-      return {
-        icon: "◇",
-        title: "CB可轉債",
-        badge: "FMN://cb.fast-shell",
-        summary: "CB 偵測結果固定殼先顯示，最新快照背景同步。",
-      };
-    }
-    if (view === "warrant-flow") {
-      return {
-        icon: "◒",
-        title: "權證走向",
-        badge: "FMN://warrant.fast-shell",
-        summary: "權證流向、量能與標的方向先開快照，完整資料背景更新。",
-      };
-    }
     if (view === "watchlist") {
       return {
         icon: "☆",
@@ -906,9 +883,6 @@
       ".stock-card",
       ".metric-card",
       ".chip-table tbody tr",
-      ".cb-detect-list > *",
-      ".warrant-flow-card",
-      ".warrant-flow-list > *",
       ".watchlist-stock-list > *",
       ".watchlist-card",
       ".strategy5-stock-card",
@@ -1105,11 +1079,11 @@
   }
 
   function isCbDetectRoute(route) {
-    return String(route || "") === CB_DETECT_ROUTE;
+    return false;
   }
 
   function isWarrantFlowRoute(route) {
-    return String(route || "") === "warrant-flow|權證走向";
+    return false;
   }
 
   function isMarketViewActive() {
@@ -1158,12 +1132,12 @@
   }
 
   function isFixedDomRoute(route) {
-    return isChipTradeRoute(route) || isCbDetectRoute(route) || isWarrantFlowRoute(route);
+    return isChipTradeRoute(route);
   }
 
   function isProtectedDataRoute(route) {
     const key = String(route || "");
-    return isStrategyRoute(key) || key === CHIP_TRADE_ROUTE || key === CB_DETECT_ROUTE || key === "warrant-flow|權證走向";
+    return isStrategyRoute(key) || key === CHIP_TRADE_ROUTE;
   }
 
   function protectedDataRouteKeys() {
@@ -1171,7 +1145,7 @@
   }
 
   function cleanupFixedDomRouteShells() {
-    [CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向"].forEach((route) => {
+    [CHIP_TRADE_ROUTE].forEach((route) => {
       const panel = panelForRoute(route);
       if (!panel) return;
       panel.classList.remove("fuman-fixed-shell-panel", "fuman-fixed-shell-active");
@@ -1190,18 +1164,7 @@
     new MutationObserver(run).observe(document.documentElement, { childList: true, subtree: true });
   }
 
-  function installDesktopFastWarrantHandlers() {
-    if (document.documentElement.dataset.fumanDesktopFastWarrantHandlersReady === "1") return;
-    document.documentElement.dataset.fumanDesktopFastWarrantHandlersReady = "1";
-    document.addEventListener("click", (event) => {
-      const button = event.target?.closest?.("[data-warrant-refresh]");
-      if (!button) return;
-      const panel = button.closest?.("#warrant-flow-view");
-      if (!panel) return;
-      event.preventDefault();
-      renderDesktopFastWarrantFlow(true);
-    }, true);
-  }
+  function installDesktopFastWarrantHandlers() {}
 
   function pickWarrantValue(row, keys) {
     for (const key of keys) {
@@ -1311,32 +1274,7 @@
     return { rows, meta, payload };
   }
 
-  async function renderDesktopFastWarrantFlow(force = false) {
-    const panel = panelForRoute("warrant-flow|權證走向");
-    if (!panel) return false;
-    if (desktopFastWarrantLoading && !force) return false;
-    desktopFastWarrantLoading = true;
-    if (!desktopFastWarrantPayload) {
-      renderDesktopFastWarrantShell({}, [], { loading: true });
-    }
-    try {
-      const endpoint = `/api/warrant-flow-latest?top=1&compact=1&limit=120&t=${Date.now()}`;
-      const response = await fetch(endpoint, { cache: "no-store" });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      desktopFastWarrantPayload = payload;
-      const rows = normalizeDesktopFastWarrantRows(payload);
-      renderDesktopFastWarrantShell(payload, rows, { status: response.status, endpoint });
-      return true;
-    } catch (error) {
-      renderDesktopFastWarrantShell(desktopFastWarrantPayload || {}, normalizeDesktopFastWarrantRows(desktopFastWarrantPayload || {}), {
-        error: error?.message || String(error || "unknown error"),
-      });
-      return false;
-    } finally {
-      desktopFastWarrantLoading = false;
-    }
-  }
+  async function renderDesktopFastWarrantFlow() { return false; }
 
   function restoreNativeFixedDomRoute(key, panel) {
     panel.querySelectorAll(":scope > .fuman-unified-list-shell").forEach((node) => node.remove());
@@ -1826,7 +1764,7 @@
     const stockCode = String(merged.code || merged.stockCode || merged.stock_code || "").match(/\d{4}/)?.[0] || "";
     const cbName = compactText(merged.cbName || merged.cb_name || merged.name || cbCode || stockCode || `CB ${index + 1}`, 64);
     const entryLabel = compactText(merged.entryLabel || merged.entryPlan?.label || merged.selectedEntryModel || merged.entrySignal || merged.stage || "", 42);
-    const sourceLayer = compactText(merged.sourceLayer || merged.dataContractSource || "cb_detect_scan_results", 72);
+    const sourceLayer = compactText(merged.sourceLayer || merged.dataContractSource || "retired_source", 72);
     const premium = pickFirstValue(merged.premium, merged.premiumLow, merged.premiumHigh, merged.conversionDistancePct);
     const pct = premium === "" || premium == null ? "" : `${cleanNumber(premium).toFixed(2)}%`;
     const price = pickFirstValue(merged.stockPrice, merged.preferredEntry, merged.entryPlan?.preferredEntry, merged.convertPrice, merged.effectiveConvertPrice);
@@ -8179,17 +8117,7 @@
     return cardsFromCounts(defs.map((item) => ({ ...item, count: countRowsByText(rows, item.patterns) })), "CB 細分檢查");
   }
 
-  function warrantOptionCards(rows) {
-    const defs = [
-      { key: "warrant_flow", label: "資金異動", patterns: [/資金|flow|money/i] },
-      { key: "warrant_underlying", label: "標的強弱", patterns: [/標的|underlying|強弱/i] },
-      { key: "warrant_volume", label: "爆量權證", patterns: [/爆量|volume|量/i] },
-      { key: "warrant_single", label: "單券異常", patterns: [/單券|異常|single/i] },
-      { key: "warrant_bid", label: "買盤集中", patterns: [/買盤|集中|bid/i] },
-      { key: "warrant_risk", label: "風險排除", patterns: [/風險|risk|排除/i] },
-    ];
-    return cardsFromCounts(defs.map((item) => ({ ...item, count: countRowsByText(rows, item.patterns) })), "權證走向細分");
-  }
+  function warrantOptionCards(rows) { return ""; }
 
   function unifiedRunCards(route, rows, payloadMeta) {
     if (isStrategy2Route(route)) {
@@ -8426,7 +8354,7 @@
         if (header) header.insertAdjacentHTML("afterend", html);
         else panel.insertAdjacentHTML("afterbegin", html);
       }
-      panel.querySelectorAll(":scope > .chip-tool, :scope > .chip-table-wrap, :scope > .cb-detect-page, :scope > .chip-empty").forEach((node) => node.remove());
+      panel.querySelectorAll(":scope > .chip-tool, :scope > .chip-table-wrap, :scope > .chip-empty").forEach((node) => node.remove());
     }
     if (supportsThreeGatePrices(route)) hydrateThreeGatePrices(route, rows, previousGoodTradeDate || routeDataDate).catch(() => undefined);
     window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);

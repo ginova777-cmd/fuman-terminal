@@ -10,8 +10,6 @@ const SOURCE_ENDPOINTS = [
   ["strategy4", "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70"],
   ["strategy5", "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70"],
   ["institution", "/api/institution-latest?canvas=1&compact=1&shell=1&limit=120"],
-  ["warrant", "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=120"],
-  ["cb", "/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=120"],
 ];
 const EXPECTED_STRATEGIES = [
   "策略2成績單",
@@ -19,8 +17,6 @@ const EXPECTED_STRATEGIES = [
   "策略4成績單",
   "策略5成績單",
   "買賣超成績單",
-  "權證成績單",
-  "CB成績單",
 ];
 const STRATEGY_SOURCE_REPORT_KEYS = {
   "策略2成績單": "strategy2",
@@ -28,8 +24,6 @@ const STRATEGY_SOURCE_REPORT_KEYS = {
   "策略4成績單": "strategy4",
   "策略5成績單": "strategy5",
   "買賣超成績單": "institution",
-  "權證成績單": "warrant",
-  "CB成績單": "cb",
 };
 
 function cleanText(value) {
@@ -345,7 +339,6 @@ function summarizeScorecard(payload) {
     .filter((row) => cleanText(row.strategy) === "策略3隔日沖成績單")
     .filter((row) => timeMinutes(row.entry_time) !== 13 * 60).length;
   const cbBad = selectedRows
-    .filter((row) => cleanText(row.strategy) === "CB成績單")
     .filter((row) => !(cleanNumber(row.entry_price) > 0 && cleanNumber(row.high_price) > 0 && Number.isFinite(cleanNumber(row.pnl)))).length;
   const strategyRules = verifyScorecardStrategyRules(payload || {}, { source: "scorecard-health" });
   return {

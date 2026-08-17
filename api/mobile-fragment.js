@@ -55,29 +55,15 @@ const TAB_CONFIG = {
     endpoint: "/api/institution-latest",
     points: ["連買優先", "合計買超", "籌碼集中"],
   },
-  cb: {
-    title: "CB 可轉債",
-    subtitle: "轉換價 / 技術 / 進場模型",
-    endpoint: "/api/cb-detect-latest",
-    points: ["CB 代號優先", "轉換價距離", "進場模型狀態"],
-  },
-  warrant: {
-    title: "權證資金",
-    subtitle: "認購熱度與標的型態",
-    endpoint: "/api/warrant-flow-latest",
-    points: ["權證先熱", "標的型態", "只看候選觀察"],
-  },
 };
 
 function tabAuthorityKey(tab) {
   const key = String(tab || "").toLowerCase();
   if (key === "chip") return "institution";
-  if (["strategy2", "strategy3", "strategy4", "strategy5", "cb", "warrant"].includes(key)) return key;
   return "";
 }
 
 function shouldUseLiveFragment(tab) {
-  return ["strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"].includes(String(tab || "").toLowerCase());
 }
 
 function terminalAuthorityForTab(tab) {
@@ -313,7 +299,6 @@ function lockedFragment(tab) {
     <article class="mobile-terminal-head">
       <small>會員權限</small>
       <strong>此分頁需要登入開通</strong>
-      <p>手機直向與橫向都會導入同一個會員登入頁；市場總覽、AI 判讀與學習方案可公開瀏覽，策略、籌碼、CB、權證與成績單需登入並開通。</p>
       <div class="mobile-terminal-auth-actions" data-mobile-membership-actions="1">
         <a class="primary" data-mobile-login-action="login" href="/auth.html?mode=login&next=${next}">登入</a>
         <a data-mobile-login-action="signup" href="/auth.html?mode=signup&next=${next}">註冊 / 開通權限</a>
@@ -551,19 +536,9 @@ function isEvidenceLikeRow(row) {
 
 function isValidBusinessRow(row, tab = "") {
   if (!row || typeof row !== "object") return false;
-  if (tab === "cb") {
-    const cbCode = String(firstValue(row, ["cbCode", "cb_code", "convertibleBondCode", "bondCode", "symbol", "code"], "")).trim();
-    const stockCode = String(firstValue(row, ["stockCode", "stock_id", "stockId", "underlyingCode", "code"], "")).trim();
-    return /^\d{4,6}$/.test(cbCode) && /^\d{4}$/.test(stockCode || cbCode.slice(0, 4));
-  }
   if (["strategy2", "strategy3", "strategy4", "strategy5", "chip"].includes(tab)) {
     const code = String(firstValue(row, ["code", "stock_id", "stockId", "symbol", "underlyingCode", "ticker"], "")).trim();
     return /^\d{4}$/.test(code);
-  }
-  if (tab === "warrant") {
-    const code = String(firstValue(row, ["underlyingCode", "code", "stockCode"], "")).trim();
-    const warrantCode = String(firstValue(row, ["warrantCode", "symbol"], "")).trim();
-    return /^\d{4}$/.test(code) || /^\d{5,6}$/.test(warrantCode);
   }
   return !isEvidenceLikeRow(row);
 }

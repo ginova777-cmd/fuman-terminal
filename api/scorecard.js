@@ -24,19 +24,13 @@ const FORMAL_STRATEGY_ENDPOINTS = {
   "策略3隔日沖成績單": "/api/strategy3-latest",
   "策略4成績單": "/api/strategy4-latest",
   "策略5成績單": "/api/strategy5-latest",
-  "買賣超成績單": "/api/institution-latest",
-  "權證成績單": "/api/warrant-flow-latest",
-  "CB成績單": "/api/cb-detect-latest",
-};
+  "買賣超成績單": "/api/institution-latest",};
 const AUDIT_SURFACES = [
   ["strategy2", "Strategy2 daytrade", "/api/strategy2-latest"],
   ["strategy3", "Strategy3", "/api/strategy3-latest"],
   ["strategy4", "Strategy4", "/api/strategy4-latest"],
   ["strategy5", "Strategy5", "/api/strategy5-latest"],
-  ["institution", "Institution / 買賣超", "/api/institution-latest"],
-  ["cb", "CB", "/api/cb-detect-latest"],
-  ["warrant", "Warrant / 權證", "/api/warrant-flow-latest"],
-  ["market-ai", "Market AI", "/api/market-ai-live"],
+  ["institution", "Institution / 買賣超", "/api/institution-latest"],  ["market-ai", "Market AI", "/api/market-ai-live"],
   ["mobile-terminal", "Mobile terminal / 手機終端", "/mobile.html"],
   ["desktop-terminal", "Desktop terminal / 電腦終端", "/"],
   ["shared-source", "Shared source / Supabase source gate", "supabase:scorecard_latest"],
@@ -149,10 +143,7 @@ const RELEASE_SOURCE_REPORTS = [
   { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", runId: "strategy3-20260713-20260713130531", count: 77, emittedRows: 77, date: "20260713", reason: "scorecard_release_latest_pointer" },
   { key: "strategy4", strategy: "strategy4", endpoint: "/api/strategy4-latest", runId: "strategy4-20260713-20260713095129", count: 332, emittedRows: 70, date: "20260713", reason: "scorecard_release_latest_pointer" },
   { key: "strategy5", strategy: "strategy5", endpoint: "/api/strategy5-latest", runId: "strategy5-20260714-20260714140711", count: 54, emittedRows: 54, date: "20260714", reason: "scorecard_release_latest_pointer" },
-  { key: "institution", strategy: "institution", endpoint: "/api/institution-latest", runId: "institution-20260713-20260713131707", count: 264, emittedRows: 264, date: "20260713", reason: "scorecard_release_latest_pointer" },
-  { key: "cb", strategy: "cb", endpoint: "/api/cb-detect-latest", runId: "cb-detect-20260713-214529", count: 9, emittedRows: 9, date: "20260713", reason: "scorecard_release_latest_pointer" },
-  { key: "warrant", strategy: "warrant", endpoint: "/api/warrant-flow-latest", runId: "warrant-flow-20260714-20260714134242", count: 327, emittedRows: 120, date: "20260714", reason: "scorecard_release_latest_pointer" },
-];
+  { key: "institution", strategy: "institution", endpoint: "/api/institution-latest", runId: "institution-20260713-20260713131707", count: 264, emittedRows: 264, date: "20260713", reason: "scorecard_release_latest_pointer" },];
 
 function taipeiDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
@@ -204,10 +195,7 @@ const LIGHTWEIGHT_SOURCE_REPORTS = [
   { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", table: "v_strategy3_latest_complete_run", strategyFilter: "strategy3", order: "" },
   { key: "strategy4", strategy: "strategy4", endpoint: "/api/strategy4-latest", table: "strategy4_scan_runs", strategyFilter: "strategy4", order: "finished_at.desc" },
   { key: "strategy5", strategy: "strategy5", endpoint: "/api/strategy5-latest", table: "v_strategy5_latest_complete_run", strategyFilter: "strategy5", order: "" },
-  { key: "institution", strategy: "institution", endpoint: "/api/institution-latest", table: "v_institution_latest_complete_run", strategyFilter: "institution", order: "" },
-  { key: "cb", strategy: "cb", endpoint: "/api/cb-detect-latest", table: "cb_detect_scan_runs", strategyFilter: "cb_detect", order: "finished_at.desc" },
-  { key: "warrant", strategy: "warrant", endpoint: "/api/warrant-flow-latest", table: "v_warrant_flow_latest_complete_run", strategyFilter: "warrant_flow", order: "" },
-];
+  { key: "institution", strategy: "institution", endpoint: "/api/institution-latest", table: "v_institution_latest_complete_run", strategyFilter: "institution", order: "" },];
 
 async function buildLightweightSourceReport(config) {
   const payload = await latestRunFallbackPayload({
@@ -495,87 +483,6 @@ function callStrategy4Latest(timeoutMs = 12000) {
   });
 }
 
-function callCbDetectLatest(timeoutMs = 12000) {
-  return new Promise((resolve) => {
-    let timer = null;
-    try {
-      const handler = require("./cb-detect-latest");
-      const query = {
-        canvas: "1",
-        compact: "1",
-        shell: "1",
-        limit: "60",
-      };
-      timer = setTimeout(() => resolve({
-        statusCode: 504,
-        payload: { ok: false, error: "cb_source_report_timeout" },
-      }), timeoutMs);
-      const finish = (result) => {
-        clearTimeout(timer);
-        resolve(result);
-      };
-      Promise.resolve(handler({
-        method: "GET",
-        url: "/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60",
-        headers: { host: "localhost", "x-scorecard-source": "1" },
-        query,
-        fumanInternalVerify: true,
-      }, createCaptureResponse(finish))).catch((error) => {
-        finish({
-          statusCode: 500,
-          payload: { ok: false, error: "cb_source_report_failed", reason: error?.message || String(error) },
-        });
-      });
-    } catch (error) {
-      if (timer) clearTimeout(timer);
-      resolve({
-        statusCode: 500,
-        payload: { ok: false, error: "cb_source_report_failed", reason: error?.message || String(error) },
-      });
-    }
-  });
-}
-
-function callWarrantLatest(timeoutMs = 12000) {
-  return new Promise((resolve) => {
-    let timer = null;
-    try {
-      const handler = require("./warrant-flow-latest");
-      const query = {
-        canvas: "1",
-        compact: "1",
-        shell: "1",
-        limit: "500",
-      };
-      timer = setTimeout(() => resolve({
-        statusCode: 504,
-        payload: { ok: false, error: "warrant_source_report_timeout" },
-      }), timeoutMs);
-      const finish = (result) => {
-        clearTimeout(timer);
-        resolve(result);
-      };
-      Promise.resolve(handler({
-        method: "GET",
-        url: "/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=500",
-        headers: { host: "localhost", "x-scorecard-source": "1" },
-        query,
-        fumanInternalVerify: true,
-      }, createCaptureResponse(finish))).catch((error) => {
-        finish({
-          statusCode: 500,
-          payload: { ok: false, error: "warrant_source_report_failed", reason: error?.message || String(error) },
-        });
-      });
-    } catch (error) {
-      if (timer) clearTimeout(timer);
-      resolve({
-        statusCode: 500,
-        payload: { ok: false, error: "warrant_source_report_failed", reason: error?.message || String(error) },
-      });
-    }
-  });
-}
 function callStrategy5Latest(timeoutMs = 12000) {
   return new Promise((resolve) => {
     let timer = null;
@@ -998,59 +905,6 @@ function buildStrategy3SourceReport(result) {
   };
 }
 
-function buildCbSourceReport(result) {
-  const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
-  const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
-    ? payload.run_quality_at_publish
-    : {};
-  return {
-    key: "cb",
-    strategy: "CB成績單",
-    endpoint: "/api/cb-detect-latest",
-    statusCode: Number(result?.statusCode || 0) || 0,
-    ok: payload.ok !== false && Number(result?.statusCode || 0) < 400,
-    runId: cleanText(payload.runId || payload.transport?.runId),
-    count: cleanNumber(payload.count ?? payload.resultCount ?? payload.total),
-    emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : 0,
-    date: cleanText(payload.usedDate || payload.tradeDate || payload.sourceDate || payload.date),
-    evidenceStatus: cleanText(payload.evidenceStatus || quality.evidenceStatus),
-    unattendedStatus: cleanText(payload.unattendedStatus || quality.unattendedStatus),
-    publishAllowed: payload.publishAllowed === true || quality.publishAllowed === true,
-    latestOverwriteAllowed: payload.latestOverwriteAllowed === true || quality.latestOverwriteAllowed === true,
-    preservePreviousGood: payload.preservePreviousGood === true || quality.preservePreviousGood === true,
-    fallbackUsed: payload.fallbackUsed === true || quality.fallbackUsed === true,
-    blockedReason: cleanText(payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
-    reason: cleanText(payload.reason || payload.detail || payload.error || payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
-  };
-}
-
-function buildWarrantSourceReport(result) {
-  const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
-  const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object"
-    ? payload.run_quality_at_publish
-    : {};
-  return {
-    key: "warrant",
-    strategy: "權證成績單",
-    endpoint: "/api/warrant-flow-latest",
-    statusCode: Number(result?.statusCode || 0) || 0,
-    ok: payload.ok !== false && Number(result?.statusCode || 0) < 400,
-    runId: cleanText(payload.runId || payload.transport?.runId),
-    count: cleanNumber(payload.count ?? payload.resultCount ?? quality.resultCount ?? payload.total),
-    emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : 0,
-    resultCount: cleanNumber(payload.resultCount ?? quality.resultCount),
-    readbackCount: cleanNumber(payload.readbackCount ?? quality.readbackCount),
-    date: cleanText(payload.usedDate || payload.tradeDate || payload.sourceDate || payload.date),
-    evidenceStatus: cleanText(payload.evidenceStatus || quality.evidenceStatus),
-    unattendedStatus: cleanText(payload.unattendedStatus || quality.unattendedStatus),
-    publishAllowed: payload.publishAllowed === true || quality.publishAllowed === true,
-    latestOverwriteAllowed: payload.latestOverwriteAllowed === true || quality.latestOverwriteAllowed === true,
-    preservePreviousGood: payload.preservePreviousGood === true || quality.preservePreviousGood === true,
-    fallbackUsed: payload.fallbackUsed === true || quality.fallbackUsed === true,
-    blockedReason: cleanText(payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
-    reason: cleanText(payload.reason || payload.detail || payload.error || payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
-  };
-}
 function buildSevenStrategyDailyHistorySourceReport(result) {
   const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
   return {

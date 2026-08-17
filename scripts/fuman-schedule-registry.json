@@ -35,11 +35,8 @@
       "Fuman Supabase Vercel History Cleanup 1545",
       "Fuman Terminal Local Freshness Verify 0830-2230",
       "Fuman Vercel Cost Health Monitor 2115",
-      "Fuman Warrant Battle Verify 2055",
       "Fuman 買賣超 Cache 2100",
       "Fuman 買賣超 Watchdog 2120",
-      "Fuman 權證走向 Cache 2030",
-      "Fuman 權證走向 Watchdog 2050",
       "FumanTerminalProductionHealthMonitor",
       "Fuman Daytrade Source Preflight 0830",
       "Fuman Daytrade Source Writer 0600-1330",
@@ -712,13 +709,6 @@
       ]
     },
     {
-      "taskName": "\\Fuman Warrant Battle Verify 2055",
-      "displayName": "Fuman Warrant Battle Verify 2055",
-      "description": "Warrant battle verification.",
-      "time": "20:55",
-      "expectedState": "Ready"
-    },
-    {
       "taskName": "\\Fuman 即時雷達",
       "displayName": "Fuman 即時雷達",
       "description": "Realtime radar. 267014 is allowed when the market window has ended.",
@@ -749,20 +739,6 @@
       "displayName": "Fuman 買賣超 Watchdog 2120",
       "description": "Institution flow watchdog.",
       "time": "21:15",
-      "expectedState": "Ready"
-    },
-    {
-      "taskName": "\\Fuman 權證走向 Cache 2030",
-      "displayName": "Fuman 權證走向 Cache 2030",
-      "description": "Warrant flow cache.",
-      "time": "20:30",
-      "expectedState": "Ready"
-    },
-    {
-      "taskName": "\\Fuman 權證走向 Watchdog 2050",
-      "displayName": "Fuman 權證走向 Watchdog 2050",
-      "description": "Warrant flow watchdog.",
-      "time": "20:50",
       "expectedState": "Ready"
     },
     {

@@ -24,8 +24,6 @@ const FULL_ENDPOINTS = [
   ["/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70", "strategy4"],
   ["/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=140", "strategy5"],
   ["/api/institution-latest?canvas=1&compact=1&shell=1&limit=60", "institution"],
-  ["/api/cb-detect-latest?canvas=1&compact=1&shell=1&limit=60", "cb"],
-  ["/api/warrant-flow-latest?canvas=1&compact=1&shell=1&limit=60", "warrant"],
 ];
 
 const ENDPOINTS = PROFILE === "full" ? FULL_ENDPOINTS : CORE_ENDPOINTS;
