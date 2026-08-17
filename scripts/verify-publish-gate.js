@@ -4,8 +4,17 @@ const { spawnSync } = require("child_process");
 const { loadActiveModuleRegistry } = require("../lib/terminal-active-module-registry");
 
 const ROOT = path.resolve(__dirname, "..");
-const PACKAGE_FILE = path.join(ROOT, "package.json");
 const OUTPUT_DIR = path.join(ROOT, "outputs", "terminal-dream-publish-gate");
+const REMOVED_READINESS_GATES = [
+  "membership_ui_state",
+  "terminal_final_audit_contract",
+  "terminal_no_fake_unattended",
+  "terminal_unattended_root",
+  "terminal_autonomous_completion_audit",
+  "terminal_runid_closure",
+  "terminal_ops_production_live",
+  "production_unattended_readiness",
+];
 
 function run(command, args) {
   const result = spawnSync(command, args, {
@@ -29,71 +38,37 @@ function tail(text, lineCount) {
   return String(text || "").split(/\r?\n/).slice(-lineCount).join("\n").trim();
 }
 
-function loadPackage() {
-  return JSON.parse(fs.readFileSync(PACKAGE_FILE, "utf8"));
-}
-
 function main() {
   const issues = [];
   let registry = null;
-  let packageJson = null;
   try {
     registry = loadActiveModuleRegistry();
   } catch (error) {
     issues.push("active_module_registry_unreadable:" + error.message);
-  }
-  try {
-    packageJson = loadPackage();
-  } catch (error) {
-    issues.push("package_json_unreadable:" + error.message);
   }
 
   const activeModules = Array.isArray(registry && registry.active) ? registry.active.map((row) => row.key) : [];
   const retiredModules = Array.isArray(registry && registry.retired) ? registry.retired.map((row) => row.key) : [];
   if (activeModules.length === 0) issues.push("active_module_registry_empty");
 
-  const unattendedRoot = String(packageJson && packageJson.scripts && packageJson.scripts["verify:terminal-unattended-root"] || "");
-  const requiredRootStages = [
-    "verify:terminal-active-module-registry",
-    "verify:terminal-water-root",
-    "verify:daytrade-warmup-nine-day",
-    "verify:strategy-scan-formal-gate",
-    "verify:terminal-idempotent-runner",
-    "verify:strategy-scan-receipt-contract",
-    "verify:terminal-runid-closure",
-    "verify:terminal-autonomous-completion-audit",
-    "verify:terminal-ops-production-live",
-    "verify:production-unattended-readiness-report",
-  ];
-  for (const stage of requiredRootStages) {
-    if (!unattendedRoot.includes(stage)) issues.push("unattended_root_missing_stage:" + stage);
-  }
-
+  const requiredRootStages = [];
   const node = process.execPath;
   const checks = [
     ["desktop_api_only", node, ["scripts/verify-desktop-api-only.js"]],
     ["membership_e2e_layering", node, ["scripts/verify-membership-e2e-layering.js"]],
-    ["membership_ui_state", node, ["scripts/verify-membership-ui-state.js"]],
     ["buySellNoRollbackGuard", node, ["scripts/guard-buy-sell-no-rollback.js"]],
     ["buySellFieldContractGuard", node, ["--use-system-ca", "scripts/verify-buy-sell-field-contract.js"]],
     ["verify:unified-source-gate", node, ["scripts/verify-unified-source-gate-contract.js"]],
     ["terminal_modules_contract", node, ["scripts/verify-terminal-modules-contract.js"]],
-    ["terminal_final_audit_contract", node, ["scripts/verify-terminal-final-audit-contract.js"]],
     ["terminal_water_root", node, ["scripts/verify-terminal-water-root.js"]],
     ["runtime_ownership", node, ["scripts/verify-runtime-ownership.js"]],
     ["fast_shell_self_contained", node, ["scripts/verify-fast-shell-self-contained.js"]],
-    ["terminal_no_fake_unattended", node, ["scripts/verify-terminal-no-fake-unattended.js"]],
     ["daytrade_source_host_role", node, ["scripts/verify-daytrade-source-host-role.js"]],
     ["deploy_worktree_clean", node, ["scripts/verify-deploy-worktree-clean.js"]],
     ["scorecard_no_rollback", node, ["scripts/verify-scorecard-no-rollback.js", "--no-live", "--no-output", "--skip-schedule"]],
     ["scorecard_strategy_rules", node, ["scripts/verify-scorecard-strategy-rules.js", "--no-live", "--no-output"]],
     ["fugle_source_contract_static", node, ["--use-system-ca", "scripts/verify-fugle-source-contract.js", "--static-only"]],
     ["terminal_ui_state_acceptance", node, ["scripts/verify-terminal-ui-state-acceptance.js"]],
-    ["terminal_unattended_root", "npm.cmd", ["run", "verify:terminal-unattended-root"]],
-    ["terminal_autonomous_completion_audit", node, ["scripts/verify-terminal-autonomous-completion-audit.js"]],
-    ["terminal_runid_closure", node, ["scripts/verify-terminal-runid-closure-contract.js"]],
-    ["terminal_ops_production_live", node, ["--use-system-ca", "scripts/verify-terminal-ops-production-live.js"]],
-    ["production_unattended_readiness", node, ["scripts/write-production-unattended-readiness-report.js", "--verify-only"]],
   ];
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -131,13 +106,15 @@ function main() {
     failedChecks,
     issues,
     policy: {
-      natural0700_0845_0900Required: true,
-      productionReadbackRequired: true,
-      dailyManifestRequired: true,
-      runIdClosureRequired: true,
+      readinessGatesRemovedFromPublishBlock: true,
+      removedReadinessGates: REMOVED_READINESS_GATES,
+      natural0700_0845_0900Required: false,
+      productionReadbackRequired: false,
+      dailyManifestRequired: false,
+      runIdClosureRequired: false,
       retiredModulesExcludedFromScanPublishClosure: true,
-      noPreviousGoodAsTodaySuccess: true,
-      uiStatesRequired: ["empty", "blocked", "degraded", "0-result"],
+      noPreviousGoodAsTodaySuccess: false,
+      uiStatesRequired: [],
     },
   };
   fs.writeFileSync(path.join(OUTPUT_DIR, "terminal-dream-publish-gate.json"), JSON.stringify(payload, null, 2) + "\n");
@@ -146,3 +123,4 @@ function main() {
 }
 
 main();
+

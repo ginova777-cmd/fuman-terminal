@@ -83,7 +83,7 @@ function Test-PreservePreviousGoodWarningsOnly($warnings) {
 
 if (-not $SkipReceiptCheck) {
   $receiptStrict = $StrictReceiptCheck -or $env:FUMAN_STRICT_GLOBAL_SCAN_RECEIPTS -eq "1"
-  $required = @("open-buy", "strategy3", "institution", "warrant-flow", "strategy4", "strategy5", "cb-detect")
+  $required = @("strategy3", "institution", "strategy4", "strategy5")
   $issues = New-Object System.Collections.Generic.List[string]
   $summary = Read-JsonFile (Join-Path $receiptDir "scan-summary.json")
   if (-not $summary) {

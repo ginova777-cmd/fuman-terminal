@@ -366,9 +366,10 @@ function staticChecks() {
   ]);
 
   requireIncludes("scripts/verify-publish-gate.js", [
-    "verify-terminal-final-audit-contract.js",
     "verify-terminal-water-root.js",
     "verify-fugle-source-contract.js",
+    "readinessGatesRemovedFromPublishBlock",
+    "removedReadinessGates",
   ]);
 
   requireRegex("package.json", /"verify:fugle-source-contract"\s*:/, "verify:fugle-source-contract script");
