@@ -61,7 +61,6 @@ function main() {
   for (const [name, src] of [
     ["chipSnapshot", "terminal-chip-snapshot-module.js"],
     ["chipFlow", "terminal-chip-snapshot-module.js"],
-    ["warrantFlow", "terminal-chip-snapshot-module.js"],
     ["market", "terminal-market-snapshot-module.js"],
     ["strategy", "terminal-strategy-module.js"],
     ["watchlist", "terminal-watchlist-shell.js"],
@@ -72,24 +71,24 @@ function main() {
       issues.push(`terminal-modules.js missing module marker ${name} -> ${src}`);
     }
   }
-  for (const marker of ["this.preload(\"chipSnapshot\")", "this.preload(\"chipFlow\")", "this.preload(\"warrantFlow\")"]) {
+  for (const marker of ["this.preload(\"chipSnapshot\")", "this.preload(\"chipFlow\")"]) {
     if (!modules.includes(marker)) issues.push(`terminal-modules.js missing preload marker ${marker}`);
   }
 
   const mobile = read("api/mobile-fragment.js");
   const mobileBlock = extractBlock(mobile, /const\s+TAB_CONFIG\s*=\s*\{/, /\n\};/);
   const mobileTabs = [...mobileBlock.matchAll(/^\s{2}([a-z0-9_]+):\s*\{/gm)].map((m) => m[1]);
-  assertSameSet("mobile TAB_CONFIG official tabs", mobileTabs, ["ai", "strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"]);
+  assertSameSet("mobile TAB_CONFIG official tabs", mobileTabs, ["ai", "strategy2", "strategy3", "strategy4", "strategy5", "chip"]);
   assertNoRetired("mobile TAB_CONFIG", mobileBlock, retired);
 
   const resource = read("scripts/verify-terminal-resource-chain.js");
   const resourceBlock = extractBlock(resource, /const\s+STRATEGIES\s*=\s*\[/, /\n\];/);
   const resourceKeys = [...resourceBlock.matchAll(/key:\s*["']([^"']+)["']/g)].map((m) => m[1]);
-  assertSameSet("resource-chain STRATEGIES", resourceKeys, ["strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant", "market"]);
+  assertSameSet("resource-chain STRATEGIES", resourceKeys, ["strategy2", "strategy3", "strategy4", "strategy5", "institution", "market"]);
   assertNoRetired("resource-chain STRATEGIES", resourceBlock, retired);
 
   const manifest = read("scripts/write-daily-terminal-run-manifest.js");
-  const expectedDueKeys = ["strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"];
+  const expectedDueKeys = ["strategy2", "strategy3", "strategy4", "strategy5", "institution"];
   const dynamicManifest = /ACTIVE_MODULE_REGISTRY\.active\.map\s*\(/.test(manifest) && manifest.includes("loadActiveModuleRegistry");
   if (!dynamicManifest) {
     const dueBlock = extractBlock(manifest, /const\s+STRATEGY_DUE_TIMES\s*=\s*\{/, /\n\};/);

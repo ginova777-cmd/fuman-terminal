@@ -9,8 +9,6 @@ const requiredRuntimeApis = [
   "/api/strategy4-latest",
   "/api/strategy5-latest",
   "/api/institution-latest",
-  "/api/warrant-flow-latest",
-  "/api/cb-detect-latest",
 ];
 
 const forbiddenStaticPatterns = [
@@ -20,10 +18,6 @@ const forbiddenStaticPatterns = [
   /(?:\/data\/|data[\\/])strategy4[^"'\s)]*\.json/g,
   /(?:\/data\/|data[\\/])strategy5[^"'\s)]*\.json/g,
   /(?:\/data\/|data[\\/])institution[^"'\s)]*\.json/g,
-  /(?:\/data\/|data[\\/])warrant-flow[^"'\s)]*\.json/g,
-  /(?:\/data\/|data[\\/])warrant-priority[^"'\s)]*\.json/g,
-  /(?:\/data\/|data[\\/])warrant-single-signal[^"'\s)]*\.json/g,
-  /(?:\/data\/|data[\\/])cb-detect[^"'\s)]*\.json/g,
 ];
 
 const runtimeFiles = [
@@ -38,8 +32,6 @@ const apiFiles = [
   "api/strategy4-latest.js",
   "api/strategy5-latest.js",
   "api/institution-latest.js",
-  "api/warrant-flow-latest.js",
-  "api/cb-detect-latest.js",
 ];
 
 const scannerMarkers = [
@@ -48,7 +40,6 @@ const scannerMarkers = [
   ["scripts/scan-strategy4-cache.js", "STRATEGY4_API_ONLY = true"],
   ["scripts/scan-strategy5-cache.js", "STRATEGY5_API_ONLY = true"],
   ["scripts/scan-institution-cache.js", "INSTITUTION_API_ONLY = true"],
-  ["scripts/scan-warrant-flow-cache.js", "WARRANT_FLOW_API_ONLY = true"],
   ["scripts/generate-slim-cache.js", "DESKTOP_API_ONLY_STATIC_OUTPUT = true"],
 ];
 
@@ -124,10 +115,6 @@ if (!strategy2Publisher.includes("supabase:strategy2_latest")) {
   fail("scripts/publish-strategy2-complete-run.js is not Supabase latest sourced");
 }
 
-const cbGenerator = read("scripts/generate-cb-detect.js");
-for (const marker of ["runId", "complete: true", "qualityStatus", "upsertSnapshot(\"cb_detect_latest\""]) {
-  if (!cbGenerator.includes(marker)) fail(`scripts/generate-cb-detect.js missing CB contract marker ${marker}`);
-}
 
 const sw = read("fuman-sw.js");
 if (!sw.includes("desktop_static_disabled") || !sw.includes("isDesktopApiOnlyStaticDataRequest")) {
@@ -135,7 +122,7 @@ if (!sw.includes("desktop_static_disabled") || !sw.includes("isDesktopApiOnlySta
 }
 
 const vercel = read("vercel.json");
-if (!vercel.includes("desktop-static-disabled") || !vercel.includes("/data/(open-buy|strategy2-intraday|strategy3|strategy4|strategy5|institution|warrant-flow")) {
+if (!vercel.includes("desktop-static-disabled") || !vercel.includes("/data/(open-buy|strategy2-intraday|strategy3|strategy4|strategy5|institution")) {
   fail("vercel.json missing desktop static JSON 410 rewrite");
 }
 

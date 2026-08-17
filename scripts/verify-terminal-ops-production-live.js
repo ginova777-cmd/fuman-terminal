@@ -33,15 +33,11 @@ const REDACTED_LOCKED_ENDPOINTS = [
       "strategy4-",
       "strategy5-",
       "institution-",
-      "cb-detect-",
-      "warrant-flow-",
       "/api/strategy2-latest",
       "/api/strategy3-latest",
       "/api/strategy4-latest",
       "/api/strategy5-latest",
       "/api/institution-latest",
-      "/api/cb-detect-latest",
-      "/api/warrant-flow-latest",
     ],
   },
   {
@@ -53,8 +49,6 @@ const REDACTED_LOCKED_ENDPOINTS = [
       "\"strategy4\"",
       "\"strategy5\"",
       "\"chip\"",
-      "\"cb\"",
-      "\"warrant\"",
     ],
   },
 ];
@@ -190,7 +184,7 @@ function membershipError(payload = {}) {
 function collectRunIds(value, out = new Set()) {
   if (value == null) return out;
   if (typeof value === "string") {
-    for (const match of value.matchAll(/\b(?:strategy2|strategy3|strategy4|strategy5|institution|cb-detect|warrant-flow)-\d{8}[\w-]*/g)) out.add(match[0]);
+    for (const match of value.matchAll(/\b(?:strategy2|strategy3|strategy4|strategy5|institution)-\d{8}[\w-]*/g)) out.add(match[0]);
     return out;
   }
   if (Array.isArray(value)) {
@@ -224,8 +218,6 @@ function strategyKeyFromRunId(value) {
   if (text.startsWith("strategy4-")) return "strategy4";
   if (text.startsWith("strategy5-")) return "strategy5";
   if (text.startsWith("institution-")) return "institution";
-  if (text.startsWith("cb-detect-")) return "cb";
-  if (text.startsWith("warrant-flow-")) return "warrant";
   return "";
 }
 
@@ -272,8 +264,6 @@ async function verifyAuthenticatedProtectedReadback(issues, localOpsStatus = {})
     { name: "mobile_strategy4", path: "/api/mobile-fragment?tab=strategy4", expectedKey: "strategy4" },
     { name: "mobile_strategy5", path: "/api/mobile-fragment?tab=strategy5", expectedKey: "strategy5" },
     { name: "mobile_institution", path: "/api/mobile-fragment?tab=chip", expectedKey: "institution" },
-    { name: "mobile_cb", path: "/api/mobile-fragment?tab=cb", expectedKey: "cb" },
-    { name: "mobile_warrant", path: "/api/mobile-fragment?tab=warrant", expectedKey: "warrant" },
   ];
   for (const target of targets) {
     let row;

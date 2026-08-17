@@ -166,24 +166,6 @@
       "status": "WIRED"
     },
     {
-      "key": "cb",
-      "dueTime": "21:25",
-      "requiredForUnattended": true,
-      "class": "chip",
-      "requirementState": "required",
-      "wired": true,
-      "status": "WIRED"
-    },
-    {
-      "key": "warrant",
-      "dueTime": "20:30",
-      "requiredForUnattended": true,
-      "class": "chip",
-      "requirementState": "required",
-      "wired": true,
-      "status": "WIRED"
-    },
-    {
       "key": "canary",
       "dueTime": "21:30",
       "requiredForUnattended": true,
@@ -305,6 +287,16 @@
     },
     {
       "key": "heatmap",
+      "retired": true,
+      "reason": "product_retired"
+    },
+    {
+      "key": "cb",
+      "retired": true,
+      "reason": "product_retired"
+    },
+    {
+      "key": "warrant",
       "retired": true,
       "reason": "product_retired"
     }

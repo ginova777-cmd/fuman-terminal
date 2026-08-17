@@ -68,7 +68,8 @@
       "destination": "/api/desktop-static-disabled"
     },
     {
-      "destination": "/api/desktop-static-disabled"
+      "destination": "/api/desktop-static-disabled",
+      "source": "/data/(open-buy|strategy2-intraday|strategy3|strategy4|strategy5|institution)(.*).json"
     }
   ],
   "headers": [
@@ -298,7 +299,8 @@
           "key": "X-Content-Type-Options",
           "value": "nosniff"
         }
-      ]
+      ],
+      "source": "/data/mobile-(strategy2|strategy3|strategy4|strategy5|chip)-ultra.html"
     },
     {
       "source": "/data/mobile-boot.json",
@@ -545,7 +547,8 @@
           "key": "X-Content-Type-Options",
           "value": "nosniff"
         }
-      ]
+      ],
+      "source": "/data/(strategy3|strategy4|strategy5|open-buy|institution)-latest.json"
     },
     {
       "source": "/data/(.*)summary.json",
@@ -662,4 +665,3 @@
     }
   ]
 }
-

@@ -31,8 +31,6 @@ const closureScripts = [
   "scripts/verify-strategy2-e2e-closure.js",
   "scripts/verify-strategy5-e2e-closure.js",
   "scripts/verify-institution-e2e-closure.js",
-  "scripts/verify-cb-e2e-closure.js",
-  "scripts/verify-warrant-e2e-closure.js",
 ];
 
 requireIncludes(helper, "function isMembershipProtected", "must define membership protected detection");

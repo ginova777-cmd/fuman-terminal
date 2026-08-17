@@ -2,11 +2,12 @@
 
 const fs = require("fs");
 const path = require("path");
+const { loadActiveModuleRegistry } = require("../lib/terminal-active-module-registry");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const OUT_DIR = path.join(ROOT, "outputs", "terminal-autonomous-completion-audit");
-const REQUIRED_ACTIVE_MODULES = ["strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"];
+const REQUIRED_ACTIVE_MODULES = loadActiveModuleRegistry().active.map((row) => row.key);
 
 const FILES = {
   predictivePreflight: path.join(ROOT, "outputs", "terminal-predictive-preflight", "terminal-predictive-preflight.json"),
