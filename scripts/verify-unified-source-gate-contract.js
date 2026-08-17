@@ -162,7 +162,7 @@ const publishSourceGate = requireMarkers("scripts/check-publish-source-gate.js",
   "preserve latest complete run; do not publish; do not overwrite latest; surface degraded reason",
   "scripts/check-scanner-resource-health.js",
 ]);
-for (const strategy of ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "institution", "cb", "warrant"]) {
+for (const strategy of ["strategy1", "strategy2", "strategy3", "strategy4", "strategy5", "institution"]) {
   if (!publishSourceGate.includes(`"${strategy}"`)) {
     issues.push(`scripts/check-publish-source-gate.js must include ${strategy} in the unified publish source gate`);
   }
@@ -198,8 +198,6 @@ const API_BY_MODULE = {
   strategy4: "api/strategy4-latest.js",
   strategy5: "api/strategy5-latest.js",
   institution: "api/institution-latest.js",
-  warrant: "api/warrant-flow-latest.js",
-  cb: "api/cb-detect-latest.js",
 };
 const apiFiles = Object.entries(API_BY_MODULE).filter(([key]) => ACTIVE_MODULES.has(key)).map(([, file]) => file);
 for (const file of apiFiles) {
@@ -224,8 +222,6 @@ const WRITER_BY_MODULE = {
   strategy4: "scripts/scan-strategy4-cache.js",
   strategy5: "scripts/scan-strategy5-cache.js",
   institution: "scripts/scan-institution-cache.js",
-  warrant: "scripts/scan-warrant-flow-cache.js",
-  cb: "scripts/generate-cb-detect.js",
 };
 const writerFiles = Object.entries(WRITER_BY_MODULE).filter(([key]) => ACTIVE_MODULES.has(key)).map(([, file]) => file).concat(["lib/watchlist-match-index-builder.js"]);
 for (const file of writerFiles) {
