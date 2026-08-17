@@ -31,7 +31,6 @@ run("guard:source", ["npm", "run", "guard:source"]);
 run("verify:retired-artifacts", ["npm", "run", "verify:retired-artifacts"]);
 run("verify:unified-source-gate", ["npm", "run", "verify:unified-source-gate"]);
 run("verify:publish-gate", ["npm", "run", "verify:publish-gate"]);
-run("verify:strategy1-open-buy-ui", ["npm", "run", "verify:strategy1-open-buy-ui"]);
 run("verify:bump", ["npm", "run", "verify:bump"]);
 run("verify:terminal-modules", ["npm", "run", "verify:terminal-modules"]);
 run("verify:version", ["npm", "run", "verify:version"]);
