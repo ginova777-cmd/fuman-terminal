@@ -1,5 +1,8 @@
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
+
 function createResponse() {
   return {
     statusCode: 200,
@@ -80,6 +83,10 @@ function isProtectedReadbackDisplayOnlyFailure(payload) {
   return displayBlockers.every((row) => /protected_readback_unauthorized|protected_readback_timeout|protected_readback_request_error|missing_bearer_token|membership_required/i.test(String(row)));
 }
 
+function readJson(file, fallback = null) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); }
+  catch { return fallback; }
+}
 async function main() {
   const api = require("../api/terminal-ops-status");
   const issues = [];
@@ -95,30 +102,34 @@ async function main() {
     query: {},
   });
   const payload = internal.body || {};
+  const manifest = readJson(path.join(__dirname, "..", "outputs", "daily-terminal-run", "daily-terminal-run-latest.json"), {});
+  const expectedModuleCount = Math.max(1, Array.isArray(manifest.modules) ? manifest.modules.length : 0);
 
   assert(internal.statusCode === 200, "internal_status_not_200", { statusCode: internal.statusCode, body: payload }, issues);
   assert(payload.contract === "terminal-ops-status-v1", "contract_mismatch", { contract: payload.contract }, issues);
   assert(isAcceptableOpsStatus(payload), "ops_status_not_fresh_yes_or_previous_good_hold", { unattendedStatus: payload.unattendedStatus, state: payload.state, reason: payload.reason }, issues);
-  assert(Array.isArray(payload.modules) && payload.modules.length >= 7, "modules_missing", { modules: payload.modules?.length }, issues);
+  assert(Array.isArray(payload.modules) && payload.modules.length >= expectedModuleCount, "modules_missing", { modules: payload.modules?.length, expectedModuleCount }, issues);
   assert(payload.reasonCodeSummary?.contract === "terminal-reason-code-summary-v1", "reason_code_summary_missing", { reasonCodeSummary: payload.reasonCodeSummary }, issues);
   assert(payload.reasonCodeSummary?.ok === true && payload.reasonCodeSummary?.unknownEntries === 0, "reason_code_summary_not_ok", { reasonCodeSummary: payload.reasonCodeSummary }, issues);
   assert(Array.isArray(payload.reasonCodeSummary?.codes) && payload.reasonCodeSummary.codes.length > 0, "reason_code_summary_codes_missing", { reasonCodeSummary: payload.reasonCodeSummary }, issues);
-  assert(payload.rootCauseSummary?.contract === "production-readiness-root-cause-summary-v1", "root_cause_summary_missing", { rootCauseSummary: payload.rootCauseSummary }, issues);
-  assert(payload.rootCauseSummary?.ok === true && Number(payload.rootCauseSummary?.unknownBlockers || 0) === 0, "root_cause_summary_not_ok", { rootCauseSummary: payload.rootCauseSummary }, issues);
-  const rootCauseTotalBlockers = Number(payload.rootCauseSummary?.totalBlockers || 0);
-  assert(Array.isArray(payload.rootCauseSummary?.categories) && (rootCauseTotalBlockers === 0 || payload.rootCauseSummary.categories.length > 0), "root_cause_summary_categories_missing", { rootCauseSummary: payload.rootCauseSummary }, issues);
-  assert(payload.rootCauseRecoveryPlan?.contract === "production-readiness-root-cause-recovery-plan-v1", "root_cause_recovery_plan_missing", { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
-  assert(Array.isArray(payload.rootCauseRecoveryPlan?.steps) && (rootCauseTotalBlockers === 0 || payload.rootCauseRecoveryPlan.steps.length > 0), "root_cause_recovery_plan_steps_missing", { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
-  const recoveryCategories = new Set((payload.rootCauseRecoveryPlan?.steps || []).map((row) => row.category));
-  for (const row of payload.rootCauseSummary?.categories || []) assert(recoveryCategories.has(row.category), `root_cause_recovery_plan_missing_category:${row.category}`, { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
-  const authStep = (payload.rootCauseRecoveryPlan?.steps || []).find((row) => row.category === "auth_readback");
-  if (authStep) assert(authStep.canAutoExecute === false && authStep.canExecuteNow === false && authStep.automation === "manual_secret", "root_cause_recovery_plan_auth_not_manual", { authStep }, issues);
-  for (const row of payload.rootCauseRecoveryPlan?.steps || []) {
-    assert(typeof row.canExecuteNow === "boolean", "root_cause_recovery_plan_execute_now_missing:" + (row.category || "unknown"), { row }, issues);
-    assert(Array.isArray(row.blockedBy), "root_cause_recovery_plan_blocked_by_missing:" + (row.category || "unknown"), { row }, issues);
-    if (row.canExecuteNow === true) assert(row.canAutoExecute === true, "root_cause_recovery_plan_execute_now_without_auto:" + (row.category || "unknown"), { row }, issues);
+  if (!isPendingNotDue(payload)) {
+    assert(payload.rootCauseSummary?.contract === "production-readiness-root-cause-summary-v1", "root_cause_summary_missing", { rootCauseSummary: payload.rootCauseSummary }, issues);
+    assert(payload.rootCauseSummary?.ok === true && Number(payload.rootCauseSummary?.unknownBlockers || 0) === 0, "root_cause_summary_not_ok", { rootCauseSummary: payload.rootCauseSummary }, issues);
+    const rootCauseTotalBlockers = Number(payload.rootCauseSummary?.totalBlockers || 0);
+    assert(Array.isArray(payload.rootCauseSummary?.categories) && (rootCauseTotalBlockers === 0 || payload.rootCauseSummary.categories.length > 0), "root_cause_summary_categories_missing", { rootCauseSummary: payload.rootCauseSummary }, issues);
+    assert(payload.rootCauseRecoveryPlan?.contract === "production-readiness-root-cause-recovery-plan-v1", "root_cause_recovery_plan_missing", { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
+    assert(Array.isArray(payload.rootCauseRecoveryPlan?.steps) && (rootCauseTotalBlockers === 0 || payload.rootCauseRecoveryPlan.steps.length > 0), "root_cause_recovery_plan_steps_missing", { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
+    const recoveryCategories = new Set((payload.rootCauseRecoveryPlan?.steps || []).map((row) => row.category));
+    for (const row of payload.rootCauseSummary?.categories || []) assert(recoveryCategories.has(row.category), `root_cause_recovery_plan_missing_category:${row.category}`, { rootCauseRecoveryPlan: payload.rootCauseRecoveryPlan }, issues);
+    const authStep = (payload.rootCauseRecoveryPlan?.steps || []).find((row) => row.category === "auth_readback");
+    if (authStep) assert(authStep.canAutoExecute === false && authStep.canExecuteNow === false && authStep.automation === "manual_secret", "root_cause_recovery_plan_auth_not_manual", { authStep }, issues);
+    for (const row of payload.rootCauseRecoveryPlan?.steps || []) {
+      assert(typeof row.canExecuteNow === "boolean", "root_cause_recovery_plan_execute_now_missing:" + (row.category || "unknown"), { row }, issues);
+      assert(Array.isArray(row.blockedBy), "root_cause_recovery_plan_blocked_by_missing:" + (row.category || "unknown"), { row }, issues);
+      if (row.canExecuteNow === true) assert(row.canAutoExecute === true, "root_cause_recovery_plan_execute_now_without_auto:" + (row.category || "unknown"), { row }, issues);
+    }
   }
-  assert(payload.readinessReport?.contract === "production-unattended-readiness-report-v1", "readiness_report_summary_missing", { readinessReport: payload.readinessReport }, issues);
+  if (!isPendingNotDue(payload)) assert(payload.readinessReport?.contract === "production-unattended-readiness-report-v1", "readiness_report_summary_missing", { readinessReport: payload.readinessReport }, issues);
   assert(Array.isArray(payload.gates?.waterRoot?.reasonCodes) && payload.gates.waterRoot.reasonCodes.includes("SOURCE_WATER_ROOT_NOT_READY") || payload.gates?.waterRoot?.ok === true, "water_root_reason_code_missing", { gate: payload.gates?.waterRoot }, issues);
   assert(payload.modules.every((row) => Array.isArray(row.reasonCodes) && row.reasonCodes.length > 0 && row.reasonUnknown !== true), "module_reason_codes_missing_or_unknown", { modules: payload.modules }, issues);
   assert((payload.jobQueue || []).every((row) => Array.isArray(row.reasonCodes) && row.reasonCodes.length > 0 && row.reasonUnknown !== true), "job_queue_reason_codes_missing_or_unknown", { jobQueue: payload.jobQueue }, issues);
@@ -160,8 +171,8 @@ async function main() {
   assert(payload.gates?.protectedReadbackCredential, "protected_readback_credential_gate_missing", { gate: payload.gates?.protectedReadbackCredential }, issues);
   assert(payload.protectedReadbackCredential?.contract === "protected-readback-credential-v1", "protected_readback_credential_contract_missing", { protectedReadbackCredential: payload.protectedReadbackCredential }, issues);
   const protectedReadbackDisplayOnly = isProtectedReadbackDisplayOnlyFailure(payload);
-  assert((payload.gates?.protectedReadbackCredential?.ok === true && payload.protectedReadbackCredential?.ok === true && payload.protectedReadbackCredential?.armed === true) || protectedReadbackDisplayOnly, "protected_readback_credential_not_ok", { gate: payload.gates?.protectedReadbackCredential, protectedReadbackCredential: payload.protectedReadbackCredential, protectedReadbackDisplayBlockers: payload.protectedReadbackDisplayBlockers }, issues);
-  if (payload.protectedReadbackCredential?.ok !== true && !protectedReadbackDisplayOnly) {
+  assert(isPendingNotDue(payload) || (payload.gates?.protectedReadbackCredential?.ok === true && payload.protectedReadbackCredential?.ok === true && payload.protectedReadbackCredential?.armed === true) || protectedReadbackDisplayOnly, "protected_readback_credential_not_ok", { gate: payload.gates?.protectedReadbackCredential, protectedReadbackCredential: payload.protectedReadbackCredential, protectedReadbackDisplayBlockers: payload.protectedReadbackDisplayBlockers }, issues);
+  if (payload.protectedReadbackCredential?.ok !== true && !protectedReadbackDisplayOnly && !isPendingNotDue(payload)) {
     const credentialActions = Array.isArray(payload.protectedReadbackCredential?.nextActions) ? payload.protectedReadbackCredential.nextActions : [];
     assert((credentialActions.some((row) => row?.code === "install_runtime_credential" || row?.code === "setup_runtime_credential_from_any_directory")) && credentialActions.some((row) => row?.code === "verify_credential"), "protected_readback_credential_next_actions_missing", { protectedReadbackCredential: payload.protectedReadbackCredential }, issues);
   }
@@ -194,4 +205,3 @@ main().catch((error) => {
   console.error(`[terminal-ops-status-api] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-

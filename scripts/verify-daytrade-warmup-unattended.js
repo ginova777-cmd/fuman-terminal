@@ -439,6 +439,7 @@ function buildSummary(expectedTradeDate, runId) {
   const effectiveFailedChecks = failedChecks;
   const effectiveFailureCodes = failureCodes;
   const previous_unattended_yes = previousUnattendedYes(expectedTradeDate);
+  const pendingNotDue = pendingPhase.length > 0 && failedChecks.length === 0;
   const uniqueFailureCodes = pendingNotDue ? ["PENDING_NOT_DUE"] : [...new Set(failureCodes)];
   const opsPolicy = buildOpsPolicy({
     yes,

@@ -388,7 +388,7 @@ function fetchStrategy2Internal(request, endpoint) {
 }
 function fetchStrategy3Internal(request, endpoint) {
   const url = new URL(endpoint, originFrom(request));
-  const query = { ...Object.fromEntries(url.searchParams.entries()), live: "1", verify: "1", noSnapshot: "1" };
+  const query = { ...Object.fromEntries(url.searchParams.entries()), verify: "1", ...(shouldUseLiveFragment("strategy3") ? { live: "1", noSnapshot: "1" } : {}) };
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("strategy3_internal_timeout")), MOBILE_STRATEGY3_DIRECT_TIMEOUT_MS);
     const finish = (result) => {

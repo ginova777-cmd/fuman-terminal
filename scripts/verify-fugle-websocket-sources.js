@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const ROOT_DIR = path.resolve(__dirname, "..");
@@ -25,7 +26,7 @@ const TASK_SHARING_VIOLATION = 2147946720; // 0x80070020, usually overlapping sc
 
 function readJson(file, fallback = null) {
   try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
+    return JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
   } catch {
     return fallback;
   }
@@ -181,7 +182,7 @@ function auditFinMindPolicyCode() {
   };
 }
 
-function main() {
+async function main() {
   const issues = [];
   const primaryStockStatus = readJson(STOCK_STATUS_FILE, null);
   const legacyStockStatus = readJson(LEGACY_STOCK_STATUS_FILE, null);
@@ -191,6 +192,8 @@ function main() {
   const daytrade = readJson(DAYTRADE_CONFIG_FILE, {});
   const shared = readJson(SHARED_CONFIG_FILE, {});
   const recoveryLock = readJson(RECOVERY_LOCK_FILE, {});
+  const marketCalendar = await buildMarketCalendarContract({}).catch(() => null);
+  const offSessionPreviousGood = marketCalendar?.sourceFreshnessRequired === false;
 
   const stock = {
     statusFile: stockStatusFile,
@@ -214,7 +217,7 @@ function main() {
     addIssue(issues, ws.mode === "streaming", `${name}_websocket_not_streaming`, ws);
     addIssue(issues, ws.withinSubscriptionLimit, `${name}_websocket_subscription_limit_violation`, ws);
     addIssue(issues, ws.forbiddenChunks === 0, `${name}_websocket_forbidden_chunks`, ws);
-    addIssue(issues, ws.ageSeconds * 1000 <= STATUS_MAX_AGE_MS, `${name}_websocket_status_stale`, ws);
+    addIssue(issues, offSessionPreviousGood || ws.ageSeconds * 1000 <= STATUS_MAX_AGE_MS, `${name}_websocket_status_stale`, ws);
     for (const channel of ws.requiredChannels) {
       addIssue(issues, ws.channels.includes(channel), `${name}_websocket_missing_channel_${channel}`, ws);
     }
@@ -278,7 +281,17 @@ function main() {
     status: issues.length === 0 ? "ready" : "not_ready",
     checkedAt: new Date().toISOString(),
     contract: "fugle-websocket-source-readiness-v1",
-    scope: "local runtime source transport only; does not prove live market A during off-session and does not run strategy scanners",
+    scope: "local runtime source transport only; live freshness is required only during formal source window and off-session preserves previous-good evidence",
+    marketCalendar: marketCalendar ? {
+      marketDate: marketCalendar.marketDate,
+      marketOpen: marketCalendar.marketOpen,
+      marketStatus: marketCalendar.marketStatus,
+      sourceFreshnessRequired: marketCalendar.sourceFreshnessRequired,
+      formalSourceWindow: marketCalendar.formalSourceWindow,
+      displayMode: marketCalendar.displayMode,
+      skipReason: marketCalendar.skipReason,
+    } : null,
+    offSessionPreviousGood,
     stock,
     futopt,
     daytradeStableSpeed: {
@@ -322,13 +335,11 @@ function main() {
   if (!report.ok) process.exitCode = 1;
 }
 
-try {
-  main();
-} catch (error) {
+main().catch((error) => {
   console.error(JSON.stringify({
     ok: false,
     status: "error",
     error: error?.stack || error?.message || String(error),
   }, null, 2));
   process.exitCode = 1;
-}
+});

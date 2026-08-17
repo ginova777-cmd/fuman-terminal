@@ -315,7 +315,7 @@ function Invoke-Strategy3PreserveFailure {
     }
     $blockedReceiptFile = Write-Strategy3BlockedReceipt $Reason ([string]$verifiedPayload.runId) ([int]$verifiedPayload.count) $Stage
     Write-Strategy3Receipt "blocked_preserved" 3 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($Reason, "blockedReceipt=$blockedReceiptFile") $Reason
-    Write-Strategy3CompleteLog "Strategy3 $Stage blocked; preserved runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
+    Write-Strategy3CompleteLog "Strategy3 $Stage blocked; source gate blocked new publish, preserving latest runId=$($verifiedPayload.runId) usedDate=$($verifiedPayload.usedDate)"
   } catch {
     $failureReason = "$Reason; preserve readback/snapshot unavailable: $($_.Exception.Message)"
     $blockedReceiptFile = ""

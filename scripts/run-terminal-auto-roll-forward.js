@@ -272,8 +272,9 @@ function actionRequiresCurrentDateReceipt(action = {}) {
 
 function receiptHasCurrentDateProof(action = {}, receipt = {}) {
   const expected = currentTradeDate();
-  if (!/^20\d{6}$/.test(expected)) return true;
-  if (!actionRequiresCurrentDateReceipt(action)) return true;
+  const requiresCurrentDate = actionRequiresCurrentDateReceipt(action);
+  if (!requiresCurrentDate) return true;
+  if (!/^20\d{6}$/.test(expected)) return false;
   const key = String(action.key || action.module || "").replace(/[^a-z0-9_-]/gi, "");
   const body = JSON.stringify(receipt);
   const expectedDashed = expected.slice(0, 4) + "-" + expected.slice(4, 6) + "-" + expected.slice(6, 8);

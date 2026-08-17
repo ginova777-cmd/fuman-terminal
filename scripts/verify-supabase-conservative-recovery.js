@@ -32,7 +32,7 @@ const PRESERVED_TASKS = [
 ];
 
 function readJson(file) {
-  return JSON.parse(fs.readFileSync(file, "utf8"));
+  return JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
 }
 
 function addIssue(issues, condition, code, details = {}) {

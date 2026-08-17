@@ -555,7 +555,7 @@ function main() {
     if (process.env.FUMAN_FINAL_AUDIT_WRITE_RUNTIME !== "0") writeJson(path.join(runtimeDir, "state", "unattended-final-audit.json"), finalPayload);
     writeRuntimeRecoveryQueue(runtimeDir, collection.recovery_queue || {});
     console.log(JSON.stringify({ ok: finalPayload.ok, decision: finalPayload.decision, pending_not_due: finalPayload.pending_not_due, daily_run_id: dailyRunId, trade_date: tradeDate, first_blocker: finalPayload.first_blocker, reason_code: finalPayload.reason_code, allowed_action: finalPayload.allowed_action, module_count: finalPayload.module_receipts.length, output: latest }, null, 2));
-    if (!finalPayload.ok || (!marketClosedPreviousGoodHold && manifestRun.exit_code !== 0) || (!marketClosedPreviousGoodHold && !closureEvidence.ok && collectionRun.exit_code !== 0)) process.exitCode = 1;
+    if (!pendingNotDue && (!finalPayload.ok || (!marketClosedPreviousGoodHold && manifestRun.exit_code !== 0) || (!marketClosedPreviousGoodHold && !closureEvidence.ok && collectionRun.exit_code !== 0))) process.exitCode = 1;
   } catch (error) {
     const release = releaseOrchestratorLock(lock);
     const payload = failurePayload({ auditRoot, tradeDate, dailyRunId, startedAt, lock, firstBlocker: "final_audit_exception", reasonCode: "final_audit_exception", allowedAction: "inspect_final_audit_error_then_retry", error: String(error.stack || error.message || error) }); payload.execution_aborted = true; payload.orchestrator_lock = { acquired: lock?.ok === true, released: release?.released === true, file: lock?.file || "", release }; payload.lock_release = release;

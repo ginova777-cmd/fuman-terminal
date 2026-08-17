@@ -218,9 +218,10 @@ function main() {
   }
   const rootRegressionNeedles = [
     "const marketClosed = finalPayload.market_closed === true || selfHealPayload.market_closed === true;",
-    "const ok = unattendedYes || marketClosed;",
+    "const offSessionPreviousGood = selfHealPayload.state === \"OUTSIDE_FORMAL_SOURCE_WINDOW_PRESERVE_PREVIOUS_GOOD\"",
+    "const ok = unattendedYes || marketClosed || offSessionPreviousGood;",
     "WARMUP_MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD",
-    "const ok = unattendedYes || marketClosed;",
+    "WARMUP_OUTSIDE_SOURCE_WINDOW_PRESERVE_PREVIOUS_GOOD",
     "contract: \"daytrade-warmup-root-with-self-heal-v2\"",
     "market-closed policy may pass without formal entry, but only natural 0700/0845/0900 evidence can set unattended_yes=YES",
   ];

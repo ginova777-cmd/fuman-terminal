@@ -128,13 +128,16 @@ function validateCanary(manifest, scorecard, options = {}) {
   const previousGoodDate = maxModuleRunDate(modules);
   const closed = marketClosedPreviousGood(manifest) || pendingPreviousGood;
   const previousGoodHoldClosure = manifestPreviousGoodHoldClosure(manifest, modules);
-  const expectedReportDate = (pendingPreviousGood || allowPendingRollForward || previousGoodHoldClosure) ? previousGoodDate : tradeDate;
+  const pendingNotDueHold = pendingPreviousGood || allowPendingRollForward;
+  const expectedReportDate = previousGoodHoldClosure
+    ? previousGoodDate
+    : (pendingNotDueHold ? (scorecardDate || previousGoodDate) : tradeDate);
 
   if (manifest.contract !== "daily-terminal-run-manifest-v1") issues.push("manifest_contract_invalid");
   if (scorecard.contract !== "scorecard-resource-chain-v1") issues.push("scorecard_contract_invalid");
   if (!tradeDate) issues.push("manifest_tradeDate_missing");
-  if (!(pendingPreviousGood || allowPendingRollForward || previousGoodHoldClosure) && scorecardDate !== tradeDate) issues.push(`scorecard_latestDate_mismatch:${scorecardDate || "missing"}!=${tradeDate || "missing"}`);
-  if ((pendingPreviousGood || allowPendingRollForward || previousGoodHoldClosure) && scorecardDate !== previousGoodDate) issues.push(`scorecard_previousGoodDate_mismatch:${scorecardDate || "missing"}!=${previousGoodDate || "missing"}`);
+  if (!(pendingNotDueHold || previousGoodHoldClosure) && scorecardDate !== tradeDate) issues.push(`scorecard_latestDate_mismatch:${scorecardDate || "missing"}!=${tradeDate || "missing"}`);
+  if (previousGoodHoldClosure && scorecardDate !== previousGoodDate) issues.push(`scorecard_previousGoodDate_mismatch:${scorecardDate || "missing"}!=${previousGoodDate || "missing"}`);
   if (scorecard.ok !== true) issues.push("scorecard_ok_not_true");
   if (!Array.isArray(scorecard.records) || scorecard.records.length <= 0) issues.push("scorecard_records_empty");
   if (!Array.isArray(scorecard.sourceReports) || scorecard.sourceReports.length <= 0) issues.push("scorecard_sourceReports_empty");
@@ -152,7 +155,7 @@ function validateCanary(manifest, scorecard, options = {}) {
 
   for (const row of modules) {
     const key = lower(row.key);
-    if (isPendingNotDueModule(row) && !pendingPreviousGood) continue;
+    if (isPendingNotDueModule(row) && (pendingNotDueHold || !pendingPreviousGood)) continue;
     const report = reports.get(key);
     if (!report) {
       issues.push(`sourceReport_missing:${row.key}`);

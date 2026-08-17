@@ -26,6 +26,14 @@ function cleanRows(value, limit) {
     .slice(0, Math.max(1, Math.min(Number(limit) || 240, 500)));
 }
 
+function hidePreviousGoodRows(rows, payload) {
+  const previousGoodRowsHidden = payload?.preservePreviousGood === true
+    || payload?.run_quality_at_publish?.preservePreviousGood === true
+    || payload?.previousGood === true
+    || payload?.fallbackUsed === true;
+  // formal terminal hides previous-good rows; previous-good can be labeled, but not displayed as fresh Strategy2 candidates.
+  return previousGoodRowsHidden ? [] : rows;
+}
 function emptyPayload(today, reason) {
   return {
     ok: true,
@@ -83,7 +91,9 @@ async function strategy2Latest(request, response) {
   if (String(payload.dataDate || payload.date || "") !== today) return response.status(200).json(emptyPayload(today, "strategy2_v2_snapshot_not_today"));
   if (!String(payload.runId || "").startsWith("strategy2-v2-")) return response.status(200).json(emptyPayload(today, "strategy2_v2_runid_invalid"));
   const limit = Number(query.limit || 240);
-  const formalEvents = cleanRows(payload.events || payload.rows || payload.matches, limit);
+  const rawFormalEvents = cleanRows(payload.events || payload.rows || payload.matches, limit);
+  const formalEvents = hidePreviousGoodRows(rawFormalEvents, payload);
+  const previousGoodRowsHidden = rawFormalEvents.length > 0 && formalEvents.length === 0;
   const observations = cleanRows(realtimePayload?.observations, limit);
   const preopenFutures = cleanRows(realtimePayload?.preopenFutures, 20);
   const events = cleanRows([...observations, ...formalEvents]
@@ -116,6 +126,8 @@ async function strategy2Latest(request, response) {
     returnedCount: events.length,
     observationCount: observations.length,
     formalReturnedCount: formalEvents.length,
+    previousGoodRowsHidden,
+    hiddenPreviousGoodCount: previousGoodRowsHidden ? rawFormalEvents.length : 0,
     fallbackUsed: false,
     previousGoodRunId: "",
     cacheSource: "supabase:market_snapshots:strategy2_live_v2+strategy2_v2_realtime_observation",
@@ -124,3 +136,5 @@ async function strategy2Latest(request, response) {
 }
 
 module.exports = withEntitlementRequired(strategy2Latest, "strategy2");
+
+

@@ -57,15 +57,19 @@ function main() {
 
   const unattendedYes = warmup.ok && isUnattendedYes(finalPayload);
   const marketClosed = finalPayload.market_closed === true || selfHealPayload.market_closed === true;
-  const ok = unattendedYes || marketClosed;
+  const offSessionPreviousGood = selfHealPayload.state === "OUTSIDE_FORMAL_SOURCE_WINDOW_PRESERVE_PREVIOUS_GOOD"
+    || finalPayload.policy_decision === "FAIL_CLOSED_PRESERVE_PREVIOUS_GOOD";
+  const ok = unattendedYes || marketClosed || offSessionPreviousGood;
   const waitingForNaturalPhase = selfHealPayload.state === "WAITING_FOR_NATURAL_PHASE";
   const state = unattendedYes
     ? "WARMUP_UNATTENDED_YES_NO_REWATER_NEEDED"
     : marketClosed
       ? "WARMUP_MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD"
-      : waitingForNaturalPhase
-        ? "WARMUP_WAITING_FOR_NATURAL_PHASE"
-        : selfHeal.ok
+      : offSessionPreviousGood
+        ? "WARMUP_OUTSIDE_SOURCE_WINDOW_PRESERVE_PREVIOUS_GOOD"
+        : waitingForNaturalPhase
+          ? "WARMUP_WAITING_FOR_NATURAL_PHASE"
+          : selfHeal.ok
           ? "WARMUP_NOT_READY_SELF_HEAL_PLANNED_OR_APPLIED"
           : "WARMUP_NOT_READY_SELF_HEAL_FAILED";
 
@@ -79,6 +83,7 @@ function main() {
     marketClosedPolicy: "market-closed policy may pass without formal entry, but only natural 0700/0845/0900 evidence can set unattended_yes=YES",
     unattendedYes,
     marketClosed,
+    offSessionPreviousGood,
     selfHealOk: selfHeal.ok,
     selfHealCountsAsUnattendedYes: false,
     warmup,

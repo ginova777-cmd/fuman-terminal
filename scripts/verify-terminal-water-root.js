@@ -179,7 +179,7 @@ function intradayStatusSummary(row = {}, checkedAt = new Date().toISOString()) {
     updatedAt,
     latestCandleAgeSeconds: Number.isFinite(explicitAge) ? explicitAge : computedAge,
     updatedAgeSeconds: computedAge,
-    readyMa20Continuous: row.ready_ma20_continuous === true || row.ready_ge_20 === true,
+    readyMa20Continuous: row.ready_ma20_continuous === true,
     readyMa35Continuous: row.ready_ma35_continuous === true || row.ready_ge_35 === true,
   };
 }

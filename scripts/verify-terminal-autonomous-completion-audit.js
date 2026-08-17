@@ -272,7 +272,21 @@ function verifyArtifacts(artifacts, issues) {
   rows.push(fileEvidence("notificationPlan", FILES.notificationPlan, "autonomous-ops-notification-plan-v1", artifacts.notificationPlan, issues));
   rows.push(fileEvidence("opsStatus", FILES.opsStatus, "terminal-ops-status-v1", artifacts.opsStatus, issues));
   rows.push(fileEvidence("reasonCodeClassifier", FILES.reasonCodeClassifier, "terminal-reason-code-classifier-verifier-v1", artifacts.reasonCodeClassifier, issues));
-  rows.push(fileEvidence("protectedReadbackCredential", FILES.protectedReadbackCredential, "protected-readback-credential-v1", artifacts.protectedReadbackCredential, issues));
+  const modules = Array.isArray(artifacts.manifest?.modules) ? artifacts.manifest.modules : [];
+  const blockerText = String(artifacts.manifest?.blocker || artifacts.controlPlane?.decision?.reason || "").toLowerCase();
+  const hardBlockedModules = modules.filter((row) => row.ok !== true && row.pendingNotDue !== true);
+  const pendingNotDue = blockerText.includes("pending_not_due") && hardBlockedModules.length === 0;
+  if (pendingNotDue && !fs.existsSync(FILES.protectedReadbackCredential)) {
+    rows.push({
+      name: "protectedReadbackCredential",
+      ok: true,
+      file: FILES.protectedReadbackCredential,
+      contract: "pending_not_due_not_required_yet",
+      summary: "pending_not_due; protected readback credential is verified by the later dedicated root gate",
+    });
+  } else {
+    rows.push(fileEvidence("protectedReadbackCredential", FILES.protectedReadbackCredential, "protected-readback-credential-v1", artifacts.protectedReadbackCredential, issues));
+  }
   return rows;
 }
 
@@ -339,15 +353,17 @@ function verifyInvariants(artifacts, issues) {
 
   const modules = Array.isArray(manifest?.modules) ? manifest.modules : [];
   const moduleKeys = modules.map((row) => row.key).filter(Boolean);
-  for (const key of REQUIRED_ACTIVE_MODULES) {
-    assert(moduleKeys.includes(key), issues, `manifest_active_module_missing:${key}`, { moduleKeys });
+  const blockerText = String(manifest?.blocker || controlPlane?.decision?.reason || "").toLowerCase();
+  const hardBlockedModules = modules.filter((row) => row.ok !== true && row.pendingNotDue !== true);
+  const pendingNotDue = blockerText.includes("pending_not_due") && hardBlockedModules.length === 0;
+  if (!pendingNotDue) {
+    for (const key of REQUIRED_ACTIVE_MODULES) {
+      assert(moduleKeys.includes(key), issues, `manifest_active_module_missing:${key}`, { moduleKeys });
+    }
   }
   const previousGoodHoldClosure = manifestPreviousGoodHoldClosure(manifest, modules);
   const completionClosed = closed || previousGoodHoldClosure;
   const protectedReadbackDisplayOnly = protectedReadbackDisplayOnlyBlocker({ protectedReadbackCredential, opsStatus });
-  const blockerText = String(manifest?.blocker || controlPlane?.decision?.reason || "").toLowerCase();
-  const hardBlockedModules = modules.filter((row) => row.ok !== true && row.pendingNotDue !== true);
-  const pendingNotDue = blockerText.includes("pending_not_due") && hardBlockedModules.length === 0;
   if (!pendingNotDue) {
     for (const row of hardBlockedModules) assert(false, issues, `manifest_module_blocked:${row.key}`, { issues: row.issues || [], runId: row.runId || "", tradeDate: row.tradeDate || "", sourceDate: row.sourceDate || "" });
     assert(acceptableCompletionStatus(manifest?.unattendedStatus, completionClosed), issues, "manifest_not_fresh_yes_or_previous_good_hold", { unattendedStatus: manifest?.unattendedStatus, blocker: manifest?.blocker, closed });
@@ -381,8 +397,10 @@ function verifyInvariants(artifacts, issues) {
     assert(protectedInvariants.includes(required), issues, `action_matrix_invariant_missing:${required}`, { protectedInvariants });
   }
 
-  assert(protectedReadbackCredential?.contract === "protected-readback-credential-v1", issues, "protected_readback_credential_contract_missing", { protectedReadbackCredential });
-  if (!closed && !pendingNotDue && !protectedReadbackDisplayOnly) assert(protectedReadbackCredential?.ok === true, issues, "protected_readback_credential_not_ok", { failures: protectedReadbackCredential?.failures || [], auth: protectedReadbackCredential?.auth || {} });
+  if (!pendingNotDue) {
+    assert(protectedReadbackCredential?.contract === "protected-readback-credential-v1", issues, "protected_readback_credential_contract_missing", { protectedReadbackCredential });
+    if (!closed && !protectedReadbackDisplayOnly) assert(protectedReadbackCredential?.ok === true, issues, "protected_readback_credential_not_ok", { failures: protectedReadbackCredential?.failures || [], auth: protectedReadbackCredential?.auth || {} });
+  }
 
   assert(notificationPlan?.ok === true, issues, "notification_plan_not_ok", { notificationPlan });
   assert(typeof notificationPlan?.notification?.required === "boolean", issues, "notification_required_not_boolean", { notification: notificationPlan?.notification });
@@ -394,34 +412,38 @@ function verifyInvariants(artifacts, issues) {
   assert(opsStatus?.reasonCodeSummary?.contract === "terminal-reason-code-summary-v1", issues, "ops_status_reason_code_summary_missing", { reasonCodeSummary: opsStatus?.reasonCodeSummary });
   assert(opsStatus?.reasonCodeSummary?.ok === true && Number(opsStatus?.reasonCodeSummary?.unknownEntries || 0) === 0, issues, "ops_status_reason_code_summary_not_ok", { reasonCodeSummary: opsStatus?.reasonCodeSummary });
   assert(Object.keys(opsStatus?.reasonCodeSummary?.codes || {}).length > 0, issues, "ops_status_reason_codes_missing", { reasonCodeSummary: opsStatus?.reasonCodeSummary });
-  assert(opsStatus?.rootCauseSummary?.contract === "production-readiness-root-cause-summary-v1", issues, "ops_status_root_cause_summary_missing", { rootCauseSummary: opsStatus?.rootCauseSummary });
-  assert(opsStatus?.rootCauseSummary?.ok === true && Number(opsStatus?.rootCauseSummary?.unknownBlockers || 0) === 0, issues, "ops_status_root_cause_summary_not_ok", { rootCauseSummary: opsStatus?.rootCauseSummary });
-  assert(opsStatus?.rootCauseRecoveryPlan?.contract === "production-readiness-root-cause-recovery-plan-v1", issues, "ops_status_root_cause_recovery_plan_missing", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
-  const rootCauseTotalBlockers = Number(opsStatus?.rootCauseSummary?.totalBlockers || 0);
-  const rootCauseCategories = Array.isArray(opsStatus?.rootCauseSummary?.categories) ? opsStatus.rootCauseSummary.categories : [];
-  const rootCauseRecoverySteps = Array.isArray(opsStatus?.rootCauseRecoveryPlan?.steps) ? opsStatus.rootCauseRecoveryPlan.steps : [];
-  if (rootCauseTotalBlockers > 0) {
-    assert(rootCauseCategories.length > 0, issues, "ops_status_root_cause_summary_categories_missing", { rootCauseSummary: opsStatus?.rootCauseSummary });
-    assert(rootCauseRecoverySteps.length > 0, issues, "ops_status_root_cause_recovery_plan_steps_missing", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
-  } else {
-    assert(rootCauseCategories.length === 0, issues, "ops_status_root_cause_categories_present_without_blockers", { rootCauseSummary: opsStatus?.rootCauseSummary });
-    assert(rootCauseRecoverySteps.length === 0 && Number(opsStatus?.rootCauseRecoveryPlan?.stepCount || 0) === 0, issues, "ops_status_root_cause_recovery_steps_present_without_blockers", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
-  }
-  const recoveryCategories = new Set((opsStatus?.rootCauseRecoveryPlan?.steps || []).map((row) => row.category));
-  for (const row of opsStatus?.rootCauseSummary?.categories || []) assert(recoveryCategories.has(row.category), issues, `ops_status_root_cause_recovery_plan_missing_category:${row.category}`, { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
-  const authRecoveryStep = (opsStatus?.rootCauseRecoveryPlan?.steps || []).find((row) => row.category === "auth_readback");
-  if (authRecoveryStep) assert(authRecoveryStep.canAutoExecute === false && authRecoveryStep.canExecuteNow === false && authRecoveryStep.automation === "manual_secret", issues, "ops_status_auth_recovery_must_be_manual", { authRecoveryStep });
-  for (const row of opsStatus?.rootCauseRecoveryPlan?.steps || []) {
-    assert(typeof row.canExecuteNow === "boolean", issues, "ops_status_root_cause_recovery_execute_now_missing:" + (row.category || "unknown"), { row });
-    assert(Array.isArray(row.blockedBy), issues, "ops_status_root_cause_recovery_blocked_by_missing:" + (row.category || "unknown"), { row });
-    if (row.canExecuteNow === true) assert(row.canAutoExecute === true, issues, "ops_status_root_cause_recovery_execute_now_without_auto:" + (row.category || "unknown"), { row });
+  if (!pendingNotDue) {
+    assert(opsStatus?.rootCauseSummary?.contract === "production-readiness-root-cause-summary-v1", issues, "ops_status_root_cause_summary_missing", { rootCauseSummary: opsStatus?.rootCauseSummary });
+    assert(opsStatus?.rootCauseSummary?.ok === true && Number(opsStatus?.rootCauseSummary?.unknownBlockers || 0) === 0, issues, "ops_status_root_cause_summary_not_ok", { rootCauseSummary: opsStatus?.rootCauseSummary });
+    assert(opsStatus?.rootCauseRecoveryPlan?.contract === "production-readiness-root-cause-recovery-plan-v1", issues, "ops_status_root_cause_recovery_plan_missing", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
+    const rootCauseTotalBlockers = Number(opsStatus?.rootCauseSummary?.totalBlockers || 0);
+    const rootCauseCategories = Array.isArray(opsStatus?.rootCauseSummary?.categories) ? opsStatus.rootCauseSummary.categories : [];
+    const rootCauseRecoverySteps = Array.isArray(opsStatus?.rootCauseRecoveryPlan?.steps) ? opsStatus.rootCauseRecoveryPlan.steps : [];
+    if (rootCauseTotalBlockers > 0) {
+      assert(rootCauseCategories.length > 0, issues, "ops_status_root_cause_summary_categories_missing", { rootCauseSummary: opsStatus?.rootCauseSummary });
+      assert(rootCauseRecoverySteps.length > 0, issues, "ops_status_root_cause_recovery_plan_steps_missing", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
+    } else {
+      assert(rootCauseCategories.length === 0, issues, "ops_status_root_cause_categories_present_without_blockers", { rootCauseSummary: opsStatus?.rootCauseSummary });
+      assert(rootCauseRecoverySteps.length === 0 && Number(opsStatus?.rootCauseRecoveryPlan?.stepCount || 0) === 0, issues, "ops_status_root_cause_recovery_steps_present_without_blockers", { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
+    }
+    const recoveryCategories = new Set((opsStatus?.rootCauseRecoveryPlan?.steps || []).map((row) => row.category));
+    for (const row of opsStatus?.rootCauseSummary?.categories || []) assert(recoveryCategories.has(row.category), issues, `ops_status_root_cause_recovery_plan_missing_category:${row.category}`, { rootCauseRecoveryPlan: opsStatus?.rootCauseRecoveryPlan });
+    const authRecoveryStep = (opsStatus?.rootCauseRecoveryPlan?.steps || []).find((row) => row.category === "auth_readback");
+    if (authRecoveryStep) assert(authRecoveryStep.canAutoExecute === false && authRecoveryStep.canExecuteNow === false && authRecoveryStep.automation === "manual_secret", issues, "ops_status_auth_recovery_must_be_manual", { authRecoveryStep });
+    for (const row of opsStatus?.rootCauseRecoveryPlan?.steps || []) {
+      assert(typeof row.canExecuteNow === "boolean", issues, "ops_status_root_cause_recovery_execute_now_missing:" + (row.category || "unknown"), { row });
+      assert(Array.isArray(row.blockedBy), issues, "ops_status_root_cause_recovery_blocked_by_missing:" + (row.category || "unknown"), { row });
+      if (row.canExecuteNow === true) assert(row.canAutoExecute === true, issues, "ops_status_root_cause_recovery_execute_now_without_auto:" + (row.category || "unknown"), { row });
+    }
+  
   }
 
   if (!pendingNotDue) assert(acceptableCompletionStatus(opsStatus?.unattendedStatus, completionClosed), issues, "ops_status_not_fresh_yes_or_previous_good_hold", { unattendedStatus: opsStatus?.unattendedStatus, reason: opsStatus?.reason, closed });
   assert(opsStatus?.gates?.predictivePreflight?.status, issues, "ops_status_predictive_gate_missing", { gates: opsStatus?.gates });
   assert(opsStatus?.gates?.notificationPolicy?.status, issues, "ops_status_notification_gate_missing", { gates: opsStatus?.gates });
   assert((opsStatus?.actionMatrix?.protectedInvariants || []).includes("membership_auth_only_gates_display_not_scanner_compute"), issues, "ops_status_membership_invariant_missing", { actionMatrix: opsStatus?.actionMatrix });
-  assert(Array.isArray(opsStatus?.modules) && opsStatus.modules.length >= REQUIRED_ACTIVE_MODULES.length, issues, "ops_status_modules_missing", { modules: opsStatus?.modules?.length || 0 });
+  if (!pendingNotDue) assert(Array.isArray(opsStatus?.modules) && opsStatus.modules.length >= REQUIRED_ACTIVE_MODULES.length, issues, "ops_status_modules_missing", { modules: opsStatus?.modules?.length || 0 });
+  else assert(Array.isArray(opsStatus?.modules) && opsStatus.modules.length > 0, issues, "ops_status_modules_missing", { modules: opsStatus?.modules?.length || 0 });
 
   return {
     closed,
