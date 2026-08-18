@@ -592,6 +592,46 @@ function applyMarketCalendarToSession(session, marketCalendar = null) {
   };
 }
 
+
+function openingReportObservationRows(clock = taipeiClock(), session = {}) {
+  let report = session?.openingMorningReport || null;
+  if (!report) {
+    try {
+      report = readOpeningMorningReport(clock);
+    } catch (_) {
+      report = null;
+    }
+  }
+  if (!report || report.ok === false) return [];
+
+  const priorityNames = normalizeArray(report.priority_industries)
+    .map((row) => String(row?.display_name || row?.industry || "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
+  const rankByIndustry = new Map(priorityNames.map((name, index) => [name, index + 1]));
+
+  return normalizeArray(report.recommended_symbols)
+    .map((row, index) => {
+      const code = String(row?.symbol || row?.code || "").trim();
+      const name = String(row?.name || row?.stockName || code).trim();
+      const industry = String(row?.industry || priorityNames[Math.min(priorityNames.length - 1, Math.floor(index / 8))] || "晨報產業").trim();
+      const rank = rankByIndustry.get(industry) || Math.min(3, Math.floor(index / 8) + 1);
+      return normalizeStockRow({
+        code,
+        name,
+        industry,
+        sector: industry,
+        pct: 0,
+        percent: 0,
+        score: Math.max(60, 99 - rank * 4 - index),
+        side: "觀察",
+        reason: `08:30 晨報第 ${rank} 強產業：${industry}；僅供開盤前海外產業觀察排序。`,
+        signalTags: ["晨報Top3", "產業日報", `第${rank}強`],
+      }, "晨報產業觀察", ["晨報Top3", "產業日報"]);
+    })
+    .filter(Boolean);
+}
+
 function heatmapSourceIssue(payload, heatmapIsToday, session = {}, clock = taipeiClock()) {
   if (!payload || !Object.keys(payload).length) return "熱力圖水源無回應";
   const health = payload.health || {};
@@ -660,7 +700,9 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
     .map((row) => normalizeStockRow(row, "熱力圖", [cleanNumber(row.pct) >= 0 ? "動能強" : "風險高"]))
     .filter(Boolean);
 
-  const allRows = mergeStockRows(normalizedBase, normalizedRadar, normalizedHeatmap).slice(0, 60);
+  let allRows = mergeStockRows(normalizedBase, normalizedRadar, normalizedHeatmap).slice(0, 60);
+  const openingFallbackRows = allRows.length ? [] : openingReportObservationRows(clock, session).slice(0, 60);
+  if (!allRows.length && openingFallbackRows.length) allRows = openingFallbackRows;
   const rowUp = allRows.filter((row) => cleanNumber(row.pct) > 0).length;
   const rowDown = allRows.filter((row) => cleanNumber(row.pct) < 0).length;
   const sample = heatmapUsable
@@ -690,7 +732,10 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
 
   const allGroupRows = allRows.slice(0, 30);
   const isPriorityCandidate = (row) => !/short|空|弱|風險/i.test(`${row.side} ${row.reason} ${row.tags.join(" ")}`) && cleanNumber(row.pct) >= 0;
-  const strongNames = strongSectors.map((sector) => sector.name || sector.industry).filter(Boolean).slice(0, 3);
+  const fallbackIndustryNames = [...new Set(openingFallbackRows.map((row) => row.industry).filter(Boolean))].slice(0, 3);
+  const strongNames = (strongSectors.map((sector) => sector.name || sector.industry).filter(Boolean).slice(0, 3).length
+    ? strongSectors.map((sector) => sector.name || sector.industry).filter(Boolean).slice(0, 3)
+    : fallbackIndustryNames);
   const weakNames = weakSectors.map((sector) => sector.name || sector.industry).filter(Boolean).slice(0, 3);
   const topStock = allGroupRows.find(isPriorityCandidate) || null;
   const hasDirectionalBreadth = !preOpenMarketAi && up + down > 0;
@@ -787,6 +832,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
         heatmapSectors: sectors.length,
         radarRows: normalizedRadar.length,
         aiRows: normalizedBase.length,
+        openingReportFallbackRows: openingFallbackRows.length,
       },
     },
     dataFreshness: {
@@ -803,6 +849,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
       heatmapQuoteCoverage,
       priorityStaleBlocked,
       preOpenMarketAi,
+      openingReportFallbackUsed: openingFallbackRows.length > 0,
       detectionWindow: "09:00-13:30",
     },
     fieldCompleteness: {
