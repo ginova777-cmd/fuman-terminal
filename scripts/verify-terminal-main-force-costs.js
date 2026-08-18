@@ -25,6 +25,8 @@ function argValue(name, fallback) {
 }
 
 check(lib.includes('const VIEW = "v_terminal_main_force_latest";'), "main_force_view_contract_missing");
+check(lib.includes('const MAIN_FORCE_FETCH_TIMEOUT_MS = 3000;'), 'main_force_timeout_budget_missing');
+check(lib.includes('setTimeout(() => controller.abort(), Math.max(250, Number(timeoutMs) || MAIN_FORCE_FETCH_TIMEOUT_MS));'), 'main_force_timeout_abort_missing');
 check(lib.includes('url.searchParams.set("trade_date", `eq.${asOfDate}`)'), "exact_trade_date_filter_missing");
 check(lib.includes('if (!code || tradeDate !== asOfDate) return null;'), "stale_main_force_row_not_rejected");
 check(lib.includes('if (/^\\d{8}$/.test(text)) return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;'), "compact_trade_date_normalization_missing");
