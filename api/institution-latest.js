@@ -224,6 +224,45 @@ function normalizeSourceHealth(row = {}) {
   };
 }
 
+function dateDigits(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.length >= 8 ? digits.slice(0, 8) : "";
+}
+
+function sourceHealthReady(health = {}) {
+  return health.coverageStatus === "ready"
+    && health.validAfterExclusionRows >= health.minRequiredRows;
+}
+
+function embeddedRunSourceHealth(run = {}) {
+  const payload = run?.payload && typeof run.payload === "object" ? run.payload : {};
+  return normalizeSourceHealth(
+    payload.sourceHealth
+    || payload.sourceCoverage
+    || payload.institution_source_status_at_run
+    || payload.chip_source_status_at_run
+    || payload.run_quality_at_publish?.institution_source_status_at_run
+    || payload.run_quality_at_publish?.chip_source_status_at_run
+    || {}
+  );
+}
+
+function selectInstitutionSourceHealth(run = {}, current = {}) {
+  const scanDate = dateDigits(run?.payload?.usedDate || run?.scan_date || "");
+  const currentHealth = normalizeSourceHealth(current || {});
+  const runHealth = embeddedRunSourceHealth(run);
+  const currentDateMatches = !scanDate || dateDigits(currentHealth.latestTradeDate) === scanDate;
+  const runDateMatches = !scanDate || dateDigits(runHealth.latestTradeDate || run?.payload?.usedDate) === scanDate;
+  if (sourceHealthReady(currentHealth) && currentDateMatches) return currentHealth;
+  if (sourceHealthReady(runHealth) && runDateMatches) {
+    return {
+      ...runHealth,
+      reason: runHealth.reason || "latest_complete_run_embedded_source_health",
+    };
+  }
+  return currentHealth.coverageStatus ? currentHealth : runHealth;
+}
+
 function secondsSince(value) {
   const parsed = Date.parse(String(value || ""));
   if (!Number.isFinite(parsed)) return 999999;
@@ -253,7 +292,7 @@ function buildPayload(rows, run, options = {}) {
   const expectedTotal = cleanNumber(run?.expected_total);
   const scannedCount = cleanNumber(run?.scanned_count);
   const resultCount = cleanNumber(run?.result_count) || sorted.length;
-  const sourceHealth = normalizeSourceHealth(options.sourceHealth || run?.payload?.sourceHealth || {});
+  const sourceHealth = selectInstitutionSourceHealth(run, options.sourceHealth || {});
   const sourceCoverageReady = sourceHealth.coverageStatus === "ready"
     && sourceHealth.validAfterExclusionRows >= sourceHealth.minRequiredRows;
   const sourceCoverage = {
@@ -484,5 +523,7 @@ module.exports._test = {
   normalizeRow,
   normalizeSourceHealth,
   buildFieldCompleteness,
+  selectInstitutionSourceHealth,
+  embeddedRunSourceHealth,
   apiOnlyError,
 };

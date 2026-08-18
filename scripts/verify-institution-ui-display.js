@@ -97,8 +97,12 @@ function main() {
   ], "desktop fast shell route and sort endpoints"));
   checks.push(includesAll(chipFlow, [
     "chip-trade-api-only-no-local-fallback-v1",
+    "function withInstitutionLiveQuery(endpoint)",
     "function institutionPayloadEndpoint()",
-    "return scope.endpoints.chipTradeLatest || scope.endpoints.institutionCache || scope.endpoints.institutionSlim",
+    "live",
+    "verify",
+    "noSnapshot",
+    "institution_live_canonical_empty",
     "function restoreChipTradeLocalCache()",
     "return false",
     "買賣超正式 API 讀取失敗",
@@ -129,7 +133,8 @@ function main() {
   ], "mobile fragment chip endpoint and degraded display"));
   checks.push(includesAll(serviceWorker, [
     "/\\/api\\/institution-latest/i",
-    "strategy2-intraday|strategy3|strategy5|institution",
+    "/\\/api\\/strategy3-latest/i",
+    "/\\/api\\/institution-latest/i",
   ], "service worker API cache and retired static institution data"));
   checks.push(includesAll(terminalUiE2e, [
     "key: \"institution\"",
@@ -142,6 +147,9 @@ function main() {
     "api/mobile-boot.js",
     "api/mobile-fragment.js",
   ], ["/data/institution-latest.json", "/data/institution.json"]));
+  checks.push(assertNoForbiddenStaticRendererUse([
+    "terminal-chip-flow.js",
+  ], ["scope.endpoints.institutionCache", "scope.endpoints.institutionBackup", "institutionBackup"]));
 
   console.log(JSON.stringify({
     ok: true,

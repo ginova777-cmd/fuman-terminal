@@ -255,11 +255,28 @@
         return (Array.isArray(tdccBreakoutPayload?.matches) ? tdccBreakoutPayload.matches : []).filter(isChipOpportunityCandidate);
       }
 
+      function withInstitutionLiveQuery(endpoint) {
+        const raw = endpoint || "/api/institution-latest";
+        try {
+          const url = new URL(raw, window.location.origin);
+          url.searchParams.set("canvas", "1");
+          url.searchParams.set("compact", "1");
+          url.searchParams.set("shell", "1");
+          url.searchParams.set("limit", "3000");
+          url.searchParams.set("live", "1");
+          url.searchParams.set("verify", "1");
+          url.searchParams.set("noSnapshot", "1");
+          return `${url.pathname}${url.search}`;
+        } catch {
+          return "/api/institution-latest?canvas=1&compact=1&shell=1&limit=3000&live=1&verify=1&noSnapshot=1";
+        }
+      }
+
       function institutionPayloadEndpoint() {
         if (scope.chipFilter === "foreignTrustVolumePct" && (scope.endpoints.chipTradeForeignTrustVolumePct || scope.endpoints.institutionForeignTrustVolumePct)) {
-          return scope.endpoints.chipTradeForeignTrustVolumePct || scope.endpoints.institutionForeignTrustVolumePct;
+          return withInstitutionLiveQuery(scope.endpoints.chipTradeForeignTrustVolumePct || scope.endpoints.institutionForeignTrustVolumePct);
         }
-        return scope.endpoints.chipTradeLatest || scope.endpoints.institutionCache || scope.endpoints.institutionSlim;
+        return withInstitutionLiveQuery(scope.endpoints.chipTradeLatest || scope.endpoints.institutionSlim || "/api/institution-latest");
       }
 
       function updateDateLine() {
@@ -540,10 +557,7 @@
             instPayload = { ...instPayload, ok: instPayload.ok ?? true, data: Object.fromEntries(instPayload.rows.map((row) => [String(row.code || ""), row])) };
           }
           if (!instPayload?.ok || !instPayload?.data || !Object.keys(instPayload.data).length) {
-            instPayload = await scope.fetchVersionedJson(scope.endpoints.chipTradeLatest || scope.endpoints.institutionCache, 10000, scope.institutionSummary?.updatedAt || "", force);
-          }
-          if (!instPayload?.ok || !instPayload?.data || !Object.keys(instPayload.data).length) {
-            instPayload = await scope.fetchVersionedJson(scope.endpoints.institutionBackup, 10000, scope.institutionSummary?.updatedAt || "", force);
+            throw new Error("institution_live_canonical_empty");
           }
           const applied = applyChipTradePayload(instPayload);
           chipTradeFrozen = applied && hasChipTradeRows();

@@ -3,6 +3,7 @@ const strategy2Latest = require("./strategy2-latest");
 const strategy3Latest = require("./strategy3-latest");
 const strategy4Latest = require("./strategy4-latest");
 const strategy5Latest = require("./strategy5-latest");
+const institutionLatest = require("./institution-latest");
 const {
   endpointPayloadFromSnapshot,
   readDesktopRouteSnapshot,
@@ -60,10 +61,12 @@ const TAB_CONFIG = {
 function tabAuthorityKey(tab) {
   const key = String(tab || "").toLowerCase();
   if (key === "chip") return "institution";
+  if (["strategy2", "strategy3", "strategy4", "strategy5"].includes(key)) return key;
   return "";
 }
 
 function shouldUseLiveFragment(tab) {
+  return ["strategy2", "strategy3", "strategy4", "strategy5", "chip"].includes(String(tab || "").toLowerCase());
 }
 
 function terminalAuthorityForTab(tab) {
@@ -123,6 +126,32 @@ function directStrategy3FormalRun(payload = {}) {
     && payload?.preservePreviousGood !== true;
 }
 
+function normalizeTradeDate(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (/^\d{8}$/.test(digits)) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  return String(value || "").slice(0, 10);
+}
+
+function directInstitutionFormalRun(payload = {}) {
+  const runId = extractRunId(payload, "chip");
+  const rows = normalizeRows(payload, "chip");
+  const count = Number(payload?.count ?? payload?.resultCount ?? payload?.returnedCount ?? rows.length) || rows.length;
+  const sourceDate = normalizeTradeDate(payload?.usedDate || payload?.tradeDate || payload?.scanDate || payload?.date);
+  const evidenceStatus = String(payload?.evidenceStatus || payload?.run_quality_at_publish?.evidenceStatus || "").toLowerCase();
+  const publishAllowed = payload?.publishAllowed ?? payload?.run_quality_at_publish?.publishAllowed;
+  const complete = payload?.complete === true || String(payload?.status || "").toLowerCase() === "complete" || String(payload?.qualityStatus || "").toLowerCase() === "complete";
+  const today = normalizeTradeDate(taipeiDateKey());
+  return String(runId || "").startsWith("institution-")
+    && normalizeTradeDate(runIdTradeDate(runId)) === today
+    && sourceDate === today
+    && complete
+    && publishAllowed === true
+    && evidenceStatus === "complete"
+    && payload?.preservePreviousGood !== true
+    && count > 0
+    && rows.length > 0;
+}
+
 function strategy2V3TerminalAuthority(payload = {}) {
   const isFormal = payload.status === "complete"
     && payload.complete === true
@@ -174,6 +203,25 @@ function attachTerminalAuthority(tab, payload = {}) {
         fallback: false,
       };
     }
+  }
+  if (String(tab || "").toLowerCase() === "chip" && directInstitutionFormalRun(payload)) {
+    const runId = extractRunId(payload, "chip");
+    terminalAuthority = {
+      ...(terminalAuthority || {}),
+      key: "institution",
+      runId,
+      tradeDate: taipeiDateKey(),
+      sourceDate: taipeiDateKey(),
+      moduleStatus: "complete",
+      todayAuthoritative: true,
+      formalDisplayAllowed: true,
+      displayMode: "direct_institution_complete_run",
+      displayBlockReason: "",
+      pendingNotDue: false,
+      evidenceStatus: "complete",
+      publishAllowed: true,
+      fallback: false,
+    };
   }
   if (!terminalAuthority) return payload;
   return {
@@ -249,6 +297,8 @@ async function readMobileFragmentHtmlSnapshot(tab) {
   if (tabAuthorityKey(tab) && !/data-formal-display-allowed=/i.test(String(payload.html || ""))) return null;
   const snapshotRunId = String(payload.runId || "");
   if (/waiting|aborted|mobile-fragment-fast-waiting/i.test(`${snapshotRunId} ${payload.html}`)) return null;
+  const runDate = runIdTradeDate(snapshotRunId);
+  if (tabAuthorityKey(tab) && runDate && normalizeTradeDate(runDate) !== normalizeTradeDate(taipeiDateKey())) return null;
   if (snapshotPayloadAgeMs(payload) > MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS) return null;
   return {
     html: payload.html,
@@ -411,6 +461,34 @@ function fetchStrategy3Internal(request, endpoint) {
     });
   });
 }
+function fetchInstitutionInternal(request, endpoint) {
+  const url = new URL(endpoint, originFrom(request));
+  const query = { ...Object.fromEntries(url.searchParams.entries()), live: "1", verify: "1", noSnapshot: "1" };
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("institution_internal_timeout")), 30000);
+    const finish = (result) => {
+      clearTimeout(timer);
+      const payload = result.payload && typeof result.payload === "object" ? result.payload : null;
+      const rows = normalizeRows(payload, "chip");
+      if (Number(result.statusCode || 0) >= 400 || payload?.ok === false || !rows.length) {
+        reject(new Error(payload?.detail || payload?.error || `HTTP ${result.statusCode}`));
+        return;
+      }
+      resolve(payload);
+    };
+    Promise.resolve(institutionLatest({
+      ...request,
+      method: "GET",
+      url: endpoint,
+      query,
+      fumanInternalVerify: true,
+    }, createCaptureResponse(finish))).catch((error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
+
 function fetchStrategy4Internal(request, endpoint) {
   const url = new URL(endpoint, originFrom(request));
   const query = { ...Object.fromEntries(url.searchParams.entries()), verify: "1" };
@@ -1021,7 +1099,9 @@ module.exports = async function handler(request, response) {
                 : fastWaitingPayload(tab, endpoint, error?.message || "strategy2_mobile_direct_timeout")))
             : tab === "strategy3"
               ? await fetchStrategy3Internal(request, endpoint)
-              : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, ["ai", "chip"].includes(tab) ? 30000 : 12000, authHeadersFrom(request)))
+              : tab === "chip"
+                ? await fetchInstitutionInternal(request, endpoint)
+                : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, ["ai", "chip"].includes(tab) ? 30000 : 12000, authHeadersFrom(request)))
       : snapshotPayload;
     const html = renderFragment(tab, config, payload);
     if (tab !== "ai" && tab !== "strategy2") writeMobileFragmentHtmlSnapshot(tab, html, payload);

@@ -289,6 +289,64 @@ function strategy2V3Authority(payload = {}) {
   };
 }
 
+function terminalTaipeiDateKey() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const value = (type) => parts.find((part) => part.type === type)?.value || "";
+  return `${value("year")}-${value("month")}-${value("day")}`;
+}
+
+function terminalNormalizeTradeDate(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (/^\d{8}$/.test(digits)) return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+  return String(value || "").slice(0, 10);
+}
+
+function terminalRunIdTradeDate(runId) {
+  const match = String(runId || "").match(/(?:^|-)20(\d{6})(?:-|$)/);
+  return match ? `20${match[1]}` : "";
+}
+
+function institutionRows(payload = {}) {
+  for (const rows of [payload.rows, payload.matches, payload.results, payload.data]) {
+    if (Array.isArray(rows)) return rows;
+    if (rows && typeof rows === "object") return Object.values(rows);
+  }
+  return [];
+}
+
+function institutionDirectAuthority(payload = {}) {
+  const runId = String(payload?.runId || payload?.latestRunId || payload?.transport?.runId || "").trim();
+  const rows = institutionRows(payload);
+  const count = Number(payload?.count ?? payload?.resultCount ?? payload?.returnedCount ?? rows.length) || rows.length;
+  const runDate = terminalNormalizeTradeDate(terminalRunIdTradeDate(runId));
+  const sourceDate = terminalNormalizeTradeDate(payload?.usedDate || payload?.tradeDate || payload?.scanDate || payload?.date);
+  const today = terminalNormalizeTradeDate(terminalTaipeiDateKey());
+  const evidenceStatus = String(payload?.evidenceStatus || payload?.run_quality_at_publish?.evidenceStatus || "").toLowerCase();
+  const publishAllowed = payload?.publishAllowed ?? payload?.run_quality_at_publish?.publishAllowed;
+  const complete = payload?.complete === true || String(payload?.status || "").toLowerCase() === "complete" || String(payload?.qualityStatus || "").toLowerCase() === "complete";
+  if (!String(runId || "").startsWith("institution-")) return null;
+  if (runDate !== today || sourceDate !== today) return null;
+  if (!complete || publishAllowed !== true || evidenceStatus !== "complete" || payload?.preservePreviousGood === true) return null;
+  if (count <= 0 || rows.length <= 0) return null;
+  return {
+    key: "institution",
+    runId,
+    tradeDate: today,
+    sourceDate: today,
+    moduleStatus: "complete",
+    todayAuthoritative: true,
+    formalDisplayAllowed: true,
+    displayMode: "direct_institution_complete_run",
+    displayBlockReason: "",
+    pendingNotDue: false,
+    evidenceStatus: "complete",
+    publishAllowed: true,
+    fallback: false,
+    resultCount: count,
+    readbackCount: rows.length,
+  };
+}
+
 function attachOpsAuthorityToEndpoints(endpoints = {}, authority = {}) {
   for (const [endpoint, payload] of Object.entries(endpoints || {})) {
     if (!payload || typeof payload !== "object") continue;
@@ -296,11 +354,16 @@ function attachOpsAuthorityToEndpoints(endpoints = {}, authority = {}) {
     const v3Strategy2 = key === "strategy2"
       && payload.strategyContract === "strategy2-live-v3-fugle-deep-scan-1m"
       && payload.version === "v3";
-    const row = v3Strategy2 ? strategy2V3Authority(payload) : key ? authority.byKey?.[key] : null;
+    const directInstitution = key === "institution" ? institutionDirectAuthority(payload) : null;
+    const row = v3Strategy2 ? strategy2V3Authority(payload) : directInstitution || (key ? authority.byKey?.[key] : null);
     if (!row) continue;
     if (v3Strategy2) {
       authority.byKey = { ...(authority.byKey || {}), strategy2: row };
       authority.source = `${authority.source || "runtime-output-artifacts"}+strategy2-v3-direct`;
+    }
+    if (directInstitution) {
+      authority.byKey = { ...(authority.byKey || {}), institution: row };
+      authority.source = `${authority.source || "runtime-output-artifacts"}+institution-direct`;
     }
     payload.terminalAuthority = row;
     payload.todayAuthoritative = row.todayAuthoritative;
@@ -422,6 +485,35 @@ async function repairStrategy5FullSnapshot() {
 
 async function repairStrategy3LatestSnapshot() {
   return null;
+}
+
+function hasInstitutionEndpoint(endpoints = {}) {
+  return Object.entries(endpoints || {}).some(([endpoint, payload]) => {
+    const path = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
+    return path === "/api/institution-latest" && Boolean(institutionDirectAuthority(payload));
+  });
+}
+
+async function repairInstitutionLatestSnapshot(request, endpoints = {}) {
+  if (hasInstitutionEndpoint(endpoints)) return;
+  const direct = await callJson(
+    "/api/institution-latest",
+    institutionLatest,
+    { ...request, query: { ...(request.query || {}), live: "1", verify: "1", noSnapshot: "1" } },
+    { ...compactQuery(3000), live: "1", verify: "1", noSnapshot: "1" },
+    15000
+  );
+  if (Number(direct.statusCode || 0) >= 500 || direct.payload?.ok === false) return;
+  if (!institutionDirectAuthority(direct.payload)) return;
+  endpoints[direct.label || "/api/institution-latest?canvas=1&compact=1&shell=1&limit=3000&live=1&verify=1&noSnapshot=1"] = {
+    ...direct.payload,
+    transport: {
+      ...(direct.payload.transport || {}),
+      fastBundleRepair: "institution-live-canonical-direct",
+      via: "api/terminal-fast-bundle",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
 }
 
 function isStrategy4Endpoint(endpoint) {
@@ -638,6 +730,7 @@ module.exports = async function handler(request, response) {
         await repairStrategy5FullSnapshot(request, endpoints);
         await repairStrategy3LatestSnapshot(request, endpoints);
       }
+      await repairInstitutionLatestSnapshot(request, endpoints);
       await ensureStrategy2V3Endpoint(request, endpoints);
       if (liveFallbackEnabled(request)) {
         await repairStrategy5FullSnapshot(request, endpoints);
@@ -702,7 +795,7 @@ module.exports = async function handler(request, response) {
     ["/api/strategy5-latest", strategy5Latest, compactQuery(140), 8000],
     ["/api/latest-signals?strategy=strategy4", latestSignals, { strategy: "strategy4", compact: "1", shell: "1", limit: "70" }, 2300],
     ["/api/market-ai-live", marketAiLive, { canvas: "1", compact: "1", shell: "1", limit: "40" }, 2300],
-    ["/api/institution-latest", institutionLatest, compactQuery(60), 2200],    ["/api/watchlist-match-index", watchlistMatchIndex, { compact: "1", shell: "1", limit: "80" }, 3000],
+    ["/api/institution-latest", institutionLatest, { ...compactQuery(3000), live: "1", verify: "1", noSnapshot: "1" }, 15000],    ["/api/watchlist-match-index", watchlistMatchIndex, { compact: "1", shell: "1", limit: "80" }, 3000],
   ];
 
   const runnableTasks = entitlement.ok ? tasks : tasks.filter(([endpoint]) => isPublicBundleEndpoint(endpoint));
