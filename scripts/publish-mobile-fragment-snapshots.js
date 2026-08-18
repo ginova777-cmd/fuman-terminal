@@ -4,7 +4,7 @@ const { resolveProtectedReadbackCredential } = require("../lib/protected-readbac
 const AUTH_URL = "https://jxnqyqnigsppqsxinlrq.supabase.co";
 const AUTH_KEY = "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
 const BASE_URL = (process.env.FUMAN_PRODUCTION_URL || process.env.FUMAN_TERMINAL_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const TABS = ["strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"];
+const TABS = ["strategy2", "strategy3", "strategy4", "strategy5", "chip"];
 
 function required(value, name) {
   const text = String(value || "").trim();

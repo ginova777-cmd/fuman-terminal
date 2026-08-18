@@ -57,11 +57,6 @@ const TASKS = [
     limit: 120,
   },
   {
-    key: "cb",
-    arrayKeys: ["rows", "matches"],
-    limit: 120,
-  },
-  {
     arrayKeys: ["rows", "matches", "volumeMatches", "singleSignals"],
     limit: 120,
   },

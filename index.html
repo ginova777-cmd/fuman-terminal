@@ -93,6 +93,23 @@
         </div>
       </aside>
 
+      <script data-retired-terminal-routes="cb-warrant-v1">
+        (() => {
+          const retired = new Set(["cb-detect", "warrant-flow"]);
+          const clearRetiredNodes = () => {
+            document.querySelectorAll("#cb-detect-view,#warrant-flow-view,[data-view=\"cb-detect\"],[data-view=\"warrant-flow\"],.cb-detect-page,.cb-detect-panel,.warrant-flow-page,.warrant-flow-panel").forEach((node) => node.remove());
+          };
+          const routeKey = window.FUMAN_RUNTIME_CONFIG?.lastRouteKey || "fuman-terminal-last-route-v1";
+          try {
+            const saved = JSON.parse(localStorage.getItem(routeKey) || "null");
+            if (retired.has(saved?.viewName)) localStorage.setItem(routeKey, JSON.stringify({ viewName: "market", at: Date.now(), source: "retired-terminal-route" }));
+          } catch {}
+          if (retired.has(location.hash.replace(/^#/, ""))) history.replaceState(null, "", location.pathname + location.search);
+          clearRetiredNodes();
+          document.addEventListener("DOMContentLoaded", clearRetiredNodes, { once: true });
+          new MutationObserver(clearRetiredNodes).observe(document.documentElement, { childList: true, subtree: true });
+        })();
+      </script>
       <main class="dashboard">
 
         <!-- 策略模組 -->
@@ -310,30 +327,6 @@
               </table>
             </section>
 
-          </section>
-        </section>
-
-          <header class="page-header chip-page-header">
-            <div>
-              <span class="refresh-line">60分K門檻｜富果現股價｜CBAS三層來源</span>
-            </div>
-          </header>
-                <div>
-                  <h2>CB 偵測結果</h2>
-                </div>
-              </div>
-              </div>
-            </aside>
-          </section>
-        </section>
-
-          <header class="page-header chip-page-header">
-            <div>
-              <span class="refresh-line">功能規劃中</span>
-            </div>
-          </header>
-          <section class="chip-empty">
-            <p>下一步會接認購、認售、成交量與方向分數。</p>
           </section>
         </section>
 

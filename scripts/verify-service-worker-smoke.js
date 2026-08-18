@@ -37,8 +37,12 @@ if (!version) {
   issues.push("terminal-core.js version was not detected");
 }
 const swCacheVersion = sw.match(/CACHE_VERSION\s*=\s*"fuman-terminal-sw-([^"]+)"/)?.[1] || "";
-if (version && swCacheVersion !== version) {
-  issues.push(`fuman-sw.js CACHE_VERSION ${swCacheVersion || "(missing)"} must match terminal-core.js version ${version}`);
+const allowedCacheVersions = new Set([
+  version,
+  `${version}-cb-warrant-retired-20260818-01`,
+]);
+if (version && !allowedCacheVersions.has(swCacheVersion)) {
+  issues.push(`fuman-sw.js CACHE_VERSION ${swCacheVersion || "(missing)"} must match terminal-core.js version ${version} or its approved CB/warrant retirement epoch`);
 }
 for (const asset of ["styles.css", "terminal-core.js", "terminal-market-ai-live-watchdog.js"]) {
   if (version && !index.includes(`${asset}?v=${version}`)) {
@@ -49,11 +53,12 @@ for (const asset of ["styles.css", "terminal-core.js", "terminal-market-ai-live-
 for (const marker of [
   'chipSnapshot: { loaded: false, src: "terminal-chip-snapshot-module.js" }',
   'chipFlow: { loaded: false, src: "terminal-chip-snapshot-module.js" }',
-  'warrantFlow: { loaded: false, src: "terminal-chip-snapshot-module.js" }',
 ]) {
   if (!modules.includes(marker)) {
     issues.push(`terminal-modules.js missing current chip snapshot marker: ${marker}`);
-  }
+  }}
+if (modules.includes("warrantFlow:")) {
+  issues.push("terminal-modules.js must not register retired warrantFlow");
 }
 
 for (const asset of lazyStaticAssets) {

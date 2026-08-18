@@ -13,7 +13,6 @@
     strategy4: { loaded: false, src: "terminal-strategy-module.js" },
     chipSnapshot: { loaded: false, src: "terminal-chip-snapshot-module.js" },
     chipFlow: { loaded: false, src: "terminal-chip-snapshot-module.js" },
-    warrantFlow: { loaded: false, src: "terminal-chip-snapshot-module.js" },
     realtimeRadar: { loaded: false, src: "terminal-strategy-module.js" },
     watchlist: { loaded: false, src: "terminal-watchlist-shell.js" },
     member: { loaded: false, src: "terminal-member-module.js" },
@@ -50,11 +49,6 @@
       if (viewName === "chip-trade") {
         this.preload("chipSnapshot");
         this.preload("chipFlow");
-      }
-      if (viewName === "cb-detect") this.preload("chipSnapshot");
-      if (viewName === "warrant-flow") {
-        this.preload("chipSnapshot");
-        this.preload("warrantFlow");
       }
       if (viewName === "watchlist") this.preload("watchlist");
       if (viewName === "member") this.preload("member");

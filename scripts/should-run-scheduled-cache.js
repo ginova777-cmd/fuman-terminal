@@ -5,7 +5,7 @@ const { ROOT, dataPath } = require("./runtime-paths");
 
 const RULES = {
   flow: {
-    files: ["data/institution-latest.json", "data/warrant-flow-latest.json"],
+    files: ["data/institution-latest.json"],
     slots: ["06:00", "21:00"],
   },
   strategy3: {

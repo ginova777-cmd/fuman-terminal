@@ -2,7 +2,7 @@
   "use strict";
 
   const VERSION = "public-terminal-fast-20260623-09";
-  const CHIP_ROUTES = ["chip-trade", "cb-detect", "warrant-flow"];
+  const CHIP_ROUTES = ["chip-trade"];
   let installed = false;
 
   function install(context = {}) {
