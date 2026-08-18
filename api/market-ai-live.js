@@ -1444,7 +1444,7 @@ function readOpeningMorningReport(clock = taipeiClock()) {
     reason_code: row.reason_code || "",
   }));
   const topPriority = industryRows.slice(0, 3);
-  const recommended = topPriority.flatMap((row) => row.a_symbols.slice(0, 4).map((stock) => ({ ...stock, industry: row.display_name, bias: row.bias })));
+  const recommended = topPriority.flatMap((row) => row.a_symbols.map((stock) => ({ ...stock, industry: row.display_name, bias: row.bias })));
   const bridgeStatus = finalReceipt.mother_pool_bridge_attempted
     ? (finalReceipt.mother_pool_bridge_ok ? "applied" : "fail_closed_optional")
     : "priority_scan_only";
