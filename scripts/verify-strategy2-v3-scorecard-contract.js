@@ -12,6 +12,7 @@ const checks = [
   ["v3_formal_source_contract", source.includes(contract)],
   ["v3_run_id_gate", source.includes("/^strategy2-v3-live-/")],
   ["v3_formal_gate", source.includes("isFormalV3")],
+  ["scorecard_normalizes_v3_trade_date", source.includes("compactDate(date) === today") && source.includes("&& isToday")],
   ["v3_current_source_report", source.includes("withCurrentStrategy2V3SourceReport")],
   ["scorecard_reads_strict_v3_snapshot", source.includes('readSnapshot("strategy2_live_v3"') && source.includes("allowLatestFallback: false") && source.includes("strategy2_v3_snapshot_unavailable")],
   ["retired_v2_not_used_by_scorecard", !/Strategy2V2|strategy2-live-v2|strategy2_v2/i.test(source)],

@@ -807,11 +807,12 @@ function buildStrategy2SourceReport(result) {
   const today = taipeiDateKey();
   const runId = cleanText(payload.runId || payload.transport?.runId);
   const date = cleanText(payload.dataDate || payload.tradeDate || payload.date);
+  const isToday = compactDate(date) === today;
   const isFormalV3 = payload.strategyContract === "strategy2-live-v3-fugle-deep-scan-1m"
     && payload.status === "complete"
     && payload.complete === true
     && payload.publishAllowed === true
-    && date === today
+    && isToday
     && /^strategy2-v3-live-/.test(runId);
   return {
     key: "strategy2",
