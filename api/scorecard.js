@@ -1566,11 +1566,17 @@ function selectPayloadDate(payload, requestedDate = "") {
   const allDaily = (Array.isArray(payload?.summary?.daily) ? payload.summary.daily : [])
     .filter((row) => !isRetiredScorecardSurfaceName(row?.strategy));
   const daily = selectedDate ? allDaily.filter((row) => cleanText(row.summary_date) === selectedDate) : allDaily;
-  const sourceReports = (Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
+  const allSourceReports = (Array.isArray(payload?.sourceReports) ? payload.sourceReports : [])
     .filter((report) => !isRetiredScorecardSurfaceName(report?.key)
       && !isRetiredScorecardSurfaceName(report?.strategy)
       && !isRetiredScorecardSurfaceName(report?.endpoint)
       && !isRetiredScorecardSurfaceName(report?.runId));
+  // A historical scorecard date is closed evidence. Do not let an incomplete
+  // current-day scanner suppress its completed records.
+  const isHistoricalSelection = Boolean(selectedDate && compactDate(selectedDate) !== taipeiDateKey());
+  const sourceReports = isHistoricalSelection
+    ? allSourceReports.filter((report) => compactDate(report?.date || report?.sourceDate || report?.tradeDate || report?.usedDate) === compactDate(selectedDate))
+    : allSourceReports;
   const blockedReports = blockedSourceReports(sourceReports);
   const blockedStrategies = new Set(blockedReports.map((report) => cleanText(report.strategy)).filter(Boolean));
   const suppressedRows = selectedRecords.filter((row) => blockedStrategies.has(cleanText(row.strategy)));
@@ -1729,7 +1735,9 @@ async function buildPayload(requestedDate = "", options = {}) {
       ? selectPayloadDate(await withLiveSourceReports(basePayload, options), requestedDate)
       : selectPayloadDate(basePayload, requestedDate);
   }
-  payload = selectPayloadDate(await withCurrentStrategy2V3SourceReport(payload), requestedDate);
+  const displayDate = isoDate(requestedDate || payload?.selectedDate || payload?.latestDate || "");
+  const historicalSelection = Boolean(displayDate && compactDate(displayDate) !== taipeiDateKey());
+  payload = selectPayloadDate(historicalSelection ? payload : await withCurrentStrategy2V3SourceReport(payload), requestedDate);
   payload = await withScanAudit(payload, options);
   if (!noCache) payloadMemoryCache.set(cacheKey, { cachedAt: Date.now(), payload });
   return payload;
