@@ -40,6 +40,7 @@ const swCacheVersion = sw.match(/CACHE_VERSION\s*=\s*"fuman-terminal-sw-([^"]+)"
 const allowedCacheVersions = new Set([
   version,
   `${version}-cb-warrant-retired-20260818-01`,
+  `${version}-decision-prices-20260819-01`,
 ]);
 if (version && !allowedCacheVersions.has(swCacheVersion)) {
   issues.push(`fuman-sw.js CACHE_VERSION ${swCacheVersion || "(missing)"} must match terminal-core.js version ${version} or its approved CB/warrant retirement epoch`);
