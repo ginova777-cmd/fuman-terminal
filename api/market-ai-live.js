@@ -1348,11 +1348,21 @@ function namesByTier(payload, tier) {
 }
 
 function openingBiasScore(payload = {}) {
+  const avg = Number(payload?.overseas_leader_detection?.average_percent ?? payload?.overseas_average_percent ?? payload?.overseas_return_1d_pct);
+  const avg2d = Number(payload?.overseas_return_2d_pct ?? payload?.overseas_leader_detection?.average_return_2d_pct);
+  if (Number.isFinite(avg)) return 100000 + avg * 1000 + (Number.isFinite(avg2d) ? avg2d : -99) * 10 + Number(payload.confidence || 0);
   const bias = String(payload.bias || "").toLowerCase();
   const directionScore = bias.includes("positive") ? 3 : bias.includes("neutral") ? 2 : bias.includes("negative") ? 1 : 0;
   const confidence = Number(payload.confidence || 0);
-  const avg = Number(payload?.overseas_leader_detection?.average_percent);
-  return directionScore * 10000 + (Number.isFinite(avg) ? avg : -99) * 100 + confidence * 10;
+  return directionScore * 10000 + confidence * 10;
+}
+
+function normalizeOpeningSymbolRows(rows) {
+  return normalizeArray(rows)
+    .map((stock) => typeof stock === "string"
+      ? { symbol: "", name: stock }
+      : { symbol: String(stock?.symbol || ""), name: String(stock?.name || stock?.symbol || "") })
+    .filter((stock) => stock.symbol || stock.name);
 }
 
 function readOpeningShortwave(clock = taipeiClock()) {
@@ -1433,7 +1443,7 @@ function readOpeningMorningReport(clock = taipeiClock()) {
     source_time: row.source_time || "",
     reason_code: row.reason_code || "",
   }));
-  const topPriority = industryRows.slice(0, 4);
+  const topPriority = industryRows.slice(0, 3);
   const recommended = topPriority.flatMap((row) => row.a_symbols.slice(0, 4).map((stock) => ({ ...stock, industry: row.display_name, bias: row.bias })));
   const bridgeStatus = finalReceipt.mother_pool_bridge_attempted
     ? (finalReceipt.mother_pool_bridge_ok ? "applied" : "fail_closed_optional")
@@ -1471,7 +1481,7 @@ function readOpeningMorningReport(clock = taipeiClock()) {
     shortwave: finalReceipt.shortwave || readOpeningShortwave(clock),
     event_digest: finalReceipt.event_digest || { status: "source_gap", reason_code: "event_digest_not_written_by_0830_runner" },
     priority_industries: topPriority,
-    recommended_symbols: recommended.slice(0, 16),
+    recommended_symbols: recommended.slice(0, 24),
     industry_bias: {
       status: industryRows.length >= 19 ? "ok" : "incomplete",
       count: industryRows.length,
@@ -1772,6 +1782,7 @@ module.exports.__test = {
   readOpeningMorningReport,
   readOpeningMorningReportSnapshot,
 };
+
 
 
 
