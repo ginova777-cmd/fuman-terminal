@@ -5,6 +5,8 @@ const path = require("path");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
 const { auditRunTimeSourceSnapshot, runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { attachMainForceCostsToPayload } = require("../lib/terminal-main-force-costs");
+const { attachThreeGatePricesToPayload } = require("../lib/terminal-three-gate-prices");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 
 function readSecretText(file) {
@@ -336,6 +338,44 @@ function blockedStrategy3EntryPayload(payload = {}, reason = "strategy3_1300_int
   };
 }
 
+function previousGoodStrategy3ReadbackPayload(payload = {}, rows = [], tradeDate = "", expectedTradeDate = "") {
+  const reason = `strategy3_previous_good_readback:run=${tradeDate}:expected=${expectedTradeDate}`;
+  return {
+    ...payload,
+    ok: true,
+    status: "previous_good",
+    qualityStatus: "previous_good",
+    displayMode: "previous_good_readback",
+    previousGoodReadback: true,
+    previousGoodTradeDate: tradeDate,
+    expectedTradeDate,
+    publishAllowed: false,
+    latestOverwriteAllowed: false,
+    degradedBlocksLatest: true,
+    preservePreviousGood: true,
+    blockedReason: reason,
+    scanner_block_reason: reason,
+    matches: rows,
+    rows,
+    count: cleanNumber(payload.count) || rows.length,
+    returnedCount: rows.length,
+    sourceCoverage: {
+      ...(payload.sourceCoverage || {}),
+      strategy3Entry1mStatus: "previous_good_readback",
+      strategy3Entry1mTradeDate: tradeDate,
+      expectedTradeDate,
+      reason,
+    },
+    run_quality_at_publish: {
+      ...(payload.run_quality_at_publish || {}),
+      publishAllowed: false,
+      latestOverwriteAllowed: false,
+      degradedBlocksLatest: true,
+      preservePreviousGood: true,
+      blockedReason: reason,
+    },
+  };
+}
 async function applyStrategy3Entry1mGate(payload = {}) {
   if (!payload || typeof payload !== "object") return payload;
   const rows = normalizeSnapshotRows(payload);
@@ -346,7 +386,7 @@ async function applyStrategy3Entry1mGate(payload = {}) {
   const tradeDate = strategy3RunDateFromPayload(payload, rows);
   if (!tradeDate) return blockedStrategy3EntryPayload(payload, "strategy3_1300_intraday_1m_trade_date_missing");
   const expectedTradeDate = isoDate(process.env.STRATEGY3_TARGET_DATE || process.env.FUMAN_EXPECTED_DATE) || isoDate(taipeiDateKey());
-  if (tradeDate !== expectedTradeDate) return blockedStrategy3EntryPayload(payload, `strategy3_latest_complete_run_not_today:run=${tradeDate}:expected=${expectedTradeDate}`);
+  if (tradeDate !== expectedTradeDate) return previousGoodStrategy3ReadbackPayload(payload, rows, tradeDate, expectedTradeDate);
   const invalidPublishedEntries = rows.map((row) => ({ code: symbolOf(row), issue: strategy3PublishedEntryIssue(row, expectedTradeDate) })).filter((row) => row.issue);
   if (!invalidPublishedEntries.length) {
     return {
@@ -1074,7 +1114,7 @@ async function handler(request, response) {
     });
     if (cached) {
       setDesktopSnapshotCache(response);
-      response.status(200).json(await applyStrategy3Entry1mGate(normalizeStrategy3ApiContract(cached, { liveProbe })));
+      response.status(200).json(await attachThreeGatePricesToPayload(await attachMainForceCostsToPayload(await applyStrategy3Entry1mGate(normalizeStrategy3ApiContract(cached, { liveProbe })))));
       return;
     }
   }
@@ -1088,7 +1128,7 @@ async function handler(request, response) {
       const snapshot = await readLatestSnapshot({ ...options, liveProbe });
       if (snapshot) {
         setDesktopSnapshotCache(response);
-        response.status(200).json(await applyStrategy3Entry1mGate(normalizeStrategy3ApiContract(snapshot, { liveProbe })));
+        response.status(200).json(await attachThreeGatePricesToPayload(await attachMainForceCostsToPayload(await applyStrategy3Entry1mGate(normalizeStrategy3ApiContract(snapshot, { liveProbe })))));
         return;
       }
     }
@@ -1098,7 +1138,7 @@ async function handler(request, response) {
       return;
     }
     setDesktopSnapshotCache(response);
-    response.status(200).json(await applyStrategy3Entry1mGate(buildPayload(latest.rows, latest.run, { ...options, liveProbe })));
+    response.status(200).json(await attachThreeGatePricesToPayload(await attachMainForceCostsToPayload(await applyStrategy3Entry1mGate(buildPayload(latest.rows, latest.run, { ...options, liveProbe })))));
   } catch (error) {
     response.status(503).json(apiOnlyError(error?.message || String(error)));
   }

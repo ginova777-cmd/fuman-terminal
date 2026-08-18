@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-rich-shell-20260813-daily-kline-01";
+  const VERSION = "watchlist-mainforce-resonance-20260816-01";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   const WATCHLIST_MAX_ITEMS = 10;
@@ -30,6 +30,8 @@
   const dailyKlineCache = new Map();
   const dailyKlinePending = new Set();
   const dailyKlineRanges = new Map();
+  const mainForceCache = new Map();
+  const mainForcePending = new Set();
 
   function normalizeCode(value) {
     return String(value ?? "").trim().match(/\d{4}/)?.[0] || "";
@@ -236,6 +238,93 @@
     return dailyKlineCache.get(normalizeCode(code)) || null;
   }
 
+  function latestDailyKlineDate(code) {
+    const payload = dailyKlineEntry(code);
+    const bars = Array.isArray(payload?.bars) ? payload.bars : [];
+    const last = bars[bars.length - 1];
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(last?.date || "")) ? String(last.date) : "";
+  }
+
+  function normalizeTradeDate(value) {
+    const text = String(value || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    if (/^\d{8}$/.test(text)) return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
+    return "";
+  }
+
+  function watchlistAsOfDate(row) {
+    return latestDailyKlineDate(row?.code)
+      || normalizeTradeDate(row?.quoteDate || row?.tradeDate || row?.date || row?.dataDate)
+      || normalizeTradeDate(document.body?.dataset?.latestTradeDate)
+      || "";
+  }
+
+  function mainForceKey(code, asOfDate) {
+    const target = normalizeCode(code);
+    return target && asOfDate ? `${target}|${asOfDate}` : "";
+  }
+
+  function mainForceItem(code, asOfDate) {
+    const key = mainForceKey(code, asOfDate);
+    return key ? mainForceCache.get(key) || null : null;
+  }
+
+  function styleLine(label, style) {
+    if (!style) return `${label} 資料不足`;
+    if (style.status === "matched") return `${label} 命中 ${formatPrice(style.costPrice)}`;
+    if (style.status === "not_matched") return `${label} 未命中`;
+    if (style.status === "unclassified") return `${label} 未分類`;
+    return `${label} 資料不足`;
+  }
+
+  function mainForceSummaryHtml(code, asOfDate) {
+    const item = mainForceItem(code, asOfDate);
+    if (!asOfDate) return "<strong>主力成本待確認</strong><b>資料日待確認</b><em>需要正式日 K 資料日後再讀取主力分點。</em>";
+    if (!item) return `<strong>主力成本讀取中</strong><b>資料日 ${escapeText(asOfDate)}</b><em>正在讀取盤後主力成本與隔日沖/短沖/當沖主力分類。</em>`;
+    if (item.status !== "ready") return `<strong>主力成本資料不足</strong><b>資料日 ${escapeText(asOfDate)}</b><em>須有同日正式分點資料；缺資料不使用舊日期替代。</em>`;
+    const chips = [styleLine("隔日沖", item.overnight), styleLine("短沖", item.shortSwing), styleLine("當沖", item.daytrade)].join("｜");
+    return `<strong>主力成本 ${formatPrice(item.mainForceCostPrice)}</strong><b>主力淨買 ${Number(item.mainForceNetBuy || 0).toLocaleString("zh-TW", { maximumFractionDigits: 0 })}</b><em>${escapeText(chips)}；資料日 ${escapeText(item.tradeDate || asOfDate)}。</em>`;
+  }
+
+  function matchedMainForceLabels(item) {
+    if (!item || item.status !== "ready") return [];
+    return [
+      item.overnight?.matched ? "隔日沖主力" : "",
+      item.shortSwing?.matched ? "短沖主力" : "",
+      item.daytrade?.matched ? "當沖主力" : "",
+    ].filter(Boolean);
+  }
+
+  function operationConditionLines(row, matchSummary, item, levels) {
+    const labels = [...new Set([...(matchSummary.labels || []), ...matchedMainForceLabels(item)])];
+    const lines = labels.length ? labels.map((label) => `命中 ${label}`) : ["尚未命中策略或主力分類"];
+    if (item?.status === "ready") lines.push(`主力成本 ${formatPrice(item.mainForceCostPrice)}`);
+    if (levels?.middle) lines.push(`三關價 中 ${formatPrice(levels.middle)}，上 ${formatPrice(levels.upper)}，下 ${formatPrice(levels.lower)}`);
+    return lines.slice(0, 4);
+  }
+
+  function hydrateMainForceCost(row) {
+    const code = normalizeCode(row?.code);
+    const asOfDate = watchlistAsOfDate(row);
+    const key = mainForceKey(code, asOfDate);
+    if (!key || mainForceCache.has(key) || mainForcePending.has(key)) return;
+    mainForcePending.add(key);
+    fetch(`/api/main-force-costs?codes=${encodeURIComponent(code)}&asOf=${encodeURIComponent(asOfDate)}&t=${Date.now()}`, { cache: "no-store" })
+      .then((response) => response.json().catch(() => null).then((payload) => ({ response, payload })))
+      .then(({ response, payload }) => {
+        const item = response.ok && payload?.ok === true && Array.isArray(payload.items) ? payload.items.find((row) => normalizeCode(row?.code) === code) || null : null;
+        mainForceCache.set(key, item);
+      })
+      .catch(() => mainForceCache.set(key, null))
+      .finally(() => {
+        mainForcePending.delete(key);
+        if (selectedCode === code) {
+          const active = readRows().map(mergeQuote).find((row) => row.code === code);
+          if (active) renderAnalysis(active);
+        }
+      });
+  }
+
   function averageSeries(rows, period) {
     return rows.map((row, index) => {
       if (index + 1 < period) return null;
@@ -276,6 +365,7 @@
     const candles = bars.map((bar, index) => {
       const up = number(bar.close) >= number(bar.open);
       const color = up ? "#ff5872" : "#21c79a";
+      const tone = up ? "is-up" : "is-down";
       const xx = x(index);
       const openY = y(number(bar.open));
       const closeY = y(number(bar.close));
@@ -284,12 +374,12 @@
       const bodyTop = Math.min(openY, closeY);
       const bodyHeight = Math.max(1.5, Math.abs(closeY - openY));
       const volumeHeight = (number(bar.volumeLots) / volumeMax) * (volumeBottom - volumeTop);
-      return `<line x1="${xx}" y1="${wickTop}" x2="${xx}" y2="${wickBottom}" stroke="${color}" stroke-width="1.3"/><rect x="${xx - bodyWidth / 2}" y="${bodyTop}" width="${bodyWidth}" height="${bodyHeight}" rx="1" fill="${color}"/><rect x="${xx - bodyWidth / 2}" y="${volumeBottom - volumeHeight}" width="${bodyWidth}" height="${Math.max(1, volumeHeight)}" rx="1" fill="${color}" opacity=".62"><title>${bar.date}｜成交 ${number(bar.volumeLots).toLocaleString("zh-TW", { maximumFractionDigits: 0 })} 張</title></rect>`;
+      return `<line class="watch-kline-wick ${tone}" x1="${xx}" y1="${wickTop}" x2="${xx}" y2="${wickBottom}" stroke="${color}" stroke-width="1.3"/><rect class="watch-kline-candle ${tone}" x="${xx - bodyWidth / 2}" y="${bodyTop}" width="${bodyWidth}" height="${bodyHeight}" rx="1" fill="${color}"/><rect class="watch-kline-volume ${tone}" x="${xx - bodyWidth / 2}" y="${volumeBottom - volumeHeight}" width="${bodyWidth}" height="${Math.max(1, volumeHeight)}" rx="1" fill="${color}" opacity=".62"><title>${bar.date}｜成交 ${number(bar.volumeLots).toLocaleString("zh-TW", { maximumFractionDigits: 0 })} 張</title></rect>`;
     }).join("");
     const line = (period, color) => {
       const values = averageSeries(bars, period);
       const points = values.map((value, index) => value ? `${x(index)},${y(value)}` : "").filter(Boolean).join(" ");
-      return points ? `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>` : "";
+      return points ? `<polyline class="watch-kline-ma watch-kline-ma-${period}" points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>` : "";
     };
     const labels = [0, Math.floor((bars.length - 1) / 3), Math.floor((bars.length - 1) * 2 / 3), bars.length - 1]
       .map((index) => `<text x="${x(index)}" y="${height - 4}" text-anchor="middle" class="watch-kline-axis">${shortDate(bars[index].date)}</text>`).join("");
@@ -348,7 +438,7 @@
     const labels = [];
     if (score >= 70 || pct >= 3) labels.push("強勢整理");
     else if (score >= 58 || pct >= 1) labels.push("偏多整理");
-    if (score >= 58) labels.push("籌碼待確認");
+    if (score >= 58) labels.push("策略待確認");
     return labels;
   }
 
@@ -704,9 +794,8 @@
             <span class="watch-name">${escapeText(row.name || row.code)}</span>
             <span class="watch-market-badge">${escapeText(marketLabel(row.market))}</span>
           </div>
-          <div class="watch-card-flow">
-            <span>外 ${escapeText(row.foreignText || "--")}</span>
-            <span>投 ${escapeText(row.trustText || "--")}</span>
+          <div class="watch-card-flow watch-card-name-line">
+            <span>${escapeText(row.name || row.code)}</span>
           </div>
         </div>
         <div class="watch-card-price">
@@ -737,12 +826,17 @@
     const pressure1 = close ? close * 1.012 : 0;
     const pressure2 = close ? close * 1.026 : 0;
     const pressure3 = close ? close * 1.04 : 0;
+    const threeGateLevels = { lower: support, middle: pressure1, upper: pressure2 };
     const trend = pct >= 3 ? "強勢整理" : pct >= 0 ? "偏多整理" : "弱勢整理";
     const action = pct >= 3 ? "等待拉回" : "等待轉強";
     const score = Math.max(0, Math.min(100, Math.round(50 + pct * 8)));
     const matchSummary = strategyMatchSummary(row, score, pct);
+    const asOfDate = watchlistAsOfDate(row);
+    const mainForce = mainForceItem(row.code, asOfDate);
+    const operationLines = operationConditionLines(row, matchSummary, mainForce, threeGateLevels);
     const kline = dailyKlineHtml(row);
     ensureMatchIndexForAnalysis(row.code);
+    hydrateMainForceCost(row);
     panel.innerHTML = `
       <div class="watch-analysis-panel ta-dashboard blackbean-stock-detail">
         <section class="watch-summary-grid">
@@ -755,9 +849,9 @@
         <section class="watch-detail-sections">
           <article class="watch-detail-section-card trend"><span>趨勢</span><strong>${trend}</strong><b>${formatPct(pct)}</b><em>收盤位於日內區間參考。</em></article>
           <article class="watch-detail-section-card price"><span>價位</span><strong class="${pct >= 0 ? "watch-up" : "watch-down"}">現價 ${formatPrice(close)}</strong><b>${formatPrice(support)} / ${formatPrice(pressure1)}</b><em>支撐觀察：${formatPrice(support)}；壓力觀察：${formatPrice(pressure1)}、${formatPrice(pressure2)}、${formatPrice(pressure3)}。</em></article>
-          <article class="watch-detail-section-card chip"><span>籌碼</span><strong>籌碼待確認</strong><b>籌碼 ${Math.max(0, score - 37)} / 主力 ${Math.max(0, score - 41)}</b><em>法人 10 日淨買賣需搭配盤後資料確認。</em></article>
-          <article class="watch-detail-section-card risk"><span>風險</span><strong>風險可控</strong><b>0 則</b><em>目前沒有明顯短線風險旗標，仍需搭配大盤與成交量確認。</em></article>
-          <article class="watch-detail-section-card action"><span>操作提醒</span><strong>${action}</strong><b>支撐 ${formatPrice(support)}</b><em>先等待量價或籌碼轉強，再把它放進主觀察清單。</em></article>
+          <article class="watch-detail-section-card chip"><span>籌碼</span>${mainForceSummaryHtml(row.code, asOfDate)}</article>
+          <article class="watch-detail-section-card risk resonance"><span>策略共振</span><strong>${matchSummary.labels.length} 項</strong><b>三關價 上 ${formatPrice(threeGateLevels.upper)} / 中 ${formatPrice(threeGateLevels.middle)} / 下 ${formatPrice(threeGateLevels.lower)}</b><em>${matchSummary.labels.length ? escapeText(matchSummary.labels.join("、")) : "尚未命中策略；等待策略或籌碼共振。"}</em></article>
+          <article class="watch-detail-section-card action"><span>操作提醒</span><strong>${action}</strong><b>${escapeText(operationLines[0] || "等待條件")}</b><em>${escapeText(operationLines.slice(1).join("；") || "策略或籌碼條件命中後再進主觀察。")}</em></article>
         </section>
         <section class="watch-note-row">
           <article><b>1</b><small>${escapeText(row.code)} ${escapeText(row.name || row.code)}：${trend}，漲跌幅 ${formatPct(pct)}。</small></article>
@@ -934,6 +1028,107 @@
       #watchlist-view .watch-note-row small { color:#b6c3d7; font-size:13px; }
       #watchlist-view .ta-timeframes { display:flex; gap:8px; }
       #watchlist-view .ta-timeframe { border:1px solid rgba(226,178,87,.35); border-radius:999px; background:rgba(9,18,29,.92); color:#ffd456; padding:8px 14px; font-weight:900; }
+      /* watchlist-sunlight-palette-20260816 */
+      body.fuman-light-theme #watchlist-view.watchlist-view-rich { color:#102033; }
+      body.fuman-light-theme #watchlist-view .watchlist-rich-header h1 { color:#102033 !important; }
+      body.fuman-light-theme #watchlist-view .watchlist-refresh-line { color:#1682d4 !important; }
+      body.fuman-light-theme #watchlist-view .watchlist-rich-shell {
+        border-color:#d8e5f1 !important;
+        background:linear-gradient(180deg,#ffffff 0%,#f7fbff 100%) !important;
+        box-shadow:0 16px 34px rgba(31,66,104,.10) !important;
+      }
+      body.fuman-light-theme #watchlist-view .watchlist-rich-shell-head {
+        border-bottom-color:#dbe7f0 !important;
+        background:linear-gradient(135deg,#ffffff 0%,#f4f9ff 72%,#fff8ed 100%) !important;
+      }
+      body.fuman-light-theme #watchlist-view .watchlist-rich-shell-head h2,
+      body.fuman-light-theme #watchlist-view .watchlist-list-title h3 { color:#172638 !important; }
+      body.fuman-light-theme #watchlist-view .watchlist-rich-shell-head p,
+      body.fuman-light-theme #watchlist-view .watchlist-list-card p,
+      body.fuman-light-theme #watchlist-view .watch-metric span,
+      body.fuman-light-theme #watchlist-view .watch-detail-section-card span { color:#55708a !important; }
+      body.fuman-light-theme #watchlist-view .watchlist-layout { background:#f4f8fc !important; }
+      body.fuman-light-theme #watchlist-view .watchlist-list-card,
+      body.fuman-light-theme #watchlist-view .watch-metric,
+      body.fuman-light-theme #watchlist-view .watch-detail-section-card,
+      body.fuman-light-theme #watchlist-view .watch-note-row article {
+        border-color:#d8e5f1 !important;
+        background:#ffffff !important;
+        color:#172638 !important;
+        box-shadow:0 10px 22px rgba(31,66,104,.07) !important;
+      }
+      body.fuman-light-theme #watchlist-view #watchlist-count {
+        background:#fff2df !important;
+        color:#a66510 !important;
+      }
+      body.fuman-light-theme #watchlist-view .watchlist-entry-input {
+        border-color:#c9d9e8 !important;
+        background:#fbfdff !important;
+        color:#1e3348 !important;
+      }
+      body.fuman-light-theme #watchlist-view .watchlist-entry-input:focus {
+        border-color:#7eb2dc !important;
+        box-shadow:0 0 0 3px rgba(126,178,220,.18) !important;
+      }
+      body.fuman-light-theme #watchlist-view .watchlist-entry-add {
+        background:linear-gradient(135deg,#eaf5ff,#d9ecfb) !important;
+        color:#245d8a !important;
+        border:1px solid #b9d3e8 !important;
+      }
+      body.fuman-light-theme #watchlist-view .watchlist-card {
+        border-color:#d8e5f1 !important;
+        background:#ffffff !important;
+        color:#172638 !important;
+        box-shadow:0 8px 18px rgba(31,66,104,.06) !important;
+      }
+      body.fuman-light-theme #watchlist-view .watchlist-card.selected {
+        border-color:#eba84a !important;
+        background:linear-gradient(90deg,#fff7e8 0%,#ffffff 48%,#f6fbff 100%) !important;
+        box-shadow:inset 4px 0 0 #eba84a,0 12px 24px rgba(235,168,74,.14) !important;
+      }
+      body.fuman-light-theme #watchlist-view .watch-code,
+      body.fuman-light-theme #watchlist-view .watch-metric strong,
+      body.fuman-light-theme #watchlist-view .watch-detail-section-card strong { color:#14263a !important; }
+      body.fuman-light-theme #watchlist-view .watch-name,
+      body.fuman-light-theme #watchlist-view .watch-metric em,
+      body.fuman-light-theme #watchlist-view .watch-detail-section-card em,
+      body.fuman-light-theme #watchlist-view .watch-note-row small { color:#637b92 !important; }
+      body.fuman-light-theme #watchlist-view .watch-market-badge,
+      body.fuman-light-theme #watchlist-view .watch-match-metric strong b {
+        border-color:#b8d7c9 !important;
+        background:#eefaf4 !important;
+        color:#27745d !important;
+      }
+      body.fuman-light-theme #watchlist-view .watch-card-flow { color:#2d8f72 !important; }
+      body.fuman-light-theme #watchlist-view .watch-up { color:#c64f62 !important; }
+      body.fuman-light-theme #watchlist-view .watch-down { color:#23866d !important; }
+      body.fuman-light-theme #watchlist-view .watch-alert,
+      body.fuman-light-theme #watchlist-view .watch-remove { color:#587187 !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-panel {
+        border-color:#cbddea !important;
+        background:linear-gradient(180deg,#ffffff 0%,#f7fbff 100%) !important;
+        box-shadow:0 12px 28px rgba(45,79,112,.09) !important;
+      }
+      body.fuman-light-theme #watchlist-view .watch-kline-head { border-bottom-color:#dbe7f0 !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-head span,
+      body.fuman-light-theme #watchlist-view .watch-kline-head small,
+      body.fuman-light-theme #watchlist-view .watch-kline-legend { color:#657b90 !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-head strong { color:#1c3147 !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-range { border-color:#c8d9e7 !important; background:#f8fbfe !important; color:#466179 !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-range.active { border-color:#77a9d6 !important; background:#e9f4ff !important; color:#1e5b8d !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-svg { background:#fbfdff !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-grid { stroke:#dce8f0 !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-divider { stroke:#c6d8e5 !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-axis { fill:#7b91a5 !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-wick.is-up,
+      body.fuman-light-theme #watchlist-view .watch-kline-candle.is-up { stroke:#dc7180 !important; fill:#dc7180 !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-wick.is-down,
+      body.fuman-light-theme #watchlist-view .watch-kline-candle.is-down { stroke:#36a88a !important; fill:#36a88a !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-volume.is-up { fill:#e7a1aa !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-volume.is-down { fill:#82c8b5 !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-ma-5 { stroke:#c89937 !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-ma-10 { stroke:#4b91c7 !important; }
+      body.fuman-light-theme #watchlist-view .watch-kline-ma-20 { stroke:#9674bd !important; }
       #watchlist-view .watch-mobile-empty { display:grid; place-items:center; min-height:220px; color:#91a0bb; font-weight:900; text-align:center; }
       @media (max-width: 980px) {
         #watchlist-view .watchlist-layout { grid-template-columns:1fr; }

@@ -5,6 +5,8 @@ const path = require("path");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
 const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { attachMainForceCostsToPayload } = require("../lib/terminal-main-force-costs");
+const { attachThreeGatePricesToPayload } = require("../lib/terminal-three-gate-prices");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -31,6 +33,10 @@ const STRATEGY5_UI_MATCH_META = {
   multi_strategy_confluence: { label: "多策略共振", short: "共振" },
   volume_turnover_breakout: { label: "量價周轉強攻", short: "量價周轉" },
   bollinger_kdj_buy: { label: "布林通道", short: "布林通道" },
+  w_neckline_recent_retest_two_day_hold: { label: "近期 W 頸線回測、兩日守住", short: "W頸線守住" },
+  w_bottom_rebound_ma3_ma5_ma10_institution_two_day_buy: { label: "W底反彈、MA轉強", short: "W底轉強" },
+  margin_up_price_up_institutional_continuous_buy: { label: "資增股漲", short: "資增股漲" },
+  margin_down_price_up_institutional_continuous_buy: { label: "資減股漲", short: "資減股漲" },
   momentum: { label: "動能分數達標", short: "動能" },
   main_force_chip: { label: "主力籌碼盤整", short: "主力" },
   limit_up_doji: { label: "漲停十字星", short: "漲停十字" },
@@ -661,11 +667,12 @@ function normalizeMatch(match) {
   const id = String(match.id || match.key || match.type || "").trim();
   if (!id || FORBIDDEN_UI_MATCH_IDS.has(id)) return null;
   const meta = STRATEGY5_UI_MATCH_META[id] || {};
+  const preferCanonicalMeta = id === "margin_up_price_up_institutional_continuous_buy" || id === "margin_down_price_up_institutional_continuous_buy";
   return {
     ...match,
     id,
-    label: match.label || match.title || match.name || meta.label || id,
-    short: match.short || meta.short || meta.label || match.label || id,
+    label: preferCanonicalMeta ? meta.label : match.label || match.title || match.name || meta.label || id,
+    short: preferCanonicalMeta ? meta.short : match.short || meta.short || meta.label || match.label || id,
   };
 }
 
@@ -759,6 +766,13 @@ function buildPayload(rows, run, options = {}) {
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
     .map(normalizePayload);
   const matches = normalizedRows.filter((row) => row.matches.length);
+  const strategy5CompositeRules = run?.payload?.strategy5CompositeRules || first.payload?.strategy5CompositeRules || {};
+  const compositeMatchCounts = {};
+  matches.forEach((row) => row.matches.forEach((match) => {
+    if (match?.compositeStrategy === "strategy5_margin_price_institutional_continuous_buy") {
+      compositeMatchCounts[match.id] = (compositeMatchCounts[match.id] || 0) + 1;
+    }
+  }));
   const scanDate = String(first.scan_date || run?.scan_date || "").replace(/-/g, "");
   const chipSourceHealth = options.chipSourceHealth || null;
   const sourceDate = resolveStrategy5SourceDate(run, scanDate, chipSourceHealth);
@@ -855,6 +869,8 @@ function buildPayload(rows, run, options = {}) {
     count: resultCount,
     returnedCount: matches.length,
     sourceHealth,
+    strategy5CompositeRules,
+    compositeMatchCounts,
     matches,
     transport: {
       source: "supabase",
@@ -1019,6 +1035,8 @@ async function handler(request, response) {
     });
     const staleReason = staleStrategy5SnapshotReason(cached);
     if (cached && !staleReason) {
+      await attachMainForceCostsToPayload(cached);
+    await attachThreeGatePricesToPayload(cached);
       setDesktopSnapshotCache(response);
       response.status(200).json(cached);
       return;
@@ -1036,8 +1054,11 @@ async function handler(request, response) {
       return;
     }
     options.chipSourceHealth = await fetchChipSourceHealth();
+    const payload = buildPayload(latest.rows, latest.run, options);
+    await attachMainForceCostsToPayload(payload);
+    await attachThreeGatePricesToPayload(payload);
     setDesktopSnapshotCache(response);
-    response.status(200).json(buildPayload(latest.rows, latest.run, options));
+    response.status(200).json(payload);
   } catch (error) {
     response.status(503).json(apiOnlyError(error?.message || String(error)));
   }

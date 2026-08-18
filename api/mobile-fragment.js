@@ -12,6 +12,8 @@ const { readSnapshot, upsertSnapshot } = require("../lib/supabase-snapshots");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 const { buildLatestOpsStatus } = require("../lib/terminal-ops-status");
 const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
+const { fetchMainForceCosts, normalizeAsOfDate, normalizeCode } = require("../lib/terminal-main-force-costs");
+const { fetchThreeGatePrices } = require("../lib/terminal-three-gate-prices");
 
 const MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS || 1200);
 const MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS || 18000);
@@ -134,15 +136,16 @@ function normalizeTradeDate(value) {
 
 function directInstitutionFormalRun(payload = {}) {
   const runId = extractRunId(payload, "chip");
+  const runDate = runIdTradeDate(runId);
   const rows = normalizeRows(payload, "chip");
   const count = Number(payload?.count ?? payload?.resultCount ?? payload?.returnedCount ?? rows.length) || rows.length;
   const sourceDate = normalizeTradeDate(payload?.usedDate || payload?.tradeDate || payload?.scanDate || payload?.date);
   const evidenceStatus = String(payload?.evidenceStatus || payload?.run_quality_at_publish?.evidenceStatus || "").toLowerCase();
   const publishAllowed = payload?.publishAllowed ?? payload?.run_quality_at_publish?.publishAllowed;
-  const complete = payload?.complete === true || String(payload?.status || "").toLowerCase() === "complete" || String(payload?.qualityStatus || "").toLowerCase() === "complete";
+  const complete = payload?.complete === true || String(payload?.status || "").toLowerCase() === "complete";
   const today = normalizeTradeDate(taipeiDateKey());
   return String(runId || "").startsWith("institution-")
-    && normalizeTradeDate(runIdTradeDate(runId)) === today
+    && normalizeTradeDate(runDate) === today
     && sourceDate === today
     && complete
     && publishAllowed === true
@@ -206,22 +209,24 @@ function attachTerminalAuthority(tab, payload = {}) {
   }
   if (String(tab || "").toLowerCase() === "chip" && directInstitutionFormalRun(payload)) {
     const runId = extractRunId(payload, "chip");
-    terminalAuthority = {
-      ...(terminalAuthority || {}),
-      key: "institution",
-      runId,
-      tradeDate: taipeiDateKey(),
-      sourceDate: taipeiDateKey(),
-      moduleStatus: "complete",
-      todayAuthoritative: true,
-      formalDisplayAllowed: true,
-      displayMode: "direct_institution_complete_run",
-      displayBlockReason: "",
-      pendingNotDue: false,
-      evidenceStatus: "complete",
-      publishAllowed: true,
-      fallback: false,
-    };
+    if (!terminalAuthority || terminalAuthority.runId !== runId || terminalAuthority.formalDisplayAllowed !== true) {
+      terminalAuthority = {
+        ...(terminalAuthority || {}),
+        key: "institution",
+        runId,
+        tradeDate: taipeiDateKey(),
+        sourceDate: taipeiDateKey(),
+        moduleStatus: "complete",
+        todayAuthoritative: true,
+        formalDisplayAllowed: true,
+        displayMode: "direct_institution_complete_run",
+        displayBlockReason: "",
+        pendingNotDue: false,
+        evidenceStatus: "complete",
+        publishAllowed: true,
+        fallback: false,
+      };
+    }
   }
   if (!terminalAuthority) return payload;
   return {
@@ -297,8 +302,6 @@ async function readMobileFragmentHtmlSnapshot(tab) {
   if (tabAuthorityKey(tab) && !/data-formal-display-allowed=/i.test(String(payload.html || ""))) return null;
   const snapshotRunId = String(payload.runId || "");
   if (/waiting|aborted|mobile-fragment-fast-waiting/i.test(`${snapshotRunId} ${payload.html}`)) return null;
-  const runDate = runIdTradeDate(snapshotRunId);
-  if (tabAuthorityKey(tab) && runDate && normalizeTradeDate(runDate) !== normalizeTradeDate(taipeiDateKey())) return null;
   if (snapshotPayloadAgeMs(payload) > MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS) return null;
   return {
     html: payload.html,
@@ -349,6 +352,7 @@ function lockedFragment(tab) {
     <article class="mobile-terminal-head">
       <small>會員權限</small>
       <strong>此分頁需要登入開通</strong>
+      <p>手機直向與橫向都會導入同一個會員登入頁；市場總覽、AI 判讀與學習方案可公開瀏覽，策略、籌碼、CB、權證與成績單需登入並開通。</p>
       <div class="mobile-terminal-auth-actions" data-mobile-membership-actions="1">
         <a class="primary" data-mobile-login-action="login" href="/auth.html?mode=login&next=${next}">登入</a>
         <a data-mobile-login-action="signup" href="/auth.html?mode=signup&next=${next}">註冊 / 開通權限</a>
@@ -438,7 +442,7 @@ function fetchStrategy2Internal(request, endpoint) {
 }
 function fetchStrategy3Internal(request, endpoint) {
   const url = new URL(endpoint, originFrom(request));
-  const query = { ...Object.fromEntries(url.searchParams.entries()), verify: "1", ...(shouldUseLiveFragment("strategy3") ? { live: "1", noSnapshot: "1" } : {}) };
+  const query = { ...Object.fromEntries(url.searchParams.entries()), live: "1", verify: "1", noSnapshot: "1" };
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("strategy3_internal_timeout")), MOBILE_STRATEGY3_DIRECT_TIMEOUT_MS);
     const finish = (result) => {
@@ -461,34 +465,6 @@ function fetchStrategy3Internal(request, endpoint) {
     });
   });
 }
-function fetchInstitutionInternal(request, endpoint) {
-  const url = new URL(endpoint, originFrom(request));
-  const query = { ...Object.fromEntries(url.searchParams.entries()), live: "1", verify: "1", noSnapshot: "1" };
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("institution_internal_timeout")), 30000);
-    const finish = (result) => {
-      clearTimeout(timer);
-      const payload = result.payload && typeof result.payload === "object" ? result.payload : null;
-      const rows = normalizeRows(payload, "chip");
-      if (Number(result.statusCode || 0) >= 400 || payload?.ok === false || !rows.length) {
-        reject(new Error(payload?.detail || payload?.error || `HTTP ${result.statusCode}`));
-        return;
-      }
-      resolve(payload);
-    };
-    Promise.resolve(institutionLatest({
-      ...request,
-      method: "GET",
-      url: endpoint,
-      query,
-      fumanInternalVerify: true,
-    }, createCaptureResponse(finish))).catch((error) => {
-      clearTimeout(timer);
-      reject(error);
-    });
-  });
-}
-
 function fetchStrategy4Internal(request, endpoint) {
   const url = new URL(endpoint, originFrom(request));
   const query = { ...Object.fromEntries(url.searchParams.entries()), verify: "1" };
@@ -528,6 +504,34 @@ function fetchStrategy5Internal(request, endpoint) {
       resolve(result.payload);
     };
     Promise.resolve(strategy5Latest({
+      ...request,
+      method: "GET",
+      url: endpoint,
+      query,
+      fumanInternalVerify: true,
+    }, createCaptureResponse(finish))).catch((error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
+}
+
+function fetchInstitutionInternal(request, endpoint) {
+  const url = new URL(endpoint, originFrom(request));
+  const query = { ...Object.fromEntries(url.searchParams.entries()), live: "1", verify: "1", noSnapshot: "1" };
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("institution_internal_timeout")), 30000);
+    const finish = (result) => {
+      clearTimeout(timer);
+      const payload = result.payload && typeof result.payload === "object" ? result.payload : null;
+      const rows = normalizeRows(payload, "chip");
+      if (Number(result.statusCode || 0) >= 400 || payload?.ok === false || !rows.length) {
+        reject(new Error(payload?.detail || payload?.error || `HTTP ${result.statusCode}`));
+        return;
+      }
+      resolve(payload);
+    };
+    Promise.resolve(institutionLatest({
       ...request,
       method: "GET",
       url: endpoint,
@@ -614,14 +618,24 @@ function isEvidenceLikeRow(row) {
 
 function isValidBusinessRow(row, tab = "") {
   if (!row || typeof row !== "object") return false;
+  if (tab === "cb") {
+    const cbCode = String(firstValue(row, ["cbCode", "cb_code", "convertibleBondCode", "bondCode", "symbol", "code"], "")).trim();
+    const stockCode = String(firstValue(row, ["stockCode", "stock_id", "stockId", "underlyingCode", "code"], "")).trim();
+    return /^\d{4,6}$/.test(cbCode) && /^\d{4}$/.test(stockCode || cbCode.slice(0, 4));
+  }
   if (["strategy2", "strategy3", "strategy4", "strategy5", "chip"].includes(tab)) {
     const code = String(firstValue(row, ["code", "stock_id", "stockId", "symbol", "underlyingCode", "ticker"], "")).trim();
     return /^\d{4}$/.test(code);
   }
+  if (tab === "warrant") {
+    const code = String(firstValue(row, ["underlyingCode", "code", "stockCode"], "")).trim();
+    const warrantCode = String(firstValue(row, ["warrantCode", "symbol"], "")).trim();
+    return /^\d{4}$/.test(code) || /^\d{5,6}$/.test(warrantCode);
+  }
   return !isEvidenceLikeRow(row);
 }
 function hidePreviousGoodRows(rows) {
-  // Strategy2 is V3 direct-only; there is no previous-good row path to filter.
+  // Strategy2 is V2 direct-only; there is no previous-good row path to filter.
   return rows;
 }
 function normalizeRows(payload, tab = "") {
@@ -732,6 +746,13 @@ function numberValue(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
+function mobileMainForceAsOfDate(payload = {}) { return normalizeAsOfDate(payload?.tradeDate || payload?.scanDate || payload?.usedDate || payload?.dataDate || payload?.date || ""); }
+async function attachMainForceCosts(tab, payload = {}) { if (!["strategy2", "strategy3", "strategy4", "strategy5", "chip"].includes(String(tab || "").toLowerCase())) return payload; const rows = normalizeRows(payload, tab), codes = [...new Set(rows.map((row) => normalizeCode(firstValue(row, ["code", "stock_id", "stockId", "symbol", "underlyingCode", "ticker"], ""))).filter(Boolean))]; if (!codes.length) return payload; try { const result = await fetchMainForceCosts({ codes, asOf: mobileMainForceAsOfDate(payload) }), items = new Map((result.items || []).map((item) => [item.code, item])); rows.forEach((row) => { const code = normalizeCode(firstValue(row, ["code", "stock_id", "stockId", "symbol", "underlyingCode", "ticker"], "")); if (code) row.terminalMainForce = items.get(code) || null; }); } catch { rows.forEach((row) => { row.terminalMainForce = null; }); } return payload; }
+function mobileThreeGateAsOfDate(payload = {}) { return normalizeAsOfDate(payload?.tradeDate || payload?.scanDate || payload?.usedDate || payload?.dataDate || payload?.date || ""); }
+async function attachThreeGatePrices(tab, payload = {}) { if (!["strategy2", "strategy3", "strategy4", "strategy5", "chip"].includes(String(tab || "").toLowerCase())) return payload; const rows = normalizeRows(payload, tab), codes = [...new Set(rows.map((row) => normalizeCode(firstValue(row, ["code", "stock_id", "stockId", "symbol", "underlyingCode", "ticker"], ""))).filter(Boolean))]; if (!codes.length) return payload; try { const result = await fetchThreeGatePrices({ codes, asOf: mobileThreeGateAsOfDate(payload) }), levels = new Map((result.levels || []).map((item) => [item.code, item])); rows.forEach((row) => { const code = normalizeCode(firstValue(row, ["code", "stock_id", "stockId", "symbol", "underlyingCode", "ticker"], "")); if (code) row.terminalThreeGate = levels.get(code) || null; }); } catch { rows.forEach((row) => { row.terminalThreeGate = null; }); } return payload; }
+function mobileThreeGateHtml(row) { const gate = row?.terminalThreeGate; if (!gate) return '<small class="mobile-three-gate-prices" data-three-gate-state="unavailable"><b>三關價</b><span>資料不足</span><em>須有前一交易日正式日K</em></small>'; return `<small class="mobile-three-gate-prices" data-three-gate-state="ready"><b>三關價</b><span>上 ${esc(numberText(gate.upperGate, 2))}｜中 ${esc(numberText(gate.middleGate, 2))}｜下 ${esc(numberText(gate.lowerGate, 2))}</span><em>參考 ${esc(gate.referenceDate || "--")}</em></small>`; }
+function mobileMainForceStyle(label, style) { if (!style || style.status === "data_insufficient") return `${label}：資料不足`; if (style.status === "unclassified") return `${label}：未分類`; if (style.matched) return `${label}：有｜成本 ${numberText(style.costPrice, 2)}`; return `${label}：無`; }
+function mobileMainForceHtml(row) { const cost = row?.terminalMainForce; if (!cost || cost.status !== "ready") return '<small class="mobile-main-force-costs" data-main-force-state="unavailable"><b>主力成本</b><span>資料不足</span><em>須有同日正式分點資料</em></small>'; return `<small class="mobile-main-force-costs" data-main-force-state="ready"><b>主力成本 ${esc(numberText(cost.mainForceCostPrice, 2))}</b><span>${esc(mobileMainForceStyle("隔日沖主力", cost.overnight))}</span><span>${esc(mobileMainForceStyle("短沖主力", cost.shortSwing))}</span><span>${esc(mobileMainForceStyle("當沖主力", cost.daytrade))}</span><em>資料日 ${esc(cost.tradeDate)}</em></small>`; }
 function strategy4TriangleSvg(row) {
   const triangle = row?.triangleBreakout;
   const lines = triangle?.chartLines;
@@ -777,6 +798,7 @@ function rowHtml(row, index, tab = "") {
     const entryPrice = firstValue(row, ["entryPrice", "observedPrice", "latestSeenPrice", "latestAPrice", "firstAPrice", "supportPrice"], "--");
     const state = firstValue(row, ["stateLabel", "actionLabel", "label", "signal", "strategy"], "即時偵測");
     const reason = firstValue(row, ["reason", "stateReason", "summary", "description", "memo", "note"], "");
+    const mainForceCosts = mobileMainForceHtml(row);
     return `
     <article class="mobile-terminal-row">
       <b>#${index + 1}</b>
@@ -784,6 +806,8 @@ function rowHtml(row, index, tab = "") {
         <h4>${esc(intradayTimeText(entryTime))}｜${esc(code)} ${esc(name)}</h4>
         <p>${esc(state)}｜進場價格 ${esc(numberText(entryPrice))}</p>
         <small>${esc(String(reason).slice(0, 150))}</small>
+        ${mainForceCosts}
+        ${mobileThreeGateHtml(row)}
       </div>
       <div class="mobile-terminal-actions">
         <button type="button" data-mobile-ai-contract="analyze" data-ai-stock-code="${esc(code)}" data-ai-stock-name="${esc(name)}">看分析</button>
@@ -822,6 +846,7 @@ function rowHtml(row, index, tab = "") {
   const reason = firstValue(row, ["reason", "summary", "description", "memo", "note", "why"], "");
   const line = `${action}｜${score}｜${pct === null ? "--" : `${numberText(pct)}%`}`;
   const triangleChart = tab === "strategy4" ? strategy4TriangleSvg(row) : "";
+  const mainForceCosts = mobileMainForceHtml(row);
   const strategy4Matched = tab === "strategy5" && Boolean(firstValue(row, ["strategy4Matched", "strategy4_matched", "strategy4RunId", "strategy4_run_id"], ""));
   const displayName = strategy4Matched ? `🔥 ${name}` : name;
   return `
@@ -832,6 +857,8 @@ function rowHtml(row, index, tab = "") {
         <p>${esc(line)}</p>
         <small>${esc(String(reason).slice(0, 150))}</small>
         ${triangleChart}
+        ${mainForceCosts}
+        ${mobileThreeGateHtml(row)}
       </div>
       <div class="mobile-terminal-actions">
         <button type="button" data-mobile-ai-contract="analyze" data-ai-stock-code="${esc(code)}" data-ai-stock-name="${esc(name)}">看分析</button>
@@ -840,9 +867,11 @@ function rowHtml(row, index, tab = "") {
     </article>`;
 }
 
-function renderFragment(tab, config, payload) {
+async function renderFragment(tab, config, payload) {
   if (tab === "ai") return renderAiFragment(tab, config, payload);
   payload = attachTerminalAuthority(tab, payload);
+  const diagnosticReplay = payload?.status === "diagnostic_replay" && payload?.diagnosticReplay === true;
+  if (!diagnosticReplay) { payload = await attachMainForceCosts(tab, payload); payload = await attachThreeGatePrices(tab, payload); }
   const rows = normalizeRows(payload, tab);
   const reportedCount = Number(payload?.count ?? payload?.total ?? payload?.result_count ?? payload?.matchCount ?? 0) || 0;
   const count = Math.max(reportedCount, rows.length);
@@ -862,7 +891,7 @@ function renderFragment(tab, config, payload) {
   const publishLabel = publishAllowed === false ? "publish blocked" : publishAllowed === true ? "publish allowed" : "";
   const preserveLabel = preservePreviousGood === true ? "preserve previous good" : "";
   const statusLine = [
-    validationDisplayAllowed ? "盤後驗證回測（非正式推薦）" : config.subtitle,
+    validationDisplayAllowed || diagnosticReplay ? "V3 回測驗證（非正式候選）" : config.subtitle,
     runId ? `run ${runId}` : "",
     quality ? `quality ${quality}` : "",
     evidenceStatus ? `evidence ${evidenceStatus}` : "",
@@ -879,7 +908,7 @@ function renderFragment(tab, config, payload) {
   const list = rows.length ? rows.map((row, index) => rowHtml(row, index, tab)).join("") : `<div class="empty-state">等待最新 complete run。</div>`;
   return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}" data-result-count="${rows.length}" data-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-today-authoritative="${todayAuthoritative === true ? "1" : "0"}" data-display-mode="${esc(displayMode)}">
       <article class="mobile-terminal-head">
-        <small>${validationDisplayAllowed ? "盤後驗證回測 / 非正式推薦" : "API-only complete run"}</small>
+        <small>${validationDisplayAllowed || diagnosticReplay ? "V3 回測驗證 / 不發布、不寫入 /88" : "API-only complete run"}</small>
         <strong>${esc(config.title)}</strong>
         <p>${esc(statusLine)}</p>
         ${blockedHtml}
@@ -920,6 +949,8 @@ function renderAiStockRow(row, index) {
         <h4>${esc(code)} ${esc(name)}</h4>
         <p>${esc(source)}｜${esc(industry)}｜${esc(pctText)}｜分數 ${esc(score)}</p>
         <small>${esc(String(reason).slice(0, 150))}</small>
+        ${mainForceCosts}
+        ${mobileThreeGateHtml(row)}
       </div>
       <button type="button" data-mobile-ai-contract="analyze" data-ai-stock-code="${esc(code)}" data-ai-stock-name="${esc(name)}">看分析</button>
       <button type="button" data-mobile-ai-contract="watch" data-ai-watch-code="${esc(code)}" data-ai-watch-name="${esc(name)}">加入自選</button>
@@ -1099,11 +1130,9 @@ module.exports = async function handler(request, response) {
                 : fastWaitingPayload(tab, endpoint, error?.message || "strategy2_mobile_direct_timeout")))
             : tab === "strategy3"
               ? await fetchStrategy3Internal(request, endpoint)
-              : tab === "chip"
-                ? await fetchInstitutionInternal(request, endpoint)
-                : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, ["ai", "chip"].includes(tab) ? 30000 : 12000, authHeadersFrom(request)))
+              : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, ["ai", "chip"].includes(tab) ? 30000 : 12000, authHeadersFrom(request)))
       : snapshotPayload;
-    const html = renderFragment(tab, config, payload);
+    const html = await renderFragment(tab, config, payload);
     if (tab !== "ai" && tab !== "strategy2") writeMobileFragmentHtmlSnapshot(tab, html, payload);
     response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);
     sendHtml(request, response, 200, html, { tab });
@@ -1111,4 +1140,3 @@ module.exports = async function handler(request, response) {
     sendHtml(request, response, 503, `<div class="empty-state">手機 API fragment 暫時無法取得：${esc(error?.message || error)}</div>`, { tab });
   }
 };
-

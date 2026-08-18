@@ -5,6 +5,8 @@ const path = require("path");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
 const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { attachMainForceCostsToPayload } = require("../lib/terminal-main-force-costs");
+const { attachThreeGatePricesToPayload } = require("../lib/terminal-three-gate-prices");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -581,6 +583,8 @@ async function handler(request, response) {
   });
   if (cached) {
     setDesktopSnapshotCache(response);
+    await attachMainForceCostsToPayload(cached);
+    await attachThreeGatePricesToPayload(cached);
     response.status(200).json(cached);
     return;
   }
@@ -608,6 +612,8 @@ async function handler(request, response) {
       response.status(409).json(apiOnlyError("strategy4_supabase_contract_mismatch"));
       return;
     }
+    await attachMainForceCostsToPayload(payload);
+    await attachThreeGatePricesToPayload(payload);
     setDesktopSnapshotCache(response);
     response.status(200).json(payload);
   } catch (error) {

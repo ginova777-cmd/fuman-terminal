@@ -25,9 +25,7 @@
   const REALTIME_RADAR_ROUTE = "";
   const CHIP_TRADE_ROUTE = "chip-trade|買賣超";
   const CB_DETECT_ROUTE = "";
-  const FIXED_ROUTE_KEYS = [MARKET_ROUTE, CHIP_TRADE_ROUTE, "watchlist|自選股"];
   const FIXED_CANVAS_PERSIST_ROUTES = [];
-  const API_ONLY_FIXED_ROUTE_KEYS = [MARKET_ROUTE, CHIP_TRADE_ROUTE];
   const CANVAS_REFRESH_TTL_MS = 18000;
   const API_ONLY_POLL_MS = 30000;
   const CHIP_TRADE_FIELD_CONTRACT_VERSION = "buy-sell-derived-fields-20260629-01";
@@ -65,6 +63,98 @@
     { key: "foreignTrustVolumePct", label: "外資+投信佔5日均量", endpoint: "/api/institution-latest" },
     { key: "tdcc1000", label: "外資連3買 + 1000張連3週增", endpoint: "/api/institution-tdcc-breakout-latest" },
   ];
+  const STRATEGY5_W_NECKLINE_FALLBACK = {
+    id: "w_neckline_recent_retest_two_day_hold",
+    label: "近期 W 頸線回測、兩日守住",
+    short: "W頸線守住",
+    icon: "W",
+    description: "正式日 OHLCV 偵測近期 W 型頸線；最近兩日低點守住頸線才命中，日K展開後會標出頸線、左右谷底與兩日守住K棒。",
+  };
+  const STRATEGY5_W_BOTTOM_REBOUND_FALLBACK = {
+    id: "w_bottom_rebound_ma3_ma5_ma10_institution_two_day_buy",
+    label: "W底反彈、MA轉強",
+    short: "W底轉強",
+    icon: "W",
+    description: "W底右腳低點反彈後連兩根紅K；第一根站上 MA3，第二根站上 MA5 或 MA10。日K展開後會框出兩根紅K。",
+  };
+
+  const STRATEGY5_DISPLAY_FALLBACKS = [
+    { id: "multi_strategy_confluence", label: "綜合共振", short: "綜合共振", icon: "綜", description: "全終端策略與籌碼至少命中 2 項，符合越多項排序越前。" },
+    { id: "volume_turnover_breakout", label: "量價周轉強攻", short: "量價周轉強攻", icon: "量", description: "漲幅、成交量、周轉率與量比共同放大。" },
+    { id: "bollinger_kdj_buy", label: "布林通道", short: "布林通道", icon: "布", description: "布林通道搭配 KDJ 與主力條件。" },
+    { id: "margin_up_price_up_institutional_continuous_buy", label: "資增股漲", short: "資增股漲", icon: "增", description: "融資餘額上升且股價上漲，並有法人連續買超；列為策略5波段籌碼觀察。" },
+    { id: "margin_down_price_up_institutional_continuous_buy", label: "資減股漲", short: "資減股漲", icon: "減", description: "融資餘額下降但股價上漲，且法人連續買超；列為策略5波段籌碼觀察。" },
+    { id: "w_neckline_recent_retest_two_day_hold", label: "近期 W 頸線回測、兩日守住", short: "W頸線守住", icon: "W", description: "正式日 OHLCV 偵測近期 W 型頸線；最近兩日低點守住頸線才命中，日K展開後會標出頸線、左右谷底與兩日守住K棒。" },
+    { id: "w_bottom_rebound_ma3_ma5_ma10_institution_two_day_buy", label: "W底反彈、MA轉強", short: "W底轉強", icon: "W", description: "W底右腳低點反彈後連兩根紅K；第一根站上 MA3，第二根站上 MA5 或 MA10。日K展開後會框出兩根紅K。" },
+    { id: "limit_up_doji", label: "漲停十字星", short: "漲停十字星", icon: "十", description: "漲停後十字星與整理突破觀察。" },
+  ];
+
+  function ensureStrategy5WNecklineConfig() {
+    const config = window.FUMAN_STRATEGY_CONFIG || {};
+    const byId = { ...(config.STRATEGY_BY_ID || {}) };
+    for (const item of STRATEGY5_DISPLAY_FALLBACKS) {
+      byId[item.id] = {
+        ...(byId[item.id] || {}),
+        id: item.id,
+        label: item.label,
+        short: item.short,
+        icon: item.icon,
+      };
+    }
+    byId[STRATEGY5_W_NECKLINE_FALLBACK.id] = {
+      ...(byId[STRATEGY5_W_NECKLINE_FALLBACK.id] || {}),
+      id: STRATEGY5_W_NECKLINE_FALLBACK.id,
+      label: STRATEGY5_W_NECKLINE_FALLBACK.label,
+      short: STRATEGY5_W_NECKLINE_FALLBACK.short,
+      icon: STRATEGY5_W_NECKLINE_FALLBACK.icon,
+    };
+    byId[STRATEGY5_W_BOTTOM_REBOUND_FALLBACK.id] = {
+      ...(byId[STRATEGY5_W_BOTTOM_REBOUND_FALLBACK.id] || {}),
+      id: STRATEGY5_W_BOTTOM_REBOUND_FALLBACK.id,
+      label: STRATEGY5_W_BOTTOM_REBOUND_FALLBACK.label,
+      short: STRATEGY5_W_BOTTOM_REBOUND_FALLBACK.short,
+      icon: STRATEGY5_W_BOTTOM_REBOUND_FALLBACK.icon,
+    };
+
+    const insertStrategy5W = (items) => {
+      const visible = [
+              "multi_strategy_confluence",
+              "volume_turnover_breakout",
+              "bollinger_kdj_buy",
+              "margin_up_price_up_institutional_continuous_buy",
+              "margin_down_price_up_institutional_continuous_buy",
+              "w_neckline_recent_retest_two_day_hold",
+              "w_bottom_rebound_ma3_ma5_ma10_institution_two_day_buy",
+              "limit_up_doji"
+      ];
+      const source = Array.isArray(items) && items.length ? items : visible;
+      return visible.filter((id) => source.includes(id) || id === "multi_strategy_confluence");
+    };
+
+    const preset = insertStrategy5W(config.STRATEGY5_PRESET_IDS);
+    const base = insertStrategy5W(config.STRATEGY5_BASE_PRESET_IDS).filter((id) => id !== "multi_strategy_confluence");
+    window.FUMAN_STRATEGY_CONFIG = {
+      ...config,
+      STRATEGY_BY_ID: byId,
+      STRATEGY5_PRESET_IDS: preset,
+      STRATEGY5_BASE_PRESET_IDS: base,
+      STRATEGY5_CARD_META: {
+        ...(config.STRATEGY5_CARD_META || {}),
+        ...Object.fromEntries(STRATEGY5_DISPLAY_FALLBACKS.map((item) => [
+          item.id,
+          {
+            ...(config.STRATEGY5_CARD_META?.[item.id] || {}),
+            description: item.description,
+          },
+        ])),
+        [STRATEGY5_W_NECKLINE_FALLBACK.id]: {
+          ...(config.STRATEGY5_CARD_META?.[STRATEGY5_W_NECKLINE_FALLBACK.id] || {}),
+          description: STRATEGY5_W_NECKLINE_FALLBACK.description,
+        },
+      },
+    };
+  }
+
   const CANVAS_WORKER_URL = "/terminal-desktop-canvas-worker.js";
   let pendingTimer = 0;
   let snapshotTimer = 0;
@@ -149,10 +239,21 @@
   };
   const strategy4DailyKlineCache = new Map();
   const strategy4DailyKlinePending = new Set();
+  const strategy4DailyKlineBatchPending = new Set();
+  const strategy4DailyKlineBatchWaiters = new Map();
+  const DAILY_KLINE_PREFETCH_CHUNK_SIZE = 24;
+  const DAILY_KLINE_PREFETCH_IDLE_DELAY_MS = 40;
+  const DAILY_KLINE_PREFETCH_CHUNK_GAP_MS = 110;
+  const DAILY_KLINE_RUN_SNAPSHOT_CONCURRENCY = 2;
+  const DAILY_KLINE_SESSION_SNAPSHOT_VERSION = "v1";
+  const DAILY_KLINE_SESSION_SNAPSHOT_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+  const strategy4DailyKlineSnapshotRuns = new Map();
   const strategy4DailyKlineRanges = new Map();
   let strategy4CanvasPointerOpenedAt = 0;
   const threeGatePriceCache = new Map();
   const threeGatePricePending = new Set();
+  const mainForceCostCache = new Map();
+  const mainForceCostPending = new Set();
 
   installRetiredSurfaceCacheMigration20260714();
   installMemberBearerFetchBridge20260714();
@@ -234,7 +335,6 @@
   function installMemberBearerFetchBridge20260714() {
     if (window.fetch?.__fumanMemberBearerBridge20260714) return;
     const originalFetch = window.fetch.bind(window);
-    const protectedApiPattern = /^\/api\/(?:strategy[2-5]-latest|terminal-fast-bundle|institution-latest|institution-tdcc-breakout-latest|cb-detect-latest|warrant-flow-latest|mobile-boot|mobile-fragment)\b/;
     const runtimeAuthKey = window.FUMAN_RUNTIME_CONFIG?.authCacheKey || "fuman-terminal-auth-cache-v1";
     const tokenKeys = [runtimeAuthKey, "fuman-terminal-auth-cache-v1"];
 
@@ -416,8 +516,6 @@
       return "";
     }
     if (route.viewName === "chip-trade") return "chip-trade|買賣超";
-    if (route.viewName === "cb-detect") return "cb-detect|CB可轉債";
-    if (route.viewName === "warrant-flow") return "warrant-flow|權證走向";
     if (route.viewName === "realtime-radar") return MARKET_ROUTE;
     if (route.viewName === "watchlist") return "watchlist|自選股";
     if (route.viewName === "market") return MARKET_ROUTE;
@@ -654,7 +752,6 @@
       "strategy|策略4",
       "strategy|策略5",
       "chip-trade|買賣超",
-      "cb-detect|CB可轉債",
       "watchlist|自選股",
     ];
     const linkForRoute = (route) => Array.from(document.querySelectorAll(NAV_SELECTOR))
@@ -818,6 +915,7 @@
         summary: "外資、投信與法人買賣超資料以快照先開，完整表格背景更新。",
       };
     }
+
     if (view === "watchlist") {
       return {
         icon: "☆",
@@ -1042,7 +1140,7 @@
         const label = compactText((translateStrategy4 && (strategy4SignalLabel(rawId) || strategy4SignalLabel(rawLabel))) || rawLabel || rawId, 40);
         const reason = compactText((translateStrategy4 && strategy4SignalLabel(rawReason)) || rawReason, 96);
         if (!id && !label && !reason) return null;
-        return { id, label: label || id || reason, reason };
+        return { ...signal, id, label: label || id || reason, reason };
       })
       .filter(Boolean);
   }
@@ -1092,7 +1190,7 @@
   }
 
   function isWideStrategyTableRoute(route) {
-    return isStrategy3Route(route) || isStrategy4Route(route) || isStrategy5Route(route);
+    return isStrategy2Route(route) || isStrategy3Route(route) || isStrategy4Route(route) || isStrategy5Route(route) || isChipTradeRoute(route); // chip_trade_daily_kline_enabled
   }
 
   function canvasPageSizeForRoute(route = canvasState.route) {
@@ -1166,126 +1264,41 @@
 
   function installDesktopFastWarrantHandlers() {}
 
-  function pickWarrantValue(row, keys) {
-    for (const key of keys) {
-      const value = row?.[key];
-      if (value !== undefined && value !== null && value !== "") return value;
-    }
-    return "";
-  }
-
-  function normalizeDesktopFastWarrantRows(payload) {
-    const groups = [
-      payload?.volumeMatches,
-      payload?.rows,
-      payload?.data,
-      payload?.items,
-      payload?.singleSignals,
-      payload?.signals,
-      payload?.top,
-    ];
-    for (const group of groups) {
-      const rows = normalizeArray(group)
-        .filter((row) => row && typeof row === "object")
-        .filter((row) => {
-          const code = pickWarrantValue(row, ["underlyingCode", "stockCode", "code", "symbol", "warrantCode"]);
-          return String(code || "").trim();
-        });
-      if (rows.length) return rows;
-    }
-    return [];
-  }
-
-  function renderDesktopFastWarrantRows(rows) {
-    return rows.slice(0, 120).map((row, index) => {
-      const stockCode = pickWarrantValue(row, ["underlyingCode", "stockCode", "code", "symbol"]) || "--";
-      const stockName = pickWarrantValue(row, ["underlyingName", "stockName", "name", "companyName"]) || "";
-      const warrantCode = pickWarrantValue(row, ["warrantCode", "warrant_code", "targetCode"]) || "--";
-      const warrantName = pickWarrantValue(row, ["warrantName", "warrant_name", "targetName"]) || "";
-      const volume = pickWarrantValue(row, ["thirtyMinuteVolume", "volume", "tradeVolume", "warrantVolume", "totalVolume"]);
-      const multiple = pickWarrantValue(row, ["volumeMultiple", "volumeRatio", "multiple", "score"]);
-      const direction = pickWarrantValue(row, ["direction", "side", "signal", "actionLabel", "signalLabel"]) || "觀察";
-      const pct = pickWarrantValue(row, ["underlyingPercent", "changePercent", "change_percent", "priceChangePercent"]);
-      const moneyness = pickWarrantValue(row, ["moneynessPercent", "moneyness", "inOutPercent"]);
-      const expiry = pickWarrantValue(row, ["daysToExpiry", "expireDays", "remainingDays"]);
-      const title = [stockName, stockCode].filter(Boolean).join(" ");
-      const sub = [warrantName, warrantCode].filter(Boolean).join(" ");
-      const metricLine = [
-        volume ? `量 ${formatCompactNumber(volume)}` : "",
-        multiple ? `倍數 ${formatRatioValue(multiple) || escapeHtml(multiple)}` : "",
-        pct !== "" ? `標的 ${formatPercentValue(pct) || escapeHtml(pct)}` : "",
-        moneyness !== "" ? `價內外 ${formatPercentValue(moneyness) || escapeHtml(moneyness)}` : "",
-        expiry !== "" ? `到期 ${escapeHtml(expiry)}日` : "",
-      ].filter(Boolean).join(" ｜ ");
-      return [
-        "<tr>",
-        `<td class="rank-cell">#${index + 1}</td>`,
-        `<td><strong>${escapeHtml(title || stockCode)}</strong><br><span>${escapeHtml(sub || warrantCode)}</span></td>`,
-        `<td><span class="signal-pill">${escapeHtml(direction)}</span></td>`,
-        `<td>${escapeHtml(metricLine || "--")}</td>`,
-        "</tr>",
-      ].join("");
-    }).join("");
-  }
-
   function renderDesktopFastWarrantShell(payload = {}, rows = [], state = {}) {
-    const panel = panelForRoute("warrant-flow|權證走向");
+    return false;
+  }
+
+  async function renderDesktopFastWarrantFlow(force = false) {
     if (!panel) return false;
-    cleanupFixedDomRouteShells();
-    const route = "warrant-flow|權證走向";
-    const meta = strategyMeta(route);
-    const payloadMeta = routePayloadMeta(route, payload) || {
-      runId: pickFirstValue(payload.runId, payload.run_id, payload.latestRunId, payload.transport?.runId, ""),
-      updatedAt: pickFirstValue(payload.updatedAt, payload.source_snapshot_captured_at, payload.sourceSnapshotCapturedAt, ""),
-      resultCount: rows.length || cleanNumber(payload.count || payload.resultCount || payload.returnedCount || payload.total),
-      evidenceStatus: pickFirstValue(payload.evidenceStatus, payload.unattended?.evidenceStatus, payload.selfCheck?.status, ""),
-      cacheSource: pickFirstValue(payload.cacheSource, payload.source, "api"),
-    };
-    activeSnapshotRoute = route;
-    canvasState.route = route;
-    canvasState.source = state.loading ? "warrant-loading" : state.error ? "warrant-error" : "api";
-    canvasState.rows = rows;
-    canvasState.filtered = rows;
-    canvasState.signalFilter = "";
-    canvasState.meta = payloadMeta;
-    canvasStore.set(route, { rows, source: canvasState.source, at: Date.now(), meta: payloadMeta });
-    if (state.loading && !rows.length && !payloadMetaHasResolvedResponse(payloadMeta)) {
-      return renderMemberStrategyPendingShell(route, meta, panel);
+    if (desktopFastWarrantLoading && !force) return false;
+    desktopFastWarrantLoading = true;
+    if (!desktopFastWarrantPayload) {
+      renderDesktopFastWarrantShell({}, [], { loading: true });
     }
-    return renderUnifiedListShell(route, meta, panel);
-  }
-
-  async function fetchFixedDomRouteRows(route) {
-    const endpoint = compactCanvasUrlForRoute(route, true);
-    if (!endpoint) return { rows: [], meta: null, payload: null };
-    const response = await fetch(endpoint, { cache: "no-store" });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const rows = normalizeCanvasRowsFromPayload(payload, route);
-    const meta = routePayloadMeta(route, payload);
-    if (rows.length) {
-      canvasStore.set(route, { rows, source: "api", at: Date.now(), meta });
-      routeSnapshots.set(route, { ...(routeSnapshots.get(route) || {}), at: Date.now(), rows, html: "", meta: meta || undefined });
-      canvasRouteVersions.set(route, Number(canvasRouteVersions.get(route) || 0) + 1);
-      canvasPreRenderedRoutes.delete(route);
-    } else {
-      rememberCanvasEmptyPayload(route, "api-empty", Date.now(), meta);
+    try {
+      const response = await fetch(endpoint, { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      desktopFastWarrantPayload = payload;
+      const rows = normalizeDesktopFastWarrantRows(payload);
+      renderDesktopFastWarrantShell(payload, rows, { status: response.status, endpoint });
+      return true;
+    } catch (error) {
+      renderDesktopFastWarrantShell(desktopFastWarrantPayload || {}, normalizeDesktopFastWarrantRows(desktopFastWarrantPayload || {}), {
+        error: error?.message || String(error || "unknown error"),
+      });
+      return false;
+    } finally {
+      desktopFastWarrantLoading = false;
     }
-    return { rows, meta, payload };
   }
-
-  async function renderDesktopFastWarrantFlow() { return false; }
 
   function restoreNativeFixedDomRoute(key, panel) {
     panel.querySelectorAll(":scope > .fuman-unified-list-shell").forEach((node) => node.remove());
     panel.classList.remove("fuman-unified-list-panel", "fuman-fixed-shell-panel", "fuman-fixed-shell-active");
     delete panel.dataset.fumanCanvasPersistent;
     removeFixedPageShell(key);
-    if (isWarrantFlowRoute(key)) {
-      renderDesktopFastWarrantFlow(false);
-    } else if (isCbDetectRoute(key)) {
-      window.loadCbDetectionData?.(false);
-    } else if (isChipTradeRoute(key)) {
+    if (isChipTradeRoute(key)) {
       window.loadInstitution?.();
       window.renderChipTradeTable?.();
     }
@@ -1308,10 +1321,8 @@
     fetchFixedDomRouteRows(key)
       .then(({ rows }) => {
         if (rows?.length) renderRows(rows, "api");
-        else if (isWarrantFlowRoute(key) && !panel.querySelector(".warrant-flow-panel tbody tr")) renderDesktopFastWarrantFlow(true);
       })
       .catch(() => {
-        if (isWarrantFlowRoute(key)) renderDesktopFastWarrantFlow(true);
       })
       .finally(() => {
         window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
@@ -1464,62 +1475,7 @@
     if ("caches" in window) {
       caches.keys().then((names) => Promise.all(names.map((name) => caches.open(name).then((cache) => cache.keys().then((requests) => Promise.all(requests.map((request) => {
         const url = request?.url || "";
-        return retiredSurfaceCacheNeedle(name) || retiredSurfaceCacheNeedle(url) ? cache.delete(request) : false;
-      }))))))).catch(() => undefined);
-    }
-  }
-
-  function purgeApiOnlyStrategySnapshots() {
-    const keys = ["strategy|策略2"];
-    keys.forEach((key) => {
-      try { sessionStorage.removeItem(SNAPSHOT_PREFIX + key); } catch (error) {}
-      routeSnapshots.delete(key);
-      canvasStore.delete(key);
-      canvasRouteVersions.delete(key);
-    });
-    if (!("indexedDB" in window)) return;
-    openSnapshotDb().then((db) => {
-      if (!db) return;
-      try {
-        const tx = db.transaction(SNAPSHOT_STORE, "readwrite");
-        keys.forEach((key) => tx.objectStore(SNAPSHOT_STORE).delete(key));
-      } catch (error) {}
-    }).catch(() => undefined);
-  }
-
-  function installProtectedRouteSnapshotRetirement20260717() {
-    const keys = ["strategy|策略2"];
-    const clearRuntime = () => {
-      keys.forEach((key) => {
-        try { sessionStorage.removeItem(SNAPSHOT_PREFIX + key); } catch (error) {}
-        routeSnapshots.delete(key);
-        canvasStore.delete(key);
-        canvasEmptyStates.delete(key);
-        canvasInflight.delete(key);
-        canvasRouteVersions.delete(key);
-        canvasMetricsCache.delete(key);
-        canvasPreRenderedRoutes.delete(key);
-      });
-      try { sessionStorage.removeItem("fuman-strategy2-snapshot-first"); } catch (error) {}
-    };
-    clearRuntime();
-    try {
-      if (localStorage.getItem(PROTECTED_ROUTE_SNAPSHOT_RETIREMENT_KEY) === "done") return;
-      localStorage.setItem(PROTECTED_ROUTE_SNAPSHOT_RETIREMENT_KEY, "done");
-    } catch (error) {}
-    if ("indexedDB" in window) {
-      openSnapshotDb().then((db) => {
-        if (!db) return;
-        try {
-          const tx = db.transaction(SNAPSHOT_STORE, "readwrite");
-          keys.forEach((key) => tx.objectStore(SNAPSHOT_STORE).delete(key));
-        } catch (error) {}
-      }).catch(() => undefined);
-    }
-    if ("caches" in window) {
-      caches.keys().then((names) => Promise.all(names.map((name) => caches.open(name).then((cache) => cache.keys().then((requests) => Promise.all(requests.map((request) => {
-        const url = request?.url || "";
-        return /terminal-fast-bundle|desktop-route-snapshot|strategy[2-5]-latest|institution-latest|cb-detect-latest|warrant-flow-latest/i.test(url)
+        return /terminal-fast-bundle|desktop-route-snapshot|strategy[2-5]-latest|institution-latest/i.test(url)
           ? cache.delete(request)
           : false;
       }))))))).catch(() => undefined);
@@ -1929,6 +1885,7 @@
   }
 
   function strategy2Tone(row) {
+    if (row?.scanMode === "strategy2_v3_diagnostic_replay" || row?.eventOrigin === "strategy2_v3_diagnostic_replay") return "prepare";
     if (row?.formalCandidate === false && (row?.observationKind || /strategy2_(realtime_quote|preopen_futopt)/.test(String(row?.eventOrigin || "")))) return "prepare";
     const text = strategy2Text(row);
     const lower = text.toLowerCase();
@@ -1951,6 +1908,7 @@
   }
 
   function strategy2DisplayState(row, fallback) {
+    if (row?.scanMode === "strategy2_v3_diagnostic_replay" || row?.eventOrigin === "strategy2_v3_diagnostic_replay") return "V3回測驗證";
     if (row?.scanMode === "postclose_diagnostic_replay" || row?.eventOrigin === "postclose_diagnostic_replay") return "盤後診斷回放";
     if (row?.observationKind || /strategy2_(realtime_quote|preopen_futopt)/.test(String(row?.eventOrigin || ""))) return row?.stateLabel || "策略命中觀察";
     return fallback;
@@ -2130,7 +2088,8 @@
           canvasState.source = "api-empty-preserved";
           canvasState.meta = nextMeta;
           applyCanvasFilter();
-          updateStrategy2BattleShell(currentCanvasShell(), route, strategyMeta(route));
+          if (isStrategy2Route(route)) updateStrategy2BattleShell(currentCanvasShell(), route, strategyMeta(route));
+          else updateCanvasShell(currentCanvasShell(), route, strategyMeta(route));
         }
         return true;
       }
@@ -2162,6 +2121,16 @@
     const memory = canvasStore.get(route);
     if (isProtectedDataRoute(route)) {
       if (isTrustedProtectedMemory(route, memory)) return memory.rows;
+      const memberPreview = readMemberStrategyPreview(route);
+      if (memberPreview?.rows?.length) {
+        setCanvasRows(route, memberPreview.rows, "member-preview-cache", memberPreview.at || Date.now(), memberPreview.meta || null); /* protected_route_snapshot_first_rows_for_route */
+        return memberPreview.rows;
+      }
+      const snapshot = routeSnapshots.get(route);
+      if (isApiBackedSnapshotItem(snapshot) && snapshot?.rows?.length) {
+        setCanvasRows(route, snapshot.rows, "snapshot", snapshot.at || Date.now(), snapshot.meta || null);
+        return snapshot.rows;
+      }
       return [];
     }
     if (memory?.rows?.length && (!isStrategyRoute(route) || !isDomDerivedSource(memory.source))) return memory.rows;
@@ -2236,12 +2205,22 @@
     return count;
   }
 
-  function primeDesktopFastBundle(force = false, reason = "startup") {
+  function strategyBundleRouteForCanvasRoute(route = "") {
+    if (isStrategy2Route(route)) return "strategy2";
+    if (isStrategy3Route(route)) return "strategy3";
+    if (isStrategy4Route(route)) return "strategy4";
+    if (isStrategy5Route(route)) return "strategy5";
+    return "";
+  }
+
+  function primeDesktopFastBundle(force = false, reason = "startup", routeOverride = "") {
     const now = Date.now();
     if (!force && desktopFastBundlePromise) return desktopFastBundlePromise;
     if (!force && now - desktopFastBundleAt < 45000) return Promise.resolve(0);
     desktopFastBundleAt = now;
-    const url = `/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&t=${now}`;
+    const requestedRoute = String(routeOverride || strategyBundleRouteForCanvasRoute(canvasState.route || activeSnapshotRoute) || "");
+    const routeQuery = requestedRoute ? `&route=${encodeURIComponent(requestedRoute)}` : "";
+    const url = `/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&t=${now}${routeQuery}`;
     desktopFastBundlePromise = fetch(url, { cache: "no-store", priority: force ? "high" : "auto" })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
       .then((payload) => primeRowsFromFastBundle(payload, `bundle-${reason}`))
@@ -2251,7 +2230,6 @@
       });
     return desktopFastBundlePromise;
   }
-
   window.addEventListener("fuman:membership-content-verified", () => {
     primeDesktopFastBundle(true, "membership-verified").catch(() => undefined);
   }, { passive: true });
@@ -2610,7 +2588,10 @@
     const inflightKey = isChipTradeRoute(route) ? `${route}|${canvasState.signalFilter || ""}` : route;
     if (canvasInflight.has(inflightKey)) return canvasInflight.get(inflightKey);
     const url = compactCanvasUrlForRoute(route, force);
-    const task = fetch(url, { cache: isProtectedDataRoute(route) || force ? "no-store" : "default" })
+    const controller = new AbortController();
+    const timeoutMs = isProtectedDataRoute(route) ? 6500 : 9000;
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+    const task = fetch(url, { cache: isProtectedDataRoute(route) || force ? "no-store" : "default", signal: controller.signal })
       .then(async (response) => {
         let payload = null;
         try { payload = await response.json(); } catch (error) {}
@@ -2647,13 +2628,15 @@
           rememberCanvasRows(route, rows, source, Date.now(), routePayloadMeta(route, payload));
         } else {
           const meta = routePayloadMeta(route, payload);
-          rememberCanvasEmptyPayload(route, "api-empty", Date.now(), meta);
+          const preserved = rememberCanvasEmptyPayload(route, "api-empty", Date.now(), meta);
           const emptyState = routeEmptyStateFromPayload(payload, route);
           if (emptyState) {
             canvasEmptyStates.set(route, emptyState);
             if (canvasState.route === route) {
               canvasState.source = emptyState.qualityStatus || emptyState.reason || "waiting";
               if (isMemberStrategyPreviewRoute(route) && hasMemberPreviewToken()) {
+                const fallbackRows = rowsForRoute(route);
+                if (preserved && fallbackRows.length) return fallbackRows; /* protected_route_api_empty_keep_snapshot */
                 if (payloadMetaHasResolvedResponse(meta)) renderStrategyRouteShell(route, "api-empty", []);
                 else {
                   const panel = document.querySelector("#strategy-view");
@@ -2662,12 +2645,25 @@
               }
             }
           } else if (canvasState.route === route && isMemberStrategyPreviewRoute(route) && hasMemberPreviewToken() && payloadMetaHasResolvedResponse(meta)) {
+            const fallbackRows = rowsForRoute(route);
+            if (preserved && fallbackRows.length) return fallbackRows; /* protected_route_api_empty_keep_snapshot */
             renderStrategyRouteShell(route, "api-empty", []);
           }
         }
         return rows;
       })
       .catch((error) => {
+        if (isMemberStrategyPreviewRoute(route) && hasMemberPreviewToken()) {
+          const fallbackRows = rowsForRoute(route);
+          const meta = { ok: false, error: error?.name === "AbortError" ? "protected_strategy_api_timeout" : "protected_strategy_api_network_error", reason: error?.message || String(error || "network_error"), cacheSource: "member-preview-cache" };
+          if (fallbackRows.length) {
+            rememberCanvasRows(route, fallbackRows, "member-preview-cache-timeout", Date.now(), { ...(canvasPayloadMeta(route) || {}), ...meta, preservedOnTimeout: true });
+            return fallbackRows;
+          }
+          rememberCanvasEmptyPayload(route, "api-timeout", Date.now(), meta);
+          if (canvasState.route === route) renderStrategyRouteShell(route, "api-timeout", []);
+          return [];
+        }
         if (isRealtimeRadarRoute(route)) {
           const errorPayload = { ok: false, error: error?.message || "network_error", reason: error?.message || "network_error" };
           rememberRealtimeRadarHealth(errorPayload);
@@ -2677,7 +2673,10 @@
         }
         return rowsForRoute(route);
       })
-      .finally(() => canvasInflight.delete(inflightKey));
+      .finally(() => {
+        window.clearTimeout(timeout);
+        canvasInflight.delete(inflightKey);
+      });
     canvasInflight.set(inflightKey, task);
     return task;
   }
@@ -3614,8 +3613,13 @@
     return String(value || "").match(/^\d{4}$/)?.[0] || "";
   }
 
+  function nativeDailyKlineChartUrl(code, limit = 120) {
+    const normalized = strategy4DailyKlineCode(code);
+    return normalized ? `/api/daily-kline-chart?code=${encodeURIComponent(normalized)}&limit=${Number(limit) || 120}&v=20260816-30` : "";
+  }
+
   function isInlineDailyKlineRoute(route) {
-    return isStrategy3Route(route) || isStrategy4Route(route) || isStrategy5Route(route);
+    return isStrategy2Route(route) || isStrategy3Route(route) || isStrategy4Route(route) || isStrategy5Route(route) || isChipTradeRoute(route); // chip_trade_daily_kline_enabled
   }
 
   function inlineDailyKlineKey(route, code) {
@@ -3623,6 +3627,63 @@
     return normalized && isInlineDailyKlineRoute(route) ? `${route}:${normalized}` : "";
   }
 
+
+  function strategy5WNecklineEvidence(row) {
+    const code = strategy4DailyKlineCode(row);
+    const target = row && typeof row === "object"
+      ? row
+      : (isStrategy5Route(canvasState.route) ? (canvasState.filtered || []).find((item) => strategy4DailyKlineCode(item) === code) : null);
+    if (!target || !isStrategy5Route(canvasState.route)) return null;
+    const match = (Array.isArray(target.signals) ? target.signals : []).find((item) => String(item?.id || "") === "w_neckline_recent_retest_two_day_hold");
+    if (!match || match.twoDayHold !== true || match.formalDailyOhlcv !== true) return null;
+    const necklinePrice = cleanNumber(match.necklinePrice);
+    const holdDates = (Array.isArray(match.holdDates) ? match.holdDates : []).map((item) => String(item || "")).filter(Boolean);
+    const holdLows = (Array.isArray(match.holdLows) ? match.holdLows : []).map((item) => cleanNumber(item)).filter((item) => item > 0);
+    if (!(necklinePrice > 0) || holdDates.length !== 2 || holdLows.length !== 2) return null;
+    return {
+      necklinePrice,
+      necklineTick: cleanNumber(match.necklineTick),
+      necklineSource: String(match.necklineSource || "recent_w_pivot"),
+      leftTroughPrice: cleanNumber(match.leftTroughPrice),
+      rightTroughPrice: cleanNumber(match.rightTroughPrice),
+      leftTroughDate: String(match.leftTroughDate || ""),
+      rightTroughDate: String(match.rightTroughDate || ""),
+      holdDates,
+      holdLows,
+      strictEvidence: match.strictEvidence && typeof match.strictEvidence === "object" ? match.strictEvidence : {},
+    };
+  }
+
+  function strategy5WBottomReboundEvidence(row) {
+    const code = strategy4DailyKlineCode(row);
+    const target = row && typeof row === "object"
+      ? row
+      : (isStrategy5Route(canvasState.route) ? (canvasState.filtered || []).find((item) => strategy4DailyKlineCode(item) === code) : null);
+    if (!target || !isStrategy5Route(canvasState.route)) return null;
+    const match = (Array.isArray(target.signals) ? target.signals : []).find((item) => String(item?.id || "") === "w_bottom_rebound_ma3_ma5_ma10_institution_two_day_buy");
+    if (!match || match.formalDailyOhlcv !== true || match.institutionalTwoDayTotalBuy !== true) return null;
+    const troughLow = cleanNumber(match.troughLow);
+    const firstRedClose = cleanNumber(match.firstRedClose);
+    const secondRedClose = cleanNumber(match.secondRedClose);
+    const firstRedDate = String(match.firstRedDate || "");
+    const secondRedDate = String(match.secondRedDate || "");
+    if (!(troughLow > 0) || !(firstRedClose > 0) || !(secondRedClose > 0) || !firstRedDate || !secondRedDate) return null;
+    return {
+      troughDate: String(match.troughDate || ""),
+      troughLow,
+      troughAgeTradingDays: cleanNumber(match.troughAgeTradingDays),
+      firstRedDate,
+      secondRedDate,
+      firstRedClose,
+      secondRedClose,
+      ma3First: cleanNumber(match.ma3First),
+      ma5Second: cleanNumber(match.ma5Second),
+      ma10Second: cleanNumber(match.ma10Second),
+      reboundPct: cleanNumber(match.reboundPct),
+      institutionalBuyDates: Array.isArray(match.institutionalBuyDates) ? match.institutionalBuyDates.map((item) => String(item || "")).filter(Boolean) : [],
+      institutionalTotalNets: Array.isArray(match.institutionalTotalNets) ? match.institutionalTotalNets.map((item) => cleanNumber(item)) : [],
+    };
+  }
   function strategy4DailyKlineAverage(bars, period) {
     return bars.map((bar, index) => {
       if (index + 1 < period) return null;
@@ -3632,7 +3693,7 @@
     });
   }
 
-  function strategy4DailyKlineSvg(rows) {
+  function strategy4DailyKlineSvg(rows, wNeckline = null) {
     const bars = rows.filter((bar) => cleanNumber(bar.open) > 0 && cleanNumber(bar.high) > 0 && cleanNumber(bar.low) > 0 && cleanNumber(bar.close) > 0);
     if (bars.length < 20) return '<div class="desktop-strategy4-kline-empty">正式日 K 資料不足，暫不繪圖。</div>';
     const width = 920;
@@ -3644,8 +3705,9 @@
     const volumeTop = 244;
     const volumeBottom = 290;
     const plotWidth = width - left - right;
-    const maxHigh = Math.max(...bars.map((bar) => cleanNumber(bar.high)));
-    const minLow = Math.min(...bars.map((bar) => cleanNumber(bar.low)));
+    const annotationPrices = wNeckline ? [cleanNumber(wNeckline.necklinePrice), ...((Array.isArray(wNeckline.holdLows) ? wNeckline.holdLows : []).map(cleanNumber))].filter((value) => value > 0) : [];
+    const maxHigh = Math.max(...bars.map((bar) => cleanNumber(bar.high)), ...annotationPrices);
+    const minLow = Math.min(...bars.map((bar) => cleanNumber(bar.low)), ...annotationPrices);
     const spread = Math.max(maxHigh - minLow, maxHigh * 0.04, 1);
     const high = maxHigh + spread * 0.08;
     const low = Math.max(0, minLow - spread * 0.08);
@@ -3655,6 +3717,59 @@
     const volumeMax = Math.max(1, ...bars.map((bar) => cleanNumber(bar.volumeLots)));
     const step = plotWidth / bars.length;
     const bodyWidth = Math.max(2, Math.min(10, step * 0.58));
+    const findBarIndex = (date) => bars.findIndex((bar) => String(bar.date || "") === String(date || ""));
+    const holdIndexes = wNeckline ? wNeckline.holdDates.map(findBarIndex).filter((index) => index >= 0) : [];
+    const holdHighlights = holdIndexes.map((index) => {
+      const xx = x(index);
+      return `<rect class="kline-w-hold" x="${(xx - Math.max(8, step * 0.78)).toFixed(1)}" y="${top}" width="${Math.max(16, step * 1.56).toFixed(1)}" height="${priceHeight.toFixed(1)}" rx="3"><title>${escapeHtml(String(bars[index].date || ""))}｜低點守住 W 頸線</title></rect>`;
+    }).join("");
+    const wBottomIndexes = wBottom ? [wBottom.firstRedDate, wBottom.secondRedDate].map(findBarIndex).filter((index) => index >= 0) : [];
+    const wBottomHighlights = wBottomIndexes.map((index, order) => {
+      const xx = x(index);
+      const label = order === 0 ? "第一根紅K站上 MA3" : "第二根紅K站上 MA5/MA10";
+      return `<rect class="kline-w-bottom-rebound" x="${(xx - Math.max(8, step * 0.82)).toFixed(1)}" y="${top}" width="${Math.max(16, step * 1.64).toFixed(1)}" height="${priceHeight.toFixed(1)}" rx="3"><title>${escapeHtml(String(bars[index].date || ""))}｜${escapeHtml(label)}</title></rect>`;
+    }).join("");
+    const troughMarker = (date, price, title) => {
+      const index = findBarIndex(date);
+      if (index < 0 || !(cleanNumber(price) > 0)) return "";
+      const xx = x(index);
+      const yy = y(cleanNumber(price));
+      return `<g class="kline-w-trough"><circle cx="${xx.toFixed(1)}" cy="${yy.toFixed(1)}" r="4.2"/><title>${escapeHtml(title)} ${escapeHtml(String(date || ""))}｜${escapeHtml(formatPriceValue(price) || String(price))}</title></g>`;
+    };
+    const wNecklineOverlay = wNeckline ? (() => {
+      const yy = y(cleanNumber(wNeckline.necklinePrice));
+      const endpoints = [findBarIndex(wNeckline.leftTroughDate), findBarIndex(wNeckline.rightTroughDate), ...holdIndexes].filter((index) => index >= 0);
+      const startIndex = endpoints.length ? Math.min(...endpoints) : 0;
+      const endIndex = endpoints.length ? Math.max(...endpoints) : bars.length - 1;
+      const lineStart = Math.max(left, x(startIndex) - step * 0.72);
+      const lineEnd = Math.min(width - right, x(endIndex) + step * 0.72);
+      const labelWidth = 128;
+      const labelX = Math.max(left + 4, Math.min(width - right - labelWidth, lineEnd - labelWidth));
+      const labelY = Math.max(top + 15, yy - 7);
+      const troughs = troughMarker(wNeckline.leftTroughDate, wNeckline.leftTroughPrice, "W 左谷底") + troughMarker(wNeckline.rightTroughDate, wNeckline.rightTroughPrice, "W 右谷底");
+      return `<g class="kline-w-annotation"><line class="kline-w-neckline" x1="${lineStart.toFixed(1)}" y1="${yy.toFixed(1)}" x2="${lineEnd.toFixed(1)}" y2="${yy.toFixed(1)}"/><rect class="kline-w-label-bg" x="${labelX.toFixed(1)}" y="${(labelY - 12).toFixed(1)}" width="${labelWidth}" height="18" rx="3"/><text class="kline-w-label" x="${(labelX + 6).toFixed(1)}" y="${labelY.toFixed(1)}">W 頸線 ${escapeHtml(formatPriceValue(wNeckline.necklinePrice) || String(wNeckline.necklinePrice))}</text><text class="kline-w-hold-label" x="${(labelX + 6).toFixed(1)}" y="${(labelY + 14).toFixed(1)}">兩日低點守住</text>${troughs}</g>`;
+    })() : "";
+    const wBottomOverlay = wBottom ? (() => {
+      const indexes = [findBarIndex(wBottom.troughDate), ...wBottomIndexes].filter((index) => index >= 0);
+      const startIndex = indexes.length ? Math.min(...indexes) : Math.max(0, bars.length - 8);
+      const endIndex = indexes.length ? Math.max(...indexes) : bars.length - 1;
+      const lineY = y(cleanNumber(wBottom.troughLow));
+      const lineStart = Math.max(left, x(startIndex) - step * 0.72);
+      const lineEnd = Math.min(width - right, x(endIndex) + step * 0.72);
+      const labelWidth = 154;
+      const labelX = Math.max(left + 4, Math.min(width - right - labelWidth, lineEnd - labelWidth));
+      const labelY = Math.max(top + 15, lineY - 9);
+      const redDots = [
+        { date: wBottom.firstRedDate, price: wBottom.firstRedClose, title: "紅K 1 站上 MA3" },
+        { date: wBottom.secondRedDate, price: wBottom.secondRedClose, title: "紅K 2 站上 MA5/MA10" },
+      ].map((item) => {
+        const index = findBarIndex(item.date);
+        if (index < 0 || !(cleanNumber(item.price) > 0)) return "";
+        return `<circle class="kline-w-bottom-dot" cx="${x(index).toFixed(1)}" cy="${y(cleanNumber(item.price)).toFixed(1)}" r="4.4"><title>${escapeHtml(item.title)}｜${escapeHtml(String(item.date || ""))}</title></circle>`;
+      }).join("");
+      const trough = troughMarker(wBottom.troughDate, wBottom.troughLow, "W底右腳低點");
+      return `<g class="kline-w-bottom-annotation"><line class="kline-w-bottom-ma" x1="${lineStart.toFixed(1)}" y1="${lineY.toFixed(1)}" x2="${lineEnd.toFixed(1)}" y2="${lineY.toFixed(1)}"/><rect class="kline-w-bottom-label-bg" x="${labelX.toFixed(1)}" y="${(labelY - 12).toFixed(1)}" width="${labelWidth}" height="18" rx="3"/><text class="kline-w-bottom-label" x="${(labelX + 6).toFixed(1)}" y="${labelY.toFixed(1)}">W底轉強｜MA3→MA5/10</text>${redDots}${trough}</g>`;
+    })() : "";
     const grid = [0, 0.5, 1].map((ratio) => {
       const yy = top + priceHeight * ratio;
       const label = (high - (high - low) * ratio).toFixed(1);
@@ -3663,19 +3778,21 @@
     const candles = bars.map((bar, index) => {
       const up = cleanNumber(bar.close) >= cleanNumber(bar.open);
       const color = up ? "#ff5872" : "#21c79a";
+      const tone = up ? "is-up" : "is-down";
       const xx = x(index);
       const openY = y(cleanNumber(bar.open));
       const closeY = y(cleanNumber(bar.close));
       const volumeHeight = (cleanNumber(bar.volumeLots) / volumeMax) * (volumeBottom - volumeTop);
-      return `<line x1="${xx}" y1="${y(cleanNumber(bar.high))}" x2="${xx}" y2="${y(cleanNumber(bar.low))}" stroke="${color}" stroke-width="1.3"/><rect x="${xx - bodyWidth / 2}" y="${Math.min(openY, closeY)}" width="${bodyWidth}" height="${Math.max(1.5, Math.abs(closeY - openY))}" rx="1" fill="${color}"/><rect x="${xx - bodyWidth / 2}" y="${volumeBottom - volumeHeight}" width="${bodyWidth}" height="${Math.max(1, volumeHeight)}" rx="1" fill="${color}" opacity=".62"><title>${escapeHtml(bar.date || "")}｜成交 ${cleanNumber(bar.volumeLots).toLocaleString("zh-TW", { maximumFractionDigits: 0 })} 張</title></rect>`;
+      return `<line x1="${xx}" y1="${y(cleanNumber(bar.high))}" x2="${xx}" y2="${y(cleanNumber(bar.low))}" class="kline-wick ${tone}" stroke="${color}" stroke-width="1.3"/><rect class="kline-candle ${tone}" x="${xx - bodyWidth / 2}" y="${Math.min(openY, closeY)}" width="${bodyWidth}" height="${Math.max(1.5, Math.abs(closeY - openY))}" rx="1" fill="${color}"/><rect class="kline-volume ${tone}" x="${xx - bodyWidth / 2}" y="${volumeBottom - volumeHeight}" width="${bodyWidth}" height="${Math.max(1, volumeHeight)}" rx="1" fill="${color}" opacity=".62"><title>${escapeHtml(bar.date || "")}｜成交 ${cleanNumber(bar.volumeLots).toLocaleString("zh-TW", { maximumFractionDigits: 0 })} 張</title></rect>`;
     }).join("");
     const averageLine = (period, color) => {
       const points = strategy4DailyKlineAverage(bars, period).map((value, index) => value ? `${x(index)},${y(value)}` : "").filter(Boolean).join(" ");
-      return points ? `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>` : "";
+      return points ? `<polyline class="kline-ma kline-ma-${period}" points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>` : "";
     };
     const shortDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value).slice(5).replace("-", "/") : "--";
     const labels = [0, Math.floor((bars.length - 1) / 3), Math.floor((bars.length - 1) * 2 / 3), bars.length - 1].map((index) => `<text x="${x(index)}" y="${height - 5}" text-anchor="middle" class="axis">${shortDate(bars[index].date)}</text>`).join("");
-    return `<svg class="desktop-strategy4-kline-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="策略4正式日 K 線與成交量">${grid}<line x1="${left}" y1="${volumeTop - 8}" x2="${width - right}" y2="${volumeTop - 8}" class="divider"/>${candles}${averageLine(5, "#f4c656")}${averageLine(10, "#4aa7ff")}${averageLine(20, "#b18ae3")}${labels}</svg>`;
+    const ariaLabel = wNeckline ? `正式日 K 線與成交量；W 頸線 ${formatPriceValue(wNeckline.necklinePrice) || wNeckline.necklinePrice}，最近兩日低點守住。` : "正式日 K 線與成交量";
+    return `<svg class="desktop-strategy4-kline-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(ariaLabel)}">${grid}<line x1="${left}" y1="${volumeTop - 8}" x2="${width - right}" y2="${volumeTop - 8}" class="divider"/>${holdHighlights}${candles}${averageLine(5, "#f4c656")}${averageLine(10, "#4aa7ff")}${averageLine(20, "#b18ae3")}${wNecklineOverlay}${labels}</svg>`;
   }
 
   function strategy4DailyKlineHtml(row, inline = false) {
@@ -3685,35 +3802,266 @@
     const rangeAttribute = inline ? "data-inline-daily-kline-range" : "data-strategy4-kline-range";
     const controls = [60, 120, 240].map((value) => `<button type="button" class="desktop-strategy4-kline-range ${range === value ? "active" : ""}" ${rangeAttribute}="${value}" aria-pressed="${range === value ? "true" : "false"}">${value} 日</button>`).join("");
     if (!payload) return `<section class="desktop-strategy4-kline-panel"><header class="desktop-strategy4-kline-head"><div><span>日 K</span><strong>正式 OHLCV 載入中</strong></div><div class="desktop-strategy4-kline-controls">${controls}</div></header><div class="desktop-strategy4-kline-empty">讀取 ${escapeHtml(code || "--")} 正式日 OHLCV...</div></section>`;
-    if (payload.ok !== true || !Array.isArray(payload.bars) || !payload.bars.length) return `<section class="desktop-strategy4-kline-panel"><header class="desktop-strategy4-kline-head"><div><span>日 K</span><strong>正式 OHLCV 無法顯示</strong></div><div class="desktop-strategy4-kline-controls">${controls}</div></header><div class="desktop-strategy4-kline-empty">${escapeHtml(payload.error || "日 K 正式來源暫時無資料")}</div></section>`;
+    if (payload.ok !== true || !Array.isArray(payload.bars) || !payload.bars.length) return `<section class="desktop-strategy4-kline-panel"><header class="desktop-strategy4-kline-head"><div><span>日 K</span><strong>正式 OHLCV 重新驗證中</strong></div><div class="desktop-strategy4-kline-controls">${controls}</div></header><div class="desktop-strategy4-kline-empty">${escapeHtml(payload.error === "daily_kline_insufficient_ohlc" ? "正式日K資料不足，系統正在重新驗證正式 OHLCV。" : (payload.error || "日 K 正式來源暫時無資料"))}</div></section>`;
     const bars = payload.bars.slice(-range);
     const last = bars[bars.length - 1];
     const previous = bars[bars.length - 2] || last;
     const change = cleanNumber(last.close) - cleanNumber(previous.close);
     const percent = cleanNumber(previous.close) ? (change / cleanNumber(previous.close)) * 100 : 0;
     const source = String(payload.source || "正式日 OHLCV").replace(/^supabase:/, "");
-    return `<section class="desktop-strategy4-kline-panel"><header class="desktop-strategy4-kline-head"><div><span>日 K</span><strong>${escapeHtml(String(last.date || "").slice(5).replace("-", "/"))}　開 ${escapeHtml(formatPriceValue(last.open) || "--")}　高 ${escapeHtml(formatPriceValue(last.high) || "--")}　低 ${escapeHtml(formatPriceValue(last.low) || "--")}　收 <b class="${change >= 0 ? "is-up" : "is-down"}">${escapeHtml(formatPriceValue(last.close) || "--")}</b></strong><small>${escapeHtml(source)}｜${bars.length} 根｜${change >= 0 ? "+" : ""}${percent.toFixed(2)}%</small></div><div class="desktop-strategy4-kline-controls">${controls}</div></header><div class="desktop-strategy4-kline-legend"><span class="ma5">MA5</span><span class="ma10">MA10</span><span class="ma20">MA20</span><span>下方為成交量（張）</span></div>${strategy4DailyKlineSvg(bars)}</section>`;
+    const wNeckline = strategy5WNecklineEvidence(row);
+    const wEvidenceText = wNeckline ? `｜W 頸線 ${formatPriceValue(wNeckline.necklinePrice) || wNeckline.necklinePrice}｜兩日守住` : "";
+    const wLegend = wNeckline ? `<span class="w-neckline">W 頸線 ${escapeHtml(formatPriceValue(wNeckline.necklinePrice) || String(wNeckline.necklinePrice))}</span><span class="w-hold">兩日低點守住</span>` : "";
+    return `<section class="desktop-strategy4-kline-panel ${wNeckline ? "has-w-neckline" : ""}"><header class="desktop-strategy4-kline-head"><div><span>日 K</span><strong>${escapeHtml(String(last.date || "").slice(5).replace("-", "/"))}　開 ${escapeHtml(formatPriceValue(last.open) || "--")}　高 ${escapeHtml(formatPriceValue(last.high) || "--")}　低 ${escapeHtml(formatPriceValue(last.low) || "--")}　收 <b class="${change >= 0 ? "is-up" : "is-down"}">${escapeHtml(formatPriceValue(last.close) || "--")}</b></strong><small>${escapeHtml(source)}｜${bars.length} 根｜${change >= 0 ? "+" : ""}${percent.toFixed(2)}%${wEvidenceText}</small></div><div class="desktop-strategy4-kline-controls">${controls}</div></header><div class="desktop-strategy4-kline-legend"><span class="ma5">MA5</span><span class="ma10">MA10</span><span class="ma20">MA20</span>${wLegend}<span>下方為成交量（張）</span></div>${strategy4DailyKlineSvg(bars, wNeckline)}</section>`;
   }
 
-  async function hydrateStrategy4DailyKline(row) {
-    const code = strategy4DailyKlineCode(row);
-    if (!code || strategy4DailyKlinePending.has(code) || strategy4DailyKlineCache.has(code)) return strategy4DailyKlineCache.get(code) || null;
-    strategy4DailyKlinePending.add(code);
+  function strategy4DailyKlineCachedBarCount(code) {
+    const payload = strategy4DailyKlineCache.get(strategy4DailyKlineCode(code));
+    return Array.isArray(payload?.bars) ? payload.bars.length : 0;
+  }
+
+  function dailyKlineSessionSnapshotKey(code) {
+    const normalized = strategy4DailyKlineCode(code);
+    return normalized ? `fuman:daily-kline:${DAILY_KLINE_SESSION_SNAPSHOT_VERSION}:${normalized}` : "";
+  }
+
+  function persistDailyKlineSessionSnapshot(code, payload) {
+    const normalized = strategy4DailyKlineCode(code);
+    if (!normalized || payload?.ok !== true || !Array.isArray(payload?.bars) || payload.bars.length < 20) return;
     try {
-      const response = await fetch(`/api/daily-kline?code=${encodeURIComponent(code)}&limit=260&t=${Date.now()}`, { cache: "no-store" });
+      sessionStorage.setItem(dailyKlineSessionSnapshotKey(normalized), JSON.stringify({ savedAt: Date.now(), payload }));
+    } catch {}
+  }
+
+  function restoreDailyKlineSessionSnapshot(code) {
+    const normalized = strategy4DailyKlineCode(code);
+    if (!normalized || strategy4DailyKlineCache.has(normalized)) return strategy4DailyKlineCache.get(normalized) || null;
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(dailyKlineSessionSnapshotKey(normalized)) || "null");
+      if (Number(saved?.savedAt || 0) + DAILY_KLINE_SESSION_SNAPSHOT_MAX_AGE_MS < Date.now()) {
+        sessionStorage.removeItem(dailyKlineSessionSnapshotKey(normalized));
+        return null;
+      }
+      const payload = saved?.payload;
+      if (payload?.ok === true && Array.isArray(payload?.bars) && payload.bars.length >= 20) {
+        strategy4DailyKlineCache.set(normalized, payload);
+        return payload;
+      }
+    } catch {}
+    return null;
+  }
+
+  function dailyKlineFailure(error) {
+    return { ok: false, error: String(error || "daily_kline_unavailable"), retryAfter: Date.now() + 1200 };
+  }
+
+  function scheduleDailyKlineRecovery(code, limit = 120) {
+    const normalized = strategy4DailyKlineCode(code);
+    const failed = strategy4DailyKlineCache.get(normalized);
+    if (!normalized || failed?.ok === true || failed?.recoveryScheduled) return;
+    failed.recoveryScheduled = true;
+    window.setTimeout(() => {
+      const latest = strategy4DailyKlineCache.get(normalized);
+      if (latest?.ok === true) return;
+      strategy4DailyKlineCache.delete(normalized);
+      hydrateStrategy4DailyKline(normalized, limit, true).catch(() => {});
+    }, 1250); // daily_kline_auto_recovery
+  }
+
+  function strategy4DailyKlineFetchLimit(limit) {
+    const parsed = Number(limit);
+    if (parsed >= 240) return 260;
+    if (parsed >= 120) return 120;
+    return 60;
+  }
+
+  async function hydrateStrategy4DailyKline(row, limit = 120, force = false) {
+    const code = strategy4DailyKlineCode(row);
+    const fetchLimit = strategy4DailyKlineFetchLimit(limit);
+    const requiredBars = fetchLimit >= 240 ? 240 : fetchLimit;
+    let cached = strategy4DailyKlineCache.get(code);
+    if (!code) return null;
+    if (!cached) cached = restoreDailyKlineSessionSnapshot(code); // daily_kline_session_snapshot_restore
+    if (cached?.ok === true && strategy4DailyKlineCachedBarCount(code) >= requiredBars) return cached;
+    if (!force && cached && cached.ok !== true && Number(cached.retryAfter || 0) > Date.now()) return cached;
+    if (!force && strategy4DailyKlinePending.has(code)) return cached || null; // daily_kline_batch_cannot_block_user_open
+    strategy4DailyKlinePending.add(code);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch(`/api/daily-kline?code=${encodeURIComponent(code)}&limit=${fetchLimit}`, { signal: controller.signal }); // daily_kline_uses_http_formal_cache
       const payload = await response.json().catch(() => null);
-      strategy4DailyKlineCache.set(code, response.ok && payload?.ok === true ? payload : { ok: false, error: payload?.error || `daily_kline_http_${response.status}` });
-    } catch {
-      strategy4DailyKlineCache.set(code, { ok: false, error: "daily_kline_network_error" });
+      strategy4DailyKlineCache.set(code, response.ok && payload?.ok === true ? payload : dailyKlineFailure(payload?.error || `daily_kline_http_${response.status}`));
+    } catch (error) {
+      strategy4DailyKlineCache.set(code, dailyKlineFailure(error?.name === "AbortError" ? "daily_kline_timeout" : "daily_kline_network_error"));
     } finally {
+      clearTimeout(timeout);
+      persistDailyKlineSessionSnapshot(code, strategy4DailyKlineCache.get(code));
       strategy4DailyKlinePending.delete(code);
       const selected = canvasState.filtered[canvasState.selectedIndex];
       if (isStrategy4Route(canvasState.route) && strategy4DailyKlineCode(selected) === code) showCanvasDetail(selected, canvasState.selectedIndex, true);
       document.querySelectorAll("[data-inline-daily-kline-panel]").forEach((panel) => {
-        if (panel.dataset.inlineDailyKlineCode === code) panel.innerHTML = strategy4DailyKlineHtml(code, true);
+        if (panel.dataset.inlineDailyKlineCode === code && !panel.hidden) panel.innerHTML = strategy4DailyKlineHtml(code, true);
       });
+      paintOpenInlineDailyKline(canvasState.route, code); // daily_kline_hydration_repaints_open_panel
     }
     return strategy4DailyKlineCache.get(code) || null;
+  }
+
+  function dailyKlinePayloadFromBatchItem(item) {
+    if (!item || item.ok !== true) return item;
+    const bars = Array.isArray(item.bars) ? item.bars.map((bar) => {
+      if (!Array.isArray(bar)) return bar;
+      return {
+        date: bar[0],
+        open: cleanNumber(bar[1]),
+        high: cleanNumber(bar[2]),
+        low: cleanNumber(bar[3]),
+        close: cleanNumber(bar[4]),
+        volumeLots: cleanNumber(bar[5]),
+        source: String(item.source || "").replace(/^supabase:/, ""),
+      };
+    }) : [];
+    return { ...item, bars };
+  }
+
+  function scheduleDailyKlinePrefetch(callback, delay = DAILY_KLINE_PREFETCH_IDLE_DELAY_MS) {
+    window.setTimeout(() => {
+      if (typeof window.requestIdleCallback === "function") {
+        window.requestIdleCallback(callback, { timeout: 1800 });
+      } else {
+        window.setTimeout(callback, 1);
+      }
+    }, delay);
+  }
+
+  async function prefetchDailyKlineBatchChunk(codes, fetchLimit) {
+    const cleanCodes = (Array.isArray(codes) ? codes : []).filter(Boolean);
+    if (!cleanCodes.length) return;
+    const batchKey = `${fetchLimit}:${cleanCodes.join(",")}:compact`;
+    if (strategy4DailyKlineBatchPending.has(batchKey)) return;
+    strategy4DailyKlineBatchPending.add(batchKey);
+    cleanCodes.forEach((code) => {
+      strategy4DailyKlinePending.add(code);
+      if (!strategy4DailyKlineBatchWaiters.has(code)) {
+        let resolve;
+        const promise = new Promise((done) => { resolve = done; });
+        strategy4DailyKlineBatchWaiters.set(code, { batchKey, promise, resolve });
+      }
+    });
+    try {
+      const query = new URLSearchParams({ codes: cleanCodes.join(","), limit: String(fetchLimit), compact: "1", daily_kline_generation: "20260816-29" }); // daily_kline_batch_uses_http_formal_cache
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6500);
+      let response;
+      try {
+        response = await fetch(`/api/daily-kline-batch?${query.toString()}`, { signal: controller.signal });
+      } finally {
+        clearTimeout(timeout);
+      }
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || payload?.ok !== true || !Array.isArray(payload.items)) throw new Error(payload?.error || `daily_kline_batch_http_${response.status}`);
+      const received = new Set();
+      payload.items.forEach((item) => {
+        const code = strategy4DailyKlineCode(item?.code);
+        if (!code) return;
+        received.add(code);
+        const resolved = item?.ok === true ? dailyKlinePayloadFromBatchItem(item) : dailyKlineFailure(item?.error || "daily_kline_batch_item_error");
+        strategy4DailyKlineCache.set(code, resolved);
+        persistDailyKlineSessionSnapshot(code, resolved); // daily_kline_session_snapshot_persist
+      });
+      cleanCodes.filter((code) => !received.has(code)).forEach((code) => {
+        strategy4DailyKlineCache.set(code, dailyKlineFailure("daily_kline_batch_missing"));
+      });
+      document.querySelectorAll("[data-inline-daily-kline-panel]").forEach((panel) => {
+        const code = panel.dataset.inlineDailyKlineCode || "";
+        if (!panel.hidden && strategy4DailyKlineCache.has(code)) panel.innerHTML = strategy4DailyKlineHtml(code, true);
+      });
+      cleanCodes.filter((code) => strategy4DailyKlineCache.get(code)?.ok !== true).slice(0, 6).forEach((code, index) => {
+        window.setTimeout(() => scheduleDailyKlineRecovery(code, fetchLimit), 180 + index * 140);
+      });
+      if (inlineDailyKlineSelectedKey) {
+        const selected = inlineDailyKlineSelectedKey.split(":").pop() || "";
+        paintOpenInlineDailyKline(canvasState.route, selected); // daily_kline_batch_repaints_open_panel
+      }
+    } catch (error) {
+      cleanCodes.forEach((code) => strategy4DailyKlinePending.delete(code));
+      cleanCodes.slice(0, 4).forEach((code, index) => {
+        window.setTimeout(() => hydrateStrategy4DailyKline(code, fetchLimit).catch(() => {}), 80 + index * 120);
+      });
+    } finally {
+      cleanCodes.forEach((code) => {
+        strategy4DailyKlinePending.delete(code);
+        const waiter = strategy4DailyKlineBatchWaiters.get(code);
+        if (waiter?.batchKey === batchKey) {
+          strategy4DailyKlineBatchWaiters.delete(code);
+          waiter.resolve();
+        }
+      });
+      strategy4DailyKlineBatchPending.delete(batchKey);
+    }
+  }
+
+  function dailyKlineRunSnapshotId(route, rows, fetchLimit) {
+    const meta = canvasPayloadMeta(route) || {};
+    const runId = String(meta.runId || meta.transport?.runId || visibleRouteDataDate(meta, rows || []) || "");
+    return `${route}:${runId}:${fetchLimit}`;
+  }
+
+  async function prewarmDailyKlineRunSnapshot(route, codes, fetchLimit) {
+    const chunks = [];
+    for (let index = 0; index < codes.length; index += DAILY_KLINE_PREFETCH_CHUNK_SIZE) {
+      chunks.push(codes.slice(index, index + DAILY_KLINE_PREFETCH_CHUNK_SIZE));
+    }
+    let nextChunk = 0;
+    const worker = async () => {
+      while (nextChunk < chunks.length) {
+        const chunk = chunks[nextChunk++];
+        await prefetchDailyKlineBatchChunk(chunk, fetchLimit).catch(() => {});
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(DAILY_KLINE_RUN_SNAPSHOT_CONCURRENCY, chunks.length) }, worker));
+  }
+
+  function prefetchInlineDailyKlines(route, rows, limit = 120) {
+    if (!isInlineDailyKlineRoute(route)) return;
+    const fetchLimit = strategy4DailyKlineFetchLimit(limit);
+    const requiredBars = fetchLimit >= 240 ? 240 : fetchLimit;
+    const allCodes = [...new Set((Array.isArray(rows) ? rows : [])
+      .map((row) => strategy4DailyKlineCode(row?.code || row?.symbol || ""))
+      .filter(Boolean))];
+    allCodes.forEach((code) => restoreDailyKlineSessionSnapshot(code)); // daily_kline_session_snapshot_restore_all
+    const codes = allCodes.filter((code) => strategy4DailyKlineCachedBarCount(code) < requiredBars && !strategy4DailyKlinePending.has(code));
+    if (!codes.length) return;
+    const snapshotId = dailyKlineRunSnapshotId(route, rows, fetchLimit);
+    if (strategy4DailyKlineSnapshotRuns.has(snapshotId)) return;
+    const task = prewarmDailyKlineRunSnapshot(route, codes, fetchLimit)
+      .finally(() => strategy4DailyKlineSnapshotRuns.delete(snapshotId));
+    strategy4DailyKlineSnapshotRuns.set(snapshotId, task);
+    task.catch(() => {}); // daily_kline_full_run_snapshot_prewarm
+  }
+
+  function paintOpenInlineDailyKline(route, code) {
+    const normalized = strategy4DailyKlineCode(code);
+    const selectedKey = String(inlineDailyKlineSelectedKey || "");
+    const routeKey = inlineDailyKlineKey(route, normalized);
+    const key = selectedKey.endsWith(`:${normalized}`) ? selectedKey : routeKey;
+    if (!key || inlineDailyKlineSelectedKey !== key) return false;
+    let painted = false;
+    document.querySelectorAll("[data-inline-daily-kline-panel]").forEach((panel) => {
+      if (panel.dataset.inlineDailyKlineKey !== key) return;
+      panel.hidden = false;
+      panel.dataset.inlineDailyKlineVisiblePaint = "1"; // daily_kline_open_panel_forced_visible
+      panel.innerHTML = strategy4DailyKlineHtml(normalized, true);
+      painted = true;
+    });
+    document.querySelectorAll("[data-inline-daily-kline-card]").forEach((card) => {
+      if (card.dataset.inlineDailyKlineKey === key) card.setAttribute("aria-expanded", "true");
+    });
+    document.querySelectorAll("[data-inline-daily-kline-row]").forEach((row) => {
+      if (row.dataset.inlineDailyKlineKey === key) row.classList.add("is-kline-open");
+    });
+    return painted;
   }
 
   function renderInlineDailyKlinePanels() {
@@ -3722,7 +4070,13 @@
       const key = panel.dataset.inlineDailyKlineKey || "";
       const open = inlineDailyKlineSelectedKey === key;
       panel.hidden = !open;
-      if (open) panel.innerHTML = strategy4DailyKlineHtml(code, true);
+      if (open) {
+        panel.dataset.inlineDailyKlineVisiblePaint = "1";
+        panel.innerHTML = strategy4DailyKlineHtml(code, true);
+        if (code && strategy4DailyKlineCachedBarCount(code) < 120 && !strategy4DailyKlinePending.has(code)) {
+          hydrateStrategy4DailyKline(code, 120).catch(() => {});
+        }
+      }
     });
     document.querySelectorAll("[data-inline-daily-kline-card]").forEach((card) => {
       card.setAttribute("aria-expanded", card.dataset.inlineDailyKlineKey === inlineDailyKlineSelectedKey ? "true" : "false");
@@ -3732,14 +4086,79 @@
     });
   }
 
+  function toggleInlineDailyKlineCard(card) {
+    const row = card?.closest?.("[data-inline-daily-kline-row]");
+    const panel = row?.querySelector?.("[data-inline-daily-kline-panel]");
+    const key = String(card?.dataset?.inlineDailyKlineKey || panel?.dataset?.inlineDailyKlineKey || "");
+    const code = strategy4DailyKlineCode(card?.dataset?.inlineDailyKlineCode || panel?.dataset?.inlineDailyKlineCode || "");
+    if (!row || !panel || !key || !code) return false;
+
+    const opening = inlineDailyKlineSelectedKey !== key;
+    inlineDailyKlineSelectedKey = opening ? key : "";
+    document.querySelectorAll("[data-inline-daily-kline-panel]").forEach((node) => {
+      const active = opening && node === panel;
+      node.hidden = !active;
+      if (active) {
+        node.dataset.inlineDailyKlineVisiblePaint = "1";
+        node.innerHTML = strategy4DailyKlineHtml(code, true);
+      }
+    });
+    document.querySelectorAll("[data-inline-daily-kline-card]").forEach((node) => {
+      node.setAttribute("aria-expanded", opening && node === card ? "true" : "false");
+    });
+    document.querySelectorAll("[data-inline-daily-kline-row]").forEach((node) => {
+      node.classList.toggle("is-kline-open", opening && node === row);
+    });
+    if (!opening) return true;
+
+    // The clicked card owns its visible panel; it must not wait for a route repaint.
+    const repaint = () => {
+      if (inlineDailyKlineSelectedKey !== key || !panel.isConnected) return;
+      panel.hidden = false;
+      panel.dataset.inlineDailyKlineVisiblePaint = "1";
+      panel.innerHTML = strategy4DailyKlineHtml(code, true);
+    };
+    repaint(); // daily_kline_card_local_panel_open daily_kline_click_forces_visible_panel
+    requestAnimationFrame(repaint);
+    const resolveOpenInlineDailyKlineSnapshot = async () => {
+      const waiter = strategy4DailyKlineBatchWaiters.get(code);
+      if (waiter?.promise) {
+        await Promise.race([
+          waiter.promise,
+          new Promise((resolve) => window.setTimeout(resolve, 7000)),
+        ]);
+      }
+      if (strategy4DailyKlineCachedBarCount(code) < 20) {
+        await hydrateStrategy4DailyKline(code, 120, true);
+      }
+      repaint();
+    };
+    resolveOpenInlineDailyKlineSnapshot().catch(repaint); // daily_kline_click_waits_for_batch_snapshot
+    return true;
+  }
+
+  window.FumanToggleInlineDailyKlineCard = (card, event) => {
+    if (event) event.__fumanInlineDailyKlineHandled = true;
+    return toggleInlineDailyKlineCard(card);
+  }; // daily_kline_direct_card_bridge
+
   function toggleInlineDailyKline(route, code) {
     const normalized = strategy4DailyKlineCode(code);
     const key = inlineDailyKlineKey(route, normalized);
-    if (!key) return;
+    const card = key ? [...document.querySelectorAll("[data-inline-daily-kline-card]")]
+      .find((node) => node.dataset.inlineDailyKlineKey === key) : null;
+    if (card) return toggleInlineDailyKlineCard(card);
+    if (!key) return false;
     const opening = inlineDailyKlineSelectedKey !== key;
     inlineDailyKlineSelectedKey = opening ? key : "";
     renderInlineDailyKlinePanels();
-    if (opening) hydrateStrategy4DailyKline(normalized);
+    if (!opening) return true;
+    paintOpenInlineDailyKline(route, normalized);
+    requestAnimationFrame(() => paintOpenInlineDailyKline(route, normalized));
+    if (strategy4DailyKlineCachedBarCount(normalized) < 20) {
+      hydrateStrategy4DailyKline(normalized, 120, true).then(() => paintOpenInlineDailyKline(route, normalized)).catch(() => {});
+    }
+    return true;
   }
 
   function renderStrategy4InlineKline(code) {
@@ -3750,7 +4169,7 @@
     toggleInlineDailyKline("strategy|策略4", code);
   }
   function supportsThreeGatePrices(route) {
-    return isStrategy3Route(route) || isStrategy4Route(route) || isStrategy5Route(route) || isChipTradeRoute(route);
+    return isStrategy2Route(route) || isStrategy3Route(route) || isStrategy4Route(route) || isStrategy5Route(route) || isChipTradeRoute(route);
   }
 
   function threeGatePriceKey(code, asOfDate) {
@@ -3816,7 +4235,12 @@
       paintThreeGatePrices();
     }
   }
-  function showCanvasDetail(row, index, preserveScroll = false) {
+  function supportsMainForceCosts(route) { return isStrategy2Route(route) || isStrategy3Route(route) || isStrategy4Route(route) || isStrategy5Route(route) || isChipTradeRoute(route); }
+  function mainForceCostKey(code, asOfDate) { const normalized = strategy4DailyKlineCode(code); return normalized ? `${normalized}:${String(asOfDate || "")}` : ""; }
+  function mainForceStyleText(label, style) { if (!style || style.status === "data_insufficient") return `${label} 資料不足`; if (style.status === "unclassified") return `${label} 未分類`; if (style.matched) return `${label} 有｜${formatPriceValue(style.costPrice) || "--"}`; return `${label} 無`; }
+  function mainForceCostHtml(code, asOfDate) { const key = mainForceCostKey(code, asOfDate), item = mainForceCostCache.get(key), value = item?.status === "ready" ? (formatPriceValue(item.mainForceCostPrice) || "--") : "資料不足", reference = item?.tradeDate ? `資料日 ${item.tradeDate}` : "須有同日正式分點資料"; return `<div class="three-gate-prices terminal-main-force-costs" data-main-force-key="${escapeHtml(key)}" data-main-force-state="${item ? "ready" : "loading"}"><small>主力成本</small><span data-main-force-cost>${escapeHtml(value)}</span><span data-main-force-overnight>隔日沖主力 資料不足</span><span data-main-force-short>短沖主力 資料不足</span><span data-main-force-daytrade>當沖主力 資料不足</span><em data-main-force-reference>${escapeHtml(reference)}</em></div>`; }
+  function paintMainForceCosts() { document.querySelectorAll("[data-main-force-key]").forEach((node) => { const item = mainForceCostCache.get(node.dataset.mainForceKey || ""), cost = node.querySelector("[data-main-force-cost]"), overnight = node.querySelector("[data-main-force-overnight]"), shortSwing = node.querySelector("[data-main-force-short]"), daytrade = node.querySelector("[data-main-force-daytrade]"), reference = node.querySelector("[data-main-force-reference]"); if (item?.status === "ready") { if (cost) cost.textContent = formatPriceValue(item.mainForceCostPrice) || "--"; if (overnight) overnight.textContent = mainForceStyleText("隔日沖主力", item.overnight); if (shortSwing) shortSwing.textContent = mainForceStyleText("短沖主力", item.shortSwing); if (daytrade) daytrade.textContent = mainForceStyleText("當沖主力", item.daytrade); if (reference) reference.textContent = `資料日 ${item.tradeDate || "--"}`; node.dataset.mainForceState = "ready"; } else if (mainForceCostCache.has(node.dataset.mainForceKey || "")) { if (cost) cost.textContent = "資料不足"; if (reference) reference.textContent = "須有同日正式分點資料"; node.dataset.mainForceState = "unavailable"; } }); }
+  async function hydrateMainForceCosts(route, rows, dataDate) { if (!supportsMainForceCosts(route)) return; const asOfDate = String(dataDate || ""); if (!/^\d{4}-\d{2}-\d{2}$/.test(asOfDate)) return; const codes = [...new Set((Array.isArray(rows) ? rows : []).map((row) => strategy4DailyKlineCode(row?.code || row?.symbol || "")).filter(Boolean))], pendingCodes = codes.filter((code) => { const key = mainForceCostKey(code, asOfDate); return key && !mainForceCostCache.has(key) && !mainForceCostPending.has(key); }); if (!pendingCodes.length) { paintMainForceCosts(); return; } pendingCodes.forEach((code) => mainForceCostPending.add(mainForceCostKey(code, asOfDate))); try { const query = new URLSearchParams({ codes: pendingCodes.join(","), asOf: asOfDate }), response = await fetch(`/api/main-force-costs?${query.toString()}`, { cache: "no-store" }), payload = await response.json().catch(() => null), items = response.ok && payload?.ok === true && Array.isArray(payload.items) ? payload.items : [], received = new Map(items.map((item) => [strategy4DailyKlineCode(item?.code), item])); pendingCodes.forEach((code) => mainForceCostCache.set(mainForceCostKey(code, asOfDate), received.get(code) || null)); } catch { pendingCodes.forEach((code) => mainForceCostCache.set(mainForceCostKey(code, asOfDate), null)); } finally { pendingCodes.forEach((code) => mainForceCostPending.delete(mainForceCostKey(code, asOfDate))); paintMainForceCosts(); } }  function showCanvasDetail(row, index, preserveScroll = false) {
     const detail = currentCanvasShell()?.querySelector(".desktop-canvas-detail");
     if (!detail || !row) return;
     const signalChips = (row.signals || []).slice(0, 8).map((signal) => `
@@ -3874,6 +4298,17 @@
     }, true);
 
     document.addEventListener("click", (event) => {
+      if (event.target.closest?.("[data-inline-daily-kline-range]")) return;
+      const inlineDailyKlineCard = event.target.closest?.("[data-inline-daily-kline-card]");
+      if (!inlineDailyKlineCard) return;
+      event.__fumanInlineDailyKlineHandled = true;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      event.stopPropagation();
+      toggleInlineDailyKlineCard(inlineDailyKlineCard); // daily_kline_capture_toggle_local_card
+    }, true);
+
+    document.addEventListener("click", (event) => {
       const radarSide = event.target.closest?.("[data-radar-dom-side]");
       if (radarSide) {
         event.preventDefault();
@@ -3919,13 +4354,18 @@
         if (code && [60, 120, 240].includes(value)) {
           strategy4DailyKlineRanges.set(code, value);
           if (panel) panel.innerHTML = strategy4DailyKlineHtml(code, true);
+          if (value >= 240 && strategy4DailyKlineCachedBarCount(code) < 240) hydrateStrategy4DailyKline(code, 260, true).catch(() => {});
         }
         return;
       }
       const inlineDailyKlineCard = event.target.closest?.("[data-inline-daily-kline-card]");
       if (inlineDailyKlineCard) {
-        event.preventDefault();
-        toggleInlineDailyKline(canvasState.route, inlineDailyKlineCard.dataset.inlineDailyKlineCode || "");
+        if (!event.__fumanInlineDailyKlineHandled) {
+          event.__fumanInlineDailyKlineHandled = true;
+          event.preventDefault();
+          event.stopPropagation();
+          toggleInlineDailyKlineCard(inlineDailyKlineCard);
+        }
         return;
       }      const klineRange = event.target.closest?.("[data-strategy4-kline-range]");
       if (klineRange) {
@@ -3937,6 +4377,7 @@
         if (code && [60, 120, 240].includes(value)) {
           strategy4DailyKlineRanges.set(code, value);
           showCanvasDetail(selected, canvasState.selectedIndex, true);
+          if (value >= 240 && strategy4DailyKlineCachedBarCount(code) < 240) hydrateStrategy4DailyKline(code, 260, true).catch(() => {});
         }
         return;
       }
@@ -4818,17 +5259,26 @@
   }
 
   function strategy5SignalCounts(rows = []) {
+    ensureStrategy5WNecklineConfig();
     const defs = window.FUMAN_STRATEGY_CONFIG?.STRATEGY_BY_ID || {};
     const allowedOrder = window.FUMAN_STRATEGY_CONFIG?.STRATEGY5_PRESET_IDS || [];
     const allowed = new Set(allowedOrder.filter((id) => id !== "multi_strategy_confluence"));
     const forbidden = new Set([["foreign", "trust", "breakout"].join("_")]);
     const map = new Map();
     (Array.isArray(rows) ? rows : []).forEach((row) => {
-      const signals = row?.signals?.length ? row.signals : row?.subStrategy ? [{ id: row.subStrategyId || row.subStrategy, label: row.subStrategy }] : [];
-      signals.forEach((signal) => {
-        const key = compactText(signal.id || signal.label || "", 48);
-        if (!key || forbidden.has(key) || (allowed.size && !allowed.has(key))) return;
-        const label = compactText(defs[key]?.short || defs[key]?.label || signal.label || signal.id || "", 28);
+      const rawSignals = [
+        ...normalizeArray(row?.signals),
+        ...normalizeArray(row?.matches),
+        row?.activeMatch,
+        row?.active_match,
+        row?.subStrategy || row?.subStrategyId ? { id: row.subStrategyId || row.subStrategy, label: row.subStrategy || row.subStrategyId } : null,
+      ].filter(Boolean);
+      const seenInRow = new Set();
+      rawSignals.forEach((signal) => {
+        const key = compactText(signal.id || signal.key || signal.strategyId || signal.strategy_id || signal.label || "", 80);
+        if (!key || seenInRow.has(key) || forbidden.has(key) || (allowed.size && !allowed.has(key))) return;
+        seenInRow.add(key);
+        const label = compactText(defs[key]?.short || defs[key]?.label || signal.short || signal.label || signal.id || "", 28);
         if (!label) return;
         const current = map.get(key) || { key, label, count: 0 };
         current.count += 1;
@@ -4993,7 +5443,7 @@
 
   function ensureWatchlistShell() {
     if (window.FUMAN_WATCHLIST_SHELL_INSTANCE) return Promise.resolve(window.FUMAN_WATCHLIST_SHELL_INSTANCE);
-    const version = "watchlist-rich-shell-20260813-daily-kline-01";
+    const version = "watchlist-rich-shell-20260816-sunlight-01";
     return loadScriptOnce(`terminal-watchlist-shell.js?v=${encodeURIComponent(version)}`, "data-fuman-watchlist-shell")
       .then(() => window.FUMAN_WATCHLIST_SHELL_MODULE?.install?.({}) || window.FUMAN_WATCHLIST_SHELL_INSTANCE || null)
       .catch(() => null);
@@ -5520,7 +5970,7 @@
 
   function hasMarketAiPayload(payload) {
     if (!payload || typeof payload !== "object") return false;
-    if (marketPayloadBlockedForFormalDisplay(payload)) return false;
+    // A degraded response can still carry a valid read-only status card. Do not leave the UI loading forever.
     return Boolean(
       payload.dashboard
       || payload.groups
@@ -6342,20 +6792,20 @@
       <header class="opening-report-0830-head">
         <div class="opening-report-0830-title">
           <b>${esc(data.date || "")} 晨報｜${esc(rows[1]?.label || "全球盤面")} ${pct(rows[1]?.percent)}｜${esc(priorities[0]?.display_name || "今日推薦")}</b>
-          <span>資料截點 08:20｜顯示窗 ${esc(data?.visible_window?.label || "08:30-08:59")}｜正式可沖仍等台股 evidence / Formal Gate</span>
+          <span>資料截點 08:20（日本／韓國早盤凍結；美股以前一交易日收盤）｜顯示窗 ${esc(data?.visible_window?.label || "08:30-08:59")}｜僅供觀察排序，不構成正式進場訊號</span>
         </div>
-        <div class="opening-report-0830-run"><span>${esc(data.report_status || "WATCH")}</span><span>${esc(data.allowed_action || "priority_scan_only")}</span></div>
+        <div class="opening-report-0830-run"><span>${esc(data.report_status || "WATCH")}</span><span>${esc("僅供觀察排序")}</span></div>
       </header>
       <div class="opening-report-0830-grid">
         <article class="opening-report-0830-card"><h4>大盤紅綠燈</h4><div class="opening-report-0830-bias ${toneClass(priorities[0]?.bias)}">${esc(priorities[0]?.bias?.includes?.("negative") ? "偏弱" : priorities[0]?.bias?.includes?.("neutral") ? "分歧" : "偏多")}</div><p>${esc(priorities[0]?.evidence_summary || data.reason_code || "等待 08:30 晨報來源")}</p></article>
         <article class="opening-report-0830-card"><h4>全球速覽</h4>${rows.length ? rows.map((row) => `<div class="opening-report-0830-minirow"><span>${esc(row.label)}</span><b class="${toneClass(row.direction || row.display)}">${pct(row.percent)}</b></div>`).join("") : `<p class="opening-report-0830-gap">${esc(data.reason_code || "market_snapshot_missing")}</p>`}</article>
-        <article class="opening-report-0830-card"><h4>台股前線</h4><p>三大法人：${esc(data.institutional?.reason_code || data.institutional?.status || "等待來源寫入")}</p><p>短波訊號：${esc(data.shortwave?.reason_code || data.shortwave?.status || "等待來源寫入")}；允許 Strategy3/4/5 前日閉環。</p></article>
+        <article class="opening-report-0830-card"><h4>台股前線</h4><p>三大法人：${esc(data.institutional?.reason_code || data.institutional?.status || "等待來源寫入")}</p><p>短波訊號：${esc(data.shortwave?.reason_code || data.shortwave?.status || "等待來源寫入")}；僅讀 Strategy5 昨日收盤已閉環結果。</p></article>
       </div>
       <section class="opening-report-0830-priority">${priorities.length ? priorities.map((item, index) => `<article><b>${index + 1}. ${esc(item.display_name || item.industry)}</b><strong class="${toneClass(item.bias)}">${esc(item.bias || "觀察")}</strong><span>${esc(names(item.a_symbols,8))}</span></article>`).join("") : `<article><b>今日推薦</b><strong class="opening-report-0830-gap">等待 08:30</strong><span>${esc(data.reason_code || "opening_report_missing")}</span></article>`}</section>
       <div class="opening-report-0830-bottom">
         <article class="opening-report-0830-card"><h4>短波訊號關注</h4><p>${esc(data.shortwave?.status || "source_gap")}；Strategy5 共振策略可列入，但只讀前日閉環 runId。</p></article>
         <article class="opening-report-0830-card"><h4>大事紀要</h4><p>${esc(data.event_digest?.reason_code || data.event_digest?.status || "等待 08:30 前新聞來源寫入")}</p></article>
-        <article class="opening-report-0830-card"><h4>今日推薦</h4><p>只做母池 priority scan，不直接 publish。</p><div class="opening-report-0830-symbols">${recommended.length ? recommended.map((stock) => `<span>${esc(stock.name || stock.symbol)}</span>`).join("") : `<span>${esc(data.bridge_status || "priority_scan_only")}</span>`}</div></article>
+        <article class="opening-report-0830-card"><h4>今日觀察</h4><p>開盤後確認量價與族群承接。</p><div class="opening-report-0830-symbols">${recommended.length ? recommended.map((stock) => `<span>${esc(stock.name || stock.symbol)}</span>`).join("") : `<span>${esc("觀察名單尚待晨報來源")}</span>`}</div></article>
       </div>`;
     panel.querySelector?.("[data-opening-report-0830-briefing]")?.remove();
     const anchor = panel.querySelector?.(".market-ai-summary");
@@ -6374,10 +6824,16 @@
       if (panels.ai.querySelector?.(".market-ai-hero-board")) return;
       panels.ai.classList.add("market-ai-visual-dashboard");
       panels.ai.dataset.marketApiAi = "preserve-previous-good";
-      panels.ai.innerHTML = ` 
+      const statusAtRun = String(aiPayload?.source_status_at_run?.status || aiPayload?.sourceStatusAtRun?.status || "--");
+      const updatedAt = String(aiPayload?.updatedAt || aiPayload?.servedAt || aiPayload?.source_snapshot_captured_at || "--");
+      const rowCount = normalizeArray(aiPayload?.rows).length;
+      const hotCount = normalizeArray(aiPayload?.hotStocks).length;
+      panels.ai.innerHTML = `
         <section class="market-ai-block" data-market-ai-preserve-previous-good="1">
-          <h3>AI 判讀暫時保留上一筆簡報</h3>
-          <p>正式資料尚未穩定，這次刷新不覆蓋正常判讀。</p>
+          <h3>市場 AI 暫停正式判讀</h3>
+          <p>資料已收到，但正式水源尚未通過；不顯示或發布正式 AI 結論。</p>
+          <p>reason=${escapeHtml(String(aiBlockedReason))}｜source_status=${escapeHtml(statusAtRun)}｜rows=${rowCount}｜hot_stocks=${hotCount}</p>
+          <p>updated_at=${escapeHtml(updatedAt)}｜publish_allowed=false</p>
         </section>
       `;
       return;
@@ -7229,6 +7685,7 @@
     shell.dataset.evidenceStatus = routeMeta.evidenceStatus || "";
     shell.dataset.unattendedStatus = routeMeta.unattendedStatus || "";
     const rows = [...canvasState.filtered].sort(strategy2SortRows);
+    const diagnosticReplay = rows.some((row) => row?.scanMode === "strategy2_v3_diagnostic_replay" || row?.eventOrigin === "strategy2_v3_diagnostic_replay");
     const liveRows = rows.filter((row) => {
       const tone = strategy2Tone(row);
       return tone === "entry" || tone === "prepare";
@@ -7255,9 +7712,13 @@
       summary.setAttribute("aria-hidden", "true");
     }
     if (count) count.textContent = `${rows.length}筆`;
-    if (status) status.textContent = String(canvasState.source || "").includes("snapshot-first")
-      ? "快照先顯示｜即時刷新中"
-      : canvasState.source || "api";
+    if (entryTitle && diagnosticReplay) entryTitle.textContent = "V3回測觀察（最新在上）";
+    if (entryNote && diagnosticReplay) entryNote.textContent = "驗證水源 → 策略 → 終端；非正式候選、不發布、不寫入 /88";
+    if (status) status.textContent = diagnosticReplay
+      ? "V3 回測驗證｜非正式候選、不發布、不寫入 /88"
+      : String(canvasState.source || "").includes("snapshot-first")
+        ? "快照先顯示｜即時刷新中"
+        : canvasState.source || "api";
   }
 
   function radarDomTimeValue(row) {
@@ -7750,17 +8211,6 @@
       s3_obv: [/OBV|obv/i],
       s3_near_high: [/近高|高檢查|near.*high/i],
       s3_mother: [/母池|mother/i],
-      cb_cbas: [/CBAS|三層|cbas/i],
-      cb_60m: [/60分|60m|阻檔/i],
-      cb_stock_price: [/富果|現股價|stockPrice|price/i],
-      cb_conversion: [/轉換|conversion|premium/i],
-      cb_signal: [/訊號|signal|entry/i],
-      warrant_flow: [/資金|flow|money/i],
-      warrant_underlying: [/標的|underlying|強弱/i],
-      warrant_volume: [/爆量|volume|量/i],
-      warrant_single: [/單券|異常|single/i],
-      warrant_bid: [/買盤|集中|bid/i],
-      warrant_risk: [/風險|risk|排除/i],
     })[key] || [];
   }
 
@@ -7794,196 +8244,154 @@
     return map;
   }
 
-  function strategy5EntryAlreadyHasChipBuy(entries = []) {
-    return normalizeArray(entries).some((item) => /籌碼買超|買超共振|chip_k_confluence/i.test([item?.key, item?.label, item?.reason, normalizeArray(item?.details).join(" ")].filter(Boolean).join(" ")));
+  const STRATEGY5_CONFLUENCE_FAMILY_LABELS = {
+    strategy2: "策略2",
+    strategy3: "策略3",
+    strategy4: "策略4",
+    strategy5: "策略5",
+    institution: "買賣超",
+  };
+
+  function strategy5ConfluenceFamilyFromText(value) {
+    const text = String(value || "").toLowerCase();
+    if (!text || /權證|warrant|cb名單|可轉債|\bcb\b/.test(text)) return "";
+    if (/strategy2|策略2|當沖雷達|當沖/.test(text)) return "strategy2";
+    if (/strategy3|策略3|隔日沖/.test(text)) return "strategy3";
+    if (/strategy4|策略4|波段/.test(text)) return "strategy4";
+    if (/strategy5|策略5|綜合策略|w頸線|w底|布林|量價周轉|資增股漲|資減股漲|漲停十字星/.test(text)) return "strategy5";
+    if (/institution|買賣超|法人|籌碼買超|買超共振|chip_k_confluence/.test(text)) return "institution";
+    return "";
   }
 
-  function strategy5LocalConfluenceCounts(rows = []) {
-    const map = new Map();
-    (Array.isArray(rows) ? rows : []).forEach((row) => {
+  function strategy5ConfluenceFamilyForEntry(entry) {
+    const explicit = String(entry?.sourceFamily || entry?.family || entry?.source || "").trim();
+    if (Object.prototype.hasOwnProperty.call(STRATEGY5_CONFLUENCE_FAMILY_LABELS, explicit)) return explicit;
+    return strategy5ConfluenceFamilyFromText([
+      entry?.key,
+      entry?.label,
+      entry?.reason,
+      normalizeArray(entry?.details).join(" "),
+    ].filter(Boolean).join(" "));
+  }
+
+  function strategy5ConfluenceFamilyDetails(entries = [], fallbackRows = []) {
+    const families = new Map();
+    const add = (family, label, details = []) => {
+      if (!Object.prototype.hasOwnProperty.call(STRATEGY5_CONFLUENCE_FAMILY_LABELS, family)) return;
+      const current = families.get(family) || { family, label: STRATEGY5_CONFLUENCE_FAMILY_LABELS[family], details: [] };
+      current.details = [...new Set([...current.details, ...normalizeArray(details).filter(Boolean)])].slice(0, 8);
+      families.set(family, current);
+    };
+    normalizeArray(entries).forEach((entry) => {
+      const family = strategy5ConfluenceFamilyForEntry(entry);
+      add(family, entry?.label, entry?.details);
+    });
+    normalizeArray(fallbackRows).forEach((row) => {
+      const descriptions = [
+        row?.sourceFamily,
+        row?.source,
+        row?.strategy,
+        row?.strategyLabel,
+        row?.subStrategy,
+        row?.subStrategyId,
+        row?.signalLabel,
+        row?.signalLine,
+        row?.reason,
+        row?.chipDirection,
+        row?.chipConfluenceLabel,
+        row?.chipNetSummary,
+        ...normalizeArray(row?.signals || row?.matches || row?.strategyTags || row?.tags || row?.signalTags)
+          .map((item) => typeof item === "object" ? [item?.sourceFamily, item?.id, item?.key, item?.label, item?.short, item?.reason].filter(Boolean).join(" ") : item),
+      ];
+      descriptions.forEach((description) => {
+        const family = strategy5ConfluenceFamilyFromText(description);
+        add(family, description, [row?.reason, row?.chipNetSummary].filter(Boolean));
+      });
+      if (isStrategy5Route(canvasState.route) && String(row?.subStrategyId || "") !== "multi_strategy_confluence") {
+        add("strategy5", "策略5", [row?.subStrategy || row?.signalLabel || row?.reason].filter(Boolean));
+      }
+      if (strategy5ChipBuyConfluence(row)) add("institution", "買賣超", [row?.reason || row?.chipNetSummary || "法人籌碼買超"]);
+    });
+    return [...families.values()].sort((a, b) => Object.keys(STRATEGY5_CONFLUENCE_FAMILY_LABELS).indexOf(a.family) - Object.keys(STRATEGY5_CONFLUENCE_FAMILY_LABELS).indexOf(b.family));
+  }
+
+  function strategy5FallbackRowsByCode(rows = []) {
+    const byCode = new Map();
+    normalizeArray(rows).forEach((row) => {
       const code = strategy5ConfluenceCode(row);
       if (!code) return;
-      const current = map.get(code) || { count: 0, explicit: 0 };
-      current.count += 1;
-      current.explicit = Math.max(current.explicit, strategy5ExplicitConfluenceCount(row));
-      map.set(code, current);
+      const entries = byCode.get(code) || [];
+      entries.push(row);
+      byCode.set(code, entries);
     });
-    return map;
+    return byCode;
   }
 
-  function strategy5WatchlistIndexDateKey(payload) {
-    const candidates = [
-      payload?.staleSnapshot?.snapshotDate,
-      payload?.source_snapshot_captured_at,
-      payload?.updatedAt,
-      payload?.transport?.updatedAt,
-      payload?.transport?.snapshotId,
-      payload?.runId,
-    ].map((value) => String(value || "").replace(/\D/g, "").slice(0, 8)).filter((value) => value.length === 8);
-    return candidates.sort().at(-1) || "";
-  }
-
-  function strategy5WatchlistExpectedDateKey(payload) {
-    return String(
-      payload?.staleSnapshot?.expectedDate
-        || payload?.displayTradeDate
-        || payload?.marketCalendar?.displayTradeDate
-        || ""
-    ).replace(/\D/g, "").slice(0, 8);
-  }
-
-  function strategy5WatchlistIndexIsUsable(payload) {
-    if (!payload || payload.ok === false || payload.staleSnapshot) return false;
-    const byCode = payload.byCode;
-    if (!byCode || typeof byCode !== "object") return false;
-    const snapshotDate = strategy5WatchlistIndexDateKey(payload);
-    const expectedDate = strategy5WatchlistExpectedDateKey(payload);
-    if (expectedDate && snapshotDate && snapshotDate < expectedDate) return false;
-    return true;
-  }
-  function strategy5WatchlistEntriesByCode() {
-    if (!strategy5WatchlistIndexIsUsable(strategy5WatchlistMatchIndexPayload)) return null;
-    const byCode = strategy5WatchlistMatchIndexPayload?.byCode;
-    return byCode && typeof byCode === "object" ? byCode : null;
-  }
-
-  function fetchStrategy5WatchlistMatchIndexIfNeeded() {
-    if (strategy5WatchlistEntriesByCode() || strategy5WatchlistMatchIndexPromise) return;
-    strategy5WatchlistMatchIndexPromise = fetch("/api/watchlist-match-index?compact=1&shell=1&limit=320", { cache: "no-store" })
-      .then((response) => response.json().catch(() => null))
-      .then((payload) => {
-        const usable = strategy5WatchlistIndexIsUsable(payload);
-        strategy5WatchlistMatchIndexPayload = usable ? payload : null;
-        if (isStrategy5Route(canvasState.route)) {
-          canvasPreRenderedRoutes.delete(canvasState.route);
-          scheduleCanvasDraw();
-        }
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        strategy5WatchlistMatchIndexPromise = null;
-      });
+  function strategy5TerminalConfluenceProfile(code, rows = canvasState.rows) {
+    const safeCode = String(code || "").match(/\d{4}/)?.[0] || "";
+    if (!safeCode) return { count: 0, families: [], entries: [], fallbackRows: [], strategy5InternalCount: 0 };
+    const byCode = strategy5WatchlistEntriesByCode();
+    const entries = normalizeArray(byCode?.[safeCode]);
+    const fallbackRows = strategy5FallbackRowsByCode(rows).get(safeCode) || [];
+    const families = strategy5ConfluenceFamilyDetails(entries, fallbackRows);
+    const strategy5InternalCount = Math.max(
+      entries.reduce((max, item) => Math.max(max, cleanNumber(item?.internalCount)), 0),
+      ...fallbackRows.map((row) => Math.max(cleanNumber(row?.strategy5InternalCount), normalizeArray(row?.matches || row?.signals).length)),
+      0
+    );
+    return { count: families.length, families, entries, fallbackRows, strategy5InternalCount };
   }
 
   function strategy5TerminalConfluenceCountForCode(code, rows = canvasState.rows) {
-    const safeCode = String(code || "").match(/\d{4}/)?.[0] || "";
-    if (!safeCode) return 0;
-    const chipRowsByCode = strategy5ChipBuyRowsByCode(rows);
-    const byCode = strategy5WatchlistEntriesByCode();
-    if (byCode) {
-      const entries = normalizeArray(byCode[safeCode]);
-      const chipBoost = chipRowsByCode.has(safeCode) && !strategy5EntryAlreadyHasChipBuy(entries) ? 1 : 0;
-      return entries.length + chipBoost;
-    }
-    const local = strategy5LocalConfluenceCounts(rows).get(safeCode);
-    return Math.max(cleanNumber(local?.count), cleanNumber(local?.explicit), chipRowsByCode.has(safeCode) ? 1 : 0);
+    return strategy5TerminalConfluenceProfile(code, rows).count;
   }
 
   function strategy5TerminalConfluenceRows(fallbackRows = []) {
-    const byCode = strategy5WatchlistEntriesByCode();
-    if (byCode) {
-      const names = strategy5WatchlistMatchIndexPayload?.namesByCode || {};
-      const quotes = strategy5WatchlistMatchIndexPayload?.quoteByCode || {};
-      const chipRowsByCode = strategy5ChipBuyRowsByCode(fallbackRows);
-      const codes = [...new Set([...Object.keys(byCode || {}), ...chipRowsByCode.keys()])];
-      return codes.map((code) => {
-        const entries = normalizeArray(byCode[code]);
-        const chipRow = chipRowsByCode.get(code) || null;
-        const quote = quotes?.[code] || {};
-        const chipBoost = chipRow && !strategy5EntryAlreadyHasChipBuy(entries) ? 1 : 0;
-        const terminalConfluenceCount = entries.length + chipBoost;
-        const strategy5InternalCount = Math.max(
-          entries.reduce((max, item) => Math.max(max, cleanNumber(item?.internalCount)), 0),
-          cleanNumber(chipRow?.strategy5InternalCount),
-          normalizeArray(chipRow?.matches || chipRow?.signals).length
-        );
-        const labels = [...new Set([
-          ...entries.map((item) => item?.label || item?.key).filter(Boolean),
-          chipRow ? "籌碼買超共振" : "",
-        ].filter(Boolean))];
-        const details = [...new Set([
-          ...entries.flatMap((item) => normalizeArray(item?.details)).filter(Boolean),
-          chipRow ? (chipRow.reason || chipRow.chipNetSummary || "法人籌碼買超") : "",
-        ].filter(Boolean))];
-        const price = cleanNumber(quote.price || quote.close || chipRow?.price || chipRow?.close);
-        const pctValue = cleanNumber(quote.percent || chipRow?.percent || chipRow?.pct);
-        const volume = cleanNumber(quote.tradeVolume || quote.volume || chipRow?.tradeVolume || chipRow?.volume);
-        const tradeValue = cleanNumber(quote.tradeValue || quote.value || chipRow?.tradeValue || chipRow?.value);
-        return {
-          ...(chipRow || {}),
-          rank: 0,
-          code,
-          title: compactText(chipRow?.title || chipRow?.name || names?.[code] || code, 64),
-          pct: pctValue ? pctValue.toFixed(2) + "%" : "",
-          price: price ? String(price) : "",
-          volume: volume ? String(volume) : "",
-          tradeValue: tradeValue ? String(tradeValue) : "",
-          score: String(Math.round((terminalConfluenceCount * 100) + strategy5InternalCount)),
-          reason: compactText(labels.join("、") + "｜" + details.slice(0, 5).join("、"), 220),
-          subStrategy: "綜合共振",
-          subStrategyId: "multi_strategy_confluence",
-          strategyDisplay: "綜合共振",
-          signalLabel: "綜合共振",
-          signalLine: labels.join("、"),
-          signals: [
-            ...entries.slice(0, 6).map((item) => ({
-              id: item?.key || item?.label || "terminal_confluence",
-              label: item?.label || item?.key || "終端策略",
-              reason: normalizeArray(item?.details).slice(0, 3).join("、"),
-            })),
-            ...(chipRow ? [{ id: "chip_k_confluence", label: "籌碼買超共振", reason: chipRow.reason || chipRow.chipNetSummary || "法人籌碼買超" }] : []),
-          ],
-          tags: labels.slice(0, 7),
-          signalTags: labels.slice(0, 7),
-          confluenceCount: terminalConfluenceCount,
-          terminalConfluenceCount,
-          strategy5InternalCount,
-          aiSummary: compactText(labels.join("、") + "｜符合 " + terminalConfluenceCount + " 個共振條件", 180),
-          triggerReason: compactText(details.slice(0, 7).join("、") || labels.join("、"), 180),
-          line: compactText(code + " ｜" + (chipRow?.name || names?.[code] || code) + "｜符合 " + terminalConfluenceCount + " 個共振條件｜" + labels.join("、"), 220),
-        };
-      }).filter((row) => cleanNumber(row.terminalConfluenceCount) >= 2 || strategy5ChipBuyConfluence(row))
-        .sort((a, b) => cleanNumber(b.terminalConfluenceCount) - cleanNumber(a.terminalConfluenceCount)
-          || cleanNumber(b.strategy5InternalCount) - cleanNumber(a.strategy5InternalCount)
-          || cleanNumber(b.score) - cleanNumber(a.score)
-          || String(a.code).localeCompare(String(b.code), "zh-Hant"))
-        .map((row, index) => ({ ...row, rank: index + 1 }));
-    }
-    const grouped = strategy5LocalConfluenceCounts(fallbackRows);
-    const firstByCode = new Map();
-    (Array.isArray(fallbackRows) ? fallbackRows : []).forEach((row) => {
-      const code = strategy5ConfluenceCode(row);
-      if (code && !firstByCode.has(code)) firstByCode.set(code, row);
-    });
-    const chipRowsByCode = strategy5ChipBuyRowsByCode(fallbackRows);
-    const codes = [...new Set([...grouped.keys(), ...chipRowsByCode.keys()])];
+    const byCode = strategy5WatchlistEntriesByCode() || {};
+    const names = strategy5WatchlistMatchIndexPayload?.namesByCode || {};
+    const quotes = strategy5WatchlistMatchIndexPayload?.quoteByCode || {};
+    const fallbackByCode = strategy5FallbackRowsByCode(fallbackRows);
+    const codes = [...new Set([...Object.keys(byCode), ...fallbackByCode.keys()])];
     return codes.map((code) => {
-      const item = grouped.get(code) || { count: 0, explicit: 0 };
-      const chipRow = chipRowsByCode.get(code) || null;
-      const source = chipRow || firstByCode.get(code) || {};
-      const localCount = Math.max(cleanNumber(item.count), cleanNumber(item.explicit));
-      const count = Math.max(localCount, chipRow ? 1 : 0);
-      const labels = [...new Set([
-        ...normalizeArray(source?.signals || source?.matches || source?.tags || source?.signalTags).map((item) => typeof item === "object" ? (item.label || item.short || item.id || item.key) : item).filter(Boolean),
-        chipRow ? "籌碼買超共振" : "",
-      ].filter(Boolean))];
+      const profile = strategy5TerminalConfluenceProfile(code, fallbackRows);
+      const source = [...profile.fallbackRows].sort((a, b) => cleanNumber(b?.score) - cleanNumber(a?.score))[0] || {};
+      const quote = quotes?.[code] || {};
+      const labels = profile.families.map((item) => item.label);
+      const details = profile.families.flatMap((item) => item.details).filter(Boolean);
+      const price = cleanNumber(quote.price || quote.close || source?.price || source?.close);
+      const pctValue = cleanNumber(quote.percent || source?.percent || source?.pct);
+      const volume = cleanNumber(quote.tradeVolume || quote.volume || source?.tradeVolume || source?.volume);
+      const tradeValue = cleanNumber(quote.tradeValue || quote.value || source?.tradeValue || source?.value);
+      const terminalConfluenceCount = profile.count;
       return {
         ...source,
+        rank: 0,
         code,
-        confluenceCount: count,
-        terminalConfluenceCount: count,
-        strategy5InternalCount: Math.max(cleanNumber(source.strategy5InternalCount), normalizeArray(source.matches || source.signals).length),
+        title: compactText(source?.title || source?.name || names?.[code] || code, 64),
+        pct: pctValue ? pctValue.toFixed(2) + "%" : "",
+        price: price ? String(price) : "",
+        volume: volume ? String(volume) : "",
+        tradeValue: tradeValue ? String(tradeValue) : "",
+        score: String(Math.round((terminalConfluenceCount * 100) + profile.strategy5InternalCount)),
+        reason: compactText("共振 " + terminalConfluenceCount + "｜" + labels.join("、") + (details.length ? "｜" + details.slice(0, 5).join("、") : ""), 220),
         subStrategy: "綜合共振",
         subStrategyId: "multi_strategy_confluence",
         strategyDisplay: "綜合共振",
         signalLabel: "綜合共振",
-        signalLine: labels.join("、"),
-        tags: labels.length ? labels.slice(0, 7) : source.tags,
-        signalTags: labels.length ? labels.slice(0, 7) : source.signalTags,
-        reason: source.reason || source.chipNetSummary || labels.join("、"),
+        signalLine: "共振 " + terminalConfluenceCount + "｜" + labels.join("、"),
+        signals: profile.families.map((item) => ({ id: item.family, label: item.label, reason: item.details.slice(0, 3).join("、") })),
+        tags: labels,
+        signalTags: labels,
+        confluenceCount: terminalConfluenceCount,
+        terminalConfluenceCount,
+        confluenceFamilies: profile.families.map((item) => item.family),
+        strategy5InternalCount: profile.strategy5InternalCount,
+        aiSummary: compactText("共振 " + terminalConfluenceCount + "｜" + labels.join("、"), 180),
+        triggerReason: compactText(details.slice(0, 7).join("、") || labels.join("、"), 180),
+        line: compactText(code + " ｜" + (source?.name || names?.[code] || code) + "｜共振 " + terminalConfluenceCount + "｜" + labels.join("、"), 220),
       };
-    }).filter((row) => strategy5ExplicitConfluenceCount(row) >= 2 || strategy5ChipBuyConfluence(row))
-      .sort((a, b) => strategy5ExplicitConfluenceCount(b) - strategy5ExplicitConfluenceCount(a)
+    }).filter((row) => cleanNumber(row.terminalConfluenceCount) >= 2)
+      .sort((a, b) => cleanNumber(b.terminalConfluenceCount) - cleanNumber(a.terminalConfluenceCount)
         || cleanNumber(b.strategy5InternalCount) - cleanNumber(a.strategy5InternalCount)
         || cleanNumber(b.score) - cleanNumber(a.score)
         || String(a.code).localeCompare(String(b.code), "zh-Hant"))
@@ -8084,6 +8492,7 @@
   }
 
   function strategy5OptionCards(rows) {
+    ensureStrategy5WNecklineConfig();
     const defs = window.FUMAN_STRATEGY_CONFIG?.STRATEGY_BY_ID || {};
     const order = window.FUMAN_STRATEGY_CONFIG?.STRATEGY5_PRESET_IDS || [];
     fetchStrategy5WatchlistMatchIndexIfNeeded();
@@ -8095,7 +8504,8 @@
       count: cleanNumber(liveCounts.get(id)?.count),
     })) : [...liveCounts.values()];
     const confluence = strategy5TerminalConfluenceRows(rows).length;
-    return cardsFromCounts([{ key: "multi_strategy_confluence", label: "綜合共振", count: confluence }, ...counts], "Strategy5 細分策略");
+    const primary = [{ key: "multi_strategy_confluence", label: "綜合共振", count: confluence }];
+    return cardsFromCounts([...primary, ...counts], "Strategy5 細分策略");
   }
 
   function institutionOptionCards(rows) {
@@ -8156,11 +8566,13 @@
     const threeGateCode = supportsThreeGatePrices(route) ? stockCode : "";
     const threeGateAsOfDate = visibleRouteDataDate(canvasPayloadMeta(route) || {}, canvasState.rows || []) || taipeiTradeDateKey();
     const threeGatePrices = threeGateCode ? threeGatePriceHtml(threeGateCode, threeGateAsOfDate) : "";
+    const mainForceCosts = supportsMainForceCosts(route) && stockCode ? mainForceCostHtml(stockCode, threeGateAsOfDate) : "";
     const hasInlineDailyKline = Boolean(dailyKlineCode);
     const dailyKlineKey = inlineDailyKlineKey(route, dailyKlineCode);
-    const routeClass = isStrategy4Route(route) ? "strategy4-inline-kline-card" : isStrategy3Route(route) ? "strategy3-inline-kline-card" : isStrategy5Route(route) ? "strategy5-inline-kline-card" : "";
+    const routeClass = isStrategy4Route(route) ? "strategy4-inline-kline-card" : isStrategy3Route(route) ? "strategy3-inline-kline-card" : isStrategy5Route(route) ? "strategy5-inline-kline-card" : isChipTradeRoute(route) ? "chip-trade-inline-kline-card" : "";
+    const cardTag = hasInlineDailyKline ? "div" : "article";
     const card = `
-      <article class="strategy3-signal-card fuman-unified-list-card ${routeClass}" ${hasInlineDailyKline ? `data-inline-daily-kline-card data-inline-daily-kline-key="${escapeHtml(dailyKlineKey)}" data-inline-daily-kline-code="${escapeHtml(dailyKlineCode)}" role="button" tabindex="0" aria-expanded="${inlineDailyKlineSelectedKey === dailyKlineKey ? "true" : "false"}"` : ""}>
+      <${cardTag} class="strategy3-signal-card fuman-unified-list-card ${routeClass}">
         <div class="strategy3-card-rank">#${index + 1}</div>
         <div class="strategy3-card-stock">
           <strong>${escapeHtml(title || "--")}</strong>
@@ -8170,8 +8582,10 @@
           <div class="strategy3-tag-row">
             ${tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join("")}
           </div>
+          ${hasInlineDailyKline ? `<span class="strategy-inline-kline-toggle strategy-inline-kline-native-label" aria-label="點選標的展開 ${escapeHtml(code || dailyKlineCode)} 日K">日 K</span>` : ""}
           ${supportsThreeGatePrices(route) ? "" : `<p>${escapeHtml(unifiedListSummary(row))}</p>`}
           ${threeGatePrices}
+          ${mainForceCosts}
         </div>
         <div class="strategy3-card-metrics">
           ${metrics.map((value, metricIndex) => `
@@ -8181,11 +8595,11 @@
             </div>
           `).join("")}
         </div>
-      </article>
+      </${cardTag}>
     `;
     if (!hasInlineDailyKline) return card;
-    const open = inlineDailyKlineSelectedKey === dailyKlineKey;
-    return `<div class="strategy-inline-kline-row ${isStrategy4Route(route) ? "strategy4-inline-kline-row" : isStrategy3Route(route) ? "strategy3-inline-kline-row" : "strategy5-inline-kline-row"} ${open ? "is-kline-open" : ""}" data-inline-daily-kline-row data-inline-daily-kline-key="${escapeHtml(dailyKlineKey)}">${card}<div class="strategy-inline-kline-panel" data-inline-daily-kline-panel data-inline-daily-kline-key="${escapeHtml(dailyKlineKey)}" data-inline-daily-kline-code="${escapeHtml(dailyKlineCode)}" ${open ? "" : "hidden"}>${open ? strategy4DailyKlineHtml(dailyKlineCode, true) : ""}</div></div>`;
+    const nativeChartUrl = nativeDailyKlineChartUrl(dailyKlineCode, 120);
+    return `<details class="strategy-inline-kline-native ${isStrategy4Route(route) ? "strategy4-inline-kline-row" : isStrategy3Route(route) ? "strategy3-inline-kline-row" : isStrategy5Route(route) ? "strategy5-inline-kline-row" : "chip-trade-inline-kline-row"}" data-daily-kline-contract="terminal-native-daily-kline-v1" data-native-daily-kline-code="${escapeHtml(dailyKlineCode)}"><summary class="strategy-inline-kline-native-summary" aria-label="展開 ${escapeHtml(code || dailyKlineCode)} 日K">${card}</summary><div class="strategy-inline-kline-native-panel"><img class="strategy-inline-kline-native-chart" src="${escapeHtml(nativeChartUrl)}" alt="${escapeHtml(String(code || dailyKlineCode) + " 正式日K")}" loading="lazy" decoding="async"></div></details>`;
   }
   function renderMemberStrategyPendingShell(route, meta, panel) {
     if (!panel) return false;
@@ -8208,6 +8622,7 @@
     const avg = panel.querySelector("#strategy-avg-score");
     const top = panel.querySelector("#strategy-top-hit");
     const table = isStrategyRoute(route) ? panel.querySelector("#strategy-table") : null;
+    table?.classList?.add("fuman-unified-list-panel");
     if (headerTitle) headerTitle.textContent = `${meta.icon} ${meta.title}`;
     if (headerText) headerText.textContent = "開通會員資料載入中；優先讀取 fast bundle / previous-good。";
     if (headerLine) headerLine.textContent = `會員資料同步中${runId ? `｜run=${runId}` : ""}`;
@@ -8288,6 +8703,7 @@
     panel.dataset.fumanRouteSnapshotRestoring = "1";
     panel.dataset.fumanCanvasPersistent = "0";
     panel.classList.add("fuman-unified-list-panel");
+    target?.classList?.add("fuman-unified-list-panel");
     if (isStrategyRoute(route)) {
       panel.classList.add("fuman-api-only-strategy-route");
       panel.classList.remove("strategy5-only", "swing-only", "open-buy-only");
@@ -8357,6 +8773,8 @@
       panel.querySelectorAll(":scope > .chip-tool, :scope > .chip-table-wrap, :scope > .chip-empty").forEach((node) => node.remove());
     }
     if (supportsThreeGatePrices(route)) hydrateThreeGatePrices(route, rows, previousGoodTradeDate || routeDataDate).catch(() => undefined);
+    if (supportsMainForceCosts(route)) hydrateMainForceCosts(route, rows, previousGoodTradeDate || routeDataDate).catch(() => undefined);
+    prefetchInlineDailyKlines(route, rows, 120);
     window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
     return true;
   }
@@ -8644,8 +9062,15 @@
     const rows = rowsForRoute(key);
     const memberFastHydrate = isMemberStrategyPreviewRoute(key) && !rows.length && hasMemberPreviewToken();
     if (memberFastHydrate) {
-      setCanvasStatus("已開通會員，優先讀取 fast bundle / previous-good");
-      primeDesktopFastBundle(true, "member-route").then(() => {
+      renderMemberStrategyPendingShell(key, strategyMeta(link || key), panel);
+      setCanvasStatus("先顯示已驗證快照，正式 API 背景刷新");
+      window.setTimeout(() => {
+        if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
+        const fallbackRows = rowsForRoute(key);
+        if (fallbackRows.length) renderStrategyRouteShell(key, "member-preview-cache-timeout", fallbackRows);
+        else if (!payloadMetaHasResolvedResponse(canvasPayloadMeta(key))) renderStrategyRouteShell(key, "controlled-loading-timeout", []);
+      }, 2200);
+      primeDesktopFastBundle(true, "member-route", strategyBundleRouteForCanvasRoute(key)).then(() => {
         if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key || canvasState.route !== key) return;
         const bundleRows = rowsForRoute(key);
         if (bundleRows.length) renderStrategyRouteShell(key, "fast-bundle", bundleRows);
@@ -10986,13 +11411,40 @@
       .desktop-strategy4-kline-svg .grid { stroke: rgba(135,157,189,0.17); stroke-width: 1; stroke-dasharray: 3 4; }
       .desktop-strategy4-kline-svg .divider { stroke: rgba(135,157,189,0.24); stroke-width: 1; }
       .desktop-strategy4-kline-svg .axis { fill: #687b94; font-size: 11px; font-weight: 700; }
+      .desktop-strategy4-kline-legend .w-neckline { color: #f6c453; }
+      .desktop-strategy4-kline-legend .w-hold { color: #ff9b71; }
+      .desktop-strategy4-kline-legend .w-bottom { color: #55d8b3; }
+      .desktop-strategy4-kline-legend .w-bottom-ma { color: #4aa7ff; }
+      .desktop-strategy4-kline-legend .w-bottom-inst { color: #f6c453; }
+      .desktop-strategy4-kline-svg .kline-w-hold { fill: rgba(246,196,83,0.13); stroke: rgba(246,196,83,0.9); stroke-width: 1.2; stroke-dasharray: 3 2; }
+      .desktop-strategy4-kline-svg .kline-w-neckline { stroke: #f6c453; stroke-width: 1.8; stroke-dasharray: 6 4; }
+      .desktop-strategy4-kline-svg .kline-w-label-bg { fill: rgba(20,30,45,0.92); stroke: rgba(246,196,83,0.84); stroke-width: .8; }
+      .desktop-strategy4-kline-svg .kline-w-label { fill: #f7d270; font-size: 11px; font-weight: 900; }
+      .desktop-strategy4-kline-svg .kline-w-hold-label { fill: #ff9b71; font-size: 10px; font-weight: 800; }
+      .desktop-strategy4-kline-svg .kline-w-trough circle { fill: #131e2d; stroke: #f6c453; stroke-width: 1.8; }
+      .desktop-strategy4-kline-svg .kline-w-bottom-rebound { fill: rgba(85,216,179,0.12); stroke: rgba(85,216,179,0.92); stroke-width: 1.3; stroke-dasharray: 4 2; }
+      .desktop-strategy4-kline-svg .kline-w-bottom-ma { stroke: #55d8b3; stroke-width: 1.6; stroke-dasharray: 5 3; }
+      .desktop-strategy4-kline-svg .kline-w-bottom-label-bg { fill: rgba(20,30,45,0.92); stroke: rgba(85,216,179,0.88); stroke-width: .8; }
+      .desktop-strategy4-kline-svg .kline-w-bottom-label { fill: #75f0c9; font-size: 11px; font-weight: 900; }
+      .desktop-strategy4-kline-svg .kline-w-bottom-sub { fill: #f7d270; font-size: 10px; font-weight: 800; }
+      .desktop-strategy4-kline-svg .kline-w-bottom-dot { fill: #101a2a; stroke: #75f0c9; stroke-width: 1.9; }
       .desktop-strategy4-kline-empty { display: grid; min-height: 210px; place-items: center; padding: 16px; color: #8fa2bd; font-size: 13px; font-weight: 800; text-align: center; }
-      .strategy3-inline-kline-card, .strategy4-inline-kline-card, .strategy5-inline-kline-card { cursor: pointer; }
+      .strategy3-inline-kline-card, .strategy4-inline-kline-card, .strategy5-inline-kline-card, .chip-trade-inline-kline-card { cursor: pointer; }
+      .strategy-inline-kline-toggle { margin-top: 8px; min-height: 28px; border: 1px solid rgba(96,165,250,0.58); border-radius: 6px; padding: 0 9px; background: rgba(30,64,175,0.14); color: #bfdbfe; font-size: 12px; font-weight: 900; cursor: pointer; }
+      .strategy-inline-kline-toggle:hover, .strategy-inline-kline-toggle:focus-visible { border-color: rgba(232,180,75,0.86); color: #f7d270; outline: none; }
       .strategy-inline-kline-row { margin: 0 0 8px; }
       .strategy-inline-kline-row.is-kline-open > .fuman-unified-list-card { border-color: rgba(232,180,75,0.82); box-shadow: inset 3px 0 0 #e8b44b; }
       .strategy-inline-kline-panel { margin: 0 0 10px; }
       .strategy-inline-kline-panel[hidden] { display: none !important; }
       .strategy-inline-kline-panel .desktop-strategy4-kline-panel { margin-top: 0; }
+      .strategy-inline-kline-native { margin: 0 0 10px; border: 0; }
+      .strategy-inline-kline-native-summary { display: block; cursor: pointer; list-style: none; }
+      .strategy-inline-kline-native-summary::-webkit-details-marker { display: none; }
+      .strategy-inline-kline-native-summary > .strategy3-signal-card { cursor: pointer; }
+      .strategy-inline-kline-native[open] .strategy3-signal-card { border-color: rgba(232,180,75,0.82); box-shadow: inset 3px 0 0 #e8b44b; }
+      .strategy-inline-kline-native-panel { margin: 0 0 10px; overflow: hidden; border: 1px solid rgba(139,164,199,0.28); border-radius: 8px; background: #0b1220; }
+      .strategy-inline-kline-native-chart { display: block; width: 100%; min-height: 300px; background: #0b1220; }
+      .strategy-inline-kline-native-label { display: inline-flex; align-items: center; }
       .strategy3-previous-good-notice { margin: 6px 0 0; color: #f4c656; font-size: 12px; font-weight: 800; line-height: 1.5; }
       .three-gate-prices { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 9px; margin-top: 8px; color: #aebed3; font-size: 11px; font-weight: 800; line-height: 1.35; }
       .three-gate-prices small { color: #f4c656; font-size: 11px; font-weight: 900; }
@@ -11001,6 +11453,10 @@
       .three-gate-prices span:nth-of-type(2) { color: #f4c656; }
       .three-gate-prices span:nth-of-type(3) { color: #55d8b3; }
       .three-gate-prices em { color: #71839c; font-size: 10px; font-style: normal; white-space: nowrap; }
+      .terminal-main-force-costs span { color: #cbd5e1; }
+      .terminal-main-force-costs span:nth-of-type(1) { color: #f4c656; }
+      .terminal-main-force-costs span:nth-of-type(2), .terminal-main-force-costs span:nth-of-type(3), .terminal-main-force-costs span:nth-of-type(4) { color: #b8c8dd; }
+      .terminal-main-force-costs[data-main-force-state="unavailable"] span { color: #94a3b8; }
       .desktop-canvas-detail-panel {
         position: relative;
         border: 1px solid rgba(255,112,55,0.58);
@@ -11385,8 +11841,6 @@
         html body.fuman-light-theme.public-terminal #market-view,
         html body.fuman-light-theme.public-terminal #strategy-view,
         html body.fuman-light-theme.public-terminal #chip-trade-view,
-        html body.fuman-light-theme.public-terminal #cb-detect-view,
-        html body.fuman-light-theme.public-terminal #warrant-flow-view,
         html body.fuman-light-theme.public-terminal #watchlist-view,
         html body.fuman-light-theme.public-terminal .strategy-terminal,
         html body.fuman-light-theme.public-terminal .strategy-results {
@@ -11399,8 +11853,7 @@
         html body.fuman-light-theme.public-terminal .intraday-topbar,
         html body.fuman-light-theme.public-terminal .swing-topbar,
         html body.fuman-light-theme.public-terminal .strategy5-page-heading,
-        html body.fuman-light-theme.public-terminal #chip-trade-view .chip-page-header,
-        html body.fuman-light-theme.public-terminal #warrant-flow-view .page-header {
+        html body.fuman-light-theme.public-terminal #chip-trade-view .chip-page-header .page-header {
           width: auto !important;
           max-width: none !important;
           height: auto !important;
@@ -11425,7 +11878,6 @@
         html body.fuman-light-theme.public-terminal .chip-tool,
         html body.fuman-light-theme.public-terminal .chip-table-wrap,
         html body.fuman-light-theme.public-terminal .swing-panel,
-        html body.fuman-light-theme.public-terminal .warrant-flow-panel,
         html body.fuman-light-theme.public-terminal .watchlist-card,
         html body.fuman-light-theme.public-terminal .watch-analysis-panel,
         html body.fuman-light-theme.public-terminal .ta-dashboard {
@@ -12633,6 +13085,79 @@
       body.fuman-light-theme #market-view .opening-report-0830-gap {
         color: #a66100 !important;
       }
+      /* sunlight-daily-kline-palette-20260816 */
+      body.fuman-light-theme .desktop-strategy4-kline-panel {
+        border-color: #cbddea !important;
+        background: linear-gradient(180deg, #ffffff 0%, #f6faff 100%) !important;
+        box-shadow: 0 12px 28px rgba(45, 79, 112, 0.09) !important;
+      }
+      body.fuman-light-theme .desktop-strategy4-kline-head { border-bottom-color: #dbe7f0 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-head span,
+      body.fuman-light-theme .desktop-strategy4-kline-head small,
+      body.fuman-light-theme .desktop-strategy4-kline-legend { color: #657b90 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-head strong { color: #1c3147 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-range {
+        border-color: #c8d9e7 !important;
+        background: #f8fbfe !important;
+        color: #466179 !important;
+      }
+      body.fuman-light-theme .desktop-strategy4-kline-range.active {
+        border-color: #77a9d6 !important;
+        background: #e9f4ff !important;
+        color: #1e5b8d !important;
+      }
+      body.fuman-light-theme .desktop-strategy4-kline-svg { background: #fbfdff !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .grid { stroke: #dce8f0 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .divider { stroke: #c6d8e5 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .axis { fill: #7b91a5 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-wick.is-up,
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-candle.is-up { stroke: #dc7180 !important; fill: #dc7180 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-wick.is-down,
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-candle.is-down { stroke: #36a88a !important; fill: #36a88a !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-volume.is-up { fill: #e7a1aa !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-volume.is-down { fill: #82c8b5 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-ma-5 { stroke: #c89937 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-ma-10 { stroke: #4b91c7 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-ma-20 { stroke: #9674bd !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-legend .ma5 { color: #b07d19 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-legend .ma10 { color: #2878b5 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-legend .ma20 { color: #835aac !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-legend .w-neckline { color: #a96800 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-legend .w-hold { color: #b54422 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-legend .w-bottom { color: #167861 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-legend .w-bottom-ma { color: #2878b5 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-legend .w-bottom-inst { color: #8f5900 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-w-hold { fill: rgba(221,160,34,0.12) !important; stroke: #b87500 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-w-neckline { stroke: #a96800 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-w-label-bg { fill: rgba(255,253,247,0.95) !important; stroke: #b87500 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-w-label { fill: #8f5900 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-w-hold-label { fill: #ad3e20 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-w-trough circle { fill: #ffffff !important; stroke: #a96800 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-w-bottom-rebound { fill: rgba(22,120,97,0.1) !important; stroke: #167861 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-w-bottom-ma { stroke: #167861 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-w-bottom-label-bg { fill: rgba(255,253,247,0.95) !important; stroke: #167861 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-w-bottom-label { fill: #126b56 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-w-bottom-sub { fill: #8f5900 !important; }
+      body.fuman-light-theme .desktop-strategy4-kline-svg .kline-w-bottom-dot { fill: #ffffff !important; stroke: #167861 !important; }
+      /* sunlight-decision-metrics-20260816 */
+      body.fuman-light-theme .three-gate-prices {
+        gap: 6px 11px !important;
+        margin-top: 9px !important;
+        color: #3d5870 !important;
+        font-size: 13px !important;
+        font-weight: 900 !important;
+        line-height: 1.5 !important;
+      }
+      body.fuman-light-theme .three-gate-prices small { color: #8d5d0a !important; font-size: 13px !important; font-weight: 900 !important; }
+      body.fuman-light-theme .three-gate-prices span { color: #3d5870 !important; font-weight: 900 !important; }
+      body.fuman-light-theme .three-gate-prices span:nth-of-type(1) { color: #b84f62 !important; }
+      body.fuman-light-theme .three-gate-prices span:nth-of-type(2) { color: #97650c !important; }
+      body.fuman-light-theme .three-gate-prices span:nth-of-type(3) { color: #237763 !important; }
+      body.fuman-light-theme .three-gate-prices em { color: #587187 !important; font-size: 12px !important; font-weight: 800 !important; }
+      body.fuman-light-theme .terminal-main-force-costs span:nth-of-type(1) { color: #97650c !important; }
+      body.fuman-light-theme .terminal-main-force-costs span:nth-of-type(2),
+      body.fuman-light-theme .terminal-main-force-costs span:nth-of-type(3),
+      body.fuman-light-theme .terminal-main-force-costs span:nth-of-type(4) { color: #3d5870 !important; }
     `;
     document.head.appendChild(style);
   }

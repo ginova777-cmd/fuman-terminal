@@ -8,7 +8,8 @@ const strategy4Latest = require("./strategy4-latest");
 const strategy5Latest = require("./strategy5-latest");
 const latestSignals = require("./latest-signals");
 const marketAiLive = require("./market-ai-live");
-const institutionLatest = require("./institution-latest");const desktopRouteSnapshot = require("./desktop-route-snapshot");
+const institutionLatest = require("./institution-latest");
+const desktopRouteSnapshot = require("./desktop-route-snapshot");
 const watchlistMatchIndex = require("./watchlist-match-index");
 const { shapeTopPayload } = require("./_http-cache");
 const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cache");
@@ -16,6 +17,7 @@ const { buildLatestOpsStatus } = require("../lib/terminal-ops-status");
 const { buildWatchlistMatchIndex } = require("../lib/watchlist-match-index-builder");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
 const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
+const { fetchMainForceCosts, normalizeCode } = require("../lib/terminal-main-force-costs");
 const FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS = Math.max(500, Math.min(3000, Number(process.env.FUMAN_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS || 2200) || 2200));
 
 function isPublicBundleEndpoint(endpoint) {
@@ -166,6 +168,22 @@ function compactQuery(limit) {
   };
 }
 
+const MAIN_FORCE_ENDPOINTS = new Set(["/api/strategy2-latest", "/api/strategy3-latest", "/api/strategy4-latest", "/api/strategy5-latest", "/api/institution-latest"]);
+function mainForceRows(payload = {}) { for (const rows of [payload.rows, payload.matches, payload.results, payload.data]) if (Array.isArray(rows)) return rows; return []; }
+function mainForceDataDate(payload = {}) { const value = String(payload.tradeDate || payload.scanDate || payload.usedDate || payload.dataDate || payload.date || "").slice(0, 10); if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value; if (/^\d{8}$/.test(value)) return `${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}`; return ""; }
+async function attachMainForceCostsToEndpoints(endpoints = {}) {
+  const groups = new Map();
+  for (const [endpoint, payload] of Object.entries(endpoints)) {
+    const pathname = new URL(String(endpoint || "/"), "https://fuman.local").pathname; if (!MAIN_FORCE_ENDPOINTS.has(pathname) || !payload || typeof payload !== "object") continue;
+    if (payload.diagnosticReplay === true) { payload.mainForceCostContract = { contract: "terminal-main-force-costs-v1", skipped: "diagnostic_replay" }; continue; }
+    const asOfDate = mainForceDataDate(payload), rows = mainForceRows(payload), codes = [...new Set(rows.map((row) => normalizeCode(row?.code || row?.symbol || row?.stock_id || row?.stockId)).filter(Boolean))];
+    if (!asOfDate || !codes.length) continue; const group = groups.get(asOfDate) || { codes: new Set(), targets: [] }; codes.forEach((code) => group.codes.add(code)); group.targets.push({ payload, rows }); groups.set(asOfDate, group);
+  }
+  for (const [asOfDate, group] of groups) {
+    try { const result = await fetchMainForceCosts({ codes: [...group.codes], asOf: asOfDate }), byCode = new Map((result.items || []).map((item) => [item.code, item])); for (const target of group.targets) { target.rows.forEach((row) => { const code = normalizeCode(row?.code || row?.symbol || row?.stock_id || row?.stockId); if (code) row.terminalMainForce = byCode.get(code) || null; }); target.payload.mainForceCostContract = { contract: "terminal-main-force-costs-v1", asOfDate, count: result.count, missingCount: result.missingCodes?.length || 0, source: result.source }; } }
+    catch { for (const target of group.targets) { target.rows.forEach((row) => { row.terminalMainForce = null; }); target.payload.mainForceCostContract = { contract: "terminal-main-force-costs-v1", asOfDate, count: 0, missingCount: group.codes.size, source: "unavailable" }; } }
+  }
+}
 function callJson(label, handler, request, query = {}, timeoutMs = 5500) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
@@ -225,7 +243,8 @@ function opsModuleKeyForEndpoint(endpoint) {
   if (path.includes("strategy3-latest")) return "strategy3";
   if (path.includes("strategy4-latest") || path.includes("latest-signals")) return "strategy4";
   if (path.includes("strategy5-latest")) return "strategy5";
-  if (path.includes("institution-latest")) return "institution";  return "";
+  if (path.includes("institution-latest")) return "institution";
+  return "";
 }
 
 function compactOpsAuthority(row = {}) {
@@ -289,6 +308,38 @@ function strategy2V3Authority(payload = {}) {
   };
 }
 
+function strategy3V2DirectAuthority(payload = {}) {
+  if (payload?.strategy !== "strategy3_v2") return null;
+  const evidenceStatus = String(payload.evidenceStatus || payload.run_quality_at_publish?.evidenceStatus || "").toLowerCase();
+  const unattendedStatus = String(payload.unattendedStatus || payload.run_quality_at_publish?.unattendedStatus || "").toUpperCase();
+  const publishAllowed = payload.publishAllowed ?? payload.run_quality_at_publish?.publishAllowed;
+  const complete = payload.complete === true || String(payload.status || "").toLowerCase() === "complete";
+  if (!complete || publishAllowed !== true || evidenceStatus !== "complete" || unattendedStatus !== "YES" || payload.preservePreviousGood === true) return null;
+  const rows = Array.isArray(payload.rows) ? payload.rows : Array.isArray(payload.matches) ? payload.matches : [];
+  const count = Number(payload.count ?? payload.resultCount ?? rows.length) || rows.length;
+  const tradeDate = String(payload.tradeDate || payload.trade_date || payload.scanDate || payload.usedDate || "").slice(0, 10);
+  const runId = String(payload.runId || payload.run_id || "").trim();
+  if (!runId.startsWith("strategy3v2-")) return null;
+  return {
+    ...(payload.terminalAuthority || {}),
+    key: "strategy3",
+    runId,
+    tradeDate,
+    sourceDate: tradeDate,
+    moduleStatus: "complete",
+    todayAuthoritative: true,
+    formalDisplayAllowed: true,
+    displayMode: "strategy3_v2_complete_run",
+    displayBlockReason: "",
+    pendingNotDue: false,
+    evidenceStatus: "complete",
+    publishAllowed: true,
+    fallback: false,
+    resultCount: count,
+    readbackCount: rows.length,
+  };
+}
+
 function terminalTaipeiDateKey() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
   const value = (type) => parts.find((part) => part.type === type)?.value || "";
@@ -306,37 +357,27 @@ function terminalRunIdTradeDate(runId) {
   return match ? `20${match[1]}` : "";
 }
 
-function institutionRows(payload = {}) {
-  for (const rows of [payload.rows, payload.matches, payload.results, payload.data]) {
-    if (Array.isArray(rows)) return rows;
-    if (rows && typeof rows === "object") return Object.values(rows);
-  }
-  return [];
-}
-
 function institutionDirectAuthority(payload = {}) {
-  const runId = String(payload?.runId || payload?.latestRunId || payload?.transport?.runId || "").trim();
-  const rows = institutionRows(payload);
-  const count = Number(payload?.count ?? payload?.resultCount ?? payload?.returnedCount ?? rows.length) || rows.length;
+  const rows = Array.isArray(payload.rows) ? payload.rows : Array.isArray(payload.matches) ? payload.matches : [];
+  const count = Number(payload.count ?? payload.resultCount ?? payload.returnedCount ?? rows.length) || rows.length;
+  const runId = String(payload.runId || payload.run_id || payload.transport?.runId || "").trim();
+  const tradeDate = terminalNormalizeTradeDate(payload.usedDate || payload.tradeDate || payload.scanDate || payload.date);
   const runDate = terminalNormalizeTradeDate(terminalRunIdTradeDate(runId));
-  const sourceDate = terminalNormalizeTradeDate(payload?.usedDate || payload?.tradeDate || payload?.scanDate || payload?.date);
   const today = terminalNormalizeTradeDate(terminalTaipeiDateKey());
-  const evidenceStatus = String(payload?.evidenceStatus || payload?.run_quality_at_publish?.evidenceStatus || "").toLowerCase();
-  const publishAllowed = payload?.publishAllowed ?? payload?.run_quality_at_publish?.publishAllowed;
-  const complete = payload?.complete === true || String(payload?.status || "").toLowerCase() === "complete" || String(payload?.qualityStatus || "").toLowerCase() === "complete";
-  if (!String(runId || "").startsWith("institution-")) return null;
-  if (runDate !== today || sourceDate !== today) return null;
-  if (!complete || publishAllowed !== true || evidenceStatus !== "complete" || payload?.preservePreviousGood === true) return null;
-  if (count <= 0 || rows.length <= 0) return null;
+  const evidenceStatus = String(payload.evidenceStatus || payload.run_quality_at_publish?.evidenceStatus || "").toLowerCase();
+  const publishAllowed = payload.publishAllowed ?? payload.run_quality_at_publish?.publishAllowed;
+  const complete = payload.complete === true || String(payload.status || "").toLowerCase() === "complete";
+  if (!runId.startsWith("institution-") || runDate !== today || tradeDate !== today || !complete || publishAllowed !== true || evidenceStatus !== "complete" || payload.preservePreviousGood === true || count <= 0 || rows.length <= 0) return null;
   return {
+    ...(payload.terminalAuthority || {}),
     key: "institution",
     runId,
-    tradeDate: today,
-    sourceDate: today,
+    tradeDate,
+    sourceDate: tradeDate,
     moduleStatus: "complete",
     todayAuthoritative: true,
     formalDisplayAllowed: true,
-    displayMode: "direct_institution_complete_run",
+    displayMode: "institution_complete_run",
     displayBlockReason: "",
     pendingNotDue: false,
     evidenceStatus: "complete",
@@ -354,12 +395,17 @@ function attachOpsAuthorityToEndpoints(endpoints = {}, authority = {}) {
     const v3Strategy2 = key === "strategy2"
       && payload.strategyContract === "strategy2-live-v3-fugle-deep-scan-1m"
       && payload.version === "v3";
+    const v2Strategy3 = key === "strategy3" ? strategy3V2DirectAuthority(payload) : null;
     const directInstitution = key === "institution" ? institutionDirectAuthority(payload) : null;
-    const row = v3Strategy2 ? strategy2V3Authority(payload) : directInstitution || (key ? authority.byKey?.[key] : null);
+    const row = v3Strategy2 ? strategy2V3Authority(payload) : v2Strategy3 || directInstitution || (key ? authority.byKey?.[key] : null);
     if (!row) continue;
     if (v3Strategy2) {
       authority.byKey = { ...(authority.byKey || {}), strategy2: row };
       authority.source = `${authority.source || "runtime-output-artifacts"}+strategy2-v3-direct`;
+    }
+    if (v2Strategy3) {
+      authority.byKey = { ...(authority.byKey || {}), strategy3: row };
+      authority.source = `${authority.source || "runtime-output-artifacts"}+strategy3-v2-direct`;
     }
     if (directInstitution) {
       authority.byKey = { ...(authority.byKey || {}), institution: row };
@@ -454,6 +500,45 @@ function compactSnapshotEndpoints(request, endpoints = {}) {
   }
   return compacted;
 }
+
+function requestedStrategyRoute(request = {}) {
+  const value = String(
+    request.query?.route
+    || request.query?.strategy
+    || request.query?.tab
+    || ""
+  ).trim().toLowerCase();
+  if (["strategy2", "strategy3", "strategy4", "strategy5", "institution"].includes(value)) return value;
+  return "";
+}
+
+function endpointBelongsToRoute(endpoint, route) {
+  if (!route) return true;
+  const pathname = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
+  const expected = {
+    strategy2: "/api/strategy2-latest",
+    strategy3: "/api/strategy3-latest",
+    strategy4: "/api/strategy4-latest",
+    strategy5: "/api/strategy5-latest",
+    institution: "/api/institution-latest",
+  }[route];
+  return pathname === expected;
+}
+
+function endpointsForRequestedRoute(request, endpoints = {}) {
+  const route = requestedStrategyRoute(request);
+  if (!route) return endpoints;
+  return Object.fromEntries(Object.entries(endpoints).filter(([endpoint]) => endpointBelongsToRoute(endpoint, route)));
+}
+
+function tasksForRequestedRoute(request, tasks = []) {
+  const route = requestedStrategyRoute(request);
+  if (!route) return tasks;
+  return tasks.filter(([endpoint]) => endpointBelongsToRoute(endpoint, route));
+}
+function shouldBuildWatchlistIndex(request) {
+  return !requestedStrategyRoute(request);
+}
 const RETIRED_TERMINAL_ENDPOINTS = new Set([
   `/api/${"open-buy"}-latest`,
   `/api/${"realtime-radar"}-latest`,
@@ -483,37 +568,73 @@ async function repairStrategy5FullSnapshot() {
   return null;
 }
 
-async function repairStrategy3LatestSnapshot() {
-  return null;
-}
-
-function hasInstitutionEndpoint(endpoints = {}) {
-  return Object.entries(endpoints || {}).some(([endpoint, payload]) => {
-    const path = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
-    return path === "/api/institution-latest" && Boolean(institutionDirectAuthority(payload));
-  });
-}
-
-async function repairInstitutionLatestSnapshot(request, endpoints = {}) {
-  if (hasInstitutionEndpoint(endpoints)) return;
-  const direct = await callJson(
-    "/api/institution-latest",
-    institutionLatest,
-    { ...request, query: { ...(request.query || {}), live: "1", verify: "1", noSnapshot: "1" } },
-    { ...compactQuery(3000), live: "1", verify: "1", noSnapshot: "1" },
-    15000
-  );
-  if (Number(direct.statusCode || 0) >= 500 || direct.payload?.ok === false) return;
-  if (!institutionDirectAuthority(direct.payload)) return;
-  endpoints[direct.label || "/api/institution-latest?canvas=1&compact=1&shell=1&limit=3000&live=1&verify=1&noSnapshot=1"] = {
-    ...direct.payload,
+async function repairStrategy3LatestSnapshot(request, endpoints = {}) {
+  if (requestedStrategyRoute(request) !== "strategy3") return null;
+  const endpoint = "/api/strategy3-latest?compact=1&limit=60";
+  const direct = await callJson("/api/strategy3-latest", strategy3Latest, request, {
+    compact: "1",
+    limit: "60",
+    live: "1",
+    refresh: "1",
+    force: "1",
+  }, 8000);
+  const payload = direct?.payload || {};
+  const rows = Array.isArray(payload.rows) ? payload.rows : Array.isArray(payload.matches) ? payload.matches : [];
+  const isV2Complete = direct.statusCode === 200
+    && payload.strategy === "strategy3_v2"
+    && payload.complete === true
+    && payload.publishAllowed === true
+    && String(payload.runId || "").startsWith("strategy3v2-")
+    && rows.length > 0;
+  if (!isV2Complete) return null;
+  for (const key of Object.keys(endpoints || {})) {
+    if (String(key).startsWith("/api/strategy3-latest")) delete endpoints[key];
+  }
+  endpoints[endpoint] = {
+    ...payload,
     transport: {
-      ...(direct.payload.transport || {}),
-      fastBundleRepair: "institution-live-canonical-direct",
-      via: "api/terminal-fast-bundle",
+      ...(payload.transport || {}),
+      fastBundleRepair: "strategy3-v2-direct-canonical",
+      via: "api/terminal-fast-bundle:snapshot-repair",
       fetchedAt: new Date().toISOString(),
     },
   };
+  return endpoints[endpoint];
+}
+
+async function repairInstitutionLatestSnapshot(request, endpoints = {}) {
+  if (requestedStrategyRoute(request) !== "institution") return null;
+  const endpoint = "/api/institution-latest?canvas=1&compact=1&shell=1&limit=120&live=1&verify=1&noSnapshot=1";
+  const direct = await callJson("/api/institution-latest", institutionLatest, request, {
+    ...compactQuery(120),
+    live: "1",
+    verify: "1",
+    noSnapshot: "1",
+    refresh: "1",
+    force: "1",
+  }, 15000);
+  const payload = direct?.payload || {};
+  const rows = Array.isArray(payload.rows) ? payload.rows : Array.isArray(payload.matches) ? payload.matches : [];
+  const authority = institutionDirectAuthority(payload);
+  if (direct.statusCode !== 200 || !authority || rows.length <= 0) return null;
+  for (const key of Object.keys(endpoints || {})) {
+    if (String(key).startsWith("/api/institution-latest")) delete endpoints[key];
+  }
+  endpoints[endpoint] = {
+    ...payload,
+    terminalAuthority: authority,
+    todayAuthoritative: true,
+    formalDisplayAllowed: true,
+    displayMode: authority.displayMode,
+    displayBlockReason: "",
+    transport: {
+      ...(payload.transport || {}),
+      fastBundleRepair: "institution-direct-canonical",
+      via: "api/terminal-fast-bundle:snapshot-repair",
+      fetchedAt: new Date().toISOString(),
+    },
+  };
+  return endpoints[endpoint];
 }
 
 function isStrategy4Endpoint(endpoint) {
@@ -531,8 +652,9 @@ async function repairStrategy4LatestSnapshot() {
   return null;
 }
 
-function isSoftSnapshotEndpoint(endpoint) {
-  return isStrategy2SnapshotEndpoint(endpoint);
+function isSoftSnapshotEndpoint() {
+  // Strategy2 V3 never uses a soft snapshot fallback. A failed V3 read must remain visible as unavailable.
+  return false;
 }
 function isOptionalLiveSnapshotEndpoint(endpoint) {
   return false;
@@ -695,6 +817,7 @@ module.exports = async function handler(request, response) {
   const entitlement = await verifyRequestEntitlement(request, { scope: "terminal-fast-bundle" });
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
   const opsAuthority = buildOpsAuthorityIndex();
+  let memberSnapshotRecovery = false;
   if (entitlement?.ok) {
     response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
     response.setHeader("CDN-Cache-Control", "no-store");
@@ -724,26 +847,28 @@ module.exports = async function handler(request, response) {
       });
     const isReleaseReadbackSnapshot = snapshot?.payload?.cacheSource === "release-readback-snapshot";
     if (snapshot?.payload?.endpoints) {
-      const endpoints = compactSnapshotEndpoints(request, snapshot.payload.endpoints);
+      const endpoints = endpointsForRequestedRoute(request, compactSnapshotEndpoints(request, snapshot.payload.endpoints));
       let realtimeRadarRepairs = isReleaseReadbackSnapshot ? { skipped: "release-readback-snapshot" } : {};
+      await repairStrategy3LatestSnapshot(request, endpoints);
+      await repairInstitutionLatestSnapshot(request, endpoints);
       if (!isReleaseReadbackSnapshot && liveFallbackEnabled(request)) {
         await repairStrategy5FullSnapshot(request, endpoints);
-        await repairStrategy3LatestSnapshot(request, endpoints);
       }
-      await repairInstitutionLatestSnapshot(request, endpoints);
       await ensureStrategy2V3Endpoint(request, endpoints);
       if (liveFallbackEnabled(request)) {
         await repairStrategy5FullSnapshot(request, endpoints);
         await repairStrategy4LatestSnapshot(request, endpoints);
+      }
+      if (shouldBuildWatchlistIndex(request)) {
         await ensureWatchlistMatchIndexEndpoint(request, endpoints, {
           cacheSource: "api/terminal-fast-bundle:snapshot-derived",
           via: "api/terminal-fast-bundle:snapshot",
           updatedAt: snapshot.payload.updatedAt || snapshot.updatedAt || new Date().toISOString(),
           forceStrategy2Refresh: true,
         });
-      }
-      sanitizeStrategy2Endpoints(endpoints);
+      }      sanitizeStrategy2Endpoints(endpoints);
       attachOpsAuthorityToEndpoints(endpoints, opsAuthority);
+  await attachMainForceCostsToEndpoints(endpoints);
       const payload = {
         ...snapshot.payload,
         endpoints,
@@ -764,7 +889,7 @@ module.exports = async function handler(request, response) {
       response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
       return;
     }
-    if (!liveFallbackEnabled(request)) {
+    if (!liveFallbackEnabled(request) && !entitlement?.ok) {
       response.setHeader("X-Fuman-Fast-Bundle-Mode", "snapshot-only");
       if (request.method === "HEAD") {
         response.status(204).end("");
@@ -785,7 +910,18 @@ module.exports = async function handler(request, response) {
   }
 
   const startedAt = Date.now();
-  const tasks = [
+  memberSnapshotRecovery = Boolean(entitlement?.ok && !wantsLive);
+  const memberSnapshotRecoveryTasks = [
+    ["/api/terminal-home", terminalHome, {}, 3500],
+    ["/api/market", market, compactQuery(24), 3000],
+    ["/api/strategy2-latest", strategy2Latest, { ...compactQuery(240), today: "1" }, 6000],
+    ["/api/strategy3-latest", strategy3Latest, compactQuery(60), 6000],
+    ["/api/strategy4-latest", strategy4Latest, compactQuery(70), 6000],
+    ["/api/strategy5-latest", strategy5Latest, compactQuery(140), 6000],
+    ["/api/institution-latest", institutionLatest, { ...compactQuery(120), live: "1", verify: "1", noSnapshot: "1" }, 15000],
+    ["/api/watchlist-match-index", watchlistMatchIndex, { compact: "1", shell: "1", limit: "80" }, 3000],
+  ];
+  const tasks = memberSnapshotRecovery ? memberSnapshotRecoveryTasks : [
     ["/api/terminal-home", terminalHome, {}, 8000],
     ["/api/market", market, compactQuery(24), 4200],
     ["/api/stocks", stocks, { limit: "120", compact: "1", shell: "1" }, 3000],
@@ -795,10 +931,12 @@ module.exports = async function handler(request, response) {
     ["/api/strategy5-latest", strategy5Latest, compactQuery(140), 8000],
     ["/api/latest-signals?strategy=strategy4", latestSignals, { strategy: "strategy4", compact: "1", shell: "1", limit: "70" }, 2300],
     ["/api/market-ai-live", marketAiLive, { canvas: "1", compact: "1", shell: "1", limit: "40" }, 2300],
-    ["/api/institution-latest", institutionLatest, { ...compactQuery(3000), live: "1", verify: "1", noSnapshot: "1" }, 15000],    ["/api/watchlist-match-index", watchlistMatchIndex, { compact: "1", shell: "1", limit: "80" }, 3000],
+    ["/api/institution-latest", institutionLatest, { ...compactQuery(120), live: "1", verify: "1", noSnapshot: "1" }, 15000],
+    ["/api/watchlist-match-index", watchlistMatchIndex, { compact: "1", shell: "1", limit: "80" }, 3000],
   ];
 
-  const runnableTasks = entitlement.ok ? tasks : tasks.filter(([endpoint]) => isPublicBundleEndpoint(endpoint));
+  const routeTasks = tasksForRequestedRoute(request, tasks);
+  const runnableTasks = entitlement.ok ? routeTasks : routeTasks.filter(([endpoint]) => isPublicBundleEndpoint(endpoint));
   const rows = await Promise.all(runnableTasks.map(([endpoint, handlerFn, query, timeout]) => (
     callJson(endpoint, handlerFn, request, query, timeout)
   )));
@@ -806,13 +944,15 @@ module.exports = async function handler(request, response) {
   const endpoints = publicEndpointMap(results);
   applySoftSnapshotFallbacks(results, endpoints, "api/terminal-fast-bundle");
   await ensureStrategy2V3Endpoint(request, endpoints);
-  await ensureWatchlistMatchIndexEndpoint(request, endpoints, {
-    cacheSource: "api/terminal-fast-bundle",
-    via: "api/terminal-fast-bundle",
-    forceStrategy2Refresh: true,
-  });
-  sanitizeStrategy2Endpoints(endpoints);
+  if (shouldBuildWatchlistIndex(request)) {
+    await ensureWatchlistMatchIndexEndpoint(request, endpoints, {
+      cacheSource: "api/terminal-fast-bundle",
+      via: "api/terminal-fast-bundle",
+      forceStrategy2Refresh: true,
+    });
+  }  sanitizeStrategy2Endpoints(endpoints);
   attachOpsAuthorityToEndpoints(endpoints, opsAuthority);
+  await attachMainForceCostsToEndpoints(endpoints);
   const summary = Object.fromEntries(Object.entries(endpoints).map(([endpoint, payload]) => [endpoint, summarize(payload)]));
   const elapsedMs = Date.now() - startedAt;
   const misses = rows
@@ -823,6 +963,7 @@ module.exports = async function handler(request, response) {
     partial: misses.length > 0,
     source: "terminal-fast-bundle",
     cacheSource: "api/terminal-fast-bundle",
+    snapshotRecovery: memberSnapshotRecovery,
     updatedAt: new Date().toISOString(),
     elapsedMs,
     endpoints,

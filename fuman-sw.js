@@ -1,10 +1,10 @@
-const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260714-22-cb-warrant-retired-20260818-01";
+const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260714-22-cb-warrant-retired-20260818-04";
 const PROTECTED_NO_STALE_SW_EPOCH = "protected-no-stale-first-paint-20260724-01";
 const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-api-only-20260809-01";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 const MARKET_OVERVIEW_RESTORE_ASSET_EPOCH = "market-overview-restore-20260627-02";
-const WATCHLIST_SHELL_ASSET_EPOCH = "watchlist-rich-shell-20260714-detail-sync-01";
+const WATCHLIST_SHELL_ASSET_EPOCH = "watchlist-mainforce-resonance-20260816-01";
 const WATCHLIST_HOTFIX_BRIDGE_EPOCH = "watchlist-bridge=20260628-06";
 
 const STATIC_ASSETS = [
@@ -19,6 +19,7 @@ const STATIC_ASSETS = [
   "/terminal-tuning-config.js?v=public-terminal-fast-20260714-22",
   "/terminal-worker.js?v=public-terminal-fast-20260714-22",
   "/terminal.js?v=public-terminal-fast-20260714-22",
+  "/terminal-desktop-fast-shell.js?buy-sell-derived-fields=20260629-01&strategy2-history=20260629-01&realtime-ledger=20260630-02&heatmap-live-contract=20260630-01&strategy2-card=20260701-03&strategy4-triangle=20260702-02&market-ai-single-renderer=20260702-03&display-switcher=20260702-01&strategy5-live-meta=20260706-02&strategy3-formal-header=20260708-01&market-ai-watchlist-actions=20260709-01&strategy3-card-ui=20260709-04&market-ai-clean-layout=20260713-01&strategy5-confluence-mix=20260715-02&protected-no-stale-first-paint=20260724-01&v=public-terminal-fast-20260714-22&industry-detection-state=20260731-03&strategy4-daily-kline=20260813-01&strategy4-kline-pointer=20260813-01&strategy4-kline-visible=20260813-01&strategy3-strategy4-inline-daily-kline=20260814-01&opening-briefing-clean=20260813-01&strategy2-panel-layout=20260813-07&sunlight-polish=20260813-01&compact-layout=20260813-06&three-gate-prices=20260818-04&sunlight-daily-kline=20260816-03&strategy5-w-neckline-annotation=20260816-27&strategy5-w-bottom-rebound=20260816-01&daily-kline-native-chart=20260816-30&strategy5-terminal-confluence=20260816-01",
   "/terminal-app.js?v=public-terminal-fast-20260714-22",
   "/terminal-entitlement-guard.js?v=public-terminal-fast-20260714-22",
   "/terminal-market-ai-live-watchdog.js?v=public-terminal-fast-20260714-22",
@@ -73,6 +74,9 @@ const LIVE_PATTERNS = [
   /\/api\/strategy2-latest/i,
   /\/api\/strategy3-latest/i,
   /\/api\/strategy4-latest/i,
+  /\/api\/three-gate-prices/i,
+  /\/api\/main-force-costs/i,
+  /\/api\/daily-kline(?:-(?:batch|chart))?/i,
   /\/api\/strategy5-latest/i,
   /\/api\/institution-latest/i,
   /\/api\/mobile-boot/i,
@@ -132,6 +136,7 @@ function isOpenBuyStaticDataRequest(url) {
 }
 
 function isDesktopApiOnlyStaticDataRequest(url) {
+  return /^\/data\/(?:strategy2-intraday|strategy3|strategy5|institution)(?:-|$).*\.json$/i.test(url.pathname);
 }
 
 function strategy4StaticDisabledResponse() {
@@ -206,6 +211,7 @@ async function prefetchAssetList(assets) {
   await Promise.allSettled(assets.map(async (pathname) => {
     if (/^\/data\/strategy4(?:-|$).*\.json$/i.test(pathname)) return;
     if (/^\/data\/open-buy(?:-|$).*\.json$/i.test(pathname)) return;
+    if (/^\/data\/(?:strategy2-intraday|strategy3|strategy5|institution)(?:-|$).*\.json$/i.test(pathname)) return;
     const request = new Request(pathname, { cache: "reload" });
     const response = await fetch(request);
     if (response.ok) await cache.put(request, response.clone());

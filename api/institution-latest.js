@@ -5,6 +5,8 @@ const path = require("path");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
 const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { attachMainForceCostsToPayload } = require("../lib/terminal-main-force-costs");
+const { attachThreeGatePricesToPayload } = require("../lib/terminal-three-gate-prices");
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -254,12 +256,10 @@ function selectInstitutionSourceHealth(run = {}, current = {}) {
   const currentDateMatches = !scanDate || dateDigits(currentHealth.latestTradeDate) === scanDate;
   const runDateMatches = !scanDate || dateDigits(runHealth.latestTradeDate || run?.payload?.usedDate) === scanDate;
   if (sourceHealthReady(currentHealth) && currentDateMatches) return currentHealth;
-  if (sourceHealthReady(runHealth) && runDateMatches) {
-    return {
-      ...runHealth,
-      reason: runHealth.reason || "latest_complete_run_embedded_source_health",
-    };
-  }
+  if (sourceHealthReady(runHealth) && runDateMatches) return {
+    ...runHealth,
+    reason: runHealth.reason || "latest_complete_run_embedded_source_health",
+  };
   return currentHealth.coverageStatus ? currentHealth : runHealth;
 }
 
@@ -493,6 +493,8 @@ async function handler(request, response) {
       via: "api/institution-latest",
     });
     if (cached && payloadMatchesFieldContract(cached, options.fieldContract) && payloadHasMachineState(cached)) {
+      await attachMainForceCostsToPayload(cached);
+    await attachThreeGatePricesToPayload(cached);
       setDesktopSnapshotCache(response);
       response.status(200).json(cached);
       return;
@@ -510,8 +512,11 @@ async function handler(request, response) {
       response.status(404).json(apiOnlyError("institution_scan_results_latest_empty"));
       return;
     }
+    const payload = buildPayload(latest.rows, latest.run, { ...options, sourceHealth });
+    await attachMainForceCostsToPayload(payload);
+    await attachThreeGatePricesToPayload(payload);
     setDesktopSnapshotCache(response);
-    response.status(200).json(buildPayload(latest.rows, latest.run, { ...options, sourceHealth }));
+    response.status(200).json(payload);
   } catch (error) {
     response.status(503).json(apiOnlyError(error?.message || String(error)));
   }
