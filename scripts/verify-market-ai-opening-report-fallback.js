@@ -193,12 +193,20 @@ function capture(handler, req) {
   assert.strictEqual(body.priorityObservation?.title, "3105 穩懋", "priority observation must start from the strongest industry first stock");
   assert.ok(allRows.every((row) => row.source === "晨報產業觀察"), "fallback rows must be labelled as morning-report industry observations");
   assert.ok(allRows.every((row) => /僅供開盤前海外產業觀察排序/.test(String(row.reason || ""))), "fallback rows must not imply formal entry judgement");
-  assert.deepStrictEqual(calls, { market: 1, heatmap: 1, radar: 1, strategy: 1, snapshot: calls.snapshot }, "default shell must call market, heatmap, radar and strategy once");
   assert.ok(calls.snapshot >= 1, "opening report snapshot must be read");
+  assert.ok(calls.heatmap >= 1, "default shell must still check heatmap/live market context");
+  assert.ok(calls.market === 0 || calls.market === 1, "market fanout must be snapshot-first optional");
+  assert.ok(calls.radar === 0 || calls.radar === 1, "radar fanout must be snapshot-first optional");
+  assert.ok(calls.strategy === 0 || calls.strategy === 1, "strategy fanout must be snapshot-first optional");
+  assert.ok(
+    calls.market + calls.radar + calls.strategy > 0 || body.dataFreshness?.openingReportFallbackUsed === true,
+    "snapshot-first shell must still prove opening report fallback is active when live fanout is skipped"
+  );
 
   console.log("[market-ai-opening-report-fallback] ok", JSON.stringify({
     count: body.count,
     openingReportFallbackRows: body.dashboard?.dataSources?.openingReportFallbackRows,
+    liveFanout: { market: calls.market, radar: calls.radar, strategy: calls.strategy, heatmap: calls.heatmap },
     focus: body.todayPoints?.find((text) => /族群聚焦/.test(text)) || "",
     rows: allRows.map((row) => `${row.code} ${row.name}`),
   }));
@@ -206,3 +214,4 @@ function capture(handler, req) {
   console.error(error);
   process.exit(1);
 });
+
