@@ -165,6 +165,12 @@ async function strategy2Latest(request, response) {
   const currentCandidates = cleanRows(decodeTerminalSnapshotRows(payload, "currentCandidates"), limit);
   const responsePayload = {
     ...payload,
+    // The API is reached only after its V3 formal predicate passes. Canonicalize
+    // this authority so terminal, mobile, and /88 cannot disagree on the same run.
+    complete: replay ? false : true,
+    formalDisplayAllowed: replay ? false : true,
+    publishAllowed: replay ? false : true,
+    latestOverwriteAllowed: replay ? false : true,
     ok: true,
     date: today,
     dataDate: today,

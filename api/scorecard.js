@@ -399,47 +399,30 @@ function callStrategy3Latest(timeoutMs = 12000) {
   });
 }
 
-function callStrategy2Latest(timeoutMs = Number(process.env.STRATEGY2_SCORECARD_SOURCE_TIMEOUT_MS || 9000)) {
-  return new Promise((resolve) => {
-    let timer = null;
-    try {
-      const handler = require("./strategy2-latest");
-      const query = {
-        canvas: "1",
-        compact: "1",
-        shell: "1",
-        today: "1",
-        verify: "1",
-        top: "1",
-      };
-      timer = setTimeout(() => resolve({
-        statusCode: 504,
-        payload: { ok: false, error: "strategy2_v3_source_report_timeout", reason: "strategy2_v3_direct_timeout_no_fallback" },
-      }), timeoutMs);
-      const finish = (result) => {
-        clearTimeout(timer);
-        resolve(result);
-      };
-      Promise.resolve(handler({
-        method: "GET",
-        url: "/api/strategy2-latest?canvas=1&compact=1&shell=1&today=1&verify=1&top=1",
-        headers: { host: "localhost", "x-scorecard-source": "1" },
-        query,
-        fumanInternalVerify: true,
-      }, createCaptureResponse(finish))).catch((error) => {
-        finish({
-          statusCode: 500,
-          payload: { ok: false, error: "strategy2_source_report_failed", reason: error?.message || String(error) },
-        });
-      });
-    } catch (error) {
-      if (timer) clearTimeout(timer);
-      resolve({
-        statusCode: 500,
-        payload: { ok: false, error: "strategy2_source_report_failed", reason: error?.message || String(error) },
-      });
-    }
-  });
+async function callStrategy2Latest(timeoutMs = Number(process.env.STRATEGY2_SCORECARD_SOURCE_TIMEOUT_MS || 9000)) {
+  // /88 reads the formal V3 snapshot directly. This prevents an in-process API
+  // wrapper or membership transport from dropping formal fields between the
+  // scanner and scorecard. The predicate below remains fail-closed.
+  const today = taipeiDateKey();
+  const snapshot = await readSnapshot("strategy2_live_v3", {
+    tradeDate: today.replace(/\D/g, ""),
+    allowLatestFallback: false,
+    timeoutMs,
+  }).catch(() => null);
+  const payload = snapshot?.payload && typeof snapshot.payload === "object" ? snapshot.payload : null;
+  if (!payload) {
+    return {
+      statusCode: 504,
+      payload: { ok: false, error: "strategy2_v3_snapshot_unavailable", reason: "strategy2_v3_direct_snapshot_timeout_or_missing" },
+    };
+  }
+  return {
+    statusCode: 200,
+    payload: {
+      ...payload,
+      transport: { ...(payload.transport || {}), source: "supabase:market_snapshots:strategy2_live_v3", via: "api/scorecard" },
+    },
+  };
 }
 
 function callStrategy4Latest(timeoutMs = 12000) {
@@ -838,7 +821,7 @@ function buildStrategy2SourceReport(result) {
     ok: Number(result?.statusCode || 0) < 400 && isFormalV3,
     runId,
     count: cleanNumber(payload.count ?? payload.resultCount ?? payload.total),
-    emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : 0,
+    emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : cleanNumber(payload.snapshotRecordCount ?? payload.readbackCount ?? payload.resultCount),
     date,
     evidenceStatus: isFormalV3 ? "complete" : "not_formal_v3_complete",
     unattendedStatus: cleanText(payload.unattendedStatus || "NO"),
