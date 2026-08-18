@@ -123,7 +123,7 @@ function directStrategy3FormalRun(payload = {}) {
     && payload?.preservePreviousGood !== true;
 }
 
-function strategy2V2TerminalAuthority(payload = {}) {
+function strategy2V3TerminalAuthority(payload = {}) {
   const isFormal = payload.status === "complete"
     && payload.complete === true
     && payload.publishAllowed === true
@@ -138,8 +138,8 @@ function strategy2V2TerminalAuthority(payload = {}) {
     moduleStatus: isFormal ? "complete" : diagnostic ? "diagnostic" : "waiting",
     todayAuthoritative: Boolean(dataDate),
     formalDisplayAllowed: isFormal,
-    displayMode: isFormal ? "V2_FORMAL_COMPLETE" : diagnostic ? "V2_DIAGNOSTIC_VISIBLE_NOT_FORMAL" : "V2_WAITING_FOR_LIVE_SCAN",
-    displayBlockReason: isFormal ? "" : String(payload.reason || "strategy2_v2_not_formal"),
+    displayMode: isFormal ? "V3_FORMAL_COMPLETE" : diagnostic ? "V3_DIAGNOSTIC_VISIBLE_NOT_FORMAL" : "V3_WAITING_FOR_LIVE_SCAN",
+    displayBlockReason: isFormal ? "" : String(payload.reason || "strategy2_v3_not_formal"),
     pendingNotDue: !dataDate,
     evidenceStatus: isFormal ? "complete" : diagnostic ? "diagnostic_only" : "waiting",
     publishAllowed: isFormal,
@@ -148,10 +148,10 @@ function strategy2V2TerminalAuthority(payload = {}) {
 }
 
 function attachTerminalAuthority(tab, payload = {}) {
-  const isStrategy2V2 = String(tab || "").toLowerCase() === "strategy2"
-    && payload?.strategyContract === "strategy2-live-v2-fugle-mother-pool-1m"
-    && payload?.version === "v2";
-  let terminalAuthority = isStrategy2V2 ? strategy2V2TerminalAuthority(payload) : (payload?.terminalAuthority || terminalAuthorityForTab(tab));
+  const isStrategy2V3 = String(tab || "").toLowerCase() === "strategy2"
+    && payload?.strategyContract === "strategy2-live-v3-fugle-deep-scan-1m"
+    && payload?.version === "v3";
+  let terminalAuthority = isStrategy2V3 ? strategy2V3TerminalAuthority(payload) : (payload?.terminalAuthority || terminalAuthorityForTab(tab));
   // A same-day Strategy3 complete run is authoritative on its own. The nightly
   // aggregate scorecard may still be rebuilding other modules and must not hide it.
   if (String(tab || "").toLowerCase() === "strategy3" && directStrategy3FormalRun(payload)) {
@@ -543,7 +543,7 @@ function isValidBusinessRow(row, tab = "") {
   return !isEvidenceLikeRow(row);
 }
 function hidePreviousGoodRows(rows) {
-  // Strategy2 is V2 direct-only; there is no previous-good row path to filter.
+  // Strategy2 is V3 direct-only; there is no previous-good row path to filter.
   return rows;
 }
 function normalizeRows(payload, tab = "") {
