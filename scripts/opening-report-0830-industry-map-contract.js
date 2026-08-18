@@ -74,7 +74,7 @@ const OPENING_REPORT_0830_INDUSTRY_MAP = [
     evidence_summary: "MEIKO、CMK、Daeduck、Simmtech、藤倉作為 PCB/CCL proxy；8358 金居固定列入 A。",
     overseas_leaders: [["MEIKO", "6787.T"], ["CMK", "6958.T"], ["Daeduck", "353200.KS"], ["Simmtech", "222800.KQ"], ["藤倉", "5803.T"]],
     a: [["2383", "台光電"], ["6274", "台燿"], ["2368", "金像電"], ["3044", "健鼎"], ["4958", "臻鼎-KY"], ["2313", "華通"], ["8358", "金居"], ["6213", "聯茂"]],
-    b: [["3037", "欣興"], ["8046", "南電"], ["3189", "景碩"], ["5469", "瀚宇博"], ["1815", "富喬"]],
+    b: [["3037", "欣興"], ["8046", "南電"], ["3189", "景碩"], ["5469", "瀚宇博"], ["1815", "富喬"], ["8039", "台虹"]],
   },
   {
     industry: "PASSIVE_COMPONENTS",
@@ -283,6 +283,7 @@ module.exports = {
   leaderPairs,
   validateIndustryMapContract,
 };
+
 
 
 

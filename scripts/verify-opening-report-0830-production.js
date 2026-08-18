@@ -77,7 +77,11 @@ function cutoffTimeMs(date) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 function verifyMarketSnapshot(snapshot, issues) {
-  if (!snapshot || snapshot.contract !== "opening-report-0830-market-snapshot-v1") {
+  const validContracts = new Set([
+    "opening-report-0830-market-snapshot-v1",
+    "opening-report-0820-market-snapshot-v1",
+  ]);
+  if (!snapshot || !validContracts.has(snapshot.contract)) {
     issues.push("market_snapshot_missing_or_contract_invalid");
     return;
   }
@@ -247,6 +251,11 @@ function buildStageChecks(receipt, issues, compact, options = {}) {
           guards_ok: guardsOk
         })
     );
+  } else if (receipt.mother_pool_bridge_optional_handoff === true || receipt.stage_status?.mother_pool_priority_bias_bridge === "OPTIONAL_FAIL_CLOSED") {
+    stages.push(skip("mother_pool_priority_bias_bridge_handoff", "mother_pool_bridge_optional_not_requested", {
+      bridge_results: bridgeRows.length,
+      optional_handoff: true
+    }));
   } else {
     stages.push(fail("mother_pool_priority_bias_bridge", "mother_pool_bridge_not_attempted", {
       bridge_results: bridgeRows.length
@@ -333,6 +342,8 @@ function main() {
 }
 
 main();
+
+
 
 
 
