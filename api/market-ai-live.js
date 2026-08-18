@@ -609,10 +609,24 @@ function openingReportObservationRows(clock = taipeiClock(), session = {}) {
     .filter(Boolean)
     .slice(0, 3);
   const rankByIndustry = new Map(priorityNames.map((name, index) => [name, index + 1]));
+  const recommendationRows = [
+    ...normalizeArray(report.priority_industries).flatMap((industryRow) => {
+      const industry = String(industryRow?.display_name || industryRow?.industry || "").trim();
+      return normalizeArray(industryRow?.a_symbols).map((stock) => ({
+        ...stock,
+        industry,
+        bias: industryRow?.bias || "",
+      }));
+    }),
+    ...normalizeArray(report.recommended_symbols),
+  ];
+  const seenCodes = new Set();
 
-  return normalizeArray(report.recommended_symbols)
+  return recommendationRows
     .map((row, index) => {
       const code = String(row?.symbol || row?.code || "").trim();
+      if (!code || seenCodes.has(code)) return null;
+      seenCodes.add(code);
       const name = String(row?.name || row?.stockName || code).trim();
       const industry = String(row?.industry || priorityNames[Math.min(priorityNames.length - 1, Math.floor(index / 8))] || "晨報產業").trim();
       const rank = rankByIndustry.get(industry) || Math.min(3, Math.floor(index / 8) + 1);
