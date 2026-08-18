@@ -6,6 +6,7 @@ const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 const { attachMainForceCostsToPayload } = require("../lib/terminal-main-force-costs");
 const { attachThreeGatePricesToPayload } = require("../lib/terminal-three-gate-prices");
+const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 
 const SNAPSHOT_KEY = "strategy2_live_v3";
 const REPLAY_SNAPSHOT_KEY = "strategy2_live_v3_diagnostic_replay";
@@ -137,6 +138,7 @@ async function readV3SnapshotWithRetry(snapshotKey, options = {}) {
 }
 async function strategy2Latest(request, response) {
   cacheHeaders(response);
+  wrapJsonRunTimeSourceEvidence(response, { strategy: "strategy2", endpoint: "api/strategy2-latest" });
   const today = taipeiDate();
   const query = request.query || {};
   const snapshotTimeoutMs = Math.max(3000, Math.min(Number(process.env.STRATEGY2_V3_SNAPSHOT_READ_TIMEOUT_MS || 12000), 15000));
