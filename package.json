@@ -284,6 +284,7 @@
     "verify:full-scan-date-preflight": "node --use-system-ca scripts/verify-full-scan-date-preflight.js",
     "full-scan:date-preflight": "node --use-system-ca scripts/check-full-scan-date-preflight.js --receipt",
     "verify:market-ai-index-report": "node scripts/verify-market-ai-index-report.js",
+    "verify:market-ai-opening-report-fallback": "node scripts/verify-market-ai-opening-report-fallback.js",
     "verify:strategy5-88-data-chain": "node --use-system-ca scripts/verify-strategy5-88-data-chain.js",
     "verify:daytrade-preopen-checkpoints": "node --use-system-ca scripts/verify-daytrade-preopen-checkpoints.js",
     "verify:daytrade-preopen-checkpoints:ready": "node --use-system-ca scripts/verify-daytrade-preopen-checkpoints.js --require-ready",
