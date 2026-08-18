@@ -56,10 +56,6 @@ const TASKS = [
     arrayKeys: ["rows", "matches"],
     limit: 120,
   },
-  {
-    arrayKeys: ["rows", "matches", "volumeMatches", "singleSignals"],
-    limit: 120,
-  },
 ];
 
 function cleanText(value) {
@@ -211,6 +207,7 @@ function callApi(task, timeoutMs = 45000) {
       compact: "1",
       shell: "1",
       live: "1",
+      date: scorecardFallbackDate(),
       limit: String(task.limit || 120),
     };
     const endpoint = buildEndpoint(task.endpoint, query);
@@ -258,8 +255,10 @@ function arraysFromTaskPayload(task, payload) {
   }
   const seen = new Set();
   return rows.filter((row, index) => {
-    if (seen.has(key)) return false;
-    seen.add(key);
+    const code = cleanText(row.code || row.symbol || row.ticker || row.underlyingCode || row.cbCode || row.warrantCode || index);
+    const rowKey = [row._scorecardArrayKey || "rows", code, cleanText(row.name || row.cbName || row.warrantName), index].join(":");
+    if (seen.has(rowKey)) return false;
+    seen.add(rowKey);
     return true;
   });
 }
@@ -338,9 +337,11 @@ function rowPublishDecision(task, payload = {}, result = {}, context = {}) {
 }
 
 function codeOf(row, fallback) {
+  return cleanText(row.code || row.symbol || row.ticker || row.underlyingCode || row.cbCode || row.warrantCode || fallback);
 }
 
 function nameOf(row, code) {
+  return cleanText(row.rawName || row.name || row.displayName || row.underlyingName || row.cbName || row.warrantName || code);
 }
 
 function priceOf(row) {
@@ -459,6 +460,7 @@ function fallbackEntryTime(task, payload) {
 }
 
 function entryTimeOf(task, payload, row) {
+  if (task.key === "strategy3") return "13:00";
   if (task.key === "realtime-radar") {
     return clampRealtimeRadarEntryTime(
       row.entry_time
@@ -813,6 +815,27 @@ function reasonOf(row, task) {
   );
 }
 
+function strategy3ScorecardEntryEvidence(row = {}, payload = {}) {
+  const detail = cleanText(row.entry_price_source_detail || row.entryPriceSourceDetail || row.entry_price_source || row.entryPriceSource || "");
+  const candleTime = cleanText(row.entry_candle_time || row.entryCandleTime || "");
+  const tradeDate = normalizeDate(row.entry_trade_date || row.entryTradeDate || row._strategy3ScorecardSourceDate || row.scan_date || row.usedDate || payload.scanDate || payload.usedDate || payload.tradeDate || payload.date || "");
+  const minutes = timeMinutes(taipeiTime(candleTime));
+  const entryPrice = priceOf(row);
+  const known = new Set(["intraday_1m_1300", "intraday_1m_1300_exact", "intraday_1m_entry_window_tolerance", "intraday_1m_tail_volume_confirmed"]);
+  const explicit = cleanText(row.entry_price_source || row.entryPriceSource || "");
+  if (known.has(explicit)) return { source: explicit, detail, candleTime, tradeDate };
+  const fugleFormal = /fugle.*intraday_1m|intraday_1m.*fugle/i.test([detail, cleanText(row.reason)].join(" "));
+  if (!fugleFormal || !tradeDate || !(entryPrice > 0) || minutes === null || minutes < 12 * 60 + 59 || minutes > 13 * 60 + 2) {
+    return { source: "", detail, candleTime, tradeDate };
+  }
+  return {
+    source: minutes === 13 * 60 ? "intraday_1m_1300_exact" : "intraday_1m_entry_window_tolerance",
+    detail,
+    candleTime,
+    tradeDate,
+  };
+}
+
 function normalizeRecord(task, payload, row, index) {
   const recordDate = scorecardRecordDate(task, payload, row);
   const code = codeOf(row, `${task.key}-${index + 1}`);
@@ -821,9 +844,18 @@ function normalizeRecord(task, payload, row, index) {
   const sourceDate = normalizeDate(row._strategy3ScorecardSourceDate || row._strategy5ScorecardSourceDate || row.source_date || row.scan_date || payload.sourceDate || payload.usedDate || "");
   const source = "terminal-complete-run-scorecard";
   const reason = reasonOf(row, task);
+  const strategy3Evidence = task.key === "strategy3" ? strategy3ScorecardEntryEvidence(row, payload) : null;
+  const sourceRow = strategy3Evidence ? {
+    ...row,
+    entry_price_source: strategy3Evidence.source,
+    entryPriceSource: strategy3Evidence.source,
+    entry_price_source_detail: strategy3Evidence.detail,
+    entry_candle_time: strategy3Evidence.candleTime,
+    entry_trade_date: strategy3Evidence.tradeDate,
+  } : row;
   return applyScorecardRuleMetadata({
     taskKey: task.key,
-    sourceRow: row,
+    sourceRow,
     payload,
     record: {
     record_id: `${recordDate}-${task.key}-${code}-${index + 1}`,
@@ -833,6 +865,9 @@ function normalizeRecord(task, payload, row, index) {
     ticker: code,
     name: nameOf(row, code),
     entry_time: entryTimeOf(task, payload, row),
+    entry_candle_time: strategy3Evidence ? strategy3Evidence.candleTime : cleanText(row.entry_candle_time || row.entryCandleTime),
+    entry_trade_date: strategy3Evidence ? strategy3Evidence.tradeDate : cleanText(row.entry_trade_date || row.entryTradeDate || sourceDate),
+    entry_price_source_detail: strategy3Evidence ? strategy3Evidence.detail : cleanText(row.entry_price_source_detail || row.entryPriceSourceDetail),
     entry_price: entryPrice,
     high_price: highPrice,
     pnl: pnlOf(row, entryPrice, highPrice),

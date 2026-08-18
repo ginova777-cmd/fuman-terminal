@@ -18,6 +18,13 @@ function taipeiDate() {
   }).format(new Date());
 }
 
+function internalScorecardDate(request, today) {
+  const requested = String(request?.query?.date || request?.query?.record_date || "").trim();
+  const isInternalScorecardRead = request?.fumanInternalVerify === true
+    || String(request?.headers?.["x-scorecard-source"] || "") === "1";
+  return isInternalScorecardRead && /^\d{4}-\d{2}-\d{2}$/.test(requested) ? requested : today;
+}
+
 function cacheHeaders(response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -141,8 +148,10 @@ async function strategy2Latest(request, response) {
   wrapJsonRunTimeSourceEvidence(response, { strategy: "strategy2", endpoint: "api/strategy2-latest" });
   const today = taipeiDate();
   const query = request.query || {};
+  // Historical settlement is internal-only; terminal and mobile remain today-only.
+  const targetDate = internalScorecardDate(request, today);
   const snapshotTimeoutMs = Math.max(3000, Math.min(Number(process.env.STRATEGY2_V3_SNAPSHOT_READ_TIMEOUT_MS || 12000), 15000));
-  const snapshotOptions = { tradeDate: today.replace(/\D/g, ""), allowLatestFallback: false, timeoutMs: snapshotTimeoutMs };
+  const snapshotOptions = { tradeDate: targetDate.replace(/\D/g, ""), allowLatestFallback: false, timeoutMs: snapshotTimeoutMs };
   const [snapshot, replaySnapshot] = await Promise.all([
     readV3SnapshotWithRetry(SNAPSHOT_KEY, snapshotOptions),
     readV3SnapshotWithRetry(REPLAY_SNAPSHOT_KEY, snapshotOptions),
@@ -151,16 +160,16 @@ async function strategy2Latest(request, response) {
   const replayPayload = replaySnapshot?.payload && typeof replaySnapshot.payload === "object" ? replaySnapshot.payload : null;
   let payload = formalPayload;
   let replay = false;
-  if (!isFormalPayload(formalPayload, today) && isVisibleDiagnosticReplay(replayPayload, today)) {
+  if (!isFormalPayload(formalPayload, targetDate) && targetDate === today && isVisibleDiagnosticReplay(replayPayload, targetDate)) {
     payload = replayPayload;
     replay = true;
   }
-  if (!payload) return response.status(200).json(emptyPayload(today, "strategy2_v3_snapshot_read_unavailable_or_missing"));
-  if (payload.strategyContract !== CONTRACT || payload.version !== "v3") return response.status(200).json(emptyPayload(today, "strategy2_v3_contract_mismatch"));
-  if (String(payload.dataDate || payload.date || "") !== today) return response.status(200).json(emptyPayload(today, "strategy2_v3_snapshot_not_today"));
-  if (!String(payload.runId || "").startsWith("strategy2-v3-live-")) return response.status(200).json(emptyPayload(today, "strategy2_v3_runid_invalid"));
-  if (!isFormalPayload(payload, today) && !isVisibleDiagnosticReplay(payload, today)) {
-    return response.status(200).json(emptyPayload(today, "strategy2_v3_snapshot_not_formal_complete"));
+  if (!payload) return response.status(200).json(emptyPayload(targetDate, "strategy2_v3_snapshot_read_unavailable_or_missing"));
+  if (payload.strategyContract !== CONTRACT || payload.version !== "v3") return response.status(200).json(emptyPayload(targetDate, "strategy2_v3_contract_mismatch"));
+  if (String(payload.dataDate || payload.date || "") !== targetDate) return response.status(200).json(emptyPayload(targetDate, "strategy2_v3_snapshot_date_mismatch"));
+  if (!String(payload.runId || "").startsWith("strategy2-v3-live-")) return response.status(200).json(emptyPayload(targetDate, "strategy2_v3_runid_invalid"));
+  if (!isFormalPayload(payload, targetDate) && !isVisibleDiagnosticReplay(payload, targetDate)) {
+    return response.status(200).json(emptyPayload(targetDate, "strategy2_v3_snapshot_not_formal_complete"));
   }
   const limit = Number(query.limit || 240);
   const records = cleanRows(decodeTerminalSnapshotRows(payload, "records"), limit);
@@ -174,9 +183,9 @@ async function strategy2Latest(request, response) {
     publishAllowed: replay ? false : true,
     latestOverwriteAllowed: replay ? false : true,
     ok: true,
-    date: today,
-    dataDate: today,
-    tradeDate: today,
+    date: targetDate,
+    dataDate: targetDate,
+    tradeDate: targetDate,
     records,
     events: records,
     rows: records,
