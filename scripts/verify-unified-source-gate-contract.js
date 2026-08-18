@@ -199,8 +199,19 @@ const API_BY_MODULE = {
   strategy5: "api/strategy5-latest.js",
   institution: "api/institution-latest.js",
 };
-const apiFiles = Object.entries(API_BY_MODULE).filter(([key]) => ACTIVE_MODULES.has(key)).map(([, file]) => file);
-for (const file of apiFiles) {
+const apiEntries = Object.entries(API_BY_MODULE).filter(([key]) => ACTIVE_MODULES.has(key));
+for (const [key, file] of apiEntries) {
+  if (key === "strategy2") {
+    const text = requireMarkers(file, [
+      "strategy2-live-v3-fugle-deep-scan-1m",
+      "readV3SnapshotWithRetry",
+      "allowLatestFallback: false",
+    ], "strategy2 V3 API");
+    if (text.includes("wrapJsonRunTimeSourceEvidence")) {
+      issues.push("strategy2 V3 API must not merge generic runtime source evidence into its formal snapshot");
+    }
+    continue;
+  }
   requireMarkers(file, [
     "run-time-source-snapshot-contract",
     "wrapJsonRunTimeSourceEvidence",

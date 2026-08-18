@@ -6,7 +6,6 @@ const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 const { attachMainForceCostsToPayload } = require("../lib/terminal-main-force-costs");
 const { attachThreeGatePricesToPayload } = require("../lib/terminal-three-gate-prices");
-const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 
 const SNAPSHOT_KEY = "strategy2_live_v3";
 const REPLAY_SNAPSHOT_KEY = "strategy2_live_v3_diagnostic_replay";
@@ -145,7 +144,6 @@ async function readV3SnapshotWithRetry(snapshotKey, options = {}) {
 }
 async function strategy2Latest(request, response) {
   cacheHeaders(response);
-  wrapJsonRunTimeSourceEvidence(response, { strategy: "strategy2", endpoint: "api/strategy2-latest" });
   const today = taipeiDate();
   const query = request.query || {};
   // Historical settlement is internal-only; terminal and mobile remain today-only.
@@ -182,6 +180,15 @@ async function strategy2Latest(request, response) {
     formalDisplayAllowed: replay ? false : true,
     publishAllowed: replay ? false : true,
     latestOverwriteAllowed: replay ? false : true,
+    qualityStatus: replay ? "diagnostic_replay" : "complete",
+    evidenceStatus: replay ? "diagnostic_replay" : "complete",
+    run_quality_at_publish: {
+      ...(payload.run_quality_at_publish || payload.runQualityAtPublish || {}),
+      publishAllowed: replay ? false : true,
+      preservePreviousGood: false,
+      evidenceStatus: replay ? "diagnostic_replay" : "complete",
+      qualityStatus: replay ? "diagnostic_replay" : "complete",
+    },
     ok: true,
     date: targetDate,
     dataDate: targetDate,
