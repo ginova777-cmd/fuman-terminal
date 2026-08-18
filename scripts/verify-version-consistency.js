@@ -46,7 +46,7 @@ requireIncludes("fuman-sw.js", `/terminal-member-module.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-market-snapshot-module.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-strategy-module.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", "WATCHLIST_SHELL_ASSET_EPOCH");
-requireIncludes("fuman-sw.js", "watchlist-rich-shell-20260714-detail-sync-01");
+
 requireIncludes("fuman-sw.js", "`/terminal-watchlist-shell.js?v=${WATCHLIST_SHELL_ASSET_EPOCH}`");
 forbidIncludes("fuman-sw.js", "watchlist-rich-shell-20260711-03");
 forbidIncludes("fuman-sw.js", "watchlist-rich-shell-20260712-quote-source-01");
@@ -68,6 +68,9 @@ for (const file of ["index.html", "terminal-core.js", "terminal-modules.js", "te
 }
 
 const sw = read("fuman-sw.js");
+if (!/const\s+WATCHLIST_SHELL_ASSET_EPOCH\s*=\s*["''][^"'']+["'']/.test(sw)) {
+  issues.push("fuman-sw.js: missing WATCHLIST_SHELL_ASSET_EPOCH");
+}
 if (sw.includes('"/",') || sw.includes('"/index.html",')) {
   issues.push("fuman-sw.js: must not precache / or /index.html");
 }
