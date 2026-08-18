@@ -387,6 +387,7 @@
     "strategy2:v3:replay": "node --use-system-ca scripts/run-strategy2-v3-live-scan.js --diagnostic --display-replay",
     "verify:strategy2-v3-water": "node --use-system-ca scripts/verify-strategy2-v3-water.js",
     "verify:strategy2-v3-live-closure": "node --use-system-ca scripts/verify-strategy2-v3-live-closure.js",
+    "verify:strategy2-v3-scorecard-contract": "node --use-system-ca scripts/verify-strategy2-v3-scorecard-contract.js",
     "verify:strategy2-v3-diagnostic-replay": "node --use-system-ca scripts/verify-strategy2-v3-diagnostic-replay.js",    "strategy3-v2:readiness": "node --use-system-ca scripts/check-strategy3-v2-readiness.js",
     "strategy3-v2:scan": "node --use-system-ca scripts/run-strategy3-v2-complete-scan.js --apply",
     "strategy3-v2:line:dry-run": "node --use-system-ca scripts/send-strategy3-v2-line-card.js --dry-run",

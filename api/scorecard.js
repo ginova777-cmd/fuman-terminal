@@ -8,8 +8,8 @@ const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
-const STRATEGY2_SCORECARD_IMPORT_CONTRACT = "strategy2_v2_afternoon_scorecard_import_v1";
-const STRATEGY2_SCORECARD_IMPORT_PENDING_REASON = "strategy2_v2_scorecard_import_pending_1400";
+const STRATEGY2_SCORECARD_IMPORT_CONTRACT = "strategy2_v3_afternoon_scorecard_import_v1";
+const STRATEGY2_SCORECARD_IMPORT_PENDING_REASON = "strategy2_v3_scorecard_import_pending_1400";
 const SCORECARD_SNAPSHOT_TIMEOUT_MS = Math.max(300, Number(process.env.FUMAN_SCORECARD_SNAPSHOT_TIMEOUT_MS || 8000) || 8000);
 const SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS = Math.max(
   SCORECARD_SNAPSHOT_TIMEOUT_MS,
@@ -414,7 +414,7 @@ function callStrategy2Latest(timeoutMs = Number(process.env.STRATEGY2_SCORECARD_
       };
       timer = setTimeout(() => resolve({
         statusCode: 504,
-        payload: { ok: false, error: "strategy2_v2_source_report_timeout", reason: "strategy2_v2_direct_timeout_no_fallback" },
+        payload: { ok: false, error: "strategy2_v3_source_report_timeout", reason: "strategy2_v3_direct_timeout_no_fallback" },
       }), timeoutMs);
       const finish = (result) => {
         clearTimeout(timer);
@@ -824,30 +824,30 @@ function buildStrategy2SourceReport(result) {
   const today = taipeiDateKey();
   const runId = cleanText(payload.runId || payload.transport?.runId);
   const date = cleanText(payload.dataDate || payload.tradeDate || payload.date);
-  const isFormalV2 = payload.strategyContract === "strategy2-live-v2-fugle-mother-pool-1m"
+  const isFormalV3 = payload.strategyContract === "strategy2-live-v3-fugle-deep-scan-1m"
     && payload.status === "complete"
     && payload.complete === true
     && payload.publishAllowed === true
     && date === today
-    && /^strategy2-v2-/.test(runId);
+    && /^strategy2-v3-live-/.test(runId);
   return {
     key: "strategy2",
     strategy: "策略2成績單",
     endpoint: "/api/strategy2-latest",
     statusCode: Number(result?.statusCode || 0) || 0,
-    ok: Number(result?.statusCode || 0) < 400 && isFormalV2,
+    ok: Number(result?.statusCode || 0) < 400 && isFormalV3,
     runId,
     count: cleanNumber(payload.count ?? payload.resultCount ?? payload.total),
     emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : 0,
     date,
-    evidenceStatus: isFormalV2 ? "complete" : "not_formal_v2_complete",
+    evidenceStatus: isFormalV3 ? "complete" : "not_formal_v3_complete",
     unattendedStatus: cleanText(payload.unattendedStatus || "NO"),
-    publishAllowed: isFormalV2,
-    latestOverwriteAllowed: isFormalV2,
+    publishAllowed: isFormalV3,
+    latestOverwriteAllowed: isFormalV3,
     preservePreviousGood: false,
     fallbackUsed: false,
-    blockedReason: isFormalV2 ? "" : "strategy2_v2_requires_today_complete_finalization",
-    reason: isFormalV2 ? "strategy2_v2_formal_scorecard_source" : "strategy2_v2_not_formal_or_not_today_no_scorecard_records",
+    blockedReason: isFormalV3 ? "" : "strategy2_v3_requires_today_complete_finalization",
+    reason: isFormalV3 ? "strategy2_v3_formal_scorecard_source" : "strategy2_v3_not_formal_or_not_today_no_scorecard_records",
   };
 }
 function isStrategy2ScorecardImportComplete(payload, liveReport) {
@@ -1129,7 +1129,7 @@ function alignPayloadDateWithSourceReports(payload) {
 }
 
 
-async function withCurrentStrategy2V2SourceReport(payload) {
+async function withCurrentStrategy2V3SourceReport(payload) {
   // The scanner is live through 13:30, but /88 imports its formal Strategy2 rows
   // once at 14:00. Before that import, surface a dated pending report instead of
   // a false /88 success or a stale previous run.
@@ -1745,7 +1745,7 @@ async function buildPayload(requestedDate = "", options = {}) {
       ? selectPayloadDate(await withLiveSourceReports(basePayload, options), requestedDate)
       : selectPayloadDate(basePayload, requestedDate);
   }
-  payload = selectPayloadDate(await withCurrentStrategy2V2SourceReport(payload), requestedDate);
+  payload = selectPayloadDate(await withCurrentStrategy2V3SourceReport(payload), requestedDate);
   payload = await withScanAudit(payload, options);
   if (!noCache) payloadMemoryCache.set(cacheKey, { cachedAt: Date.now(), payload });
   return payload;
