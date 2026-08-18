@@ -64,9 +64,9 @@ function capture(handler, req) {
 (async () => {
   const result = await capture(marketAiLive, {
     method: "GET",
-    query: { canvas: "1", compact: "1", shell: "1", limit: "40" },
+    query: { canvas: "1", compact: "1", shell: "1", limit: "40", simpleReport: "1" },
     headers: { host: "localhost" },
-    url: "/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40",
+    url: "/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40&simpleReport=1",
   });
   const body = result.payload || {};
   assert.strictEqual(result.statusCode, 200);

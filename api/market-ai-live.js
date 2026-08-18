@@ -852,7 +852,11 @@ function heatmapQueryForMarketAi(baseQuery, mustDetectToday) {
 
 
 function usesSimpleMarketAiReport(request = {}) {
-  return true;
+  const query = request?.query || {};
+  return query.simpleReport === "1"
+    || query.indexOnly === "1"
+    || query.indexReport === "1"
+    || query.simple === "1";
 }
 
 function marketIndexItem(marketPayload = {}, matcher) {
