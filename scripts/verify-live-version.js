@@ -96,10 +96,10 @@ function verifyAllUnifiedFrontendRelease({ scorecard, mobile, auth, serviceWorke
     if (!body.includes(asset)) throw new Error(`${page} must use the unified release ${asset}`);
     if (/membership-lock=|public-terminal-fast-20260714-(?:19|20|22)/.test(body)) throw new Error(`${page} retains a legacy frontend cache token`);
   }
-  if (!desktopShell.includes(`terminal-watchlist-shell.js?v=${encodeURIComponent(version)}`) || !desktopShell.includes(`terminal-realtime-radar.css?v=${encodeURIComponent(terminalFastVersion())}`)) {
+  if (!desktopShell.includes("terminal-watchlist-shell.js?v=${encodeURIComponent(version)}") || !desktopShell.includes("terminal-realtime-radar.css?v=${encodeURIComponent(terminalFastVersion())}")) {
     throw new Error("desktop dynamic assets must use the unified release version");
   }
-  if (!watchlistModule.includes("function releaseVersion()") || !watchlistModule.includes(`terminal-watchlist-shell.js?v=${encodeURIComponent(releaseVersion())}`)) {
+  if (!watchlistModule.includes("function releaseVersion()") || !watchlistModule.includes("terminal-watchlist-shell.js?v=${encodeURIComponent(releaseVersion())}")) {
     throw new Error("watchlist module must load the shell with the unified release version");
   }
   if (!watchlistShell.includes(`const VERSION = \"${version}\"`)) throw new Error("watchlist shell must report the unified release version");
@@ -213,8 +213,8 @@ async function verifyOnce() {
   }
   verifyUnifiedFrontendRelease(home, desktopShell, version);
   const scorecard = await expectOk("scorecard-page", "/88", (body) => body.includes(`terminal-entitlement-guard.js?v=${version}`));
-  const mobile = await expectOk("mobile-page", "/mobile.html", (body) => body.includes(`terminal-entitlement-guard.js?v=${version}`));
-  const auth = await expectOk("auth-page", "/auth.html", (body) => body.includes(`terminal-runtime-config.js?v=${version}`));
+  const mobile = await expectOk("mobile-page", "/mobile", (body) => body.includes(`terminal-entitlement-guard.js?v=${version}`));
+  const auth = await expectOk("auth-page", "/auth", (body) => body.includes(`terminal-runtime-config.js?v=${version}`));
   const watchlistModule = await expectOk("watchlist-module", `/terminal-watchlist-module.js?v=${version}`, (body) => body.includes("function releaseVersion()"));
   const watchlistShell = await expectOk("watchlist-shell", `/terminal-watchlist-shell.js?v=${version}`, (body) => body.includes(`const VERSION = "${version}"`));
   const serviceWorker = await expectOk("service-worker-unified", `/fuman-sw.js?v=${version}`, (body) => body.includes(`fuman-terminal-sw-${version}`));
