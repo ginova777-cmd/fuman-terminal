@@ -1165,7 +1165,7 @@ async function main() {
   const requestedScorecardDate = normalizeDate(process.env.FUMAN_SCORECARD_EXPECTED_DATE || process.env.FUMAN_SCANNER_TARGET_DATE || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || "");
   const expectedDisplayDate = requestedScorecardDate || (tradingDay.isTradingDay ? tradingDay.date : (await previousTwseTradingDate(tradingDay.date) || tradingDay.date));
   const explicitExpectedDateMode = Boolean(requestedScorecardDate);
-  for (const task of TASKS) {
+  for (const task of TASKS.filter((item) => item.key && item.modulePath && item.endpoint)) {
     const result = await callApi(task);
     const payload = result.payload || {};
     const rows = arraysFromTaskPayload(task, payload);
@@ -1366,6 +1366,9 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: error?.message || String(error) }, null, 2));
   process.exit(1);
 });
+
+
+
 
 
 
