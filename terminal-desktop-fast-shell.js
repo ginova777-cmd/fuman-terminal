@@ -13396,8 +13396,8 @@
 
   })();
   (function installMarketSettlementDesktopBadge() {
-    if (window.__fumanMarketSettlementDesktopBadge === "20260819-02") return;
-    window.__fumanMarketSettlementDesktopBadge = "20260819-02";
+    if (window.__fumanMarketSettlementDesktopBadge === "20260819-03") return;
+    window.__fumanMarketSettlementDesktopBadge = "20260819-03";
 
     function eventText(date = new Date()) {
       const local = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -13406,22 +13406,42 @@
         if (settlement.getDay() !== 3) continue;
         const start = new Date(settlement);
         start.setDate(settlement.getDate() - 2);
-        if (local >= start && local <= settlement) {
-          return String(settlement.getMonth() + 1) + "/" + String(settlement.getDate()) + " 台指期大結算";
-        }
-        return "";
+        return local >= start && local <= settlement
+          ? String(settlement.getMonth() + 1) + "/" + String(settlement.getDate()) + " 台指期大結算"
+          : "";
       }
       return "";
     }
 
+    function ensureBanner(market, text) {
+      let banner = market?.querySelector?.("[data-market-settlement-banner]");
+      if (!text) {
+        banner?.remove();
+        return;
+      }
+      if (!banner) {
+        banner = document.createElement("div");
+        banner.className = "market-settlement-banner";
+        banner.dataset.marketSettlementBanner = "1";
+        banner.setAttribute("role", "status");
+        const anchor = market.querySelector(".page-header, .market-header, .refresh-line") || market.firstElementChild;
+        if (anchor?.parentElement === market) anchor.insertAdjacentElement("afterend", banner);
+        else market.prepend(banner);
+      }
+      const label = "市場事件：" + text;
+      if (banner.textContent !== label) banner.textContent = label;
+    }
+
     function render() {
       const text = eventText();
-      const title = document.querySelector("#market-view .page-header h1");
+      const market = document.querySelector("#market-view");
+      ensureBanner(market, text);
+
+      const title = market?.querySelector?.(".page-header h1, .page-title, h1, h2") || null;
       if (title) {
         let badge = title.querySelector("[data-market-settlement-title]");
-        if (!text) {
-          badge?.remove();
-        } else {
+        if (!text) badge?.remove();
+        else {
           if (!badge) {
             badge = document.createElement("small");
             badge.className = "update-mode-badge settlement-title-badge";
@@ -13429,34 +13449,48 @@
             title.appendChild(document.createTextNode(" "));
             title.appendChild(badge);
           }
-          badge.textContent = text;
+          if (badge.textContent !== text) badge.textContent = text;
         }
       }
 
       const marketNav = document.querySelector('[data-view="market"]');
       if (!marketNav) return;
       let navBadge = marketNav.querySelector("[data-market-settlement-nav]");
-      if (!text) {
-        navBadge?.remove();
-        return;
+      if (!text) navBadge?.remove();
+      else {
+        if (!navBadge) {
+          navBadge = document.createElement("small");
+          navBadge.className = "update-mode-badge update-mode-badge-live settlement-title-badge";
+          navBadge.dataset.marketSettlementNav = "1";
+          marketNav.appendChild(navBadge);
+        }
+        if (navBadge.textContent !== text) navBadge.textContent = text;
       }
-      if (!navBadge) {
-        navBadge = document.createElement("small");
-        navBadge.className = "update-mode-badge update-mode-badge-live settlement-title-badge";
-        navBadge.dataset.marketSettlementNav = "1";
-        marketNav.appendChild(navBadge);
-      }
-      navBadge.textContent = text;
     }
 
-    render();
+    function scheduleRender() {
+      window.clearTimeout(window.__fumanMarketSettlementRenderTimer || 0);
+      window.__fumanMarketSettlementRenderTimer = window.setTimeout(render, 0);
+    }
+
+    const style = document.createElement("style");
+    style.dataset.marketSettlementStyle = "1";
+    style.textContent = "#market-view .market-settlement-banner{display:block;margin:10px 0 14px;padding:10px 14px;border:1px solid rgba(245,158,11,.72);border-radius:6px;background:rgba(146,64,14,.18);color:#fde68a;font-size:15px;font-weight:800;letter-spacing:0;line-height:1.35}html body.fuman-light-theme.public-terminal #market-view .market-settlement-banner{background:#fff7e6;border-color:#d97706;color:#92400e}";
+    document.head?.appendChild(style);
+
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", scheduleRender, { once: true });
+    else scheduleRender();
+    [80, 240, 900, 2200, 5000].forEach((delay) => window.setTimeout(render, delay));
     window.setInterval(render, 60000);
+    window.addEventListener("fuman:desktop-route", scheduleRender);
     document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) render();
+      if (!document.hidden) scheduleRender();
     }, { passive: true });
-    document.addEventListener("click", (event) => {
-      if (event.target?.closest?.('[data-view="market"]')) window.setTimeout(render, 0);
-    }, true);
+    if (typeof MutationObserver === "function" && eventText()) {
+      new MutationObserver(() => {
+        if (!document.querySelector("#market-view [data-market-settlement-banner]")) scheduleRender();
+      }).observe(document.documentElement, { childList: true, subtree: true });
+    }
   })();
 
 })();

@@ -77,6 +77,9 @@ function verifyMarketEventReminderGuard(app, desktopShell) {
     "installMarketSettlementDesktopBadge",
     "data-market-settlement-title",
     "data-market-settlement-nav",
+    "data-market-settlement-banner",
+    "市場事件：",
+    "MutationObserver",
     "台指期大結算",
     "window.setInterval(render, 60000)",
   ];
