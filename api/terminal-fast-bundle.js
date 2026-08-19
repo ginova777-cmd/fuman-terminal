@@ -12,7 +12,7 @@ const institutionLatest = require("./institution-latest");
 const desktopRouteSnapshot = require("./desktop-route-snapshot");
 const watchlistMatchIndex = require("./watchlist-match-index");
 const { shapeTopPayload } = require("./_http-cache");
-const { readDesktopRouteSnapshot } = require("../lib/desktop-route-snapshot-cache");
+const { readDesktopRouteSnapshot, readDesktopRouteSnapshotForRoute } = require("../lib/desktop-route-snapshot-cache");
 const { buildLatestOpsStatus } = require("../lib/terminal-ops-status");
 const { buildWatchlistMatchIndex } = require("../lib/watchlist-match-index-builder");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
@@ -875,14 +875,23 @@ module.exports = async function handler(request, response) {
     return;
   }
   if (!wantsLive) {
-    const releaseSnapshotPayload = typeof desktopRouteSnapshot.releaseReadbackSnapshot === "function" ? desktopRouteSnapshot.releaseReadbackSnapshot() : null;
-    const snapshot = releaseSnapshotPayload
-      ? { updatedAt: releaseSnapshotPayload.updatedAt || "", payload: releaseSnapshotPayload }
-      : await readDesktopRouteSnapshot({
+    const requestedRoute = requestedStrategyRoute(request);
+    const routeSnapshot = requestedRoute && requestedRoute !== "strategy2"
+      ? await readDesktopRouteSnapshotForRoute(requestedRoute, {
         timeoutMs: FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS,
         allowStale: true,
-      });
+      }).catch(() => null)
+      : null;
+    const releaseSnapshotPayload = typeof desktopRouteSnapshot.releaseReadbackSnapshot === "function" ? desktopRouteSnapshot.releaseReadbackSnapshot() : null;
+    const snapshot = routeSnapshot
+      || (releaseSnapshotPayload
+        ? { updatedAt: releaseSnapshotPayload.updatedAt || "", payload: releaseSnapshotPayload }
+        : await readDesktopRouteSnapshot({
+          timeoutMs: FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS,
+          allowStale: true,
+        }));
     const isReleaseReadbackSnapshot = snapshot?.payload?.cacheSource === "release-readback-snapshot";
+    const isRouteSnapshot = snapshot?.payload?.cacheSource === "supabase:desktop_route_snapshot:route";
     if (snapshot?.payload?.endpoints) {
       const endpoints = endpointsForRequestedRoute(request, compactSnapshotEndpoints(request, snapshot.payload.endpoints));
       let realtimeRadarRepairs = isReleaseReadbackSnapshot ? { skipped: "release-readback-snapshot" } : {};
@@ -916,7 +925,7 @@ module.exports = async function handler(request, response) {
         summary: Object.fromEntries(Object.entries(endpoints).map(([endpoint, endpointPayload]) => [endpoint, summarize(endpointPayload)])),
         ok: snapshot.payload.ok !== false,
         source: "terminal-fast-bundle",
-        cacheSource: isReleaseReadbackSnapshot ? "release-readback-snapshot" : "supabase:desktop_route_snapshot",
+        cacheSource: isReleaseReadbackSnapshot ? "release-readback-snapshot" : isRouteSnapshot ? "supabase:desktop_route_snapshot:route" : "supabase:desktop_route_snapshot",
         partial: Boolean(snapshot.payload.partial),
         misses: Array.isArray(snapshot.payload.misses) ? snapshot.payload.misses : [],
         snapshotHit: !isReleaseReadbackSnapshot,

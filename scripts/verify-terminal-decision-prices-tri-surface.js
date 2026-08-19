@@ -23,6 +23,8 @@ const mobile = read("api/mobile-fragment.js");
 const fastBundle = read("api/terminal-fast-bundle.js");
 const sw = read("fuman-sw.js");
 const pkg = read("package.json");
+const snapshotCache = read("lib/desktop-route-snapshot-cache.js");
+const snapshotBuilder = read("lib/desktop-route-snapshot-builder.js");
 
 check(gateLib.includes("previous_formal_daily_ohlcv_only; reference_date_must_be_before_as_of_date"), "api_gate_freshness_rule_missing");
 check(gateLib.includes("row.terminalThreeGate = byCode.get(code) || null"), "api_three_gate_row_field_missing");
@@ -44,6 +46,9 @@ check(mobile.includes("mobileMainForceHtml(row)"), "mobile_main_force_not_render
 check(mobile.includes('const forceLivePayload = tab === "strategy2" || requestedLiveFragment;') && mobile.includes('allowStale: tab !== "strategy2",'), "mobile_prior_formal_snapshot_or_strategy2_live_rule_missing");
 check(fastBundle.includes("allowStale: true,") && fastBundle.includes('requestedStrategyRoute(request) === "strategy2"') && fastBundle.includes("attachSnapshotMainForcePlaceholders(endpoints);"), "desktop_prior_formal_snapshot_or_strategy2_live_rule_missing");
 check(fastBundle.includes('source: "snapshot:client-hydration-pending"') && fastBundle.includes('status: "data_insufficient"'), "desktop_snapshot_main_force_placeholder_missing");
+check(snapshotCache.includes("async function readDesktopRouteSnapshotForRoute(route, options = {})") && snapshotCache.includes("supabase:desktop_route_snapshot:route"), "route_snapshot_reader_contract_missing");
+check(snapshotBuilder.includes("function buildRouteSnapshotPayload(route, payload = {})") && snapshotBuilder.includes("writeDesktopRouteSnapshotForRoute(route, routePayload"), "route_snapshot_materialization_contract_missing");
+check(fastBundle.includes("readDesktopRouteSnapshotForRoute(requestedRoute") && fastBundle.includes("isRouteSnapshot ? \"supabase:desktop_route_snapshot:route\""), "desktop_route_snapshot_fast_path_missing");
 check(sw.includes("/\\/api\\/three-gate-prices/i") && sw.includes("/\\/api\\/main-force-costs/i"), "service_worker_decision_price_api_not_live");
 check(pkg.includes('"verify:terminal-decision-prices": "node scripts/verify-terminal-decision-prices-tri-surface.js"'), "package_decision_price_verifier_missing");
 
