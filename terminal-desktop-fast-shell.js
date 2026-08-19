@@ -5407,7 +5407,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260623-09";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-26";
   }
 
   function loadScriptOnce(src, attr) {
@@ -5544,7 +5544,7 @@
       (promise, [file, attr]) => promise.then(() => loadScriptOnce(`/${file}?v=${encodeURIComponent(version)}`, attr)),
       Promise.resolve(true)
     ).then(() => loadScriptOnce(
-      `/terminal-app.js?v=${encodeURIComponent(version)}&desktop_market_exports=20260624-02`,
+      `/terminal-app.js?v=${encodeURIComponent(version)}`,
       "data-fuman-terminal-app"
     )).then(() => {
       if (!/^20260624-0[12]$/.test(String(window.__fumanDesktopMarketExports || ""))) {

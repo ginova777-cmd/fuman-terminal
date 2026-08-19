@@ -55,6 +55,38 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function verifyUnifiedFrontendRelease(home, desktopShell, version) {
+  const expectedScripts = [
+    "terminal-entitlement-guard.js",
+    "terminal-ai-risk-guard.js",
+    "terminal-hotfix.js",
+    "terminal-watchlist-shell.js",
+    "terminal-desktop-fast-shell.js",
+    "terminal-core.js",
+    "terminal-market-ai-live-watchdog.js",
+    "terminal-market-overview-restore.js",
+  ];
+  for (const file of expectedScripts) {
+    if (!home.includes(`src="${file}?v=${version}"`)) {
+      throw new Error(`unified frontend release missing ${file}?v=${version}`);
+    }
+  }
+  const desktopEntry = home.match(/src="(terminal-desktop-fast-shell\.js[^"]*)"/);
+  if (!desktopEntry || desktopEntry[1] !== `terminal-desktop-fast-shell.js?v=${version}`) {
+    throw new Error("desktop fast-shell must use exactly one release version token");
+  }
+  if (home.includes("strategy2-history=") || home.includes("strategy4-daily-kline=") || home.includes("watchlist-mainforce-resonance=") || home.includes("market-overview-restore=")) {
+    throw new Error("legacy per-feature frontend version token remains in production entry");
+  }
+  if (!desktopShell.includes(`window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "${version}"`)) {
+    throw new Error("desktop fast-shell fallback must use the unified release version");
+  }
+  if (!desktopShell.includes("`/terminal-app.js?v=${encodeURIComponent(version)}`")) {
+    throw new Error("desktop dynamic terminal app must use the unified release version");
+  }
+  console.log("[live-version] unified frontend release ok");
+}
+
 function verifyMarketEventReminderGuard(app, desktopShell) {
   const required = [
     "installMarketSettlementTitleBadgeGuard",
@@ -157,6 +189,7 @@ async function verifyOnce() {
   if (localDesktopShellHash !== liveDesktopShellHash) {
     throw new Error(`desktop-fast-shell hash mismatch local=${localDesktopShellHash} live=${liveDesktopShellHash}`);
   }
+  verifyUnifiedFrontendRelease(home, desktopShell, version);
   verifyMarketEventReminderGuard(app, desktopShell);
   const riskGuard = await expectOk("AI priority risk guard", `/terminal-ai-risk-guard.js?v=${version}`, (body) => body.includes("installMarketAiPriorityRiskGuard"));
   verifyMarketAiPriorityRiskGuard(riskGuard);

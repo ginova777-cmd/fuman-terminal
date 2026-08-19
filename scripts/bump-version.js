@@ -15,6 +15,7 @@ const FILES = [
   "terminal-core.js",
   "terminal.js",
   "terminal-modules.js",
+  "terminal-desktop-fast-shell.js",
   "fuman-sw.js",
   "refresh.html",
   "version.json",
