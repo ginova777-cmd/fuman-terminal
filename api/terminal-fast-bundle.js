@@ -843,14 +843,16 @@ module.exports = async function handler(request, response) {
       ? { updatedAt: releaseSnapshotPayload.updatedAt || "", payload: releaseSnapshotPayload }
       : await readDesktopRouteSnapshot({
         timeoutMs: FAST_BUNDLE_SNAPSHOT_TIMEOUT_MS,
-        allowStale: marketCalendar?.marketOpen === false && (marketCalendar?.preservePreviousGood === true || marketCalendar?.formalScanSkipped === true),
+        allowStale: true,
       });
     const isReleaseReadbackSnapshot = snapshot?.payload?.cacheSource === "release-readback-snapshot";
     if (snapshot?.payload?.endpoints) {
       const endpoints = endpointsForRequestedRoute(request, compactSnapshotEndpoints(request, snapshot.payload.endpoints));
       let realtimeRadarRepairs = isReleaseReadbackSnapshot ? { skipped: "release-readback-snapshot" } : {};
-      await repairStrategy3LatestSnapshot(request, endpoints);
-      await repairInstitutionLatestSnapshot(request, endpoints);
+      if (requestedLiveFanout) {
+        await repairStrategy3LatestSnapshot(request, endpoints);
+        await repairInstitutionLatestSnapshot(request, endpoints);
+      }
       if (!isReleaseReadbackSnapshot && liveFallbackEnabled(request)) {
         await repairStrategy5FullSnapshot(request, endpoints);
       }

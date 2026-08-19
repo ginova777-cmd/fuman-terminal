@@ -1091,7 +1091,8 @@ module.exports = async function handler(request, response) {
       });
       return;
     }
-    const bypassHtmlSnapshot = shouldUseLiveFragment(tab) && (url.searchParams.get("live") === "1" || url.searchParams.get("verify") === "1" || url.searchParams.get("noSnapshot") === "1");
+    const requestedLiveFragment = shouldUseLiveFragment(tab) && (url.searchParams.get("live") === "1" || url.searchParams.get("verify") === "1" || url.searchParams.get("noSnapshot") === "1");
+    const bypassHtmlSnapshot = requestedLiveFragment;
     const htmlSnapshot = (bypassHtmlSnapshot || tab === "strategy2") ? null : await readMobileFragmentHtmlSnapshot(
       tab);
     if (htmlSnapshot?.html) {
@@ -1107,14 +1108,15 @@ module.exports = async function handler(request, response) {
       compact: 1,
       shell: 1,
       limit: 60,
-      ...(shouldUseLiveFragment(tab) ? { live: 1, verify: 1, noSnapshot: 1 } : {}),
+      ...(tab === "strategy2" || requestedLiveFragment ? { live: 1, verify: 1, noSnapshot: 1 } : {}),
       ts: Date.now(),
     });
     const snapshot = await readDesktopRouteSnapshot({
       timeoutMs: MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS,
+      allowStale: tab !== "strategy2",
     }).catch(() => null);
     const snapshotPayload = tab === "ai" ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
-    const forceLivePayload = shouldUseLiveFragment(tab);
+    const forceLivePayload = tab === "strategy2" || requestedLiveFragment;
     const payload = forceLivePayload
       || !hasUsableSnapshotPayload(snapshotPayload, tab)
 

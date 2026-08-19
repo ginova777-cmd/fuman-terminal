@@ -20,6 +20,7 @@ const gateLib = read("lib/terminal-three-gate-prices.js");
 const mainForceLib = read("lib/terminal-main-force-costs.js");
 const desktop = read("terminal-desktop-fast-shell.js");
 const mobile = read("api/mobile-fragment.js");
+const fastBundle = read("api/terminal-fast-bundle.js");
 const sw = read("fuman-sw.js");
 const pkg = read("package.json");
 
@@ -40,6 +41,8 @@ check(mobile.includes('const { fetchThreeGatePrices } = require("../lib/terminal
 check(mobile.includes("async function attachThreeGatePrices(tab, payload = {})") && mobile.includes("function mobileThreeGateHtml(row)"), "mobile_three_gate_contract_missing");
 check(mobile.includes("payload = await attachThreeGatePrices(tab, payload)") && mobile.includes("${mobileThreeGateHtml(row)}"), "mobile_three_gate_not_rendered");
 check(mobile.includes("mobileMainForceHtml(row)"), "mobile_main_force_not_rendered");
+check(mobile.includes('const forceLivePayload = tab === "strategy2" || requestedLiveFragment;') && mobile.includes('allowStale: tab !== "strategy2",'), "mobile_prior_formal_snapshot_or_strategy2_live_rule_missing");
+check(fastBundle.includes("allowStale: true,") && fastBundle.includes("await ensureStrategy2V3Endpoint(request, endpoints);"), "desktop_prior_formal_snapshot_or_strategy2_live_rule_missing");
 check(sw.includes("/\\/api\\/three-gate-prices/i") && sw.includes("/\\/api\\/main-force-costs/i"), "service_worker_decision_price_api_not_live");
 check(pkg.includes('"verify:terminal-decision-prices": "node scripts/verify-terminal-decision-prices-tri-surface.js"'), "package_decision_price_verifier_missing");
 
