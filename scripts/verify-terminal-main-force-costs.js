@@ -36,7 +36,8 @@ check(api.includes('freshnessRule: "exact_as_of_trade_date_only; missing_or_uncl
 check(fastBundle.includes('require("../lib/terminal-main-force-costs")'), "fast_bundle_main_force_import_missing");
 check(fastBundle.includes('const MAIN_FORCE_ENDPOINTS = new Set(['), "fast_bundle_main_force_endpoint_scope_missing");
 check(fastBundle.includes('async function attachMainForceCostsToEndpoints'), "fast_bundle_main_force_enrichment_missing");
-check((fastBundle.match(/await attachMainForceCostsToEndpoints\(endpoints\);/g) || []).length >= 2, "fast_bundle_main_force_snapshot_or_live_attach_missing");
+check(fastBundle.includes("await attachMainForceCostsToEndpoints(endpoints);") && fastBundle.includes("attachSnapshotMainForcePlaceholders(endpoints);"), "fast_bundle_main_force_snapshot_or_live_attach_missing");
+check(fastBundle.includes('source: "snapshot:client-hydration-pending"') && fastBundle.includes('status: "data_insufficient"'), "fast_bundle_main_force_snapshot_placeholder_missing");
 check(fastBundle.includes('row.terminalMainForce = byCode.get(code) || null;'), "fast_bundle_main_force_row_contract_missing");
 check(desktop.includes('function mainForceCostHtml(code, asOfDate)'), "desktop_main_force_card_missing");
 check(desktop.includes("sunlight-decision-metrics-20260816") && desktop.includes("body.fuman-light-theme .three-gate-prices") && desktop.includes("font-size: 13px !important;") && desktop.includes("font-weight: 900 !important;"), "sunlight_decision_metrics_missing");

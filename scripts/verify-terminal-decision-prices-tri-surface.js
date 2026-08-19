@@ -42,7 +42,8 @@ check(mobile.includes("async function attachThreeGatePrices(tab, payload = {})")
 check(mobile.includes("payload = await attachThreeGatePrices(tab, payload)") && mobile.includes("${mobileThreeGateHtml(row)}"), "mobile_three_gate_not_rendered");
 check(mobile.includes("mobileMainForceHtml(row)"), "mobile_main_force_not_rendered");
 check(mobile.includes('const forceLivePayload = tab === "strategy2" || requestedLiveFragment;') && mobile.includes('allowStale: tab !== "strategy2",'), "mobile_prior_formal_snapshot_or_strategy2_live_rule_missing");
-check(fastBundle.includes("allowStale: true,") && fastBundle.includes("await ensureStrategy2V3Endpoint(request, endpoints);"), "desktop_prior_formal_snapshot_or_strategy2_live_rule_missing");
+check(fastBundle.includes("allowStale: true,") && fastBundle.includes('requestedStrategyRoute(request) === "strategy2"') && fastBundle.includes("attachSnapshotMainForcePlaceholders(endpoints);"), "desktop_prior_formal_snapshot_or_strategy2_live_rule_missing");
+check(fastBundle.includes('source: "snapshot:client-hydration-pending"') && fastBundle.includes('status: "data_insufficient"'), "desktop_snapshot_main_force_placeholder_missing");
 check(sw.includes("/\\/api\\/three-gate-prices/i") && sw.includes("/\\/api\\/main-force-costs/i"), "service_worker_decision_price_api_not_live");
 check(pkg.includes('"verify:terminal-decision-prices": "node scripts/verify-terminal-decision-prices-tri-surface.js"'), "package_decision_price_verifier_missing");
 

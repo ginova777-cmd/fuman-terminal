@@ -184,6 +184,43 @@ async function attachMainForceCostsToEndpoints(endpoints = {}) {
     catch { for (const target of group.targets) { target.rows.forEach((row) => { row.terminalMainForce = null; }); target.payload.mainForceCostContract = { contract: "terminal-main-force-costs-v1", asOfDate, count: 0, missingCount: group.codes.size, source: "unavailable" }; } }
   }
 }
+function attachSnapshotMainForcePlaceholders(endpoints = {}) {
+  for (const [endpoint, payload] of Object.entries(endpoints)) {
+    const pathname = new URL(String(endpoint || "/"), "https://fuman.local").pathname;
+    if (!MAIN_FORCE_ENDPOINTS.has(pathname) || !payload || typeof payload !== "object") continue;
+    const rows = mainForceRows(payload);
+    const asOfDate = mainForceDataDate(payload);
+    let missingCount = 0;
+    for (const row of rows) {
+      if (!row || typeof row !== "object" || Object.prototype.hasOwnProperty.call(row, "terminalMainForce")) continue;
+      const code = normalizeCode(row?.code || row?.symbol || row?.stock_id || row?.stockId);
+      row.terminalMainForce = {
+        code,
+        tradeDate: asOfDate,
+        status: "data_insufficient",
+        mainForceCostPrice: null,
+        mainForceNetBuy: null,
+        mainForceBranchCount: 0,
+        topBranches: [],
+        overnight: { matched: false, costPrice: null, netBuy: null, status: "data_insufficient" },
+        shortSwing: { matched: false, costPrice: null, netBuy: null, status: "data_insufficient" },
+        daytrade: { matched: false, costPrice: null, netBuy: null, status: "data_insufficient" },
+        source: "snapshot:client-hydration-pending",
+        updatedAt: "",
+      };
+      missingCount += 1;
+    }
+    if (missingCount) {
+      payload.mainForceCostContract = {
+        contract: "terminal-main-force-costs-v1",
+        asOfDate,
+        count: 0,
+        missingCount,
+        source: "snapshot:client-hydration-pending",
+      };
+    }
+  }
+}
 function callJson(label, handler, request, query = {}, timeoutMs = 5500) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
@@ -856,7 +893,9 @@ module.exports = async function handler(request, response) {
       if (!isReleaseReadbackSnapshot && liveFallbackEnabled(request)) {
         await repairStrategy5FullSnapshot(request, endpoints);
       }
-      await ensureStrategy2V3Endpoint(request, endpoints);
+      if (!requestedStrategyRoute(request) || requestedStrategyRoute(request) === "strategy2") {
+        await ensureStrategy2V3Endpoint(request, endpoints);
+      }
       if (liveFallbackEnabled(request)) {
         await repairStrategy5FullSnapshot(request, endpoints);
         await repairStrategy4LatestSnapshot(request, endpoints);
@@ -870,7 +909,7 @@ module.exports = async function handler(request, response) {
         });
       }      sanitizeStrategy2Endpoints(endpoints);
       attachOpsAuthorityToEndpoints(endpoints, opsAuthority);
-  await attachMainForceCostsToEndpoints(endpoints);
+      attachSnapshotMainForcePlaceholders(endpoints);
       const payload = {
         ...snapshot.payload,
         endpoints,
