@@ -109,6 +109,23 @@ function verifyAllUnifiedFrontendRelease({ scorecard, mobile, auth, serviceWorke
   if (/ASSET_EPOCH|desktop-fast-shell-core-|watchlist-mainforce-resonance/.test(serviceWorker)) throw new Error("service worker retains a legacy feature cache epoch");
   console.log("[live-version] all terminal entry points share one release version");
 }
+function verifyMarketOverviewDirectApiFallback(restore) {
+  const required = [
+    'typeof window.FUMAN_MARKET_DIRECT_PAINT === "function"',
+    'if (window.__fumanDesktopFastShell) {',
+    'window.FUMAN_MARKET_DIRECT_PAINT = run',
+    'xhrJson("/api/market?canvas=1&compact=1&shell=1&limit=24")',
+    '[600, 2400, 6800, 12000, 25000].forEach((delay) => setTimeout(run, delay))',
+  ];
+  for (const marker of required) {
+    if (!restore.includes(marker)) throw new Error("market overview direct API fallback missing " + marker);
+  }
+  if (restore.includes('window.__fumanDesktopFastShell === "20260623-09"')) {
+    throw new Error("market overview direct API fallback is restricted to a retired desktop shell version");
+  }
+  console.log("[live-version] market overview direct API fallback ok");
+}
+
 function verifyMarketEventReminderGuard(app, desktopShell) {
   const required = [
     "installMarketSettlementTitleBadgeGuard",
@@ -209,8 +226,15 @@ async function verifyOnce() {
   const localDesktopShellHash = sha256(read("terminal-desktop-fast-shell.js"));
   const liveDesktopShellHash = sha256(desktopShell);
   if (localDesktopShellHash !== liveDesktopShellHash) {
-    throw new Error(`desktop-fast-shell hash mismatch local=${localDesktopShellHash} live=${liveDesktopShellHash}`);
+    throw new Error("desktop-fast-shell hash mismatch local=" + localDesktopShellHash + " live=" + liveDesktopShellHash);
   }
+  const marketRestore = await expectOk("market-overview-restore", "/terminal-market-overview-restore.js?v=" + version, (body) => body.includes("window.FUMAN_MARKET_DIRECT_PAINT = run"));
+  const localMarketRestoreHash = sha256(read("terminal-market-overview-restore.js"));
+  const liveMarketRestoreHash = sha256(marketRestore);
+  if (localMarketRestoreHash !== liveMarketRestoreHash) {
+    throw new Error("market-overview-restore hash mismatch local=" + localMarketRestoreHash + " live=" + liveMarketRestoreHash);
+  }
+  verifyMarketOverviewDirectApiFallback(marketRestore);
   verifyUnifiedFrontendRelease(home, desktopShell, version);
   const scorecard = await expectOk("scorecard-page", "/88", (body) => body.includes(`terminal-entitlement-guard.js?v=${version}`));
   const mobile = await expectOk("mobile-page", "/mobile", (body) => body.includes(`terminal-entitlement-guard.js?v=${version}`));

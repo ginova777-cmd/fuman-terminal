@@ -1,10 +1,10 @@
 (function restoreMarketOverviewLegacySurface() {
-  if (window.__fumanDesktopFastShell) {
+  if (window.__fumanDesktopFastShell && typeof window.FUMAN_MARKET_DIRECT_PAINT === "function") {
     window.__fumanMarketOverviewRestoreReady = true;
-    document.documentElement.dataset.fumanMarketOverviewRestoreSkipped = "desktop-fast-shell";
+    document.documentElement.dataset.fumanMarketOverviewRestoreSkipped = "desktop-fast-shell-direct-painter-ready";
     return;
   }
-  if (window.__fumanDesktopFastShell === "20260623-09") {
+  if (window.__fumanDesktopFastShell) {
     window.__fumanMarketOverviewRestoreReady = true;
     document.documentElement.dataset.fumanMarketOverviewRestoreSkipped = "desktop-fast-shell";
     if (!window.__fumanMarketOverviewDirectPainter) {
@@ -778,7 +778,7 @@
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") setTimeout(run, 220);
       });
-      [600, 2400, 6800, 12000].forEach((delay) => setTimeout(run, delay));
+      [600, 2400, 6800, 12000, 25000].forEach((delay) => setTimeout(run, delay));
     }
     [600, 2400, 6800].forEach((delay) => {
       setTimeout(() => {
