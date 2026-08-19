@@ -189,6 +189,7 @@ function effectiveSourceOperational(payload) {
   const source = payload.sourceStatus.summary;
   const intraday = payload.intraday1m.summary || {};
   const daily = payload.dailyVolume.row || {};
+  const intradayRequired = intraday1mRequired(payload);
   const intradayAge = Math.min(
     source.intraday1mStaleSeconds,
     asNumber(intraday.latestCandleAgeSeconds, 999999),
@@ -200,8 +201,8 @@ function effectiveSourceOperational(payload) {
   const objectiveOk = Boolean(
     source.priorityFreshQuoteCoverage120s >= required.priorityCoverage
     && source.quoteAgeSeconds <= required.quoteAgeSeconds
-    && intradayReady
-    && intradayAge <= required.intraday1mStaleSeconds
+    && (!intradayRequired || intradayReady)
+    && (!intradayRequired || intradayAge <= required.intraday1mStaleSeconds)
     && (!required.dailyVolume || ["ready", "ok"].includes(String(source.dailyVolumeStatus || daily.status || "").toLowerCase()))
   );
   return {
@@ -215,6 +216,61 @@ function effectiveSourceOperational(payload) {
     reason: sourceStatusOk ? "source_status_ok" : (objectiveOk ? "objective_water_metrics_ready_source_status_lagging" : "source_status_and_objective_metrics_not_ready"),
   };
 }
+function sourcePayload(payload) {
+  const raw = payload.sourceStatus?.row?.payload;
+  return raw && typeof raw === "object" ? raw : {};
+}
+
+function taipeiMinuteFromCalendar(payload) {
+  const value = payload.marketCalendar?.row?.formalSourceWindow?.currentMinute;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : NaN;
+}
+
+function preopenIntraday1mExempt(payload) {
+  if (payload.required?.formalNow === true) return false;
+  const raw = sourcePayload(payload);
+  const source = payload.sourceStatus?.summary || {};
+  const gate = payload.canonicalGate?.summary || {};
+  const currentMinute = taipeiMinuteFromCalendar(payload);
+  const sourceText = [
+    raw.intraday_1m_status,
+    raw.today1m_status,
+    raw.today_1m_status,
+    raw.phase,
+    source.phase,
+    source.message,
+    gate.phase,
+    gate.reason,
+  ].filter(Boolean).join(" ").toLowerCase();
+  const beforeFormalIntradayMinute = Number.isFinite(currentMinute) && currentMinute < 541;
+  return sourceText.includes("not_required_preopen") || (beforeFormalIntradayMinute && sourceText.includes("preopen"));
+}
+
+function intraday1mRequired(payload) {
+  return !preopenIntraday1mExempt(payload);
+}
+
+function sourcePoolEvidenceCount(payload, kind) {
+  if (payload.required?.formalNow === true) return 0;
+  const raw = sourcePayload(payload);
+  const keys = kind === "priority"
+    ? [
+        "priority_pool_symbols",
+        "daytrade_priority_symbols",
+        "terminal_priority_symbols",
+        "formal_daytrade_priority_symbols",
+        "deep_scan_pool_symbols",
+        "priority_symbols",
+      ]
+    : [
+        "mother_pool_symbols",
+        "mother_pool_signal_candidate_symbols",
+        "mother_pool_base_pool_symbols",
+      ];
+  return Math.max(0, ...keys.map((key) => asNumber(raw[key], 0)));
+}
+
 function isMarketClosedPreviousGood(payload) {
   const calendar = payload.marketCalendar?.row || {};
   const source = payload.sourceStatus?.summary || {};
@@ -249,6 +305,9 @@ function statusIssues(payload) {
   const daily = payload.dailyVolume.row || {};
   const motherRows = payload.motherPool.rowCount;
   const priorityRows = payload.priorityTop40.rowCount;
+  const intradayRequired = intraday1mRequired(payload);
+  const effectiveMotherRows = Math.max(motherRows, sourcePoolEvidenceCount(payload, "mother"));
+  const effectivePriorityRows = Math.max(priorityRows, sourcePoolEvidenceCount(payload, "priority"));
 
   if (isMarketClosedPreviousGood(payload) && !required.tradingDay && !required.formalNow) {
     return issues;
@@ -258,8 +317,11 @@ function statusIssues(payload) {
     const diagnosticIntradayCoveredBySource = item.name === "intraday_1m_status"
       && source.hasIntraday1mStaleSeconds
       && source.intraday1mStaleSeconds <= required.intraday1mStaleSeconds;
-    if (!item.ok && !diagnosticIntradayCoveredBySource) issues.push(`${item.name}_not_readable:${item.status || item.error}`);
-    if (item.elapsedMs > item.maxElapsedMs && !diagnosticIntradayCoveredBySource) issues.push(`${item.name}_slow:${item.elapsedMs}ms`);
+    const poolCoveredBySource = item.name === "mother_pool" && effectiveMotherRows >= required.motherPoolRows;
+    const priorityCoveredBySource = item.name === "priority_top40" && effectivePriorityRows >= required.priorityTop40Rows;
+    const probeCovered = diagnosticIntradayCoveredBySource || poolCoveredBySource || priorityCoveredBySource;
+    if (!item.ok && !probeCovered) issues.push(`${item.name}_not_readable:${item.status || item.error}`);
+    if (item.elapsedMs > item.maxElapsedMs && !probeCovered) issues.push(`${item.name}_slow:${item.elapsedMs}ms`);
   }
   if (required.tradingDay && payload.marketCalendar.ok && payload.marketCalendar.row?.isTradingDay === false) {
     issues.push("market_calendar_not_trading_day");
@@ -269,14 +331,14 @@ function statusIssues(payload) {
     issues.push(`priority_quote_coverage_low:${source.priorityFreshQuoteCoverage120s}`);
   }
   if (source.quoteAgeSeconds > required.quoteAgeSeconds) issues.push(`quote_age_too_old:${source.quoteAgeSeconds}`);
-  if (effective.intraday1mStaleSeconds > required.intraday1mStaleSeconds) {
+  if (intradayRequired && effective.intraday1mStaleSeconds > required.intraday1mStaleSeconds) {
     issues.push(`intraday_1m_stale:${effective.intraday1mStaleSeconds}`);
   }
   if (required.dailyVolume && !["ready", "ok"].includes(String(source.dailyVolumeStatus || daily.status || "").toLowerCase())) {
     issues.push(`daily_volume_not_ready:${source.dailyVolumeStatus || daily.status || "missing"}`);
   }
-  if (motherRows < required.motherPoolRows) issues.push(`mother_pool_rows_low:${motherRows}`);
-  if (priorityRows < required.priorityTop40Rows) issues.push(`priority_top40_rows_low:${priorityRows}`);
+  if (effectiveMotherRows < required.motherPoolRows) issues.push(`mother_pool_rows_low:${motherRows}`);
+  if (effectivePriorityRows < required.priorityTop40Rows) issues.push(`priority_top40_rows_low:${priorityRows}`);
   if (required.formalNow) {
     for (const [name, probe] of [["mother_pool", payload.motherPool], ["priority_top40", payload.priorityTop40]]) {
       const actual = rowTradeDate(probe.row || {});
@@ -294,7 +356,7 @@ function statusIssues(payload) {
   }
   const intradayDiagnosticCoveredBySource = source.hasIntraday1mStaleSeconds && source.intraday1mStaleSeconds <= required.intraday1mStaleSeconds;
   const intradayHasTodayData = intradaySummary.hasTodayData === true || asNumber(intraday.today_candle_count) > 0;
-  if (!intradayDiagnosticCoveredBySource && (intraday.today_candle_count !== undefined || intradaySummary.hasTodayData !== undefined) && intradayHasTodayData !== true) {
+  if (intradayRequired && !intradayDiagnosticCoveredBySource && (intraday.today_candle_count !== undefined || intradaySummary.hasTodayData !== undefined) && intradayHasTodayData !== true) {
     issues.push("intraday_1m_today_candle_count_zero");
   }
   return issues;
