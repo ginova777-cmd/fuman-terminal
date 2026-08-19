@@ -3615,7 +3615,7 @@
 
   function nativeDailyKlineChartUrl(code, limit = 120) {
     const normalized = strategy4DailyKlineCode(code);
-    return normalized ? `/api/daily-kline-chart?code=${encodeURIComponent(normalized)}&limit=${Number(limit) || 120}&v=20260816-30` : "";
+    return normalized ? `/api/daily-kline-chart?code=${encodeURIComponent(normalized)}&limit=${Number(limit) || 120}&v=${encodeURIComponent(terminalFastVersion())}` : "";
   }
 
   function isInlineDailyKlineRoute(route) {
@@ -5407,7 +5407,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-26";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-27";
   }
 
   function loadScriptOnce(src, attr) {
@@ -5443,7 +5443,7 @@
 
   function ensureWatchlistShell() {
     if (window.FUMAN_WATCHLIST_SHELL_INSTANCE) return Promise.resolve(window.FUMAN_WATCHLIST_SHELL_INSTANCE);
-    const version = "watchlist-rich-shell-20260816-sunlight-01";
+    const version = terminalFastVersion();
     return loadScriptOnce(`terminal-watchlist-shell.js?v=${encodeURIComponent(version)}`, "data-fuman-watchlist-shell")
       .then(() => window.FUMAN_WATCHLIST_SHELL_MODULE?.install?.({}) || window.FUMAN_WATCHLIST_SHELL_INSTANCE || null)
       .catch(() => null);
@@ -7883,7 +7883,7 @@
     const link = document.createElement("link");
     link.id = "fuman-realtime-radar-dom-style";
     link.rel = "stylesheet";
-    link.href = "/terminal-realtime-radar.css?v=radar-ledger-20260630-02";
+    link.href = `/terminal-realtime-radar.css?v=${encodeURIComponent(terminalFastVersion())}`;
     document.head.appendChild(link);
   }
 

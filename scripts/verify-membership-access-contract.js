@@ -267,15 +267,15 @@ async function main() {
   requireIncludes("styles.css", "membership-footer-status-20260713");
   requireIncludes("terminal-entitlement-guard.js", "handleMemberAuthAction");
   requireIncludes("terminal-entitlement-guard.js", "openLoginPage");
-  requireIncludes("index.html", "membership-lock=20260713-11");
-  requireIncludes("mobile.html", "membership-lock=20260713-11");
+  requireIncludes("index.html", "terminal-entitlement-guard.js?v=");
+  requireIncludes("mobile.html", "terminal-entitlement-guard.js?v=");
   requireIncludes("mobile.html", "mobile-auth-actions");
   requireIncludes("mobile.html", "mobile-login-link");
   requireExcludes("mobile.html", "mobile-signup-link");
   requireIncludes("mobile.html", "mobile-logout-button");
   requireIncludes("mobile.html", "data-mobile-auth-lock");
   requireIncludes("mobile.html", "function renderAuthGate");
-  requireIncludes("88.html", "membership-lock=20260713-11");
+  requireIncludes("88.html", "terminal-entitlement-guard.js?v=");
   requireIncludes("api/mobile-fragment.js", "data-mobile-membership-login=\"1\"");
   requireIncludes("api/mobile-fragment.js", "data-mobile-orientation-login=\"portrait-landscape\"");
   requireIncludes("api/mobile-fragment.js", "data-mobile-login-action=\"login\"");
@@ -286,7 +286,7 @@ async function main() {
   requireIncludes("api/source-reports.js", "withEntitlementRequired(handler, \"source-reports\")");
   requireExcludes("terminal-entitlement-guard.js", "data-testid=\"scorecard-locked\"");
   requireExcludes("terminal-entitlement-guard.js", "/auth.html?next=%2F88");
-  requireIncludes("index.html", "membership-footer=20260713-02");
+  requireIncludes("index.html", "styles.css?v=");
   requireIncludes("styles.css", "membership-footer-status-readable-20260713");
   requireIncludes("terminal-entitlement-guard.js", "forceActivePanel");
   requireIncludes("api/terminal-fast-bundle.js", "filterPublicBundlePayload");

@@ -97,8 +97,8 @@ async function verifyLive() {
 
   const serviceWorker = await fetchText("/fuman-sw.js");
   assertLiveText("fuman-sw", serviceWorker, [
-    "/api/terminal-fast-bundle",
-    "DATA_PATTERNS",
+    "api\\/terminal-fast-bundle",
+    "LIVE_PATTERNS",
   ]);
 
   const mobilePage = await fetchText("/api/mobile-page");
@@ -153,7 +153,7 @@ async function main() {
   requireMarker("terminal-hotfix.js", "finishShellAdd", "watchlist async shell add bridge");
   requireMarker("terminal-hotfix.js", "watchlist-storage-guard-20260628-03", "watchlist placeholder storage blocker");
   requireMarker("terminal-hotfix.js", "scheduleShellValidation", "watchlist storage validation handoff");
-  requireMarker("terminal-watchlist-shell.js", "watchlist-rich-shell-20260714-detail-sync-01", "watchlist detail quote sync shell 20260714");
+  requireMarker("terminal-watchlist-shell.js", "const VERSION = \"public-terminal-fast-", "watchlist shell unified release version");
   requireMarker("terminal-watchlist-shell.js", "memoryRows", "watchlist memory-backed rows");
   requireMarker("terminal-watchlist-shell.js", "validateTaiwanStockCode", "watchlist Taiwan stock validation");
   requireMarker("terminal-watchlist-shell.js", "不是有效上市/上櫃台股代號", "watchlist invalid stock blocker");
@@ -173,7 +173,7 @@ async function main() {
   requireMarker("version.json", EXPECTED_FRONTEND_VERSION);
   requireMarker("terminal-core.js", `const version = "${EXPECTED_FRONTEND_VERSION}"`);
   requireMarker("index.html", `terminal-core.js?v=${EXPECTED_FRONTEND_VERSION}`);
-  requireMarker("index.html", "terminal-hotfix.js?watchlist-bridge=20260628-06");
+  requireMarker("index.html", `terminal-hotfix.js?v=${EXPECTED_FRONTEND_VERSION}`);
   requireMarker("fuman-sw.js", `fuman-terminal-sw-${EXPECTED_FRONTEND_VERSION}`);
   for (const file of ["version.json", "index.html", "terminal-core.js", "fuman-sw.js"]) {
     if (read(file).includes("strategy1-two-cards-20260623-03")) {
@@ -201,8 +201,8 @@ async function main() {
   requireMarker(path.join("api", "terminal-fast-bundle.js"), "fast_bundle_timeout");
   requireMarker(path.join("api", "terminal-fast-bundle.js"), "Promise.all");
 
-  requireMarker("fuman-sw.js", "/api/terminal-fast-bundle");
-  requireMarker("fuman-sw.js", "DATA_PATTERNS");
+  requireMarker("fuman-sw.js", "api\\/terminal-fast-bundle");
+  requireMarker("fuman-sw.js", "LIVE_PATTERNS");
   requireMarker("fuman-sw.js", "PREFETCH_CORE_DATA_ASSETS");
 
   const vercel = read("vercel.json");

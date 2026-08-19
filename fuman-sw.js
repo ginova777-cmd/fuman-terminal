@@ -1,41 +1,41 @@
-const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260714-26-decision-prices-20260819-01";
+const RELEASE_VERSION = "public-terminal-fast-20260714-27";
+const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260714-27";
 const PROTECTED_NO_STALE_SW_EPOCH = "protected-no-stale-first-paint-20260724-01";
 const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-api-only-20260809-01";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
-const MARKET_OVERVIEW_RESTORE_ASSET_EPOCH = "market-overview-restore-20260627-02";
-const WATCHLIST_SHELL_ASSET_EPOCH = "watchlist-mainforce-resonance-20260816-01";
-const WATCHLIST_HOTFIX_BRIDGE_EPOCH = "watchlist-bridge=20260628-06";
 
 const STATIC_ASSETS = [
-  "/styles.css?v=public-terminal-fast-20260714-26",
-  "/terminal-core.js?v=public-terminal-fast-20260714-26&runtime=desktop-fast-shell-core-20260628-03",
-  "/terminal-modules.js?v=public-terminal-fast-20260714-26",
-  "/terminal-sector-map.js?v=public-terminal-fast-20260714-26",
-  "/terminal-strategy-config.js?v=public-terminal-fast-20260714-26",
-  "/terminal-market-config.js?v=public-terminal-fast-20260714-26",
-  "/terminal-ui-config.js?v=public-terminal-fast-20260714-26",
-  "/terminal-runtime-config.js?v=public-terminal-fast-20260714-26",
-  "/terminal-tuning-config.js?v=public-terminal-fast-20260714-26",
-  "/terminal-worker.js?v=public-terminal-fast-20260714-26",
-  "/terminal.js?v=public-terminal-fast-20260714-26",
-  "/terminal-desktop-fast-shell.js?buy-sell-derived-fields=20260629-01&strategy2-history=20260629-01&realtime-ledger=20260630-02&heatmap-live-contract=20260630-01&strategy2-card=20260701-03&strategy4-triangle=20260702-02&market-ai-single-renderer=20260702-03&display-switcher=20260702-01&strategy5-live-meta=20260706-02&strategy3-formal-header=20260708-01&market-ai-watchlist-actions=20260709-01&strategy3-card-ui=20260709-04&market-ai-clean-layout=20260713-01&strategy5-confluence-mix=20260715-02&protected-no-stale-first-paint=20260724-01&v=public-terminal-fast-20260714-26&industry-detection-state=20260731-03&strategy4-daily-kline=20260813-01&strategy4-kline-pointer=20260813-01&strategy4-kline-visible=20260813-01&strategy3-strategy4-inline-daily-kline=20260814-01&opening-briefing-clean=20260813-01&strategy2-panel-layout=20260813-07&sunlight-polish=20260813-01&compact-layout=20260813-06&three-gate-prices=20260818-04&sunlight-daily-kline=20260816-03&strategy5-w-neckline-annotation=20260816-27&strategy5-w-bottom-rebound=20260816-01&daily-kline-native-chart=20260816-30&strategy5-terminal-confluence=20260816-01",
-  "/terminal-app.js?v=public-terminal-fast-20260714-26",
-  "/terminal-entitlement-guard.js?v=public-terminal-fast-20260714-26",
-  "/terminal-market-ai-live-watchdog.js?v=public-terminal-fast-20260714-26",
-  "/terminal-ai-risk-guard.js?v=public-terminal-fast-20260714-26",
-  `/terminal-market-overview-restore.css?v=${MARKET_OVERVIEW_RESTORE_ASSET_EPOCH}`,
-  `/terminal-market-overview-restore.js?v=${MARKET_OVERVIEW_RESTORE_ASSET_EPOCH}`,
-  "/terminal-member-module.js?v=public-terminal-fast-20260714-26",
-  "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260714-26",
-  "/terminal-strategy-module.js?v=public-terminal-fast-20260714-26",
-  `/terminal-watchlist-shell.js?v=${WATCHLIST_SHELL_ASSET_EPOCH}`,
-  "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260714-26",
-  "/terminal-chip-flow.js?v=public-terminal-fast-20260714-26",
-  "/terminal-watchlist-module.js?v=public-terminal-fast-20260714-26",
-  "/terminal-intraday-radar.css?v=public-terminal-fast-20260714-26",
-  "/terminal-utility.css?v=public-terminal-fast-20260714-26",
-  "/refresh.html?v=public-terminal-fast-20260714-26",
+  "/styles.css?v=public-terminal-fast-20260714-27",
+  "/terminal-core.js?v=public-terminal-fast-20260714-27",
+  "/terminal-modules.js?v=public-terminal-fast-20260714-27",
+  "/terminal-sector-map.js?v=public-terminal-fast-20260714-27",
+  "/terminal-strategy-config.js?v=public-terminal-fast-20260714-27",
+  "/terminal-market-config.js?v=public-terminal-fast-20260714-27",
+  "/terminal-ui-config.js?v=public-terminal-fast-20260714-27",
+  "/terminal-runtime-config.js?v=public-terminal-fast-20260714-27",
+  "/terminal-tuning-config.js?v=public-terminal-fast-20260714-27",
+  "/terminal-worker.js?v=public-terminal-fast-20260714-27",
+  "/terminal.js?v=public-terminal-fast-20260714-27",
+  "/terminal-hotfix.js?v=public-terminal-fast-20260714-27",
+  "/terminal-desktop-fast-shell.js?v=public-terminal-fast-20260714-27",
+  "/terminal-app.js?v=public-terminal-fast-20260714-27",
+  "/terminal-entitlement-guard.js?v=public-terminal-fast-20260714-27",
+  "/terminal-market-ai-live-watchdog.js?v=public-terminal-fast-20260714-27",
+  "/terminal-ai-risk-guard.js?v=public-terminal-fast-20260714-27",
+  "/terminal-market-overview-restore.css?v=public-terminal-fast-20260714-27",
+  "/terminal-market-overview-restore.js?v=public-terminal-fast-20260714-27",
+  "/terminal-member-module.js?v=public-terminal-fast-20260714-27",
+  "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260714-27",
+  "/terminal-strategy-module.js?v=public-terminal-fast-20260714-27",
+  "/terminal-watchlist-shell.js?v=public-terminal-fast-20260714-27",
+  "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260714-27",
+  "/terminal-chip-flow.js?v=public-terminal-fast-20260714-27",
+  "/terminal-watchlist-module.js?v=public-terminal-fast-20260714-27",
+  "/terminal-realtime-radar.css?v=public-terminal-fast-20260714-27",
+  "/terminal-intraday-radar.css?v=public-terminal-fast-20260714-27",
+  "/terminal-utility.css?v=public-terminal-fast-20260714-27",
+  "/refresh.html?v=public-terminal-fast-20260714-27",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
@@ -224,7 +224,7 @@ async function purgeOldMarketOverviewAssets() {
   await Promise.allSettled(requests.map((request) => {
     const url = new URL(request.url);
     if (!/^\/terminal-market-overview-restore\.(?:js|css)$/i.test(url.pathname)) return undefined;
-    if (url.search.includes(MARKET_OVERVIEW_RESTORE_ASSET_EPOCH)) return undefined;
+    if (url.searchParams.get("v") === RELEASE_VERSION) return undefined;
     return cache.delete(request);
   }));
 }
@@ -234,8 +234,8 @@ async function purgeOldWatchlistAssets() {
   const requests = await cache.keys();
   await Promise.allSettled(requests.map((request) => {
     const url = new URL(request.url);
-    if (url.pathname === "/terminal-watchlist-shell.js" && !url.search.includes(WATCHLIST_SHELL_ASSET_EPOCH)) return cache.delete(request);
-    if (url.pathname === "/terminal-hotfix.js" && !url.search.includes(WATCHLIST_HOTFIX_BRIDGE_EPOCH)) return cache.delete(request);
+    if (url.pathname === "/terminal-watchlist-shell.js" && url.searchParams.get("v") !== RELEASE_VERSION) return cache.delete(request);
+    if (url.pathname === "/terminal-hotfix.js" && url.searchParams.get("v") !== RELEASE_VERSION) return cache.delete(request);
     return undefined;
   }));
 }

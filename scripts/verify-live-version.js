@@ -87,6 +87,28 @@ function verifyUnifiedFrontendRelease(home, desktopShell, version) {
   console.log("[live-version] unified frontend release ok");
 }
 
+function verifyAllUnifiedFrontendRelease({ scorecard, mobile, auth, serviceWorker, desktopShell, watchlistModule, watchlistShell, version }) {
+  for (const [page, body, asset] of [
+    ["/88", scorecard, `terminal-entitlement-guard.js?v=${version}`],
+    ["/mobile.html", mobile, `terminal-entitlement-guard.js?v=${version}`],
+    ["/auth.html", auth, `terminal-runtime-config.js?v=${version}`],
+  ]) {
+    if (!body.includes(asset)) throw new Error(`${page} must use the unified release ${asset}`);
+    if (/membership-lock=|public-terminal-fast-20260714-(?:19|20|22)/.test(body)) throw new Error(`${page} retains a legacy frontend cache token`);
+  }
+  if (!desktopShell.includes(`terminal-watchlist-shell.js?v=${encodeURIComponent(version)}`) || !desktopShell.includes(`terminal-realtime-radar.css?v=${encodeURIComponent(terminalFastVersion())}`)) {
+    throw new Error("desktop dynamic assets must use the unified release version");
+  }
+  if (!watchlistModule.includes("function releaseVersion()") || !watchlistModule.includes(`terminal-watchlist-shell.js?v=${encodeURIComponent(releaseVersion())}`)) {
+    throw new Error("watchlist module must load the shell with the unified release version");
+  }
+  if (!watchlistShell.includes(`const VERSION = \"${version}\"`)) throw new Error("watchlist shell must report the unified release version");
+  for (const asset of ["terminal-core.js", "terminal-desktop-fast-shell.js", "terminal-watchlist-shell.js", "terminal-market-overview-restore.js", "terminal-realtime-radar.css"]) {
+    if (!serviceWorker.includes(`/${asset}?v=${version}`)) throw new Error(`service worker missing unified ${asset}`);
+  }
+  if (/ASSET_EPOCH|desktop-fast-shell-core-|watchlist-mainforce-resonance/.test(serviceWorker)) throw new Error("service worker retains a legacy feature cache epoch");
+  console.log("[live-version] all terminal entry points share one release version");
+}
 function verifyMarketEventReminderGuard(app, desktopShell) {
   const required = [
     "installMarketSettlementTitleBadgeGuard",
@@ -190,6 +212,13 @@ async function verifyOnce() {
     throw new Error(`desktop-fast-shell hash mismatch local=${localDesktopShellHash} live=${liveDesktopShellHash}`);
   }
   verifyUnifiedFrontendRelease(home, desktopShell, version);
+  const scorecard = await expectOk("scorecard-page", "/88", (body) => body.includes(`terminal-entitlement-guard.js?v=${version}`));
+  const mobile = await expectOk("mobile-page", "/mobile.html", (body) => body.includes(`terminal-entitlement-guard.js?v=${version}`));
+  const auth = await expectOk("auth-page", "/auth.html", (body) => body.includes(`terminal-runtime-config.js?v=${version}`));
+  const watchlistModule = await expectOk("watchlist-module", `/terminal-watchlist-module.js?v=${version}`, (body) => body.includes("function releaseVersion()"));
+  const watchlistShell = await expectOk("watchlist-shell", `/terminal-watchlist-shell.js?v=${version}`, (body) => body.includes(`const VERSION = "${version}"`));
+  const serviceWorker = await expectOk("service-worker-unified", `/fuman-sw.js?v=${version}`, (body) => body.includes(`fuman-terminal-sw-${version}`));
+  verifyAllUnifiedFrontendRelease({ scorecard, mobile, auth, serviceWorker, desktopShell, watchlistModule, watchlistShell, version });
   verifyMarketEventReminderGuard(app, desktopShell);
   const riskGuard = await expectOk("AI priority risk guard", `/terminal-ai-risk-guard.js?v=${version}`, (body) => body.includes("installMarketAiPriorityRiskGuard"));
   verifyMarketAiPriorityRiskGuard(riskGuard);

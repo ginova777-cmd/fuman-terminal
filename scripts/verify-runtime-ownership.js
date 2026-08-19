@@ -65,8 +65,8 @@ if (!/terminal-hotfix\.js\?[^"']+["']\s+data-fuman-terminal-hotfix=["']1["']/.te
 if (!/terminal-desktop-fast-shell\.js\?[^"']+["']\s+data-fuman-desktop-fast-shell=["']1["']/.test(indexHtml)) {
   issues.push("index.html must load terminal-desktop-fast-shell.js with an explicit cache key");
 }
-if (!/terminal-core\.js\?v=public-terminal-fast-\d{8}-\d{2}&runtime=desktop-fast-shell-core-\d{8}-\d{2}/.test(indexHtml)) {
-  issues.push("index.html terminal-core runtime key must be desktop-fast-shell-core-* when fast shell owns runtime");
+if (!/terminal-core\.js\?v=public-terminal-fast-\d{8}-\d{2}/.test(indexHtml) || /terminal-core\.js\?[^"']*&runtime=/.test(indexHtml)) {
+  issues.push("index.html terminal-core must use only the unified release version");
 }
 
 const realtimeNavCount = (indexHtml.match(/data-view=["']realtime-radar["']/g) || []).length;
@@ -133,8 +133,8 @@ if (skipIndex < 0) {
   }
 }
 
-if (!serviceWorker.includes("desktop-fast-shell-core-")) {
-  issues.push("fuman-sw.js must cache the current desktop-fast-shell-core terminal-core asset");
+if (!/\/terminal-core\.js\?v=public-terminal-fast-\d{8}-\d{2}/.test(serviceWorker) || serviceWorker.includes("desktop-fast-shell-core-")) {
+  issues.push("fuman-sw.js must cache terminal-core with only the unified release version");
 }
 
 if (!String(packageJson.scripts?.["verify:runtime-ownership"] || "").includes("verify-runtime-ownership.js")) {

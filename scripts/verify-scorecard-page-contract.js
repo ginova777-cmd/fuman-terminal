@@ -24,10 +24,10 @@ const issues = [];
 const publicPage = page.replace(/<template\s+id="scorecardPrivateContractMarkers"[\s\S]*?<\/template>/i, "");
 
 assertMarker(issues, page, "/api/scorecard?t=", "/88 snapshot scorecard API");
-if (/\/api\/scorecard\?[^`"']*(live=1|snapshotLive=1|noCache=1)/.test(page)) {
-  issues.push("/88 must not force scorecard live/snapshotLive/noCache; scorecard reads published snapshot to protect Supabase");
+if (!/\/api\/scorecard\?[^`"']*live=1[^`"']*noCache=1/.test(page)) {
+  issues.push("/88 must request the current published scorecard with no-cache");
 }
-assertMarker(issues, page, "membership-lock=20260713-11", "/88 must load current membership guard");
+assertMarker(issues, page, "terminal-entitlement-guard.js?v=", "/88 must load current membership guard");
 assertMarker(issues, page, "cache: \"no-store\"", "/88 no-store fetch");
 assertMarker(issues, page, "renderMembershipLock", "/88 membership lock renderer");
 assertMarker(issues, page, "isMembershipFailure", "/88 membership failure handling");

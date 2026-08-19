@@ -31,6 +31,10 @@ requireIncludes("index.html", `styles.css?v=${VERSION}`);
 requireIncludes("index.html", `terminal-core.js?v=${VERSION}`);
 requireIncludes("index.html", `terminal-entitlement-guard.js?v=${VERSION}`);
 requireIncludes("88.html", `terminal-entitlement-guard.js?v=${VERSION}`);
+requireIncludes("mobile.html", `terminal-entitlement-guard.js?v=${VERSION}`);
+requireIncludes("auth.html", `terminal-runtime-config.js?v=${VERSION}`);
+requireIncludes("index.github.html", `styles.css?v=${VERSION}`);
+requireIncludes("index.html", `terminal-market-overview-restore.css?v=${VERSION}`);
 requireIncludes("index.html", `terminal-ai-risk-guard.js?v=${VERSION}`);
 requireIncludes("terminal-core.js", `const version = "${VERSION}"`);
 requireIncludes("terminal-modules.js", `const VERSION = "${VERSION}"`);
@@ -45,13 +49,17 @@ requireIncludes("fuman-sw.js", `/terminal-ai-risk-guard.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-member-module.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-market-snapshot-module.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-strategy-module.js?v=${VERSION}`);
-requireIncludes("fuman-sw.js", "WATCHLIST_SHELL_ASSET_EPOCH");
-
-requireIncludes("fuman-sw.js", "`/terminal-watchlist-shell.js?v=${WATCHLIST_SHELL_ASSET_EPOCH}`");
+requireIncludes("fuman-sw.js", `const RELEASE_VERSION = "${VERSION}"`);
+requireIncludes("fuman-sw.js", `/terminal-watchlist-shell.js?v=${VERSION}`);
+requireIncludes("fuman-sw.js", `/terminal-market-overview-restore.css?v=${VERSION}`);
+requireIncludes("fuman-sw.js", `/terminal-market-overview-restore.js?v=${VERSION}`);
+requireIncludes("fuman-sw.js", `/terminal-hotfix.js?v=${VERSION}`);
+requireIncludes("fuman-sw.js", `/terminal-realtime-radar.css?v=${VERSION}`);
+forbidIncludes("fuman-sw.js", "WATCHLIST_SHELL_ASSET_EPOCH");
+forbidIncludes("fuman-sw.js", "MARKET_OVERVIEW_RESTORE_ASSET_EPOCH");
 forbidIncludes("fuman-sw.js", "watchlist-rich-shell-20260711-03");
 forbidIncludes("fuman-sw.js", "watchlist-rich-shell-20260712-quote-source-01");
 forbidIncludes("fuman-sw.js", "watchlist-rich-shell-20260712-quote-source-02");
-forbidIncludes("fuman-sw.js", `/terminal-watchlist-shell.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-chip-snapshot-module.js?v=${VERSION}`);
 requireIncludes("refresh.html", `/?v=${VERSION}`);
 requireIncludes("version.json", `"version": "${VERSION}"`);
@@ -68,8 +76,20 @@ for (const file of ["index.html", "terminal-core.js", "terminal-modules.js", "te
 }
 
 const sw = read("fuman-sw.js");
-if (!/const\s+WATCHLIST_SHELL_ASSET_EPOCH\s*=\s*["''][^"'']+["'']/.test(sw)) {
-  issues.push("fuman-sw.js: missing WATCHLIST_SHELL_ASSET_EPOCH");
+if (!sw.includes(`const RELEASE_VERSION = "${VERSION}"`)) {
+  issues.push("fuman-sw.js: missing unified RELEASE_VERSION");
+}
+if (/ASSET_EPOCH|desktop-fast-shell-core-|watchlist-rich-shell-20\d{6}/.test(sw)) {
+  issues.push("fuman-sw.js: legacy feature epoch remains");
+}
+if (!read("terminal-watchlist-module.js").includes("function releaseVersion()") || !read("terminal-watchlist-module.js").includes("terminal-watchlist-shell.js?v=${encodeURIComponent(releaseVersion())}")) {
+  issues.push("terminal-watchlist-module.js: dynamic shell must use unified release version");
+}
+if (!read("terminal-desktop-fast-shell.js").includes("terminal-watchlist-shell.js?v=${encodeURIComponent(version)}") || !read("terminal-desktop-fast-shell.js").includes("terminal-realtime-radar.css?v=${encodeURIComponent(terminalFastVersion())}") || !read("terminal-desktop-fast-shell.js").includes("daily-kline-chart?code=${encodeURIComponent(normalized)}&limit=${Number(limit) || 120}&v=${encodeURIComponent(terminalFastVersion())}")) {
+  issues.push("terminal-desktop-fast-shell.js: dynamic assets must use unified release version");
+}
+if (!read("scripts/bump-version.js").includes("\"mobile.html\"") || !read("scripts/bump-version.js").includes("\"terminal-watchlist-shell.js\"")) {
+  issues.push("scripts/bump-version.js: unified release files are incomplete");
 }
 if (sw.includes('"/",') || sw.includes('"/index.html",')) {
   issues.push("fuman-sw.js: must not precache / or /index.html");

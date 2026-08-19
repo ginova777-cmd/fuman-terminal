@@ -37,13 +37,8 @@ if (!version) {
   issues.push("terminal-core.js version was not detected");
 }
 const swCacheVersion = sw.match(/CACHE_VERSION\s*=\s*"fuman-terminal-sw-([^"]+)"/)?.[1] || "";
-const allowedCacheVersions = new Set([
-  version,
-  `${version}-cb-warrant-retired-20260818-01`,
-  `${version}-decision-prices-20260819-01`,
-]);
-if (version && !allowedCacheVersions.has(swCacheVersion)) {
-  issues.push(`fuman-sw.js CACHE_VERSION ${swCacheVersion || "(missing)"} must match terminal-core.js version ${version} or its approved CB/warrant retirement epoch`);
+if (version && swCacheVersion !== version) {
+  issues.push(`fuman-sw.js CACHE_VERSION ${swCacheVersion || "(missing)"} must exactly match terminal-core.js version ${version}`);
 }
 for (const asset of ["styles.css", "terminal-core.js", "terminal-market-ai-live-watchdog.js"]) {
   if (version && !index.includes(`${asset}?v=${version}`)) {

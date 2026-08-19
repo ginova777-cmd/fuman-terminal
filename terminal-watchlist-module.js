@@ -1,7 +1,11 @@
 (function () {
   "use strict";
 
-  const VERSION = "watchlist-old-page-deleted-bridge-20260627-02";
+  const FALLBACK_VERSION = "public-terminal-fast-20260714-27";
+
+  function releaseVersion() {
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || FALLBACK_VERSION;
+  }
   let shellPromise = null;
 
   function loadShellScript() {
@@ -18,8 +22,7 @@
         return;
       }
       const script = document.createElement("script");
-      const bootVersion = window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast";
-      script.src = `terminal-watchlist-shell.js?v=${encodeURIComponent(`${bootVersion}-${VERSION}`)}`;
+      script.src = `terminal-watchlist-shell.js?v=${encodeURIComponent(releaseVersion())}`;
       script.async = true;
       script.dataset.fumanWatchlistShell = "1";
       script.addEventListener("load", () => { script.dataset.fumanLoaded = "1"; resolve(window.FUMAN_WATCHLIST_SHELL_MODULE || window.FUMAN_WATCHLIST_SHELL_INSTANCE); }, { once: true });
@@ -45,7 +48,7 @@
 
   function install() {
     const api = {
-      version: VERSION,
+      version: releaseVersion(),
       mode: "old-watchlist-page-deleted-rich-shell-only",
       renderWatchlist: () => callShell("render"),
       refreshSelectedWatchlistQuote: () => callShell("refreshSelected"),
@@ -56,7 +59,7 @@
         shell?.render?.();
         return {
           ok: Boolean(shell),
-          version: VERSION,
+          version: releaseVersion(),
           shellVersion: window.FUMAN_WATCHLIST_SHELL_MODULE?.version || window.FUMAN_WATCHLIST_SHELL_INSTANCE?.version || "",
           mode: "old-page-deleted",
           at: new Date().toISOString(),
@@ -70,7 +73,7 @@
     return api;
   }
 
-  window.FUMAN_WATCHLIST_MODULE = { version: VERSION, install };
+  window.FUMAN_WATCHLIST_MODULE = { version: releaseVersion(), install };
   window.FUMAN_WATCHLIST_MODULE_FORCE_ADD = () => callShell("addFromInput");
   window.FUMAN_WATCHLIST_FORCE_ADD = window.FUMAN_WATCHLIST_MODULE_FORCE_ADD;
   window.removeFromWatchlist = (code) => callShell("removeCode", code);
