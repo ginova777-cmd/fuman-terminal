@@ -55,7 +55,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function verifyMarketEventReminderGuard(app) {
+function verifyMarketEventReminderGuard(app, desktopShell) {
   const required = [
     "installMarketSettlementTitleBadgeGuard",
     "台指期大結算",
@@ -72,6 +72,18 @@ function verifyMarketEventReminderGuard(app) {
     throw new Error("market event reminder order must be 台指期大結算 before 美股四巫日");
   }
   console.log("[live-version] market event reminders ok");
+
+  const desktopRequired = [
+    "installMarketSettlementDesktopBadge",
+    "data-market-settlement-title",
+    "data-market-settlement-nav",
+    "台指期大結算",
+    "window.setInterval(render, 60000)",
+  ];
+  for (const marker of desktopRequired) {
+    if (!desktopShell.includes(marker)) throw new Error(`desktop market event reminder missing ${marker}`);
+  }
+  console.log("[live-version] desktop market event reminder ok");
 }
 
 function verifyMarketAiPriorityRiskGuard(text) {
@@ -129,7 +141,13 @@ async function verifyOnce() {
   if (localWatchdogHash !== liveWatchdogHash) {
     throw new Error(`market-ai-live-watchdog hash mismatch local=${localWatchdogHash} live=${liveWatchdogHash}`);
   }
-  verifyMarketEventReminderGuard(app);
+  const desktopShell = await expectOk("desktop-fast-shell", `/terminal-desktop-fast-shell.js?v=${version}`, (body) => body.includes("FUMAN_DESKTOP_ROUTE_SNAPSHOT"));
+  const localDesktopShellHash = sha256(read("terminal-desktop-fast-shell.js"));
+  const liveDesktopShellHash = sha256(desktopShell);
+  if (localDesktopShellHash !== liveDesktopShellHash) {
+    throw new Error(`desktop-fast-shell hash mismatch local=${localDesktopShellHash} live=${liveDesktopShellHash}`);
+  }
+  verifyMarketEventReminderGuard(app, desktopShell);
   const riskGuard = await expectOk("AI priority risk guard", `/terminal-ai-risk-guard.js?v=${version}`, (body) => body.includes("installMarketAiPriorityRiskGuard"));
   verifyMarketAiPriorityRiskGuard(riskGuard);
   console.log(`[live-version] ok version=${version} release=${RELEASE_SHA ? RELEASE_SHA.slice(0, 8) : "none"} terminal-app=${liveAppHash}`);

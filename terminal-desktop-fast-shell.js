@@ -13392,5 +13392,69 @@
         if (watch) button.textContent = ok === false ? "已選中" : "已加入";
       });
     }, true);
+
+  (function installMarketSettlementDesktopBadge() {
+    if (window.__fumanMarketSettlementDesktopBadge === "20260819-01") return;
+    window.__fumanMarketSettlementDesktopBadge = "20260819-01";
+
+    function eventText(date = new Date()) {
+      const local = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      for (let day = 15; day <= 21; day += 1) {
+        const settlement = new Date(local.getFullYear(), local.getMonth(), day);
+        if (settlement.getDay() !== 3) continue;
+        const start = new Date(settlement);
+        start.setDate(settlement.getDate() - 2);
+        if (local >= start && local <= settlement) {
+          return String(settlement.getMonth() + 1) + "/" + String(settlement.getDate()) + " 台指期大結算";
+        }
+        return "";
+      }
+      return "";
+    }
+
+    function render() {
+      const text = eventText();
+      const title = document.querySelector("#market-view .page-header h1");
+      if (title) {
+        let badge = title.querySelector("[data-market-settlement-title]");
+        if (!text) {
+          badge?.remove();
+        } else {
+          if (!badge) {
+            badge = document.createElement("small");
+            badge.className = "update-mode-badge settlement-title-badge";
+            badge.dataset.marketSettlementTitle = "1";
+            title.appendChild(document.createTextNode(" "));
+            title.appendChild(badge);
+          }
+          badge.textContent = text;
+        }
+      }
+
+      const marketNav = document.querySelector('[data-view="market"]');
+      if (!marketNav) return;
+      let navBadge = marketNav.querySelector("[data-market-settlement-nav]");
+      if (!text) {
+        navBadge?.remove();
+        return;
+      }
+      if (!navBadge) {
+        navBadge = document.createElement("small");
+        navBadge.className = "update-mode-badge update-mode-badge-live settlement-title-badge";
+        navBadge.dataset.marketSettlementNav = "1";
+        marketNav.appendChild(navBadge);
+      }
+      navBadge.textContent = text;
+    }
+
+    render();
+    window.setInterval(render, 60000);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) render();
+    }, { passive: true });
+    document.addEventListener("click", (event) => {
+      if (event.target?.closest?.('[data-view="market"]')) window.setTimeout(render, 0);
+    }, true);
+  })();
   })();
 })();
