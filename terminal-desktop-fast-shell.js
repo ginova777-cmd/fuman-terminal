@@ -13393,9 +13393,11 @@
       });
     }, true);
 
+
+  })();
   (function installMarketSettlementDesktopBadge() {
-    if (window.__fumanMarketSettlementDesktopBadge === "20260819-01") return;
-    window.__fumanMarketSettlementDesktopBadge = "20260819-01";
+    if (window.__fumanMarketSettlementDesktopBadge === "20260819-02") return;
+    window.__fumanMarketSettlementDesktopBadge = "20260819-02";
 
     function eventText(date = new Date()) {
       const local = new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -13456,5 +13458,5 @@
       if (event.target?.closest?.('[data-view="market"]')) window.setTimeout(render, 0);
     }, true);
   })();
-  })();
+
 })();

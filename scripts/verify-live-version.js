@@ -83,6 +83,13 @@ function verifyMarketEventReminderGuard(app, desktopShell) {
   for (const marker of desktopRequired) {
     if (!desktopShell.includes(marker)) throw new Error(`desktop market event reminder missing ${marker}`);
   }
+  const normalizedDesktopShell = desktopShell.replace(/\r\n/g, "\n");
+  const watchlistStart = normalizedDesktopShell.indexOf("installMarketAiWatchlistActions");
+  const watchlistClose = normalizedDesktopShell.indexOf("\n  })();", watchlistStart);
+  const settlementStart = normalizedDesktopShell.indexOf("installMarketSettlementDesktopBadge");
+  if (watchlistStart < 0 || watchlistClose < 0 || settlementStart <= watchlistClose) {
+    throw new Error("desktop market event reminder must be initialized outside the watchlist guard");
+  }
   console.log("[live-version] desktop market event reminder ok");
 }
 
