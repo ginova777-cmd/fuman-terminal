@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const FALLBACK_VERSION = "public-terminal-fast-20260714-27";
+  const FALLBACK_VERSION = "public-terminal-fast-20260714-28";
 
   function releaseVersion() {
     return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || FALLBACK_VERSION;
