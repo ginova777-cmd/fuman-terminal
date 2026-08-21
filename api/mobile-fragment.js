@@ -661,6 +661,9 @@ function normalizeRows(payload, tab = "") {
     const windowRows = sortedRows.filter(inStrategy2Window);
     return hidePreviousGoodRows((windowRows.length ? windowRows : sortedRows).filter((row) => isValidBusinessRow(row, tab)), payload, tab);
   }
+  if (tab === "strategy3") {
+    return rows.filter((row) => isValidBusinessRow(row, tab));
+  }
   return rows.filter((row) => isValidBusinessRow(row, tab)).slice(0, 20);
 }
 
@@ -1080,6 +1083,7 @@ module.exports = async function handler(request, response) {
     sendHtml(request, response, 404, '<div class="empty-state">未知分頁。</div>', { tab });
     return;
   }
+  const requestedLiveFragment = shouldUseLiveFragment(tab) && (url.searchParams.get("live") === "1" || url.searchParams.get("verify") === "1" || url.searchParams.get("noSnapshot") === "1");
   if (tab !== "ai") {
     const entitlement = await verifyRequestEntitlement(request, { scope: `mobile-fragment:${tab}` });
     if (!entitlement.ok) {
@@ -1091,7 +1095,6 @@ module.exports = async function handler(request, response) {
       });
       return;
     }
-    const requestedLiveFragment = shouldUseLiveFragment(tab) && (url.searchParams.get("live") === "1" || url.searchParams.get("verify") === "1" || url.searchParams.get("noSnapshot") === "1");
     const bypassHtmlSnapshot = requestedLiveFragment;
     const htmlSnapshot = (bypassHtmlSnapshot || tab === "strategy2") ? null : await readMobileFragmentHtmlSnapshot(
       tab);
@@ -1102,12 +1105,13 @@ module.exports = async function handler(request, response) {
     }
   }
   try {
+    const endpointLimit = tab === "strategy3" ? 1200 : 60;
     const endpoint = appendQuery(config.endpoint, {
       mobile: 1,
       canvas: 1,
       compact: 1,
       shell: 1,
-      limit: 60,
+      limit: endpointLimit,
       ...(tab === "strategy2" || requestedLiveFragment ? { live: 1, verify: 1, noSnapshot: 1 } : {}),
       ts: Date.now(),
     });
