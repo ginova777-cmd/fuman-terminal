@@ -102,7 +102,7 @@ function verifyAllUnifiedFrontendRelease({ scorecard, mobile, auth, serviceWorke
     ["/auth.html", auth, `terminal-runtime-config.js?v=${version}`],
   ]) {
     if (!body.includes(asset)) throw new Error(`${page} must use the unified release ${asset}`);
-    if (/membership-lock=|public-terminal-fast-20260714-(?:19|20|22)/.test(body)) throw new Error(`${page} retains a legacy frontend cache token`);
+    if (/membership-lock=|public-terminal-fast-20260714-(?:19|20)/.test(body)) throw new Error(`${page} retains a legacy frontend cache token`);
   }
   if (!desktopShell.includes("terminal-watchlist-shell.js?v=${encodeURIComponent(version)}") || !desktopShell.includes("terminal-realtime-radar.css?v=${encodeURIComponent(terminalFastVersion())}")) {
     throw new Error("desktop dynamic assets must use the unified release version");

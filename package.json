@@ -68,6 +68,7 @@
     "verify:source-layer-contract": "node scripts/verify-source-layer-contract.js",
     "verify:daytrade-source-speed": "node --use-system-ca scripts/verify-daytrade-source-speed-readonly.js",
     "verify:daytrade-source-contract-alignment": "node --use-system-ca scripts/verify-daytrade-source-contract-alignment.js",
+    "verify:daytrade-mother-pool-skeleton": "node scripts/verify-daytrade-mother-pool-skeleton.js",
     "apply:daytrade-source-contract-alignment": "node --use-system-ca scripts/apply-daytrade-source-contract-alignment.js",
     "verify:daytrade-strategy3-closure-live": "node --use-system-ca scripts/verify-daytrade-strategy3-closure-live.js",
     "verify:daytrade-strategy3-closure:wrapped": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-daytrade-strategy3-closure-verify.ps1",

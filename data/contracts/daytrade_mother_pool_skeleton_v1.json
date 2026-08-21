@@ -1,0 +1,40 @@
+{
+  "contract": "daytrade_mother_pool_skeleton_v1",
+  "baseline": "public-terminal-fast-20260714-22",
+  "baselineTime": "2026-08-18 21:00 Asia/Taipei",
+  "baselineCommit": "4d6ba88c19c5924093fcbe8afb0566df3c80a921",
+  "formalFlow": [
+    "full_market_quote_radar",
+    "mother_pool",
+    "priority_pool",
+    "hot_pool",
+    "deep_scan_pool",
+    "formal_gate",
+    "formal_candidates"
+  ],
+  "compatOnlyFields": [
+    "TOP40",
+    "priority_top40"
+  ],
+  "forbiddenInFormalScope": [
+    "cb",
+    "warrant",
+    "etf",
+    "stale_quote",
+    "previous_good_as_today",
+    "old_supabase_market_snapshots_fallback"
+  ],
+  "displaySurfaces": [
+    "terminal",
+    "mobile_fragment",
+    "api"
+  ],
+  "rules": {
+    "tradingDayOnly": true,
+    "sameTradeDateAndRunIdRequired": true,
+    "top40IsNotLimitGateOrOnlyEntry": true,
+    "websocketCandlesAreFormal1mSource": true,
+    "dataGapMustNotDisplayAsNoSignal": true,
+    "oldSupabaseMarketSnapshotsFallbackDisabled": true
+  }
+}

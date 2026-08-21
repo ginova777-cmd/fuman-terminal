@@ -58,6 +58,7 @@ function main() {
     ["membership_e2e_layering", node, ["scripts/verify-membership-e2e-layering.js"]],
     ["buySellNoRollbackGuard", node, ["scripts/guard-buy-sell-no-rollback.js"]],
     ["buySellFieldContractGuard", node, ["--use-system-ca", "scripts/verify-buy-sell-field-contract.js"]],
+    ["daytradeMotherPoolSkeleton", node, ["scripts/verify-daytrade-mother-pool-skeleton.js"]],
     ["verify:unified-source-gate", node, ["scripts/verify-unified-source-gate-contract.js"]],
     ["terminal_modules_contract", node, ["scripts/verify-terminal-modules-contract.js"]],
     ["terminal_water_root", node, ["scripts/verify-terminal-water-root.js"]],

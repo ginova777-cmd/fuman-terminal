@@ -1,10 +1,16 @@
 (function () {
   const version = "public-terminal-fast-20260714-27";
   const runtimeAssetEpoch = "desktop-fast-shell-core-20260628-03";
+  const formalSkeletonContract = "daytrade_mother_pool_skeleton_v1";
+  const formalSkeletonBaseline = "public-terminal-fast-20260714-22";
   window.FUMAN_TERMINAL_VERSION = version;
+  window.FUMAN_FORMAL_SKELETON_CONTRACT = formalSkeletonContract;
+  window.FUMAN_FORMAL_SKELETON_BASELINE = formalSkeletonBaseline;
   window.FUMAN_TERMINAL_RUNTIME_ASSET_EPOCH = runtimeAssetEpoch;
   window.FUMAN_TERMINAL_BOOT = {
     version,
+    formalSkeletonContract,
+    formalSkeletonBaseline,
     runtimeAssetEpoch,
     startedAt: Date.now(),
   };

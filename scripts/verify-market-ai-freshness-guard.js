@@ -72,10 +72,10 @@ const preOpenBiasContracts = apiSource.match(/bias = preOpenMarketAi \? "等待�
 assert(preOpenBiasContracts.length >= 2, "market-ai-live full and simple report branches must neutralize bias before 09:00");
 assert(apiSource.includes("不使用開盤前指數或昨日 cache 判斷多空"), "simple market-ai report must not turn pre-open index data into directional bias");
 assert(apiSource.includes("isMarketAiTodayRequiredWindow") && apiSource.includes("AI_TODAY_REQUIRED_START_SECONDS"), "market-ai-live must keep requiring today's live detection after the shared-source start until same-day data exists");
-assert(apiSource.includes("requiresTodayLiveSource") && apiSource.includes("allowLatestFallback: !requireTodayLiveSource"), "market-ai-live must not use latest snapshot fallback after today's shared-source window starts");
-assert(apiSource.includes("allowLatestFallback: !requireTodayLiveSource && (fastCachedPayload || !isMarketAiPostClose(clock))"), "market-ai-live must not use stale latest snapshot fallback after 13:30 post-close or during today live-source-required window");
+assert(apiSource.includes("old_supabase_market_snapshots_fallback_disabled_by_daytrade_mother_pool_skeleton_v1"), "market-ai-live must carry the formal skeleton marker that disables old Supabase market_snapshots fallback");
+assert(!apiSource.includes("allowLatestFallback: !requireTodayLiveSource && (fastCachedPayload || !isMarketAiPostClose(clock))"), "market-ai-live must not keep the old latest market_ai_live snapshot fallback branch");
 assert(apiSource.includes("cachedAllowed") && apiSource.includes("isTodayDate(cachedTradeDate, clock)"), "market-ai-live must not serve stale local cache after 13:30 post-close");
-assert(apiSource.includes("snapshot?.payload && !mustDetectToday && (fastCachedPayload || !isMarketAiPostClose(clock))"), "market-ai-live must rebuild live bundle instead of returning market_ai_live snapshot after 13:30 post-close or when today detection is required");
+assert(!apiSource.includes("snapshot?.payload && !mustDetectToday && (fastCachedPayload || !isMarketAiPostClose(clock))"), "market-ai-live must rebuild live bundle instead of returning market_ai_live snapshot after 13:30 post-close or when today detection is required");
 assert(apiSource.includes("cached && cachedAllowed && !isMarketAiPostClose(clock)"), "market-ai-live must rebuild live bundle instead of returning local cache after 13:30 post-close");
 assert(heatmapApiSource.includes("isUsableHeatmapMemoryPayload"), "heatmap API must reject unusable memory cache payloads");
 assert(heatmapApiSource.includes("stockCount < 500"), "heatmap memory cache must enforce minimum stock coverage");

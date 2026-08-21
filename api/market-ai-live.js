@@ -344,28 +344,6 @@ function normalizeNonTradingCachePayload(payload, session) {
   };
 }
 
-function snapshotResponsePayload(snapshot, breadth, clock) {
-  const payload = snapshot.payload || {};
-  return cachedResponsePayload(
-    {
-      ...payload,
-      cacheSource: "supabase:market_snapshots",
-      snapshot: {
-        key: snapshot.key,
-        tradeDate: snapshot.tradeDate,
-        snapshotId: snapshot.snapshotId,
-        locked: snapshot.locked,
-        source: snapshot.source,
-        updatedAt: snapshot.updatedAt,
-        finalizedAt: snapshot.finalizedAt,
-      },
-    },
-    breadth,
-    clock,
-    snapshot.reason || (snapshot.locked ? "after-1330-cache" : "supabase-snapshot")
-  );
-}
-
 function capture(handler, req) {
   return new Promise((resolve) => {
     const headers = {};
@@ -1738,24 +1716,8 @@ module.exports = async function handler(request, response) {
     ));
     return;
   }
-  const snapshot = await readSnapshot("market_ai_live", {
-    tradeDate: clock.date,
-    allowLatestFallback: !requireTodayLiveSource && (fastCachedPayload || !isMarketAiPostClose(clock)),
-    timeoutMs: SNAPSHOT_TIMEOUT_MS,
-  });
-
-  if (snapshot?.payload && !mustDetectToday && (fastCachedPayload || !isMarketAiPostClose(clock))) {
-    const payload = {
-      ...snapshotResponsePayload(snapshot, breadth, clock),
-      marketSession: sessionForPayload,
-    };
-    response.status(200).json(withMarketAiRunTimeSourceSnapshot(
-      await enrichMarketAiPayload(payload, request, clock, sessionForPayload),
-      clock,
-      sessionForPayload
-    ));
-    return;
-  }
+  const snapshot = null;
+  // old_supabase_market_snapshots_fallback_disabled_by_daytrade_mother_pool_skeleton_v1
 
   const cachedTradeDate = payloadTradeDate(cached);
   const cachedAllowed = !isMarketAiPostClose(clock) || isTodayDate(cachedTradeDate, clock);

@@ -6,6 +6,10 @@ module.exports = function handler(req, res) {
   res.status(200).json({
     ok: true,
     version: versionPayload.version,
+    formalSkeletonContract: versionPayload.formalSkeletonContract,
+    formalSkeletonBaseline: versionPayload.formalSkeletonBaseline,
+    formalSkeletonBaselineTime: versionPayload.formalSkeletonBaselineTime,
+    formalSkeletonBaselineCommit: versionPayload.formalSkeletonBaselineCommit,
     updatedAt: new Date().toISOString(),
   });
 };

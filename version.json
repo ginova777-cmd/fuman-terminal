@@ -1,3 +1,7 @@
 {
-  "version": "public-terminal-fast-20260714-27"
+  "version": "public-terminal-fast-20260714-27",
+  "formalSkeletonContract": "daytrade_mother_pool_skeleton_v1",
+  "formalSkeletonBaseline": "public-terminal-fast-20260714-22",
+  "formalSkeletonBaselineTime": "2026-08-18 21:00 Asia/Taipei",
+  "formalSkeletonBaselineCommit": "4d6ba88c19c5924093fcbe8afb0566df3c80a921"
 }
