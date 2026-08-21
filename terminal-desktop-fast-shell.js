@@ -5415,7 +5415,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-28";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-29";
   }
 
   function loadScriptOnce(src, attr) {
@@ -9396,9 +9396,13 @@
       if (event.__fumanDesktopFastShellClick) return;
       if (!link || event.__fumanDeferredViewClick || event.__fumanFastOfficialClick) return;
       markFastEvent(event);
-      if (isStrategyLink(link) && routeKey(link) === fastClickRoute && Date.now() - fastClickAt < 700) {
+      if (isStrategyLink(link)) {
         event.preventDefault();
         event.stopImmediatePropagation();
+        if (routeKey(link) !== fastClickRoute || Date.now() - fastClickAt >= 700) {
+          activateStrategyRoute(link, "click");
+          runStrategyFastClick(link, event, true);
+        }
         return;
       }
       if (!isStrategyLink(link)) {
@@ -13506,5 +13510,6 @@
   })();
 
 })();
+
 
 
