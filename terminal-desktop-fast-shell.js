@@ -9066,6 +9066,7 @@
     startLatency(link, source || "strategy");
     beginInteractionHold(`strategy-${source || "route"}`);
     const key = strategyRouteKey(link);
+    const panel = document.querySelector("#strategy-view");
     const route = publishActiveRoute(link, key, source || "strategy");
     const seq = route?.seq || ++routeSwitchSeq;
     switchStrategyViewNow(link);
@@ -13505,4 +13506,5 @@
   })();
 
 })();
+
 

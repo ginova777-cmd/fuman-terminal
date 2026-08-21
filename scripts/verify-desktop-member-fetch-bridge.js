@@ -11,6 +11,7 @@ assert(source.includes("const protectedApiPattern ="), "desktop_shell_missing_se
 assert(source.includes("installMemberBearerFetchBridge20260714"), "desktop_shell_missing_member_bearer_bridge");
 assert(source.includes("protectedApiPattern.test(url.pathname)"), "member_bearer_bridge_must_match_url_pathname");
 assert(source.includes("protectedApiPattern: protectedApiPattern.source"), "member_bearer_bridge_must_expose_pattern_for_readback");
+assert(/function activateStrategyRoute[\s\S]*const panel = document\.querySelector\("#strategy-view"\);[\s\S]*renderMemberStrategyPendingShell\(key, strategyMeta\(link \|\| key\), panel\)/.test(source), "strategy_member_fast_hydrate_missing_panel_binding");
 
 const patternMatch = source.match(/const protectedApiPattern = (\/\^[^\n]+\/);/);
 assert(patternMatch, "protected_api_pattern_not_parseable");
@@ -41,3 +42,4 @@ if (issues.length) {
 }
 
 console.log("[desktop-member-fetch-bridge] ok");
+
