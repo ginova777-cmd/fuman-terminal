@@ -573,6 +573,14 @@ function tasksForRequestedRoute(request, tasks = []) {
   if (!route) return tasks;
   return tasks.filter(([endpoint]) => endpointBelongsToRoute(endpoint, route));
 }
+function directLiveTaskForRequestedRoute(request) {
+  const route = requestedStrategyRoute(request);
+  if (route === "strategy3") return [["/api/strategy3-latest", strategy3Latest, { ...compactQuery(1200), live: "1", verify: "1", noSnapshot: "1" }, 15000]];
+  if (route === "strategy4") return [["/api/strategy4-latest", strategy4Latest, { ...compactQuery(1200), live: "1", verify: "1", noSnapshot: "1" }, 15000]];
+  if (route === "strategy5") return [["/api/strategy5-latest", strategy5Latest, { ...compactQuery(1200), live: "1", verify: "1", noSnapshot: "1" }, 15000]];
+  if (route === "institution") return [["/api/institution-latest", institutionLatest, { ...compactQuery(1200), live: "1", verify: "1", noSnapshot: "1" }, 15000]];
+  return null;
+}
 function shouldBuildWatchlistIndex(request) {
   return !requestedStrategyRoute(request);
 }
@@ -962,7 +970,7 @@ module.exports = async function handler(request, response) {
   }
 
   const startedAt = Date.now();
-  memberSnapshotRecovery = Boolean(entitlement?.ok && !wantsLive);
+  memberSnapshotRecovery = Boolean(entitlement?.ok && !wantsLive && !forceDirectMemberRoute);
   const memberSnapshotRecoveryTasks = [
     ["/api/terminal-home", terminalHome, {}, 3500],
     ["/api/market", market, compactQuery(24), 3000],
@@ -987,7 +995,9 @@ module.exports = async function handler(request, response) {
     ["/api/watchlist-match-index", watchlistMatchIndex, { compact: "1", shell: "1", limit: "80" }, 3000],
   ];
 
-  const routeTasks = tasksForRequestedRoute(request, tasks);
+  const routeTasks = forceDirectMemberRoute
+    ? directLiveTaskForRequestedRoute(request)
+    : tasksForRequestedRoute(request, tasks);
   const runnableTasks = entitlement.ok ? routeTasks : routeTasks.filter(([endpoint]) => isPublicBundleEndpoint(endpoint));
   const rows = await Promise.all(runnableTasks.map(([endpoint, handlerFn, query, timeout]) => (
     callJson(endpoint, handlerFn, request, query, timeout)
@@ -995,7 +1005,9 @@ module.exports = async function handler(request, response) {
   const results = Object.fromEntries(rows.map((item) => [item.label, item]));
   const endpoints = publicEndpointMap(results);
   applySoftSnapshotFallbacks(results, endpoints, "api/terminal-fast-bundle");
-  await ensureStrategy2V3Endpoint(request, endpoints);
+  if (!requestedStrategyRoute(request) || requestedStrategyRoute(request) === "strategy2") {
+    await ensureStrategy2V3Endpoint(request, endpoints);
+  }
   if (shouldBuildWatchlistIndex(request)) {
     await ensureWatchlistMatchIndexEndpoint(request, endpoints, {
       cacheSource: "api/terminal-fast-bundle",
