@@ -175,6 +175,7 @@
     "verify:runtime-hotfix": "node --use-system-ca scripts/verify-runtime-hotfix-guard.js",
     "verify:runtime-ownership": "node scripts/verify-runtime-ownership.js",
     "verify:fast-shell-self-contained": "node scripts/verify-fast-shell-self-contained.js",
+    "verify:desktop-member-fetch-bridge": "node scripts/verify-desktop-member-fetch-bridge.js",
     "verify:fast-shell-regression-drill": "node scripts/verify-fast-shell-regression-drill.js",
     "verify:upload-gate": "node scripts/verify-upload-gate.js",
     "verify:publish-gate": "node scripts/verify-publish-gate.js",
@@ -420,3 +421,4 @@
     "node": "24.x"
   }
 }
+

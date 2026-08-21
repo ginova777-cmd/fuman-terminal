@@ -64,6 +64,7 @@ function main() {
     ["terminal_water_root", node, ["scripts/verify-terminal-water-root.js"]],
     ["runtime_ownership", node, ["scripts/verify-runtime-ownership.js"]],
     ["fast_shell_self_contained", node, ["scripts/verify-fast-shell-self-contained.js"]],
+    ["desktop_member_fetch_bridge", node, ["scripts/verify-desktop-member-fetch-bridge.js"]],
     ["daytrade_source_host_role", node, ["scripts/verify-daytrade-source-host-role.js"]],
     ["deploy_worktree_clean", node, ["scripts/verify-deploy-worktree-clean.js"]],
     ["scorecard_no_rollback", node, ["scripts/verify-scorecard-no-rollback.js", "--no-live", "--no-output", "--skip-schedule"]],
@@ -124,4 +125,5 @@ function main() {
 }
 
 main();
+
 

@@ -47,6 +47,7 @@
     [MARKET_ROUTE]: "/api/market",
     "chip-trade|買賣超": "/api/institution-latest",
   };
+  const protectedApiPattern = /^\/api\/(?:terminal-fast-bundle|desktop-route-snapshot|desktop-route-snapshot-refresh|latest-strategy|strategy[2-5]-latest|institution-latest|institution-tdcc-breakout-latest|mobile-boot|mobile-fragment|scorecard|source-reports|terminal-ops-status)(?:$|\/|\?)/;
   const CANVAS_ROUTE_OPTIONS = {
     [MARKET_ROUTE]: { limit: 24, ttl: 14000, live: true, today: true },
     "strategy|策略2": { limit: 240, ttl: 6500, live: true, today: true },
@@ -13504,3 +13505,4 @@
   })();
 
 })();
+
