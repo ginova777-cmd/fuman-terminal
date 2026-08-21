@@ -47,9 +47,7 @@ function requestQuery(request) {
 function shouldUseStrategy3V2(request) {
   const query = requestQuery(request);
   if (String(query.legacy || query.v1 || "").trim() === "1") return false;
-  const date = String(query.date || taipeiDate()).replace(/\D/g, "").slice(0, 8);
-  const receipt = readJson(scanReceiptPath(date), null);
-  return receipt?.ok === true && String(receipt?.status || "").toUpperCase() === "COMPLETE";
+  return true;
 }
 
 module.exports = async function strategy3LatestWithEvidence(request, response) {
