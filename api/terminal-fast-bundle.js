@@ -865,6 +865,8 @@ module.exports = async function handler(request, response) {
     || request.query?.refresh === "1"
     || request.query?.force === "1";
   const wantsLive = requestedLiveFanout && liveFanoutEnabled(request);
+  const requestedMemberRoute = requestedStrategyRoute(request);
+  const forceDirectMemberRoute = Boolean(entitlement?.ok && requestedMemberRoute && requestedMemberRoute !== "strategy2");
   if (!entitlement?.ok && !wantsLive) {
     if (request.method === 'HEAD') {
       response.status(200).end('');
@@ -874,7 +876,7 @@ module.exports = async function handler(request, response) {
     response.status(200).json(lockedPayload);
     return;
   }
-  if (!wantsLive) {
+  if (!wantsLive && !forceDirectMemberRoute) {
     const requestedRoute = requestedStrategyRoute(request);
     const routeSnapshot = requestedRoute && requestedRoute !== "strategy2"
       ? await readDesktopRouteSnapshotForRoute(requestedRoute, {
@@ -1029,3 +1031,4 @@ module.exports = async function handler(request, response) {
   }
   response.status(200).json(filterPublicBundlePayload(attachMarketCalendar(sanitizeStrategy2BundlePayload(payload, endpoints), marketCalendar), entitlement));
 };
+

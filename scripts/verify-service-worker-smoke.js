@@ -31,6 +31,8 @@ requireText('url.pathname === "/terminal-app.js"', "terminal-app.js must be expl
 requireText("event.respondWith(networkFirst(request));", "data requests must be network-first");
 requireText('request.mode === "navigate"', "navigation requests must be handled separately");
 requireText('fetch(request, { cache: "no-store" })', "navigation/service worker/static network-first must use no-store");
+requireText('/\\/api\\/version/i', "api_version_must_bypass_service_worker");
+if (!core.includes("fetch(`/api/version?fresh=${fresh}`") || core.indexOf("fetch(`/api/version?fresh=${fresh}`") > core.indexOf("fetch(`/version.json?fresh=${fresh}`")) issues.push("terminal_core_remote_version_must_use_api_version_first");
 
 const version = core.match(/const\s+version\s*=\s*"([^"]+)"/)?.[1] || "";
 if (!version) {
@@ -81,3 +83,4 @@ if (issues.length) {
 }
 
 console.log("[sw-smoke] ok");
+

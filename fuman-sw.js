@@ -1,41 +1,41 @@
-const RELEASE_VERSION = "public-terminal-fast-20260714-29";
-const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260714-29";
+const RELEASE_VERSION = "public-terminal-fast-20260714-30";
+const CACHE_VERSION = "fuman-terminal-sw-public-terminal-fast-20260714-30";
 const PROTECTED_NO_STALE_SW_EPOCH = "protected-no-stale-first-paint-20260724-01";
 const RUNTIME_THEME_CSS_LOADER = "terminal-theme-css-api-only-20260809-01";
 const STATIC_CACHE = `${CACHE_VERSION}-static`;
 const DATA_CACHE = `${CACHE_VERSION}-data`;
 
 const STATIC_ASSETS = [
-  "/styles.css?v=public-terminal-fast-20260714-29",
-  "/terminal-core.js?v=public-terminal-fast-20260714-29",
-  "/terminal-modules.js?v=public-terminal-fast-20260714-29",
-  "/terminal-sector-map.js?v=public-terminal-fast-20260714-29",
-  "/terminal-strategy-config.js?v=public-terminal-fast-20260714-29",
-  "/terminal-market-config.js?v=public-terminal-fast-20260714-29",
-  "/terminal-ui-config.js?v=public-terminal-fast-20260714-29",
-  "/terminal-runtime-config.js?v=public-terminal-fast-20260714-29",
-  "/terminal-tuning-config.js?v=public-terminal-fast-20260714-29",
-  "/terminal-worker.js?v=public-terminal-fast-20260714-29",
-  "/terminal.js?v=public-terminal-fast-20260714-29",
-  "/terminal-hotfix.js?v=public-terminal-fast-20260714-29",
-  "/terminal-desktop-fast-shell.js?v=public-terminal-fast-20260714-29",
-  "/terminal-app.js?v=public-terminal-fast-20260714-29",
-  "/terminal-entitlement-guard.js?v=public-terminal-fast-20260714-29",
-  "/terminal-market-ai-live-watchdog.js?v=public-terminal-fast-20260714-29",
-  "/terminal-ai-risk-guard.js?v=public-terminal-fast-20260714-29",
-  "/terminal-market-overview-restore.css?v=public-terminal-fast-20260714-29",
-  "/terminal-market-overview-restore.js?v=public-terminal-fast-20260714-29",
-  "/terminal-member-module.js?v=public-terminal-fast-20260714-29",
-  "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260714-29",
-  "/terminal-strategy-module.js?v=public-terminal-fast-20260714-29",
-  "/terminal-watchlist-shell.js?v=public-terminal-fast-20260714-29",
-  "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260714-29",
-  "/terminal-chip-flow.js?v=public-terminal-fast-20260714-29",
-  "/terminal-watchlist-module.js?v=public-terminal-fast-20260714-29",
-  "/terminal-realtime-radar.css?v=public-terminal-fast-20260714-29",
-  "/terminal-intraday-radar.css?v=public-terminal-fast-20260714-29",
-  "/terminal-utility.css?v=public-terminal-fast-20260714-29",
-  "/refresh.html?v=public-terminal-fast-20260714-29",
+  "/styles.css?v=public-terminal-fast-20260714-30",
+  "/terminal-core.js?v=public-terminal-fast-20260714-30",
+  "/terminal-modules.js?v=public-terminal-fast-20260714-30",
+  "/terminal-sector-map.js?v=public-terminal-fast-20260714-30",
+  "/terminal-strategy-config.js?v=public-terminal-fast-20260714-30",
+  "/terminal-market-config.js?v=public-terminal-fast-20260714-30",
+  "/terminal-ui-config.js?v=public-terminal-fast-20260714-30",
+  "/terminal-runtime-config.js?v=public-terminal-fast-20260714-30",
+  "/terminal-tuning-config.js?v=public-terminal-fast-20260714-30",
+  "/terminal-worker.js?v=public-terminal-fast-20260714-30",
+  "/terminal.js?v=public-terminal-fast-20260714-30",
+  "/terminal-hotfix.js?v=public-terminal-fast-20260714-30",
+  "/terminal-desktop-fast-shell.js?v=public-terminal-fast-20260714-30",
+  "/terminal-app.js?v=public-terminal-fast-20260714-30",
+  "/terminal-entitlement-guard.js?v=public-terminal-fast-20260714-30",
+  "/terminal-market-ai-live-watchdog.js?v=public-terminal-fast-20260714-30",
+  "/terminal-ai-risk-guard.js?v=public-terminal-fast-20260714-30",
+  "/terminal-market-overview-restore.css?v=public-terminal-fast-20260714-30",
+  "/terminal-market-overview-restore.js?v=public-terminal-fast-20260714-30",
+  "/terminal-member-module.js?v=public-terminal-fast-20260714-30",
+  "/terminal-market-snapshot-module.js?v=public-terminal-fast-20260714-30",
+  "/terminal-strategy-module.js?v=public-terminal-fast-20260714-30",
+  "/terminal-watchlist-shell.js?v=public-terminal-fast-20260714-30",
+  "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260714-30",
+  "/terminal-chip-flow.js?v=public-terminal-fast-20260714-30",
+  "/terminal-watchlist-module.js?v=public-terminal-fast-20260714-30",
+  "/terminal-realtime-radar.css?v=public-terminal-fast-20260714-30",
+  "/terminal-intraday-radar.css?v=public-terminal-fast-20260714-30",
+  "/terminal-utility.css?v=public-terminal-fast-20260714-30",
+  "/refresh.html?v=public-terminal-fast-20260714-30",
   "/assets/logo.webp",
   "/favicon.ico",
 ];
@@ -64,6 +64,7 @@ const PREFETCH_DATA_ASSETS = [
 ];
 
 const LIVE_PATTERNS = [
+  /\/api\/version/i,
   /\/api\/terminal-fast-bundle/i,
   /\/api\/desktop-route-snapshot/i,
   /\/api\/scorecard/i,
@@ -338,3 +339,5 @@ self.addEventListener("fetch", (event) => {
   }
 
 });
+
+

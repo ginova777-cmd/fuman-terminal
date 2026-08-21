@@ -1,5 +1,5 @@
 (function () {
-  const version = "public-terminal-fast-20260714-29";
+  const version = "public-terminal-fast-20260714-30";
   const runtimeAssetEpoch = "desktop-fast-shell-core-20260628-03";
   const formalSkeletonContract = "daytrade_mother_pool_skeleton_v1";
   const formalSkeletonBaseline = "public-terminal-fast-20260714-22";
@@ -81,8 +81,8 @@
   const checkRemoteVersion = () => {
     try {
       const fresh = Date.now();
-      fetch(`/version.json?fresh=${fresh}`, { cache: "no-store" })
-        .then((response) => response.ok ? response.json() : fetch(`/api/version?fresh=${fresh}`, { cache: "no-store" }).then((apiResponse) => apiResponse.ok ? apiResponse.json() : null))
+      fetch(`/api/version?fresh=${fresh}`, { cache: "no-store" })
+        .then((response) => response.ok ? response.json() : fetch(`/version.json?fresh=${fresh}`, { cache: "no-store" }).then((jsonResponse) => jsonResponse.ok ? jsonResponse.json() : null))
         .then((payload) => reloadToFreshVersion(String(payload?.version || "").trim()))
         .catch(() => undefined);
     } catch (error) {}
@@ -240,3 +240,4 @@
     setTimeout(loadMain, 0);
   }
 })();
+

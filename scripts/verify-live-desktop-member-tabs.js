@@ -9,22 +9,22 @@ const requiredLiveTabs = [
   {
     name: "strategy3",
     path: "/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=1200&live=1",
-    bundlePath: "/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60&live=1",
+    route: "strategy3",
   },
   {
     name: "strategy4",
     path: "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=1200&live=1",
-    bundlePath: "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70&live=1",
+    route: "strategy4",
   },
   {
     name: "strategy5",
     path: "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=1200&live=1",
-    bundlePath: "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=140&live=1",
+    route: "strategy5",
   },
   {
     name: "institution",
     path: "/api/institution-latest?canvas=1&compact=1&shell=1&limit=1200&live=1",
-    bundlePath: "/api/institution-latest?canvas=1&compact=1&shell=1&limit=60&live=1",
+    route: "institution",
   },
 ];
 
@@ -110,25 +110,29 @@ function assertStrategy2State(payload) {
   if (!credential.ok) fail("protected_readback_credential_unavailable", credential);
   const headers = protectedReadbackHeaders(credential);
 
-  const bundle = await readJson("/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=120", headers);
-  if (bundle?.ok === false || !bundle?.endpoints) fail("terminal_fast_bundle_unavailable", bundle);
-
-  const bundleSummary = {};
-  for (const tab of requiredLiveTabs) {
-    const endpointPayload = bundle.endpoints[tab.bundlePath];
-    if (!endpointPayload) fail(tab.name + "_missing_from_terminal_fast_bundle", Object.keys(bundle.endpoints || {}));
-    const count = countOf(endpointPayload);
-    if (count <= 0) fail(tab.name + "_bundle_empty", endpointPayload);
-    bundleSummary[tab.name] = {
-      count,
-      runId: endpointPayload.runId || endpointPayload.run_id || endpointPayload.transport?.runId,
-      source: endpointPayload.source || endpointPayload.cacheSource,
-    };
-  }
-
   const liveSummary = {};
   for (const tab of requiredLiveTabs) {
     liveSummary[tab.name] = assertLiveTabPayload(tab, await readJson(tab.path, headers));
+  }
+
+  const bundleSummary = {};
+  for (const tab of requiredLiveTabs) {
+    const routeBundle = await readJson(`/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&route=${encodeURIComponent(tab.route)}`, headers);
+    if (routeBundle?.ok === false || !routeBundle?.endpoints) fail(tab.name + "_route_bundle_unavailable", routeBundle);
+    const endpointEntry = Object.entries(routeBundle.endpoints).find(([endpoint]) => endpoint.startsWith(tab.path.split("?")[0]));
+    if (!endpointEntry) fail(tab.name + "_missing_from_route_bundle", Object.keys(routeBundle.endpoints || {}));
+    const endpointPayload = endpointEntry[1];
+    const count = countOf(endpointPayload);
+    const runId = endpointPayload.runId || endpointPayload.run_id || endpointPayload.transport?.runId;
+    if (count <= 0) fail(tab.name + "_route_bundle_empty", endpointPayload);
+    if (runId !== liveSummary[tab.name].runId) fail(tab.name + "_route_bundle_run_id_drift", { routeBundle: endpointPayload, direct: liveSummary[tab.name] });
+    if (String(routeBundle.cacheSource || "").includes("desktop_route_snapshot")) fail(tab.name + "_route_bundle_must_not_use_desktop_route_snapshot", { cacheSource: routeBundle.cacheSource, endpointPayload });
+    bundleSummary[tab.name] = {
+      count,
+      runId,
+      source: endpointPayload.source || endpointPayload.cacheSource,
+      cacheSource: routeBundle.cacheSource,
+    };
   }
 
   const strategy2 = assertStrategy2State(await readJson("/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=1200&live=1", headers));
@@ -144,4 +148,5 @@ function assertStrategy2State(payload) {
 })().catch((error) => {
   fail("unexpected_error", { message: error.message, stack: error.stack });
 });
+
 
