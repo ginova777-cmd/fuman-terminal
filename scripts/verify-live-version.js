@@ -55,6 +55,10 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function desktopFastShellSrc(version) {
+  return `terminal-desktop-fast-shell.js?buy-sell-derived-fields=20260629-01&strategy2-history=20260629-01&v=${version}`;
+}
+
 function verifyUnifiedFrontendRelease(home, desktopShell, version) {
   const expectedScripts = [
     "terminal-entitlement-guard.js",
@@ -67,15 +71,19 @@ function verifyUnifiedFrontendRelease(home, desktopShell, version) {
     "terminal-market-overview-restore.js",
   ];
   for (const file of expectedScripts) {
+    if (file === "terminal-desktop-fast-shell.js") continue;
     if (!home.includes(`src="${file}?v=${version}"`)) {
       throw new Error(`unified frontend release missing ${file}?v=${version}`);
     }
   }
-  const desktopEntry = home.match(/src="(terminal-desktop-fast-shell\.js[^"]*)"/);
-  if (!desktopEntry || desktopEntry[1] !== `terminal-desktop-fast-shell.js?v=${version}`) {
-    throw new Error("desktop fast-shell must use exactly one release version token");
+  if (!home.includes(`src="${desktopFastShellSrc(version)}"`)) {
+    throw new Error(`unified frontend release missing ${desktopFastShellSrc(version)}`);
   }
-  if (home.includes("strategy2-history=") || home.includes("strategy4-daily-kline=") || home.includes("watchlist-mainforce-resonance=") || home.includes("market-overview-restore=")) {
+  const desktopEntry = home.match(/src="(terminal-desktop-fast-shell\.js[^"]*)"/);
+  if (!desktopEntry || desktopEntry[1] !== desktopFastShellSrc(version)) {
+    throw new Error("desktop fast-shell must use the buy-sell field contract marker and exactly one release version token");
+  }
+  if (home.includes("strategy4-daily-kline=") || home.includes("watchlist-mainforce-resonance=") || home.includes("market-overview-restore=")) {
     throw new Error("legacy per-feature frontend version token remains in production entry");
   }
   if (!desktopShell.includes(`window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "${version}"`)) {
