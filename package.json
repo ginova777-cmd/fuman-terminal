@@ -410,7 +410,11 @@
     "verify:strategy2-v3-scorecard-contract": "node --use-system-ca scripts/verify-strategy2-v3-scorecard-contract.js",
     "verify:strategy2-v3-diagnostic-replay": "node --use-system-ca scripts/verify-strategy2-v3-diagnostic-replay.js",
     "dev:vercel": "vercel dev",
-    "verify:strategy3-v2-surface-closure": "node --use-system-ca scripts/verify-strategy3-v2-surface-closure.js"
+    "verify:strategy3-v2-surface-closure": "node --use-system-ca scripts/verify-strategy3-v2-surface-closure.js",
+    "verify:opening-report-0830-terminal-briefing": "node scripts/verify-opening-report-0830-terminal-briefing.js",
+    "verify:opening-report-0830-delivery-chain": "node --use-system-ca scripts/verify-opening-report-0830-delivery-chain.js",
+    "verify:opening-report-0830-unattended-readiness": "node --use-system-ca scripts/verify-opening-report-0830-unattended-readiness.js",
+    "verify:opening-report-0830-production:line": "node --use-system-ca scripts/verify-opening-report-0830-production.js --require-line"
   },
   "engines": {
     "node": "24.x"

@@ -33,6 +33,9 @@ assert(appSource.includes("installOpeningReport0830TerminalBriefing"), "terminal
 assert(appSource.includes("opening-report-0830-sunlight-polish-20260813") && appSource.includes("body.fuman-light-theme .opening-report-0830-briefing"), "terminal app sunlight briefing polish missing");
 assert(appSource.includes("window.__fumanRenderOpeningReport0830=renderBriefing") && appSource.includes("__fumanRenderOpeningReport0830?.(payload?.openingMorningReport"), "opening report render hook missing from live renderer");
 assert(desktopFastShellSource.includes("renderOpeningReport0830DesktopBriefing") && desktopFastShellSource.includes("aiPayload?.openingMorningReport") && desktopFastShellSource.includes("data-opening-report-0830-briefing"), "desktop fast shell must render opening report briefing");
+assert(desktopFastShellSource.includes("MARKET_AI_BRIEFING_PATH") && desktopFastShellSource.includes("/api/market-ai-live?simpleReport=1"), "desktop market AI must load index + 08:30 briefing endpoint");
+assert(desktopFastShellSource.includes("reportMode !== \"weighted-index-simple-report\"") && desktopFastShellSource.includes("/等待方向/.test(bias)"), "desktop fast bundle must not let default waiting-direction live bundle overwrite briefing");
+assert(desktopFastShellSource.includes("priorities.flatMap((item) => arr(item.a_symbols)"), "desktop opening briefing must derive 今日推薦 from Top3 a_symbols when recommended_symbols is empty");
 assert(desktopFastShellSource.includes("fuman-sunlight-mode-polish-20260813") && desktopFastShellSource.includes("body.fuman-light-theme #market-view .opening-report-0830-briefing") && desktopFastShellSource.includes("body.fuman-light-theme #market-view .opening-report-0830-card"), "desktop sunlight mode briefing polish missing");
 assert(desktopFastShellSource.includes("fuman-market-ai-compact-layout-polish-20260813") && desktopFastShellSource.includes("--fuman-ai-hero-height: 150px") && desktopFastShellSource.includes("#market-view .market-ai-hero-metrics .market-ai-index-chip") && desktopFastShellSource.includes("opening-report-0830-readable-type-20260813") && desktopFastShellSource.includes("font-size: 34px !important") && desktopFastShellSource.includes("market-ai-readable-zh-type-20260813") && desktopFastShellSource.includes("font-size: 26px !important") && desktopFastShellSource.includes("font-size: 21px !important") && desktopFastShellSource.includes("font-size: 17px !important") && desktopFastShellSource.includes("font-size: 36px !important") && desktopFastShellSource.includes("font-size: 20px !important") && desktopFastShellSource.includes("market-ai-report-layout-v5-20260813") && desktopFastShellSource.includes("#market-view .market-ai-hero-metrics .market-ai-index-chip small") && desktopFastShellSource.includes("market-ai-index-label-restore-v6-20260813") && desktopFastShellSource.includes("display: block !important") && desktopFastShellSource.includes("font-size: 16px !important") && desktopFastShellSource.includes("font-size: 18px !important") && desktopFastShellSource.includes("min-height: 0 !important"), "desktop compact market ai layout polish missing");
 assert(!desktopFastShellSource.includes("<h4>熱門觀察股</h4>") && !desktopFastShellSource.includes("market-ai-block market-ai-hot-section"), "desktop fast shell must not render hot stock block inside 0830 briefing layout");
@@ -46,8 +49,8 @@ assert(pkg.scripts["verify:opening-report-0830-terminal-briefing"] === "node scr
 assert(pkg.scripts["verify:opening-report-0830-delivery-chain"] === "node --use-system-ca scripts/verify-opening-report-0830-delivery-chain.js", "delivery chain verifier package script missing");
 assert(pkg.scripts["verify:opening-report-0830-unattended-readiness"] === "node --use-system-ca scripts/verify-opening-report-0830-unattended-readiness.js", "unattended readiness verifier package script missing");
 assert(pkg.scripts["verify:opening-report-0830-production:line"] === "node --use-system-ca scripts/verify-opening-report-0830-production.js --require-line", "production line verifier package script missing");
-assert(indexSource.includes("sunlight-polish=20260813-01"), "index cache bust missing sunlight polish version");
-assert(indexSource.includes("compact-layout=20260813-06"), "index cache bust missing compact layout version");
+assert(indexSource.includes("terminal-desktop-fast-shell.js"), "index must load desktop fast shell");
+assert(indexSource.includes("terminal-core.js?v="), "index must use unified release token for terminal core");
 assert(marketAiLive.__test?.readOpeningMorningReport, "market-ai-live __test missing readOpeningMorningReport");
 assert(marketAiLive.__test?.readOpeningMorningReportSnapshot, "market-ai-live __test missing readOpeningMorningReportSnapshot");
 
@@ -64,7 +67,7 @@ assert(briefing.visible_window?.active === true, "08:30 verifier clock must acti
 if (briefing.ok) {
   assert(briefing.run_id && briefing.run_id.includes(compact), "briefing runId must match date");
   assert(briefing.industry_bias?.count >= 19, "briefing must read at least 19 industry bias files");
-  assert(Array.isArray(briefing.priority_industries) && briefing.priority_industries.length === 4, "briefing must expose top 4 priority industries");
+  assert(Array.isArray(briefing.priority_industries) && briefing.priority_industries.length === 3, "briefing must expose current Top 3 priority industries");
   assert(Array.isArray(briefing.market_snapshot?.items) && briefing.market_snapshot.items.length >= 4, "briefing must expose global market snapshot rows");
   assert(briefing.formal_candidates === 0, "08:30 briefing must not create formal candidates");
 } else {

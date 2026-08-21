@@ -195,6 +195,7 @@
   const MARKET_HEATMAP_FETCH_TIMEOUT_MS = 12000;
   const MARKET_RADAR_FETCH_TIMEOUT_MS = 12000;
   const MARKET_AI_LIVE_FETCH_TIMEOUT_MS = 23000;
+  const MARKET_AI_BRIEFING_PATH = "/api/market-ai-live?simpleReport=1";
   let marketAiRenderSignature = "";
   let marketAiRenderTimer = 0;
   let marketAiRenderRequest = null;
@@ -2171,6 +2172,12 @@
       return;
     }
     if (pathname === "/api/market-ai-live") {
+      const source = String(payload?.source || "");
+      const reportMode = String(payload?.reportMode || "");
+      const bias = String(payload?.summary?.bias || "");
+      if (source === "live-api-bundle" && reportMode !== "weighted-index-simple-report" && /等待方向/.test(bias)) {
+        return;
+      }
       marketAiBundlePayload = payload;
       if (isMarketViewActive() && isMarketDesktopAiModeActive()) {
         scheduleMarketApiAiRender(marketSnapshotFirstPayload || {}, marketRadarBundlePayload || {}, marketAiBundlePayload, { delay: 70 });
@@ -5911,7 +5918,7 @@
     ];
     if (marketDesktopMode === "ai" || document.documentElement.dataset.fumanMarketDesktopMode === "ai") {
       tasks.push(
-        fetchMarketJson("/api/market-ai-live", 20, force, MARKET_AI_LIVE_FETCH_TIMEOUT_MS).then((payload) => {
+        fetchMarketJson(MARKET_AI_BRIEFING_PATH, 20, force, MARKET_AI_LIVE_FETCH_TIMEOUT_MS).then((payload) => {
           if (payload && typeof payload === "object") marketAiBundlePayload = payload;
         }),
       );
@@ -6141,7 +6148,7 @@
         }
       })
       .finally(done);
-    fetchMarketJson("/api/market-ai-live", 40, force, MARKET_AI_LIVE_FETCH_TIMEOUT_MS)
+    fetchMarketJson(MARKET_AI_BRIEFING_PATH, 40, force, MARKET_AI_LIVE_FETCH_TIMEOUT_MS)
       .then((payload) => {
         state.ai = payload || {};
         if (hasMarketAiPayload(state.ai)) {
@@ -6258,7 +6265,7 @@
     window.__fumanMarketAiDirectFallbackTimer = window.setTimeout(() => {
       if (!isMarketViewActive() || !isMarketDesktopAiModeActive()) return;
       if (document.querySelector("#market-view .market-ai-hero-board")) return;
-      fetchMarketJson("/api/market-ai-live", 40, true, MARKET_AI_LIVE_FETCH_TIMEOUT_MS)
+      fetchMarketJson(MARKET_AI_BRIEFING_PATH, 40, true, MARKET_AI_LIVE_FETCH_TIMEOUT_MS)
         .then((payload) => {
           if (!hasMarketAiPayload(payload)) return;
           marketAiBundlePayload = payload;
@@ -6280,7 +6287,7 @@
       if (market.querySelector(".market-ai-hero-board")) return;
       const aiPanel = market.querySelector("[data-market-api-ai], #market-ai-panel");
       if (!aiPanel || aiPanel.hidden) return;
-      fetchMarketJson("/api/market-ai-live", 40, true, MARKET_AI_LIVE_FETCH_TIMEOUT_MS)
+      fetchMarketJson(MARKET_AI_BRIEFING_PATH, 40, true, MARKET_AI_LIVE_FETCH_TIMEOUT_MS)
         .then((payload) => {
           if (!hasMarketAiPayload(payload)) return;
           marketAiBundlePayload = payload;
@@ -6784,7 +6791,10 @@
     };
     const rows = arr(data.market_snapshot?.items).slice(0, 4);
     const priorities = arr(data.priority_industries).slice(0,3);
-    const recommended = arr(data.recommended_symbols).slice(0,18);
+    const recommended = (arr(data.recommended_symbols).length
+      ? arr(data.recommended_symbols)
+      : priorities.flatMap((item) => arr(item.a_symbols).map((stock) => ({ ...stock, industry: item.display_name || item.industry })))
+    ).slice(0,18);
     const node = document.createElement("section");
     node.className = "opening-report-0830-briefing";
     node.dataset.openingReport0830Briefing = "1";
@@ -7338,7 +7348,7 @@
       .finally(done);
     if (aiMode) {
       done();
-      fetchMarketJson("/api/market-ai-live", 20, force, MARKET_AI_LIVE_FETCH_TIMEOUT_MS)
+      fetchMarketJson(MARKET_AI_BRIEFING_PATH, 20, force, MARKET_AI_LIVE_FETCH_TIMEOUT_MS)
         .then((payload) => {
           state.ai = payload || {};
           renderIfChanged(true);
