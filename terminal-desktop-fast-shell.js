@@ -5456,7 +5456,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-34";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-35";
   }
 
   function loadScriptOnce(src, attr) {
@@ -9395,7 +9395,7 @@
   }
 
   function installRouteFeedback() {
-    document.addEventListener("pointerdown", (event) => {
+    window.addEventListener("pointerdown", (event) => {
       const link = event.target.closest?.(NAV_SELECTOR);
       if (!link || !isPrimaryPointer(event)) return;
       markFastEvent(event);
@@ -9432,7 +9432,7 @@
       }
     }, true);
 
-    document.addEventListener("click", (event) => {
+    window.addEventListener("click", (event) => {
       const link = event.target.closest?.(NAV_SELECTOR);
       if (event.__fumanDesktopFastShellClick) return;
       if (!link || event.__fumanDeferredViewClick || event.__fumanFastOfficialClick) return;
