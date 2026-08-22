@@ -1,15 +1,11 @@
 {
-  "updatedAt": "2026-08-09T20:01:51.945Z",
+  "updatedAt": "2026-08-22T14:40:29.974Z",
   "policyVersion": 3,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
     "activeTasks": [
       "Fuman API-Only Retired Artifact Cleanup 1535",
       "Fuman API Unattended Patrol",
-      "Fuman API Unattended Scorecard",
-      "Fuman CB Battle Verify 2150",
-      "Fuman CB Complete Scan 2125",
-      "Fuman CB Watchdog 2145",
       "Fuman Chip Source Sync 2005",
       "Fuman Daily Battle Verify 2155",
       "Fuman Freshness Gate Fast 0845-1645",
@@ -20,14 +16,6 @@
       "Fuman Public Slot Shared Source Watchdog",
       "Fuman Publish Gate Verify 0820",
       "Fuman Scorecard Daily Automation 1400",
-      "Fuman Daytrade Strategy3 Closure Verify 1410",
-      "Fuman Strategy2 Intraday Scan",
-      "Fuman Strategy2 LINE Start 0900",
-      "Fuman Strategy2 LINE Stop 1330",
-      "Fuman Strategy2 Supabase Coverage 0800",
-      "Fuman Strategy2 E2E Closure Readback",
-      "Fuman Strategy3 Battle Verify 1305",
-      "Fuman Strategy3 Complete Scan 1300",
       "Fuman Strategy4 Cache 1600",
       "Fuman Strategy4 Source Prewarm 1535",
       "Fuman Strategy5 Cache 2100",
@@ -38,14 +26,11 @@
       "Fuman 買賣超 Cache 2100",
       "Fuman 買賣超 Watchdog 2120",
       "FumanTerminalProductionHealthMonitor",
-      "Fuman Daytrade Source Preflight 0830",
       "Fuman Daytrade Source Writer 0600-1330",
       "Fuman Daytrade Source Gate 0700",
       "Fuman Daytrade Source Gate 0845",
       "Fuman Daytrade Source Gate 0900",
       "Fuman Daytrade Source Gate 0910",
-      "Fuman Daytrade Source Gate 0935",
-      "Fuman Daytrade Source Final Verdict 0912",
       "Fuman Fugle Daytrade Watchdog Every Minute",
       "Fuman Scorecard Daily Watchdog 1410",
       "Fuman Market Calendar Auto Update 1900-0830",
@@ -53,14 +38,46 @@
       "Fuman Fugle Daytrade WebSocket Collector 0600-1330",
       "Fuman Daytrade Warmup Nine-Day Audit 0915",
       "Fuman Opening Report 0830 LINE",
-      "Fuman Terminal Full Unattended Final Audit"
+      "Fuman Terminal Full Unattended Final Audit",
+      "Fuman Chip Source Sync 2005 Official Retry 1530",
+      "Fuman Chip Source Sync 2005 Official Retry 1800",
+      "Fuman Chip Source Sync 2005 Official Retry 2100",
+      "Fuman Daily Retention Maintenance 1625",
+      "Fuman Daytrade Cleanup 1536 Readonly Verify",
+      "Fuman Daytrade Futopt Collector Recovery 0835",
+      "Fuman Daytrade Futopt Preopen Evidence 0845",
+      "Fuman Daytrade Futopt Preopen Evidence 0850",
+      "Fuman Daytrade Gate Phase Contract 0555 Verify",
+      "Fuman Daytrade Intraday Retention 1605",
+      "Fuman Daytrade Scheduled Timeline Contract 0550 Verify",
+      "Fuman Fugle Daytrade Watchdog 0600 Warmup",
+      "Fuman Fugle Futopt Fast Sync 0600-1330",
+      "Fuman Fugle Futopt WebSocket Collector 0600-1330",
+      "Fuman Opening Limit Order 0900 Readonly Verify",
+      "Fuman Opening Limit Order Morning Readonly 0845",
+      "Fuman Opening Report 0820 Preflight",
+      "Fuman Opening Report 0830 LINE Bridge",
+      "Fuman Strategy2 V2 Unattended",
+      "Fuman Strategy2 V3 Water Gate 0845",
+      "Fuman Strategy3 V2 Complete Scan 1300",
+      "Fuman Strategy3 V2 Daily Closure Verify 1310",
+      "Fuman Strategy3 V2 First Attempt 1255",
+      "Fuman Strategy3 V2 Readiness Guard 1230",
+      "Fuman Strategy3 V2 Readiness Guard 1250",
+      "Fuman Strategy5 Preopen Refresh 0540"
     ],
     "expectedDisabledTasks": [
       "Fuman Terminal Autonomous Ops 5m",
       "Fuman Terminal Autonomous Ops User 5m",
       "Fuman Public Slot Shared Source 0800",
       "Fuman Strategy3 LINE Card 1308",
-      "Fuman Strategy4 LINE Card 1610"
+      "Fuman Strategy4 LINE Card 1610",
+      "Fuman Daytrade Futopt Preopen Evidence 0855",
+      "Fuman Daytrade Futopt Preopen Evidence 0859",
+      "Fuman Opening Limit Order 0831 Prewarm Readonly",
+      "Fuman Strategy3 Complete Scan 1300",
+      "Fuman Strategy3 Readiness Guard 1230",
+      "Fuman Strategy3 Readiness Guard 1250"
     ],
     "retiredTasks": [
       "Fuman 即時雷達",
@@ -112,11 +129,6 @@
         267009,
         267011
       ],
-      "Fuman API Unattended Scorecard": [
-        0,
-        267009,
-        267011
-      ],
       "Fuman Freshness Gate Full 2010": [
         0,
         267009,
@@ -144,19 +156,6 @@
         267009
       ],
       "Fuman Vercel Cost Health Monitor 2115": [
-        0,
-        267009
-      ],
-      "Fuman Strategy2 LINE Start 0900": [
-        0,
-        267009,
-        267014
-      ],
-      "Fuman Strategy2 LINE Stop 1330": [
-        0,
-        267011
-      ],
-      "Fuman Strategy2 Supabase Coverage 0800": [
         0,
         267009
       ],
@@ -191,17 +190,6 @@
       "Fuman Daytrade Source Gate 0910": [
         0
       ],
-      "Fuman Daytrade Source Gate 0935": [
-        0
-      ],
-      "Fuman Daytrade Source Preflight 0830": [
-        0,
-        267011
-      ],
-      "Fuman Daytrade Source Final Verdict 0912": [
-        0,
-        267011
-      ],
       "Fuman Scorecard Daily Watchdog 1410": [
         0,
         267009
@@ -209,9 +197,6 @@
       "Fuman Scorecard Daily Automation 1400": [
         0,
         267009
-      ],
-      "Fuman Daytrade Strategy3 Closure Verify 1410": [
-        0
       ],
       "Fuman Fugle Daytrade Watchdog Every Minute": [
         0,
@@ -223,26 +208,12 @@
         0,
         267009
       ],
-      "Fuman Strategy4 Postscan Closure 1605": [
-        0,
-        267009
-      ],
       "Fuman Public Slot Quote Fast Flush 0845": [
         0,
         267009,
         267011,
         -1073741510,
         3221225786
-      ],
-      "Fuman Strategy2 E2E Closure Readback": [
-        0,
-        267009,
-        267011
-      ],
-      "Fuman Strategy2 Intraday Scan": [
-        0,
-        267009,
-        267014
       ],
       "Fuman Terminal Local Freshness Verify 0830-2230": [
         0,
@@ -297,6 +268,168 @@
         267009,
         267011,
         267014
+      ],
+      "Fuman Chip Source Sync 2005 Official Retry 1530": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Chip Source Sync 2005 Official Retry 1800": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Chip Source Sync 2005 Official Retry 2100": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Daily Retention Maintenance 1625": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Daytrade Cleanup 1536 Readonly Verify": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Daytrade Futopt Collector Recovery 0835": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Daytrade Futopt Preopen Evidence 0845": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Daytrade Futopt Preopen Evidence 0850": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Daytrade Gate Phase Contract 0555 Verify": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Daytrade Intraday Retention 1605": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Daytrade Scheduled Timeline Contract 0550 Verify": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Fugle Daytrade Watchdog 0600 Warmup": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Fugle Futopt Fast Sync 0600-1330": [
+        0,
+        267009,
+        267011,
+        267014
+      ],
+      "Fuman Fugle Futopt WebSocket Collector 0600-1330": [
+        0,
+        267009,
+        267011,
+        267014
+      ],
+      "Fuman Opening Limit Order 0900 Readonly Verify": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Opening Limit Order Morning Readonly 0845": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Opening Report 0820 Preflight": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Opening Report 0830 LINE Bridge": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Strategy2 V2 Unattended": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Strategy2 V3 Water Gate 0845": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Strategy3 V2 Complete Scan 1300": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Strategy3 V2 Daily Closure Verify 1310": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Strategy3 V2 First Attempt 1255": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Strategy3 V2 Readiness Guard 1230": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Strategy3 V2 Readiness Guard 1250": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Strategy5 Preopen Refresh 0540": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Daytrade Futopt Preopen Evidence 0855": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Daytrade Futopt Preopen Evidence 0859": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Opening Limit Order 0831 Prewarm Readonly": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Strategy3 Complete Scan 1300": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Strategy3 Readiness Guard 1230": [
+        0,
+        267009,
+        267011
+      ],
+      "Fuman Strategy3 Readiness Guard 1250": [
+        0,
+        267009,
+        267011
       ]
     },
     "coveredBy": {
@@ -392,37 +525,6 @@
         "16:10",
         "22:00"
       ]
-    },
-    {
-      "taskName": "\\Fuman API Unattended Scorecard",
-      "displayName": "Fuman API Unattended Scorecard",
-      "description": "All-strategy API unattended scorecard from the local production mirror. Runs after afternoon strategy windows so /88 can show same-day public scorecard before evening checks.",
-      "time": "16:10",
-      "expectedState": "Ready",
-      "expectedTriggers": [
-        "16:10"
-      ]
-    },
-    {
-      "taskName": "\\Fuman CB Battle Verify 2150",
-      "displayName": "Fuman CB Battle Verify 2150",
-      "description": "CB battle verification.",
-      "time": "21:50",
-      "expectedState": "Ready"
-    },
-    {
-      "taskName": "\\Fuman CB Complete Scan 2125",
-      "displayName": "Fuman CB Complete Scan 2125",
-      "description": "CB complete scan.",
-      "time": "21:25",
-      "expectedState": "Ready"
-    },
-    {
-      "taskName": "\\Fuman CB Watchdog 2145",
-      "displayName": "Fuman CB Watchdog 2145",
-      "description": "CB watchdog.",
-      "time": "21:45",
-      "expectedState": "Ready"
     },
     {
       "taskName": "\\Fuman Chip Source Sync 2005",
@@ -583,65 +685,14 @@
       "retiredReason": "retired_from_formal_unattended_scope"
     },
     {
-      "taskName": "\\Fuman Strategy2 Intraday Scan",
-      "displayName": "Fuman Strategy2 Intraday Scan",
-      "description": "Strategy2 intraday scanner; operational window is 08:45-13:30.",
-      "time": "08:00",
-      "expectedState": "Ready"
-    },
-    {
-      "taskName": "\\Fuman Strategy2 LINE Start 0900",
-      "displayName": "Fuman Strategy2 LINE Start 0900",
-      "description": "Strategy2 LINE patrol start; trigger must be 09:00 for the 09:00-13:30 official live window.",
-      "time": "09:00",
-      "expectedState": "Ready",
-      "expectedTriggers": [
-        "09:00"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Strategy2 LINE Stop 1330",
-      "displayName": "Fuman Strategy2 LINE Stop 1330",
-      "description": "Strategy2 LINE patrol stop at 13:30.",
-      "time": "13:30",
-      "expectedState": "Ready",
-      "expectedTriggers": [
-        "13:30"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Strategy2 Supabase Coverage 0800",
-      "displayName": "Fuman Strategy2 Supabase Coverage 0800",
-      "description": "Strategy2 Supabase coverage watch: 08:30 warmup, 08:45 readiness, 08:55 preopen, 09:05 first 1m, 09:10 quote+1m hard gate, 09:30 ready_ge_35 hard gate.",
-      "time": "08:00-09:30",
-      "expectedState": "Ready"
-    },
-    {
-      "taskName": "\\Fuman Strategy2 E2E Closure Readback",
-      "displayName": "Fuman Strategy2 E2E Closure Readback",
-      "description": "Strategy2 strict source writer to scanner snapshot production API desktop mobile and /88 closure readback.",
-      "time": "08:45,09:10,09:40,13:35",
-      "expectedState": "Ready",
-      "expectedTriggers": [
-        "08:45",
-        "09:10",
-        "09:40",
-        "13:35"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Strategy3 Battle Verify 1305",
-      "displayName": "Fuman Strategy3 Battle Verify 1305",
-      "description": "Strategy3 battle verification.",
-      "time": "13:05",
-      "expectedState": "Ready"
-    },
-    {
       "taskName": "\\Fuman Strategy3 Complete Scan 1300",
       "displayName": "Fuman Strategy3 Complete Scan 1300",
       "description": "Strategy3 complete scan.",
       "time": "13:00",
-      "expectedState": "Ready"
+      "expectedState": "Disabled",
+      "expectedTriggers": [
+        "13:00"
+      ]
     },
     {
       "taskName": "\\Fuman Strategy4 Cache 1600",
@@ -654,10 +705,10 @@
       "taskName": "\\Fuman Strategy4 Source Prewarm 1535",
       "displayName": "Fuman Strategy4 Source Prewarm 1535",
       "description": "Strategy4 source full prewarm before the 16:00 formal scan.",
-      "time": "13:45",
+      "time": "15:35",
       "expectedState": "Ready",
       "expectedTriggers": [
-        "13:45"
+        "15:35"
       ]
     },
     {
@@ -826,16 +877,6 @@
       "expectedState": "Disabled"
     },
     {
-      "taskName": "\\Fuman Daytrade Source Preflight 0830",
-      "displayName": "Fuman Daytrade Source Preflight 0830",
-      "description": "Read-only 08:30 predictive preflight for daytrade warmup. Captures immutable source readiness evidence after boot/power recovery and must not write strategy latest.",
-      "time": "08:30",
-      "expectedState": "Ready",
-      "expectedTriggers": [
-        "08:30"
-      ]
-    },
-    {
       "taskName": "\\Fuman Daytrade Source Writer 0600-1330",
       "displayName": "Fuman Daytrade Source Writer 0600-1330",
       "description": "Dedicated daytrade source writer. Supplies priority-first Fugle quotes/readiness evidence; must not write strategy latest.",
@@ -886,26 +927,6 @@
       ]
     },
     {
-      "taskName": "\\Fuman Daytrade Source Gate 0935",
-      "displayName": "Fuman Daytrade Source Gate 0935",
-      "description": "Read-only daytrade regular-session source gate checkpoint. Must not write strategy latest.",
-      "time": "09:35",
-      "expectedState": "Ready",
-      "expectedTriggers": [
-        "09:35"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Daytrade Source Final Verdict 0912",
-      "displayName": "Fuman Daytrade Source Final Verdict 0912",
-      "description": "Read-only daytrade final verdict at 09:12. Runs warmup root apply after natural 0700/0845/0900 evidence and must not write strategy latest.",
-      "time": "09:12",
-      "expectedState": "Ready",
-      "expectedTriggers": [
-        "09:12"
-      ]
-    },
-    {
       "taskName": "\\Fuman Fugle Daytrade Watchdog Every Minute",
       "displayName": "Fuman Fugle Daytrade Watchdog Every Minute",
       "description": "Daytrade source watchdog every minute during the opening window. Failure is critical.",
@@ -919,16 +940,6 @@
       "taskName": "\\Fuman Scorecard Daily Watchdog 1410",
       "displayName": "Fuman Scorecard Daily Watchdog 1410",
       "description": "Scorecard daily automation watchdog.",
-      "time": "14:10",
-      "expectedState": "Ready",
-      "expectedTriggers": [
-        "14:10"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Daytrade Strategy3 Closure Verify 1410",
-      "displayName": "Fuman Daytrade Strategy3 Closure Verify 1410",
-      "description": "Post-scorecard live closure verifier for daytrade source, Strategy3, production API, desktop/mobile surfaces, and /88 receipts.",
       "time": "14:10",
       "expectedState": "Ready",
       "expectedTriggers": [
@@ -963,7 +974,7 @@
       ]
     },
     {
-      "taskName": "\\\\Fuman Fugle Daytrade WebSocket Collector 0600-1330",
+      "taskName": "\\Fuman Fugle Daytrade WebSocket Collector 0600-1330",
       "displayName": "Fuman Fugle Daytrade WebSocket Collector 0600-1330",
       "description": "Fugle WebSocket collector for daytrade trades/aggregates/candles source layer. Must be ready during 06:00-13:30 and power-recovery safe.",
       "time": "06:00-13:30",
@@ -973,7 +984,7 @@
       ]
     },
     {
-      "taskName": "\\\\Fuman Daytrade Warmup Nine-Day Audit 0915",
+      "taskName": "\\Fuman Daytrade Warmup Nine-Day Audit 0915",
       "displayName": "Fuman Daytrade Warmup Nine-Day Audit 0915",
       "description": "Nine-day warmup evidence audit. Read-only evidence checker for daytrade warmup quality.",
       "time": "09:15",
@@ -983,7 +994,7 @@
       ]
     },
     {
-      "taskName": "\\\\Fuman Opening Report 0830 LINE",
+      "taskName": "\\Fuman Opening Report 0830 LINE",
       "displayName": "Fuman Opening Report 0830 LINE",
       "description": "Opening readiness report. Waiting/not-run before its due window is allowed.",
       "time": "08:30",
@@ -993,7 +1004,7 @@
       ]
     },
     {
-      "taskName": "\\\\Fuman Strategy3 LINE Card 1308",
+      "taskName": "\\Fuman Strategy3 LINE Card 1308",
       "displayName": "Fuman Strategy3 LINE Card 1308",
       "description": "Retired LINE notification loop. Receipt-based total-control verification owns post-scan validation.",
       "time": "13:08",
@@ -1003,7 +1014,7 @@
       ]
     },
     {
-      "taskName": "\\\\Fuman Strategy4 LINE Card 1610",
+      "taskName": "\\Fuman Strategy4 LINE Card 1610",
       "displayName": "Fuman Strategy4 LINE Card 1610",
       "description": "Retired LINE notification loop. Receipt-based total-control verification owns post-scan validation.",
       "time": "16:10",
@@ -1013,7 +1024,7 @@
       ]
     },
     {
-      "taskName": "\\\\Fuman Terminal Full Unattended Final Audit",
+      "taskName": "\\Fuman Terminal Full Unattended Final Audit",
       "displayName": "Fuman Terminal Full Unattended Final Audit",
       "description": "Full unattended final audit task. Produces final YES/NO receipt after daily closures.",
       "time": "07:00,09:00,16:00,22:30",
@@ -1026,7 +1037,7 @@
       ]
     },
     {
-      "taskName": "\\\\Fuman Terminal Autonomous Ops 5m",
+      "taskName": "\\Fuman Terminal Autonomous Ops 5m",
       "displayName": "Fuman Terminal Autonomous Ops 5m",
       "description": "Disabled legacy autonomous ops loop; replaced by Fuman Terminal Autonomous Root Monitor.",
       "time": "every 5 minutes",
@@ -1034,7 +1045,7 @@
       "expectedTriggers": []
     },
     {
-      "taskName": "\\\\Fuman Terminal Autonomous Ops User 5m",
+      "taskName": "\\Fuman Terminal Autonomous Ops User 5m",
       "displayName": "Fuman Terminal Autonomous Ops User 5m",
       "description": "Disabled legacy user autonomous ops loop; replaced by Fuman Terminal Autonomous Root Monitor.",
       "time": "every 5 minutes",
@@ -1045,7 +1056,7 @@
       "taskName": "\\Fuman Strategy2 V2 Unattended",
       "displayName": "Fuman Strategy2 V2 Unattended",
       "description": "唯一正式 Strategy2 S4U runner：08:45 啟動 Fugle 動態 Mother Pool / quote observer，09:00-13:30 以當日正式 1 分 K LIVE scan；實際 task launch、receipt 與三端 closure 均須驗證。",
-      "time": "08:45-13:30 (交易日)",
+      "time": "08:45",
       "expectedState": "Ready",
       "expectedTriggers": [
         "08:45"
@@ -1053,6 +1064,306 @@
       "runner": "run-strategy2-live-v2.ps1",
       "sourceContract": "strategy2-live-v2-fugle-mother-pool-1m",
       "unattendedStatus": "s4u_background_ready_with_launch_evidence"
+    },
+    {
+      "taskName": "\\Fuman Chip Source Sync 2005 Official Retry 1530",
+      "displayName": "Fuman Chip Source Sync 2005 Official Retry 1530",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "15:30",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "15:30"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Chip Source Sync 2005 Official Retry 1800",
+      "displayName": "Fuman Chip Source Sync 2005 Official Retry 1800",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "18:00",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "18:00"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Chip Source Sync 2005 Official Retry 2100",
+      "displayName": "Fuman Chip Source Sync 2005 Official Retry 2100",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "21:00",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "21:00"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daily Retention Maintenance 1625",
+      "displayName": "Fuman Daily Retention Maintenance 1625",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "16:25",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "16:25"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daytrade Cleanup 1536 Readonly Verify",
+      "displayName": "Fuman Daytrade Cleanup 1536 Readonly Verify",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "15:36",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "15:36"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daytrade Futopt Collector Recovery 0835",
+      "displayName": "Fuman Daytrade Futopt Collector Recovery 0835",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "08:35",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:35"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daytrade Futopt Preopen Evidence 0845",
+      "displayName": "Fuman Daytrade Futopt Preopen Evidence 0845",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "08:45",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:45"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daytrade Futopt Preopen Evidence 0850",
+      "displayName": "Fuman Daytrade Futopt Preopen Evidence 0850",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "08:50",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:50"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daytrade Gate Phase Contract 0555 Verify",
+      "displayName": "Fuman Daytrade Gate Phase Contract 0555 Verify",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "05:55",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "05:55"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daytrade Intraday Retention 1605",
+      "displayName": "Fuman Daytrade Intraday Retention 1605",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "16:05",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "16:05"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daytrade Scheduled Timeline Contract 0550 Verify",
+      "displayName": "Fuman Daytrade Scheduled Timeline Contract 0550 Verify",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "05:50",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "05:50"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Fugle Daytrade Watchdog 0600 Warmup",
+      "displayName": "Fuman Fugle Daytrade Watchdog 0600 Warmup",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "06:00",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "06:00"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Fugle Futopt Fast Sync 0600-1330",
+      "displayName": "Fuman Fugle Futopt Fast Sync 0600-1330",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "06:00",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "06:00"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Fugle Futopt WebSocket Collector 0600-1330",
+      "displayName": "Fuman Fugle Futopt WebSocket Collector 0600-1330",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "06:00",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "06:00"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Opening Limit Order 0900 Readonly Verify",
+      "displayName": "Fuman Opening Limit Order 0900 Readonly Verify",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "09:00",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "09:00"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Opening Limit Order Morning Readonly 0845",
+      "displayName": "Fuman Opening Limit Order Morning Readonly 0845",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "08:40",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:40"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Opening Report 0820 Preflight",
+      "displayName": "Fuman Opening Report 0820 Preflight",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "08:20",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:20"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Opening Report 0830 LINE Bridge",
+      "displayName": "Fuman Opening Report 0830 LINE Bridge",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "08:30",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:30"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy2 V3 Water Gate 0845",
+      "displayName": "Fuman Strategy2 V3 Water Gate 0845",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "08:45",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:45"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy3 V2 Complete Scan 1300",
+      "displayName": "Fuman Strategy3 V2 Complete Scan 1300",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "13:00",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "13:00"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy3 V2 Daily Closure Verify 1310",
+      "displayName": "Fuman Strategy3 V2 Daily Closure Verify 1310",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "13:10",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "13:10"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy3 V2 First Attempt 1255",
+      "displayName": "Fuman Strategy3 V2 First Attempt 1255",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "12:55",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "12:55"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy3 V2 Readiness Guard 1230",
+      "displayName": "Fuman Strategy3 V2 Readiness Guard 1230",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "12:30",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "12:30"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy3 V2 Readiness Guard 1250",
+      "displayName": "Fuman Strategy3 V2 Readiness Guard 1250",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "12:50",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "12:50"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy5 Preopen Refresh 0540",
+      "displayName": "Fuman Strategy5 Preopen Refresh 0540",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "05:40",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "05:40"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daytrade Futopt Preopen Evidence 0855",
+      "displayName": "Fuman Daytrade Futopt Preopen Evidence 0855",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "08:55",
+      "expectedState": "Disabled",
+      "expectedTriggers": [
+        "08:55"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daytrade Futopt Preopen Evidence 0859",
+      "displayName": "Fuman Daytrade Futopt Preopen Evidence 0859",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "08:59",
+      "expectedState": "Disabled",
+      "expectedTriggers": [
+        "08:59"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Opening Limit Order 0831 Prewarm Readonly",
+      "displayName": "Fuman Opening Limit Order 0831 Prewarm Readonly",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "08:31",
+      "expectedState": "Disabled",
+      "expectedTriggers": [
+        "08:31"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy3 Readiness Guard 1230",
+      "displayName": "Fuman Strategy3 Readiness Guard 1230",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "12:30",
+      "expectedState": "Disabled",
+      "expectedTriggers": [
+        "12:30"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Strategy3 Readiness Guard 1250",
+      "displayName": "Fuman Strategy3 Readiness Guard 1250",
+      "description": "Observed production Windows Task Scheduler entry.",
+      "time": "12:50",
+      "expectedState": "Disabled",
+      "expectedTriggers": [
+        "12:50"
+      ]
     }
   ]
 }
