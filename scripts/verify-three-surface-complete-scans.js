@@ -92,6 +92,9 @@ async function main() {
   for (const tab of TABS) {
     const fragment = boot.payload?.fragments?.[tab.key === "institution" ? "chip" : tab.key];
     if (!fragment?.runId) fail(`mobile_boot_${tab.key}_missing_run_id`);
+    const expectedRunId = summary.tabs[tab.key].api.runId;
+    const waiting = /waiting|snapshot-not-ready|not-ready/i.test(String(fragment.runId));
+    if (!waiting && fragment.runId !== expectedRunId) fail(`mobile_boot_${tab.key}_stale_run_id`, { expected: expectedRunId, actual: fragment.runId });
   }
 
   const strategy2 = await read("/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=1200&live=1", headers);

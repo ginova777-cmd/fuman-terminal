@@ -168,7 +168,10 @@ function authorityPayload(tab) {
   const key = tab === "chip" ? "institution" : tab;
   const row = (buildLatestOpsStatus()?.modules || []).find((item) => item?.key === key);
   const count = Number(row?.resultCount || row?.readbackCount || 0);
-  if (!row?.runId || count <= 0) return null;
+  const dateMatch = String(row?.runId || "").match(/20(\d{6})/);
+  const runTime = dateMatch ? Date.parse(`20${dateMatch[1].slice(0, 2)}-${dateMatch[1].slice(2, 4)}-${dateMatch[1].slice(4, 6)}T00:00:00+08:00`) : NaN;
+  const ageDays = Number.isFinite(runTime) ? Math.abs(Date.now() - runTime) / 86400000 : Infinity;
+  if (!row?.runId || count <= 0 || ageDays > 3) return null;
   return {
     ok: true,
     source: "mobile-boot-ops-authority",
