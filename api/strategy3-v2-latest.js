@@ -104,10 +104,10 @@ async function fetchSupabaseJson(table, query) {
   return { ok: response.ok, status: response.status, rows: Array.isArray(rows) ? rows : [], error: response.ok ? "" : text.slice(0, 240) };
 }
 
-async function readSupabasePayload(dateDash) {
+async function readSupabasePayload(dateDash, options = {}) {
   const runQuery = new URLSearchParams({
     select: "*",
-    trade_date: `eq.${dateDash}`,
+    trade_date: options.latestReadOnly ? `lte.${dateDash}` : `eq.${dateDash}`,
     strategy: `eq.${STRATEGY}`,
     contract: `eq.${CONTRACT_VERSION}`,
     complete: "eq.true",
@@ -131,10 +131,12 @@ async function readSupabasePayload(dateDash) {
     source: "supabase",
     run,
     rows: rowsResult.rows.map((row, index) => normalizeRow(row, index)),
+    latestReadOnly: options.latestReadOnly === true,
   };
 }
 
-function payloadFromComplete({ source, runId, tradeDate, status, count, rows, scannerSummary }) {
+function payloadFromComplete({ source, runId, tradeDate, status, count, rows, scannerSummary, latestReadOnly = false }) {
+  const displayMode = latestReadOnly ? "latest_readonly_history" : "strategy3_v2_complete_run";
   return {
     ok: true,
     complete: true,
@@ -156,11 +158,11 @@ function payloadFromComplete({ source, runId, tradeDate, status, count, rows, sc
     evidenceStatus: "complete",
     unattendedStatus: "YES",
     publishAllowed: true,
-    latestOverwriteAllowed: true,
+    latestOverwriteAllowed: !latestReadOnly,
     formalDisplayAllowed: true,
-    todayAuthoritative: true,
-    preservePreviousGood: false,
-    previousGoodReadback: false,
+    todayAuthoritative: !latestReadOnly,
+    preservePreviousGood: latestReadOnly,
+    previousGoodReadback: latestReadOnly,
     resultCount: count || rows.length,
     count: count || rows.length,
     matches: rows,
@@ -171,7 +173,9 @@ function payloadFromComplete({ source, runId, tradeDate, status, count, rows, sc
       evidenceStatus: "complete",
       unattendedStatus: "YES",
       publishAllowed: true,
-      latestOverwriteAllowed: true,
+      latestOverwriteAllowed: !latestReadOnly,
+      preservePreviousGood: latestReadOnly,
+      previousGoodReadback: latestReadOnly,
     },
     terminalAuthority: {
       key: "strategy3",
@@ -179,14 +183,14 @@ function payloadFromComplete({ source, runId, tradeDate, status, count, rows, sc
       tradeDate,
       sourceDate: tradeDate,
       moduleStatus: "complete",
-      todayAuthoritative: true,
+      todayAuthoritative: !latestReadOnly,
       formalDisplayAllowed: true,
-      displayMode: "strategy3_v2_complete_run",
+      displayMode,
       displayBlockReason: "",
       pendingNotDue: false,
       evidenceStatus: "complete",
       publishAllowed: true,
-      fallback: false,
+      fallback: latestReadOnly,
       resultCount: count || rows.length,
       readbackCount: rows.length,
     },
@@ -210,6 +214,21 @@ module.exports = async function strategy3V2Latest(request, response) {
       count: Number(supabase.run.result_count || supabase.rows.length) || supabase.rows.length,
       rows: supabase.rows,
       scannerSummary: supabase.run.coverage || {},
+      latestReadOnly: supabase.latestReadOnly === true,
+    }));
+  }
+
+  const latestSupabase = await readSupabasePayload(dateDash, { latestReadOnly: true }).catch(() => null);
+  if (latestSupabase?.ok) {
+    return response.status(200).json(payloadFromComplete({
+      source: "supabase:strategy3_v2:latest_readonly_history",
+      runId: latestSupabase.run.run_id,
+      tradeDate: latestSupabase.run.trade_date || dateDash,
+      status: latestSupabase.run.status,
+      count: Number(latestSupabase.run.result_count || latestSupabase.rows.length) || latestSupabase.rows.length,
+      rows: latestSupabase.rows,
+      scannerSummary: latestSupabase.run.coverage || {},
+      latestReadOnly: true,
     }));
   }
 

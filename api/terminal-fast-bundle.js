@@ -425,6 +425,41 @@ function institutionDirectAuthority(payload = {}) {
   };
 }
 
+function directLatestReadOnlyAuthority(key, payload = {}) {
+  if (!["strategy3", "strategy4", "strategy5", "institution"].includes(key)) return null;
+  const rows = Array.isArray(payload.rows) ? payload.rows : Array.isArray(payload.matches) ? payload.matches : Array.isArray(payload.data) ? payload.data : [];
+  const count = Number(payload.count ?? payload.resultCount ?? payload.returnedCount ?? rows.length) || rows.length;
+  const runId = String(payload.runId || payload.run_id || payload.transport?.runId || "").trim();
+  const prefixes = { strategy3: "strategy3v2-", strategy4: "strategy4-", strategy5: "strategy5-", institution: "institution-" };
+  if (!runId.startsWith(prefixes[key]) || count <= 0 || rows.length <= 0) return null;
+  const evidenceStatus = String(payload.evidenceStatus || payload.run_quality_at_publish?.evidenceStatus || "").toLowerCase();
+  const publishAllowed = payload.publishAllowed ?? payload.run_quality_at_publish?.publishAllowed;
+  const complete = payload.complete === true || String(payload.status || "").toLowerCase() === "complete" || String(payload.qualityStatus || "").toLowerCase() === "complete";
+  if (!complete || publishAllowed !== true || evidenceStatus !== "complete") return null;
+  const tradeDate = terminalNormalizeTradeDate(payload.usedDate || payload.tradeDate || payload.trade_date || payload.scanDate || payload.date || terminalRunIdTradeDate(runId));
+  const runDate = terminalNormalizeTradeDate(terminalRunIdTradeDate(runId));
+  const today = terminalNormalizeTradeDate(terminalTaipeiDateKey());
+  const isToday = runDate === today && tradeDate === today && payload.preservePreviousGood !== true && payload.previousGoodReadback !== true;
+  const completeMode = key === "strategy3" ? "strategy3_v2_complete_run" : `${key}_complete_run`;
+  return {
+    ...(payload.terminalAuthority || {}),
+    key,
+    runId,
+    tradeDate,
+    sourceDate: tradeDate,
+    moduleStatus: "complete",
+    todayAuthoritative: isToday,
+    formalDisplayAllowed: true,
+    displayMode: isToday ? completeMode : "latest_readonly_history",
+    displayBlockReason: "",
+    pendingNotDue: false,
+    evidenceStatus: "complete",
+    publishAllowed: true,
+    fallback: !isToday,
+    resultCount: count,
+    readbackCount: rows.length,
+  };
+}
 function attachOpsAuthorityToEndpoints(endpoints = {}, authority = {}) {
   for (const [endpoint, payload] of Object.entries(endpoints || {})) {
     if (!payload || typeof payload !== "object") continue;
@@ -434,7 +469,8 @@ function attachOpsAuthorityToEndpoints(endpoints = {}, authority = {}) {
       && payload.version === "v3";
     const v2Strategy3 = key === "strategy3" ? strategy3V2DirectAuthority(payload) : null;
     const directInstitution = key === "institution" ? institutionDirectAuthority(payload) : null;
-    const row = v3Strategy2 ? strategy2V3Authority(payload) : v2Strategy3 || directInstitution || (key ? authority.byKey?.[key] : null);
+    const directReadOnly = !v3Strategy2 ? directLatestReadOnlyAuthority(key, payload) : null;
+    const row = v3Strategy2 ? strategy2V3Authority(payload) : v2Strategy3 || directInstitution || directReadOnly || (key ? authority.byKey?.[key] : null);
     if (!row) continue;
     if (v3Strategy2) {
       authority.byKey = { ...(authority.byKey || {}), strategy2: row };
@@ -447,6 +483,10 @@ function attachOpsAuthorityToEndpoints(endpoints = {}, authority = {}) {
     if (directInstitution) {
       authority.byKey = { ...(authority.byKey || {}), institution: row };
       authority.source = `${authority.source || "runtime-output-artifacts"}+institution-direct`;
+    }
+    if (directReadOnly) {
+      authority.byKey = { ...(authority.byKey || {}), [key]: row };
+      authority.source = `${authority.source || "runtime-output-artifacts"}+${key}-direct-readonly`;
     }
     payload.terminalAuthority = row;
     payload.todayAuthoritative = row.todayAuthoritative;
