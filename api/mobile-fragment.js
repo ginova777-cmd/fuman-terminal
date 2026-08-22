@@ -1120,7 +1120,10 @@ module.exports = async function handler(request, response) {
       allowStale: tab !== "strategy2",
     }).catch(() => null);
     const snapshotPayload = tab === "ai" ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
-    const forceLivePayload = tab === "strategy2" || requestedLiveFragment;
+    // Formal strategy/chip tabs must never paint an older HTML snapshot as current.
+    // They all read the same protected latest API path as the desktop terminal.
+    const forceLivePayload = ["strategy2", "strategy3", "strategy4", "strategy5", "chip"].includes(tab)
+      || requestedLiveFragment;
     const payload = forceLivePayload
       || !hasUsableSnapshotPayload(snapshotPayload, tab)
 

@@ -418,7 +418,8 @@
     "verify:opening-report-0830-production:line": "node --use-system-ca scripts/verify-opening-report-0830-production.js --require-line",
     "verify:live-desktop-member-tabs": "node --use-system-ca scripts/verify-live-desktop-member-tabs.js",
     "verify:terminal-reset-preserve-login": "node scripts/verify-terminal-reset-preserve-login.js",
-    "verify:terminal-entitlement-session-proof": "node scripts/verify-terminal-entitlement-session-proof.js"
+    "verify:terminal-entitlement-session-proof": "node scripts/verify-terminal-entitlement-session-proof.js",
+    "verify:three-surface-complete-scans": "node --use-system-ca scripts/verify-three-surface-complete-scans.js"
   },
   "engines": {
     "node": "24.x"

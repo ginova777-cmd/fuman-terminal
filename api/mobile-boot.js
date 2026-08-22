@@ -15,6 +15,7 @@ const TAB_ENDPOINTS = {
   strategy5: "/api/strategy5-latest",
   chip: "/api/institution-latest",
 };
+const FRAGMENT_TABS = Object.keys(TAB_ENDPOINTS);
 const MARKET_CORE_ENDPOINT = "/api/market?canvas=1&compact=1&shell=1&limit=4";
 const MOBILE_BOOT_SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_BOOT_SNAPSHOT_TIMEOUT_MS || 650);
 const MOBILE_BOOT_MARKET_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_BOOT_MARKET_TIMEOUT_MS || 650);
@@ -27,13 +28,19 @@ function originFrom(request) {
   return `${proto}://${host}`;
 }
 
-async function fetchJsonWithTimeout(url, timeoutMs = MOBILE_BOOT_TAB_TIMEOUT_MS) {
+function authHeadersFrom(request) {
+  const headers = request?.headers || {};
+  const authorization = headers.authorization || headers.Authorization || "";
+  return authorization ? { authorization } : {};
+}
+
+async function fetchJsonWithTimeout(url, timeoutMs = MOBILE_BOOT_TAB_TIMEOUT_MS, extraHeaders = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
       cache: "no-store",
-      headers: { "Cache-Control": "no-cache", Accept: "application/json" },
+      headers: { "Cache-Control": "no-cache", Accept: "application/json", ...extraHeaders },
       signal: controller.signal,
     });
     if (!response.ok) return null;
@@ -306,7 +313,7 @@ async function buildBoot(request) {
     let payload = endpointPayloadFromSnapshot(snapshot?.payload, MARKET_CORE_ENDPOINT)
       || endpointPayloadFromSnapshot(snapshot?.payload, "/api/market");
     try {
-      if (!payload) payload = await fetchJsonWithTimeout(`${origin}${MARKET_CORE_ENDPOINT}`, MOBILE_BOOT_MARKET_TIMEOUT_MS);
+      if (!payload) payload = await fetchJsonWithTimeout(`${origin}${MARKET_CORE_ENDPOINT}`, MOBILE_BOOT_MARKET_TIMEOUT_MS, authHeadersFrom(request));
     } catch {
       payload = null;
     }
@@ -322,7 +329,13 @@ async function buildBoot(request) {
       ts: Date.now(),
     });
     let payload = endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
-    if (!payload) payload = fastWaitingPayload(tab, endpoint);
+    if (!payload) {
+      try {
+        payload = await fetchJsonWithTimeout(`${origin}${endpoint}`, MOBILE_BOOT_TAB_TIMEOUT_MS, authHeadersFrom(request));
+      } catch {
+        payload = fastWaitingPayload(tab, endpoint);
+      }
+    }
     return [tab, payload];
   }));
   const fragments = {};

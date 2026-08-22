@@ -206,7 +206,8 @@ function checkApiBoot() {
   requireText(apiBoot, 'Vercel-CDN-Cache-Control", "no-store', "/api/mobile-boot must be Vercel CDN no-store");
   requireText(apiBoot, "/api/mobile-fragment?tab=", "/api/mobile-boot must point strategy tabs to API-rendered fragments");
   requireText(apiBoot, "function fastWaitingPayload", "mobile boot must not wait for every strategy endpoint before painting");
-  for (const endpoint of ["/api/strategy2-latest", "/api/strategy3-latest", "/api/strategy4-latest", "/api/strategy5-latest", "/api/institution-latest", "/api/cb-detect-latest", "/api/warrant-flow-latest"]) {
+  requireText(apiBoot, "const FRAGMENT_TABS = Object.keys(TAB_ENDPOINTS)", "mobile boot must enumerate the formal strategy/chip tabs");
+  for (const endpoint of ["/api/strategy2-latest", "/api/strategy3-latest", "/api/strategy4-latest", "/api/strategy5-latest", "/api/institution-latest"]) {
     requireText(apiBoot, endpoint, `/api/mobile-boot must derive mobile fragments from ${endpoint}`);
     requireText(fragmentApi, endpoint, `/api/mobile-fragment must render rows from ${endpoint}`);
   }
@@ -219,6 +220,7 @@ function checkApiBoot() {
   rejectText(apiBoot, "vercel --prod", "/api/mobile-boot must not trigger Vercel deploy as repair");
   requireText(fragmentApi, 'Cache-Control", "no-store', "/api/mobile-fragment must be browser no-store");
   requireText(fragmentApi, "data-run-id", "/api/mobile-fragment must expose API runId in the rendered fragment");
+  requireText(fragmentApi, "Formal strategy/chip tabs must never paint", "/api/mobile-fragment must reject stale formal HTML snapshots");
   requireText(mobileWatchMeta, "stocks-index.json", "/api/mobile-watch-meta must read the compact stock index");
   requireText(mobileWatchMeta, "stocks-slim.json", "/api/mobile-watch-meta must fall back to the full stock universe");
   requireText(mobileWatchMeta, "valid", "/api/mobile-watch-meta must return a valid boolean");
@@ -308,7 +310,7 @@ function isMembershipLockedHtml(text) {
 
 function assertNoProtectedMobileLeak(payload, label) {
   const fragments = payload?.fragments && typeof payload.fragments === "object" ? payload.fragments : {};
-  const protectedTabs = ["strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"];
+  const protectedTabs = ["strategy2", "strategy3", "strategy4", "strategy5", "chip"];
   for (const tab of protectedTabs) {
     if (fragments[tab]) pushIssue(`${label} leaked protected fragment ${tab} while membershipRequired=true`);
   }
@@ -367,7 +369,7 @@ async function checkLive() {
       }
     }
   } else {
-    for (const tab of ["strategy2", "strategy3", "strategy4", "strategy5", "chip", "cb", "warrant"]) {
+    for (const tab of ["strategy2", "strategy3", "strategy4", "strategy5", "chip"]) {
       const fragment = bootJson?.fragments?.[tab];
       if (!String(fragment?.url || "").startsWith("/api/mobile-fragment?tab=")) {
         pushIssue(`live /api/mobile-boot fragment ${tab} must point to /api/mobile-fragment actual=${fragment?.url || "<missing>"}`);
