@@ -2268,8 +2268,9 @@
     desktopFastBundleAt = now;
     const requestedRoute = String(routeOverride || strategyBundleRouteForCanvasRoute(canvasState.route || activeSnapshotRoute) || "");
     const routeQuery = requestedRoute ? `&route=${encodeURIComponent(requestedRoute)}` : "";
-    const url = `/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&t=${now}${routeQuery}`;
-    desktopFastBundlePromise = fetch(url, { cache: "no-store", priority: force ? "high" : "auto" })
+    const url = `/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&t=${now}`;
+    const requestUrl = `${url}${routeQuery}`;
+    desktopFastBundlePromise = fetch(requestUrl, { cache: "no-store", priority: force ? "high" : "auto" })
       .then((response) => response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`)))
       .then((payload) => primeRowsFromFastBundle(payload, `bundle-${reason}`))
       .catch(() => 0)
@@ -5455,7 +5456,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-31";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-32";
   }
 
   function loadScriptOnce(src, attr) {

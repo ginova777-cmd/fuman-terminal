@@ -18,6 +18,10 @@
   },
   "rewrites": [
     {
+      "source": "/reset",
+      "destination": "/reset.html"
+    },
+    {
       "source": "/88",
       "destination": "/88.html"
     },
@@ -73,6 +77,32 @@
     }
   ],
   "headers": [
+    {
+      "source": "/reset.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
+    {
+      "source": "/reset",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    },
     {
       "source": "/88",
       "headers": [

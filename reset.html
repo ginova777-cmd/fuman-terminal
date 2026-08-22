@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow">
+    <title>Fuman Terminal Reset</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #080c16; color: #dbeafe; font: 16px system-ui, sans-serif; }
+      main { text-align: center; }
+      p { color: #94a3b8; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <strong>正在清除終端舊快取…</strong>
+      <p>登入狀態會保留，完成後回到正式終端。</p>
+    </main>
+    <script>
+      (() => {
+        const protectedDb = "fuman-desktop-route-snapshots";
+        const clearCaches = async () => {
+          if (!window.caches) return;
+          const names = await caches.keys();
+          await Promise.all(names.filter((name) => /fuman-terminal/i.test(name)).map((name) => caches.delete(name)));
+        };
+        const unregisterWorkers = async () => {
+          if (!navigator.serviceWorker?.getRegistrations) return;
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map((registration) => registration.unregister()));
+        };
+        const clearSnapshotDb = () => new Promise((resolve) => {
+          if (!window.indexedDB) return resolve();
+          const request = indexedDB.deleteDatabase(protectedDb);
+          request.onsuccess = request.onerror = request.onblocked = () => resolve();
+        });
+        Promise.allSettled([clearCaches(), unregisterWorkers(), clearSnapshotDb(), Promise.resolve().then(() => sessionStorage.clear())])
+          .finally(() => {
+            const target = new URL("/?desktop=1", location.origin);
+            target.searchParams.set("fresh", String(Date.now()));
+            location.replace(target.pathname + target.search);
+          });
+      })();
+    </script>
+  </body>
+</html>

@@ -34,7 +34,7 @@ mustInclude("installProtectedRouteSnapshotRetirement20260717();", "protected_sna
 mustInclude('sessionStorage.removeItem("fuman-strategy2-snapshot-first")', "strategy2_snapshot_first_flag_not_cleared");
 mustMatch(/function\s+strategy2SnapshotFirstEnabled\s*\(\)\s*\{\s*return\s+false\s*;\s*\}/, "strategy2_snapshot_first_not_hard_disabled");
 mustInclude('const url = `/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&t=${now}`;', "fast_bundle_missing_cache_buster");
-mustInclude('fetch(url, { cache: "no-store"', "fast_bundle_not_no_store");
+if (!/fetch\((?:url|requestUrl), \{ cache: "no-store"/.test(shell)) issues.push("fast_bundle_not_no_store");
 mustInclude('fetch(url, { cache: isProtectedDataRoute(route) || force ? "no-store" : "default"', "protected_canvas_fetch_not_no_store");
 mustInclude("if (isProtectedDataRoute(route)) {", "protected_rows_for_route_gate_missing");
 mustInclude("return [];", "protected_rows_must_not_snapshot_fallback");
@@ -42,8 +42,8 @@ mustInclude("return [];", "protected_rows_must_not_snapshot_fallback");
 mustNotMatch(/if\s*\(strategy2SnapshotFirst\)\s*query\.set\("snapshot",\s*"1"\)/, "strategy2_snapshot_query_still_enabled");
 mustNotMatch(/if\s*\(!force\s*&&\s*cached\?\.rows\?\.length[^)]*Date\.now\(\)[^)]*ttl\)\s*\{\s*return Promise\.resolve\(cached\.rows\)/s, "protected_route_may_return_memory_cache_before_api");
 
-mustIncludeIn(indexHtml, "protected-no-stale-first-paint=20260717-01", "index_shell_cache_buster_not_bumped");
-mustIncludeIn(sw, 'PROTECTED_NO_STALE_SW_EPOCH = "protected-no-stale-first-paint-20260717-01"', "sw_no_stale_epoch_missing");
+mustIncludeIn(indexHtml, "protected-no-stale-first-paint=20260724-01", "index_shell_cache_buster_not_bumped");
+mustIncludeIn(sw, 'PROTECTED_NO_STALE_SW_EPOCH = "protected-no-stale-first-paint-20260724-01"', "sw_no_stale_epoch_missing");
 for (const [pattern, code] of [
   [/\/\\\/api\\\/terminal-fast-bundle\/i/, "sw_terminal_fast_bundle_not_live"],
   [/\/\\\/api\\\/desktop-route-snapshot\/i/, "sw_desktop_route_snapshot_not_live"],
