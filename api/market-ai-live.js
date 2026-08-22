@@ -693,8 +693,13 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
     .filter(Boolean);
 
   let allRows = mergeStockRows(normalizedBase, normalizedRadar, normalizedHeatmap).slice(0, 60);
-  const openingFallbackRows = allRows.length ? [] : openingReportObservationRows(clock, session).slice(0, 60);
-  if (!allRows.length && openingFallbackRows.length) allRows = openingFallbackRows;
+  const candidateOpeningFallbackRows = openingReportObservationRows(clock, session).slice(0, 60);
+  const shouldUseOpeningFallback = candidateOpeningFallbackRows.length > 0
+    && normalizedRadar.length === 0
+    && normalizedHeatmap.length === 0
+    && (!allRows.length || normalizedBase.length === allRows.length);
+  const openingFallbackRows = shouldUseOpeningFallback ? candidateOpeningFallbackRows : [];
+  if (openingFallbackRows.length) allRows = openingFallbackRows;
   const rowUp = allRows.filter((row) => cleanNumber(row.pct) > 0).length;
   const rowDown = allRows.filter((row) => cleanNumber(row.pct) < 0).length;
   const sample = heatmapUsable
@@ -723,6 +728,8 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
   ).slice(0, 20);
 
   const allGroupRows = allRows.slice(0, 30);
+  const openingReportFallbackUsed = openingFallbackRows.length > 0 || allGroupRows.some((row) => row?.source === "晨報產業觀察");
+  const openingReportFallbackRowCount = openingFallbackRows.length || (openingReportFallbackUsed ? allGroupRows.filter((row) => row?.source === "晨報產業觀察").length : 0);
   const isPriorityCandidate = (row) => !/short|空|弱|風險/i.test(`${row.side} ${row.reason} ${row.tags.join(" ")}`) && cleanNumber(row.pct) >= 0;
   const fallbackIndustryNames = [...new Set(openingFallbackRows.map((row) => row.industry).filter(Boolean))].slice(0, 3);
   const strongNames = (strongSectors.map((sector) => sector.name || sector.industry).filter(Boolean).slice(0, 3).length
@@ -824,7 +831,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
         heatmapSectors: sectors.length,
         radarRows: normalizedRadar.length,
         aiRows: normalizedBase.length,
-        openingReportFallbackRows: openingFallbackRows.length,
+        openingReportFallbackRows: openingReportFallbackRowCount,
       },
     },
     dataFreshness: {
@@ -841,7 +848,7 @@ function buildMarketAiInsights(payload, heatmapPayload, radarPayload, clock, ses
       heatmapQuoteCoverage,
       priorityStaleBlocked,
       preOpenMarketAi,
-      openingReportFallbackUsed: openingFallbackRows.length > 0,
+      openingReportFallbackUsed,
       detectionWindow: "09:00-13:30",
     },
     fieldCompleteness: {
