@@ -56,7 +56,7 @@ function sleep(ms) {
 }
 
 function desktopFastShellSrc(version) {
-  return `terminal-desktop-fast-shell.js?buy-sell-derived-fields=20260629-01&strategy2-history=20260629-01&v=${version}`;
+  return `terminal-desktop-fast-shell.js?buy-sell-derived-fields=20260629-01&strategy2-history=20260629-01&protected-no-stale-first-paint=20260724-01&v=${version}`;
 }
 
 function verifyUnifiedFrontendRelease(home, desktopShell, version) {
