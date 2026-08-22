@@ -541,6 +541,9 @@
     const handler = (event) => {
       const link = event.target?.closest?.("a,button,[data-view]");
       if (!link || !document.documentElement.contains(link) || !isProtectedLink(link)) return;
+      // The desktop fast shell owns navigation and also applies the entitlement
+      // block. Let its capture handlers switch to the correct route/locked view.
+      if (window.__fumanDesktopFastShell) return;
       blockEvent(event, link);
     };
     document.addEventListener("pointerdown", handler, true);

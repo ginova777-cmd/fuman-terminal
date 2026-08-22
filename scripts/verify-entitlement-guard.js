@@ -25,16 +25,17 @@ function requireOrder(file, before, after) {
 
 requireIncludes("terminal-entitlement-guard.js", 'const PUBLIC_VIEWS = new Set(["market", "member"])');
 requireIncludes("terminal-entitlement-guard.js", 'PROTECTED_VIEWS = new Set(["strategy", "chip-trade", "cb-detect", "warrant-flow", "realtime-radar"])');
-requireIncludes("terminal-entitlement-guard.js", "membership_required");
+requireIncludes("terminal-entitlement-guard.js", 'data-membership-required="1"');
 requireIncludes("terminal-entitlement-guard.js", "scorecard|source-reports");
-requireIncludes("terminal-entitlement-guard.js", "/auth.html?next=");
+requireIncludes("terminal-entitlement-guard.js", 'new URL("/auth.html", location.origin)');
+requireIncludes("terminal-entitlement-guard.js", 'authUrl.searchParams.set("next", "/?desktop=1")');
 requireIncludes("auth.html", "Fuman");
 requireIncludes("auth.html", "電子郵件 / 帳號");
 requireIncludes("auth.html", "遊客登入");
 requireIncludes("auth.html", "立即註冊帳號");
 requireIncludes("auth.html", "fuman_user_access");
 
-for (const label of ["策略1", "策略2", "策略3", "策略4", "策略5", "即時雷達", "買賣超", "CB可轉債", "權證走向", "回測研究"]) {
+for (const label of ["策略1", "策略2", "策略3", "策略4", "策略5", "即時名單", "買賣超", "CB可轉債", "權證走向", "回測研究"]) {
   requireIncludes("terminal-entitlement-guard.js", label);
 }
 
@@ -43,6 +44,7 @@ for (const status of ["active", "approved", "admin", "paid", "pro", "premium"]) 
 }
 
 requireIncludes("terminal-desktop-fast-shell.js", "const DEFAULT_DESKTOP_ROUTE_KEY = MARKET_ROUTE;");
+requireIncludes("terminal-entitlement-guard.js", "if (window.__fumanDesktopFastShell) return;");
 requireIncludes("fuman-sw.js", "/terminal-entitlement-guard.js?v=public-terminal-fast-");
 requireIncludes("package.json", '"verify:entitlement-guard": "node scripts/verify-entitlement-guard.js"');
 requireOrder("index.html", "terminal-entitlement-guard.js", "terminal-desktop-fast-shell.js");
