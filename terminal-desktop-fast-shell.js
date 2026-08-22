@@ -25,6 +25,8 @@
   const REALTIME_RADAR_ROUTE = "";
   const CHIP_TRADE_ROUTE = "chip-trade|買賣超";
   const CB_DETECT_ROUTE = "";
+  const FIXED_ROUTE_KEYS = [MARKET_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向", "watchlist|自選股"];
+  const API_ONLY_FIXED_ROUTE_KEYS = [MARKET_ROUTE, CHIP_TRADE_ROUTE, CB_DETECT_ROUTE, "warrant-flow|權證走向"];
   const FIXED_CANVAS_PERSIST_ROUTES = [];
   const CANVAS_REFRESH_TTL_MS = 18000;
   const API_ONLY_POLL_MS = 30000;
@@ -1264,6 +1266,44 @@
     new MutationObserver(run).observe(document.documentElement, { childList: true, subtree: true });
   }
 
+  function installProtectedRouteSnapshotRetirement20260717() {
+    const keys = protectedDataRouteKeys();
+    const clearRuntime = () => {
+      keys.forEach((key) => {
+        try { sessionStorage.removeItem(SNAPSHOT_PREFIX + key); } catch (error) {}
+        routeSnapshots.delete(key);
+        canvasStore.delete(key);
+        canvasEmptyStates.delete(key);
+        canvasInflight.delete(key);
+        canvasRouteVersions.delete(key);
+        canvasMetricsCache.delete(key);
+        canvasPreRenderedRoutes.delete(key);
+      });
+      try { sessionStorage.removeItem("fuman-strategy2-snapshot-first"); } catch (error) {}
+    };
+    clearRuntime();
+    try {
+      if (localStorage.getItem(PROTECTED_ROUTE_SNAPSHOT_RETIREMENT_KEY) === "done") return;
+      localStorage.setItem(PROTECTED_ROUTE_SNAPSHOT_RETIREMENT_KEY, "done");
+    } catch (error) {}
+    if ("indexedDB" in window) {
+      openSnapshotDb().then((db) => {
+        if (!db) return;
+        try {
+          const tx = db.transaction(SNAPSHOT_STORE, "readwrite");
+          keys.forEach((key) => tx.objectStore(SNAPSHOT_STORE).delete(key));
+        } catch (error) {}
+      }).catch(() => undefined);
+    }
+    if ("caches" in window) {
+      caches.keys().then((names) => Promise.all(names.map((name) => caches.open(name).then((cache) => cache.keys().then((requests) => Promise.all(requests.map((request) => {
+        const url = request?.url || "";
+        return /terminal-fast-bundle|desktop-route-snapshot|strategy[2-5]-latest|institution-latest|cb-detect-latest|warrant-flow-latest/i.test(url)
+          ? cache.delete(request)
+          : false;
+      }))))))).catch(() => undefined);
+    }
+  }
   function installDesktopFastWarrantHandlers() {}
 
   function renderDesktopFastWarrantShell(payload = {}, rows = [], state = {}) {
@@ -5415,7 +5455,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-30";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-31";
   }
 
   function loadScriptOnce(src, attr) {
