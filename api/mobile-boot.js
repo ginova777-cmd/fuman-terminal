@@ -5,6 +5,7 @@ const {
   readDesktopRouteSnapshot,
 } = require("../lib/desktop-route-snapshot-cache");
 const { verifyRequestEntitlement } = require("../lib/server-entitlement-guard");
+const { buildLatestOpsStatus } = require("../lib/terminal-ops-status");
 const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-limit");
 
 const PUBLIC_FRAGMENT_TABS = [];
@@ -161,6 +162,25 @@ function waitingRunId(payload, tab = "") {
   const reason = payload?.reason || payload?.error || payload?.detail || payload?.qualityStatus || payload?.cacheSource || "waiting";
   const date = compactDate(payload?.date || payload?.marketSession?.taipeiDate || payload?.updatedAt || payload?.transport?.fetchedAt);
   return `${compactToken(tab || "mobile")}-waiting-${date}-${compactToken(reason)}`;
+}
+
+function authorityPayload(tab) {
+  const key = tab === "chip" ? "institution" : tab;
+  const row = (buildLatestOpsStatus()?.modules || []).find((item) => item?.key === key);
+  const count = Number(row?.resultCount || row?.readbackCount || 0);
+  if (!row?.runId || count <= 0) return null;
+  return {
+    ok: true,
+    source: "mobile-boot-ops-authority",
+    cacheSource: "terminal-ops-authority",
+    runId: String(row.runId),
+    count,
+    resultCount: count,
+    complete: row.formalDisplayAllowed === true,
+    publishAllowed: row.publishAllowed === true,
+    evidenceStatus: row.evidenceStatus || "complete",
+    updatedAt: row.updatedAt || new Date().toISOString(),
+  };
 }
 
 function fastWaitingPayload(tab, endpoint, reason = "snapshot_not_ready") {
@@ -328,7 +348,7 @@ async function buildBoot(request) {
       limit: 60,
       ts: Date.now(),
     });
-    let payload = endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
+    let payload = endpointPayloadFromSnapshot(snapshot?.payload, endpoint) || authorityPayload(tab);
     if (!payload) {
       try {
         payload = await fetchJsonWithTimeout(`${origin}${endpoint}`, MOBILE_BOOT_TAB_TIMEOUT_MS, authHeadersFrom(request));
