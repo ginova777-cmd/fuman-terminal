@@ -4,7 +4,6 @@ const { notificationsDisabled } = require("./notification-guard");
 const fs = require("fs");
 const path = require("path");
 const tls = require("tls");
-const { notificationsDisabled } = require("./notification-guard");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";

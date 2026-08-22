@@ -31,8 +31,12 @@ function originFrom(request) {
 
 function authHeadersFrom(request) {
   const headers = request?.headers || {};
-  const authorization = headers.authorization || headers.Authorization || "";
-  return authorization ? { authorization } : {};
+  const forwarded = {};
+  for (const name of ["authorization", "cookie", "x-vercel-protection-bypass", "x-vercel-set-bypass-cookie"]) {
+    const value = headers[name] || headers[name.toLowerCase()] || headers[name.toUpperCase()];
+    if (value) forwarded[name] = value;
+  }
+  return forwarded;
 }
 
 async function fetchJsonWithTimeout(url, timeoutMs = MOBILE_BOOT_TAB_TIMEOUT_MS, extraHeaders = {}) {
