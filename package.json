@@ -200,7 +200,7 @@
     "verify:terminal-ui-e2e:matrix": "node --use-system-ca scripts/verify-terminal-ui-e2e-matrix.js",
     "verify:terminal-ui-state-acceptance": "node scripts/verify-terminal-ui-state-acceptance.js",
     "verify:protected-route-no-stale-first-paint": "node scripts/verify-protected-route-no-stale-first-paint.js",
-    "verify:terminal-perfect": "npm run verify:terminal-reset-preserve-login && npm run verify:terminal-fields && npm run verify:terminal-resource-chain && npm run verify:terminal-cold-start -- --skip-watchlist && npm run verify:terminal-ui-state-acceptance && npm run verify:terminal-ui-e2e -- --skip-watchlist --only=desktop-night,desktop-sun,mobile-phone-portrait-night,mobile-phone-portrait-sun,mobile-phone-landscape-night,mobile-phone-landscape-sun,mobile-tablet-night,mobile-tablet-sun,mobile-desktop-night,mobile-desktop-sun --route-timeout=60000",
+    "verify:terminal-perfect": "npm run verify:terminal-entitlement-session-proof && npm run verify:terminal-reset-preserve-login && npm run verify:terminal-fields && npm run verify:terminal-resource-chain && npm run verify:terminal-cold-start -- --skip-watchlist && npm run verify:terminal-ui-state-acceptance && npm run verify:terminal-ui-e2e -- --skip-watchlist --only=desktop-night,desktop-sun,mobile-phone-portrait-night,mobile-phone-portrait-sun,mobile-phone-landscape-night,mobile-phone-landscape-sun,mobile-tablet-night,mobile-tablet-sun,mobile-desktop-night,mobile-desktop-sun --route-timeout=60000",
     "verify:terminal-resource-chain": "node --use-system-ca scripts/verify-terminal-resource-chain.js",
     "verify:terminal-resource-chain:unattended": "node --use-system-ca scripts/verify-terminal-resource-chain.js --require-unattended",
     "verify:terminal-water-root": "node --use-system-ca scripts/verify-terminal-water-root.js",
@@ -417,7 +417,8 @@
     "verify:opening-report-0830-unattended-readiness": "node --use-system-ca scripts/verify-opening-report-0830-unattended-readiness.js",
     "verify:opening-report-0830-production:line": "node --use-system-ca scripts/verify-opening-report-0830-production.js --require-line",
     "verify:live-desktop-member-tabs": "node --use-system-ca scripts/verify-live-desktop-member-tabs.js",
-    "verify:terminal-reset-preserve-login": "node scripts/verify-terminal-reset-preserve-login.js"
+    "verify:terminal-reset-preserve-login": "node scripts/verify-terminal-reset-preserve-login.js",
+    "verify:terminal-entitlement-session-proof": "node scripts/verify-terminal-entitlement-session-proof.js"
   },
   "engines": {
     "node": "24.x"

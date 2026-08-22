@@ -50,7 +50,8 @@
     const authReady = body?.classList?.contains("auth-ready") && !body.classList.contains("auth-locked");
     const logoutReady = document.querySelector(".sidebar-foot .logout")?.dataset?.authAction === "logout";
     const memberReady = ALLOWED_STATUSES.has(status) || bodyAccess || contentVerified;
-    const sessionReady = bodyToken || authReady || logoutReady;
+    // auth-ready/logout UI state is only a paint hint; protected APIs require a real session.
+    const sessionReady = bodyToken || contentVerified;
     return {
       status,
       bodyAccess,
