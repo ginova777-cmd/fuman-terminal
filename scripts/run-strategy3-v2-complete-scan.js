@@ -107,6 +107,24 @@ function parseJson(text) {
   try { return JSON.parse(raw.slice(first, last + 1)); } catch { return null; }
 }
 
+function runMarketGuard() {
+  const child = spawnSync(process.execPath, ["--use-system-ca", path.join(ROOT, "scripts", "check-market-calendar-action.js"), "--label=strategy3-v2-complete-scan", "--receipt"], {
+    cwd: ROOT,
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 30000,
+    env: { ...process.env, FUMAN_RUNTIME_DIR: RUNTIME_DIR },
+  });
+  const stdout = String(child.stdout || "");
+  const first = stdout.indexOf("{");
+  const last = stdout.lastIndexOf("}");
+  let payload = null;
+  if (first >= 0 && last > first) {
+    try { payload = JSON.parse(stdout.slice(first, last + 1)); } catch {}
+  }
+  return { closed: child.status === 10, exitCode: child.status ?? 1, payload, stderr: String(child.stderr || "").trim() };
+}
+
 function runReadiness() {
   const child = spawnSync(process.execPath, ["--use-system-ca", path.join(ROOT, "scripts", "check-strategy3-v2-readiness.js"), `--trade-date=${tradeDate}`], {
     cwd: ROOT,
@@ -265,6 +283,36 @@ function buildScannerCoreResults() {
 }
 
 async function main() {
+  const market = runMarketGuard();
+  if (market.closed) {
+    const receipt = {
+      ok: true,
+      strategy: STRATEGY,
+      contract: CONTRACT_VERSION,
+      status: "SKIPPED_MARKET_CLOSED",
+      checked_at: nowTaipeiIso(),
+      trade_date: tradeDate,
+      run_id: `strategy3v2-market-closed-${compactDate}`,
+      apply,
+      scanner_core_ready: false,
+      scanner_source: "market_calendar_guard",
+      scanner_summary: { result_count: 0 },
+      readiness: { ok: true, skipped: true, reason_code: "market_closed_preserve_previous_good" },
+      entry_window: ENTRY_WINDOW,
+      result_count: 0,
+      results: [],
+      line_allowed: false,
+      formal_allowed: false,
+      publish_allowed: false,
+      marketCalendar: market.payload,
+      reason_code: "market_closed_preserve_previous_good",
+      previous_good_preserved: true,
+    };
+    const file = writeJson(scanReceiptPath(compactDate), receipt);
+    console.log(JSON.stringify({ ...receipt, receipt_path: file }, null, 2));
+    return;
+  }
+  if (market.exitCode !== 0) throw new Error(`strategy3_v2_market_calendar_guard_failed exit=${market.exitCode} ${market.stderr}`);
   const readiness = runReadiness();
   const issues = [];
   const scanner = buildScannerCoreResults();

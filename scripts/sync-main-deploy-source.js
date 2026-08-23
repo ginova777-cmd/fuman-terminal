@@ -182,6 +182,8 @@ const FILES = [
   "scripts/strategy3-v2-contract.js",
   "scripts/check-strategy3-v2-readiness.js",
   "scripts/run-strategy3-v2-complete-scan.js",
+  "scripts/run-strategy2-v3-water-scan.js",
+  "scripts/verify-strategy3-v2-daily-unattended-closure.js",
   "scripts/send-strategy3-v2-line-card.js",
   "scripts/verify-strategy3-v2-full-closure.js",
   "scripts/verify-strategy3-v2-water-universe.js",

@@ -4,9 +4,9 @@
 // the current Fugle deep-scan pool. It does not import V2 rules or fallbacks.
 const fs = require("fs");
 const path = require("path");
-const { terminalSupabaseKey, terminalSupabaseUrl } = require("../../../../../../fuman-terminal/lib/server-supabase-key");
+const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
-const ROOT = "C:/fuman-terminal";
+const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 // V3 scans the dedicated daytrade WebSocket cache directly. The database is
 // the durable mirror, not the live-clock authority for Strategy2.
@@ -17,6 +17,58 @@ const SOURCE_NAME = "fugle_daytrade_source";
 const CONTRACT = "strategy2-v3-fugle-deep-scan-water-v1";
 const MIN_CANDLES = 35;
 const WEBSOCKET_STATUS_FILE = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status.json");
+
+function marketClosedReport(label, clock) {
+  const { spawnSync } = require("child_process");
+  const child = spawnSync(process.execPath, ["--use-system-ca", path.join(ROOT, "scripts", "check-market-calendar-action.js"), `--label=${label}`, "--receipt"], {
+    cwd: ROOT,
+    encoding: "utf8",
+    windowsHide: true,
+    env: { ...process.env, FUMAN_RUNTIME_DIR: RUNTIME_DIR },
+  });
+  const stdout = String(child.stdout || "");
+  const first = stdout.indexOf("{");
+  const last = stdout.lastIndexOf("}");
+  let payload = null;
+  if (first >= 0 && last > first) {
+    try { payload = JSON.parse(stdout.slice(first, last + 1)); } catch {}
+  }
+  if (child.status !== 10) return null;
+  return {
+    ok: true,
+    strategy: "strategy2",
+    version: "v3",
+    strategyContract: CONTRACT,
+    runId: `strategy2-v3-market-closed-${clock.ymd}`,
+    dataDate: clock.date,
+    tradeDate: clock.date,
+    updatedAt: new Date().toISOString(),
+    status: "market_closed_previous_good",
+    complete: true,
+    liveWindow: false,
+    publishAllowed: false,
+    formalDisplayAllowed: false,
+    reason: "market_closed_preserve_previous_good",
+    marketCalendar: payload,
+    expectedCount: 0,
+    scannedCount: 0,
+    dataGapCount: 0,
+    resultCount: 0,
+    records: [],
+    dataGaps: [],
+    sourceCoverage: {
+      formalDeepScanPoolRows: 0,
+      formalDeepScanQuoteRows: 0,
+      formalDeepScanEligibleRows: 0,
+      formalIntradayOneMinuteRows: 0,
+      formalIntradayOneMinuteReadySymbols: 0,
+      dataGapCount: 0,
+      noLegacyReadbackViews: true,
+      noTop40Gate: true,
+      noPreviousGoodFallback: true,
+    },
+  };
+}
 
 function taipeiClock(now = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -253,6 +305,14 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
 async function main() {
   const now = new Date();
   const clock = taipeiClock(now);
+  const closed = marketClosedReport("strategy2-v3-water", clock);
+  if (closed) {
+    const base = path.join(RUNTIME_DIR, "data", "strategy2-v3");
+    writeJson(path.join(base, "latest.json"), closed);
+    writeJson(path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2-v3-water.json"), closed);
+    console.log(JSON.stringify({ ok: true, status: closed.status, runId: closed.runId, dataDate: closed.dataDate, receipt: path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2-v3-water.json") }, null, 2));
+    return;
+  }
   const source = config();
   if (!source.url || !source.key) throw new Error("strategy2_v3_supabase_credentials_missing");
   const diagnostic = process.argv.includes("--diagnostic");
