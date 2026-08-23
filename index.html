@@ -130,7 +130,15 @@
             const gateVisible = Boolean(document.querySelector("#auth-gate:not([hidden])"));
             if (gateVisible || /檢查中|尚未|未開通|登入/.test(text)) explicitLockedBadge();
           };
-          [120, 520, 1200, 2200].forEach((delay) => setTimeout(markLockedIfPending, delay));
+          [0, 120, 520, 1200, 2200].forEach((delay) => setTimeout(markLockedIfPending, delay));
+          const pendingLockStartedAt = Date.now();
+          const pendingLockTimer = setInterval(() => {
+            if (document.body?.dataset?.membershipAccess === "allowed" || Date.now() - pendingLockStartedAt > 6000) {
+              clearInterval(pendingLockTimer);
+              return;
+            }
+            markLockedIfPending();
+          }, 250);
           const apply = (link, source = "early-sidebar") => {
             const info = routeInfo(link);
             if (!info) return false;
