@@ -10,6 +10,9 @@ const ATTEMPTS = Number(process.env.FUMAN_VERIFY_SNAPSHOT_ATTEMPTS || (RETRY ? 1
 const DELAY_MS = Number(process.env.FUMAN_VERIFY_SNAPSHOT_DELAY_MS || 10000);
 const SNAPSHOT_CONTRACT = "terminal-display-snapshot-v1";
 const DISPLAY_VERSION_MARKER = "terminal-display-v2-20260823-05";
+const DAILY_KLINE_CONTRACT = "terminal-daily-kline-v1";
+const DAILY_KLINE_MARKER = "terminal-display-v2-kline-20260823-01";
+const DAILY_KLINE_TEST_CODE = process.env.FUMAN_VERIFY_DAILY_KLINE_CODE || "6830";
 const SNAPSHOT_ROUTES = ["strategy2", "strategy3", "strategy4", "strategy5", "institution"];
 const REQUIRED_DATA_ROUTES = ["strategy3", "strategy4", "strategy5", "institution"];
 
@@ -49,10 +52,12 @@ function sleep(ms) {
 
 function verifyStatic() {
   const api = read("api/terminal-display-snapshot.js");
+  const dailyKlineApi = read("api/daily-kline.js");
   const display = read("terminal-display-v2.js");
   const pkg = read("package.json");
   const sync = read("scripts/sync-main-deploy-source.js");
   const sourceSync = read("scripts/verify-source-sync.js");
+  const publishGate = read("scripts/verify-publish-gate.js");
 
   assert(api.includes(SNAPSHOT_CONTRACT), `snapshot API missing ${SNAPSHOT_CONTRACT}`);
   assert(api.includes("readDesktopRouteSnapshotForRoute"), "snapshot API must prefer route-specific desktop snapshots");
@@ -63,17 +68,43 @@ function verifyStatic() {
     assert(display.includes(`/api/terminal-display-snapshot?route=${route}`), `terminal-display-v2 missing snapshot route ${route}`);
   }
 
+  assert(dailyKlineApi.includes(DAILY_KLINE_CONTRACT), `daily-K API missing ${DAILY_KLINE_CONTRACT}`);
+  for (const marker of ["strategy4_daily_ohlcv_view", "open", "high", "low", "close", "volumeLots", "MAX_LIMIT = 260"]) {
+    assert(dailyKlineApi.includes(marker), `daily-K API contract missing ${marker}`);
+  }
+
   assert(display.includes(DISPLAY_VERSION_MARKER), `terminal-display-v2 missing marker ${DISPLAY_VERSION_MARKER}`);
   assert(display.includes("loadSnapshotFallback"), "terminal-display-v2 missing loadSnapshotFallback");
-  assert(display.includes("terminal-display-v2-kline-20260823-01"), "terminal-display-v2 missing target daily-K takeover marker");
-  assert(display.includes("/api/daily-kline?code=${encodeURIComponent(code)}&limit=260"), "terminal-display-v2 missing daily-K API fetch");
-  assert(display.includes("FUMAN_TERMINAL_DISPLAY_V2_KLINE"), "terminal-display-v2 missing daily-K debug export");
+  for (const marker of [
+    DAILY_KLINE_MARKER,
+    "FUMAN_TERMINAL_DISPLAY_V2_KLINE",
+    "function codeOf(value)",
+    "function markCards()",
+    "async function openCard(card)",
+    "new MutationObserver(markCards)",
+    ".terminal-display-v2-card[data-terminal-display-v2-kline-code]",
+    ".terminal-display-v2-kline-panel",
+    ".terminal-display-v2-kline-svg",
+    "data-terminal-display-v2-kline-range",
+    "[60, 120, 240]",
+    "MA5",
+    "MA10",
+    "MA20",
+    "下方為成交量（張）",
+    "/api/daily-kline?code=${encodeURIComponent(code)}&limit=260",
+  ]) {
+    assert(display.includes(marker), `terminal-display-v2 daily-K takeover missing ${marker}`);
+  }
   assert(display.includes("window.FUMAN_TERMINAL_DISPLAY_V2"), "terminal-display-v2 missing debug export");
   assert(display.includes("route.snapshot"), "terminal-display-v2 must call the snapshot path during route activation");
   assert(pkg.includes('"verify:terminal-display-snapshot"'), "package.json missing verify:terminal-display-snapshot script");
+  assert(pkg.includes("npm run verify:terminal-display-snapshot -- --retry"), "postdeploy must run terminal-display-snapshot live verifier");
+  assert(publishGate.includes("terminal_display_snapshot"), "publish gate missing terminal_display_snapshot check");
   assert(sync.includes("scripts/verify-terminal-display-snapshot.js"), "sync-main-deploy-source missing verifier script");
   assert(sourceSync.includes("scripts/verify-terminal-display-snapshot.js"), "verify-source-sync missing verifier script");
-  console.log(`[terminal-display-snapshot] static ok contract=${SNAPSHOT_CONTRACT}`);
+  assert(sync.includes("api/daily-kline.js"), "sync-main-deploy-source missing api/daily-kline.js");
+  assert(sourceSync.includes("api/daily-kline.js"), "verify-source-sync missing api/daily-kline.js");
+  console.log(`[terminal-display-snapshot] static ok snapshot=${SNAPSHOT_CONTRACT} dailyK=${DAILY_KLINE_CONTRACT}`);
 }
 
 async function fetchSnapshot(route) {
@@ -99,6 +130,25 @@ async function fetchSnapshot(route) {
   };
 }
 
+async function fetchDailyKline(code) {
+  const result = await fetchText(`/api/daily-kline?code=${encodeURIComponent(code)}&limit=60&verify=${Date.now()}`, 30000);
+  assert(result.status >= 200 && result.status < 300, `daily-K ${code} HTTP ${result.status}`);
+  const payload = parseJson(`daily-K ${code}`, result.body);
+  assert(payload?.ok === true, `daily-K ${code} ok must be true`);
+  assert(payload.contract === DAILY_KLINE_CONTRACT, `daily-K ${code} contract mismatch`);
+  assert(String(payload.source || "").startsWith("supabase:"), `daily-K ${code} source must be supabase`);
+  const bars = Array.isArray(payload.bars) ? payload.bars : [];
+  assert(bars.length >= 20, `daily-K ${code} bars must be >= 20`);
+  for (const [index, bar] of bars.entries()) {
+    for (const field of ["date", "open", "high", "low", "close", "volumeLots"]) {
+      assert(bar?.[field] !== undefined && bar?.[field] !== null && bar?.[field] !== "", `daily-K ${code} bar ${index} missing ${field}`);
+    }
+    assert(Number(bar.high) >= Math.max(Number(bar.open), Number(bar.close)), `daily-K ${code} bar ${index} high violates OHLC`);
+    assert(Number(bar.low) <= Math.min(Number(bar.open), Number(bar.close)), `daily-K ${code} bar ${index} low violates OHLC`);
+  }
+  return { code, contract: payload.contract, source: payload.source, bars: bars.length, latestDate: payload.latestDate || bars[bars.length - 1]?.date || "" };
+}
+
 async function verifyLiveOnce() {
   const version = parseJson("version", read("version.json")).version;
   const asset = await fetchText(`/terminal-display-v2.js?v=${encodeURIComponent(version)}&verify=${Date.now()}`);
@@ -106,22 +156,28 @@ async function verifyLiveOnce() {
   assert(asset.body.includes(DISPLAY_VERSION_MARKER), `live terminal-display-v2 missing ${DISPLAY_VERSION_MARKER}`);
   assert(asset.body.includes("loadSnapshotFallback"), "live terminal-display-v2 missing loadSnapshotFallback");
   assert(asset.body.includes("/api/terminal-display-snapshot?route=strategy5"), "live terminal-display-v2 missing snapshot API route");
+  assert(asset.body.includes(DAILY_KLINE_MARKER), `live terminal-display-v2 missing ${DAILY_KLINE_MARKER}`);
+  assert(asset.body.includes("FUMAN_TERMINAL_DISPLAY_V2_KLINE"), "live terminal-display-v2 missing daily-K export");
+  assert(asset.body.includes("/api/daily-kline?code="), "live terminal-display-v2 missing daily-K API fetch");
+  assert(asset.body.includes("data-terminal-display-v2-kline-range"), "live terminal-display-v2 missing daily-K range controls");
 
   const rows = [];
   for (const route of SNAPSHOT_ROUTES) rows.push(await fetchSnapshot(route));
-  console.log("[terminal-display-snapshot] live ok " + JSON.stringify(rows));
+  const dailyKline = await fetchDailyKline(DAILY_KLINE_TEST_CODE);
+  console.log("[terminal-display-snapshot] live ok " + JSON.stringify({ snapshots: rows, dailyKline }));
 }
 
 async function verifyLive() {
   let lastError = null;
-  for (let attempt = 1; attempt <= Math.max(1, ATTEMPTS); attempt += 1) {
+  const attempts = Math.max(1, ATTEMPTS);
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      if (attempt > 1) console.log(`[terminal-display-snapshot] retry ${attempt}/${ATTEMPTS}`);
+      if (attempt > 1) console.log(`[terminal-display-snapshot] retry ${attempt}/${attempts}`);
       await verifyLiveOnce();
       return;
     } catch (error) {
       lastError = error;
-      if (attempt >= ATTEMPTS) break;
+      if (attempt >= attempts) break;
       console.warn(`[terminal-display-snapshot] waiting for propagation: ${error.message}`);
       await sleep(DELAY_MS);
     }
