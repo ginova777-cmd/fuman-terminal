@@ -288,8 +288,8 @@
   installDesktopFastBundlePrime();
   installApiOnlyCanvasPolling();
   primeCanvasWorker();
-  installRouteFeedback();
   installSidebarNavHardCapture20260823();
+  installRouteFeedback();
   installStrategyRouteIdentityWatchdog20260725();
   disableRealtimeRadarSurface();
   window.setInterval(disableRealtimeRadarSurface, 1500);
