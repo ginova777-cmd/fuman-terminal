@@ -65,6 +65,9 @@ function verifyStatic() {
 
   assert(display.includes(DISPLAY_VERSION_MARKER), `terminal-display-v2 missing marker ${DISPLAY_VERSION_MARKER}`);
   assert(display.includes("loadSnapshotFallback"), "terminal-display-v2 missing loadSnapshotFallback");
+  assert(display.includes("terminal-display-v2-kline-20260823-01"), "terminal-display-v2 missing target daily-K takeover marker");
+  assert(display.includes("/api/daily-kline?code=${encodeURIComponent(code)}&limit=260"), "terminal-display-v2 missing daily-K API fetch");
+  assert(display.includes("FUMAN_TERMINAL_DISPLAY_V2_KLINE"), "terminal-display-v2 missing daily-K debug export");
   assert(display.includes("window.FUMAN_TERMINAL_DISPLAY_V2"), "terminal-display-v2 missing debug export");
   assert(display.includes("route.snapshot"), "terminal-display-v2 must call the snapshot path during route activation");
   assert(pkg.includes('"verify:terminal-display-snapshot"'), "package.json missing verify:terminal-display-snapshot script");

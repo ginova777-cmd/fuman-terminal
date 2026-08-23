@@ -295,3 +295,181 @@
   document.addEventListener("click", onAction, true);
   window.FUMAN_TERMINAL_DISPLAY_V2 = { activate, renderState, renderApiFallback, loadApiFallback, loadSnapshotFallback, routeFromLink, version: VERSION };
 })();
+
+(() => {
+  if (window.__fumanTerminalDisplayV2Kline) return;
+  window.__fumanTerminalDisplayV2Kline = "terminal-display-v2-kline-20260823-01";
+  const cache = new Map();
+  const ranges = new Map();
+
+  function codeOf(value) {
+    return String(value || "").match(/\b\d{4}\b/)?.[0] || "";
+  }
+  function number(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  function price(value) {
+    const parsed = number(value);
+    return parsed ? parsed.toLocaleString("zh-TW", { maximumFractionDigits: 2 }) : "--";
+  }
+  function shortDate(value) {
+    return String(value || "").slice(5).replace("-", "/") || "--";
+  }
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[char]));
+  }
+  function installStyle() {
+    if (document.getElementById("terminal-display-v2-kline-style")) return;
+    const style = document.createElement("style");
+    style.id = "terminal-display-v2-kline-style";
+    style.textContent = `
+      .terminal-display-v2-card[data-terminal-display-v2-kline-code] { cursor: pointer; position: relative; padding-right: 78px; }
+      .terminal-display-v2-card[data-terminal-display-v2-kline-code]::after { content: "日 K"; position: absolute; right: 14px; top: 50%; transform: translateY(-50%); min-height: 28px; border: 1px solid rgba(96,165,250,.58); border-radius: 6px; padding: 6px 9px; background: rgba(30,64,175,.14); color: #bfdbfe; font-size: 12px; font-weight: 900; }
+      .terminal-display-v2-card.is-kline-open { border-color: rgba(232,180,75,.82); box-shadow: inset 3px 0 0 #e8b44b; }
+      .terminal-display-v2-kline-panel { margin-top: -2px; overflow: hidden; border: 1px solid rgba(139,164,199,.28); border-radius: 8px; background: #0b1420; color: #eaf2ff; }
+      .terminal-display-v2-kline-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; padding: 14px 16px 10px; border-bottom: 1px solid rgba(139,164,199,.18); }
+      .terminal-display-v2-kline-head span { display: block; margin-bottom: 5px; color: #94a8c2; font-size: 12px; font-weight: 900; }
+      .terminal-display-v2-kline-head strong { display: block; color: #eaf2ff; font-size: 14px; line-height: 1.5; }
+      .terminal-display-v2-kline-head small { display: block; margin-top: 3px; color: #71839c; font-size: 11px; }
+      .terminal-display-v2-kline-head b.is-up { color: #ff5872; }
+      .terminal-display-v2-kline-head b.is-down { color: #21c79a; }
+      .terminal-display-v2-kline-controls { display: flex; flex-shrink: 0; gap: 5px; }
+      .terminal-display-v2-kline-range { min-width: 47px; height: 30px; border: 1px solid #29394e; border-radius: 5px; background: #111c2c; color: #a5b4c8; font-size: 12px; font-weight: 900; cursor: pointer; }
+      .terminal-display-v2-kline-range.active { border-color: #e8b44b; background: #e8b44b; color: #161d29; }
+      .terminal-display-v2-kline-legend { display: flex; flex-wrap: wrap; gap: 11px; padding: 9px 16px 0; color: #71839c; font-size: 11px; font-weight: 800; }
+      .terminal-display-v2-kline-legend .ma5 { color: #f4c656; }
+      .terminal-display-v2-kline-legend .ma10 { color: #4aa7ff; }
+      .terminal-display-v2-kline-legend .ma20 { color: #b18ae3; }
+      .terminal-display-v2-kline-svg { display: block; width: 100%; height: 300px; padding: 3px 10px 8px 0; box-sizing: border-box; }
+      .terminal-display-v2-kline-svg .grid { stroke: rgba(135,157,189,.17); stroke-width: 1; stroke-dasharray: 3 4; }
+      .terminal-display-v2-kline-svg .divider { stroke: rgba(135,157,189,.24); stroke-width: 1; }
+      .terminal-display-v2-kline-svg .axis { fill: #687b94; font-size: 11px; font-weight: 700; }
+      .terminal-display-v2-kline-empty { display: grid; min-height: 180px; place-items: center; padding: 16px; color: #8fa2bd; font-size: 13px; font-weight: 800; text-align: center; }
+      body.fuman-light-theme .terminal-display-v2-kline-panel { background: #f7fbff; border-color: #d6e4ef; color: #24384f; }
+      body.fuman-light-theme .terminal-display-v2-kline-head strong { color: #1c3147; }
+      @media (max-width: 760px) { .terminal-display-v2-kline-head { display: grid; } .terminal-display-v2-kline-controls { flex-wrap: wrap; } }
+    `;
+    document.head.appendChild(style);
+  }
+  function movingAverage(rows, period) {
+    return rows.map((_, index) => {
+      if (index < period - 1) return null;
+      const slice = rows.slice(index - period + 1, index + 1);
+      return slice.reduce((sum, row) => sum + number(row.close), 0) / period;
+    });
+  }
+  function svg(rows) {
+    const bars = rows.slice(-260).filter((row) => row && row.date && row.open && row.high && row.low && row.close);
+    if (bars.length < 20) return '<div class="terminal-display-v2-kline-empty">正式日 K 資料不足，暫不繪圖。</div>';
+    const width = 920, height = 300, left = 46, right = 18, top = 18, volumeTop = 228, bottom = 24;
+    const priceMin = Math.min(...bars.map((bar) => number(bar.low)));
+    const priceMax = Math.max(...bars.map((bar) => number(bar.high)));
+    const volumeMax = Math.max(1, ...bars.map((bar) => number(bar.volumeLots)));
+    const span = Math.max(0.01, priceMax - priceMin);
+    const x = (index) => left + (index * (width - left - right)) / Math.max(1, bars.length - 1);
+    const y = (value) => top + ((priceMax - value) / span) * (volumeTop - top - 12);
+    const volumeBottom = height - bottom;
+    const bodyWidth = Math.max(2, Math.min(9, (width - left - right) / Math.max(1, bars.length) * 0.58));
+    const grid = [0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+      const value = priceMax - span * ratio;
+      const yy = y(value);
+      return `<line x1="${left}" y1="${yy}" x2="${width - right}" y2="${yy}" class="grid"/><text x="4" y="${yy + 4}" class="axis">${price(value)}</text>`;
+    }).join("");
+    const candles = bars.map((bar, index) => {
+      const xx = x(index);
+      const open = number(bar.open), close = number(bar.close), high = number(bar.high), low = number(bar.low);
+      const isUp = close >= open;
+      const tone = isUp ? "is-up" : "is-down";
+      const color = isUp ? "#ff5872" : "#21c79a";
+      const bodyTop = Math.min(y(open), y(close));
+      const bodyHeight = Math.max(1.5, Math.abs(y(open) - y(close)));
+      const volumeHeight = Math.max(1, (number(bar.volumeLots) / volumeMax) * 50);
+      return `<line class="kline-wick ${tone}" x1="${xx}" y1="${y(high)}" x2="${xx}" y2="${y(low)}" stroke="${color}" stroke-width="1.2"/><rect class="kline-candle ${tone}" x="${xx - bodyWidth / 2}" y="${bodyTop}" width="${bodyWidth}" height="${bodyHeight}" rx="1" fill="${color}"/><rect class="kline-volume ${tone}" x="${xx - bodyWidth / 2}" y="${volumeBottom - volumeHeight}" width="${bodyWidth}" height="${volumeHeight}" rx="1" fill="${color}" opacity=".6"/>`;
+    }).join("");
+    const line = (period, color) => {
+      const points = movingAverage(bars, period).map((value, index) => value ? `${x(index).toFixed(1)},${y(value).toFixed(1)}` : "").filter(Boolean).join(" ");
+      return points ? `<polyline class="kline-ma-${period}" points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>` : "";
+    };
+    const labelIndexes = [0, Math.floor((bars.length - 1) / 2), bars.length - 1].filter((value, index, array) => array.indexOf(value) === index);
+    const labels = labelIndexes.map((index) => `<text x="${x(index)}" y="${height - 4}" text-anchor="middle" class="axis">${shortDate(bars[index].date)}</text>`).join("");
+    return `<svg class="terminal-display-v2-kline-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="正式日 K 線與成交量">${grid}<line x1="${left}" y1="${volumeTop - 8}" x2="${width - right}" y2="${volumeTop - 8}" class="divider"/>${candles}${line(5, "#f4c656")}${line(10, "#4aa7ff")}${line(20, "#b18ae3")}${labels}</svg>`;
+  }
+  function panelHtml(code) {
+    const range = [60, 120, 240].includes(ranges.get(code)) ? ranges.get(code) : 120;
+    const payload = cache.get(code);
+    const controls = [60, 120, 240].map((value) => `<button type="button" class="terminal-display-v2-kline-range ${range === value ? "active" : ""}" data-terminal-display-v2-kline-range="${value}" aria-pressed="${range === value ? "true" : "false"}">${value} 日</button>`).join("");
+    if (!payload) return `<header class="terminal-display-v2-kline-head"><div><span>日 K</span><strong>正式 OHLCV 載入中</strong></div><div class="terminal-display-v2-kline-controls">${controls}</div></header><div class="terminal-display-v2-kline-empty">讀取 ${escapeHtml(code)} 正式日 OHLCV...</div>`;
+    if (payload.ok !== true) return `<header class="terminal-display-v2-kline-head"><div><span>日 K</span><strong>正式 OHLCV 無法顯示</strong></div><div class="terminal-display-v2-kline-controls">${controls}</div></header><div class="terminal-display-v2-kline-empty">${escapeHtml(payload.error || "日 K 正式來源暫時無資料")}</div>`;
+    const bars = (Array.isArray(payload.bars) ? payload.bars : []).slice(-range);
+    const last = bars[bars.length - 1] || {};
+    const previous = bars[bars.length - 2] || last;
+    const change = number(last.close) - number(previous.close);
+    const pct = number(previous.close) ? (change / number(previous.close)) * 100 : 0;
+    return `<header class="terminal-display-v2-kline-head"><div><span>日 K</span><strong>${shortDate(last.date)}　開 ${price(last.open)}　高 ${price(last.high)}　低 ${price(last.low)}　收 <b class="${change >= 0 ? "is-up" : "is-down"}">${price(last.close)}</b></strong><small>${escapeHtml(payload.source || "supabase:daily-kline")}｜${bars.length} 根｜${change >= 0 ? "+" : ""}${pct.toFixed(2)}%</small></div><div class="terminal-display-v2-kline-controls">${controls}</div></header><div class="terminal-display-v2-kline-legend"><span class="ma5">MA5</span><span class="ma10">MA10</span><span class="ma20">MA20</span><span>下方為成交量（張）</span></div>${svg(bars)}`;
+  }
+  async function fetchKline(code) {
+    if (!code || cache.has(code)) return cache.get(code) || null;
+    try {
+      const response = await fetch(`/api/daily-kline?code=${encodeURIComponent(code)}&limit=260&display_v2=${Date.now()}`, { cache: "no-store" });
+      const payload = await response.json().catch(() => null);
+      const next = response.ok && payload?.ok === true ? payload : { ok: false, error: payload?.error || `daily_kline_http_${response.status}` };
+      cache.set(code, next);
+      return next;
+    } catch {
+      const failure = { ok: false, error: "daily_kline_network_error" };
+      cache.set(code, failure);
+      return failure;
+    }
+  }
+  function markCards() {
+    document.querySelectorAll(".terminal-display-v2-card").forEach((card) => {
+      const code = codeOf(card.querySelector("strong")?.textContent || card.textContent);
+      if (code) card.dataset.terminalDisplayV2KlineCode = code;
+    });
+  }
+  async function openCard(card) {
+    const code = codeOf(card?.dataset?.terminalDisplayV2KlineCode || card?.textContent);
+    if (!code) return;
+    installStyle();
+    markCards();
+    document.querySelectorAll(".terminal-display-v2-card.is-kline-open").forEach((item) => { if (item !== card) item.classList.remove("is-kline-open"); });
+    document.querySelectorAll(".terminal-display-v2-kline-panel").forEach((item) => { if (item.previousElementSibling !== card) item.hidden = true; });
+    let panel = card.nextElementSibling?.classList?.contains("terminal-display-v2-kline-panel") ? card.nextElementSibling : null;
+    if (!panel) {
+      panel = document.createElement("section");
+      panel.className = "terminal-display-v2-kline-panel";
+      card.insertAdjacentElement("afterend", panel);
+    }
+    card.classList.add("is-kline-open");
+    panel.hidden = false;
+    panel.dataset.terminalDisplayV2KlineCode = code;
+    panel.innerHTML = panelHtml(code);
+    await fetchKline(code);
+    panel.innerHTML = panelHtml(code);
+  }
+  document.addEventListener("click", (event) => {
+    const range = event.target?.closest?.("[data-terminal-display-v2-kline-range]");
+    if (range) {
+      event.preventDefault();
+      const panel = range.closest(".terminal-display-v2-kline-panel");
+      const code = codeOf(panel?.dataset?.terminalDisplayV2KlineCode);
+      const value = Number(range.dataset.terminalDisplayV2KlineRange);
+      if (code && [60, 120, 240].includes(value)) {
+        ranges.set(code, value);
+        panel.innerHTML = panelHtml(code);
+      }
+      return;
+    }
+    const card = event.target?.closest?.(".terminal-display-v2-card[data-terminal-display-v2-kline-code]");
+    if (card) {
+      event.preventDefault();
+      openCard(card).catch(() => {});
+    }
+  }, true);
+  const observer = new MutationObserver(markCards);
+  observer.observe(document.documentElement, { subtree: true, childList: true });
+  installStyle();
+  markCards();
+  window.FUMAN_TERMINAL_DISPLAY_V2_KLINE = { openCard, markCards, version: window.__fumanTerminalDisplayV2Kline };
+})();

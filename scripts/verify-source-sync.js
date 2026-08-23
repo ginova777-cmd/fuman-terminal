@@ -23,6 +23,7 @@ const KEY_FILES = [
   "api/version.js",
   "api/scorecard.js",
   "api/terminal-display-snapshot.js",
+  "api/daily-kline.js",
   "api/strategy5-latest.js",
   "api/terminal-home.js",
   "api/latest-signals.js",
