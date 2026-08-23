@@ -241,6 +241,7 @@ const FILES = [
   "scripts/verify-live-version.js",
   "scripts/verify-service-worker-smoke.js",
   "scripts/verify-source-sync.js",
+  "scripts/verify-terminal-display-snapshot.js",
   "scripts/verify-sync-hard-gate.js",
   "scripts/verify-production-mirror-guard.js",
   "scripts/verify-final-readonly.js",

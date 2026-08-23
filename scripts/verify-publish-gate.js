@@ -61,6 +61,7 @@ function main() {
     ["daytradeMotherPoolSkeleton", node, ["scripts/verify-daytrade-mother-pool-skeleton.js"]],
     ["verify:unified-source-gate", node, ["scripts/verify-unified-source-gate-contract.js"]],
     ["terminal_modules_contract", node, ["scripts/verify-terminal-modules-contract.js"]],
+    ["terminal_display_snapshot", node, ["scripts/verify-terminal-display-snapshot.js"]],
     ["terminal_water_root", node, ["scripts/verify-terminal-water-root.js"]],
     ["runtime_ownership", node, ["scripts/verify-runtime-ownership.js"]],
     ["fast_shell_self_contained", node, ["scripts/verify-fast-shell-self-contained.js"]],

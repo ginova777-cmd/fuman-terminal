@@ -102,6 +102,7 @@ const KEY_FILES = [
   "scripts/verify-market-ai-freshness-guard.js",
   "scripts/verify-production-guard.js",
   "scripts/verify-production-mirror-guard.js",
+  "scripts/verify-terminal-display-snapshot.js",
   "scripts/verify-sync-hard-gate.js",
   "scripts/verify-final-readonly.js",
   "scripts/verify-retired-artifacts-clean.js",

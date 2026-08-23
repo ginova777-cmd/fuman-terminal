@@ -49,7 +49,7 @@
     "verify:version": "node scripts/verify-version-consistency.js",
     "verify:entitlement-guard": "node scripts/verify-entitlement-guard.js",
     "predeploy": "node scripts/prepare-deploy.js",
-    "postdeploy": "node --use-system-ca scripts/verify-live-version.js --retry && node --use-system-ca scripts/verify-mobile-layout.js --live && node --dns-result-order=ipv4first scripts/verify-mobile-realtime.js && node --dns-result-order=ipv4first scripts/publish-mobile-update-event.js --source=postdeploy",
+    "postdeploy": "node --use-system-ca scripts/verify-live-version.js --retry && npm run verify:terminal-display-snapshot -- --retry && node --use-system-ca scripts/verify-mobile-layout.js --live && node --dns-result-order=ipv4first scripts/verify-mobile-realtime.js && node --dns-result-order=ipv4first scripts/publish-mobile-update-event.js --source=postdeploy",
     "guard:source": "node scripts/guard-source-tree.js",
     "guard:mirror": "node scripts/verify-production-mirror-guard.js",
     "verify:sync-hard-gate": "node scripts/verify-sync-hard-gate.js",
@@ -419,7 +419,8 @@
     "verify:live-desktop-member-tabs": "node --use-system-ca scripts/verify-live-desktop-member-tabs.js",
     "verify:terminal-reset-preserve-login": "node scripts/verify-terminal-reset-preserve-login.js",
     "verify:terminal-entitlement-session-proof": "node scripts/verify-terminal-entitlement-session-proof.js",
-    "verify:three-surface-complete-scans": "node --use-system-ca scripts/verify-three-surface-complete-scans.js"
+    "verify:three-surface-complete-scans": "node --use-system-ca scripts/verify-three-surface-complete-scans.js",
+    "verify:terminal-display-snapshot": "node --use-system-ca scripts/verify-terminal-display-snapshot.js"
   },
   "engines": {
     "node": "24.x"
