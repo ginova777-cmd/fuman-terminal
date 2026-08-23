@@ -182,7 +182,7 @@ async function main() {
         && !endpointKeys.some((endpoint) => endpoint.includes("strategy2-latest"))
         && (
           membershipRedacted
-            ? endpointKeys.length >= 3 && p.cacheSource === "membership-fast-shell"
+            ? endpointKeys.includes("/api/market") && endpointKeys.includes("/api/market-ai-live") && endpointKeys.length >= 2 && p.cacheSource === "membership-fast-shell"
             : endpointKeys.length >= 10 && p.cacheSource === "supabase:desktop_route_snapshot"
         );
     }],
@@ -233,5 +233,4 @@ main().catch((error) => {
   console.error(`[smoke] failed: ${error.message}`);
   process.exit(1);
 });
-
 
