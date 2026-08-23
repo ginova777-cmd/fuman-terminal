@@ -289,6 +289,7 @@
   installApiOnlyCanvasPolling();
   primeCanvasWorker();
   installRouteFeedback();
+  installSidebarNavHardCapture20260823();
   installStrategyRouteIdentityWatchdog20260725();
   disableRealtimeRadarSurface();
   window.setInterval(disableRealtimeRadarSurface, 1500);
@@ -9467,6 +9468,58 @@
     }, true);
   }
 
+  function installSidebarNavHardCapture20260823() {
+    if (document.documentElement.dataset.fumanSidebarNavHardCapture20260823 === "1") return;
+    document.documentElement.dataset.fumanSidebarNavHardCapture20260823 = "1";
+    const sidebarLink = (event) => event.target?.closest?.("aside.sidebar [data-view]:not([data-member-tab])");
+    const hardActivate = (link, source = "sidebar-hard") => {
+      if (!link || link.dataset?.memberTab) return false;
+      const key = isStrategyLink(link) ? strategyRouteKey(link) : fixedRouteKey(link);
+      if (!key) return false;
+      beginInteractionHold(source, 1400);
+      publishActiveRoute(link, key, source);
+      if (isStrategyLink(link)) switchStrategyViewNow(link);
+      else switchFixedViewNow(link);
+      if (isStrategyLink(link)) {
+        document.body.dataset.strategyActiveRoute = String(link.dataset.strategyRoute || savedStrategyRouteName(key) || "");
+      }
+      return true;
+    };
+    const reassert = (link, source) => {
+      [0, 40, 120, 280, 620, 1200].forEach((delay) => {
+        window.setTimeout(() => hardActivate(link, `${source}-${delay}`), delay);
+      });
+    };
+    const handle = (event) => {
+      const link = sidebarLink(event);
+      if (!link || !isPrimaryPointer(event)) return;
+      const key = isStrategyLink(link) ? strategyRouteKey(link) : fixedRouteKey(link);
+      if (!key) return;
+      markFastEvent(event);
+      markInstantActive(link);
+      const guard = window.FUMAN_ENTITLEMENT_GUARD;
+      const viewName = isStrategyLink(link) ? "strategy" : (link.dataset.view || key.split("|")[0] || "");
+      const protectedRoute = guard && guard.isEntitled?.() !== true
+        && (guard.isProtectedView?.(viewName, link) || guard.isProtectedLink?.(link));
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      event.stopImmediatePropagation?.();
+      hardActivate(link, protectedRoute ? "sidebar-protected" : "sidebar-open");
+      if (protectedRoute) {
+        guard.showLocked?.(String(link.textContent || viewName || "付費功能").trim(), viewName, link);
+      } else if (isStrategyLink(link)) {
+        activateStrategyRoute(link, "sidebar-hard");
+      } else {
+        activateFixedPageRoute(link, "sidebar-hard");
+      }
+      reassert(link, protectedRoute ? "sidebar-protected-reassert" : "sidebar-open-reassert");
+    };
+    ["pointerdown", "mousedown", "mouseup", "click"].forEach((type) => {
+      window.addEventListener(type, handle, true);
+      document.addEventListener(type, handle, true);
+    });
+    window.FUMAN_SIDEBAR_NAV_HARD_CAPTURE = { hardActivate, reassert };
+  }
   function installStrategyRouteIdentityWatchdog20260725() {
     if (document.documentElement.dataset.fumanStrategyRouteIdentityWatchdog20260725 === "1") return;
     document.documentElement.dataset.fumanStrategyRouteIdentityWatchdog20260725 = "1";
