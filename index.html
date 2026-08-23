@@ -123,6 +123,14 @@
             }
             if (document.body) document.body.dataset.membershipAccess = "locked";
           };
+          const markLockedIfPending = () => {
+            if (!document.body || document.body.dataset.membershipAccess === "allowed") return;
+            const badge = document.querySelector("#member-state");
+            const text = String(badge?.textContent || "");
+            const gateVisible = Boolean(document.querySelector("#auth-gate:not([hidden])"));
+            if (gateVisible || /檢查中|尚未|未開通|登入/.test(text)) explicitLockedBadge();
+          };
+          [120, 520, 1200, 2200].forEach((delay) => setTimeout(markLockedIfPending, delay));
           const apply = (link, source = "early-sidebar") => {
             const info = routeInfo(link);
             if (!info) return false;
