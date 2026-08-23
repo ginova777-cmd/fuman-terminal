@@ -9518,7 +9518,21 @@
       window.addEventListener(type, handle, true);
       document.addEventListener(type, handle, true);
     });
-    window.FUMAN_SIDEBAR_NAV_HARD_CAPTURE = { hardActivate, reassert };
+    const replayEarlyRoute = (source = "sidebar-early-replay") => {
+      const earlyKey = document.documentElement.dataset.fumanSidebarEarlyRoute || document.documentElement.dataset.fumanDesktopActiveRoute || window.__fumanDesktopActiveRoute?.key || "";
+      if (!earlyKey || earlyKey === MARKET_ROUTE) return false;
+      const links = [...document.querySelectorAll("aside.sidebar [data-view]:not([data-member-tab])")];
+      const link = links.find((item) => (isStrategyLink(item) ? strategyRouteKey(item) : fixedRouteKey(item)) === earlyKey);
+      if (!link) return false;
+      if (!hardActivate(link, source)) return false;
+      if (isStrategyLink(link)) activateStrategyRoute(link, source);
+      else activateFixedPageRoute(link, source);
+      return true;
+    };
+    [0, 80, 240, 600, 1200, 2200].forEach((delay) => {
+      window.setTimeout(() => replayEarlyRoute("sidebar-early-replay-" + delay), delay);
+    });
+    window.FUMAN_SIDEBAR_NAV_HARD_CAPTURE = { hardActivate, reassert, replayEarlyRoute };
   }
   function installStrategyRouteIdentityWatchdog20260725() {
     if (document.documentElement.dataset.fumanStrategyRouteIdentityWatchdog20260725 === "1") return;
