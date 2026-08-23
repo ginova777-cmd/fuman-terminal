@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const VERSION = "public-terminal-fast-20260714-35";
+  const VERSION = "public-terminal-fast-20260714-36";
   const WATCHLIST_KEY = "fuman_watchlist";
   const MOBILE_WATCHLIST_KEY = "fuman_mobile_watchlist_v1";
   const WATCHLIST_MAX_ITEMS = 10;
