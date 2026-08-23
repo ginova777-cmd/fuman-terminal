@@ -9099,7 +9099,16 @@
     event?.preventDefault?.();
     event?.stopPropagation?.();
     event?.stopImmediatePropagation?.();
+    const key = isStrategyLink(link) ? strategyRouteKey(link) : fixedRouteKey(link);
+    const activateLockedRoute = (source = "protected") => {
+      if (key) publishActiveRoute(link, key, source);
+      if (isStrategyLink(link)) switchStrategyViewNow(link);
+      else if (fixedRouteKey(link)) switchFixedViewNow(link);
+    };
+    activateLockedRoute("protected-prelock");
     guard.showLocked?.(String(link?.textContent || viewName || "付費功能").trim(), viewName, link);
+    window.setTimeout(() => activateLockedRoute("protected-lock-reassert"), 0);
+    window.setTimeout(() => activateLockedRoute("protected-lock-late"), 160);
     return true;
   }
   function activateStrategyRoute(link, source) {
