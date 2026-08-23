@@ -2,7 +2,7 @@
   if (window.__fumanTerminalDisplayV2) return;
   window.__fumanTerminalDisplayV2 = true;
 
-  const VERSION = "terminal-display-v2-20260823-01";
+  const VERSION = "terminal-display-v2-20260823-03";
   const LAST_ROUTE_KEY = window.FUMAN_RUNTIME_CONFIG?.lastRouteKey || "fuman-terminal-last-route-v1";
   const ROUTES = {
     market: { view: "market", panel: "market-view", label: "市場總覽", protected: false },
@@ -20,6 +20,10 @@
 
   function text(value) {
     return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[char]));
   }
 
   function routeFromLink(link) {
@@ -79,12 +83,7 @@
 
   function persistRoute(route) {
     try {
-      localStorage.setItem(LAST_ROUTE_KEY, JSON.stringify({
-        viewName: route.view,
-        strategyRoute: route.route || "",
-        at: Date.now(),
-        source: VERSION,
-      }));
+      localStorage.setItem(LAST_ROUTE_KEY, JSON.stringify({ viewName: route.view, strategyRoute: route.route || "", at: Date.now(), source: VERSION }));
     } catch {}
   }
 
@@ -112,7 +111,7 @@
     const title = isLocked ? `${route.label}需要會員權限` : `${route.label}顯示層已接管`;
     const body = isLocked
       ? "目前沒有可用的登入權杖或會員權限，所以終端不再停在載入狀態，改顯示明確的鎖定畫面。登入後重新點選左側分頁即可讀取正式策略資料。"
-      : "正式資料仍在重新同步。這個畫面代表切頁已成功，若資料源稍慢，請按重新讀取。";
+      : "正式 renderer 尚未完成畫面，請按重新讀取；v2 會直接讀正式 API 並顯示清單。";
     return `
       <section class="terminal-display-v2-state" data-terminal-display-v2-state="${state}">
         <div class="kicker">FMN://terminal-display-v2</div>
@@ -126,6 +125,42 @@
     `;
   }
 
+  function targetFor(panel) {
+    return panel.querySelector("#strategy-table") || panel.querySelector(".strategy-results") || panel;
+  }
+
+  function payloadRows(payload) {
+    const candidates = [payload?.matches, payload?.results, payload?.items, payload?.rows, payload?.data, payload?.signals];
+    const rows = candidates.find(Array.isArray) || [];
+    return rows.filter((row) => row && typeof row === "object");
+  }
+
+  function renderApiFallback(routeKey, payload, source = "api") {
+    const route = ROUTES[routeKey];
+    if (!route) return false;
+    installStyles();
+    const panel = setActivePanel(route);
+    if (!panel) return false;
+    setActiveNav(routeKey);
+    persistRoute(route);
+    lastRenderedKey = routeKey;
+    if (route.route && document.body) document.body.dataset.strategyActiveRoute = route.route;
+    const rows = payloadRows(payload);
+    const target = targetFor(panel);
+    const date = payload?.tradeDate || payload?.trade_date || payload?.dataDate || payload?.usedDate || payload?.expectedTradeDate || "--";
+    const runId = payload?.runId || payload?.run_id || payload?.latestRunId || "--";
+    const cards = rows.slice(0, 80).map((row, index) => {
+      const code = row.code || row.symbol || row.stock_id || row.stockId || "--";
+      const name = row.name || row.stock_name || row.stockName || "";
+      const score = row.score ?? row.totalScore ?? row.rank_score ?? row.signalScore ?? "--";
+      const reason = row.reason || row.triggerReason || row.trigger_reason || row.aiSummary || row.summary || row.signal_type || row.strategy || "正式策略命中";
+      const price = row.close_price ?? row.close ?? row.entry_price ?? row.price ?? "--";
+      return `<article class="strategy3-signal-card fuman-unified-list-card" data-terminal-display-v2-row="1"><div class="strategy3-card-rank">#${index + 1}</div><div class="strategy3-card-stock"><strong>${escapeHtml(code)} ${escapeHtml(name)}</strong><span>${escapeHtml(reason)}</span></div><div class="strategy3-card-metrics"><div><small>分數</small><strong>${escapeHtml(score)}</strong></div><div><small>價格</small><strong>${escapeHtml(price)}</strong></div></div></article>`;
+    }).join("");
+    target.innerHTML = `<section class="strategy5-dashboard strategy3-clean" data-terminal-display-v2-api="${escapeHtml(source)}"><header class="strategy5-results-head"><div><span class="console-badge">FMN://terminal-display-v2.api</span><h3>${escapeHtml(route.label)}正式資料</h3><p>資料日 ${escapeHtml(date)}｜Run ${escapeHtml(runId)}｜${escapeHtml(String(rows.length))} 檔</p></div><strong class="strategy3-count-pill">${escapeHtml(String(rows.length))} 檔</strong></header><section class="strategy3-table" aria-label="${escapeHtml(route.label)}正式資料">${cards || `<div class="terminal-display-v2-state"><div class="kicker">FMN://terminal-display-v2.empty</div><h2>${escapeHtml(route.label)}目前沒有清單</h2><p>API 已回應，但這個時間點沒有可顯示股票。</p><div class="actions"><button type="button" data-terminal-display-v2-retry>重新讀取</button><button class="secondary" type="button" data-terminal-display-v2-market>回市場總覽</button></div></div>`}</section></section>`;
+    return true;
+  }
+
   function renderState(routeKey, state) {
     const route = ROUTES[routeKey];
     if (!route) return false;
@@ -137,9 +172,25 @@
     lastRenderedKey = routeKey;
     document.documentElement.dataset.fumanDisplayV2Route = routeKey;
     if (route.route && document.body) document.body.dataset.strategyActiveRoute = route.route;
-    const target = panel.querySelector("#strategy-table") || panel.querySelector(".strategy-results") || panel;
-    target.innerHTML = stateHtml(route, state);
+    targetFor(panel).innerHTML = stateHtml(route, state);
     return true;
+  }
+
+  async function loadApiFallback(routeKey) {
+    const route = ROUTES[routeKey];
+    if (!route?.api) return renderState(routeKey, "empty");
+    if (route.protected && !membershipAllowed()) return renderState(routeKey, "locked");
+    try {
+      renderState(routeKey, "empty");
+      const response = await fetch(`${route.api}?display_v2=${Date.now()}`, { cache: "no-store" });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload) throw new Error(`api_${response.status}`);
+      return renderApiFallback(routeKey, payload, "retry");
+    } catch (error) {
+      const box = document.querySelector(".terminal-display-v2-state p");
+      if (box) box.textContent = `正式 API 暫時讀取失敗：${error?.message || error}。`;
+      return false;
+    }
   }
 
   function armWatchdog(routeKey) {
@@ -151,18 +202,18 @@
       if (!panel || panel.hidden) return;
       const body = text(panel.textContent);
       if (/正在載入正式策略資料|策略資料載入中|正式策略載入中/.test(body)) {
-        renderState(routeKey, membershipAllowed() ? "empty" : "locked");
+        if (membershipAllowed()) loadApiFallback(routeKey);
+        else renderState(routeKey, "locked");
       }
-    }, 4500);
+    }, 6500);
   }
 
   function activate(routeKey, options = {}) {
     const route = ROUTES[routeKey];
     if (!route) return false;
     window.__fumanTerminalDisplayV2State = { routeKey, route, at: Date.now(), version: VERSION };
-    if (route.protected && !membershipAllowed()) {
-      return renderState(routeKey, "locked");
-    }
+    lastRenderedKey = routeKey;
+    if (route.protected && !membershipAllowed()) return renderState(routeKey, "locked");
     setActivePanel(route);
     setActiveNav(routeKey);
     persistRoute(route);
@@ -195,16 +246,11 @@
     }
     if (event.target?.closest?.("[data-terminal-display-v2-retry]")) {
       event.preventDefault();
-      const key = lastRenderedKey || "market";
-      if (membershipAllowed()) {
-        location.reload();
-      } else {
-        activate(key);
-      }
+      loadApiFallback(lastRenderedKey || "market");
     }
   }
 
   document.addEventListener("click", onClick, true);
   document.addEventListener("click", onAction, true);
-  window.FUMAN_TERMINAL_DISPLAY_V2 = { activate, renderState, routeFromLink, version: VERSION };
+  window.FUMAN_TERMINAL_DISPLAY_V2 = { activate, renderState, renderApiFallback, loadApiFallback, routeFromLink, version: VERSION };
 })();
