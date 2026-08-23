@@ -14,6 +14,7 @@ const modules = fs.readFileSync(modulesPath, "utf8");
 const issues = [];
 const lazyStaticAssets = [
   "terminal-chip-snapshot-module.js",
+  "terminal-display-v2.js",
   "terminal-watchlist-module.js",
 ];
 

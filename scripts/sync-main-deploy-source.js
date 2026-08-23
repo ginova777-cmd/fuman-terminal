@@ -48,6 +48,7 @@ const FILES = [
   "terminal-market-ai-live-watchdog.js",
   "terminal-modules.js",
   "terminal-watchlist-module.js",
+  "terminal-display-v2.js",
   "terminal-watchlist.css",
   "lib/desktop-route-snapshot-builder.js",
   "lib/desktop-route-snapshot-cache.js",
