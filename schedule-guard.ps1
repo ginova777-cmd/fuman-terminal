@@ -99,6 +99,21 @@ function Invoke-FumanMarketCalendarGuard {
   $exitCode = $LASTEXITCODE
   if ($LogPath) { $output | ForEach-Object { "market-calendar-guard: $_" >> $LogPath } }
 
+  $payload = $null
+  try {
+    $jsonText = ($output | Out-String).Trim()
+    if (-not [string]::IsNullOrWhiteSpace($jsonText)) { $payload = $jsonText | ConvertFrom-Json }
+  } catch {
+    if ($LogPath) { "market-calendar-guard: json parse warning $($_.Exception.Message)" >> $LogPath }
+  }
+
+  if ($null -ne $payload -and $payload.scannerAction -eq "skip_formal_scan" -and $payload.sourceFreshnessRequired -eq $false) {
+    $reason = if ($payload.marketOpen -eq $false) { "market_closed" } else { "source_window_not_required" }
+    $message = "$Label skipped by market calendar contract ($reason); preserve previous good; do not write latest or empty result"
+    if ($LogPath) { $message >> $LogPath } else { Write-Host $message }
+    exit 0
+  }
+
   if ($exitCode -eq 10) {
     $message = "$Label skipped on market_closed by market calendar contract; preserve previous good; do not write latest or empty result"
     if ($LogPath) { $message >> $LogPath } else { Write-Host $message }
