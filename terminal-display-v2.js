@@ -2,7 +2,7 @@
   if (window.__fumanTerminalDisplayV2) return;
   window.__fumanTerminalDisplayV2 = true;
 
-  const VERSION = "terminal-display-v2-20260823-05";
+  const VERSION = "terminal-display-v2-20260823-06";
   const LAST_ROUTE_KEY = window.FUMAN_RUNTIME_CONFIG?.lastRouteKey || "fuman-terminal-last-route-v1";
   const ROUTES = {
     market: { view: "market", panel: "market-view", label: "市場總覽", protected: false },
@@ -26,6 +26,68 @@
     return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[char]));
   }
 
+
+  function stockCode(value) {
+    return String(value || "").match(/\b\d{4}\b/)?.[0] || "";
+  }
+
+  function priceValue(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed.toFixed(2).replace(/\.00$/, "") : "--";
+  }
+
+  function threeGateLevel(row) {
+    return row?.terminalThreeGate || row?.terminal_three_gate || row?.threeGate || row?.three_gate || row?.threeGatePrice || null;
+  }
+
+  function threeGateHtml(row, code, date) {
+    const level = threeGateLevel(row);
+    const state = level ? "ready" : "loading";
+    const reference = level?.referenceDate || level?.reference_date || "";
+    return `<div class="terminal-display-v2-three-gate" data-terminal-display-v2-three-gate="${escapeHtml(code)}" data-terminal-display-v2-three-gate-date="${escapeHtml(date || "")}" data-terminal-display-v2-three-gate-state="${state}"><small>三關價</small><span data-terminal-display-v2-three-gate-upper>上 ${escapeHtml(priceValue(level?.upperGate ?? level?.upper_gate))}</span><span data-terminal-display-v2-three-gate-middle>中 ${escapeHtml(priceValue(level?.middleGate ?? level?.middle_gate))}</span><span data-terminal-display-v2-three-gate-lower>下 ${escapeHtml(priceValue(level?.lowerGate ?? level?.lower_gate))}</span><em data-terminal-display-v2-three-gate-reference>${escapeHtml(reference ? `基準 ${reference}` : "正式日K讀取中")}</em></div>`;
+  }
+
+  function paintThreeGatePrices(levels = []) {
+    const byCode = new Map(levels.map((level) => [stockCode(level?.code), level]).filter(([code]) => code));
+    document.querySelectorAll("[data-terminal-display-v2-three-gate]").forEach((node) => {
+      const code = stockCode(node.dataset.terminalDisplayV2ThreeGate);
+      const level = byCode.get(code);
+      if (!level) {
+        node.dataset.terminalDisplayV2ThreeGateState = "missing";
+        const reference = node.querySelector("[data-terminal-display-v2-three-gate-reference]");
+        if (reference) reference.textContent = "正式日K資料不足";
+        return;
+      }
+      node.dataset.terminalDisplayV2ThreeGateState = "ready";
+      const upper = node.querySelector("[data-terminal-display-v2-three-gate-upper]");
+      const middle = node.querySelector("[data-terminal-display-v2-three-gate-middle]");
+      const lower = node.querySelector("[data-terminal-display-v2-three-gate-lower]");
+      const reference = node.querySelector("[data-terminal-display-v2-three-gate-reference]");
+      if (upper) upper.textContent = `上 ${priceValue(level.upperGate)}`;
+      if (middle) middle.textContent = `中 ${priceValue(level.middleGate)}`;
+      if (lower) lower.textContent = `下 ${priceValue(level.lowerGate)}`;
+      if (reference) reference.textContent = level.referenceDate ? `基準 ${level.referenceDate}` : "正式日K";
+    });
+  }
+
+  async function hydrateThreeGatePrices(routeKey, rows, date) {
+    if (!["strategy2", "strategy3", "strategy4", "strategy5", "institution"].includes(routeKey)) return;
+    const codes = [...new Set(rows.map((row) => stockCode(row?.code || row?.symbol || row?.stock_id || row?.stockId)).filter(Boolean))].slice(0, 120);
+    if (!codes.length) return;
+    try {
+      const query = new URLSearchParams({ codes: codes.join(","), asOf: date || "" });
+      const response = await fetch(`/api/three-gate-prices?${query.toString()}`, { cache: "no-store" });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || payload?.ok !== true || payload?.contract !== "terminal-three-gate-prices-v1") throw new Error(`three_gate_${response.status}`);
+      paintThreeGatePrices(Array.isArray(payload.levels) ? payload.levels : []);
+    } catch {
+      document.querySelectorAll("[data-terminal-display-v2-three-gate-state='loading']").forEach((node) => {
+        node.dataset.terminalDisplayV2ThreeGateState = "missing";
+        const reference = node.querySelector("[data-terminal-display-v2-three-gate-reference]");
+        if (reference) reference.textContent = "正式日K暫不可讀";
+      });
+    }
+  }
   function routeFromLink(link) {
     const view = link?.dataset?.view || "";
     const route = link?.dataset?.strategyRoute || "";
@@ -123,6 +185,13 @@
       .terminal-display-v2-main { min-width: 0; display: grid; gap: 6px; }
       .terminal-display-v2-main strong { color: #f7fbff; font-size: 18px; line-height: 1.25; }
       .terminal-display-v2-main p { margin: 0; color: #afbdd0; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+      .terminal-display-v2-three-gate { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 9px; margin-top: 2px; color: #aebed3; font-size: 11px; font-weight: 800; line-height: 1.35; }
+      .terminal-display-v2-three-gate small { color: #f4c656; font-size: 11px; font-weight: 900; }
+      .terminal-display-v2-three-gate span { color: #dce8f7; white-space: nowrap; }
+      .terminal-display-v2-three-gate span:nth-of-type(1) { color: #ff889a; }
+      .terminal-display-v2-three-gate span:nth-of-type(2) { color: #f4c656; }
+      .terminal-display-v2-three-gate span:nth-of-type(3) { color: #55d8b3; }
+      .terminal-display-v2-three-gate em { color: #71839c; font-size: 10px; font-style: normal; white-space: nowrap; }
       .terminal-display-v2-metrics { display: grid; grid-template-columns: repeat(2, minmax(62px, 1fr)); gap: 7px; min-width: 150px; }
       .terminal-display-v2-metrics div { border: 1px solid rgba(120,145,185,.18); border-radius: 6px; background: rgba(7,14,25,.5); padding: 7px 9px; }
       .terminal-display-v2-metrics small { display: block; color: #7f91aa; font-size: 11px; font-weight: 800; }
@@ -131,6 +200,12 @@
       body.fuman-light-theme .terminal-display-v2-state, body.fuman-light-theme .terminal-display-v2-api-head, body.fuman-light-theme .terminal-display-v2-card { background: #f7fbff; border-color: #d6e4ef; color: #24384f; }
       body.fuman-light-theme .terminal-display-v2-state h2, body.fuman-light-theme .terminal-display-v2-api-head h3, body.fuman-light-theme .terminal-display-v2-main strong { color: #19314a; }
       body.fuman-light-theme .terminal-display-v2-state p, body.fuman-light-theme .terminal-display-v2-api-head p, body.fuman-light-theme .terminal-display-v2-main p { color: #62788f; }
+      body.fuman-light-theme .terminal-display-v2-three-gate small { color: #8d5d0a; }
+      body.fuman-light-theme .terminal-display-v2-three-gate span { color: #3d5870; }
+      body.fuman-light-theme .terminal-display-v2-three-gate span:nth-of-type(1) { color: #b84f62; }
+      body.fuman-light-theme .terminal-display-v2-three-gate span:nth-of-type(2) { color: #97650c; }
+      body.fuman-light-theme .terminal-display-v2-three-gate span:nth-of-type(3) { color: #237763; }
+      body.fuman-light-theme .terminal-display-v2-three-gate em { color: #587187; }
     `;
     document.head.appendChild(style);
   }
@@ -174,9 +249,10 @@
       const score = row.score ?? row.totalScore ?? row.rank_score ?? row.signalScore ?? "--";
       const reason = row.reason || row.triggerReason || row.trigger_reason || row.aiSummary || row.summary || row.signal_type || row.strategy || "正式策略命中";
       const price = row.close_price ?? row.close ?? row.entry_price ?? row.price ?? "--";
-      return `<article class="terminal-display-v2-card" data-terminal-display-v2-row="1"><div class="terminal-display-v2-rank">#${index + 1}</div><div class="terminal-display-v2-main"><strong>${escapeHtml(code)} ${escapeHtml(name)}</strong><p>${escapeHtml(reason)}</p></div><div class="terminal-display-v2-metrics"><div><small>分數</small><b>${escapeHtml(score)}</b></div><div><small>價格</small><b>${escapeHtml(price)}</b></div></div></article>`;
+      return `<article class="terminal-display-v2-card" data-terminal-display-v2-row="1"><div class="terminal-display-v2-rank">#${index + 1}</div><div class="terminal-display-v2-main"><strong>${escapeHtml(code)} ${escapeHtml(name)}</strong><p>${escapeHtml(reason)}</p>${threeGateHtml(row, stockCode(code), date)}</div><div class="terminal-display-v2-metrics"><div><small>分數</small><b>${escapeHtml(score)}</b></div><div><small>價格</small><b>${escapeHtml(price)}</b></div></div></article>`;
     }).join("");
     target.innerHTML = `<section class="terminal-display-v2-api-shell" data-terminal-display-v2-api="${escapeHtml(source)}"><header class="terminal-display-v2-api-head"><div><span class="terminal-display-v2-badge">FMN://terminal-display-v2.api</span><h3>${escapeHtml(route.label)}正式資料</h3><p>資料日 ${escapeHtml(date)} | Run ${escapeHtml(runId)} | ${escapeHtml(String(rows.length))} 檔</p></div><strong class="terminal-display-v2-count">${escapeHtml(String(rows.length))} 檔</strong></header><section class="terminal-display-v2-list" aria-label="${escapeHtml(route.label)}正式資料">${cards || `<div class="terminal-display-v2-state"><div class="kicker">FMN://terminal-display-v2.empty</div><h2>${escapeHtml(route.label)}目前沒有清單</h2><p>API 已回應，但這個時間點沒有可顯示股票。</p><div class="actions"><button type="button" data-terminal-display-v2-retry>重新讀取</button><button class="secondary" type="button" data-terminal-display-v2-market>回市場總覽</button></div></div>`}</section></section>`;
+    hydrateThreeGatePrices(routeKey, rows, date);
     return true;
   }
 
@@ -473,3 +549,6 @@
   markCards();
   window.FUMAN_TERMINAL_DISPLAY_V2_KLINE = { openCard, markCards, version: window.__fumanTerminalDisplayV2Kline };
 })();
+
+
+

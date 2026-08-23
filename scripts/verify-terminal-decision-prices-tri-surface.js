@@ -43,7 +43,7 @@ check(mobile.includes('const { fetchThreeGatePrices } = require("../lib/terminal
 check(mobile.includes("async function attachThreeGatePrices(tab, payload = {})") && mobile.includes("function mobileThreeGateHtml(row)"), "mobile_three_gate_contract_missing");
 check(mobile.includes("payload = await attachThreeGatePrices(tab, payload)") && mobile.includes("${mobileThreeGateHtml(row)}"), "mobile_three_gate_not_rendered");
 check(mobile.includes("mobileMainForceHtml(row)"), "mobile_main_force_not_rendered");
-check(mobile.includes('const forceLivePayload = tab === "strategy2" || requestedLiveFragment;') && mobile.includes('allowStale: tab !== "strategy2",'), "mobile_prior_formal_snapshot_or_strategy2_live_rule_missing");
+check(mobile.includes('const forceLivePayload = ["strategy2", "strategy3", "strategy4", "strategy5", "chip"].includes(tab)') && mobile.includes('|| requestedLiveFragment;') && mobile.includes('allowStale: tab !== "strategy2",'), "mobile_prior_formal_snapshot_or_strategy2_live_rule_missing");
 check(fastBundle.includes("allowStale: true,") && fastBundle.includes('requestedStrategyRoute(request) === "strategy2"') && fastBundle.includes("attachSnapshotMainForcePlaceholders(endpoints);"), "desktop_prior_formal_snapshot_or_strategy2_live_rule_missing");
 check(fastBundle.includes('source: "snapshot:client-hydration-pending"') && fastBundle.includes('status: "data_insufficient"'), "desktop_snapshot_main_force_placeholder_missing");
 check(snapshotCache.includes("async function readDesktopRouteSnapshotForRoute(route, options = {})") && snapshotCache.includes("supabase:desktop_route_snapshot:route"), "route_snapshot_reader_contract_missing");

@@ -9,10 +9,12 @@ const RETRY = process.argv.includes("--retry");
 const ATTEMPTS = Number(process.env.FUMAN_VERIFY_SNAPSHOT_ATTEMPTS || (RETRY ? 12 : 1));
 const DELAY_MS = Number(process.env.FUMAN_VERIFY_SNAPSHOT_DELAY_MS || 10000);
 const SNAPSHOT_CONTRACT = "terminal-display-snapshot-v1";
-const DISPLAY_VERSION_MARKER = "terminal-display-v2-20260823-05";
+const DISPLAY_VERSION_MARKER = "terminal-display-v2-20260823-06";
 const DAILY_KLINE_CONTRACT = "terminal-daily-kline-v1";
 const DAILY_KLINE_MARKER = "terminal-display-v2-kline-20260823-01";
 const DAILY_KLINE_TEST_CODE = process.env.FUMAN_VERIFY_DAILY_KLINE_CODE || "6830";
+const THREE_GATE_CONTRACT = "terminal-three-gate-prices-v1";
+const THREE_GATE_TEST_CODE = process.env.FUMAN_VERIFY_THREE_GATE_CODE || DAILY_KLINE_TEST_CODE;
 const SNAPSHOT_ROUTES = ["strategy2", "strategy3", "strategy4", "strategy5", "institution"];
 const REQUIRED_DATA_ROUTES = ["strategy3", "strategy4", "strategy5", "institution"];
 
@@ -95,6 +97,21 @@ function verifyStatic() {
   ]) {
     assert(display.includes(marker), `terminal-display-v2 daily-K takeover missing ${marker}`);
   }
+  for (const marker of [
+    "function threeGateHtml(row, code, date)",
+    "async function hydrateThreeGatePrices(routeKey, rows, date)",
+    "function paintThreeGatePrices(levels = [])",
+    "terminal-display-v2-three-gate",
+    "data-terminal-display-v2-three-gate-upper",
+    "data-terminal-display-v2-three-gate-middle",
+    "data-terminal-display-v2-three-gate-lower",
+    "data-terminal-display-v2-three-gate-reference",
+    "/api/three-gate-prices?${query.toString()}",
+    "terminal-three-gate-prices-v1",
+    "正式日K資料不足",
+  ]) {
+    assert(display.includes(marker), `terminal-display-v2 three-gate takeover missing ${marker}`);
+  }
   assert(display.includes("window.FUMAN_TERMINAL_DISPLAY_V2"), "terminal-display-v2 missing debug export");
   assert(display.includes("route.snapshot"), "terminal-display-v2 must call the snapshot path during route activation");
   assert(pkg.includes('"verify:terminal-display-snapshot"'), "package.json missing verify:terminal-display-snapshot script");
@@ -130,6 +147,23 @@ async function fetchSnapshot(route) {
   };
 }
 
+async function fetchThreeGate(code) {
+  const result = await fetchText(`/api/three-gate-prices?codes=${encodeURIComponent(code)}&asOf=2026-08-21&verify=${Date.now()}`, 30000);
+  assert(result.status >= 200 && result.status < 300, `three-gate ${code} HTTP ${result.status}`);
+  const payload = parseJson(`three-gate ${code}`, result.body);
+  assert(payload?.ok === true, `three-gate ${code} ok must be true`);
+  assert(payload.contract === THREE_GATE_CONTRACT, `three-gate ${code} contract mismatch`);
+  assert(String(payload.source || "").startsWith("supabase:"), `three-gate ${code} source must be supabase`);
+  const levels = Array.isArray(payload.levels) ? payload.levels : [];
+  const level = levels.find((item) => String(item?.code || "") === String(code));
+  assert(level, `three-gate ${code} level missing`);
+  for (const field of ["upperGate", "middleGate", "lowerGate", "referenceDate"]) {
+    assert(level[field] !== undefined && level[field] !== null && level[field] !== "", `three-gate ${code} missing ${field}`);
+  }
+  assert(Number(level.upperGate) > Number(level.middleGate), `three-gate ${code} upper must exceed middle`);
+  assert(Number(level.middleGate) > Number(level.lowerGate), `three-gate ${code} middle must exceed lower`);
+  return { code, contract: payload.contract, source: payload.source, upperGate: level.upperGate, middleGate: level.middleGate, lowerGate: level.lowerGate, referenceDate: level.referenceDate };
+}
 async function fetchDailyKline(code) {
   const result = await fetchText(`/api/daily-kline?code=${encodeURIComponent(code)}&limit=60&verify=${Date.now()}`, 30000);
   assert(result.status >= 200 && result.status < 300, `daily-K ${code} HTTP ${result.status}`);
@@ -160,11 +194,15 @@ async function verifyLiveOnce() {
   assert(asset.body.includes("FUMAN_TERMINAL_DISPLAY_V2_KLINE"), "live terminal-display-v2 missing daily-K export");
   assert(asset.body.includes("/api/daily-kline?code="), "live terminal-display-v2 missing daily-K API fetch");
   assert(asset.body.includes("data-terminal-display-v2-kline-range"), "live terminal-display-v2 missing daily-K range controls");
+  assert(asset.body.includes("terminal-display-v2-three-gate"), "live terminal-display-v2 missing three-gate display");
+  assert(asset.body.includes("/api/three-gate-prices?"), "live terminal-display-v2 missing three-gate API fetch");
+  assert(asset.body.includes("terminal-three-gate-prices-v1"), "live terminal-display-v2 missing three-gate contract guard");
 
   const rows = [];
   for (const route of SNAPSHOT_ROUTES) rows.push(await fetchSnapshot(route));
   const dailyKline = await fetchDailyKline(DAILY_KLINE_TEST_CODE);
-  console.log("[terminal-display-snapshot] live ok " + JSON.stringify({ snapshots: rows, dailyKline }));
+  const threeGate = await fetchThreeGate(THREE_GATE_TEST_CODE);
+  console.log("[terminal-display-snapshot] live ok " + JSON.stringify({ snapshots: rows, dailyKline, threeGate }));
 }
 
 async function verifyLive() {
@@ -194,3 +232,5 @@ main().catch((error) => {
   console.error(`[terminal-display-snapshot] failed: ${error.message}`);
   process.exit(1);
 });
+
+
