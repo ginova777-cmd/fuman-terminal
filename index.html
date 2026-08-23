@@ -93,6 +93,77 @@
         </div>
       </aside>
 
+      <script data-sidebar-early-route-capture="20260823-01">
+        (() => {
+          if (window.__fumanSidebarEarlyRouteCapture20260823) return;
+          window.__fumanSidebarEarlyRouteCapture20260823 = true;
+          const routeInfo = (link) => {
+            const view = link?.dataset?.view || "";
+            const route = link?.dataset?.strategyRoute || "";
+            const text = String(link?.textContent || "").replace(/\s+/g, " " ).trim();
+            if (view === "strategy") {
+              if (route === "intraday_2m" || text.includes("當沖")) return { view, panel: "strategy-view", key: "strategy|策略2", route: "intraday_2m", protected: true };
+              if (route === "strategy3" || text.includes("隔日")) return { view, panel: "strategy-view", key: "strategy|策略3", route: "strategy3", protected: true };
+              if (route === "swing_radar" || text.includes("波段")) return { view, panel: "strategy-view", key: "strategy|策略4", route: "swing_radar", protected: true };
+              if (route === "strategy5" || text.includes("綜合")) return { view, panel: "strategy-view", key: "strategy|策略5", route: "strategy5", protected: true };
+              return { view, panel: "strategy-view", key: "strategy|策略", route: "", protected: true };
+            }
+            if (view === "chip-trade") return { view, panel: "chip-trade-view", key: "chip-trade|買賣超", protected: true };
+            if (view === "watchlist") return { view, panel: "watchlist-view", key: "watchlist|自選股", protected: false };
+            if (view === "market") return { view, panel: "market-view", key: "market|市場總覽", protected: false };
+            if (view === "member") return { view, panel: "member-view", key: "member|會員", protected: false };
+            return null;
+          };
+          const explicitLockedBadge = () => {
+            const badge = document.querySelector("#member-state");
+            if (badge && /檢查中/.test(badge.textContent || "")) {
+              badge.textContent = "會員：尚未開通";
+              badge.dataset.status = "guest";
+              badge.dataset.memberStatus = "guest";
+            }
+            if (document.body) document.body.dataset.membershipAccess = "locked";
+          };
+          const apply = (link, source = "early-sidebar") => {
+            const info = routeInfo(link);
+            if (!info) return false;
+            const panel = document.getElementById(info.panel);
+            document.documentElement.dataset.fumanDesktopActiveRoute = info.key;
+            document.documentElement.dataset.fumanSidebarEarlyRoute = info.key;
+            window.__fumanDesktopActiveRoute = { key: info.key, view: info.view, route: info.route || info.view, source, at: Date.now() };
+            if (info.route && document.body) document.body.dataset.strategyActiveRoute = info.route;
+            if (info.protected) explicitLockedBadge();
+            if (panel) {
+              document.querySelectorAll(".view-panel").forEach((item) => {
+                const active = item === panel;
+                item.classList.toggle("active", active);
+                item.hidden = !active;
+                item.setAttribute("aria-hidden", active ? "false" : "true");
+              });
+            }
+            document.querySelectorAll("aside.sidebar [data-view]").forEach((item) => {
+              const active = item === link;
+              item.classList.toggle("active", active);
+              if (active) item.setAttribute("aria-current", "page");
+              else item.removeAttribute("aria-current");
+            });
+            return true;
+          };
+          const handle = (event) => {
+            const link = event.target?.closest?.("aside.sidebar [data-view]:not([data-member-tab])");
+            if (!link) return;
+            const info = routeInfo(link);
+            if (!info) return;
+            if (link.tagName === "A" && link.getAttribute("href") === "#") event.preventDefault();
+            apply(link, "early-sidebar-event");
+            [0, 80, 220, 520, 1000, 1800].forEach((delay) => setTimeout(() => apply(link, `early-sidebar-${delay}`), delay));
+          };
+          ["pointerdown", "mousedown", "mouseup", "click"].forEach((type) => {
+            window.addEventListener(type, handle, true);
+            document.addEventListener(type, handle, true);
+          });
+          window.FUMAN_SIDEBAR_EARLY_ROUTE_CAPTURE = { apply };
+        })();
+      </script>
       <script data-retired-terminal-routes="cb-warrant-v1">
         (() => {
           const retired = new Set(["cb-detect", "warrant-flow"]);
