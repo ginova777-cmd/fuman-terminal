@@ -9092,6 +9092,16 @@
     return false;
   }
 
+  function markDesktopMembershipLocked20260823() {
+    if (document.body && document.body.dataset.membershipAccess !== "allowed") document.body.dataset.membershipAccess = "locked";
+    const badge = document.querySelector("#member-state");
+    if (badge && !/已開通|allowed|active/i.test(String(badge.textContent || ""))) {
+      badge.textContent = "會員：尚未開通";
+      badge.dataset.status = "guest";
+      badge.dataset.memberStatus = "guest";
+    }
+  }
+
   function blockProtectedFastRoute(viewName, link, event = null) {
     const guard = window.FUMAN_ENTITLEMENT_GUARD;
     if (!guard || guard.isEntitled?.() === true) return false;
@@ -9100,6 +9110,7 @@
     event?.preventDefault?.();
     event?.stopPropagation?.();
     event?.stopImmediatePropagation?.();
+    markDesktopMembershipLocked20260823();
     const key = isStrategyLink(link) ? strategyRouteKey(link) : fixedRouteKey(link);
     const activateLockedRoute = (source = "protected") => {
       if (key) publishActiveRoute(link, key, source);
@@ -9504,6 +9515,7 @@
       event.preventDefault?.();
       event.stopPropagation?.();
       event.stopImmediatePropagation?.();
+      if (protectedRoute) markDesktopMembershipLocked20260823();
       hardActivate(link, protectedRoute ? "sidebar-protected" : "sidebar-open");
       if (protectedRoute) {
         guard.showLocked?.(String(link.textContent || viewName || "付費功能").trim(), viewName, link);
