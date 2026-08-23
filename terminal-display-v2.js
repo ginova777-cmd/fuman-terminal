@@ -2,15 +2,15 @@
   if (window.__fumanTerminalDisplayV2) return;
   window.__fumanTerminalDisplayV2 = true;
 
-  const VERSION = "terminal-display-v2-20260823-04";
+  const VERSION = "terminal-display-v2-20260823-05";
   const LAST_ROUTE_KEY = window.FUMAN_RUNTIME_CONFIG?.lastRouteKey || "fuman-terminal-last-route-v1";
   const ROUTES = {
     market: { view: "market", panel: "market-view", label: "市場總覽", protected: false },
-    strategy2: { view: "strategy", panel: "strategy-view", route: "intraday_2m", label: "當沖雷達", protected: true, api: "/api/strategy2-latest" },
-    strategy3: { view: "strategy", panel: "strategy-view", route: "strategy3", label: "隔日沖", protected: true, api: "/api/strategy3-latest" },
-    strategy4: { view: "strategy", panel: "strategy-view", route: "swing_radar", label: "波段", protected: true, api: "/api/strategy4-latest" },
-    strategy5: { view: "strategy", panel: "strategy-view", route: "strategy5", label: "綜合策略", protected: true, api: "/api/strategy5-latest" },
-    institution: { view: "chip-trade", panel: "chip-trade-view", label: "買賣超", protected: true, api: "/api/institution-latest" },
+    strategy2: { view: "strategy", panel: "strategy-view", route: "intraday_2m", label: "當沖雷達", protected: true, api: "/api/strategy2-latest", snapshot: "/api/terminal-display-snapshot?route=strategy2" },
+    strategy3: { view: "strategy", panel: "strategy-view", route: "strategy3", label: "隔日沖", protected: true, api: "/api/strategy3-latest", snapshot: "/api/terminal-display-snapshot?route=strategy3" },
+    strategy4: { view: "strategy", panel: "strategy-view", route: "swing_radar", label: "波段", protected: true, api: "/api/strategy4-latest", snapshot: "/api/terminal-display-snapshot?route=strategy4" },
+    strategy5: { view: "strategy", panel: "strategy-view", route: "strategy5", label: "綜合策略", protected: true, api: "/api/strategy5-latest", snapshot: "/api/terminal-display-snapshot?route=strategy5" },
+    institution: { view: "chip-trade", panel: "chip-trade-view", label: "買賣超", protected: true, api: "/api/institution-latest", snapshot: "/api/terminal-display-snapshot?route=institution" },
     watchlist: { view: "watchlist", panel: "watchlist-view", label: "自選股", protected: false },
     member: { view: "member", panel: "member-view", label: "會員", protected: false },
   };
@@ -195,12 +195,32 @@
     return true;
   }
 
+  async function loadSnapshotFallback(routeKey) {
+    const route = ROUTES[routeKey];
+    if (!route?.snapshot) return false;
+    try {
+      const separator = route.snapshot.includes("?") ? "&" : "?";
+      const url = route.snapshot + separator + "display_v2=" + Date.now();
+      const response = await fetch(url, { cache: "no-store" });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload || payload.ok === false || !Array.isArray(payload.rows) || !payload.rows.length) return false;
+      return renderApiFallback(routeKey, {
+        ...payload,
+        matches: payload.rows,
+        count: payload.count ?? payload.rows.length,
+        cacheSource: payload.source || "terminal-display-snapshot",
+      }, "snapshot");
+    } catch {
+      return false;
+    }
+  }
   async function loadApiFallback(routeKey) {
     const route = ROUTES[routeKey];
     if (!route?.api) return renderState(routeKey, "empty");
     if (route.protected && !membershipAllowed()) return renderState(routeKey, "locked");
     try {
       renderState(routeKey, "empty");
+      if (await loadSnapshotFallback(routeKey)) return true;
       const response = await fetch(`${route.api}?display_v2=${Date.now()}`, { cache: "no-store", headers: authHeaders() });
       const payload = await response.json().catch(() => null);
       if (payload?.protected || payload?.error === "protected") throw new Error("protected_api_requires_login");
@@ -237,6 +257,7 @@
     setActivePanel(route);
     setActiveNav(routeKey);
     persistRoute(route);
+    if (route.snapshot) loadSnapshotFallback(routeKey);
     armWatchdog(routeKey);
     if (options.forceState) renderState(routeKey, options.forceState);
     return true;
@@ -272,5 +293,5 @@
 
   document.addEventListener("click", onClick, true);
   document.addEventListener("click", onAction, true);
-  window.FUMAN_TERMINAL_DISPLAY_V2 = { activate, renderState, renderApiFallback, loadApiFallback, routeFromLink, version: VERSION };
+  window.FUMAN_TERMINAL_DISPLAY_V2 = { activate, renderState, renderApiFallback, loadApiFallback, loadSnapshotFallback, routeFromLink, version: VERSION };
 })();

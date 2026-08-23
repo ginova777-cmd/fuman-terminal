@@ -22,6 +22,7 @@ const KEY_FILES = [
   "api/release-manifest.js",
   "api/version.js",
   "api/scorecard.js",
+  "api/terminal-display-snapshot.js",
   "api/strategy5-latest.js",
   "api/terminal-home.js",
   "api/latest-signals.js",

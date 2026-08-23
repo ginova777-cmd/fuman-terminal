@@ -65,6 +65,7 @@ const FILES = [
   "api/source-reports.js",
   "api/mobile-boot.js",
   "api/mobile-fragment.js",
+  "api/terminal-display-snapshot.js",
   "api/strategy5-latest.js",
   "api/strategy3-latest.js",
   "api/strategy3-v2-latest.js",
