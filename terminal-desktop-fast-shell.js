@@ -9129,6 +9129,14 @@
     beginInteractionHold(`strategy-${source || "route"}`);
     const key = strategyRouteKey(link);
     const panel = document.querySelector("#strategy-view");
+    if (isMemberStrategyPreviewRoute(key) && !hasMemberPreviewToken()) {
+      markDesktopMembershipLocked20260823();
+      const route = publishActiveRoute(link, key, source || "strategy-missing-token");
+      switchStrategyViewNow(link);
+      renderMemberStrategyPendingShell(key, strategyMeta(link || key), panel);
+      setCanvasStatus("等待會員權限資料");
+      return false;
+    }
     const route = publishActiveRoute(link, key, source || "strategy");
     const seq = route?.seq || ++routeSwitchSeq;
     switchStrategyViewNow(link);
