@@ -5475,7 +5475,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-60";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-61";
   }
 
   function loadScriptOnce(src, attr) {
@@ -5906,8 +5906,12 @@
     const strong = card.querySelector("strong");
     const em = card.querySelector("em");
     if (title) title.textContent = label;
-    if (strong) strong.textContent = value || "--";
-    if (em) em.textContent = subText || "等待官方資料";
+    const nextValue = String(value || "--").trim();
+    const currentValue = String(strong?.textContent || "").trim();
+    const hasCurrentValue = currentValue && currentValue !== "--" && currentValue !== "0.00";
+    const hasNextValue = nextValue && nextValue !== "--" && nextValue !== "0.00";
+    if (strong && (hasNextValue || !hasCurrentValue)) strong.textContent = nextValue;
+    if (em && (hasNextValue || !hasCurrentValue)) em.textContent = subText || "等待官方資料";
     card.classList.toggle("market-card-up", positive === true);
     card.classList.toggle("market-card-down", positive === false);
   }
@@ -6305,7 +6309,7 @@
     const findIndex = (names) => list(payload.indexes).find((item) => names.some((name) => text(item?.[indexName] || item?.name).includes(name))) || null;
     const valueText = (value) => {
       const parsed = number(value);
-      return parsed == null ? "--" : parsed.toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      return parsed == null || parsed <= 0 ? "--" : parsed.toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     };
     const deltaText = (item, fallback) => {
       if (!item) return fallback;
@@ -6921,7 +6925,7 @@
     ).slice(0,18);
     const node = document.createElement("section");
     node.className = "opening-report-0830-briefing";
-    node.dataset.openingReport0830Briefing = "1";
+    node.setAttribute("data-opening-report-0830-briefing", "1");
     node.innerHTML = `
       <header class="opening-report-0830-head">
         <div class="opening-report-0830-title">
