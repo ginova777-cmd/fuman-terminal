@@ -66,6 +66,16 @@
     return node;
   }
 
+  function showLoading() {
+    const panel = findPanel();
+    if (!panel || panel.querySelector?.("[data-opening-report-0830-briefing]")) return;
+    const node = document.createElement("section");
+    node.id = "terminal-opening-report-0830-loading";
+    node.dataset.openingReport0830Loading = "1";
+    node.innerHTML = "<div style=\"min-height:160px;padding:24px;color:#cde2ff;background:#090f19;border:1px solid #17c9de;font:16px system-ui\"><strong style=\"color:#ffd166\"~x1��-</strong><p style=\"margin:9px 0 0;color:#a9bed6\">w�WO�� 08:30fx1W{H���</p></div>";
+    panel.replaceChildren(node);
+  }
+
   function mount() {
     if (!report || report.ok !== true) return false;
     const panel = findPanel();
@@ -88,6 +98,7 @@
   }
 
   async function refresh() {
+    showLoading();
     try {
       let payload = null;
       for (const endpoint of ENDPOINTS) {

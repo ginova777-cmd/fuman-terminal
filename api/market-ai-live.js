@@ -1556,11 +1556,11 @@ function readOpeningMorningReport(clock = taipeiClock()) {
   };
 }
 
-async function readOpeningMorningReportSnapshot(clock = taipeiClock()) {
+async function readOpeningMorningReportSnapshot(clock = taipeiClock(), timeoutMs = Number(process.env.FUMAN_OPENING_REPORT_0830_SNAPSHOT_TIMEOUT_MS || 2000)) {
   const snapshot = await readSnapshot("opening_report_0830_terminal_briefing", {
     tradeDate: clock.date,
     allowLatestFallback: false,
-    timeoutMs: Number(process.env.FUMAN_OPENING_REPORT_0830_SNAPSHOT_TIMEOUT_MS || 2000),
+    timeoutMs,
   }).catch(() => null);
   const payload = snapshot?.payload;
   if (!payload || payload.contract !== "opening-report-0830-terminal-briefing-v1") return null;
@@ -1663,7 +1663,7 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
 module.exports = async function handler(request, response) {
   const clock = taipeiClock();
   if (String(request.query?.briefingOnly || "") === "1") {
-    const snapshotReport = await readOpeningMorningReportSnapshot(clock);
+    const snapshotReport = await readOpeningMorningReportSnapshot(clock, 10000);
     const report = snapshotReport?.ok === true ? snapshotReport : readOpeningMorningReport(clock);
     response.status(200).json({
       ok: report?.ok === true,
