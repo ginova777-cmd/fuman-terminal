@@ -83,12 +83,14 @@ function main() {
     "scripts/run-strategy3-v2-complete-scan.js",
     "scripts/send-strategy3-v2-line-card.js",
     "scripts/verify-strategy3-v2-full-closure.js",
+    "scripts/verify-strategy3-v2-1255-first-attempt.js",
     "scripts/verify-strategy3-v2-water-universe.js",
     "scripts/verify-strategy3-v2-schema-contract.js",
     "scripts/verify-strategy3-v2-collector-boot-contract.js",
     "api/strategy3-v2-latest.js",
     "api/strategy3-latest.js",
     "run-strategy3-v2-complete-scan.ps1",
+    "run-strategy3-v2-1255-first-attempt.ps1",
   ].map((file) => path.join(ROOT, file));
 
   for (const file of files) {
@@ -131,22 +133,44 @@ function main() {
   add(lineReceipt.strategy === STRATEGY, "strategy3_v2_line_receipt_strategy_mismatch", { value: lineReceipt.strategy });
   add(lineReceipt.line_card_design_contract?.title === "隔日沖參考", "strategy3_v2_line_title_mismatch");
   add(lineReceipt.line_card_design_contract?.layout === "white_stock_card_pink_panel_six_box", "strategy3_v2_line_layout_mismatch");
+  const scanFailedClosed = String(scanReceipt.status || "").toUpperCase() === "FAIL_CLOSED";
+  const apiPayload = terminalLegacyApiRun.payload || {};
+  const apiReadOnlyHistory = apiPayload.displayMode === "latest_readonly_history"
+    && apiPayload.publishAllowed === false
+    && ["HISTORY_ONLY", "NO"].includes(apiPayload.unattendedStatus)
+    && ["historical_readonly", "insufficient"].includes(apiPayload.evidenceStatus);
+  const failClosedSafe = scanFailedClosed
+    && lineReceipt.status === "FAIL_CLOSED"
+    && apiReadOnlyHistory;
+
   add(schemaContractRun.exitCode === 0, "strategy3_v2_schema_contract_verifier_failed", { exitCode: schemaContractRun.exitCode });
-  add(waterUniverseRun.exitCode === 0, "strategy3_v2_water_universe_verifier_failed", { exitCode: waterUniverseRun.exitCode });
-  add(readinessRun.exitCode === 0, "strategy3_v2_readiness_verifier_failed", { exitCode: readinessRun.exitCode, stderr: String(readinessRun.stderr || "").slice(0, 500) });
   add(collectorBootRun.exitCode === 0, "strategy3_v2_collector_boot_contract_verifier_failed", { exitCode: collectorBootRun.exitCode });
   add(terminalLegacyApiRun.exitCode === 0, "strategy3_v2_terminal_legacy_api_probe_failed", { exitCode: terminalLegacyApiRun.exitCode, stderr: String(terminalLegacyApiRun.stderr || "").slice(0, 500) });
-  add(terminalLegacyApiRun.payload?.strategy === STRATEGY, "strategy3_v2_terminal_legacy_api_not_v2", { payload: terminalLegacyApiRun.payload });
-  add(terminalLegacyApiRun.payload?.runId === scanReceipt.run_id, "strategy3_v2_terminal_legacy_api_runid_mismatch", { apiRunId: terminalLegacyApiRun.payload?.runId, scanRunId: scanReceipt.run_id });
-  add(Number(terminalLegacyApiRun.payload?.count || 0) === Number(scanReceipt.result_count || 0), "strategy3_v2_terminal_legacy_api_count_mismatch", { apiCount: terminalLegacyApiRun.payload?.count, scanCount: scanReceipt.result_count });
-  add(terminalLegacyApiRun.payload?.publishAllowed === true, "strategy3_v2_terminal_legacy_api_publish_not_allowed", { payload: terminalLegacyApiRun.payload });
-  add(terminalLegacyApiRun.payload?.evidenceStatus === "complete", "strategy3_v2_terminal_legacy_api_evidence_not_complete", { payload: terminalLegacyApiRun.payload });
-  add(terminalLegacyApiRun.payload?.unattendedStatus === "YES", "strategy3_v2_terminal_legacy_api_unattended_not_yes", { payload: terminalLegacyApiRun.payload });
+  add(apiPayload.strategy === STRATEGY, "strategy3_v2_terminal_legacy_api_not_v2", { payload: apiPayload });
+  if (scanFailedClosed) {
+    add(failClosedSafe, "strategy3_v2_fail_closed_surface_not_safe", {
+      lineStatus: lineReceipt.status,
+      apiDisplayMode: apiPayload.displayMode,
+      apiPublishAllowed: apiPayload.publishAllowed,
+      apiEvidenceStatus: apiPayload.evidenceStatus,
+      apiUnattendedStatus: apiPayload.unattendedStatus,
+    });
+  } else {
+    add(waterUniverseRun.exitCode === 0, "strategy3_v2_water_universe_verifier_failed", { exitCode: waterUniverseRun.exitCode });
+    add(readinessRun.exitCode === 0, "strategy3_v2_readiness_verifier_failed", { exitCode: readinessRun.exitCode, stderr: String(readinessRun.stderr || "").slice(0, 500) });
+    add(apiPayload.runId === scanReceipt.run_id, "strategy3_v2_terminal_legacy_api_runid_mismatch", { apiRunId: apiPayload.runId, scanRunId: scanReceipt.run_id });
+    add(Number(apiPayload.count || 0) === Number(scanReceipt.result_count || 0), "strategy3_v2_terminal_legacy_api_count_mismatch", { apiCount: apiPayload.count, scanCount: scanReceipt.result_count });
+    add(apiPayload.publishAllowed === true, "strategy3_v2_terminal_legacy_api_publish_not_allowed", { payload: apiPayload });
+    add(apiPayload.evidenceStatus === "complete", "strategy3_v2_terminal_legacy_api_evidence_not_complete", { payload: apiPayload });
+    add(apiPayload.unattendedStatus === "YES", "strategy3_v2_terminal_legacy_api_unattended_not_yes", { payload: apiPayload });
+  }
   add(JSON.stringify(lineReceipt).includes("strategy3_scan_results") === false || lineReceipt.status === "FAIL_CLOSED", "strategy3_v2_line_receipt_mentions_legacy_results");
 
   const payload = {
     ok: issues.length === 0,
-    status: issues.length === 0 ? "STRATEGY3_V2_CLEAN_CHAIN_READY" : "STRATEGY3_V2_CLEAN_CHAIN_NOT_READY",
+    status: issues.length === 0
+      ? (scanFailedClosed ? "STRATEGY3_V2_FAIL_CLOSED_SAFE" : "STRATEGY3_V2_CLEAN_CHAIN_READY")
+      : "STRATEGY3_V2_CLEAN_CHAIN_NOT_READY",
     contract: CONTRACT_VERSION,
     strategy: STRATEGY,
     trade_date: tradeDate,
@@ -160,6 +184,8 @@ function main() {
       schemaContract: { exitCode: schemaContractRun.exitCode },
       collectorBootContract: { exitCode: collectorBootRun.exitCode },
       terminalLegacyApi: { exitCode: terminalLegacyApiRun.exitCode, payload: terminalLegacyApiRun.payload },
+      mode: scanFailedClosed ? "fail_closed_safe" : "formal_complete",
+      blocker: scanFailedClosed ? (scanReceipt.reason_code || scanReceipt.status || "source_not_ready") : "",
     },
     issues,
   };

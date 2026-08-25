@@ -26,6 +26,7 @@ const tradeDate = process.argv.find((arg) => arg.startsWith("--trade-date="))?.s
 const compactDate = tradeDate.replace(/\D/g, "");
 const runId = newRunId(compactDate);
 const apply = process.argv.includes("--apply");
+const attemptPhase = process.argv.find((arg) => arg.startsWith("--attempt-phase="))?.slice("--attempt-phase=".length) || "";
 const quoteCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-quotes.json");
 const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles.json");
 const MIN_LOCAL_COVERAGE_RATIO = Math.max(0.9, Number(process.env.STRATEGY3_V2_MIN_LOCAL_COVERAGE_RATIO || 0.9));
@@ -314,6 +315,33 @@ async function main() {
   }
   if (market.exitCode !== 0) throw new Error(`strategy3_v2_market_calendar_guard_failed exit=${market.exitCode} ${market.stderr}`);
   const readiness = runReadiness();
+  if (attemptPhase === "1255") {
+    const attemptReceipt = {
+      ok: false,
+      strategy: STRATEGY,
+      contract: CONTRACT_VERSION,
+      status: "PREOPEN_ATTEMPT_FAIL_CLOSED",
+      checked_at: nowTaipeiIso(),
+      trade_date: tradeDate,
+      run_id: "strategy3v2-1255-attempt-" + compactDate,
+      attempt_phase: "1255",
+      apply: false,
+      formal_allowed: false,
+      publish_allowed: false,
+      line_allowed: false,
+      line_push_allowed: false,
+      readiness,
+      reason_code: "strategy3_v2_1255_preopen_attempt_requires_1300_retry",
+      allowed_action: "retry_strategy3_v2_complete_scan_at_1300_only",
+      result_count: 0,
+      results: [],
+    };
+    const attemptFile = path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy3-v2-complete-scan-attempt-1255-" + compactDate + ".json");
+    const file = writeJson(attemptFile, attemptReceipt);
+    console.log(JSON.stringify({ ...attemptReceipt, receipt_path: file }, null, 2));
+    process.exitCode = 1;
+    return;
+  }
   const issues = [];
   const scanner = buildScannerCoreResults();
   const formalReadyTarget = Number(readiness.payload?.mother_pool?.minimumReadySymbols || readiness.payload?.minimums?.motherPoolReadySymbols || 1000);

@@ -194,7 +194,8 @@ const KEY_FILES = [
 ];
 
 const RETIRED_ARTIFACTS = [
-  "run-open-buy-sync-retry.ps1",
+  "run-open-buy-sync-retry.ps1",
+
   "data/strategy4-latest.json",
   "data/strategy4-backup.json",
   "data/strategy4-summary.json",
@@ -298,17 +299,3 @@ if (issues.length) {
 }
 
 console.log(`[source-sync] ok source=${SOURCE_ROOT} deploy=${DEPLOY_ROOT} version=${sourceVersion || "unknown"}`);
-
-
-
-
-
-
-
-
-
-
-
-
-
-

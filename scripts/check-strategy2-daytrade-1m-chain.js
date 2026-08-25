@@ -9,10 +9,12 @@ const MIN_CANDLES_FOR_STRATEGY3 = Math.max(1, Number(process.env.STRATEGY3_FORMA
 const MIN_READY_FOR_STRATEGY2 = Math.max(1, Number(process.env.STRATEGY2_MIN_INTRADAY_1M_READY || 1500));
 const STATUS_VIEW = process.env.STRATEGY2_READINESS_STATUS_VIEW || "v_strategy2_readiness_status";
 const READY_VIEW = process.env.STRATEGY2_INTRADAY_READY_VIEW || "v_strategy2_intraday_ready";
+const READY_RPC = process.env.STRATEGY2_INTRADAY_READY_RPC || "get_strategy2_intraday_ready";
 const DAYTRADE_STATUS_VIEW = process.env.STRATEGY3_DAYTRADE_INTRADAY_STATUS_VIEW || "v_fugle_daytrade_intraday_1m_status";
 const MISSING_VIEW = process.env.STRATEGY2_READINESS_MISSING_VIEW || "v_strategy2_readiness_missing";
 const RAW_1M_TABLE = process.env.STRATEGY3_SUPABASE_1M_TABLE || "fugle_intraday_1m";
 const DAYTRADE_SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
+const ALLOW_RAW_FALLBACK = process.env.STRATEGY2_ALLOW_RAW_LATEST_VALID_DAY_FALLBACK === "1";
 
 function readSecret(file) {
   try {
@@ -95,6 +97,17 @@ async function getRowsPagedSafe(baseRoute, warningLabel, warnings, pageSize = 10
   }
 }
 
+async function getRpcRowsPaged(functionName, pageSize = 500, maxRows = 5000) {
+  const rows = [];
+  for (let offset = 0; offset < maxRows; offset += pageSize) {
+    const page = await rpc(functionName, { p_limit: pageSize, p_offset: offset });
+    if (!Array.isArray(page) || !page.length) break;
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
+}
+
 function numberValue(value) {
   const number = Number(String(value ?? "").replace(/[,%]/g, "").trim());
   return Number.isFinite(number) ? number : 0;
@@ -166,12 +179,28 @@ async function fetchDaytradeSourcePayloadReadiness(warnings) {
   };
 }
 
+
+async function refreshReadyCachePaged(pageSize = 500, maxPages = 12) {
+  let result = await rpc("refresh_strategy2_intraday_ready_cache", { p_page_size: pageSize, p_reset: true });
+  let pages = 1;
+  while (Number(result?.next_offset || 0) > 0 && pages < maxPages) {
+    result = await rpc("refresh_strategy2_intraday_ready_cache", { p_page_size: pageSize, p_reset: false });
+    pages += 1;
+  }
+  return { ...result, pages, complete: Number(result?.next_offset || 0) === 0 };
+}
+
 async function main() {
   const warnings = [];
   let refreshResult = null;
   let refreshWarning = "";
   try {
-    refreshResult = await rpc("refresh_strategy2_readiness_cache", {});
+    const cacheRefresh = await refreshReadyCachePaged();
+    let readinessSummary = null;
+    try { readinessSummary = await rpc("refresh_strategy2_readiness_cache", {}); } catch (error) {
+      refreshWarning = error?.message || String(error);
+    }
+    refreshResult = { ...(readinessSummary || {}), cacheRefresh };
   } catch (error) {
     refreshWarning = error?.message || String(error);
   }
@@ -186,9 +215,16 @@ async function main() {
   const statusReadyCount = numberValue(status?.intraday_1m_ready_count);
   const statusExpected = numberValue(status?.detection_expected_count);
   const daytradeStatusReadyCount = daytradeStatusRows.filter(isReady).length;
-  const shouldReadHeavyReadyView = process.env.STRATEGY2_FORCE_READY_VIEW_READBACK === "1"
-    || Math.max(daytradeStatusReadyCount, statusReadyCount, numberValue(sourceStatusReadiness.readyCount)) < MIN_READY_FOR_STRATEGY3;
-  const readyRows = shouldReadHeavyReadyView ? await getRowsPagedSafe([
+  let cacheRpcRows = [];
+  try {
+    cacheRpcRows = await getRpcRowsPaged(READY_RPC, 500, 5000);
+  } catch (error) {
+    warnings.push(`${READY_RPC}_read_failed:${error?.message || String(error)}`);
+  }
+  const cacheRpcReadyCount = cacheRpcRows.filter(isReady).length;
+  const shouldReadHeavyReadyView = cacheRpcRows.length === 0 && (process.env.STRATEGY2_FORCE_READY_VIEW_READBACK === "1"
+    || Math.max(daytradeStatusReadyCount, statusReadyCount, numberValue(sourceStatusReadiness.readyCount)) < MIN_READY_FOR_STRATEGY3);
+  const readyViewRows = shouldReadHeavyReadyView ? await getRowsPagedSafe([
     `/rest/v1/${READY_VIEW}`,
     "?select=symbol,name,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_35,ready_ma20_continuous,ready_ma35_continuous,intraday_1m_status_updated_at,quote_updated_at",
     "&order=symbol.asc",
@@ -202,12 +238,15 @@ async function main() {
   ].join(""), MISSING_VIEW, warnings);
 
   let rawFallback = null;
-  const readyCountFromView = readyRows.filter(isReady).length;
-  const expectedFromView = readyRows.length;
-  if (Math.max(readyCountFromView, daytradeStatusReadyCount, statusReadyCount) < MIN_READY_FOR_STRATEGY3) {
+  const readyCountFromView = readyViewRows.filter(isReady).length;
+  const expectedFromView = readyViewRows.length;
+  if (ALLOW_RAW_FALLBACK && Math.max(cacheRpcReadyCount, readyCountFromView, daytradeStatusReadyCount, statusReadyCount) < MIN_READY_FOR_STRATEGY3) {
     rawFallback = await fetchRawLatestValidDayReadiness().catch((error) => ({ error: error?.message || String(error), readyCount: 0, expected: 0 }));
+  } else if (!ALLOW_RAW_FALLBACK && Math.max(cacheRpcReadyCount, readyCountFromView, daytradeStatusReadyCount, statusReadyCount) < MIN_READY_FOR_STRATEGY3) {
+    rawFallback = { source: `${RAW_1M_TABLE}:raw-fallback-disabled`, skipped: true, readyCount: 0, expected: 0 };
   }
   const effectiveReady = Math.max(
+    cacheRpcReadyCount,
     readyCountFromView,
     daytradeStatusReadyCount,
     statusReadyCount,
@@ -216,6 +255,7 @@ async function main() {
   );
   const expected = Math.max(
     expectedFromView,
+    cacheRpcRows.length,
     daytradeStatusRows.length,
     statusExpected,
     numberValue(rawFallback?.expected),
@@ -228,7 +268,7 @@ async function main() {
     ok: strategy3Safe,
     status: strategy3Safe ? "ready_for_strategy3" : "not_ready_for_strategy3",
     checkedAt: new Date().toISOString(),
-    source: daytradeStatusReadyCount >= MIN_READY_FOR_STRATEGY3 ? DAYTRADE_STATUS_VIEW : (statusReadyCount >= MIN_READY_FOR_STRATEGY3 ? STATUS_VIEW : (rawFallback?.readyCount >= MIN_READY_FOR_STRATEGY3 ? rawFallback.source : READY_VIEW)),
+    source: cacheRpcReadyCount >= MIN_READY_FOR_STRATEGY3 ? `rpc:${READY_RPC}` : (daytradeStatusReadyCount >= MIN_READY_FOR_STRATEGY3 ? DAYTRADE_STATUS_VIEW : (statusReadyCount >= MIN_READY_FOR_STRATEGY3 ? STATUS_VIEW : (rawFallback?.readyCount >= MIN_READY_FOR_STRATEGY3 ? rawFallback.source : READY_VIEW))),
     statusView: STATUS_VIEW,
     daytradeStatusView: DAYTRADE_STATUS_VIEW,
     missingView: MISSING_VIEW,
@@ -240,6 +280,9 @@ async function main() {
     rawLatestValidDay: rawFallback,
     sourceStatusReadiness,
     readyCountFromView,
+    cacheRpc: READY_RPC,
+    cacheRpcRows: cacheRpcRows.length,
+    cacheRpcReadyCount,
     statusReadyCount,
     expectedFromView,
     statusExpected,
@@ -248,8 +291,8 @@ async function main() {
     strategy2MinReady: MIN_READY_FOR_STRATEGY2,
     strategy3SafeForReuse: strategy3Safe,
     strategy2DaytradeReadyEnough: strategy2Safe,
-    latestCandleTime: latestTime(daytradeStatusRows, "latest_candle_time") || latestTime(readyRows, "latest_candle_time") || rawFallback?.latestCandleTime || "",
-    latestStatusUpdatedAt: latestTime(daytradeStatusRows, "updated_at") || latestTime(readyRows, "intraday_1m_status_updated_at") || rawFallback?.latestStatusUpdatedAt || "",
+    latestCandleTime: latestTime(daytradeStatusRows, "latest_candle_time") || latestTime(cacheRpcRows, "latest_candle_time") || latestTime(readyViewRows, "latest_candle_time") || rawFallback?.latestCandleTime || "",
+    latestStatusUpdatedAt: latestTime(daytradeStatusRows, "updated_at") || latestTime(cacheRpcRows, "intraday_1m_status_updated_at") || latestTime(readyViewRows, "intraday_1m_status_updated_at") || rawFallback?.latestStatusUpdatedAt || "",
     missingSampleCount: missingRows.length,
     missingSample: missingRows.map((row) => ({
       symbol: row.symbol || "",

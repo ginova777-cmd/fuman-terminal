@@ -136,7 +136,12 @@ async function readSupabasePayload(dateDash, options = {}) {
 }
 
 function payloadFromComplete({ source, runId, tradeDate, status, count, rows, scannerSummary, latestReadOnly = false }) {
-  const displayMode = latestReadOnly ? "latest_readonly_history" : "strategy3_v2_complete_run";
+  const readonlyHistory = latestReadOnly === true;
+  const displayMode = readonlyHistory ? "latest_readonly_history" : "strategy3_v2_complete_run";
+  const formalDisplayAllowed = !readonlyHistory;
+  const publishAllowed = !readonlyHistory;
+  const unattendedStatus = readonlyHistory ? "HISTORY_ONLY" : "YES";
+  const evidenceStatus = readonlyHistory ? "historical_readonly" : "complete";
   return {
     ok: true,
     complete: true,
@@ -152,14 +157,14 @@ function payloadFromComplete({ source, runId, tradeDate, status, count, rows, sc
     usedDate: tradeDate,
     dataDate: tradeDate,
     expectedTradeDate: tradeDate,
-    status: "complete",
-    rawStatus: status || "COMPLETE",
-    qualityStatus: "complete",
-    evidenceStatus: "complete",
-    unattendedStatus: "YES",
-    publishAllowed: true,
+    status: readonlyHistory ? "READONLY_HISTORY" : "complete",
+    rawStatus: readonlyHistory ? "READONLY_HISTORY" : (status || "COMPLETE"),
+    qualityStatus: readonlyHistory ? "historical_readonly" : "complete",
+    evidenceStatus,
+    unattendedStatus,
+    publishAllowed,
     latestOverwriteAllowed: !latestReadOnly,
-    formalDisplayAllowed: true,
+    formalDisplayAllowed,
     todayAuthoritative: !latestReadOnly,
     preservePreviousGood: latestReadOnly,
     previousGoodReadback: latestReadOnly,
@@ -169,10 +174,10 @@ function payloadFromComplete({ source, runId, tradeDate, status, count, rows, sc
     rows,
     scannerSummary: scannerSummary || {},
     run_quality_at_publish: {
-      status: "complete",
-      evidenceStatus: "complete",
-      unattendedStatus: "YES",
-      publishAllowed: true,
+      status: readonlyHistory ? "READONLY_HISTORY" : "complete",
+      evidenceStatus,
+      unattendedStatus,
+      publishAllowed,
       latestOverwriteAllowed: !latestReadOnly,
       preservePreviousGood: latestReadOnly,
       previousGoodReadback: latestReadOnly,
@@ -182,14 +187,14 @@ function payloadFromComplete({ source, runId, tradeDate, status, count, rows, sc
       runId,
       tradeDate,
       sourceDate: tradeDate,
-      moduleStatus: "complete",
+      moduleStatus: readonlyHistory ? "historical_readonly" : "complete",
       todayAuthoritative: !latestReadOnly,
-      formalDisplayAllowed: true,
+      formalDisplayAllowed,
       displayMode,
-      displayBlockReason: "",
+      displayBlockReason: readonlyHistory ? "today_no_new_complete_run" : "",
       pendingNotDue: false,
-      evidenceStatus: "complete",
-      publishAllowed: true,
+      evidenceStatus,
+      publishAllowed,
       fallback: latestReadOnly,
       resultCount: count || rows.length,
       readbackCount: rows.length,

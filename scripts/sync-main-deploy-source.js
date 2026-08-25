@@ -203,6 +203,7 @@ const FILES = [
 
   "scripts/send-strategy3-v2-line-card.js",
   "scripts/verify-strategy3-v2-full-closure.js",
+  "scripts/verify-strategy3-v2-1255-first-attempt.js",
   "scripts/verify-strategy3-v2-water-universe.js",
   "scripts/verify-strategy3-v2-schema-contract.js",
   "scripts/verify-strategy3-v2-collector-boot-contract.js",
@@ -340,6 +341,7 @@ const FILES = [
   "run-strategy3.ps1",
   "run-strategy3-complete-scan.ps1",
   "run-strategy3-v2-complete-scan.ps1",
+  "run-strategy3-v2-1255-first-attempt.ps1",
   "run-strategy4.ps1",
   "run-strategy4-source-prewarm.ps1",
   "install-strategy4-source-prewarm-task.ps1",

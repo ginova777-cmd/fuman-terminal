@@ -56,13 +56,13 @@ function isTransientRestError(error) {
 
 async function retryTransient(label, action) {
   let lastError;
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
     try {
       return await action();
     } catch (error) {
       lastError = error;
       if (!isTransientRestError(error) || attempt === 3) throw error;
-      await sleepMs(350 * attempt);
+      await sleepMs(250 * attempt);
     }
   }
   throw lastError || new Error(`${label} failed`);
@@ -81,7 +81,7 @@ async function restGet(anonKey, pathAndQuery) {
         Authorization: `Bearer ${anonKey}`,
         Accept: "application/json",
       },
-      signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined,
+      signal: AbortSignal.timeout ? AbortSignal.timeout(Number(process.env.DAYTRADE_ALIGNMENT_READ_TIMEOUT_MS || 6000)) : undefined,
     });
     const text = await response.text();
     if (!response.ok) {
@@ -104,7 +104,7 @@ async function restPost(anonKey, rpcName, body) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify(body || {}),
-      signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined,
+      signal: AbortSignal.timeout ? AbortSignal.timeout(Number(process.env.DAYTRADE_ALIGNMENT_READ_TIMEOUT_MS || 6000)) : undefined,
     });
     const text = await response.text();
     if (!response.ok) {

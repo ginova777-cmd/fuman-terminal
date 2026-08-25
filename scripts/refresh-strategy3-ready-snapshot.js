@@ -115,6 +115,17 @@ async function fetchAllRows(table, params = {}, options = {}) {
   return out;
 }
 
+async function fetchAllRpcRows(functionName, options = {}) {
+  const maxRows = Math.max(PAGE_SIZE, Number(options.maxRows || 8000));
+  const out = [];
+  for (let offset = 0; offset < maxRows; offset += PAGE_SIZE) {
+    const rows = await rpc(functionName, { p_limit: PAGE_SIZE, p_offset: offset });
+    out.push(...(Array.isArray(rows) ? rows : []));
+    if (!Array.isArray(rows) || rows.length < PAGE_SIZE) break;
+  }
+  return out;
+}
+
 async function rpc(functionName, body = {}) {
   return request("POST", `/rest/v1/rpc/${functionName}`, { body, timeout: 90000 });
 }
@@ -230,10 +241,10 @@ async function main() {
       ].join(","),
       order: "updated_at.desc",
     }, { maxRows: 6000 }),
-    fetchAllRows("v_strategy2_intraday_ready", {
+    fetchAllRpcRows("get_strategy2_intraday_ready", { maxRows: 6000 }).catch(() => fetchAllRows("v_strategy2_intraday_ready", {
       select: "symbol,latest_candle_time,today_candle_count,continuous_candle_count,ready_ge_35,ready_ma20_continuous,ready_ma35_continuous,intraday_1m_status_updated_at,quote_updated_at",
       order: "latest_candle_time.desc",
-    }, { maxRows: 6000 }),
+    }, { maxRows: 6000 })),
     fetchAllRows("stock_capital_latest", {
       select: "code,issued_shares,updated_at",
       order: "updated_at.desc",
