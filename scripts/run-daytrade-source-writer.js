@@ -24,6 +24,7 @@ const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL
 const STATE_FILE = statePath("daytrade-source-writer-state.json");
 const ENRICHMENT_PENDING_STATE_FILE = statePath("daytrade-source-writer-enrichment-pending.json");
 const MOTHER_POOL_DELTA_STATE_FILE = statePath("daytrade-mother-pool-delta.json");
+const INTRADAY_BURST_TELEGRAM_OUTBOX_FILE = statePath("daytrade-intraday-burst-telegram-outbox.json");
 const RUNTIME_CONFIG_FILE = runtimePath("config", "daytrade-source-speed.json");
 const REPO_CONFIG_FILE = repoPath("ops", "public-slot", "daytrade-source-speed.config.example.json");
 const PRIORITY_SYMBOLS_FILE = process.env.FUGLE_DAYTRADE_PRIORITY_SYMBOLS_FILE || cachePath("intraday", "fugle-daytrade-ws-priority-symbols.json");
@@ -181,6 +182,10 @@ const MAX_INTRADAY_1M_STALE_SECONDS = positiveNumber(CONFIG.intraday1m?.maxStale
 const HOT_BURST_MIN_SIGNALS = 2;
 const HOT_BURST_MAX_STALE_SECONDS = Math.max(60, Math.min(MAX_INTRADAY_1M_STALE_SECONDS, Number(process.env.DAYTRADE_HOT_BURST_MAX_STALE_SECONDS || 120)));
 const HOT_BURST_COOLDOWN_SECONDS = Math.max(60, Number(process.env.DAYTRADE_HOT_BURST_COOLDOWN_SECONDS || 300));
+const INTRADAY_PRICE_BURST_MIN_PCT = positiveNumber(process.env.DAYTRADE_INTRADAY_PRICE_BURST_MIN_PCT, 1);
+const INTRADAY_ROLLING_1M_WINDOW = 60;
+const INTRADAY_ROLLING_1M_MIN_SAMPLES = 20;
+const INTRADAY_VOLUME_BURST_ROLLING_MULTIPLIER = positiveNumber(process.env.DAYTRADE_INTRADAY_VOLUME_BURST_ROLLING_MULTIPLIER, 2);
 const HOT_POOL_MIN_SYMBOLS = 40;
 const HOT_POOL_MAX_SYMBOLS = 80;
 const PREOPEN_WARMUP_START_MINUTES = 7 * 60;
@@ -4732,6 +4737,205 @@ function poolLayerForRank(rank) {
   return "priority_pool";
 }
 
+function buildIntradayBurstCandleCacheBySymbol(tradeDate) {
+  const bySymbol = new Map();
+  try {
+    const { candles } = readFugleWebSocketCandles({ maxAgeMs: 90 * 60 * 1000 });
+    const values = candles instanceof Map ? candles.values() : [];
+    for (const row of values) {
+      const symbol = normalizeCode(row?.symbol || row?.code);
+      const candleTime = row?.candleTime || row?.candle_time || row?.time || "";
+      if (!symbol || !candleTime || taipeiDateFrom(candleTime) !== tradeDate) continue;
+      const close = numberValue(row?.close);
+      const volume = Math.max(0, numberValue(row?.volume));
+      if (!(close > 0)) continue;
+      const rows = bySymbol.get(symbol) || [];
+      rows.push({
+        symbol,
+        candle_time: candleTime,
+        close,
+        volume,
+        source: "fugle_websocket_candle_cache",
+      });
+      bySymbol.set(symbol, rows);
+    }
+    for (const rows of bySymbol.values()) {
+      rows.sort((a, b) => Date.parse(b.candle_time) - Date.parse(a.candle_time));
+    }
+  } catch {
+    return new Map();
+  }
+  return bySymbol;
+}
+
+function buildIntradayBurstMetricsFromCandleCache(candles) {
+  const rows = Array.isArray(candles) ? candles : [];
+  const latest = rows[0] || null;
+  const prior = rows.slice(1, INTRADAY_ROLLING_1M_WINDOW + 1);
+  const priorVolumes = prior.map((row) => Math.max(0, numberValue(row.volume))).filter((value) => Number.isFinite(value));
+  const priorCloses = prior.map((row) => numberValue(row.close)).filter((value) => value > 0);
+  const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  const sampleCount = priorVolumes.length;
+  return {
+    latest_1m_time: latest?.candle_time || "",
+    latest_1m_close: numberValue(latest?.close),
+    latest_1m_volume: Math.max(0, numberValue(latest?.volume)),
+    rolling_1m_prior_high_close: priorCloses.length ? Math.max(...priorCloses) : 0,
+    rolling_1m_baseline_volume: average(priorVolumes),
+    rolling_1m_baseline_sample_count: sampleCount,
+    rolling_1m_baseline_status: sampleCount >= INTRADAY_ROLLING_1M_MIN_SAMPLES ? "ready" : "DATA_GAP_ROLLING_1M_BASELINE",
+    intraday_1m_stale_seconds: latest?.candle_time ? ageSeconds(latest.candle_time) : 999999,
+    cache_rolling_1m_baseline_source: latest ? "fugle_websocket_candle_cache" : "",
+  };
+}
+
+function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quoteMap = new Map()) {
+  const inputRows = Array.isArray(rows) ? rows : [];
+  const candleCacheBySymbol = buildIntradayBurstCandleCacheBySymbol(tradeDate);
+  const events = [];
+  const rejectedReasonCounts = {};
+  const sampleRejected = [];
+  let cacheRolling1mReadyCount = 0;
+  const firstPositiveValue = (...values) => {
+    for (const value of values) {
+      const number = Number(value);
+      if (Number.isFinite(number) && number > 0) return number;
+    }
+    return 0;
+  };
+  const minFiniteValue = (...values) => {
+    const numbers = values.map((value) => Number(value)).filter((number) => Number.isFinite(number) && number >= 0);
+    return numbers.length ? Math.min(...numbers) : 999999;
+  };
+  const addReject = (symbol, reason) => {
+    rejectedReasonCounts[reason] = (rejectedReasonCounts[reason] || 0) + 1;
+    if (sampleRejected.length < 12) sampleRejected.push({ symbol: symbol || "", reason });
+  };
+  for (const row of inputRows) {
+    const symbol = normalizeCode(row?.symbol);
+    const rowMetrics = row?.metrics || {};
+    const priorityMetrics = row?.priorityMetrics || {};
+    const cacheMetrics = buildIntradayBurstMetricsFromCandleCache(candleCacheBySymbol.get(symbol));
+    const quote = quoteMap instanceof Map ? (quoteMap.get(symbol) || {}) : {};
+    const quotePayload = quote?.payload || {};
+    const metrics = { ...rowMetrics, ...priorityMetrics };
+    const price = firstPositiveValue(priorityMetrics.price, priorityMetrics.lastPrice, priorityMetrics.last_price, priorityMetrics.close, rowMetrics.price, rowMetrics.lastPrice, rowMetrics.last_price, rowMetrics.close, row?.price, row?.last_price, row?.lastPrice, row?.close, row?.payload?.price, row?.payload?.last_price, row?.payload?.lastPrice, row?.payload?.close, quote.price, quote.lastPrice, quote.last_price, quote.close, quotePayload.price, quotePayload.lastPrice, quotePayload.last_price, quotePayload.close);
+    const quoteAgeSeconds = minFiniteValue(priorityMetrics.quoteAgeSeconds, priorityMetrics.quote_age_seconds, rowMetrics.quoteAgeSeconds, rowMetrics.quote_age_seconds, row?.quote_age_seconds, row?.payload?.quote_age_seconds, quote.quoteAgeSeconds, quote.quote_age_seconds, quotePayload.quoteAgeSeconds, quotePayload.quote_age_seconds, ageSeconds(quoteFreshnessTime(quote)));
+    const sampleCount = Math.max(
+      numberValue(metrics.rolling1mBaselineSampleCount ?? metrics.rolling_1m_baseline_sample_count),
+      numberValue(cacheMetrics.rolling_1m_baseline_sample_count),
+    );
+    const baselineStatus = sampleCount >= INTRADAY_ROLLING_1M_MIN_SAMPLES ? "ready" : String(metrics.rolling1mBaselineStatus || metrics.rolling_1m_baseline_status || cacheMetrics.rolling_1m_baseline_status || "");
+    const latest1mClose = firstPositiveValue(priorityMetrics.latest1mClose, priorityMetrics.latest_1m_close, rowMetrics.latest1mClose, rowMetrics.latest_1m_close, cacheMetrics.latest_1m_close, price);
+    const latest1mVolume = firstPositiveValue(metrics.latest1mVolume, metrics.latest_1m_volume, cacheMetrics.latest_1m_volume);
+    const rollingHigh = firstPositiveValue(metrics.rolling1mPriorHighClose, metrics.rolling_1m_prior_high_close, cacheMetrics.rolling_1m_prior_high_close);
+    const rollingVolume = firstPositiveValue(metrics.rolling1mBaselineVolume, metrics.rolling_1m_baseline_volume, cacheMetrics.rolling_1m_baseline_volume);
+    const latest1mTime = metrics.latestCandleTime || metrics.latest_1m_time || cacheMetrics.latest_1m_time || checkedAt;
+    const intraday1mStaleSeconds = minFiniteValue(metrics.intraday1mStaleSeconds, metrics.intraday_1m_stale_seconds, cacheMetrics.intraday_1m_stale_seconds);
+    if (cacheMetrics.rolling_1m_baseline_status === "ready") cacheRolling1mReadyCount += 1;
+    const rank = numberValue(row?.priority_rank ?? row?.payload?.priority_rank ?? row?.intradayNotificationMeta?.rank, 999999);
+    const tradableMotherPool = row?.basePool?.eligible === true
+      || row?.payload?.basePoolEligible === true
+      || row?.payload?.is_daytrade_allowed === true;
+    const quoteFresh = priorityMetrics.quoteFresh === true
+      || priorityMetrics.quote_fresh === true
+      || rowMetrics.quoteFresh === true
+      || rowMetrics.quote_fresh === true
+      || row?.quote_fresh === true
+      || row?.payload?.quote_fresh === true
+      || ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS;
+    const common = {
+      trade_date: tradeDate,
+      symbol,
+      name: row?.name || symbol,
+      price,
+      change_percent: numberValue(metrics.changePercent ?? metrics.change_percent),
+      pool_rank: rank,
+      entry_score: numberValue(row?.entryScore ?? row?.score ?? row?.payload?.entry_score ?? row?.payload?.score),
+      upgrade_score: numberValue(row?.upgradeScore ?? row?.payload?.upgrade_score),
+      pool_reasons: Array.isArray(row?.poolReasons) ? row.poolReasons : [],
+      tradable_mother_pool: tradableMotherPool,
+      quote_fresh: quoteFresh,
+      quote_age_seconds: quoteAgeSeconds,
+      latest_1m_time: latest1mTime,
+      latest_1m_close: latest1mClose,
+      latest_1m_volume: latest1mVolume,
+      rolling_1m_prior_high_close: rollingHigh,
+      rolling_1m_baseline_volume: rollingVolume,
+      rolling_1m_baseline_sample_count: sampleCount,
+      rolling_1m_baseline_status: baselineStatus,
+      cache_rolling_1m_baseline_source: cacheMetrics.cache_rolling_1m_baseline_source || "",
+      checked_at: checkedAt,
+      run_id: runId,
+    };
+    const hotCommonFailures = [];
+    if (!/^\d{4}$/.test(symbol)) hotCommonFailures.push("symbol_invalid");
+    if (price < MOTHER_POOL_MIN_PRICE) hotCommonFailures.push("price_below_minimum");
+    if (!tradableMotherPool) hotCommonFailures.push("not_daytrade_mother_pool_eligible");
+    if (!quoteFresh || quoteAgeSeconds > WINDOW_SECONDS) hotCommonFailures.push("quote_not_fresh");
+    const strictFailures = [...hotCommonFailures];
+    if (baselineStatus !== "ready") strictFailures.push("rolling_1m_baseline_not_ready");
+    if (sampleCount < INTRADAY_ROLLING_1M_MIN_SAMPLES) strictFailures.push("rolling_1m_samples_below_20");
+    if (intraday1mStaleSeconds > MAX_INTRADAY_1M_STALE_SECONDS) strictFailures.push("intraday_1m_stale");
+    if (strictFailures.length) {
+      addReject(symbol, strictFailures[0]);
+      continue;
+    }
+    const priceTriggerLevel = rollingHigh * (1 + (INTRADAY_PRICE_BURST_MIN_PCT / 100));
+    const volumeTriggerLevel = rollingVolume * INTRADAY_VOLUME_BURST_ROLLING_MULTIPLIER;
+    const priceRuleMet = rollingHigh > 0 && latest1mClose >= priceTriggerLevel;
+    const volumeRuleMet = rollingVolume > 0 && latest1mVolume >= volumeTriggerLevel;
+    let emittedStrict = false;
+    if ((metrics.intradayPriceBurst1Pct === true || priceRuleMet) && priceRuleMet) {
+      events.push({
+        ...common,
+        trigger_type: "price_breakout_1pct",
+        price_trigger_level: priceTriggerLevel,
+        volume_trigger_level: volumeTriggerLevel,
+      });
+      emittedStrict = true;
+    }
+    if ((metrics.intradayVolumeBurstRolling60X2 === true || volumeRuleMet) && volumeRuleMet) {
+      events.push({
+        ...common,
+        trigger_type: "volume_burst_rolling60_x2",
+        price_trigger_level: priceTriggerLevel,
+        volume_trigger_level: volumeTriggerLevel,
+      });
+      emittedStrict = true;
+    }
+    if (!emittedStrict) addReject(symbol, "no_strict_burst_trigger");
+  }
+  const strictBurstEventCount = events.length;
+  const hotRankFallbackEventCount = 0;
+  const payload = {
+    contract: "daytrade_intraday_burst_telegram_outbox_v1",
+    source: "fugle_formal_1m",
+    alert_scope: "strategy2_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage",
+    trade_date: tradeDate,
+    updated_at: checkedAt,
+    run_id: runId,
+    conditions: {
+      price_breakout: "latest_1m_close >= prior_rolling60_high_close * 1.01",
+      volume_burst: "latest_1m_volume >= prior_rolling60_average_volume * 2",
+      hot_rank_fallback: "disabled; telegram only sends price_breakout_1pct and volume_burst_rolling60_x2",
+      min_rolling_samples: 20,
+      min_price: MOTHER_POOL_MIN_PRICE,
+      max_quote_age_seconds: WINDOW_SECONDS,
+      max_1m_stale_seconds: MAX_INTRADAY_1M_STALE_SECONDS,
+    },
+    candidate_count: inputRows.length,
+    candle_cache_symbol_count: candleCacheBySymbol.size,
+    cache_rolling_1m_ready_count: cacheRolling1mReadyCount,
+    strict_burst_event_count: strictBurstEventCount,
+    hot_rank_fallback_event_count: hotRankFallbackEventCount,
+    rejected_reason_counts: rejectedReasonCounts,
+    sample_rejected: sampleRejected,
+    events,
+  };
+  if (!DRY_RUN) writeJson(INTRADAY_BURST_TELEGRAM_OUTBOX_FILE, payload);
+  return { path: INTRADAY_BURST_TELEGRAM_OUTBOX_FILE, event_count: events.length, events, diagnostics: payload };
+}
 function updateMotherPoolDelta(result) {
   const priorityRows = Array.isArray(result?.priorityRows) ? result.priorityRows : [];
   const payload = result?.payload || {};
@@ -4946,6 +5150,10 @@ function updateMotherPoolDelta(result) {
     latest_1m_time: latest1mTimes.length ? latest1mTimes[latest1mTimes.length - 1] : "",
     intraday_1m_stale_seconds: numberValue(payload.intraday_1m_stale_seconds, 999999),
   };
+
+  const burstRows = priorityRows;
+  const intradayBurstTelegramOutbox = writeIntradayBurstTelegramOutbox(burstRows, tradeDate, checkedAt, runId, result?.quoteMap);
+  roundSummary.intraday_burst_telegram_event_count = intradayBurstTelegramOutbox.event_count;
 
   if (!DRY_RUN) writeJson(MOTHER_POOL_DELTA_STATE_FILE, {
     source_name: SOURCE_NAME,
@@ -5752,6 +5960,7 @@ async function tick() {
     state: nextState,
     supplementalMaps,
   });
+  result.quoteMap = quoteMap;
   result.payload.nonfatal_write_errors = fetchResult.errors || [];
   result.payload.websocket_quote_readthrough_written = websocketQuoteReadthroughSync.written || 0;
   result.payload.websocket_quote_readthrough_skipped = Boolean(websocketQuoteReadthroughSync.skipped);

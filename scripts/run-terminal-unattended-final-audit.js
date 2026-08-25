@@ -49,10 +49,12 @@ function argValue(name, fallback = "") {
 
 function runNode(args, env = {}, cwd = ROOT) {
   const started = new Date().toISOString();
-  const result = spawnSync(process.execPath, args, { cwd, encoding: "utf8", env: { ...process.env, ...env }, windowsHide: true });
+  const timeout = Math.max(15000, Number(process.env.FUMAN_FINAL_AUDIT_CHILD_TIMEOUT_MS || 180000));
+  const result = spawnSync(process.execPath, args, { cwd, encoding: "utf8", env: { ...process.env, ...env }, windowsHide: true, timeout });
   const stdout = String(result.stdout || "");
   const stderr = String(result.stderr || "");
-  return { started_at: started, finished_at: new Date().toISOString(), exit_code: result.status === null ? 1 : result.status, stdout, stderr, parsed: parseLastJson(stdout) || parseLastJson(stderr), command: `node ${args.join(" ")}` };
+  const timedOut = result.error?.code === "ETIMEDOUT";
+  return { started_at: started, finished_at: new Date().toISOString(), exit_code: result.status === null ? 1 : result.status, timed_out: timedOut, timeout_ms: timeout, stdout, stderr: timedOut ? `${stderr}\nchild_verifier_timeout:${timeout}`.trim() : stderr, parsed: parseLastJson(stdout) || parseLastJson(stderr), command: `node ${args.join(" ")}` };
 }
 function refreshRecoveryQueueVerifier({ tradeDate, dailyRunId }) {
   const output = path.join(ROOT, "outputs", "terminal-orchestrator", "terminal-recovery-queue-verifier.json");

@@ -83,8 +83,7 @@ async function main() {
     "manifest:daily-terminal-run",
     "orchestrator:state:from-existing",
     "policy:autonomous-ops",
-    "rollforward:terminal:apply",
-    "rollforward:terminal:apply-scanners",
+    "rollforward:terminal",
     "verify:terminal-canary-publish:live",
     "verify:terminal-control-plane:from-existing",
     "verify:terminal-resource-chain:unattended",
@@ -102,6 +101,7 @@ async function main() {
     "FUMAN_DAILY_RUN_ID",
   ];
   for (const marker of runnerMarkers) requireMarker(issues, "run-terminal-autonomous-root.ps1", runner, marker);
+  if (!/formalScanSkipped\s+-ne\s+\$true/.test(runner) || !/scannerAction\s+-ne\s+["']skip_formal_scan["']/.test(runner)) addIssue(issues, "root_scanner_date_gate_must_block_formal_scan_skipped");
 
   const installerMarkers = [
     "Fuman Terminal Autonomous Root Monitor",
@@ -114,7 +114,6 @@ async function main() {
     "16:10",
     "21:35",
     "22:00",
-    "-ApplyScanners",
     "New-FumanPrincipal",
     "LogonType S4U",
     "InteractiveFallback",
@@ -126,7 +125,7 @@ async function main() {
   for (const name of [...new Set(invokedScripts)]) {
     if (!scripts[name]) addIssue(issues, "package_script_missing_runner_step:" + name, { name });
   }
-  for (const name of ["ops:autonomous-root", "ops:autonomous-root:apply-scanners", "install:terminal-autonomous-root-task", "ops:autonomous-root:contract"]) {
+  for (const name of ["ops:autonomous-root", "install:terminal-autonomous-root-task", "ops:autonomous-root:contract"]) {
     if (!scripts[name]) addIssue(issues, `package_script_missing:${name}`);
   }
   if (!String(scripts["verify:terminal-unattended-root"] || "").includes("ops:autonomous-root:contract")) {
@@ -156,7 +155,7 @@ async function main() {
     if (!windowsTask.installed) addIssue(issues, "windows_task_missing_autonomous_root_monitor", { exitCode: windowsTask.exitCode, raw: windowsTask.raw.slice(0, 1200) });
     if (windowsTask.installed && windowsTask.disabled) addIssue(issues, "windows_task_disabled_autonomous_root_monitor", { raw: windowsTask.raw.slice(0, 1200) });
     if (windowsTask.installed && !windowsTask.hasRunner) addIssue(issues, "windows_task_missing_autonomous_root_runner", { raw: windowsTask.raw.slice(0, 1200) });
-    if (windowsTask.installed && !windowsTask.hasApplyScanners) addIssue(issues, "windows_task_missing_apply_scanners_flag", { raw: windowsTask.raw.slice(0, 1200) });
+    if (windowsTask.installed && windowsTask.hasApplyScanners) addIssue(issues, "windows_task_must_be_read_only_no_apply_scanners", { raw: windowsTask.raw.slice(0, 1200) });
     if (windowsTask.installed && !windowsTask.hasRequireProtectedReadback) addIssue(issues, "windows_task_missing_protected_readback_flag", { raw: windowsTask.raw.slice(0, 1200) });
     if (windowsTask.installed && !windowsTask.hasS4U) addIssue(issues, "windows_task_not_s4u_unattended", { raw: windowsTask.raw.slice(0, 1200), xml: windowsTask.xmlRaw.slice(0, 1200) });
   }
@@ -169,7 +168,7 @@ async function main() {
     installerExists: Boolean(installer),
     packageScripts: {
       opsAutonomousRoot: scripts["ops:autonomous-root"] || "",
-      opsAutonomousRootApplyScanners: scripts["ops:autonomous-root:apply-scanners"] || "",
+      controllerMode: "read_only_verify_and_infrastructure_rewater_only",
       installTask: scripts["install:terminal-autonomous-root-task"] || "",
     },
     scheduleRegistry: {
@@ -181,7 +180,7 @@ async function main() {
       installed: windowsTask.installed,
       disabled: windowsTask.disabled,
       hasRunner: windowsTask.hasRunner,
-      hasApplyScanners: windowsTask.hasApplyScanners,
+      readOnlyNoApplyScanners: windowsTask.hasApplyScanners !== true,
       hasRequireProtectedReadback: windowsTask.hasRequireProtectedReadback,
       hasS4U: windowsTask.hasS4U,
       hasInteractiveOnly: windowsTask.hasInteractiveOnly,
@@ -203,7 +202,7 @@ async function main() {
     guarantees: [
       "autonomous root is callable as a first-class npm script",
       "Windows task wakes the full root chain after strategy due windows",
-      "runner executes preflight, water root, daily manifest, state machine, policy, job queue roll-forward, and readback-only closure",
+      "runner executes preflight, water root, daily manifest, state machine, policy, read-only roll-forward planning, and readback-only closure",
       "failure writes a receipt and attempts workflow alert",
       "root monitor holds the shared daily orchestrator lock and passes a re-entrant owner lease to Final Audit",
     ],

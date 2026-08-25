@@ -336,7 +336,7 @@ function Invoke-InstitutionSnapshotRefresh($RunId = "", $Count = 0, $Warning = "
 "=== Institution scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
 . "${PSScriptRoot}\schedule-guard.ps1"
 . "${PSScriptRoot}\flow-health.ps1"
-Invoke-FumanWeekdayGuard -Label "Institution scan" -LogPath $log
+Invoke-FumanWeekdayGuard -Label "Institution scan" -LogPath $log -AllowAfterFormalSourceWindow
 . "${PSScriptRoot}\scanner-resource-health.ps1"
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "institution" -LogPath $log
 if (Test-InstitutionTransientResourceHealthFailure $resourceGate) {

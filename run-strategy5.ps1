@@ -128,7 +128,7 @@ function Invoke-Strategy5SnapshotRefresh($RunId = "", $Count = 0, $Warning = "")
 
 "=== Strategy5 scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
 . "${PSScriptRoot}\schedule-guard.ps1"
-Invoke-FumanWeekdayGuard -Label "Strategy5 scan" -LogPath $log
+Invoke-FumanWeekdayGuard -Label "Strategy5 scan" -LogPath $log -AllowAfterFormalSourceWindow
 . "${PSScriptRoot}\scanner-resource-health.ps1"
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy5" -LogPath $log
 if ($resourceGate.PreserveLatest) {

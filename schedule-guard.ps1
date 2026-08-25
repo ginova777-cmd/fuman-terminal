@@ -37,7 +37,8 @@ function Get-FumanMarketHolidays {
 function Invoke-FumanWeekdayGuard {
   param(
     [Parameter(Mandatory = $true)][string]$Label,
-    [string]$LogPath
+    [string]$LogPath,
+    [switch]$AllowAfterFormalSourceWindow
   )
 
   if ($env:FUMAN_FORCE_RUN -eq "1") {
@@ -45,7 +46,7 @@ function Invoke-FumanWeekdayGuard {
     return
   }
 
-  Invoke-FumanMarketCalendarGuard -Label $Label -LogPath $LogPath
+  Invoke-FumanMarketCalendarGuard -Label $Label -LogPath $LogPath -AllowAfterFormalSourceWindow:$AllowAfterFormalSourceWindow
 
   $now = Get-FumanTaipeiNow
   if ($now.DayOfWeek -eq [DayOfWeek]::Saturday -or $now.DayOfWeek -eq [DayOfWeek]::Sunday) {
@@ -75,7 +76,8 @@ function Invoke-FumanWeekdayGuard {
 function Invoke-FumanMarketCalendarGuard {
   param(
     [Parameter(Mandatory = $true)][string]$Label,
-    [string]$LogPath
+    [string]$LogPath,
+    [switch]$AllowAfterFormalSourceWindow
   )
 
   if ($env:FUMAN_FORCE_RUN -eq "1") {
@@ -105,6 +107,16 @@ function Invoke-FumanMarketCalendarGuard {
     if (-not [string]::IsNullOrWhiteSpace($jsonText)) { $payload = $jsonText | ConvertFrom-Json }
   } catch {
     if ($LogPath) { "market-calendar-guard: json parse warning $($_.Exception.Message)" >> $LogPath }
+  }
+
+  $isAllowedAfterWindow = $AllowAfterFormalSourceWindow `
+    -and $null -ne $payload `
+    -and $payload.marketOpen -eq $true `
+    -and [string]$payload.marketStatus -eq "after_formal_source_window"
+  if ($isAllowedAfterWindow) {
+    $message = "$Label allowed after daytrade formal source window by explicit after-hours strategy contract"
+    if ($LogPath) { $message >> $LogPath } else { Write-Host $message }
+    return
   }
 
   if ($null -ne $payload -and $payload.scannerAction -eq "skip_formal_scan" -and $payload.sourceFreshnessRequired -eq $false) {

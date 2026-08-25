@@ -121,7 +121,10 @@ function eventTimeMs(options = {}) {
 }
 
 function localGate(channel, options = {}) {
-  if (notificationsDisabled()) return { ok: false, reason: "notifications-disabled" };
+  const allowMotherPoolBurstTelegram = channel === "telegram"
+    && options.motherPoolIntradayBurstTelegram === true
+    && envFlag("FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM");
+  if (notificationsDisabled() && !allowMotherPoolBurstTelegram) return { ok: false, reason: "notifications-disabled" };
   if (envFlag("NOTIFICATION_GUARD_DISABLED") || envFlag("NOTIFY_GUARD_DISABLED")) {
     return { ok: true, reason: "guard-disabled" };
   }

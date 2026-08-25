@@ -55,7 +55,7 @@ $tailText
 }
 
 . "$PSScriptRoot\schedule-guard.ps1"
-Invoke-FumanWeekdayGuard -Label "Institution chip-flow battle verify" -LogPath $log
+Invoke-FumanWeekdayGuard -Label "Institution chip-flow battle verify" -LogPath $log -AllowAfterFormalSourceWindow
 
 node scripts\verify-institution-battle-state.js 2>&1 | Tee-Object -FilePath $log -Append
 if ($LASTEXITCODE -ne 0) {

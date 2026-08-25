@@ -1,7 +1,6 @@
 param(
   [string]$ProjectRoot = $PSScriptRoot,
   [string]$RuntimeRoot = $(if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }),
-  [switch]$ApplyScanners,
   [switch]$RequireProtectedReadback
 )
 
@@ -303,7 +302,8 @@ function Write-Receipt {
     runtimeRoot = $RuntimeRoot
     daily_run_id = $DailyRunId
     orchestrator_lock = [ordered]@{ acquired = ($null -ne $OrchestratorLock -and $OrchestratorLock.ok -eq $true); released = ($null -ne $OrchestratorLockRelease -and $OrchestratorLockRelease.released -eq $true); file = $OrchestratorLockFile; release = $OrchestratorLockRelease }
-    applyScanners = [bool]$ApplyScanners
+    applyScanners = $false
+    controllerMode = "read_only_verify_and_infrastructure_rewater_only"
     requireProtectedReadback = [bool]$RequireProtectedReadback
     failedStep = $FailedStep
     errorMessage = $ErrorMessage
@@ -355,7 +355,7 @@ if ($RequireProtectedReadback) {
 
 $steps = New-Object System.Collections.Generic.List[object]
 try {
-  Write-RunnerLog "Autonomous root started contract=$Contract applyScanners=$([bool]$ApplyScanners) requireProtectedReadback=$([bool]$RequireProtectedReadback)"
+  Write-RunnerLog "Autonomous root started contract=$Contract controllerMode=read_only requireProtectedReadback=$([bool]$RequireProtectedReadback)"
   # Pick one Taipei target date before queue/scanner work. Pre-open runs may
   # inspect and self-heal, but must never apply formal scanners before the
   # calendar gate allows the target trading session.
@@ -382,7 +382,7 @@ try {
     $tradingDayOpen = ($datePreflight.marketCalendar.tradingDayOpen -eq $true -or $datePreflight.marketCalendar.tradingDay.isTradingDay -eq $true -or $datePreflight.afterCloseProfile -eq $true)
     $calendarOverride = ($datePreflight.marketCalendar.override -eq $true)
     $calendarClosedReason = [string]$datePreflight.marketCalendar.closedReason
-    $scannerApplyAllowed = ($datePreflight.ok -eq $true -and $tradingDayOpen -and -not $calendarOverride -and [string]::IsNullOrWhiteSpace($calendarClosedReason))
+    $scannerApplyAllowed = ($datePreflight.ok -eq $true -and $tradingDayOpen -and $datePreflight.formalScanSkipped -ne $true -and [string]$datePreflight.scannerAction -ne "skip_formal_scan" -and -not $calendarOverride -and [string]::IsNullOrWhiteSpace($calendarClosedReason))
     Write-RunnerLog ("Date gate target={0} marketOpen={1} formalScanSkipped={2} scannerApplyAllowed={3}" -f $targetTradeDate, $datePreflight.marketOpen, $datePreflight.formalScanSkipped, $scannerApplyAllowed)
   } else {
     Write-RunnerLog "Date gate receipt missing; scanner apply disabled fail-closed"
@@ -408,11 +408,7 @@ try {
   $steps.Add((Invoke-NpmStep "state-machine" "orchestrator:state:from-existing" -ToleratedExitCodes @(1)))
   $steps.Add((Invoke-NpmStep "autonomous-policy" "policy:autonomous-ops"))
   if ($scannerApplyAllowed) {
-    if ($ApplyScanners) {
-      $steps.Add((Invoke-NpmStep "job-queue-roll-forward" "rollforward:terminal:apply-scanners" -ToleratedExitCodes @(1)))
-    } else {
-      $steps.Add((Invoke-NpmStep "job-queue-roll-forward" "rollforward:terminal:apply" -ToleratedExitCodes @(1)))
-    }
+    $steps.Add((Invoke-NpmStep "job-queue-roll-forward-readonly" "rollforward:terminal" -ToleratedExitCodes @(1)))
   } else {
     $skipReason = if ($datePreflight -and $datePreflight.marketOpen -ne $true) { "market_closed" } elseif ($datePreflight -and $datePreflight.formalScanSkipped -eq $true) { "formal_scan_not_due" } else { "date_preflight_not_ready" }
     $steps.Add([ordered]@{ name = "job-queue-roll-forward"; script = "skipped_by_date_gate"; attempts = 0; exitCode = 0; timedOut = $false; ok = $true; skipped = $true; skipReason = $skipReason; executionGuard = "date_gate_blocks_formal_scanner_apply" })
