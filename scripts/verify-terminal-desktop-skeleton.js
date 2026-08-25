@@ -33,6 +33,7 @@ function main() {
   requireMarker(index, "terminal-core.js?v=" + version.version, "index", failures);
   requireMarker(core, "const formalSkeletonBaseline = \"" + BASELINE + "\"", "terminal_core", failures);
   requireMarker(shell, "window.__fumanDesktopFastShell", "desktop_shell", failures);
+  requireMarker(shell, "function purgeApiOnlyStrategySnapshots()", "desktop_shell", failures);
   requireMarker(shell, "function refreshMarketHeaderMetrics(payload = {})", "desktop_shell", failures);
   requireMarker(shell, "marketHeaderMetrics", "desktop_shell", failures);
   requireMarker(shell, "fetchMarketJson(\"/api/market\", 24, force, 2200)", "desktop_shell", failures);

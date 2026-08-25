@@ -1267,6 +1267,24 @@
     new MutationObserver(run).observe(document.documentElement, { childList: true, subtree: true });
   }
 
+  function purgeApiOnlyStrategySnapshots() {
+    const keys = ["strategy|策略2"];
+    keys.forEach((key) => {
+      try { sessionStorage.removeItem(SNAPSHOT_PREFIX + key); } catch (_) {}
+      routeSnapshots.delete(key);
+      canvasStore.delete(key);
+      canvasRouteVersions.delete(key);
+    });
+    if (!("indexedDB" in window)) return;
+    openSnapshotDb().then((db) => {
+      if (!db) return;
+      try {
+        const tx = db.transaction(SNAPSHOT_STORE, "readwrite");
+        keys.forEach((key) => tx.objectStore(SNAPSHOT_STORE).delete(key));
+      } catch (_) {}
+    }).catch(() => undefined);
+  }
+
   function installProtectedRouteSnapshotRetirement20260717() {
     const keys = protectedDataRouteKeys();
     const clearRuntime = () => {
@@ -5457,7 +5475,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-59";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-60";
   }
 
   function loadScriptOnce(src, attr) {
