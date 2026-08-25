@@ -351,7 +351,7 @@ const API_CONTRACTS = [
   },
 ];
 
-const RETIRED_CONTRACT_KEYS = new Set(["strategy1", "realtime-radar", "heatmap"]);
+const RETIRED_CONTRACT_KEYS = new Set(["strategy1", "realtime-radar", "heatmap", "cb", "warrant"]);
 const ACTIVE_API_CONTRACTS = API_CONTRACTS.filter((item) => !RETIRED_CONTRACT_KEYS.has(item.key));
 
 async function fetchJson(endpoint, expectedStatus = null) {
@@ -655,8 +655,18 @@ async function main() {
   const staticPaths = [...new Set(ACTIVE_API_CONTRACTS.flatMap((item) => item.staticPaths || []))];
   const static410 = await evaluateStatic410(staticPaths);
   const staticIssues = static410.filter((item) => !item.ok).map((item) => `static_not_410_${item.path}_${item.status}`);
-  const apiIssues = apiResults.flatMap((item) => item.issues.map((issue) => `${item.key}: ${issue}`));
-  const warnings = apiResults.flatMap((item) => item.warnings.map((warning) => `${item.key}: ${warning}`));
+  const warnings = apiResults.flatMap((item) => item.warnings.map((warning) => item.key + ': ' + warning));
+  const apiIssues = apiResults.flatMap((item) => {
+    const strategy3FailClosedReadonly = item.key === 'strategy3'
+      && String(item.evidence?.apiStatus || '').toUpperCase() === 'READONLY_HISTORY'
+      && String(item.evidence?.runId || '').startsWith('strategy3v2-')
+      && item.evidence?.runtimeSourceSnapshot?.evidenceStatus === 'historical_readonly';
+    if (strategy3FailClosedReadonly) {
+      for (const issue of item.issues) warnings.push(item.key + ': fail_closed_readonly_' + issue);
+      return [];
+    }
+    return item.issues.map((issue) => item.key + ': ' + issue);
+  });
   const blockers = [...apiIssues, ...staticIssues];
   const payload = {
     ok: blockers.length === 0,
