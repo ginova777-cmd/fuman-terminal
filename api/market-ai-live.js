@@ -1499,9 +1499,11 @@ function readOpeningMorningReport(clock = taipeiClock()) {
     ? (finalReceipt.mother_pool_bridge_ok ? "applied" : "fail_closed_optional")
     : "priority_scan_only";
   const issues = [];
+  const deliveryWarnings = [];
   if (!finalDateOk) issues.push("final_receipt_date_mismatch");
   if (industryRows.length < 19) issues.push("industry_bias_json_incomplete");
-  if (finalReceipt.line_required === true && finalReceipt.line_delivery_ok !== true) issues.push("line_delivery_not_ok");
+  // LINE delivery is an independent side effect, never a terminal briefing gate.
+  if (finalReceipt.line_required === true && finalReceipt.line_delivery_ok !== true) deliveryWarnings.push("line_delivery_not_ok");
   return {
     contract: "opening-report-0830-terminal-briefing-v1",
     ok: issues.length === 0,
@@ -1549,6 +1551,7 @@ function readOpeningMorningReport(clock = taipeiClock()) {
       unavailable_leaders: overseasLeaders.unavailable_leaders || 0,
     } : null,
     issues,
+    delivery_warnings: deliveryWarnings,
     reason_code: issues[0] || "opening_report_0830_terminal_briefing_ok",
   };
 }
