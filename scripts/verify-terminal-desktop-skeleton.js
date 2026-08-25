@@ -34,6 +34,7 @@ function main() {
   requireMarker(shell, "window.__fumanDesktopFastShell", "desktop_shell", failures);
   if (!fs.existsSync(path.join(ROOT, "api/desktop-route-snapshot.js"))) failures.push("desktop_route_snapshot_endpoint_missing");
   requireMarker(marketApi, "opening_report_0830_terminal_briefing", "market_api", failures);
+  requireMarker(shell, `payload.openingMorningReport && typeof payload.openingMorningReport === "object"`, "desktop_shell", failures);
   requireMarker(shell, "renderOpeningReport0830DesktopBriefing(aiPayload);", "desktop_shell", failures);
   if (!/independently verified and remains visible when live AI is blocked\.\n\s*renderOpeningReport0830DesktopBriefing\(aiPayload\);\n\s*return;/.test(shell)) failures.push("morning_report_not_rendered_when_ai_blocked");
   requireMarker(reset, "fuman-desktop-route-snapshots", "reset", failures);

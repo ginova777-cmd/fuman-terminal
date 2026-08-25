@@ -5457,7 +5457,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-45";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-46";
   }
 
   function loadScriptOnce(src, attr) {
@@ -6030,6 +6030,8 @@
       || normalizeArray(payload.hotStocks).length
       || normalizeArray(payload.todayPoints).length
       || normalizeArray(payload.reasoning).length
+      // The independently verified 08:30 briefing is sufficient to paint the market panel.
+      || (payload.openingMorningReport && typeof payload.openingMorningReport === "object")
     );
   }
 
