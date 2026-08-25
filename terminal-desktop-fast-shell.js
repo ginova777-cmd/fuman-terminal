@@ -266,7 +266,6 @@
   installSunlightModePolish();
   installMarketAiCompactLayoutPolish();
   installDesktopThemeToggle();
-  scheduleOpeningReport0830DesktopBriefing();
   purgeApiOnlyStrategySnapshots();
   installProtectedRouteSnapshotRetirement20260717();
   installCanvasThemeObserver();
@@ -5476,7 +5475,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-65";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-66";
   }
 
   function loadScriptOnce(src, attr) {
@@ -6986,6 +6985,7 @@
     };
     window.setTimeout(() => load(0), 900);
   }
+  scheduleOpeningReport0830DesktopBriefing();
 
   function renderMarketApiAi(heatmapPayload, radarPayload, aiPayload = {}) {
     const panels = ensureMarketApiPanels();
