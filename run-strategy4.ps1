@@ -248,8 +248,16 @@ function Invoke-Strategy4StrictTriSurfaceVerify {
 }
 Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
 . "${PSScriptRoot}\schedule-guard.ps1"
-Invoke-FumanWeekdayGuard -Label "Strategy4 full scan" -LogPath $log
-
+$calendarGuardReturned = $false
+try {
+  Invoke-FumanWeekdayGuard -Label "Strategy4 full scan" -LogPath $log
+  $calendarGuardReturned = $true
+} finally {
+  if (-not $calendarGuardReturned) {
+    $reason = "Strategy4 market calendar guard skipped formal scan before receipt closure; preserving previous good."
+    Write-Strategy4Receipt "skipped_market_calendar" 0 $false 0 "" @($reason) $reason
+  }
+}
 & $nodeExe "scripts\check-full-scan-date-preflight.js" "--label=strategy4" "--receipt" *>&1 | Tee-Object -FilePath $log -Append
 $datePreflightExit = $LASTEXITCODE
 if ($datePreflightExit -eq 10) {
