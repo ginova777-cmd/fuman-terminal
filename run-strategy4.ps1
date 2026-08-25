@@ -248,7 +248,7 @@ function Invoke-Strategy4StrictTriSurfaceVerify {
 }
 Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
 . "${PSScriptRoot}\schedule-guard.ps1"
-Invoke-FumanWeekdayGuard -Label "Strategy4 full scan" -LogPath $log
+Invoke-FumanWeekdayGuard -Label "Strategy4 full scan" -LogPath $log -AllowAfterFormalSourceWindow
 
 & $nodeExe "scripts\check-full-scan-date-preflight.js" "--label=strategy4" "--receipt" *>&1 | Tee-Object -FilePath $log -Append
 $datePreflightExit = $LASTEXITCODE

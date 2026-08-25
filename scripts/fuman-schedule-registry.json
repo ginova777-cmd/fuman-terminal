@@ -64,7 +64,7 @@
       "Fuman Strategy3 V2 First Attempt 1255",
       "Fuman Strategy3 V2 Readiness Guard 1230",
       "Fuman Strategy3 V2 Readiness Guard 1250",
-      "Fuman Strategy5 Preopen Refresh 0540"
+      "Fuman Mother Pool Telegram 0900-1230"
     ],
     "expectedDisabledTasks": [
       "Fuman Terminal Autonomous Ops 5m",
@@ -392,11 +392,6 @@
         267011
       ],
       "Fuman Strategy3 V2 Readiness Guard 1250": [
-        0,
-        267009,
-        267011
-      ],
-      "Fuman Strategy5 Preopen Refresh 0540": [
         0,
         267009,
         267011
@@ -1306,16 +1301,6 @@
       ]
     },
     {
-      "taskName": "\\Fuman Strategy5 Preopen Refresh 0540",
-      "displayName": "Fuman Strategy5 Preopen Refresh 0540",
-      "description": "Observed production Windows Task Scheduler entry.",
-      "time": "05:40",
-      "expectedState": "Ready",
-      "expectedTriggers": [
-        "05:40"
-      ]
-    },
-    {
       "taskName": "\\Fuman Daytrade Futopt Preopen Evidence 0855",
       "displayName": "Fuman Daytrade Futopt Preopen Evidence 0855",
       "description": "Observed production Windows Task Scheduler entry.",
@@ -1363,6 +1348,16 @@
       "expectedState": "Disabled",
       "expectedTriggers": [
         "12:50"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Mother Pool Telegram 0900-1230",
+      "displayName": "Fuman Mother Pool Telegram 0900-1230",
+      "description": "Telegram-only event-driven Strategy2 Mother Pool burst notifier. Consumes formal outbox; never starts or writes a strategy run.",
+      "time": "09:00-12:30",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "09:00"
       ]
     }
   ]

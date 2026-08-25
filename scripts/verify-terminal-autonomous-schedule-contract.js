@@ -24,7 +24,6 @@ for (const marker of [
   "Acquire-OrchestratorLock",
   "final-audit:terminal",
   "RequireProtectedReadback",
-  "ApplyScanners",
 ]) {
   if (!controller.includes(marker)) issues.push("controller_missing:" + marker);
 }
@@ -76,7 +75,7 @@ if (REQUIRE_LIVE) {
   if (live.exists !== true) issues.push("live_task_missing");
   if (live.exists === true && !["Ready", "Running"].includes(String(live.state || ""))) issues.push(`live_task_state_invalid:${live.state || "missing"}`);
   if (live.exists === true && !/run-terminal-autonomous-root\.ps1/i.test(String(live.arguments || ""))) issues.push("live_task_runner_mismatch");
-  if (live.exists === true && !/-ApplyScanners/i.test(String(live.arguments || ""))) issues.push("live_task_apply_gate_arguments_missing");
+  if (live.exists === true && /-ApplyScanners/i.test(String(live.arguments || ""))) issues.push("live_task_must_be_read_only_no_apply_scanners");
   if (live.exists === true && !/-RequireProtectedReadback/i.test(String(live.arguments || ""))) issues.push("live_task_protected_readback_argument_missing");
   if (live.exists === true && String(live.multipleInstances || "") !== "IgnoreNew") issues.push(`live_task_multiple_instances_not_ignore_new:${live.multipleInstances || "missing"}`);
   if (live.exists === true && live.startWhenAvailable !== true) issues.push("live_task_start_when_available_false");

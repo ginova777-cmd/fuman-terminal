@@ -92,6 +92,7 @@ async function sendTelegramText(text, options = {}) {
     throw new Error("Missing TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID or TELEGRAM_TO");
   }
   const chunks = splitTelegramText(text);
+  const results = [];
   for (const chatId of targets) {
     const payload = {
       chatId,
@@ -115,7 +116,9 @@ async function sendTelegramText(text, options = {}) {
     if (!result.sent && process.env.NOTIFY_GUARD_VERBOSE === "1") {
       console.log(`Telegram notification skipped: ${guardSummary(result.claim)}`);
     }
+    results.push({ sent: result.sent === true, skipped: result.claim?.skipped === true, reason: result.reason || result.claim?.reason || "", latencyMs: result.latencyMs ?? null });
   }
+  return results;
 }
 
 module.exports = {

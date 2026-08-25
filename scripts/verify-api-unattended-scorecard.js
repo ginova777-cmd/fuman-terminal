@@ -3,6 +3,8 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { resolveProtectedReadbackCredential, protectedReadbackHeaders } = require("../lib/protected-readback-credential");
+const { auditFourSurfaces } = require("../lib/master-control-four-surface");
 const {
   auditRunTimeSourceSnapshot,
   auditRunTimeSourceSnapshotQuality,
@@ -42,6 +44,7 @@ const NO_FAIL = ARGS.flags.has("no-fail") || process.env.FUMAN_API_UNATTENDED_NO
 const TIMEOUT_MS = Math.max(5000, Number(ARGS.values.get("timeout-ms") || process.env.FUMAN_API_UNATTENDED_TIMEOUT_MS || 45000));
 const VERIFIER_TIMEOUT_MS = Math.max(10000, Number(ARGS.values.get("verifier-timeout-ms") || process.env.FUMAN_API_UNATTENDED_VERIFIER_TIMEOUT_MS || 45000));
 const MAX_SAMPLE_MISSING = Math.max(1, Number(ARGS.values.get("sample-missing") || 25));
+let READBACK_HEADERS = {};
 const CHECKED_AT = new Date();
 const TAIPEI_MINUTE = taipeiMinute(CHECKED_AT);
 const MARKET_WINDOW = TAIPEI_MINUTE >= 8 * 60 + 30 && TAIPEI_MINUTE <= 13 * 60 + 40;
@@ -58,7 +61,20 @@ const STRATEGY_FILTER = String(ARGS.values.get("strategy") || ARGS.values.get("o
   .map((item) => item.trim().toLowerCase())
   .filter(Boolean);
 
-const RETIRED_STRATEGY_KEYS = new Set(["strategy1", "realtime-radar", "heatmap", "market-ai"]);
+const RETIRED_STRATEGY_KEYS = new Set(["strategy1", "realtime-radar", "heatmap", "market-ai", "cb", "warrant"]);
+
+const MASTER_CONTROL_CONTRACT = Object.freeze({
+  contract: "fuman-master-control-v1",
+  timezone: "Asia/Taipei",
+  activeStrategies: ["strategy2", "strategy3", "strategy4", "strategy5", "institution", "institution-battle"],
+  retiredStrategies: ["cb", "warrant"],
+  deadlines: { strategy2: "12:20", strategy3: "13:15", strategy4: "17:00", strategy5: "21:40", institution: "21:40" },
+  telegram: { window: "09:00-12:30", scope: "strategy2_mother_pool_only", transport: "telegram_only", eventDriven: true, createsStrategyRun: false },
+  equality: ["tradeDate", "runId", "resultCount"],
+  surfaces: ["completeScanReceipt", "desktop", "mobile", "route88"],
+  route88RequiredFields: ["strategy", "tradeDate", "sourceDate", "runId", "startedAt", "finishedAt", "universeCount", "scannedCount", "resultCount", "qualityStatus", "evidenceStatus", "fallbackUsed", "publishAllowed", "desktopStatus", "mobileStatus", "scorecardUpdatedAt", "firstBlocker", "reasonCode"],
+  controllerProhibitions: ["start_scan", "recalculate_strategy", "create_second_formal_run", "write_strategy_result", "use_previous_good_as_today", "kill_process", "automatic_deploy"],
+});
 
 const COMMON_GROUPS = {
   identity: ["code", "symbol", "stockId", "stock_id", "underlyingCode", "stockCode", "cbCode", "warrantCode"],
@@ -527,9 +543,11 @@ function strategyDueStatus(strategy, date = new Date()) {
   const endOfEvidenceDay = 23 * 60 + 55;
   const windows = {
     strategy1: { start: 8 * 60 + 45, end: endOfEvidenceDay, label: "08:45-23:55 Asia/Taipei" },
-    strategy2: { start: 8 * 60 + 45, end: endOfEvidenceDay, label: "08:45-23:55 Asia/Taipei" },
-    strategy3: { start: 13 * 60 + 5, end: endOfEvidenceDay, label: "13:05-23:55 Asia/Taipei" },
-    strategy4: { start: 16 * 60, end: endOfEvidenceDay, label: "16:00-23:55 Asia/Taipei" },
+    strategy2: { start: 12 * 60 + 20, end: endOfEvidenceDay, label: "12:20-23:55 Asia/Taipei" },
+    strategy3: { start: 13 * 60 + 15, end: endOfEvidenceDay, label: "13:15-23:55 Asia/Taipei" },
+    strategy4: { start: 17 * 60, end: endOfEvidenceDay, label: "17:00-23:55 Asia/Taipei" },
+    strategy5: { start: 21 * 60 + 40, end: endOfEvidenceDay, label: "21:40-23:55 Asia/Taipei" },
+    institution: { start: 21 * 60 + 40, end: endOfEvidenceDay, label: "21:40-23:55 Asia/Taipei" },
   };
   if (windows[strategy.key]) {
     const window = windows[strategy.key];
@@ -613,7 +631,7 @@ async function fetchJson(endpoint) {
   try {
     const response = await fetch(url, {
       cache: "no-store",
-      headers: { Accept: "application/json", "Cache-Control": "no-cache" },
+      headers: { Accept: "application/json", "Cache-Control": "no-cache", ...READBACK_HEADERS },
       signal: controller.signal,
     });
     const text = await response.text();
@@ -1275,6 +1293,7 @@ function writeOutputs(scorecard) {
     `- liveManifestSha: ${scorecard.releaseIdentity?.liveGitSha || "unknown"}`,
     `- deployId: ${scorecard.releaseIdentity?.deployId || "unknown"}`,
     `- releaseIdentityOk: ${scorecard.releaseIdentity?.ok === true}`,
+    `- fourSurfaceAuditOk: ${scorecard.fourSurfaceAudit?.ok === true}`,
     `- profile: ${scorecard.profile}`,
     `- strictLive: ${scorecard.strictLive}`,
     `- unattendedStatus: ${scorecard.unattendedStatus}`,
@@ -1317,8 +1336,21 @@ function writeOutputs(scorecard) {
 }
 
 async function main() {
+  if (ARGS.flags.has("contract-only")) {
+    const selected = STRATEGIES.filter((strategy) => !RETIRED_STRATEGY_KEYS.has(String(strategy.key || "").toLowerCase())).map((strategy) => strategy.key);
+    const issues = [];
+    for (const key of ["strategy2", "strategy3", "strategy4", "strategy5", "institution"]) if (!selected.includes(key)) issues.push(`active_strategy_missing:${key}`);
+    for (const key of ["cb", "warrant"]) if (selected.includes(key)) issues.push(`retired_strategy_active:${key}`);
+    const payload = { ok: issues.length === 0, unattendedStatus: issues.length ? "NO" : "YES", checkedAt: CHECKED_AT.toISOString(), taipeiCheckedAt: taipeiStamp(CHECKED_AT), masterControlContract: MASTER_CONTROL_CONTRACT, selectedStrategies: selected, blockers: issues, warnings: [], strategies: [], outputFile: OUT_FILE, markdownFile: MD_FILE };
+    writeOutputs(payload);
+    console.log(`[api-unattended] contract-only status=${payload.unattendedStatus} blockers=${issues.length}`);
+    if (issues.length && !NO_FAIL) process.exitCode = 1;
+    return;
+  }
   const now = CHECKED_AT;
   const marketWindow = MARKET_WINDOW;
+  const credential = await resolveProtectedReadbackCredential({ timeoutMs: Math.min(TIMEOUT_MS, 20000) });
+  READBACK_HEADERS = protectedReadbackHeaders(credential);
   const releaseIdentity = await fetchReleaseIdentity();
   const strategies = [];
   const selectedStrategies = STRATEGIES
@@ -1331,8 +1363,13 @@ async function main() {
     console.log(`[api-unattended] checking ${strategy.key}`);
     strategies.push(await evaluateStrategy(strategy, { now }));
   }
+  const dueByStrategy = Object.fromEntries(strategies.map((row) => [row.key, row.dueStatus?.due === true]));
+  const tradeDate = taipeiStamp(now).slice(0, 10).replace(/\D/g, "");
+  const fourSurfaceAudit = await auditFourSurfaces({ baseUrl: BASE_URL, runtimeDir: RUNTIME_DIR, headers: READBACK_HEADERS, timeoutMs: TIMEOUT_MS, dueByStrategy, tradeDate });
   const blockers = [
+    ...(credential.ok ? [] : [`protected-readback: ${credential.reason || "credential_unavailable"}`]),
     ...releaseIdentity.issues.map((issue) => `release: ${issue}`),
+    ...fourSurfaceAudit.blockers,
     ...strategies.flatMap((strategy) => strategy.issues.map((issue) => `${strategy.key}: ${issue}`)),
   ];
   const warnings = [
@@ -1355,8 +1392,11 @@ async function main() {
     sourceBranch: gitValue(["rev-parse", "--abbrev-ref", "HEAD"]),
     sourceStatusShort: gitValue(["status", "--short"]),
     releaseIdentity,
+    protectedReadback: { ok: credential.ok === true, source: credential.source || "", reason: credential.reason || "" },
+    fourSurfaceAudit,
     runtimeDir: RUNTIME_DIR,
     runVerifiers: RUN_VERIFIERS,
+    masterControlContract: MASTER_CONTROL_CONTRACT,
     requirements: {
       sourceCoverageFields: [
         "source_snapshot_captured_at",

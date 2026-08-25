@@ -3,7 +3,6 @@ param(
   [string]$RuntimeRoot = $(if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }),
   [string]$TaskName = "Fuman Terminal Autonomous Root Monitor",
   [string[]]$At = @("08:55", "09:10", "09:40", "13:35", "14:10", "16:10", "21:35", "22:00"),
-  [switch]$ApplyScanners,
   [switch]$RequireProtectedReadback,
   [switch]$InteractiveFallback
 )
@@ -29,7 +28,6 @@ $argumentParts = @(
   "-ProjectRoot", ('"{0}"' -f $ProjectRoot),
   "-RuntimeRoot", ('"{0}"' -f $RuntimeRoot)
 )
-if ($ApplyScanners) { $argumentParts += "-ApplyScanners" }
 if ($RequireProtectedReadback) { $argumentParts += "-RequireProtectedReadback" }
 
 $action = New-ScheduledTaskAction -Execute $Pwsh -Argument ($argumentParts -join " ") -WorkingDirectory $ProjectRoot
@@ -50,4 +48,4 @@ $principal = New-FumanPrincipal
 $description = "Autonomous root monitor: predictive preflight, water root, daily manifest, state machine, job queue roll-forward, runId closure, production readback. Membership gates display only."
 
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $triggers -Settings $settings -Principal $principal -Description $description -Force | Out-Null
-Write-Host ("[terminal-autonomous-root-task] installed task={0} root={1} triggers={2} applyScanners={3} requireProtectedReadback={4} interactiveFallback={5}" -f $TaskName, $ProjectRoot, ($At -join ","), [bool]$ApplyScanners, [bool]$RequireProtectedReadback, [bool]$InteractiveFallback)
+Write-Host ("[terminal-autonomous-root-task] installed task={0} root={1} triggers={2} readOnlyController={3} requireProtectedReadback={4} interactiveFallback={5}" -f $TaskName, $ProjectRoot, ($At -join ","), $true, [bool]$RequireProtectedReadback, [bool]$InteractiveFallback)
