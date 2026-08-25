@@ -16,13 +16,18 @@ class Element {
     this.hidden = false;
     this.innerHTML = "";
   }
-  querySelector() { return this.panel || null; }
+  querySelector(selector) {
+    if (String(selector).includes("terminal-band")) return this.terminalBand || null;
+    return this.panel || null;
+  }
   replaceChildren(node) {
     this.children = [node];
     node.parentElement = this;
     if (node.id) this.byId.set(node.id, node);
   }
   insertAdjacentElement() {}
+  appendChild(node) { this.children.push(node); node.parentElement = this; if (node.id) this.byId.set(node.id, node); }
+  insertBefore(node, anchor) { this.children.unshift(node); node.parentElement = this; if (node.id) this.byId.set(node.id, node); }
 }
 
 async function main() {
@@ -31,8 +36,12 @@ async function main() {
   const byId = new Map();
   const market = new Element("market-view");
   const panel = new Element("market-ai-panel");
+  const terminalBand = new Element("terminal-band");
   panel.byId = byId;
+  terminalBand.byId = byId;
+  market.byId = byId;
   market.panel = panel;
+  market.terminalBand = terminalBand;
   const document = {
     readyState: "complete",
     documentElement: { dataset: {} },
@@ -62,17 +71,16 @@ async function main() {
   vm.runInNewContext(source, context, { filename: "terminal-opening-report-0830-standalone.js" });
   await new Promise((resolve) => setImmediate(resolve));
   await new Promise((resolve) => setImmediate(resolve));
-  const node = panel.children[0];
+  const root = document.getElementById("terminal-opening-report-0830-root");
+  const node = root?.children[0];
   assert.equal(document.documentElement.dataset.fumanOpeningReport0830, "mounted");
   assert.equal(node?.id, "terminal-opening-report-0830-standalone");
   assert(node.innerHTML.includes("晨報｜今日優先觀察"));
   assert(node.innerHTML.includes("測試族群"));
   assert(observerCallback, "root observer was not installed");
-  const rebuiltPanel = new Element("market-ai-panel");
-  rebuiltPanel.byId = byId;
-  market.panel = rebuiltPanel;
+  panel.replaceChildren(document.createElement("section"));
   observerCallback();
-  assert.equal(rebuiltPanel.children[0]?.id, "terminal-opening-report-0830-standalone");
-  console.log(JSON.stringify({ ok: true, contract: "terminal_opening_report_0830_standalone_renderer_v1", mounted: true, target: "market-ai-panel", failed_checks: [], first_blocker: null, read_only: true }, null, 2));
+  assert.equal(document.getElementById("terminal-opening-report-0830-root")?.children[0]?.id, "terminal-opening-report-0830-standalone");
+  console.log(JSON.stringify({ ok: true, contract: "terminal_opening_report_0830_standalone_renderer_v1", mounted: true, target: "independent_market_view_sibling", survived_ai_panel_overwrite: true, failed_checks: [], first_blocker: null, read_only: true }, null, 2));
 }
 main().catch((error) => { console.error(error.stack || String(error)); process.exit(1); });

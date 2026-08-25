@@ -1,6 +1,7 @@
 (() => {
   "use strict";
   const ID = "terminal-opening-report-0830-standalone";
+  const ROOT_ID = "terminal-opening-report-0830-root";
   const ENDPOINTS = [
     "/api/market-ai-live?briefingOnly=1",
     "/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40",
@@ -25,14 +26,15 @@
   function findPanel() {
     const market = document.querySelector("#market-view");
     if (!market) return null;
-    let panel = market.querySelector("[data-market-api-ai], #market-ai-panel, .market-ai-panel");
+    let panel = document.getElementById(ROOT_ID);
     if (!panel) {
       panel = document.createElement("section");
-      panel.id = "market-ai-panel";
+      panel.id = ROOT_ID;
       panel.className = "market-ai-panel";
-      panel.dataset.marketApiAi = "opening-report-0830-standalone";
-      const header = market.querySelector(".page-header");
-      header?.insertAdjacentElement("afterend", panel);
+      panel.dataset.openingReport0830Root = "1";
+      const anchor = market.querySelector(".terminal-band") || market.querySelector(".watch-section");
+      if (anchor && typeof market.insertBefore === "function") market.insertBefore(panel, anchor);
+      else market.appendChild(panel);
     }
     panel.hidden = false;
     return panel;

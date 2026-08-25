@@ -40,6 +40,7 @@ function main() {
   requireMarker(shell, "!shell.ai.querySelector?.(", "desktop_shell", failures);
   requireMarker(index, "terminal-opening-report-0830-standalone.js?v=" + version.version, "index", failures);
   const standalone = read("terminal-opening-report-0830-standalone.js");
+  requireMarker(standalone, "const ROOT_ID = \"terminal-opening-report-0830-root\"", "standalone_briefing", failures);
   requireMarker(standalone, "openingMorningReport", "standalone_briefing", failures);
   requireMarker(standalone, "MutationObserver", "standalone_briefing", failures);
   requireMarker(standalone, "observer.observe(document.documentElement", "standalone_briefing", failures);
