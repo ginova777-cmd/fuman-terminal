@@ -101,6 +101,7 @@ async function main() {
     "FUMAN_DAILY_RUN_ID",
   ];
   for (const marker of runnerMarkers) requireMarker(issues, "run-terminal-autonomous-root.ps1", runner, marker);
+  if (!/formalScanSkipped\s+-ne\s+\$true/.test(runner) || !/scannerAction\s+-ne\s+["']skip_formal_scan["']/.test(runner)) addIssue(issues, "root_scanner_date_gate_must_block_formal_scan_skipped");
 
   const installerMarkers = [
     "Fuman Terminal Autonomous Root Monitor",

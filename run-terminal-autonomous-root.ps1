@@ -382,7 +382,7 @@ try {
     $tradingDayOpen = ($datePreflight.marketCalendar.tradingDayOpen -eq $true -or $datePreflight.marketCalendar.tradingDay.isTradingDay -eq $true -or $datePreflight.afterCloseProfile -eq $true)
     $calendarOverride = ($datePreflight.marketCalendar.override -eq $true)
     $calendarClosedReason = [string]$datePreflight.marketCalendar.closedReason
-    $scannerApplyAllowed = ($datePreflight.ok -eq $true -and $tradingDayOpen -and -not $calendarOverride -and [string]::IsNullOrWhiteSpace($calendarClosedReason))
+    $scannerApplyAllowed = ($datePreflight.ok -eq $true -and $tradingDayOpen -and $datePreflight.formalScanSkipped -ne $true -and [string]$datePreflight.scannerAction -ne "skip_formal_scan" -and -not $calendarOverride -and [string]::IsNullOrWhiteSpace($calendarClosedReason))
     Write-RunnerLog ("Date gate target={0} marketOpen={1} formalScanSkipped={2} scannerApplyAllowed={3}" -f $targetTradeDate, $datePreflight.marketOpen, $datePreflight.formalScanSkipped, $scannerApplyAllowed)
   } else {
     Write-RunnerLog "Date gate receipt missing; scanner apply disabled fail-closed"
