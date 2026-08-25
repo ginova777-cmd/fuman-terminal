@@ -5457,7 +5457,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-57";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-58";
   }
 
   function loadScriptOnce(src, attr) {
@@ -6141,6 +6141,7 @@
     panels.ai.dataset.marketAiRenderer = "desktop-fast-shell";
     panels.ai.dataset.marketApiAi = "desktop-fast-shell-loading";
     panels.ai.innerHTML = '<div class="empty-state">正式 AI 判讀同步檢查中</div>';
+    renderOpeningReport0830DesktopBriefing({});
   }
 
   function hydrateMarketDesktopAiDirect(force = false) {
@@ -6150,6 +6151,7 @@
     const shell = ensureMarketDesktopShell();
     if (shell.ai && !/market-ai-card|market-ai-stock-row|操作建議|風險/.test(shell.ai.textContent || "") && !shell.ai.querySelector?.("[data-opening-report-0830-briefing]")) {
       shell.ai.innerHTML = '<div class="empty-state">正式 AI 判讀同步檢查中</div>';
+      renderOpeningReport0830DesktopBriefing({});
     }
     const state = {
       heatmap: marketSnapshotFirstPayload || null,
@@ -6809,31 +6811,15 @@
   }
 
 
-  function renderOpeningReport0830DesktopBriefing(aiPayload) {
-    const data = aiPayload?.openingMorningReport;
-    const market = document.querySelector("#market-view");
-    if (!market) return false;
-    let panel = market.querySelector("#terminal-opening-report-0830-root");
-    if (!panel) {
-      panel = document.createElement("section");
-      panel.id = "terminal-opening-report-0830-root";
-      panel.className = "terminal-opening-report-0830-root";
-      panel.dataset.openingReport0830Root = "1";
-    }
-    const tabs = market.querySelector("[data-fuman-market-tabs]");
-    if (tabs) {
-      if (panel.previousElementSibling !== tabs) tabs.insertAdjacentElement("afterend", panel);
-    } else {
-      const anchor = market.querySelector(".terminal-band") || market.querySelector(".watch-section");
-      if (anchor && panel.nextElementSibling !== anchor) market.insertBefore(panel, anchor);
-      else if (!panel.parentElement) market.appendChild(panel);
-    }
-    if (!data) return false;
+  function renderOpeningReport0830DesktopBriefing(aiPayload = {}) {
+    const incoming = aiPayload?.openingMorningReport;
+    if (incoming?.ok === true) window.__fumanOpeningReport0830 = incoming;
+    const data = incoming?.ok === true ? incoming : window.__fumanOpeningReport0830;
+    const panel = ensureMarketDesktopShell().ai || document.querySelector("#market-view [data-market-api-ai], #market-view #market-ai-panel, #market-view .market-ai-panel");
+    document.getElementById("terminal-opening-report-0830-root")?.remove();
+    if (!panel || !data) return Boolean(panel?.querySelector?.("[data-opening-report-0830-briefing]"));
     const hasToday = data.ok === true || String(data.reason_code || "") !== "opening_report_0830_final_receipt_missing";
-    if (!hasToday) {
-      panel.dataset.openingReport0830Preserved = "1";
-      return false;
-    }
+    if (!hasToday) return Boolean(panel.querySelector?.("[data-opening-report-0830-briefing]"));
     const esc = (value) => escapeHtml(String(value ?? ""));
     const arr = (value) => Array.isArray(value) ? value : [];
     const pct = (value) => {
@@ -6878,11 +6864,13 @@
         <article class="opening-report-0830-card"><h4>大事紀要</h4><p>${esc(data.event_digest?.reason_code || data.event_digest?.status || "等待 08:30 前新聞來源寫入")}</p></article>
         <article class="opening-report-0830-card"><h4>今日觀察</h4><p>開盤後確認量價與族群承接。</p><div class="opening-report-0830-symbols">${recommended.length ? recommended.map((stock) => `<span>${esc(stock.name || stock.symbol)}</span>`).join("") : `<span>${esc("觀察名單尚待晨報來源")}</span>`}</div></article>
       </div>`;
-    panel.replaceChildren(node);
-    panel.hidden = false;
-    panel.dataset.openingReport0830Preserved = "0";
+    panel.querySelector?.("[data-opening-report-0830-briefing]")?.remove();
+    const anchor = panel.querySelector?.(".market-ai-summary");
+    if (anchor) anchor.insertAdjacentElement("afterend", node);
+    else panel.prepend(node);
     return true;
   }
+  window.FUMAN_RENDER_OPENING_REPORT_0830 = renderOpeningReport0830DesktopBriefing;
 
   function renderMarketApiAi(heatmapPayload, radarPayload, aiPayload = {}) {
     const panels = ensureMarketApiPanels();
@@ -12231,7 +12219,7 @@
           background: rgba(249, 115, 22, 0.16) !important;
           color: #ffb86b !important;
         }
-        #market-view.market-ai-mode > :not(.page-header):not(.market-mode-tabs):not(.market-ai-panel):not(#terminal-opening-report-0830-root) {
+        #market-view.market-ai-mode > :not(.page-header):not(.market-mode-tabs):not(.market-ai-panel) {
           display: none !important;
         }
         #market-view.fuman-market-overview-shell > .desktop-route-shell.desktop-canvas-app {
