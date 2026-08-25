@@ -50,6 +50,9 @@ function main() {
   const standalone = read("terminal-opening-report-0830-standalone.js");
   requireMarker(standalone, "FUMAN_RENDER_OPENING_REPORT_0830", "standalone_briefing", failures);
   requireMarker(shell, "window.FUMAN_RENDER_OPENING_REPORT_0830 = renderOpeningReport0830DesktopBriefing;", "desktop_shell", failures);
+  requireMarker(shell, "function scheduleOpeningReport0830DesktopBriefing()", "desktop_shell", failures);
+  requireMarker(shell, "scheduleOpeningReport0830DesktopBriefing();", "desktop_shell", failures);
+  requireMarker(shell, "opening_report_http_", "desktop_shell", failures);
   requireMarker(shell, "window.__fumanOpeningReport0830", "desktop_shell", failures);
   requireMarker(shell, "renderOpeningReport0830DesktopBriefing({});", "desktop_shell", failures);
   requireMarker(shell, "data-fuman-market-tabs", "desktop_shell", failures);

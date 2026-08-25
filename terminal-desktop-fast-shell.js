@@ -266,6 +266,7 @@
   installSunlightModePolish();
   installMarketAiCompactLayoutPolish();
   installDesktopThemeToggle();
+  scheduleOpeningReport0830DesktopBriefing();
   purgeApiOnlyStrategySnapshots();
   installProtectedRouteSnapshotRetirement20260717();
   installCanvasThemeObserver();
@@ -5475,7 +5476,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-63";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-65";
   }
 
   function loadScriptOnce(src, attr) {
@@ -6952,6 +6953,39 @@
     return true;
   }
   window.FUMAN_RENDER_OPENING_REPORT_0830 = renderOpeningReport0830DesktopBriefing;
+
+  let openingReport0830FetchScheduled = false;
+  function scheduleOpeningReport0830DesktopBriefing() {
+    if (openingReport0830FetchScheduled) return;
+    openingReport0830FetchScheduled = true;
+    const load = async (attempt = 0) => {
+      try {
+        const controller = typeof AbortController === "function" ? new AbortController() : null;
+        const timeout = window.setTimeout(() => controller?.abort(), 6000);
+        const response = await fetch("/api/market-ai-live?briefingOnly=1", {
+          cache: "no-store",
+          credentials: "same-origin",
+          signal: controller?.signal,
+        });
+        window.clearTimeout(timeout);
+        if (!response.ok) throw new Error("opening_report_http_" + response.status);
+        const payload = await response.json();
+        if (payload?.openingMorningReport?.ok === true) {
+          renderOpeningReport0830DesktopBriefing(payload);
+          document.documentElement.dataset.fumanOpeningReport0830 = "mounted";
+          return;
+        }
+        throw new Error(payload?.openingMorningReport?.reason_code || "opening_report_not_ready");
+      } catch (error) {
+        if (attempt >= 3) {
+          document.documentElement.dataset.fumanOpeningReport0830 = "unavailable";
+          return;
+        }
+        window.setTimeout(() => load(attempt + 1), 1000 * (attempt + 1));
+      }
+    };
+    window.setTimeout(() => load(0), 900);
+  }
 
   function renderMarketApiAi(heatmapPayload, radarPayload, aiPayload = {}) {
     const panels = ensureMarketApiPanels();

@@ -1663,7 +1663,7 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
 module.exports = async function handler(request, response) {
   const clock = taipeiClock();
   if (String(request.query?.briefingOnly || "") === "1") {
-    const snapshotReport = await readOpeningMorningReportSnapshot(clock, 10000);
+    const snapshotReport = await readOpeningMorningReportSnapshot(clock, 2500);
     const report = snapshotReport?.ok === true ? snapshotReport : readOpeningMorningReport(clock);
     response.status(200).json({
       ok: report?.ok === true,
