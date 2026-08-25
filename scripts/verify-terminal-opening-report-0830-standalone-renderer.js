@@ -41,9 +41,13 @@ async function main() {
     getElementById(id) { return byId.get(id) || null; },
     addEventListener() {},
   };
+  let observerCallback = null;
   const context = {
     document,
-    MutationObserver: class { observe() {} },
+    MutationObserver: class {
+      constructor(callback) { observerCallback = callback; }
+      observe() {}
+    },
     fetch: async () => ({ json: async () => ({
       openingMorningReport: {
         ok: true,
@@ -63,6 +67,12 @@ async function main() {
   assert.equal(node?.id, "terminal-opening-report-0830-standalone");
   assert(node.innerHTML.includes("晨報｜今日優先觀察"));
   assert(node.innerHTML.includes("測試族群"));
+  assert(observerCallback, "root observer was not installed");
+  const rebuiltPanel = new Element("market-ai-panel");
+  rebuiltPanel.byId = byId;
+  market.panel = rebuiltPanel;
+  observerCallback();
+  assert.equal(rebuiltPanel.children[0]?.id, "terminal-opening-report-0830-standalone");
   console.log(JSON.stringify({ ok: true, contract: "terminal_opening_report_0830_standalone_renderer_v1", mounted: true, target: "market-ai-panel", failed_checks: [], first_blocker: null, read_only: true }, null, 2));
 }
 main().catch((error) => { console.error(error.stack || String(error)); process.exit(1); });

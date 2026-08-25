@@ -91,10 +91,10 @@
   }
 
   function watch() {
-    const market = document.querySelector("#market-view");
-    if (!market || observer) return;
+    if (observer || !document.documentElement) return;
+    // The desktop shell can replace #market-view after a late hydrate. Watch the stable root.
     observer = new MutationObserver(() => { mount(); });
-    observer.observe(market, { childList: true, subtree: true });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
   }
 
   async function refresh() {

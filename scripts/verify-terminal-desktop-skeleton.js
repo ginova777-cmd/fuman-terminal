@@ -42,6 +42,7 @@ function main() {
   const standalone = read("terminal-opening-report-0830-standalone.js");
   requireMarker(standalone, "openingMorningReport", "standalone_briefing", failures);
   requireMarker(standalone, "MutationObserver", "standalone_briefing", failures);
+  requireMarker(standalone, "observer.observe(document.documentElement", "standalone_briefing", failures);
   requireMarker(standalone, "panel.replaceChildren(node)", "standalone_briefing", failures);
   requireMarker(standalone, "briefingOnly=1", "standalone_briefing", failures);
   requireMarker(marketApi, "briefingOnly", "market_api", failures);
