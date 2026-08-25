@@ -164,12 +164,11 @@ try {
   )
 
   # The report only ranks already-qualified candidates. It never creates one by itself.
-  # User-facing order is weighted score first; report/futures/broker evidence are score context, not hard gates.
+  # User-facing order follows evidence priority; final score is the last tie-breaker.
+  # Ranking priority is intentionally evidence-first: overseas industry strength,
+  # preferred day-trade brokers, near futures evidence, then strategy breadth.
   $rankedCandidateRows = @($candidateRows | Sort-Object -Property `
-    @{ Expression = { [double]($_.final_score ?? $_.entry_score) }; Descending = $true }, `
-    @{ Expression = { [int]($_.matched_rule_count) }; Descending = $true }, `
-    @{ Expression = { if ($_.evidence.futopt_positive_basis -eq $true -or $_.evidence.trial_match_ready -eq $true -or $_.evidence.inverse_convergence_ready -eq $true) { 1 } else { 0 } }; Descending = $true }, `
-    @{ Expression = { if ($_.evidence.preferred_broker_top_net_buy -eq $true) { 1 } else { 0 } }; Descending = $true }, `
+    @{ Expression = { [double]($_.opening_report_rank_boost) }; Descending = $true }, `
     @{ Expression = {
       $evidence = $_.evidence
       if ($evidence.opening_report_strong_sector_return_1d -eq $true -and $evidence.opening_report_priority_observation -eq $true) { 0 }
@@ -177,7 +176,13 @@ try {
       elseif ($evidence.opening_report_priority_observation -eq $true) { 2 }
       else { 3 }
     }; Ascending = $true }, `
-    @{ Expression = { [double]($_.opening_report_rank_boost) }; Descending = $true }, `
+    @{ Expression = { if ($_.evidence.preferred_broker_top_net_buy -eq $true) { 1 } else { 0 } }; Descending = $true }, `
+    @{ Expression = { [double]($_.evidence.broker_score ?? 0) }; Descending = $true }, `
+    @{ Expression = { [double]($_.evidence.industry_futures_combo_score ?? 0) }; Descending = $true }, `
+    @{ Expression = { [double]($_.evidence.futures_score ?? 0) }; Descending = $true }, `
+    @{ Expression = { if ($_.evidence.futopt_positive_basis -eq $true -or $_.evidence.trial_match_ready -eq $true -or $_.evidence.inverse_convergence_ready -eq $true) { 1 } else { 0 } }; Descending = $true }, `
+    @{ Expression = { [int]($_.matched_rule_count) }; Descending = $true }, `
+    @{ Expression = { [double]($_.final_score ?? $_.entry_score) }; Descending = $true }, `
     symbol)
 
   $displayCandidateRows = @($rankedCandidateRows | Select-Object -First 80)

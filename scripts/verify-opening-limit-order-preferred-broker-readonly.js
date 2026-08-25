@@ -1,7 +1,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
-const CONTRACT = "opening_limit_order_preferred_broker_rank_readonly_v2";
+const CONTRACT = "opening_limit_order_preferred_broker_rank_readonly_v3";
 const TERMINAL_DIR = process.env.FUMAN_TERMINAL_DIR || "C:/fuman-terminal";
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const DATA_DIR = path.join(RUNTIME_DIR, "data", "opening-limit-order");
@@ -12,6 +12,29 @@ function taipeiDate() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asi
 function readText(file) { try { return fs.readFileSync(file, "utf8"); } catch { return ""; } }
 function readJson(file) { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch (error) { return { __read_error: error?.message || String(error) }; } }
 function array(value) { return Array.isArray(value) ? value : []; }
+function num(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
+function evidencePriorityKey(row) {
+  const futoptReady = row?.futopt_positive_basis === true || row?.trial_match_ready === true || row?.inverse_convergence_ready === true;
+  return [
+    num(row?.opening_report_rank_boost),
+    -num(row?.opening_report_rank_tier_sort),
+    row?.preferred_broker_top_net_buy === true ? 1 : 0,
+    num(row?.broker_score),
+    num(row?.industry_futures_combo_score),
+    num(row?.futures_score),
+    futoptReady ? 1 : 0,
+    num(row?.matched_rule_count),
+    num(row?.final_score ?? row?.entry_score),
+  ];
+}
+function evidencePriorityCompare(a, b) {
+  const left = evidencePriorityKey(a);
+  const right = evidencePriorityKey(b);
+  for (let index = 0; index < left.length; index += 1) {
+    if (Math.abs(left[index] - right[index]) > 0.000001) return left[index] > right[index] ? -1 : 1;
+  }
+  return String(a?.symbol || "").localeCompare(String(b?.symbol || ""));
+}
 function main() {
   const tradeDate = dashDate(arg("trade-date", taipeiDate())); const compact = compactDate(tradeDate); const requireRuntime = arg("require-runtime", "1") !== "0";
   const runnerPath = path.join(TERMINAL_DIR, "ops", "Run-OpeningLimitOrder0855Readonly.ps1");
@@ -40,14 +63,17 @@ function main() {
     if (summary.action_guard?.creates_order !== false || summary.action_guard?.creates_formal_candidate !== false || summary.action_guard?.publish_allowed !== false) failures.push("summary_action_guard_failed");
     if (summary.formal_candidate_count !== 0 || summary.formal_candidate_allowed !== false || summary.publish_allowed !== false) failures.push("summary_formal_or_publish_guard_failed");
     rows = array(summary.candidates);
-    let previousFinalScore = Number.POSITIVE_INFINITY;
+    for (let index = 1; index < rows.length; index += 1) {
+      if (evidencePriorityCompare(rows[index - 1], rows[index]) > 0) {
+        rowFailures.push(`${rows[index]?.symbol || "unknown"}:evidence_priority_order_invalid`);
+        break;
+      }
+    }
     for (const row of rows) {
       const symbol = String(row?.symbol || "unknown");
       const finalScore = Number(row?.final_score ?? row?.entry_score);
       if (typeof row?.preferred_broker_top_net_buy !== "boolean") rowFailures.push(`${symbol}:preferred_broker_top_net_buy_missing`);
       if (!Number.isFinite(finalScore)) rowFailures.push(`${symbol}:final_score_missing`);
-      if (Number.isFinite(finalScore) && finalScore > previousFinalScore + 0.000001) rowFailures.push(`${symbol}:final_score_order_invalid`);
-      previousFinalScore = Number.isFinite(finalScore) ? finalScore : previousFinalScore;
       if (row?.preferred_broker_top_net_buy === true) {
         const brokerName = String(row?.preferred_broker_top_net_buy_name || "").trim();
         const brokerNameCompact = brokerName.replace(/[\s\-_.()（）]/g, "").toLowerCase();
@@ -60,7 +86,7 @@ function main() {
     }
   }
   const matched = rows.filter((row) => row?.preferred_broker_top_net_buy === true);
-  const output = { ok: failures.length === 0 && rowFailures.length === 0, contract: CONTRACT, trade_date: tradeDate, checked_at: new Date().toISOString(), policy: "latest_formal_branch_report_top2_net_buy_only; score_context_only; never_creates_opening_candidate", static_contract: { console_display: !failures.includes("runner_preferred_broker_console_display_missing"), score_context_only: !failures.includes("runner_preferred_broker_rank_sort_missing"), dedicated_broker_detection: !failures.includes("candidate_jpmorgan_detection_missing") && !failures.includes("candidate_morgan_stanley_detection_missing") && !failures.includes("candidate_preferred_broker_keys_missing"), top2_detection: !failures.includes("candidate_top2_preferred_broker_missing") && !failures.includes("static_prefilter_top2_preferred_broker_missing"), preferred_brokers: ["摩根大通/JPMorgan", "台灣摩根士丹利/Morgan Stanley"], never_creates_opening_candidate: !failures.includes("preferred_broker_must_not_create_candidate_guard_missing") }, runtime_readback: requireRuntime ? { summary_path: summaryPath, candidate_count: rows.length, preferred_broker_top_net_buy_candidate_count: matched.length, preferred_broker_symbols: matched.map((row) => ({ symbol: row.symbol, broker_name: row.preferred_broker_top_net_buy_name, rank: row.preferred_broker_top_net_buy_rank, net_buy: row.preferred_broker_top_net_buy_net_buy, cost_price: row.preferred_broker_top_net_buy_cost_price, signal_date: row.preferred_broker_top_net_buy_signal_date })), final_score_ranked_first: !rowFailures.some((failure) => failure.includes("final_score_order_invalid")), action_guard: summary.action_guard || null } : null, row_failures: rowFailures, failed_checks: failures, first_blocker: failures[0] || rowFailures[0] || null };
+  const output = { ok: failures.length === 0 && rowFailures.length === 0, contract: CONTRACT, trade_date: tradeDate, checked_at: new Date().toISOString(), policy: "latest_formal_branch_report_top2_net_buy_only; score_context_only; evidence_first_ranking; never_creates_opening_candidate", static_contract: { console_display: !failures.includes("runner_preferred_broker_console_display_missing"), score_context_only: !failures.includes("runner_preferred_broker_rank_sort_missing"), dedicated_broker_detection: !failures.includes("candidate_jpmorgan_detection_missing") && !failures.includes("candidate_morgan_stanley_detection_missing") && !failures.includes("candidate_preferred_broker_keys_missing"), top2_detection: !failures.includes("candidate_top2_preferred_broker_missing") && !failures.includes("static_prefilter_top2_preferred_broker_missing"), preferred_brokers: ["摩根大通/JPMorgan", "台灣摩根士丹利/Morgan Stanley"], never_creates_opening_candidate: !failures.includes("preferred_broker_must_not_create_candidate_guard_missing") }, runtime_readback: requireRuntime ? { summary_path: summaryPath, candidate_count: Number(summary.candidate_count) || rows.length, displayed_candidate_count: rows.length, preferred_broker_top_net_buy_displayed_count: matched.length, preferred_broker_symbols: matched.map((row) => ({ symbol: row.symbol, broker_name: row.preferred_broker_top_net_buy_name, rank: row.preferred_broker_top_net_buy_rank, net_buy: row.preferred_broker_top_net_buy_net_buy, cost_price: row.preferred_broker_top_net_buy_cost_price, signal_date: row.preferred_broker_top_net_buy_signal_date })), evidence_priority_ranked_first: !rowFailures.some((failure) => failure.includes("evidence_priority_order_invalid")), action_guard: summary.action_guard || null } : null, row_failures: rowFailures, failed_checks: failures, first_blocker: failures[0] || rowFailures[0] || null };
   console.log(JSON.stringify(output, null, 2)); process.exitCode = output.ok ? 0 : 1;
 }
 main();

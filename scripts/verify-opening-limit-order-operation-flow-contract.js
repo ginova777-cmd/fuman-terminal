@@ -17,6 +17,7 @@ function main() {
     verifier0900: "ops/Run-OpeningLimitOrder0900Verifier.ps1",
     candidateVerifier: "scripts/verify-opening-limit-order-candidate-readonly.js",
     verifier0855: "scripts/verify-opening-limit-order-0855-readonly.js",
+    preferredBrokerVerifier: "scripts/verify-opening-limit-order-preferred-broker-readonly.js",
     closedLoopVerifier: "scripts/verify-opening-limit-order-closed-loop.js"
   };
   const texts = {};
@@ -31,11 +32,15 @@ function main() {
   const verifier0900 = texts.verifier0900;
   const candidate = texts.candidateVerifier;
   const verifier0855 = texts.verifier0855;
+  const preferredBrokerVerifier = texts.preferredBrokerVerifier;
   const closedLoop = texts.closedLoopVerifier;
   need(all(morning, ["Run-OpeningLimitOrder0840ProgressiveReadonly.ps1", "-WaitUntil0840", "不掛單", "不 publish"]), failures, "morning_runner_drifted_from_0840_readonly_entry");
   need(all(progressive, ["opening-limit-order-0845-futopt-readback", "opening-limit-order-0850-preflight", "opening-limit-order-0855-summary", "Run-OpeningLimitOrder0855Readonly.ps1", "Run-OpeningLimitOrder0900Verifier.ps1", "opening-limit-order-morning-readonly"]), failures, "progressive_runner_drifted_from_full_morning_chain");
   need(all(progressive, ["uses_0900_data = $false", "creates_order = $false", "creates_formal_candidate = $false", "formal_candidate_count = 0", "publish_allowed = $false", "requires_second_confirm_before_action = $true"]), failures, "progressive_runner_readonly_guard_drifted");
   need(all(runner0855, ["opening-limit-order-0850-preflight", "opening-limit-order-0855-candidates", "opening-limit-order-0855-summary", "$displayCandidateRows = @($rankedCandidateRows | Select-Object -First 80)", "for ($index = 0; $index -lt $displayCandidateRows.Count; $index++)", "candidate_count = $candidateRows.Count", "formal_candidate_count = 0", "publish_allowed = $false"]), failures, "runner0855_display_vs_full_candidate_contract_drifted");
+  need(all(runner0855, ["Ranking priority is intentionally evidence-first", "opening_report_rank_boost", "opening_report_rank_tier_sort", "preferred_broker_top_net_buy", "broker_score", "industry_futures_combo_score", "futures_score", "matched_rule_count", "final_score"]), failures, "runner0855_evidence_first_ranking_contract_drifted");
+  need(all(verifier0855, ["evidencePriorityKey", "summary_evidence_priority_order_invalid", "opening_report_rank_boost", "preferred_broker_top_net_buy", "industry_futures_combo_score", "futures_score", "matched_rule_count"]), failures, "verifier0855_evidence_first_ranking_contract_drifted");
+  need(all(preferredBrokerVerifier, ["evidencePriorityKey", "evidence_priority_order_invalid", "preferred_broker_top_net_buy", "broker_score", "industry_futures_combo_score", "futures_score", "matched_rule_count", "evidence_priority_ranked_first"]), failures, "preferred_broker_verifier_evidence_first_ranking_contract_drifted");
   need(all(verifier0900, ["[string]$TradeDate", "OpeningLimitOrder0900Verifier", "verify-opening-limit-order-0855-readonly.js", "opening-limit-order-0900-verifier"]), failures, "verifier0900_contract_drifted");
   if (has(verifier0900, "Invoke-FumanWeekdayGuard")) failures.push("verifier0900_uses_formal_source_window_guard");
   need(all(candidate, ["const REQUIRED_PREOPEN_SLOTS = [\"0845\", \"0850\"]", "async function loadPreopenRowsBySymbols", "async function loadStockFutureStrengthRows", "v_fugle_daytrade_near_one_contract", "v_fugle_daytrade_preopen_snapshot_contract", "v_stock_future_live_contract", "fallback_preopen_near_snapshot", "0845_0850_natural_evidence", "stock_future_live_ready", "stock_future_strength_source", "futures_score_ready", "futures_score_ready_cases"]), failures, "candidate_verifier_futures_fallback_contract_drifted");
@@ -56,6 +61,7 @@ function main() {
       no_publish: true,
       morning_chain: ["08:40", "08:45", "08:50", "08:55", "09:00", "closed-loop"],
       futures_live_timeout_fallback_required: true,
+      evidence_first_ranking_required: true,
       fallback_source: "0845_0850_natural_evidence",
       fallback_strength_status: "fallback_preopen_near_snapshot",
       display_limit_can_be_80_but_candidate_receipt_must_remain_full: true

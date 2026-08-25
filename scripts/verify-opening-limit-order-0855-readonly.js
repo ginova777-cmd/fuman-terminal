@@ -160,6 +160,29 @@ function main() {
   const summaryCandidates = array(summary.candidates);
   const futuresScorePositiveCount = summaryCandidates.filter((row) => Number(row?.futures_score || row?.evidence?.futures_score || 0) > 0).length;
   const industryFuturesComboScorePositiveCount = summaryCandidates.filter((row) => Number(row?.industry_futures_combo_score || row?.evidence?.industry_futures_combo_score || 0) > 0).length;
+  function num(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
+  function evidencePriorityKey(row) {
+    const futoptReady = row?.futopt_positive_basis === true || row?.trial_match_ready === true || row?.inverse_convergence_ready === true;
+    return [
+      num(row?.opening_report_rank_boost),
+      -num(row?.opening_report_rank_tier_sort),
+      row?.preferred_broker_top_net_buy === true ? 1 : 0,
+      num(row?.broker_score),
+      num(row?.industry_futures_combo_score),
+      num(row?.futures_score),
+      futoptReady ? 1 : 0,
+      num(row?.matched_rule_count),
+      num(row?.final_score ?? row?.entry_score),
+    ];
+  }
+  function evidencePriorityCompare(a, b) {
+    const left = evidencePriorityKey(a);
+    const right = evidencePriorityKey(b);
+    for (let index = 0; index < left.length; index += 1) {
+      if (Math.abs(left[index] - right[index]) > 0.000001) return left[index] > right[index] ? -1 : 1;
+    }
+    return String(a?.symbol || "").localeCompare(String(b?.symbol || ""));
+  }
   if (requireRows && candidates.length === 0) failures.push("candidate_rows_required_but_empty");
 
   for (const row of summaryCandidates) {
@@ -178,6 +201,12 @@ function main() {
   }
 
   if (Number(summary.candidate_count || 0) !== candidates.length) failures.push("summary_candidate_count_mismatch");
+  for (let index = 1; index < summaryCandidates.length; index += 1) {
+    if (evidencePriorityCompare(summaryCandidates[index - 1], summaryCandidates[index]) > 0) {
+      failures.push("summary_evidence_priority_order_invalid");
+      break;
+    }
+  }
   if (summaryCandidates.length !== Math.min(80, candidates.length)) failures.push("summary_candidate_display_count_mismatch");
   if (futoptReady && summaryCandidates.length > 0 && futuresScoreReadyCases > 0 && futuresScorePositiveCount <= 0) failures.push("futopt_score_ready_but_summary_futures_score_all_zero");
   if (Number(watchlist.formal_candidate_count || 0) !== 0) failures.push("watchlist_formal_candidate_count_not_zero");
