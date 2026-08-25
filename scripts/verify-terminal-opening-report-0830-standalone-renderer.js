@@ -74,6 +74,7 @@ async function main() {
   const root = document.getElementById("terminal-opening-report-0830-root");
   const node = root?.children[0];
   assert.equal(document.documentElement.dataset.fumanOpeningReport0830, "mounted");
+  assert.equal(root?.className, "terminal-opening-report-0830-root");
   assert.equal(node?.id, "terminal-opening-report-0830-standalone");
   assert(node.innerHTML.includes("晨報｜今日優先觀察"));
   assert(node.innerHTML.includes("測試族群"));

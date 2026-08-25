@@ -30,7 +30,7 @@
     if (!panel) {
       panel = document.createElement("section");
       panel.id = ROOT_ID;
-      panel.className = "market-ai-panel";
+      panel.className = "terminal-opening-report-0830-root";
       panel.dataset.openingReport0830Root = "1";
       const anchor = market.querySelector(".terminal-band") || market.querySelector(".watch-section");
       if (anchor && typeof market.insertBefore === "function") market.insertBefore(panel, anchor);

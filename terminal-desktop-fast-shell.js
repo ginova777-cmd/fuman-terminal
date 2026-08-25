@@ -5457,7 +5457,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-53";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-54";
   }
 
   function loadScriptOnce(src, attr) {
@@ -12216,7 +12216,7 @@
           background: rgba(249, 115, 22, 0.16) !important;
           color: #ffb86b !important;
         }
-        #market-view.market-ai-mode > :not(.page-header):not(.market-mode-tabs):not(.market-ai-panel) {
+        #market-view.market-ai-mode > :not(.page-header):not(.market-mode-tabs):not(.market-ai-panel):not(#terminal-opening-report-0830-root) {
           display: none !important;
         }
         #market-view.fuman-market-overview-shell > .desktop-route-shell.desktop-canvas-app {

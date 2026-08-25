@@ -41,6 +41,8 @@ function main() {
   requireMarker(index, "terminal-opening-report-0830-standalone.js?v=" + version.version, "index", failures);
   const standalone = read("terminal-opening-report-0830-standalone.js");
   requireMarker(standalone, "const ROOT_ID = \"terminal-opening-report-0830-root\"", "standalone_briefing", failures);
+  requireMarker(standalone, "terminal-opening-report-0830-root", "standalone_briefing", failures);
+  requireMarker(shell, ":not(#terminal-opening-report-0830-root)", "desktop_shell", failures);
   requireMarker(standalone, "openingMorningReport", "standalone_briefing", failures);
   requireMarker(standalone, "MutationObserver", "standalone_briefing", failures);
   requireMarker(standalone, "observer.observe(document.documentElement", "standalone_briefing", failures);
