@@ -13,6 +13,10 @@ const CONTRACT = "strategy2-v2-realtime-quote-observation-v1";
 const SOURCE_NAME = "fugle_daytrade_source";
 const MIN_PRICE = 50;
 const MAX_HISTORY = 80;
+const MAX_PREOPEN_WATCH_ROWS = 20;
+const MAX_PREOPEN_WATCH_HISTORY = 360;
+const PREOPEN_WATCH_SOURCE = "futopt_preopen_watch_history";
+const STRATEGY_DETECTED_SOURCE = "strategy_detected_history";
 const LOOP_LOCK_FILE = path.join(RUNTIME_DIR, "state", "strategy2-v2-realtime-observer.lock");
 
 function number(value) {
@@ -66,6 +70,36 @@ function iso(value, fallback = "") {
 function ageSeconds(value, now = Date.now()) {
   const stamp = Date.parse(String(value || ""));
   return Number.isFinite(stamp) ? Math.max(0, Math.floor((now - stamp) / 1000)) : 999999;
+}
+
+function taipeiIso(clock) {
+  return clock.date + "T" + String(clock.hour).padStart(2, "0") + ":" + String(clock.minute).padStart(2, "0") + ":" + String(clock.second).padStart(2, "0") + "+08:00";
+}
+
+function classifyPreopenBasis({ futurePrice, preopenPrice, basisPercent, relativeToTxfPercent, isStale, hasTrialRow, hasTrialPrice }) {
+  if (isStale) return "stale不可正";
+  if (futurePrice <= 0) return "資料缺";
+  if (!hasTrialRow) return "試撮缺";
+  if (!hasTrialPrice || preopenPrice <= 0) return "待試撮";
+  if (basisPercent > 0) return "正價差";
+  if (basisPercent < 0 && relativeToTxfPercent > 0) return "逆收斂";
+  if (basisPercent < 0) return "逆價差";
+  return "期貨觀察";
+}
+
+function preopenDisplayStatus(basisStatus, sourceStatus) {
+  if (basisStatus === "stale不可正") return "stale觀察保存";
+  if (basisStatus === "待試撮" || basisStatus === "試撮缺") return basisStatus;
+  if (sourceStatus && sourceStatus !== "ready" && sourceStatus !== "ok") return "gate=D觀察保存";
+  return "期貨前20觀察";
+}
+
+function sortPreopenRows(rows) {
+  return [...rows].sort((left, right) => {
+    const lScore = number(left.relative_txf_percent ?? left.relativeToTxfPercent) * 1000 + number(left.future_volume ?? left.totalVolume);
+    const rScore = number(right.relative_txf_percent ?? right.relativeToTxfPercent) * 1000 + number(right.future_volume ?? right.totalVolume);
+    return rScore - lScore;
+  });
 }
 
 function sourceConfig() {
@@ -267,78 +301,133 @@ async function readPreopenFutures(config, clock, previous, errors) {
   const txfChange = number(txf?.change_percent ?? txf?.payload?.changePercent);
   const trialBySymbol = mapBySymbol(trialRows);
   const tickersByFuture = new Map(tickerRows.map((row) => [String(row?.future_symbol || "").toUpperCase(), row]));
-  const candidates = [];
+  const health = healthRows[0] || null;
+  const sourceStatus = String(health?.source_status || (number(health?.ready_rows) > 0 ? "ready" : "not_ready")).toLowerCase();
+  const snapshotTime = taipeiIso(clock);
+  const observedAt = new Date().toISOString();
+  const watchRows = [];
+  const strategyCandidates = [];
   for (const row of futoptRows) {
     const product = String(row?.product || row?.payload?.product || "").toUpperCase();
     if (product !== "STOCK_FUTURE") continue;
     const code = normalizeCode(row?.underlying_symbol || row?.payload?.underlying_symbol || row?.payload?.underlyingSymbol);
-    if (!code || ageSeconds(row?.updated_at) > 15) continue;
+    if (!code) continue;
     const ticker = tickersByFuture.get(String(row?.future_symbol || "").toUpperCase()) || {};
     const trial = trialBySymbol.get(code) || {};
     const change = number(row?.change_percent ?? row?.payload?.changePercent);
     const volume = number(row?.total_volume ?? row?.payload?.total?.tradeVolume);
-    const trialPrice = number(trial?.trial_price || trial?.reference_price);
+    const preopenPrice = number(trial?.trial_price || trial?.reference_price);
     const futPrice = number(row?.last_price ?? row?.payload?.lastPrice);
-    const basis = trialPrice > 0 ? futPrice - trialPrice : 0;
-    const state = trialPrice > 0 ? (basis > 0 ? "正價差" : basis < 0 ? "逆價差" : "平價") : "試撮缺資料";
-    if (change <= 0 || volume <= 0 || change - txfChange <= 0) continue;
-    candidates.push({
-      code,
+    const basis = preopenPrice > 0 ? futPrice - preopenPrice : 0;
+    const basisPercent = preopenPrice > 0 ? (basis / preopenPrice) * 100 : 0;
+    const relativeToTxfPercent = change - txfChange;
+    const quoteAgeSeconds = ageSeconds(row?.updated_at);
+    const hasTrialRow = Boolean(trial?.symbol || trial?.updated_at || trial?.trial_price || trial?.reference_price);
+    const hasTrialPrice = preopenPrice > 0;
+    const isStale = quoteAgeSeconds > 15;
+    const basisStatus = classifyPreopenBasis({
+      futurePrice: futPrice,
+      preopenPrice,
+      basisPercent,
+      relativeToTxfPercent,
+      isStale,
+      hasTrialRow,
+      hasTrialPrice,
+    });
+    const displayStatus = preopenDisplayStatus(basisStatus, sourceStatus);
+    const futureSymbol = row?.future_symbol || ticker?.future_symbol || "";
+    const watchRow = {
+      snapshot_time: snapshotTime,
+      trade_date: clock.date,
       symbol: code,
       name: trial?.name || row?.payload?.underlying_name || code,
+      future_symbol: futureSymbol,
+      future_price: round(futPrice),
+      future_change_percent: round(change),
+      relative_txf_percent: round(relativeToTxfPercent),
+      future_volume: volume,
+      preopen_price: round(preopenPrice),
+      basis_percent: round(basisPercent),
+      basis_status: basisStatus,
+      source_status: sourceStatus,
+      is_stale: isStale,
+      formal_allowed: false,
+      display_status: displayStatus,
+      code,
       market: trial?.market || "",
       price: round(futPrice),
       entryPrice: round(futPrice),
-      entryAt: iso(row?.updated_at, new Date().toISOString()),
-      timestamp: iso(row?.updated_at, new Date().toISOString()),
-      observedAt: new Date().toISOString(),
+      entryAt: iso(row?.updated_at, observedAt),
+      timestamp: iso(row?.updated_at, observedAt),
+      observedAt,
       scanDate: clock.date,
       tradeDate: clock.date,
-      source: "supabase:fugle_daytrade_futopt_quotes_live",
+      source: PREOPEN_WATCH_SOURCE,
       sourceTimestamp: iso(row?.updated_at, ""),
       entryPriceSource: "fugle_futopt_quote_observation",
       stateId: "watch",
       stateLabel: "08:45 股期觀察",
       formalCandidate: false,
-      eventOrigin: "strategy2_preopen_futopt",
-      observationKind: "futopt_preopen",
-      signalId: "s2_preopen_futopt_lead",
-      signal: state + "／股期領漲",
-      reason: "近月股期相對 TXF " + round(change - txfChange) + "%，量 " + volume + "，" + state,
-      futureSymbol: row?.future_symbol || ticker?.future_symbol || "",
+      eventOrigin: PREOPEN_WATCH_SOURCE,
+      observationKind: "futopt_preopen_watch",
+      signalId: "s2_preopen_futopt_watch",
+      signal: basisStatus + "／股期觀察",
+      reason: "08:45-08:59 股期前20觀察列，相對 TXF " + round(relativeToTxfPercent) + "% ，量 " + volume + "，" + basisStatus,
+      futureSymbol,
       futureChangePercent: round(change),
-      relativeToTxfPercent: round(change - txfChange),
+      relativeToTxfPercent: round(relativeToTxfPercent),
       totalVolume: volume,
-      trialPrice: round(trialPrice),
+      trialPrice: round(preopenPrice),
+      preopenPrice: round(preopenPrice),
       basis: round(basis),
-      basisStatus: state,
-      quoteAgeSeconds: ageSeconds(row?.updated_at),
-    });
+      basisPercent: round(basisPercent),
+      basisStatus,
+      sourceStatus,
+      isStale,
+      formalAllowed: false,
+      displayStatus,
+      quoteAgeSeconds,
+    };
+    watchRows.push(watchRow);
+    if (!isStale && futPrice > 0 && change > 0 && volume > 0 && relativeToTxfPercent > 0) {
+      strategyCandidates.push({
+        ...watchRow,
+        source: "supabase:fugle_daytrade_futopt_quotes_live",
+        eventOrigin: "strategy2_preopen_futopt",
+        observationKind: "futopt_preopen",
+        signalId: "s2_preopen_futopt_lead",
+        signal: basisStatus + "／股期領漲",
+        reason: "近月股期相對 TXF " + round(relativeToTxfPercent) + "% ，量 " + volume + "，" + basisStatus,
+      });
+    }
   }
-  const current = candidates.sort((left, right) => {
-    const lScore = number(left.relativeToTxfPercent) * 1000 + number(left.totalVolume);
-    const rScore = number(right.relativeToTxfPercent) * 1000 + number(right.totalVolume);
-    return rScore - lScore;
-  }).slice(0, 20);
+  const current = sortPreopenRows(watchRows).slice(0, MAX_PREOPEN_WATCH_ROWS);
+  const strategyCurrent = sortPreopenRows(strategyCandidates).slice(0, MAX_PREOPEN_WATCH_ROWS);
   const active = previous.activeSignals && typeof previous.activeSignals === "object" ? { ...previous.activeSignals } : {};
   const events = [];
-  for (const row of current) {
+  for (const row of strategyCurrent) {
     const key = "futopt:" + row.code;
     const state = row.signalId + "|" + row.basisStatus;
-    const previousSignal = String(active[key] || "").split("|")[0];
+    const previousState = String(active[key] || "");
     active[key] = state;
-    if (previousSignal !== row.signalId) events.push(row);
+    if (previousState !== state) events.push(row);
   }
   return {
     events,
     preopenFutures: current,
+    preopenWatchRows: current,
+    strategyDetectedRows: strategyCurrent,
     activeSignals: active,
     source: {
       futoptRows: futoptRows.length,
       tickerRows: tickerRows.length,
       trialRows: trialRows.length,
-      health: healthRows[0] || null,
+      health,
       txfChangePercent: round(txfChange),
+      preopenWatchRows: current.length,
+      strategyDetectedRows: strategyCurrent.length,
+      preopenWatchSource: PREOPEN_WATCH_SOURCE,
+      strategyDetectedSource: STRATEGY_DETECTED_SOURCE,
     },
   };
 }
@@ -350,6 +439,24 @@ function appendEvents(previous, incoming) {
     if (row?.code && row?.entryAt) seen.set(key, row);
   }
   return [...seen.values()].sort((left, right) => String(right.entryAt || "").localeCompare(String(left.entryAt || ""))).slice(0, MAX_HISTORY);
+}
+
+function appendPreopenWatchHistory(previous, incoming) {
+  const seen = new Map();
+  for (const row of [...(Array.isArray(previous) ? previous : []), ...(Array.isArray(incoming) ? incoming : [])]) {
+    const symbol = String(row?.symbol || row?.code || "");
+    const futureSymbol = String(row?.future_symbol || row?.futureSymbol || "");
+    const snapshotTime = String(row?.snapshot_time || row?.snapshotTime || row?.observedAt || "");
+    if (!symbol || !snapshotTime) continue;
+    seen.set(snapshotTime + "|" + symbol + "|" + futureSymbol, row);
+  }
+  return [...seen.values()]
+    .sort((left, right) => {
+      const timeOrder = String(right.snapshot_time || right.snapshotTime || "").localeCompare(String(left.snapshot_time || left.snapshotTime || ""));
+      if (timeOrder !== 0) return timeOrder;
+      return number(right.relative_txf_percent ?? right.relativeToTxfPercent) - number(left.relative_txf_percent ?? left.relativeToTxfPercent);
+    })
+    .slice(0, MAX_PREOPEN_WATCH_HISTORY);
 }
 
 async function runOnce() {
@@ -380,7 +487,11 @@ async function runOnce() {
     phase = "diagnostic";
     result = await readIntradayObservations(config, clock, previous, errors);
   }
+  const preopenWatchRows = Array.isArray(result.preopenWatchRows) ? result.preopenWatchRows : [];
+  const previousPreopenWatchHistory = previous.preopenWatchHistory || previous.futoptPreopenWatchHistory || previous.futopt_preopen_watch_history || [];
+  const preopenWatchHistory = appendPreopenWatchHistory(previousPreopenWatchHistory, preopenWatchRows);
   const events = appendEvents(previous.observations, result.events);
+  const strategyDetectedHistory = appendEvents(previous.strategyDetectedHistory || previous.strategy_detected_history || previous.observations, result.events);
   const updatedAt = new Date().toISOString();
   const runId = "strategy2-v2-realtime-" + clock.ymd + "-" + String(clock.hour).padStart(2, "0") + String(clock.minute).padStart(2, "0") + String(clock.second).padStart(2, "0");
   const payload = {
@@ -403,13 +514,27 @@ async function runOnce() {
     pollIntervalSeconds: 3,
     observations: events,
     observationCount: events.length,
+    strategyDetectedHistory,
+    strategy_detected_history: strategyDetectedHistory,
     preopenFutures: result.preopenFutures || previous.preopenFutures || [],
+    preopenWatchRows,
+    preopenWatchCount: preopenWatchRows.length,
+    preopenWatchHistory,
+    preopenWatchHistoryCount: preopenWatchHistory.length,
+    futoptPreopenWatchHistory: preopenWatchHistory,
+    futopt_preopen_watch_history: preopenWatchHistory,
+    historyContracts: {
+      futopt_preopen_watch_history: PREOPEN_WATCH_SOURCE,
+      strategy_detected_history: STRATEGY_DETECTED_SOURCE,
+      preopen_watch_max_batch_rows: MAX_PREOPEN_WATCH_ROWS,
+      preopen_watch_max_history_rows: MAX_PREOPEN_WATCH_HISTORY,
+    },
     activeSignals: result.activeSignals,
     sourceHealth: result.source,
     errors,
     transport: { source: "strategy2-v2-realtime-observer", snapshotKey: SNAPSHOT_KEY, runId },
   };
-  const shouldPublish = result.events.length > 0 || !previous.updatedAt || Date.now() - Date.parse(previous.updatedAt || 0) >= 15000;
+  const shouldPublish = result.events.length > 0 || preopenWatchRows.length > 0 || !previous.updatedAt || Date.now() - Date.parse(previous.updatedAt || 0) >= 15000;
   const snapshot = shouldPublish
     ? await upsertSnapshot(SNAPSHOT_KEY, payload, {
       tradeDate: clock.ymd,
@@ -430,6 +555,9 @@ async function runOnce() {
     status: payload.status,
     pollIntervalSeconds: payload.pollIntervalSeconds,
     observationCount: payload.observationCount,
+    preopenWatchCount: payload.preopenWatchCount,
+    preopenWatchHistoryCount: payload.preopenWatchHistoryCount,
+    strategyDetectedHistoryCount: strategyDetectedHistory.length,
     sourceHealth: payload.sourceHealth,
     errors,
     snapshot,
@@ -437,7 +565,7 @@ async function runOnce() {
     finishedAt: new Date().toISOString(),
   };
   writeJson(path.join(DATA_DIR, "scan-receipts", "strategy2-v2-realtime.json"), receipt);
-  console.log(JSON.stringify({ ok: true, runId, phase, observationCount: payload.observationCount, newEvents: result.events.length, snapshot: snapshot.ok, skipped: snapshot.skipped || false, errors }, null, 2));
+  console.log(JSON.stringify({ ok: true, runId, phase, observationCount: payload.observationCount, preopenWatchCount: payload.preopenWatchCount, preopenWatchHistoryCount: payload.preopenWatchHistoryCount, newEvents: result.events.length, snapshot: snapshot.ok, skipped: snapshot.skipped || false, errors }, null, 2));
 }
 
 function sleep(ms) {

@@ -10,6 +10,7 @@
     "strategy2:v3:water": "node --use-system-ca scripts/run-strategy2-v3-water-scan.js",
     "strategy2:v3:water:diagnostic": "node --use-system-ca scripts/run-strategy2-v3-water-scan.js --diagnostic",
     "verify:strategy2-v3-water": "node --use-system-ca scripts/verify-strategy2-v3-water.js",
+    "verify:strategy2-preopen-futopt-watch-history": "node --use-system-ca scripts/verify-strategy2-preopen-futopt-watch-history-contract.js",
     "snapshot:data": "node scripts/commit-data-snapshot.js",
     "scorecard:sync": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-scorecard-daily-automation.ps1",
     "scorecard:sync:wrapped": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-scorecard-daily-automation-wrapper.ps1",
