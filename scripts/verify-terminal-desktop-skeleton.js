@@ -38,6 +38,11 @@ function main() {
   requireMarker(shell, "renderOpeningReport0830DesktopBriefing(aiPayload);", "desktop_shell", failures);
   requireMarker(shell, ".market-ai-hero-board, [data-opening-report-0830-briefing]", "desktop_shell", failures);
   requireMarker(shell, "!shell.ai.querySelector?.(", "desktop_shell", failures);
+  requireMarker(index, "terminal-opening-report-0830-standalone.js?v=" + version.version, "index", failures);
+  const standalone = read("terminal-opening-report-0830-standalone.js");
+  requireMarker(standalone, "openingMorningReport", "standalone_briefing", failures);
+  requireMarker(standalone, "MutationObserver", "standalone_briefing", failures);
+  requireMarker(standalone, "panel.replaceChildren(node)", "standalone_briefing", failures);
   if (!/independently verified and remains visible when live AI is blocked\.\n\s*renderOpeningReport0830DesktopBriefing\(aiPayload\);\n\s*return;/.test(shell)) failures.push("morning_report_not_rendered_when_ai_blocked");
   requireMarker(reset, "fuman-desktop-route-snapshots", "reset", failures);
   requireMarker(reset, "sessionStorage.clear()", "reset", failures);
@@ -50,6 +55,7 @@ function main() {
   requireMarker(vercel, "\"value\": \"no-store\"", "vercel", failures);
   for (const route of contract.source_routes) { const file = route.replace(/^\/api\//, "api/") + ".js"; if (!fs.existsSync(path.join(ROOT, file))) failures.push("source_route_missing:" + route); }
   if (pkg.scripts["verify:terminal-desktop-skeleton"] !== "node scripts/verify-terminal-desktop-skeleton.js") failures.push("package_verifier_script_missing");
+  if (pkg.scripts["verify:terminal-opening-report-0830-standalone"] !== "node scripts/verify-terminal-opening-report-0830-standalone-renderer.js") failures.push("standalone_renderer_verifier_missing");
   if (!String(pkg.scripts.postdeploy || "").includes("verify:terminal-desktop-skeleton")) failures.push("postdeploy_skeleton_verifier_missing");
   const result = {ok: failures.length === 0,contract: CONTRACT,baseline: contract.baseline,entry: contract.entry,canonical_flow: contract.canonical_flow,source_routes: contract.source_routes,morning_report: contract.morning_report,failed_checks: failures,first_blocker: failures[0] || null,read_only: true};
   console.log(JSON.stringify(result, null, 2));

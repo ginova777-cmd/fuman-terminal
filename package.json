@@ -49,7 +49,7 @@
     "verify:version": "node scripts/verify-version-consistency.js",
     "verify:entitlement-guard": "node scripts/verify-entitlement-guard.js",
     "predeploy": "node scripts/prepare-deploy.js",
-    "postdeploy": "node --use-system-ca scripts/verify-live-version.js --retry && npm run verify:terminal-desktop-skeleton && npm run verify:terminal-display-snapshot -- --retry && node --use-system-ca scripts/verify-mobile-layout.js --live && node --dns-result-order=ipv4first scripts/verify-mobile-realtime.js && node --dns-result-order=ipv4first scripts/publish-mobile-update-event.js --source=postdeploy",
+    "postdeploy": "node --use-system-ca scripts/verify-live-version.js --retry && npm run verify:terminal-desktop-skeleton && npm run verify:terminal-opening-report-0830-standalone && npm run verify:terminal-display-snapshot -- --retry && node --use-system-ca scripts/verify-mobile-layout.js --live && node --dns-result-order=ipv4first scripts/verify-mobile-realtime.js && node --dns-result-order=ipv4first scripts/publish-mobile-update-event.js --source=postdeploy",
     "guard:source": "node scripts/guard-source-tree.js",
     "guard:mirror": "node scripts/verify-production-mirror-guard.js",
     "verify:sync-hard-gate": "node scripts/verify-sync-hard-gate.js",
@@ -424,7 +424,8 @@
     "verify:opening-limit-order-source": "node scripts/verify-opening-limit-order-source-contract.js",
     "verify:opening-limit-order-0840": "node --use-system-ca scripts/verify-opening-limit-order-0840-progressive-readonly.js",
     "verify:opening-limit-order-closed-loop": "node --use-system-ca scripts/verify-opening-limit-order-closed-loop.js --allow-late-repair=1",
-    "verify:terminal-desktop-skeleton": "node scripts/verify-terminal-desktop-skeleton.js"
+    "verify:terminal-desktop-skeleton": "node scripts/verify-terminal-desktop-skeleton.js",
+    "verify:terminal-opening-report-0830-standalone": "node scripts/verify-terminal-opening-report-0830-standalone-renderer.js"
   },
   "engines": {
     "node": "24.x"
