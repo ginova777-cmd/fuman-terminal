@@ -5457,7 +5457,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-46";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-47";
   }
 
   function loadScriptOnce(src, attr) {
@@ -6115,7 +6115,7 @@
       syncMarketAiDesktopModeIfVisible();
       if (!hasMarketAiPayload(next.ai)) {
         const panel = document.querySelector("#market-view [data-market-api-ai]");
-        if (panel?.querySelector?.(".market-ai-hero-board")) {
+        if (panel?.querySelector?.(".market-ai-hero-board, [data-opening-report-0830-briefing]")) {
           panel.dataset.marketApiAiSkippedReason = marketPayloadBlockedForFormalDisplay(next.heatmap) || "ai_payload_not_ready";
           return;
         }
@@ -6135,7 +6135,7 @@
   function renderMarketApiAiLoading() {
     const panels = ensureMarketApiPanels();
     if (!panels.ai) return;
-    if (panels.ai.querySelector?.(".market-ai-hero-board")) return;
+    if (panels.ai.querySelector?.(".market-ai-hero-board, [data-opening-report-0830-briefing]")) return;
     if (panels.ai.dataset.marketApiAi === "live-api-bundle" && hasMarketAiPayload(marketAiBundlePayload)) return;
     panels.ai.classList.add("market-ai-visual-dashboard");
     panels.ai.dataset.marketAiRenderer = "desktop-fast-shell";
@@ -6148,7 +6148,7 @@
     syncMarketAiDesktopModeIfVisible();
     marketDesktopAiLoading = true;
     const shell = ensureMarketDesktopShell();
-    if (shell.ai && !/market-ai-card|market-ai-stock-row|操作建議|風險/.test(shell.ai.textContent || "")) {
+    if (shell.ai && !/market-ai-card|market-ai-stock-row|操作建議|風險/.test(shell.ai.textContent || "") && !shell.ai.querySelector?.("[data-opening-report-0830-briefing]")) {
       shell.ai.innerHTML = '<div class="empty-state">正式 AI 判讀同步檢查中</div>';
     }
     const state = {

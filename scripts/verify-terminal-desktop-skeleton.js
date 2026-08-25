@@ -36,6 +36,8 @@ function main() {
   requireMarker(marketApi, "opening_report_0830_terminal_briefing", "market_api", failures);
   requireMarker(shell, `payload.openingMorningReport && typeof payload.openingMorningReport === "object"`, "desktop_shell", failures);
   requireMarker(shell, "renderOpeningReport0830DesktopBriefing(aiPayload);", "desktop_shell", failures);
+  requireMarker(shell, ".market-ai-hero-board, [data-opening-report-0830-briefing]", "desktop_shell", failures);
+  requireMarker(shell, "!shell.ai.querySelector?.(", "desktop_shell", failures);
   if (!/independently verified and remains visible when live AI is blocked\.\n\s*renderOpeningReport0830DesktopBriefing\(aiPayload\);\n\s*return;/.test(shell)) failures.push("morning_report_not_rendered_when_ai_blocked");
   requireMarker(reset, "fuman-desktop-route-snapshots", "reset", failures);
   requireMarker(reset, "sessionStorage.clear()", "reset", failures);
