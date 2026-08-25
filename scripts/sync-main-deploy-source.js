@@ -189,6 +189,18 @@ const FILES = [
   "scripts/run-strategy2-v3-water-scan.js",
   "scripts/verify-strategy3-v2-daily-unattended-closure.js",
   "scripts/verify-opening-limit-order-0855-readonly.js",
+  "scripts/build-opening-limit-order-static-prefilter.js",
+  "scripts/build-opening-limit-order-watchlist.js",
+  "scripts/verify-opening-limit-order-0830-report-ranking-readonly.js",
+  "scripts/verify-opening-limit-order-0831-prewarm-readonly.js",
+  "scripts/verify-opening-limit-order-0840-progressive-readonly.js",
+  "scripts/verify-opening-limit-order-0855-source-readback.js",
+  "scripts/verify-opening-limit-order-candidate-readonly.js",
+  "scripts/verify-opening-limit-order-closed-loop.js",
+  "scripts/verify-opening-limit-order-display-contract-readonly.js",
+  "scripts/verify-opening-limit-order-preferred-broker-readonly.js",
+  "scripts/verify-opening-limit-order-source-contract.js",
+
   "scripts/send-strategy3-v2-line-card.js",
   "scripts/verify-strategy3-v2-full-closure.js",
   "scripts/verify-strategy3-v2-water-universe.js",
@@ -280,6 +292,15 @@ const FILES = [
   "ops/public-slot/SharedSourceReadOnlyVerifier.ps1",
   "ops/public-slot/StrategyCacheStatusAndLatestPayload.sql",
   "ops/Run-OpeningLimitOrder0900Verifier.ps1",
+  "ops/Register-OpeningLimitOrder0840Task.ps1",
+  "ops/Run-OpeningLimitOrder0831OpeningReportPrewarmReadonly.ps1",
+  "ops/Run-OpeningLimitOrder0840ProgressiveReadonly.ps1",
+  "ops/Run-OpeningLimitOrder0850PreflightReadonly.engine-v2.ps1",
+  "ops/Run-OpeningLimitOrder0850PreflightReadonly.pre-v2.ps1",
+  "ops/Run-OpeningLimitOrder0850PreflightReadonly.ps1",
+  "ops/Run-OpeningLimitOrder0855Readonly.ps1",
+  "ops/Run-OpeningLimitOrderMorningReadonly.ps1",
+
   "ops/public-slot/FinMindUnifiedQuoteViews.sql",
   "ops/public-slot/Strategy3QuoteReadyFugleFirstFix.sql",
   "ops/public-slot/Strategy5RunIdCompleteGate.sql",
@@ -488,3 +509,4 @@ for (const directory of DIRECTORIES) {
 }
 
 console.log(`[sync-source] ok copied=${copied} copiedFromDirs=${copiedFromDirs} retiredDeleted=${retiredDeleted} deploy=${DEPLOY_ROOT}`);
+

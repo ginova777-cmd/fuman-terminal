@@ -420,7 +420,10 @@
     "verify:terminal-reset-preserve-login": "node scripts/verify-terminal-reset-preserve-login.js",
     "verify:terminal-entitlement-session-proof": "node scripts/verify-terminal-entitlement-session-proof.js",
     "verify:three-surface-complete-scans": "node --use-system-ca scripts/verify-three-surface-complete-scans.js",
-    "verify:terminal-display-snapshot": "node --use-system-ca scripts/verify-terminal-display-snapshot.js"
+    "verify:terminal-display-snapshot": "node --use-system-ca scripts/verify-terminal-display-snapshot.js",
+    "verify:opening-limit-order-source": "node scripts/verify-opening-limit-order-source-contract.js",
+    "verify:opening-limit-order-0840": "node --use-system-ca scripts/verify-opening-limit-order-0840-progressive-readonly.js",
+    "verify:opening-limit-order-closed-loop": "node --use-system-ca scripts/verify-opening-limit-order-closed-loop.js --allow-late-repair=1"
   },
   "engines": {
     "node": "24.x"
