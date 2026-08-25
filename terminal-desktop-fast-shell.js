@@ -6926,6 +6926,7 @@
     const node = document.createElement("section");
     node.className = "opening-report-0830-briefing";
     node.setAttribute("data-opening-report-0830-briefing", "1");
+    node.setAttribute("data-opening-report-state", "mounted");
     node.innerHTML = `
       <header class="opening-report-0830-head">
         <div class="opening-report-0830-title">

@@ -44,6 +44,7 @@ function main() {
   requireMarker(shell, `payload.openingMorningReport && typeof payload.openingMorningReport === "object"`, "desktop_shell", failures);
   requireMarker(shell, "renderOpeningReport0830DesktopBriefing(aiPayload);", "desktop_shell", failures);
   requireMarker(shell, "node.setAttribute(\"data-opening-report-0830-briefing\", \"1\");", "desktop_shell", failures);
+  requireMarker(shell, "node.setAttribute(\"data-opening-report-state\", \"mounted\");", "desktop_shell", failures);
   requireMarker(shell, ".market-ai-hero-board, [data-opening-report-0830-briefing]", "desktop_shell", failures);
   requireMarker(shell, "!shell.ai.querySelector?.(", "desktop_shell", failures);
   requireMarker(index, "terminal-opening-report-0830-standalone.js?v=" + version.version, "index", failures);
