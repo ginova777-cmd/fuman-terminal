@@ -5457,7 +5457,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-54";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-55";
   }
 
   function loadScriptOnce(src, attr) {
@@ -6811,11 +6811,22 @@
 
   function renderOpeningReport0830DesktopBriefing(aiPayload) {
     const data = aiPayload?.openingMorningReport;
-    const panel = document.querySelector("#market-view [data-market-api-ai], #market-view #market-ai-panel, #market-view .market-ai-panel");
-    if (!panel || !data) return false;
+    const market = document.querySelector("#market-view");
+    if (!market) return false;
+    let panel = market.querySelector("#terminal-opening-report-0830-root");
+    if (!panel) {
+      panel = document.createElement("section");
+      panel.id = "terminal-opening-report-0830-root";
+      panel.className = "terminal-opening-report-0830-root";
+      panel.dataset.openingReport0830Root = "1";
+      const anchor = market.querySelector(".terminal-band") || market.querySelector(".watch-section");
+      if (anchor) market.insertBefore(panel, anchor);
+      else market.appendChild(panel);
+    }
+    if (!data) return false;
     const hasToday = data.ok === true || String(data.reason_code || "") !== "opening_report_0830_final_receipt_missing";
     if (!hasToday) {
-      panel.querySelector?.("[data-opening-report-0830-briefing]")?.remove();
+      panel.dataset.openingReport0830Preserved = "1";
       return false;
     }
     const esc = (value) => escapeHtml(String(value ?? ""));
@@ -6862,10 +6873,9 @@
         <article class="opening-report-0830-card"><h4>大事紀要</h4><p>${esc(data.event_digest?.reason_code || data.event_digest?.status || "等待 08:30 前新聞來源寫入")}</p></article>
         <article class="opening-report-0830-card"><h4>今日觀察</h4><p>開盤後確認量價與族群承接。</p><div class="opening-report-0830-symbols">${recommended.length ? recommended.map((stock) => `<span>${esc(stock.name || stock.symbol)}</span>`).join("") : `<span>${esc("觀察名單尚待晨報來源")}</span>`}</div></article>
       </div>`;
-    panel.querySelector?.("[data-opening-report-0830-briefing]")?.remove();
-    const anchor = panel.querySelector?.(".market-ai-summary");
-    if (anchor) anchor.insertAdjacentElement("afterend", node);
-    else panel.prepend(node);
+    panel.replaceChildren(node);
+    panel.hidden = false;
+    panel.dataset.openingReport0830Preserved = "0";
     return true;
   }
 
