@@ -19,6 +19,7 @@ function main() {
   const reset = read("reset.html");
   const core = read("terminal-core.js");
   const shell = read("terminal-desktop-fast-shell.js");
+  const marketRestore = read("terminal-market-overview-restore.js");
   const vercel = read("vercel.json");
   const marketApi = read("api/market-ai-live.js");
   if (contract.contract !== CONTRACT) failures.push("contract_name_drift");
@@ -32,6 +33,8 @@ function main() {
   requireMarker(index, "terminal-core.js?v=" + version.version, "index", failures);
   requireMarker(core, "const formalSkeletonBaseline = \"" + BASELINE + "\"", "terminal_core", failures);
   requireMarker(shell, "window.__fumanDesktopFastShell", "desktop_shell", failures);
+  requireMarker(marketRestore, "desktop-fast-shell-canonical-single-renderer", "market_restore", failures);
+  if (marketRestore.includes("window.FUMAN_MARKET_DIRECT_PAINT = run;")) failures.push("market_restore_legacy_painter_not_removed");
   if (!fs.existsSync(path.join(ROOT, "api/desktop-route-snapshot.js"))) failures.push("desktop_route_snapshot_endpoint_missing");
   requireMarker(marketApi, "opening_report_0830_terminal_briefing", "market_api", failures);
   requireMarker(shell, `payload.openingMorningReport && typeof payload.openingMorningReport === "object"`, "desktop_shell", failures);
