@@ -55,7 +55,7 @@ async function main() {
     { name: "snapshot_briefing_ok", ok: snapshotPayload?.ok === true && Number(snapshotPayload?.industry_bias?.count || 0) === 19 },
     { name: "watchlist_only", ok: finalReceipt?.watchlist_only === true && briefing?.allowed_action === "priority_scan_only" },
     { name: "formal_candidates_zero", ok: Number(finalReceipt?.formal_candidates || 0) === 0 && Number(briefing?.formal_candidates || 0) === 0 },
-    { name: "desktop_renders_briefing_when_ai_blocked", ok: desktopShell.includes("renderOpeningReport0830DesktopBriefing(aiPayload);\n      return;") },
+    { name: "desktop_renders_briefing_when_ai_blocked", ok: /renderOpeningReport0830DesktopBriefing\(aiPayload\);\r?\n      return;/.test(desktopShell) },
   ];
   const failed = checks.find((check) => !check.ok);
   const payload = {
