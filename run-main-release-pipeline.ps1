@@ -25,7 +25,7 @@ $versionFiles = @(
 # Release invariant checked by scripts/verify-publish-gate.js:
 # git fetch origin main -> git pull --ff-only origin main -> npm run verify:bump
 # -> npm run sync:source -> npm run deploy -> npm run verify:live-version
-# -> npm run verify:warrant-freshness:live -> git push origin HEAD:main.
+# -> npm run verify:production-api-freshness -> git push origin HEAD:main.
 # Frontend version bumps are manual only: pass -ForceBump with ALLOW_VERSION_BUMP=1.
 
 function Write-ReleaseLog($message) {
@@ -128,7 +128,7 @@ if ($changedAfterBump.Count -gt 0) {
 Invoke-Npm "sync:source"
 Invoke-Npm "verify:version"
 Invoke-Npm "verify:sw"
-Invoke-Npm "verify:warrant-freshness"
+Invoke-Npm "verify:data-freshness"
 Invoke-Npm "verify:source-sync"
 
 if (-not $SkipDeploy) {
@@ -138,7 +138,7 @@ if (-not $SkipDeploy) {
 }
 
 Invoke-Npm "verify:live-version"
-Invoke-Npm "verify:warrant-freshness:live"
+Invoke-Npm "verify:production-api-freshness"
 
 $versionChanged = $beforeVersion -ne $afterVersion
 if ($versionChanged) {
