@@ -53,6 +53,8 @@ function main() {
   requireMarker(shell, "function scheduleOpeningReport0830DesktopBriefing()", "desktop_shell", failures);
   requireMarker(shell, "scheduleOpeningReport0830DesktopBriefing();", "desktop_shell", failures);
   requireMarker(shell, "opening_report_http_", "desktop_shell", failures);
+  requireMarker(shell, "window.setTimeout(() => load(0), 15000);", "desktop_shell", failures);
+  requireMarker(shell, "renderOpeningReport0830DesktopBriefing({});", "desktop_shell", failures);
   requireMarker(shell, "window.__fumanOpeningReport0830", "desktop_shell", failures);
   requireMarker(shell, "renderOpeningReport0830DesktopBriefing({});", "desktop_shell", failures);
   requireMarker(shell, "data-fuman-market-tabs", "desktop_shell", failures);

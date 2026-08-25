@@ -5475,7 +5475,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-67";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-68";
   }
 
   function loadScriptOnce(src, attr) {
@@ -6977,7 +6977,8 @@
         throw new Error(payload?.openingMorningReport?.reason_code || "opening_report_not_ready");
       } catch (error) {
         if (attempt >= 3) {
-          document.documentElement.dataset.fumanOpeningReport0830 = "unavailable";
+          document.documentElement.dataset.fumanOpeningReport0830 = "retrying";
+          window.setTimeout(() => load(0), 15000);
           return;
         }
         window.setTimeout(() => load(attempt + 1), 1000 * (attempt + 1));
@@ -7414,6 +7415,8 @@
         openMarketAiIndustryModal(industryTarget.dataset.marketAiIndustryName);
       });
     }
+    renderOpeningReport0830DesktopBriefing({});
+    renderOpeningReport0830DesktopBriefing({});
     syncMarketAiDesktopModeIfVisible();
   }
 
