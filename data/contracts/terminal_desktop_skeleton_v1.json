@@ -1,0 +1,45 @@
+{
+  "contract": "terminal_desktop_skeleton_v1",
+  "status": "frozen",
+  "baseline": {
+    "name": "public-terminal-fast-20260714-22",
+    "at": "2026-08-18T21:00:00+08:00",
+    "commit": "4d6ba88c19c5924093fcbe8afb0566df3c80a921"
+  },
+  "entry": {
+    "official": "/?desktop=1",
+    "recovery": "/reset",
+    "recovery_target": "/?desktop=1",
+    "preserve_auth": true
+  },
+  "canonical_flow": [
+    "index.html",
+    "terminal-desktop-fast-shell.js",
+    "terminal-core.js",
+    "/api/desktop-route-snapshot"
+  ],
+  "source_routes": [
+    "/api/market-ai-live",
+    "/api/institution-latest",
+    "/api/strategy2-latest",
+    "/api/strategy3-latest",
+    "/api/strategy4-latest",
+    "/api/strategy5-latest"
+  ],
+  "morning_report": {
+    "source": "opening_report_0830_terminal_briefing",
+    "display_invariant": "must_render_when_market_ai_blocked",
+    "line_delivery_independent": true,
+    "formal_candidate_count": 0
+  },
+  "cache": {
+    "versioned_assets": true,
+    "reset_cache_control": "no-store",
+    "reset_clears_session_storage_only": true
+  },
+  "guardrails": {
+    "no_membership_logged_out_recovery": true,
+    "no_auth_token_clear_on_reset": true,
+    "strategy3_no_current_run_must_be_data_gap": true
+  }
+}

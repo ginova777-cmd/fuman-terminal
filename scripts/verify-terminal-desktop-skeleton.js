@@ -1,0 +1,55 @@
+"use strict";
+
+const fs = require("fs");
+const path = require("path");
+const ROOT = path.resolve(__dirname, "..");
+const CONTRACT = "terminal_desktop_skeleton_v1";
+const BASELINE = "public-terminal-fast-20260714-22";
+const BASELINE_TIME = "2026-08-18T21:00:00+08:00";
+const BASELINE_COMMIT = "4d6ba88c19c5924093fcbe8afb0566df3c80a921";
+const read = (file) => fs.readFileSync(path.join(ROOT, file), "utf8").replace(/\r\n/g, "\n");
+const json = (file) => JSON.parse(read(file));
+const requireMarker = (text, marker, label, failures) => { if (!text.includes(marker)) failures.push(label + ":missing:" + marker); };
+function main() {
+  const failures = [];
+  const contract = json("data/contracts/terminal_desktop_skeleton_v1.json");
+  const version = json("version.json");
+  const pkg = json("package.json");
+  const index = read("index.html");
+  const reset = read("reset.html");
+  const core = read("terminal-core.js");
+  const shell = read("terminal-desktop-fast-shell.js");
+  const vercel = read("vercel.json");
+  const marketApi = read("api/market-ai-live.js");
+  if (contract.contract !== CONTRACT) failures.push("contract_name_drift");
+  if (contract.status !== "frozen") failures.push("contract_not_frozen");
+  if (contract.baseline?.name !== BASELINE || contract.baseline?.at !== BASELINE_TIME || contract.baseline?.commit !== BASELINE_COMMIT) failures.push("baseline_drift");
+  if (version.terminalDesktopSkeletonContract !== CONTRACT) failures.push("version_contract_drift");
+  if (version.terminalDesktopSkeletonBaseline !== BASELINE) failures.push("version_baseline_drift");
+  if (version.terminalDesktopSkeletonBaselineTime !== BASELINE_TIME || version.terminalDesktopSkeletonBaselineCommit !== BASELINE_COMMIT) failures.push("version_baseline_metadata_drift");
+  requireMarker(index, "data-fuman-desktop-fast-shell=\"1\"", "index", failures);
+  if (!new RegExp("terminal-desktop-fast-shell\\.js\\?[^\"]*v=" + version.version).test(index)) failures.push("index:missing:versioned_desktop_fast_shell");
+  requireMarker(index, "terminal-core.js?v=" + version.version, "index", failures);
+  requireMarker(core, "const formalSkeletonBaseline = \"" + BASELINE + "\"", "terminal_core", failures);
+  requireMarker(shell, "window.__fumanDesktopFastShell", "desktop_shell", failures);
+  if (!fs.existsSync(path.join(ROOT, "api/desktop-route-snapshot.js"))) failures.push("desktop_route_snapshot_endpoint_missing");
+  requireMarker(marketApi, "opening_report_0830_terminal_briefing", "market_api", failures);
+  requireMarker(shell, "renderOpeningReport0830DesktopBriefing(aiPayload);", "desktop_shell", failures);
+  if (!/independently verified and remains visible when live AI is blocked\.\n\s*renderOpeningReport0830DesktopBriefing\(aiPayload\);\n\s*return;/.test(shell)) failures.push("morning_report_not_rendered_when_ai_blocked");
+  requireMarker(reset, "fuman-desktop-route-snapshots", "reset", failures);
+  requireMarker(reset, "sessionStorage.clear()", "reset", failures);
+  requireMarker(reset, "navigator.serviceWorker.getRegistrations", "reset", failures);
+  requireMarker(reset, "new URL(\"/?desktop=1\", location.origin)", "reset", failures);
+  if (reset.includes("membership=logged-out")) failures.push("reset_must_not_force_logged_out");
+  if (reset.includes("localStorage.clear()") || reset.includes("fuman-terminal-auth-cache-v1")) failures.push("reset_must_preserve_auth");
+  requireMarker(vercel, "\"source\": \"/reset\"", "vercel", failures);
+  requireMarker(vercel, "\"destination\": \"/reset.html\"", "vercel", failures);
+  requireMarker(vercel, "\"value\": \"no-store\"", "vercel", failures);
+  for (const route of contract.source_routes) { const file = route.replace(/^\/api\//, "api/") + ".js"; if (!fs.existsSync(path.join(ROOT, file))) failures.push("source_route_missing:" + route); }
+  if (pkg.scripts["verify:terminal-desktop-skeleton"] !== "node scripts/verify-terminal-desktop-skeleton.js") failures.push("package_verifier_script_missing");
+  if (!String(pkg.scripts.postdeploy || "").includes("verify:terminal-desktop-skeleton")) failures.push("postdeploy_skeleton_verifier_missing");
+  const result = {ok: failures.length === 0,contract: CONTRACT,baseline: contract.baseline,entry: contract.entry,canonical_flow: contract.canonical_flow,source_routes: contract.source_routes,morning_report: contract.morning_report,failed_checks: failures,first_blocker: failures[0] || null,read_only: true};
+  console.log(JSON.stringify(result, null, 2));
+  if (failures.length) process.exit(1);
+}
+main();

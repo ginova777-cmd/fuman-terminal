@@ -1,7 +1,11 @@
 {
-  "version": "public-terminal-fast-20260714-44",
+  "version": "public-terminal-fast-20260714-45",
   "formalSkeletonContract": "daytrade_mother_pool_skeleton_v1",
   "formalSkeletonBaseline": "public-terminal-fast-20260714-22",
   "formalSkeletonBaselineTime": "2026-08-18 21:00 Asia/Taipei",
-  "formalSkeletonBaselineCommit": "4d6ba88c19c5924093fcbe8afb0566df3c80a921"
+  "formalSkeletonBaselineCommit": "4d6ba88c19c5924093fcbe8afb0566df3c80a921",
+  "terminalDesktopSkeletonContract": "terminal_desktop_skeleton_v1",
+  "terminalDesktopSkeletonBaseline": "public-terminal-fast-20260714-22",
+  "terminalDesktopSkeletonBaselineTime": "2026-08-18T21:00:00+08:00",
+  "terminalDesktopSkeletonBaselineCommit": "4d6ba88c19c5924093fcbe8afb0566df3c80a921"
 }
