@@ -6889,6 +6889,8 @@
           <p>updated_at=${escapeHtml(updatedAt)}｜publish_allowed=false</p>
         </section>
       `;
+      // The 08:30 morning report is independently verified and remains visible when live AI is blocked.
+      renderOpeningReport0830DesktopBriefing(aiPayload);
       return;
     }
     const sectors = normalizeArray(heatmapPayload?.sectors);

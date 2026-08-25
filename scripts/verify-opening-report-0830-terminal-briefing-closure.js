@@ -42,6 +42,7 @@ async function main() {
     tradeDate: date, allowLatestFallback: false, timeoutMs: 5000,
   });
   const snapshotPayload = snapshot?.payload || {};
+  const desktopShell = fs.readFileSync(path.join(__dirname, "..", "terminal-desktop-fast-shell.js"), "utf8");
   const checks = [
     { name: "final_receipt_exists", ok: Boolean(finalReceipt) },
     { name: "report_core_ok", ok: finalReceipt?.report_core_ok === true },
@@ -54,6 +55,7 @@ async function main() {
     { name: "snapshot_briefing_ok", ok: snapshotPayload?.ok === true && Number(snapshotPayload?.industry_bias?.count || 0) === 19 },
     { name: "watchlist_only", ok: finalReceipt?.watchlist_only === true && briefing?.allowed_action === "priority_scan_only" },
     { name: "formal_candidates_zero", ok: Number(finalReceipt?.formal_candidates || 0) === 0 && Number(briefing?.formal_candidates || 0) === 0 },
+    { name: "desktop_renders_briefing_when_ai_blocked", ok: desktopShell.includes("renderOpeningReport0830DesktopBriefing(aiPayload);\n      return;") },
   ];
   const failed = checks.find((check) => !check.ok);
   const payload = {
