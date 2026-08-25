@@ -180,9 +180,10 @@ try {
     @{ Expression = { [double]($_.opening_report_rank_boost) }; Descending = $true }, `
     symbol)
 
+  $displayCandidateRows = @($rankedCandidateRows | Select-Object -First 80)
   $summaryRows = @(
-    for ($index = 0; $index -lt $rankedCandidateRows.Count; $index++) {
-      $row = $rankedCandidateRows[$index]
+    for ($index = 0; $index -lt $displayCandidateRows.Count; $index++) {
+      $row = $displayCandidateRows[$index]
       $evidence = $row.evidence
       $reportTier = if ($evidence.opening_report_strong_sector_return_1d -eq $true -and $evidence.opening_report_priority_observation -eq $true) {
         "日報強勢優先觀察"
@@ -279,20 +280,4 @@ try {
 } finally {
   Pop-Location
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

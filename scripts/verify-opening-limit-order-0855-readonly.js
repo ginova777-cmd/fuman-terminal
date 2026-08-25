@@ -84,12 +84,13 @@ function main() {
   const candidatePath = arg("candidates", path.join(DATA_DIR, `opening-limit-order-0855-candidates-${compact}.json`));
   const watchlistPath = arg("watchlist", path.join(DATA_DIR, `opening-limit-order-0855-watchlist-${compact}.json`));
   const preflightPath = arg("preflight", path.join(DATA_DIR, `opening-limit-order-0850-preflight-${compact}.json`));
+  const futoptReadbackPath = arg("futopt-readback", path.join(DATA_DIR, `opening-limit-order-0845-futopt-readback-${compact}.json`));
 
   const failures = [];
   const rowFailures = [];
 
   if (!tradeDate) failures.push("trade_date_invalid");
-  for (const [label, file] of [["preflight", preflightPath], ["summary", summaryPath], ["candidates", candidatePath], ["watchlist", watchlistPath]]) {
+  for (const [label, file] of [["preflight", preflightPath], ["summary", summaryPath], ["candidates", candidatePath], ["watchlist", watchlistPath], ["futopt_readback", futoptReadbackPath]]) {
     if (!exists(file)) failures.push(`${label}_file_missing`);
   }
 
@@ -97,10 +98,12 @@ function main() {
   const summary = readJson(summaryPath);
   const candidate = readJson(candidatePath);
   const watchlist = readJson(watchlistPath);
+  const futoptReadback = readJson(futoptReadbackPath);
   if (preflight.__read_error) failures.push(`preflight_unreadable:${preflight.__read_error}`);
   if (summary.__read_error) failures.push(`summary_unreadable:${summary.__read_error}`);
   if (candidate.__read_error) failures.push(`candidates_unreadable:${candidate.__read_error}`);
   if (watchlist.__read_error) failures.push(`watchlist_unreadable:${watchlist.__read_error}`);
+  if (futoptReadback.__read_error) failures.push(`futopt_readback_unreadable:${futoptReadback.__read_error}`);
 
   const preflightHhmm = taipeiHhmm(preflight.checked_at);
   const summaryHhmm = taipeiHhmm(summary.checked_at);
@@ -112,6 +115,7 @@ function main() {
   if (dashDate(summary.trade_date) !== tradeDate) failures.push("summary_trade_date_mismatch");
   if (dashDate(candidate.trade_date) !== tradeDate) failures.push("candidate_trade_date_mismatch");
   if (dashDate(watchlist.trade_date) !== tradeDate) failures.push("watchlist_trade_date_mismatch");
+  if (dashDate(futoptReadback.trade_date) !== tradeDate) failures.push("futopt_readback_trade_date_mismatch");
 
   if (preflight.contract !== "opening_limit_order_0850_preflight_v1") failures.push("preflight_contract_mismatch");
   if (preflight.phase !== "0850_preopen_watchlist_warmup") failures.push("preflight_phase_mismatch");
@@ -128,6 +132,15 @@ function main() {
   if (!guardOk(summary.action_guard)) failures.push("summary_action_guard_failed");
   if (!guardOk(candidate.action_guard)) failures.push("candidate_action_guard_failed");
   if (candidate.test_override_mode === true) failures.push("candidate_test_override_mode_must_be_false");
+  const futoptReady = futoptReadback?.evidence_ok === true || futoptReadback?.ok === true;
+  const preopenReadback = candidate.preopen_evidence_readback || {};
+  const preopenCounts = preopenReadback.readback_counts || {};
+  const futuresScoreReadyCases = Number(preopenCounts.futures_score_ready_cases || 0);
+  const stockFutureRows = Number(preopenCounts.stock_future_live_rows || 0);
+  const fallbackStrengthCases = Number(preopenCounts.fallback_strength_cases || 0);
+  if (futoptReady && candidate.phase_readiness?.preopen_evidence_ready !== true) failures.push("futopt_receipt_ready_but_preopen_evidence_not_ready");
+  if (futoptReady && futuresScoreReadyCases <= 0) failures.push("futopt_receipt_ready_but_no_symbol_score_ready");
+  if (futoptReady && futuresScoreReadyCases <= 0 && stockFutureRows <= 0 && fallbackStrengthCases <= 0) failures.push("stock_future_live_timeout_without_near_snapshot_fallback");
   if (!guardOk(watchlist.action_guard)) failures.push("watchlist_action_guard_failed");
   if (Number(watchlist?.sources?.opening_report?.files_accepted || 0) < 19) failures.push("opening_report_strength_files_below_19");
   if (summary.formal_candidate_count !== 0) failures.push("summary_formal_candidate_count_not_zero");
@@ -145,6 +158,8 @@ function main() {
   const rows = array(candidate.rows);
   const candidates = rows.filter((row) => row?.status === "OPEN_LIMIT_ORDER_CANDIDATE");
   const summaryCandidates = array(summary.candidates);
+  const futuresScorePositiveCount = summaryCandidates.filter((row) => Number(row?.futures_score || row?.evidence?.futures_score || 0) > 0).length;
+  const industryFuturesComboScorePositiveCount = summaryCandidates.filter((row) => Number(row?.industry_futures_combo_score || row?.evidence?.industry_futures_combo_score || 0) > 0).length;
   if (requireRows && candidates.length === 0) failures.push("candidate_rows_required_but_empty");
 
   for (const row of summaryCandidates) {
@@ -164,6 +179,7 @@ function main() {
 
   if (Number(summary.candidate_count || 0) !== candidates.length) failures.push("summary_candidate_count_mismatch");
   if (summaryCandidates.length !== Math.min(80, candidates.length)) failures.push("summary_candidate_display_count_mismatch");
+  if (futoptReady && summaryCandidates.length > 0 && futuresScoreReadyCases > 0 && futuresScorePositiveCount <= 0) failures.push("futopt_score_ready_but_summary_futures_score_all_zero");
   if (Number(watchlist.formal_candidate_count || 0) !== 0) failures.push("watchlist_formal_candidate_count_not_zero");
   if (watchlist.formal_candidate_allowed !== false) failures.push("watchlist_formal_candidate_allowed_not_false");
 
@@ -177,6 +193,7 @@ function main() {
       summary_path: summaryPath,
       candidate_path: candidatePath,
       watchlist_path: watchlistPath,
+      futopt_readback_path: futoptReadbackPath,
     },
     timing: {
       preflight_checked_at: preflight.checked_at || null,
@@ -199,6 +216,11 @@ function main() {
       candidate_count: candidates.length,
       data_gap_count: rows.filter((row) => row?.status === "OPEN_LIMIT_ORDER_DATA_GAP").length,
       rejected_count: rows.filter((row) => row?.status === "OPEN_LIMIT_ORDER_REJECTED").length,
+      futures_score_positive_count: futuresScorePositiveCount,
+      industry_futures_combo_score_positive_count: industryFuturesComboScorePositiveCount,
+      futures_score_ready_cases: futuresScoreReadyCases,
+      stock_future_live_rows: stockFutureRows,
+      fallback_strength_cases: fallbackStrengthCases,
     },
     action_guard: {
       creates_order: false,
@@ -241,13 +263,4 @@ function main() {
 }
 
 main();
-
-
-
-
-
-
-
-
-
 

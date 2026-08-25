@@ -108,6 +108,7 @@ function addDays(dateText, days) { const date = new Date(`${dateText}T00:00:00Z`
 function parseSymbols(value) { return unique(String(value || "").split(/[,\s]+/).map((item) => item.trim().match(/^\d{4,6}$/)?.[0] || "")); }
 function taipeiDate() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
 function cachePath(tradeDate) { return path.join(CACHE_DIR, `opening-limit-order-0850-static-sources-${compactDate(tradeDate)}.json`); }
+function chunk(values, size) { const out = []; for (let i = 0; i < values.length; i += size) out.push(values.slice(i, i + size)); return out; }
 function readText(file) { try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; } }
 function readJson(file) { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } }
 function writeJson(file, payload) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`, "utf8"); }
@@ -135,6 +136,64 @@ async function supabaseSelect(view, params, key) {
   return Array.isArray(rows) ? rows : [];
 }
 
+async function loadPreopenRowsBySymbols(view, tradeDate, symbols, key, symbolColumn, select) {
+  const rows = [];
+  const failures = [];
+  for (const batch of chunk(symbols, 60)) {
+    try {
+      const batchRows = await supabaseSelect(view, {
+        select,
+        trade_date: `eq.${tradeDate}`,
+        [symbolColumn]: `in.(${batch.join(",")})`,
+        limit: String(Math.max(60, batch.length * 2)),
+      }, key);
+      rows.push(...batchRows);
+    } catch (error) {
+      failures.push(error?.message || String(error));
+    }
+  }
+  if (rows.length === 0 && failures.length > 0) {
+    try {
+      const allRows = await supabaseSelect(view, { select, trade_date: `eq.${tradeDate}`, limit: "5000" }, key);
+      const wanted = new Set(symbols.map(String));
+      rows.push(...allRows.filter((row) => wanted.has(String(row[symbolColumn] || ""))));
+    } catch (error) {
+      failures.push(error?.message || String(error));
+    }
+  }
+  return { rows, failures };
+}
+async function loadStockFutureStrengthRows(tradeDate, symbols, key) {
+  const rows = [];
+  const failures = [];
+  for (const batch of chunk(symbols, 60)) {
+    try {
+      const batchRows = await supabaseSelect("v_stock_future_live_contract", {
+        select: "trade_date,symbol,futopt_change_percent,futopt_total_volume,txf_change_percent,relative_to_txf_percent,source_status",
+        trade_date: `eq.${tradeDate}`,
+        symbol: `in.(${batch.join(",")})`,
+        limit: String(Math.max(60, batch.length)),
+      }, key);
+      rows.push(...batchRows);
+    } catch (error) {
+      failures.push(error?.message || String(error));
+    }
+  }
+  if (rows.length === 0 && failures.length > 0) {
+    try {
+      const allRows = await supabaseSelect("v_stock_future_live_contract", {
+        select: "trade_date,symbol,futopt_change_percent,futopt_total_volume,txf_change_percent,relative_to_txf_percent,source_status",
+        trade_date: `eq.${tradeDate}`,
+        limit: "5000",
+      }, key);
+      const wanted = new Set(symbols.map(String));
+      rows.push(...allRows.filter((row) => wanted.has(String(row.symbol || ""))));
+    } catch (error) {
+      failures.push(error?.message || String(error));
+    }
+  }
+  return { rows, failures };
+}
 function priceRowsByDate(rows) { return [...(rows || [])].sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))); }
 function lastCompletedSignalDate(priceRows, tradeDate) { return [...priceRowsByDate(priceRows)].reverse().find((row) => String(row.date || "") < tradeDate)?.date || ""; }
 function ma(rows, index, length) { if (index < length - 1) return NaN; const part = rows.slice(index - length + 1, index + 1); return part.length === length ? part.reduce((sum, row) => sum + n(row.close, 0), 0) / length : NaN; }
@@ -318,8 +377,9 @@ function classifyPreopenSlot(row, strength) {
   const relToTxf = n(strength?.relative_to_txf_percent);
   const effectiveVolume = Number.isFinite(futVolume) ? futVolume : n(strength?.futopt_total_volume);
   const effectiveFutChange = Number.isFinite(futChangePct) ? futChangePct : n(strength?.futopt_change_percent);
+  const relativeReady = !strength || (Number.isFinite(relToTxf) && relToTxf >= FUTOPT_RELATIVE_TO_TXF_PCT);
   const futStrong = Number.isFinite(effectiveFutChange) && effectiveFutChange >= FUTOPT_STRONG_CHANGE_PCT
-    && Number.isFinite(relToTxf) && relToTxf >= FUTOPT_RELATIVE_TO_TXF_PCT
+    && relativeReady
     && Number.isFinite(effectiveVolume) && effectiveVolume >= FUTOPT_MIN_VOLUME;
   const hasFut = Number.isFinite(fut);
   const hasTrial = Number.isFinite(trial);
@@ -355,31 +415,75 @@ function classifyPreopenSlot(row, strength) {
 }
 
 async function loadPreopenEvidence(tradeDate, symbols) {
-  const key = supabaseKey(); const output = { ok: false, source: "supabase_preopen_futopt_trial_views", views: { near_one: "v_fugle_daytrade_near_one_contract", preopen_snapshot: "v_fugle_daytrade_preopen_snapshot_contract", inverse_convergence: "derived_from_0845_0850_slots" }, cases: {}, failures: [] };
+  const key = supabaseKey();
+  const output = {
+    ok: false,
+    source: "supabase_preopen_futopt_trial_views",
+    views: {
+      near_one: "v_fugle_daytrade_near_one_contract",
+      preopen_snapshot: "v_fugle_daytrade_preopen_snapshot_contract",
+      inverse_convergence: "derived_from_0845_0850_slots",
+      stock_future_live: "v_stock_future_live_contract",
+    },
+    cases: {},
+    failures: [],
+    warnings: [],
+    readback_counts: {
+      near_one_rows: 0,
+      preopen_snapshot_rows: 0,
+      stock_future_live_rows: 0,
+      stock_future_live_failures: 0,
+      fallback_strength_cases: 0,
+      futures_score_ready_cases: 0,
+    },
+  };
   if (!key) { output.failures.push("missing_supabase_read_key"); return output; }
   try {
-    // Preopen source views are small same-day futures universes. Query them by
-    // trade date once, then intersect locally. A 691-symbol IN predicate made
-    // PostgREST time out and delayed the 08:55 observation list.
-    const [nearRows, snapshots, strengthRows] = await Promise.all([
-      supabaseSelect(output.views.near_one, { select: "trade_date,symbol,fut_contract,expiry_date,is_near_one,source", trade_date: `eq.${tradeDate}`, limit: "5000" }, key),
-      supabaseSelect(output.views.preopen_snapshot, { select: "trade_date,capture_slot,underlying_symbol,fut_contract,expiry_date,captured_at,fut_price,fut_change_pct,fut_volume,trial_price,trial_change_pct,best_bid,best_ask,bid_ask_ratio,natural_schedule_evidence,source", trade_date: `eq.${tradeDate}`, limit: "5000" }, key),
-      supabaseSelect("v_stock_future_live_contract", { select: "trade_date,symbol,futopt_change_percent,futopt_total_volume,txf_change_percent,relative_to_txf_percent,source_status", trade_date: `eq.${tradeDate}`, limit: "5000" }, key),
+    // Read the heavy stock-future view in bounded chunks. If that view times out,
+    // keep the 08:45/08:50 natural near-month snapshots available for scoring fallback.
+    const nearSelect = "trade_date,symbol,fut_contract,expiry_date,is_near_one,source";
+    const snapshotSelect = "trade_date,capture_slot,underlying_symbol,fut_contract,expiry_date,captured_at,fut_price,fut_change_pct,fut_volume,trial_price,trial_change_pct,best_bid,best_ask,bid_ask_ratio,natural_schedule_evidence,source";
+    const [nearReadback, snapshotReadback, strengthReadback] = await Promise.all([
+      loadPreopenRowsBySymbols(output.views.near_one, tradeDate, symbols, key, "symbol", nearSelect),
+      loadPreopenRowsBySymbols(output.views.preopen_snapshot, tradeDate, symbols, key, "underlying_symbol", snapshotSelect),
+      loadStockFutureStrengthRows(tradeDate, symbols, key),
     ]);
-    output.views.stock_future_live = "v_stock_future_live_contract";
-    const near = new Map(nearRows.map((row) => [String(row.symbol), row])); const strength = new Map(strengthRows.map((row) => [String(row.symbol), row])); const snapshotsBySymbol = new Map();
+    const nearRows = nearReadback.rows || [];
+    const snapshots = snapshotReadback.rows || [];
+    const strengthRows = strengthReadback.rows || [];
+    output.readback_counts.near_one_rows = nearRows.length;
+    output.readback_counts.preopen_snapshot_rows = snapshots.length;
+    output.readback_counts.stock_future_live_rows = strengthRows.length;
+    output.readback_counts.near_one_failures = nearReadback.failures.length;
+    output.readback_counts.preopen_snapshot_failures = snapshotReadback.failures.length;
+    output.readback_counts.stock_future_live_failures = strengthReadback.failures.length;
+    if (nearReadback.failures.length > 0) output.warnings.push("near_one_partial_read_failed:" + nearReadback.failures[0]);
+    if (snapshotReadback.failures.length > 0) output.warnings.push("preopen_snapshot_partial_read_failed:" + snapshotReadback.failures[0]);
+    if (strengthReadback.failures.length > 0) output.warnings.push("stock_future_live_partial_read_failed:" + strengthReadback.failures[0]);
+    const near = new Map(nearRows.map((row) => [String(row.symbol), row]));
+    const strength = new Map(strengthRows.map((row) => [String(row.symbol), row]));
+    const snapshotsBySymbol = new Map();
     for (const row of snapshots) { const symbol = String(row.underlying_symbol || ""); const map = snapshotsBySymbol.get(symbol) || new Map(); map.set(String(row.capture_slot || ""), row); snapshotsBySymbol.set(symbol, map); }
     for (const symbol of symbols) {
-      const slotMap = snapshotsBySymbol.get(symbol) || new Map(); const futStrength = strength.get(symbol) || null; const slots = REQUIRED_PREOPEN_SLOTS.map((capture_slot) => { const row = slotMap.get(capture_slot) || null; const classified = classifyPreopenSlot(row, futStrength); return { capture_slot, present: Boolean(row), natural_schedule_evidence: row?.natural_schedule_evidence === true, best_bid: round(n(row?.best_bid)), best_ask: round(n(row?.best_ask)), bid_ask_ratio: round(n(row?.bid_ask_ratio)), ...classified }; });
-      const nearOneReady = Boolean(near.get(symbol)?.is_near_one === true && near.get(symbol)?.fut_contract && near.get(symbol)?.expiry_date);
+      const slotMap = snapshotsBySymbol.get(symbol) || new Map();
+      const nearRow = near.get(symbol) || null;
+      let futStrength = strength.get(symbol) || null;
+      const slots = REQUIRED_PREOPEN_SLOTS.map((capture_slot) => { const row = slotMap.get(capture_slot) || null; const classified = classifyPreopenSlot(row, futStrength); return { capture_slot, present: Boolean(row), natural_schedule_evidence: row?.natural_schedule_evidence === true, best_bid: round(n(row?.best_bid)), best_ask: round(n(row?.best_ask)), bid_ask_ratio: round(n(row?.bid_ask_ratio)), ...classified }; });
+      const nearOneReady = Boolean(nearRow?.is_near_one === true && nearRow?.fut_contract && nearRow?.expiry_date);
+      if (!futStrength && nearOneReady && slots.some((slot) => slot.present && slot.natural_schedule_evidence && (slot.has_fut_price || slot.has_trial_price))) {
+        futStrength = { source_status: "fallback_preopen_near_snapshot", source: "0845_0850_natural_evidence", symbol };
+        output.readback_counts.fallback_strength_cases += 1;
+      }
       const trialMatchReady = slots.every((slot) => slot.present && slot.natural_schedule_evidence && slot.has_trial_price && slot.has_fut_price);
       const positiveBasis = slots.some((slot) => slot.basis_status === "正價差"); const negativeBasis = slots.some((slot) => slot.basis_status === "逆價差"); const flatBasis = slots.some((slot) => slot.basis_status === "平價差"); const pendingBasis = slots.some((slot) => slot.basis_status === "期貨強勢/價差待確認"); const inverseConvergence = slots.length >= 2 && slots[0].natural_schedule_evidence === true && slots[1].natural_schedule_evidence === true && Number.isFinite(n(slots[0].basis_pct)) && Number.isFinite(n(slots[1].basis_pct)) && n(slots[0].basis_pct) < 0 && n(slots[1].basis_pct) < 0 && n(slots[1].basis_pct) > n(slots[0].basis_pct);
       const futoptNearPrevCloseAndUp = slots.some((slot) => slot.fut_change_pct !== null && slot.fut_change_pct > 0 && Math.abs(slot.fut_change_pct) <= FUTOPT_NEAR_PREV_CLOSE_PCT);
       const trialMatchLimitDown = slots.some((slot) => slot.trial_change_pct !== null && slot.trial_change_pct <= TRIAL_LIMIT_DOWN_PCT);
       const failures = []; if (!nearOneReady) failures.push("near_one_incomplete"); if (!trialMatchReady) failures.push("trial_match_0845_0850_incomplete");
-      output.cases[symbol] = { near_one_ready: nearOneReady, trial_match_ready: trialMatchReady, positive_basis: positiveBasis, negative_basis: negativeBasis, flat_basis: flatBasis, basis_pending: pendingBasis, inverse_convergence: inverseConvergence, futopt_near_prev_close_and_up: futoptNearPrevCloseAndUp, trial_match_limit_down: trialMatchLimitDown, futopt_strength: futStrength, slots, failures };
+      const futuresScoreReady = Boolean(futStrength || positiveBasis || negativeBasis || inverseConvergence || trialMatchReady || futoptNearPrevCloseAndUp);
+      if (futuresScoreReady) output.readback_counts.futures_score_ready_cases += 1;
+      output.cases[symbol] = { near_one_ready: nearOneReady, stock_future_live_ready: Boolean(strength.get(symbol)), stock_future_strength_source: futStrength?.source_status || futStrength?.source || "", trial_match_ready: trialMatchReady, positive_basis: positiveBasis, negative_basis: negativeBasis, flat_basis: flatBasis, basis_pending: pendingBasis, inverse_convergence: inverseConvergence, futopt_near_prev_close_and_up: futoptNearPrevCloseAndUp, trial_match_limit_down: trialMatchLimitDown, futopt_strength: futStrength, futures_score_ready: futuresScoreReady, slots, failures };
     }
-    output.ok = true;
+    output.ok = output.readback_counts.futures_score_ready_cases > 0 || snapshots.length > 0 || nearRows.length > 0;
   } catch (error) { output.failures.push(error?.message || String(error)); }
   return output;
 }
@@ -535,16 +639,4 @@ main().catch((error) => {
   }, null, 2));
   process.exit(1);
 });
-
-
-
-
-
-
-
-
-
-
-
-
 
