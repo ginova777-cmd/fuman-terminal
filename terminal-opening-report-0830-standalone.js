@@ -2,7 +2,7 @@
   "use strict";
   const ID = "terminal-opening-report-0830-standalone";
   const ENDPOINTS = [
-    "/api/opening-report-0830-terminal-briefing",
+    "/api/market-ai-live?briefingOnly=1",
     "/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40",
   ];
   let report = null;

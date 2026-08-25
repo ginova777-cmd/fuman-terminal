@@ -26,7 +26,7 @@ class Element {
 }
 
 async function main() {
-  assert(source.includes("/api/opening-report-0830-terminal-briefing"), "standalone renderer must use the fast briefing endpoint");
+  assert(source.includes("briefingOnly=1"), "standalone renderer must use the fast briefing endpoint");
   assert(source.includes("market-ai-live"), "standalone renderer must retain the market API fallback");
   const byId = new Map();
   const market = new Element("market-view");

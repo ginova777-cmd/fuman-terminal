@@ -1661,6 +1661,18 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
 }
 
 module.exports = async function handler(request, response) {
+  const clock = taipeiClock();
+  if (String(request.query?.briefingOnly || "") === "1") {
+    const snapshotReport = await readOpeningMorningReportSnapshot(clock);
+    const report = snapshotReport?.ok === true ? snapshotReport : readOpeningMorningReport(clock);
+    response.status(200).json({
+      ok: report?.ok === true,
+      source: "opening-report-0830-briefing-only",
+      openingMorningReport: report || null,
+    });
+    return;
+  }
+
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
   installMarketCalendarResponse(response, marketCalendar);
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
@@ -1672,7 +1684,6 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  const clock = taipeiClock();
   const detectWindowActive = isMarketAiDetectWindow(clock);
   const cached = readCachedPayload();
   const breadth = readCachedBreadth();
