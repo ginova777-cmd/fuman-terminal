@@ -32,9 +32,14 @@
       panel.id = ROOT_ID;
       panel.className = "terminal-opening-report-0830-root";
       panel.dataset.openingReport0830Root = "1";
+    }
+    const tabs = market.querySelector("[data-fuman-market-tabs]");
+    if (tabs) {
+      if (panel.previousElementSibling !== tabs) tabs.insertAdjacentElement("afterend", panel);
+    } else {
       const anchor = market.querySelector(".terminal-band") || market.querySelector(".watch-section");
-      if (anchor && typeof market.insertBefore === "function") market.insertBefore(panel, anchor);
-      else market.appendChild(panel);
+      if (anchor && panel.nextElementSibling !== anchor && typeof market.insertBefore === "function") market.insertBefore(panel, anchor);
+      else if (!panel.parentElement) market.appendChild(panel);
     }
     panel.hidden = false;
     return panel;

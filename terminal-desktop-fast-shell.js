@@ -5457,7 +5457,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-55";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-56";
   }
 
   function loadScriptOnce(src, attr) {
@@ -6819,9 +6819,14 @@
       panel.id = "terminal-opening-report-0830-root";
       panel.className = "terminal-opening-report-0830-root";
       panel.dataset.openingReport0830Root = "1";
+    }
+    const tabs = market.querySelector("[data-fuman-market-tabs]");
+    if (tabs) {
+      if (panel.previousElementSibling !== tabs) tabs.insertAdjacentElement("afterend", panel);
+    } else {
       const anchor = market.querySelector(".terminal-band") || market.querySelector(".watch-section");
-      if (anchor) market.insertBefore(panel, anchor);
-      else market.appendChild(panel);
+      if (anchor && panel.nextElementSibling !== anchor) market.insertBefore(panel, anchor);
+      else if (!panel.parentElement) market.appendChild(panel);
     }
     if (!data) return false;
     const hasToday = data.ok === true || String(data.reason_code || "") !== "opening_report_0830_final_receipt_missing";

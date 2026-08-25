@@ -17,6 +17,7 @@ class Element {
     this.innerHTML = "";
   }
   querySelector(selector) {
+    if (String(selector).includes("data-fuman-market-tabs")) return this.tabs || null;
     if (String(selector).includes("terminal-band")) return this.terminalBand || null;
     return this.panel || null;
   }
@@ -25,7 +26,14 @@ class Element {
     node.parentElement = this;
     if (node.id) this.byId.set(node.id, node);
   }
-  insertAdjacentElement() {}
+  insertAdjacentElement(position, node) {
+    if (position !== "afterend" || !this.parentElement) return;
+    const parent = this.parentElement;
+    const index = parent.children.indexOf(this);
+    parent.children.splice(index + 1, 0, node);
+    node.parentElement = parent;
+    if (node.id) parent.byId.set(node.id, node);
+  }
   appendChild(node) { this.children.push(node); node.parentElement = this; if (node.id) this.byId.set(node.id, node); }
   insertBefore(node, anchor) { this.children.unshift(node); node.parentElement = this; if (node.id) this.byId.set(node.id, node); }
 }
@@ -75,6 +83,7 @@ async function main() {
   const node = root?.children[0];
   assert.equal(document.documentElement.dataset.fumanOpeningReport0830, "mounted");
   assert.equal(root?.className, "terminal-opening-report-0830-root");
+  assert.equal(market.children[1], root, "briefing root must render before the AI panel");
   assert.equal(node?.id, "terminal-opening-report-0830-standalone");
   assert(node.innerHTML.includes("晨報｜今日優先觀察"));
   assert(node.innerHTML.includes("測試族群"));
