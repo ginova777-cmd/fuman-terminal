@@ -55,6 +55,8 @@ function main() {
   requireMarker(shell, "data-fuman-market-tabs", "desktop_shell", failures);
   requireMarker(standalone, "openingMorningReport", "standalone_briefing", failures);
   requireMarker(standalone, "briefingOnly=1", "standalone_briefing", failures);
+  requireMarker(standalone, "MAX_RETRY_ATTEMPTS = 3", "standalone_briefing", failures);
+  requireMarker(standalone, "response.ok", "standalone_briefing", failures);
   if (standalone.includes("terminal-opening-report-0830-root")) failures.push("standalone_must_not_create_separate_morning_report_surface");
   requireMarker(marketApi, "briefingOnly", "market_api", failures);
   if (!/independently verified and remains visible when live AI is blocked\.\n\s*renderOpeningReport0830DesktopBriefing\(aiPayload\);\n\s*return;/.test(shell)) failures.push("morning_report_not_rendered_when_ai_blocked");

@@ -22,6 +22,7 @@ async function main() {
   const context = {
     document,
     fetch: async () => ({
+      ok: true,
       json: async () => ({
         openingMorningReport: {
           ok: true,
