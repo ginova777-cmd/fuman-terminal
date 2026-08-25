@@ -1,6 +1,7 @@
-param(
+﻿param(
   [string]$TradeDate = "",
   [int]$Limit = 1600,
+  [string]$RunId = "",
   [switch]$WaitUntil0840,
   [string]$TerminalDir = "C:\fuman-terminal",
   [string]$RuntimeDir = "C:\fuman-runtime"
@@ -50,6 +51,7 @@ if ($Limit -lt 1600) { Write-Host ("[0840] ignore user Limit={0}; use full openi
 if ($WaitUntil0840) { Wait-UntilTaipeiTime -HHmmss "08:40:00" }
 
 $compactDate = $TradeDate -replace "[^\d]", ""
+if (!$RunId) { $RunId = "opening-limit-order-{0}-{1}" -f $compactDate, ((Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmss")) }
 $outDir = Join-Path $RuntimeDir "data\opening-limit-order"
 $preCandidatesPath = Join-Path $outDir ("opening-limit-order-0840-pre-candidates-{0}.json" -f $compactDate)
 $futoptReadbackPath = Join-Path $outDir ("opening-limit-order-0845-futopt-readback-{0}.json" -f $compactDate)
@@ -76,7 +78,7 @@ try {
   try { $calendar = $calendarText | ConvertFrom-Json } catch { $calendar = $null }
   if (!$calendar) {
     $receipt = [ordered]@{
-      ok = $false; contract = "opening_limit_order_0840_progressive_readonly_v1"; trade_date = $TradeDate
+      ok = $false; contract = "opening_limit_order_0840_progressive_readonly_v1"; trade_date = $TradeDate; run_id = $RunId
       checked_at = (Get-Date).ToUniversalTime().ToString("o"); phase = "0840_pre_candidates"; status = "BLOCKED_CALENDAR"
       first_blocker = "market_calendar_unreadable"; reason_code = "market_calendar_unreadable"; calendar_exit_code = $calendarExitCode; calendar_raw = $calendarText
       uses_0900_data = $false
@@ -90,7 +92,7 @@ try {
 
   if ($calendar.marketOpen -ne $true -or $calendar.marketDate -ne $TradeDate) {
     $receipt = [ordered]@{
-      ok = $true; contract = "opening_limit_order_0840_progressive_readonly_v1"; trade_date = $TradeDate
+      ok = $true; contract = "opening_limit_order_0840_progressive_readonly_v1"; trade_date = $TradeDate; run_id = $RunId
       checked_at = (Get-Date).ToUniversalTime().ToString("o"); phase = "0840_pre_candidates"; status = "SKIP_NON_TRADING_DAY"
       market_calendar = $calendar; first_blocker = "market_calendar_non_trading_day"; reason_code = "market_calendar_non_trading_day"
       uses_0900_data = $false
@@ -102,8 +104,8 @@ try {
     exit 0
   }
 
-  Write-Host ("[0840] progressive opening-entry pre-candidates trade_date={0} limit={1}" -f $TradeDate, $Limit)
-  & "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -File $preflightScript -TradeDate $TradeDate -Limit $Limit -TerminalDir $TerminalDir -RuntimeDir $RuntimeDir
+  Write-Host ("[0840] progressive opening-entry pre-candidates trade_date={0} run_id={1} limit={2}" -f $TradeDate, $RunId, $Limit)
+  & "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -File $preflightScript -TradeDate $TradeDate -Limit $Limit -RunId $RunId -TerminalDir $TerminalDir -RuntimeDir $RuntimeDir
   $preflightExit = $LASTEXITCODE
   $preflight = Read-JsonFile -Path $preflightPath
   $watchlist = Read-JsonFile -Path $watchlistPath
@@ -114,6 +116,7 @@ try {
     ok = ($preflightExit -eq 0 -and $preflight -and $preflight.ok -eq $true -and $watchlist -and [int]$watchlist.symbol_count -eq [int]$watchlist.full_symbol_count)
     contract = "opening_limit_order_0840_progressive_readonly_v1"
     trade_date = $TradeDate
+    run_id = $RunId
     checked_at = (Get-Date).ToUniversalTime().ToString("o")
     phase = "0840_pre_candidates"
     detection_window = "08:40-08:45"
@@ -166,6 +169,7 @@ try {
     evidence_ok = $futoptEvidenceOk
     contract = "opening_limit_order_0845_futopt_readback_v2"
     trade_date = $TradeDate
+    run_id = $RunId
     checked_at = (Get-Date).ToUniversalTime().ToString("o")
     phase = "0845_0850_futopt_trial_readback"
     futopt_detection_window = "08:45-08:50"
@@ -186,7 +190,7 @@ try {
 
   Wait-UntilTaipeiTime -HHmmss "08:55:00"
   Write-Host ("[0855] progressive final ranked watchlist trade_date={0}" -f $TradeDate)
-  & "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -File $observeScript -TradeDate $TradeDate -Limit $Limit -TerminalDir $TerminalDir -RuntimeDir $RuntimeDir
+  & "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -File $observeScript -TradeDate $TradeDate -Limit $Limit -RunId $RunId -TerminalDir $TerminalDir -RuntimeDir $RuntimeDir
   $observeExit = $LASTEXITCODE
   $summary = Read-JsonFile -Path $summaryPath
   $rankedRows = @()
@@ -217,9 +221,10 @@ try {
     ok = $summaryOk
     contract = "opening_limit_order_0855_ranked_watchlist_v1"
     trade_date = $TradeDate
+    run_id = $RunId
     checked_at = (Get-Date).ToUniversalTime().ToString("o")
     phase = "0855_weighted_ranked_watchlist"
-    ranking_policy = "final_score_desc_then_strategy_count_futopt_broker_report_symbol"
+    ranking_policy = "evidence_first_report_broker_futures_strategy_then_score"
     uses_0900_data = $false
     observe_exit_code = $observeExit
     source_paths = [ordered]@{ pre_candidates = $preCandidatesPath; futopt_readback = $futoptReadbackPath; summary = $summaryPath }
@@ -239,7 +244,7 @@ try {
 
   Wait-UntilTaipeiTime -HHmmss "09:00:00"
   Write-Host ("[0900] progressive verifier readback trade_date={0}" -f $TradeDate)
-  $verifierRaw = & "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -File $verifierScript -TradeDate $TradeDate -TerminalDir $TerminalDir -RuntimeDir $RuntimeDir -NodeExe $nodeExe 2>&1
+  $verifierRaw = & "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -File $verifierScript -TradeDate $TradeDate -RunId $RunId -TerminalDir $TerminalDir -RuntimeDir $RuntimeDir -NodeExe $nodeExe 2>&1
   $verifierExit = $LASTEXITCODE
   $verifierText = ($verifierRaw | Out-String).Trim()
   $verifierReceipt = Read-JsonFile -Path $verifierReceiptPath
@@ -247,6 +252,7 @@ try {
     ok = ($verifierExit -eq 0 -and $verifierReceipt -and $verifierReceipt.ok -eq $true)
     contract = "opening_limit_order_morning_readonly_chain_v1"
     trade_date = $TradeDate
+    run_id = $RunId
     checked_at = (Get-Date).ToUniversalTime().ToString("o")
     phase = "0840_to_0900_opening_entry_readonly_chain"
     source_paths = [ordered]@{
@@ -273,8 +279,3 @@ try {
 } finally {
   Pop-Location
 }
-
-
-
-
-

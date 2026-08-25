@@ -8,6 +8,8 @@ const read = (file) => fs.readFileSync(path.join(terminalDir, file), "utf8");
 const candidate = read("scripts/verify-opening-limit-order-candidate-readonly.js");
 const preflight = read("ops/Run-OpeningLimitOrder0850PreflightReadonly.ps1");
 const engine = read("ops/Run-OpeningLimitOrder0850PreflightReadonly.engine-v2.ps1");
+const runner0855 = read("ops/Run-OpeningLimitOrder0855Readonly.ps1");
+const verifier0855 = read("scripts/verify-opening-limit-order-0855-readonly.js");
 const staticPrefilter = read("scripts/build-opening-limit-order-static-prefilter.js");
 const issues = [];
 
@@ -58,6 +60,8 @@ for (const marker of candidateMarkers) if (!candidate.includes(marker)) issues.p
 for (const marker of schedulerMarkers) if (!preflight.includes(marker)) issues.push(`scheduler_marker_missing:${marker}`);
 for (const marker of engineMarkers) if (!engine.includes(marker)) issues.push(`engine_marker_missing:${marker}`);
 for (const marker of staticMarkers) if (!staticPrefilter.includes(marker)) issues.push(`static_prefilter_marker_missing:${marker}`);
+for (const marker of ["[string]$RunId", "run_id = $RunId", "-RunId $RunId"]) if (!preflight.includes(marker) && !engine.includes(marker) && !runner0855.includes(marker)) issues.push(`run_id_marker_missing:${marker}`);
+for (const marker of ["expectedRunId", "runIdReadback", "run_id_missing_all_receipts"]) if (!verifier0855.includes(marker)) issues.push(`run_id_verifier_marker_missing:${marker}`);
 if (candidate.includes("prev_low_above_prior_open_overnight_trader_branches")) issues.push("legacy_rule8_previous_open_condition_present");
 if (candidate.includes('const REQUIRED_PREOPEN_SLOTS = ["0845", "0850", "0855", "0859"]')) issues.push("preopen_decision_must_not_require_0859");
 if (candidate.includes("us_sector_1d_strength_missing_or_not_positive")) issues.push("legacy_us_only_sector_gap_present");

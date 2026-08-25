@@ -1,6 +1,7 @@
-param(
+﻿param(
   [string]$TradeDate = "",
   [int]$Limit = 1600,
+  [string]$RunId = "",
   [switch]$WaitUntil0850,
   [string]$TerminalDir = "C:\fuman-terminal",
   [string]$RuntimeDir = "C:\fuman-runtime"
@@ -37,6 +38,7 @@ function Write-Receipt {
 
 if (!$TradeDate) { $TradeDate = (Get-TaipeiNow).ToString("yyyy-MM-dd") }
 $compactDate = $TradeDate -replace "[^\d]", ""
+if (!$RunId) { $RunId = "opening-limit-order-{0}-{1}" -f $compactDate, ((Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmss")) }
 $preflightPath = Join-Path $RuntimeDir ("data\opening-limit-order\opening-limit-order-0850-preflight-{0}.json" -f $compactDate)
 $engine = Join-Path $TerminalDir "ops\Run-OpeningLimitOrder0850PreflightReadonly.engine-v2.ps1"
 
@@ -52,7 +54,7 @@ try {
   try { $calendar = $calendarText | ConvertFrom-Json } catch { $calendar = $null }
   if (!$calendar) {
     $receipt = [ordered]@{
-      ok = $false; contract = "opening_limit_order_0850_preflight_v3"; trade_date = $TradeDate
+      ok = $false; contract = "opening_limit_order_0850_preflight_v3"; trade_date = $TradeDate; run_id = $RunId
       checked_at = (Get-Date).ToUniversalTime().ToString("o"); status = "BLOCKED_CALENDAR"
       first_blocker = "market_calendar_unreadable"; reason_code = "market_calendar_unreadable"
       calendar_exit_code = $calendarExitCode; calendar_raw = $calendarText
@@ -65,7 +67,7 @@ try {
   }
   if ($calendar.marketOpen -ne $true -or $calendar.marketDate -ne $TradeDate) {
     $receipt = [ordered]@{
-      ok = $true; contract = "opening_limit_order_0850_preflight_v3"; trade_date = $TradeDate
+      ok = $true; contract = "opening_limit_order_0850_preflight_v3"; trade_date = $TradeDate; run_id = $RunId
       checked_at = (Get-Date).ToUniversalTime().ToString("o"); status = "SKIP_NON_TRADING_DAY"
       market_calendar = $calendar; first_blocker = "market_calendar_non_trading_day"; reason_code = "market_calendar_non_trading_day"
       action_guard = [ordered]@{ creates_order = $false; creates_formal_candidate = $false; publish_allowed = $false; requires_second_confirm_before_action = $true }
@@ -79,13 +81,6 @@ try {
 if ($WaitUntil0850) { Wait-Until0850 }
 
   # The engine completes static warmup at 08:50 and freezes the one pre-open result at 08:55.
-  & "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -File $engine -TradeDate $TradeDate -Limit $Limit -TerminalDir $TerminalDir -RuntimeDir $RuntimeDir
+  & "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -File $engine -TradeDate $TradeDate -Limit $Limit -RunId $RunId -TerminalDir $TerminalDir -RuntimeDir $RuntimeDir
   exit $LASTEXITCODE
 } finally { Pop-Location }
-
-
-
-
-
-
-

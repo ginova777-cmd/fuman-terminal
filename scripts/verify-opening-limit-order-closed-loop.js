@@ -39,6 +39,10 @@ function taskEnabled(text) { return /Scheduled Task State:\s*Enabled/i.test(text
 function taskReady(text) { return /Status:\s*Ready/i.test(text); }
 function taskHasStart(text, hhmmss) { return new RegExp(`Start Time:\\s*(?:上午\\s*)?${hhmmss.replace(/:/g, ":")}`, "i").test(text); }
 function taskRuns(text, scriptName) { return text.includes(scriptName); }
+function taskLastResult(text) {
+  const match = String(text || "").match(/Last Result:\s*(-?\d+)/i);
+  return match ? Number(match[1]) : null;
+}
 function lateOnly(failedChecks) {
   const allowed = new Set(["preflight_completed_after_0855", "summary_completed_after_0900"]);
   return array(failedChecks).length > 0 && array(failedChecks).every((check) => allowed.has(check));
@@ -94,6 +98,7 @@ function main() {
     if (!taskReady(task0840.text)) warnings.push("task_0840_not_ready_now");
     if (!taskHasStart(task0840.text, "08:40:00")) failures.push("task_0840_wrong_start_time");
     if (!taskRuns(task0840.text, "Run-OpeningLimitOrderMorningReadonly.ps1")) failures.push("task_0840_wrong_runner");
+    if (requireRuntime && taskLastResult(task0840.text) !== 0) failures.push("task_0840_last_result_not_zero");
   }
   if (task0900.status !== 0) failures.push("task_0900_unreadable");
   else {
@@ -101,6 +106,7 @@ function main() {
     if (!taskReady(task0900.text)) warnings.push("task_0900_not_ready_now");
     if (!taskHasStart(task0900.text, "09:00:00")) failures.push("task_0900_wrong_start_time");
     if (!taskRuns(task0900.text, "Run-OpeningLimitOrder0900Verifier.ps1")) failures.push("task_0900_wrong_runner");
+    if (requireRuntime && taskLastResult(task0900.text) !== 0) failures.push("task_0900_last_result_not_zero");
   }
 
   const runtimeFiles = {
@@ -109,6 +115,7 @@ function main() {
     preflight: path.join(DATA_DIR, `opening-limit-order-0850-preflight-${compact}.json`),
     watchlist: path.join(DATA_DIR, `opening-limit-order-0855-watchlist-${compact}.json`),
     candidates: path.join(DATA_DIR, `opening-limit-order-0855-candidates-${compact}.json`),
+    rankedWatchlist: path.join(DATA_DIR, `opening-limit-order-0855-ranked-watchlist-${compact}.json`),
     summary: path.join(DATA_DIR, `opening-limit-order-0855-summary-${compact}.json`),
     verifier0900: path.join(DATA_DIR, `opening-limit-order-0900-verifier-${compact}.json`),
     morningReceipt: path.join(DATA_DIR, `opening-limit-order-morning-readonly-${compact}.json`),
@@ -119,7 +126,7 @@ function main() {
       runtime[label] = exists(file) ? readJson(file) : null;
       if (!runtime[label] && label !== "morningReceipt") failures.push(`${label}_runtime_missing`);
     }
-    if (!runtime.morningReceipt) warnings.push("morning_total_receipt_missing_for_current_date_before_next_scheduled_run");
+    if (!runtime.morningReceipt) failures.push("morning_total_receipt_missing_for_current_date_before_next_scheduled_run");
     if (runtime.preCandidates && !guardOk(runtime.preCandidates.action_guard)) failures.push("pre_candidates_action_guard_failed");
     if (runtime.futoptReadback && !guardOk(runtime.futoptReadback.action_guard)) failures.push("futopt_readback_action_guard_failed");
     if (runtime.watchlist && !guardOk(runtime.watchlist.action_guard)) failures.push("watchlist_action_guard_failed");
@@ -129,9 +136,28 @@ function main() {
     if (runtime.summary && Number(runtime.summary.formal_candidate_count || 0) !== 0) failures.push("summary_formal_candidate_count_not_zero");
     if (runtime.summary && runtime.summary.publish_allowed !== false) failures.push("summary_publish_allowed_not_false");
     if (runtime.candidates && array(runtime.candidates.implemented_rules).length < 10) failures.push("candidate_implemented_rules_less_than_10");
+    const runIdReadback = {
+      preCandidates: runtime.preCandidates?.run_id || "",
+      futoptReadback: runtime.futoptReadback?.run_id || "",
+      preflight: runtime.preflight?.run_id || "",
+      watchlist: runtime.watchlist?.run_id || "",
+      candidates: runtime.candidates?.run_id || "",
+      rankedWatchlist: runtime.rankedWatchlist?.run_id || "",
+      summary: runtime.summary?.run_id || "",
+      verifier0900: runtime.verifier0900?.run_id || "",
+      morningReceipt: runtime.morningReceipt?.run_id || "",
+    };
+    const resolvedRunId = Object.values(runIdReadback).find(Boolean) || "";
+    if (!resolvedRunId) failures.push("run_id_missing_all_runtime_receipts");
+    for (const [label, value] of Object.entries(runIdReadback)) {
+      if (!value) failures.push(`${label}_run_id_missing`);
+      else if (value !== resolvedRunId) failures.push(`${label}_run_id_mismatch`);
+    }
     if (runtime.verifier0900 && runtime.verifier0900.ok !== true) {
-      if (allowLateRepair && lateOnly(runtime.verifier0900.failed_checks)) warnings.push("current_date_repaired_late_only_not_a_scheduled_pass");
-      else failures.push("verifier_0900_not_ok");
+      if (allowLateRepair && lateOnly(runtime.verifier0900.failed_checks)) {
+        warnings.push("current_date_repaired_late_only_not_a_scheduled_pass");
+        failures.push("verifier_0900_late_repair_not_scheduled_pass");
+      } else failures.push("verifier_0900_not_ok");
     }
   }
 
@@ -160,6 +186,19 @@ function main() {
       verifier_0900_failed_checks: runtime.verifier0900?.failed_checks || [],
       late_repair_accepted: Boolean(runtime.verifier0900 && runtime.verifier0900.ok !== true && allowLateRepair && lateOnly(runtime.verifier0900.failed_checks)),
       morning_total_receipt_exists: Boolean(runtime.morningReceipt),
+      task_0840_last_result: taskLastResult(task0840.text),
+      task_0900_last_result: taskLastResult(task0900.text),
+      run_id_readback: runtime.preCandidates ? {
+        preCandidates: runtime.preCandidates?.run_id || "",
+        futoptReadback: runtime.futoptReadback?.run_id || "",
+        preflight: runtime.preflight?.run_id || "",
+        watchlist: runtime.watchlist?.run_id || "",
+        candidates: runtime.candidates?.run_id || "",
+        rankedWatchlist: runtime.rankedWatchlist?.run_id || "",
+        summary: runtime.summary?.run_id || "",
+        verifier0900: runtime.verifier0900?.run_id || "",
+        morningReceipt: runtime.morningReceipt?.run_id || "",
+      } : null,
     } : null,
     files: { source: sourceFiles, runtime: runtimeFiles, out: outPath },
     warnings,

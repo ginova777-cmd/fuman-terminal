@@ -80,6 +80,7 @@ function main() {
   const tradeDate = dashDate(arg("trade-date", taipeiDate()));
   const compact = compactDate(tradeDate);
   const requireRows = arg("require-rows", "0") === "1";
+  const expectedRunId = arg("run-id", "");
   const summaryPath = arg("summary", path.join(DATA_DIR, `opening-limit-order-0855-summary-${compact}.json`));
   const candidatePath = arg("candidates", path.join(DATA_DIR, `opening-limit-order-0855-candidates-${compact}.json`));
   const watchlistPath = arg("watchlist", path.join(DATA_DIR, `opening-limit-order-0855-watchlist-${compact}.json`));
@@ -116,6 +117,21 @@ function main() {
   if (dashDate(candidate.trade_date) !== tradeDate) failures.push("candidate_trade_date_mismatch");
   if (dashDate(watchlist.trade_date) !== tradeDate) failures.push("watchlist_trade_date_mismatch");
   if (dashDate(futoptReadback.trade_date) !== tradeDate) failures.push("futopt_readback_trade_date_mismatch");
+
+  const runIdReadback = {
+    preflight: String(preflight.run_id || ""),
+    summary: String(summary.run_id || ""),
+    candidates: String(candidate.run_id || ""),
+    watchlist: String(watchlist.run_id || ""),
+    futopt_readback: String(futoptReadback.run_id || ""),
+  };
+  const resolvedRunId = expectedRunId || Object.values(runIdReadback).find(Boolean) || "";
+  if (!resolvedRunId) failures.push("run_id_missing_all_receipts");
+  for (const [label, value] of Object.entries(runIdReadback)) {
+    if (!value) failures.push(`${label}_run_id_missing`);
+    else if (resolvedRunId && value !== resolvedRunId) failures.push(`${label}_run_id_mismatch`);
+  }
+  if (expectedRunId && resolvedRunId && resolvedRunId !== expectedRunId) failures.push("expected_run_id_mismatch");
 
   if (preflight.contract !== "opening_limit_order_0850_preflight_v1") failures.push("preflight_contract_mismatch");
   if (preflight.phase !== "0850_preopen_watchlist_warmup") failures.push("preflight_phase_mismatch");
@@ -216,7 +232,9 @@ function main() {
     ok: failures.length === 0 && rowFailures.length === 0,
     contract: CONTRACT,
     trade_date: tradeDate,
+    run_id: resolvedRunId,
     checked_at: new Date().toISOString(),
+    run_id_readback: runIdReadback,
     files: {
       preflight_path: preflightPath,
       summary_path: summaryPath,

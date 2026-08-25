@@ -1,6 +1,7 @@
-param(
+﻿param(
   [string]$TradeDate = "",
   [int]$Limit = 1600,
+  [string]$RunId = "",
   [switch]$WaitUntil0850,
   [string]$TerminalDir = "C:\fuman-terminal",
   [string]$RuntimeDir = "C:\fuman-runtime"
@@ -84,6 +85,7 @@ if ($Limit -lt 1600) { Write-Host ("[0850] ignore user Limit={0}; use full openi
 if ($WaitUntil0850) { Wait-UntilTaipeiTime -Time "08:50:00" -Label "until_0850" }
 
 $compactDate = $TradeDate -replace "[^\d]", ""
+if (!$RunId) { $RunId = "opening-limit-order-{0}-{1}" -f $compactDate, ((Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmss")) }
 $outDir = Join-Path $RuntimeDir "data\opening-limit-order"
 $watchlistPath = Join-Path $outDir ("opening-limit-order-0855-watchlist-{0}.json" -f $compactDate)
 $preflightPath = Join-Path $outDir ("opening-limit-order-0850-preflight-{0}.json" -f $compactDate)
@@ -100,6 +102,9 @@ try {
   $watchlistText = ((& $nodeExe "scripts\build-opening-limit-order-watchlist.js" "--trade-date=$TradeDate" "--limit=$Limit" "--out=$watchlistPath") | Out-String).Trim()
   if (!$watchlistText) { throw "opening_limit_order_0850_watchlist_no_output" }
   $watchlist = ConvertFrom-JsonOutput -Text $watchlistText -Label "opening_limit_order_0850_watchlist"
+  $watchlist | Add-Member -NotePropertyName run_id -NotePropertyValue $RunId -Force
+  $watchlist | Add-Member -NotePropertyName chain_run_id -NotePropertyValue $RunId -Force
+  Write-JsonFile -Path $watchlistPath -Payload $watchlist
 
   # Static daily, institutional, branch-cost, and overnight-style inputs are fetched before 08:55.
   $sourceWarmup = $null
@@ -142,6 +147,7 @@ try {
     ok = ($LASTEXITCODE -eq 0 -and $watchlist.ok -eq $true)
     contract = "opening_limit_order_0850_preflight_v1"
     trade_date = $TradeDate
+    run_id = $RunId
     checked_at = (Get-Date).ToUniversalTime().ToString("o")
     phase = "0850_preopen_watchlist_warmup"
     candidate_deadline = "08:55:00 Asia/Taipei"
@@ -186,15 +192,3 @@ try {
   # The outer morning runner is the only owner of the 08:55 observation call.
   # Keeping it here would run the candidate phase twice and can cross 09:00.
 } finally { Pop-Location }
-
-
-
-
-
-
-
-
-
-
-
-

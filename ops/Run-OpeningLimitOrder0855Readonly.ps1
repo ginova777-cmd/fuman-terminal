@@ -1,6 +1,7 @@
-param(
+﻿param(
   [string]$TradeDate = "",
   [int]$Limit = 1600,
+  [string]$RunId = "",
   [switch]$WaitUntil0855,
   [string]$TerminalDir = "C:\fuman-terminal",
   [string]$RuntimeDir = "C:\fuman-runtime"
@@ -88,8 +89,15 @@ try {
   $watchlist = $null
   $watchlistSource = ""
   $preflight = if (Test-Path -LiteralPath $preflightPath) { Get-Content -LiteralPath $preflightPath -Raw | ConvertFrom-Json } else { $null }
-  $preflightValid = (
+  if (!$RunId -and $preflight -and $preflight.run_id) { $RunId = $preflight.run_id }
+  if (!$RunId) { $RunId = "opening-limit-order-{0}-{1}" -f $compactDate, ((Get-Date).ToUniversalTime().ToString("yyyyMMddHHmmss")) }
+  $runIdOk = (
     $preflight -and
+    $preflight.run_id -and
+    $preflight.run_id -eq $RunId
+  )
+  $preflightValid = (
+    $runIdOk -and
     $preflight.ok -eq $true -and
     $preflight.contract -eq "opening_limit_order_0850_preflight_v1" -and
     $preflight.trade_date -eq $TradeDate -and
@@ -125,6 +133,7 @@ try {
       ok = $false
       contract = "opening_limit_order_0855_readonly_runner_v1"
       trade_date = $TradeDate
+      run_id = $RunId
       checked_at = (Get-Date).ToUniversalTime().ToString("o")
       phase = "0855_preopen_candidate_list"
       watchlist_path = $watchlistPath
@@ -149,7 +158,9 @@ try {
   $candidateText = ($candidateRaw | Out-String).Trim()
   if (!$candidateText) { throw "candidate_verifier_no_output" }
   $candidate = $candidateText | ConvertFrom-Json
-  $candidateText | Set-Content -LiteralPath $candidatePath -Encoding UTF8
+  $candidate | Add-Member -NotePropertyName run_id -NotePropertyValue $RunId -Force
+  $candidate | Add-Member -NotePropertyName chain_run_id -NotePropertyValue $RunId -Force
+  Write-JsonFile -Path $candidatePath -Payload $candidate
 
   $rows = @($candidate.rows)
   $candidateRows = @($rows | Where-Object { $_.status -eq "OPEN_LIMIT_ORDER_CANDIDATE" })
@@ -249,6 +260,7 @@ try {
     ok = ($candidate.ok -eq $true -and $guardOk)
     contract = "opening_limit_order_0855_readonly_runner_v1"
     trade_date = $TradeDate
+    run_id = $RunId
     checked_at = (Get-Date).ToUniversalTime().ToString("o")
     phase = "0855_preopen_candidate_list"
     watchlist_path = $watchlistPath
@@ -285,4 +297,3 @@ try {
 } finally {
   Pop-Location
 }
-
