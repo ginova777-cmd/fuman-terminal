@@ -132,7 +132,7 @@ Invoke-Npm "verify:fugle-websocket-sources"
 Invoke-Npm "verify:source-sync"
 
 if (-not $SkipDeploy) {
-  Invoke-NpmAt $terminalRoot "deploy"
+  Invoke-Npm "deploy"
 } else {
   Write-ReleaseLog "SkipDeploy selected; deploy command was not run."
 }
