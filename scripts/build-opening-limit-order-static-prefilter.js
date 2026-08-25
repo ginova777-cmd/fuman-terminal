@@ -243,13 +243,17 @@ function mergeBranchCosts(rows) {
 }
 function weightedCost(rows) { const positives = mergeBranchCosts(rows).slice(0, 10); const volume = positives.reduce((sum, row) => sum + row.net_buy, 0); return volume ? positives.reduce((sum, row) => sum + row.net_buy * row.net_buy_cost, 0) / volume : NaN; }
 function preferredTopNetBuyBroker(rows) {
-  const top = mergeBranchCosts(rows)[0] || null;
-  if (!top) return { available: false, matched: false, rank: null, broker_name: "", trader_id: "", net_buy: null, cost_price: null, reason: "top_net_buy_branch_missing" };
-  const brokerName = String(top.trader || "").trim();
-  if (!brokerName) return { available: false, matched: false, rank: 1, broker_name: "", trader_id: String(top.trader_id || ""), net_buy: round(top.net_buy, 0), cost_price: round(top.net_buy_cost), reason: "top_net_buy_broker_name_missing" };
-  const compact = brokerName.replace(/[\s\-_.()（）]/g, "").toLowerCase();
-  const brokerKey = /摩根大通|jpmorgan/.test(compact) ? "jpmorgan" : /摩根士丹利|morganstanley/.test(compact) ? "morgan_stanley" : "";
-  return { available: true, matched: Boolean(brokerKey), broker_key: brokerKey || null, rank: 1, broker_name: brokerName, trader_id: String(top.trader_id || ""), net_buy: round(top.net_buy, 0), cost_price: round(top.net_buy_cost), reason: brokerKey ? "preferred_broker_top_net_buy" : "top_net_buy_broker_not_preferred" };
+  const topTwo = mergeBranchCosts(rows).filter((row) => n(row?.net_buy, 0) > 0).slice(0, 2);
+  if (!topTwo.length) return { available: false, matched: false, rank: null, matched_rank: null, eligible_ranks: [1, 2], broker_name: "", trader_id: "", net_buy: null, cost_price: null, reason: "top2_net_buy_branch_missing", inspected_brokers: [] };
+  const inspected = topTwo.map((row, index) => ({ rank: index + 1, broker_name: String(row.trader || "").trim(), trader_id: String(row.trader_id || ""), net_buy: round(row.net_buy, 0), cost_price: round(row.net_buy_cost) }));
+  for (const item of inspected) {
+    if (!item.broker_name) continue;
+    const compact = item.broker_name.replace(/[\s\-_.()（）]/g, "").toLowerCase();
+    const brokerKey = /摩根大通|jpmorgan/.test(compact) ? "jpmorgan" : /摩根士丹利|morganstanley/.test(compact) ? "morgan_stanley" : "";
+    if (brokerKey) return { available: true, matched: true, broker_key: brokerKey, rank: item.rank, matched_rank: item.rank, eligible_ranks: [1, 2], broker_name: item.broker_name, trader_id: item.trader_id, net_buy: item.net_buy, cost_price: item.cost_price, reason: "preferred_broker_top2_net_buy", inspected_brokers: inspected };
+  }
+  const first = inspected[0] || {};
+  return { available: true, matched: false, broker_key: null, rank: first.rank || null, matched_rank: null, eligible_ranks: [1, 2], broker_name: first.broker_name || "", trader_id: first.trader_id || "", net_buy: first.net_buy ?? null, cost_price: first.cost_price ?? null, reason: inspected.some((item) => item.broker_name) ? "top2_net_buy_broker_not_preferred" : "top2_net_buy_broker_name_missing", inspected_brokers: inspected };
 }
 function institutionTwoDayBuy(rows, signalDate) {
   const buckets = new Map();

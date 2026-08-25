@@ -54,7 +54,7 @@ function Write-OpeningLimitOrderCandidateSummary {
     $numbers = @($row.matched_strategy_numbers | ForEach-Object { "策略{0}" -f $_ }) -join "、"
     $labels = @($row.matched_strategy_labels | ForEach-Object { $_.display }) -join "；"
     if (!$numbers) { $numbers = "未回讀策略編號" }
-    $brokerRank = if ($row.preferred_broker_top_net_buy -eq $true) { " | 主力第一買超：{0}（淨買 {1}，成本 {2}）" -f $row.preferred_broker_top_net_buy_name, $row.preferred_broker_top_net_buy_net_buy, $row.preferred_broker_top_net_buy_cost_price } else { "" }
+    $brokerRank = if ($row.preferred_broker_top_net_buy -eq $true) { " | 主力前二買超命中：第{0}名 {1}（淨買 {2}，成本 {3}）" -f $row.preferred_broker_top_net_buy_rank, $row.preferred_broker_top_net_buy_name, $row.preferred_broker_top_net_buy_net_buy, $row.preferred_broker_top_net_buy_cost_price } else { "" }
     Write-Host ("#{0} | 代碼 {1} | {2} | 符合策略幾：{3} | 總分 {4} | 策略基礎 {5} | 晨報 {6} | 股期 {7} | 產業股期共振 {8} | 風險 {9}{10}" -f $row.rank, $row.symbol, $row.qualified_label, $numbers, $row.entry_score, $row.entry_score_base, $row.opening_report_rank_boost, $row.futures_score, $row.industry_futures_combo_score, $row.risk_score, $brokerRank)
     if ($labels) { Write-Host ("  符合策略名稱：{0}" -f $labels) }
   }
