@@ -94,7 +94,8 @@ async function main() {
   if (!currentOk && !readiness.ok) {
     result.verdict = "FAIL_CLOSED_NO_WRITE";
     console.log(JSON.stringify(result, null, 2));
-    process.exit(1);
+    process.exitCode = 1;
+    return;
   }
   if (!APPLY || currentOk) {
     result.verdict = currentOk ? "ALREADY_READY" : "DRY_RUN_READY_TO_PROMOTE";
@@ -124,5 +125,5 @@ async function main() {
 
 main().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: error?.message || String(error) }, null, 2));
-  process.exit(1);
+  process.exitCode = 1;
 });
