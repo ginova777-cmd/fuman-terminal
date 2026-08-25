@@ -42,6 +42,16 @@
   }
 
   window.__fumanOpeningReport0830Standalone = { refresh, deliver };
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", refresh, { once: true });
-  else refresh();
+
+  // This script can be inserted after DOMContentLoaded by the desktop shell.
+  // Always schedule one explicit run; the DOM listener is only an additional
+  // early-page trigger and must not pass its Event object as the retry count.
+  const start = () => {
+    if (typeof window.setTimeout === "function") window.setTimeout(() => refresh(0), 250);
+    else Promise.resolve().then(() => refresh(0));
+  };
+  start();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  }
 })();
