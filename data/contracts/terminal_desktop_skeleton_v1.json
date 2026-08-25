@@ -24,13 +24,16 @@
     "/api/strategy2-latest",
     "/api/strategy3-latest",
     "/api/strategy4-latest",
-    "/api/strategy5-latest"
+    "/api/strategy5-latest",
+    "/api/opening-report-0830-terminal-briefing"
   ],
   "morning_report": {
     "source": "opening_report_0830_terminal_briefing",
     "display_invariant": "must_render_when_market_ai_blocked",
     "line_delivery_independent": true,
-    "formal_candidate_count": 0
+    "formal_candidate_count": 0,
+    "fast_endpoint": "/api/opening-report-0830-terminal-briefing",
+    "fallback_endpoint": "/api/market-ai-live"
   },
   "cache": {
     "versioned_assets": true,

@@ -1,7 +1,10 @@
 (() => {
   "use strict";
   const ID = "terminal-opening-report-0830-standalone";
-  const ENDPOINT = "/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40";
+  const ENDPOINTS = [
+    "/api/opening-report-0830-terminal-briefing",
+    "/api/market-ai-live?canvas=1&compact=1&shell=1&limit=40",
+  ];
   let report = null;
   let observer = null;
 
@@ -86,7 +89,16 @@
 
   async function refresh() {
     try {
-      const payload = await fetch(ENDPOINT, { cache: "no-store", credentials: "same-origin" }).then((response) => response.json());
+      let payload = null;
+      for (const endpoint of ENDPOINTS) {
+        try {
+          const candidate = await fetch(endpoint, { cache: "no-store", credentials: "same-origin" }).then((response) => response.json());
+          if (candidate?.openingMorningReport?.ok === true) {
+            payload = candidate;
+            break;
+          }
+        } catch (_) {}
+      }
       report = payload?.openingMorningReport || null;
       if (mount()) watch();
       else document.documentElement.dataset.fumanOpeningReport0830 = "missing";
