@@ -33,6 +33,9 @@ function main() {
   requireMarker(index, "terminal-core.js?v=" + version.version, "index", failures);
   requireMarker(core, "const formalSkeletonBaseline = \"" + BASELINE + "\"", "terminal_core", failures);
   requireMarker(shell, "window.__fumanDesktopFastShell", "desktop_shell", failures);
+  requireMarker(shell, "function refreshMarketHeaderMetrics(payload = {})", "desktop_shell", failures);
+  requireMarker(shell, "marketHeaderMetrics", "desktop_shell", failures);
+  requireMarker(shell, "fetchMarketJson(\"/api/market\", 24, force, 2200)", "desktop_shell", failures);
   requireMarker(marketRestore, "desktop-fast-shell-canonical-single-renderer", "market_restore", failures);
   if (marketRestore.includes("window.FUMAN_MARKET_DIRECT_PAINT = run;")) failures.push("market_restore_legacy_painter_not_removed");
   if (!fs.existsSync(path.join(ROOT, "api/desktop-route-snapshot.js"))) failures.push("desktop_route_snapshot_endpoint_missing");

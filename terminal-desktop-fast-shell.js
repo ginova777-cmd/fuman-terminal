@@ -5457,7 +5457,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-58";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-59";
   }
 
   function loadScriptOnce(src, attr) {
@@ -5957,7 +5957,7 @@
           paintMarketSnapshotFirstPayload(marketSnapshotFirstPayload);
         }
       }),
-      fetchMarketJson("/api/market", 24, force, 2200),
+      fetchMarketJson("/api/market", 24, force, 2200).then((payload) => refreshMarketHeaderMetrics(payload || {})),
     ];
     if (marketDesktopMode === "ai" || document.documentElement.dataset.fumanMarketDesktopMode === "ai") {
       tasks.push(
@@ -6153,6 +6153,9 @@
       shell.ai.innerHTML = '<div class="empty-state">正式 AI 判讀同步檢查中</div>';
       renderOpeningReport0830DesktopBriefing({});
     }
+    fetchMarketJson("/api/market", 24, force, 2200)
+      .then((payload) => refreshMarketHeaderMetrics(payload || {}))
+      .catch(() => {});
     const state = {
       heatmap: marketSnapshotFirstPayload || null,
       radar: marketRadarBundlePayload || null,
@@ -6264,6 +6267,62 @@
     const title = market.querySelector(".page-header h1");
     if (title) title.textContent = "市場 AI 總覽";
     return { market, tabs, ai };
+  }
+
+  function refreshMarketHeaderMetrics(payload = {}) {
+    const market = document.querySelector("#market-view");
+    const cards = [...(market?.querySelectorAll?.(".metric-grid .metric-card") || [])].slice(0, 4);
+    if (!cards.length) return false;
+    const list = (value) => Array.isArray(value) ? value : [];
+    const text = (value) => String(value ?? "");
+    const number = (value) => {
+      const parsed = Number(String(value ?? "").replace(/,/g, ""));
+      return Number.isFinite(parsed) ? parsed : null;
+    };
+    const indexName = "\u6307\u6578";
+    const closeIndex = "\u6536\u76e4\u6307\u6578";
+    const change = "\u6f32\u8dcc";
+    const changePoints = "\u6f32\u8dcc\u9ede\u6578";
+    const changePercent = "\u6f32\u8dcc\u767e\u5206\u6bd4";
+    const findIndex = (names) => list(payload.indexes).find((item) => names.some((name) => text(item?.[indexName] || item?.name).includes(name))) || null;
+    const valueText = (value) => {
+      const parsed = number(value);
+      return parsed == null ? "--" : parsed.toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+    const deltaText = (item, fallback) => {
+      if (!item) return fallback;
+      const sign = text(item[change] || item.sign).includes("-") ? "-" : "+";
+      const points = text(item[changePoints] ?? item.change ?? "0").replace(/^[+-]/, "");
+      const percent = text(item[changePercent] ?? item.pct ?? "0").replace(/[+%-]/g, "");
+      return sign + points + " (" + sign + percent + "%)";
+    };
+    const setCard = (card, label, value, detail, isUp) => {
+      if (!card) return;
+      const title = card.querySelector("span");
+      const strong = card.querySelector("strong");
+      const sub = card.querySelector("em");
+      if (title) title.textContent = label;
+      if (strong) strong.textContent = value;
+      if (sub) sub.textContent = detail;
+      card.classList.toggle("market-card-up", isUp === true);
+      card.classList.toggle("market-card-down", isUp === false);
+    };
+    const twse = findIndex(["\u52a0\u6b0a", "\u767c\u884c\u91cf"]);
+    const otc = findIndex(["\u6ac3\u8cb7"]);
+    const near = payload.futuresNear || payload.futures || null;
+    const next = payload.futuresNext || null;
+    const officialPending = "\u7b49\u5f85\u5b98\u65b9\u8cc7\u6599";
+    const futuresPending = "\u7b49\u5f85\u671f\u4ea4\u6240\u8cc7\u6599";
+    const futureDetail = (item, fallback) => {
+      if (!item) return fallback;
+      return text(item.change || "--") + " (" + text(item.pct || "--") + ")" + (item.basisLabel ? " � " + text(item.basisLabel) : "");
+    };
+    setCard(cards[0], "\u2197 \u52a0\u6b0a\u6307\u6578", valueText(twse?.[closeIndex]), deltaText(twse, officialPending), twse ? !text(twse[change]).includes("-") : null);
+    setCard(cards[1], "\u2197 \u6ac3\u8cb7\u6307\u6578", valueText(otc?.[closeIndex]), deltaText(otc, officialPending), otc ? !text(otc[change]).includes("-") : null);
+    setCard(cards[2], "\u21c5 \u53f0\u6307\u671f\u591c\u76e4", near?.price ? valueText(near.price) : "--", futureDetail(near, futuresPending), near ? !text(near.change).includes("-") : null);
+    setCard(cards[3], "\u263e \u53f0\u6307\u6b21\u6708", next?.price ? valueText(next.price) : "--", futureDetail(next, futuresPending), next ? !text(next.change).includes("-") : null);
+    market.dataset.marketHeaderMetrics = payload.updatedAt || new Date().toISOString();
+    return true;
   }
 
   function applyMarketDesktopMode(mode) {
