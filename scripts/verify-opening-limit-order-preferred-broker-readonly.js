@@ -26,6 +26,9 @@ function main() {
   if (!staticPrefilter.includes("preferredTopNetBuyBroker")) failures.push("static_prefilter_preferred_broker_evidence_missing");
   if (!candidateScript.includes("preferredTopNetBuyBrokerEvidence")) failures.push("candidate_preferred_broker_evidence_missing");
   if (!candidateScript.includes("preferred_broker_top_net_buy_detail")) failures.push("candidate_preferred_broker_detail_missing");
+  if (!candidateScript.includes("/摩根大通|jpmorgan/")) failures.push("candidate_jpmorgan_detection_missing");
+  if (!candidateScript.includes("/摩根士丹利|morganstanley/")) failures.push("candidate_morgan_stanley_detection_missing");
+  if (!candidateScript.includes("\"jpmorgan\"") || !candidateScript.includes("\"morgan_stanley\"")) failures.push("candidate_preferred_broker_keys_missing");
   if (!candidateScript.includes("const ok = preopenPriceEligible && reasons.length >= 1")) failures.push("preferred_broker_must_not_create_candidate_guard_missing");
   let summary = {}; let rows = [];
   if (requireRuntime) {
@@ -44,7 +47,10 @@ function main() {
       if (Number.isFinite(finalScore) && finalScore > previousFinalScore + 0.000001) rowFailures.push(`${symbol}:final_score_order_invalid`);
       previousFinalScore = Number.isFinite(finalScore) ? finalScore : previousFinalScore;
       if (row?.preferred_broker_top_net_buy === true) {
-        if (!String(row?.preferred_broker_top_net_buy_name || "").trim()) rowFailures.push(`${symbol}:preferred_broker_name_missing`);
+        const brokerName = String(row?.preferred_broker_top_net_buy_name || "").trim();
+        const brokerNameCompact = brokerName.replace(/[\s\-_.()（）]/g, "").toLowerCase();
+        if (!brokerName) rowFailures.push(`${symbol}:preferred_broker_name_missing`);
+        if (!/(摩根大通|jpmorgan|摩根士丹利|morganstanley)/.test(brokerNameCompact)) rowFailures.push(`${symbol}:preferred_broker_name_not_jpmorgan_or_morgan_stanley`);
         if (Number(row?.preferred_broker_top_net_buy_rank) !== 1) rowFailures.push(`${symbol}:preferred_broker_rank_not_one`);
         if (!(Number(row?.preferred_broker_top_net_buy_net_buy) > 0)) rowFailures.push(`${symbol}:preferred_broker_net_buy_not_positive`);
         if (String(row?.preferred_broker_top_net_buy_reason || "") !== "preferred_broker_top_net_buy") rowFailures.push(`${symbol}:preferred_broker_reason_invalid`);
@@ -52,7 +58,7 @@ function main() {
     }
   }
   const matched = rows.filter((row) => row?.preferred_broker_top_net_buy === true);
-  const output = { ok: failures.length === 0 && rowFailures.length === 0, contract: CONTRACT, trade_date: tradeDate, checked_at: new Date().toISOString(), policy: "latest_formal_branch_report_top_net_buy_only; score_context_only; never_creates_opening_candidate", static_contract: { console_display: !failures.includes("runner_preferred_broker_console_display_missing"), score_context_only: !failures.includes("runner_preferred_broker_rank_sort_missing"), never_creates_opening_candidate: !failures.includes("preferred_broker_must_not_create_candidate_guard_missing") }, runtime_readback: requireRuntime ? { summary_path: summaryPath, candidate_count: rows.length, preferred_broker_top_net_buy_candidate_count: matched.length, preferred_broker_symbols: matched.map((row) => ({ symbol: row.symbol, broker_name: row.preferred_broker_top_net_buy_name, net_buy: row.preferred_broker_top_net_buy_net_buy, cost_price: row.preferred_broker_top_net_buy_cost_price, signal_date: row.preferred_broker_top_net_buy_signal_date })), final_score_ranked_first: !rowFailures.some((failure) => failure.includes("final_score_order_invalid")), action_guard: summary.action_guard || null } : null, row_failures: rowFailures, failed_checks: failures, first_blocker: failures[0] || rowFailures[0] || null };
+  const output = { ok: failures.length === 0 && rowFailures.length === 0, contract: CONTRACT, trade_date: tradeDate, checked_at: new Date().toISOString(), policy: "latest_formal_branch_report_top_net_buy_only; score_context_only; never_creates_opening_candidate", static_contract: { console_display: !failures.includes("runner_preferred_broker_console_display_missing"), score_context_only: !failures.includes("runner_preferred_broker_rank_sort_missing"), dedicated_broker_detection: !failures.includes("candidate_jpmorgan_detection_missing") && !failures.includes("candidate_morgan_stanley_detection_missing") && !failures.includes("candidate_preferred_broker_keys_missing"), preferred_brokers: ["摩根大通/JPMorgan", "台灣摩根士丹利/Morgan Stanley"], never_creates_opening_candidate: !failures.includes("preferred_broker_must_not_create_candidate_guard_missing") }, runtime_readback: requireRuntime ? { summary_path: summaryPath, candidate_count: rows.length, preferred_broker_top_net_buy_candidate_count: matched.length, preferred_broker_symbols: matched.map((row) => ({ symbol: row.symbol, broker_name: row.preferred_broker_top_net_buy_name, net_buy: row.preferred_broker_top_net_buy_net_buy, cost_price: row.preferred_broker_top_net_buy_cost_price, signal_date: row.preferred_broker_top_net_buy_signal_date })), final_score_ranked_first: !rowFailures.some((failure) => failure.includes("final_score_order_invalid")), action_guard: summary.action_guard || null } : null, row_failures: rowFailures, failed_checks: failures, first_blocker: failures[0] || rowFailures[0] || null };
   console.log(JSON.stringify(output, null, 2)); process.exitCode = output.ok ? 0 : 1;
 }
 main();
