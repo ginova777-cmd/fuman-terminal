@@ -139,7 +139,7 @@ function Test-InstitutionFresh {
 
 
 Write-WatchdogLog "=== Flow watchdog start scope=$Scope expected=$ExpectedTime $(Get-Date) ==="
-Invoke-FumanWeekdayGuard -Label "Flow watchdog $Scope" -LogPath $log
+Invoke-FumanWeekdayGuard -Label "Flow watchdog $Scope" -LogPath $log -AllowAfterFormalSourceWindow
 
 $result = if ($Scope -eq "institution") { Test-InstitutionFresh } else { Test-WarrantFresh }
 if ($result.ok) {
@@ -148,18 +148,7 @@ if ($result.ok) {
   exit 0
 }
 
-Write-WatchdogLog "Watchdog stale: $($result.reason); starting rerun"
-Write-FumanFlowHealth -Scope $Scope -Status watchdog_rerun -Message "Watchdog rerun started" -Detail @{ expectedTime = $ExpectedTime; reason = $result.reason; log = $log }
-$script = "${PSScriptRoot}\run-institution.ps1"
-$pwshExe = "C:\Program Files\PowerShell\7\pwsh.exe"
-if (-not (Test-Path -LiteralPath $pwshExe)) { $pwshExe = "pwsh.exe" }
-& $pwshExe -NoProfile -ExecutionPolicy Bypass -File $script >> $log 2>&1
-$exit = $LASTEXITCODE
-if ($exit -ne 0) {
-  Write-WatchdogLog "Watchdog rerun failed exit=$exit"
-  $alert = Invoke-WatchdogFailureAlert "watchdog_failed" $result.reason $exit
-  Write-FumanFlowHealth -Scope $Scope -Status watchdog_failed -Message "Watchdog rerun failed" -Detail @{ exitCode = $exit; expectedTime = $ExpectedTime; reason = $result.reason; log = $log; alert = $alert }
-  exit $exit
-}
-Write-WatchdogLog "Watchdog rerun completed"
-Write-FumanFlowHealth -Scope $Scope -Status ok -Message "Watchdog rerun completed" -Detail @{ expectedTime = $ExpectedTime; reason = $result.reason; log = $log }
+Write-WatchdogLog "Watchdog stale: $($result.reason); read-only watchdog will not start a second formal run"
+$alert = Invoke-WatchdogFailureAlert "watchdog_failed" $result.reason 1
+Write-FumanFlowHealth -Scope $Scope -Status watchdog_failed -Message "Read-only watchdog detected stale formal run" -Detail @{ expectedTime = $ExpectedTime; reason = $result.reason; log = $log; alert = $alert; rerunAllowed = $false }
+exit 1

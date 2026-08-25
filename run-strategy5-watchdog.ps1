@@ -65,7 +65,7 @@ function Invoke-Strategy5WatchdogFailureAlert {
 }
 
 . "${PSScriptRoot}\schedule-guard.ps1"
-Invoke-FumanWeekdayGuard -Label "Strategy5 watchdog" -LogPath $log
+Invoke-FumanWeekdayGuard -Label "Strategy5 watchdog" -LogPath $log -AllowAfterFormalSourceWindow
 
 function Get-TaipeiNow {
   [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date), "Taipei Standard Time")
@@ -148,40 +148,7 @@ if ($health.Healthy) {
 }
 
 Write-WatchdogLog "strategy5 unhealthy: $($health.Reason)"
-$running = @(Test-Strategy5Running)
-
-if ($running.Count -gt 0) {
-  $pids = ($running | Select-Object -ExpandProperty ProcessId) -join ","
-  Write-WatchdogLog "strategy5 already running; no restart. pid=$pids"
-  Write-WatchdogStatus "running" "strategy5 already running; pid=$pids"
-  exit 0
-}
-
-Write-WatchdogLog "starting strategy5 runner: $runner"
-$pwshExe = "C:\Program Files\PowerShell\7\pwsh.exe"
-if (-not (Test-Path -LiteralPath $pwshExe)) { $pwshExe = "pwsh.exe" }
-& $pwshExe -NoProfile -ExecutionPolicy Bypass -File $runner *>&1 | ForEach-Object {
-  Add-Content -LiteralPath $log -Value ([string]$_) -Encoding utf8
-}
-
-$exitCode = $LASTEXITCODE
-if ($null -eq $exitCode) { $exitCode = 0 }
-
-if ($exitCode -ne 0) {
-  Write-WatchdogLog "strategy5 runner failed with exit code $exitCode"
-  Invoke-Strategy5WatchdogFailureAlert -Reason "runner failed" -ExitCode $exitCode
-  Write-WatchdogStatus "failed" "runner failed" $exitCode
-  exit $exitCode
-}
-
-$postHealth = Test-Strategy5Healthy (Get-Strategy5Payload)
-if (-not $postHealth.Healthy) {
-  Write-WatchdogLog "strategy5 still unhealthy after rerun: $($postHealth.Reason)"
-  Invoke-Strategy5WatchdogFailureAlert -Reason "still unhealthy after rerun: $($postHealth.Reason)" -ExitCode 1
-  Write-WatchdogStatus "failed" "still unhealthy after rerun: $($postHealth.Reason)" 1
-  exit 1
-}
-
-Write-WatchdogLog "strategy5 recovered: $($postHealth.Reason)"
-Write-WatchdogStatus "success" "recovered: $($postHealth.Reason)"
-exit 0
+Write-WatchdogLog "read-only watchdog will not start a second formal run"
+Invoke-Strategy5WatchdogFailureAlert -Reason $health.Reason -ExitCode 1
+Write-WatchdogStatus "failed" "read-only watchdog detected missing or stale 21:00 formal run; rerunAllowed=false" 1
+exit 1
