@@ -128,7 +128,7 @@ if ($changedAfterBump.Count -gt 0) {
 Invoke-Npm "sync:source"
 Invoke-Npm "verify:version"
 Invoke-Npm "verify:sw"
-Invoke-Npm "verify:data-freshness"
+Invoke-Npm "verify:fugle-websocket-sources"
 Invoke-Npm "verify:source-sync"
 
 if (-not $SkipDeploy) {

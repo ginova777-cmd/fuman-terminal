@@ -31,6 +31,8 @@ const ROUTE_FILTER = new Set((process.argv.find((arg) => arg.startsWith("--route
   .map(normalizeRouteFilter)
   .filter(Boolean));
 
+const RETIRED_ROUTE_KEYS = new Set(["cb", "warrant"]);
+
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 
@@ -89,7 +91,7 @@ const CONTRACTS = [
         "symbol", "code", "name", "market", "updated_at", "quote_time", "last_trade_time", "close", "last_price", "open", "high", "low",
         "prev_close", "previous_close", "change_percent", "trade_volume", "trade_volume_lots", "trade_volume_shares", "total_volume",
         "trade_value", "quote_source", "quote_age_seconds", "session", "stock_type", "is_halted", "is_trial",
-      ], { order: "updated_at.desc", requireToday: true, purpose: "formal Strategy3 quote source" }),
+      ], { order: "updated_at.desc", requireToday: true, level: "warning", purpose: "legacy Strategy3 quote source; Strategy3 V2 formal gate uses daytrade 1m readiness" }),
       sourceTable("v_strategy2_intraday_ready", [
         "symbol", "latest_candle_time", "today_candle_count", "continuous_candle_count", "ready_ge_35", "ready_ma35_continuous",
       ], { order: "latest_candle_time.desc", requireToday: true, minRows: 1, purpose: "formal Strategy3 intraday session readiness source via Strategy2 daytrade 1m" }),
@@ -696,7 +698,7 @@ async function main() {
   const results = [];
   const failures = [];
   const warnings = [];
-  for (const strategy of CONTRACTS.filter((item) => !ROUTE_FILTER.size || ROUTE_FILTER.has(item.key))) {
+  for (const strategy of CONTRACTS.filter((item) => (!RETIRED_ROUTE_KEYS.has(item.key) || ROUTE_FILTER.has(item.key)) && (!ROUTE_FILTER.size || ROUTE_FILTER.has(item.key)))) {
     console.log(`[source-contract] ${strategy.key}`);
     const checks = [];
     for (const check of strategy.checks) {
