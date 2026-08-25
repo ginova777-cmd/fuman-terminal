@@ -1560,7 +1560,9 @@ async function readOpeningMorningReportSnapshot(clock = taipeiClock(), timeoutMs
   const snapshot = await readSnapshot("opening_report_0830_terminal_briefing", {
     tradeDate: clock.date,
     allowLatestFallback: false,
-    timeoutMs,
+    // A short retry is more useful to the terminal than one long stalled request.
+    timeoutMs: Math.min(Math.max(500, Number(timeoutMs) || 2000), 1300),
+    maxAttempts: 3,
   }).catch(() => null);
   const payload = snapshot?.payload;
   if (!payload || payload.contract !== "opening-report-0830-terminal-briefing-v1") return null;
