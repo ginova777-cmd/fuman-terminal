@@ -112,6 +112,10 @@ async function notifyFromOutbox(options = {}) {
     receipt.first_blocker = "outbox_trade_date_mismatch_or_missing";
     writeReceiptWithHistory(receipt); return receipt;
   }
+  if (String(outbox.alert_scope || "") !== "strategy2_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage") {
+    receipt.first_blocker = "outbox_scope_not_mother_pool_only";
+    writeReceiptWithHistory(receipt); return receipt;
+  }
   if (!isTradingWindow()) {
     receipt.ok = true; receipt.first_blocker = "outside_trading_window";
     writeReceiptWithHistory(receipt); return receipt;
