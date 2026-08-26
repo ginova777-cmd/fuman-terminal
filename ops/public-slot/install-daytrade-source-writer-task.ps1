@@ -1,5 +1,5 @@
 param(
-  [string]$FumanRoot = "C:\fuman-terminal",
+  [string]$FumanRoot = "C:\fuman-release-owner\fuman-terminal",
   [string]$RuntimeDir = "C:\fuman-runtime",
   [string]$TaskName = "Fuman Daytrade Source Writer 0600-1330"
 )
