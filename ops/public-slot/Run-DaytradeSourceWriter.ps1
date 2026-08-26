@@ -13,7 +13,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RepoRoot = Split-Path -Parent (Split-Path -Parent $ScriptDir)
+$RepoRoot = $FumanRoot
 $WriterScript = Join-Path $RepoRoot "scripts\run-daytrade-source-writer.js"
 $LogDir = Join-Path $RuntimeDir "logs"
 $StateDir = Join-Path $RuntimeDir "state"
