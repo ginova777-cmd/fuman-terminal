@@ -90,7 +90,7 @@ async function main() {
   }
 
   if (process.platform === "win32") {
-    const unified = spawnSync("schtasks", ["/Query", "/TN", "Fuman Strategy2 Unified 0845-1230", "/FO", "LIST"], { encoding: "utf8", windowsHide: true });
+    const unified = spawnSync("schtasks", ["/Query", "/TN", "Fuman Strategy2 Unified 0845-1210", "/FO", "LIST"], { encoding: "utf8", windowsHide: true });
     const retired = ["Fuman Strategy2 V3 Water Gate 0845", "Fuman Strategy2 V2 Unattended", "Fuman Strategy2 V2 Recovery"]
       .map((name) => ({ name, status: spawnSync("schtasks", ["/Query", "/TN", name], { encoding: "utf8", windowsHide: true }).status }));
     check(checks, unified.status === 0, "unique_strategy2_schedule_present", { status: unified.status });

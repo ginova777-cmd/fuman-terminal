@@ -61,7 +61,7 @@
       "Fuman Strategy3 V2 Readiness Guard 1230",
       "Fuman Strategy3 V2 Readiness Guard 1250",
       "Fuman Mother Pool Telegram 0900-1230",
-      "Fuman Strategy2 Unified 0845-1230"
+      "Fuman Strategy2 Unified 0845-1210"
     ],
     "expectedDisabledTasks": [
       "Fuman Public Slot Shared Source 0800",
@@ -406,7 +406,7 @@
         267009,
         267011
       ],
-      "Fuman Strategy2 Unified 0845-1230": [
+      "Fuman Strategy2 Unified 0845-1210": [
         0,
         267009,
         267011
@@ -1293,9 +1293,9 @@
       ]
     },
     {
-      "taskName": "\\Fuman Strategy2 Unified 0845-1230",
-      "displayName": "Fuman Strategy2 Unified 0845-1230",
-      "description": "Unique Strategy2 V3 S4U runner: observe from 08:45, scan 09:00-12:30, use one daily canonical runId, finalize once at 12:30, and expose the same fail-closed evidence to desktop, mobile and /88.",
+      "taskName": "\\Fuman Strategy2 Unified 0845-1210",
+      "displayName": "Fuman Strategy2 Unified 0845-1210",
+      "description": "Unique Strategy2 V3 S4U runner: one 08:45 water preflight, scan 09:00-12:10, use one daily canonical runId, finalize once at 12:10, and expose the same fail-closed evidence to desktop, mobile and /88.",
       "time": "08:45",
       "expectedState": "Ready",
       "expectedTriggers": [
