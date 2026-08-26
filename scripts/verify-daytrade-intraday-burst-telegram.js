@@ -136,6 +136,15 @@ const checks = {
 };
 
 const outbox = readJson(outboxFile);
+const expectedAlertScope = "strategy2_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage";
+const outboxEvents = Array.isArray(outbox?.events) ? outbox.events : [];
+checks.runtime_outbox_mother_pool_scope = !outbox || String(outbox.alert_scope || "") === expectedAlertScope;
+checks.runtime_events_mother_pool_only = !outbox || outboxEvents.every((event) =>
+  event?.tradable_mother_pool === true
+  && String(event?.trade_date || "") === String(outbox?.trade_date || "")
+  && String(event?.source || outbox?.source || "") === "fugle_formal_1m"
+);
+
 const rejectedReasonCounts = outbox?.rejected_reason_counts || null;
 const candidateCount = Number.isFinite(Number(outbox?.candidate_count)) ? Number(outbox.candidate_count) : null;
 const baselineRejectedCount = Number(rejectedReasonCounts?.rolling_1m_baseline_not_ready || 0);
@@ -160,6 +169,9 @@ const runtime = {
   outbox_exists: Boolean(outbox),
   outbox_trade_date: outbox?.trade_date || null,
   outbox_is_today: String(outbox?.trade_date || "") === taipeiDate(),
+  outbox_alert_scope: outbox?.alert_scope || null,
+  outbox_scope_is_mother_pool_only: checks.runtime_outbox_mother_pool_scope,
+  outbox_events_are_mother_pool_only: checks.runtime_events_mother_pool_only,
   outbox_event_count: Array.isArray(outbox?.events) ? outbox.events.length : 0,
   strict_burst_event_count: Number.isFinite(Number(outbox?.strict_burst_event_count)) ? Number(outbox.strict_burst_event_count) : null,
   hot_rank_fallback_event_count: Number.isFinite(Number(outbox?.hot_rank_fallback_event_count)) ? Number(outbox.hot_rank_fallback_event_count) : null,
