@@ -808,6 +808,7 @@ function buildStrategy2SourceReport(result) {
   const runId = cleanText(payload.runId || payload.transport?.runId);
   const date = cleanText(payload.dataDate || payload.tradeDate || payload.date);
   const isToday = compactDate(date) === today;
+  const isBlockedEvidence = payload.status === "blocked" && payload.displayOnlyBlockedEvidence === true && isToday;
   const isFormalV3 = payload.strategyContract === "strategy2-live-v3-fugle-deep-scan-1m"
     && payload.status === "complete"
     && payload.complete === true
@@ -824,14 +825,18 @@ function buildStrategy2SourceReport(result) {
     count: cleanNumber(payload.count ?? payload.resultCount ?? payload.total),
     emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : cleanNumber(payload.snapshotRecordCount ?? payload.readbackCount ?? payload.resultCount),
     date,
-    evidenceStatus: isFormalV3 ? "complete" : "not_formal_v3_complete",
+    evidenceStatus: isFormalV3 ? "complete" : isBlockedEvidence ? "blocked" : "not_formal_v3_complete",
+    expectedCount: cleanNumber(payload.expectedCount),
+    scannedCount: cleanNumber(payload.scannedCount),
+    resultCount: cleanNumber(payload.resultCount),
+    dataGapCount: cleanNumber(payload.dataGapCount),
     unattendedStatus: cleanText(payload.unattendedStatus || "NO"),
     publishAllowed: isFormalV3,
     latestOverwriteAllowed: isFormalV3,
     preservePreviousGood: false,
     fallbackUsed: false,
-    blockedReason: isFormalV3 ? "" : "strategy2_v3_requires_today_complete_finalization",
-    reason: isFormalV3 ? "strategy2_v3_formal_scorecard_source" : "strategy2_v3_not_formal_or_not_today_no_scorecard_records",
+    blockedReason: isFormalV3 ? "" : cleanText(payload.displayBlockReason || payload.reason || "strategy2_v3_requires_today_complete_finalization"),
+    reason: isFormalV3 ? "strategy2_v3_formal_scorecard_source" : isBlockedEvidence ? "strategy2_v3_blocked_evidence_visible_no_scorecard_records" : "strategy2_v3_not_formal_or_not_today_no_scorecard_records",
   };
 }
 function isStrategy2ScorecardImportComplete(payload, liveReport) {

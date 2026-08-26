@@ -162,18 +162,24 @@ function strategy2V3TerminalAuthority(payload = {}) {
     && payload.formalDisplayAllowed === true;
   const dataDate = String(payload.dataDate || payload.tradeDate || payload.date || "");
   const diagnostic = payload.status === "diagnostic_replay";
+  const blocked = payload.status === "blocked"
+    && payload.complete === false
+    && payload.publishAllowed === false
+    && payload.formalDisplayAllowed === false
+    && Boolean(dataDate)
+    && Boolean(payload.runId);
   return {
     key: "strategy2",
     runId: String(payload.runId || ""),
     tradeDate: dataDate,
     sourceDate: dataDate,
-    moduleStatus: isFormal ? "complete" : diagnostic ? "diagnostic" : "waiting",
+    moduleStatus: isFormal ? "complete" : diagnostic ? "diagnostic" : blocked ? "blocked" : "waiting",
     todayAuthoritative: Boolean(dataDate),
     formalDisplayAllowed: isFormal,
-    displayMode: isFormal ? "V3_FORMAL_COMPLETE" : diagnostic ? "V3_DIAGNOSTIC_VISIBLE_NOT_FORMAL" : "V3_WAITING_FOR_LIVE_SCAN",
+    displayMode: isFormal ? "V3_FORMAL_COMPLETE" : diagnostic ? "V3_DIAGNOSTIC_VISIBLE_NOT_FORMAL" : blocked ? "V3_BLOCKED_EVIDENCE" : "V3_WAITING_FOR_LIVE_SCAN",
     displayBlockReason: isFormal ? "" : String(payload.reason || "strategy2_v3_not_formal"),
     pendingNotDue: !dataDate,
-    evidenceStatus: isFormal ? "complete" : diagnostic ? "diagnostic_only" : "waiting",
+    evidenceStatus: isFormal ? "complete" : diagnostic ? "diagnostic_only" : blocked ? "blocked" : "waiting",
     publishAllowed: isFormal,
     fallback: false,
   };

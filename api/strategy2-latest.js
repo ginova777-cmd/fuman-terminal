@@ -129,6 +129,17 @@ function isVisibleDiagnosticReplay(payload, today) {
     && String(payload?.dataDate || payload?.date || "") === today;
 }
 
+function isVisibleBlockedEvidence(payload, today) {
+  return payload?.status === "blocked"
+    && payload?.complete === false
+    && payload?.formalDisplayAllowed === false
+    && payload?.publishAllowed === false
+    && payload?.fallbackUsed !== true
+    && payload?.preservePreviousGood !== true
+    && String(payload?.dataDate || payload?.date || "") === today
+    && String(payload?.runId || "").startsWith("strategy2-v3-live-");
+}
+
 async function readV3SnapshotWithRetry(snapshotKey, options = {}) {
   const attempts = Math.max(1, Math.min(Number(process.env.STRATEGY2_V3_SNAPSHOT_READ_ATTEMPTS || 3), 3));
   const totalTimeoutMs = Math.max(3000, Math.min(Number(options.timeoutMs || 12000), 15000));
@@ -166,9 +177,10 @@ async function strategy2Latest(request, response) {
   if (payload.strategyContract !== CONTRACT || payload.version !== "v3") return response.status(200).json(emptyPayload(targetDate, "strategy2_v3_contract_mismatch"));
   if (String(payload.dataDate || payload.date || "") !== targetDate) return response.status(200).json(emptyPayload(targetDate, "strategy2_v3_snapshot_date_mismatch"));
   if (!String(payload.runId || "").startsWith("strategy2-v3-live-")) return response.status(200).json(emptyPayload(targetDate, "strategy2_v3_runid_invalid"));
-  if (!isFormalPayload(payload, targetDate) && !isVisibleDiagnosticReplay(payload, targetDate)) {
+  if (!isFormalPayload(payload, targetDate) && !isVisibleDiagnosticReplay(payload, targetDate) && !isVisibleBlockedEvidence(payload, targetDate)) {
     return response.status(200).json(emptyPayload(targetDate, "strategy2_v3_snapshot_not_formal_complete"));
   }
+  const blockedEvidence = isVisibleBlockedEvidence(payload, targetDate);
   const limit = Number(query.limit || 240);
   const records = cleanRows(decodeTerminalSnapshotRows(payload, "records"), limit);
   const currentCandidates = cleanRows(decodeTerminalSnapshotRows(payload, "currentCandidates"), limit);
@@ -176,18 +188,18 @@ async function strategy2Latest(request, response) {
     ...payload,
     // The API is reached only after its V3 formal predicate passes. Canonicalize
     // this authority so terminal, mobile, and /88 cannot disagree on the same run.
-    complete: replay ? false : true,
-    formalDisplayAllowed: replay ? false : true,
-    publishAllowed: replay ? false : true,
-    latestOverwriteAllowed: replay ? false : true,
-    qualityStatus: replay ? "diagnostic_replay" : "complete",
-    evidenceStatus: replay ? "diagnostic_replay" : "complete",
+    complete: blockedEvidence || replay ? false : true,
+    formalDisplayAllowed: blockedEvidence || replay ? false : true,
+    publishAllowed: blockedEvidence || replay ? false : true,
+    latestOverwriteAllowed: blockedEvidence || replay ? false : true,
+    qualityStatus: blockedEvidence ? "blocked" : replay ? "diagnostic_replay" : "complete",
+    evidenceStatus: blockedEvidence ? "blocked" : replay ? "diagnostic_replay" : "complete",
     run_quality_at_publish: {
       ...(payload.run_quality_at_publish || payload.runQualityAtPublish || {}),
-      publishAllowed: replay ? false : true,
+      publishAllowed: blockedEvidence || replay ? false : true,
       preservePreviousGood: false,
-      evidenceStatus: replay ? "diagnostic_replay" : "complete",
-      qualityStatus: replay ? "diagnostic_replay" : "complete",
+      evidenceStatus: blockedEvidence ? "blocked" : replay ? "diagnostic_replay" : "complete",
+      qualityStatus: blockedEvidence ? "blocked" : replay ? "diagnostic_replay" : "complete",
     },
     ok: true,
     date: targetDate,
@@ -199,20 +211,22 @@ async function strategy2Latest(request, response) {
     matches: records,
     formalEvents: records,
     currentCandidates,
-    count: replay ? records.length : Number(payload.resultCount ?? currentCandidates.length),
+    count: blockedEvidence || replay ? records.length : Number(payload.resultCount ?? currentCandidates.length),
     resultCount: Number(payload.resultCount ?? currentCandidates.length),
     returnedCount: records.length,
     fallbackUsed: false,
     preservePreviousGood: false,
-    cacheSource: replay ? "supabase:market_snapshots:strategy2_live_v3_diagnostic_replay" : "supabase:market_snapshots:strategy2_live_v3",
+    displayOnlyBlockedEvidence: blockedEvidence,
+    displayBlockReason: blockedEvidence ? String(payload.reason || "strategy2_v3_formal_water_incomplete") : "",
+    cacheSource: blockedEvidence ? "supabase:market_snapshots:strategy2_live_v3_blocked_evidence" : replay ? "supabase:market_snapshots:strategy2_live_v3_diagnostic_replay" : "supabase:market_snapshots:strategy2_live_v3",
     transport: { ...(payload.transport || {}), source: replay ? "strategy2-live-v3-diagnostic-replay" : "strategy2-live-v3", snapshotKey: replay ? REPLAY_SNAPSHOT_KEY : SNAPSHOT_KEY, via: "api/strategy2-latest", fetchedAt: new Date().toISOString() },
   };
-  if (!replay) {
+  if (!replay && !blockedEvidence) {
     await attachMainForceCostsToPayload(responsePayload);
     await attachThreeGatePricesToPayload(responsePayload);
   } else {
-    responsePayload.mainForceCostContract = { contract: "terminal-main-force-costs-v1", skipped: "diagnostic_replay" };
-    responsePayload.threeGatePriceContract = { contract: "terminal-three-gate-prices-v1", skipped: "diagnostic_replay" };
+    responsePayload.mainForceCostContract = { contract: "terminal-main-force-costs-v1", skipped: blockedEvidence ? "blocked_evidence" : "diagnostic_replay" };
+    responsePayload.threeGatePriceContract = { contract: "terminal-three-gate-prices-v1", skipped: blockedEvidence ? "blocked_evidence" : "diagnostic_replay" };
   }
   return response.status(200).json(responsePayload);
 }

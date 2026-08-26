@@ -103,10 +103,12 @@ async function main() {
   const now = new Date();
   const clock = taipeiClock(now);
   const diagnostic = process.argv.includes("--diagnostic");
+  const finalize = process.argv.includes("--finalize");
   const displayReplay = process.argv.includes("--display-replay");
   if (displayReplay && !diagnostic) throw new Error("strategy2_v3_display_replay_requires_diagnostic");
   const trigger = process.argv.includes("--source-event") ? "fugle_writer_success" : displayReplay ? "diagnostic_display_replay" : diagnostic ? "diagnostic" : "manual";
-  const liveWindow = clock.minuteOfDay >= 9 * 60 && clock.minuteOfDay <= 12 * 60;
+  const observationWindow = clock.minuteOfDay >= (8 * 60 + 45) && clock.minuteOfDay <= (12 * 60 + 30);
+  const liveWindow = clock.minuteOfDay >= 9 * 60 && clock.minuteOfDay <= (12 * 60 + 30);
   const tradingDay = await isTwseTradingDay(now, { stateDir: path.join(RUNTIME_DIR, "state") });
   const water = await readFormalWater(require("./run-strategy2-v3-water-scan").config(), clock.date);
   const evaluationNow = displayReplay ? replayReferenceTime(water, now) : now;
@@ -119,9 +121,12 @@ async function main() {
     .sort((left, right) => right.score - left.score || String(right.entryAt).localeCompare(String(left.entryAt)));
   const dataGaps = evaluations.filter((row) => row.hardGate?.complete !== true);
   const websocketFormalReady = water.websocket?.formalReady === true;
-  const complete = websocketFormalReady && water.rows.length > 0 && dataGaps.length === 0;
+  const waterComplete = websocketFormalReady && water.rows.length > 0 && dataGaps.length === 0;
+  const complete = finalize && waterComplete;
   const allowed = tradingDay.isTradingDay === true && liveWindow && complete;
-  const runId = `strategy2-v3-live-${clock.ymd}-${String(clock.hour).padStart(2, "0")}${String(clock.minute).padStart(2, "0")}${String(clock.second).padStart(2, "0")}`;
+  const runId = diagnostic || displayReplay
+    ? `strategy2-v3-live-${clock.ymd}-diagnostic-${String(clock.hour).padStart(2, "0")}${String(clock.minute).padStart(2, "0")}${String(clock.second).padStart(2, "0")}`
+    : `strategy2-v3-live-${clock.ymd}-canonical`;
   const previous = readJson(HISTORY_FILE, {});
   const events = displayReplay ? [] : appendTodayEvents(previous, candidates, clock.date);
   const replayRows = displayReplay ? evaluations.map(diagnosticReplayRow) : [];
@@ -129,7 +134,7 @@ async function main() {
   const replayWaterAvailable = displayReplay && replayRows.length > 0
     && replayRows.every((row) => row.entryTradeDate === clock.date && row.entryPrice > 0 && row.candleCount >= 35);
   const payload = {
-    ok: complete,
+    ok: allowed,
     strategy: "strategy2",
     version: "v3",
     strategyContract: CONTRACT,
@@ -142,14 +147,14 @@ async function main() {
     trigger,
     status: displayReplay ? "diagnostic_replay" : diagnostic ? "diagnostic" : allowed ? "complete" : "blocked",
     complete,
-    qualityStatus: displayReplay ? "diagnostic" : complete ? "complete" : "blocked",
-    unattendedStatus: displayReplay ? "NO" : complete ? "YES" : "NO",
+    qualityStatus: displayReplay ? "diagnostic" : allowed ? "complete" : observationWindow ? "in_progress_or_blocked" : "blocked",
+    unattendedStatus: displayReplay ? "NO" : allowed ? "YES" : "NO",
     formalDisplayAllowed: allowed,
     publishAllowed: allowed,
     latestOverwriteAllowed: allowed,
     preservePreviousGood: false,
     fallbackUsed: false,
-    reason: displayReplay ? "strategy2_v3_diagnostic_replay_visible_not_formal" : diagnostic ? "strategy2_v3_diagnostic_only" : allowed ? "strategy2_v3_live_complete" : tradingDay.isTradingDay !== true ? "market_closed_no_v3_publish" : !liveWindow ? "outside_strategy2_v3_live_window" : !websocketFormalReady ? (water.websocket?.reason || "fugle_websocket_not_formal_ready") : "strategy2_v3_formal_water_incomplete",
+    reason: displayReplay ? "strategy2_v3_diagnostic_replay_visible_not_formal" : diagnostic ? "strategy2_v3_diagnostic_only" : allowed ? "strategy2_v3_live_complete" : tradingDay.isTradingDay !== true ? "market_closed_no_v3_publish" : !observationWindow ? "outside_strategy2_v3_observation_window" : !finalize ? "strategy2_v3_scan_in_progress_not_finalized" : !websocketFormalReady ? (water.websocket?.reason || "fugle_websocket_not_formal_ready") : "strategy2_v3_formal_water_incomplete",
     expectedCount: water.rows.length,
     scannedCount: water.rows.length,
     resultCount: candidates.length,
@@ -182,6 +187,9 @@ async function main() {
     },
     tradingDay: { isTradingDay: tradingDay.isTradingDay === true, reason: tradingDay.reason || "" },
     liveWindow,
+    observationWindow,
+    finalizeRequested: finalize,
+    waterComplete,
     transport: { source: "strategy2-v3-live-scan", snapshotKey: displayReplay ? REPLAY_SNAPSHOT_KEY : SNAPSHOT_KEY, runId, via: "run-strategy2-v3-live-scan.js" },
   };
 
@@ -196,13 +204,13 @@ async function main() {
       reason: "strategy2-v3-diagnostic-replay-visible-not-formal",
       timeoutMs: 20000,
     })
-    : diagnostic || !allowed
+    : diagnostic
       ? { ok: true, skipped: true, reason: payload.reason }
       : await upsertSnapshot(SNAPSHOT_KEY, snapshotPayload, {
         tradeDate: clock.ymd,
         snapshotId: runId,
-        source: "strategy2-v3-live-scan",
-        reason: "strategy2-v3-live-complete",
+        source: allowed ? "strategy2-v3-live-scan" : "strategy2-v3-live-blocked-evidence",
+        reason: payload.reason,
         timeoutMs: 20000,
       });
   const receipt = {
