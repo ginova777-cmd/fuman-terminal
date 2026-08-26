@@ -1,6 +1,6 @@
 param(
   [string]$TaskName = "Fuman Global Cost Janitor Scorecard 1555",
-  [string]$ProjectRoot = "C:\fuman-terminal",
+  [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
   [string]$At = "15:55",
   [switch]$RunNow,
   [switch]$Uninstall

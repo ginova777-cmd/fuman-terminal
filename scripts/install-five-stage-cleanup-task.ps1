@@ -1,5 +1,5 @@
 param(
-  [string]$ProjectRoot = 'C:\fuman-terminal',
+  [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
   [string]$UserId = "$env:USERDOMAIN\$env:USERNAME"
 )
 
