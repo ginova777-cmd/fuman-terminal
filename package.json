@@ -33,6 +33,7 @@
     "cleanup:history": "node --use-system-ca scripts/cleanup-supabase-vercel-history.js --dry-run",
     "cleanup:history:apply": "node --use-system-ca scripts/cleanup-supabase-vercel-history.js --apply",
     "cleanup:history:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File install-history-retention-cleanup-task.ps1",
+    "cleanup:five-stage:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-five-stage-cleanup-task.ps1",
     "cleanup:daytrade-intraday": "node --use-system-ca scripts/cleanup-daytrade-intraday-retention.js --dry-run --json",
     "cleanup:daytrade-intraday:apply": "node --use-system-ca scripts/cleanup-daytrade-intraday-retention.js --apply --json",
     "cleanup:daytrade-intraday:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File install-daytrade-intraday-retention-task.ps1",
