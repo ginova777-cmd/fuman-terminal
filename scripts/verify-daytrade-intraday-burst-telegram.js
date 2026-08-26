@@ -35,6 +35,8 @@ const installer = read(installerFile);
 const checks = {
   writer_readable: Boolean(writer),
   notifier_readable: Boolean(notifier),
+  writer_never_invokes_notifier: !writer.includes("notifyFromOutbox")
+    && !writer.includes("notify-daytrade-intraday-burst-telegram"),
   exact_price_rule: includesAll(writer, [
     "latest1mClose >= priceTriggerLevel",
     "trigger_type: \"price_breakout_1pct\"",
