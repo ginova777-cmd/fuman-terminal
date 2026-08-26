@@ -62,9 +62,9 @@ jobs:
             fi
           fi
 
-      - name: Record intraday signals
+      - name: Strategy2 record mode retired
         if: steps.mode.outputs.mode == 'record'
-        run: node scripts/scan-intraday-signals.js
+        run: echo "Strategy2 is owned by the unified Windows runner; GitHub must not create a second run."
 
       - name: Send intraday report
         if: steps.mode.outputs.mode == 'report'

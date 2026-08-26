@@ -113,7 +113,7 @@ const STRATEGIES = [
       "/api/strategy2-latest?compact=1&limit=1200&live=1",
     ],
     sourceChain: ["v_strategy2_latest_complete_run", "strategy2_scan_results", "v_strategy2_readiness_status", "source_status"],
-    writerRunner: "run-strategy2-intraday.ps1 / scripts/scan-intraday-signals.js",
+    writerRunner: "ops/run-strategy2-v3-unified.ps1 / scripts/run-strategy2-v3-live-scan.js",
     latestView: "v_strategy2_latest_complete_run",
     runsTable: "strategy2_scan_runs",
     resultsTable: "strategy2_scan_results",

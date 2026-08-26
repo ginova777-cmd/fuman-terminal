@@ -569,14 +569,7 @@ try {
   Invoke-FullScanFormalEntryGate
   if (-not $SkipStrategy2) {
     Invoke-ScanTask "star-preopen" "STAR preopen raw refresh" "optional" "scripts\scan-star-preopen.js" (Join-Path $runtimeRoot "data\star-preopen-latest.json") @{}
-    Invoke-ScanTask "strategy2" "strategy2 intraday raw refresh" "optional" "scripts\scan-intraday-signals.js" (Join-Path $runtimeRoot "data\strategy2-intraday-latest.json") @{
-      INTRADAY_PATROL_INTERVAL_MS = "3000"
-      STRATEGY2_SCAN_START_MINUTES = "525"
-      STRATEGY2_ENTRY_START_MINUTES = "525"
-      STRATEGY2_ENTRY_END_MINUTES = "720"
-      STRATEGY2_SCAN_END_MINUTES = "720"
-      STRATEGY2_REALTIME_FUGLE_ONLY = "1"
-    }
+    Write-ScanLog "Strategy2 is schedule-owned by Fuman Strategy2 Unified 0845-1230; full scan is read-only and must not start a second run."
   }
 
   Invoke-RunnerTask "strategy3" "strategy3 full scan" "critical" "run-strategy3-complete-scan.ps1"

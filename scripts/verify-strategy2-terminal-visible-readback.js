@@ -2,13 +2,16 @@
 
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 const { callInternalApi, summarizeLatestPayload } = require("./e2e-membership-closure-utils");
+const { resolveProtectedReadbackCredential, protectedReadbackHeaders } = require("../lib/protected-readback-credential");
 
 const ROOT = path.resolve(__dirname, "..");
 const BASE_URL = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const OUT_DIR = path.join(ROOT, "outputs", "strategy2-terminal-visible-readback");
-const OUT_FILE = path.join(OUT_DIR, "strategy2-terminal-visible-readback.json");
-const BEARER_TOKEN = process.env.FUMAN_AUDIT_BEARER_TOKEN || "";
+const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
+const OUT_DIR = path.join(RUNTIME_ROOT, "data", "scan-receipts");
+const OUT_FILE = path.join(OUT_DIR, "strategy2-tri-surface-canonical-latest.json");
+let bearerToken = process.env.FUMAN_AUDIT_BEARER_TOKEN || "";
 const COOKIE = process.env.FUMAN_AUDIT_COOKIE || "";
 
 function fresh(pathname) {
@@ -19,10 +22,7 @@ function fresh(pathname) {
 
 function auditHeaders() {
   const headers = { "Cache-Control": "no-cache" };
-  if (BEARER_TOKEN) {
-    headers.authorization = /^Bearer\s+/i.test(BEARER_TOKEN) ? BEARER_TOKEN : `Bearer ${BEARER_TOKEN}`;
-    headers["x-fuman-member-session"] = "1";
-  }
+  if (bearerToken) Object.assign(headers, protectedReadbackHeaders({ token: bearerToken }));
   if (COOKIE) headers.cookie = COOKIE;
   return headers;
 }
@@ -68,9 +68,13 @@ function endpointForStrategy2(bundlePayload) {
     || null;
 }
 
+function mobileAttribute(text, name) {
+  return String(text || "").match(new RegExp(`data-${name}="([^"]*)"`))?.[1] || "";
+}
+
 function mobileRunId(text) {
-  return String(text || "").match(/data-run-id="([^"]+)"/)?.[1]
-    || String(text || "").match(/strategy2-\d{8}-\d+/)?.[0]
+  return mobileAttribute(text, "run-id")
+    || String(text || "").match(/strategy2-v3-live-\d{8}-(?:canonical|\d+)/)?.[0]
     || "";
 }
 
@@ -80,6 +84,18 @@ function check(checks, ok, code, evidence = {}) {
 
 async function main() {
   const checks = [];
+  if (!bearerToken && !COOKIE) {
+    const credential = await resolveProtectedReadbackCredential({ timeoutMs: 20000 });
+    bearerToken = credential?.token || "";
+  }
+
+  if (process.platform === "win32") {
+    const unified = spawnSync("schtasks", ["/Query", "/TN", "Fuman Strategy2 Unified 0845-1230", "/FO", "LIST"], { encoding: "utf8", windowsHide: true });
+    const retired = ["Fuman Strategy2 V3 Water Gate 0845", "Fuman Strategy2 V2 Unattended", "Fuman Strategy2 V2 Recovery"]
+      .map((name) => ({ name, status: spawnSync("schtasks", ["/Query", "/TN", name], { encoding: "utf8", windowsHide: true }).status }));
+    check(checks, unified.status === 0, "unique_strategy2_schedule_present", { status: unified.status });
+    check(checks, retired.every((item) => item.status !== 0), "retired_strategy2_schedules_absent", { retired });
+  }
   const internal = await callInternalApi("api/strategy2-latest.js", { compact: "1", live: "1", today: "1", verify: "1" });
   const latestSummary = summarizeLatestPayload(internal.payload || {});
   const expectedRunId = String(latestSummary.runId || "");
@@ -97,10 +113,24 @@ async function main() {
   const scorecardRow = sourceReport(scorecard.payload);
   const reportRow = sourceReport(reports.payload);
   const mobileId = mobileRunId(mobile.text);
+  const mobileResultCount = Number(mobileAttribute(mobile.text, "result-count"));
+  const expectedDate = String(internal.payload?.dataDate || internal.payload?.tradeDate || internal.payload?.date || "");
+  const expectedResultCount = Number(internal.payload?.resultCount ?? latestSummary.resultCount ?? 0);
+  const visibleFormal = internal.payload?.status === "complete"
+    && internal.payload?.complete === true
+    && internal.payload?.formalDisplayAllowed === true
+    && internal.payload?.publishAllowed === true;
+  const visibleBlocked = internal.payload?.status === "blocked"
+    && internal.payload?.complete === false
+    && internal.payload?.formalDisplayAllowed === false
+    && internal.payload?.publishAllowed === false
+    && internal.payload?.displayOnlyBlockedEvidence === true
+    && Number(internal.payload?.expectedCount || 0) > 0
+    && Number(internal.payload?.scannedCount || 0) > 0;
   const terminalRedacted = bundle.status === 200 && bundle.payload?.membershipRequired === true && !bundleStrategy2;
   const mobileProtected = mobile.status === 401 && /membership_required|missing_bearer_token|mobile-terminal-locked/i.test(mobile.text || "");
 
-  check(checks, internal.ok && /^strategy2-\d{8}-\d+/.test(expectedRunId), "compute_strategy2_run_id_present", { status: internal.status, expectedRunId, latestSummary });
+  check(checks, internal.ok && /^strategy2-v3-live-\d{8}-(?:canonical|\d+)$/.test(expectedRunId) && (visibleFormal || visibleBlocked), "compute_strategy2_visible_authority_valid", { status: internal.status, expectedRunId, latestSummary, visibleFormal, visibleBlocked });
   check(checks, scorecard.status === 200 && scorecardRow?.runId === expectedRunId, "scorecard_strategy2_row_run_id_matches", { status: scorecard.status, expectedRunId, row: scorecardRow });
   check(checks, reports.status === 200 && reportRow?.runId === expectedRunId, "source_reports_strategy2_row_run_id_matches", { status: reports.status, expectedRunId, row: reportRow });
   check(checks, page88.status === 200 && /api\/scorecard|sourceReports|scorecard/i.test(page88.text || ""), "page88_scorecard_hook_present", { status: page88.status, url: page88.url });
@@ -118,6 +148,9 @@ async function main() {
     actual: mobileId,
     issue: mobileProtected ? "mobile_fragment_membership_protected_no_visible_row" : "",
   });
+  check(checks, expectedDate && bundleStrategy2?.dataDate === expectedDate && scorecardRow?.date === expectedDate && reportRow?.date === expectedDate, "tri_surface_trade_date_matches", { expectedDate, desktop: bundleStrategy2?.dataDate || "", scorecard: scorecardRow?.date || "", sourceReports: reportRow?.date || "" });
+  check(checks, Number(bundleStrategy2?.resultCount) === expectedResultCount && Number(bundleStrategy2?.count) === expectedResultCount && Number(scorecardRow?.resultCount) === expectedResultCount && Number(scorecardRow?.count) === expectedResultCount && Number(reportRow?.resultCount) === expectedResultCount && Number(reportRow?.count) === expectedResultCount && mobileResultCount === expectedResultCount, "tri_surface_result_count_matches", { expectedResultCount, desktopCount: bundleStrategy2?.count, desktopResultCount: bundleStrategy2?.resultCount, mobileResultCount, scorecardCount: scorecardRow?.count, sourceReportCount: reportRow?.count });
+  check(checks, visibleFormal || (visibleBlocked && scorecardRow?.publishAllowed === false && reportRow?.publishAllowed === false && String(scorecardRow?.blockedReason || "") !== ""), "blocked_evidence_fail_closed_or_formal_complete", { visibleFormal, visibleBlocked, scorecardPublishAllowed: scorecardRow?.publishAllowed, sourceReportPublishAllowed: reportRow?.publishAllowed, blockedReason: scorecardRow?.blockedReason || "" });
 
   const report = {
     ok: checks.every((item) => item.ok),
@@ -125,8 +158,10 @@ async function main() {
     generatedAt: new Date().toISOString(),
     baseUrl: BASE_URL,
     expectedRunId,
-    rule: "scorecard/sourceReports are audit evidence; terminal/mobile visible rows require actual Strategy2 endpoint or data-run-id and membership shell is not counted as visible display",
-    authMode: BEARER_TOKEN ? "bearer" : COOKIE ? "cookie" : "none",
+    contract: "strategy2-tri-surface-canonical-verifier-v1",
+    authoritative: true,
+    rule: "desktop, mobile and /88 must share tradeDate, runId and resultCount; blocked evidence is visible only when complete/formalDisplayAllowed/publishAllowed are false and scan coverage plus blocker are present",
+    authMode: bearerToken ? "bearer" : COOKIE ? "cookie" : "none",
     readbacks: {
       terminalFastBundle: {
         status: bundle.status,
@@ -134,7 +169,7 @@ async function main() {
         endpointKeys: Object.keys(bundle.payload?.endpoints || {}),
         runId: bundleRunId,
       },
-      mobileFragment: { status: mobile.status, protectedByMembership: mobileProtected, runId: mobileId },
+      mobileFragment: { status: mobile.status, protectedByMembership: mobileProtected, runId: mobileId, resultCount: mobileResultCount },
       scorecard: { status: scorecard.status, runId: scorecardRow?.runId || "", row: scorecardRow },
       sourceReports: { status: reports.status, runId: reportRow?.runId || "", row: reportRow },
       page88: { status: page88.status },
