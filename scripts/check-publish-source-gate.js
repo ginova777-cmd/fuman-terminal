@@ -17,8 +17,6 @@ const STRATEGIES = [
   "strategy4",
   "strategy5",
   "institution",
-  "cb",
-  "warrant",
 ];
 
 function hasArg(name) {

@@ -51,6 +51,14 @@ function main() {
   const retiredModules = Array.isArray(registry && registry.retired) ? registry.retired.map((row) => row.key) : [];
   if (activeModules.length === 0) issues.push("active_module_registry_empty");
 
+  const sourceGateText = fs.readFileSync(path.join(ROOT, "scripts", "check-publish-source-gate.js"), "utf8");
+  const sourceGateStrategyBlock = sourceGateText.match(/const STRATEGIES = \[([\s\S]*?)\];/)?.[1] || "";
+  for (const retiredKey of ["cb", "warrant"]) {
+    if (new RegExp(`['"]${retiredKey}['"]`, "i").test(sourceGateStrategyBlock)) {
+      issues.push(`retired_module_in_publish_source_gate:${retiredKey}`);
+    }
+  }
+
   const requiredRootStages = [];
   const node = process.execPath;
   const checks = [
