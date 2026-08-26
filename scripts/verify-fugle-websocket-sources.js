@@ -263,7 +263,6 @@ async function main() {
 
   const tasks = [
     taskState("\\Fuman Daytrade Source Writer 0600-1330"),
-    taskState("\\Fuman Fugle Daytrade Watchdog Every Minute"),
     taskState("\\Fuman Public Slot Shared Source Watchdog"),
   ];
   for (const task of tasks) {

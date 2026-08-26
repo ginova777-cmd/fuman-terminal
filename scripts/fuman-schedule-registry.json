@@ -31,7 +31,6 @@
       "Fuman Daytrade Source Gate 0845",
       "Fuman Daytrade Source Gate 0900",
       "Fuman Daytrade Source Gate 0910",
-      "Fuman Fugle Daytrade Watchdog Every Minute",
       "Fuman Scorecard Daily Watchdog 1410",
       "Fuman Market Calendar Auto Update 1900-0830",
       "Fuman Terminal Autonomous Root Monitor",
@@ -199,12 +198,6 @@
       "Fuman Scorecard Daily Automation 1400": [
         0,
         267009
-      ],
-      "Fuman Fugle Daytrade Watchdog Every Minute": [
-        0,
-        267009,
-        2147946720,
-        -2147020576
       ],
       "Fuman Strategy4 Source Prewarm 1535": [
         0,
@@ -916,16 +909,6 @@
       "expectedState": "Ready",
       "expectedTriggers": [
         "09:10"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Fugle Daytrade Watchdog Every Minute",
-      "displayName": "Fuman Fugle Daytrade Watchdog Every Minute",
-      "description": "Daytrade source watchdog every minute during the opening window. Failure is critical.",
-      "time": "07:00-13:35",
-      "expectedState": "Ready",
-      "expectedTriggers": [
-        "07:00"
       ]
     },
     {
