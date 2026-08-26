@@ -429,7 +429,7 @@
     "verify:terminal-desktop-skeleton": "node scripts/verify-terminal-desktop-skeleton.js",
     "verify:terminal-opening-report-0830-standalone": "node scripts/verify-terminal-opening-report-0830-standalone-renderer.js",
     "verify:opening-report-0830-briefing-only-live": "node --use-system-ca scripts/verify-opening-report-0830-briefing-only-live.js",
-    "verify:master-control-contract": "node scripts/verify-api-unattended-scorecard.js --contract-only && node scripts/verify-master-control-four-surface-current-date.js && node scripts/verify-cleanup-root-authority.js",
+    "verify:master-control-contract": "node scripts/verify-api-unattended-scorecard.js --contract-only && node scripts/verify-master-control-four-surface-current-date.js && node scripts/verify-cleanup-root-authority.js && node scripts/verify-source-observability-authority-contract.js",
     "verify:after-hours-scan-guard": "node scripts/verify-after-hours-scan-guard-contract.js .",
     "verify:daytrade-burst-telegram": "node scripts/verify-daytrade-intraday-burst-telegram.js",
     "verify:chip-source-sync-receipt": "node scripts/verify-chip-source-sync-receipt.js",
