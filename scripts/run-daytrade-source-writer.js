@@ -3786,53 +3786,38 @@ function readRuntimePrioritySummary(activeSymbols) {
 function readWebSocketStatusSummary() {
   const status = readJson(FUGLE_WS_STATUS_FILE, {});
   const streamingChannels = Array.isArray(status.streamingChannels) ? status.streamingChannels : [];
-  const requiredChannels = ['trades', 'aggregates', 'candles'];
+  const requiredChannels = ["trades", "aggregates", "candles"];
   const statusAgeSeconds = ageSeconds(status.updatedAt || status.checkedAt || status.timestamp);
-  const transportReady = status.ok !== false
-    && status.mode === 'streaming'
-    && status.websocketConnected === true
-    && status.websocketAuthenticated === true
-    && status.restDisabled === true
-    && requiredChannels.every((channel) => streamingChannels.includes(channel))
-    && numberValue(status.subscribedSymbols) > 0
-    && numberValue(status.subscribeForbiddenChunks) === 0
-    && numberValue(status.streamingMessages) > 0
-    && statusAgeSeconds <= 300
-    && Boolean(status.lastMessageAt || status.websocketLastMessageAt)
-    && ageSeconds(status.lastMessageAt || status.websocketLastMessageAt) <= 300;
   const lastMessageAt = status.lastMessageAt || status.websocketLastMessageAt || "";
   const lastMessageAgeSeconds = lastMessageAt ? ageSeconds(lastMessageAt) : 999999;
+  const websocketHeartbeatAt = status.websocketHeartbeatAt || status.websocket_heartbeat_at || status.websocketServerHeartbeatAt || "";
+  const websocketHeartbeatAgeSeconds = websocketHeartbeatAt ? ageSeconds(websocketHeartbeatAt) : 999999;
+  const aggregatesLastUpdatedAt = status.aggregatesLastUpdatedAt || status.aggregates_last_updated_at || "";
+  const aggregatesLastUpdatedAgeSeconds = aggregatesLastUpdatedAt ? ageSeconds(aggregatesLastUpdatedAt) : 999999;
+  const websocketHeartbeatReady = websocketHeartbeatAgeSeconds <= 45;
+  const aggregatesPipelineReady = aggregatesLastUpdatedAgeSeconds <= 45;
+  const pipelineHealthy = websocketHeartbeatReady || aggregatesPipelineReady;
+  const transportReady = status.ok !== false && status.mode === "streaming"
+    && status.websocketConnected === true && status.websocketAuthenticated === true
+    && status.restDisabled === true && requiredChannels.every((channel) => streamingChannels.includes(channel))
+    && numberValue(status.subscribedSymbols) > 0 && numberValue(status.subscribeForbiddenChunks) === 0
+    && numberValue(status.streamingMessages) > 0 && statusAgeSeconds <= 300 && pipelineHealthy;
   const freshSymbols120s = numberValue(status.freshSymbols120s ?? status.websocketFreshSymbols120s);
   return {
-    ok: status.ok !== false,
-    mode: status.mode || '',
-    channel: status.channel || '',
-    streamingChannel: status.streamingChannel || '',
-    streamingChannels,
-    connected: Boolean(status.websocketConnected),
-    authenticated: Boolean(status.websocketAuthenticated),
-    subscribed: numberValue(status.subscribed),
-    subscribedSymbols: numberValue(status.subscribedSymbols),
-    subscribedChannels: numberValue(status.subscribedChannels),
-    streamingMessages: numberValue(status.streamingMessages),
-    streamingQuotes: numberValue(status.streamingQuotes),
-    streamingQuoteSpeedPerSec: numberValue(status.streamingQuoteSpeedPerSec),
-    lastMessageAt,
-    lastMessageAgeSeconds,
-    symbolCount: numberValue(status.websocketSymbolCount ?? status.subscribedSymbols),
-    freshSymbols120s,
-    priorityDaytradeSymbols: numberValue(status.priorityDaytradeSymbols),
-    priorityFileUpdatedAt: status.priorityFileUpdatedAt || '',
-    statusAgeSeconds,
-    restDisabled: Boolean(status.restDisabled),
-    formalReady: transportReady,
-    formalReadyReason: transportReady
-      ? 'streaming_authenticated_required_channels_and_subscription_ready'
-      : (status.formalReadyReason || 'websocket_transport_not_formal_ready'),
-    updatedAt: status.updatedAt || '',
+    ok: status.ok !== false, mode: status.mode || "", channel: status.channel || "", streamingChannel: status.streamingChannel || "", streamingChannels,
+    connected: Boolean(status.websocketConnected), authenticated: Boolean(status.websocketAuthenticated), subscribed: numberValue(status.subscribed),
+    subscribedSymbols: numberValue(status.subscribedSymbols), subscribedChannels: numberValue(status.subscribedChannels), streamingMessages: numberValue(status.streamingMessages),
+    streamingQuotes: numberValue(status.streamingQuotes), streamingQuoteSpeedPerSec: numberValue(status.streamingQuoteSpeedPerSec),
+    lastMessageAt, lastMessageAgeSeconds, websocketHeartbeatAt, websocketHeartbeatAgeSeconds, websocketHeartbeatReady,
+    aggregatesLastUpdatedAt, aggregatesLastUpdatedAgeSeconds, aggregatesPipelineReady, pipelineHealthy,
+    pipelineHealthUses: status.pipelineHealthUses || "websocket_heartbeat_or_aggregates_lastUpdated",
+    tradesSilenceForLowTurnoverIsNotDisconnect: status.tradesSilenceForLowTurnoverIsNotDisconnect !== false,
+    symbolCount: numberValue(status.websocketSymbolCount ?? status.subscribedSymbols), freshSymbols120s, priorityDaytradeSymbols: numberValue(status.priorityDaytradeSymbols),
+    priorityFileUpdatedAt: status.priorityFileUpdatedAt || "", statusAgeSeconds, restDisabled: Boolean(status.restDisabled), formalReady: transportReady,
+    formalReadyReason: transportReady ? "streaming_authenticated_pipeline_healthy_required_channels_and_subscription_ready" : (status.formalReadyReason || "websocket_transport_or_pipeline_not_formal_ready"),
+    updatedAt: status.updatedAt || "",
   };
 }
-
 function strategy3TailCandidateSymbols() {
   // Retired: Strategy3 must consume the Strategy2 Mother Pool only.
   return [];
@@ -5302,7 +5287,43 @@ async function writeEnrichmentPendingHeartbeat({ activeSymbols, priorityRows, qu
     state_updated_at: state.updatedAt || "",
     nonfatal_write_errors: errors,
   });
-}async function syncDailyVolumeMirror(dailyVolumeMap, activeSymbols) {
+}
+
+async function writeFastWebSocketTransportHeartbeat({ priorityRows, quoteMap }) {
+  if (!APPLY || !priorityRows.length) return { written: false, reason: "no_priority_rows_or_dry_run" };
+  let baseline;
+  try {
+    const rows = await supabaseGetPaged("source_status", "select=trade_date,status,message,stale_seconds,payload&source_name=eq." + encodeURIComponent(SOURCE_NAME) + "&order=updated_at.desc&limit=1", { service: true, pageSize: 1 });
+    baseline = rows && rows[0] ? rows[0] : null;
+  } catch (error) {
+    return { written: false, reason: "source_status_baseline_read_failed", error: error?.message || String(error) };
+  }
+  const baselinePayload = baseline && baseline.payload && typeof baseline.payload === "object" ? baseline.payload : null;
+  const today = taipeiDate();
+  const baselineDate = String((baselinePayload && (baselinePayload.trade_date || baselinePayload.tradeDate)) || (baseline && baseline.trade_date) || "");
+  if (!baselinePayload || (baselineDate && baselineDate !== today)) return { written: false, reason: "same_day_baseline_missing_or_stale" };
+  const websocket = readWebSocketStatusSummary();
+  const freshRows = priorityRows.filter((row) => ageSeconds(quoteFreshnessTime(quoteMap.get(normalizeCode(row.symbol)))) <= WINDOW_SECONDS);
+  const coverage = priorityRows.length ? Number((freshRows.length / priorityRows.length).toFixed(4)) : 0;
+  const payload = { ...baselinePayload,
+    writer_version: "daytrade-source-writer-fast-websocket-heartbeat-v1",
+    priority_pool_symbols: priorityRows.length, priority_fresh_quotes_120s: freshRows.length, priority_fresh_quote_coverage_120s: coverage,
+    websocket_heartbeat_at: websocket.websocketHeartbeatAt, websocket_heartbeat_age_seconds: websocket.websocketHeartbeatAgeSeconds,
+    websocket_heartbeat_ready: websocket.websocketHeartbeatReady, aggregates_last_updated_at: websocket.aggregatesLastUpdatedAt,
+    aggregates_last_updated_age_seconds: websocket.aggregatesLastUpdatedAgeSeconds, aggregates_pipeline_ready: websocket.aggregatesPipelineReady,
+    websocket_pipeline_healthy: websocket.pipelineHealthy, pipeline_health_uses: websocket.pipelineHealthUses,
+    trades_silence_for_low_turnover_is_not_disconnect: websocket.tradesSilenceForLowTurnoverIsNotDisconnect,
+    fast_transport_heartbeat: true, fast_transport_heartbeat_at: nowIso(), transport_heartbeat_contract: "preserve_complete_gate_verdict_v2",
+  };
+  try {
+    await supabaseUpsert("source_status", [{ source_name: SOURCE_NAME, trade_date: today, updated_at: nowIso(), status: baseline.status || "degraded", message: baseline.message || "WebSocket transport heartbeat", stale_seconds: Number.isFinite(Number(baseline.stale_seconds)) ? Number(baseline.stale_seconds) : 0, payload }], "source_name");
+    return { written: true, coverage, preserved_gate_grade: payload.gate_grade || null };
+  } catch (error) {
+    return { written: false, reason: "source_status_fast_heartbeat_write_failed", error: error?.message || String(error) };
+  }
+}
+
+async function syncDailyVolumeMirror(dailyVolumeMap, activeSymbols) {
   if (DRY_RUN) return { written: 0, skipped: true, reason: 'dry_run' };
   const now = Date.now();
   if (now - lastDailyVolumeMirrorSyncAt < DAILY_VOLUME_MIRROR_SYNC_INTERVAL_MS) {
@@ -5653,6 +5674,7 @@ async function tick() {
     dailyVolumeMap,
     state,
   });
+  await writeFastWebSocketTransportHeartbeat({ priorityRows: provisionalPriorityRows, quoteMap });
   const [capitalMap, chipMap, marginChangeMap, stockFutureInitialMap, stockGroupContractMap] = await Promise.all([
     fetchCapitalMap(),
     fetchChipFlowMap(),

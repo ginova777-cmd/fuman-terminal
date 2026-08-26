@@ -17,6 +17,9 @@ const FORMAL_RANK_FLOOR = 41;
 const MOTHER_POOL_START_RANK = 300;
 const BOOST_STEP = 25;
 const MOTHER_POOL_MIN_PRICE = 50;
+const REST_TIMEOUT_MS = Math.max(5000, Number(process.env.OPENING_REPORT_0830_REST_TIMEOUT_MS || 12000));
+const REST_RETRIES = Math.max(0, Number(process.env.OPENING_REPORT_0830_REST_RETRIES || 2));
+const REST_RETRY_BACKOFF_MS = Math.max(250, Number(process.env.OPENING_REPORT_0830_REST_RETRY_BACKOFF_MS || 750));
 
 function argValue(name, fallback = "") {
   const prefix = `${name}=`;
@@ -81,17 +84,32 @@ function readSecret(name) {
 }
 
 async function restRequest(key, resource, options = {}) {
-  const response = await fetch(`${PROJECT_URL.replace(/\/$/, "")}/rest/v1/${resource}`, {
-    method: options.method || "GET",
-    headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json", "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" },
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    signal: AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined,
-  });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`${options.method || "GET"} ${resource} HTTP ${response.status}: ${text.slice(0, 500)}`);
-  return text ? JSON.parse(text) : [];
+  let lastError = null;
+  for (let attempt = 0; attempt <= REST_RETRIES; attempt += 1) {
+    try {
+      const response = await fetch(PROJECT_URL.replace(/\/$/, "") + "/rest/v1/" + resource, {
+        method: options.method || "GET",
+        headers: { apikey: key, Authorization: "Bearer " + key, Accept: "application/json", "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=representation" },
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal: AbortSignal.timeout ? AbortSignal.timeout(REST_TIMEOUT_MS) : undefined,
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        const error = new Error((options.method || "GET") + " " + resource + " HTTP " + response.status + ": " + text.slice(0, 500));
+        error.status = response.status;
+        throw error;
+      }
+      return text ? JSON.parse(text) : [];
+    } catch (error) {
+      lastError = error;
+      const status = Number(error?.status || 0);
+      const retryable = /aborted|timeout|ECONNRESET|ETIMEDOUT|fetch failed|HTTP 5\d\d/i.test(String(error?.message || error || "")) || status === 408 || status === 429 || status >= 500;
+      if (!retryable || attempt >= REST_RETRIES) break;
+      await new Promise((resolve) => setTimeout(resolve, REST_RETRY_BACKOFF_MS * (attempt + 1)));
+    }
+  }
+  throw lastError || new Error("REST request failed: " + resource);
 }
-
 function buildReceipt({ inputPath, receiptPath, payload, validation, acceptedSymbols, rejectedSymbols, appliedBoosts, error = "" }) {
   return {
     contract: "opening-report-0830-priority-bias-bridge-v1",

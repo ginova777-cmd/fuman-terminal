@@ -68,13 +68,11 @@ function actionPlan(job) {
   switch (job.action) {
     case "restart_stock_fugle_websocket_collector":
       return [
-        { kind: "task", name: "\\Fuman Fugle Daytrade Watchdog Every Minute" },
         { kind: "task", name: "\\Fuman Daytrade Source Writer 0600-1330" },
         { kind: "verify", script: "verify:fugle-websocket-sources", toleratedExitCodes: [1] },
       ];
     case "restart_futopt_fugle_websocket_collector":
       return [
-        { kind: "task", name: "\\Fuman Fugle Daytrade Watchdog Every Minute" },
         { kind: "verify", script: "verify:fugle-websocket-sources", toleratedExitCodes: [1] },
       ];
     case "rebuild_today_mother_pool_and_priority_top40":

@@ -54,6 +54,7 @@ const STREAMING_RECONNECT_MAX_MS = Math.max(STREAMING_RECONNECT_INITIAL_MS, Numb
 ));
 const STREAMING_STALE_RECONNECT_MS = Math.max(30000, Number(process.env.FUGLE_STREAMING_STALE_RECONNECT_MS || 120000));
 const STREAMING_STATUS_MS = Math.max(1000, Number(process.env.FUGLE_STREAMING_STATUS_MS || 5000));
+const STREAMING_PRIORITY_REFRESH_MS = Math.max(5000, Number(process.env.FUGLE_STREAMING_PRIORITY_REFRESH_MS || 30000));
 const BATCH_SIZE = Math.max(1, Number(process.env.FUGLE_COLLECTOR_BATCH_SIZE || 120));
 const PER_SYMBOL_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_DELAY_MS || process.env.FUGLE_COLLECTOR_PER_SYMBOL_DELAY_MS || 80));
 const CONCURRENCY = Math.max(1, Math.min(12, Number(process.env.FUGLE_COLLECTOR_CONCURRENCY || 2)));
@@ -1234,9 +1235,13 @@ async function runStreamingCollector() {
     let lastSubscribeCycleAt = "";
     let lastSubscribeSignature = "";
     let runLastMessageAt = "";
+    let lastTransportMessageAt = "";
+    let lastWebSocketHeartbeatAt = "";
+    let lastAggregatesLastUpdatedAt = "";
     let staleRecoveryTriggered = false;
     const staleDataWindow = STREAMING_STALE_RECONNECT_MS;
     let staleRecoveryTimer;
+    let priorityRefreshTimer;
     let closed = false;
     const writeStreamingStatus = (extra = {}) => {
       const freshCount = countFreshCachedQuotes(selection.allSymbols);
@@ -1263,6 +1268,14 @@ async function runStreamingCollector() {
         streamingChannelQuotes: channelQuotes,
         streamingChannelCandles: channelCandles,
         lastMessageAt,
+        websocketLastMessageAt: lastTransportMessageAt || lastMessageAt,
+        websocketHeartbeatAt: lastWebSocketHeartbeatAt,
+        websocketServerHeartbeatAt: lastWebSocketHeartbeatAt,
+        websocketHeartbeatAgeSeconds: lastWebSocketHeartbeatAt ? Math.max(0, Math.round((Date.now() - Date.parse(lastWebSocketHeartbeatAt)) / 1000)) : 999999,
+        aggregatesLastUpdatedAt: lastAggregatesLastUpdatedAt,
+        aggregatesLastUpdatedAgeSeconds: lastAggregatesLastUpdatedAt ? Math.max(0, Math.round((Date.now() - Date.parse(lastAggregatesLastUpdatedAt)) / 1000)) : 999999,
+        pipelineHealthUses: "websocket_server_heartbeat_or_aggregates_lastUpdated",
+        tradesSilenceForLowTurnoverIsNotDisconnect: true,
         subscribed: selection.subscriptionCount,
         subscribedSymbols: selection.selected.length,
         subscribedChannels: STREAMING_CHANNELS.length,
@@ -1403,6 +1416,11 @@ async function runStreamingCollector() {
         let payload = null;
         try { payload = JSON.parse(String(event.data || "")); } catch {}
         const text = String(event.data || "");
+        lastTransportMessageAt = nowIso();
+        const eventName = String(payload?.event || payload?.type || payload?.data?.event || "").toLowerCase();
+        if (/heartbeat|pong/.test(eventName) || /"(?:event|type)"\s*:\s*"(?:heartbeat|pong)"/i.test(text)) {
+          lastWebSocketHeartbeatAt = lastTransportMessageAt;
+        }
         if (/authenticated|auth/i.test(text)) {
           authenticated = true;
           if (!lastSubscribeSignature) subscribe();
@@ -1439,6 +1457,11 @@ async function runStreamingCollector() {
           ? normalizeFugleTrade(payload)
           : normalizeFugleAggregate(payload);
         if (quote) {
+          if (inferredChannel === "aggregates") {
+            const aggregateUpdatedAt = quote.updatedAt || quote.quoteTime || quote.time || data.lastUpdated || lastTransportMessageAt;
+            const aggregateUpdatedMs = Date.parse(String(aggregateUpdatedAt || ""));
+            lastAggregatesLastUpdatedAt = Number.isFinite(aggregateUpdatedMs) ? new Date(aggregateUpdatedMs).toISOString() : lastTransportMessageAt;
+          }
           quoteMessages += 1;
           if (Object.prototype.hasOwnProperty.call(channelQuotes, inferredChannel)) channelQuotes[inferredChannel] += 1;
           lastMessageAt = nowIso();
@@ -1454,6 +1477,7 @@ async function runStreamingCollector() {
         clearInterval(statusTimer);
         clearInterval(subscribeTimer);
         clearInterval(staleRecoveryTimer);
+        clearInterval(priorityRefreshTimer);
         writeStreamingStatus({ websocketConnected: false });
         resolve();
       });
@@ -1465,9 +1489,19 @@ async function runStreamingCollector() {
         if (closed) clearInterval(subscribeTimer);
         else subscribe();
       }, STREAMING_RESUBSCRIBE_MS);
+      priorityRefreshTimer = setInterval(() => {
+        if (closed) {
+          clearInterval(priorityRefreshTimer);
+          return;
+        }
+        // The 08:30 bridge writes a new priority manifest. Re-check it every
+        // 30 seconds; subscribe() reconnects only when the manifest changed.
+        void subscribe();
+      }, STREAMING_PRIORITY_REFRESH_MS);
       staleRecoveryTimer = setInterval(() => {
         if (closed) {
           clearInterval(staleRecoveryTimer);
+        clearInterval(priorityRefreshTimer);
           return;
         }
         const lastDataMs = Date.parse(runLastMessageAt || openedAt || "");
