@@ -38,17 +38,29 @@ try {
   $env:FUMAN_API_UNATTENDED_REPORT_FILE = $mdFile
   & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-api-unattended-scorecard.js")
   $verifierExit = [int]$LASTEXITCODE
+  $cleanupVerifierDue = ($effectiveMode -eq "Full")
+  $cleanupVerifierExit = $null
+  $cleanupVerifierFile = Join-Path $RuntimeRoot ("status\daily-retention-maintenance-verifier-{0}.json" -f $startedAt.ToString("yyyyMMdd"))
+  if ($cleanupVerifierDue) {
+    # Final-only and read-only: this reads cleanup receipts and protected windows.
+    # It never starts cleanup, a strategy scan, a retry, or a deployment.
+    & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-daily-retention-maintenance.js")
+    $cleanupVerifierExit = [int]$LASTEXITCODE
+  }
   $finishedAt = Get-Date
   [ordered]@{
     contract = "fuman-master-checkpoint-runner-v1"
     mode = $auditMode
     checkpointId = if ($effectiveMode -eq "Full") { "23:10-final" } else { $startedAt.ToString("HH:mm") }
     fullDayAudit = ($effectiveMode -eq "Full")
-    ok = ($verifierExit -eq 0)
+    ok = (($verifierExit -eq 0) -and (-not $cleanupVerifierDue -or $cleanupVerifierExit -eq 0))
     startedAt = $startedAt.ToString("o")
     finishedAt = $finishedAt.ToString("o")
     durationSeconds = [math]::Round(($finishedAt - $startedAt).TotalSeconds, 3)
     verifierExitCode = $verifierExit
+    cleanupVerifierDue = $cleanupVerifierDue
+    cleanupVerifierExitCode = $cleanupVerifierExit
+    cleanupVerifierReceipt = $cleanupVerifierFile
     strategyExecutionAllowed = $false
     scannerApplyAllowed = $false
     deploymentAllowed = $false

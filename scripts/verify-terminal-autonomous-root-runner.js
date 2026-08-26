@@ -168,8 +168,7 @@ async function main() {
   if (legacyConflictTask.checked && legacyConflictTask.installed && !legacyConflictTask.disabled) addIssue(issues, "windows_task_legacy_autonomous_ops_conflict", { raw: legacyConflictTask.raw.slice(0, 1200), xml: legacyConflictTask.xmlRaw.slice(0, 1200) });
 
   if (finalAuditTask.checked) {
-    if (!finalAuditTask.installed) addIssue(issues, "windows_task_missing_full_unattended_final_audit", { exitCode: finalAuditTask.exitCode, raw: finalAuditTask.raw.slice(0, 1200) });
-    if (finalAuditTask.installed && !finalAuditTask.hasS4U) addIssue(issues, "windows_task_not_s4u_unattended_final_audit", { raw: finalAuditTask.raw.slice(0, 1200), xml: finalAuditTask.xmlRaw.slice(0, 1200) });
+    if (finalAuditTask.installed) addIssue(issues, "windows_task_duplicate_full_unattended_final_audit_must_be_absent", { raw: finalAuditTask.raw.slice(0, 1200), xml: finalAuditTask.xmlRaw.slice(0, 1200) });
   }
   if (windowsTask.checked) {
     if (!windowsTask.installed) addIssue(issues, "windows_task_missing_autonomous_root_monitor", { exitCode: windowsTask.exitCode, raw: windowsTask.raw.slice(0, 1200) });
@@ -209,8 +208,7 @@ async function main() {
     finalAuditTask: {
       checked: finalAuditTask.checked,
       installed: finalAuditTask.installed,
-      hasS4U: finalAuditTask.hasS4U,
-      hasInteractiveOnly: finalAuditTask.hasInteractiveOnly,
+      requiredState: "absent_single_master_owns_2310",
       exitCode: finalAuditTask.exitCode,
     },
     legacyConflictTask: {
