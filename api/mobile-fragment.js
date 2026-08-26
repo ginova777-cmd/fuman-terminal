@@ -917,9 +917,10 @@ async function renderFragment(tab, config, payload) {
     ? `<p class="mobile-terminal-blocked" data-mobile-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-mobile-display-mode="${esc(displayMode)}" data-mobile-blocked-reason="${esc(blockedReason)}">${esc(blockedReason || "source not ready; latest preserved")}</p>`
     : "";
 
+  const displayResultCount = tab === "strategy2" ? Number(payload.resultCount ?? rows.length) : rows.length;
   const points = config.points.map((point, index) => `<p><b>${index + 1}</b>${esc(point)}</p>`).join("");
   const list = rows.length ? rows.map((row, index) => rowHtml(row, index, tab)).join("") : `<div class="empty-state">等待最新 complete run。</div>`;
-  return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}" data-result-count="${rows.length}" data-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-today-authoritative="${todayAuthoritative === true ? "1" : "0"}" data-display-mode="${esc(displayMode)}">
+  return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}" data-result-count="${displayResultCount}" data-observation-count="${rows.length}" data-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-today-authoritative="${todayAuthoritative === true ? "1" : "0"}" data-display-mode="${esc(displayMode)}">
       <article class="mobile-terminal-head">
         <small>${validationDisplayAllowed || diagnosticReplay ? "V3 回測驗證 / 不發布、不寫入 /88" : "API-only complete run"}</small>
         <strong>${esc(config.title)}</strong>
