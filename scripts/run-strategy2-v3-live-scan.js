@@ -108,8 +108,8 @@ async function main() {
   const displayReplay = process.argv.includes("--display-replay");
   if (displayReplay && !diagnostic) throw new Error("strategy2_v3_display_replay_requires_diagnostic");
   const trigger = process.argv.includes("--source-event") ? "fugle_writer_success" : displayReplay ? "diagnostic_display_replay" : diagnostic ? "diagnostic" : "manual";
-  const observationWindow = clock.minuteOfDay >= (8 * 60 + 45) && clock.minuteOfDay <= (12 * 60 + 30);
-  const liveWindow = clock.minuteOfDay >= 9 * 60 && clock.minuteOfDay <= (12 * 60 + 30);
+  const observationWindow = clock.minuteOfDay >= (8 * 60 + 45) && clock.minuteOfDay <= (12 * 60 + 10);
+  const liveWindow = clock.minuteOfDay >= 9 * 60 && clock.minuteOfDay <= (12 * 60 + 10);
   const tradingDay = await isTwseTradingDay(now, { stateDir: path.join(RUNTIME_DIR, "state") });
   const water = await readFormalWater(require("./run-strategy2-v3-water-scan").config(), clock.date);
   const evaluationNow = displayReplay ? replayReferenceTime(water, now) : now;

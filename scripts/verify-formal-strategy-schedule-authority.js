@@ -1,11 +1,13 @@
 "use strict";
 
 const { spawnSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 
 const FORMAL_ROOT = "C:\\fuman-release-owner\\fuman-terminal";
 const expected = [
   ["Fuman Terminal Autonomous Root Monitor", "run-terminal-master-control.ps1"],
-  ["Fuman Strategy2 Unified 0845-1230", "ops\\run-strategy2-v3-unified.ps1"],
+  ["Fuman Strategy2 Unified 0845-1210", "ops\\run-strategy2-v3-unified.ps1"],
   ["Fuman Mother Pool Telegram 0900-1230", "run-daytrade-intraday-burst-telegram.ps1"],
   ["Fuman Strategy3 V2 First Attempt 1255", "run-strategy3-v2-1255-first-attempt.ps1"],
   ["Fuman Strategy3 V2 Complete Scan 1300", "run-strategy3-v2-complete-scan.ps1"],
@@ -42,6 +44,7 @@ const issues = [];
 const evidence = [];
 for (const [name, marker] of expected) {
   const task = tasks.find((row) => row.name === name) || tasks.find((row) => `${row?.execute || ""} ${row?.arguments || ""}`.toLowerCase().includes(marker.toLowerCase()));
+  if (name === "Fuman Strategy2 Unified 0845-1210" && task?.name !== name) issues.push(`formal_task_name_drift:${name}:${task?.name || "missing"}`);
   const action = `${task?.execute || ""} ${task?.arguments || ""}`;
   const active = task && ["Ready", "Running", "Queued"].includes(String(task.state || ""));
   const rootOk = action.toLowerCase().includes(FORMAL_ROOT.toLowerCase()) && String(task?.workingDirectory || "").toLowerCase() === FORMAL_ROOT.toLowerCase();
@@ -61,11 +64,27 @@ for (const task of tasks) {
   if (/\bCB\b|warrant|權證/i.test(task.name || "")) issues.push(`retired_strategy_task_active:${task.name}`);
 }
 
-for (const name of ["Fuman Strategy2 V3 Water Gate 0845", "Fuman Strategy2 V2 Unattended", "Fuman Strategy2 V2 Recovery"]) {
+for (const name of ["Fuman Strategy2 Unified 0845-1230", "Fuman Strategy2 V3 Water Gate 0845", "Fuman Strategy2 V2 Unattended", "Fuman Strategy2 V2 Recovery"]) {
   const task = tasks.find((row) => row.name === name && ["Ready", "Running", "Queued"].includes(String(row.state || "")));
   if (task) issues.push(`retired_strategy2_task_active:${name}`);
 }
 
+const root = path.resolve(__dirname, "..");
+const strategy2Runner = fs.readFileSync(path.join(root, "ops", "run-strategy2-v3-unified.ps1"), "utf8");
+const strategy2Live = fs.readFileSync(path.join(root, "scripts", "run-strategy2-v3-live-scan.js"), "utf8");
+const strategy2Water = fs.readFileSync(path.join(root, "scripts", "run-strategy2-v3-water-scan.js"), "utf8");
+const strategy2TimelineChecks = {
+  preflightAt0845Only: strategy2Runner.includes("08:45 is a single water preflight"),
+  scanStartsAt0900: strategy2Runner.includes("$scanStart = (Get-Date).Date.AddHours(9)"),
+  finalizeAt1210: strategy2Runner.includes("$finalizeAt = (Get-Date).Date.AddHours(12).AddMinutes(10)"),
+  noRunner1230Deadline: !strategy2Runner.includes("AddMinutes(30)"),
+  liveWindowEnds1210: strategy2Live.includes("clock.minuteOfDay <= (12 * 60 + 10)"),
+  waterWindowEnds1210: strategy2Water.includes("clock.minuteOfDay <= (12 * 60 + 10)"),
+  noSleepPastFinalize: strategy2Runner.includes("$remainingSeconds") && strategy2Runner.includes("[Math]::Min(60, $remainingSeconds)"),
+};
+for (const [check, ok] of Object.entries(strategy2TimelineChecks)) {
+  if (!ok) issues.push(`strategy2_timeline_drift:${check}`);
+}
 const report = {
   ok: issues.length === 0,
   contract: "fuman-formal-strategy-schedule-authority-v1",

@@ -569,7 +569,7 @@ try {
   Invoke-FullScanFormalEntryGate
   if (-not $SkipStrategy2) {
     Invoke-ScanTask "star-preopen" "STAR preopen raw refresh" "optional" "scripts\scan-star-preopen.js" (Join-Path $runtimeRoot "data\star-preopen-latest.json") @{}
-    Write-ScanLog "Strategy2 is schedule-owned by Fuman Strategy2 Unified 0845-1230; full scan is read-only and must not start a second run."
+    Write-ScanLog "Strategy2 is schedule-owned by Fuman Strategy2 Unified 0845-1210; full scan is read-only and must not start a second run."
   }
 
   Invoke-RunnerTask "strategy3" "strategy3 full scan" "critical" "run-strategy3-complete-scan.ps1"
