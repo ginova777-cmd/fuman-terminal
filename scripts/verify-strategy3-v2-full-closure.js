@@ -77,6 +77,7 @@ function runTerminalLegacyApiProbe(date) {
 
 
 function main() {
+  add(ROOT === path.resolve(__dirname, ".."), "strategy3_v2_root_not_self_derived", { root: ROOT });
   const files = [
     "scripts/strategy3-v2-contract.js",
     "scripts/check-strategy3-v2-readiness.js",
@@ -85,6 +86,7 @@ function main() {
     "scripts/verify-strategy3-v2-full-closure.js",
     "scripts/verify-strategy3-v2-1255-first-attempt.js",
     "scripts/verify-strategy3-v2-water-universe.js",
+    "scripts/verify-strategy3-v2-daily-unattended-closure.js",
     "scripts/verify-strategy3-v2-schema-contract.js",
     "scripts/verify-strategy3-v2-collector-boot-contract.js",
     "api/strategy3-v2-latest.js",
