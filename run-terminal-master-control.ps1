@@ -21,6 +21,8 @@ $reportDir = Join-Path $RuntimeRoot "reports"
 $lockDir = Join-Path $RuntimeRoot "locks"
 $mutexName = "Global\FumanTerminalMasterControl"
 $receiptFile = Join-Path $receiptDir "terminal-master-checkpoint-latest.json"
+$receiptHistoryFile = Join-Path $receiptDir ("terminal-master-checkpoint-{0}.json" -f $startedAt.ToString("yyyyMMdd-HHmmss"))
+$alertReceiptFile = Join-Path $receiptDir ("terminal-master-alert-{0}.json" -f $startedAt.ToString("yyyyMMdd-HHmmss"))
 $jsonFile = Join-Path $RuntimeRoot "state\api-unattended-scorecard.json"
 $mdFile = Join-Path $reportDir "api-unattended-scorecard.md"
 New-Item -ItemType Directory -Force -Path $receiptDir,$reportDir,$lockDir,(Split-Path -Parent $jsonFile) | Out-Null
@@ -68,8 +70,17 @@ try {
     scorecardJson = $jsonFile
     scorecardMarkdown = $mdFile
   } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $receiptFile -Encoding UTF8
-  # NO is valid fail-closed evidence; never retry or create a second formal run.
-  exit 0
+  Copy-Item -LiteralPath $receiptFile -Destination $receiptHistoryFile -Force
+  $checkpointOk = (($verifierExit -eq 0) -and (-not $cleanupVerifierDue -or $cleanupVerifierExit -eq 0))
+  if (-not $checkpointOk) {
+    $env:FUMAN_ALERT_SOURCE = "Fuman Terminal Master Control"
+    $env:FUMAN_ALERT_SUBJECT = "Fuman master control blocker detected"
+    $env:FUMAN_ALERT_TEXT = "The read-only master verifier detected a hard blocker at checkpoint $($startedAt.ToString('HH:mm')). No scan, retry, publish, or deployment was started. Receipt: $receiptHistoryFile"
+    & node --use-system-ca (Join-Path $ProjectRoot "scripts\send-workflow-alert.js") --kind master-control --receipt $alertReceiptFile
+  }
+  # Fail closed with a real scheduler failure code. Never retry or create a second formal run.
+  if ($checkpointOk) { exit 0 }
+  exit 1
 } catch {
   $finishedAt = Get-Date
   [ordered]@{
@@ -88,6 +99,7 @@ try {
     killedProcess = $false
     error = $_.Exception.Message
   } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $receiptFile -Encoding UTF8
+  Copy-Item -LiteralPath $receiptFile -Destination $receiptHistoryFile -Force
   exit 1
 } finally {
   if ($mutexOwned) { try { $mutex.ReleaseMutex() } catch { } }
