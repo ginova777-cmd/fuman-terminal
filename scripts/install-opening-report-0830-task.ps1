@@ -1,42 +1,26 @@
 param(
-  [switch]$Remove
+  [switch]$Remove,
+  [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
+  [string]$TaskName = "Fuman Opening Report 0830 Telegram",
+  [string]$UserId = "$env:USERDOMAIN\$env:USERNAME"
 )
-
 $ErrorActionPreference = "Stop"
-
-$TaskName = "Fuman Opening Report 0830 Line"
-$Root = "C:\fuman-terminal"
-$ScriptPath = Join-Path $Root "run-opening-report-0830-production-wrapper.ps1"
-$Pwsh = "C:\Program Files\PowerShell\7\pwsh.exe"
-if (-not (Test-Path -LiteralPath $Pwsh)) {
-  $Pwsh = "powershell.exe"
-}
-
+$scriptPath = Join-Path $ProjectRoot "run-opening-report-0830-production-wrapper.ps1"
+$pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
+if (-not $pwsh) { $pwsh = "powershell.exe" }
 if ($Remove) {
-  Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+  foreach ($name in @($TaskName, "Fuman Opening Report 0830 LINE", "Fuman Opening Report 0830 Line", "Fuman Opening Report 0830 LINE Bridge")) {
+    Unregister-ScheduledTask -TaskName $name -Confirm:$false -ErrorAction SilentlyContinue
+  }
   return
 }
-
-if (-not (Test-Path -LiteralPath $ScriptPath)) {
-  throw "Missing wrapper script: $ScriptPath"
+if (-not (Test-Path -LiteralPath $scriptPath)) { throw "Missing wrapper script: $scriptPath" }
+$action = New-ScheduledTaskAction -Execute $pwsh -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`"" -WorkingDirectory $ProjectRoot
+$trigger = New-ScheduledTaskTrigger -Daily -At "08:30"
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 25)
+$principal = New-ScheduledTaskPrincipal -UserId $UserId -LogonType S4U -RunLevel Highest
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "Single opening-report chain: 08:30 report, 08:35 required Mother Pool bridge, 08:36 Telegram personal/group delivery and terminal receipt closure. LINE fallback and second run forbidden." -Force | Out-Null
+foreach ($legacy in @("Fuman Opening Report 0830 LINE", "Fuman Opening Report 0830 Line", "Fuman Opening Report 0830 LINE Bridge")) {
+  if ($legacy -ne $TaskName) { Unregister-ScheduledTask -TaskName $legacy -Confirm:$false -ErrorAction SilentlyContinue }
 }
-
-$Action = New-ScheduledTaskAction `
-  -Execute $Pwsh `
-  -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`"" `
-  -WorkingDirectory $Root
-$Trigger = New-ScheduledTaskTrigger -Daily -At "08:30"
-$Settings = New-ScheduledTaskSettingsSet `
-  -StartWhenAvailable `
-  -MultipleInstances IgnoreNew `
-  -ExecutionTimeLimit (New-TimeSpan -Minutes 25)
-
-Register-ScheduledTask `
-  -TaskName $TaskName `
-  -Action $Action `
-  -Trigger $Trigger `
-  -Settings $Settings `
-  -Description "Fuman 08:30 opening report. Success gate is delivery-chain: report + terminal briefing + LINE personal/group." `
-  -Force | Out-Null
-
-Get-ScheduledTask -TaskName $TaskName | Select-Object TaskName, State
+Get-ScheduledTask -TaskName $TaskName | Select-Object TaskName,State,@{n="StartBoundary";e={$_.Triggers[0].StartBoundary}},@{n="MultipleInstances";e={$_.Settings.MultipleInstances}}
