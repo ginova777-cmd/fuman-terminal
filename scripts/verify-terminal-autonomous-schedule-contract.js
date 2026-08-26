@@ -11,6 +11,7 @@ const taskName = "Fuman Terminal Autonomous Root Monitor";
 const legacyTaskName = "Fuman Terminal Autonomous Ops 5m";
 const REQUIRE_LIVE = process.argv.includes("--require-live");
 const issues = [];
+const expectedCheckpoints = ["06:05","07:08","08:20","08:30","08:35","08:36","09:00","12:10","12:20","12:55","13:00","13:15","15:35","16:00","16:10","17:00","21:00","21:10","21:15","21:30","21:40","22:00","23:10"];
 
 function read(file) {
   try { return fs.readFileSync(file, "utf8"); } catch { return ""; }
@@ -32,14 +33,29 @@ if (!installer) issues.push("autonomous_schedule_installer_missing");
 for (const marker of [
   "run-terminal-autonomous-root.ps1",
   "Fuman Terminal Autonomous Root Monitor",
-  "08:55",
-  "09:10",
-  "09:40",
-  "13:35",
-  "14:10",
+  "06:05",
+  "07:08",
+  "08:20",
+  "08:30",
+  "08:35",
+  "08:36",
+  "09:00",
+  "12:10",
+  "12:20",
+  "12:55",
+  "13:00",
+  "13:15",
+  "15:35",
+  "16:00",
   "16:10",
-  "21:35",
+  "17:00",
+  "21:00",
+  "21:10",
+  "21:15",
+  "21:30",
+  "21:40",
   "22:00",
+  "23:10",
   "MultipleInstances IgnoreNew",
   "StartWhenAvailable",
   "LogonType S4U",
@@ -81,7 +97,9 @@ if (REQUIRE_LIVE) {
   if (live.exists === true && live.startWhenAvailable !== true) issues.push("live_task_start_when_available_false");
   if (live.exists === true) {
     const triggers = Array.isArray(live.triggers) ? live.triggers : [];
-    if (triggers.length < 8) issues.push(`live_task_expected_root_checkpoints_missing:${triggers.length}`);
+    const liveTimes = new Set(triggers.map((row) => String(row.start || "").match(/T(\d{2}:\d{2})/)?.[1]).filter(Boolean));
+    const missingCheckpoints = expectedCheckpoints.filter((time) => !liveTimes.has(time));
+    if (missingCheckpoints.length > 0) issues.push(`live_task_expected_root_checkpoints_missing:${missingCheckpoints.join(",")}`);
   }
 }
 
