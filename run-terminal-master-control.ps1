@@ -42,6 +42,13 @@ try {
   $verifierExit = [int]$LASTEXITCODE
   & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-formal-strategy-schedule-authority.js")
   $scheduleAuthorityExit = [int]$LASTEXITCODE
+  $chipSourceVerifierDue = (($startedAt.DayOfWeek -ne [DayOfWeek]::Saturday) -and ($startedAt.DayOfWeek -ne [DayOfWeek]::Sunday) -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("20:05")))
+  $chipSourceVerifierExit = $null
+  $chipSourceVerifierReceipt = Join-Path $receiptDir "chip-source-sync.json"
+  if ($chipSourceVerifierDue) {
+    & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-chip-source-sync-receipt.js")
+    $chipSourceVerifierExit = [int]$LASTEXITCODE
+  }
   $telegramVerifierDue = (($startedAt.DayOfWeek -ne [DayOfWeek]::Saturday) -and ($startedAt.DayOfWeek -ne [DayOfWeek]::Sunday) -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("09:00")))
   $telegramVerifierExit = $null
   if ($telegramVerifierDue) {
@@ -71,12 +78,15 @@ try {
     mode = $auditMode
     checkpointId = if ($effectiveMode -eq "Full") { "23:10-final" } else { $startedAt.ToString("HH:mm") }
     fullDayAudit = ($effectiveMode -eq "Full")
-    ok = (($verifierExit -eq 0) -and ($scheduleAuthorityExit -eq 0) -and (-not $telegramVerifierDue -or $telegramVerifierExit -eq 0) -and (-not $strategy2VerifierDue -or $strategy2VerifierExit -eq 0) -and (-not $cleanupVerifierDue -or $cleanupVerifierExit -eq 0))
+    ok = (($verifierExit -eq 0) -and ($scheduleAuthorityExit -eq 0) -and (-not $chipSourceVerifierDue -or $chipSourceVerifierExit -eq 0) -and (-not $telegramVerifierDue -or $telegramVerifierExit -eq 0) -and (-not $strategy2VerifierDue -or $strategy2VerifierExit -eq 0) -and (-not $cleanupVerifierDue -or $cleanupVerifierExit -eq 0))
     startedAt = $startedAt.ToString("o")
     finishedAt = $finishedAt.ToString("o")
     durationSeconds = [math]::Round(($finishedAt - $startedAt).TotalSeconds, 3)
     verifierExitCode = $verifierExit
     scheduleAuthorityExitCode = $scheduleAuthorityExit
+    chipSourceVerifierDue = $chipSourceVerifierDue
+    chipSourceVerifierExitCode = $chipSourceVerifierExit
+    chipSourceVerifierReceipt = $chipSourceVerifierReceipt
     telegramVerifierDue = $telegramVerifierDue
     telegramVerifierExitCode = $telegramVerifierExit
     strategy2VerifierDue = $strategy2VerifierDue
@@ -93,7 +103,7 @@ try {
     scorecardMarkdown = $mdFile
   } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $receiptFile -Encoding UTF8
   Copy-Item -LiteralPath $receiptFile -Destination $receiptHistoryFile -Force
-  $checkpointOk = (($verifierExit -eq 0) -and ($scheduleAuthorityExit -eq 0) -and (-not $telegramVerifierDue -or $telegramVerifierExit -eq 0) -and (-not $strategy2VerifierDue -or $strategy2VerifierExit -eq 0) -and (-not $cleanupVerifierDue -or $cleanupVerifierExit -eq 0))
+  $checkpointOk = (($verifierExit -eq 0) -and ($scheduleAuthorityExit -eq 0) -and (-not $chipSourceVerifierDue -or $chipSourceVerifierExit -eq 0) -and (-not $telegramVerifierDue -or $telegramVerifierExit -eq 0) -and (-not $strategy2VerifierDue -or $strategy2VerifierExit -eq 0) -and (-not $cleanupVerifierDue -or $cleanupVerifierExit -eq 0))
   if (-not $checkpointOk) {
     $env:FUMAN_ALERT_SOURCE = "Fuman Terminal Master Control"
     $env:FUMAN_ALERT_SUBJECT = "Fuman master control blocker detected"

@@ -8,7 +8,7 @@ const guard = read("schedule-guard.ps1");
 if (!/\[switch\]\$AllowAfterFormalSourceWindow/.test(guard)) issues.push("guard_switch_missing");
 if (!/marketStatus\s*-eq\s*["']after_formal_source_window["']/.test(guard)) issues.push("after_window_status_missing");
 if (!/marketOpen\s*-eq\s*\$true/.test(guard)) issues.push("trading_day_open_requirement_missing");
-for (const file of ["run-strategy4.ps1", "run-strategy5.ps1", "run-institution.ps1", "run-institution-battle-verify.ps1", "run-flow-watchdog.ps1", "run-strategy5-watchdog.ps1"]) {
+for (const file of ["run-chip-source-sync.ps1", "run-strategy4.ps1", "run-strategy5.ps1", "run-institution.ps1", "run-institution-battle-verify.ps1", "run-flow-watchdog.ps1", "run-strategy5-watchdog.ps1"]) {
   if (!/Invoke-FumanWeekdayGuard[^\r\n]*-AllowAfterFormalSourceWindow/.test(read(file))) issues.push(`${file}:explicit_allow_missing`);
 }
 for (const file of ["run-strategy2.ps1", "run-strategy3.ps1"]) {

@@ -2,7 +2,6 @@ $ErrorActionPreference = "Stop"
 
 # FUMAN_MARKET_CLOSED_RUNNER_GUARD_V1
 . "${PSScriptRoot}\schedule-guard.ps1"
-Invoke-FumanWeekdayGuard -Label "Chip source sync"
 $PSNativeCommandUseErrorActionPreference = $false
 
 $runtime = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
@@ -17,6 +16,7 @@ $receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
 New-Item -ItemType Directory -Force -Path $logDir, $receiptDir | Out-Null
 $log = Join-Path $logDir ("chip-source-sync-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 $startedAt = (Get-Date).ToString("o")
+Invoke-FumanWeekdayGuard -Label "Chip source sync" -LogPath $log -AllowAfterFormalSourceWindow
 
 function Write-Log($message) {
   $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $message

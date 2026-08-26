@@ -12,6 +12,7 @@ const expected = [
   ["Fuman Strategy3 V2 Daily Closure Verify 1315", "verify-strategy3-v2-daily-unattended-closure.js"],
   ["Fuman Strategy4 Source Prewarm 1535", "run-strategy4-source-prewarm.ps1"],
   ["Fuman Strategy4 Cache 1600", "run-strategy4.ps1"],
+  ["Fuman Chip Source Sync 2005", "run-chip-source-sync.ps1"],
   ["Fuman Strategy5 Cache 2100", "run-strategy5.ps1"],
   ["Fuman 買賣超 Cache 2100", "run-institution.ps1"],
   ["Fuman Institution Battle Verify 2110", "run-institution-battle-verify.ps1"],
