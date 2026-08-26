@@ -1,6 +1,7 @@
 param(
   [string]$Root = "C:\fuman-terminal",
-  [string]$TaskName = "Fuman Mother Pool Telegram 0900-1230"
+  [string]$TaskName = "Fuman Mother Pool Telegram 0900-1230",
+  [switch]$InteractiveFallback
 )
 $ErrorActionPreference = "Stop"
 $runner = Join-Path $Root "run-daytrade-intraday-burst-telegram.ps1"
@@ -11,6 +12,12 @@ $trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday
 $trigger.Repetition.Interval = "PT1M"
 $trigger.Repetition.Duration = "PT3H31M"
 $trigger.Repetition.StopAtDurationEnd = $true
-$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 1)
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Description "Telegram-only Strategy2 Mother Pool burst notifier; consumes formal outbox only; never starts a strategy run." -Force | Out-Null
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 1) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+$identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+$principal = if ($InteractiveFallback) {
+  New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Limited
+} else {
+  New-ScheduledTaskPrincipal -UserId $identity -LogonType S4U -RunLevel Highest
+}
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "Telegram-only Strategy2 Mother Pool burst notifier; consumes formal outbox only; never starts a strategy run." -Force | Out-Null
 Get-ScheduledTask -TaskName $TaskName | Select-Object TaskName,State
