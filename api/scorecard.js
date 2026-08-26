@@ -367,7 +367,10 @@ function callStrategy3Latest(timeoutMs = 12000) {
         canvas: "1",
         compact: "1",
         shell: "1",
-        limit: "60",
+        limit: "1200",
+        live: "1",
+        verify: "1",
+        noSnapshot: "1",
       };
       timer = setTimeout(async () => resolve({
         statusCode: 504,
@@ -379,7 +382,7 @@ function callStrategy3Latest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=60",
+        url: "/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=1200&live=1&verify=1&noSnapshot=1",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -434,7 +437,10 @@ function callStrategy4Latest(timeoutMs = 12000) {
         canvas: "1",
         compact: "1",
         shell: "1",
-        limit: "70",
+        limit: "1200",
+        live: "1",
+        verify: "1",
+        noSnapshot: "1",
       };
       timer = setTimeout(async () => resolve({
         statusCode: 504,
@@ -446,7 +452,7 @@ function callStrategy4Latest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70",
+        url: "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=1200&live=1&verify=1&noSnapshot=1",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -628,6 +634,9 @@ function callInstitutionLatest(timeoutMs = 12000) {
         compact: "1",
         shell: "1",
         limit: "1200",
+        live: "1",
+        verify: "1",
+        noSnapshot: "1",
       };
       timer = setTimeout(() => resolve({
         statusCode: 504,
@@ -639,7 +648,7 @@ function callInstitutionLatest(timeoutMs = 12000) {
       };
       Promise.resolve(handler({
         method: "GET",
-        url: "/api/institution-latest?canvas=1&compact=1&shell=1&limit=1200",
+        url: "/api/institution-latest?canvas=1&compact=1&shell=1&limit=1200&live=1&verify=1&noSnapshot=1",
         headers: { host: "localhost", "x-scorecard-source": "1" },
         query,
         fumanInternalVerify: true,
@@ -802,6 +811,39 @@ function buildStrategy4SourceReport(result) {
   };
 }
 
+function buildInstitutionSourceReport(result) {
+  const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
+  const quality = payload.run_quality_at_publish && typeof payload.run_quality_at_publish === "object" ? payload.run_quality_at_publish : {};
+  return {
+    key: "institution",
+    strategy: "買賣超成績單",
+    endpoint: "/api/institution-latest",
+    statusCode: Number(result?.statusCode || 0) || 0,
+    ok: payload.ok !== false && Number(result?.statusCode || 0) < 400,
+    runId: cleanText(payload.runId || payload.run_id || payload.transport?.runId),
+    count: cleanNumber(payload.resultCount ?? payload.result_count ?? payload.count),
+    emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.data) ? payload.data.length : 0,
+    resultCount: cleanNumber(payload.resultCount ?? payload.result_count ?? payload.count),
+    readbackCount: cleanNumber(payload.readbackCount ?? payload.readback_count ?? payload.count),
+    expectedTotal: cleanNumber(payload.expectedTotal ?? payload.expected_total ?? payload.sourceCoverage?.expectedTotal),
+    scannedCount: cleanNumber(payload.scannedCount ?? payload.scanned_count ?? payload.sourceCoverage?.scannedCount ?? payload.sourceCoverage?.eligibleSymbols),
+    date: cleanText(payload.usedDate || payload.tradeDate || payload.trade_date || payload.sourceDate || payload.date),
+    sourceDate: cleanText(payload.sourceDate || payload.usedDate || payload.tradeDate || payload.trade_date || payload.date),
+    tradeDate: cleanText(payload.tradeDate || payload.trade_date || payload.usedDate || payload.sourceDate || payload.date),
+    startedAt: cleanText(payload.startedAt || payload.started_at),
+    finishedAt: cleanText(payload.finishedAt || payload.finished_at || payload.updatedAt),
+    qualityStatus: cleanText(payload.qualityStatus || payload.quality_status || payload.evidenceStatus || quality.evidenceStatus),
+    evidenceStatus: cleanText(payload.evidenceStatus || quality.evidenceStatus),
+    unattendedStatus: cleanText(payload.unattendedStatus || quality.unattendedStatus),
+    publishAllowed: payload.publishAllowed === true || quality.publishAllowed === true,
+    latestOverwriteAllowed: payload.latestOverwriteAllowed === true || quality.latestOverwriteAllowed === true,
+    preservePreviousGood: payload.preservePreviousGood === true || quality.preservePreviousGood === true,
+    fallbackUsed: payload.fallbackUsed === true || quality.fallbackUsed === true,
+    blockedReason: cleanText(payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
+    reason: cleanText(payload.reason || payload.error || payload.blockedReason || payload.scanner_block_reason || quality.blockedReason),
+  };
+}
+
 function buildStrategy2SourceReport(result) {
   const payload = result?.payload && typeof result.payload === "object" ? result.payload : {};
   const today = taipeiDateKey();
@@ -883,7 +925,16 @@ function buildStrategy3SourceReport(result) {
     runId: cleanText(payload.runId || payload.transport?.runId),
     count: cleanNumber(payload.count ?? payload.resultCount ?? payload.total),
     emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : 0,
-    date: cleanText(payload.usedDate || payload.tradeDate || payload.sourceDate || payload.date),
+    resultCount: cleanNumber(payload.resultCount ?? payload.result_count ?? payload.count),
+    readbackCount: cleanNumber(payload.readbackCount ?? payload.readback_count ?? payload.resultCount ?? payload.count),
+    expectedTotal: cleanNumber(payload.expectedTotal ?? payload.expected_total ?? payload.scannerSummary?.expected_count),
+    scannedCount: cleanNumber(payload.scannedCount ?? payload.scanned_count ?? payload.scannerSummary?.scanned_count),
+    date: cleanText(payload.usedDate || payload.tradeDate || payload.trade_date || payload.sourceDate || payload.date),
+    sourceDate: cleanText(payload.sourceDate || payload.usedDate || payload.tradeDate || payload.trade_date || payload.date),
+    tradeDate: cleanText(payload.tradeDate || payload.trade_date || payload.usedDate || payload.sourceDate || payload.date),
+    startedAt: cleanText(payload.startedAt || payload.started_at),
+    finishedAt: cleanText(payload.finishedAt || payload.finished_at || payload.updatedAt),
+    qualityStatus: cleanText(payload.qualityStatus || payload.quality_status || payload.evidenceStatus || quality.evidenceStatus),
     evidenceStatus: cleanText(payload.evidenceStatus || quality.evidenceStatus),
     unattendedStatus: cleanText(payload.unattendedStatus || quality.unattendedStatus),
     publishAllowed: payload.publishAllowed === true || quality.publishAllowed === true,
@@ -1150,14 +1201,6 @@ async function withFreshStrategySourceReports(payload) {
   try {
     const institutionReport = buildInstitutionSourceReport(await callInstitutionLatest());
     if (institutionReport.runId) nextPayload = mergeSourceReport(nextPayload, institutionReport);
-  } catch {}
-  try {
-    const cbReport = buildCbSourceReport(await callCbDetectLatest());
-    if (cbReport.runId) nextPayload = mergeSourceReport(nextPayload, cbReport);
-  } catch {}
-  try {
-    const warrantReport = buildWarrantSourceReport(await callWarrantLatest());
-    if (warrantReport.runId) nextPayload = mergeSourceReport(nextPayload, warrantReport);
   } catch {}
   try {
     const daytradeReport = await buildDaytradeSourceReport();
@@ -1563,6 +1606,47 @@ function blockedSourceReports(sourceReports) {
   });
 }
 
+function route88ReasonCode(report) {
+  const raw = cleanText(report?.reasonCode || report?.rowSuppressionReason || report?.blockedReason || report?.reason);
+  return raw ? raw.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 120) : "none";
+}
+
+function enrichRoute88SourceReport(report, scorecardUpdatedAt = "") {
+  const runId = cleanText(report?.runId);
+  const runDate = (runId.match(/(?:^|-)20(\d{6})(?:-|$)/) || [])[0]?.replace(/^-/, "").replace(/-$/, "") || "";
+  const reportedDate = cleanText(report?.tradeDate || report?.trade_date || report?.date || report?.usedDate || report?.sourceDate);
+  const tradeDate = runDate && compactDate(reportedDate) !== compactDate(runDate) ? compactDateToIso(runDate) : reportedDate;
+  const sourceDate = cleanText(report?.sourceDate || report?.source_date || report?.usedDate || tradeDate);
+  const resultCount = cleanNumber(report?.resultCount ?? report?.result_count ?? report?.count ?? report?.emittedRows);
+  const scannedCount = cleanNumber(report?.scannedCount ?? report?.scanned_count ?? report?.readbackCount ?? resultCount);
+  const universeCount = cleanNumber(report?.universeCount ?? report?.universe_count ?? report?.expectedCount ?? report?.expectedTotal ?? scannedCount);
+  const evidenceStatus = cleanText(report?.evidenceStatus || (report?.ok === true ? "complete" : "blocked"));
+  const qualityStatus = cleanText(report?.qualityStatus || evidenceStatus || (report?.ok === true ? "complete" : "blocked"));
+  const firstBlocker = cleanText(report?.firstBlocker || report?.blockedReason || report?.reason || report?.rowSuppressionBlockers?.[0]);
+  const surfaceStatus = report?.publishAllowed === true && report?.ok !== false ? "complete" : "blocked";
+  return {
+    ...report,
+    strategy: cleanText(report?.strategy || report?.key),
+    tradeDate,
+    sourceDate,
+    runId,
+    startedAt: cleanText(report?.startedAt || report?.started_at || report?.sourceSnapshotCapturedAt),
+    finishedAt: cleanText(report?.finishedAt || report?.finished_at || report?.updatedAt || report?.sourceSnapshotCapturedAt),
+    universeCount,
+    scannedCount,
+    resultCount,
+    qualityStatus,
+    evidenceStatus,
+    fallbackUsed: report?.fallbackUsed === true,
+    publishAllowed: report?.publishAllowed === true,
+    desktopStatus: cleanText(report?.desktopStatus || surfaceStatus),
+    mobileStatus: cleanText(report?.mobileStatus || surfaceStatus),
+    scorecardUpdatedAt: cleanText(report?.scorecardUpdatedAt || report?.updatedAt || scorecardUpdatedAt),
+    firstBlocker,
+    reasonCode: route88ReasonCode(report),
+  };
+}
+
 function selectPayloadDate(payload, requestedDate = "") {
   const allRecords = (Array.isArray(payload?.records) ? payload.records : []).filter((row) => !isRetiredScorecardSurfaceName(row?.strategy));
   const dates = historyDates(allRecords);
@@ -1578,10 +1662,11 @@ function selectPayloadDate(payload, requestedDate = "") {
       && !isRetiredScorecardSurfaceName(report?.runId));
   // A historical scorecard date is closed evidence. Do not let an incomplete
   // current-day scanner suppress its completed records.
-  const isHistoricalSelection = Boolean(selectedDate && compactDate(selectedDate) !== taipeiDateKey());
-  const sourceReports = isHistoricalSelection
+  const isHistoricalSelection = Boolean(requestedDate && selectedDate && compactDate(selectedDate) !== taipeiDateKey());
+  const selectedSourceReports = isHistoricalSelection
     ? allSourceReports.filter((report) => compactDate(report?.date || report?.sourceDate || report?.tradeDate || report?.usedDate) === compactDate(selectedDate))
     : allSourceReports;
+  const sourceReports = selectedSourceReports.map((report) => enrichRoute88SourceReport(report, payload?.updatedAt || payload?.generatedAt || ""));
   const blockedReports = blockedSourceReports(sourceReports);
   const blockedStrategies = new Set(blockedReports.map((report) => cleanText(report.strategy)).filter(Boolean));
   const suppressedRows = selectedRecords.filter((row) => blockedStrategies.has(cleanText(row.strategy)));
