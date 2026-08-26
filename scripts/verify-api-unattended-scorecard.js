@@ -34,6 +34,7 @@ function parseArgs(argv) {
 }
 
 const ARGS = parseArgs(process.argv.slice(2));
+const CONTRACT_ONLY = ARGS.flags.has("contract-only");
 const BASE_URL = String(ARGS.values.get("production-url") || DEFAULT_PRODUCTION_URL).replace(/\/+$/, "");
 const REPORT_DIR = path.resolve(ARGS.values.get("report-dir") || process.env.FUMAN_API_UNATTENDED_REPORT_DIR || DEFAULT_REPORT_DIR);
 const OUT_FILE = path.resolve(ARGS.values.get("out") || process.env.FUMAN_API_UNATTENDED_SCORECARD_FILE || path.join(DEFAULT_STATE_DIR, "api-unattended-scorecard.json"));
@@ -1279,6 +1280,7 @@ function strategyMatchesFilter(strategy) {
 }
 
 function writeOutputs(scorecard) {
+  if (CONTRACT_ONLY) throw new Error("contract_only_must_not_write_runtime_outputs");
   fs.mkdirSync(path.dirname(OUT_FILE), { recursive: true });
   fs.mkdirSync(path.dirname(MD_FILE), { recursive: true });
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(scorecard, null, 2)}\n`, "utf8");
@@ -1337,13 +1339,12 @@ function writeOutputs(scorecard) {
 }
 
 async function main() {
-  if (ARGS.flags.has("contract-only")) {
+  if (CONTRACT_ONLY) {
     const selected = STRATEGIES.filter((strategy) => !RETIRED_STRATEGY_KEYS.has(String(strategy.key || "").toLowerCase())).map((strategy) => strategy.key);
     const issues = [];
     for (const key of ["strategy2", "strategy3", "strategy4", "strategy5", "institution"]) if (!selected.includes(key)) issues.push(`active_strategy_missing:${key}`);
     for (const key of ["cb", "warrant"]) if (selected.includes(key)) issues.push(`retired_strategy_active:${key}`);
-    const payload = { ok: issues.length === 0, unattendedStatus: issues.length ? "NO" : "YES", checkedAt: CHECKED_AT.toISOString(), taipeiCheckedAt: taipeiStamp(CHECKED_AT), masterControlContract: MASTER_CONTROL_CONTRACT, selectedStrategies: selected, blockers: issues, warnings: [], strategies: [], outputFile: OUT_FILE, markdownFile: MD_FILE };
-    writeOutputs(payload);
+    const payload = { ok: issues.length === 0, unattendedStatus: issues.length ? "NO" : "YES", checkedAt: CHECKED_AT.toISOString(), taipeiCheckedAt: taipeiStamp(CHECKED_AT), masterControlContract: MASTER_CONTROL_CONTRACT, selectedStrategies: selected, blockers: issues, warnings: [], strategies: [], writesRuntime: false, outputFile: null, markdownFile: null };
     console.log(`[api-unattended] contract-only status=${payload.unattendedStatus} blockers=${issues.length}`);
     if (issues.length && !NO_FAIL) process.exitCode = 1;
     return;
