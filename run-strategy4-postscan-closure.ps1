@@ -1,5 +1,5 @@
 param(
-  [string]$ProjectRoot = "C:\fuman-terminal",
+  [string]$ProjectRoot = $PSScriptRoot,
   [string]$RuntimeRoot = "C:\fuman-runtime",
   [string]$ProductionUrl = "https://fuman-terminal.vercel.app",
   [int]$WaitSeconds = 0,

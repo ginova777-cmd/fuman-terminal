@@ -1,3 +1,3 @@
 $ErrorActionPreference = "Stop"
-Set-Location -LiteralPath "C:\fuman-terminal"
+Set-Location -LiteralPath $PSScriptRoot
 node scripts\refresh-strategy3-ready-snapshot.js

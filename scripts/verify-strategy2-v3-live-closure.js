@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const ROOT = "C:/fuman-terminal";
+const ROOT = path.resolve(__dirname, "..");
 const RUNTIME = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const RECEIPT = path.join(RUNTIME, "data", "scan-receipts", "strategy2-v3-live.json");
 const CONTRACT = "strategy2-live-v3-fugle-deep-scan-1m";
@@ -93,8 +93,6 @@ function main() {
   ];
   const legacyFilesStillPresent = retiredLegacyFiles.filter((relative) => fs.existsSync(path.join(ROOT, relative)));
   add(checks, "legacy_strategy2_collectors_removed", legacyFilesStillPresent.length === 0, legacyFilesStillPresent.join(","));
-  const retiredV2Release = "C:/Users/ginov/Documents/Codex/strategy2-v2-production-release-20260814";
-  add(checks, "legacy_strategy2_v2_release_removed", !fs.existsSync(retiredV2Release), retiredV2Release);
 
   add(checks, "receipt_is_v3", receipt.version === "v3" && receipt.strategyContract === CONTRACT, `${receipt.version || ""}/${receipt.strategyContract || ""}`);
   add(checks, "receipt_is_today", receipt.dataDate === expectDate && receipt.tradeDate === expectDate, `${receipt.dataDate || ""}/${receipt.tradeDate || ""}/${expectDate}`);

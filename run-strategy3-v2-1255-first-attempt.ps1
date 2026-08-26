@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
-Set-Location "C:\fuman-terminal"
+Set-Location -LiteralPath $PSScriptRoot
 $runtimeDir = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
 $env:FUMAN_RUNTIME_DIR = $runtimeDir
 $env:NODE_OPTIONS = "--use-system-ca"

@@ -111,7 +111,7 @@ async function main() {
   if (credential?.ok && credential?.token) AUTH_BEARER = String(credential.token);
   if (!AUTH_BEARER) throw new Error("strategy4_closure_authenticated_readback_credential_missing");
   const root = path.resolve(__dirname, "..");
-  const terminalRoot = process.env.FUMAN_TERMINAL_ROOT || "C:/fuman-terminal";
+  const terminalRoot = process.env.FUMAN_TERMINAL_ROOT || path.resolve(__dirname, "..");
   const modules = {
     strategy4Latest: path.join(terminalRoot, "api", "strategy4-latest.js"),
     terminalFastBundle: path.join(terminalRoot, "api", "terminal-fast-bundle.js"),
