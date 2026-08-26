@@ -228,7 +228,7 @@ for (const file of ["api/heatmap.js", "api/market-ai-live.js", "api/latest-strat
 
 const WRITER_BY_MODULE = {
   strategy1: "scripts/scan-open-buy-cache.js",
-  strategy2: "scripts/scan-intraday-signals.js",
+  strategy2: "scripts/run-strategy2-v3-live-scan.js",
   strategy3: "scripts/scan-strategy3-cache.js",
   strategy4: "scripts/scan-strategy4-cache.js",
   strategy5: "scripts/scan-strategy5-cache.js",

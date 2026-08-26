@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const zlib = require("zlib");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
+const { auditRunTimeSourceSnapshot, buildRunTimeSourceSnapshotFields } = require("../lib/run-time-source-snapshot-contract");
 const { isTwseTradingDay } = require("./twse-trading-day");
 const { CONTRACT: WATER_CONTRACT, taipeiClock, readFormalWater } = require("./run-strategy2-v3-water-scan");
 const { candidateFromWaterRow } = require("../lib/strategy2-v3-signal");
@@ -192,6 +193,30 @@ async function main() {
     waterComplete,
     transport: { source: "strategy2-v3-live-scan", snapshotKey: displayReplay ? REPLAY_SNAPSHOT_KEY : SNAPSHOT_KEY, runId, via: "run-strategy2-v3-live-scan.js" },
   };
+
+  Object.assign(payload, buildRunTimeSourceSnapshotFields({
+    strategy: "strategy2",
+    runId,
+    payload,
+    startedAt: now.toISOString(),
+    finishedAt: payload.updatedAt,
+    expectedTotal: payload.expectedCount,
+    scannedCount: payload.scannedCount,
+    resultCount: payload.resultCount,
+    readbackCount: payload.readbackCount,
+    sourceStatus: payload.sourceCoverage,
+    quoteCoverage: payload.sourceCoverage,
+    intraday1mReadiness: payload.sourceCoverage,
+    maReadiness: payload.sourceCoverage,
+    preopenFutoptDailyReadiness: payload.sourceCoverage,
+    publishAllowed: allowed,
+    degradedBlocksLatest: !allowed,
+    preservePreviousGood: false,
+    fallbackUsed: false,
+    qualityStatus: payload.qualityStatus,
+  }));
+  const runTimeSourceAudit = auditRunTimeSourceSnapshot(payload);
+  if (!runTimeSourceAudit.ok) throw new Error(`strategy2_v3_runtime_source_evidence_missing:${runTimeSourceAudit.missingFields.join(",")}`);
 
   if (!displayReplay) writeJson(HISTORY_FILE, { dataDate: clock.date, updatedAt: payload.updatedAt, events });
   writeJson(path.join(DATA_DIR, "strategy2-v3", displayReplay ? "latest-replay.json" : "latest-live.json"), payload);

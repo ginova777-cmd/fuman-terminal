@@ -307,7 +307,7 @@ try {
       } else {
         $null = Invoke-GateCommand "STAR preopen raw refresh" { & $nodeExe "scripts\scan-star-preopen.js" } -AllowFailure
       }
-      $null = Invoke-GateCommand "strategy2 intraday raw refresh" { & $nodeExe "scripts\scan-intraday-signals.js" } -AllowFailure
+      Write-GateLog "Strategy2 raw refresh retired; freshness gate reads the unified V3 receipt and never starts a second run."
     } finally {
       Pop-Location
     }

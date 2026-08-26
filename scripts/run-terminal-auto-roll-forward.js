@@ -916,7 +916,7 @@ function planForJob(job = {}, policy = {}, options = {}) {
 function scannerRunnerForKey(key = "", fallbackCommand = "") {
   const pwsh = process.platform === "win32" ? "pwsh.exe" : "pwsh";
   const map = {
-    strategy2: "run-strategy2-intraday.ps1",
+    // Strategy2 is schedule-owned; auto-roll-forward must never create a second run.
     strategy3: "run-strategy3-complete-scan.ps1",
     strategy4: "run-strategy4.ps1",
     strategy5: "run-strategy5.ps1",
