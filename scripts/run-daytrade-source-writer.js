@@ -188,6 +188,9 @@ const INTRADAY_ROLLING_1M_MIN_SAMPLES = 20;
 const INTRADAY_VOLUME_BURST_ROLLING_MULTIPLIER = positiveNumber(process.env.DAYTRADE_INTRADAY_VOLUME_BURST_ROLLING_MULTIPLIER, 2);
 const HOT_POOL_MIN_SYMBOLS = 40;
 const HOT_POOL_MAX_SYMBOLS = 80;
+// The canonical live tables are read by several pool layers. Keep their
+// writes bounded so one slow table cannot consume an entire writer tick.
+const SLOW_TABLE_BATCH_SIZE = 40;
 const PREOPEN_WARMUP_START_MINUTES = 7 * 60;
 const QUOTE_BATCH_SIZE = Math.max(1, Math.min(500, REST_PRIORITY_BATCH_LIMIT));
 const BATCH_SIZE = Math.max(1, Math.min(DEEP_SCAN_POOL_MAX_SYMBOLS, REST_PRIORITY_BATCH_LIMIT));
@@ -2941,11 +2944,16 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   // The ordinary-stock mother pool warms from the full active universe.
   // Pending quote/volume fields may enter the warming pool, but formal entry
   // still requires fresh quotes and every canonical gate condition below.
-  // A pending quote or stale quote cannot enter the published mother pool.
-  // It remains visible in base-pool diagnostics until the next radar refresh.
-  // Pending/stale/unknown-price rows remain diagnostics-only. They must never
-  // enter mother/priority/hot/deep pools or consume high-cost candle slots.
-  const rankingCandidates = qualifiedCandidates;
+  // Before the open, retain quote/volume-pending rows with a known price in a
+  // warming-only layer. This preserves full-market discovery without letting
+  // an unknown/low price, or any other hard failure, enter a formal pool.
+  const warmingPhase = taipeiMinutes() < 9 * 60;
+  const warmingPendingCandidates = pendingCandidates.filter((row) =>
+    Number(row.metrics?.price) >= MOTHER_POOL_MIN_PRICE
+    && !(row.basePool.pendingChecks || []).includes("price_pending"));
+  const rankingCandidates = warmingPhase
+    ? [...qualifiedCandidates, ...warmingPendingCandidates]
+    : qualifiedCandidates;
   const changeRanks = rankMap(rankingCandidates, (row) => row.metrics.changePercent, { minValue: 0 });
   const volumeSurgeRanks = rankMap(rankingCandidates, (row) => row.metrics.volumeRatio5, { minValue: 0 });
   const estimatedVolumeRanks = rankMap(rankingCandidates, (row) => row.metrics.estimatedVolumeRatio, { minValue: 0 });
@@ -3126,29 +3134,23 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     const openingReport0830BiasOnly = seedEntry.openingReport0830BiasOnly === true;
     const sourceSignal = seedSources.length > 0 || metrics.stockFutureInitial0846Ok || metrics.trackedBuyPointActive;
     const openingPriceBreakout = metrics.openPrice > 0 && metrics.price > metrics.openPrice;
-    const dynamicSignal = metrics.changePercent > 2
-      || metrics.volumeRatio5 >= 2
-      || (volumeRank > 0 && volumeRank <= 100)
-      || (valueRank > 0 && valueRank <= 150)
-      || metrics.turnoverRate >= MOTHER_POOL_MIN_TURNOVER_RATE
-      || metrics.volumeExpanding
-      || metrics.movingAverageTurnBullish
-      || metrics.surgeFlag
-      || metrics.volumeSpikeFlag
-      || metrics.rapidGainIncrease
-      || metrics.openingRangeBreak
-      || openingPriceBreakout
-      || metrics.fibSupport
-      || metrics.ma10PullbackSupport
-      || metrics.wBottomNecklineBreak
-      || metrics.scatterGunPattern
-      || metrics.pppPattern
-      || metrics.middleGateBreak
-      || metrics.threeBottomPattern
-      || metrics.dynamicThreeGateBreak
-      || metrics.tongziPattern
-      || metrics.divergencePattern
-      || metrics.vTurnPattern;
+    const motherPoolDynamicDiscoveryUnion = {
+      gain_gt_2: metrics.changePercent > 2,
+      volume_ratio_gt_2: metrics.volumeRatio5 >= 2,
+      volume_rank_top_100: volumeRank > 0 && volumeRank <= 100,
+      trade_value_rank_front: valueRank > 0 && valueRank <= 150,
+      turnover_ge_minimum: metrics.turnoverRate >= MOTHER_POOL_MIN_TURNOVER_RATE,
+      volume_expanding: metrics.volumeExpanding,
+      moving_average_turn_bullish: metrics.movingAverageTurnBullish,
+      intraday_surge: metrics.surgeFlag,
+      intraday_volume_spike: metrics.volumeSpikeFlag,
+      rapid_gain: metrics.rapidGainIncrease,
+      opening_range_break: metrics.openingRangeBreak || openingPriceBreakout,
+      pattern_candidate: metrics.fibSupport || metrics.ma10PullbackSupport || metrics.wBottomNecklineBreak
+        || metrics.scatterGunPattern || metrics.pppPattern || metrics.middleGateBreak || metrics.threeBottomPattern
+        || metrics.dynamicThreeGateBreak || metrics.tongziPattern || metrics.divergencePattern || metrics.vTurnPattern,
+    };
+    const dynamicSignal = Object.values(motherPoolDynamicDiscoveryUnion).some(Boolean);
     const hotBurstSignals = [
       metrics.volumeRatio5 >= 2 || metrics.estimatedVolumeRatio >= 2 || metrics.volumeSpikeFlag,
       metrics.rapidGainIncrease || metrics.changePercent >= 2,
@@ -3259,6 +3261,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       downgradeProtection,
       fastRemove,
       isMotherPoolCandidate,
+      warmingPending: row.basePool.pending === true,
       liquidityGrade,
       sourceFlags: seedSources,
       openingReport0830BiasOnly,
@@ -3392,9 +3395,10 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     };
   }).sort((a, b) => Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true) || b.entryScore - a.entryScore || a.symbol.localeCompare(b.symbol));
 
-  const publishableRankedCandidates = rankedCandidates.filter((row) => row.basePool.eligible);
-  const rankedBySymbol = new Map(publishableRankedCandidates.map((row) => [row.symbol, row]));
-  const signalCandidates = publishableRankedCandidates.filter((row) => row.isMotherPoolCandidate);
+  const warmingPoolCandidates = rankedCandidates.filter((row) =>
+    row.basePool.eligible === true || (warmingPhase && row.warmingPending === true));
+  const rankedBySymbol = new Map(warmingPoolCandidates.map((row) => [row.symbol, row]));
+  const signalCandidates = warmingPoolCandidates.filter((row) => row.isMotherPoolCandidate);
   // Quote Radar evaluates the full formal universe, but only rows matching at
   // least one dynamic or evidence-backed source condition may enter Mother Pool.
   const nonOpeningCandidates = signalCandidates.filter((row) => row.openingReport0830BiasOnly !== true);
@@ -3404,7 +3408,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     ...openingBiasCandidates.slice(0, MOTHER_POOL_MAX_SYMBOLS),
   ];
   const selectedCandidateSymbols = new Set(selectedCandidates.map((row) => row.symbol));
-  const rotationFillCandidates = publishableRankedCandidates
+  const rotationFillCandidates = warmingPoolCandidates
     .filter((row) => !selectedCandidateSymbols.has(row.symbol))
     .filter((row) => row.basePool?.eligible === true && row.metrics?.quoteFresh === true && Number(row.metrics?.price) >= MOTHER_POOL_MIN_PRICE)
     .sort((a, b) => Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true) || b.entryScore - a.entryScore || a.symbol.localeCompare(b.symbol));
@@ -3443,8 +3447,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   }
 
   const rankedRows = [...bySymbol.values()]
-    .filter((row) => row.basePool?.eligible === true
-      && row.metrics?.quoteFresh === true
+    .filter((row) => (row.basePool?.eligible === true || (warmingPhase && row.warmingPending === true))
       && Number(row.metrics?.price) >= MOTHER_POOL_MIN_PRICE)
     .sort((a, b) => Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true) || b.upgradeScore - a.upgradeScore || b.entryScore - a.entryScore || a.symbol.localeCompare(b.symbol));
   const rows = [
@@ -3457,7 +3460,8 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     const sourceFlags = Array.isArray(row.sourceFlags) ? row.sourceFlags : [];
     const userTracked = sourceFlags.some((source) => /manual_watchlist|user_watchlist/i.test(String(source)));
     const intradayBurst = row.hotBurstFastPath === true || row.priorityMetrics?.surgeFlag === true || row.priorityMetrics?.volumeSpikeFlag === true;
-    const wantsDeepScan = index + 1 <= HOT_POOL_MAX_SYMBOLS || userTracked || row.userCaseSeedMatched === true || row.userCaseLearningActive === true || row.priorityMetrics?.trackedBuyPointActive === true || intradayBurst;
+    const warmingPending = row.warmingPending === true;
+    const wantsDeepScan = !warmingPending && (index + 1 <= HOT_POOL_MAX_SYMBOLS || userTracked || row.userCaseSeedMatched === true || row.userCaseLearningActive === true || row.priorityMetrics?.trackedBuyPointActive === true || intradayBurst);
     const rowDataGap = row.priorityMetrics?.dataGap || {};
     const rowDataGapReason = String(rowDataGap.data_gap_reason || rowDataGap.status || "OK").toUpperCase();
     const rowFormal1mReady = rowDataGapReason === "OK"
@@ -3491,8 +3495,8 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         hot_burst_cooldown_seconds: HOT_BURST_COOLDOWN_SECONDS,
         hot_burst_triggered_at: row.hotBurstTriggeredAt || "",
         hot_extension_rank: hotExtensionRank,
-        pool_layer: index + 1 <= HOT_POOL_MAX_SYMBOLS ? "hot_pool" : "priority_pool",
-        canonical_pool_layer: deepScanEligible ? "deep_scan_pool" : (index + 1 <= HOT_POOL_MAX_SYMBOLS ? "hot_pool" : "priority_pool"),
+        pool_layer: warmingPending ? "warming_pending" : (index + 1 <= HOT_POOL_MAX_SYMBOLS ? "hot_pool" : "priority_pool"),
+        canonical_pool_layer: warmingPending ? "warming_pending" : (deepScanEligible ? "deep_scan_pool" : (index + 1 <= HOT_POOL_MAX_SYMBOLS ? "hot_pool" : "priority_pool")),
         trade_date: taipeiDate(),
         canonical_run_id: `${SOURCE_NAME}:${compactDateKey(taipeiDate())}:canonical`,
         deep_scan_eligible: deepScanEligible,
@@ -3503,6 +3507,8 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
           : index + 1,
         source_flags: row.sourceFlags || [],
         is_daytrade_allowed: row.basePool?.eligible === true,
+        warming_pending: warmingPending,
+        formal_pool_eligible: row.basePool?.eligible === true,
         price_gate_status: MOTHER_POOL_MIN_PRICE > 0 ? (numberValue(row.metrics?.price) >= MOTHER_POOL_MIN_PRICE ? "pass" : "below_minimum") : "no_price_floor",
         score_components: {
           entry_score: numberValue(row.entryScore ?? row.score),
@@ -3596,21 +3602,26 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
   }
   const priceEligiblePriorityRows = (priorityRows || []).filter((row) => {
     const metrics = row?.metrics || row?.payload?.motherPoolMetrics || {};
-    const eligible = row?.basePool?.eligible === true
+    const formalEligible = row?.basePool?.eligible === true
       || row?.payload?.basePoolEligible === true
+      || row?.payload?.formal_pool_eligible === true
       || row?.payload?.is_daytrade_allowed === true;
-    return eligible
+    const warmingPending = row?.warmingPending === true || row?.payload?.warming_pending === true;
+    return (formalEligible || warmingPending)
       && Number(metrics.price) >= MOTHER_POOL_MIN_PRICE;
   });
+  const formalPoolRows = priceEligiblePriorityRows.filter((row) => row?.basePool?.eligible === true
+    || row?.payload?.basePoolEligible === true
+    || row?.payload?.formal_pool_eligible === true);
   const daytradeMotherPoolSymbols = priceEligiblePriorityRows
     .map((row) => normalizeCode(row.symbol))
     .filter((code) => /^\d{4}$/.test(code))
     .slice(0, MOTHER_POOL_MAX_SYMBOLS);
-  const daytradeHotPoolSymbols = daytradeMotherPoolSymbols.slice(0, HOT_POOL_MAX_SYMBOLS);
-  const daytradePrioritySymbols = daytradeMotherPoolSymbols.slice(0, MOTHER_POOL_MAX_SYMBOLS);
-  const daytradePriorityExtensionSymbols = daytradeMotherPoolSymbols.slice(HOT_POOL_MAX_SYMBOLS, MOTHER_POOL_MAX_SYMBOLS);
-  const daytradeFormalPrioritySymbols = daytradeMotherPoolSymbols.slice(0, DEEP_SCAN_POOL_MAX_SYMBOLS);
-  const priceEligibleSymbolSet = new Set(priceEligiblePriorityRows
+  const daytradeHotPoolSymbols = formalPoolRows.map((row) => normalizeCode(row.symbol)).filter((code) => /^\d{4}$/.test(code)).slice(0, HOT_POOL_MAX_SYMBOLS);
+  const daytradePrioritySymbols = formalPoolRows.map((row) => normalizeCode(row.symbol)).filter((code) => /^\d{4}$/.test(code)).slice(0, MOTHER_POOL_MAX_SYMBOLS);
+  const daytradePriorityExtensionSymbols = daytradePrioritySymbols.slice(HOT_POOL_MAX_SYMBOLS, MOTHER_POOL_MAX_SYMBOLS);
+  const daytradeFormalPrioritySymbols = daytradePrioritySymbols.slice(0, DEEP_SCAN_POOL_MAX_SYMBOLS);
+  const priceEligibleSymbolSet = new Set(formalPoolRows
     .map((row) => normalizeCode(row.symbol))
     .filter((code) => /^\d{4}$/.test(code)));
   const openingReportCandlePrioritySymbols = compactDateKey(existing.openingReport0830PrewarmTradeDate) === compactDateKey(taipeiDate())
@@ -3673,6 +3684,12 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     // Legacy formal-priority fields remain compatibility readback only; dynamic pools define scanning.
     daytradeMotherPoolSymbols,
     daytradeMotherPoolCount: daytradeMotherPoolSymbols.length,
+    daytradeMotherPoolWarmingPendingSymbols: priceEligiblePriorityRows
+      .filter((row) => row?.warmingPending === true || row?.payload?.warming_pending === true)
+      .map((row) => normalizeCode(row.symbol))
+      .filter((code) => /^\d{4}$/.test(code)),
+    daytradeMotherPoolWarmingPendingCount: priceEligiblePriorityRows
+      .filter((row) => row?.warmingPending === true || row?.payload?.warming_pending === true).length,
     daytradeMinimumPrice: MOTHER_POOL_MIN_PRICE,
     daytradePoolPriceBySymbol: Object.fromEntries(priceEligiblePriorityRows.map((row) => [
       normalizeCode(row.symbol),
@@ -3719,14 +3736,20 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     writeFugleWebSocketSymbols(nextPriorityPayload.symbols, {
       source: "daytrade-dedicated-priority-bridge",
       prioritySource: "daytrade-dedicated-priority-bridge",
-      daytradePriorityCount: daytradeMotherPoolSymbols.length,
+      daytradePriorityCount: daytradePrioritySymbols.length,
       daytradeMotherPoolCount: daytradeMotherPoolSymbols.length,
-    daytradeMinimumPrice: MOTHER_POOL_MIN_PRICE,
-    daytradePoolPriceBySymbol: Object.fromEntries(priceEligiblePriorityRows.map((row) => [
-      normalizeCode(row.symbol),
-      Number(row.metrics?.price ?? row.payload?.motherPoolMetrics?.price),
-    ])),
-    daytradePriceGateStatus: MOTHER_POOL_MIN_PRICE > 0 ? "minimum_price_enforced" : "no_price_floor",
+      daytradeMotherPoolWarmingPendingSymbols: priceEligiblePriorityRows
+        .filter((row) => row?.warmingPending === true || row?.payload?.warming_pending === true)
+        .map((row) => normalizeCode(row.symbol))
+        .filter((code) => /^\d{4}$/.test(code)),
+      daytradeMotherPoolWarmingPendingCount: priceEligiblePriorityRows
+        .filter((row) => row?.warmingPending === true || row?.payload?.warming_pending === true).length,
+      daytradeMinimumPrice: MOTHER_POOL_MIN_PRICE,
+      daytradePoolPriceBySymbol: Object.fromEntries(priceEligiblePriorityRows.map((row) => [
+        normalizeCode(row.symbol),
+        Number(row.metrics?.price ?? row.payload?.motherPoolMetrics?.price),
+      ])),
+      daytradePriceGateStatus: MOTHER_POOL_MIN_PRICE > 0 ? "minimum_price_enforced" : "no_price_floor",
       daytradeHotPoolCount: daytradeHotPoolSymbols.length,
       daytradeFormalPriorityCount: daytradeFormalPrioritySymbols.length,
       terminalPriorityCount: nextPriorityPayload.terminalPrioritySymbols.length,
@@ -4410,8 +4433,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     // Full-market quote speed is diagnostic only and must not block formal entry.
     daytrade_source_speed_ok: formalPrioritySpeedOk,
     gate_mode: "priority_first",
-    formal_gate_scope: "mother_pool_complete_dynamic_scan",
-    formal_scan_scope: "mother_pool_complete_dynamic_scan",
+    formal_gate_scope: "priority_hot_deep_scan_pool_only",
+    formal_scan_scope: "priority_hot_deep_scan_pool_only",
     mother_pool_scan_min_symbols: MOTHER_POOL_MIN_SYMBOLS,
     mother_pool_scan_max_symbols: MOTHER_POOL_MAX_SYMBOLS,
     formal_source_name: SOURCE_NAME,
@@ -4438,7 +4461,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     futopt_mother_pool_evidence_enabled: true,
     gate_speed_ok: formalPrioritySpeedOk,
     quote_speed_scope: "full_market_scorecard_nonblocking",
-    formal_speed_scope: "mother_pool_complete_dynamic_scan",
+    formal_speed_scope: "priority_hot_deep_scan_pool_only",
     priority_gate_grade: priorityGateGrade,
     full_market_gate_grade: fullMarketGateA ? "A" : "C",
     fresh_quote_window_seconds: WINDOW_SECONDS,
@@ -5412,7 +5435,7 @@ async function ensureOpening0901CandleEvidence(formalPriorityRows = []) {
   }
   if (fallbackRows.length) {
     try {
-      const result = await supabaseUpsert("fugle_daytrade_intraday_1m", fallbackRows, "symbol,candle_time", { batchSize: 40 });
+      const result = await supabaseUpsert("fugle_daytrade_intraday_1m", fallbackRows, "symbol,candle_time", { batchSize: SLOW_TABLE_BATCH_SIZE });
       fallbackWritten = result.written || 0;
     } catch (error) {
       return { ...base, ready: false, source: "dedicated_daytrade_1m_0901_fallback_write_failed", rows: bySymbol.size, symbols: [...bySymbol.keys()], missingSymbols: requiredSymbols.filter((symbol) => !bySymbol.has(symbol)), fallbackRows: fallbackRows.length, error: error?.message || String(error) };
@@ -5506,7 +5529,7 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
   }
 
   const rows = [...selected.values()];
-  await supabaseUpsert('fugle_daytrade_intraday_1m', rows, 'symbol,candle_time', { batchSize: 500, timeoutMs: 15000, retries: 1 });
+  await supabaseUpsert('fugle_daytrade_intraday_1m', rows, 'symbol,candle_time', { batchSize: SLOW_TABLE_BATCH_SIZE, timeoutMs: 15000, retries: 1 });
   if (state && !DRY_RUN) state.daytradeMotherPoolCandleMirror = nextMirror;
   return {
     written: rows.length,
@@ -5562,7 +5585,7 @@ async function syncWebSocketFutoptQuotes() {
   if (!rows.length) {
     return { written: 0, skipped: true, cacheCount: cache.quotes.size, stockRows: 0, txfRows: 0 };
   }
-  await supabaseUpsert("fugle_daytrade_futopt_quotes_live", rows, "future_symbol", { batchSize: 40, timeoutMs: 30000, retries: 1, retryDelayMs: 1000 });
+  await supabaseUpsert("fugle_daytrade_futopt_quotes_live", rows, "future_symbol", { batchSize: SLOW_TABLE_BATCH_SIZE, timeoutMs: 30000, retries: 1, retryDelayMs: 1000 });
   return { written: rows.length, skipped: false, cacheCount: cache.quotes.size, stockRows, txfRows };
 }
 
@@ -5775,7 +5798,7 @@ async function tick() {
     }
     try {
       await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
-        batchSize: 40,
+        batchSize: SLOW_TABLE_BATCH_SIZE,
         timeoutMs: 30000,
         retries: 1,
         retryDelayMs: 1000,
@@ -5803,7 +5826,7 @@ async function tick() {
           priorityRows = candleSyncedPriorityRows;
           publishDaytradePrioritySymbols(priorityRows, activeSymbols);
           await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
-            batchSize: 40,
+            batchSize: SLOW_TABLE_BATCH_SIZE,
             timeoutMs: 30000,
             retries: 1,
             retryDelayMs: 1000,
@@ -5880,7 +5903,7 @@ async function tick() {
         // the same fresh quote timestamps used by source_status.payload.
         publishDaytradePrioritySymbols(priorityRows, activeSymbols);
         await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
-        batchSize: 40,
+        batchSize: SLOW_TABLE_BATCH_SIZE,
         timeoutMs: 30000,
         retries: 1,
         retryDelayMs: 1000,

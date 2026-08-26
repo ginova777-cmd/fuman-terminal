@@ -42,6 +42,12 @@ function arrayValue(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function taipeiDateFromTimestamp(value) {
+  const parsed = Date.parse(value || "");
+  if (!Number.isFinite(parsed)) return "";
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(parsed));
+}
+
 function sleepMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -238,11 +244,27 @@ function gateWebsocketOk(gate) {
   return sourceWebsocketOk(gate) && gate.websocketFormalReady === true;
 }
 
+const MOTHER_POOL_MIN_SYMBOLS = 300;
+const MOTHER_POOL_MAX_SYMBOLS = 600;
+const DYNAMIC_FORMAL_SCOPES = new Set([
+  "priority_hot_deep_scan_pool_only",
+  "mother_pool_300_rotating_deep_scan",
+]);
+
+function hasDynamicPoolLayers(item) {
+  return item.motherPoolSymbols >= MOTHER_POOL_MIN_SYMBOLS
+    && item.motherPoolSymbols <= MOTHER_POOL_MAX_SYMBOLS
+    && item.priorityPoolSymbols > 0
+    && item.priorityPoolSymbols <= item.motherPoolSymbols
+    && item.formalScanPoolSymbols > 0
+    && item.formalScanPoolSymbols <= item.priorityPoolSymbols;
+}
+
 function isSourceA(source) {
   return source.status === "ok"
     && source.daytradeGateGrade === "A"
     && source.hasPriorityPoolSymbols === true
-    && source.priorityPoolSymbols === 40
+    && hasDynamicPoolLayers(source)
     && source.hasPriorityFreshQuoteCoverage120s === true
     && source.priorityFreshQuoteCoverage120s >= 0.90
     && source.quoteAgeSeconds <= 90
@@ -268,7 +290,7 @@ function isGateA(gate) {
     && ["ready", "ok", "yes", ""].includes(gate.gateStatus.toLowerCase())
     && gate.hasCanonicalGateReason === true
     && gate.hasPriorityPoolSymbols === true
-    && gate.priorityPoolSymbols === 40
+    && hasDynamicPoolLayers(gate)
     && gate.hasPriorityFreshQuoteCoverage120s === true
     && gate.priorityFreshQuoteCoverage120s >= 0.90
     && gate.hasScannerCanRunOpening === true
@@ -331,11 +353,11 @@ function writerCodeRegressionChecks() {
     strategyChipEvidencePolicyConsistent: source.includes('strategyChipCompleteLatestRun') && ((source.includes('formal_priority_strategy_chip_required_for_formal_entry: false') && source.includes('formal_priority_strategy_chip_blocks_formal_entry: false')) || (source.includes('formal_priority_strategy_chip_required_for_formal_entry: true') && source.includes('formal_priority_strategy_chip_blocks_formal_entry: !strategyChipCompleteLatestRun'))),
     formalPrioritySpeedPayload: source.includes("formal_priority_speed_ok"),
     fullMarketSpeedNonBlockingPayload: source.includes("full_market_speed_blocking: false"),
-    slowTableBatchReduction: source.includes('fugle_daytrade_priority_pool')
-      && source.includes('fugle_daytrade_intraday_1m')
-      && source.includes('fugle_daytrade_futopt_quotes_live')
-      && source.includes('batchSize: 40')
-      && source.includes('BATCH_SIZE = Math.max(1, Math.min(FORMAL_DAYTRADE_PRIORITY_LIMIT'),
+    slowTableBatchReduction: source.includes('const SLOW_TABLE_BATCH_SIZE = 40')
+      && source.includes("fugle_daytrade_priority_pool")
+      && source.includes("fugle_daytrade_intraday_1m")
+      && source.includes("fugle_daytrade_futopt_quotes_live")
+      && source.includes("batchSize: SLOW_TABLE_BATCH_SIZE"),
     websocketQuoteReadthrough: source.includes('supabaseUpsert(\'fugle_daytrade_quotes_live\', websocketQuoteRows, \'symbol\', { batchSize: 40 })')
       && source.includes('websocket_cache_mother_pool_readthrough')
       && source.includes('websocket_quote_readthrough_written'),
@@ -347,16 +369,19 @@ function writerCodeRegressionChecks() {
       && !source.includes('avg5_volume_not_gt_3000')
       && source.includes('market_not_twse_otc')
       && source.includes('price_below_'),
-    warmingMotherPoolIncludesPending: source.includes('const rankingCandidates = [...qualifiedCandidates, ...pendingCandidates]')
-      && source.includes('quote_stale')
-      && source.includes('quote_pending'),
+    warmingMotherPoolIncludesPending: source.includes('const warmingPendingCandidates = pendingCandidates.filter')
+      && source.includes('const rankingCandidates = warmingPhase')
+      && source.includes('warming_pending')
+      && source.includes('formal_pool_eligible'),
     runtimeSeedsCannotBypassBasePool: source.includes('Runtime seeds may boost a candidate already selected in the warming')
       && source.includes('if (!prev)'),
     fullMarketMotherPoolRotation: source.includes('prioritySource: "dynamic_daytrade_mother_pool"')
-      && source.includes('formal_gate_scope: "mother_pool_300_rotating_deep_scan"')
+      && source.includes('formal_gate_scope: "priority_hot_deep_scan_pool_only"')
       && source.includes('mother_pool_scan_min_symbols')
       && source.includes('mother_pool_scan_max_symbols'),
-    motherPoolMinimum300: source.includes('positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_SYMBOLS || CONFIG.motherPool?.targetSymbolsMin, 300)'),
+    motherPoolMinimum300: source.includes('const MOTHER_POOL_MIN_SYMBOLS = 300;')
+      && source.includes('const MOTHER_POOL_MAX_SYMBOLS')
+      && source.includes('Math.min(600,'),
     motherPoolFreshnessFirst: source.includes('Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true)')
       && source.includes('mother_pool_fresh_coverage_120s'),
     motherPoolOptionalPriceFloor: source.includes('MOTHER_POOL_MIN_PRICE') && source.includes('price_below_'),
@@ -376,9 +401,9 @@ function writerCodeRegressionChecks() {
     dynamicMaTurnMotherPoolSignal: source.includes('movingAverageTurnBullish')
       && source.includes('ma3_5_10_or_ma5_10_30_turn_bullish')
       && source.includes('supplementalMaps.intradayMap = intradayMap'),
-    motherPoolDynamicDiscoveryUnion: source.includes('isMotherPoolCandidate')
+    motherPoolDynamicDiscoveryUnion: source.includes('const motherPoolDynamicDiscoveryUnion =')
+      && source.includes('Object.values(motherPoolDynamicDiscoveryUnion).some(Boolean)')
       && source.includes('signalCandidates')
-      && source.includes('rotationCandidates')
       && source.includes('radar_rotation_fill')
       && source.includes('sourceFlags'),
     motherPoolReadbackFields: source.includes('volumeRatio5')
@@ -477,6 +502,24 @@ async function optionalProbe(label, action) {
 }
 
 async function main() {
+  const staticOnly = process.argv.includes("--static");
+  if (staticOnly) {
+    const writerCodeRegression = writerCodeRegressionChecks();
+    const writerSupervisorRegression = writerSupervisorRegressionChecks();
+    const websocketCodeRegression = websocketCodeRegressionChecks();
+    const issues = [...writerCodeRegression.issues, ...writerSupervisorRegression.issues, ...websocketCodeRegression.issues];
+    console.log(JSON.stringify({
+      ok: issues.length === 0,
+      contract: "daytrade-source-contract-alignment-dynamic-mother-pool-v3",
+      mode: "static_contract_only",
+      writerCodeRegression,
+      writerSupervisorRegression,
+      websocketCodeRegression,
+      issues,
+    }, null, 2));
+    process.exitCode = issues.length ? 1 : 0;
+    return;
+  }
   const marketDay = await isTwseTradingDay(new Date(), { stateDir: process.env.FUMAN_STATE_DIR || "C:/fuman-runtime/state" }).catch((error) => ({ isTradingDay: true, reason: "calendar_probe_failed", error: error.message }));
   const marketClosed = marketDay.isTradingDay === false;
   const anonKey = process.env.SUPABASE_ANON_KEY || readTextSecret([
@@ -545,7 +588,9 @@ async function main() {
 
   for (const [label, item] of [["source", sourceStatus], ["canonical", canonicalGate], ["unattended", unattendedGate]]) {
     if (item.hasPriorityPoolSymbols !== true) issues.push(`${label}_priority_pool_symbols_missing`);
-    if (item.priorityPoolSymbols !== 40) issues.push(`${label}_priority_pool_symbols_not_40`);
+    if (item.priorityPoolSymbols <= 0) issues.push(`${label}_priority_pool_symbols_empty`);
+    if (item.motherPoolSymbols > 0 && item.priorityPoolSymbols > item.motherPoolSymbols) issues.push(`${label}_priority_pool_exceeds_mother_pool`);
+    if (((label === "source" && item.daytradeGateGrade === "A") || (label !== "source" && item.gateGrade === "A")) && !hasDynamicPoolLayers(item)) issues.push(`${label}_dynamic_pool_layers_invalid_for_a`);
     if (item.hasPriorityFreshQuoteCoverage120s !== true) issues.push(`${label}_priority_fresh_quote_coverage_120s_missing`);
     if (item.hasScannerCanRunOpening !== true) issues.push(`${label}_scanner_can_run_opening_missing`);
     if (item.scannerCanRunOpening !== true && item.gateGrade === "A") issues.push(`${label}_scanner_can_run_opening_false_for_a`);
@@ -560,7 +605,7 @@ async function main() {
     if (!marketClosed && ((label === "source" && item.daytradeGateGrade === "A") || (label !== "source" && item.gateGrade === "A"))) {
       if (sourceWebsocketOk(item) !== true) issues.push(`${label}_websocket_evidence_not_formal`);
       if (label === "source") {
-        if (!["mother_pool_300_rotating_deep_scan", "priority_top40"].includes(item.formalGateScope)) issues.push("source_formal_gate_scope_not_mother_pool_or_priority_top40");
+        if (!DYNAMIC_FORMAL_SCOPES.has(item.formalGateScope)) issues.push("source_formal_gate_scope_not_dynamic_pool_layered");
         if (item.formalSourceName !== SOURCE_NAME) issues.push("source_formal_source_name_mismatch");
         if (!item.formalGateSource.includes("v_fugle_daytrade_canonical_gate")) issues.push("source_formal_gate_source_missing_canonical_gate");
         if (item.formalQuoteSource !== "fugle_daytrade_quotes_live") issues.push("source_formal_quote_source_mismatch");
@@ -570,11 +615,15 @@ async function main() {
         if (item.formalSourceAlignmentOk !== true) issues.push("source_formal_source_alignment_not_ok_for_a");
         if (item.formalPrioritySpeedOk !== true || item.gateSpeedOk !== true) issues.push("source_formal_priority_speed_not_ok_for_a");
         if (item.fullMarketSpeedBlocking !== false) issues.push("source_full_market_speed_should_be_nonblocking");
-        if (item.formalSpeedScope !== "priority_top40") issues.push("source_formal_speed_scope_not_priority_top40");
+        if (!DYNAMIC_FORMAL_SCOPES.has(item.formalSpeedScope)) issues.push("source_formal_speed_scope_not_dynamic_pool_layered");
       }
     }
   }
 
+  const sourceStatusTradeDate = taipeiDateFromTimestamp(sourceStatus.updatedAt);
+  const sourceStatusIsOvernight = Boolean(sourceStatusTradeDate && marketDay.date && sourceStatusTradeDate !== marketDay.date);
+  const layerGateGradeMismatch = sourceStatus.gateGrade !== canonicalGate.gateGrade
+    || sourceStatus.gateGrade !== unattendedGate.gateGrade;
   const layerAlignmentChecks = [
     ["gate_grade", sourceStatus.gateGrade, canonicalGate.gateGrade, unattendedGate.gateGrade],
     ["gate_status", sourceStatus.gateStatus, canonicalGate.gateStatus, unattendedGate.gateStatus],
@@ -636,11 +685,21 @@ async function main() {
     },
     checkedAt: new Date().toISOString(),
     sourceName: SOURCE_NAME,
-    contract: "daytrade-source-contract-alignment-websocket-formal-v2",
+    contract: "daytrade-source-contract-alignment-dynamic-mother-pool-v3",
     formalQuoteRule: "formal daytrade A requires Fugle WebSocket trades/aggregates/candles; REST may seed/backfill only",
     sourceStatus,
     canonicalGate,
     unattendedGate,
+    runtimeState: {
+      sourceStatusUpdatedAt: sourceStatus.updatedAt,
+      sourceStatusTradeDate,
+      expectedTradeDate: marketDay.date || "",
+      sourceStatusIsOvernight,
+      layerGateGradeMismatch,
+      layerGateGradeMismatchClassification: sourceStatusIsOvernight && layerGateGradeMismatch
+        ? "overnight_source_status_state_not_static_contract"
+        : (layerGateGradeMismatch ? "live_layer_state_mismatch" : "aligned"),
+    },
     writerCodeRegression,
     writerSupervisorRegression,
     websocketCodeRegression,
