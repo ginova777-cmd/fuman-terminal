@@ -118,7 +118,7 @@ function addCheck(checks, ok, code, evidence = {}) {
 
 async function main() {
   const root = path.resolve(__dirname, "..");
-  const terminalRoot = process.env.FUMAN_TERMINAL_ROOT || "C:/fuman-terminal";
+  const terminalRoot = process.env.FUMAN_TERMINAL_ROOT || path.resolve(__dirname, "..");
   const modules = {
     strategy5Latest: path.join(terminalRoot, "api", "strategy5-latest.js"),
     terminalFastBundle: path.join(terminalRoot, "api", "terminal-fast-bundle.js"),

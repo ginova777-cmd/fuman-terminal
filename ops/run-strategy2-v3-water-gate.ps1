@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-  [string]$FumanRoot = "C:\fuman-terminal",
+  [string]$FumanRoot = (Split-Path -Parent $PSScriptRoot),
   [string]$RuntimeDir = "C:\fuman-runtime"
 )
 

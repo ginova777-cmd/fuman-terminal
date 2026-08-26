@@ -1,5 +1,5 @@
 param(
-  [string]$ProjectRoot = "C:\fuman-terminal",
+  [string]$ProjectRoot = $PSScriptRoot,
   [string]$RuntimeRoot = "C:\fuman-runtime"
 )
 

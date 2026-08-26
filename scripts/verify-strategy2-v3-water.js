@@ -5,7 +5,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const ROOT = "C:/fuman-terminal";
+const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const RECEIPT = path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2-v3-water.json");
 const SCANNER = path.join(ROOT, "scripts", "run-strategy2-v3-water-scan.js");

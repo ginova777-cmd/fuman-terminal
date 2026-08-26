@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
-Set-Location "C:\fuman-terminal"
+Set-Location -LiteralPath $PSScriptRoot
 $env:FUMAN_RUNTIME_DIR = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
 $env:NODE_OPTIONS = "--use-system-ca"
 $nodeExe = "C:\Program Files\nodejs\node.exe"

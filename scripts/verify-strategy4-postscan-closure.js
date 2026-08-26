@@ -203,7 +203,7 @@ async function main() {
     fetchText(endpoints.scorecardPage88, 30000).catch((error) => ({ ok: false, status: 0, url: endpoints.scorecardPage88, text: "", error: error.message })),
   ]);
 
-  const terminalRoot = process.env.FUMAN_TERMINAL_ROOT || "C:/fuman-terminal";
+  const terminalRoot = process.env.FUMAN_TERMINAL_ROOT || path.resolve(__dirname, "..");
   const latestProtectedByMembership = latest.status === 401 && latest.payload?.protected === true && latest.payload?.reason === "missing_bearer_token";
   const internalLatest = latest.ok ? latest : await callInternal(
     path.join(terminalRoot, "api", "strategy4-latest.js"),
