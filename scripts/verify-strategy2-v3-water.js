@@ -36,6 +36,7 @@ function main() {
 
   addCheck(checks, "scanner_has_v3_contract", scanner.includes(CONTRACT));
   addCheck(checks, "scanner_reads_priority_pool", scanner.includes('"fugle_daytrade_priority_pool"'));
+  addCheck(checks, "scanner_reads_canonical_v2_websocket_status_only", scanner.includes("fugle-daytrade-websocket-status-v2.json") && !scanner.includes('"fugle-daytrade-websocket-status.json"'));
   addCheck(checks, "scanner_reads_fugle_quotes", scanner.includes("readFugleWebSocketQuotes") && scanner.includes("fugle_daytrade_websocket_cache"));
   addCheck(checks, "scanner_reads_formal_1m", scanner.includes("readFugleWebSocketCandles") && scanner.includes("fugle_daytrade_websocket_cache"));
   addCheck(checks, "scanner_rejects_old_view_queries", !/readRows\(source,\s*["']v_fugle_daytrade_mother_pool/i.test(scanner));

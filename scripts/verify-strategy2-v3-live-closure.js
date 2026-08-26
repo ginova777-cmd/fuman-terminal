@@ -49,6 +49,7 @@ function main() {
   add(checks, "live_scanner_has_v3_contract", scanner.includes(`const CONTRACT = \"${CONTRACT}\"`));
   add(checks, "live_scanner_reuses_v3_water", scanner.includes("readFormalWater") && scanner.includes("strategy2-v3-water-scan"));
   add(checks, "formal_live_requires_fugle_websocket", water.includes("readWebSocketEvidence") && water.includes("fugle-websocket") && water.includes("restDisabled") && scanner.includes("websocketFormalReady"));
+  add(checks, "water_reads_canonical_v2_websocket_status_only", water.includes("fugle-daytrade-websocket-status-v2.json") && !water.includes('"fugle-daytrade-websocket-status.json"'));
   add(checks, "water_reads_direct_fugle_websocket_quote_and_candles", water.includes("readFugleWebSocketQuotes") && water.includes("readFugleWebSocketCandles") && water.includes("fugle_daytrade_websocket_cache"));
   add(checks, "water_scopes_to_dynamic_priority_mother_pool", water.includes('"fugle_daytrade_priority_pool"') && water.includes("deep_scan_pool + basePoolEligible") && water.includes('"top40"'));
   add(checks, "websocket_handover_is_bounded_to_fresh_evidence", water.includes("handoverGrace") && water.includes("reauthGrace") && water.includes("evidenceAgeSeconds <= 45") && water.includes("restDisabled"));

@@ -16,7 +16,7 @@ const { readFugleWebSocketCandles, readFugleWebSocketQuotes } = require("../lib/
 const SOURCE_NAME = "fugle_daytrade_source";
 const CONTRACT = "strategy2-v3-fugle-deep-scan-water-v1";
 const MIN_CANDLES = 35;
-const WEBSOCKET_STATUS_FILE = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status.json");
+const WEBSOCKET_STATUS_FILE = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status-v2.json");
 
 function marketClosedReport(label, clock) {
   const { spawnSync } = require("child_process");
