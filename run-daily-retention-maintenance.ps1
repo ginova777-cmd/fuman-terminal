@@ -1,7 +1,7 @@
 param([switch]$Apply)
 
 $ErrorActionPreference = 'Stop'
-$root = 'C:\fuman-terminal'
+$root = $PSScriptRoot
 $node = (Get-Command node -ErrorAction Stop).Source
 $suffix = if ($Apply) { @('--apply', '--json') } else { @('--json') }
 
