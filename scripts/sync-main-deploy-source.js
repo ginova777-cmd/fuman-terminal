@@ -332,6 +332,7 @@ const FILES = [
   "run-production-health-monitor.ps1",
   "run-strategy2-intraday.ps1",
   "run-vercel-cost-health-monitor.ps1",
+  "run-terminal-master-control.ps1",
   "run-api-unattended-scorecard.ps1",
   "ops/run-api-unattended-patrol.ps1",
   "ops/install-api-unattended-patrol-task.ps1",

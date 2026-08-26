@@ -1,0 +1,83 @@
+param(
+  [string]$ProjectRoot = $PSScriptRoot,
+  [string]$RuntimeRoot = $(if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }),
+  [ValidateSet("Auto", "Checkpoint", "Full")]
+  [string]$Mode = "Auto",
+  [switch]$RequireProtectedReadback
+)
+
+$ErrorActionPreference = "Stop"
+$startedAt = Get-Date
+$effectiveMode = $Mode
+if ($effectiveMode -eq "Auto") {
+  $effectiveMode = if ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("23:10") -and $startedAt.TimeOfDay -lt [TimeSpan]::Parse("23:59")) { "Full" } else { "Checkpoint" }
+}
+
+$env:FUMAN_RUNTIME_DIR = $RuntimeRoot
+if ($RequireProtectedReadback) { $env:FUMAN_REQUIRE_PROTECTED_READBACK = "1" }
+$auditMode = if ($effectiveMode -eq "Full") { "full_day_read_only_audit" } else { "read_only_checkpoint" }
+$receiptDir = Join-Path $RuntimeRoot "data\scan-receipts"
+$reportDir = Join-Path $RuntimeRoot "reports"
+$lockDir = Join-Path $RuntimeRoot "locks"
+$mutexName = "Global\FumanTerminalMasterControl"
+$receiptFile = Join-Path $receiptDir "terminal-master-checkpoint-latest.json"
+$jsonFile = Join-Path $RuntimeRoot "state\api-unattended-scorecard.json"
+$mdFile = Join-Path $reportDir "api-unattended-scorecard.md"
+New-Item -ItemType Directory -Force -Path $receiptDir,$reportDir,$lockDir,(Split-Path -Parent $jsonFile) | Out-Null
+
+$mutex = [System.Threading.Mutex]::new($false, $mutexName)
+$mutexOwned = $false
+try {
+  $mutexOwned = $mutex.WaitOne(0)
+  if (-not $mutexOwned) {
+    # Never overlap verifiers and never start a strategy as compensation.
+    exit 0
+  }
+  Set-Location $ProjectRoot
+  $env:FUMAN_API_UNATTENDED_SCORECARD_FILE = $jsonFile
+  $env:FUMAN_API_UNATTENDED_REPORT_FILE = $mdFile
+  & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-api-unattended-scorecard.js")
+  $verifierExit = [int]$LASTEXITCODE
+  $finishedAt = Get-Date
+  [ordered]@{
+    contract = "fuman-master-checkpoint-runner-v1"
+    mode = $auditMode
+    checkpointId = if ($effectiveMode -eq "Full") { "23:10-final" } else { $startedAt.ToString("HH:mm") }
+    fullDayAudit = ($effectiveMode -eq "Full")
+    ok = ($verifierExit -eq 0)
+    startedAt = $startedAt.ToString("o")
+    finishedAt = $finishedAt.ToString("o")
+    durationSeconds = [math]::Round(($finishedAt - $startedAt).TotalSeconds, 3)
+    verifierExitCode = $verifierExit
+    strategyExecutionAllowed = $false
+    scannerApplyAllowed = $false
+    deploymentAllowed = $false
+    killedProcess = $false
+    scorecardJson = $jsonFile
+    scorecardMarkdown = $mdFile
+  } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $receiptFile -Encoding UTF8
+  # NO is valid fail-closed evidence; never retry or create a second formal run.
+  exit 0
+} catch {
+  $finishedAt = Get-Date
+  [ordered]@{
+    contract = "fuman-master-checkpoint-runner-v1"
+    mode = $auditMode
+    checkpointId = if ($effectiveMode -eq "Full") { "23:10-final" } else { $startedAt.ToString("HH:mm") }
+    fullDayAudit = ($effectiveMode -eq "Full")
+    ok = $false
+    startedAt = $startedAt.ToString("o")
+    finishedAt = $finishedAt.ToString("o")
+    durationSeconds = [math]::Round(($finishedAt - $startedAt).TotalSeconds, 3)
+    verifierExitCode = 1
+    strategyExecutionAllowed = $false
+    scannerApplyAllowed = $false
+    deploymentAllowed = $false
+    killedProcess = $false
+    error = $_.Exception.Message
+  } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $receiptFile -Encoding UTF8
+  exit 1
+} finally {
+  if ($mutexOwned) { try { $mutex.ReleaseMutex() } catch { } }
+  if ($mutex) { $mutex.Dispose() }
+}
