@@ -53,7 +53,7 @@ const checks = {
     "not_daytrade_mother_pool_eligible",
     "strategy2_mother_pool_only_0900_1230",
   ]),
-  dedicated_task_contract: includesAll(runner, ["notify-daytrade-intraday-burst-telegram.js"]) && includesAll(installer, ["Fuman Mother Pool Telegram 0900-1230", "PT1M", "PT3H31M", "MultipleInstances IgnoreNew", "New-ScheduledTaskPrincipal", "-LogonType S4U", "-RunLevel Highest", "-Principal $principal"]),
+  dedicated_task_contract: includesAll(runner, ["notify-daytrade-intraday-burst-telegram.js"]) && includesAll(installer, ["Fuman Mother Pool Telegram 0900-1230", "<Interval>PT1M</Interval>", "<Duration>PT3H31M</Duration>", "<StopAtDurationEnd>true</StopAtDurationEnd>", "<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>", "<LogonType>S4U</LogonType>", "<RunLevel>HighestAvailable</RunLevel>", "<Monday />", "<Friday />", "Register-ScheduledTask -TaskName $TaskName -Xml $taskXml -Force"]),
   outbox_hooked_after_delta: includesAll(writer, [
     "const burstRows = priorityRows;",
     "writeIntradayBurstTelegramOutbox(burstRows, tradeDate, checkedAt, runId, result?.quoteMap)",
