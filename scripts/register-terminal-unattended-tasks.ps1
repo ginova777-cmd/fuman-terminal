@@ -19,7 +19,8 @@ $TaskNames = @(
   "Fuman Terminal Full Unattended Final Audit"
 )
 $LegacyConflictTaskNames = @(
-  "Fuman Terminal Autonomous Ops 5m"
+  "Fuman Terminal Autonomous Ops 5m",
+  "Fuman Terminal Autonomous Ops User 5m"
 )
 $startedAt = (Get-Date).ToUniversalTime().ToString("o")
 $result = [ordered]@{
@@ -63,27 +64,25 @@ try {
   if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "final audit task installer exited with code $LASTEXITCODE" }
   $result.actions += "final_audit_task_registered"
 
-  & (Join-Path $PSScriptRoot "install-terminal-autonomous-root-task.ps1") -ProjectRoot $ProjectRoot -RuntimeRoot $RuntimeRoot -ApplyScanners -RequireProtectedReadback
+  & (Join-Path $PSScriptRoot "install-terminal-autonomous-root-task.ps1") -ProjectRoot $ProjectRoot -RuntimeRoot $RuntimeRoot -RequireProtectedReadback
   if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "autonomous root task installer exited with code $LASTEXITCODE" }
   $result.actions += "autonomous_root_task_registered"
 
   foreach ($legacyTaskName in $LegacyConflictTaskNames) {
     $legacyTask = Get-ScheduledTask -TaskName $legacyTaskName -ErrorAction SilentlyContinue
     if ($null -ne $legacyTask) {
-      if ([string]$legacyTask.State -ne "Disabled") {
-        Disable-ScheduledTask -TaskName $legacyTaskName -ErrorAction Stop | Out-Null
-        $result.actions += "legacy_task_disabled:$legacyTaskName"
-      }
+      Unregister-ScheduledTask -TaskName $legacyTaskName -Confirm:$false -ErrorAction Stop
+      $result.actions += "legacy_task_removed:$legacyTaskName"
       $legacyTask = Get-ScheduledTask -TaskName $legacyTaskName -ErrorAction SilentlyContinue
     }
     $result.legacy_tasks += [ordered]@{
       task_name = $legacyTaskName
       installed = ($null -ne $legacyTask)
-      disabled = ($null -ne $legacyTask -and [string]$legacyTask.State -eq "Disabled")
+      removed = ($null -eq $legacyTask)
       state = if ($null -ne $legacyTask) { [string]$legacyTask.State } else { "Missing" }
     }
-    if ($null -ne $legacyTask -and [string]$legacyTask.State -ne "Disabled") {
-      $result.failures += "legacy_task_not_disabled:$legacyTaskName"
+    if ($null -ne $legacyTask) {
+      $result.failures += "legacy_task_not_removed:$legacyTaskName"
     }
   }
 
