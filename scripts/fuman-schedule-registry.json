@@ -13,7 +13,6 @@
       "Fuman Global Cost Janitor Scorecard 1555",
       "Fuman Institution Battle Verify 2110",
       "Fuman PC Wake 0430",
-      "Fuman Public Slot Shared Source Watchdog",
       "Fuman Publish Gate Verify 0820",
       "Fuman Scorecard Daily Automation 1400",
       "Fuman Strategy4 Cache 1600",
@@ -147,10 +146,6 @@
         0,
         267009,
         267014
-      ],
-      "Fuman Public Slot Shared Source Watchdog": [
-        0,
-        267009
       ],
       "Fuman Global Cost Janitor Scorecard 1555": [
         0,
@@ -615,13 +610,6 @@
         "08:45"
       ],
       "retiredReason": "retired_from_formal_unattended_scope"
-    },
-    {
-      "taskName": "\\Fuman Public Slot Shared Source Watchdog",
-      "displayName": "Fuman Public Slot Shared Source Watchdog",
-      "description": "Public slot shared source watchdog.",
-      "time": "08:00",
-      "expectedState": "Ready"
     },
     {
       "taskName": "\\Fuman Publish Gate Verify 0820",
