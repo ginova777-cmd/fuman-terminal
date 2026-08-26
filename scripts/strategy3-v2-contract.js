@@ -3,9 +3,9 @@
 const fs = require("fs");
 const path = require("path");
 
-const ROOT = "C:/fuman-terminal";
+const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const LEGACY_ROOT_PATTERN = /strategy2-v2-production-release-20260814|Documents[\\/]+Codex[\\/]+strategy2-v2/i;
+const LEGACY_ROOT_PATTERN = /strategy2-v2-production-release-20260814|Documents[\\/]+Codex[\\/]+strategy2-v2|(?:^|["'])C:[\\/]fuman-terminal(?:[\\/]|["'])/im;
 const CONTRACT_VERSION = "strategy3-v2-clean-chain-v1";
 const STRATEGY = "strategy3_v2";
 const RUN_ID_PREFIX = "strategy3v2";
