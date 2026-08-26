@@ -217,21 +217,11 @@ function Write-InstitutionBlockedReceipt($Reason, $RunId = "", $Count = 0) {
 function Invoke-NodeScan($scriptPath, $label) {
   Push-Location "${PSScriptRoot}"
   try {
-    for ($attempt = 1; $attempt -le 3; $attempt++) {
-      "=== $label attempt $attempt $(Get-Date) ===" >> $log
-      & $nodeExe $scriptPath >> $log 2>&1
-      $exitCode = $LASTEXITCODE
-      if ($exitCode -eq 0) { return 0 }
-      "$label attempt $attempt failed with exit code $exitCode" >> $log
-      $tailText = (Get-Content -LiteralPath $log -ErrorAction SilentlyContinue | Select-Object -Last 80) -join "`n"
-      if (Test-InstitutionControlledSourceNotReady $tailText) {
-        "$label controlled source-not-ready detected; stop retrying and preserve latest complete run" >> $log
-        return $exitCode
-      }
-      if ($attempt -lt 3) {
-        "Waiting 60 seconds before retry" >> $log
-        Start-Sleep -Seconds 60
-      }
+    "=== $label single canonical attempt $(Get-Date) ===" >> $log
+    & $nodeExe $scriptPath >> $log 2>&1
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -ne 0) {
+      "$label failed with exit code $exitCode; rerunAllowed=false" >> $log
     }
     return $exitCode
   } finally {

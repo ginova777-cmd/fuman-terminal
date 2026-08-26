@@ -95,19 +95,10 @@ function Get-Strategy5RunDateKey($RunId) {
   return ""
 }
 function Invoke-NodeScan($scriptPath, $label) {
-  for ($attempt = 1; $attempt -le 3; $attempt++) {
-    Add-Content -LiteralPath $log -Encoding utf8 -Value "=== $label attempt $attempt $(Get-Date) ==="
-    & $nodeExe $scriptPath 2>&1 | Out-File -LiteralPath $log -Encoding utf8 -Append
-    $exitCode = $LASTEXITCODE
-    if ($exitCode -eq 0) {
-      return 0
-    }
-    Add-Content -LiteralPath $log -Encoding utf8 -Value "$label attempt $attempt failed with exit code $exitCode"
-    if ($attempt -lt 3) {
-      Add-Content -LiteralPath $log -Encoding utf8 -Value "Waiting 60 seconds before retry"
-      Start-Sleep -Seconds 60
-    }
-  }
+  Add-Content -LiteralPath $log -Encoding utf8 -Value "=== $label single canonical attempt $(Get-Date) ==="
+  & $nodeExe $scriptPath 2>&1 | Out-File -LiteralPath $log -Encoding utf8 -Append
+  $exitCode = $LASTEXITCODE
+  if ($exitCode -ne 0) { Add-Content -LiteralPath $log -Encoding utf8 -Value "$label failed with exit code $exitCode; rerunAllowed=false" }
   return $exitCode
 }
 
