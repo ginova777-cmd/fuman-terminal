@@ -32,6 +32,13 @@ function timestamp() {
   return new Date().toISOString();
 }
 
+function taipeiMinuteOfDay(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date).map((part) => [part.type, part.value]));
+  return Number(parts.hour) * 60 + Number(parts.minute);
+}
+async function waitUntilTaipeiMinute(targetMinute) {
+  while (taipeiMinuteOfDay() < targetMinute) await sleep(Math.min(15000, (targetMinute - taipeiMinuteOfDay()) * 60000));
+}
 function ensureDir(file) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
 }
@@ -403,8 +410,10 @@ async function main() {
   const runId = argValue("--run-id", `opening-report-0830-${compact}-${Date.now()}`);
   const mock = hasFlag("--self-test") || hasFlag("--mock-overseas");
   const applyBridge = hasFlag("--apply-bridge");
-  const sendLine = hasFlag("--send-line");
-  const dryRunLine = !sendLine;
+  if (hasFlag("--send-line")) throw new Error("line_delivery_retired_use_telegram_only");
+  const sendLine = false;
+  const dryRunLine = true;
+
   const overseasPreflight = await buildOverseasPreflight(tradeDate, runId, mock);
   const items = baseIndustryItems(tradeDate, runId);
   const taiwanGate = readTaiwanGate(tradeDate);
@@ -415,6 +424,7 @@ async function main() {
   fs.writeFileSync(reportPath, markdownReport({ tradeDate, runId, overseasPreflight, items, taiwanGate }), "utf8");
   writeJson(overseasPath, overseasPreflight);
   const bridgeResults = [];
+  if (applyBridge && !mock) await waitUntilTaipeiMinute(8 * 60 + 35);
   for (const item of items) {
     const inputPath = path.join(STATE_DIR, `opening_report_0830.industry_bias.${item.industry}.json`);
     const receiptPath = path.join(RUNTIME_DIR, "data", "scan-receipts", `opening-report-0830-priority-bias-bridge-${item.industry}-${compact}.json`);

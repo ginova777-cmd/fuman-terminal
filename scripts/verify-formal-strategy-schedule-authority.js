@@ -7,6 +7,11 @@ const path = require("path");
 const FORMAL_ROOT = "C:\\fuman-release-owner\\fuman-terminal";
 const expected = [
   ["Fuman Terminal Autonomous Root Monitor", "run-terminal-master-control.ps1", ["06:05", "07:08", "08:00", "08:20", "08:36", "12:20", "13:15", "16:10", "17:00", "21:40", "22:00", "23:10"]],
+  ["Fuman Daytrade Source Writer 0600-1330", "Run-DaytradeSourceWriter.ps1", ["06:00"], { allowRuntimeAction: true }],
+  ["Fuman Fugle Daytrade WebSocket Collector 0600-1330", "Run-DaytradeWebSocketCollector.ps1", ["06:00"]],
+  ["Fuman Daytrade Source Gate 0700", "Run-DaytradeUnattendedGate.ps1", ["07:00"], { allowRuntimeAction: true }],
+  ["Fuman Opening Report 0820 Preflight", "run-opening-report-0820-preflight.js", ["08:20"]],
+  ["Fuman Opening Report 0830 Telegram", "run-opening-report-0830-production-wrapper.ps1", ["08:30"]],
   ["Fuman Strategy2 Unified 0845-1210", "ops\\run-strategy2-v3-unified.ps1", ["08:45"]],
   ["Fuman Mother Pool Telegram 0900-1230", "run-daytrade-intraday-burst-telegram.ps1", ["09:00"]],
   ["Fuman Strategy3 V2 First Attempt 1255", "run-strategy3-v2-1255-first-attempt.ps1", ["12:55"]],
@@ -23,7 +28,8 @@ const expected = [
 ];
 
 function powershellJson(command) {
-  const result = spawnSync("C:\\Program Files\\PowerShell\\7\\pwsh.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command], {
+  const utf8Command = "$OutputEncoding=[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false);" + command;
+  const result = spawnSync("C:\\Program Files\\PowerShell\\7\\pwsh.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", utf8Command], {
     encoding: "utf8",
     timeout: 20000,
     windowsHide: true,
@@ -47,12 +53,13 @@ function triggerTimes(task) {
     .map((trigger) => /T(\d{2}:\d{2})/.exec(String(trigger?.startBoundary || ""))?.[1])
     .filter(Boolean))].sort();
 }
-for (const [name, marker, expectedTimes] of expected) {
+for (const [name, marker, expectedTimes, options = {}] of expected) {
   const task = tasks.find((row) => row.name === name) || tasks.find((row) => `${row?.execute || ""} ${row?.arguments || ""}`.toLowerCase().includes(marker.toLowerCase()));
-  if (name === "Fuman Strategy2 Unified 0845-1210" && task?.name !== name) issues.push(`formal_task_name_drift:${name}:${task?.name || "missing"}`);
+  if (task && task.name !== name) issues.push(`formal_task_name_drift:${name}:${task.name}`);
   const action = `${task?.execute || ""} ${task?.arguments || ""}`;
   const active = task && ["Ready", "Running", "Queued"].includes(String(task.state || ""));
-  const rootOk = action.toLowerCase().includes(FORMAL_ROOT.toLowerCase()) && String(task?.workingDirectory || "").toLowerCase() === FORMAL_ROOT.toLowerCase();
+  const actionRootOk = action.toLowerCase().includes(FORMAL_ROOT.toLowerCase()) || (options.allowRuntimeAction === true && action.toLowerCase().includes("c:\\fuman-runtime\\ops"));
+  const rootOk = actionRootOk && String(task?.workingDirectory || "").toLowerCase() === FORMAL_ROOT.toLowerCase();
   const markerOk = action.toLowerCase().includes(marker.toLowerCase());
   const actualTimes = triggerTimes(task);
   const timeOk = JSON.stringify(actualTimes) === JSON.stringify([...expectedTimes].sort());
@@ -72,9 +79,9 @@ for (const task of tasks) {
   if (/\bCB\b|warrant|權證/i.test(task.name || "")) issues.push(`retired_strategy_task_active:${task.name}`);
 }
 
-for (const name of ["Fuman Strategy2 Unified 0845-1230", "Fuman Strategy2 V3 Water Gate 0845", "Fuman Strategy2 V2 Unattended", "Fuman Strategy2 V2 Recovery"]) {
+for (const name of ["Fuman Strategy2 Unified 0845-1230", "Fuman Strategy2 V3 Water Gate 0845", "Fuman Strategy2 V2 Unattended", "Fuman Strategy2 V2 Recovery", "Fuman Opening Report 0830 LINE", "Fuman Opening Report 0830 Line", "Fuman Opening Report 0830 LINE Bridge", "Fuman Opening Limit Order Morning Readonly 0840"]) {
   const task = tasks.find((row) => row.name === name && ["Ready", "Running", "Queued"].includes(String(row.state || "")));
-  if (task) issues.push(`retired_strategy2_task_active:${name}`);
+  if (task) issues.push(`retired_formal_task_active:${name}`);
 }
 
 const root = path.resolve(__dirname, "..");
