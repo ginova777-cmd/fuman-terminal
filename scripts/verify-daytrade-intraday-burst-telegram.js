@@ -10,6 +10,7 @@ const guardFile = path.join(ROOT, "scripts", "notification-guard.js");
 const runnerFile = path.join(ROOT, "run-daytrade-intraday-burst-telegram.ps1");
 const installerFile = path.join(ROOT, "scripts", "install-daytrade-intraday-burst-telegram-task.ps1");
 const outboxFile = path.join(RUNTIME_ROOT, "state", "daytrade-intraday-burst-telegram-outbox.json");
+const receiptFile = path.join(RUNTIME_ROOT, "data", "scan-receipts", "daytrade-intraday-burst-telegram-" + taipeiDate().replace(/-/g, "") + ".json");
 
 function read(file) {
   try { return fs.readFileSync(file, "utf8"); } catch { return ""; }
@@ -136,9 +137,22 @@ const checks = {
     "sentEventsFromState",
     "cannot erase a proven same-day send",
   ]),
+  canonical_sent_receipt_contract: includesAll(notifier, [
+    "canonicalSentEvent",
+    "telegramIdempotencyKey",
+    "event_key",
+    "tradeDate",
+    "event_time",
+    "send_result: \"sent\"",
+    "const attemptSentCount",
+    "sent_events: attemptSentCount",
+  ]),
 };
 
 const outbox = readJson(outboxFile);
+const receipt = readJson(receiptFile);
+const receiptSentEvents = Array.isArray(receipt?.sent_events) ? receipt.sent_events : [];
+const receiptEventKeys = receiptSentEvents.map((event) => String(event?.event_key || ""));
 const expectedAlertScope = "strategy2_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage";
 const outboxEvents = Array.isArray(outbox?.events) ? outbox.events : [];
 checks.runtime_outbox_mother_pool_scope = !outbox || String(outbox.alert_scope || "") === expectedAlertScope;
@@ -147,6 +161,18 @@ checks.runtime_events_mother_pool_only = !outbox || outboxEvents.every((event) =
   && String(event?.trade_date || "") === String(outbox?.trade_date || "")
   && String(event?.source || outbox?.source || "") === "fugle_formal_1m"
 );
+checks.runtime_receipt_canonical_fields = !receipt || receiptSentEvents.every((event) =>
+  Boolean(event?.event_key)
+  && String(event?.tradeDate || "") === String(receipt?.trade_date || "")
+  && String(event?.trade_date || "") === String(receipt?.trade_date || "")
+  && /^\d{4}$/.test(String(event?.symbol || ""))
+  && Boolean(event?.event_time)
+  && Boolean(event?.sent_at)
+  && event?.sent === true
+  && String(event?.send_result || "") === "sent"
+);
+checks.runtime_receipt_event_keys_unique = !receipt || receiptEventKeys.length === new Set(receiptEventKeys).size;
+checks.runtime_receipt_count_matches = !receipt || Number(receipt?.sent_event_count) === receiptSentEvents.length;
 
 const rejectedReasonCounts = outbox?.rejected_reason_counts || null;
 const candidateCount = Number.isFinite(Number(outbox?.candidate_count)) ? Number(outbox.candidate_count) : null;
@@ -176,6 +202,12 @@ const runtime = {
   outbox_scope_is_mother_pool_only: checks.runtime_outbox_mother_pool_scope,
   outbox_events_are_mother_pool_only: checks.runtime_events_mother_pool_only,
   outbox_event_count: Array.isArray(outbox?.events) ? outbox.events.length : 0,
+  receipt_path: receiptFile,
+  receipt_exists: Boolean(receipt),
+  receipt_sent_event_count: receiptSentEvents.length,
+  receipt_event_keys_unique: checks.runtime_receipt_event_keys_unique,
+  receipt_canonical_fields: checks.runtime_receipt_canonical_fields,
+  receipt_last_attempt_sent_events: Number(receipt?.last_attempt?.sent_events || 0),
   strict_burst_event_count: Number.isFinite(Number(outbox?.strict_burst_event_count)) ? Number(outbox.strict_burst_event_count) : null,
   hot_rank_fallback_event_count: Number.isFinite(Number(outbox?.hot_rank_fallback_event_count)) ? Number(outbox.hot_rank_fallback_event_count) : null,
   candidate_count: candidateCount,

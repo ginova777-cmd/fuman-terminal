@@ -44,14 +44,41 @@ function eventMessage(event) {
   return ["當沖盤中雷達｜" + eventLabel(event.trigger_type), identity, detail, "前置樣本 " + event.rolling_1m_baseline_sample_count + " 根｜K棒 " + time, "僅為 Mother Pool 雷達提醒；非正式候選、非下單訊號。"].join("\n");
 }
 function eventKey(event) { return String(event.trade_date) + ":" + event.symbol + ":" + event.trigger_type; }
+function telegramIdempotencyKey(tradeDate, event) {
+  return "daytrade-intraday-burst:" + compactDate(tradeDate) + ":" + event.symbol + ":" + event.trigger_type + ":" + String(event.latest_1m_time || event.event_time || "").replace(/\D/g, "");
+}
 function receiptPath(tradeDate) { return path.join(RECEIPT_DIR, "daytrade-intraday-burst-telegram-" + compactDate(tradeDate) + ".json"); }
-function uniqueEvents(events) {
+function canonicalSentEvent(event, tradeDate) {
+  const eventTime = String(event?.event_time || event?.latest_1m_time || "");
+  const sentAt = String(event?.sent_at || "");
+  const symbol = String(event?.symbol || "");
+  const triggerType = String(event?.trigger_type || "");
+  if (!eventTime || !sentAt || !/^\d{4}$/.test(symbol) || !["price_breakout_1pct", "volume_burst_rolling60_x2"].includes(triggerType)) return null;
+  const normalized = {
+    event_key: String(event?.event_key || telegramIdempotencyKey(tradeDate, { symbol, trigger_type: triggerType, latest_1m_time: eventTime })),
+    tradeDate,
+    trade_date: tradeDate,
+    symbol,
+    name: String(event?.name || ""),
+    trigger_type: triggerType,
+    event_time: eventTime,
+    latest_1m_time: eventTime,
+    sent_at: sentAt,
+    sent: true,
+    send_result: "sent",
+  };
+  if (Number.isFinite(Number(event?.telegram_target_count))) normalized.telegram_target_count = Number(event.telegram_target_count);
+  return normalized;
+}
+function uniqueEvents(events, tradeDate) {
   const byKey = new Map();
-  for (const event of Array.isArray(events) ? events : []) {
-    const key = [event?.symbol || "", event?.trigger_type || "", event?.latest_1m_time || ""].join(":");
-    if (!byKey.has(key)) byKey.set(key, event);
+  for (const raw of Array.isArray(events) ? events : []) {
+    const event = canonicalSentEvent(raw, tradeDate);
+    if (!event) continue;
+    const previous = byKey.get(event.event_key) || {};
+    byKey.set(event.event_key, { ...previous, ...event, name: event.name || previous.name || "" });
   }
-  return [...byKey.values()];
+  return [...byKey.values()].sort((a, b) => String(a.sent_at).localeCompare(String(b.sent_at)) || a.event_key.localeCompare(b.event_key));
 }
 function sentEventsFromState(tradeDate) {
   const state = readJson(STATE_FILE, {});
@@ -59,7 +86,13 @@ function sentEventsFromState(tradeDate) {
   return Object.entries(state.sent).flatMap(([key, value]) => {
     const [date, symbol, triggerType] = String(key).split(":");
     if (date !== tradeDate || !["price_breakout_1pct", "volume_burst_rolling60_x2"].includes(triggerType)) return [];
-    return [{ symbol, trigger_type: triggerType, latest_1m_time: value?.latest_1m_time || "", sent_at: value?.sent_at || "" }];
+    const event = canonicalSentEvent({
+      symbol,
+      trigger_type: triggerType,
+      latest_1m_time: value?.latest_1m_time || "",
+      sent_at: value?.sent_at || "",
+    }, tradeDate);
+    return event ? [event] : [];
   });
 }
 function writeReceiptWithHistory(receipt) {
@@ -67,12 +100,13 @@ function writeReceiptWithHistory(receipt) {
   const previous = readJson(file, {});
   const previousSent = previous?.trade_date === receipt.trade_date ? previous.sent_events : [];
   const stateSent = sentEventsFromState(receipt.trade_date);
-  receipt.sent_events = uniqueEvents([...(Array.isArray(previousSent) ? previousSent : []), ...stateSent, ...(receipt.sent_events || [])]);
+  const attemptSentCount = Array.isArray(receipt.sent_events) ? receipt.sent_events.length : 0;
+  receipt.sent_events = uniqueEvents([...(Array.isArray(previousSent) ? previousSent : []), ...stateSent, ...(receipt.sent_events || [])], receipt.trade_date);
   receipt.sent_event_count = receipt.sent_events.length;
   receipt.last_attempt = {
     checked_at: receipt.checked_at,
     detected_events: receipt.detected_events,
-    sent_events: Array.isArray(receipt.sent_events) ? receipt.sent_events.length : 0,
+    sent_events: attemptSentCount,
     skipped_events: Array.isArray(receipt.skipped_events) ? receipt.skipped_events.length : 0,
     first_blocker: receipt.first_blocker,
   };
@@ -145,13 +179,13 @@ async function notifyFromOutbox(options = {}) {
         const results = await sendTelegramText(eventMessage(event), {
           motherPoolIntradayBurstTelegram: true, dataConfirmed: true, eventTime: event.latest_1m_time || event.checked_at,
           maxEventAgeSec: MAX_EVENT_AGE_SECONDS,
-          idempotencyKey: "daytrade-intraday-burst:" + compactDate(tradeDate) + ":" + event.symbol + ":" + event.trigger_type + ":" + String(event.latest_1m_time || "").replace(/\D/g, ""),
+          idempotencyKey: telegramIdempotencyKey(tradeDate, event),
           dedupeScope: "daytrade-intraday-burst:" + compactDate(tradeDate),
         });
         const allSent = Array.isArray(results) && results.length > 0 && results.every((result) => result.sent === true);
         if (allSent) {
           sent[key] = { sent_at: checkedAt, latest_1m_time: event.latest_1m_time, trigger_type: event.trigger_type };
-          receipt.sent_events.push({ symbol: event.symbol, name: event.name || "", trigger_type: event.trigger_type });
+          receipt.sent_events.push(canonicalSentEvent({ ...event, event_time: event.latest_1m_time, sent_at: checkedAt, telegram_target_count: results.length }, tradeDate));
         } else {
           receipt.skipped_events.push({ symbol: event.symbol, trigger_type: event.trigger_type, reason: results?.[0]?.reason || "telegram_send_skipped" });
         }
