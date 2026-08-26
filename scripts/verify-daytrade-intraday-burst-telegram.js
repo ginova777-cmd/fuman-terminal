@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || process.env.FUMAN_RUNTIME_ROOT || (process.platform === "win32" ? "C:\\fuman-runtime" : ROOT);
@@ -26,6 +27,13 @@ function taipeiDate() {
 function includesAll(source, fragments) {
   return fragments.every((fragment) => source.includes(fragment));
 }
+function readLiveTask() {
+  if (process.platform !== "win32") return { applicable: false };
+  const command = "$task=Get-ScheduledTask -TaskName 'Fuman Mother Pool Telegram 0900-1230' -ErrorAction SilentlyContinue;if(-not $task){[pscustomobject]@{exists=$false}|ConvertTo-Json -Compress;exit 0};$action=$task.Actions|Select-Object -First 1;$info=Get-ScheduledTaskInfo -TaskName $task.TaskName;$trigger=$task.Triggers|Select-Object -First 1;$state=switch([int]$task.State){2{'Queued'}3{'Ready'}4{'Running'}default{[string]$task.State}};[pscustomobject]@{exists=$true;state=$state;arguments=[string]$action.Arguments;workingDirectory=[string]$action.WorkingDirectory;lastResult=[long]$info.LastTaskResult;start=[string]$trigger.StartBoundary;interval=[string]$trigger.Repetition.Interval;duration=[string]$trigger.Repetition.Duration;stopAtDurationEnd=[bool]$trigger.Repetition.StopAtDurationEnd;multipleInstances=[string]$task.Settings.MultipleInstances}|ConvertTo-Json -Compress";
+  const result = spawnSync("C:\\Program Files\\PowerShell\\7\\pwsh.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", timeout: 15000, windowsHide: true });
+  try { return JSON.parse(String(result.stdout || "").trim()); }
+  catch { return { exists: false, error: String(result.stderr || result.error?.message || "live_task_query_failed").trim() }; }
+}
 
 const writer = read(writerFile);
 const notifier = read(notifierFile);
@@ -33,6 +41,9 @@ const telegram = read(telegramFile);
 const guard = read(guardFile);
 const runner = read(runnerFile);
 const installer = read(installerFile);
+const requireLive = process.argv.includes("--require-live");
+const requireToday = process.argv.includes("--require-today");
+const liveTask = requireLive ? readLiveTask() : { required: false };
 const checks = {
   writer_readable: Boolean(writer),
   notifier_readable: Boolean(notifier),
@@ -149,6 +160,14 @@ const checks = {
   ]),
 };
 
+if (requireLive) {
+  checks.live_task_exists_enabled = liveTask.exists === true && ["Ready", "Running", "Queued"].includes(String(liveTask.state || ""));
+  checks.live_task_fixed_release_root = /C:\\fuman-release-owner\\fuman-terminal\\run-daytrade-intraday-burst-telegram\.ps1/i.test(String(liveTask.arguments || "")) && String(liveTask.workingDirectory || "").toLowerCase() === ROOT.toLowerCase();
+  checks.live_task_exact_window = /T09:00:00/.test(String(liveTask.start || "")) && String(liveTask.interval || "") === "PT1M" && String(liveTask.duration || "") === "PT3H31M" && liveTask.stopAtDurationEnd === true;
+  checks.live_task_ignore_new = String(liveTask.multipleInstances || "") === "IgnoreNew";
+  checks.live_task_last_result_ok = Number(liveTask.lastResult) === 0;
+}
+
 const outbox = readJson(outboxFile);
 const receipt = readJson(receiptFile);
 const receiptSentEvents = Array.isArray(receipt?.sent_events) ? receipt.sent_events : [];
@@ -173,6 +192,11 @@ checks.runtime_receipt_canonical_fields = !receipt || receiptSentEvents.every((e
 );
 checks.runtime_receipt_event_keys_unique = !receipt || receiptEventKeys.length === new Set(receiptEventKeys).size;
 checks.runtime_receipt_count_matches = !receipt || Number(receipt?.sent_event_count) === receiptSentEvents.length;
+if (requireToday) {
+  checks.runtime_today_outbox_present = Boolean(outbox) && String(outbox?.trade_date || "") === taipeiDate();
+  checks.runtime_today_receipt_present = Boolean(receipt) && String(receipt?.trade_date || "") === taipeiDate();
+  checks.runtime_no_send_after_1230 = !receipt || receiptSentEvents.every((event) => taipeiMinutesFromIso(event?.sent_at) <= 750);
+}
 
 const rejectedReasonCounts = outbox?.rejected_reason_counts || null;
 const candidateCount = Number.isFinite(Number(outbox?.candidate_count)) ? Number(outbox.candidate_count) : null;
@@ -218,6 +242,7 @@ const runtime = {
   rolling_1m_baseline_rejected_ratio: Number(baselineRejectedRatio.toFixed(4)),
   rolling_1m_baseline_runtime_healthy: baselineRuntimeHealthy,
   runtime_status: outbox ? (baselineRuntimeHealthy ? "available" : "rolling_1m_baseline_not_ready") : "awaiting_next_writer_tick",
+  live_task: liveTask,
 };
 
 checks.runtime_rolling_1m_baseline_available = baselineRuntimeHealthy;const failedChecks = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name);
