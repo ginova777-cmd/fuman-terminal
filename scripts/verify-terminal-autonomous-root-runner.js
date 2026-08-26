@@ -63,7 +63,7 @@ function queryWindowsTask(taskName) {
     hasRequireProtectedReadback: actionText.includes("-RequireProtectedReadback"),
     hasS4U: /<LogonType>\s*S4U\s*<\/LogonType>/i.test(xmlRaw) || /Logon Mode:\s*S4U/i.test(raw),
     hasInteractiveOnly: /<LogonType>\s*InteractiveToken\s*<\/LogonType>/i.test(xmlRaw) || /Logon Mode:\s*Interactive only/i.test(raw),
-    hasRunner: actionText.includes("run-terminal-autonomous-root.ps1"),
+    hasRunner: actionText.includes("run-terminal-master-control.ps1"),
   };
 }
 
@@ -71,6 +71,7 @@ async function main() {
   await fs.promises.mkdir(OUT_DIR, { recursive: true });
   const issues = [];
   const runner = readText("run-terminal-autonomous-root.ps1");
+  const masterRunner = readText("run-terminal-master-control.ps1");
   const installer = readText("scripts/install-terminal-autonomous-root-task.ps1");
   const pkg = readJson("package.json", { scripts: {} });
   const registry = readJson("scripts/fuman-schedule-registry.json", {});
@@ -101,13 +102,26 @@ async function main() {
     "FUMAN_DAILY_RUN_ID",
   ];
   for (const marker of runnerMarkers) requireMarker(issues, "run-terminal-autonomous-root.ps1", runner, marker);
+  for (const marker of [
+    "fuman-master-checkpoint-runner-v1",
+    "verify-api-unattended-scorecard.js",
+    'strategyExecutionAllowed = $false',
+    'scannerApplyAllowed = $false',
+    'deploymentAllowed = $false',
+    'killedProcess = $false',
+    '23:10',
+    '"Full"',
+    '"Checkpoint"',
+  ]) requireMarker(issues, "run-terminal-master-control.ps1", masterRunner, marker);
   if (!/formalScanSkipped\s+-ne\s+\$true/.test(runner) || !/scannerAction\s+-ne\s+["']skip_formal_scan["']/.test(runner)) addIssue(issues, "root_scanner_date_gate_must_block_formal_scan_skipped");
 
   const installerMarkers = [
     "Fuman Terminal Autonomous Root Monitor",
+    "run-terminal-master-control.ps1",
     "Register-ScheduledTask",
     "06:05",
     "07:08",
+    "08:00",
     "08:20",
     "08:36",
     "12:20",
@@ -130,6 +144,9 @@ async function main() {
   }
   for (const name of ["ops:autonomous-root", "install:terminal-autonomous-root-task", "ops:autonomous-root:contract"]) {
     if (!scripts[name]) addIssue(issues, `package_script_missing:${name}`);
+  }
+  if (!String(scripts["ops:autonomous-root"] || "").includes("run-terminal-master-control.ps1")) {
+    addIssue(issues, "package_autonomous_root_must_use_single_master_wrapper");
   }
   if (!String(scripts["verify:terminal-unattended-root"] || "").includes("ops:autonomous-root:contract")) {
     addIssue(issues, "unattended_root_missing_autonomous_root_contract");
@@ -171,7 +188,7 @@ async function main() {
     installerExists: Boolean(installer),
     packageScripts: {
       opsAutonomousRoot: scripts["ops:autonomous-root"] || "",
-      controllerMode: "read_only_verify_and_infrastructure_rewater_only",
+      controllerMode: "read_only_master_verifier_only",
       installTask: scripts["install:terminal-autonomous-root-task"] || "",
     },
     scheduleRegistry: {
@@ -203,11 +220,11 @@ async function main() {
       exitCode: legacyConflictTask.exitCode,
     },
     guarantees: [
-      "autonomous root is callable as a first-class npm script",
-      "Windows task wakes the full root chain after strategy due windows",
-      "runner executes preflight, water root, daily manifest, state machine, policy, read-only roll-forward planning, and readback-only closure",
-      "failure writes a receipt and attempts workflow alert",
-      "root monitor holds the shared daily orchestrator lock and passes a re-entrant owner lease to Final Audit",
+      "one master-control wrapper is the only scheduled and npm controller entrypoint",
+      "Windows task wakes the same read-only verifier at each due checkpoint",
+      "08:00 and 08:20 are separated checkpoints; 08:36 is a lightweight delivery closure",
+      "23:10 performs the full-day read-only audit through the same verifier",
+      "the wrapper forbids strategy execution, scanner apply, deployment, and process killing",
     ],
     issues,
   };

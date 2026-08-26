@@ -11,7 +11,7 @@ const taskName = "Fuman Terminal Autonomous Root Monitor";
 const legacyTaskName = "Fuman Terminal Autonomous Ops 5m";
 const REQUIRE_LIVE = process.argv.includes("--require-live");
 const issues = [];
-const expectedCheckpoints = ["06:05","07:08","08:20","08:36","12:20","13:15","16:10","17:00","21:40","22:00","23:10"];
+const expectedCheckpoints = ["06:05","07:08","08:00","08:20","08:36","12:20","13:15","16:10","17:00","21:40","22:00","23:10"];
 
 function read(file) {
   try { return fs.readFileSync(file, "utf8"); } catch { return ""; }
@@ -31,10 +31,11 @@ for (const marker of [
 const installer = read(installerFile);
 if (!installer) issues.push("autonomous_schedule_installer_missing");
 for (const marker of [
-  "run-terminal-autonomous-root.ps1",
+  "run-terminal-master-control.ps1",
   "Fuman Terminal Autonomous Root Monitor",
   "06:05",
   "07:08",
+  "08:00",
   "08:20",
   "08:36",
   "12:20",
@@ -78,7 +79,7 @@ const live = REQUIRE_LIVE ? readLiveTask() : { required: false, attempted: false
 if (REQUIRE_LIVE) {
   if (live.exists !== true) issues.push("live_task_missing");
   if (live.exists === true && !["Ready", "Running"].includes(String(live.state || ""))) issues.push(`live_task_state_invalid:${live.state || "missing"}`);
-  if (live.exists === true && !/run-terminal-autonomous-root\.ps1/i.test(String(live.arguments || ""))) issues.push("live_task_runner_mismatch");
+  if (live.exists === true && !/run-terminal-master-control\.ps1/i.test(String(live.arguments || ""))) issues.push("live_task_runner_mismatch");
   if (live.exists === true && /-ApplyScanners/i.test(String(live.arguments || ""))) issues.push("live_task_must_be_read_only_no_apply_scanners");
   if (live.exists === true && !/-RequireProtectedReadback/i.test(String(live.arguments || ""))) issues.push("live_task_protected_readback_argument_missing");
   if (live.exists === true && String(live.multipleInstances || "") !== "IgnoreNew") issues.push(`live_task_multiple_instances_not_ignore_new:${live.multipleInstances || "missing"}`);
