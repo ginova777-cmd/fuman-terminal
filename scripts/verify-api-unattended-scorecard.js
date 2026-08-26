@@ -1084,7 +1084,7 @@ function isProtectedFailClosedPayload(payload = {}) {
     && Boolean(blockedReason || evidenceStatus || unattendedStatus === "NO");
 }
 
-function applyProfileJudgement(strategy, endpointResult, judgement) {
+function applyProfileJudgement(strategy, endpointResult, judgement, dueStatus = {}) {
   if (!judgement.issues.length) return judgement;
   const protectedFailClosed = isProtectedFailClosedPayload(endpointResult.json);
   const membershipProtected = isMembershipProtectedPayload(endpointResult);
@@ -1093,7 +1093,7 @@ function applyProfileJudgement(strategy, endpointResult, judgement) {
   for (const issue of judgement.issues) {
     if (strategy.liveSessionSurface && /^(http_status_0|http_status_503|api_ok_false|api_rows_empty|rows_below_expected_|field_blanks_)/.test(issue)) {
       downgraded.push(issue);
-    } else if ((protectedFailClosed || membershipProtected) && /^(http_status_401|api_ok_false|api_rows_empty|api_status_|api_evidence_status_|api_unattended_status_no|run_time_source_snapshot_source_quality_fail|run_time_source_snapshot_quality_issues_|run_time_source_snapshot_insufficient_|runtime_source_snapshot_quality_fail|runtime_source_snapshot_missing|fallback_or_static_cache_used|realtime_radar_evidence_missing_|fresh_quote_coverage_|quote_age_seconds_|write_budget_|alert_receipt_)/.test(issue)) {
+    } else if (dueStatus.due === false && (protectedFailClosed || membershipProtected) && /^(http_status_401|api_ok_false|api_rows_empty|api_status_|api_evidence_status_|api_unattended_status_no|run_time_source_snapshot_source_quality_fail|run_time_source_snapshot_quality_issues_|run_time_source_snapshot_insufficient_|runtime_source_snapshot_quality_fail|runtime_source_snapshot_missing|fallback_or_static_cache_used|realtime_radar_evidence_missing_|fresh_quote_coverage_|quote_age_seconds_|write_budget_|alert_receipt_)/.test(issue)) {
       downgraded.push(issue);
     } else {
       kept.push(issue);
@@ -1163,7 +1163,8 @@ async function evaluateStrategy(strategy, context = {}) {
     const judgement = applyProfileJudgement(
       strategy,
       response,
-      apiIssues(strategy, response, basic, freshness, coverage, fields, fallback, runtimeSnapshot, frontend, sourceEvidence, dueStatus, realtimeRadarEvidence)
+      apiIssues(strategy, response, basic, freshness, coverage, fields, fallback, runtimeSnapshot, frontend, sourceEvidence, dueStatus, realtimeRadarEvidence),
+      dueStatus
     );
     endpointResults.push({
       endpoint,
@@ -1226,7 +1227,7 @@ async function evaluateStrategy(strategy, context = {}) {
   }
   for (const verifier of verifierResults) {
     if (!verifier.ok) {
-      if (endpointResults.some((item) => item.warnings.some((warning) => /membership_protected_fail_closed|live_surface_stale|live_surface_unavailable|off_session_protected_fail_closed|off_session_live_stale|off_session_live_unavailable/.test(warning)))) {
+      if (dueStatus.due === false && endpointResults.some((item) => item.warnings.some((warning) => /membership_protected_fail_closed|live_surface_stale|live_surface_unavailable|off_session_protected_fail_closed|off_session_live_stale|off_session_live_unavailable/.test(warning)))) {
         operationalNotes.push(`protected_or_live_surface:verifier_failed:${verifier.command}`);
       } else {
         issues.push(`verifier_failed: ${verifier.command}`);
