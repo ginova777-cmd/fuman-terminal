@@ -247,8 +247,7 @@ function gateWebsocketOk(gate) {
 const MOTHER_POOL_MIN_SYMBOLS = 300;
 const MOTHER_POOL_MAX_SYMBOLS = 600;
 const DYNAMIC_FORMAL_SCOPES = new Set([
-  "priority_hot_deep_scan_pool_only",
-  "mother_pool_300_rotating_deep_scan",
+  "mother_pool_complete_dynamic_scan",
 ]);
 
 function hasDynamicPoolLayers(item) {

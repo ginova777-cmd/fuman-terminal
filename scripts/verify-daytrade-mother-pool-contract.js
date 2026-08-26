@@ -236,8 +236,8 @@ async function main() {
     issues.push(`mother_pool_source_not_dynamic:${health.mother_pool_source || "missing"}`);
   }
   const formalScope = String(health.formal_scope || "");
-  const acceptedFormalScopes = new Set(["mother_pool_300_rotating_deep_scan"]);
-  const legacyFormalScopeAliases = new Set(["mother_pool_rotation_priority_top40", "priority_top40", "top40_only"]);
+  const acceptedFormalScopes = new Set(["mother_pool_complete_dynamic_scan"]);
+  const legacyFormalScopeAliases = new Set(["mother_pool_300_rotating_deep_scan", "mother_pool_rotation_priority_top40", "priority_top40", "top40_only"]);
   if (!acceptedFormalScopes.has(formalScope)) {
     if (legacyFormalScopeAliases.has(formalScope)) {
       warnings.push(`formal_scope_legacy_alias_needs_db_normalization:${formalScope}`);
