@@ -102,6 +102,11 @@ function Assert-DaytradeSourceHostApproval {
 }
 
 # FUMAN_MARKET_CLOSED_RUNNER_GUARD_V1
+# The dedicated daytrade writer owns the full 06:00-13:30 source/warmup
+# window. Do not inherit the generic 08:30 formal strategy window: doing so
+# makes every 06:00-08:29 invocation exit 0 without producing today's water.
+$env:FUMAN_FORMAL_SOURCE_WINDOW_START = "0600"
+$env:FUMAN_FORMAL_SOURCE_WINDOW_END = "1330"
 . "$RepoRoot\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Daytrade source writer" -LogPath $WrapperLog
 
