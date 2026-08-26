@@ -91,14 +91,14 @@ function main() {
   const startWhenAvailableReady = task.startWhenAvailable === true;
   const multipleInstancesReady = String(task.multipleInstances || "").toLowerCase() === "ignorenew";
   const rootActionReady = /run-terminal-autonomous-root\.ps1/i.test(`${task.execute || ""} ${task.arguments || ""}`);
-  const rootApplyScannersReady = /\s-ApplyScanners(\s|$)/i.test(` ${task.arguments || ""} `);
+  const rootReadOnlyReady = !/\s-ApplyScanners(\s|$)/i.test(` ${task.arguments || ""} `);
   const rootProtectedReadbackReady = /\s-RequireProtectedReadback(\s|$)/i.test(` ${task.arguments || ""} `);
   const triggerCountReady = Number(task.triggerCount || 0) >= 8;
   const postBootRecoveryVerified = taskRegistered && Boolean(boot.boot) && Boolean(task.lastRun) && Date.parse(task.lastRun) >= Date.parse(boot.boot);
   const lockSafe = lock.safe === true;
   const staleLockHandled = lock.staleLockHandled === true;
   const eventRows = Array.isArray(events.events) ? events.events : (events.events ? [events.events] : []);
-  const powerRecoveryOk = taskRegistered && unattendedPrincipalReady && startWhenAvailableReady && multipleInstancesReady && rootActionReady && rootApplyScannersReady && rootProtectedReadbackReady && triggerCountReady && postBootRecoveryVerified && lockSafe && staleLockHandled && !legacyTaskConflict;
+  const powerRecoveryOk = taskRegistered && unattendedPrincipalReady && startWhenAvailableReady && multipleInstancesReady && rootActionReady && rootReadOnlyReady && rootProtectedReadbackReady && triggerCountReady && postBootRecoveryVerified && lockSafe && staleLockHandled && !legacyTaskConflict;
   const payload = {
     contract: "terminal-power-recovery-receipt-v1",
     ok: powerRecoveryOk,
@@ -117,7 +117,7 @@ function main() {
     startWhenAvailableReady,
     multipleInstancesReady,
     rootActionReady,
-    rootApplyScannersReady,
+    rootReadOnlyReady,
     rootProtectedReadbackReady,
     triggerCountReady,
     postBootRecoveryVerified,
@@ -139,7 +139,7 @@ function main() {
       ...(startWhenAvailableReady ? [] : ["autonomous_root_monitor_task_not_start_when_available"]),
       ...(multipleInstancesReady ? [] : ["autonomous_root_monitor_task_not_ignore_new"]),
       ...(rootActionReady ? [] : ["autonomous_root_monitor_task_action_not_root_runner"]),
-      ...(rootApplyScannersReady ? [] : ["autonomous_root_monitor_task_missing_apply_scanners"]),
+      ...(rootReadOnlyReady ? [] : ["autonomous_root_monitor_task_must_not_apply_scanners"]),
       ...(rootProtectedReadbackReady ? [] : ["autonomous_root_monitor_task_missing_protected_readback"]),
       ...(triggerCountReady ? [] : ["autonomous_root_monitor_task_trigger_count_low"]),
       ...(postBootRecoveryVerified ? [] : ["autonomous_root_monitor_has_not_run_after_last_boot"]),
