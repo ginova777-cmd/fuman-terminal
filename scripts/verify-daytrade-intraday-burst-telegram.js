@@ -105,6 +105,7 @@ const checks = {
     "quote_not_fresh",
     "quote_age_seconds",
     "tradable_mother_pool !== true",
+    "outbox_scope_not_mother_pool_only",
   ]),
   time_and_dedupe_gate: includesAll(notifier, [
     "return minutes >= 540 && minutes <= 750",
