@@ -15,7 +15,6 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = $FumanRoot
 $WriterScript = Join-Path $RepoRoot "scripts\run-daytrade-source-writer.js"
-$Strategy2V3LiveScript = Join-Path $RepoRoot "scripts\run-strategy2-v3-live-scan.js"
 $LogDir = Join-Path $RuntimeDir "logs"
 $StateDir = Join-Path $RuntimeDir "state"
 $TradeDate = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, "Taipei Standard Time").ToString("yyyy-MM-dd")
@@ -27,7 +26,7 @@ $StdoutLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-',
 $StderrLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-',''))-$Stamp.stderr.log"
 $WrapperLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-','')).wrapper.log"
 $FutoptCollectorRelease = "futopt-formal-live-mirror-v1"
-$MutexName = "Local\FumanFugleDaytradeSourceWriter"
+$MutexName = "Global\FumanFugleDaytradeSourceWriter"
 $CrossSessionLockPath = Join-Path $StateDir "daytrade-source-writer.cross-session.lock"
 $CrossSessionLockStream = $null
 $CrossSessionLockMaxAgeSeconds = 330
@@ -196,34 +195,6 @@ function Invoke-FugleFutoptCollectorReleaseReconcile {
     Write-WrapperLog "WARN futopt collector start failed: $($_.Exception.Message)"
     return $false
   }
-}function Invoke-Strategy2V3LiveHook {
-  if (-not $Apply) {
-    Write-WrapperLog "STRATEGY2_V3_LIVE_HOOK skip=writer_not_apply"
-    return
-  }
-  $taipeiNow = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, "Taipei Standard Time")
-  $minuteOfDay = ($taipeiNow.Hour * 60) + $taipeiNow.Minute
-  if ($minuteOfDay -lt 540 -or $minuteOfDay -gt 720) {
-    Write-WrapperLog "STRATEGY2_V3_LIVE_HOOK skip=outside_live_window taipei=$($taipeiNow.ToString('HH:mm:ss'))"
-    return
-  }
-  if (-not (Test-Path -LiteralPath $Strategy2V3LiveScript)) {
-    Write-WrapperLog "STRATEGY2_V3_LIVE_HOOK fail=live_script_missing path=$Strategy2V3LiveScript"
-    return
-  }
-  $hookLog = Join-Path $LogDir "strategy2-v3-live-hook-$($TradeDate.Replace('-',''))-$Stamp.log"
-  Write-WrapperLog "STRATEGY2_V3_LIVE_HOOK start script=$Strategy2V3LiveScript log=$hookLog"
-  try {
-    & $node --use-system-ca $Strategy2V3LiveScript --source-event *> $hookLog
-    $hookExit = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
-    if ($hookExit -eq 0) {
-      Write-WrapperLog "STRATEGY2_V3_LIVE_HOOK done exit=0 log=$hookLog"
-    } else {
-      Write-WrapperLog "STRATEGY2_V3_LIVE_HOOK fail=exit_$hookExit log=$hookLog"
-    }
-  } catch {
-    Write-WrapperLog "STRATEGY2_V3_LIVE_HOOK fail=exception message=$($_.Exception.Message) log=$hookLog"
-  }
 }
 
 function Write-FailureArtifact {
@@ -265,6 +236,8 @@ $env:DAYTRADE_SUPABASE_READ_TIMEOUT_MS = "10000"
 $env:DAYTRADE_SUPABASE_WRITE_TIMEOUT_MS = "20000"
 $env:DAYTRADE_SUPABASE_TRANSIENT_RETRIES = "2"
 $env:DAYTRADE_SUPABASE_RETRY_BASE_DELAY_MS = "1000"
+$env:FUMAN_FORMAL_SOURCE_WINDOW_START = "0600"
+$env:FUMAN_FORMAL_SOURCE_WINDOW_END = "1330"
 
 # FUMAN_MARKET_CLOSED_RUNNER_GUARD_V1
 . "$RepoRoot\schedule-guard.ps1"
@@ -404,7 +377,6 @@ try {
     Write-WrapperLog "FAIL writer_exit_$exitCode detail=$diagnostic stdout=$StdoutLog stderr=$StderrLog"
     exit $exitCode
   }
-  Invoke-Strategy2V3LiveHook
   Write-WrapperLog "DONE ok stdout=$StdoutLog stderr=$StderrLog"
   exit 0
 } catch {
