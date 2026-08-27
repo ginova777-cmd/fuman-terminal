@@ -706,7 +706,16 @@ function mergeQuotes(newQuotes) {
       byCode.set(code, row);
     }
   }
-  for (const quote of newQuotes) byCode.set(quote.code, quote);
+  for (const quote of newQuotes) {
+    const previous = byCode.get(quote.code) || {};
+    byCode.set(quote.code, {
+      ...previous,
+      ...quote,
+      // A trade update must not discard the last aggregate health timestamp.
+      aggregateLastUpdated: quote.aggregateLastUpdated || previous.aggregateLastUpdated || '',
+      receivedAt: quote.receivedAt || previous.receivedAt || nowIso(),
+    });
+  }
   const quotes = [...byCode.values()].sort((a, b) => String(a.code).localeCompare(String(b.code)));
   writeJson(FUGLE_WS_QUOTES_FILE, {
     source: "fugle-rest-collector",
@@ -1622,10 +1631,13 @@ async function runStreamingCollector() {
           ? normalizeFugleTrade(payload)
           : normalizeFugleAggregate(payload);
         if (quote) {
+          const receivedAt = lastTransportMessageAt || nowIso();
+          quote.receivedAt = receivedAt;
           if (inferredChannel === "aggregates") {
-            const aggregateUpdatedAt = quote.updatedAt || quote.quoteTime || quote.time || data.lastUpdated || lastTransportMessageAt;
+            const aggregateUpdatedAt = quote.aggregateLastUpdated || quote.updatedAt || quote.quoteTime || quote.time || data.lastUpdated || lastTransportMessageAt;
             const aggregateUpdatedMs = Date.parse(String(aggregateUpdatedAt || ""));
             lastAggregatesLastUpdatedAt = Number.isFinite(aggregateUpdatedMs) ? new Date(aggregateUpdatedMs).toISOString() : lastTransportMessageAt;
+            quote.aggregateLastUpdated = lastAggregatesLastUpdatedAt;
           }
           quoteMessages += 1;
           if (Object.prototype.hasOwnProperty.call(channelQuotes, inferredChannel)) channelQuotes[inferredChannel] += 1;

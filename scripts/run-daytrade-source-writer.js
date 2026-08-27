@@ -1196,8 +1196,16 @@ function mergeWebSocketQuoteCache(quoteMap) {
     if (isFinMindDiagnosticQuote(row)) continue;
     const previous = quoteMap.get(symbol) || {};
     const seenAt = normalizeTimestamp(
-      row.quoteSeenAt || row.updatedAt || cache.payload?.updatedAt || previous.quote_seen_at,
+      row.exchangeTime || row.quoteSeenAt || row.updatedAt || cache.payload?.updatedAt || previous.quote_seen_at,
       nowIso(),
+    );
+    const receivedAt = normalizeTimestamp(
+      row.receivedAt || row.updatedAt || cache.payload?.updatedAt || previous.updated_at,
+      nowIso(),
+    );
+    const aggregateLastUpdated = normalizeTimestamp(
+      row.aggregateLastUpdated || previous.payload?.aggregate_last_updated,
+      '',
     );
     const changePercentValue = currentValue(row.changePercent, row.change_percent, row.percent);
     const merged = {
@@ -1205,7 +1213,7 @@ function mergeWebSocketQuoteCache(quoteMap) {
       symbol,
       market: row.market || previous.market || "",
       quote_seen_at: seenAt,
-      updated_at: seenAt || previous.updated_at || "",
+      updated_at: receivedAt || previous.updated_at || "",
       last_trade_time: normalizeTimestamp(
         row.lastTradeTime || row.quoteTime || row.time || previous.last_trade_time,
         seenAt,
@@ -1233,6 +1241,9 @@ function mergeWebSocketQuoteCache(quoteMap) {
         source: "fugle-websocket-cache",
         quoteSource: row.quoteSource || row.closeSource || "fugle-ws",
         cacheUpdatedAt: cache.payload?.updatedAt || "",
+        quote_seen_at: seenAt,
+        received_at: receivedAt,
+        aggregate_last_updated: aggregateLastUpdated,
       },
     };
     quoteMap.set(symbol, merged);
