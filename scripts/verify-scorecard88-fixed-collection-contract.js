@@ -20,6 +20,7 @@ const scorecardFetch = page.match(/fetch\(`\/api\/scorecard[^\n]+/)?.[0] || "";
 if (/refreshSourceReports=1|strictLiveReports=1|[?&]live=1/.test(scorecardFetch)) issues.push("page88_live_rebuild_query_present");
 if ((page.match(/loadDaytradeEntries\(\);/g) || []).length || (page.match(/loadSevenStrategyDailyHistory\(\);/g) || []).length || (page.match(/loadStrategy4Live\(\);/g) || []).length) issues.push("page88_live_or_supabase_autoload_present");
 if (!api.includes("terminal_fixed_slot_snapshot") || !api.includes('cacheSource = "terminal-canonical-json"')) issues.push("scorecard_api_not_terminal_snapshot_only");
+if (!api.includes("terminal_scorecard_snapshot_missing_or_legacy")) issues.push("scorecard_api_legacy_static_fallback_not_fail_closed");
 if (/await readSnapshot\s*\(SNAPSHOT_KEY/.test(api)) issues.push("scorecard_api_executes_supabase_snapshot_read");
 for (const slot of definitions.map((row) => row[1])) if (!collector.includes(`"${slot}"`)) issues.push(`collector_slot_missing:${slot}`);
 for (const invariant of ["querySupabase: false", "recalculated: false", "generatedRunId: false", "terminal_canonical_not_complete"]) if (!collector.includes(invariant)) issues.push(`collector_invariant_missing:${invariant}`);

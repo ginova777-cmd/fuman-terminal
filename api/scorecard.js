@@ -1755,6 +1755,12 @@ function readStaticSnapshot(reason = "scorecard_static_snapshot") {
     };
   }
   const payload = staticSnapshotCache.payload;
+  if (payload?.contract !== "scorecard88-terminal-canonical-collector-v1"
+    || payload?.collectionPolicy?.supabaseQueryAllowed !== false
+    || payload?.collectionPolicy?.scanAllowed !== false
+    || payload?.collectionPolicy?.generateRunIdAllowed !== false) {
+    return withScorecardContract({ ok: false, cacheSource: "terminal-canonical-json", records: [], sourceReports: [] }, "blocked", "terminal_scorecard_snapshot_missing_or_legacy");
+  }
   return withScorecardContract({
     ok: payload.ok !== false,
     ...payload,
