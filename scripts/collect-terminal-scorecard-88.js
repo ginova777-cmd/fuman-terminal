@@ -16,6 +16,21 @@ const slots = {
   "17:00": ["strategy4"],
   "21:40": ["strategy5", "institution", "battle"],
 };
+const collectionDelayMinutes = Math.max(0, Math.min(5, Number(process.env.FUMAN_SCORECARD88_COLLECTION_DELAY_MINUTES || 5)));
+function taipeiMinuteOfDay(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" }).formatToParts(now).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  return Number(parts.hour) * 60 + Number(parts.minute);
+}
+function slotMinuteOfDay(value) {
+  const [hour, minute] = String(value || "").split(":").map(Number);
+  return hour * 60 + minute;
+}
+function fixedCollectionWindow(value, now = new Date()) {
+  const scheduledMinute = slotMinuteOfDay(value);
+  const currentMinute = taipeiMinuteOfDay(now);
+  return { scheduledMinute, currentMinute, delayMinutes: currentMinute - scheduledMinute, allowed: currentMinute >= scheduledMinute && currentMinute <= scheduledMinute + collectionDelayMinutes };
+}
+
 
 function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
@@ -120,6 +135,11 @@ if (!slots[slot]) {
   console.error(JSON.stringify({ ok: false, status: "FAIL_CLOSED", reason: "invalid_collection_slot", allowedSlots: Object.keys(slots) }));
   process.exit(2);
 }
+const collectionWindow = fixedCollectionWindow(slot);
+if (!collectionWindow.allowed) {
+  console.error(JSON.stringify({ ok: false, status: "FAIL_CLOSED", reason: "outside_fixed_collection_window", slot, writeAllowed: false, blobPublishAllowed: false, collectionWindow }));
+  process.exit(6);
+}
 
 const today = taipeiDate();
 const todayKey = compactDate(today);
@@ -184,7 +204,7 @@ async function main() {
   let blobError = "";
   try { blob = await publishBlob(payload, todayKey, slot.replace(":", "")); } catch (error) { blobError = error?.message || String(error); }
   const ok = payload.ok && Boolean(blob) && !blobError;
-  const receipt = { ok, status: ok ? "PASS" : payload.ok ? "FAIL_CLOSED" : "BLOCKED", slot, tradeDate: today, collectedAt, outputFile, blobPublished: Boolean(blob), blob, firstBlocker: payload.ok ? blobError : receipts.find((row) => !row.ok)?.firstBlocker || "terminal_canonical_not_complete", reports: receipts };
+  const receipt = { ok, status: ok ? "PASS" : payload.ok ? "FAIL_CLOSED" : "BLOCKED", slot, tradeDate: today, collectedAt, collectionWindow, outputFile, blobPublished: Boolean(blob), blob, firstBlocker: payload.ok ? blobError : receipts.find((row) => !row.ok)?.firstBlocker || "terminal_canonical_not_complete", reports: receipts };
   writeJsonAtomic(path.join(receiptDir, `scorecard88-collection-${todayKey}-${slot.replace(":", "")}.json`), receipt);
   console.log(JSON.stringify(receipt, null, 2));
   process.exitCode = ok ? 0 : payload.ok ? 4 : 3;
