@@ -41,6 +41,7 @@ const STREAMING_CHANNEL = STREAMING_CHANNELS.join(",");
 const STREAMING_MAX_SYMBOLS = Math.max(1, Number(process.env.FUGLE_STREAMING_MAX_SYMBOLS || process.env.FUGLE_STREAMING_MAX_SUBSCRIPTIONS || 600));
 const STREAMING_MAX_TOTAL_SUBSCRIPTIONS = Math.max(STREAMING_CHANNELS.length, Number(process.env.FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS || 1800));
 const STREAMING_CANDLE_SYMBOLS = Math.max(0, Number(process.env.FUGLE_STREAMING_CANDLE_SYMBOLS || 1000));
+const STREAMING_AGGREGATE_SYMBOLS = Math.max(0, Number(process.env.FUGLE_STREAMING_AGGREGATE_SYMBOLS || 80));
 const STREAMING_SUBSCRIBE_CHUNK_SIZE = Math.max(1, Math.min(50, Number(process.env.FUGLE_STREAMING_SUBSCRIBE_CHUNK_SIZE || 50)));
 const STREAMING_RESUBSCRIBE_MS = Math.max(30000, Number(process.env.FUGLE_STREAMING_RESUBSCRIBE_MS || (COLLECTOR_ROLE === "daytrade" ? 16200000 : 30000)));
 const STREAMING_RECONNECT_INITIAL_MS = Math.max(1000, Number(
@@ -1155,9 +1156,9 @@ function chunkArray(values, size) {
 function selectStreamingSymbols(rotationCursor = 0) {
   const allSymbols = readSymbols();
   const priority = readPrioritySymbols(allSymbols);
-  const formalChannelCount = Math.max(1, STREAMING_CHANNELS.length);
-  const quoteRadarChannel = STREAMING_CHANNELS.includes("aggregates") ? "aggregates" : STREAMING_CHANNELS.includes("trades") ? "trades" : STREAMING_CHANNELS[0];
+  const quoteRadarChannel = STREAMING_CHANNELS.includes("trades") ? "trades" : STREAMING_CHANNELS.includes("aggregates") ? "aggregates" : STREAMING_CHANNELS[0];
   const aggregateRadarChannel = STREAMING_CHANNELS.includes("aggregates") ? "aggregates" : "";
+  const candleChannel = STREAMING_CHANNELS.includes("candles") ? "candles" : "";
   const taipeiParts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" }).formatToParts(new Date());
   const taipeiValues = Object.fromEntries(taipeiParts.map((part) => [part.type, part.value]));
   const taipeiMinute = Number(taipeiValues.hour) * 60 + Number(taipeiValues.minute);
@@ -1177,7 +1178,7 @@ function selectStreamingSymbols(rotationCursor = 0) {
       formalSymbols: [], candleRadarSymbols: [], candleChannel: "",
       quoteRadarSymbols: [], aggregateRadarSymbols: selected,
       quoteRadarChannel, aggregateRadarChannel,
-      formalChannelCount, formalExtraChannelCount: 0,
+      formalChannelCount: 0, formalExtraChannelCount: 0,
       subscriptionCount: selected.length, requested: allSymbols.length,
       symbolLimit: selected.length, pinnedPriorityCount: 0,
       rotationCursor: 0, nextRotationCursor: 0,
@@ -1187,71 +1188,78 @@ function selectStreamingSymbols(rotationCursor = 0) {
       subscriptionPlan: "preopen_0600_0844_full_market_aggregate_radar",
     };
   }
-  // A subscription must never introduce a fixed "formal 40" gate. Allocate
-  // the budget evenly across every required WebSocket channel so the current
-  // dynamic priority/hot/deep-scan window receives trades, aggregates, and
-  // formal 1m candles together.
-  const formalExtraChannelCount = Math.max(0, formalChannelCount - 1);
-  const symbolLimit = Math.min(
-    STREAMING_MAX_SYMBOLS,
-    Math.floor(STREAMING_MAX_TOTAL_SUBSCRIPTIONS / formalChannelCount),
-  );
+
+  // Reserve the formal 1m capacity first. The remaining subscription budget is
+  // split between the all-market trade radar and aggregate snapshots. No pool
+  // size is a decision gate; these are transport capacities only.
+  const candleBudget = candleChannel
+    ? Math.min(STREAMING_MAX_SYMBOLS, STREAMING_CANDLE_SYMBOLS, STREAMING_MAX_TOTAL_SUBSCRIPTIONS)
+    : 0;
+  const remainingBudget = Math.max(0, STREAMING_MAX_TOTAL_SUBSCRIPTIONS - candleBudget);
+  const aggregateBudget = aggregateRadarChannel
+    ? Math.min(STREAMING_AGGREGATE_SYMBOLS, remainingBudget)
+    : 0;
+  const tradeBudget = quoteRadarChannel === "trades"
+    ? Math.max(0, remainingBudget - aggregateBudget)
+    : 0;
   const seen = new Set();
-  const ordered = [];
+  const prioritySymbols = [];
   const rotating = [];
-  const add = (code) => {
+  const addPriority = (code) => {
     const symbol = normalizeCode(code);
     if (/^\d{4}$/.test(symbol) && !seen.has(symbol)) {
       seen.add(symbol);
-      ordered.push(symbol);
+      prioritySymbols.push(symbol);
     }
   };
-  for (const code of priority.symbols) add(code);
-  const rotatingSeen = new Set(ordered);
-  const addRotating = (code) => {
+  for (const code of priority.symbols) addPriority(code);
+  const rotatingSeen = new Set(prioritySymbols);
+  for (const code of allSymbols) {
     const symbol = normalizeCode(code);
     if (/^\d{4}$/.test(symbol) && !rotatingSeen.has(symbol)) {
       rotatingSeen.add(symbol);
       rotating.push(symbol);
     }
-  };
-  for (const code of allSymbols) addRotating(code);
-  const rotatingCapacity = Math.max(0, symbolLimit - ordered.length);
-  const safeCursor = rotating.length ? ((Math.trunc(rotationCursor) % rotating.length) + rotating.length) % rotating.length : 0;
-  for (let index = 0; index < Math.min(rotatingCapacity, rotating.length); index += 1) {
-    ordered.push(rotating[(safeCursor + index) % rotating.length]);
   }
-  const selected = ordered.slice(0, symbolLimit);
-  const formalSymbols = selected;
-  const candleChannel = STREAMING_CHANNELS.includes("candles") ? "candles" : "";
-  const candleRadarSymbols = [];
-  const quoteRadarSymbols = [];
-  const aggregateRadarSymbols = [];
-  const subscriptionCount = formalSymbols.length * formalChannelCount;
+  const safeCursor = rotating.length ? ((Math.trunc(rotationCursor) % rotating.length) + rotating.length) % rotating.length : 0;
+  const selectPool = (capacity, cursor, preferPriority = true) => {
+    const pool = [];
+    if (preferPriority) pool.push(...prioritySymbols.slice(0, capacity));
+    for (let index = 0; pool.length < capacity && index < rotating.length; index += 1) {
+      pool.push(rotating[(cursor + index) % rotating.length]);
+    }
+    return pool;
+  };
+  const candleRadarSymbols = selectPool(candleBudget, safeCursor, true);
+  const quoteRadarSymbols = selectPool(tradeBudget, (safeCursor + Math.max(1, candleRadarSymbols.length)) % Math.max(1, rotating.length), true);
+  const aggregateRadarSymbols = selectPool(aggregateBudget, safeCursor, true);
+  const selected = candleRadarSymbols;
+  const subscriptionCount = candleRadarSymbols.length + quoteRadarSymbols.length + aggregateRadarSymbols.length;
+  const rotationWindow = Math.max(candleRadarSymbols.length, quoteRadarSymbols.length, aggregateRadarSymbols.length);
   return {
     allSymbols,
     priority,
     selected,
-    formalSymbols,
+    formalSymbols: [],
     candleRadarSymbols,
     candleChannel,
     quoteRadarSymbols,
     aggregateRadarSymbols,
     quoteRadarChannel,
     aggregateRadarChannel,
-    formalChannelCount,
-    formalExtraChannelCount,
+    formalChannelCount: 0,
+    formalExtraChannelCount: 0,
     subscriptionCount,
-    requested: priority.symbols.length + rotating.length,
-    symbolLimit,
-    pinnedPriorityCount: Math.min(priority.symbols.length, selected.length),
+    requested: prioritySymbols.length + rotating.length,
+    symbolLimit: selected.length,
+    pinnedPriorityCount: Math.min(prioritySymbols.length, selected.length),
     rotationCursor: safeCursor,
-    nextRotationCursor: rotating.length ? (safeCursor + Math.max(1, rotatingCapacity)) % rotating.length : 0,
+    nextRotationCursor: rotating.length ? (safeCursor + Math.max(1, rotationWindow)) % rotating.length : 0,
     rotationUniverse: rotating.length,
-    rotationWindow: Math.min(rotatingCapacity, rotating.length),
+    rotationWindow,
     totalSubscriptionLimit: STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
-    candleCoverageTarget: candleChannel ? selected.length : 0,
-    subscriptionPlan: "dynamic_priority_hot_deep_scan_all_channels_plus_full_market_rotation",
+    candleCoverageTarget: candleRadarSymbols.length,
+    subscriptionPlan: "formal_1m_1000_plus_trade_radar_plus_aggregate_priority",
   };
 }
 let pendingStreamingQuotes = [];

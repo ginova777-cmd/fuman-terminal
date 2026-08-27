@@ -512,8 +512,10 @@ function writerCodeRegressionChecks() {
       try {
         const collector = fs.readFileSync(path.join(__dirname, "fugle-websocket-collector.js"), "utf8");
         return !collector.includes("STREAMING_PINNED_PRIORITY_SYMBOLS")
-          && collector.includes("const formalSymbols = selected;")
-          && collector.includes("dynamic_priority_hot_deep_scan_all_channels_plus_full_market_rotation");
+          && collector.includes("const candleBudget = candleChannel")
+          && collector.includes("const STREAMING_CANDLE_SYMBOLS")
+          && collector.includes("const STREAMING_AGGREGATE_SYMBOLS")
+          && collector.includes("formal_1m_1000_plus_trade_radar_plus_aggregate_priority");
       } catch { return false; }
     })(),
     websocketCandleBatchNormalizer: (() => {

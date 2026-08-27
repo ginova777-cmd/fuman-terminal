@@ -122,9 +122,11 @@ try {
   $env:FUGLE_STREAMING_CHANNELS = "trades,aggregates,candles"
   $env:FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS = "1800"
   $env:FUGLE_STREAMING_MAX_SYMBOLS = "2000"
-  # Dynamic Mother Pool: no fixed TOP40/pinned subset. The collector divides
-  # the 1,800 budget across trades, aggregates, and candles for its current
-  # priority/hot/deep-scan window, then rotates the remaining market universe.
+  $env:FUGLE_STREAMING_CANDLE_SYMBOLS = "1000"
+  $env:FUGLE_STREAMING_AGGREGATE_SYMBOLS = "80"
+  # Dynamic Mother Pool: no fixed TOP40/pinned subset. Reserve 1,000 formal
+  # 1m candle slots, then use the remaining 800 slots for the trade radar and
+  # aggregate priority snapshots while rotating the wider market universe.
   $env:FUGLE_STREAMING_RESUBSCRIBE_MS = "300000"
   $env:FUGLE_STREAMING_PRIORITY_REFRESH_MS = "300000"
   $env:FUGLE_STREAMING_PRIORITY_RECONNECT_MIN_MS = "300000"
