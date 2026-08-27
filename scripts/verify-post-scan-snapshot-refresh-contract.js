@@ -46,22 +46,6 @@ const TASKS = [
     query: { canvas: "1", compact: "1", shell: "1", limit: "60" },
     minCount: 1,
   },
-  {
-    key: "cb",
-    strategy: "CB",
-    endpoint: "/api/cb-detect-latest",
-    modulePath: "../api/cb-detect-latest",
-    query: { canvas: "1", compact: "1", shell: "1", limit: "60" },
-    minCount: 1,
-  },
-  {
-    key: "warrant",
-    strategy: "Warrant",
-    endpoint: "/api/warrant-flow-latest",
-    modulePath: "../api/warrant-flow-latest",
-    query: { canvas: "1", compact: "1", shell: "1", limit: "60" },
-    minCount: 1,
-  },
 ];
 
 function arg(name, fallback = "") {
