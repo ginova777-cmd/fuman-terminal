@@ -4,6 +4,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const CONTRACT_VERSION = "fugle-source-contract-20260629-01";
+const DAYTRADE_SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
 const STATIC_ONLY = process.argv.includes("--static-only");
 const LIVE = process.argv.includes("--live") || (!STATIC_ONLY && process.env.SUPABASE_SOURCE_CONTRACT_LIVE !== "0");
 const LIVE_MIN_FRESH_QUOTE_COVERAGE_120S = Number(process.env.FUGLE_SOURCE_CONTRACT_MIN_FRESH_QUOTE_COVERAGE_120S || 0.9);
@@ -12,6 +13,36 @@ const LIVE_MAX_INTRADAY_1M_STALE_SECONDS = Number(process.env.FUGLE_SOURCE_CONTR
 
 const issues = [];
 const EMPTY_PAYLOAD_OK = new Set(["scanner_block_reason"]);
+const CANONICAL_DAYTRADE_PAYLOAD_FIELDS = [
+  "writer_version",
+  "source_authority",
+  "source_host_id",
+  "writer_heartbeat_at",
+  "quote_status",
+  "quote_transport",
+  "websocket_connected",
+  "websocket_status_ok",
+  "daytrade_gate_grade",
+  "daytrade_source_speed_ok",
+  "fresh_quote_window_seconds",
+  "priority_pool_symbols",
+  "hot_pool_symbols",
+  "deep_scan_pool_symbols",
+  "mother_pool_symbols",
+  "mother_pool_min_price",
+  "mother_pool_source",
+  "formal_scope",
+  "intraday_1m_status",
+  "intraday_1m_stale_seconds",
+  "today_1m_symbols",
+  "today_1m_rows",
+  "ready_ma20_continuous",
+  "ready_ma35_continuous",
+  "priority_fresh_quotes_120s",
+  "priority_fresh_quote_coverage_120s",
+  "scanner_can_run_opening",
+  "formal_entry_allowed",
+];
 
 function read(file) {
   return fs.readFileSync(path.join(ROOT, file), "utf8");
@@ -467,128 +498,50 @@ async function liveChecks() {
   }
 
   let sourceRegularSession = false;
-  const statusRows = await restGet(baseUrl, key, "source_status?source_name=eq.fugle_shared_source&select=source_name,status,updated_at,message,payload&limit=1");
+  const statusRows = await restGet(baseUrl, key, `source_status?source_name=eq.${encodeURIComponent(DAYTRADE_SOURCE_NAME)}&select=source_name,status,updated_at,message,payload&limit=1`);
   if (!Array.isArray(statusRows) || !statusRows[0]) {
-    issues.push("source_status missing fugle_shared_source row");
+    issues.push(`source_status missing ${DAYTRADE_SOURCE_NAME} row`);
   } else {
     const payload = statusRows[0].payload || {};
-    sourceRegularSession = String(payload.session || "").toLowerCase() === "regular";
-    requirePayload(payload, [
-      "source_contract_version",
-      "writer_version",
-      "build_id",
-      "writer_pid",
-      "quote_status",
-      "permission_status",
-      "preopen_status",
-      "intraday_1m_status",
-      "daily_volume_status",
-      "quote_age_seconds",
-      "last_quote_at",
-      "latest_candle_time",
-      "latest_candle_time_taipei",
-      "intraday_1m_stale_seconds",
-      "ready_ma20_continuous_symbols",
-      "ready_ma35_continuous_symbols",
-      "ready_ge_80_symbols",
-      "ready_ge_200_symbols",
-      "fresh_quotes_120s",
-      "fresh_quote_coverage_120s",
-      "today_1m_symbols",
-      "today_1m_rows",
-      "warmup_candle_count",
-      "continuous_candle_count",
-      "ready_ma20_continuous_symbols",
-      "ready_ma35_continuous_symbols",
-      "ready_macd_continuous_symbols",
-      "quote_derived_1m_candidate_symbols",
-      "mother_pool_source",
-      "mother_pool_symbols",
-      "quote_derived_1m_full_universe",
-      "quote_derived_1m_rows",
-      "quote_derived_1m_current_rows",
-      "quote_derived_1m_current_minute",
-      "quote_derived_1m_max_quote_age_seconds",
-      "quote_derived_1m_opening_backfill_minutes",
-      "quote_derived_1m_opening_backfill_rows",
-      "quote_derived_1m_opening_backfill_symbols",
-      "intraday_1m_fresh_target_seconds",
-      "intraday_1m_fresh_hard_seconds",
-      "direct_1m_prewarm_enabled",
-      "direct_1m_prewarm_bars_per_symbol",
-      "direct_1m_prewarm_target_symbols",
-      "direct_1m_prewarm_completed_symbols",
-      "direct_1m_prewarm_rows",
-      "direct_1m_prewarm_complete",
-      "daily_volume_ready_symbols",
-      "top_movers_ready20_count",
-      "top_movers_ready35_count",
-      "scanner_can_run_quote_only",
-      "scanner_can_run_opening",
-      "scanner_can_run_ma20",
-      "scanner_can_run_ma35",
-      "scanner_can_run_full_intraday",
-      "scanner_block_reason",
-      "quotes",
-      "active_symbols",
-      "eligible_quote_rows",
-      "eligible_quote_coverage",
-      "preopen",
-      "futopt",
-      "futopt_quotes",
-      "daily_volume_rows",
-      "daily_volume_avg_rows",
-      "degraded_but_usable_for_intraday",
-    ], "source_status:fugle_shared_source");
-    if (payload.source_contract_version !== CONTRACT_VERSION) {
-      issues.push(`source_status source_contract_version mismatch: ${payload.source_contract_version || "(missing)"}`);
+    const phase = String(payload.phase || "").toLowerCase();
+    sourceRegularSession = /^(opening_detection_|regular_daytrade_)/.test(phase);
+    requirePayload(payload, CANONICAL_DAYTRADE_PAYLOAD_FIELDS, `source_status:${DAYTRADE_SOURCE_NAME}`);
+
+    if (String(statusRows[0].status || "").toLowerCase() !== "ok") {
+      issues.push(`source_status:${DAYTRADE_SOURCE_NAME} status=${statusRows[0].status || "(missing)"}`);
     }
-    const readyMa20 = Number(payload.ready_ma20_continuous_symbols || payload.ready_ma20_continuous_symbols || 0);
-    const readyMa35 = Number(payload.ready_ma35_continuous_symbols || payload.ready_ma35_continuous_symbols || 0);
-    const readyMacd = Number(payload.ready_macd_continuous_symbols || 0);
-    const readyGe80 = Number(payload.ready_ge_80_symbols || 0);
-    if (readyMa35 > readyMa20) {
-      issues.push(`source_status ready_ma20_continuous_symbols ${readyMa20} below ready_ma35_continuous_symbols ${readyMa35}`);
+    if (firstFiniteNumber(payload.mother_pool_min_price) !== 50) {
+      issues.push(`source_status mother_pool_min_price ${payload.mother_pool_min_price} must equal 50`);
     }
-    if (readyGe80 > readyMacd) {
-      issues.push(`source_status ready_macd_continuous_symbols ${readyMacd} below ready_ge_80_symbols ${readyGe80}`);
+    if (!String(payload.formal_scope || "").includes("dynamic")) {
+      issues.push(`source_status formal_scope must be dynamic: ${payload.formal_scope || "(missing)"}`);
     }
+
     if (sourceRegularSession) {
-      const activeSymbols = firstFiniteNumber(payload.active_symbols, payload.mother_pool_symbols, payload.eligible_symbols, payload.seeded_symbols);
-      const expectedIntradaySymbols = activeSymbols > 0 ? activeSymbols : firstFiniteNumber(payload.today_1m_symbols, payload.intraday_1m_symbols_today);
-      const today1mSymbols = firstFiniteNumber(payload.today_1m_symbols, payload.intraday_1m_symbols_today);
+      const prioritySymbols = firstFiniteNumber(payload.priority_pool_symbols);
+      const priorityFreshCoverage = firstFiniteNumber(payload.priority_fresh_quote_coverage_120s);
       const staleSeconds = firstFiniteNumber(payload.intraday_1m_stale_seconds, 999999);
-      const freshQuoteCoverage120s = firstFiniteNumber(payload.fresh_quote_coverage_120s, payload.eligible_quote_coverage);
-      const hasCandidateLimit = payload.quote_derived_1m_candidate_limit !== undefined && payload.quote_derived_1m_candidate_limit !== null;
-      const fullUniverse = boolValue(payload.quote_derived_1m_full_universe) || (hasCandidateLimit && firstFiniteNumber(payload.quote_derived_1m_candidate_limit) <= 0);
-      const minIntradaySymbols = Math.ceil(expectedIntradaySymbols * LIVE_MIN_INTRADAY_1M_COVERAGE);
       const intradayStatus = String(payload.intraday_1m_status || "").toLowerCase();
-      if (freshQuoteCoverage120s < LIVE_MIN_FRESH_QUOTE_COVERAGE_120S) {
-        issues.push(`source_status fresh_quote_coverage_120s ${freshQuoteCoverage120s} < ${LIVE_MIN_FRESH_QUOTE_COVERAGE_120S}`);
+      if (prioritySymbols < 1) {
+        issues.push("source_status priority_pool_symbols must be positive during regular session");
       }
-      if (!fullUniverse) {
-        issues.push("source_status quote_derived_1m_full_universe is not true during regular session");
-      }
-      if (expectedIntradaySymbols >= 1000 && today1mSymbols < minIntradaySymbols) {
-        issues.push(`source_status today_1m_symbols ${today1mSymbols}/${expectedIntradaySymbols} below live gate ${LIVE_MIN_INTRADAY_1M_COVERAGE}`);
-      }
-      if (expectedIntradaySymbols >= 1000 && readyMa35 < minIntradaySymbols && boolValue(payload.intraday_1m_ma35_required)) {
-        issues.push(`source_status ready_ma35_continuous_symbols ${readyMa35}/${expectedIntradaySymbols} below live gate ${LIVE_MIN_INTRADAY_1M_COVERAGE}`);
+      if (priorityFreshCoverage < LIVE_MIN_FRESH_QUOTE_COVERAGE_120S) {
+        issues.push(`source_status priority_fresh_quote_coverage_120s ${priorityFreshCoverage} < ${LIVE_MIN_FRESH_QUOTE_COVERAGE_120S}`);
       }
       if (staleSeconds > LIVE_MAX_INTRADAY_1M_STALE_SECONDS) {
         issues.push(`source_status intraday_1m_stale_seconds ${staleSeconds} > ${LIVE_MAX_INTRADAY_1M_STALE_SECONDS}`);
       }
-      if (intradayStatus && intradayStatus !== "ready") {
-        issues.push(`source_status intraday_1m_status=${payload.intraday_1m_status}`);
+      if (intradayStatus !== "ready") {
+        issues.push(`source_status intraday_1m_status=${payload.intraday_1m_status || "(missing)"}`);
       }
-      if (boolValue(payload.intraday_1m_ma35_required) && !boolValue(payload.scanner_can_run_ma35)) {
-        issues.push("source_status scanner_can_run_ma35 is false while MA35 is required");
+      if (!boolValue(payload.scanner_can_run_opening)) {
+        issues.push("source_status scanner_can_run_opening is false during regular session");
       }
     }
   }
 
   const probes = [
-    ["fugle_source_coverage", "source_name,checked_at,status,quote_status,permission_status,intraday_1m_status,daily_volume_status,active_symbols,quotes_symbols,fresh_quotes_120s,today_1m_symbols,today_1m_rows,warmup_candle_count,continuous_candle_count,intraday_1m_symbols_today,ready_ma20_continuous_symbols,ready_ma35_continuous_symbols,ready_ma20_continuous_symbols,ready_ma35_continuous_symbols,ready_macd_continuous_symbols,top_movers_ready20_count,top_movers_ready35_count,scanner_can_run_ma20,scanner_block_reason,latest_candle_time_taipei&source_name=eq.fugle_shared_source&order=checked_at.desc&limit=1"],
+    ["fugle_source_coverage", `source_name,checked_at,status,quote_status,permission_status,intraday_1m_status,daily_volume_status,active_symbols,quotes_symbols,fresh_quotes_120s,today_1m_symbols,today_1m_rows,warmup_candle_count,continuous_candle_count,intraday_1m_symbols_today,ready_ma20_continuous_symbols,ready_ma35_continuous_symbols,ready_ma20_continuous_symbols,ready_ma35_continuous_symbols,ready_macd_continuous_symbols,top_movers_ready20_count,top_movers_ready35_count,scanner_can_run_ma20,scanner_block_reason,latest_candle_time_taipei&source_name=eq.${encodeURIComponent(DAYTRADE_SOURCE_NAME)}&order=checked_at.desc&limit=1`],
     ["v_fugle_quotes_commonstock_active", "symbol,name,market,updated_at,price,total_volume,bid_volume,ask_volume,stock_type,session&limit=1"],
     ["fugle_quotes_live", "symbol,name,market,updated_at,price,total_volume,bid_volume,ask_volume,payload&limit=1"],
     ["stock_tickers", "symbol,name,market,stock_type,industry,type,is_etf,is_suspended,updated_at,payload&limit=1"],
