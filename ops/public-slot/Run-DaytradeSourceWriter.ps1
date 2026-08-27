@@ -40,10 +40,16 @@ function Write-WrapperLog {
 }
 
 function Get-IsoAgeSeconds {
-  param([string]$Value)
+  param([object]$Value)
   try {
-    if ([string]::IsNullOrWhiteSpace($Value)) { return 999999 }
-    $parsed = [DateTimeOffset]::Parse($Value)
+    if ($null -eq $Value -or [string]::IsNullOrWhiteSpace([string]$Value)) { return 999999 }
+    if ($Value -is [DateTime]) {
+      $parsed = [DateTimeOffset]::new($Value.ToUniversalTime())
+    } elseif ($Value -is [DateTimeOffset]) {
+      $parsed = $Value.ToUniversalTime()
+    } else {
+      $parsed = [DateTimeOffset]::Parse([string]$Value).ToUniversalTime()
+    }
     return [Math]::Max(0, [Math]::Floor(([DateTimeOffset]::UtcNow - $parsed).TotalSeconds))
   } catch {
     return 999999
@@ -83,7 +89,7 @@ function Invoke-DaytradeWebSocketCollectorSelfHeal {
   try { if (Test-Path -LiteralPath $statusPath) { $status = Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json } } catch {}
   try { if (Test-Path -LiteralPath $supervisorPath) { $supervisor = Get-Content -LiteralPath $supervisorPath -Raw | ConvertFrom-Json } } catch {}
 
-  $heartbeatAt = if ($status.websocket_heartbeat_at) { [string]$status.websocket_heartbeat_at } elseif ($status.heartbeat_at) { [string]$status.heartbeat_at } else { [string]$status.updatedAt }
+  $heartbeatAt = if ($status.websocket_heartbeat_at) { $status.websocket_heartbeat_at } elseif ($status.heartbeat_at) { $status.heartbeat_at } else { $status.updatedAt }
   $heartbeatAgeSeconds = Get-IsoAgeSeconds $heartbeatAt
   $pidAlive = $false
   if ($supervisor.pid) {
@@ -93,7 +99,7 @@ function Invoke-DaytradeWebSocketCollectorSelfHeal {
 
   $previous = $null
   try { if (Test-Path -LiteralPath $latestPath) { $previous = Get-Content -LiteralPath $latestPath -Raw | ConvertFrom-Json } } catch {}
-  $previousAgeSeconds = Get-IsoAgeSeconds ([string]$previous.checked_at)
+  $previousAgeSeconds = Get-IsoAgeSeconds $previous.checked_at
   $receipt = [ordered]@{
     contract = "daytrade_websocket_collector_self_heal_v1"
     trade_date = $TradeDate
