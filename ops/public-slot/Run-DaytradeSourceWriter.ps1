@@ -1,5 +1,5 @@
 param(
-  [string]$FumanRoot = "C:\fuman-release-owner\fuman-terminal",
+  [string]$FumanRoot = "C:\fuman-terminal",
   [string]$RuntimeDir = "C:\fuman-runtime",
   [switch]$Apply,
   [switch]$Fetch,
@@ -15,6 +15,7 @@ $ErrorActionPreference = "Stop"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = $FumanRoot
 $WriterScript = Join-Path $RepoRoot "scripts\run-daytrade-source-writer.js"
+$Strategy2V3LiveScript = Join-Path $RepoRoot "scripts\run-strategy2-v3-live-scan.js"
 $LogDir = Join-Path $RuntimeDir "logs"
 $StateDir = Join-Path $RuntimeDir "state"
 $TradeDate = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, "Taipei Standard Time").ToString("yyyy-MM-dd")
@@ -25,7 +26,11 @@ New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
 $StdoutLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-',''))-$Stamp.stdout.log"
 $StderrLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-',''))-$Stamp.stderr.log"
 $WrapperLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-','')).wrapper.log"
-$MutexName = "Global\FumanFugleDaytradeSourceWriter"
+$FutoptCollectorRelease = "futopt-formal-live-mirror-v1"
+$MutexName = "Local\FumanFugleDaytradeSourceWriter"
+$CrossSessionLockPath = Join-Path $StateDir "daytrade-source-writer.cross-session.lock"
+$CrossSessionLockStream = $null
+$CrossSessionLockMaxAgeSeconds = 330
 $Mutex = New-Object System.Threading.Mutex($false, $MutexName)
 $MutexAcquired = $false
 
@@ -33,6 +38,192 @@ function Write-WrapperLog {
   param([string]$Message)
   $line = "[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message
   Add-Content -LiteralPath $WrapperLog -Value $line -Encoding utf8
+}
+
+function Get-IsoAgeSeconds {
+  param([string]$Value)
+  try {
+    if ([string]::IsNullOrWhiteSpace($Value)) { return 999999 }
+    $parsed = [DateTimeOffset]::Parse($Value)
+    return [Math]::Max(0, [Math]::Floor(([DateTimeOffset]::UtcNow - $parsed).TotalSeconds))
+  } catch {
+    return 999999
+  }
+}
+
+function Invoke-DaytradeWebSocketCollectorSelfHeal {
+  if ($Apply) {
+    $ensureScript = Join-Path $RepoRoot "scripts\ensure-daytrade-websocket-collector.js"
+    if (Test-Path -LiteralPath $ensureScript) {
+      $ensureOutput = & $node --use-system-ca $ensureScript "--phase=writer" "--apply" "--trade-date=$TradeDate" 2>&1
+      $ensureExit = $LASTEXITCODE
+      $compact = (($ensureOutput -join " ") -replace "[\r\n]+", " ").Trim()
+      if ($compact.Length -gt 500) { $compact = $compact.Substring(0, 500) }
+      Write-WrapperLog "WEBSOCKET_SELF_HEAL_V2 exit=$ensureExit output=$compact"
+    } else {
+      Write-WrapperLog "WEBSOCKET_SELF_HEAL_V2 skip=ensure_script_missing path=$ensureScript"
+    }
+  }
+  if (-not $Apply) { return }
+
+  $taipeiNow = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, "Taipei Standard Time")
+  $minuteOfDay = ($taipeiNow.Hour * 60) + $taipeiNow.Minute
+  if ($taipeiNow.DayOfWeek -in @([DayOfWeek]::Saturday, [DayOfWeek]::Sunday) -or $minuteOfDay -lt 360 -or $minuteOfDay -gt 810) {
+    return
+  }
+
+  $statusPath = Join-Path $StateDir "fugle-daytrade-websocket-status-v2.json"
+  $supervisorPath = Join-Path $StateDir "fugle-daytrade-websocket-supervisor.json"
+  $receiptDir = Join-Path $RuntimeDir "data\scan-receipts"
+  $latestPath = Join-Path $receiptDir "daytrade-ws-collector-self-heal-latest.json"
+  $receiptPath = Join-Path $receiptDir "daytrade-ws-collector-self-heal-$($TradeDate.Replace('-','')).json"
+  New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
+
+  $status = $null
+  $supervisor = $null
+  try { if (Test-Path -LiteralPath $statusPath) { $status = Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json } } catch {}
+  try { if (Test-Path -LiteralPath $supervisorPath) { $supervisor = Get-Content -LiteralPath $supervisorPath -Raw | ConvertFrom-Json } } catch {}
+
+  $heartbeatAt = if ($status.websocket_heartbeat_at) { [string]$status.websocket_heartbeat_at } elseif ($status.heartbeat_at) { [string]$status.heartbeat_at } else { [string]$status.updatedAt }
+  $heartbeatAgeSeconds = Get-IsoAgeSeconds $heartbeatAt
+  $pidAlive = $false
+  if ($supervisor.pid) {
+    try { $null = Get-Process -Id ([int]$supervisor.pid) -ErrorAction Stop; $pidAlive = $true } catch {}
+  }
+  if ($pidAlive -and $heartbeatAgeSeconds -le 90) { return }
+
+  $previous = $null
+  try { if (Test-Path -LiteralPath $latestPath) { $previous = Get-Content -LiteralPath $latestPath -Raw | ConvertFrom-Json } } catch {}
+  $previousAgeSeconds = Get-IsoAgeSeconds ([string]$previous.checked_at)
+  $receipt = [ordered]@{
+    contract = "daytrade_websocket_collector_self_heal_v1"
+    trade_date = $TradeDate
+    checked_at = [DateTimeOffset]::UtcNow.ToString("o")
+    websocket_heartbeat_at = $heartbeatAt
+    heartbeat_age_seconds = $heartbeatAgeSeconds
+    supervisor_pid = if ($supervisor.pid) { [int]$supervisor.pid } else { 0 }
+    supervisor_pid_alive = $pidAlive
+    action = "not_requested"
+    task_name = "Fuman Fugle Daytrade WebSocket Collector 0600-1330"
+    first_blocker = $null
+    ok = $false
+  }
+
+  if ($previousAgeSeconds -lt 240 -and [string]$previous.action -eq "scheduled_task_start_requested") {
+    $receipt.action = "restart_rate_limited"
+    $receipt.first_blocker = "collector_heartbeat_stale_restart_cooldown"
+  } else {
+    try {
+      & schtasks.exe /Run /TN "Fuman Fugle Daytrade WebSocket Collector 0600-1330" | Out-Null
+      $taskExit = [int]$LASTEXITCODE
+      $receipt.task_exit_code = $taskExit
+      if ($taskExit -eq 0) {
+        $receipt.action = "scheduled_task_start_requested"
+      } else {
+        $receipt.action = "scheduled_task_start_failed"
+        $receipt.first_blocker = "collector_task_start_failed"
+      }
+    } catch {
+      $receipt.action = "scheduled_task_start_failed"
+      $receipt.first_blocker = "collector_task_start_exception"
+      $receipt.error = $_.Exception.Message
+    }
+  }
+
+  $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $receiptPath -Encoding utf8
+  $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $latestPath -Encoding utf8
+  Write-WrapperLog "WEBSOCKET_SELF_HEAL action=$($receipt.action) heartbeat_age_seconds=$heartbeatAgeSeconds receipt=$receiptPath"
+}
+function Invoke-FugleFutoptCollectorReleaseReconcile {
+  $statusPath = Join-Path $StateDir "fugle-futopt-websocket-status.json"
+  $receiptPath = Join-Path $StateDir "fugle-daytrade-futopt-collector-rotation.json"
+  $current = $null
+  try { if (Test-Path -LiteralPath $statusPath) { $current = Get-Content -LiteralPath $statusPath -Raw | ConvertFrom-Json } } catch {}
+  $currentRelease = if ($null -ne $current) { [string]$current.collector_release } else { "" }
+  $targetProcessId = 0
+  try { if ($null -ne $current) { $targetProcessId = [int]$current.pid } } catch {}
+  $alive = $false
+  if ($targetProcessId -gt 0) { try { $alive = $null -ne (Get-Process -Id $targetProcessId -ErrorAction Stop) } catch {} }
+  $receipt = [ordered]@{ contract="fugle_daytrade_futopt_collector_rotation_v1"; checked_at=[DateTimeOffset]::UtcNow.ToString("o"); trade_date=$TradeDate; desired_release=$FutoptCollectorRelease; current_release=$currentRelease; current_pid=$targetProcessId; status="pending"; reason="" }
+  if ($alive -and $currentRelease -eq $FutoptCollectorRelease) {
+    $receipt.status = "current"
+    $receipt.reason = "collector_release_current"
+    $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $receiptPath -Encoding utf8
+    return $true
+  }
+  if ($alive) {
+    try {
+      Stop-Process -Id $targetProcessId -Force -ErrorAction Stop
+      Start-Sleep -Milliseconds 800
+      if (Get-Process -Id $targetProcessId -ErrorAction SilentlyContinue) { throw "collector_pid_still_running" }
+      $receipt.status = "retired"
+      $receipt.reason = "collector_release_mismatch"
+      Write-WrapperLog "futopt collector retired pid=$targetProcessId for release=$FutoptCollectorRelease"
+    } catch {
+      $receipt.status = "blocked"
+      $receipt.reason = "collector_rotation_stop_failed"
+      $receipt.error = $_.Exception.Message
+      $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $receiptPath -Encoding utf8
+      Write-WrapperLog "WARN futopt collector rotation failed pid=${targetProcessId}: $($_.Exception.Message)"
+      return $false
+    }
+  }
+  $collector = Join-Path $RepoRoot "scripts\fugle-futopt-websocket-collector.js"
+  $nodeExe = "C:\Program Files\nodejs\node.exe"
+  if (-not (Test-Path -LiteralPath $collector) -or -not (Test-Path -LiteralPath $nodeExe)) {
+    $receipt.status = "blocked"
+    $receipt.reason = "collector_or_node_missing"
+    $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $receiptPath -Encoding utf8
+    return $false
+  }
+  $env:FUGLE_FUTOPT_STREAMING_CHANNELS = "trades,aggregates,candles"
+  $env:FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS = "1800"
+  $env:FUGLE_FUTOPT_STREAMING_MAX_SYMBOLS = "500"
+  $env:FUGLE_FUTOPT_COLLECTOR_RELEASE = $FutoptCollectorRelease
+  try {
+    $process = Start-Process -FilePath $nodeExe -ArgumentList @("--use-system-ca", $collector) -WorkingDirectory (Split-Path -Parent $collector) -WindowStyle Hidden -PassThru -ErrorAction Stop
+    $receipt.status = "started"
+    $receipt.reason = "collector_release_started"
+    $receipt.started_pid = $process.Id
+    Write-WrapperLog "futopt collector started pid=$($process.Id) release=$FutoptCollectorRelease"
+    $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $receiptPath -Encoding utf8
+    return $true
+  } catch {
+    $receipt.status = "blocked"
+    $receipt.reason = "collector_start_failed"
+    $receipt.error = $_.Exception.Message
+    $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $receiptPath -Encoding utf8
+    Write-WrapperLog "WARN futopt collector start failed: $($_.Exception.Message)"
+    return $false
+  }
+}function Invoke-Strategy2V3LiveHook {
+  if (-not $Apply) {
+    Write-WrapperLog "STRATEGY2_V3_LIVE_HOOK skip=writer_not_apply"
+    return
+  }
+  $taipeiNow = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, "Taipei Standard Time")
+  $minuteOfDay = ($taipeiNow.Hour * 60) + $taipeiNow.Minute
+  if ($minuteOfDay -lt 540 -or $minuteOfDay -gt 720) {
+    Write-WrapperLog "STRATEGY2_V3_LIVE_HOOK skip=outside_live_window taipei=$($taipeiNow.ToString('HH:mm:ss'))"
+    return
+  }
+  if (-not (Test-Path -LiteralPath $Strategy2V3LiveScript)) {
+    Write-WrapperLog "STRATEGY2_V3_LIVE_HOOK fail=live_script_missing path=$Strategy2V3LiveScript"
+    return
+  }
+  $hookLog = Join-Path $LogDir "strategy2-v3-live-hook-$($TradeDate.Replace('-',''))-$Stamp.log"
+  Write-WrapperLog "STRATEGY2_V3_LIVE_HOOK start script=$Strategy2V3LiveScript log=$hookLog"
+  try {
+    & $node --use-system-ca $Strategy2V3LiveScript --source-event *> $hookLog
+    $hookExit = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+    if ($hookExit -eq 0) {
+      Write-WrapperLog "STRATEGY2_V3_LIVE_HOOK done exit=0 log=$hookLog"
+    } else {
+      Write-WrapperLog "STRATEGY2_V3_LIVE_HOOK fail=exit_$hookExit log=$hookLog"
+    }
+  } catch {
+    Write-WrapperLog "STRATEGY2_V3_LIVE_HOOK fail=exception message=$($_.Exception.Message) log=$hookLog"
+  }
 }
 
 function Write-FailureArtifact {
@@ -68,158 +259,37 @@ if (-not (Test-Path -LiteralPath $WriterScript)) {
 }
 
 $env:FUMAN_RUNTIME_DIR = $RuntimeDir
-$DaytradePrioritySymbolsFile = Join-Path $RuntimeDir "cache\intraday\fugle-daytrade-ws-priority-symbols.json"
 $env:FUGLE_COLLECTOR_ROLE = "daytrade"
-$SourceHostId = if ($env:FUMAN_DAYTRADE_SOURCE_HOST_ID) { [string]$env:FUMAN_DAYTRADE_SOURCE_HOST_ID } else { [string]$env:COMPUTERNAME }
-$env:FUMAN_DAYTRADE_SOURCE_ROLE = if ($Apply) { "writer" } else { "reader" }
-$env:FUMAN_DAYTRADE_SOURCE_HOST_ID = $SourceHostId
-$env:FUMAN_DAYTRADE_WRITER_INSTANCE_ID = if ($env:FUMAN_DAYTRADE_WRITER_INSTANCE_ID) { $env:FUMAN_DAYTRADE_WRITER_INSTANCE_ID } else { "$($SourceHostId):daytrade-writer" }
-$env:FUMAN_DAYTRADE_WRITER_LEASE_REQUIRED = "1"
-$env:FUGLE_DAYTRADE_PRIORITY_SYMBOLS_FILE = $DaytradePrioritySymbolsFile
-$env:FUGLE_WS_PRIORITY_SYMBOLS_FILE = $DaytradePrioritySymbolsFile
-$env:FUGLE_WS_SYMBOLS_FILE = Join-Path $RuntimeDir "cache\intraday\fugle-daytrade-ws-symbols.json"
-$env:FUGLE_WS_QUOTES_FILE = Join-Path $RuntimeDir "cache\intraday\fugle-daytrade-ws-quotes.json"
-$env:FUGLE_WS_CANDLES_FILE = Join-Path $RuntimeDir "cache\intraday\fugle-daytrade-ws-candles.json"
-$env:FUGLE_WS_STATUS_FILE = Join-Path $RuntimeDir "state\fugle-daytrade-websocket-status.json"
-$HostApprovalFile = Join-Path $RuntimeDir "config\daytrade-source-host-approval.json"
-
-function Assert-DaytradeSourceHostApproval {
-  if (-not $Apply) { return }
-  if (-not (Test-Path -LiteralPath $HostApprovalFile)) {
-    Write-FailureArtifact 9003 "daytrade_source_host_approval_missing"
-    throw "Missing approved source host file: $HostApprovalFile"
-  }
-  try {
-    $approval = Get-Content -LiteralPath $HostApprovalFile -Raw | ConvertFrom-Json
-  } catch {
-    Write-FailureArtifact 9003 "daytrade_source_host_approval_invalid"
-    throw "Invalid source host approval file: $HostApprovalFile"
-  }
-  if ($approval.approved -ne $true -or [string]$approval.sourceRole -ne "writer" -or [string]$approval.hostId -ne $SourceHostId) {
-    Write-FailureArtifact 9003 "daytrade_source_host_not_approved"
-    throw "This computer is not the approved daytrade source writer host: $SourceHostId"
-  }
-}
+$env:FUMAN_DAYTRADE_SOURCE_ROLE = "writer"
+$env:DAYTRADE_SUPABASE_READ_TIMEOUT_MS = "10000"
+$env:DAYTRADE_SUPABASE_WRITE_TIMEOUT_MS = "20000"
+$env:DAYTRADE_SUPABASE_TRANSIENT_RETRIES = "2"
+$env:DAYTRADE_SUPABASE_RETRY_BASE_DELAY_MS = "1000"
 
 # FUMAN_MARKET_CLOSED_RUNNER_GUARD_V1
-# The dedicated daytrade writer owns the full 06:00-13:30 source/warmup
-# window. Do not inherit the generic 08:30 formal strategy window: doing so
-# makes every 06:00-08:29 invocation exit 0 without producing today's water.
-$env:FUMAN_FORMAL_SOURCE_WINDOW_START = "0600"
-$env:FUMAN_FORMAL_SOURCE_WINDOW_END = "1330"
 . "$RepoRoot\schedule-guard.ps1"
-Invoke-FumanWeekdayGuard -Label "Daytrade source writer" -LogPath $WrapperLog
-
-function Get-FugleWebSocketCollectorProcess {
-  $collectorMarker = "fugle-websocket-collector.js"
-  try {
-    $processes = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
-      $_.Name -match '^(node|nodejs)(\.exe)?$' -and
-      [string]$_.CommandLine -match [regex]::Escape($collectorMarker) -and
-      [string]$_.CommandLine -match "--daytrade-source"
-    })
-    if ($processes.Count -gt 0) { return $processes[0] }
-  } catch {
-    Write-WrapperLog "WARN unable to inspect websocket collector process: $($_.Exception.Message)"
-  }
-  return $null
-}
-
-function Ensure-FugleWebSocketCollector {
-  $collector = Join-Path $RepoRoot "scripts\fugle-websocket-collector.js"
-  $nodeExe = "C:\Program Files\nodejs\node.exe"
-  if (-not (Test-Path -LiteralPath $collector)) {
-    Write-WrapperLog "WARN websocket collector missing: $collector"
-    return $false
-  }
-  if (-not (Test-Path -LiteralPath $nodeExe)) {
-    Write-WrapperLog "WARN node executable missing: $nodeExe"
-    return $false
-  }
-  $existing = Get-FugleWebSocketCollectorProcess
-  if ($null -ne $existing) {
-    Write-WrapperLog "websocket collector already running pid=$($existing.ProcessId)"
-    return $true
-  }
-
-  $env:FUGLE_STREAMING_CHANNELS = "trades,aggregates,candles"
-  $env:FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS = "1800"
-  $process = Start-Process -FilePath $nodeExe `
-    -ArgumentList @("--use-system-ca", $collector, "--daytrade-source") `
-    -WorkingDirectory (Split-Path -Parent $collector) `
-    -WindowStyle Hidden `
-    -PassThru
-  Start-Sleep -Milliseconds 500
-  Write-WrapperLog "websocket collector started pid=$($process.Id) channels=$($env:FUGLE_STREAMING_CHANNELS) subscriptions=$($env:FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS)"
-  return $true
-}
-
-function Get-FugleFutoptWebSocketCollectorProcess {
-  $collectorMarker = "fugle-futopt-websocket-collector.js"
-  try {
-    $processes = @(Get-CimInstance Win32_Process -ErrorAction Stop | Where-Object {
-      $_.Name -match '^(node|nodejs)(\.exe)?$' -and
-      [string]$_.CommandLine -match [regex]::Escape($collectorMarker)
-    })
-    if ($processes.Count -gt 0) { return $processes[0] }
-  } catch {
-    Write-WrapperLog "WARN unable to inspect futopt websocket collector process: $($_.Exception.Message)"
-  }
-  return $null
-}
-function Ensure-FugleFutoptWebSocketCollector {
-  $collectorMutex = New-Object System.Threading.Mutex($false, "Global\FumanFugleDaytradeFutoptCollector")
-  $collectorMutexAcquired = $false
-  try {
-    $collectorMutexAcquired = $collectorMutex.WaitOne(0)
-    if (-not $collectorMutexAcquired) {
-      Write-WrapperLog "futopt websocket collector start lock busy; defer to next writer tick"
-      return $false
-    }
-  $collector = Join-Path $RepoRoot "scripts\fugle-futopt-websocket-collector.js"
-  $nodeExe = "C:\Program Files\nodejs\node.exe"
-  if (-not (Test-Path -LiteralPath $collector)) {
-    Write-WrapperLog "WARN futopt websocket collector missing: $collector"
-    return $false
-  }
-  if (-not (Test-Path -LiteralPath $nodeExe)) {
-    Write-WrapperLog "WARN node executable missing for futopt collector: $nodeExe"
-    return $false
-  }
-  $existing = Get-FugleFutoptWebSocketCollectorProcess
-  if ($null -ne $existing) {
-    Write-WrapperLog "futopt websocket collector already running pid=$($existing.ProcessId)"
-    return $true
-  }
-
-  $env:FUGLE_FUTOPT_STREAMING_CHANNELS = "trades,aggregates,candles"
-  $env:FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS = "1800"
-  $env:FUGLE_FUTOPT_STREAMING_MAX_SYMBOLS = "500"
-  $process = Start-Process -FilePath $nodeExe `
-    -ArgumentList @("--use-system-ca", $collector) `
-    -WorkingDirectory (Split-Path -Parent $collector) `
-    -WindowStyle Hidden `
-    -PassThru
-  Start-Sleep -Milliseconds 500
-  Write-WrapperLog "futopt websocket collector started pid=$($process.Id) channels=$($env:FUGLE_FUTOPT_STREAMING_CHANNELS) subscriptions=$($env:FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS)"
-  return $true
-  } finally {
-    if ($collectorMutexAcquired) {
-      try { $collectorMutex.ReleaseMutex() | Out-Null } catch {}
-    }
-    try { $collectorMutex.Dispose() } catch {}
-  }
-}
+# A trading-day pre-open run writes warmup evidence only. It must not be
+# treated as a formal scan, but it must not be skipped by the generic formal
+# source-window guard either.
+$preopenWarmup = $false
 if ($Apply) {
-  Assert-DaytradeSourceHostApproval
-  if (-not (Ensure-FugleWebSocketCollector)) {
-    Write-WrapperLog "WARN websocket collector was not confirmed; writer remains fail-closed until formal WS status is ready"
+  $taipeiNow = Get-FumanTaipeiNow
+  $minuteOfDay = ($taipeiNow.Hour * 60) + $taipeiNow.Minute
+  $preopenWarmup = $minuteOfDay -ge 360 -and $minuteOfDay -lt 510
+}
+if ($preopenWarmup) {
+  $calendarScript = Join-Path $RepoRoot "scripts\check-market-calendar-action.js"
+  $calendarOutput = & node $calendarScript "--label=Daytrade source writer warmup" "--receipt=1" 2>&1
+  $calendarExit = $LASTEXITCODE
+  $calendarPayload = $null
+  try { $calendarPayload = (($calendarOutput | Out-String).Trim() | ConvertFrom-Json) } catch {}
+  if ($calendarExit -ne 0 -or $null -eq $calendarPayload -or $calendarPayload.tradingDay.isTradingDay -ne $true) {
+    Write-WrapperLog "PREOPEN_WARMUP_BLOCKED calendar_exit=$calendarExit; no source write"
+    exit 0
   }
-  if (-not (Ensure-FugleFutoptWebSocketCollector)) {
-    Write-WrapperLog "WARN futopt websocket collector was not confirmed; writer remains fail-closed until formal futopt status is ready"
-  }
+  Write-WrapperLog "PREOPEN_WARMUP_ALLOWED trade_date=$($calendarPayload.tradingDay.date); warmup_only=true; formal_entry_allowed=false"
 } else {
-  Write-WrapperLog "READ_ONLY mode: collector start skipped; no source writes allowed"
+  Invoke-FumanWeekdayGuard -Label "Daytrade source writer" -LogPath $WrapperLog
 }
 
 $node = "node"
@@ -229,10 +299,7 @@ if ($LocalCheck) {
   $args += "--local-check"
 } elseif ($Apply) {
   $args += "--apply"
-  # The Windows task runs every minute. One bounded tick per task keeps the
-  # mutex, wrapper timeout, and natural evidence cadence aligned. Explicit
-  # -Continuous remains available for an approved long-running writer window.
-  if ($Once -or -not $Continuous) {
+  if ($Once) {
     $args += "--once"
   } else {
     $args += "--max-seconds=300"
@@ -250,8 +317,42 @@ if ($Fetch -and -not $Apply) {
 
 $EffectiveOnce = $args -contains "--once"
 Write-WrapperLog "START run_id=$RunId apply=$Apply fetch=$Fetch once=$Once continuous=$Continuous effectiveOnce=$EffectiveOnce localCheck=$LocalCheck"
+Invoke-DaytradeWebSocketCollectorSelfHeal
 try {
-  $MutexAcquired = $Mutex.WaitOne(0)
+  if (Test-Path -LiteralPath $CrossSessionLockPath) {
+    $staleLockProbe = $null
+    try {
+      $staleLockProbe = [System.IO.File]::Open($CrossSessionLockPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+      $staleLockAgeSeconds = [Math]::Max(0, ((Get-Date) - (Get-Item -LiteralPath $CrossSessionLockPath).LastWriteTime).TotalSeconds)
+      $staleLockProbe.Dispose()
+      $staleLockProbe = $null
+      if ($staleLockAgeSeconds -ge $CrossSessionLockMaxAgeSeconds) {
+        Remove-Item -LiteralPath $CrossSessionLockPath -Force -ErrorAction Stop
+        Write-WrapperLog "RECOVER stale_unlocked_cross_session_lock age_seconds=$([Math]::Round($staleLockAgeSeconds)) path=$CrossSessionLockPath"
+      }
+    } catch [System.IO.IOException] {
+      # An active writer still owns the file lock; CreateNew below will skip safely.
+    } finally {
+      if ($staleLockProbe) { try { $staleLockProbe.Dispose() } catch {} }
+    }
+  }
+  try {
+    $CrossSessionLockStream = [System.IO.File]::Open($CrossSessionLockPath, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+    $lockBytes = [System.Text.Encoding]::UTF8.GetBytes("run_id=$RunId`nstarted_at=$([DateTimeOffset]::UtcNow.ToString("o"))`n")
+    $CrossSessionLockStream.Write($lockBytes, 0, $lockBytes.Length)
+    $CrossSessionLockStream.Flush()
+  } catch [System.IO.IOException] {
+    Write-WrapperLog "SKIP cross_session_writer_lock_exists path=$CrossSessionLockPath stdout=$StdoutLog stderr=$StderrLog"
+    [ordered]@{ ok = $true; skipped = $true; reason = "writer_cross_session_lock_exists"; source_name = "fugle_daytrade_source"; checked_at = [DateTimeOffset]::UtcNow.ToString("o"); trade_date = $TradeDate; run_id = $RunId; preserve_previous_good = $true } | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath $StdoutLog -Encoding utf8
+    exit 0
+  }
+  try {
+    $MutexAcquired = $Mutex.WaitOne(0)
+  } catch [System.Threading.AbandonedMutexException] {
+    # The prior writer ended unexpectedly. Windows grants ownership here, so recover it.
+    $MutexAcquired = $true
+    Write-WrapperLog "RECOVER abandoned_mutex owner_acquired=true"
+  }
   if (-not $MutexAcquired) {
     Write-WrapperLog "SKIP already_running stdout=$StdoutLog stderr=$StderrLog"
     [ordered]@{
@@ -267,25 +368,43 @@ try {
     exit 0
   }
 
-  $timeoutSeconds = if ($Apply) { 330 } elseif ($Fetch) { 120 } else { 120 }
-  $process = Start-Process -FilePath $node -ArgumentList $args -WindowStyle Hidden -RedirectStandardOutput $StdoutLog -RedirectStandardError $StderrLog -PassThru
-  if (-not $process.WaitForExit($timeoutSeconds * 1000)) {
-    try { $process.Kill() } catch {}
-    try { $process.WaitForExit(5000) } catch {}
-    Write-FailureArtifact 9004 "writer_timeout_${timeoutSeconds}s"
-    Write-WrapperLog "FAIL writer_timeout_${timeoutSeconds}s stdout=$StdoutLog stderr=$StderrLog"
-    exit 1
+  if ($Apply -and -not (Invoke-FugleFutoptCollectorReleaseReconcile)) {
+    Write-WrapperLog "WARN futopt collector reconcile blocked; canonical gate remains fail-closed"
   }
-  $exitCode = [int]$process.ExitCode
+
+  $attempts = if ($env:FUMAN_DAYTRADE_WRAPPER_ATTEMPTS) { [int]$env:FUMAN_DAYTRADE_WRAPPER_ATTEMPTS } else { 1 }
+  if ($attempts -lt 1) { $attempts = 1 }
+  $retrySeconds = if ($env:FUMAN_DAYTRADE_WRAPPER_RETRY_SECONDS) { [int]$env:FUMAN_DAYTRADE_WRAPPER_RETRY_SECONDS } else { 8 }
+  if ($retrySeconds -lt 0) { $retrySeconds = 0 }
+  $exitCode = 1
+  for ($attempt = 1; $attempt -le $attempts; $attempt++) {
+    Write-WrapperLog "NODE_ATTEMPT $attempt/$attempts stdout=$StdoutLog stderr=$StderrLog"
+    $nodeTimeoutSeconds = if ($env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS) { [int]$env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS } else { 180 }
+    if ($nodeTimeoutSeconds -lt 30) { $nodeTimeoutSeconds = 30 }
+    $nodeProcess = Start-Process -FilePath $node -ArgumentList $args -RedirectStandardOutput $StdoutLog -RedirectStandardError $StderrLog -PassThru -WindowStyle Hidden
+    if (-not $nodeProcess.WaitForExit($nodeTimeoutSeconds * 1000)) {
+      try { Stop-Process -Id $nodeProcess.Id -Force -ErrorAction Stop } catch {}
+      $exitCode = 124
+      Add-Content -LiteralPath $StderrLog -Value "writer_node_timeout_seconds=$nodeTimeoutSeconds" -Encoding utf8
+    } else {
+      $exitCode = [int]$nodeProcess.ExitCode
+    }
+    if ($exitCode -eq 0) { break }
+    $stderrText = if (Test-Path -LiteralPath $StderrLog) { Get-Content -LiteralPath $StderrLog -Raw -ErrorAction SilentlyContinue } else { "" }
+    $stdoutText = if (Test-Path -LiteralPath $StdoutLog) { Get-Content -LiteralPath $StdoutLog -Raw -ErrorAction SilentlyContinue } else { "" }
+    $transient = "$stderrText`n$stdoutText" -match "fetch failed|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|timeout|aborted|HTTP 5\d\d|502|503|504|521|522|429"
+    if (-not $transient -or $attempt -ge $attempts) { break }
+    Write-WrapperLog "RETRY transient_exit_$exitCode attempt=$attempt/$attempts"
+    if ($retrySeconds -gt 0) { Start-Sleep -Seconds $retrySeconds }
+  }
   if ($exitCode -ne 0) {
-    Write-FailureArtifact $exitCode "writer_exit_$exitCode"
-    Write-WrapperLog "FAIL writer_exit_$exitCode stdout=$StdoutLog stderr=$StderrLog"
+    $diagnostic = (($stderrText + " " + $stdoutText) -replace "[\r\n]+", " ").Trim()
+    if ($diagnostic.Length -gt 500) { $diagnostic = $diagnostic.Substring(0, 500) }
+    Write-FailureArtifact $exitCode "writer_exit_$exitCode detail=$diagnostic"
+    Write-WrapperLog "FAIL writer_exit_$exitCode detail=$diagnostic stdout=$StdoutLog stderr=$StderrLog"
     exit $exitCode
   }
-  # Keep historical logs, but remove the current failure pointer after a
-  # successful tick so watchdogs do not read an obsolete timeout as live state.
-  $failureArtifact = Join-Path $StateDir "daytrade-source-writer.failure.json"
-  Remove-Item -LiteralPath $failureArtifact -Force -ErrorAction SilentlyContinue
+  Invoke-Strategy2V3LiveHook
   Write-WrapperLog "DONE ok stdout=$StdoutLog stderr=$StderrLog"
   exit 0
 } catch {
@@ -298,4 +417,8 @@ try {
     try { $Mutex.ReleaseMutex() | Out-Null } catch {}
   }
   try { $Mutex.Dispose() } catch {}
+  if ($CrossSessionLockStream) {
+    try { $CrossSessionLockStream.Dispose() } catch {}
+    try { Remove-Item -LiteralPath $CrossSessionLockPath -Force -ErrorAction SilentlyContinue } catch {}
+  }
 }

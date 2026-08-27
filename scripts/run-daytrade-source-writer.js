@@ -171,6 +171,9 @@ const REST_PRIORITY_BATCH_LIMIT = Math.max(1, Math.min(500, positiveNumber(proce
 const MOTHER_POOL_MIN_PRICE = Math.max(50, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_PRICE ?? CONFIG.motherPool?.minimumPrice, 50));
 const MOTHER_POOL_MIN_TURNOVER_RATE = Math.max(1, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_TURNOVER_RATE ?? CONFIG.motherPool?.minimumTurnoverRate, 1));
 const MOTHER_POOL_RULE_VERSION = 'daytrade_mother_pool_dynamic_300_600_deep_scan_20260813_v5';
+const PREOPEN_REFERENCE_PRICE_CACHE_MS = Math.max(60000, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_CACHE_MS || 15 * 60 * 1000));
+const PREOPEN_REFERENCE_PRICE_MIN_ROWS = Math.max(300, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_MIN_ROWS || 1000));
+let preopenReferencePriceCache = { loadedAt: 0, tradeDate: '', source: 'unavailable', bySymbol: new Map() };
 const USER_CASE_SYMBOLS = new Set(String(process.env.DAYTRADE_MOTHER_POOL_USER_CASE_SYMBOLS || '8069,6213,3042,4956,3105')
   .split(',')
   .map((value) => normalizeCode(value))
@@ -215,6 +218,9 @@ const MIN_READY_MA20_CONTINUOUS = positiveNumber(process.env.DAYTRADE_MIN_READY_
 const MIN_READY_MA35_CONTINUOUS = positiveNumber(process.env.DAYTRADE_MIN_READY_MA35_CONTINUOUS, 1500);
 const MIN_INTRADAY_1M_READY_COVERAGE = positiveNumber(process.env.DAYTRADE_MIN_INTRADAY_1M_READY_COVERAGE || CONFIG.intraday1m?.minReadyCoverageForA, 0.90);
 const MIN_PRIORITY_INTRADAY_1M_READY_COVERAGE = positiveNumber(process.env.DAYTRADE_MIN_PRIORITY_INTRADAY_1M_READY_COVERAGE || CONFIG.intraday1m?.minPriorityReadyCoverageForA, 0.90);
+// Indicator readiness follows the same scoped 90% tolerance as formal 1m
+// coverage; remaining rows retain per-symbol DATA_GAP instead of blocking all.
+const MIN_INDICATOR_WARMUP_COVERAGE = positiveNumber(process.env.DAYTRADE_MIN_INDICATOR_WARMUP_COVERAGE, 0.90);
 const REQUIRE_MA35_FOR_FORMAL_DAYTRADE = envFlag("DAYTRADE_REQUIRE_MA35_FOR_FORMAL_ENTRY");
 const REQUIRE_FUTOPT_FOR_FORMAL_DAYTRADE = envFlag("DAYTRADE_REQUIRE_FUTOPT_FOR_FORMAL_ENTRY");
 const MIN_FUTOPT_MAPPED = positiveNumber(process.env.DAYTRADE_MIN_FUTOPT_MAPPED, 1);
@@ -786,8 +792,14 @@ function evaluateMotherPoolBasePool(row, metrics) {
   const turnoverRateValue = Number(metrics.turnoverRate);
   const hasTurnoverBasis = Number(metrics.issuedShares) > 0 && Number(metrics.totalVolume) > 0;
   if (MOTHER_POOL_MIN_TURNOVER_RATE > 0) {
+    const turnoverGraceActive = taipeiMinutes() < (9 * 60 + 10);
     if (Number.isFinite(turnoverRateValue) && turnoverRateValue > 0) {
-      if (turnoverRateValue < MOTHER_POOL_MIN_TURNOVER_RATE) failedChecks.push(`turnover_rate_below_${MOTHER_POOL_MIN_TURNOVER_RATE}`);
+      if (turnoverRateValue < MOTHER_POOL_MIN_TURNOVER_RATE) {
+        // Early opening turnover is naturally below 1%. Preserve discovery
+        // until 09:10 as trial/watch instead of hard-rejecting candidates.
+        if (turnoverGraceActive) pendingChecks.push("turnover_rate_trial_or_watch_before_0910");
+        else failedChecks.push(`turnover_rate_below_${MOTHER_POOL_MIN_TURNOVER_RATE}`);
+      }
     } else if (taipeiMinutes() >= 9 * 60 || hasTurnoverBasis) {
       pendingChecks.push("turnover_rate_pending");
     }
@@ -935,6 +947,78 @@ async function fetchDailyVolumeAvg() {
   combined.source = combined.source || "missing_daily_volume";
   combined.readErrors = readErrors;
   return combined;
+}
+function taipeiDateDaysAgo(days) {
+  const date = new Date(Date.now() - Math.max(0, Number(days) || 0) * 24 * 60 * 60 * 1000);
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+async function fetchPreopenReferencePriceMap() {
+  const tradeDate = taipeiDate();
+  const cacheAgeMs = Date.now() - Number(preopenReferencePriceCache.loadedAt || 0);
+  if (
+    preopenReferencePriceCache.tradeDate === tradeDate
+    && cacheAgeMs >= 0
+    && cacheAgeMs <= PREOPEN_REFERENCE_PRICE_CACHE_MS
+  ) {
+    return preopenReferencePriceCache.bySymbol;
+  }
+
+  const sources = [
+    { resource: "stock_daily_volume", select: "symbol,trade_date,close", source: "stock_daily_volume" },
+    { resource: "finmind_daily_ohlcv", select: "symbol,trade_date,close", source: "finmind_daily_ohlcv" },
+  ];
+  let best = new Map();
+  let bestSource = "unavailable";
+  for (let daysAgo = 1; daysAgo <= 7; daysAgo += 1) {
+    const referenceDate = taipeiDateDaysAgo(daysAgo);
+    for (const candidate of sources) {
+      try {
+        const rows = await supabaseGetPaged(
+          candidate.resource,
+          `select=${candidate.select}&trade_date=eq.${referenceDate}&order=symbol.asc`,
+          { service: true },
+        );
+        const bySymbol = new Map(rows
+          .map((row) => {
+            const symbol = normalizeCode(row.symbol);
+            const close = numberValue(row.close);
+            return symbol && close > 0
+              ? [symbol, { close, tradeDate: referenceDate, source: candidate.source }]
+              : null;
+          })
+          .filter(Boolean));
+        if (bySymbol.size > best.size) {
+          best = bySymbol;
+          bestSource = `${candidate.source}:${referenceDate}`;
+        }
+        if (bySymbol.size >= PREOPEN_REFERENCE_PRICE_MIN_ROWS) {
+          preopenReferencePriceCache = {
+            loadedAt: Date.now(),
+            tradeDate,
+            source: bestSource,
+            bySymbol,
+          };
+          return bySymbol;
+        }
+      } catch {
+        // A daily-close enrichment outage leaves the symbol price pending; it
+        // must not fabricate a value or affect the live quote/formal gate.
+      }
+    }
+  }
+  preopenReferencePriceCache = {
+    loadedAt: Date.now(),
+    tradeDate,
+    source: bestSource,
+    bySymbol: best,
+  };
+  return best;
 }
 async function fetchExistingDaytradeQuotes() {
   const quoteMap = new Map();
@@ -1387,9 +1471,28 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const margin = supplementalMaps.marginChangeMap?.get(symbol) || {};
   const stockFuture = supplementalMaps.stockFutureInitialMap?.get(symbol) || {};
   const groupContract = supplementalMaps.stockGroupContractMap?.get(symbol) || {};
-  const price = firstNumber(quote.price, quote.close, payload.price, payload.close);
+  const preopenReference = supplementalMaps.preopenReferencePriceMap?.get(symbol) || {};
+  const currentMinutes = taipeiMinutes();
+  const livePrice = firstNumber(quote.price, quote.close, payload.price, payload.close, payload.lastPrice, payload.last_price);
+  // Prior-day formal close is a warmup-only price eligibility input. It never
+  // satisfies quote freshness or any post-open/formal decision requirement.
+  const preopenReferencePrice = firstNumber(preopenReference.close);
+  const price = livePrice > 0
+    ? livePrice
+    : (currentMinutes < 9 * 60 ? preopenReferencePrice : 0);
   const openPrice = firstNumber(quote.open_price, payload.openPrice, payload.open_price);
-  const previousClose = firstNumber(quote.previous_close, payload.previousClose, payload.previous_close);
+  const previousClose = firstNumber(
+    quote.previous_close,
+    quote.prevClose,
+    quote.reference_price,
+    quote.referencePrice,
+    payload.previousClose,
+    payload.previous_close,
+    payload.prevClose,
+    payload.referencePrice,
+    payload.reference_price,
+    preopenReferencePrice,
+  );
   const changePercent = firstNumber(
     quote.change_percent,
     payload.changePercent,
@@ -1403,7 +1506,6 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const volumeRatio5 = avgVolume5 > 0 ? totalVolume / avgVolume5 : 0;
   const quotePresent = quoteMap?.has(symbol) === true;
   const quoteFresh = ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS;
-  const currentMinutes = taipeiMinutes();
   const sessionElapsedMinutes = currentMinutes >= 540 && currentMinutes <= 810
     ? Math.max(1, Math.min(270, currentMinutes - 540 + 1))
     : 0;
@@ -2933,6 +3035,31 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     ...row,
     basePool: evaluateMotherPoolBasePool(row, row.metrics),
   }));
+  // After 09:10, low turnover normally downgrades a symbol. It must not erase
+  // a live burst, stock-future, or already-known strategy/watchlist candidate.
+  // This is a Mother Pool retention rule only; quote freshness and all trading
+  // hard filters remain enforced by evaluateMotherPoolBasePool.
+  for (const candidate of candidates) {
+    const failedChecks = candidate.basePool?.failedChecks || [];
+    const turnoverFailure = `turnover_rate_below_${MOTHER_POOL_MIN_TURNOVER_RATE}`;
+    if (!failedChecks.includes(turnoverFailure)) continue;
+    const seedSources = sourceSeedBySymbol.get(candidate.symbol)?.sources || [];
+    const metrics = candidate.metrics || {};
+    const retentionReasons = [
+      metrics.surgeFlag === true || metrics.rapidGainIncrease === true ? "intraday_surge" : "",
+      metrics.volumeSpikeFlag === true || metrics.volumeRatio5 >= 2 || metrics.estimatedVolumeRatio >= 2 ? "intraday_volume_spike" : "",
+      metrics.stockFutureInitial0846Ok === true ? "stock_future_sync" : "",
+      metrics.trackedBuyPointActive === true ? "tracked_buy_point" : "",
+      seedSources.length ? "strategy_or_watchlist_seed" : "",
+    ].filter(Boolean);
+    if (!retentionReasons.length) continue;
+    candidate.basePool.failedChecks = failedChecks.filter((check) => check !== turnoverFailure);
+    candidate.basePool.turnoverRetentionReasons = retentionReasons;
+    candidate.basePool.eligible = candidate.basePool.failedChecks.length === 0
+      && candidate.basePool.pendingChecks.length === 0;
+    candidate.basePool.pending = candidate.basePool.failedChecks.length === 0
+      && candidate.basePool.pendingChecks.length > 0;
+  }
   const qualifiedCandidates = candidates.filter((row) => row.basePool.eligible);
   const pendingCandidates = candidates.filter((row) => !row.basePool.eligible && row.basePool.pending);
   const basePoolFailureCounts = {};
@@ -2944,10 +3071,10 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   // The ordinary-stock mother pool warms from the full active universe.
   // Pending quote/volume fields may enter the warming pool, but formal entry
   // still requires fresh quotes and every canonical gate condition below.
-  // Before the open, retain quote/volume-pending rows with a known price in a
+  // Until 09:10, retain quote/volume/turnover-pending rows with a known price in a
   // warming-only layer. This preserves full-market discovery without letting
   // an unknown/low price, or any other hard failure, enter a formal pool.
-  const warmingPhase = taipeiMinutes() < 9 * 60;
+  const warmingPhase = taipeiMinutes() < (9 * 60 + 10);
   const warmingPendingCandidates = pendingCandidates.filter((row) =>
     Number(row.metrics?.price) >= MOTHER_POOL_MIN_PRICE
     && !(row.basePool.pendingChecks || []).includes("price_pending"));
@@ -3391,6 +3518,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         basePoolPending: row.basePool.pending,
         basePoolFailedChecks: row.basePool.failedChecks,
         basePoolPendingChecks: row.basePool.pendingChecks,
+        turnoverRetentionReasons: row.basePool.turnoverRetentionReasons || [],
       },
     };
   }).sort((a, b) => Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true) || b.entryScore - a.entryScore || a.symbol.localeCompare(b.symbol));
@@ -3464,12 +3592,25 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     const wantsDeepScan = !warmingPending && (index + 1 <= HOT_POOL_MAX_SYMBOLS || userTracked || row.userCaseSeedMatched === true || row.userCaseLearningActive === true || row.priorityMetrics?.trackedBuyPointActive === true || intradayBurst);
     const rowDataGap = row.priorityMetrics?.dataGap || {};
     const rowDataGapReason = String(rowDataGap.data_gap_reason || rowDataGap.status || "OK").toUpperCase();
+    // The 09:00-10:30 coverage SLA is a hard audit once the window closes.
+    // Before 10:30, formal deep scan may start from a fresh same-day 20-bar
+    // window; it must not wait for candles that have not happened yet. Once
+    // the window closes, require 90% of the complete 09:00-10:30 window.
+    const earlySessionSlaDue = taipeiMinutes() >= (10 * 60 + 30);
+    const requiredFormalCandleCount = earlySessionSlaDue
+      ? Math.max(20, Math.ceil(91 * MIN_INTRADAY_1M_READY_COVERAGE))
+      : 20;
     const rowFormal1mReady = rowDataGapReason === "OK"
       && rowDataGap.has_required_1m_window === true
-      && rowDataGap.has_0900_1030_continuous === true
-      && numberValue(rowDataGap.candle_count) >= Math.max(20, Math.ceil(91 * MIN_INTRADAY_1M_READY_COVERAGE))
+      && (!earlySessionSlaDue || rowDataGap.has_0900_1030_continuous === true)
+      && numberValue(rowDataGap.candle_count) >= requiredFormalCandleCount
       && numberValue(rowDataGap.intraday_1m_stale_seconds, 999999) <= MAX_INTRADAY_1M_STALE_SECONDS;
-    const deepScanEligible = wantsDeepScan && (taipeiMinutes() < 9 * 60 || rowFormal1mReady);
+    // Pool membership is the queue for candle warmup and DATA_GAP diagnostics.
+    // Do not make same-day 1m readiness a prerequisite here: that creates a
+    // circular gate where an incomplete symbol never reaches the deep-scan
+    // queue that is responsible for filling and reporting its candles.
+    // Formal publication remains gated later by rowFormal1mReady coverage.
+    const deepScanEligible = wantsDeepScan;
     const candlesPriorityReasons = [wantsDeepScan ? "formal_deep_scan_candidate" : "", index + 1 <= HOT_POOL_MAX_SYMBOLS ? "hot_pool" : "", userTracked ? "user_watchlist" : "", row.userCaseSeedMatched === true ? "designated_case" : "", row.userCaseLearningActive === true ? "case_pattern" : "", row.priorityMetrics?.trackedBuyPointActive === true ? "tracked_buy_point" : "", intradayBurst ? "intraday_surge_or_volume_spike" : ""].filter(Boolean);
     return ({
       poolReasons: Array.isArray(row.poolReasons) && row.poolReasons.length ? [...new Set(row.poolReasons)] : ["radar_rotation_fill"],
@@ -4025,8 +4166,18 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   // Discovery and formal scanning use dynamic priority/hot/deep-scan pools.
   // Legacy rank fields remain readback-only and never define a hard gate.
   const hotPriorityRows = priorityRows.slice(0, HOT_POOL_MAX_SYMBOLS);
-  const priorityExtensionRows = priorityRows.slice(DEEP_SCAN_POOL_MAX_SYMBOLS, HOT_POOL_MAX_SYMBOLS);
-  const formalPriorityRows = priorityRows.slice(0, DEEP_SCAN_POOL_MAX_SYMBOLS);
+  const priorityExtensionRows = priorityRows.slice(HOT_POOL_MAX_SYMBOLS, MOTHER_POOL_MAX_SYMBOLS);
+  // Formal readiness follows the high-frequency hot pool plus explicit user/case/burst symbols.
+  // The larger deep-scan queue remains eligible for candle fill and emits DATA_GAP per symbol.
+  const formalPriorityRows = priorityRows.filter((row, index) => {
+    const flags = Array.isArray(row.sourceFlags) ? row.sourceFlags : [];
+    return index < HOT_POOL_MAX_SYMBOLS
+      || flags.some((source) => /manual_watchlist|user_watchlist/i.test(String(source)))
+      || row.userCaseSeedMatched === true
+      || row.userCaseLearningActive === true
+      || row.hotBurstFastPath === true
+      || row.priorityMetrics?.trackedBuyPointActive === true;
+  });
   const minFormalPrioritySymbols = 1;
   const quoteTransport = webSocketStatus.mode === "streaming"
     ? `websocket_${(webSocketStatus.streamingChannel || "streaming").replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "")}`
@@ -4045,6 +4196,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const freshFull = [];
   const freshPriority = [];
   const freshFormalPriority = [];
+  const formalPriorityAges = [];
   const freshDeepScan = [];
   const quoteAges = [];
   let lastQuoteAt = "";
@@ -4071,7 +4223,9 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   }
   for (const symbol of formalPrioritySet) {
     const quote = quoteMap.get(symbol);
-    if (ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS) freshFormalPriority.push(symbol);
+    const quoteAge = ageSeconds(quoteFreshnessTime(quote));
+    formalPriorityAges.push(quote ? quoteAge : 999999);
+    if (quoteAge <= WINDOW_SECONDS) freshFormalPriority.push(symbol);
   }
 
   const priorityPoolSymbols = prioritySet.size;
@@ -4085,6 +4239,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const freshQuoteCoverage = activeCount ? freshFull.length / activeCount : 0;
   const priorityFreshCoverage = priorityPoolSymbols ? freshPriority.length / priorityPoolSymbols : 0;
   const formalPriorityFreshCoverage = formalPriorityPoolSymbols ? freshFormalPriority.length / formalPriorityPoolSymbols : 0;
+  const formalPriorityMaxAge = formalPriorityAges.length ? Math.max(...formalPriorityAges) : 999999;
   const deepScanFreshCoverage = deepScanPoolSymbols ? [...deepScanSet].filter((symbol) => ageSeconds(quoteFreshnessTime(quoteMap.get(symbol))) <= WINDOW_SECONDS).length / deepScanPoolSymbols : 0;
   const motherFreshCoverage = motherPoolSymbols ? freshMother.length / motherPoolSymbols : 0;
   const priorityMaxAge = priorityAges.length ? Math.max(...priorityAges) : 999999;
@@ -4243,20 +4398,32 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const intraday1mReadyCoverage = motherPoolSymbols ? intraday1mReadySymbols / motherPoolSymbols : 0;
   const priorityIntraday1mReadySymbols = [...prioritySet].filter((symbol) => intraday1mReadySet.has(symbol)).length;
   const priorityIntraday1mReadyCoverage = priorityPoolSymbols ? priorityIntraday1mReadySymbols / priorityPoolSymbols : 0;
-  // Mother Pool discovers candidates. Formal Strategy2 water is measured only
-  // against priority/hot/deep-scan symbols, never against the discovery pool.
-  const formalScanPoolSymbols = deepScanPoolSymbols;
-  const formalScanIntraday1mReadySymbols = [...deepScanSet].filter((symbol) => intraday1mReadySet.has(symbol)).length;
+  // Formal readiness is measured against high-frequency hot plus explicit tracked/case/burst symbols.
+  // Deep scan is a discovery/candle-fill queue: missing rows stay visible as DATA_GAP and cannot
+  // make the already-ready formal scope fail merely because the queue is intentionally larger.
+  const formalScanPoolSymbols = formalPrioritySet.size;
+  const formalScanIntraday1mReadySymbols = [...formalPrioritySet].filter((symbol) => intraday1mReadySet.has(symbol)).length;
   const formalScanIntraday1mReadyCoverage = formalScanPoolSymbols ? formalScanIntraday1mReadySymbols / formalScanPoolSymbols : 0;
+  const formalScanIntraday1mDataGapSymbols = [...formalPrioritySet]
+    .filter((symbol) => !intraday1mReadySet.has(symbol));
   const deepScanIntraday1mDataGapSymbols = [...deepScanSet]
     .filter((symbol) => !intraday1mReadySet.has(symbol));
+  const formalScanIntraday1mFreshAges = [...formalPrioritySet]
+    .filter((symbol) => intraday1mReadySet.has(symbol))
+    .map((symbol) => Math.min(
+      numberValue(intradayMap.get(symbol)?.latest_candle_age_seconds, 999999),
+      intraday1mStaleSeconds,
+    ));
+  // DATA_GAP is per-symbol. One missing/stale deep-scan candle cannot mark the formal scope stale.
+  const formalScanIntraday1mFreshMaxAgeSeconds = formalScanIntraday1mFreshAges.length
+    ? Math.max(...formalScanIntraday1mFreshAges)
+    : 999999;
   const deepScanIntraday1mFreshAges = [...deepScanSet]
     .filter((symbol) => intraday1mReadySet.has(symbol))
     .map((symbol) => Math.min(
       numberValue(intradayMap.get(symbol)?.latest_candle_age_seconds, 999999),
       intraday1mStaleSeconds,
     ));
-  // DATA_GAP is per-symbol. One missing/stale candle cannot mark an otherwise-ready formal pool stale.
   const deepScanIntraday1mFreshMaxAgeSeconds = deepScanIntraday1mFreshAges.length
     ? Math.max(...deepScanIntraday1mFreshAges)
     : 999999;
@@ -4265,22 +4432,38 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const intraday1mCoverageGateReady = formalScanPoolSymbols >= minFormalPrioritySymbols
     && formalScanIntraday1mReadySymbols >= intraday1mReadyMinSymbols
     && formalScanIntraday1mReadyCoverage >= MIN_INTRADAY_1M_READY_COVERAGE
-    && deepScanIntraday1mFreshMaxAgeSeconds <= MAX_INTRADAY_1M_STALE_SECONDS;
+    && formalScanIntraday1mFreshMaxAgeSeconds <= MAX_INTRADAY_1M_STALE_SECONDS;
   const scannerCanRunQuoteOnly = formalScanPoolSymbols >= minFormalPrioritySymbols
-    && deepScanFreshCoverage >= MIN_PRIORITY_FRESH_COVERAGE
+    && formalPriorityFreshCoverage >= MIN_PRIORITY_FRESH_COVERAGE
     && rateLimitStatus === "ok";
-  const effectiveMa20Required = Math.min(MIN_READY_MA20_CONTINUOUS, Math.max(1, formalScanPoolSymbols));
-  const effectiveMa35Required = Math.min(MIN_READY_MA35_CONTINUOUS, Math.max(1, formalScanPoolSymbols));
-  const scannerCanRunOpening = scannerCanRunQuoteOnly
+  const scopedIndicatorRequired = Math.max(1, Math.ceil(formalScanPoolSymbols * MIN_INDICATOR_WARMUP_COVERAGE));
+  const effectiveMa20Required = Math.min(MIN_READY_MA20_CONTINUOUS, scopedIndicatorRequired);
+  const effectiveMa35Required = Math.min(MIN_READY_MA35_CONTINUOUS, scopedIndicatorRequired);
+  // Before 09:00, a quiet stock has no new trade by design. Warmup health is
+  // therefore a transport/data-base check, not an impossible per-symbol trade
+  // freshness threshold. The strict quote and same-day 1m requirements resume
+  // exactly at 09:00 for every formal decision.
+  const warmupTransportHealthy = webSocketStatus.formalReady
+    && numberValue(webSocketStatus.statusAgeSeconds, 999999) <= MAX_QUOTE_AGE_SECONDS;
+  // Historical MA20/35 warmup is tracked before the open, but it cannot
+  // block source readiness: no same-day 1m evidence exists yet. After 09:00
+  // strictScannerCanRunOpening keeps the formal MA coverage requirements.
+  const warmupIndicatorsAvailable = readyMa20 > 0
+    && (!REQUIRE_MA35_FOR_FORMAL_DAYTRADE || readyMa35 > 0);
+  const warmupGateReady = !after0900
+    && motherPoolSymbols >= MOTHER_POOL_MIN_SYMBOLS
+    && formalScanPoolSymbols >= minFormalPrioritySymbols
+    && dailyVolumeStatus === "ready"
+    && rateLimitStatus === "ok"
+    && warmupTransportHealthy;
+  const strictScannerCanRunOpening = scannerCanRunQuoteOnly
     && dailyVolumeStatus === "ready"
     && readyMa20 >= effectiveMa20Required
     && (!REQUIRE_MA35_FOR_FORMAL_DAYTRADE || readyMa35 >= effectiveMa35Required)
     && (!after0900 || formalScanIntraday1mReadyCoverage >= MIN_INTRADAY_1M_READY_COVERAGE)
     && opening0901GateOk;
-  const scannerCanRunPreopen = scannerCanRunQuoteOnly
-    && dailyVolumeStatus === "ready"
-    && readyMa20 >= effectiveMa20Required
-    && (!REQUIRE_MA35_FOR_FORMAL_DAYTRADE || readyMa35 >= effectiveMa35Required);
+  const scannerCanRunOpening = after0900 ? strictScannerCanRunOpening : warmupGateReady;
+  const scannerCanRunPreopen = warmupGateReady;
   const scannerCanRunIntraday = scannerCanRunOpening
     && after0900
     && today1mSymbols > 0
@@ -4293,7 +4476,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     : quoteRows > 0
     ? "stale"
     : "empty";
-  const preopenStatus = selectedSymbolsFreshOk
+  const preopenStatus = warmupGateReady
     ? "ready"
     : priorityPoolSymbols >= minFormalPrioritySymbols && freshPriority.length > 0
     ? "degraded"
@@ -4316,7 +4499,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
       : "empty"
     : "not_required_preopen";
 
-  const priorityGateA = sourceGateA({
+  const strictPriorityGateA = sourceGateA({
     after0830,
     after0845,
     after0900,
@@ -4343,6 +4526,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     strategyChipCompleteLatestRun,
     minPriorityPoolSymbols: minFormalPrioritySymbols,
   });
+  const priorityGateA = after0900 ? strictPriorityGateA : warmupGateReady;
   const fullMarketGateA = freshFull.length >= TARGET_FRESH_QUOTES && freshQuoteCoverage >= MIN_FRESH_QUOTE_COVERAGE;
   const motherRuleCounts = {};
   const motherFieldCoverageCounts = {};
@@ -4362,7 +4546,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const stockFutureInitialRows = [...(supplementalMaps.stockFutureInitialMap || new Map()).values()];
   const stockGroupMeta = supplementalMaps.stockGroupContractMap?.meta || { source: "missing", rows: 0 };
   const offSession = ["closed_before_0600", "after_daytrade_window"].includes(phase);
-  const formalEntryWindow = !offSession && after0845;
+  const formalEntryWindow = !offSession && after0900;
   const openingBoostActive = ["opening_boost_0845_0859", "opening_detection_0900_0934"].includes(phase)
     && quoteFetchAllowedForPhase(phase)
     && FETCH_ENABLED
@@ -4378,7 +4562,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
       : "opening_boost_waiting_for_priority_freshness"
     : `phase_${phase}`;
   const priorityGateGrade = priorityGateA ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : "D";
-  const gateGrade = priorityGateA && formalEntryWindow && webSocketStatus.formalReady ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : freshFull.length > 0 ? "C" : "D";
+  const gateGrade = priorityGateA && webSocketStatus.formalReady ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : freshFull.length > 0 ? "C" : "D";
   const sourceInjecting = !offSession && ["ready", "degraded"].includes(quoteStatus) && quoteRows > 0;
   const status = offSession ? "stopped" : gateGrade === "A" ? "ok" : sourceInjecting ? "degraded" : "stale";
   const failedChecks = [];
@@ -4390,10 +4574,10 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   // Mother pool is the full-market discovery layer. Formal entry uses dynamic priority/hot/deep-scan pools.
   const motherPoolFreshnessWarning = !offSession && motherFreshCoverage < 0.8;
   if (!offSession && priorityPoolSymbols < minFormalPrioritySymbols) failedChecks.push('priority_pool_empty');
-  if (!offSession && priorityFreshCoverage < MIN_PRIORITY_FRESH_COVERAGE) failedChecks.push('priority_pool_fresh_coverage_below_' + String(Math.round(MIN_PRIORITY_FRESH_COVERAGE * 100)).padStart(2, '0'));
+  if (!offSession && after0900 && priorityFreshCoverage < MIN_PRIORITY_FRESH_COVERAGE) failedChecks.push('priority_pool_fresh_coverage_below_' + String(Math.round(MIN_PRIORITY_FRESH_COVERAGE * 100)).padStart(2, '0'));
 
   // Strategy/chip results are a formal-entry dependency after the opening gate; before then they remain warmup evidence.
-  if (!offSession && latestQuoteAge > MAX_QUOTE_AGE_SECONDS) failedChecks.push('quote_stale');
+  if (!offSession && after0900 && latestQuoteAge > MAX_QUOTE_AGE_SECONDS) failedChecks.push('quote_stale');
   if (!offSession && dailyVolumeStatus !== 'ready') failedChecks.push('daily_volume_not_ready');
   if (!offSession && after0900 && motherPoolSymbols < MOTHER_POOL_MIN_SYMBOLS) discoveryWarnings.push('intraday_1m_mother_pool_discovery_below_target_warning');
   if (!offSession && after0900 && formalScanIntraday1mReadySymbols < intraday1mReadyMinSymbols) failedChecks.push('intraday_1m_ready_symbols_below_dynamic_min');
@@ -4445,6 +4629,11 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     quote_source_daytrade_ok: quoteSourceDaytradeOk,
     intraday_1m_source_daytrade_ok: intraday1mSourceDaytradeOk,
     formal_source_alignment_ok: formalSourceAlignmentOk,
+    warmup_gate_ready: warmupGateReady,
+    warmup_transport_healthy: warmupTransportHealthy,
+    warmup_indicators_available: warmupIndicatorsAvailable,
+    warmup_reference_price_symbols: supplementalMaps.preopenReferencePriceMap?.size || 0,
+    warmup_reference_price_source: preopenReferencePriceCache.source,
     reason_code: reasonCode,
     failed_checks: failedChecks,
     discovery_warnings: discoveryWarnings,
@@ -4550,6 +4739,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     intraday_1m_ready_min_symbols: intraday1mReadyMinSymbols,
     intraday_1m_ready_coverage_min: MIN_INTRADAY_1M_READY_COVERAGE,
     priority_intraday_1m_ready_coverage_min: MIN_PRIORITY_INTRADAY_1M_READY_COVERAGE,
+    indicator_warmup_coverage_min: MIN_INDICATOR_WARMUP_COVERAGE,
     mother_pool_symbols: priorityRows.length,
     mother_pool_fresh_coverage_120s: Number(motherFreshCoverage.toFixed(4)),
     mother_pool_fresh_quotes_120s: freshMother.length,
@@ -4591,6 +4781,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     formal_deep_scan_symbols: formalPriorityPoolSymbols,
     formal_deep_scan_fresh_quotes_120s: freshFormalPriority.length,
     formal_deep_scan_fresh_quote_coverage_120s: Number(formalPriorityFreshCoverage.toFixed(4)),
+    formal_scan_max_quote_age_seconds: formalPriorityMaxAge,
     formal_scan_pool_symbols: formalScanPoolSymbols,
     mother_pool_fresh_quotes_120s: freshMother.length,
     mother_pool_fresh_coverage_120s: Number(motherFreshCoverage.toFixed(4)),
@@ -4653,10 +4844,13 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     formal_scan_pool_symbols: formalScanPoolSymbols,
     formal_scan_intraday_1m_ready_symbols: formalScanIntraday1mReadySymbols,
     formal_scan_intraday_1m_ready_coverage: Number(formalScanIntraday1mReadyCoverage.toFixed(4)),
-    formal_scan_intraday_1m_fresh_max_age_seconds: deepScanIntraday1mFreshMaxAgeSeconds,
-    formal_scan_intraday_1m_data_gap_count: deepScanIntraday1mDataGapSymbols.length,
-    formal_scan_intraday_1m_data_gap_symbols: deepScanIntraday1mDataGapSymbols,
-    formal_scan_intraday_1m_data_gap_status: deepScanIntraday1mDataGapSymbols.length ? 'DATA_GAP' : 'ready',
+    formal_scan_intraday_1m_fresh_max_age_seconds: formalScanIntraday1mFreshMaxAgeSeconds,
+    formal_scan_intraday_1m_data_gap_count: formalScanIntraday1mDataGapSymbols.length,
+    formal_scan_intraday_1m_data_gap_symbols: formalScanIntraday1mDataGapSymbols,
+    formal_scan_intraday_1m_data_gap_status: formalScanIntraday1mDataGapSymbols.length ? 'DATA_GAP' : 'ready',
+    deep_scan_intraday_1m_data_gap_count: deepScanIntraday1mDataGapSymbols.length,
+    deep_scan_intraday_1m_data_gap_symbols: deepScanIntraday1mDataGapSymbols,
+    deep_scan_intraday_1m_data_gap_status: deepScanIntraday1mDataGapSymbols.length ? 'DATA_GAP' : 'ready',
     deep_scan_intraday_1m_stale_seconds: deepScanIntraday1mStaleSeconds,
     mother_pool_intraday_1m_ready_symbols: intraday1mReadySymbols,
     intraday_1m_ready_coverage: Number(intraday1mReadyCoverage.toFixed(4)),
@@ -4709,9 +4903,9 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     warmup_start_taipei: "07:00",
     warmup_data_fill_active: warmupDataFillActive,
     off_session: offSession,
-    formal_entry_allowed: !offSession && after0845 && gateGrade === "A" && webSocketStatus.formalReady,
-    latest_update_allowed: !offSession && after0845 && gateGrade === "A" && webSocketStatus.formalReady,
-    preserve_previous_good: offSession || gateGrade !== "A",
+    formal_entry_allowed: !offSession && after0900 && gateGrade === "A" && webSocketStatus.formalReady,
+    latest_update_allowed: !offSession && after0900 && gateGrade === "A" && webSocketStatus.formalReady,
+    preserve_previous_good: offSession || !after0900 || gateGrade !== "A",
     apply_mode: APPLY,
     fetch_enabled: FETCH_ENABLED,
     quote_fetch_allowed_for_phase: warmupDataFillActive && quoteFetchAllowedForPhase(phase),
@@ -5685,11 +5879,14 @@ async function tick() {
   const activeSymbols = await fetchActiveSymbols();
   await refreshStrategyChipPriorityBridge();
   const dailyVolumeMap = await fetchDailyVolumeAvg();
+  const preopenReferencePriceMap = taipeiMinutes() < 9 * 60
+    ? await fetchPreopenReferencePriceMap()
+    : new Map();
   const quoteMap = await fetchExistingDaytradeQuotes();
   // Seed pool ranking from the live WebSocket cache before any enrichment
   // reads, so the first formal readthrough of a tick is freshness-first too.
   mergeWebSocketQuoteCache(quoteMap);
-  const provisionalPriorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, {});
+  const provisionalPriorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, { preopenReferencePriceMap });
   await writeEnrichmentPendingHeartbeat({
     activeSymbols,
     priorityRows: provisionalPriorityRows,
@@ -5705,7 +5902,7 @@ async function tick() {
     fetchStockFutureInitialMap(),
     fetchStockGroupContractMap(),
   ]);
-  const supplementalMaps = { capitalMap, chipMap, marginChangeMap, stockFutureInitialMap, stockGroupContractMap };
+  const supplementalMaps = { capitalMap, chipMap, marginChangeMap, stockFutureInitialMap, stockGroupContractMap, preopenReferencePriceMap };
   let priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
   let intradayMap = await fetchIntradayStatus(activeSymbols);
   supplementalMaps.intradayMap = intradayMap;
@@ -6005,6 +6202,7 @@ async function tick() {
     state: nextState,
     supplementalMaps,
   });
+  result.priorityRows = priorityRows;
   result.quoteMap = quoteMap;
   result.payload.nonfatal_write_errors = fetchResult.errors || [];
   result.payload.websocket_quote_readthrough_written = websocketQuoteReadthroughSync.written || 0;

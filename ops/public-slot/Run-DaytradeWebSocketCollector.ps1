@@ -14,6 +14,7 @@ $mutexName = "Global\FumanFugleDaytradeWebSocketCollector"
 $mutex = $null
 $acquired = $false
 $collectorProcess = $null
+$lastRestartReason = ""
 
 function Get-TaipeiNow {
   [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, "Taipei Standard Time")
@@ -35,6 +36,7 @@ function Write-State {
     prioritySymbolsFile = (Join-Path $cacheDir "fugle-daytrade-ws-priority-symbols.json")
     websocketStatusFile = (Join-Path $stateDir "fugle-daytrade-websocket-status-v2.json")
     maxCollectors = 1
+    lastRestartReason = $script:lastRestartReason
   } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $statusFile -Encoding utf8
 }
 
@@ -43,10 +45,27 @@ function Get-WebSocketStatusAgeSeconds {
   if (-not (Test-Path -LiteralPath $websocketStatusFile)) { return 999999 }
   try {
     $payload = Get-Content -LiteralPath $websocketStatusFile -Raw | ConvertFrom-Json
-    $updatedAt = [DateTimeOffset]::Parse([string]$payload.updatedAt)
-    return [Math]::Max(0, [int]([DateTimeOffset]::UtcNow - $updatedAt.ToUniversalTime()).TotalSeconds)
+    # A low-turnover symbol may have no new trade. Transport health is instead
+    # the freshest writer status, server heartbeat, aggregate update, or stream message.
+    $timestamps = @(
+      $payload.updatedAt,
+      $payload.websocketServerHeartbeatAt,
+      $payload.aggregatesLastUpdatedAt,
+      $payload.websocketLastMessageAt
+    ) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) }
+    $ages = @()
+    foreach ($timestamp in $timestamps) {
+      try {
+        $parsed = [DateTimeOffset]::Parse([string]$timestamp)
+        $ages += [Math]::Max(0, [int]([DateTimeOffset]::UtcNow - $parsed.ToUniversalTime()).TotalSeconds)
+      } catch {}
+    }
+    if ($ages.Count -eq 0) { return 999999 }
+    return ($ages | Measure-Object -Minimum).Minimum
   } catch {
-    return 999999
+    # A concurrent Windows reader/writer can observe a partial status file.
+    # Skip this supervisor poll; a missing file or stale parsed timestamps still fail closed.
+    return 0
   }
 }
 function Stop-OrphanCollectorProcesses {
@@ -103,12 +122,13 @@ try {
   $env:FUGLE_STREAMING_CHANNELS = "trades,aggregates,candles"
   $env:FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS = "1800"
   $env:FUGLE_STREAMING_MAX_SYMBOLS = "2000"
-  # Dynamic Mother Pool: do not keep a legacy fixed TOP40 pin.
-  # The total subscription cap remains the only capacity bound.
-  # Reserve the 1,800-channel budget for the Strategy3 formal candle minimum: 400 priority symbols on all channels plus 600 additional candle symbols = 1,000 candles.
-  $env:FUGLE_STREAMING_PINNED_PRIORITY_SYMBOLS = "400"
-  $env:FUGLE_STREAMING_CANDLE_SYMBOLS = "1000"
-  $env:FUGLE_STREAMING_RESUBSCRIBE_MS = "0"
+  # Dynamic Mother Pool: no fixed TOP40/pinned subset. The collector divides
+  # the 1,800 budget across trades, aggregates, and candles for its current
+  # priority/hot/deep-scan window, then rotates the remaining market universe.
+  $env:FUGLE_STREAMING_RESUBSCRIBE_MS = "300000"
+  $env:FUGLE_STREAMING_PRIORITY_REFRESH_MS = "300000"
+  $env:FUGLE_STREAMING_PRIORITY_RECONNECT_MIN_MS = "300000"
+  $env:FUGLE_STREAMING_CLIENT_PING_MS = "25000"
   $env:FUGLE_STREAMING_RECONNECT_INITIAL_MS = "1000"
   $env:FUGLE_STREAMING_RECONNECT_MAX_MS = "30000"
   $env:FUGLE_STREAMING_STALE_RECONNECT_MS = "120000"
@@ -159,22 +179,17 @@ try {
       }
       $process.Refresh()
       if ($process.HasExited) { break }
-      # Restart a wedged child when the WebSocket stops refreshing its status.
-      $processAgeSeconds = [Math]::Max(0, [int](([DateTimeOffset]::Now - $process.StartTime).TotalSeconds))
-      $statusAgeSeconds = Get-WebSocketStatusAgeSeconds
-      if ($processAgeSeconds -ge 120 -and $statusAgeSeconds -ge 90) {
-        Write-State -Status "restarting" -ProcessId $process.Id -Reason "websocket_status_stale_${statusAgeSeconds}s" -BackoffSeconds $backoff
-        try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
-        break
-      }
-      Start-Sleep -Seconds 5
+      # The Node collector owns WebSocket stale recovery using server heartbeat and
+      # aggregates lastUpdated. The supervisor only restarts an exited child so a
+      # transient status-file read can never discard the formal candle cache.      Start-Sleep -Seconds 5
     }
     if ($stopForWindow) {
       Write-State -Status "stopped_off_session" -ProcessId 0 -Reason "collector_window_closed" -BackoffSeconds 0
       exit 0
     }
     if ($process.ExitCode -eq 0) { $reason = "collector_exit_0" } else { $reason = "collector_exit_$($process.ExitCode)" }
-    Write-State -Status "restarting" -ProcessId $process.Id -Reason $reason -BackoffSeconds $backoff
+    $script:lastRestartReason = $reason
+    Write-State -Status "restarting" -ProcessId $process.Id -Reason $script:lastRestartReason -BackoffSeconds $backoff
     Start-Sleep -Seconds $backoff
     $backoff = [Math]::Min(30, $backoff * 2)
   }
