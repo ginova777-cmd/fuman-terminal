@@ -112,6 +112,12 @@ async function main() {
     '23:10',
     '"Full"',
     '"Checkpoint"',
+    'status = $checkpointStatus',
+    'allowedStatuses = @("PASS", "SELF_HEALED_PASS", "FAIL_CLOSED", "BLOCKED")',
+    'firstBlocker = $firstBlocker',
+    'limitedSelfHealPerformed = $limitedSelfHealPerformed',
+    '$contractFailure',
+    '$dependencyBlocked',
   ]) requireMarker(issues, "run-terminal-master-control.ps1", masterRunner, marker);
   if (!/formalScanSkipped\s+-ne\s+\$true/.test(runner) || !/scannerAction\s+-ne\s+["']skip_formal_scan["']/.test(runner)) addIssue(issues, "root_scanner_date_gate_must_block_formal_scan_skipped");
 
