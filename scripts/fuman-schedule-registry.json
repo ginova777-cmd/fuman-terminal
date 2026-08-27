@@ -54,9 +54,9 @@
       "Fuman Opening Limit Order 0900 Readonly Verify",
       "Fuman Opening Limit Order Morning Readonly 0845",
       "Fuman Opening Report 0820 Preflight",
-      "Fuman Opening Report 0830 LINE Bridge",
+      "Fuman Opening Report 0830 LINE",
       "Fuman Strategy3 V2 Complete Scan 1300",
-      "Fuman Strategy3 V2 Daily Closure Verify 1310",
+      "Fuman Strategy3 V2 Daily Closure Verify 1315",
       "Fuman Strategy3 V2 First Attempt 1255",
       "Fuman Strategy3 V2 Readiness Guard 1230",
       "Fuman Strategy3 V2 Readiness Guard 1250",
@@ -346,7 +346,7 @@
         267009,
         267011
       ],
-      "Fuman Opening Report 0830 LINE Bridge": [
+      "Fuman Opening Report 0830 LINE": [
         0,
         267009,
         267011
@@ -356,7 +356,7 @@
         267009,
         267011
       ],
-      "Fuman Strategy3 V2 Daily Closure Verify 1310": [
+      "Fuman Strategy3 V2 Daily Closure Verify 1315": [
         0,
         267009,
         267011
@@ -1173,8 +1173,8 @@
       ]
     },
     {
-      "taskName": "\\Fuman Opening Report 0830 LINE Bridge",
-      "displayName": "Fuman Opening Report 0830 LINE Bridge",
+      "taskName": "\\Fuman Opening Report 0830 LINE",
+      "displayName": "Fuman Opening Report 0830 LINE",
       "description": "Observed production Windows Task Scheduler entry.",
       "time": "08:30",
       "expectedState": "Ready",
@@ -1193,13 +1193,13 @@
       ]
     },
     {
-      "taskName": "\\Fuman Strategy3 V2 Daily Closure Verify 1310",
-      "displayName": "Fuman Strategy3 V2 Daily Closure Verify 1310",
+      "taskName": "\\Fuman Strategy3 V2 Daily Closure Verify 1315",
+      "displayName": "Fuman Strategy3 V2 Daily Closure Verify 1315",
       "description": "Observed production Windows Task Scheduler entry.",
-      "time": "13:10",
+      "time": "13:15",
       "expectedState": "Ready",
       "expectedTriggers": [
-        "13:10"
+        "13:15"
       ]
     },
     {

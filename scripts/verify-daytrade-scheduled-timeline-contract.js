@@ -9,6 +9,8 @@ const checks = [
   { name: "Fuman Opening Report 0820 Preflight", contains: "run-opening-report-0820-preflight.js" },
   { name: "Fuman Opening Report 0830 LINE", contains: "run-opening-report-0830-production-wrapper.ps1" },
   { name: "Fuman Opening Limit Order Morning Readonly 0840", contains: "Run-OpeningLimitOrderMorningReadonly.ps1" },
+  { name: "Fuman Strategy3 V2 Readiness Guard 1230", contains: "run-strategy3-v2-readiness-guard.ps1" },
+  { name: "Fuman Strategy3 V2 Readiness Guard 1250", contains: "run-strategy3-v2-readiness-guard.ps1" },
   { name: "Fuman Strategy3 V2 First Attempt 1255", contains: "run-strategy3-v2" },
   { name: "Fuman Strategy3 V2 Complete Scan 1300", contains: "run-strategy3-v2-complete-scan.ps1" },
   { name: "Fuman Strategy3 V2 Daily Closure Verify 1315", contains: "verify-strategy3-v2-daily-unattended-closure.js" }
@@ -40,11 +42,12 @@ function queryXml(name) {
 
 const results = checks.map((check) => {
   const raw = query(check.name);
-  const missing = /ERROR:|cannot find the file specified/i.test(raw);
   const xml = queryXml(check.name);
+  // Windows localizes schtasks errors. A valid task XML is the only stable
+  // cross-locale existence signal, rather than parsing localized stderr.
+  const missing = !/<Task\b/i.test(xml);
   const enabled = !missing && !/<Enabled>false<\/Enabled>/i.test(xml);
-  const commandMatches = !missing && raw.includes(check.contains);
-  return {
+  const commandMatches = !missing && raw.includes(check.contains);  return {
     task: check.name,
     exists: !missing,
     enabled,
@@ -63,6 +66,8 @@ console.log(JSON.stringify({
     "08:20 overseas preflight",
     "08:30 morning report",
     "08:40 opening-entry readonly runner",
+    "12:30 Strategy3 readiness guard",
+    "12:50 Strategy3 readiness guard",
     "12:55 Strategy3 first attempt",
     "13:00 Strategy3 complete scan",
     "13:15 Strategy3 closure verify"

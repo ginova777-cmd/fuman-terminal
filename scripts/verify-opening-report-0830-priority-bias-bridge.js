@@ -13,6 +13,35 @@ function argValue(name, fallback = "") {
 function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
 }
+function taipeiTradeDate(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function normalizedDate(value) {
+  const text = String(value || "").trim();
+  if (/^\d{8}$/.test(text)) return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
+}
+
+function findCurrentReceipt(expectedTradeDate) {
+  const compact = String(expectedTradeDate || "").replace(/\D/g, "");
+  const directory = "C:\\fuman-runtime\\data\\scan-receipts";
+  try {
+    const matches = fs.readdirSync(directory)
+      .filter((name) => new RegExp(`^opening-report-0830-priority-bias-bridge-.+-${compact}\\.json$`, "i").test(name))
+      .sort();
+    return matches.length ? path.join(directory, matches[matches.length - 1]) : "";
+  } catch {
+    return "";
+  }
+}
 
 function selfTest() {
   const valid = { date: "2026-08-06", report_time: "08:30", run_id: "daily-20260806-0830", source: "opening_report_0830", mode: "priority_bias_only", industry: "semiconductors", bias: "strong", confidence: 0.9, evidence_summary: "overseas strength", mapped_symbols: ["2330", "2454"], allowed_action: "boost_scan_priority_only", forbidden_action: "publish_formal_candidate_without_taiwan_evidence" };
@@ -34,9 +63,10 @@ function main() {
     if (!result.ok) process.exitCode = 1;
     return;
   }
-  const receiptPath = path.resolve(argValue("--receipt", process.env.OPENING_REPORT_0830_BIAS_RECEIPT || "C:\\fuman-runtime\\data\\scan-receipts\\opening-report-0830-priority-bias-bridge-latest.json"));
-  const receipt = readJson(receiptPath);
-  const issues = [];
+  const expectedTradeDate = normalizedDate(argValue("--trade-date", taipeiTradeDate()));
+  const explicitReceipt = argValue("--receipt", process.env.OPENING_REPORT_0830_BIAS_RECEIPT || "");
+  const receiptPath = explicitReceipt ? path.resolve(explicitReceipt) : findCurrentReceipt(expectedTradeDate);
+  const receipt = receiptPath ? readJson(receiptPath) : null;  const issues = [];
   if (!receipt || receipt.contract !== "opening-report-0830-priority-bias-bridge-v1") issues.push("receipt_missing_or_contract_invalid");
   if (receipt && receipt.received !== true) issues.push("received_not_true");
   if (receipt && receipt.forbidden_publish_guard !== true) issues.push("forbidden_publish_guard_not_true");
@@ -46,8 +76,22 @@ function main() {
   if (receipt && receipt.reason_code !== bridge.constants.REASON_CODE) issues.push("reason_code_invalid");
   if (receipt && receipt.source !== bridge.constants.SOURCE) issues.push("source_invalid");
   if (receipt && receipt.mode !== bridge.constants.MODE) issues.push("mode_invalid");
-  if (receipt && receipt.validation?.ok === true && (!receipt.accepted_symbols?.length || !receipt.applied_boosts?.length)) issues.push("successful_receipt_missing_boosts");
-  const output = { ok: issues.length === 0, contract: "opening-report-0830-priority-bias-bridge-v1-verifier", checked_at: new Date().toISOString(), receipt_path: receiptPath, receipt, issues };
+  const receiptTradeDate = normalizedDate(receipt?.trade_date || receipt?.date);
+  const staleCacheRejected = Boolean(receipt && expectedTradeDate && receiptTradeDate !== expectedTradeDate);
+  if (staleCacheRejected) issues.push("receipt_trade_date_mismatch_stale_cache_rejected");
+  if (receipt && receipt.validation?.ok === true && receipt.accepted_symbols?.length > 0 && !receipt.applied_boosts?.length) issues.push("accepted_symbols_missing_applied_boosts");
+  const output = {
+    ok: issues.length === 0,
+    contract: "opening-report-0830-priority-bias-bridge-v1-verifier",
+    checked_at: new Date().toISOString(),
+    expected_trade_date: expectedTradeDate,
+    receipt_trade_date: receiptTradeDate || null,
+    stale_cache_rejected: staleCacheRejected,
+    receipt_path: receiptPath,
+    receipt,
+    issues,
+    first_blocker: issues[0] || null,
+  };
   console.log(JSON.stringify(output, null, 2));
   if (!output.ok) process.exitCode = 1;
 }

@@ -71,7 +71,8 @@ function staticChecks() {
   const dedicatedInstaller = fs.readFileSync(path.join(ROOT, "ops", "public-slot", "install-daytrade-websocket-collector-task.ps1"), "utf8");
   const selfHeal = fs.readFileSync(path.join(ROOT, "scripts", "run-daytrade-warmup-self-heal.js"), "utf8");
   const motherScope = fs.readFileSync(path.join(ROOT, "ops", "public-slot", "DaytradeMotherPoolWarmingScopePatch_20260730.sql"), "utf8");
-  const canonicalGateSql = fs.readFileSync(path.join(ROOT, "ops", "public-slot", "DaytradeSourceCanonicalGatePriorityFirstPatch_20260708.sql"), "utf8");
+  const canonicalGateSql = fs.readFileSync(path.join(ROOT, "ops", "public-slot", "DaytradeSourceCanonicalGateDynamicPools_20260827.sql"), "utf8");
+  const dynamicHealthSql = fs.readFileSync(path.join(ROOT, 'ops', 'public-slot', 'DaytradeMotherPoolContractHealthFormalScope_20260827.sql'), 'utf8');
   const writerLeaseSql = fs.readFileSync(path.join(ROOT, "ops", "public-slot", "DaytradeSourceWriterLease_20260731.sql"), "utf8");
   const hostContractDoc = fs.readFileSync(path.join(ROOT, "ops", "public-slot", "DaytradeSourceHostContract_20260731.md"), "utf8");
   return {
@@ -83,27 +84,38 @@ function staticChecks() {
     fullMarketSignalEvidence: writer.includes("full_market_intraday_signal_evidence") && writer.includes("full_market_bullish_gain_volume_candidates"),
     bullishGainVolumeRule: writer.includes("change_percent>2 AND ma5>ma10>ma35 AND volume_expanding"),
     volumeSurgeTop100Rule: writer.includes("total_volume>10000") && writer.includes("volume_rank<=100") && writer.includes("volume_surge_top100"),
-    motherPoolDynamicRange: writer.includes("Math.min(600") && writer.includes("mother_pool_300_600_rotation"),
-    priorityFromStrategyAndChipResults: ["strategy2", "strategy3", "strategy4", "strategy5", "institution", "warrant", "cb"].every((name) => writer.includes(`addMany("${name}"`)),
+    motherPoolDynamicRange: writer.includes("const MOTHER_POOL_MIN_SYMBOLS = 300;") && writer.includes("const MOTHER_POOL_MAX_SYMBOLS = Math.max(") && writer.includes("Math.min(600,") && writer.includes("mother_pool_scan_max_symbols"),
+    priorityFromStrategyAndChipResults: writer.includes("motherPoolDynamicDiscoveryUnion") && ["strategy2", "strategy3", "strategy4", "strategy5", "institution"].every((name) => writer.includes(name)),
     gateRuntimePriorityBridgePreserved: gateRuntime.includes("readPriorityBridgeFields") && gateRuntime.includes("...readPriorityBridgeFields(),"),
     websocketCandleWarmup: writer.includes("syncWebSocketIntraday1mCandles") && writer.includes("fugle-websocket-candles-cache"),
     websocketMotherReadthrough: writer.includes("const writebackQuoteMap = new Map(quoteMap)") && writer.includes("websocket_quote_readthrough_fresh_rows"),
     motherPoolWarmingScope: motherScope.includes("basePoolPending") && motherScope.includes("create or replace view public.v_fugle_daytrade_mother_pool") && motherScope.includes("create or replace view public.v_fugle_daytrade_mother_pool_contract_health"),
-    runtimePriorityArtifactContract: writer.includes("formalPriorityStrategyChip") && writer.includes("completeLatestRunEvidence") && writer.includes("top40SymbolCount"),
-    strategyChipCompleteRunHardGate: writer.includes("strategyChipCompleteLatestRun") && writer.includes("strategy_chip_complete_latest_run_missing") && canonicalGateSql.includes("formal_priority_strategy_chip_complete_latest_run_evidence") && canonicalGateSql.includes("strategy_chip_complete_latest_run_missing"),
+    runtimePriorityArtifactContract: writer.includes("formalPriorityStrategyChip") && writer.includes("completeLatestRunEvidence") && writer.includes("formalPriorityCount"),
+    strategyChipCompleteRunHardGate: writer.includes("strategyChipCompleteLatestRun") && canonicalGateSql.includes("formal_priority_strategy_chip_complete_latest_run_evidence") && canonicalGateSql.includes("strategy_chip_complete_latest_run_missing"),
+    canonicalGateDynamicPools: canonicalGateSql.includes("formal_scope = 'priority_hot_deep_scan_pool_only'") && canonicalGateSql.includes("formal_priority_symbols > 0 and formal_priority_symbols <= priority_pool_symbols") && !canonicalGateSql.includes("formal_priority_symbols = 40"),
     canonicalGateLastMessageFreshness: canonicalGateSql.includes("websocket_last_message_age_seconds") && canonicalGateSql.includes("websocket_last_message_age_seconds <= 300"),
+    canonicalHealthUsesDynamicFormalScope: writer.includes('formal_scan_max_quote_age_seconds: formalPriorityMaxAge')
+      && dynamicHealthSql.includes("formal_scope," )
+      && dynamicHealthSql.includes("'priority_hot_deep_scan_pool_only'::text as formal_scope" )
+      && dynamicHealthSql.includes("(payload ->> 'formal_scan_pool_symbols')::bigint" )
+      && !dynamicHealthSql.includes('formal_row <= 40'),
     offSessionPayloadAlignment: writer.includes('gate_grade: offSession ? "D"') && writer.includes('websocket_formal_ready: offSession ? false') && writer.includes('off_session_source_stopped'),
     websocketSilentStaleRecovery: collector.includes("STREAMING_STALE_RECONNECT_MS") && collector.includes("staleDataWindow") && collector.includes("reconnect_stale_source") && collector.includes('ws.close(1000, "stale source self-heal")'),
-    daytradeSharedSourceIsolation: collector.includes("COLLECTOR_ROLE") && collector.includes("fugle-daytrade-ws-priority-symbols.json") && daytradeWrapper.includes("--daytrade-source") && daytradeWrapper.includes("FUGLE_DAYTRADE_PRIORITY_SYMBOLS_FILE") && daytradeWrapper.includes("-and\n      [string]$_.CommandLine"),
-      dedicatedCollectorSupervisor: dedicatedSupervisor.includes("FumanFugleDaytradeWebSocketCollector") && dedicatedSupervisor.includes("--daytrade-source") && dedicatedSupervisor.includes("Start-Process") && dedicatedSupervisor.includes("Start-Sleep") && dedicatedSupervisor.includes("FUGLE_WS_PRIORITY_SYMBOLS_FILE") && dedicatedSupervisor.includes("FUGLE_STREAMING_STALE_RECONNECT_MS"),
+    daytradeSharedSourceIsolation: (() => {
+      const start = daytradeWrapper.indexOf('function Invoke-DaytradeWebSocketCollectorSelfHeal {');
+      const end = daytradeWrapper.indexOf('function Invoke-FugleFutoptCollectorReleaseReconcile {', start);
+      const stockCollectorBlock = start >= 0 && end > start ? daytradeWrapper.slice(start, end) : '';
+      return stockCollectorBlock.includes('Fuman Fugle Daytrade WebSocket Collector 0600-1330')
+        && stockCollectorBlock.includes('collector_heartbeat_stale_restart_cooldown')
+        && !stockCollectorBlock.includes('Start-Process -FilePath $nodeExe');
+    })(),      dedicatedCollectorSupervisor: dedicatedSupervisor.includes("FumanFugleDaytradeWebSocketCollector") && dedicatedSupervisor.includes("--daytrade-source") && dedicatedSupervisor.includes("Start-Process") && dedicatedSupervisor.includes("Start-Sleep") && dedicatedSupervisor.includes("FUGLE_WS_PRIORITY_SYMBOLS_FILE") && dedicatedSupervisor.includes("FUGLE_STREAMING_STALE_RECONNECT_MS"),
     dedicatedCollectorTaskPolicy: dedicatedInstaller.includes("Fuman Fugle Daytrade WebSocket Collector 0600-1330") && dedicatedInstaller.includes("New-ScheduledTaskSettingsSet") && dedicatedInstaller.includes("MultipleInstances Ignore") && dedicatedInstaller.includes("StartWhenAvailable"),
     dedicatedCollectorStartupEvidence: dedicatedSupervisor.includes("Write-State -Status \"starting\"") && dedicatedSupervisor.includes("$mutex = $null") && dedicatedSupervisor.includes("supervisor_start"),
     selfHealWindowsSafeReceipts: selfHeal.includes("replace(/[^A-Za-z0-9._-]+/g, \"_\")") && selfHeal.includes("fs.mkdirSync(path.dirname(file), { recursive: true })"),
     nodeSourceHostApproval: writer.includes("ensureApprovedSourceHost") && collector.includes("assertApprovedDaytradeSourceHost") && writer.includes("SOURCE_HOST_APPROVAL_FILE"),
     dedicatedSupervisorHostApproval: dedicatedSupervisor.includes("daytrade_source_host_approval_missing") && dedicatedSupervisor.includes("daytrade_source_host_not_approved"),
-    sourceHostApproval: daytradeWrapper.includes("Assert-DaytradeSourceHostApproval") && daytradeWrapper.includes("READ_ONLY mode: collector start skipped") && dedicatedSupervisor.includes("authoritativeWriter = $true"),
-    crossHostWriterIdentity: writer.includes("source_host_id") && writer.includes("writer_instance_id") && writer.includes("ensureWriterLease") && daytradeWrapper.includes("FUMAN_DAYTRADE_SOURCE_HOST_ID") && daytradeWrapper.includes("Assert-DaytradeSourceHostApproval") && dedicatedSupervisor.includes("authoritativeWriter = $true"),
-    crossHostReaderIsolation: writer.includes("daytrade_writer_host_role_required") && hostContractDoc.toLowerCase().includes("reader/viewer") && hostContractDoc.includes("service_role"),
+    sourceHostApproval: writer.includes("ensureApprovedSourceHost") && dedicatedSupervisor.includes("daytrade_source_host_approval_missing") && dedicatedSupervisor.includes("authoritativeWriter = $true"),
+    crossHostWriterIdentity: writer.includes("source_host_id") && writer.includes("writer_instance_id") && writer.includes("ensureWriterLease") && dedicatedSupervisor.includes("FUMAN_DAYTRADE_SOURCE_HOST_ID") && dedicatedSupervisor.includes("FUMAN_DAYTRADE_WRITER_INSTANCE_ID") && dedicatedSupervisor.includes("authoritativeWriter = $true"),    crossHostReaderIsolation: writer.includes("daytrade_writer_host_role_required") && hostContractDoc.toLowerCase().includes("reader/viewer") && hostContractDoc.includes("service_role"),
     distributedWriterLease: writerLeaseSql.includes("claim_fugle_daytrade_source_writer_lease") && writerLeaseSql.includes("lease_expires_at") && writerLeaseSql.includes("writer_instance_id"),
   };
 }
@@ -139,7 +151,8 @@ function buildDecision({ shared, daytrade, canonical, unattended, counts, time }
     canonical_gate_grade: text(getField(sourcePayload, canonicalRow, unattendedRow, "gate_grade", "canonical_gate_grade", "daytrade_gate_grade")).toUpperCase() || "MISSING",
     formal_entry_allowed: bool(getField(sourcePayload, canonicalRow, unattendedRow, "formal_entry_allowed")),
     scanner_can_run_opening: bool(getField(sourcePayload, canonicalRow, unattendedRow, "scanner_can_run_opening")),
-    priority_top40_ready_count: number(valueFrom(sourcePayload.priority_top40_symbols, sourcePayload.formal_daytrade_priority_symbols, sourcePayload.priority_pool_symbols), counts.priorityTop40.exact ?? counts.priorityTop40.rows),
+    priority_pool_symbols: number(valueFrom(sourcePayload.priority_pool_symbols), 0),
+    formal_scan_pool_symbols: number(valueFrom(sourcePayload.formal_scan_pool_symbols, sourcePayload.formal_daytrade_priority_symbols), counts.formalTop40.exact ?? counts.formalTop40.rows),
     futopt_stock_mapped: number(getField(sourcePayload, canonicalRow, unattendedRow, "futopt_stock_mapped", "mapped_underlying_count"), 0),
     futopt_stock_this_loop: number(getField(sourcePayload, canonicalRow, unattendedRow, "futopt_stock_this_loop", "futopt_stock_quotes_this_loop"), 0),
     daily_volume_status: text(getField(sourcePayload, canonicalRow, unattendedRow, "daily_volume_status")).toLowerCase() || "missing",
@@ -156,7 +169,7 @@ function buildDecision({ shared, daytrade, canonical, unattended, counts, time }
   };
   const failures = [];
   const fail = (ok, code, detail) => { if (!ok) failures.push({ code, detail }); };
-  fail(counts.priorityTop40.exact === 40 || counts.priorityTop40.rows === 40, "priority_top40_not_40", `${counts.priorityTop40.exact ?? counts.priorityTop40.rows}/40`);
+  fail(fields.formal_scan_pool_symbols > 0 && fields.formal_scan_pool_symbols <= fields.priority_pool_symbols, "formal_scan_pool_invalid", `${fields.formal_scan_pool_symbols}/${fields.priority_pool_symbols}`);
   fail(fields.daytrade_priority_quote_coverage_120s >= 0.95, "priority_quote_coverage_below_095", fields.daytrade_priority_quote_coverage_120s);
   fail(fields.scanner_can_run_opening, "scanner_can_run_opening_false", fields.scanner_can_run_opening);
   fail(fields.daytrade_formal_entry_speed_verdict === "YES", "formal_entry_speed_verdict_not_yes", fields.daytrade_formal_entry_speed_verdict);

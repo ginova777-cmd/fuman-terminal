@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 
 const {
   FUGLE_FUTOPT_WS_CANDLES_FILE,
@@ -45,6 +46,9 @@ const STREAMING_RECONNECT_MAX_MS = Math.max(STREAMING_RECONNECT_INITIAL_MS, Numb
   || 30000,
 ));
 const STREAMING_STATUS_MS = Math.max(1000, Number(process.env.FUGLE_FUTOPT_STREAMING_STATUS_MS || 5000));
+const FORMAL_LIVE_MIRROR_MS = Math.max(30000, Number(process.env.FUGLE_FUTOPT_FORMAL_LIVE_MIRROR_MS || 30000));
+const FORMAL_LIVE_MIRROR_RETRIES = Math.max(1, Math.min(4, Number(process.env.FUGLE_FUTOPT_FORMAL_LIVE_MIRROR_RETRIES || 3)));
+const FORMAL_LIVE_MIRROR_BACKOFF_MS = Math.max(250, Number(process.env.FUGLE_FUTOPT_FORMAL_LIVE_MIRROR_BACKOFF_MS || 1000));
 const CACHE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_FUTOPT_WS_CACHE_TTL_MS || 5 * 60 * 1000));
 const STREAMING_AFTER_HOURS_RAW = String(process.env.FUGLE_FUTOPT_STREAMING_AFTER_HOURS || "").trim().toLowerCase();
 const STREAMING_AFTER_HOURS = /^(1|true|yes|on)$/.test(STREAMING_AFTER_HOURS_RAW)
@@ -53,7 +57,12 @@ const STREAMING_AFTER_HOURS = /^(1|true|yes|on)$/.test(STREAMING_AFTER_HOURS_RAW
     ? false
     : null;
 
+const FORMAL_LIVE_MIRROR_RECEIPT_FILE = path.join(path.dirname(FUGLE_FUTOPT_WS_STATUS_FILE), "fugle-daytrade-futopt-live-mirror.json");
+const COLLECTOR_RELEASE = "futopt-formal-live-mirror-v1";
+
 let lastMessageAt = "";
+let lastFormalLiveMirrorAt = 0;
+let formalLiveMirrorInFlight = false;
 
 function readSecret(paths) {
   for (const file of paths) {
@@ -256,9 +265,10 @@ function buildSubscribeMessage(channel, symbols) {
   return { event: "subscribe", data };
 }
 function writeStatus(extra = {}) {
-  writeJson(FUGLE_FUTOPT_WS_STATUS_FILE, {
+  const payload = {
     ok: extra.ok !== false,
     pid: process.pid,
+    collector_release: COLLECTOR_RELEASE,
     mode: "streaming",
     source: "fugle-futopt-websocket",
     streamingUrl: STREAMING_URL,
@@ -267,9 +277,140 @@ function writeStatus(extra = {}) {
     maxSymbols: STREAMING_MAX_SYMBOLS,
     updatedAt: nowIso(),
     ...extra,
-  });
+  };
+  writeJson(FUGLE_FUTOPT_WS_STATUS_FILE, payload);
+  return payload;
 }
 
+function retryableFormalLiveMirrorError(status) {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504 || status === 521;
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function finiteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function freshFormalFutoptRows(checkedAt) {
+  const cache = readJson(FUGLE_FUTOPT_WS_QUOTES_FILE, {});
+  const rows = Array.isArray(cache?.quotes) ? cache.quotes : [];
+  const freshnessCutoff = Date.now() - 180000;
+  return rows
+    .filter((quote) => {
+      const seen = Date.parse(quote.quoteSeenAt || quote.updated_at || cache.updatedAt || "");
+      return normalizeFutureSymbol(quote.future_symbol) && Number.isFinite(seen) && seen >= freshnessCutoff && finiteNumber(quote.last_price ?? quote.price) > 0;
+    })
+    .map((quote) => {
+      const futureSymbol = normalizeFutureSymbol(quote.future_symbol);
+      const product = quote.product || (futureSymbol.startsWith("TXF") ? "TXF" : "STOCK_FUTURE");
+      return {
+        future_symbol: futureSymbol,
+        underlying_symbol: quote.underlying_symbol || (futureSymbol.startsWith("TXF") ? "TXF" : null),
+        underlying_name: quote.underlying_name || null,
+        updated_at: quote.quoteSeenAt || quote.updated_at || cache.updatedAt || checkedAt,
+        last_price: finiteNumber(quote.last_price ?? quote.price),
+        open_price: finiteNumber(quote.open_price),
+        high_price: finiteNumber(quote.high_price ?? quote.last_price ?? quote.price),
+        low_price: finiteNumber(quote.low_price ?? quote.last_price ?? quote.price),
+        previous_close: finiteNumber(quote.previous_close),
+        change_percent: finiteNumber(quote.change_percent),
+        total_volume: finiteNumber(quote.total_volume ?? quote.volume),
+        product,
+        session: quote.session || "",
+        source: "fugle_futopt_websocket_collector:formal_live_mirror",
+        payload: {
+          ...(quote.payload || {}),
+          source: "fugle_futopt_websocket_collector:formal_live_mirror",
+          quote_seen_at: quote.quoteSeenAt || "",
+          collector_checked_at: checkedAt,
+          formal_fugle_websocket: true,
+        },
+      };
+    });
+}
+
+async function mirrorFormalFutoptLive() {
+  const checkedAt = nowIso();
+  const receipt = {
+    contract: "fugle_daytrade_futopt_formal_live_mirror_v1",
+    checked_at: checkedAt,
+    interval_seconds: Math.round(FORMAL_LIVE_MIRROR_MS / 1000),
+    retry_limit: FORMAL_LIVE_MIRROR_RETRIES,
+    attempts: 0,
+    status: "pending",
+    first_blocker: null,
+  };
+  const baseUrl = serverSupabaseUrl();
+  const apiKey = serverSupabaseKey();
+  if (!baseUrl || !apiKey) {
+    receipt.status = "blocked";
+    receipt.first_blocker = "formal_live_mirror_credentials_missing";
+    writeJson(FORMAL_LIVE_MIRROR_RECEIPT_FILE, receipt);
+    return receipt;
+  }
+  const rows = freshFormalFutoptRows(checkedAt);
+  receipt.fresh_rows = rows.length;
+  receipt.txf_rows = rows.filter((row) => row.product === "TXF" || String(row.future_symbol).startsWith("TXF")).length;
+  receipt.stock_future_rows = rows.filter((row) => row.product === "STOCK_FUTURE").length;
+  if (!rows.length) {
+    receipt.status = "no_fresh_formal_futopt_rows";
+    receipt.first_blocker = "futopt_websocket_cache_no_fresh_rows";
+    writeJson(FORMAL_LIVE_MIRROR_RECEIPT_FILE, receipt);
+    return receipt;
+  }
+  for (let attempt = 1; attempt <= FORMAL_LIVE_MIRROR_RETRIES; attempt += 1) {
+    receipt.attempts = attempt;
+    try {
+      const response = await fetch(`${baseUrl}/rest/v1/fugle_daytrade_futopt_quotes_live?on_conflict=future_symbol`, {
+        method: "POST",
+        headers: {
+          apikey: apiKey,
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify(rows),
+      });
+      if (!response.ok) throw Object.assign(new Error(`futopt_formal_live_mirror_http_${response.status}`), { status: response.status });
+      receipt.status = "written";
+      writeJson(FORMAL_LIVE_MIRROR_RECEIPT_FILE, receipt);
+      return receipt;
+    } catch (error) {
+      const status = Number(error?.status || 0);
+      receipt.last_error = error?.message || String(error);
+      if (attempt >= FORMAL_LIVE_MIRROR_RETRIES || !retryableFormalLiveMirrorError(status)) {
+        receipt.status = "retry_exhausted";
+        receipt.first_blocker = status ? `futopt_formal_live_mirror_http_${status}` : "futopt_formal_live_mirror_exception";
+        writeJson(FORMAL_LIVE_MIRROR_RECEIPT_FILE, receipt);
+        return receipt;
+      }
+      const delayMs = Math.min(60000, FORMAL_LIVE_MIRROR_BACKOFF_MS * (2 ** (attempt - 1)));
+      receipt.next_retry_at = new Date(Date.now() + delayMs).toISOString();
+      writeJson(FORMAL_LIVE_MIRROR_RECEIPT_FILE, receipt);
+      await delay(delayMs);
+    }
+  }
+  return receipt;
+}
+
+function scheduleFormalFutoptLiveMirror() {
+  if (formalLiveMirrorInFlight || Date.now() - lastFormalLiveMirrorAt < FORMAL_LIVE_MIRROR_MS) return;
+  lastFormalLiveMirrorAt = Date.now();
+  formalLiveMirrorInFlight = true;
+  mirrorFormalFutoptLive()
+    .catch((error) => writeJson(FORMAL_LIVE_MIRROR_RECEIPT_FILE, {
+      contract: "fugle_daytrade_futopt_formal_live_mirror_v1",
+      checked_at: nowIso(),
+      status: "retry_exhausted",
+      first_blocker: "futopt_formal_live_mirror_exception",
+      error: error?.message || String(error),
+    }))
+    .finally(() => { formalLiveMirrorInFlight = false; });
+}
 async function run() {
   const apiKey = readSecret(API_KEY_FILES);
   if (!apiKey) {
@@ -326,7 +467,7 @@ async function run() {
                     : forbiddenChunks > 0
                       ? "websocket_subscription_forbidden"
                       : "websocket_transport_not_formal_ready";
-      writeStatus({
+      const statusSnapshot = writeStatus({
         websocketConnected: Boolean(ws && ws.readyState === WebSocket.OPEN),
         websocketAuthenticated: authenticated,
         formalReady,
@@ -358,6 +499,7 @@ async function run() {
         lastMessageAt,
         ...extra,
       });
+      scheduleFormalFutoptLiveMirror(statusSnapshot);
     };
 
     const subscribe = () => {

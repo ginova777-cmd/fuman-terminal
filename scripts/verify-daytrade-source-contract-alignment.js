@@ -141,6 +141,12 @@ function normalizeSourceStatus(row) {
   return {
     status: stringValue(row?.status),
     message: stringValue(row?.message),
+    phase: stringValue(payload.phase),
+    warmupGateReady: boolValue(payload.warmup_gate_ready),
+    warmupTransportHealthy: boolValue(payload.warmup_transport_healthy),
+    warmupIndicatorsAvailable: boolValue(payload.warmup_indicators_available),
+    warmupReferencePriceSymbols: numberValue(payload.warmup_reference_price_symbols),
+    warmupReferencePriceSource: stringValue(payload.warmup_reference_price_source),
     updatedAt: stringValue(row?.updated_at),
     daytradeGateGrade: stringValue(payload.daytrade_gate_grade),
     gateGrade: stringValue(payload.gate_grade),
@@ -248,6 +254,7 @@ const MOTHER_POOL_MIN_SYMBOLS = 300;
 const MOTHER_POOL_MAX_SYMBOLS = 600;
 const DYNAMIC_FORMAL_SCOPES = new Set([
   "mother_pool_complete_dynamic_scan",
+  "priority_hot_deep_scan_pool_only",
 ]);
 
 function hasDynamicPoolLayers(item) {
@@ -307,7 +314,20 @@ function isGateFailClosed(gate) {
     && gate.formalEntrySpeedVerdict === "NO";
 }
 
+function isPreopenWarmupReady(source) {
+  return ["preopen_prepare_0830_0844", "opening_boost_0845_0859"].includes(source.phase)
+    && source.status === "ok"
+    && source.daytradeGateGrade === "A"
+    && source.warmupGateReady === true
+    && source.warmupTransportHealthy === true
+    && source.scannerCanRunOpening === true
+    && source.formalEntryAllowed === false
+    && hasDynamicPoolLayers(source)
+    && sourceWebsocketOk(source);
+}
+
 function gateVerdict(source, canonicalGate, unattendedGate) {
+  const preopenWarmupReady = isPreopenWarmupReady(source);
   const sourceA = isSourceA(source);
   const sourceClosed = isSourceFailClosed(source);
   const canonicalA = isGateA(canonicalGate);
@@ -315,6 +335,12 @@ function gateVerdict(source, canonicalGate, unattendedGate) {
   const canonicalClosed = isGateFailClosed(canonicalGate);
   const unattendedClosed = isGateFailClosed(unattendedGate);
   if (sourceA && canonicalA && unattendedA) return { ok: true, verdict: "A_READY_ALIGNED", mode: "formal_ready", issues: [] };
+  // Canonical/unattended gates intentionally remain formal-closed before
+  // 09:00. A healthy pre-open source must be reported as warmup-ready rather
+  // than as an artificial cross-layer failure.
+  if (preopenWarmupReady && canonicalGate.formalEntryAllowed === false && unattendedGate.formalEntryAllowed === false) {
+    return { ok: true, verdict: "PREOPEN_WARMUP_READY", mode: "preopen_warmup", issues: [] };
+  }
   if (sourceClosed && canonicalClosed && unattendedClosed) return { ok: true, verdict: "FAIL_CLOSED_ALIGNED", mode: "formal_entry_fail_closed", issues: [] };
   const issues = [];
   if (!sourceA && !sourceClosed) issues.push("source_status_not_a_or_fail_closed");
@@ -348,7 +374,8 @@ function writerCodeRegressionChecks() {
     formalSourceAlignmentPayload: source.includes("formal_source_alignment_ok"),
     websocketFormalReadyPayload: source.includes("websocket_formal_ready") && source.includes("websocket_formal_ready_reason") && source.includes("formalReadyReason"),
     websocketFormalReadyRequiresTransport: /formalReady: transportReady/.test(source) && /statusAgeSeconds <= 300/.test(source),
-    formalGateRequiresWebsocket: /priorityGateA && formalEntryWindow && webSocketStatus\.formalReady/.test(source),
+    formalGateRequiresWebsocket: /formal_entry_allowed: !offSession && after0900 && gateGrade === "A" && webSocketStatus\.formalReady/.test(source)
+      && /latest_update_allowed: !offSession && after0900 && gateGrade === "A" && webSocketStatus\.formalReady/.test(source),
     strategyChipEvidencePolicyConsistent: source.includes('strategyChipCompleteLatestRun') && ((source.includes('formal_priority_strategy_chip_required_for_formal_entry: false') && source.includes('formal_priority_strategy_chip_blocks_formal_entry: false')) || (source.includes('formal_priority_strategy_chip_required_for_formal_entry: true') && source.includes('formal_priority_strategy_chip_blocks_formal_entry: !strategyChipCompleteLatestRun'))),
     formalPrioritySpeedPayload: source.includes("formal_priority_speed_ok"),
     fullMarketSpeedNonBlockingPayload: source.includes("full_market_speed_blocking: false"),
@@ -394,9 +421,125 @@ function writerCodeRegressionChecks() {
       && source.includes('is_cb')
       && source.includes('is_blacklisted'),
     hotPool40To80: source.includes('HOT_POOL_MIN_SYMBOLS') && source.includes('daytradeHotPoolSymbols') && source.includes('hot_pool_max_symbols'),
+    deepScanQueuePrecedesCandleReadiness: source.includes('const deepScanEligible = wantsDeepScan;')
+      && source.includes('Formal publication remains gated later by rowFormal1mReady coverage.'),
+    formalScanQuoteAgePayload: source.includes('const formalPriorityMaxAge = formalPriorityAges.length ? Math.max(...formalPriorityAges) : 999999;')
+      && source.includes('formal_scan_max_quote_age_seconds: formalPriorityMaxAge'),
+    formalReadinessScopesHotAndTracked: (() => {
+      const start = source.indexOf('const formalPriorityRows = priorityRows.filter');
+      const end = source.indexOf('const minFormalPrioritySymbols', start);
+      const scope = start >= 0 && end > start ? source.slice(start, end) : '';
+      return source.includes('Formal readiness is measured against high-frequency hot plus explicit tracked/case/burst symbols.')
+        && source.includes('const formalScanPoolSymbols = formalPrioritySet.size;')
+        && source.includes('const formalScanIntraday1mReadySymbols = [...formalPrioritySet]')
+        && source.includes('deep_scan_intraday_1m_data_gap_count')
+        && scope.includes('index < HOT_POOL_MAX_SYMBOLS')
+        && scope.includes('row.hotBurstFastPath === true')
+        && !scope.includes('row.priorityMetrics?.surgeFlag === true')
+        && !scope.includes('row.priorityMetrics?.volumeSpikeFlag === true');
+    })(),
     preopenWarmupStarts0700: source.includes('PREOPEN_WARMUP_START_MINUTES = 7 * 60') && source.includes('warmup_start_taipei') && source.includes('warmupDataFillActive'),
-    indicatorWarmupMa3Ma58: source.includes('current.ma3 = movingAverage(3)') && source.includes('current.ma58 = movingAverage(58)') && source.includes('indicator_set') && source.includes('macd_line') && source.includes('kd_k') && source.includes('rsi14'),
+    writerFallbackUsesBoundedV2Streaming: (() => {
+      try {
+        const wrapper = fs.readFileSync(path.join(__dirname, '..', 'ops', 'public-slot', 'Run-DaytradeSourceWriter.ps1'), 'utf8');
+        return wrapper.includes('fugle-daytrade-websocket-status-v2.json')
+          && wrapper.includes('Fuman Fugle Daytrade WebSocket Collector 0600-1330')
+          && wrapper.includes('collector_heartbeat_stale_restart_cooldown');
+      } catch { return false; }
+    })(),
+    writerUsesSingleCollectorOwner: (() => {
+      try {
+        const wrapper = fs.readFileSync(path.join(__dirname, '..', 'ops', 'public-slot', 'Run-DaytradeSourceWriter.ps1'), 'utf8');
+        const start = wrapper.indexOf('function Invoke-DaytradeWebSocketCollectorSelfHeal {');
+        const end = wrapper.indexOf('function Invoke-FugleFutoptCollectorReleaseReconcile {', start);
+        const block = start >= 0 && end > start ? wrapper.slice(start, end) : '';
+        return block.includes('schtasks.exe /Run /TN "Fuman Fugle Daytrade WebSocket Collector 0600-1330"')
+          && !block.includes('Start-Process -FilePath');
+      } catch { return false; }
+    })(),
+    writerUsesCanonicalWebSocketV2Files: (() => {
+      try {
+        const wrapper = fs.readFileSync(path.join(__dirname, '..', 'ops', 'public-slot', 'Run-DaytradeSourceWriter.ps1'), 'utf8');
+        return wrapper.includes('fugle-daytrade-websocket-status-v2.json')
+          && !wrapper.includes('fugle-daytrade-websocket-status.json');
+      } catch { return false; }
+    })(),    earlyTurnoverGraceBefore0910: source.includes('turnover_rate_trial_or_watch_before_0910')
+      && source.includes('const turnoverGraceActive = taipeiMinutes() < (9 * 60 + 10);'),
+    earlySessionSlaDoesNotBlockBefore1030: source.includes('const earlySessionSlaDue = taipeiMinutes() >= (10 * 60 + 30);')
+      && source.includes('const requiredFormalCandleCount = earlySessionSlaDue')
+      && source.includes(': 20;')
+      && source.includes('numberValue(rowDataGap.candle_count) >= requiredFormalCandleCount')
+      && source.includes('(!earlySessionSlaDue || rowDataGap.has_0900_1030_continuous === true)'),
+    post0910TurnoverRetentionExceptions: source.includes('turnoverRetentionReasons')
+      && source.includes('strategy_or_watchlist_seed')
+      && source.includes('stock_future_sync')
+      && source.includes('intraday_volume_spike'),
+    preopenReferencePriceWarmup: source.includes('fetchPreopenReferencePriceMap')
+      && source.includes('stock_daily_volume')
+      && source.includes('currentMinutes < 9 * 60 ? preopenReferencePrice : 0')
+      && source.includes('warmup_reference_price_symbols'),
+    preopenWarmupUsesTransportHealth: source.includes('const warmupTransportHealthy = webSocketStatus.formalReady')
+      && source.includes('const warmupIndicatorsAvailable = readyMa20 > 0')
+      && source.includes('const warmupGateReady = !after0900')
+      && source.includes('const scannerCanRunOpening = after0900 ? strictScannerCanRunOpening : warmupGateReady'),
+    websocketBoundedHeartbeatPing: (() => {
+      try {
+        const collector = fs.readFileSync(path.join(__dirname, 'fugle-websocket-collector.js'), 'utf8');
+        const supervisor = fs.readFileSync(path.join(__dirname, '..', 'ops', 'public-slot', 'Run-DaytradeWebSocketCollector.ps1'), 'utf8');
+        return collector.includes('STREAMING_CLIENT_PING_MS')
+          && collector.includes('JSON.stringify({ event: "ping" })')
+          && collector.includes('clearInterval(pingTimer)')
+          && supervisor.includes('FUGLE_STREAMING_CLIENT_PING_MS = "25000"');
+      } catch { return false; }
+    })(),
+    websocketSupervisorUsesTransportHealth: (() => {
+      try {
+        const supervisor = fs.readFileSync(path.join(__dirname, '..', 'ops', 'public-slot', 'Run-DaytradeWebSocketCollector.ps1'), 'utf8');
+        return supervisor.includes('websocketServerHeartbeatAt')
+          && supervisor.includes('aggregatesLastUpdatedAt')
+          && supervisor.includes('websocketLastMessageAt')
+          && supervisor.includes('Measure-Object -Minimum');
+      } catch { return false; }
+    })(),
+    websocketSupervisorDefersStaleRecoveryToCollector: (() => {
+      try {
+        const supervisor = fs.readFileSync(path.join(__dirname, '..', 'ops', 'public-slot', 'Run-DaytradeWebSocketCollector.ps1'), 'utf8');
+        return supervisor.includes('The Node collector owns WebSocket stale recovery')
+          && supervisor.includes('supervisor only restarts an exited child')
+          && !supervisor.includes('websocket_status_stale_${statusAgeSeconds}s');
+      } catch { return false; }
+    })(),    websocketDynamicPoolNoTop40: (() => {
+      try {
+        const collector = fs.readFileSync(path.join(__dirname, "fugle-websocket-collector.js"), "utf8");
+        return !collector.includes("STREAMING_PINNED_PRIORITY_SYMBOLS")
+          && collector.includes("const candleBudget = candleChannel")
+          && collector.includes("const STREAMING_CANDLE_SYMBOLS")
+          && collector.includes("const STREAMING_AGGREGATE_SYMBOLS")
+          && collector.includes("formal_1m_1000_plus_trade_radar_plus_aggregate_priority");
+      } catch { return false; }
+    })(),
+    websocketCandleBatchNormalizer: (() => {
+      try {
+        const collector = fs.readFileSync(path.join(__dirname, 'fugle-websocket-collector.js'), 'utf8');
+        const helpers = fs.readFileSync(path.join(__dirname, '..', 'lib', 'fugle-websocket-quotes.js'), 'utf8');
+        return collector.includes('const candles = normalizeFugleCandles(payload)')
+          && helpers.includes('function normalizeFugleCandles(payload)')
+          && helpers.includes('normalizeFugleCandles,');
+      } catch { return false; }
+    })(),
+    websocketCacheWritesAtomic: (() => {
+      try {
+        const helpers = fs.readFileSync(path.join(__dirname, '..', 'lib', 'fugle-websocket-quotes.js'), 'utf8');
+        return helpers.includes('const temp = `${file}.${process.pid}.${Date.now()}.tmp`;')
+          && helpers.includes('fs.renameSync(temp, file)')
+          && helpers.includes('fs.copyFileSync(file, `${file}.bak`)')
+          && helpers.includes('fs.readFileSync(`${file}.bak`, "utf8")');
+      } catch { return false; }
+    })(),    indicatorWarmupMa3Ma58: source.includes('current.ma3 = movingAverage(3)') && source.includes('current.ma58 = movingAverage(58)') && source.includes('indicator_set') && source.includes('macd_line') && source.includes('kd_k') && source.includes('rsi14'),
     indicatorWarmupMa20: source.includes('current.ma20 = movingAverage(20)') && source.includes('ma20: Number.isFinite(Number(row.ma20))') && source.includes('"MA20"'),
+    indicatorWarmupScopedTolerance: source.includes('const MIN_INDICATOR_WARMUP_COVERAGE = positiveNumber(process.env.DAYTRADE_MIN_INDICATOR_WARMUP_COVERAGE, 0.90);')
+      && source.includes('const scopedIndicatorRequired = Math.max(1, Math.ceil(formalScanPoolSymbols * MIN_INDICATOR_WARMUP_COVERAGE));')
+      && source.includes('indicator_warmup_coverage_min: MIN_INDICATOR_WARMUP_COVERAGE'),
     dynamicMaTurnMotherPoolSignal: source.includes('movingAverageTurnBullish')
       && source.includes('ma3_5_10_or_ma5_10_30_turn_bullish')
       && source.includes('supplementalMaps.intradayMap = intradayMap'),
@@ -456,15 +599,13 @@ function writerSupervisorRegressionChecks() {
     return { ok: false, path: wrapperPath, checks: {}, issues: [`writer_supervisor_read_failed:${error.message}`] };
   }
   const checks = {
-    futoptProcessGuard: source.includes("Get-FugleFutoptWebSocketCollectorProcess"),
-    futoptEnsureFunction: source.includes("function Ensure-FugleFutoptWebSocketCollector"),
-    applyStartsOrReusesFutopt: /if \(\$Apply\)[\s\S]{0,900}Ensure-FugleFutoptWebSocketCollector/.test(source),
+    futoptReleaseReconcileFunction: source.includes("function Invoke-FugleFutoptCollectorReleaseReconcile"),
+    applyReconcilesFutopt: source.includes("Invoke-FugleFutoptCollectorReleaseReconcile"),
     requiredChannels: source.includes("$env:FUGLE_FUTOPT_STREAMING_CHANNELS = \"trades,aggregates,candles\""),
     subscriptionBudget: source.includes("$env:FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS = \"1800\"") && source.includes("$env:FUGLE_FUTOPT_STREAMING_MAX_SYMBOLS = \"500\""),
-    missingCollectorRemainsFailClosed: source.includes("formal futopt status is ready"),
-    futoptCollectorStartMutex: source.includes("Global\\FumanFugleDaytradeFutoptCollector"),
-  };
-  const issues = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => `writer_supervisor_${name}_missing`);
+    versionedFutoptRelease: source.includes("$FutoptCollectorRelease = \"futopt-formal-live-mirror-v1\"") && source.includes("FUGLE_FUTOPT_COLLECTOR_RELEASE"),
+    rotationReceiptAndFailClosed: source.includes("fugle-daytrade-futopt-collector-rotation.json") && source.includes("collector_rotation_stop_failed") && source.includes("canonical gate remains fail-closed"),
+  };  const issues = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => `writer_supervisor_${name}_missing`);
   return { ok: issues.length === 0, path: wrapperPath, checks, issues };
 }
 function websocketCodeRegressionChecks() {
@@ -488,6 +629,22 @@ function websocketCodeRegressionChecks() {
     verifierReadsFormalReady: source.verifier.includes("requiredChannels")
       && source.verifier.includes("websocket_not_connected")
       && source.verifier.includes("websocket_missing_channel"),
+    collectorMirrorsSourceStatusEvery30Seconds: source.stockCollector.includes("SOURCE_STATUS_HEARTBEAT_MS")
+      && source.stockCollector.includes("mirrorDaytradeSourceTransport")
+      && source.stockCollector.includes("scheduleSourceStatusHeartbeat"),
+    collectorHeartbeatPreservesWriterGate: source.stockCollector.includes("preserve_writer_gate_verdict_v1")
+      && source.stockCollector.includes("...baselinePayload, ...transportPayload")
+      && !/websocket_formal_ready:\s*[^\n]+/.test(source.stockCollector.slice(source.stockCollector.indexOf("function mirrorDaytradeSourceTransport"), source.stockCollector.indexOf("function scheduleSourceStatusHeartbeat"))),
+    collectorHeartbeatHasBoundedRetryReceipt: source.stockCollector.includes("SOURCE_STATUS_HEARTBEAT_RETRIES")
+      && source.stockCollector.includes("retry_exhausted")
+      && source.stockCollector.includes("SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE"),
+    futoptCollectorMirrorsFormalLiveTable: source.futoptCollector.includes("FORMAL_LIVE_MIRROR_MS")
+      && source.futoptCollector.includes("mirrorFormalFutoptLive")
+      && source.futoptCollector.includes("fugle_daytrade_futopt_quotes_live")
+      && source.futoptCollector.includes("scheduleFormalFutoptLiveMirror"),
+    futoptMirrorHasBoundedRetryReceipt: source.futoptCollector.includes("FORMAL_LIVE_MIRROR_RETRIES")
+      && source.futoptCollector.includes("retry_exhausted")
+      && source.futoptCollector.includes("FORMAL_LIVE_MIRROR_RECEIPT_FILE"),
   };
   const issues = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => `websocket_regression_${name}_missing`);
   return { ok: issues.length === 0, files, checks, issues };
@@ -562,7 +719,7 @@ async function main() {
     "websocket_formal_ready",
     "websocket_streaming_channels",
   ].join(",");  const [sourceRows, canonicalRows, unattendedRows, dailyAliasProbe, intradayRpcProbe, canonicalFutoptProbe, unattendedFutoptProbe] = await Promise.all([
-    restGet(anonKey, `source_status?source_name=eq.${encodeURIComponent(SOURCE_NAME)}&select=source_name,status,updated_at,message,payload&limit=1`),
+    restGet(anonKey, `source_status?source_name=eq.${encodeURIComponent(SOURCE_NAME)}&select=source_name,status,updated_at,message,payload&order=updated_at.desc&limit=1`),
     restGet(anonKey, `v_fugle_daytrade_canonical_gate?select=${gateSelect}&limit=1`),
     restGet(anonKey, `v_fugle_daytrade_unattended_gate_status?select=${gateSelect}&limit=1`),
     optionalProbe("daily_volume_alias", () => restGet(anonKey, "fugle_daytrade_daily_volume_avg?select=symbol,avg_volume5,avg5_volume,daily_volume_status&limit=1")),
@@ -619,6 +776,7 @@ async function main() {
     }
   }
 
+  const preopenWarmupMode = alignment.mode === "preopen_warmup";
   const sourceStatusTradeDate = taipeiDateFromTimestamp(sourceStatus.updatedAt);
   const sourceStatusIsOvernight = Boolean(sourceStatusTradeDate && marketDay.date && sourceStatusTradeDate !== marketDay.date);
   const layerGateGradeMismatch = sourceStatus.gateGrade !== canonicalGate.gateGrade
@@ -635,6 +793,7 @@ async function main() {
     ["intraday_1m_stale_seconds", sourceStatus.intraday1mStaleSeconds, canonicalGate.intraday1mStaleSeconds, unattendedGate.intraday1mStaleSeconds],
   ];
   for (const [name, ...values] of layerAlignmentChecks) {
+    if (preopenWarmupMode) continue;
     if (name === "websocket_formal_ready" && sourceStatus.offSession === true) continue;
     if (values.some((value) => value === null || value === undefined || value === "" || Number.isNaN(value))) {
       issues.push(`layer_contract_field_missing:${name}`);
@@ -670,8 +829,8 @@ async function main() {
     if (row && String(row.futopt_gate_status || "") !== "ready") issues.push("unattended_a_with_futopt_not_ready");
     if (row && row.futopt_txf_ok !== true) issues.push("unattended_a_with_txf_not_ready");
   }
-  if (Math.abs(sourceStatus.priorityFreshQuoteCoverage120s - canonicalGate.priorityFreshQuoteCoverage120s) > 0.05) issues.push("source_vs_canonical_priority_coverage_mismatch");
-  if (Math.abs(sourceStatus.priorityFreshQuoteCoverage120s - unattendedGate.priorityFreshQuoteCoverage120s) > 0.05) issues.push("source_vs_unattended_priority_coverage_mismatch");
+  if (!preopenWarmupMode && Math.abs(sourceStatus.priorityFreshQuoteCoverage120s - canonicalGate.priorityFreshQuoteCoverage120s) > 0.05) issues.push("source_vs_canonical_priority_coverage_mismatch");
+  if (!preopenWarmupMode && Math.abs(sourceStatus.priorityFreshQuoteCoverage120s - unattendedGate.priorityFreshQuoteCoverage120s) > 0.05) issues.push("source_vs_unattended_priority_coverage_mismatch");
 
   const result = {
     ok: issues.length === 0 && alignment.ok === true,

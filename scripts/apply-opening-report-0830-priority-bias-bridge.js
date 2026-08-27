@@ -7,8 +7,11 @@ const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const PROJECT_URL = process.env.SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co";
 const DEFAULT_INPUT = path.join(RUNTIME_DIR, "state", "opening_report_0830.industry_bias_json");
-const DEFAULT_RECEIPT = path.join(RUNTIME_DIR, "data", "scan-receipts", "opening-report-0830-priority-bias-bridge-latest.json");
-const SOURCE = "opening_report_0830";
+function defaultReceiptPath(payload, expectedDate) {
+  const compact = String(expectedDate || taipeiDateKey()).replace(/\D/g, "").slice(0, 8) || "unknown";
+  const industry = String(payload?.industry || "unknown").trim().replace(/[^A-Za-z0-9_-]+/g, "_") || "unknown";
+  return path.join(RUNTIME_DIR, "data", "scan-receipts", `opening-report-0830-priority-bias-bridge-${industry}-${compact}.json`);
+}const SOURCE = "opening_report_0830";
 const MODE = "priority_bias_only";
 const ALLOWED_ACTION = "boost_scan_priority_only";
 const FORBIDDEN_ACTION = "publish_formal_candidate_without_taiwan_evidence";
@@ -151,12 +154,11 @@ function entryPrice(value) {
 
 async function main() {
   const inputPath = path.resolve(argValue("--input", process.env.OPENING_REPORT_0830_BIAS_INPUT || DEFAULT_INPUT));
-  const receiptPath = path.resolve(argValue("--receipt", process.env.OPENING_REPORT_0830_BIAS_RECEIPT || DEFAULT_RECEIPT));
   const expectedDate = argValue("--expected-date", process.env.FUMAN_TRADE_DATE || taipeiDateKey());
   const expectedRunId = argValue("--expected-run-id", process.env.FUMAN_EXPECTED_OPENING_REPORT_RUN_ID || "");
   const raw = readJson(inputPath);
   const payload = parseInput(raw);
-  const validation = validate(payload, { expectedDate, expectedRunId });
+  const receiptPath = path.resolve(argValue("--receipt", process.env.OPENING_REPORT_0830_BIAS_RECEIPT || defaultReceiptPath(payload, expectedDate)));  const validation = validate(payload, { expectedDate, expectedRunId });
   let acceptedSymbols = [];
   const rejectedSymbols = [];
   const mappedEntryBySymbol = new Map();

@@ -49,15 +49,10 @@ function main() {
   const maxSymbols = 2000;
   const totalSubscriptions = 1800;
   const candleSymbols = 1000;
-  const pinned = 40;
-  const formalExtraChannelCount = channels.length - 1;
-  const quoteRadarCapacity = Math.max(0, totalSubscriptions - (pinned * formalExtraChannelCount));
-  const symbolLimit = Math.min(maxSymbols, quoteRadarCapacity);
-  const formalSubscriptionCount = pinned * channels.length;
-  const candleRadarSymbols = Math.max(0, Math.min(candleSymbols - pinned, symbolLimit - pinned));
-  const candleSubscribedSymbols = pinned + candleRadarSymbols;
-  const tradeRadarCapacity = Math.max(0, totalSubscriptions - formalSubscriptionCount - candleRadarSymbols);
-
+  const aggregateSymbols = 80;
+  const candleSubscribedSymbols = Math.min(candleSymbols, totalSubscriptions, maxSymbols);
+  const aggregateSubscribedSymbols = Math.min(aggregateSymbols, Math.max(0, totalSubscriptions - candleSubscribedSymbols));
+  const tradeRadarCapacity = Math.max(0, totalSubscriptions - candleSubscribedSymbols - aggregateSubscribedSymbols);
   const livePid = Number(status.pid || 0);
   const liveUpdated = status.updatedAt || status.checkedAt || "";
   const liveRecent = isRecentIso(liveUpdated, 5 * 60 * 1000);
@@ -74,6 +69,8 @@ function main() {
   add(/process\.env\.FUGLE_STREAMING_MAX_SYMBOLS/.test(collector), "strategy3_v2_collector_does_not_read_max_symbols_env");
   add(/process\.env\.FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS/.test(collector), "strategy3_v2_collector_does_not_read_total_subscriptions_env");
   add(/process\.env\.FUGLE_STREAMING_CANDLE_SYMBOLS/.test(collector), "strategy3_v2_collector_does_not_read_candle_symbols_env");
+  add(/process\.env\.FUGLE_STREAMING_AGGREGATE_SYMBOLS/.test(collector), "strategy3_v2_collector_does_not_read_aggregate_symbols_env");
+  add(collector.includes("formal_1m_1000_plus_trade_radar_plus_aggregate_priority"), "strategy3_v2_collector_transport_plan_missing");
   add(candleSubscribedSymbols >= MIN_READY_SYMBOLS, "strategy3_v2_boot_contract_cannot_reach_1000_candles", {
     computedCandleSubscribedSymbols: candleSubscribedSymbols,
     required: MIN_READY_SYMBOLS,
@@ -96,11 +93,8 @@ function main() {
       channels,
       maxSymbols,
       totalSubscriptions,
-      pinnedPrioritySymbols: pinned,
-      formalSubscriptionCount,
-      symbolLimit,
-      candleRadarSymbols,
       candleSubscribedSymbols,
+      aggregateSubscribedSymbols,
       tradeRadarCapacity,
     },
     live_runtime: {
