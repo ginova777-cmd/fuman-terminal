@@ -54,6 +54,17 @@ const KEY_FILES = [
 
 const issues = [];
 const warnings = [];
+const deploySafe = read("scripts/deploy-production-safe.js");
+for (const marker of [
+  "FUMAN_PRODUCTION_WINDOW_GO",
+  "FUMAN_APPROVED_DEPLOY_SOURCE_ROOT",
+  "legacy_fuman_terminal_deploy_root_forbidden",
+  "production_deploy_outside_2200_window",
+  "approved_deploy_source_not_clean",
+  "approved_deploy_source_not_origin_main",
+]) {
+  if (!deploySafe.includes(marker)) issues.push(`production safe deploy marker missing: ${marker}`);
+}
 
 function read(file) {
   return fs.readFileSync(path.join(ROOT, file), "utf8");
