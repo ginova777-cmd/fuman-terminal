@@ -14,7 +14,7 @@ try {
   $waterScript = Join-Path $FumanRoot "scripts\run-strategy2-v3-water-scan.js"
   $scanScript = Join-Path $FumanRoot "scripts\run-strategy2-v3-live-scan.js"
   $scanStart = (Get-Date).Date.AddHours(9)
-  $finalizeAt = (Get-Date).Date.AddHours(12).AddMinutes(10)
+  $finalizeAt = (Get-Date).Date.AddHours(12).AddMinutes(30)
   if ((Get-Date) -gt $finalizeAt) { exit 2 }
 
   # 08:45 is a single water preflight. Strategy2 must not scan before 09:00.
@@ -23,7 +23,7 @@ try {
     Start-Sleep -Seconds 15
   }
 
-  # One canonical run accumulates events from 09:00 and finalizes once at 12:10.
+  # One canonical run accumulates events from 09:00 and finalizes once at 12:30.
   while ((Get-Date) -lt $finalizeAt) {
     & $node $waterScript
     & $node $scanScript --source-event
