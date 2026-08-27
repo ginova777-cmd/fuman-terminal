@@ -12,6 +12,7 @@ const expected = [
   ["Fuman Daytrade Source Gate 0700", "Run-DaytradeUnattendedGate.ps1", ["07:00"], { allowRuntimeAction: true }],
   ["Fuman Opening Report 0820 Preflight", "run-opening-report-0820-preflight.js", ["08:20"]],
   ["Fuman Opening Report 0830 Telegram", "run-opening-report-0830-production-wrapper.ps1", ["08:30"]],
+  ["Fuman Opening Limit Order Morning Readonly 0840", "ops\\Run-OpeningLimitOrderMorningReadonly.ps1", ["08:40"]],
   ["Fuman Strategy2 Unified 0845-1210", "ops\\run-strategy2-v3-unified.ps1", ["08:45"]],
   ["Fuman Mother Pool Telegram 0900-1230", "run-daytrade-intraday-burst-telegram.ps1", ["09:00"]],
   ["Fuman Strategy3 V2 First Attempt 1255", "run-strategy3-v2-1255-first-attempt.ps1", ["12:55"]],
@@ -79,7 +80,7 @@ for (const task of tasks) {
   if (/\bCB\b|warrant|權證/i.test(task.name || "")) issues.push(`retired_strategy_task_active:${task.name}`);
 }
 
-for (const name of ["Fuman Strategy2 Unified 0845-1230", "Fuman Strategy2 V3 Water Gate 0845", "Fuman Strategy2 V2 Unattended", "Fuman Strategy2 V2 Recovery", "Fuman Opening Report 0830 LINE", "Fuman Opening Report 0830 Line", "Fuman Opening Report 0830 LINE Bridge", "Fuman Opening Limit Order Morning Readonly 0840"]) {
+for (const name of ["Fuman Strategy2 Unified 0845-1230", "Fuman Strategy2 V3 Water Gate 0845", "Fuman Strategy2 V2 Unattended", "Fuman Strategy2 V2 Recovery", "Fuman Opening Report 0830 LINE", "Fuman Opening Report 0830 Line", "Fuman Opening Report 0830 LINE Bridge", "Fuman Opening Limit Order Morning Readonly 0845", "Fuman Opening Limit Order 0900 Readonly Verify"]) {
   const task = tasks.find((row) => row.name === name && ["Ready", "Running", "Queued"].includes(String(row.state || "")));
   if (task) issues.push(`retired_formal_task_active:${name}`);
 }
