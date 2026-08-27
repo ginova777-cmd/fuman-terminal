@@ -92,6 +92,7 @@ function canonicalFromDesktop(key, desktop) {
   };
 }function canonicalBattle() {
   const candidates = [
+    "institution-battle-verify.json",
     "institution-battle-verify-alert.json",
     "daily-battle-readiness-verify.json",
   ];
@@ -106,6 +107,8 @@ function canonicalFromDesktop(key, desktop) {
       resultCount: num(value.resultCount, value.matches, value.count),
       count: num(value.resultCount, value.matches, value.count), source: `terminal-receipt:${name}`,
       sourceUpdatedAt: value.updatedAt || value.checkedAt || value.checked_at || "",
+      firstBlocker: value.firstBlocker || value.blockingReason || value.blocking_reason || value.reason || "",
+      blockingReason: value.blockingReason || value.blocking_reason || value.firstBlocker || value.reason || "",
       strategy5RunId: value.strategy5RunId || value.runId || "", institutionRunId: value.institutionRunId || "", generatedRunId: false,
       canonicalComplete: value.ok === true || value.status === "complete" || value.status === "PASS",
     };
@@ -132,7 +135,7 @@ for (const key of slots[slot]) {
   const canonicalRunDate = canonical ? runDate(canonical.runId) : "";
   const sameDate = canonical && (canonicalRunDate ? canonicalRunDate === todayKey : compactDate(canonical.tradeDate) === todayKey);
   const complete = Boolean(canonical?.canonicalComplete && canonical.runId && sameDate);
-  const blockingReason = complete ? "" : (!canonical ? "terminal_canonical_missing" : !canonical.runId ? "terminal_run_id_missing" : !sameDate ? "terminal_trade_date_not_today" : "terminal_canonical_not_complete");
+  const blockingReason = complete ? "" : (canonical?.firstBlocker || canonical?.blockingReason || (!canonical ? "terminal_canonical_missing" : !canonical.runId ? "terminal_run_id_missing" : !sameDate ? "terminal_trade_date_not_today" : "terminal_canonical_not_complete"));
   const row = complete ? {
     ...canonical,
     ok: true,
