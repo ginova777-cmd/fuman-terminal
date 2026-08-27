@@ -417,6 +417,10 @@ function writerCodeRegressionChecks() {
       && /latest_update_allowed: !offSession && after0900 && gateGrade === "A" && webSocketStatus\.formalReady/.test(source),
     strategyChipEvidencePolicyConsistent: source.includes('strategyChipCompleteLatestRun') && ((source.includes('formal_priority_strategy_chip_required_for_formal_entry: false') && source.includes('formal_priority_strategy_chip_blocks_formal_entry: false')) || (source.includes('formal_priority_strategy_chip_required_for_formal_entry: true') && source.includes('formal_priority_strategy_chip_blocks_formal_entry: !strategyChipCompleteLatestRun'))),
     formalPrioritySpeedPayload: source.includes("formal_priority_speed_ok"),
+    formalScopeSpeedUsesDynamicPool: source.includes('const formalScopeQuoteFreshOk = formalPriorityPoolSymbols > 0')
+      && source.includes('const formalPrioritySpeedOk = formalScopeQuoteFreshOk;')
+      && source.includes('formal_scope_fresh_ok: formalScopeQuoteFreshOk')
+      && !source.includes('const formalPrioritySpeedOk = motherFreshCoverage'),
     fullMarketSpeedNonBlockingPayload: source.includes("full_market_speed_blocking: false"),
     slowTableBatchReduction: source.includes('const SLOW_TABLE_BATCH_SIZE = 40')
       && source.includes("fugle_daytrade_priority_pool")

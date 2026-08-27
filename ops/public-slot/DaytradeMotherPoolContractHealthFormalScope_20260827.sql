@@ -52,10 +52,8 @@ projected as (
     m.mother_updated_at,
     m.mother_daily_volume_rows,
     case
-      when d.mother_pool_symbols >= 300
-       and d.formal_priority_symbols > 0
+      when d.formal_priority_symbols > 0
        and d.formal_priority_symbols <= d.mother_pool_symbols
-       and d.mother_fresh_quote_coverage_120s >= 0.80
        and d.formal_fresh_quote_coverage_120s >= 0.95
        and d.formal_max_quote_age_seconds <= 120
       then 'ready'
