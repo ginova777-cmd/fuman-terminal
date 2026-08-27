@@ -87,6 +87,7 @@ const RATE_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-rate-state.js
 const UNSUPPORTED_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-unsupported-symbols.json");
 const DAYTRADE_PRIORITY_SYMBOLS_CONTRACT_FILE = "fugle-daytrade-ws-priority-symbols.json";
 const PRIORITY_SYMBOLS_FILE = process.env.FUGLE_WS_PRIORITY_SYMBOLS_FILE || path.join(RUNTIME_DIR, "cache", "intraday", COLLECTOR_ROLE === "daytrade" ? DAYTRADE_PRIORITY_SYMBOLS_CONTRACT_FILE : "fugle-ws-priority-symbols.json");
+const FUTOPT_PRIORITY_FILE = process.env.FUGLE_WS_FUTOPT_PRIORITY_FILE || path.join(RUNTIME_DIR, "state", "daytrade-futopt-priority-observations.json");
 const ADAPTIVE_INITIAL_RPM = Math.max(10, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_INITIAL_RPM || 60));
 const ADAPTIVE_MIN_RPM = Math.max(5, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MIN_RPM || 20));
 const ADAPTIVE_MAX_RPM = Math.max(ADAPTIVE_MIN_RPM, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MAX_RPM || 180));
@@ -548,6 +549,22 @@ function freshCachedCodeSet(symbols) {
   return fresh;
 }
 
+function readFutoptPriorityArtifact() {
+  const payload = readJson(FUTOPT_PRIORITY_FILE, {});
+  const tradeDate = String(payload?.trade_date || payload?.tradeDate || "");
+  const valid = tradeDate === currentTaipeiDate()
+    && payload?.priority_only === true
+    && Number(payload?.formal_candidate_count || 0) === 0
+    && payload?.formal_candidate_allowed !== true
+    && payload?.publish_allowed !== true;
+  if (!valid) {
+    return { symbols: [], source: "", updatedAt: "", rejected: Boolean(tradeDate), reason: tradeDate && tradeDate !== currentTaipeiDate() ? "stale_trade_date" : "invalid_priority_only_contract" };
+  }
+  const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+  const values = Array.isArray(payload?.symbols) && payload.symbols.length ? payload.symbols : rows;
+  return { symbols: values, source: String(payload?.source || ""), updatedAt: String(payload?.updated_at || payload?.updatedAt || ""), rejected: false, reason: "" };
+}
+
 function readPrioritySymbols(symbols) {
   const payload = readJson(PRIORITY_SYMBOLS_FILE, {});
   const universe = new Set(symbols);
@@ -572,6 +589,7 @@ function readPrioritySymbols(symbols) {
     daytradeCandlePriority: 0,
     terminalPriority: 0,
     openingPriority: 0,
+    futoptPriority: 0,
     symbols: 0,
   };
   const addMany = (key, values, options = {}) => {
@@ -597,6 +615,8 @@ function readPrioritySymbols(symbols) {
   addMany("daytrade", payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, { priority: true });
   addMany("terminalPriority", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, { priority: true });
   addMany("openingPriority", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, { priority: true });
+  const futoptPriority = readFutoptPriorityArtifact();
+  addMany("futoptPriority", futoptPriority.symbols, { priority: true });
   counts.strategy1 = 0; // retired: do not subscribe Strategy1 priority symbols
   addMany("strategy2", payload.strategy2 || payload.strategy2Symbols, { priority: true });
   addMany("strategy3", payload.strategy3 || payload.strategy3Symbols, { priority: true });
@@ -615,8 +635,10 @@ function readPrioritySymbols(symbols) {
     symbols: priorityOrdered.length ? priorityOrdered : ordered,
     allSymbols: ordered,
     counts,
-    updatedAt: payload.updatedAt || "",
-    source: payload.source || "",
+    updatedAt: payload.updatedAt || futoptPriority.updatedAt || "",
+    source: payload.source || futoptPriority.source || "",
+    futoptPriorityRejected: futoptPriority.rejected,
+    futoptPriorityRejectReason: futoptPriority.reason,
   };
 }
 

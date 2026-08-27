@@ -17,6 +17,12 @@ const MAX_PREOPEN_WATCH_ROWS = 20;
 const MAX_PREOPEN_WATCH_HISTORY = 360;
 const PREOPEN_WATCH_SOURCE = "futopt_preopen_watch_history";
 const STRATEGY_DETECTED_SOURCE = "strategy_detected_history";
+const FUTOPT_PRIORITY_SOURCE = "daytrade_futopt_priority_observation";
+const FUTOPT_PRIORITY_FILE = path.join(RUNTIME_DIR, "state", "daytrade-futopt-priority-observations.json");
+const MAX_FUTOPT_PRIORITY_ROWS = 80;
+const PREOPEN_PRIORITY_END = 8 * 60 + 50;
+const FUTOPT_SYNC_STRONG_CHANGE_PCT = 2;
+const SPOT_SYNC_STRONG_CHANGE_PCT = 2;
 const LOOP_LOCK_FILE = path.join(RUNTIME_DIR, "state", "strategy2-v2-realtime-observer.lock");
 
 function number(value) {
@@ -92,6 +98,47 @@ function preopenDisplayStatus(basisStatus, sourceStatus) {
   if (basisStatus === "待試撮" || basisStatus === "試撮缺") return basisStatus;
   if (sourceStatus && sourceStatus !== "ready" && sourceStatus !== "ok") return "gate=D觀察保存";
   return "期貨前20觀察";
+}
+
+function observedBasisStatus(value) {
+  return ["正價差", "逆價差", "逆收斂"].includes(String(value || ""));
+}
+
+function futoptPriorityRow({ row, quote, future, preopen, clock, observedAt }) {
+  const code = normalizeCode(row?.symbol || quote?.symbol || future?.underlying_symbol || future?.payload?.underlyingSymbol);
+  const futurePrice = number(future?.last_price ?? future?.payload?.lastPrice);
+  const spotPrice = number(quote?.price);
+  const futureChangePercent = number(future?.change_percent ?? future?.payload?.changePercent);
+  const spotChangePercent = number(quote?.change_percent);
+  const quoteTime = iso(quote?.quote_seen_at || quote?.updated_at || quote?.last_trade_time, "");
+  const futureTime = iso(future?.updated_at, "");
+  const quoteAgeSeconds = ageSeconds(quoteTime);
+  const futureAgeSeconds = ageSeconds(futureTime);
+  const basisStatus = String(preopen?.basis_status || preopen?.basisStatus || "");
+  const preopenBasisObserved = observedBasisStatus(basisStatus);
+  const synchronizedStrong = futureChangePercent >= FUTOPT_SYNC_STRONG_CHANGE_PCT
+    && spotChangePercent >= SPOT_SYNC_STRONG_CHANGE_PCT;
+  if (!code || futurePrice <= 0 || spotPrice <= 0 || quoteAgeSeconds > 12 || futureAgeSeconds > 15) return null;
+  if (!synchronizedStrong && !preopenBasisObserved) return null;
+  const reasonParts = [];
+  if (preopenBasisObserved) reasonParts.push("08:45-08:50 " + basisStatus);
+  if (synchronizedStrong) reasonParts.push("近月股期 " + round(futureChangePercent) + "%／現股 " + round(spotChangePercent) + "% 同步強漲");
+  const priorityKind = preopenBasisObserved && synchronizedStrong ? "preopen_basis_followed_by_sync_strength" : synchronizedStrong ? "futopt_spot_sync_strength" : "preopen_basis_priority";
+  return {
+    trade_date: clock.date, symbol: code, name: quote?.name || row?.name || preopen?.name || code,
+    future_symbol: future?.future_symbol || preopen?.future_symbol || preopen?.futureSymbol || "",
+    future_price: round(futurePrice), future_change_percent: round(futureChangePercent),
+    spot_price: round(spotPrice), spot_change_percent: round(spotChangePercent),
+    preopen_basis_status: basisStatus || "未觀察", preopen_basis_observed: preopenBasisObserved,
+    priority_kind: priorityKind, priority_level: synchronizedStrong ? "hot" : "priority",
+    priority_only: true, formal_candidate: false, formal_candidate_allowed: false, publish_allowed: false,
+    source: FUTOPT_PRIORITY_SOURCE, source_timestamp: futureTime || quoteTime,
+    quote_age_seconds: quoteAgeSeconds, future_age_seconds: futureAgeSeconds,
+    reason_code: priorityKind, reason: reasonParts.join("；"),
+    score: round(number(row?.mother_pool_score) + number(row?.priority_score) + (preopenBasisObserved ? 10 : 0) + (synchronizedStrong ? 20 : 0)),
+    warmup_actions: ["quote_refresh_priority", "candle_warmup_priority", "ma_warmup_priority", "priority_hot_scan_queue"],
+    observed_at: observedAt,
+  };
 }
 
 function sortPreopenRows(rows) {
@@ -189,10 +236,7 @@ function mapBySymbol(rows, key = "symbol") {
 async function readIntradayObservations(config, clock, previous, errors) {
   const motherRows = await safeRows(config, "v_fugle_daytrade_mother_pool", {
     select: "trade_date,symbol,name,market,price,open_price,previous_close,total_volume,trade_value,avg5_volume,mother_pool_score,priority_score,quote_seen_at,quote_updated_at,quote_age_seconds,source_name,updated_at,high_price,low_price,volume_vs_avg5_ratio,relative_volume_ratio,ma3_turn_up,ma5_turn_up,ma10_turn_up,ma30_turn_up,ma58_turn_up,ma_bull_stack_short,ma_bull_stack_mid,above_open_price,opening_range_break,surge_flag,volume_spike_flag,pool_reasons",
-    trade_date: "eq." + clock.date,
-    source_name: "eq." + SOURCE_NAME,
-    order: "mother_pool_score.desc",
-    limit: "1000",
+    trade_date: "eq." + clock.date, source_name: "eq." + SOURCE_NAME, order: "mother_pool_score.desc", limit: "1000",
   }, errors);
   const eligible = motherRows.filter(eligibleMotherPool);
   const symbols = eligible.map((row) => normalizeCode(row.symbol)).filter(Boolean);
@@ -201,14 +245,28 @@ async function readIntradayObservations(config, clock, previous, errors) {
     const group = symbols.slice(index, index + 120);
     quoteRows.push(...await safeRows(config, "fugle_daytrade_quotes_live", {
       select: "symbol,name,market,quote_seen_at,updated_at,last_trade_time,price,open_price,high_price,low_price,previous_close,change_percent,total_volume,trade_value,bid_price,bid_volume,ask_price,ask_volume,cumulative_bid_volume,cumulative_ask_volume",
-      symbol: "in.(" + group.join(",") + ")",
-      order: "quote_seen_at.desc",
-      limit: "1000",
+      symbol: "in.(" + group.join(",") + ")", order: "quote_seen_at.desc", limit: "1000",
     }, errors));
   }
+  const futoptRows = await safeRows(config, "fugle_daytrade_futopt_quotes_live", {
+    select: "future_symbol,underlying_symbol,product,last_price,change_percent,total_volume,updated_at,payload", order: "updated_at.desc", limit: "2000",
+  }, errors);
   const quoteBySymbol = mapBySymbol(quoteRows);
+  const futureBySymbol = new Map();
+  for (const future of futoptRows) {
+    const product = String(future?.product || future?.payload?.product || "").toUpperCase();
+    const code = normalizeCode(future?.underlying_symbol || future?.payload?.underlying_symbol || future?.payload?.underlyingSymbol);
+    if (product === "STOCK_FUTURE" && code && !futureBySymbol.has(code)) futureBySymbol.set(code, future);
+  }
+  const previousPreopenWatchHistory = previous.preopenWatchHistory || previous.futoptPreopenWatchHistory || previous.futopt_preopen_watch_history || [];
+  const preopenBySymbol = new Map();
+  for (const preopen of previousPreopenWatchHistory) {
+    const code = normalizeCode(preopen?.symbol || preopen?.code);
+    if (code && String(preopen?.trade_date || preopen?.tradeDate || "") === clock.date && !preopenBySymbol.has(code)) preopenBySymbol.set(code, preopen);
+  }
   const active = previous.activeSignals && typeof previous.activeSignals === "object" ? { ...previous.activeSignals } : {};
   const events = [];
+  const futoptPriorityRows = [];
   const nowIso = new Date().toISOString();
   for (const row of eligible) {
     const code = normalizeCode(row.symbol);
@@ -219,57 +277,49 @@ async function readIntradayObservations(config, clock, previous, errors) {
     const signal = fresh ? observationSignal(row, quote) : null;
     const stateKey = "quote:" + code;
     const state = signal ? signal.id + "|" + quoteTime : "";
-    if (!signal) {
-      delete active[stateKey];
-      continue;
+    if (!signal) delete active[stateKey];
+    else {
+      const previousState = String(active[stateKey] || "");
+      const previousSignal = previousState.split("|")[0];
+      active[stateKey] = state;
+      if (previousSignal !== signal.id) events.push({
+        code, symbol: code, name: quote.name || row.name || code, market: quote.market || row.market || "",
+        price: round(quote.price), entryPrice: round(quote.price), entryAt: quoteTime, timestamp: quoteTime, observedAt: nowIso,
+        scanDate: clock.date, tradeDate: clock.date, source: "supabase:fugle_daytrade_quotes_live", sourceTimestamp: quoteTime,
+        entryPriceSource: "fugle_websocket_quote_observation", entryCandleTime: "", entryTradeDate: clock.date,
+        stateId: "watch", stateLabel: "秒級策略觀察", formalCandidate: false, eventOrigin: "strategy2_realtime_quote",
+        observationKind: "quote", signalId: signal.id, signal: signal.label, reason: signal.reason,
+        score: round(number(row.mother_pool_score) + number(row.priority_score) + (number(row.volume_vs_avg5_ratio || row.relative_volume_ratio) >= 2 ? 12 : 0)),
+        pct: round(quote.change_percent), totalVolume: number(quote.total_volume), tradeValue: number(quote.trade_value),
+        volumeVsAvg5Ratio: round(row.volume_vs_avg5_ratio || row.relative_volume_ratio), quoteAgeSeconds: ageSeconds(quoteTime),
+        motherPoolScore: number(row.mother_pool_score), priorityScore: number(row.priority_score), poolReasons: row.pool_reasons || "",
+      });
     }
-    const previousState = String(active[stateKey] || "");
-    const previousSignal = previousState.split("|")[0];
-    active[stateKey] = state;
-    if (previousSignal === signal.id) continue;
-    events.push({
-      code,
-      symbol: code,
-      name: quote.name || row.name || code,
-      market: quote.market || row.market || "",
-      price: round(quote.price),
-      entryPrice: round(quote.price),
-      entryAt: quoteTime,
-      timestamp: quoteTime,
-      observedAt: nowIso,
-      scanDate: clock.date,
-      tradeDate: clock.date,
-      source: "supabase:fugle_daytrade_quotes_live",
-      sourceTimestamp: quoteTime,
-      entryPriceSource: "fugle_websocket_quote_observation",
-      entryCandleTime: "",
-      entryTradeDate: clock.date,
-      stateId: "watch",
-      stateLabel: "秒級策略觀察",
-      formalCandidate: false,
-      eventOrigin: "strategy2_realtime_quote",
-      observationKind: "quote",
-      signalId: signal.id,
-      signal: signal.label,
-      reason: signal.reason,
-      score: round(number(row.mother_pool_score) + number(row.priority_score) + (number(row.volume_vs_avg5_ratio || row.relative_volume_ratio) >= 2 ? 12 : 0)),
-      pct: round(quote.change_percent),
-      totalVolume: number(quote.total_volume),
-      tradeValue: number(quote.trade_value),
-      volumeVsAvg5Ratio: round(row.volume_vs_avg5_ratio || row.relative_volume_ratio),
-      quoteAgeSeconds: ageSeconds(quoteTime),
-      motherPoolScore: number(row.mother_pool_score),
-      priorityScore: number(row.priority_score),
-      poolReasons: row.pool_reasons || "",
+    const priority = futoptPriorityRow({ row, quote, future: futureBySymbol.get(code), preopen: preopenBySymbol.get(code), clock, observedAt: nowIso });
+    const futoptStateKey = "futopt-priority:" + code;
+    if (!priority) { delete active[futoptStateKey]; continue; }
+    futoptPriorityRows.push(priority);
+    const priorityState = priority.priority_kind;
+    const previousPriorityState = String(active[futoptStateKey] || "");
+    active[futoptStateKey] = priorityState;
+    if (previousPriorityState !== priorityState) events.push({
+      code, symbol: code, name: priority.name, market: quote.market || row.market || "", price: priority.spot_price,
+      entryPrice: priority.spot_price, entryAt: priority.source_timestamp, timestamp: priority.source_timestamp, observedAt: nowIso,
+      scanDate: clock.date, tradeDate: clock.date, source: FUTOPT_PRIORITY_SOURCE, sourceTimestamp: priority.source_timestamp,
+      entryPriceSource: "fugle_websocket_futopt_and_spot_observation", stateId: "watch", stateLabel: "股期同步超強觀察",
+      formalCandidate: false, priorityOnly: true, eventOrigin: FUTOPT_PRIORITY_SOURCE, observationKind: "futopt_spot_priority",
+      signalId: "s2_" + priority.priority_kind, signal: "近月股期／現股超強優先觀察", reason: priority.reason,
+      score: priority.score, pct: priority.spot_change_percent, futureChangePercent: priority.future_change_percent,
+      preopenBasisStatus: priority.preopen_basis_status, priorityLevel: priority.priority_level,
+      quoteAgeSeconds: priority.quote_age_seconds, futureAgeSeconds: priority.future_age_seconds,
     });
   }
+  const currentPriorityRows = [...futoptPriorityRows].sort((left, right) => number(right.score) - number(left.score)).slice(0, MAX_FUTOPT_PRIORITY_ROWS);
   return {
-    events,
-    activeSignals: active,
+    events, futoptPriorityRows: currentPriorityRows, activeSignals: active,
     source: {
-      motherPoolRows: motherRows.length,
-      eligibleMotherPoolRows: eligible.length,
-      quoteRows: quoteRows.length,
+      motherPoolRows: motherRows.length, eligibleMotherPoolRows: eligible.length, quoteRows: quoteRows.length,
+      futoptRows: futoptRows.length, futoptPriorityRows: currentPriorityRows.length,
       freshQuoteRows: quoteRows.filter((row) => ageSeconds(row.quote_seen_at || row.updated_at || row.last_trade_time) <= 12).length,
     },
   };
@@ -403,6 +453,16 @@ async function readPreopenFutures(config, clock, previous, errors) {
   }
   const current = sortPreopenRows(watchRows).slice(0, MAX_PREOPEN_WATCH_ROWS);
   const strategyCurrent = sortPreopenRows(strategyCandidates).slice(0, MAX_PREOPEN_WATCH_ROWS);
+  const futoptPriorityRows = clock.minuteOfDay <= PREOPEN_PRIORITY_END
+    ? current.filter((row) => !row.isStale && number(row.preopenPrice) >= MIN_PRICE && observedBasisStatus(row.basisStatus))
+      .map((row) => futoptPriorityRow({
+        row,
+        quote: { symbol: row.symbol, name: row.name, price: row.preopenPrice, quote_seen_at: row.sourceTimestamp },
+        future: { future_symbol: row.futureSymbol, last_price: row.future_price, change_percent: row.futureChangePercent, updated_at: row.sourceTimestamp },
+        preopen: row, clock, observedAt,
+      }))
+      .filter(Boolean).slice(0, MAX_FUTOPT_PRIORITY_ROWS)
+    : [];
   const active = previous.activeSignals && typeof previous.activeSignals === "object" ? { ...previous.activeSignals } : {};
   const events = [];
   for (const row of strategyCurrent) {
@@ -417,6 +477,7 @@ async function readPreopenFutures(config, clock, previous, errors) {
     preopenFutures: current,
     preopenWatchRows: current,
     strategyDetectedRows: strategyCurrent,
+    futoptPriorityRows,
     activeSignals: active,
     source: {
       futoptRows: futoptRows.length,
@@ -426,6 +487,7 @@ async function readPreopenFutures(config, clock, previous, errors) {
       txfChangePercent: round(txfChange),
       preopenWatchRows: current.length,
       strategyDetectedRows: strategyCurrent.length,
+      futoptPriorityRows: futoptPriorityRows.length,
       preopenWatchSource: PREOPEN_WATCH_SOURCE,
       strategyDetectedSource: STRATEGY_DETECTED_SOURCE,
     },
@@ -459,6 +521,17 @@ function appendPreopenWatchHistory(previous, incoming) {
     .slice(0, MAX_PREOPEN_WATCH_HISTORY);
 }
 
+function appendFutoptPriorityRows(previous, incoming, tradeDate) {
+  const rows = new Map();
+  for (const row of [...(Array.isArray(previous) ? previous : []), ...(Array.isArray(incoming) ? incoming : [])]) {
+    const symbol = normalizeCode(row?.symbol || row?.code);
+    if (!symbol || String(row?.trade_date || row?.tradeDate || "") !== tradeDate) continue;
+    if (row?.priority_only !== true || row?.formal_candidate === true || row?.formal_candidate_allowed === true || row?.publish_allowed === true) continue;
+    rows.set(symbol, row);
+  }
+  return [...rows.values()].sort((left, right) => number(right.score) - number(left.score)).slice(0, MAX_FUTOPT_PRIORITY_ROWS);
+}
+
 async function runOnce() {
   const diagnostic = process.argv.includes("--diagnostic");
   const now = new Date();
@@ -490,6 +563,8 @@ async function runOnce() {
   const preopenWatchRows = Array.isArray(result.preopenWatchRows) ? result.preopenWatchRows : [];
   const previousPreopenWatchHistory = previous.preopenWatchHistory || previous.futoptPreopenWatchHistory || previous.futopt_preopen_watch_history || [];
   const preopenWatchHistory = appendPreopenWatchHistory(previousPreopenWatchHistory, preopenWatchRows);
+  const previousFutoptPriorityRows = previous.futoptPriorityRows || previous.futopt_priority_rows || [];
+  const futoptPriorityRows = appendFutoptPriorityRows(previousFutoptPriorityRows, result.futoptPriorityRows || [], clock.date);
   const events = appendEvents(previous.observations, result.events);
   const strategyDetectedHistory = appendEvents(previous.strategyDetectedHistory || previous.strategy_detected_history || previous.observations, result.events);
   const updatedAt = new Date().toISOString();
@@ -523,9 +598,19 @@ async function runOnce() {
     preopenWatchHistoryCount: preopenWatchHistory.length,
     futoptPreopenWatchHistory: preopenWatchHistory,
     futopt_preopen_watch_history: preopenWatchHistory,
+    futoptPriorityRows,
+    futopt_priority_rows: futoptPriorityRows,
+    futoptPrioritySymbols: futoptPriorityRows.map((row) => row.symbol),
+    futopt_priority_symbols: futoptPriorityRows.map((row) => row.symbol),
+    futoptPriorityOnly: true,
+    futopt_priority_only: true,
+    futoptFormalCandidateCount: 0,
+    futopt_formal_candidate_count: 0,
     historyContracts: {
       futopt_preopen_watch_history: PREOPEN_WATCH_SOURCE,
       strategy_detected_history: STRATEGY_DETECTED_SOURCE,
+      futopt_priority_observation: FUTOPT_PRIORITY_SOURCE,
+      futopt_priority_max_rows: MAX_FUTOPT_PRIORITY_ROWS,
       preopen_watch_max_batch_rows: MAX_PREOPEN_WATCH_ROWS,
       preopen_watch_max_history_rows: MAX_PREOPEN_WATCH_HISTORY,
     },
@@ -534,6 +619,13 @@ async function runOnce() {
     errors,
     transport: { source: "strategy2-v2-realtime-observer", snapshotKey: SNAPSHOT_KEY, runId },
   };
+  const futoptPriorityArtifact = {
+    contract: "daytrade_futopt_priority_observation_v1", trade_date: clock.date, run_id: runId, phase,
+    source: FUTOPT_PRIORITY_SOURCE, priority_only: true, formal_candidate_count: 0,
+    formal_candidate_allowed: false, publish_allowed: false, symbols: futoptPriorityRows.map((row) => row.symbol),
+    rows: futoptPriorityRows, updated_at: updatedAt, first_blocker: errors[0] || null,
+  };
+  writeJson(FUTOPT_PRIORITY_FILE, futoptPriorityArtifact);
   const shouldPublish = result.events.length > 0 || preopenWatchRows.length > 0 || !previous.updatedAt || Date.now() - Date.parse(previous.updatedAt || 0) >= 15000;
   const snapshot = shouldPublish
     ? await upsertSnapshot(SNAPSHOT_KEY, payload, {
@@ -557,6 +649,10 @@ async function runOnce() {
     observationCount: payload.observationCount,
     preopenWatchCount: payload.preopenWatchCount,
     preopenWatchHistoryCount: payload.preopenWatchHistoryCount,
+    futoptPriorityCount: futoptPriorityRows.length,
+    futoptPriorityArtifact: FUTOPT_PRIORITY_FILE,
+    futoptPriorityOnly: true,
+    futoptFormalCandidateCount: 0,
     strategyDetectedHistoryCount: strategyDetectedHistory.length,
     sourceHealth: payload.sourceHealth,
     errors,
@@ -565,7 +661,7 @@ async function runOnce() {
     finishedAt: new Date().toISOString(),
   };
   writeJson(path.join(DATA_DIR, "scan-receipts", "strategy2-v2-realtime.json"), receipt);
-  console.log(JSON.stringify({ ok: true, runId, phase, observationCount: payload.observationCount, preopenWatchCount: payload.preopenWatchCount, preopenWatchHistoryCount: payload.preopenWatchHistoryCount, newEvents: result.events.length, snapshot: snapshot.ok, skipped: snapshot.skipped || false, errors }, null, 2));
+  console.log(JSON.stringify({ ok: true, runId, phase, observationCount: payload.observationCount, preopenWatchCount: payload.preopenWatchCount, preopenWatchHistoryCount: payload.preopenWatchHistoryCount, futoptPriorityCount: futoptPriorityRows.length, futoptPriorityOnly: true, newEvents: result.events.length, snapshot: snapshot.ok, skipped: snapshot.skipped || false, errors }, null, 2));
 }
 
 function sleep(ms) {
