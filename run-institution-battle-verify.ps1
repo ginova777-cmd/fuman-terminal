@@ -9,6 +9,9 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
 $log = Join-Path $logDir ("institution-battle-verify-{0}.log" -f (Get-Date -Format yyyyMMdd-HHmmss))
 $alertReceipt = Join-Path $receiptDir "institution-battle-verify-alert.json"
+$canonicalReceipt = Join-Path $receiptDir "institution-battle-verify.json"
+$strategy5ReceiptFile = Join-Path $receiptDir "strategy5.json"
+$institutionReceiptFile = Join-Path $receiptDir "institution.json"
 
 function Invoke-InstitutionBattleFailureAlert($ExitCode) {
   $nodeExe = "C:\Program Files\nodejs\node.exe"
@@ -54,23 +57,51 @@ $tailText
   } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $alertReceipt -Encoding utf8
 }
 
+function Write-InstitutionBattleBlockedReceipt($Reason, $ExitCode) {
+  $tradeDate = (Get-Date).ToString("yyyy-MM-dd")
+  $strategy5 = if (Test-Path -LiteralPath $strategy5ReceiptFile) { Get-Content -LiteralPath $strategy5ReceiptFile -Raw | ConvertFrom-Json } else { $null }
+  $institution = if (Test-Path -LiteralPath $institutionReceiptFile) { Get-Content -LiteralPath $institutionReceiptFile -Raw | ConvertFrom-Json } else { $null }
+  [ordered]@{
+    ok = $false
+    status = "BLOCKED"
+    complete = $false
+    contract = "institution-battle-canonical-receipt-v1"
+    tradeDate = $tradeDate
+    runId = ""
+    strategy5RunId = [string]($strategy5.runId ?? "")
+    institutionRunId = [string]($institution.runId ?? "")
+    strategy5Count = 0
+    institutionCount = 0
+    firstBlocker = [string]$Reason
+    blockingReason = [string]$Reason
+    source = "existing_strategy5_and_institution_receipts"
+    generatedRunId = $false
+    publishAllowed = $false
+    querySupabase = $false
+    scanAllowed = $false
+    recalculated = $false
+    exitCode = [int]$ExitCode
+    checkedAt = (Get-Date).ToString("o")
+  } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $canonicalReceipt -Encoding utf8
+}
+
 . "$PSScriptRoot\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Institution chip-flow battle verify" -LogPath $log -AllowAfterFormalSourceWindow
 
 node scripts\verify-institution-battle-state.js 2>&1 | Tee-Object -FilePath $log -Append
 if ($LASTEXITCODE -ne 0) {
-  Invoke-InstitutionBattleFailureAlert $LASTEXITCODE
-  throw "Institution chip-flow battle verify failed with exit code $LASTEXITCODE; log=$log"
+  $verifyExit = $LASTEXITCODE
+  Write-InstitutionBattleBlockedReceipt "institution_battle_state_verifier_failed" $verifyExit
+  Invoke-InstitutionBattleFailureAlert $verifyExit
+  throw "Institution chip-flow battle verify failed with exit code $verifyExit; log=$log"
 }
 
 $tradeDate = (Get-Date).ToString("yyyy-MM-dd")
-$strategy5ReceiptFile = Join-Path $receiptDir "strategy5.json"
-$institutionReceiptFile = Join-Path $receiptDir "institution.json"
-$canonicalReceipt = Join-Path $receiptDir "institution-battle-verify.json"
 $tradeDateKey = $tradeDate.Replace("-", "")
 $strategy5 = if (Test-Path -LiteralPath $strategy5ReceiptFile) { Get-Content -LiteralPath $strategy5ReceiptFile -Raw | ConvertFrom-Json } else { $null }
 $institution = if (Test-Path -LiteralPath $institutionReceiptFile) { Get-Content -LiteralPath $institutionReceiptFile -Raw | ConvertFrom-Json } else { $null }
 if (-not $strategy5 -or -not $institution -or [string]::IsNullOrWhiteSpace([string]$strategy5.runId) -or [string]::IsNullOrWhiteSpace([string]$institution.runId) -or ([string]$strategy5.runId -notmatch $tradeDateKey) -or ([string]$institution.runId -notmatch $tradeDateKey)) {
+  Write-InstitutionBattleBlockedReceipt "institution_battle_canonical_receipts_missing_or_not_today" 4
   Invoke-InstitutionBattleFailureAlert 4
   throw "Institution Battle canonical receipts missing or not today"
 }
