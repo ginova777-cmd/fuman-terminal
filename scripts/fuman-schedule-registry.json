@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-27T11:35:34.0812472Z",
+  "updatedAt": "2026-08-27T12:04:39.989Z",
   "policyVersion": 4,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
@@ -21,6 +21,10 @@
       "Fuman Opening Report 0820 Preflight",
       "Fuman Opening Report 0830 Telegram",
       "Fuman PC Wake 0430",
+      "Fuman Scorecard88 Collect Evening 2140",
+      "Fuman Scorecard88 Collect Strategy2 1240",
+      "Fuman Scorecard88 Collect Strategy3 1315",
+      "Fuman Scorecard88 Collect Strategy4 1700",
       "Fuman Strategy2 Unified 0845-1230",
       "Fuman Strategy3 V2 Complete Scan 1300",
       "Fuman Strategy3 V2 Daily Closure Verify 1310",
@@ -407,6 +411,26 @@
         0,
         267009,
         267011
+      ],
+      "Fuman Scorecard88 Collect Strategy2 1240": [
+        0,
+        3,
+        267009
+      ],
+      "Fuman Scorecard88 Collect Strategy3 1315": [
+        0,
+        3,
+        267009
+      ],
+      "Fuman Scorecard88 Collect Strategy4 1700": [
+        0,
+        3,
+        267009
+      ],
+      "Fuman Scorecard88 Collect Evening 2140": [
+        0,
+        3,
+        267009
       ]
     },
     "coveredBy": {
@@ -1338,6 +1362,46 @@
       "expectedState": "Ready",
       "expectedTriggers": [
         "08:40"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Scorecard88 Collect Strategy2 1240",
+      "displayName": "Fuman Scorecard88 Collect Strategy2 1240",
+      "description": "/88 terminal-only canonical scorecard collection; no scan, Supabase query, recalculation, or runId generation.",
+      "time": "12:40",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "12:40"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Scorecard88 Collect Strategy3 1315",
+      "displayName": "Fuman Scorecard88 Collect Strategy3 1315",
+      "description": "/88 terminal-only canonical scorecard collection; no scan, Supabase query, recalculation, or runId generation.",
+      "time": "13:15",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "13:15"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Scorecard88 Collect Strategy4 1700",
+      "displayName": "Fuman Scorecard88 Collect Strategy4 1700",
+      "description": "/88 terminal-only canonical scorecard collection; no scan, Supabase query, recalculation, or runId generation.",
+      "time": "17:00",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "17:00"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Scorecard88 Collect Evening 2140",
+      "displayName": "Fuman Scorecard88 Collect Evening 2140",
+      "description": "/88 terminal-only canonical scorecard collection; no scan, Supabase query, recalculation, or runId generation.",
+      "time": "21:40",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "21:40"
       ]
     }
   ]

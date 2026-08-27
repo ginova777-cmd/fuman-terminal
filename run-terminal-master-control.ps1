@@ -45,6 +45,8 @@ try {
   $chipSourceVerifierDue = (($startedAt.DayOfWeek -ne [DayOfWeek]::Saturday) -and ($startedAt.DayOfWeek -ne [DayOfWeek]::Sunday) -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("20:05")))
   & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-fuman-schedule-registry-live-alignment.js")
   $scheduleAlignmentExit = [int]$LASTEXITCODE
+  & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-scorecard88-fixed-collection-contract.js")
+  $scorecard88ContractExit = [int]$LASTEXITCODE
   $chipSourceVerifierExit = $null
   $chipSourceVerifierReceipt = Join-Path $receiptDir "chip-source-sync.json"
   if ($chipSourceVerifierDue) {
@@ -80,7 +82,7 @@ try {
     mode = $auditMode
     checkpointId = if ($effectiveMode -eq "Full") { "23:10-final" } else { $startedAt.ToString("HH:mm") }
     fullDayAudit = ($effectiveMode -eq "Full")
-    ok = (($verifierExit -eq 0) -and ($scheduleAuthorityExit -eq 0) -and ($scheduleAlignmentExit -eq 0) -and (-not $chipSourceVerifierDue -or $chipSourceVerifierExit -eq 0) -and (-not $telegramVerifierDue -or $telegramVerifierExit -eq 0) -and (-not $strategy2VerifierDue -or $strategy2VerifierExit -eq 0) -and (-not $cleanupVerifierDue -or $cleanupVerifierExit -eq 0))
+    ok = (($verifierExit -eq 0) -and ($scheduleAuthorityExit -eq 0) -and ($scheduleAlignmentExit -eq 0) -and ($scorecard88ContractExit -eq 0) -and (-not $chipSourceVerifierDue -or $chipSourceVerifierExit -eq 0) -and (-not $telegramVerifierDue -or $telegramVerifierExit -eq 0) -and (-not $strategy2VerifierDue -or $strategy2VerifierExit -eq 0) -and (-not $cleanupVerifierDue -or $cleanupVerifierExit -eq 0))
     startedAt = $startedAt.ToString("o")
     finishedAt = $finishedAt.ToString("o")
     durationSeconds = [math]::Round(($finishedAt - $startedAt).TotalSeconds, 3)
@@ -94,6 +96,7 @@ try {
     strategy2VerifierDue = $strategy2VerifierDue
     strategy2VerifierExitCode = $strategy2VerifierExit
     scheduleAlignmentExitCode = $scheduleAlignmentExit
+    scorecard88ContractExitCode = $scorecard88ContractExit
     strategy2VerifierReceipt = $strategy2VerifierReceipt
     cleanupVerifierDue = $cleanupVerifierDue
     cleanupVerifierExitCode = $cleanupVerifierExit
@@ -106,7 +109,7 @@ try {
     scorecardMarkdown = $mdFile
   } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $receiptFile -Encoding UTF8
   Copy-Item -LiteralPath $receiptFile -Destination $receiptHistoryFile -Force
-  $checkpointOk = (($verifierExit -eq 0) -and ($scheduleAuthorityExit -eq 0) -and ($scheduleAlignmentExit -eq 0) -and (-not $chipSourceVerifierDue -or $chipSourceVerifierExit -eq 0) -and (-not $telegramVerifierDue -or $telegramVerifierExit -eq 0) -and (-not $strategy2VerifierDue -or $strategy2VerifierExit -eq 0) -and (-not $cleanupVerifierDue -or $cleanupVerifierExit -eq 0))
+  $checkpointOk = (($verifierExit -eq 0) -and ($scheduleAuthorityExit -eq 0) -and ($scheduleAlignmentExit -eq 0) -and ($scorecard88ContractExit -eq 0) -and (-not $chipSourceVerifierDue -or $chipSourceVerifierExit -eq 0) -and (-not $telegramVerifierDue -or $telegramVerifierExit -eq 0) -and (-not $strategy2VerifierDue -or $strategy2VerifierExit -eq 0) -and (-not $cleanupVerifierDue -or $cleanupVerifierExit -eq 0))
   if (-not $checkpointOk) {
     $env:FUMAN_ALERT_SOURCE = "Fuman Terminal Master Control"
     $env:FUMAN_ALERT_SUBJECT = "Fuman master control blocker detected"

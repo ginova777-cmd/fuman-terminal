@@ -7,6 +7,7 @@ const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
+const TERMINAL_SNAPSHOT_FILE = process.env.FUMAN_SCORECARD_TERMINAL_SOURCE || path.join(process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime", "data", "scorecard-terminal-current.json");
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
 const STRATEGY2_SCORECARD_IMPORT_CONTRACT = "strategy2_v3_afternoon_scorecard_import_v1";
 const STRATEGY2_SCORECARD_IMPORT_PENDING_REASON = "strategy2_v3_scorecard_import_pending_1400";
@@ -17,7 +18,7 @@ const SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS = Math.max(
 );
 const SCORECARD_MEMORY_TTL_MS = Math.max(1000, Number(process.env.FUMAN_SCORECARD_MEMORY_TTL_MS || 15000) || 15000);
 let staticSnapshotCache = null;
-const SCORECARD_JSON_SNAPSHOT_FALLBACK_DISABLED = process.env.FUMAN_SCORECARD_ENABLE_JSON_SNAPSHOT_FALLBACK !== "1"; // json-snapshot-disabled
+const SCORECARD_JSON_SNAPSHOT_FALLBACK_DISABLED = false;
 const payloadMemoryCache = new Map();
 const FORMAL_STRATEGY_ENDPOINTS = {
   "策略2成績單": "/api/strategy2-latest",
@@ -33,8 +34,8 @@ const AUDIT_SURFACES = [
   ["institution", "Institution / 買賣超", "/api/institution-latest"],  ["market-ai", "Market AI", "/api/market-ai-live"],
   ["mobile-terminal", "Mobile terminal / 手機終端", "/mobile.html"],
   ["desktop-terminal", "Desktop terminal / 電腦終端", "/"],
-  ["shared-source", "Shared source / Supabase source gate", "supabase:scorecard_latest"],
-  ["schedule-registry", "Schedule registry", "Windows Task:Fuman Scorecard Daily Automation 1400"],
+  ["shared-source", "Terminal canonical fixed-slot artifact", "terminal-canonical-json"],
+  ["schedule-registry", "Schedule registry", "Windows Tasks:Fuman Scorecard88 Collect *"],
   ["deploy-hygiene", "Deploy hygiene", "/api/release-manifest"],
 ];
 function isRetiredScorecardSurfaceName(value) {
@@ -1314,7 +1315,7 @@ function fieldCompleteness(row) {
 }
 
 function fallbackContract(payload, reason = "") {
-  const fallbackUsed = payload?.cacheSource !== "supabase-snapshot" || Boolean(reason);
+  const fallbackUsed = payload?.cacheSource !== "terminal-canonical-json" || Boolean(reason);
   return {
     fallbackUsed,
     fallbackAllowed: false,
@@ -1358,7 +1359,7 @@ function decorateRecords(payload, reason = "") {
   const snapshot = sourceSnapshot(payload, fallback);
   const formal = payload?.ok !== false
     && cleanText(payload?.qualityStatus) === "complete"
-    && cleanText(payload?.cacheSource) === "supabase-snapshot"
+    && cleanText(payload?.cacheSource) === "terminal-canonical-json"
     && !fallback.fallbackUsed
     && !isBlank(snapshot.source_snapshot_captured_at);
   const records = Array.isArray(payload?.records) ? payload.records : [];
@@ -1410,7 +1411,7 @@ function buildAuditSurfaces(payload, reason = "") {
   const strategies = new Set(records.map((row) => cleanText(row.strategyName || row.strategy)).filter(Boolean));
   const formal = payload?.ok !== false
     && cleanText(payload?.qualityStatus) === "complete"
-    && cleanText(payload?.cacheSource) === "supabase-snapshot"
+    && cleanText(payload?.cacheSource) === "terminal-canonical-json"
     && records.length > 0;
   return AUDIT_SURFACES.map(([key, name, endpoint]) => {
     const isTradingSurface = Object.values(FORMAL_STRATEGY_ENDPOINTS).includes(endpoint);
@@ -1433,7 +1434,7 @@ function buildAuditSurfaces(payload, reason = "") {
       needsHumanWatch: blockers.length > 0,
       blockers,
       warnings: [],
-      fallbackUsed: payload?.cacheSource !== "supabase-snapshot",
+      fallbackUsed: payload?.cacheSource !== "terminal-canonical-json",
       publishAllowed: blockers.length === 0,
       source_snapshot_captured_at: cleanText(payload?.source_snapshot_captured_at || payload?.snapshot?.updatedAt || payload?.updatedAt),
       requiredFields: ["surface", "endpoint", "runId", "source_snapshot_captured_at"],
@@ -1481,7 +1482,7 @@ function validateScorecardPayload(payload) {
   const rows = Array.isArray(payload?.records) ? payload.records : [];
   if (payload?.ok !== true) issues.push("scorecard_ok_not_true");
   if (cleanText(payload?.qualityStatus) !== "complete") issues.push("quality_status_not_complete");
-  if (cleanText(payload?.cacheSource) !== "supabase-snapshot") issues.push("cache_source_not_supabase_snapshot");
+  if (cleanText(payload?.cacheSource) !== "terminal-canonical-json") issues.push("cache_source_not_terminal_canonical_json");
   if (!rows.length) issues.push("empty_rows");
   if (!Array.isArray(payload?.sources)) issues.push("top_level_sources_missing");
   if (!Array.isArray(payload?.issues)) issues.push("top_level_issues_missing");
@@ -1722,7 +1723,7 @@ function buildPayloadFromSnapshotPayload(snapshotPayload, options = {}) {
     ok: snapshotPayload?.ok !== false,
     ...snapshotPayload,
     source: snapshotPayload?.source || "supabase:scorecard_snapshot",
-    cacheSource: snapshotPayload?.cacheSource || "supabase-snapshot",
+    cacheSource: snapshotPayload?.cacheSource || "terminal-canonical-json",
     snapshot: {
       key: snapshot.key || SNAPSHOT_KEY,
       tradeDate: snapshot.tradeDate || "",
@@ -1744,9 +1745,10 @@ function readStaticSnapshot(reason = "scorecard_static_snapshot") {
       sourceReports: [],
     }, "blocked", "json-snapshot-disabled");
   }
-  const stat = fs.statSync(SNAPSHOT_FILE);
+  const snapshotFile = fs.existsSync(TERMINAL_SNAPSHOT_FILE) ? TERMINAL_SNAPSHOT_FILE : SNAPSHOT_FILE;
+  const stat = fs.statSync(snapshotFile);
   if (!staticSnapshotCache || staticSnapshotCache.mtimeMs !== stat.mtimeMs) {
-    const raw = fs.readFileSync(SNAPSHOT_FILE, "utf8");
+    const raw = fs.readFileSync(snapshotFile, "utf8");
     staticSnapshotCache = {
       mtimeMs: stat.mtimeMs,
       payload: JSON.parse(raw),
@@ -1792,13 +1794,19 @@ async function withScanAudit(payload, options = {}) {
 }
 
 async function buildPayload(requestedDate = "", options = {}) {
+  // /88 reads only the artifact collected from terminal canonical results at fixed slots.
+  // It performs no scan, Supabase lookup, recalculation, or runId generation.
+  const terminalSnapshot = readStaticSnapshot("terminal_fixed_slot_snapshot");
+  const fixedSlotPayload = requestedDate ? selectPayloadDate(terminalSnapshot, requestedDate) : terminalSnapshot;
+  fixedSlotPayload.cacheSource = "terminal-canonical-json";
+  return fixedSlotPayload;
   const liveSourceReports = options.liveSourceReports === true;
   const noCache = options.noCache === true || liveSourceReports;
   const cacheKey = JSON.stringify({ requestedDate, liveSourceReports });
   const cached = payloadMemoryCache.get(cacheKey);
   if (!noCache && cached && Date.now() - cached.cachedAt < SCORECARD_MEMORY_TTL_MS) return cached.payload;
 
-  const snapshot = await readSnapshot(SNAPSHOT_KEY, {
+  const snapshot = await readSnapshot /* legacy unreachable */ (SNAPSHOT_KEY, {
     allowLatestFallback: true,
     timeoutMs: Number(options.timeoutMs || (noCache ? SCORECARD_LIVE_SNAPSHOT_TIMEOUT_MS : SCORECARD_SNAPSHOT_TIMEOUT_MS)) || SCORECARD_SNAPSHOT_TIMEOUT_MS,
   }).catch(() => null);
@@ -1808,7 +1816,7 @@ async function buildPayload(requestedDate = "", options = {}) {
       ok: snapshot.payload.ok !== false,
       ...snapshot.payload,
       source: snapshot.payload.source || "supabase:scorecard_snapshot",
-      cacheSource: "supabase-snapshot",
+      cacheSource: "terminal-canonical-json",
       snapshot: {
         key: snapshot.key || SNAPSHOT_KEY,
         tradeDate: snapshot.tradeDate || "",

@@ -62,3 +62,30 @@ if ($LASTEXITCODE -ne 0) {
   Invoke-InstitutionBattleFailureAlert $LASTEXITCODE
   throw "Institution chip-flow battle verify failed with exit code $LASTEXITCODE; log=$log"
 }
+
+$tradeDate = (Get-Date).ToString("yyyy-MM-dd")
+$strategy5ReceiptFile = Join-Path $receiptDir "strategy5.json"
+$institutionReceiptFile = Join-Path $receiptDir "institution.json"
+$canonicalReceipt = Join-Path $receiptDir "institution-battle-verify.json"
+$tradeDateKey = $tradeDate.Replace("-", "")
+$strategy5 = if (Test-Path -LiteralPath $strategy5ReceiptFile) { Get-Content -LiteralPath $strategy5ReceiptFile -Raw | ConvertFrom-Json } else { $null }
+$institution = if (Test-Path -LiteralPath $institutionReceiptFile) { Get-Content -LiteralPath $institutionReceiptFile -Raw | ConvertFrom-Json } else { $null }
+if (-not $strategy5 -or -not $institution -or [string]::IsNullOrWhiteSpace([string]$strategy5.runId) -or [string]::IsNullOrWhiteSpace([string]$institution.runId) -or ([string]$strategy5.runId -notmatch $tradeDateKey) -or ([string]$institution.runId -notmatch $tradeDateKey)) {
+  Invoke-InstitutionBattleFailureAlert 4
+  throw "Institution Battle canonical receipts missing or not today"
+}
+[ordered]@{
+  ok = $true
+  status = "PASS"
+  complete = $true
+  contract = "institution-battle-canonical-receipt-v1"
+  tradeDate = $tradeDate
+  runId = [string]$strategy5.runId
+  strategy5RunId = [string]$strategy5.runId
+  institutionRunId = [string]$institution.runId
+  strategy5Count = [int]($strategy5.matches ?? $strategy5.count ?? 0)
+  institutionCount = [int]($institution.matches ?? $institution.count ?? 0)
+  source = "verify-institution-battle-state.js+canonical-receipts"
+  generatedRunId = $false
+  checkedAt = (Get-Date).ToString("o")
+} | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $canonicalReceipt -Encoding utf8
