@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 
 const {
   FUGLE_WS_CANDLES_FILE,
@@ -40,9 +41,9 @@ const STREAMING_CHANNEL = STREAMING_CHANNELS.join(",");
 const STREAMING_MAX_SYMBOLS = Math.max(1, Number(process.env.FUGLE_STREAMING_MAX_SYMBOLS || process.env.FUGLE_STREAMING_MAX_SUBSCRIPTIONS || 600));
 const STREAMING_MAX_TOTAL_SUBSCRIPTIONS = Math.max(STREAMING_CHANNELS.length, Number(process.env.FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS || 1800));
 const STREAMING_CANDLE_SYMBOLS = Math.max(0, Number(process.env.FUGLE_STREAMING_CANDLE_SYMBOLS || 1000));
+const STREAMING_AGGREGATE_SYMBOLS = Math.max(0, Number(process.env.FUGLE_STREAMING_AGGREGATE_SYMBOLS || 80));
 const STREAMING_SUBSCRIBE_CHUNK_SIZE = Math.max(1, Math.min(50, Number(process.env.FUGLE_STREAMING_SUBSCRIBE_CHUNK_SIZE || 50)));
 const STREAMING_RESUBSCRIBE_MS = Math.max(30000, Number(process.env.FUGLE_STREAMING_RESUBSCRIBE_MS || (COLLECTOR_ROLE === "daytrade" ? 16200000 : 30000)));
-const STREAMING_PINNED_PRIORITY_SYMBOLS = Math.max(0, Number(process.env.FUGLE_STREAMING_PINNED_PRIORITY_SYMBOLS || 40));
 const STREAMING_RECONNECT_INITIAL_MS = Math.max(1000, Number(
   process.env.FUGLE_STREAMING_RECONNECT_INITIAL_MS
   || process.env.FUGLE_STREAMING_RECONNECT_MS
@@ -54,7 +55,15 @@ const STREAMING_RECONNECT_MAX_MS = Math.max(STREAMING_RECONNECT_INITIAL_MS, Numb
 ));
 const STREAMING_STALE_RECONNECT_MS = Math.max(30000, Number(process.env.FUGLE_STREAMING_STALE_RECONNECT_MS || 120000));
 const STREAMING_STATUS_MS = Math.max(1000, Number(process.env.FUGLE_STREAMING_STATUS_MS || 5000));
-const STREAMING_PRIORITY_REFRESH_MS = Math.max(5000, Number(process.env.FUGLE_STREAMING_PRIORITY_REFRESH_MS || 30000));
+const SOURCE_STATUS_HEARTBEAT_MS = Math.max(30000, Number(process.env.FUGLE_SOURCE_STATUS_HEARTBEAT_MS || 30000));
+const SOURCE_STATUS_HEARTBEAT_RETRIES = Math.max(1, Math.min(4, Number(process.env.FUGLE_SOURCE_STATUS_HEARTBEAT_RETRIES || 3)));
+const SOURCE_STATUS_HEARTBEAT_BACKOFF_MS = Math.max(250, Number(process.env.FUGLE_SOURCE_STATUS_HEARTBEAT_BACKOFF_MS || 1000));
+const STREAMING_PRIORITY_REFRESH_MS = Math.max(60000, Number(process.env.FUGLE_STREAMING_PRIORITY_REFRESH_MS || 300000));
+const STREAMING_PRIORITY_RECONNECT_MIN_MS = Math.max(
+  STREAMING_PRIORITY_REFRESH_MS,
+  Number(process.env.FUGLE_STREAMING_PRIORITY_RECONNECT_MIN_MS || 300000),
+);
+const STREAMING_CLIENT_PING_MS = Math.max(25000, Number(process.env.FUGLE_STREAMING_CLIENT_PING_MS || 25000));
 const BATCH_SIZE = Math.max(1, Number(process.env.FUGLE_COLLECTOR_BATCH_SIZE || 120));
 const PER_SYMBOL_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_REQUEST_DELAY_MS || process.env.FUGLE_COLLECTOR_PER_SYMBOL_DELAY_MS || 80));
 const CONCURRENCY = Math.max(1, Math.min(12, Number(process.env.FUGLE_COLLECTOR_CONCURRENCY || 2)));
@@ -73,6 +82,7 @@ const OPENING_BOOST_CONCURRENCY = Math.max(1, Math.min(12, Number(process.env.FU
 const OPENING_BOOST_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_DELAY_MS || 80));
 const OPENING_BOOST_TARGET_COVERAGE = Math.max(0.5, Math.min(1, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_TARGET_COVERAGE || 0.95)));
 const STATE_DIR = path.dirname(FUGLE_WS_STATUS_FILE);
+const SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE = path.join(STATE_DIR, "fugle-daytrade-source-status-heartbeat.json");
 const RATE_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-rate-state.json");
 const UNSUPPORTED_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-unsupported-symbols.json");
 const DAYTRADE_PRIORITY_SYMBOLS_CONTRACT_FILE = "fugle-daytrade-ws-priority-symbols.json";
@@ -95,6 +105,12 @@ let last429At = "";
 let cooldownUntil = 0;
 let finmindCooldownUntil = 0;
 let lastFinmindError = "";
+let lastSourceStatusHeartbeatAt = 0;
+let sourceStatusHeartbeatInFlight = false;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function assertApprovedDaytradeSourceHost() {
   if (COLLECTOR_ROLE !== "daytrade") return { ok: true, status: "not_required" };
@@ -163,7 +179,7 @@ function symbolSource() {
 }
 function writeStatus(extra = {}) {
   const currentSymbolSource = symbolSource();
-  writeJson(FUGLE_WS_STATUS_FILE, {
+  const payload = {
     ok: extra.ok !== false,
     pid: process.pid,
     channel: "rest-quote-collector",
@@ -205,9 +221,142 @@ function writeStatus(extra = {}) {
     symbolSource: currentSymbolSource,
     symbolBootstrapOnly: currentSymbolSource === "priority_bridge_bootstrap_codes_only",
     ...extra,
-  });
+  };
+  writeJson(FUGLE_WS_STATUS_FILE, payload);
+  return payload;
 }
 
+function retryableSourceStatusError(status) {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status === 500 || status === 502 || status === 503 || status === 504 || status === 521;
+}
+
+async function mirrorDaytradeSourceTransport(snapshot) {
+  const checkedAt = nowIso();
+  const receipt = {
+    contract: "fugle_daytrade_collector_transport_heartbeat_v1",
+    source_name: "fugle_daytrade_source",
+    checked_at: checkedAt,
+    collector_role: COLLECTOR_ROLE,
+    interval_seconds: Math.round(SOURCE_STATUS_HEARTBEAT_MS / 1000),
+    retry_limit: SOURCE_STATUS_HEARTBEAT_RETRIES,
+    attempts: 0,
+    status: "pending",
+    first_blocker: null,
+  };
+  if (COLLECTOR_ROLE !== "daytrade") {
+    receipt.status = "skipped_non_daytrade_collector";
+    writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
+    return receipt;
+  }
+  const baseUrl = serverSupabaseUrl();
+  const apiKey = serverSupabaseKey();
+  if (!baseUrl || !apiKey) {
+    receipt.status = "blocked";
+    receipt.first_blocker = "source_status_credentials_missing";
+    writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
+    return receipt;
+  }
+
+  for (let attempt = 1; attempt <= SOURCE_STATUS_HEARTBEAT_RETRIES; attempt += 1) {
+    receipt.attempts = attempt;
+    try {
+      const read = await fetch(`${baseUrl}/rest/v1/source_status?source_name=eq.fugle_daytrade_source&select=source_name,trade_date,status,message,stale_seconds,payload&limit=1`, {
+        headers: { apikey: apiKey, Authorization: `Bearer ${apiKey}` },
+      });
+      if (!read.ok) throw Object.assign(new Error(`source_status_baseline_read_http_${read.status}`), { status: read.status });
+      const rows = await read.json();
+      const baseline = Array.isArray(rows) ? rows[0] : null;
+      const baselinePayload = baseline?.payload && typeof baseline.payload === "object" ? baseline.payload : null;
+      const tradeDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+      const baselineDate = String(baselinePayload?.trade_date || baseline?.trade_date || "");
+      if (!baselinePayload || baselineDate !== tradeDate) {
+        receipt.status = "blocked";
+        receipt.first_blocker = "same_day_source_status_baseline_missing_or_stale";
+        receipt.baseline_trade_date = baselineDate;
+        writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
+        return receipt;
+      }
+
+      const transportPayload = {
+        websocket_status_ok: snapshot.ok !== false,
+        websocket_mode: "streaming",
+        websocket_connected: snapshot.websocketConnected === true,
+        websocket_authenticated: snapshot.websocketAuthenticated === true,
+        websocket_subscribed: Number(snapshot.subscribed || 0),
+        websocket_subscribed_symbols: Number(snapshot.subscribedSymbols || 0),
+        websocket_streaming_channels: Array.isArray(snapshot.streamingChannels) ? snapshot.streamingChannels : [],
+        websocket_rest_disabled: snapshot.restDisabled === true,
+        websocket_status_updated_at: snapshot.updatedAt || checkedAt,
+        websocket_last_message_at: snapshot.websocketLastMessageAt || snapshot.lastMessageAt || "",
+        websocket_last_message_age_seconds: Number(snapshot.websocketHeartbeatAgeSeconds ?? snapshot.aggregatesLastUpdatedAgeSeconds ?? 999999),
+        websocket_heartbeat_at: snapshot.websocketHeartbeatAt || "",
+        websocket_heartbeat_age_seconds: Number(snapshot.websocketHeartbeatAgeSeconds ?? 999999),
+        aggregates_last_updated_at: snapshot.aggregatesLastUpdatedAt || "",
+        aggregates_last_updated_age_seconds: Number(snapshot.aggregatesLastUpdatedAgeSeconds ?? 999999),
+        websocket_pipeline_healthy: snapshot.ok !== false && (Boolean(snapshot.websocketHeartbeatAt) || Boolean(snapshot.aggregatesLastUpdatedAt)),
+        collector_transport_heartbeat_at: checkedAt,
+        collector_transport_heartbeat_contract: "preserve_writer_gate_verdict_v1",
+      };
+      const payload = { ...baselinePayload, ...transportPayload };
+      const write = await fetch(`${baseUrl}/rest/v1/source_status?on_conflict=source_name`, {
+        method: "POST",
+        headers: {
+          apikey: apiKey,
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        },
+        body: JSON.stringify([{
+          source_name: "fugle_daytrade_source",
+          trade_date: tradeDate,
+          status: baseline.status || "degraded",
+          message: baseline.message || "collector transport heartbeat",
+          stale_seconds: Number.isFinite(Number(baseline.stale_seconds)) ? Number(baseline.stale_seconds) : 0,
+          updated_at: checkedAt,
+          payload,
+        }]),
+      });
+      if (!write.ok) throw Object.assign(new Error(`source_status_transport_heartbeat_http_${write.status}`), { status: write.status });
+      receipt.status = "written";
+      receipt.preserved_gate_fields = ["daytrade_gate_grade", "gate_grade", "formal_entry_allowed", "formal_entry_speed_verdict"];
+      receipt.websocket_status_updated_at = transportPayload.websocket_status_updated_at;
+      receipt.websocket_last_message_age_seconds = transportPayload.websocket_last_message_age_seconds;
+      writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
+      return receipt;
+    } catch (error) {
+      const status = Number(error?.status || 0);
+      receipt.last_error = error?.message || String(error);
+      if (attempt >= SOURCE_STATUS_HEARTBEAT_RETRIES || !retryableSourceStatusError(status)) {
+        receipt.status = "retry_exhausted";
+        receipt.first_blocker = status ? `source_status_transport_heartbeat_http_${status}` : "source_status_transport_heartbeat_exception";
+        writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
+        return receipt;
+      }
+      const delayMs = Math.min(60000, SOURCE_STATUS_HEARTBEAT_BACKOFF_MS * (2 ** (attempt - 1)));
+      receipt.next_retry_at = new Date(Date.now() + delayMs).toISOString();
+      writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
+      await sleep(delayMs);
+    }
+  }
+  return receipt;
+}
+
+function scheduleSourceStatusHeartbeat(snapshot) {
+  if (COLLECTOR_ROLE !== "daytrade" || sourceStatusHeartbeatInFlight) return;
+  const now = Date.now();
+  if (now - lastSourceStatusHeartbeatAt < SOURCE_STATUS_HEARTBEAT_MS) return;
+  lastSourceStatusHeartbeatAt = now;
+  sourceStatusHeartbeatInFlight = true;
+  mirrorDaytradeSourceTransport(snapshot)
+    .catch((error) => writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, {
+      contract: "fugle_daytrade_collector_transport_heartbeat_v1",
+      checked_at: nowIso(),
+      status: "retry_exhausted",
+      first_blocker: "source_status_transport_heartbeat_exception",
+      error: error?.message || String(error),
+    }))
+    .finally(() => { sourceStatusHeartbeatInFlight = false; });
+}
 function getStreamingNotice(payload, text) {
   const eventName = String(payload?.event || payload?.type || "").toLowerCase();
   const data = payload?.data && typeof payload.data === "object" ? payload.data : {};
@@ -1007,9 +1156,9 @@ function chunkArray(values, size) {
 function selectStreamingSymbols(rotationCursor = 0) {
   const allSymbols = readSymbols();
   const priority = readPrioritySymbols(allSymbols);
-  const formalChannelCount = Math.max(1, STREAMING_CHANNELS.length);
-  const quoteRadarChannel = STREAMING_CHANNELS.includes("aggregates") ? "aggregates" : STREAMING_CHANNELS.includes("trades") ? "trades" : STREAMING_CHANNELS[0];
+  const quoteRadarChannel = STREAMING_CHANNELS.includes("trades") ? "trades" : STREAMING_CHANNELS.includes("aggregates") ? "aggregates" : STREAMING_CHANNELS[0];
   const aggregateRadarChannel = STREAMING_CHANNELS.includes("aggregates") ? "aggregates" : "";
+  const candleChannel = STREAMING_CHANNELS.includes("candles") ? "candles" : "";
   const taipeiParts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" }).formatToParts(new Date());
   const taipeiValues = Object.fromEntries(taipeiParts.map((part) => [part.type, part.value]));
   const taipeiMinute = Number(taipeiValues.hour) * 60 + Number(taipeiValues.minute);
@@ -1029,7 +1178,7 @@ function selectStreamingSymbols(rotationCursor = 0) {
       formalSymbols: [], candleRadarSymbols: [], candleChannel: "",
       quoteRadarSymbols: [], aggregateRadarSymbols: selected,
       quoteRadarChannel, aggregateRadarChannel,
-      formalChannelCount, formalExtraChannelCount: 0,
+      formalChannelCount: 0, formalExtraChannelCount: 0,
       subscriptionCount: selected.length, requested: allSymbols.length,
       symbolLimit: selected.length, pinnedPriorityCount: 0,
       rotationCursor: 0, nextRotationCursor: 0,
@@ -1039,84 +1188,78 @@ function selectStreamingSymbols(rotationCursor = 0) {
       subscriptionPlan: "preopen_0600_0844_full_market_aggregate_radar",
     };
   }
-  const formalExtraChannelCount = Math.max(0, formalChannelCount - 1);
-  const pinnedPriorityCount = Math.min(
-    STREAMING_PINNED_PRIORITY_SYMBOLS,
-    priority.symbols.length,
-    STREAMING_MAX_SYMBOLS,
-    Math.floor(STREAMING_MAX_TOTAL_SUBSCRIPTIONS / Math.max(1, formalExtraChannelCount + 1)),
-  );
-  const quoteRadarCapacity = Math.max(
-    0,
-    STREAMING_MAX_TOTAL_SUBSCRIPTIONS - (pinnedPriorityCount * formalExtraChannelCount),
-  );
-  const symbolLimit = Math.min(STREAMING_MAX_SYMBOLS, quoteRadarCapacity);
+
+  // Reserve the formal 1m capacity first. The remaining subscription budget is
+  // split between the all-market trade radar and aggregate snapshots. No pool
+  // size is a decision gate; these are transport capacities only.
+  const candleBudget = candleChannel
+    ? Math.min(STREAMING_MAX_SYMBOLS, STREAMING_CANDLE_SYMBOLS, STREAMING_MAX_TOTAL_SUBSCRIPTIONS)
+    : 0;
+  const remainingBudget = Math.max(0, STREAMING_MAX_TOTAL_SUBSCRIPTIONS - candleBudget);
+  const aggregateBudget = aggregateRadarChannel
+    ? Math.min(STREAMING_AGGREGATE_SYMBOLS, remainingBudget)
+    : 0;
+  const tradeBudget = quoteRadarChannel === "trades"
+    ? Math.max(0, remainingBudget - aggregateBudget)
+    : 0;
   const seen = new Set();
-  const ordered = [];
+  const prioritySymbols = [];
   const rotating = [];
-  const add = (code) => {
+  const addPriority = (code) => {
     const symbol = normalizeCode(code);
     if (/^\d{4}$/.test(symbol) && !seen.has(symbol)) {
       seen.add(symbol);
-      ordered.push(symbol);
+      prioritySymbols.push(symbol);
     }
   };
-  for (const code of priority.symbols.slice(0, pinnedPriorityCount)) add(code);
-  const rotatingSeen = new Set(ordered);
-  const addRotating = (code) => {
+  for (const code of priority.symbols) addPriority(code);
+  const rotatingSeen = new Set(prioritySymbols);
+  for (const code of allSymbols) {
     const symbol = normalizeCode(code);
     if (/^\d{4}$/.test(symbol) && !rotatingSeen.has(symbol)) {
       rotatingSeen.add(symbol);
       rotating.push(symbol);
     }
-  };
-  for (const code of priority.symbols.slice(pinnedPriorityCount)) addRotating(code);
-  for (const code of allSymbols) addRotating(code);
-  const rotatingCapacity = Math.max(0, symbolLimit - ordered.length);
-  const safeCursor = rotating.length ? ((Math.trunc(rotationCursor) % rotating.length) + rotating.length) % rotating.length : 0;
-  for (let index = 0; index < Math.min(rotatingCapacity, rotating.length); index += 1) {
-    ordered.push(rotating[(safeCursor + index) % rotating.length]);
   }
-  const selected = ordered.slice(0, symbolLimit);
-  const formalSymbols = selected.slice(0, pinnedPriorityCount);
-  const candleChannel = STREAMING_CHANNELS.includes("candles") ? "candles" : "";
-  const candleRadarSymbols = candleChannel
-    ? selected.slice(pinnedPriorityCount, pinnedPriorityCount + Math.max(0, STREAMING_CANDLE_SYMBOLS - formalSymbols.length))
-    : [];
-  // Reserve the remaining subscription budget for the trades quote radar.
-  // Aggregate subscriptions are already retained for every formal priority symbol.
-  const formalSubscriptionCount = formalSymbols.length * formalChannelCount;
-  const tradeRadarCapacity = Math.max(
-    0,
-    STREAMING_MAX_TOTAL_SUBSCRIPTIONS - formalSubscriptionCount - candleRadarSymbols.length,
-  );
-  const quoteRadarSymbols = selected.slice(pinnedPriorityCount, pinnedPriorityCount + tradeRadarCapacity);
-  const aggregateRadarSymbols = [];
-  const subscriptionCount = formalSymbols.length + quoteRadarSymbols.length + (formalSymbols.length * formalExtraChannelCount) + candleRadarSymbols.length + aggregateRadarSymbols.length;
+  const safeCursor = rotating.length ? ((Math.trunc(rotationCursor) % rotating.length) + rotating.length) % rotating.length : 0;
+  const selectPool = (capacity, cursor, preferPriority = true) => {
+    const pool = [];
+    if (preferPriority) pool.push(...prioritySymbols.slice(0, capacity));
+    for (let index = 0; pool.length < capacity && index < rotating.length; index += 1) {
+      pool.push(rotating[(cursor + index) % rotating.length]);
+    }
+    return pool;
+  };
+  const candleRadarSymbols = selectPool(candleBudget, safeCursor, true);
+  const quoteRadarSymbols = selectPool(tradeBudget, (safeCursor + Math.max(1, candleRadarSymbols.length)) % Math.max(1, rotating.length), true);
+  const aggregateRadarSymbols = selectPool(aggregateBudget, safeCursor, true);
+  const selected = candleRadarSymbols;
+  const subscriptionCount = candleRadarSymbols.length + quoteRadarSymbols.length + aggregateRadarSymbols.length;
+  const rotationWindow = Math.max(candleRadarSymbols.length, quoteRadarSymbols.length, aggregateRadarSymbols.length);
   return {
     allSymbols,
     priority,
     selected,
-    formalSymbols,
+    formalSymbols: [],
     candleRadarSymbols,
     candleChannel,
     quoteRadarSymbols,
     aggregateRadarSymbols,
     quoteRadarChannel,
     aggregateRadarChannel,
-    formalChannelCount,
-    formalExtraChannelCount,
+    formalChannelCount: 0,
+    formalExtraChannelCount: 0,
     subscriptionCount,
-    requested: pinnedPriorityCount + rotating.length,
-    symbolLimit,
-    pinnedPriorityCount,
+    requested: prioritySymbols.length + rotating.length,
+    symbolLimit: selected.length,
+    pinnedPriorityCount: Math.min(prioritySymbols.length, selected.length),
     rotationCursor: safeCursor,
-    nextRotationCursor: rotating.length ? (safeCursor + Math.max(1, rotatingCapacity)) % rotating.length : 0,
+    nextRotationCursor: rotating.length ? (safeCursor + Math.max(1, rotationWindow)) % rotating.length : 0,
     rotationUniverse: rotating.length,
-    rotationWindow: Math.min(rotatingCapacity, rotating.length),
+    rotationWindow,
     totalSubscriptionLimit: STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
-    candleCoverageTarget: candleChannel ? Math.min(STREAMING_CANDLE_SYMBOLS, selected.length) : 0,
-    subscriptionPlan: "formal_priority_all_channels_plus_candle_radar_plus_trades_quote_radar_plus_aggregate_formal_priority",
+    candleCoverageTarget: candleRadarSymbols.length,
+    subscriptionPlan: "formal_1m_1000_plus_trade_radar_plus_aggregate_priority",
   };
 }
 let pendingStreamingQuotes = [];
@@ -1234,10 +1377,13 @@ async function runStreamingCollector() {
     let lastForbiddenChannel = "";
     let lastSubscribeCycleAt = "";
     let lastSubscribeSignature = "";
+    let priorityManifestChanged = false;
+    let priorityManifestDeferred = false;
     let runLastMessageAt = "";
     let lastTransportMessageAt = "";
     let lastWebSocketHeartbeatAt = "";
     let lastAggregatesLastUpdatedAt = "";
+    let lastClientPingAt = "";
     let staleRecoveryTriggered = false;
     const staleDataWindow = STREAMING_STALE_RECONNECT_MS;
     let staleRecoveryTimer;
@@ -1248,7 +1394,7 @@ async function runStreamingCollector() {
       const priorityFreshCount = countFreshCachedQuotes(selection.priority.symbols);
       const openedAtMs = openedAt ? Date.parse(openedAt) : 0;
       const elapsedSeconds = openedAtMs > 0 ? Math.max(0.001, (Date.now() - openedAtMs) / 1000) : 0;
-      writeStatus({
+      const statusSnapshot = writeStatus({
         mode: "streaming",
         channel: `websocket:${STREAMING_CHANNEL}`,
         primarySource: "fugle-websocket",
@@ -1272,6 +1418,8 @@ async function runStreamingCollector() {
         websocketHeartbeatAt: lastWebSocketHeartbeatAt,
         websocketServerHeartbeatAt: lastWebSocketHeartbeatAt,
         websocketHeartbeatAgeSeconds: lastWebSocketHeartbeatAt ? Math.max(0, Math.round((Date.now() - Date.parse(lastWebSocketHeartbeatAt)) / 1000)) : 999999,
+        websocketClientPingAt: lastClientPingAt,
+        websocketClientPingIntervalMs: STREAMING_CLIENT_PING_MS,
         aggregatesLastUpdatedAt: lastAggregatesLastUpdatedAt,
         aggregatesLastUpdatedAgeSeconds: lastAggregatesLastUpdatedAt ? Math.max(0, Math.round((Date.now() - Date.parse(lastAggregatesLastUpdatedAt)) / 1000)) : 999999,
         pipelineHealthUses: "websocket_server_heartbeat_or_aggregates_lastUpdated",
@@ -1349,6 +1497,7 @@ async function runStreamingCollector() {
         sourceHostApprovalFile: SOURCE_HOST_APPROVAL_FILE,
         ...extra,
       });
+      scheduleSourceStatusHeartbeat(statusSnapshot);
     };
     let subscribeInProgress = false;
     const subscribe = async () => {
@@ -1364,7 +1513,23 @@ async function runStreamingCollector() {
           return;
         }
         if (lastSubscribeSignature && signature !== lastSubscribeSignature) {
-          ws.close(1000, "priority selection changed; reconnect before resubscribe");
+          // Fugle does not guarantee that unsubscribe/resubscribe produces a
+          // snapshot. Keep the healthy stream alive; defer one bounded
+          // reconnect until it has carried data for a stable interval.
+          priorityManifestChanged = true;
+          const openedAtMs = Date.parse(openedAt || "");
+          const canReconnectForPriority = Number.isFinite(openedAtMs)
+            && Date.now() - openedAtMs >= STREAMING_PRIORITY_RECONNECT_MIN_MS;
+          if (canReconnectForPriority) {
+            ws.close(1000, "priority selection changed after stable stream interval");
+            return;
+          }
+          priorityManifestDeferred = true;
+          writeStreamingStatus({
+            priorityManifestChanged,
+            priorityManifestDeferred,
+            priorityManifestReconnectMinSeconds: Math.ceil(STREAMING_PRIORITY_RECONNECT_MIN_MS / 1000),
+          });
           return;
         }
         lastSubscribeSignature = signature;
@@ -1476,6 +1641,7 @@ async function runStreamingCollector() {
         closed = true;
         clearInterval(statusTimer);
         clearInterval(subscribeTimer);
+        clearInterval(pingTimer);
         clearInterval(staleRecoveryTimer);
         clearInterval(priorityRefreshTimer);
         writeStreamingStatus({ websocketConnected: false });
@@ -1485,6 +1651,16 @@ async function runStreamingCollector() {
         if (closed) clearInterval(statusTimer);
         else writeStreamingStatus();
       }, STREAMING_STATUS_MS);
+      // Fugle's streaming protocol supports ping/pong. Keep the connection
+      // alive without subscribe churn; server heartbeat remains the health source.
+      const pingTimer = setInterval(() => {
+        if (closed || !ws || ws.readyState !== WebSocket.OPEN) {
+          clearInterval(pingTimer);
+          return;
+        }
+        lastClientPingAt = nowIso();
+        ws.send(JSON.stringify({ event: "ping" }));
+      }, STREAMING_CLIENT_PING_MS);
       const subscribeTimer = setInterval(() => {
         if (closed) clearInterval(subscribeTimer);
         else subscribe();
@@ -1494,8 +1670,8 @@ async function runStreamingCollector() {
           clearInterval(priorityRefreshTimer);
           return;
         }
-        // The 08:30 bridge writes a new priority manifest. Re-check it every
-        // 30 seconds; subscribe() reconnects only when the manifest changed.
+        // The 08:30 bridge can change the priority manifest. Re-check it at
+        // low frequency; a healthy stream is never churned just to refresh it.
         void subscribe();
       }, STREAMING_PRIORITY_REFRESH_MS);
       staleRecoveryTimer = setInterval(() => {
