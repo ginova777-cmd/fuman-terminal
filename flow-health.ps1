@@ -7,7 +7,7 @@ function Get-FumanRuntimeDir {
 
 function Write-FumanFlowHealth {
   param(
-    [Parameter(Mandatory = $true)][ValidateSet("institution", "warrant", "publish", "freshness", "supabase", "flow")][string]$Scope,
+    [Parameter(Mandatory = $true)][ValidateSet("institution", "publish", "freshness", "supabase", "flow")][string]$Scope,
     [Parameter(Mandatory = $true)][string]$Status,
     [string]$Message = "",
     [hashtable]$Detail = @{}
@@ -27,6 +27,8 @@ function Write-FumanFlowHealth {
       foreach ($property in $existing.PSObject.Properties) { $payload[$property.Name] = $property.Value }
     } catch {}
   }
+  # Warrant is retired. Never carry its legacy health record into a new payload.
+  $payload.Remove("warrant") | Out-Null
 
   $record = [ordered]@{
     scope = $Scope

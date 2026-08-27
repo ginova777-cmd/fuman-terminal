@@ -121,6 +121,15 @@ function Invoke-Strategy5SnapshotRefresh($RunId = "", $Count = 0, $Warning = "")
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy5 scan" -LogPath $log -AllowAfterFormalSourceWindow
 . "${PSScriptRoot}\scanner-resource-health.ps1"
+$chipReceiptVerifier = Join-Path $PSScriptRoot "scripts\verify-chip-source-sync-receipt.js"
+& $nodeExe "--use-system-ca" $chipReceiptVerifier *>&1 | Out-File -LiteralPath $log -Encoding utf8 -Append
+$chipReceiptExit = $LASTEXITCODE
+if ($chipReceiptExit -ne 0) {
+  $reason = "20:05 chip source readiness receipt is missing, stale, or source-date mismatched"
+  Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 blocked before scanner: $reason exit=$chipReceiptExit"
+  Write-Strategy5Receipt "blocked" 3 $false 0 "" @($reason) $reason
+  exit 3
+}
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "strategy5" -LogPath $log
 if ($resourceGate.PreserveLatest) {
   $reason = "resource health $($resourceGate.Status): $($resourceGate.Reason)"

@@ -328,6 +328,17 @@ function Invoke-InstitutionSnapshotRefresh($RunId = "", $Count = 0, $Warning = "
 . "${PSScriptRoot}\flow-health.ps1"
 Invoke-FumanWeekdayGuard -Label "Institution scan" -LogPath $log -AllowAfterFormalSourceWindow
 . "${PSScriptRoot}\scanner-resource-health.ps1"
+$chipReceiptVerifier = Join-Path $PSScriptRoot "scripts\verify-chip-source-sync-receipt.js"
+& $nodeExe "--use-system-ca" $chipReceiptVerifier *>&1 | Out-File -LiteralPath $log -Encoding utf8 -Append
+$chipReceiptExit = $LASTEXITCODE
+if ($chipReceiptExit -ne 0) {
+  $reason = "20:05 chip source readiness receipt is missing, stale, or source-date mismatched"
+  "Institution blocked before scanner: $reason exit=$chipReceiptExit" >> $log
+  Write-InstitutionBlockedReceipt $reason "" 0
+  Write-InstitutionReceipt "blocked_preserved" 3 $false 0 "" @($reason) $reason $true
+  Write-FumanFlowHealth -Scope institution -Status source_stale -Message $reason -Detail @{ receiptVerifierExit = $chipReceiptExit; log = $log }
+  exit 3
+}
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "institution" -LogPath $log
 if (Test-InstitutionTransientResourceHealthFailure $resourceGate) {
   $diagnostic = "resource health diagnostic unavailable: $($resourceGate.Reason)"

@@ -76,7 +76,7 @@ async function fetchRows(table, select, query = "") {
 }
 
 async function main() {
-  const maxAgeDays = Math.max(1, Number(process.env.CHIP_SOURCE_HEALTH_MAX_AGE_DAYS || 3));
+  const maxAgeDays = Math.max(0, Number(process.env.CHIP_SOURCE_HEALTH_MAX_AGE_DAYS ?? 3));
   const healthRows = await fetchRows(
     "v_institution_source_health",
     [

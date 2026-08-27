@@ -124,16 +124,22 @@ function Test-UpdatedAfterSlot($updatedAt, $slot) {
 }
 
 function Test-InstitutionFresh {
-  $url = "https://fuman-terminal.vercel.app/api/institution-latest?canvas=1&compact=1&shell=1&limit=60&live=1&ts=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
   try {
-    $payload = (Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45 -Headers @{ "Cache-Control" = "no-cache" }).Content | ConvertFrom-Json
+    $helper = Join-Path $PSScriptRoot "scripts\read-protected-production-api.js"
+    $endpoint = "/api/institution-latest?canvas=1&compact=1&shell=1&limit=60&live=1"
+    $raw = & node "--use-system-ca" $helper "--endpoint=$endpoint" 2>&1
+    $helperExit = $LASTEXITCODE
+    if ($helperExit -ne 0) { throw "protected readback helper exit=$helperExit $($raw -join ' ')" }
+    $envelope = ($raw | Out-String) | ConvertFrom-Json -ErrorAction Stop
+    if ($envelope.ok -ne $true -or $null -eq $envelope.payload) { throw "protected readback envelope invalid" }
+    $payload = $envelope.payload
     $count = if ($payload.count) { [int]$payload.count } else { 0 }
     if ($payload.ok -ne $true -or -not $payload.runId) { return @{ ok = $false; reason = "institution API not ready ok=$($payload.ok) runId=$($payload.runId)" } }
     if ($count -lt 100) { return @{ ok = $false; reason = "institution API count too low: $count" } }
     if (-not (Test-UpdatedAfterSlot $payload.updatedAt $ExpectedTime)) { return @{ ok = $false; reason = "institution API not updated after $ExpectedTime; updatedAt=$($payload.updatedAt)" } }
-    return @{ ok = $true; reason = "api ok count=$count runId=$($payload.runId)" }
+    return @{ ok = $true; reason = "authenticated api ok count=$count runId=$($payload.runId)" }
   } catch {
-    return @{ ok = $false; reason = "institution API freshness check failed; no local cache fallback allowed: $($_.Exception.Message)" }
+    return @{ ok = $false; reason = "institution authenticated API freshness check failed; no local cache fallback allowed: $($_.Exception.Message)" }
   }
 }
 
