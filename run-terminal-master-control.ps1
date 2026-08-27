@@ -76,13 +76,31 @@ try {
     & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-daily-retention-maintenance.js")
     $cleanupVerifierExit = [int]$LASTEXITCODE
   }
+  $contractFailure = (($verifierExit -ne 0) -or ($scheduleAuthorityExit -ne 0) -or ($scheduleAlignmentExit -ne 0) -or ($scorecard88ContractExit -ne 0))
+  $dependencyBlocked = (($chipSourceVerifierDue -and $chipSourceVerifierExit -ne 0) -or ($telegramVerifierDue -and $telegramVerifierExit -ne 0) -or ($strategy2VerifierDue -and $strategy2VerifierExit -ne 0) -or ($cleanupVerifierDue -and $cleanupVerifierExit -ne 0))
+  $checkpointOk = (-not $contractFailure -and -not $dependencyBlocked)
+  $limitedSelfHealPerformed = $false
+  $checkpointStatus = if ($checkpointOk -and $limitedSelfHealPerformed) { "SELF_HEALED_PASS" } elseif ($checkpointOk) { "PASS" } elseif ($contractFailure) { "FAIL_CLOSED" } else { "BLOCKED" }
+  $firstBlocker = if ($verifierExit -ne 0) { "api_unattended_scorecard_failed" }
+    elseif ($scheduleAuthorityExit -ne 0) { "formal_schedule_authority_failed" }
+    elseif ($scheduleAlignmentExit -ne 0) { "schedule_registry_live_alignment_failed" }
+    elseif ($scorecard88ContractExit -ne 0) { "scorecard88_contract_failed" }
+    elseif ($chipSourceVerifierDue -and $chipSourceVerifierExit -ne 0) { "chip_source_readiness_blocked" }
+    elseif ($telegramVerifierDue -and $telegramVerifierExit -ne 0) { "intraday_telegram_closure_blocked" }
+    elseif ($strategy2VerifierDue -and $strategy2VerifierExit -ne 0) { "strategy2_canonical_closure_blocked" }
+    elseif ($cleanupVerifierDue -and $cleanupVerifierExit -ne 0) { "cleanup_five_stage_closure_blocked" }
+    else { $null }
   $finishedAt = Get-Date
   [ordered]@{
     contract = "fuman-master-checkpoint-runner-v1"
     mode = $auditMode
     checkpointId = if ($effectiveMode -eq "Full") { "23:10-final" } else { $startedAt.ToString("HH:mm") }
     fullDayAudit = ($effectiveMode -eq "Full")
-    ok = (($verifierExit -eq 0) -and ($scheduleAuthorityExit -eq 0) -and ($scheduleAlignmentExit -eq 0) -and ($scorecard88ContractExit -eq 0) -and (-not $chipSourceVerifierDue -or $chipSourceVerifierExit -eq 0) -and (-not $telegramVerifierDue -or $telegramVerifierExit -eq 0) -and (-not $strategy2VerifierDue -or $strategy2VerifierExit -eq 0) -and (-not $cleanupVerifierDue -or $cleanupVerifierExit -eq 0))
+    ok = $checkpointOk
+    status = $checkpointStatus
+    allowedStatuses = @("PASS", "SELF_HEALED_PASS", "FAIL_CLOSED", "BLOCKED")
+    firstBlocker = $firstBlocker
+    limitedSelfHealPerformed = $limitedSelfHealPerformed
     startedAt = $startedAt.ToString("o")
     finishedAt = $finishedAt.ToString("o")
     durationSeconds = [math]::Round(($finishedAt - $startedAt).TotalSeconds, 3)
@@ -109,11 +127,10 @@ try {
     scorecardMarkdown = $mdFile
   } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $receiptFile -Encoding UTF8
   Copy-Item -LiteralPath $receiptFile -Destination $receiptHistoryFile -Force
-  $checkpointOk = (($verifierExit -eq 0) -and ($scheduleAuthorityExit -eq 0) -and ($scheduleAlignmentExit -eq 0) -and ($scorecard88ContractExit -eq 0) -and (-not $chipSourceVerifierDue -or $chipSourceVerifierExit -eq 0) -and (-not $telegramVerifierDue -or $telegramVerifierExit -eq 0) -and (-not $strategy2VerifierDue -or $strategy2VerifierExit -eq 0) -and (-not $cleanupVerifierDue -or $cleanupVerifierExit -eq 0))
   if (-not $checkpointOk) {
     $env:FUMAN_ALERT_SOURCE = "Fuman Terminal Master Control"
     $env:FUMAN_ALERT_SUBJECT = "Fuman master control blocker detected"
-    $env:FUMAN_ALERT_TEXT = "The read-only master verifier detected a hard blocker at checkpoint $($startedAt.ToString('HH:mm')). No scan, retry, publish, or deployment was started. Receipt: $receiptHistoryFile"
+    $env:FUMAN_ALERT_TEXT = "The read-only master verifier returned $checkpointStatus at checkpoint $($startedAt.ToString('HH:mm')); firstBlocker=$firstBlocker. No scan, retry, publish, or deployment was started. Receipt: $receiptHistoryFile"
     & node --use-system-ca (Join-Path $ProjectRoot "scripts\send-workflow-alert.js") --kind master-control --receipt $alertReceiptFile
   }
   # Fail closed with a real scheduler failure code. Never retry or create a second formal run.
@@ -127,6 +144,10 @@ try {
     checkpointId = if ($effectiveMode -eq "Full") { "23:10-final" } else { $startedAt.ToString("HH:mm") }
     fullDayAudit = ($effectiveMode -eq "Full")
     ok = $false
+    status = "FAIL_CLOSED"
+    allowedStatuses = @("PASS", "SELF_HEALED_PASS", "FAIL_CLOSED", "BLOCKED")
+    firstBlocker = "master_controller_exception"
+    limitedSelfHealPerformed = $false
     startedAt = $startedAt.ToString("o")
     finishedAt = $finishedAt.ToString("o")
     durationSeconds = [math]::Round(($finishedAt - $startedAt).TotalSeconds, 3)
