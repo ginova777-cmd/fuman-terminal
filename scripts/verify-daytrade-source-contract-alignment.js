@@ -48,6 +48,45 @@ function taipeiDateFromTimestamp(value) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(parsed));
 }
 
+function taipeiMinutes(value = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(value);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value || 0);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value || 0);
+  return hour * 60 + minute;
+}
+
+function formalWindowContext(marketDay, now = new Date()) {
+  const minutes = taipeiMinutes(now);
+  const isTradingDay = marketDay?.isTradingDay === true;
+  const inFormalWindow = isTradingDay && minutes >= 9 * 60 && minutes <= 13 * 60 + 30;
+  return {
+    isTradingDay,
+    taipeiMinutes: minutes,
+    inFormalWindow,
+    phase: !isTradingDay
+      ? "non_trading_day"
+      : minutes < 9 * 60
+        ? "preopen_or_warmup"
+        : minutes <= 13 * 60 + 30
+          ? "formal_daytrade_window"
+          : "after_formal_daytrade_window",
+  };
+}
+
+function hasSameDayFormalEvidence(source, tradeDate) {
+  return taipeiDateFromTimestamp(source?.updatedAt) === String(tradeDate || "")
+    && source?.status === "ok"
+    && source?.daytradeGateGrade === "A"
+    && source?.formalEntryAllowed === true
+    && source?.websocketFormalReady === true
+    && source?.scannerCanRunOpening === true;
+}
+
 function sleepMs(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -677,7 +716,9 @@ async function main() {
     return;
   }
   const marketDay = await isTwseTradingDay(new Date(), { stateDir: process.env.FUMAN_STATE_DIR || "C:/fuman-runtime/state" }).catch((error) => ({ isTradingDay: true, reason: "calendar_probe_failed", error: error.message }));
-  const marketClosed = marketDay.isTradingDay === false;
+  const formalWindow = formalWindowContext(marketDay);
+  const marketClosed = formalWindow.isTradingDay !== true;
+  const formalAlignmentRequired = formalWindow.inFormalWindow;
   const anonKey = process.env.SUPABASE_ANON_KEY || readTextSecret([
     path.join("C:", "fuman-runtime", "secrets", "supabase-anon-key.txt"),
     path.join(__dirname, "..", "secrets", "supabase-anon-key.txt"),
@@ -731,9 +772,15 @@ async function main() {
   const sourceStatus = normalizeSourceStatus(firstObject(sourceRows));
   const canonicalGate = normalizeGate(firstObject(canonicalRows));
   const unattendedGate = normalizeGate(firstObject(unattendedRows));
+  const sameDayFormalEvidence = hasSameDayFormalEvidence(sourceStatus, marketDay.date);
+  const afterFormalWindow = formalWindow.phase === "after_formal_daytrade_window";
   const alignment = marketClosed
     ? { ok: true, verdict: "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD", mode: "market_closed_previous_good", issues: [] }
-    : gateVerdict(sourceStatus, canonicalGate, unattendedGate);
+    : afterFormalWindow
+      ? sameDayFormalEvidence
+        ? { ok: true, verdict: "AFTER_FORMAL_WINDOW_SAME_DAY_A_EVIDENCE", mode: "after_formal_window_same_day_evidence", issues: [] }
+        : { ok: false, verdict: "AFTER_FORMAL_WINDOW_NO_SAME_DAY_A_EVIDENCE", mode: "after_formal_window_missing_evidence", issues: ["after_formal_window_same_day_a_evidence_missing"] }
+      : gateVerdict(sourceStatus, canonicalGate, unattendedGate);
   const issues = [...alignment.issues];
   const writerCodeRegression = writerCodeRegressionChecks();
   const writerSupervisorRegression = writerSupervisorRegressionChecks();
@@ -757,8 +804,8 @@ async function main() {
         || item.scorecardRequiredOkCount > item.scorecardRequiredCount)) {
       issues.push(`${label}_scorecard_required_count_invalid`);
     }
-    if (!marketClosed && item.gateGrade === "A" && label !== "source" && gateWebsocketOk(item) !== true) issues.push(`${label}_websocket_formal_ready_false_for_a`);
-    if (!marketClosed && ((label === "source" && item.daytradeGateGrade === "A") || (label !== "source" && item.gateGrade === "A"))) {
+    if (formalAlignmentRequired && item.gateGrade === "A" && label !== "source" && gateWebsocketOk(item) !== true) issues.push(`${label}_websocket_formal_ready_false_for_a`);
+    if (formalAlignmentRequired && ((label === "source" && item.daytradeGateGrade === "A") || (label !== "source" && item.gateGrade === "A"))) {
       if (sourceWebsocketOk(item) !== true) issues.push(`${label}_websocket_evidence_not_formal`);
       if (label === "source") {
         if (!DYNAMIC_FORMAL_SCOPES.has(item.formalGateScope)) issues.push("source_formal_gate_scope_not_dynamic_pool_layered");
@@ -793,7 +840,7 @@ async function main() {
     ["intraday_1m_stale_seconds", sourceStatus.intraday1mStaleSeconds, canonicalGate.intraday1mStaleSeconds, unattendedGate.intraday1mStaleSeconds],
   ];
   for (const [name, ...values] of layerAlignmentChecks) {
-    if (preopenWarmupMode) continue;
+    if (preopenWarmupMode || !formalAlignmentRequired) continue;
     if (name === "websocket_formal_ready" && sourceStatus.offSession === true) continue;
     if (values.some((value) => value === null || value === undefined || value === "" || Number.isNaN(value))) {
       issues.push(`layer_contract_field_missing:${name}`);
@@ -819,12 +866,12 @@ async function main() {
       if (typeof row.txf_ok !== "boolean") issues.push(`${probe.label}_txf_ok_not_boolean`);
     }
   }
-  if (!marketClosed && canonicalGate.gateGrade === "A" && canonicalFutoptProbe.ok) {
+  if (formalAlignmentRequired && canonicalGate.gateGrade === "A" && canonicalFutoptProbe.ok) {
     const row = Array.isArray(canonicalFutoptProbe.rows) ? canonicalFutoptProbe.rows[0] : null;
     if (row && String(row.futopt_gate_status || "") !== "ready") issues.push("canonical_a_with_futopt_not_ready");
     if (row && row.futopt_txf_ok !== true) issues.push("canonical_a_with_txf_not_ready");
   }
-  if (!marketClosed && unattendedGate.gateGrade === "A" && unattendedFutoptProbe.ok) {
+  if (formalAlignmentRequired && unattendedGate.gateGrade === "A" && unattendedFutoptProbe.ok) {
     const row = Array.isArray(unattendedFutoptProbe.rows) ? unattendedFutoptProbe.rows[0] : null;
     if (row && String(row.futopt_gate_status || "") !== "ready") issues.push("unattended_a_with_futopt_not_ready");
     if (row && row.futopt_txf_ok !== true) issues.push("unattended_a_with_txf_not_ready");
@@ -839,7 +886,13 @@ async function main() {
       date: marketDay.date || "",
       reason: marketDay.reason || "",
       source: marketDay.source || "",
-      closedPolicy: marketClosed ? "preserve_previous_good_no_formal_entry" : "formal_alignment_required",
+      closedPolicy: marketClosed
+        ? "preserve_previous_good_no_formal_entry"
+        : formalAlignmentRequired
+          ? "formal_alignment_required"
+          : "same_day_formal_evidence_required_after_window",
+      formalWindow,
+      sameDayFormalEvidence,
     },
     checkedAt: new Date().toISOString(),
     sourceName: SOURCE_NAME,
@@ -856,7 +909,9 @@ async function main() {
       layerGateGradeMismatch,
       layerGateGradeMismatchClassification: sourceStatusIsOvernight && layerGateGradeMismatch
         ? "overnight_source_status_state_not_static_contract"
-        : (layerGateGradeMismatch ? "live_layer_state_mismatch" : "aligned"),
+        : (!formalAlignmentRequired && layerGateGradeMismatch
+          ? "after_formal_window_dynamic_gate_expected"
+          : (layerGateGradeMismatch ? "live_layer_state_mismatch" : "aligned")),
     },
     writerCodeRegression,
     writerSupervisorRegression,
@@ -890,8 +945,8 @@ async function main() {
       },
     },
     issues,
-    mode: marketClosed ? "market_closed_previous_good" : alignment.mode,
-    verdict: marketClosed ? "MARKET_CLOSED_PRESERVE_PREVIOUS_GOOD" : alignment.verdict,
+    mode: alignment.mode,
+    verdict: alignment.verdict,
   };
   console.log(JSON.stringify(result, null, 2));
   process.exitCode = result.ok ? 0 : 1;
