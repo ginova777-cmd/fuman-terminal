@@ -8,6 +8,7 @@ const LOCK_FILE = process.env.FUMAN_DEPLOY_LOCK_FILE || "C:\\fuman-runtime\\lock
 const LAST_DEPLOY_FILE = process.env.FUMAN_DEPLOY_LAST_FILE || "C:\\fuman-runtime\\locks\\fuman-vercel-deploy.last.json";
 const LOCK_TTL_MS = Number(process.env.FUMAN_DEPLOY_LOCK_TTL_MS || 2 * 60 * 60 * 1000);
 const DUPLICATE_WINDOW_MS = Number(process.env.FUMAN_DEPLOY_DUPLICATE_WINDOW_MS || 30 * 60 * 1000);
+const LEGACY_DEPLOY_ROOT = path.resolve("C:\\fuman-terminal").toLowerCase();
 
 function ensureDir(file) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -19,6 +20,31 @@ function git(args) {
     throw new Error(`git ${args.join(" ")} failed: ${(result.stderr || result.stdout || "").trim()}`);
   }
   return String(result.stdout || "").trim();
+}
+
+function taipeiClock(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(now).filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
+  return Number(parts.hour) * 60 + Number(parts.minute);
+}
+
+function assertApprovedProductionWindow() {
+  const approvedRoot = path.resolve(process.env.FUMAN_APPROVED_DEPLOY_SOURCE_ROOT || "").toLowerCase();
+  const actualRoot = path.resolve(ROOT).toLowerCase();
+  if (process.env.FUMAN_PRODUCTION_WINDOW_GO !== "1") throw new Error("production_window_go_missing");
+  if (!approvedRoot || approvedRoot !== actualRoot) throw new Error(`approved_deploy_source_mismatch approved=${approvedRoot || "(missing)"} actual=${actualRoot}`);
+  if (actualRoot === LEGACY_DEPLOY_ROOT) throw new Error("legacy_fuman_terminal_deploy_root_forbidden");
+  const minute = taipeiClock();
+  if (minute < 22 * 60 || minute >= 22 * 60 + 30) throw new Error("production_deploy_outside_2200_window");
+  const status = git(["status", "--porcelain"]);
+  if (status) throw new Error("approved_deploy_source_not_clean");
+  const head = git(["rev-parse", "HEAD"]);
+  const main = git(["rev-parse", "origin/main"]);
+  if (head !== main) throw new Error(`approved_deploy_source_not_origin_main head=${head.slice(0, 8)} main=${main.slice(0, 8)}`);
 }
 
 function run(label, args) {
@@ -110,6 +136,7 @@ if (!/^[0-9a-f]{40}$/i.test(releaseSha)) {
 }
 
 try {
+  assertApprovedProductionWindow();
   assertSupabaseIncidentClear("deploy-production-safe");
   acquireLock(releaseSha);
   run("verify-sync-hard-gate.js", [process.execPath, "scripts/verify-sync-hard-gate.js"]);
