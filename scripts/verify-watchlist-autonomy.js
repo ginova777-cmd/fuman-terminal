@@ -66,7 +66,7 @@ function isBlockedWatchlistDisplay(response) {
 
 function taskCheck() {
   if (SKIP_TASKS || process.platform !== "win32") return { checked: false, reason: SKIP_TASKS ? "skipped" : "non_windows" };
-  const probe = spawnSync("powershell.exe", ["-NoProfile", "-Command", "$names = 'Fuman Freshness Gate Fast 0845-1645','Fuman Freshness Gate Full 2010','FumanTerminalProductionHealthMonitor'; $active=@{}; foreach($name in $names){ $task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue; $active[$name]=[bool]$task }; $info=Get-ScheduledTaskInfo -TaskName 'Fuman Freshness Gate Fast 0845-1645' -ErrorAction SilentlyContinue; [pscustomobject]@{ active=$active; retiredPresent=@(); fastGateLastResult=if($info){[string]$info.LastTaskResult}else{''}; fastGateTaskCount=if($active['Fuman Freshness Gate Fast 0845-1645']){1}else{0} } | ConvertTo-Json -Compress"], { encoding: "utf8", windowsHide: true });
+  const probe = spawnSync("powershell.exe", ["-NoProfile", "-Command", "$required = 'Fuman Terminal Autonomous Root Monitor'; $retired = 'Fuman Freshness Gate Fast 0845-1645','Fuman Freshness Gate Full 2010','FumanTerminalProductionHealthMonitor'; $active=@{}; foreach($name in $required){ $task=Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue; $active[$name]=[bool]$task }; $retiredPresent=@($retired | Where-Object { Get-ScheduledTask -TaskName $_ -ErrorAction SilentlyContinue }); [pscustomobject]@{ active=$active; retiredPresent=$retiredPresent } | ConvertTo-Json -Compress"], { encoding: "utf8", windowsHide: true });
   if (probe.status !== 0) return { checked: false, reason: String(probe.stderr || probe.stdout || "").trim() || `exit_${probe.status}` };
   try { return { checked: true, ...JSON.parse(String(probe.stdout || "{}").trim()) }; }
   catch (error) { return { checked: false, reason: `scheduled_task_json_parse_failed:${error.message}` }; }
@@ -113,12 +113,6 @@ async function main() {
   if (tasks.checked) {
     for (const [name, present] of Object.entries(tasks.active)) failWhen(!present, `scheduled task missing: ${name}`);
     failWhen(tasks.retiredPresent.length > 0, `retired scheduled tasks present: ${tasks.retiredPresent.join(",")}`);
-    failWhen(tasks.active?.["Fuman Freshness Gate Fast 0845-1645"] && !tasks.fastGateLastResult, "Fuman Freshness Gate Fast last result could not be read");
-    if (SKIP_FAST_GATE_LAST_RESULT) {
-      warnWhen(tasks.fastGateLastResult && !/^(0|267009)\b/.test(tasks.fastGateLastResult), `Fuman Freshness Gate Fast last result skipped during active freshness gate: ${tasks.fastGateLastResult}`);
-    } else {
-      failWhen(tasks.fastGateLastResult && !/^(0|267009)\b/.test(tasks.fastGateLastResult), `Fuman Freshness Gate Fast last result is ${tasks.fastGateLastResult}`);
-    }
   } else {
     warnings.push(`task check not authoritative: ${tasks.reason}`);
   }
