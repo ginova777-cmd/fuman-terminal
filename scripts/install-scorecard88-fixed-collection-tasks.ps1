@@ -1,8 +1,11 @@
 param(
   [string]$ProjectRoot = 'C:\fuman-release-owner\fuman-terminal',
-  [string]$RuntimeRoot = 'C:\fuman-runtime'
+  [string]$RuntimeRoot = 'C:\fuman-runtime',
+  [switch]$InteractiveFallback
 )
 $ErrorActionPreference = 'Stop'
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+if (-not $isAdmin -and -not $InteractiveFallback) { throw 'administrator_required_for_scorecard88_s4u_tasks' }
 $pwsh = 'C:\Program Files\PowerShell\7\pwsh.exe'
 $runner = Join-Path $ProjectRoot 'scripts\run-scorecard88-terminal-collector.ps1'
 if (-not (Test-Path -LiteralPath $runner)) { throw "runner_missing:$runner" }
@@ -17,6 +20,11 @@ foreach ($definition in $definitions) {
   $action = New-ScheduledTaskAction -Execute $pwsh -Argument $args
   $trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At $definition.At
   $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
-  Register-ScheduledTask -TaskName $definition.Name -Action $action -Trigger $trigger -Settings $settings -User $env:USERNAME -Force -ErrorAction Stop | Out-Null
-  Write-Output "[scorecard88] installed task=$($definition.Name) at=$($definition.At) slot=$($definition.Slot)"
+  if ($InteractiveFallback) {
+    Register-ScheduledTask -TaskName $definition.Name -Action $action -Trigger $trigger -Settings $settings -User $env:USERNAME -Force -ErrorAction Stop | Out-Null
+  } else {
+    $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
+    Register-ScheduledTask -TaskName $definition.Name -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force -ErrorAction Stop | Out-Null
+  }
+  Write-Output "[scorecard88] installed task=$($definition.Name) at=$($definition.At) slot=$($definition.Slot) logonType=$(if($InteractiveFallback){'InteractiveToken'}else{'S4U'})"
 }

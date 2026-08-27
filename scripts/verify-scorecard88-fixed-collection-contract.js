@@ -34,7 +34,7 @@ for (const [name, time] of definitions) {
   if (!allowed.includes(0) || !allowed.includes(3)) issues.push(`registry_allowed_results_missing:${name}`);
 }
 const namesLiteral = definitions.map(([name]) => `'${name.replace(/'/g, "''")}'`).join(",");
-const ps = `$OutputEncoding=[Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $rows=Get-ScheduledTask -TaskName @(${namesLiteral}) -ErrorAction SilentlyContinue | ForEach-Object {$a=$_.Actions|Select-Object -First 1; [pscustomobject]@{name=$_.TaskName; enabled=$_.Settings.Enabled; arguments=[string]$a.Arguments; triggers=@($_.Triggers|ForEach-Object{if([string]$_.StartBoundary -match 'T(\\d{2}:\\d{2})'){$Matches[1]}})}}; @($rows)|ConvertTo-Json -Depth 4 -Compress`;
+const ps = `$OutputEncoding=[Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $rows=Get-ScheduledTask -TaskName @(${namesLiteral}) -ErrorAction SilentlyContinue | ForEach-Object {$a=$_.Actions|Select-Object -First 1; [pscustomobject]@{name=$_.TaskName; enabled=$_.Settings.Enabled; arguments=[string]$a.Arguments; logonType=[string]$_.Principal.LogonType; triggers=@($_.Triggers|ForEach-Object{if([string]$_.StartBoundary -match 'T(\\d{2}:\\d{2})'){$Matches[1]}})}}; @($rows)|ConvertTo-Json -Depth 4 -Compress`;
 const liveResult = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ps], { encoding: "utf8", timeout: 15000, windowsHide: true });
 let live = [];
 try { const parsed = JSON.parse(String(liveResult.stdout || "[]").trim() || "[]"); live = Array.isArray(parsed) ? parsed : [parsed]; } catch (error) { issues.push(`live_task_query_invalid:${error.message}`); }
@@ -43,6 +43,7 @@ for (const [name, time] of definitions) {
   if (!row || row.enabled === false) { issues.push(`live_task_missing_or_disabled:${name}`); continue; }
   if (!String(row.arguments).includes("run-scorecard88-terminal-collector.ps1") || !String(row.arguments).includes(`-Slot \"${time}\"`)) issues.push(`live_task_action_mismatch:${name}`);
   if (!Array.isArray(row.triggers) || !row.triggers.includes(time)) issues.push(`live_task_trigger_mismatch:${name}`);
+  if (row.logonType !== "S4U") issues.push(`live_task_not_s4u:${name}:${row.logonType || "unknown"}`);
 }
 const result = { ok: issues.length === 0, contract: "scorecard88-fixed-collection-contract-v2", fixedSlots: definitions.map(([,time]) => time), liveTaskCount: live.length, invariants: { scans: false, supabaseQueries: false, recalculation: false, runIdGeneration: false }, issues };
 console.log(JSON.stringify(result, null, 2));
