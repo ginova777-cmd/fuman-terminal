@@ -72,6 +72,12 @@ function text(...values) {
 function boolean(value, fallback = false) {
   return typeof value === "boolean" ? value : fallback;
 }
+function surfaceEvidence(key) {
+  const file = path.join(receiptDir, `scorecard88-surface-evidence-${compactDate(taipeiDate())}-${slot.replace(":", "")}.json`);
+  const report = readJson(file);
+  if (!report || report.contract !== "scorecard88-terminal-surface-evidence-v1" || report.slot !== slot || compactDate(report.tradeDate) !== compactDate(taipeiDate())) return null;
+  return Array.isArray(report.rows) ? report.rows.find((row) => row?.key === key) || null : null;
+}
 function canonicalReceipt(key) {
   const todayKey = compactDate(taipeiDate());
   const files = {
@@ -105,10 +111,12 @@ function canonicalFromDesktop(key, desktop) {
   const receiptComplete = detail.ok === true || detail.complete === true || detail.status === "complete" || detail.status === "PASS" || detail.status === "STRATEGY3_V2_DAILY_UNATTENDED_YES";
   const fullScannedCount = num(detail.scannedCount, detail.scanned_count, detail.scanned, scan.scannedCount, scan.scanned_count, summary.scannedCount, summary.count);
   const fullResultCount = num(detail.resultCount, detail.result_count, detail.matches, detail.count, scan.resultCount, scan.result_count, scan.count, summary.resultCount, summary.count);
-  const desktopStatus = summary.ok === true && Boolean(runId) && (!receiptRunId || receiptRunId === runId) ? "PASS" : "BLOCKED";
-  const mobileStatus = text(detail.mobileStatus, detail.mobile_status, detail.mobile?.status, detail.mobileFragment?.status) || "UNVERIFIED";
-  const mobileRunId = text(detail.mobileRunId, detail.mobile_run_id, detail.mobile?.runId, detail.mobileFragment?.runId);
-  const mobileMatches = mobileStatus === "PASS" && mobileRunId === runId;
+  const surface = surfaceEvidence(key);
+  const desktopStatus = surface?.desktopStatus || "UNVERIFIED";
+  const mobileStatus = surface?.mobileStatus || "UNVERIFIED";
+  const desktopRunId = text(surface?.desktopRunId);
+  const mobileRunId = text(surface?.mobileRunId);
+  const surfaceMatches = surface?.ok === true && desktopStatus === "PASS" && mobileStatus === "PASS" && desktopRunId === runId && mobileRunId === runId;
   return {
     key, strategy: key, runId, tradeDate: taipeiDate(), date: taipeiDate(),
     sourceDate: text(detail.sourceDate, detail.source_date, detail.scanDate, detail.scan_date, taipeiDate()),
@@ -120,13 +128,13 @@ function canonicalFromDesktop(key, desktop) {
     evidenceStatus: text(detail.evidenceStatus, detail.evidence_status) || (receiptComplete ? "complete" : "blocked"),
     fallbackUsed: boolean(detail.fallbackUsed, boolean(detail.fallback, false)),
     publishAllowed: boolean(detail.publishAllowed, boolean(detail.publish_allowed, receiptComplete)),
-    desktopStatus, mobileStatus, mobileRunId,
+    desktopStatus, mobileStatus, desktopRunId, mobileRunId,
     scorecardUpdatedAt: "",
     firstBlocker: text(detail.firstBlocker, detail.blockingReason, detail.blocking_reason),
     reasonCode: text(detail.reasonCode, detail.reason_code),
     source: `terminal-desktop-route-snapshot+canonical-receipt:${receipt?.name || "missing"}`,
     sourceUpdatedAt: summary.updatedAt || desktop.updatedAt || "", terminalEndpoint: endpointByKey[key],
-    canonicalComplete: summary.ok === true && Boolean(runId) && receiptComplete && (!receiptRunId || receiptRunId === runId) && mobileMatches,
+    canonicalComplete: summary.ok === true && Boolean(runId) && receiptComplete && (!receiptRunId || receiptRunId === runId) && surfaceMatches,
   };
 }function canonicalBattle() {
   const candidates = [
