@@ -89,17 +89,17 @@ function Get-TaipeiTimeFromValue {
 }
 
 function Get-Strategy5Payload {
-  $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-  $url = "$apiUrl`?canvas=1&compact=1&shell=1&limit=70&live=1&ts=$timestamp"
   try {
-    $response = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 45 -Headers @{ "Cache-Control" = "no-cache" }
-    $cacheControl = [string]$response.Headers["Cache-Control"]
-    if ($cacheControl -notmatch "no-store") {
-      Write-WatchdogLog "strategy5 API missing no-store cache header: Cache-Control=$cacheControl"
-    }
-    return ([string]$response.Content | ConvertFrom-Json -ErrorAction Stop)
+    $helper = Join-Path $PSScriptRoot "scripts\read-protected-production-api.js"
+    $endpoint = "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70&live=1"
+    $raw = & node "--use-system-ca" $helper "--endpoint=$endpoint" 2>&1
+    $helperExit = $LASTEXITCODE
+    if ($helperExit -ne 0) { throw "protected readback helper exit=$helperExit $($raw -join ' ')" }
+    $envelope = ($raw | Out-String) | ConvertFrom-Json -ErrorAction Stop
+    if ($envelope.ok -ne $true -or $null -eq $envelope.payload) { throw "protected readback envelope invalid" }
+    return $envelope.payload
   } catch {
-    Write-WatchdogLog "strategy5 latest API failed: $($_.Exception.Message)"
+    Write-WatchdogLog "strategy5 authenticated latest API failed: $($_.Exception.Message)"
     return $null
   }
 }

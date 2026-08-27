@@ -861,7 +861,7 @@ function auditChecks(payload, rows) {
   const productionIdentity = Boolean(payload.runId && payload.contract && payload.marketDate);
   return [
     ["Page shell", true, "頁面殼已載入，資料只經 API 讀取"],
-    ["Scorecard API", payload.ok === true && payload.qualityStatus === "complete" && payload.cacheSource === "supabase-snapshot", `qualityStatus=${payload.qualityStatus || "--"} cacheSource=${payload.cacheSource || "--"}`],
+    ["Scorecard API", payload.ok === true && payload.qualityStatus === "complete" && payload.cacheSource === "terminal-canonical-json", `qualityStatus=${payload.qualityStatus || "--"} cacheSource=${payload.cacheSource || "--"}`],
     ["Scorecard Health", payload.healthOk === true || audit.healthOk === true || rowEvidencePass, "以 API row evidence 作為頁面即時閘門；health 仍須獨立驗證"],
     ["Strategy coverage", surfacesPass || audit.strategyCount >= 9, `strategies=${audit.strategyCount || 0} surfaces=${surfaces.length}`],
     ["Runtime source snapshot coverage", rowEvidencePass, "每列必須有 source_snapshot_captured_at 與 source 狀態"],
@@ -885,7 +885,7 @@ function renderAuditPanel(rows) {
   const fail = checks.length - pass;
   const totalYes = payload.ok === true
     && payload.qualityStatus === "complete"
-    && payload.cacheSource === "supabase-snapshot"
+    && payload.cacheSource === "terminal-canonical-json"
     && audit.unattendedStatus === "YES"
     && rows.length > 0
     && rows.every(rowEvidenceOk);
@@ -1321,7 +1321,7 @@ async function load(date = "") {
   byId("rows").innerHTML = `<tr><td colspan="13" class="empty">載入中...</td></tr>`;
   try {
     const dateQuery = date ? `&date=${encodeURIComponent(date)}` : "";
-    const response = await fetch(`/api/scorecard?t=${Date.now()}${dateQuery}&live=1&refreshSourceReports=1&strictLiveReports=1&noCache=1`, { cache: "no-store" });
+    const response = await fetch(`/api/scorecard?t=${Date.now()}${dateQuery}`, { cache: "no-store" });
     payload = await response.json();
     if (isMembershipFailure(response, payload)) {
       renderMembershipLock(payload.reason || payload.error || `HTTP ${response.status}`);
@@ -1436,15 +1436,10 @@ byId("themeToggle").addEventListener("click", () => {
 });
 byId("reload").addEventListener("click", () => {
   load(activeDate);
-  loadStrategy4Live();
-  loadDaytradeEntries();
-  loadSevenStrategyDailyHistory();
 });
 applyTheme(preferredTheme());
 load();
-loadStrategy4Live();
-loadDaytradeEntries();
-loadSevenStrategyDailyHistory();
+// /88 fixed-slot terminal scorecard: no live strategy or Supabase history fan-out.
 </script>
 <script data-market-closed-banner="v1">
 (()=>{if(window.__fumanMarketClosedBannerReady)return;window.__fumanMarketClosedBannerReady=!0;function label(p){return p?.closedReasonText||("typhoon_holiday"===p?.closedReason?"颱風假休市":"市場休市")}function show(p){if(!p||p.marketOpen!==false)return;let n=document.querySelector("#fuman-market-closed-banner");if(!n){n=document.createElement("aside");n.id="fuman-market-closed-banner";n.setAttribute("role","status");n.style.cssText="margin:10px 0 12px;border:1px solid #f59e0b;border-radius:8px;background:#78350f;color:#fff7ed;padding:10px 12px;font-weight:800;line-height:1.5";const target=document.querySelector("main")||document.body;target.prepend(n)}n.textContent=label(p)+"｜休市保護啟動，顯示最後交易日 "+(p.displayTradeDate||"上一交易日")+"；不掃描、不寫空結果、不覆蓋 previous good。"}fetch("/api/market-calendar?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.json():null).then(show).catch(()=>{})})();

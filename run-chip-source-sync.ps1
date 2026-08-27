@@ -66,6 +66,7 @@ if ($finmindExit -ne 0) {
   Write-Log "FinMind chip sync failed; continuing to official source gap fill"
 }
 $officialExit = Invoke-NpmScript "TWSE/TPEx official chip gap fill" "sync:official:chip"
+$env:CHIP_SOURCE_HEALTH_MAX_AGE_DAYS = "0"
 $healthExit = Invoke-NpmScript "chip source health verification" "verify:chip-source"
 
 $warnings = @()
@@ -75,8 +76,15 @@ if ($healthExit -ne 0) { $warnings += "chip source health verification exit=$hea
 
 if ($officialExit -eq 0 -and $healthExit -eq 0) {
   Write-Receipt "complete" 0 $warnings
-  Write-Log "SUCCESS chip source sync completed"
-  exit 0
+  $receiptExit = Invoke-NpmScript "chip source receipt verification" "verify:chip-source-sync-receipt"
+  if ($receiptExit -eq 0) {
+    Write-Log "SUCCESS chip source sync completed with current-day receipt"
+    exit 0
+  }
+  $warnings += "chip source current-day receipt verification exit=$receiptExit"
+  Write-Receipt "failed" $receiptExit $warnings
+  Write-Log "FAILED chip source receipt verification exit=$receiptExit"
+  exit $receiptExit
 }
 
 $exitCode = if ($healthExit -ne 0) { $healthExit } elseif ($officialExit -ne 0) { $officialExit } else { 1 }
