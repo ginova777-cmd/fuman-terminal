@@ -117,21 +117,19 @@ function verifyAllUnifiedFrontendRelease({ scorecard, mobile, auth, serviceWorke
   if (/ASSET_EPOCH|desktop-fast-shell-core-|watchlist-mainforce-resonance/.test(serviceWorker)) throw new Error("service worker retains a legacy feature cache epoch");
   console.log("[live-version] all terminal entry points share one release version");
 }
-function verifyMarketOverviewDirectApiFallback(restore) {
+function verifyMarketOverviewRestorePassiveGuard(restore) {
   const required = [
-    'typeof window.FUMAN_MARKET_DIRECT_PAINT === "function"',
-    'if (window.__fumanDesktopFastShell) {',
-    'window.FUMAN_MARKET_DIRECT_PAINT = run',
-    'xhrJson("/api/market?canvas=1&compact=1&shell=1&limit=24")',
-    '[600, 2400, 6800, 12000, 25000].forEach((delay) => setTimeout(run, delay))',
+    "if (window.__fumanDesktopFastShell",
+    "window.__fumanMarketOverviewRestoreReady = true",
+    "desktop-fast-shell-direct-painter-ready",
   ];
   for (const marker of required) {
-    if (!restore.includes(marker)) throw new Error("market overview direct API fallback missing " + marker);
+    if (!restore.includes(marker)) throw new Error("market overview restore passive guard missing " + marker);
   }
-  if (restore.includes('window.__fumanDesktopFastShell === "20260623-09"')) {
-    throw new Error("market overview direct API fallback is restricted to a retired desktop shell version");
+  if (restore.includes("window.FUMAN_MARKET_DIRECT_PAINT = run")) {
+    throw new Error("market overview restore must not install a competing direct painter");
   }
-  console.log("[live-version] market overview direct API fallback ok");
+  console.log("[live-version] market overview restore passive guard ok");
 }
 
 function verifyMarketEventReminderGuard(app, desktopShell) {
@@ -236,13 +234,13 @@ async function verifyOnce() {
   if (localDesktopShellHash !== liveDesktopShellHash) {
     throw new Error("desktop-fast-shell hash mismatch local=" + localDesktopShellHash + " live=" + liveDesktopShellHash);
   }
-  const marketRestore = await expectOk("market-overview-restore", "/terminal-market-overview-restore.js?v=" + version, (body) => body.includes("window.FUMAN_MARKET_DIRECT_PAINT = run"));
+  const marketRestore = await expectOk("market-overview-restore", "/terminal-market-overview-restore.js?v=" + version, (body) => body.includes("desktop-fast-shell-direct-painter-ready"));
   const localMarketRestoreHash = sha256(read("terminal-market-overview-restore.js"));
   const liveMarketRestoreHash = sha256(marketRestore);
   if (localMarketRestoreHash !== liveMarketRestoreHash) {
     throw new Error("market-overview-restore hash mismatch local=" + localMarketRestoreHash + " live=" + liveMarketRestoreHash);
   }
-  verifyMarketOverviewDirectApiFallback(marketRestore);
+  verifyMarketOverviewRestorePassiveGuard(marketRestore);
   verifyUnifiedFrontendRelease(home, desktopShell, version);
   const scorecard = await expectOk("scorecard-page", "/88", (body) => body.includes(`terminal-entitlement-guard.js?v=${version}`));
   const mobile = await expectOk("mobile-page", "/mobile", (body) => body.includes(`terminal-entitlement-guard.js?v=${version}`));
