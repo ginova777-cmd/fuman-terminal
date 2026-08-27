@@ -11,7 +11,7 @@ const taskName = "Fuman Terminal Autonomous Root Monitor";
 const legacyTaskName = "Fuman Terminal Autonomous Ops 5m";
 const REQUIRE_LIVE = process.argv.includes("--require-live");
 const issues = [];
-const expectedCheckpoints = ["06:05","07:08","08:00","08:20","08:36","12:20","13:15","16:10","17:00","21:40","22:00","23:10"];
+const expectedCheckpoints = ["06:05","07:08","08:00","08:20","08:36","12:40","13:15","16:10","17:00","21:40","22:00","23:10"];
 
 function read(file) {
   try { return fs.readFileSync(file, "utf8"); } catch { return ""; }
@@ -38,7 +38,7 @@ for (const marker of [
   "08:00",
   "08:20",
   "08:36",
-  "12:20",
+  "12:40",
   "13:15",
   "16:10",
   "17:00",

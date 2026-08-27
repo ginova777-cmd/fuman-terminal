@@ -319,7 +319,7 @@ async function main() {
   const water = await readFormalWater(source, clock.date);
   const scanned = water.rows.filter((row) => row.formalQuoteReady && row.formalOneMinuteReady);
   const dataGaps = water.rows.filter((row) => row.dataGap);
-  const liveWindow = clock.minuteOfDay >= 9 * 60 && clock.minuteOfDay <= (12 * 60 + 10);
+  const liveWindow = clock.minuteOfDay >= 9 * 60 && clock.minuteOfDay <= (12 * 60 + 30);
   const complete = scanned.length === water.rows.length && water.rows.length > 0;
   const runId = `strategy2-v3-${clock.ymd}-${String(clock.hour).padStart(2, "0")}${String(clock.minute).padStart(2, "0")}${String(clock.second).padStart(2, "0")}`;
   const report = {
