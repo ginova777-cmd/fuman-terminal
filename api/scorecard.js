@@ -8,6 +8,7 @@ const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
 const TERMINAL_SNAPSHOT_FILE = process.env.FUMAN_SCORECARD_TERMINAL_SOURCE || path.join(process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime", "data", "scorecard-terminal-current.json");
+const SCORECARD88_BLOB_CURRENT_PATH = "scorecard88/current.json";
 const SCORECARD_CONTRACT = "scorecard-resource-chain-v1";
 const STRATEGY2_SCORECARD_IMPORT_CONTRACT = "strategy2_v3_afternoon_scorecard_import_v1";
 const STRATEGY2_SCORECARD_IMPORT_PENDING_REASON = "strategy2_v3_scorecard_import_pending_1400";
@@ -1769,6 +1770,21 @@ function readStaticSnapshot(reason = "scorecard_static_snapshot") {
   }, "degraded", reason);
 }
 
+async function readTerminalCanonicalSnapshot(reason = "terminal_fixed_slot_snapshot") {
+  if (fs.existsSync(TERMINAL_SNAPSHOT_FILE)) return readStaticSnapshot(reason);
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return withScorecardContract({ ok: false, cacheSource: "vercel-blob-private", records: [], sourceReports: [] }, "blocked", "scorecard88_blob_token_missing");
+  try {
+    const { get } = await import("@vercel/blob");
+    const result = await get(SCORECARD88_BLOB_CURRENT_PATH, { access: "private", useCache: false });
+    if (!result || result.statusCode !== 200 || !result.stream) throw new Error("scorecard88_blob_current_missing");
+    const payload = JSON.parse(await new Response(result.stream).text());
+    if (payload?.contract !== "scorecard88-terminal-canonical-collector-v1" || payload?.collectionPolicy?.supabaseQueryAllowed !== false || payload?.collectionPolicy?.scanAllowed !== false || payload?.collectionPolicy?.recalculateAllowed !== false || payload?.collectionPolicy?.generateRunIdAllowed !== false) throw new Error("terminal_scorecard_snapshot_missing_or_legacy");
+    return withScorecardContract({ ok: payload.ok !== false, ...payload, cacheSource: "vercel-blob-private", fallbackReason: reason }, "degraded", reason);
+  } catch (error) {
+    return withScorecardContract({ ok: false, cacheSource: "vercel-blob-private", records: [], sourceReports: [] }, "blocked", error?.message || "scorecard88_blob_read_failed");
+  }
+}
+
 function scorecardLiveSourceReportsEnabled(request) {
   return process.env.FUMAN_SCORECARD_LIVE_SOURCE_REPORTS === "1"
     && (request.query?.strictLiveReports === "1" || request.query?.refreshSourceReports === "1");
@@ -1802,7 +1818,7 @@ async function withScanAudit(payload, options = {}) {
 async function buildPayload(requestedDate = "", options = {}) {
   // /88 reads only the artifact collected from terminal canonical results at fixed slots.
   // It performs no scan, Supabase lookup, recalculation, or runId generation.
-  const terminalSnapshot = readStaticSnapshot("terminal_fixed_slot_snapshot");
+  const terminalSnapshot = await readTerminalCanonicalSnapshot("terminal_fixed_slot_snapshot");
   const fixedSlotPayload = requestedDate ? selectPayloadDate(terminalSnapshot, requestedDate) : terminalSnapshot;
   fixedSlotPayload.cacheSource = "terminal-canonical-json";
   return fixedSlotPayload;

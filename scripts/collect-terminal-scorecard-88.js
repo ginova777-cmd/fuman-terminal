@@ -7,6 +7,8 @@ const runtimeRoot = process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
 const dataDir = path.join(runtimeRoot, "data");
 const receiptDir = path.join(dataDir, "scan-receipts");
 const outputFile = process.env.FUMAN_SCORECARD_TERMINAL_SOURCE || path.join(dataDir, "scorecard-terminal-current.json");
+const blobTokenFile = process.env.FUMAN_SCORECARD88_BLOB_TOKEN_FILE || path.join(runtimeRoot, "secrets", "vercel-blob-read-write-token.txt");
+const blobCurrentPath = "scorecard88/current.json";
 const slot = String(process.argv.find((arg) => arg.startsWith("--slot=")) || "").split("=")[1] || "";
 const slots = {
   "12:40": ["strategy2"],
@@ -23,6 +25,21 @@ function writeJsonAtomic(file, payload) {
   const temp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(temp, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   fs.renameSync(temp, file);
+}
+function blobToken() {
+  if (process.env.BLOB_READ_WRITE_TOKEN) return String(process.env.BLOB_READ_WRITE_TOKEN).trim();
+  try { return fs.readFileSync(blobTokenFile, "utf8").trim(); } catch { return ""; }
+}
+async function publishBlob(payload, todayKey, slotKey) {
+  const token = blobToken();
+  if (!token) throw new Error("scorecard88_blob_token_missing");
+  const { put } = await import("@vercel/blob");
+  const body = `${JSON.stringify(payload, null, 2)}\n`;
+  const options = { access: "private", token, addRandomSuffix: false, allowOverwrite: true, contentType: "application/json; charset=utf-8", cacheControlMaxAge: 60 };
+  const immutablePath = `scorecard88/${todayKey}/${slotKey}.json`;
+  const immutable = await put(immutablePath, body, options);
+  const current = await put(blobCurrentPath, body, options);
+  return { immutablePath, currentPath: blobCurrentPath, immutableUrl: immutable.url, currentUrl: current.url };
 }
 function taipeiDate() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -158,8 +175,15 @@ const payload = {
     generateRunIdAllowed: false,
   },
 };
-writeJsonAtomic(outputFile, payload);
-const receipt = { ok: payload.ok, status: payload.ok ? "PASS" : "BLOCKED", slot, tradeDate: today, collectedAt, outputFile, reports: receipts };
-writeJsonAtomic(path.join(receiptDir, `scorecard88-collection-${todayKey}-${slot.replace(":", "")}.json`), receipt);
-console.log(JSON.stringify(receipt, null, 2));
-process.exit(payload.ok ? 0 : 3);
+async function main() {
+  writeJsonAtomic(outputFile, payload);
+  let blob = null;
+  let blobError = "";
+  try { blob = await publishBlob(payload, todayKey, slot.replace(":", "")); } catch (error) { blobError = error?.message || String(error); }
+  const ok = payload.ok && Boolean(blob) && !blobError;
+  const receipt = { ok, status: ok ? "PASS" : payload.ok ? "FAIL_CLOSED" : "BLOCKED", slot, tradeDate: today, collectedAt, outputFile, blobPublished: Boolean(blob), blob, firstBlocker: payload.ok ? blobError : receipts.find((row) => !row.ok)?.firstBlocker || "terminal_canonical_not_complete", reports: receipts };
+  writeJsonAtomic(path.join(receiptDir, `scorecard88-collection-${todayKey}-${slot.replace(":", "")}.json`), receipt);
+  console.log(JSON.stringify(receipt, null, 2));
+  process.exitCode = ok ? 0 : payload.ok ? 4 : 3;
+}
+main().catch((error) => { console.error(JSON.stringify({ ok: false, status: "FAIL_CLOSED", reason: error?.message || String(error) })); process.exitCode = 5; });
