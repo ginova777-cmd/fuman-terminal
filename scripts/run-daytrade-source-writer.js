@@ -4573,7 +4573,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
       : "opening_boost_waiting_for_priority_freshness"
     : `phase_${phase}`;
   const priorityGateGrade = priorityGateA ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : "D";
-  const gateGrade = priorityGateA && webSocketStatus.formalReady ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : freshFull.length > 0 ? "C" : "D";
+  const phaseTransportReady = after0900 ? webSocketStatus.formalReady : warmupTransportHealthy;
+  const gateGrade = priorityGateA && phaseTransportReady ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : freshFull.length > 0 ? "C" : "D";
   const sourceInjecting = !offSession && ["ready", "degraded"].includes(quoteStatus) && quoteRows > 0;
   const status = offSession ? "stopped" : gateGrade === "A" ? "ok" : sourceInjecting ? "degraded" : "stale";
   const failedChecks = [];
@@ -4597,7 +4598,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   if (!offSession && after0900 && intraday1mStaleSeconds > MAX_INTRADAY_1M_STALE_SECONDS) failedChecks.push('intraday_1m_not_ready');
   if (!offSession && opening0901HardRequired && !opening0901GateOk) failedChecks.push('opening_0901_candle_not_ready');
   // Futopt failure disables only futopt/STAR/preopen basis strategies; it never zeros the intraday Mother Pool.
-  if (!offSession && !webSocketStatus.formalReady) failedChecks.push('websocket_formal_not_ready');
+  if (!offSession && after0900 && !webSocketStatus.formalReady) failedChecks.push('websocket_formal_not_ready');
   if (!offSession && after0845 && !scannerCanRunOpening) failedChecks.push('scanner_opening_not_ready');
   const reasonCode = failedChecks[0] || (offSession ? "off_session_previous_good" : "");
   const message = offSession
