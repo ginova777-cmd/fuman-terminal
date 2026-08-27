@@ -66,6 +66,10 @@ function main() {
   add(/\$env:FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS\s*=\s*"1800"/.test(wrapper), "strategy3_v2_wrapper_total_subscriptions_not_1800");
   add(/\$env:FUGLE_STREAMING_MAX_SYMBOLS\s*=\s*"2000"/.test(wrapper), "strategy3_v2_wrapper_max_symbols_not_2000");
   add(/\$env:FUGLE_STREAMING_CANDLE_SYMBOLS\s*=\s*"1000"/.test(wrapper), "strategy3_v2_wrapper_candle_symbols_not_1000");
+  const collectorWindowStops = wrapper.match(/TimeSpan\]::Parse\("13:30"\)/g) || [];
+  add(collectorWindowStops.length === 2, "strategy3_v2_collector_window_not_locked_to_1330", { collectorWindowStops: collectorWindowStops.length });
+  add(!wrapper.includes('TimeSpan]::Parse("14:05")'), "strategy3_v2_legacy_1405_collector_window_present");
+  add(wrapper.includes('Reason "collector_window_closed"'), "strategy3_v2_collector_window_close_receipt_missing");
   add(/process\.env\.FUGLE_STREAMING_MAX_SYMBOLS/.test(collector), "strategy3_v2_collector_does_not_read_max_symbols_env");
   add(/process\.env\.FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS/.test(collector), "strategy3_v2_collector_does_not_read_total_subscriptions_env");
   add(/process\.env\.FUGLE_STREAMING_CANDLE_SYMBOLS/.test(collector), "strategy3_v2_collector_does_not_read_candle_symbols_env");

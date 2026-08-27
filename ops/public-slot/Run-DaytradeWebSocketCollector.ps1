@@ -158,7 +158,7 @@ try {
   $backoff = 1
   while ($true) {
     $now = Get-TaipeiNow
-    if ($now.DayOfWeek -in @([DayOfWeek]::Saturday, [DayOfWeek]::Sunday) -or $now.TimeOfDay -ge [TimeSpan]::Parse("14:05")) {
+    if ($now.DayOfWeek -in @([DayOfWeek]::Saturday, [DayOfWeek]::Sunday) -or $now.TimeOfDay -ge [TimeSpan]::Parse("13:30")) {
       Write-State -Status "stopped_off_session" -Reason "collector_window_closed"
       exit 0
     }
@@ -174,7 +174,7 @@ try {
     $stopForWindow = $false
     while ($true) {
       $now = Get-TaipeiNow
-      if ($now.DayOfWeek -in @([DayOfWeek]::Saturday, [DayOfWeek]::Sunday) -or $now.TimeOfDay -ge [TimeSpan]::Parse("14:05")) {
+      if ($now.DayOfWeek -in @([DayOfWeek]::Saturday, [DayOfWeek]::Sunday) -or $now.TimeOfDay -ge [TimeSpan]::Parse("13:30")) {
         $stopForWindow = $true
         try { Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue } catch {}
         break
