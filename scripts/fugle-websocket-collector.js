@@ -87,6 +87,7 @@ const RATE_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-rate-state.js
 const UNSUPPORTED_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-unsupported-symbols.json");
 const DAYTRADE_PRIORITY_SYMBOLS_CONTRACT_FILE = "fugle-daytrade-ws-priority-symbols.json";
 const PRIORITY_SYMBOLS_FILE = process.env.FUGLE_WS_PRIORITY_SYMBOLS_FILE || path.join(RUNTIME_DIR, "cache", "intraday", COLLECTOR_ROLE === "daytrade" ? DAYTRADE_PRIORITY_SYMBOLS_CONTRACT_FILE : "fugle-ws-priority-symbols.json");
+const EARLY_CANDLE_HYDRATION_RECEIPT_DIR = path.join(RUNTIME_DIR, "data", "scan-receipts");
 const ADAPTIVE_INITIAL_RPM = Math.max(10, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_INITIAL_RPM || 60));
 const ADAPTIVE_MIN_RPM = Math.max(5, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MIN_RPM || 20));
 const ADAPTIVE_MAX_RPM = Math.max(ADAPTIVE_MIN_RPM, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MAX_RPM || 180));
@@ -570,10 +571,22 @@ function readPrioritySymbols(symbols) {
     hot: 0,
     daytrade: 0,
     daytradeCandlePriority: 0,
+    preopenCandlePriority: 0,
     terminalPriority: 0,
     openingPriority: 0,
     symbols: 0,
   };
+  const manifestTradeDate = String(
+    payload.daytradeCandlePriorityTradeDate
+    || payload.preopenCandlePriorityTradeDate
+    || payload.tradeDate
+    || payload.trade_date
+    || "",
+  );
+  const sameDayManifest = COLLECTOR_ROLE !== "daytrade" || manifestTradeDate === currentTaipeiDate();
+  // The priority manifest is a same-day transport input. Ignore every queue
+  // field together on date mismatch instead of allowing a partial stale queue.
+  const priorityPayload = sameDayManifest ? payload : {};
   const addMany = (key, values, options = {}) => {
     const list = Array.isArray(values) ? values : [];
     let count = 0;
@@ -593,23 +606,26 @@ function readPrioritySymbols(symbols) {
     counts[key] = count;
   };
 
-  addMany("daytradeCandlePriority", payload.daytradeCandlePrioritySymbols, { priority: true });
-  addMany("daytrade", payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, { priority: true });
-  addMany("terminalPriority", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, { priority: true });
-  addMany("openingPriority", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, { priority: true });
+  // A stale priority cache must never re-enter the next trading day candle
+  // queue. Non-daytrade collectors retain their independent legacy contract.
+  addMany("preopenCandlePriority", sameDayManifest ? priorityPayload.preopenCandlePrioritySymbols : [], { priority: true });
+  addMany("daytradeCandlePriority", sameDayManifest ? priorityPayload.daytradeCandlePrioritySymbols : [], { priority: true });
+  addMany("daytrade", priorityPayload.daytradePrioritySymbols || priorityPayload.daytradeSymbols || priorityPayload.daytrade, { priority: true });
+  addMany("terminalPriority", priorityPayload.terminalPrioritySymbols || priorityPayload.terminalSymbols || priorityPayload.terminalPriority, { priority: true });
+  addMany("openingPriority", priorityPayload.openingPrioritySymbols || priorityPayload.primaryPrioritySymbols, { priority: true });
   counts.strategy1 = 0; // retired: do not subscribe Strategy1 priority symbols
-  addMany("strategy2", payload.strategy2 || payload.strategy2Symbols, { priority: true });
-  addMany("strategy3", payload.strategy3 || payload.strategy3Symbols, { priority: true });
-  addMany("strategy4", payload.strategy4 || payload.strategy4Symbols, { priority: true });
-  addMany("strategy5", payload.strategy5 || payload.strategy5Symbols, { priority: true });
-  addMany("institution", payload.institution || payload.institutionSymbols, { priority: true });
-  addMany("warrant", payload.warrant || payload.warrantSymbols, { priority: true });
-  addMany("cb", payload.cb || payload.cbSymbols, { priority: true });
+  addMany("strategy2", priorityPayload.strategy2 || priorityPayload.strategy2Symbols, { priority: true });
+  addMany("strategy3", priorityPayload.strategy3 || priorityPayload.strategy3Symbols, { priority: true });
+  addMany("strategy4", priorityPayload.strategy4 || priorityPayload.strategy4Symbols, { priority: true });
+  addMany("strategy5", priorityPayload.strategy5 || priorityPayload.strategy5Symbols, { priority: true });
+  addMany("institution", priorityPayload.institution || priorityPayload.institutionSymbols, { priority: true });
+  addMany("warrant", priorityPayload.warrant || priorityPayload.warrantSymbols, { priority: true });
+  addMany("cb", priorityPayload.cb || priorityPayload.cbSymbols, { priority: true });
   counts.realtimeRadar = 0; // retired: do not subscribe realtime radar priority symbols
-  addMany("threeDayOpenHighFade", payload.threeDayOpenHighFade || payload.openHighFadeSymbols, { priority: true });
-  addMany("dynamic", payload.dynamic || payload.dynamicMotherPoolSymbols, { priority: true });
-  addMany("hot", payload.hot || payload.daytradeHotSymbols || payload.priorityStrongSymbols, { priority: true });
-  addMany("symbols", payload.symbols);
+  addMany("threeDayOpenHighFade", priorityPayload.threeDayOpenHighFade || priorityPayload.openHighFadeSymbols, { priority: true });
+  addMany("dynamic", priorityPayload.dynamic || priorityPayload.dynamicMotherPoolSymbols, { priority: true });
+  addMany("hot", priorityPayload.hot || priorityPayload.daytradeHotSymbols || priorityPayload.priorityStrongSymbols, { priority: true });
+  addMany("symbols", priorityPayload.symbols);
 
   return {
     symbols: priorityOrdered.length ? priorityOrdered : ordered,
@@ -617,6 +633,8 @@ function readPrioritySymbols(symbols) {
     counts,
     updatedAt: payload.updatedAt || "",
     source: payload.source || "",
+    tradeDate: manifestTradeDate,
+    sameDayManifest,
   };
 }
 
@@ -627,6 +645,51 @@ function currentTaipeiDate() {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
+}
+
+function currentTaipeiMinute() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Taipei",
+    hour12: false,
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return Number(values.hour) * 60 + Number(values.minute);
+}
+
+function earlyCandleHydrationReceiptPath(tradeDate = currentTaipeiDate()) {
+  return path.join(EARLY_CANDLE_HYDRATION_RECEIPT_DIR, "daytrade-early-candle-hydration-" + String(tradeDate).replace(/\D/g, "") + ".json");
+}
+
+function writeEarlyCandleHydrationReceipt(selection) {
+  if (COLLECTOR_ROLE !== "daytrade" || !selection.candleChannel) return;
+  const taipeiMinute = currentTaipeiMinute();
+  if (taipeiMinute < 8 * 60 + 45 || taipeiMinute > 9 * 60 + 35) return;
+  const tradeDate = currentTaipeiDate();
+  const file = earlyCandleHydrationReceiptPath(tradeDate);
+  const existing = readJson(file, {});
+  if (existing.trade_date === tradeDate && Array.isArray(existing.candle_symbols) && existing.captured_at) return;
+  writeJson(file, {
+    contract: "daytrade_early_candle_hydration_v1",
+    trade_date: tradeDate,
+    captured_at: nowIso(),
+    phase: taipeiMinute < 9 * 60 ? "opening_boost_0845_0859" : "opening_first_candle_0900_0935",
+    collector_pid: process.pid,
+    priority_manifest_path: PRIORITY_SYMBOLS_FILE,
+    priority_manifest_trade_date: selection.priority.tradeDate || "",
+    priority_manifest_same_day: selection.priority.sameDayManifest === true,
+    priority_manifest_updated_at: selection.priority.updatedAt || "",
+    priority_source: selection.priority.source || "",
+    priority_symbols: selection.priority.symbols,
+    candle_symbols: selection.candleRadarSymbols,
+    candle_symbol_count: selection.candleRadarSymbols.length,
+    candle_capacity: selection.candleCoverageTarget,
+    subscription_requested: true,
+    formal_candidate_count: 0,
+    formal_candidate_allowed: false,
+    first_blocker: selection.priority.sameDayManifest === false ? "candle_priority_manifest_date_mismatch" : null,
+  });
 }
 
 function effectiveCollectorConfig(symbols) {
@@ -1159,9 +1222,7 @@ function selectStreamingSymbols(rotationCursor = 0) {
   const quoteRadarChannel = STREAMING_CHANNELS.includes("trades") ? "trades" : STREAMING_CHANNELS.includes("aggregates") ? "aggregates" : STREAMING_CHANNELS[0];
   const aggregateRadarChannel = STREAMING_CHANNELS.includes("aggregates") ? "aggregates" : "";
   const candleChannel = STREAMING_CHANNELS.includes("candles") ? "candles" : "";
-  const taipeiParts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" }).formatToParts(new Date());
-  const taipeiValues = Object.fromEntries(taipeiParts.map((part) => [part.type, part.value]));
-  const taipeiMinute = Number(taipeiValues.hour) * 60 + Number(taipeiValues.minute);
+  const taipeiMinute = currentTaipeiMinute();
   if (aggregateRadarChannel && taipeiMinute < 525) {
     const seen = new Set();
     const selected = [];
@@ -1388,6 +1449,7 @@ async function runStreamingCollector() {
     const staleDataWindow = STREAMING_STALE_RECONNECT_MS;
     let staleRecoveryTimer;
     let priorityRefreshTimer;
+    let openingTransitionTimer;
     let closed = false;
     const writeStreamingStatus = (extra = {}) => {
       const freshCount = countFreshCachedQuotes(selection.allSymbols);
@@ -1506,6 +1568,7 @@ async function runStreamingCollector() {
       try {
         selection = selectStreamingSymbols(rotationCursor);
         rotationCursor = selection.nextRotationCursor;
+        writeEarlyCandleHydrationReceipt(selection);
         chunks = chunkArray(selection.selected, STREAMING_SUBSCRIBE_CHUNK_SIZE);
         const signature = `${selection.subscriptionPlan}|${STREAMING_CHANNELS.join(",")}|formal:${selection.formalSymbols.join(",")}|candles:${selection.candleChannel}:${selection.candleRadarSymbols.join(",")}|trades:${selection.quoteRadarChannel}:${selection.quoteRadarSymbols.join(",")}|aggregates:${selection.aggregateRadarChannel}:${selection.aggregateRadarSymbols.join(",")}`;
         if (lastSubscribeSignature && signature === lastSubscribeSignature) {
@@ -1644,6 +1707,7 @@ async function runStreamingCollector() {
         clearInterval(pingTimer);
         clearInterval(staleRecoveryTimer);
         clearInterval(priorityRefreshTimer);
+        clearInterval(openingTransitionTimer);
         writeStreamingStatus({ websocketConnected: false });
         resolve();
       });
@@ -1665,6 +1729,19 @@ async function runStreamingCollector() {
         if (closed) clearInterval(subscribeTimer);
         else subscribe();
       }, STREAMING_RESUBSCRIBE_MS);
+      // The normal refresh cadence is deliberately low to avoid subscription
+      // churn. Do not let that cadence delay the 08:45 transition from the
+      // pre-open aggregate radar to the formal 1m candle plan.
+      openingTransitionTimer = setInterval(() => {
+        if (closed) {
+          clearInterval(openingTransitionTimer);
+          return;
+        }
+        if (currentTaipeiMinute() >= 8 * 60 + 45) {
+          clearInterval(openingTransitionTimer);
+          void subscribe();
+        }
+      }, 5000);
       priorityRefreshTimer = setInterval(() => {
         if (closed) {
           clearInterval(priorityRefreshTimer);

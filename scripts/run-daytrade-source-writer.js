@@ -3819,6 +3819,10 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
   const nextPriorityPayload = {
     ...existing,
     ...bridgeFields,
+    // This manifest is consumed by the WebSocket collector. Stamp every
+    // candle-priority list with the current trading day so a prior-day queue
+    // cannot be carried into the opening subscription plan.
+    tradeDate: taipeiDate(),
     updatedAt: nowIso(),
     source: "daytrade-dedicated-priority-bridge",
     // Keep the complete mother pool on the WebSocket/data-rotation path.
@@ -3841,6 +3845,13 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     daytradePriorityCount: daytradePrioritySymbols.length,
     daytradeCandlePrioritySymbols: [...new Set(daytradeCandlePrioritySymbols)],
     daytradeCandlePriorityCount: new Set(daytradeCandlePrioritySymbols).size,
+    daytradeCandlePriorityTradeDate: taipeiDate(),
+    daytradeCandlePriorityPolicy: "same_day_user_case_opening_report_hot_and_live_burst_priority",
+    // The collector freezes this ordered list at its first 08:45+ candle
+    // subscription. Keeping it explicit makes the pre-open handoff auditable.
+    preopenCandlePrioritySymbols: [...new Set(daytradeCandlePrioritySymbols)],
+    preopenCandlePriorityCount: new Set(daytradeCandlePrioritySymbols).size,
+    preopenCandlePriorityTradeDate: taipeiDate(),
     userCaseSymbols: [...new Set(userCaseCandlePrioritySymbols)],
     userCaseCandlePrioritySymbols: [...new Set(userCaseCandlePrioritySymbols)],
     userCaseCandlePriorityCount: new Set(userCaseCandlePrioritySymbols).size,
@@ -3867,12 +3878,16 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
   const samePriorityCounts = Number(existing.daytradeMotherPoolCount || 0) === nextPriorityPayload.daytradeMotherPoolCount
     && Number(existing.daytradeFormalPriorityCount || 0) === nextPriorityPayload.daytradeFormalPriorityCount
     && Number(existing.daytradePriorityExtensionCount || 0) === nextPriorityPayload.daytradePriorityExtensionCount;
+  const sameCandlePriority = JSON.stringify(existing.daytradeCandlePrioritySymbols || []) === JSON.stringify(nextPriorityPayload.daytradeCandlePrioritySymbols || [])
+    && JSON.stringify(existing.preopenCandlePrioritySymbols || []) === JSON.stringify(nextPriorityPayload.preopenCandlePrioritySymbols || [])
+    && String(existing.daytradeCandlePriorityTradeDate || "") === nextPriorityPayload.daytradeCandlePriorityTradeDate
+    && String(existing.preopenCandlePriorityTradeDate || "") === nextPriorityPayload.preopenCandlePriorityTradeDate;
   const bridgeChanged = Object.keys(bridgeFields).some((key) => JSON.stringify(existing[key]) !== JSON.stringify(bridgeFields[key]));
   const formalPriorityArtifactChanged = JSON.stringify(existing.formalPriorityStrategyChip || {}) !== JSON.stringify(formalPriorityStrategyChip);
   const priceGateArtifactChanged = Number(existing.daytradeMinimumPrice || 0) !== MOTHER_POOL_MIN_PRICE
     || String(existing.daytradePriceGateStatus || "") !== (MOTHER_POOL_MIN_PRICE > 0 ? "minimum_price_enforced" : "no_price_floor")
     || JSON.stringify(existing.daytradePoolPriceBySymbol || {}) !== JSON.stringify(nextPriorityPayload.daytradePoolPriceBySymbol || {});
-  if (!sameSymbols || !samePriorityCounts || bridgeChanged || formalPriorityArtifactChanged || priceGateArtifactChanged) {
+  if (!sameSymbols || !samePriorityCounts || !sameCandlePriority || bridgeChanged || formalPriorityArtifactChanged || priceGateArtifactChanged) {
     writeJson(PRIORITY_SYMBOLS_FILE, nextPriorityPayload);
     writeFugleWebSocketSymbols(nextPriorityPayload.symbols, {
       source: "daytrade-dedicated-priority-bridge",
