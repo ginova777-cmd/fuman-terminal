@@ -25,6 +25,11 @@ if (/await readSnapshot\s*\(SNAPSHOT_KEY/.test(api)) issues.push("scorecard_api_
 for (const slot of definitions.map((row) => row[1])) if (!collector.includes(`"${slot}"`)) issues.push(`collector_slot_missing:${slot}`);
 for (const invariant of ["querySupabase: false", "recalculated: false", "generatedRunId: false", "terminal_canonical_not_complete"]) if (!collector.includes(invariant)) issues.push(`collector_invariant_missing:${invariant}`);
 for (const invariant of ["outside_fixed_collection_window", "writeAllowed: false", "blobPublishAllowed: false", "fixedCollectionWindow(slot)"]) if (!collector.includes(invariant)) issues.push(`collector_window_guard_missing:${invariant}`);
+for (const field of ["sourceDate", "startedAt", "finishedAt", "universeCount", "scannedCount", "resultCount", "qualityStatus", "evidenceStatus", "fallbackUsed", "publishAllowed", "desktopStatus", "mobileStatus", "scorecardUpdatedAt", "firstBlocker", "reasonCode"]) {
+  if (!collector.includes(field)) issues.push(`collector_required_field_missing:${field}`);
+}
+if (!collector.includes('mobileStatus === "PASS"') || !collector.includes("mobileRunId === runId") || !collector.includes("&& mobileMatches")) issues.push("collector_mobile_authenticated_readback_gate_missing");
+if (!collector.includes('mobileStatus: canonical?.mobileStatus || "UNVERIFIED"')) issues.push("collector_blocked_mobile_status_missing");
 if (/server-supabase|supabase-snapshots|fetch\s*\(/i.test(collector)) issues.push("collector_network_or_supabase_dependency_present");
 if (!master.includes("verify-scorecard88-fixed-collection-contract.js") || !master.includes("scorecard88ContractExitCode")) issues.push("master_checkpoint_missing_scorecard88_contract");
 for (const [name, time] of definitions) {
@@ -46,6 +51,6 @@ for (const [name, time] of definitions) {
   if (!Array.isArray(row.triggers) || !row.triggers.includes(time)) issues.push(`live_task_trigger_mismatch:${name}`);
   if (row.logonType !== "S4U") issues.push(`live_task_not_s4u:${name}:${row.logonType || "unknown"}`);
 }
-const result = { ok: issues.length === 0, contract: "scorecard88-fixed-collection-contract-v2", fixedSlots: definitions.map(([,time]) => time), liveTaskCount: live.length, invariants: { scans: false, supabaseQueries: false, recalculation: false, runIdGeneration: false }, issues };
+const result = { ok: issues.length === 0, contract: "scorecard88-fixed-collection-contract-v3", fixedSlots: definitions.map(([,time]) => time), liveTaskCount: live.length, invariants: { scans: false, supabaseQueries: false, recalculation: false, runIdGeneration: false, authenticatedMobileRequiredForPass: true, completeFieldContract: true }, issues };
 console.log(JSON.stringify(result, null, 2));
 process.exit(result.ok ? 0 : 1);

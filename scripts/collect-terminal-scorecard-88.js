@@ -65,6 +65,13 @@ function num(...values) {
   for (const value of values) if (Number.isFinite(Number(value))) return Number(value);
   return 0;
 }
+function text(...values) {
+  for (const value of values) if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
+  return "";
+}
+function boolean(value, fallback = false) {
+  return typeof value === "boolean" ? value : fallback;
+}
 function canonicalReceipt(key) {
   const todayKey = compactDate(taipeiDate());
   const files = {
@@ -98,12 +105,28 @@ function canonicalFromDesktop(key, desktop) {
   const receiptComplete = detail.ok === true || detail.complete === true || detail.status === "complete" || detail.status === "PASS" || detail.status === "STRATEGY3_V2_DAILY_UNATTENDED_YES";
   const fullScannedCount = num(detail.scannedCount, detail.scanned_count, detail.scanned, scan.scannedCount, scan.scanned_count, summary.scannedCount, summary.count);
   const fullResultCount = num(detail.resultCount, detail.result_count, detail.matches, detail.count, scan.resultCount, scan.result_count, scan.count, summary.resultCount, summary.count);
+  const desktopStatus = summary.ok === true && Boolean(runId) && (!receiptRunId || receiptRunId === runId) ? "PASS" : "BLOCKED";
+  const mobileStatus = text(detail.mobileStatus, detail.mobile_status, detail.mobile?.status, detail.mobileFragment?.status) || "UNVERIFIED";
+  const mobileRunId = text(detail.mobileRunId, detail.mobile_run_id, detail.mobile?.runId, detail.mobileFragment?.runId);
+  const mobileMatches = mobileStatus === "PASS" && mobileRunId === runId;
   return {
     key, strategy: key, runId, tradeDate: taipeiDate(), date: taipeiDate(),
+    sourceDate: text(detail.sourceDate, detail.source_date, detail.scanDate, detail.scan_date, taipeiDate()),
+    startedAt: text(detail.startedAt, detail.started_at, scan.startedAt, scan.started_at),
+    finishedAt: text(detail.finishedAt, detail.finished_at, detail.checkedAt, detail.checked_at, summary.updatedAt, desktop.updatedAt),
+    universeCount: num(detail.universeCount, detail.universe_count, detail.expectedTotal, detail.expected_total, scan.universeCount, scan.expectedTotal),
     scannedCount: fullScannedCount, resultCount: fullResultCount, count: fullResultCount,
+    qualityStatus: text(detail.qualityStatus, detail.quality_status, detail.published?.qualityStatus) || (receiptComplete ? "complete" : "blocked"),
+    evidenceStatus: text(detail.evidenceStatus, detail.evidence_status) || (receiptComplete ? "complete" : "blocked"),
+    fallbackUsed: boolean(detail.fallbackUsed, boolean(detail.fallback, false)),
+    publishAllowed: boolean(detail.publishAllowed, boolean(detail.publish_allowed, receiptComplete)),
+    desktopStatus, mobileStatus, mobileRunId,
+    scorecardUpdatedAt: "",
+    firstBlocker: text(detail.firstBlocker, detail.blockingReason, detail.blocking_reason),
+    reasonCode: text(detail.reasonCode, detail.reason_code),
     source: `terminal-desktop-route-snapshot+canonical-receipt:${receipt?.name || "missing"}`,
     sourceUpdatedAt: summary.updatedAt || desktop.updatedAt || "", terminalEndpoint: endpointByKey[key],
-    canonicalComplete: summary.ok === true && Boolean(runId) && receiptComplete && (!receiptRunId || receiptRunId === runId),
+    canonicalComplete: summary.ok === true && Boolean(runId) && receiptComplete && (!receiptRunId || receiptRunId === runId) && mobileMatches,
   };
 }function canonicalBattle() {
   const candidates = [
@@ -118,14 +141,30 @@ function canonicalFromDesktop(key, desktop) {
       key: "battle", strategy: "battle", runId: String(value.runId || value.run_id || ""),
       tradeDate: value.tradeDate || value.trade_date || value.marketDate || "",
       date: value.tradeDate || value.trade_date || value.marketDate || "",
+      sourceDate: value.sourceDate || value.source_date || value.tradeDate || value.trade_date || value.marketDate || "",
+      startedAt: value.startedAt || value.started_at || "",
+      finishedAt: value.finishedAt || value.finished_at || value.checkedAt || value.checked_at || "",
+      universeCount: num(value.universeCount, value.universe_count, value.scannedCount, value.scanned, value.count),
       scannedCount: num(value.scannedCount, value.scanned, value.count),
       resultCount: num(value.resultCount, value.matches, value.count),
       count: num(value.resultCount, value.matches, value.count), source: `terminal-receipt:${name}`,
       sourceUpdatedAt: value.updatedAt || value.checkedAt || value.checked_at || "",
+      qualityStatus: value.qualityStatus || value.quality_status || (value.ok === true ? "complete" : "blocked"),
+      evidenceStatus: value.evidenceStatus || value.evidence_status || (value.ok === true ? "complete" : "blocked"),
+      fallbackUsed: boolean(value.fallbackUsed, boolean(value.fallback, false)),
+      publishAllowed: boolean(value.publishAllowed, boolean(value.publish_allowed, value.ok === true)),
+      desktopStatus: value.desktopStatus || value.desktop_status || "UNVERIFIED",
+      mobileStatus: value.mobileStatus || value.mobile_status || value.mobile?.status || "UNVERIFIED",
+      mobileRunId: value.mobileRunId || value.mobile_run_id || value.mobile?.runId || "",
+      scorecardUpdatedAt: "",
       firstBlocker: value.firstBlocker || value.blockingReason || value.blocking_reason || value.reason || "",
       blockingReason: value.blockingReason || value.blocking_reason || value.firstBlocker || value.reason || "",
+      reasonCode: value.reasonCode || value.reason_code || "",
       strategy5RunId: value.strategy5RunId || value.runId || "", institutionRunId: value.institutionRunId || "", generatedRunId: false,
-      canonicalComplete: value.ok === true || value.status === "complete" || value.status === "PASS",
+      canonicalComplete: (value.ok === true || value.status === "complete" || value.status === "PASS")
+        && (value.desktopStatus === "PASS" || value.desktop_status === "PASS")
+        && (value.mobileStatus === "PASS" || value.mobile_status === "PASS")
+        && (value.mobileRunId || value.mobile_run_id || value.mobile?.runId || "") === String(value.runId || value.run_id || ""),
     };
   }
   return null;
@@ -163,14 +202,22 @@ for (const key of slots[slot]) {
     status: "PASS",
     collectionSlot: slot,
     collectedAt,
+    scorecardUpdatedAt: collectedAt,
     collectionContract: "scorecard88-terminal-canonical-collector-v1",
     querySupabase: false,
     recalculated: false,
     generatedRunId: false,
   } : {
     key, strategy: key, ok: false, complete: false, status: "今日尚未閉環",
-    tradeDate: today, date: today, runId: "", terminalSourceRunId: canonical?.runId || "", count: 0, resultCount: 0,
+    tradeDate: today, date: today, sourceDate: canonical?.sourceDate || today, runId: "", terminalSourceRunId: canonical?.runId || "",
+    startedAt: canonical?.startedAt || "", finishedAt: canonical?.finishedAt || "", universeCount: num(canonical?.universeCount),
+    scannedCount: num(canonical?.scannedCount), count: 0, resultCount: 0,
+    qualityStatus: canonical?.qualityStatus || "blocked", evidenceStatus: canonical?.evidenceStatus || "blocked",
+    fallbackUsed: boolean(canonical?.fallbackUsed, false), publishAllowed: false,
+    desktopStatus: canonical?.desktopStatus || "BLOCKED", mobileStatus: canonical?.mobileStatus || "UNVERIFIED",
+    scorecardUpdatedAt: collectedAt,
     blocking_reason: blockingReason, firstBlocker: blockingReason, collectionSlot: slot, collectedAt,
+    reasonCode: canonical?.reasonCode || blockingReason,
     source: canonical?.source || "terminal-canonical-missing",
     collectionContract: "scorecard88-terminal-canonical-collector-v1",
     querySupabase: false, recalculated: false, generatedRunId: false,
