@@ -6,7 +6,7 @@ const zlib = require("zlib");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
 const { auditRunTimeSourceSnapshot, buildRunTimeSourceSnapshotFields } = require("../lib/run-time-source-snapshot-contract");
 const { isTwseTradingDay } = require("./twse-trading-day");
-const { CONTRACT: WATER_CONTRACT, taipeiClock, readFormalWater } = require("./run-strategy2-v3-water-scan");
+const { CONTRACT: WATER_CONTRACT, MIN_FORMAL_WATER_COVERAGE_RATIO, taipeiClock, readFormalWater, ratio } = require("./run-strategy2-v3-water-scan");
 const { candidateFromWaterRow } = require("../lib/strategy2-v3-signal");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -77,6 +77,16 @@ function compactTerminalRow(row = {}) {
 function encodeTerminalRows(rows = []) {
   return zlib.gzipSync(Buffer.from(JSON.stringify(rows.map(compactTerminalRow)), "utf8")).toString("base64");
 }
+function blockedReasonFor({ displayReplay, diagnostic, allowed, tradingDay, observationWindow, finalize, websocketFormalReady, water }) {
+  if (displayReplay) return "strategy2_v3_diagnostic_replay_visible_not_formal";
+  if (diagnostic) return "strategy2_v3_diagnostic_only";
+  if (allowed) return "";
+  if (tradingDay.isTradingDay !== true) return "market_closed_no_v3_publish";
+  if (!observationWindow) return "outside_strategy2_v3_observation_window";
+  if (!finalize) return "strategy2_v3_scan_in_progress_not_finalized";
+  if (!websocketFormalReady) return water.websocket?.reason || "fugle_websocket_not_formal_ready";
+  return "strategy2_v3_formal_water_incomplete";
+}
 function terminalSnapshotPayload(payload = {}) {
   const records = Array.isArray(payload.records) ? payload.records : [];
   const currentCandidates = Array.isArray(payload.currentCandidates) ? payload.currentCandidates : [];
@@ -94,7 +104,7 @@ function terminalSnapshotPayload(payload = {}) {
     dataGapCount: payload.dataGapCount, snapshotRecordCount: records.length, snapshotCandidateCount: currentCandidates.length,
     recordsGzip, currentCandidatesGzip, recordsEncoding: "gzip-base64-json-v1", diagnosticReplay: payload.diagnosticReplay,
     replayDisplayAllowed: payload.replayDisplayAllowed, replayReferenceAt: payload.replayReferenceAt,
-    displayBlockReason: payload.displayBlockReason, sourceCoverage: payload.sourceCoverage,
+    displayBlockReason: payload.displayBlockReason, blockedReason: payload.blockedReason, displayOnlyBlockedEvidence: payload.displayOnlyBlockedEvidence === true, sourceCoverage: payload.sourceCoverage,
     tradingDay: payload.tradingDay, liveWindow: payload.liveWindow, transport: payload.transport,
     snapshotContract: "strategy2-v3-terminal-compact-snapshot-v2",
   };
@@ -108,6 +118,17 @@ async function main() {
   const displayReplay = process.argv.includes("--display-replay");
   if (displayReplay && !diagnostic) throw new Error("strategy2_v3_display_replay_requires_diagnostic");
   const trigger = process.argv.includes("--source-event") ? "fugle_writer_success" : displayReplay ? "diagnostic_display_replay" : diagnostic ? "diagnostic" : "manual";
+  const liveReceiptPath = path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2-v3-live.json");
+  const previousLiveReceipt = readJson(liveReceiptPath, null);
+  const previousLiveTimestamp = previousLiveReceipt?.finishedAt || previousLiveReceipt?.updatedAt || previousLiveReceipt?.startedAt || "";
+  const previousLiveAgeMs = previousLiveTimestamp ? now.getTime() - Date.parse(previousLiveTimestamp) : Number.POSITIVE_INFINITY;
+  if (trigger === "fugle_writer_success" && !finalize && !diagnostic && !displayReplay
+    && previousLiveReceipt?.runId === `strategy2-v3-live-${clock.ymd}-canonical`
+    && previousLiveReceipt?.tradeDate === clock.date
+    && Number.isFinite(previousLiveAgeMs) && previousLiveAgeMs >= 0 && previousLiveAgeMs < 55000) {
+    console.log(JSON.stringify({ ok: true, cached: true, runId: previousLiveReceipt.runId, status: previousLiveReceipt.status, ageMs: previousLiveAgeMs, receipt: liveReceiptPath }, null, 2));
+    return;
+  }
   const observationWindow = clock.minuteOfDay >= (8 * 60 + 45) && clock.minuteOfDay <= (12 * 60 + 30);
   const liveWindow = clock.minuteOfDay >= 9 * 60 && clock.minuteOfDay <= (12 * 60 + 30);
   const tradingDay = await isTwseTradingDay(now, { stateDir: path.join(RUNTIME_DIR, "state") });
@@ -121,8 +142,12 @@ async function main() {
   const candidates = evaluations.filter((row) => row.formalCandidate === true)
     .sort((left, right) => right.score - left.score || String(right.entryAt).localeCompare(String(left.entryAt)));
   const dataGaps = evaluations.filter((row) => row.hardGate?.complete !== true);
+  const formalWaterReadyCount = evaluations.length - dataGaps.length;
+  const formalWaterCoverageRatio = ratio(formalWaterReadyCount, evaluations.length);
+  const requiredFormalWaterCoverageRatio = MIN_FORMAL_WATER_COVERAGE_RATIO;
+  const formalWaterCoverageOk = evaluations.length > 0 && formalWaterCoverageRatio >= requiredFormalWaterCoverageRatio;
   const websocketFormalReady = water.websocket?.formalReady === true;
-  const waterComplete = websocketFormalReady && water.rows.length > 0 && dataGaps.length === 0;
+  const waterComplete = websocketFormalReady && formalWaterCoverageOk;
   const complete = finalize && waterComplete;
   const allowed = tradingDay.isTradingDay === true && liveWindow && complete;
   const runId = diagnostic || displayReplay
@@ -134,6 +159,7 @@ async function main() {
   const displayRows = displayReplay ? replayRows : events;
   const replayWaterAvailable = displayReplay && replayRows.length > 0
     && replayRows.every((row) => row.entryTradeDate === clock.date && row.entryPrice > 0 && row.candleCount >= 35);
+  const blockedReason = blockedReasonFor({ displayReplay, diagnostic, allowed, tradingDay, observationWindow, finalize, websocketFormalReady, water });
   const payload = {
     ok: allowed,
     strategy: "strategy2",
@@ -155,7 +181,9 @@ async function main() {
     latestOverwriteAllowed: allowed,
     preservePreviousGood: false,
     fallbackUsed: false,
-    reason: displayReplay ? "strategy2_v3_diagnostic_replay_visible_not_formal" : diagnostic ? "strategy2_v3_diagnostic_only" : allowed ? "strategy2_v3_live_complete" : tradingDay.isTradingDay !== true ? "market_closed_no_v3_publish" : !observationWindow ? "outside_strategy2_v3_observation_window" : !finalize ? "strategy2_v3_scan_in_progress_not_finalized" : !websocketFormalReady ? (water.websocket?.reason || "fugle_websocket_not_formal_ready") : "strategy2_v3_formal_water_incomplete",
+    reason: allowed ? "strategy2_v3_live_complete" : blockedReason,
+    blockedReason,
+    displayOnlyBlockedEvidence: !displayReplay && !diagnostic && !allowed,
     expectedCount: water.rows.length,
     scannedCount: water.rows.length,
     resultCount: candidates.length,
@@ -164,6 +192,10 @@ async function main() {
     dataGapCount: dataGaps.length,
     currentCandidates: candidates,
     observations: evaluations,
+      formalWaterReadyCount,
+      formalWaterCoverageRatio,
+      requiredFormalWaterCoverageRatio,
+      formalWaterCoverageOk,
     events: displayRows,
     records: displayRows,
     rows: displayRows,
@@ -171,7 +203,7 @@ async function main() {
     diagnosticReplay: displayReplay,
     replayDisplayAllowed: replayWaterAvailable,
     replayReferenceAt: displayReplay ? evaluationNow.toISOString() : "",
-    displayBlockReason: displayReplay ? "V3 回測驗證：非正式候選、不發布、不寫入 /88" : "",
+    displayBlockReason: displayReplay ? "V3 回測驗證：非正式候選、不發布、不寫入 /88" : blockedReason,
     sourceCoverage: {
       motherPool: "fugle_daytrade_priority_pool",
       quote: "fugle_daytrade_websocket_cache",
@@ -245,7 +277,7 @@ async function main() {
     formalDisplayAllowed: payload.formalDisplayAllowed, publishAllowed: allowed, latestOverwriteAllowed: payload.latestOverwriteAllowed,
     fallbackUsed: false, preservePreviousGood: false,
     expectedCount: payload.expectedCount, scannedCount: payload.scannedCount, resultCount: payload.resultCount,
-    dataGapCount: payload.dataGapCount, sourceCoverage: payload.sourceCoverage, snapshot, snapshotContract: snapshotPayload.snapshotContract, snapshotBytes: Buffer.byteLength(JSON.stringify(snapshotPayload)), reason: payload.reason,
+    dataGapCount: payload.dataGapCount, sourceCoverage: payload.sourceCoverage, snapshot, snapshotContract: snapshotPayload.snapshotContract, snapshotBytes: Buffer.byteLength(JSON.stringify(snapshotPayload)), reason: payload.reason, blockedReason: payload.blockedReason, displayOnlyBlockedEvidence: payload.displayOnlyBlockedEvidence,
     diagnosticReplay: displayReplay, replayDisplayAllowed: payload.replayDisplayAllowed, replayReferenceAt: payload.replayReferenceAt,
     startedAt: now.toISOString(), finishedAt: new Date().toISOString(),
   };
@@ -265,5 +297,4 @@ module.exports = {
   compactTerminalRow,
   terminalSnapshotPayload,
 };
-
 

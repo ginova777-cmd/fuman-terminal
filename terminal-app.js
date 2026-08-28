@@ -372,20 +372,6 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   }catch(error){
     if(typeof recordFrontendError==="function")recordFrontendError("strategy2-realtime-subscribe",error);
   }
-  try{
-    if(typeof EventSource!=="undefined"){
-      const stream=new EventSource("/api/strategy2-stream");
-      stream.addEventListener("strategy2-run",event=>{
-        try{refreshFromPush(JSON.parse(event.data||"{}"),"sse")}catch(error){}
-      });
-      stream.addEventListener("strategy2-error",event=>{
-        if(typeof recordFrontendError==="function")recordFrontendError("strategy2-sse",new Error(String(event?.data||"strategy2_sse_error")));
-      });
-      window.__fumanStrategy2Sse=stream;
-    }
-  }catch(error){
-    if(typeof recordFrontendError==="function")recordFrontendError("strategy2-sse-open",error);
-  }
 })();
 
 ;(function installTerminalConfluenceRunIdPolling(){

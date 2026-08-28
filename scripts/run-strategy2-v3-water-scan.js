@@ -16,6 +16,7 @@ const { readFugleWebSocketCandles, readFugleWebSocketQuotes } = require("../lib/
 const SOURCE_NAME = "fugle_daytrade_source";
 const CONTRACT = "strategy2-v3-fugle-deep-scan-water-v1";
 const MIN_CANDLES = 35;
+const MIN_FORMAL_WATER_COVERAGE_RATIO = 0.90;
 const WEBSOCKET_STATUS_FILE = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status-v2.json");
 
 function marketClosedReport(label, clock) {
@@ -97,6 +98,10 @@ function bool(value) {
   return value === true || value === 1 || value === "1" || String(value).toLowerCase() === "true";
 }
 
+function ratio(part, total) {
+  return total > 0 ? Number((part / total).toFixed(4)) : 0;
+}
+
 function chunk(items, size) {
   const result = [];
   for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
@@ -116,6 +121,10 @@ async function mapWithConcurrency(items, concurrency, worker) {
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, runWorker));
   return results;
+}
+
+function readJson(file, fallback = null) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
 }
 
 function writeJson(file, value) {
@@ -299,7 +308,21 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
       },
     };
   });
-  return { rows, poolRows: poolRows.length, quoteRows: quoteBySymbol.size, candleRows, candleBySymbol, websocket, liveEvidence: "fugle_daytrade_websocket_cache" };
+  const formalReadyRows = rows.filter((row) => row.formalQuoteReady && row.formalOneMinuteReady).length;
+  const formalWaterCoverageRatio = ratio(formalReadyRows, rows.length);
+  return {
+    rows,
+    poolRows: poolRows.length,
+    quoteRows: quoteBySymbol.size,
+    candleRows,
+    candleBySymbol,
+    websocket,
+    formalReadyRows,
+    formalWaterCoverageRatio,
+    requiredFormalWaterCoverageRatio: MIN_FORMAL_WATER_COVERAGE_RATIO,
+    formalWaterCoverageOk: rows.length > 0 && formalWaterCoverageRatio >= MIN_FORMAL_WATER_COVERAGE_RATIO,
+    liveEvidence: "fugle_daytrade_websocket_cache",
+  };
 }
 
 async function main() {
@@ -313,15 +336,30 @@ async function main() {
     console.log(JSON.stringify({ ok: true, status: closed.status, runId: closed.runId, dataDate: closed.dataDate, receipt: path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2-v3-water.json") }, null, 2));
     return;
   }
+  const diagnostic = process.argv.includes("--diagnostic");
+  const force = process.argv.includes("--force");
+  const formalReceiptPath = path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2-v3-water.json");
+  const diagnosticReceiptPath = path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2-v3-water-diagnostic-latest.json");
+  const receiptPath = diagnostic ? diagnosticReceiptPath : formalReceiptPath;
+  const previousReceipt = readJson(formalReceiptPath);
+  const previousAgeMs = previousReceipt?.updatedAt ? now.getTime() - Date.parse(previousReceipt.updatedAt) : Number.POSITIVE_INFINITY;
+  if (!diagnostic && !force
+    && previousReceipt?.runId === `strategy2-v3-live-${clock.ymd}-canonical`
+    && previousReceipt?.tradeDate === clock.date
+    && Number.isFinite(previousAgeMs) && previousAgeMs >= 0 && previousAgeMs < 55000) {
+    console.log(JSON.stringify({ ok: true, cached: true, status: previousReceipt.status, runId: previousReceipt.runId, dataDate: previousReceipt.dataDate, ageMs: previousAgeMs, receipt: receiptPath }, null, 2));
+    return;
+  }
   const source = config();
   if (!source.url || !source.key) throw new Error("strategy2_v3_supabase_credentials_missing");
-  const diagnostic = process.argv.includes("--diagnostic");
   const water = await readFormalWater(source, clock.date);
   const scanned = water.rows.filter((row) => row.formalQuoteReady && row.formalOneMinuteReady);
   const dataGaps = water.rows.filter((row) => row.dataGap);
   const liveWindow = clock.minuteOfDay >= 9 * 60 && clock.minuteOfDay <= (12 * 60 + 30);
-  const complete = scanned.length === water.rows.length && water.rows.length > 0;
-  const runId = `strategy2-v3-${clock.ymd}-${String(clock.hour).padStart(2, "0")}${String(clock.minute).padStart(2, "0")}${String(clock.second).padStart(2, "0")}`;
+  const complete = water.formalWaterCoverageOk === true;
+  const runId = diagnostic
+    ? `strategy2-v3-diagnostic-${clock.ymd}-${String(clock.hour).padStart(2, "0")}${String(clock.minute).padStart(2, "0")}${String(clock.second).padStart(2, "0")}`
+    : `strategy2-v3-live-${clock.ymd}-canonical`;
   const report = {
     ok: complete,
     strategy: "strategy2",
@@ -331,7 +369,13 @@ async function main() {
     dataDate: clock.date,
     tradeDate: clock.date,
     updatedAt: now.toISOString(),
-    status: diagnostic ? "diagnostic_water_ready" : liveWindow && complete ? "water_ready_for_live_strategy" : "water_ready_outside_live_window",
+    status: diagnostic
+      ? "diagnostic_water_ready"
+      : !liveWindow
+        ? "water_ready_outside_live_window"
+        : complete
+          ? "water_ready_for_live_strategy"
+          : "water_incomplete_live_window",
     complete,
     liveWindow,
     publishAllowed: false,
@@ -358,6 +402,9 @@ async function main() {
       formalDeepScanEligibleRows: water.rows.length,
       formalIntradayOneMinuteRows: water.candleRows,
       formalIntradayOneMinuteReadySymbols: scanned.length,
+      formalWaterCoverageRatio: water.formalWaterCoverageRatio,
+      requiredFormalWaterCoverageRatio: water.requiredFormalWaterCoverageRatio,
+      formalWaterCoverageOk: water.formalWaterCoverageOk,
       dataGapCount: dataGaps.length,
       noLegacyReadbackViews: true,
       noTop40Gate: true,
@@ -365,23 +412,21 @@ async function main() {
     },
   };
   const base = path.join(RUNTIME_DIR, "data", "strategy2-v3");
-  writeJson(path.join(base, "latest.json"), report);
-  writeJson(path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2-v3-water.json"), report);
-  console.log(JSON.stringify({ ok: report.ok, status: report.status, runId, dataDate: report.dataDate, expectedCount: report.expectedCount, scannedCount: report.scannedCount, dataGapCount: report.dataGapCount, receipt: path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2-v3-water.json") }, null, 2));
+  writeJson(path.join(base, diagnostic ? "latest-diagnostic.json" : "latest.json"), report);
+  writeJson(receiptPath, report);
+  console.log(JSON.stringify({ ok: report.ok, status: report.status, runId, dataDate: report.dataDate, expectedCount: report.expectedCount, scannedCount: report.scannedCount, dataGapCount: report.dataGapCount, receipt: receiptPath }, null, 2));
 }
 
 if (require.main === module) {
   main().catch((error) => {
     const clock = taipeiClock();
+    const diagnostic = process.argv.includes("--diagnostic");
     const receipt = { ok: false, strategy: "strategy2", version: "v3", strategyContract: CONTRACT, dataDate: clock.date, status: "failed", reason: error?.message || String(error), updatedAt: new Date().toISOString() };
-    writeJson(path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2-v3-water.json"), receipt);
+    writeJson(path.join(RUNTIME_DIR, "data", "scan-receipts", diagnostic ? "strategy2-v3-water-diagnostic-latest.json" : "strategy2-v3-water.json"), receipt);
     console.error(JSON.stringify(receipt, null, 2));
     process.exitCode = 1;
   });
 }
 
-module.exports = { CONTRACT, MIN_CANDLES, taipeiClock, number, bool, config, readWebSocketEvidence, readFormalWater };
-
-
-
+module.exports = { CONTRACT, MIN_CANDLES, MIN_FORMAL_WATER_COVERAGE_RATIO, taipeiClock, number, bool, ratio, config, readWebSocketEvidence, readFormalWater };
 

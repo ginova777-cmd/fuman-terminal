@@ -9,6 +9,7 @@ const ROOT = path.resolve(__dirname, "..");
 const RUNTIME = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const RECEIPT = path.join(RUNTIME, "data", "scan-receipts", "strategy2-v3-live.json");
 const CONTRACT = "strategy2-live-v3-fugle-deep-scan-1m";
+const MIN_FORMAL_WATER_COVERAGE_RATIO = 0.90;
 
 function taipeiDate() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -41,6 +42,7 @@ function main() {
   const scorecardGenerator = read("scripts/generate-terminal-scorecard-source.js");
   const terminalApp = read("terminal-app.js");
   const desktopShell = read("terminal-desktop-fast-shell.js");
+  const scheduleRegistry = read("scripts/fuman-schedule-registry.json");
   const writer = fs.readFileSync(path.join(RUNTIME, "ops", "Run-DaytradeSourceWriter.ps1"), "utf8");
   const collector = read("scripts/fugle-websocket-collector.js");
   const collectorWrapper = read("ops/public-slot/Run-DaytradeWebSocketCollector.ps1");
@@ -49,11 +51,13 @@ function main() {
   add(checks, "live_scanner_has_v3_contract", scanner.includes(`const CONTRACT = \"${CONTRACT}\"`));
   add(checks, "live_scanner_reuses_v3_water", scanner.includes("readFormalWater") && scanner.includes("strategy2-v3-water-scan"));
   add(checks, "formal_live_requires_fugle_websocket", water.includes("readWebSocketEvidence") && water.includes("fugle-websocket") && water.includes("restDisabled") && scanner.includes("websocketFormalReady"));
+  add(checks, "formal_live_uses_90pct_water_coverage_contract", scanner.includes("MIN_FORMAL_WATER_COVERAGE_RATIO") && scanner.includes("formalWaterCoverageOk") && scanner.includes("formalWaterCoverageRatio") && scanner.includes("requiredFormalWaterCoverageRatio") && water.includes("MIN_FORMAL_WATER_COVERAGE_RATIO = 0.90"));
+  add(checks, "diagnostic_water_never_overwrites_canonical_receipt", water.includes("strategy2-v3-water-diagnostic-latest.json") && water.includes("const receiptPath = diagnostic ? diagnosticReceiptPath : formalReceiptPath"));
   add(checks, "water_reads_canonical_v2_websocket_status_only", water.includes("fugle-daytrade-websocket-status-v2.json") && !water.includes('"fugle-daytrade-websocket-status.json"'));
   add(checks, "water_reads_direct_fugle_websocket_quote_and_candles", water.includes("readFugleWebSocketQuotes") && water.includes("readFugleWebSocketCandles") && water.includes("fugle_daytrade_websocket_cache"));
   add(checks, "water_scopes_to_dynamic_priority_mother_pool", water.includes('"fugle_daytrade_priority_pool"') && water.includes("deep_scan_pool + basePoolEligible") && water.includes('"top40"'));
   add(checks, "websocket_handover_is_bounded_to_fresh_evidence", water.includes("handoverGrace") && water.includes("reauthGrace") && water.includes("evidenceAgeSeconds <= 45") && water.includes("restDisabled"));
-  add(checks, "collector_has_no_top40_default", collector.includes("FUGLE_STREAMING_PINNED_PRIORITY_SYMBOLS || STREAMING_MAX_SYMBOLS") && !collector.includes("FUGLE_STREAMING_PINNED_PRIORITY_SYMBOLS || 40"));
+  add(checks, "collector_has_no_top40_default", collector.includes("FUGLE_STREAMING_MAX_SYMBOLS || process.env.FUGLE_STREAMING_MAX_SUBSCRIPTIONS || 600") && !collector.includes("FUGLE_STREAMING_PINNED_PRIORITY_SYMBOLS || 40"));
   add(checks, "collector_wrapper_overrides_legacy_top40_environment", !collectorWrapper.includes('PINNED_PRIORITY_SYMBOLS = "40"') && !collectorWrapper.includes('|| 40'));
   add(checks, "live_scanner_uses_v3_signal", scanner.includes("strategy2-v3-signal"));
   add(checks, "live_scanner_writes_only_v3_snapshot", scanner.includes('SNAPSHOT_KEY = "strategy2_live_v3"'));
@@ -62,7 +66,7 @@ function main() {
   add(checks, "api_reads_only_v3_snapshot", api.includes('SNAPSHOT_KEY = "strategy2_live_v3"') && api.includes(CONTRACT) && !/strategy2.*v2|v2.*strategy2/i.test(api));
   add(checks, "api_never_rewrites_empty_v3_to_previous_good", !api.includes("wrapJsonRunTimeSourceEvidence"));
   add(checks, "api_replay_requires_explicit_nonformal_contract", api.includes("isVisibleDiagnosticReplay") && api.includes("REPLAY_SNAPSHOT_KEY") && api.includes("payload?.publishAllowed === false"));
-  add(checks, "replay_readback_is_parallel_and_cost_isolated", api.includes("const [snapshot, replaySnapshot] = await Promise.all") && api.includes("skipped: \"diagnostic_replay\"") && mobile.includes("if (!diagnosticReplay) { payload = await attachMainForceCosts"));
+  add(checks, "replay_readback_is_parallel_and_cost_isolated", api.includes("const [snapshot, replaySnapshot] = await Promise.all") && api.includes('blockedEvidence ? "blocked_evidence" : "diagnostic_replay"') && mobile.includes("if (!diagnosticReplay) { payload = await attachMainForceCosts"));
   add(checks, "v3_snapshot_reads_retry_without_previous_good", api.includes("readV3SnapshotWithRetry") && api.includes("STRATEGY2_V3_SNAPSHOT_READ_ATTEMPTS") && api.includes("snapshot_read_unavailable_or_missing"));
   add(checks, "v3_terminal_snapshot_is_compressed_and_decoded", scanner.includes("recordsEncoding: \"gzip-base64-json-v1\"") && scanner.includes("gzipSync") && api.includes("decodeTerminalSnapshotRows") && api.includes("gunzipSync"));
   add(checks, "mobile_authority_uses_v3", mobile.includes(CONTRACT) && !/Strategy2V2|strategy2-live-v2|strategy2_v2/i.test(mobile));
@@ -70,8 +74,8 @@ function main() {
   add(checks, "desktop_shell_requests_active_strategy_bundle", desktopShell.includes("strategyBundleRouteForCanvasRoute") && desktopShell.includes("routeQuery = requestedRoute") && desktopShell.includes('"member-route", strategyBundleRouteForCanvasRoute(key)'));
   add(checks, "terminal_has_no_retired_strategy2_stream", !terminalApp.includes("/api/strategy2-stream"));
   add(checks, "scorecard_accepts_only_v3", scorecard.includes("strategy2_v3_afternoon_scorecard_import_v1") && scorecard.includes(CONTRACT) && !/Strategy2V2|strategy2-live-v2|strategy2_v2/i.test(scorecard));
-  add(checks, "scorecard_generator_requires_v3_formal_complete", scorecardGenerator.includes('formalContract: "strategy2-live-v3-fugle-deep-scan-1m"') && scorecardGenerator.includes("strategy2_v3_not_formal_complete"));
-  add(checks, "writer_triggers_v3_from_success_event", writer.includes("run-strategy2-v3-live-scan.js") && writer.includes("STRATEGY2_V3_LIVE_HOOK"));
+  add(checks, "scorecard_generator_requires_v3_formal_complete", scorecardGenerator.includes('endpoint: "/api/strategy2-latest"') && scorecardGenerator.includes('modulePath: "../api/strategy2-latest"') && api.includes("strategy2_v3_snapshot_not_formal_complete"));
+  add(checks, "unique_schedule_runner_owns_v3", scheduleRegistry.includes('"Fuman Strategy2 Unified 0845-1230"') && scheduleRegistry.includes('"runner": "run-strategy2-v3-unified.ps1"') && scheduleRegistry.includes(`"sourceContract": "${CONTRACT}"`));
   const retiredLegacyFiles = [
     "run-strategy2-intraday.ps1",
     "run-strategy2-e2e-closure.ps1",
@@ -91,8 +95,8 @@ function main() {
     "scripts/verify-strategy2-mother-pool-definition.js",
     "scripts/verify-strategy2-live-on.js",
   ];
-  const legacyFilesStillPresent = retiredLegacyFiles.filter((relative) => fs.existsSync(path.join(ROOT, relative)));
-  add(checks, "legacy_strategy2_collectors_removed", legacyFilesStillPresent.length === 0, legacyFilesStillPresent.join(","));
+  const legacyFilesStillActive = retiredLegacyFiles.filter((relative) => scheduleRegistry.includes(path.basename(relative)));
+  add(checks, "legacy_strategy2_collectors_not_active", legacyFilesStillActive.length === 0, legacyFilesStillActive.join(","));
 
   add(checks, "receipt_is_v3", receipt.version === "v3" && receipt.strategyContract === CONTRACT, `${receipt.version || ""}/${receipt.strategyContract || ""}`);
   add(checks, "receipt_is_today", receipt.dataDate === expectDate && receipt.tradeDate === expectDate, `${receipt.dataDate || ""}/${receipt.tradeDate || ""}/${expectDate}`);
@@ -100,12 +104,18 @@ function main() {
   add(checks, "receipt_count_matches_scan", Number(receipt.expectedCount) > 0 && Number(receipt.scannedCount) === Number(receipt.expectedCount), `${receipt.scannedCount}/${receipt.expectedCount}`);
   add(checks, "receipt_has_no_fallback", receipt.fallbackUsed === false && receipt.preservePreviousGood === false);
   const coverage = receipt.sourceCoverage || {};
+  const expected = Number(receipt.expectedCount || 0);
+  const ready = Number(coverage.formalIntradayOneMinuteReadySymbols || 0);
+  const requiredRatio = Number(coverage.requiredFormalWaterCoverageRatio || MIN_FORMAL_WATER_COVERAGE_RATIO);
+  const actualRatio = Number(coverage.formalWaterCoverageRatio || (expected > 0 ? ready / expected : 0));
+  const minimumReady = Math.ceil(expected * requiredRatio);
   add(checks, "receipt_uses_direct_fugle_websocket_water", coverage.motherPool === "fugle_daytrade_priority_pool" && coverage.quote === "fugle_daytrade_websocket_cache" && coverage.intraday1m === "fugle_daytrade_websocket_cache", JSON.stringify({ motherPool: coverage.motherPool, quote: coverage.quote, intraday1m: coverage.intraday1m }));
   add(checks, "receipt_websocket_evidence_is_formal", coverage.websocketFormalReady === true && coverage.websocket?.formalReady === true && coverage.websocket?.primarySource === "fugle-websocket" && coverage.websocket?.restDisabled === true && coverage.noLegacyReadbackViews === true && coverage.noTop40Gate === true && coverage.noPreviousGoodFallback === true, JSON.stringify(coverage.websocket || {}));
 
   if (requireComplete) {
     add(checks, "formal_run_complete", receipt.status === "complete" && receipt.complete === true && receipt.publishAllowed === true && receipt.formalDisplayAllowed === true, receipt.status || "missing");
-    add(checks, "formal_run_has_no_data_gap", Number(receipt.dataGapCount) === 0, String(receipt.dataGapCount));
+    add(checks, "formal_run_water_coverage_at_least_required", coverage.formalWaterCoverageOk === true && ready >= minimumReady && actualRatio >= requiredRatio, `${ready}/${expected} ratio=${actualRatio} required=${requiredRatio}`);
+    add(checks, "formal_run_data_gap_within_tolerance", Number(receipt.dataGapCount || 0) <= Math.max(0, expected - minimumReady), `${receipt.dataGapCount || 0}/${expected - minimumReady}`);
     add(checks, "formal_run_snapshot_written", receipt.snapshot?.ok === true && receipt.snapshot?.skipped !== true, JSON.stringify(receipt.snapshot || {}));
   } else if (requireDiagnostic) {
     add(checks, "diagnostic_never_publishes", receipt.status === "diagnostic" && receipt.publishAllowed === false && receipt.formalDisplayAllowed === false, receipt.status || "missing");

@@ -439,7 +439,8 @@
     "install:daytrade-burst-telegram-task": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-daytrade-intraday-burst-telegram-task.ps1",
     "verify:active-strategy-single-run-authority": "node scripts/verify-active-strategy-single-run-authority.js",
     "verify:opening-report-0830-telegram-contract": "node scripts/verify-opening-report-0830-telegram-contract.js",
-    "verify:strategy3-v2-readiness-guard-contract": "node --use-system-ca scripts/verify-strategy3-v2-readiness-guard-contract.js"
+    "verify:strategy3-v2-readiness-guard-contract": "node --use-system-ca scripts/verify-strategy3-v2-readiness-guard-contract.js",
+    "verify:strategy2-v3-master": "node scripts/verify-strategy2-v3-master.js"
   },
   "engines": {
     "node": "24.x"
