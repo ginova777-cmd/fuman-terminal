@@ -7,6 +7,7 @@ const { spawnSync } = require("child_process");
 const ROOT = path.resolve(__dirname, "..");
 const CONTRACT_FILE = path.join(ROOT, "data", "contracts", "release_root_authority_v1.json");
 const REQUIRE_PRODUCTION_ROOT = process.argv.includes("--require-production-root");
+const APPROVED_DEPLOY_SOURCE_ROOT = process.env.FUMAN_APPROVED_DEPLOY_SOURCE_ROOT || "";
 
 function normalize(value) {
   return path.resolve(String(value || "")).replace(/[\\/]+$/, "").toLowerCase();
@@ -40,7 +41,30 @@ function main() {
   const policy = contract?.policy || {};
 
   if (contract?.contract !== "release_root_authority_v1") issues.push("authority_contract_version_invalid");
-  if (!sourceRoot || normalize(ROOT) !== normalize(sourceRoot)) issues.push("source_root_mismatch");
+  const runningFromSourceAuthority = Boolean(sourceRoot) && normalize(ROOT) === normalize(sourceRoot);
+  const runningFromApprovedDeployClone = Boolean(APPROVED_DEPLOY_SOURCE_ROOT)
+    && normalize(ROOT) === normalize(APPROVED_DEPLOY_SOURCE_ROOT);
+  if (!runningFromSourceAuthority && !runningFromApprovedDeployClone) issues.push("source_root_mismatch");
+
+  let deployCloneEvidence = null;
+  if (runningFromApprovedDeployClone && !runningFromSourceAuthority) {
+    const branch = git(ROOT, ["branch", "--show-current"]);
+    const head = git(ROOT, ["rev-parse", "HEAD"]);
+    const originMain = git(ROOT, ["rev-parse", "origin/main"]);
+    const status = git(ROOT, ["status", "--porcelain"]);
+    deployCloneEvidence = {
+      approvedRoot: APPROVED_DEPLOY_SOURCE_ROOT,
+      branch: branch.value,
+      head: head.value.toLowerCase(),
+      originMain: originMain.value.toLowerCase(),
+      clean: status.ok ? status.value === "" : false,
+    };
+    if (!branch.ok || branch.value !== "main") issues.push("approved_deploy_clone_not_main");
+    if (!head.ok || !originMain.ok || head.value.toLowerCase() !== originMain.value.toLowerCase()) {
+      issues.push("approved_deploy_clone_not_origin_main");
+    }
+    if (!status.ok || status.value) issues.push("approved_deploy_clone_dirty");
+  }
   if (!productionRoot || normalize(productionRoot) === normalize(sourceRoot)) issues.push("production_root_not_isolated");
   if (!runtimeRoot || [sourceRoot, productionRoot].some((root) => normalize(root) === normalize(runtimeRoot))) issues.push("runtime_root_not_isolated");
   if (!/^[0-9a-f]{40}$/.test(approvedProductionSha)) issues.push("approved_production_sha_invalid");
@@ -114,6 +138,9 @@ function main() {
     productionClean: productionExists ? productionStatus === "" : null,
     productionGitTopLevel: productionTopLevel,
     productionValidationRequired: REQUIRE_PRODUCTION_ROOT,
+    executionRoot: ROOT,
+    executionMode: runningFromSourceAuthority ? "source_authority" : runningFromApprovedDeployClone ? "approved_deploy_clone" : "unapproved_root",
+    deployCloneEvidence,
     wiringEvidence,
     issues,
   };
