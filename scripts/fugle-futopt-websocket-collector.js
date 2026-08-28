@@ -49,6 +49,7 @@ const STREAMING_STATUS_MS = Math.max(1000, Number(process.env.FUGLE_FUTOPT_STREA
 const FORMAL_LIVE_MIRROR_MS = Math.max(30000, Number(process.env.FUGLE_FUTOPT_FORMAL_LIVE_MIRROR_MS || 30000));
 const FORMAL_LIVE_MIRROR_RETRIES = Math.max(1, Math.min(4, Number(process.env.FUGLE_FUTOPT_FORMAL_LIVE_MIRROR_RETRIES || 3)));
 const FORMAL_LIVE_MIRROR_BACKOFF_MS = Math.max(250, Number(process.env.FUGLE_FUTOPT_FORMAL_LIVE_MIRROR_BACKOFF_MS || 1000));
+const FORMAL_LIVE_MIRROR_TIMEOUT_MS = Math.max(1000, Number(process.env.FUGLE_FUTOPT_FORMAL_LIVE_MIRROR_TIMEOUT_MS || 10000));
 const CACHE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_FUTOPT_WS_CACHE_TTL_MS || 5 * 60 * 1000));
 const STREAMING_AFTER_HOURS_RAW = String(process.env.FUGLE_FUTOPT_STREAMING_AFTER_HOURS || "").trim().toLowerCase();
 const STREAMING_AFTER_HOURS = /^(1|true|yes|on)$/.test(STREAMING_AFTER_HOURS_RAW)
@@ -58,7 +59,7 @@ const STREAMING_AFTER_HOURS = /^(1|true|yes|on)$/.test(STREAMING_AFTER_HOURS_RAW
     : null;
 
 const FORMAL_LIVE_MIRROR_RECEIPT_FILE = path.join(path.dirname(FUGLE_FUTOPT_WS_STATUS_FILE), "fugle-daytrade-futopt-live-mirror.json");
-const COLLECTOR_RELEASE = "futopt-formal-live-mirror-v2";
+const COLLECTOR_RELEASE = "futopt-formal-live-mirror-v3";
 
 let lastMessageAt = "";
 let lastFormalLiveMirrorAt = 0;
@@ -293,6 +294,21 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function fetchWithTimeout(url, options, timeoutMs = FORMAL_LIVE_MIRROR_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw Object.assign(new Error(`futopt_formal_live_mirror_timeout_${timeoutMs}ms`), { status: 408 });
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function finiteNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
@@ -368,7 +384,7 @@ async function mirrorFormalFutoptLive() {
   for (let attempt = 1; attempt <= FORMAL_LIVE_MIRROR_RETRIES; attempt += 1) {
     receipt.attempts = attempt;
     try {
-      const response = await fetch(`${baseUrl}/rest/v1/fugle_daytrade_futopt_quotes_live?on_conflict=future_symbol`, {
+      const response = await fetchWithTimeout(`${baseUrl}/rest/v1/fugle_daytrade_futopt_quotes_live?on_conflict=future_symbol`, {
         method: "POST",
         headers: {
           apikey: apiKey,
