@@ -58,7 +58,7 @@ const STREAMING_AFTER_HOURS = /^(1|true|yes|on)$/.test(STREAMING_AFTER_HOURS_RAW
     : null;
 
 const FORMAL_LIVE_MIRROR_RECEIPT_FILE = path.join(path.dirname(FUGLE_FUTOPT_WS_STATUS_FILE), "fugle-daytrade-futopt-live-mirror.json");
-const COLLECTOR_RELEASE = "futopt-formal-live-mirror-v1";
+const COLLECTOR_RELEASE = "futopt-formal-live-mirror-v2";
 
 let lastMessageAt = "";
 let lastFormalLiveMirrorAt = 0;

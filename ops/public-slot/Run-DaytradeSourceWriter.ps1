@@ -25,7 +25,7 @@ New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
 $StdoutLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-',''))-$Stamp.stdout.log"
 $StderrLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-',''))-$Stamp.stderr.log"
 $WrapperLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-','')).wrapper.log"
-$FutoptCollectorRelease = "futopt-formal-live-mirror-v1"
+$FutoptCollectorRelease = "futopt-formal-live-mirror-v2"
 $MutexName = "Global\FumanFugleDaytradeSourceWriter"
 $CrossSessionLockPath = Join-Path $StateDir "daytrade-source-writer.cross-session.lock"
 $CrossSessionLockStream = $null
