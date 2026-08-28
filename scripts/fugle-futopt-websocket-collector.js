@@ -167,6 +167,9 @@ function selectStreamingTickers() {
   const byUnderlying = new Map();
   for (const row of rows) {
     if (row.product !== "STOCK_FUTURE" || !normalizeCode(row.underlying_symbol)) continue;
+    // Select the nearest still-tradable contract. Picking the nearest first and
+    // filtering expiry later can eliminate an entire underlying after expiry.
+    if (futureEndTime(row) < today.getTime()) continue;
     const prev = byUnderlying.get(row.underlying_symbol);
     if (!prev || futureEndTime(row) < futureEndTime(prev)) byUnderlying.set(row.underlying_symbol, row);
   }
