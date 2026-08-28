@@ -387,6 +387,7 @@
     "guard:strategy3-1250-readiness:apply": "node --use-system-ca scripts/guard-strategy3-1250-readiness.js --apply",
     "verify:strategy-line-card-design": "node --use-system-ca scripts/verify-strategy-line-card-design.js",
     "verify:opening-report-0830-contract": "node --use-system-ca scripts/verify-opening-report-0830-contract.js",
+    "test:opening-report-0830-contract": "node scripts/test-opening-report-0830-contract-fixture.js",
     "verify:opening-report-0820-preflight": "node --use-system-ca scripts/verify-opening-report-0820-preflight.js",
     "verify:opening-report-asia-freshness": "node scripts/verify-opening-report-asia-freshness-fixtures.js",
     "verify:opening-report-asia-partial-delivery": "node scripts/verify-opening-report-asia-partial-delivery-fixtures.js",
