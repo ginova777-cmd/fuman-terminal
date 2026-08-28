@@ -434,6 +434,7 @@
     "verify:master-control-contract": "node scripts/verify-api-unattended-scorecard.js --contract-only && node scripts/verify-master-control-four-surface-current-date.js && node scripts/verify-cleanup-root-authority.js && node scripts/verify-source-observability-authority-contract.js && node scripts/verify-daytrade-formal-root-default.js && node scripts/verify-daytrade-writer-wrapper-authority.js && node scripts/verify-active-strategy-root-authority.js && npm run verify:active-strategy-single-run-authority && npm run verify:opening-report-0830-telegram-contract",
     "verify:after-hours-scan-guard": "node scripts/verify-after-hours-scan-guard-contract.js .",
     "verify:daytrade-burst-telegram": "node scripts/verify-daytrade-intraday-burst-telegram.js",
+    "verify:daytrade-burst-readback": "node scripts/verify-daytrade-intraday-burst-readback.js",
     "verify:chip-source-sync-receipt": "node scripts/verify-chip-source-sync-receipt.js",
     "verify:formal-strategy-schedule-authority": "node scripts/verify-formal-strategy-schedule-authority.js",
     "install:daytrade-burst-telegram-task": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-daytrade-intraday-burst-telegram-task.ps1",
