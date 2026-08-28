@@ -15,6 +15,7 @@ const {
   readJson,
   writeJson,
 } = require("../lib/fugle-websocket-quotes");
+const { resolveCandleReserve } = require("../lib/daytrade-candle-reserve");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const API_KEY_FILES = [
@@ -1239,7 +1240,19 @@ function selectStreamingSymbols(rotationCursor = 0) {
     }
     return pool;
   };
-  const candleRadarSymbols = selectPool(candleBudget, safeCursor, true);
+  // Candles are a finite formal-data reserve, not a rotating quote channel.
+  // Replacing the roster whenever the priority cache changes makes late-added
+  // symbols look healthy while silently discarding early-session 1m history.
+  // Freeze the first 08:45+ same-day roster and keep it across reconnects.
+  const reserve = resolveCandleReserve({
+    runtimeDir: RUNTIME_DIR,
+    tradeDate: currentTaipeiDate(),
+    capacity: candleBudget,
+    prioritySymbols,
+    universeSymbols: [...prioritySymbols, ...rotating],
+  });
+  const frozenCandleSymbols = reserve.symbols;
+  const candleRadarSymbols = frozenCandleSymbols;
   const quoteRadarSymbols = selectPool(tradeBudget, (safeCursor + Math.max(1, candleRadarSymbols.length)) % Math.max(1, rotating.length), true);
   const aggregateRadarSymbols = selectPool(aggregateBudget, safeCursor, true);
   const selected = candleRadarSymbols;
@@ -1268,6 +1281,12 @@ function selectStreamingSymbols(rotationCursor = 0) {
     rotationWindow,
     totalSubscriptionLimit: STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
     candleCoverageTarget: candleRadarSymbols.length,
+    candleReserveFile: reserve.file,
+    candleReserveCreated: reserve.created,
+    candleReserveFrozenAt: reserve.frozenAt,
+    candleReserveSource: reserve.source,
+    candleReservePriorityCountAtFreeze: reserve.priorityCountAtFreeze,
+    frozenCandleSymbols: candleRadarSymbols.length,
     subscriptionPlan: "formal_1m_1000_plus_trade_radar_plus_aggregate_priority",
   };
 }
@@ -1469,6 +1488,12 @@ async function runStreamingCollector() {
         candleRadarSymbols: selection.candleRadarSymbols.length,
         candleChannel: selection.candleChannel,
         candleCoverageTarget: selection.candleCoverageTarget,
+        candleReserveFile: selection.candleReserveFile || "",
+        candleReserveCreated: selection.candleReserveCreated === true,
+        candleReserveFrozenAt: selection.candleReserveFrozenAt || "",
+        candleReserveSource: selection.candleReserveSource || "",
+        candleReservePriorityCountAtFreeze: selection.candleReservePriorityCountAtFreeze || 0,
+        frozenCandleSymbols: selection.frozenCandleSymbols || 0,
         quoteRadarSymbols: selection.quoteRadarSymbols.length,
         quoteRadarChannel: selection.quoteRadarChannel,
         aggregateRadarSymbols: selection.aggregateRadarSymbols.length,
