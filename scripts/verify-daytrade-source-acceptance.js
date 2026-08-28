@@ -94,6 +94,14 @@ function staticChecks() {
     strategyChipCompleteRunHardGate: writer.includes("strategyChipCompleteLatestRun") && canonicalGateSql.includes("formal_priority_strategy_chip_complete_latest_run_evidence") && canonicalGateSql.includes("strategy_chip_complete_latest_run_missing"),
     canonicalGateDynamicPools: canonicalGateSql.includes("formal_scope = 'priority_hot_deep_scan_pool_only'") && canonicalGateSql.includes("formal_priority_symbols > 0 and formal_priority_symbols <= priority_pool_symbols") && !canonicalGateSql.includes("formal_priority_symbols = 40"),
     canonicalGateLastMessageFreshness: canonicalGateSql.includes("websocket_last_message_age_seconds") && canonicalGateSql.includes("websocket_last_message_age_seconds <= 300"),
+    canonicalGateFormalScopeFreshness: canonicalGateSql.includes("formal_fresh_quote_coverage_120s >= 0.95")
+      && !canonicalGateSql.includes("mother_pool_symbols >= 300")
+      && !canonicalGateSql.includes("mother_fresh_quote_coverage_120s >= 0.80")
+      && !canonicalGateSql.includes("priority_fresh_quote_coverage_120s >= 0.95")
+      && !canonicalGateSql.includes("priority_top40"),
+    writerFormalScopeSpeed: writer.includes('const formalScopeQuoteFreshOk = formalPriorityPoolSymbols > 0')
+      && writer.includes('const formalPrioritySpeedOk = formalScopeQuoteFreshOk;')
+      && !writer.includes('const formalPrioritySpeedOk = motherFreshCoverage'),
     canonicalHealthUsesDynamicFormalScope: writer.includes('formal_scan_max_quote_age_seconds: formalPriorityMaxAge')
       && dynamicHealthSql.includes("formal_scope," )
       && dynamicHealthSql.includes("'priority_hot_deep_scan_pool_only'::text as formal_scope" )

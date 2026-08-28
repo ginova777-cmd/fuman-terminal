@@ -4264,6 +4264,10 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const selectedSymbolsFreshOk = priorityPoolSymbols >= minFormalPrioritySymbols
     && priorityFreshCoverage >= MIN_PRIORITY_FRESH_COVERAGE
     && priorityCoverageAge <= SELECTED_SYMBOL_MAX_AGE_SECONDS;
+  // Formal readiness is scoped to the high-frequency priority/hot/deep-scan set.
+  // Broad Mother Pool freshness remains a discovery diagnostic, never a formal gate.
+  const formalScopeQuoteFreshOk = formalPriorityPoolSymbols > 0
+    && formalPriorityFreshCoverage >= MIN_PRIORITY_FRESH_COVERAGE;
 
   let avgVolume5Eligible = 0;
   for (const symbol of prioritySet) {
@@ -4440,12 +4444,11 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     : 999999;
   const deepScanIntraday1mStaleSeconds = deepScanIntraday1mFreshMaxAgeSeconds;
   const intraday1mReadyMinSymbols = Math.max(1, Math.ceil(formalScanPoolSymbols * MIN_INTRADAY_1M_READY_COVERAGE));
-  const intraday1mCoverageGateReady = formalScanPoolSymbols >= minFormalPrioritySymbols
+  const intraday1mCoverageGateReady = formalScanPoolSymbols > 0
     && formalScanIntraday1mReadySymbols >= intraday1mReadyMinSymbols
     && formalScanIntraday1mReadyCoverage >= MIN_INTRADAY_1M_READY_COVERAGE
     && formalScanIntraday1mFreshMaxAgeSeconds <= MAX_INTRADAY_1M_STALE_SECONDS;
-  const scannerCanRunQuoteOnly = formalScanPoolSymbols >= minFormalPrioritySymbols
-    && formalPriorityFreshCoverage >= MIN_PRIORITY_FRESH_COVERAGE
+  const scannerCanRunQuoteOnly = formalScopeQuoteFreshOk
     && rateLimitStatus === "ok";
   const scopedIndicatorRequired = Math.max(1, Math.ceil(formalScanPoolSymbols * MIN_INDICATOR_WARMUP_COVERAGE));
   const effectiveMa20Required = Math.min(MIN_READY_MA20_CONTINUOUS, scopedIndicatorRequired);
@@ -4463,7 +4466,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     && (!REQUIRE_MA35_FOR_FORMAL_DAYTRADE || readyMa35 > 0);
   const warmupGateReady = !after0900
     && motherPoolSymbols >= MOTHER_POOL_MIN_SYMBOLS
-    && formalScanPoolSymbols >= minFormalPrioritySymbols
+    && formalScanPoolSymbols > 0
     && dailyVolumeStatus === "ready"
     && rateLimitStatus === "ok"
     && warmupTransportHealthy;
@@ -4514,12 +4517,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     after0830,
     after0845,
     after0900,
-    selectedSymbolsFreshOk,
-    prioritySourceInjecting,
-    priorityPoolSymbols,
-    priorityFreshCoverage,
-    motherPoolSymbols,
-    motherFreshCoverage,
+    formalScopeQuoteFreshOk,
+    formalPoolSymbols: formalPriorityPoolSymbols,
     quoteAgeSeconds: latestQuoteAge,
     cooldownRemaining,
     last429AgeSeconds,
@@ -4572,9 +4571,9 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
       ? "priority_fetch_in_progress"
       : "opening_boost_waiting_for_priority_freshness"
     : `phase_${phase}`;
-  const priorityGateGrade = priorityGateA ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : "D";
+  const priorityGateGrade = priorityGateA ? "A" : formalScopeQuoteFreshOk || prioritySourceInjecting ? "B" : "D";
   const phaseTransportReady = after0900 ? webSocketStatus.formalReady : warmupTransportHealthy;
-  const gateGrade = priorityGateA && phaseTransportReady ? "A" : selectedSymbolsFreshOk || prioritySourceInjecting ? "B" : freshFull.length > 0 ? "C" : "D";
+  const gateGrade = priorityGateA && phaseTransportReady ? "A" : formalScopeQuoteFreshOk || prioritySourceInjecting ? "B" : freshFull.length > 0 ? "C" : "D";
   const sourceInjecting = !offSession && ["ready", "degraded"].includes(quoteStatus) && quoteRows > 0;
   const status = offSession ? "stopped" : gateGrade === "A" ? "ok" : sourceInjecting ? "degraded" : "stale";
   const failedChecks = [];
@@ -4586,7 +4585,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   // Mother pool is the full-market discovery layer. Formal entry uses dynamic priority/hot/deep-scan pools.
   const motherPoolFreshnessWarning = !offSession && motherFreshCoverage < 0.8;
   if (!offSession && priorityPoolSymbols < minFormalPrioritySymbols) failedChecks.push('priority_pool_empty');
-  if (!offSession && after0900 && priorityFreshCoverage < MIN_PRIORITY_FRESH_COVERAGE) failedChecks.push('priority_pool_fresh_coverage_below_' + String(Math.round(MIN_PRIORITY_FRESH_COVERAGE * 100)).padStart(2, '0'));
+  if (!offSession && after0900 && !formalScopeQuoteFreshOk) failedChecks.push('formal_scope_fresh_coverage_below_' + String(Math.round(MIN_PRIORITY_FRESH_COVERAGE * 100)).padStart(2, '0'));
 
   // Strategy/chip results are a formal-entry dependency after the opening gate; before then they remain warmup evidence.
   if (!offSession && after0900 && latestQuoteAge > MAX_QUOTE_AGE_SECONDS) failedChecks.push('quote_stale');
@@ -4616,8 +4615,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const intraday1mSourceDaytradeOk = !after0900
     || (today1mStatus === "ready" && intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
   const formalSourceAlignmentOk = quoteSourceDaytradeOk && intraday1mSourceDaytradeOk && opening0901GateOk;
-  const formalPrioritySpeedOk = motherFreshCoverage >= MIN_PRIORITY_FRESH_COVERAGE
-    && motherPoolSymbols >= MOTHER_POOL_MIN_SYMBOLS;
+  const formalPrioritySpeedOk = formalScopeQuoteFreshOk;
   const payload = {
     source_name: SOURCE_NAME,
     writer_version: "daytrade-source-writer-20260702-03",
@@ -4812,6 +4810,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     priority_min_injecting_quotes: MIN_PRIORITY_INJECTING_QUOTES,
     priority_fresh_quote_coverage_target_120s: MIN_PRIORITY_FRESH_COVERAGE,
     selected_symbols_fresh_ok: selectedSymbolsFreshOk,
+    formal_scope_fresh_ok: formalScopeQuoteFreshOk,
     eligible_quote_rows: freshFull.length,
     quotes: quoteRows,
     quote_count: quoteRows,
@@ -4930,8 +4929,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
 }
 
 function sourceGateA(values) {
-  return values.selectedSymbolsFreshOk
-    && values.priorityPoolSymbols >= (values.minPriorityPoolSymbols || MIN_PRIORITY_POOL_SYMBOLS)
+  return values.formalScopeQuoteFreshOk
+    && values.formalPoolSymbols > 0
     && values.quoteAgeSeconds <= MAX_QUOTE_AGE_SECONDS
     && values.cooldownRemaining <= 0
     && values.last429AgeSeconds > RECENT_429_BLOCK_SECONDS
