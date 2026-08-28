@@ -417,6 +417,18 @@ function writerCodeRegressionChecks() {
       && /latest_update_allowed: !offSession && after0900 && gateGrade === "A" && webSocketStatus\.formalReady/.test(source),
     strategyChipEvidencePolicyConsistent: source.includes('strategyChipCompleteLatestRun') && ((source.includes('formal_priority_strategy_chip_required_for_formal_entry: false') && source.includes('formal_priority_strategy_chip_blocks_formal_entry: false')) || (source.includes('formal_priority_strategy_chip_required_for_formal_entry: true') && source.includes('formal_priority_strategy_chip_blocks_formal_entry: !strategyChipCompleteLatestRun'))),
     formalPrioritySpeedPayload: source.includes("formal_priority_speed_ok"),
+    websocketFirstRestFallbackBounded: source.includes("REST_FALLBACK_INTERVAL_SECONDS")
+      && source.includes("Math.min(80, positiveNumber(process.env.DAYTRADE_REST_PRIORITY_BATCH_LIMIT")
+      && source.includes("const restFallbackActive = REST_QUOTE_FETCH_ENABLED && FETCH_ENABLED && fetchAllowedForPhase && !cooldownActive && restFallbackDueThisTick;")
+      && source.includes("priorityOnly: fetchPriorityOnlyForPhase, batchLimit: REST_PRIORITY_BATCH_LIMIT"),
+    restFallbackExcludedFromFormalFreshness: source.includes("function isFreshWebSocketQuote")
+      && source.includes("if (isFreshWebSocketQuote(quote)) freshFormalPriority.push(symbol);")
+      && source.includes("const deepScanFreshCoverage = deepScanPoolSymbols ? [...deepScanSet].filter((symbol) => isFreshWebSocketQuote(quoteMap.get(symbol)))")
+      && source.includes("const freshRows = priorityRows.filter((row) => isFreshWebSocketQuote(quoteMap.get(normalizeCode(row.symbol))));")
+      && source.includes("if (isWebSocketQuote(quote)) {"),
+    restFallbackReceiptFields: source.includes("rest_fallback_interval_seconds")
+      && source.includes("lastRestFallbackAt")
+      && source.includes("lastRestFallbackOutcome"),
     formalScopeSpeedUsesDynamicPool: source.includes('const formalScopeQuoteFreshOk = formalPriorityPoolSymbols > 0')
       && source.includes('const formalPrioritySpeedOk = formalScopeQuoteFreshOk;')
       && source.includes('formal_scope_fresh_ok: formalScopeQuoteFreshOk')

@@ -167,7 +167,10 @@ const MOTHER_POOL_MAX_SYMBOLS = Math.max(
   MOTHER_POOL_MIN_SYMBOLS,
   Math.min(600, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MAX_SYMBOLS, 600)),
 );
-const REST_PRIORITY_BATCH_LIMIT = Math.max(1, Math.min(500, positiveNumber(process.env.DAYTRADE_REST_PRIORITY_BATCH_LIMIT, 320))); // >=300 keeps Mother Pool discovery from being capped by one quote batch.
+// Fugle streaming is the formal live source. REST quote calls are deliberately
+// kept as a small, low-frequency correction path for priority symbols only.
+const REST_PRIORITY_BATCH_LIMIT = Math.max(1, Math.min(80, positiveNumber(process.env.DAYTRADE_REST_PRIORITY_BATCH_LIMIT ?? CONFIG.collector?.restFallbackBatchSize ?? CONFIG.collector?.quoteBatchSize, 80)));
+const REST_FALLBACK_INTERVAL_SECONDS = Math.max(60, positiveNumber(process.env.DAYTRADE_REST_FALLBACK_INTERVAL_SECONDS ?? CONFIG.collector?.restFallbackIntervalSeconds, 300));
 const MOTHER_POOL_MIN_PRICE = Math.max(50, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_PRICE ?? CONFIG.motherPool?.minimumPrice, 50));
 const MOTHER_POOL_MIN_TURNOVER_RATE = Math.max(1, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_TURNOVER_RATE ?? CONFIG.motherPool?.minimumTurnoverRate, 1));
 const MOTHER_POOL_RULE_VERSION = 'daytrade_mother_pool_dynamic_300_600_deep_scan_20260813_v5';
@@ -398,11 +401,24 @@ function quoteFetchAllowedForPhase(phase) {
 
 function quoteFetchPriorityOnlyForPhase(phase) {
   void phase;
-  return false;
+  return true;
+}
+
+function restFallbackDue(state) {
+  return !state?.lastRestFallbackAt || ageSeconds(state.lastRestFallbackAt) >= REST_FALLBACK_INTERVAL_SECONDS;
 }
 
 function quoteFreshnessTime(quote) {
   return quote?.quote_seen_at || quote?.updated_at || quote?.last_trade_time || "";
+}
+
+function isWebSocketQuote(quote) {
+  const source = String(quote?.source || quote?.payload?.source || quote?.payload?.quoteSource || "").toLowerCase();
+  return source.includes("websocket") || source.includes("fugle-ws");
+}
+
+function isFreshWebSocketQuote(quote, maxAgeSeconds = WINDOW_SECONDS) {
+  return isWebSocketQuote(quote) && ageSeconds(quoteFreshnessTime(quote)) <= maxAgeSeconds;
 }
 
 function ageSeconds(value, fallback = 999999) {
@@ -685,6 +701,8 @@ function readWriterState() {
     lastSelfHealAt: state.lastSelfHealAt || "",
     lastSelfHealReason: state.lastSelfHealReason || "",
     lastSelfHealAction: state.lastSelfHealAction || "",
+    lastRestFallbackAt: state.lastRestFallbackAt || "",
+    lastRestFallbackOutcome: state.lastRestFallbackOutcome || "",
     intradayMirrorCursor: Math.max(0, Number(state.intradayMirrorCursor || 0)),
   };
 }
@@ -4021,13 +4039,14 @@ function selectFetchBatch(activeSymbols, priorityRows, quoteMap, state, options 
     ...runtimeList(runtimePriorityPayload.userCaseSymbols),
   ].map((value) => normalizeCode(value?.symbol || value?.code || value)).filter((symbol) => symbol && activeSet.has(symbol)))];
   const priorityOnly = Boolean(options.priorityOnly) || futureSeconds(state.priorityOnlyUntil) > 0 || futureSeconds(state.cooldownUntil) > 0;
+  const batchLimit = Math.max(1, Math.min(REST_PRIORITY_BATCH_LIMIT, Number(options.batchLimit || REST_PRIORITY_BATCH_LIMIT)));
   const notFoundUntilBySymbol = state.notFoundUntilBySymbol || {};
   const skippedByNotFound = (symbol) => futureSeconds(notFoundUntilBySymbol[symbol]) > 0;
   const stale = (symbol, maxAge = WINDOW_SECONDS) => ageSeconds(quoteFreshnessTime(quoteMap.get(symbol))) > maxAge;
   const selected = [];
   const selectedSet = new Set();
   const add = (symbol) => {
-    if (!symbol || selectedSet.has(symbol) || !activeSet.has(symbol) || skippedByNotFound(symbol) || selected.length >= QUOTE_BATCH_SIZE) return;
+    if (!symbol || selectedSet.has(symbol) || !activeSet.has(symbol) || skippedByNotFound(symbol) || selected.length >= batchLimit) return;
     selected.push(symbol);
     selectedSet.add(symbol);
   };
@@ -4039,20 +4058,20 @@ function selectFetchBatch(activeSymbols, priorityRows, quoteMap, state, options 
   }
   if (!priorityOnly) {
     let cursor = Math.max(0, Math.min(state.cursor || 0, active.length - 1));
-    for (let i = 0; i < active.length && selected.length < QUOTE_BATCH_SIZE; i += 1) {
+    for (let i = 0; i < active.length && selected.length < batchLimit; i += 1) {
       const symbol = active[(cursor + i) % active.length];
       if (priority.includes(symbol)) continue;
       if (stale(symbol, WINDOW_SECONDS)) add(symbol);
     }
-    if (selected.length < QUOTE_BATCH_SIZE) {
-      for (let i = 0; i < active.length && selected.length < QUOTE_BATCH_SIZE; i += 1) {
+    if (selected.length < batchLimit) {
+      for (let i = 0; i < active.length && selected.length < batchLimit; i += 1) {
         const symbol = active[(cursor + i) % active.length];
         if (!priority.includes(symbol)) add(symbol);
       }
     }
     state.cursor = active.length ? (cursor + Math.max(1, selected.length)) % active.length : 0;
   }
-  if (selected.length < QUOTE_BATCH_SIZE) {
+  if (selected.length < batchLimit) {
     for (const symbol of priority) add(symbol);
   }
   return { symbols: selected, priorityOnly };
@@ -4217,17 +4236,17 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     const quote = quoteMap.get(symbol);
     const quoteTime = quoteFreshnessTime(quote);
     const quoteAge = ageSeconds(quoteTime);
-    if (quote) {
+    if (isWebSocketQuote(quote)) {
       quoteAges.push(quoteAge);
       if (quoteTime && (!lastQuoteAt || Date.parse(quoteTime) > Date.parse(lastQuoteAt))) lastQuoteAt = quoteTime;
     }
-    if (quoteAge <= WINDOW_SECONDS) freshFull.push(symbol);
+    if (isFreshWebSocketQuote(quote)) freshFull.push(symbol);
   }
   for (const symbol of prioritySet) {
     const quote = quoteMap.get(symbol);
     const quoteAge = ageSeconds(quoteFreshnessTime(quote));
-    priorityAges.push(quote ? quoteAge : 999999);
-    if (quoteAge <= WINDOW_SECONDS) {
+    priorityAges.push(isWebSocketQuote(quote) ? quoteAge : 999999);
+    if (isFreshWebSocketQuote(quote)) {
       freshPriority.push(symbol);
       freshPriorityAges.push(quoteAge);
     }
@@ -4235,8 +4254,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   for (const symbol of formalPrioritySet) {
     const quote = quoteMap.get(symbol);
     const quoteAge = ageSeconds(quoteFreshnessTime(quote));
-    formalPriorityAges.push(quote ? quoteAge : 999999);
-    if (quoteAge <= WINDOW_SECONDS) freshFormalPriority.push(symbol);
+    formalPriorityAges.push(isWebSocketQuote(quote) ? quoteAge : 999999);
+    if (isFreshWebSocketQuote(quote)) freshFormalPriority.push(symbol);
   }
 
   const priorityPoolSymbols = prioritySet.size;
@@ -4251,7 +4270,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const priorityFreshCoverage = priorityPoolSymbols ? freshPriority.length / priorityPoolSymbols : 0;
   const formalPriorityFreshCoverage = formalPriorityPoolSymbols ? freshFormalPriority.length / formalPriorityPoolSymbols : 0;
   const formalPriorityMaxAge = formalPriorityAges.length ? Math.max(...formalPriorityAges) : 999999;
-  const deepScanFreshCoverage = deepScanPoolSymbols ? [...deepScanSet].filter((symbol) => ageSeconds(quoteFreshnessTime(quoteMap.get(symbol))) <= WINDOW_SECONDS).length / deepScanPoolSymbols : 0;
+  const deepScanFreshCoverage = deepScanPoolSymbols ? [...deepScanSet].filter((symbol) => isFreshWebSocketQuote(quoteMap.get(symbol))).length / deepScanPoolSymbols : 0;
   const motherFreshCoverage = motherPoolSymbols ? freshMother.length / motherPoolSymbols : 0;
   const priorityMaxAge = priorityAges.length ? Math.max(...priorityAges) : 999999;
   const priorityFreshMaxAge = freshPriorityAges.length ? Math.max(...freshPriorityAges) : 999999;
@@ -4728,6 +4747,13 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     realtime_radar_priority_symbols: runtimePriority.realtimeRadar,
     batch_size: QUOTE_BATCH_SIZE,
     batch_interval_seconds: TARGET_BATCH_INTERVAL_SECONDS,
+    rest_fallback_enabled: fetchResult.restFallback?.enabled === true,
+    rest_fallback_active: fetchResult.restFallback?.active === true,
+    rest_fallback_due: fetchResult.restFallback?.due === true,
+    rest_fallback_priority_only: fetchResult.restFallback?.priorityOnly === true,
+    rest_fallback_batch_limit: fetchResult.restFallback?.batchLimit || REST_PRIORITY_BATCH_LIMIT,
+    rest_fallback_interval_seconds: fetchResult.restFallback?.intervalSeconds || REST_FALLBACK_INTERVAL_SECONDS,
+    rest_fallback_disabled_reason: fetchResult.restFallback?.disabledReason || "",
     priority_symbols: priorityPoolSymbols,
     priority_pool_symbols: priorityPoolSymbols,
     priority_pool_min_symbols: 1,
@@ -5531,7 +5557,7 @@ async function writeFastWebSocketTransportHeartbeat({ priorityRows, quoteMap }) 
   const baselineDate = String((baselinePayload && (baselinePayload.trade_date || baselinePayload.tradeDate)) || (baseline && baseline.trade_date) || "");
   if (!baselinePayload || (baselineDate && baselineDate !== today)) return { written: false, reason: "same_day_baseline_missing_or_stale" };
   const websocket = readWebSocketStatusSummary();
-  const freshRows = priorityRows.filter((row) => ageSeconds(quoteFreshnessTime(quoteMap.get(normalizeCode(row.symbol)))) <= WINDOW_SECONDS);
+  const freshRows = priorityRows.filter((row) => isFreshWebSocketQuote(quoteMap.get(normalizeCode(row.symbol))));
   const coverage = priorityRows.length ? Number((freshRows.length / priorityRows.length).toFixed(4)) : 0;
   const payload = { ...baselinePayload,
     writer_version: "daytrade-source-writer-fast-websocket-heartbeat-v1",
@@ -5887,6 +5913,7 @@ async function tick() {
   const warmupDataFillActive = taipeiMinutes() >= PREOPEN_WARMUP_START_MINUTES;
   const fetchAllowedForPhase = warmupDataFillActive && quoteFetchAllowedForPhase(phase);
   const fetchPriorityOnlyForPhase = warmupDataFillActive && quoteFetchPriorityOnlyForPhase(phase);
+  const restFallbackDueThisTick = fetchAllowedForPhase && restFallbackDue(state);
   const activeSymbols = await fetchActiveSymbols();
   await refreshStrategyChipPriorityBridge();
   const dailyVolumeMap = await fetchDailyVolumeAvg();
@@ -6085,12 +6112,22 @@ async function tick() {
   });
 
   const cooldownActive = futureSeconds(state.cooldownUntil) > 0;
-  const selected = cooldownActive || !fetchAllowedForPhase
-    ? { symbols: [], priorityOnly: true }
-    : selectFetchBatch(activeSymbols, priorityRows, quoteMap, state, { priorityOnly: fetchPriorityOnlyForPhase });
-  const fetchResult = fetchAllowedForPhase
+  const restFallbackActive = REST_QUOTE_FETCH_ENABLED && FETCH_ENABLED && fetchAllowedForPhase && !cooldownActive && restFallbackDueThisTick;
+  const selected = restFallbackActive
+    ? selectFetchBatch(activeSymbols, priorityRows, quoteMap, state, { priorityOnly: fetchPriorityOnlyForPhase, batchLimit: REST_PRIORITY_BATCH_LIMIT })
+    : { symbols: [], priorityOnly: true };
+  const fetchResult = restFallbackActive
     ? await fetchQuoteBatch(selected.symbols)
-    : { rows: [], attempted: 0, fetched: 0, rateLimited: false, errors: [], disabledReason: `phase_${phase}_fetch_disabled` };
+    : { rows: [], attempted: 0, fetched: 0, rateLimited: false, errors: [], disabledReason: cooldownActive ? "rest_fallback_cooldown" : (fetchAllowedForPhase ? "rest_fallback_not_due" : `phase_${phase}_fetch_disabled`) };
+  fetchResult.restFallback = {
+    enabled: REST_QUOTE_FETCH_ENABLED,
+    active: restFallbackActive,
+    due: restFallbackDueThisTick,
+    priorityOnly: fetchPriorityOnlyForPhase,
+    batchLimit: REST_PRIORITY_BATCH_LIMIT,
+    intervalSeconds: REST_FALLBACK_INTERVAL_SECONDS,
+    disabledReason: fetchResult.disabledReason || "",
+  };
   fetchResult.errors = [...(fetchResult.errors || []), ...nonFatalWriteErrors];
   if (fetchResult.rows.length) {
     await supabaseUpsert("fugle_daytrade_quotes_live", fetchResult.rows, "symbol");
@@ -6184,6 +6221,10 @@ async function tick() {
   }
 
   let nextState = { ...state };
+  if (restFallbackActive) {
+    nextState.lastRestFallbackAt = nowIso();
+    nextState.lastRestFallbackOutcome = fetchResult.rateLimited ? "rate_limited" : `attempted_${fetchResult.attempted}_fetched_${fetchResult.fetched}`;
+  }
   if (fetchResult.rateLimited) {
     nextState = apply429State(nextState);
   } else if (!cooldownActive) {
