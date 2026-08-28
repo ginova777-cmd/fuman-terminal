@@ -47,6 +47,15 @@ try {
   $scheduleAlignmentExit = [int]$LASTEXITCODE
   & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-scorecard88-fixed-collection-contract.js")
   $scorecard88ContractExit = [int]$LASTEXITCODE
+  $daytradeWriterVerifierDue = (($startedAt.DayOfWeek -ne [DayOfWeek]::Saturday) -and ($startedAt.DayOfWeek -ne [DayOfWeek]::Sunday) -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("06:05")) -and ($startedAt.TimeOfDay -le [TimeSpan]::Parse("13:35")))
+  $daytradeWriterVerifierExit = $null
+  $daytradeWriterVerifierReceipt = Join-Path $receiptDir ("daytrade-writer-checkpoint-health-{0}.json" -f $startedAt.ToString("yyyyMMdd"))
+  if ($daytradeWriterVerifierDue) {
+    # Local readback only: task metadata, wrapper completion log, V2 status and Mother Pool receipt.
+    # It never queries Supabase and never starts a writer, collector, strategy or retry.
+    & node (Join-Path $ProjectRoot "scripts\verify-daytrade-writer-checkpoint-health.js") "--trade-date=$($startedAt.ToString('yyyy-MM-dd'))"
+    $daytradeWriterVerifierExit = [int]$LASTEXITCODE
+  }
   $chipSourceVerifierExit = $null
   $chipSourceVerifierReceipt = Join-Path $receiptDir "chip-source-sync.json"
   if ($chipSourceVerifierDue) {
@@ -77,14 +86,16 @@ try {
     $cleanupVerifierExit = [int]$LASTEXITCODE
   }
   $contractFailure = (($verifierExit -ne 0) -or ($scheduleAuthorityExit -ne 0) -or ($scheduleAlignmentExit -ne 0) -or ($scorecard88ContractExit -ne 0))
+  $runtimeHealthFailure = ($daytradeWriterVerifierDue -and $daytradeWriterVerifierExit -ne 0)
   $dependencyBlocked = (($chipSourceVerifierDue -and $chipSourceVerifierExit -ne 0) -or ($telegramVerifierDue -and $telegramVerifierExit -ne 0) -or ($strategy2VerifierDue -and $strategy2VerifierExit -ne 0) -or ($cleanupVerifierDue -and $cleanupVerifierExit -ne 0))
-  $checkpointOk = (-not $contractFailure -and -not $dependencyBlocked)
+  $checkpointOk = (-not $contractFailure -and -not $runtimeHealthFailure -and -not $dependencyBlocked)
   $limitedSelfHealPerformed = $false
-  $checkpointStatus = if ($checkpointOk -and $limitedSelfHealPerformed) { "SELF_HEALED_PASS" } elseif ($checkpointOk) { "PASS" } elseif ($contractFailure) { "FAIL_CLOSED" } else { "BLOCKED" }
+  $checkpointStatus = if ($checkpointOk -and $limitedSelfHealPerformed) { "SELF_HEALED_PASS" } elseif ($checkpointOk) { "PASS" } elseif ($contractFailure -or $runtimeHealthFailure) { "FAIL_CLOSED" } else { "BLOCKED" }
   $firstBlocker = if ($verifierExit -ne 0) { "api_unattended_scorecard_failed" }
     elseif ($scheduleAuthorityExit -ne 0) { "formal_schedule_authority_failed" }
     elseif ($scheduleAlignmentExit -ne 0) { "schedule_registry_live_alignment_failed" }
     elseif ($scorecard88ContractExit -ne 0) { "scorecard88_contract_failed" }
+    elseif ($daytradeWriterVerifierDue -and $daytradeWriterVerifierExit -ne 0) { "daytrade_writer_checkpoint_health_failed" }
     elseif ($chipSourceVerifierDue -and $chipSourceVerifierExit -ne 0) { "chip_source_readiness_blocked" }
     elseif ($telegramVerifierDue -and $telegramVerifierExit -ne 0) { "intraday_telegram_closure_blocked" }
     elseif ($strategy2VerifierDue -and $strategy2VerifierExit -ne 0) { "strategy2_canonical_closure_blocked" }
@@ -115,6 +126,9 @@ try {
     strategy2VerifierExitCode = $strategy2VerifierExit
     scheduleAlignmentExitCode = $scheduleAlignmentExit
     scorecard88ContractExitCode = $scorecard88ContractExit
+    daytradeWriterVerifierDue = $daytradeWriterVerifierDue
+    daytradeWriterVerifierExitCode = $daytradeWriterVerifierExit
+    daytradeWriterVerifierReceipt = $daytradeWriterVerifierReceipt
     strategy2VerifierReceipt = $strategy2VerifierReceipt
     cleanupVerifierDue = $cleanupVerifierDue
     cleanupVerifierExitCode = $cleanupVerifierExit
