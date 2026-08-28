@@ -2,6 +2,24 @@
 
 Last updated: 2026-07-01 Asia/Taipei.
 
+## Release Root Authority
+
+`C:\fuman-release-owner\fuman-terminal` is the only editable source and contract authority. `C:\fuman-release-owner\prod81` is a detached, read-only production release worktree. `C:\fuman-runtime` contains runtime state only and is never code authority.
+
+Before upload, publish, deploy, or formal total-control acceptance, run:
+
+```powershell
+npm run verify:release-root-authority
+```
+
+The verifier must prove that `prod81` is clean and that its `HEAD` equals `data/contracts/release_root_authority_v1.json.approvedProductionSha`. A missing root, dirty production worktree, unapproved SHA, invalid authority contract, or gate wiring removal is:
+
+```text
+FAIL_CLOSED: RELEASE_ROOT_DRIFT
+```
+
+Never edit `prod81` directly or choose whichever root appears newer. Update and test the source authority, approve one commit, update the authority contract in the same release-owner flow, then publish that exact commit to `prod81`.
+
 This file intentionally replaces the old accumulated AGENTS history. Keep only the latest executable contract here. Do not append legacy incident notes back into this file.
 
 ## Main Rule

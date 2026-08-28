@@ -336,7 +336,9 @@ async function main() {
     liveWindow,
     publishAllowed: false,
     formalDisplayAllowed: false,
-    reason: diagnostic ? "diagnostic_v3_water_validation_only" : "strategy_rules_not_yet_attached",
+    reason: diagnostic
+      ? "diagnostic_v3_water_validation_only"
+      : complete ? "strategy2_v3_formal_water_ready" : "strategy2_v3_formal_water_incomplete",
     sourceContract: {
       motherPool: "fugle_daytrade_priority_pool",
       quote: "fugle_daytrade_websocket_cache",

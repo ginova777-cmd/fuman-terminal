@@ -1,0 +1,24 @@
+{
+  "contract": "release_root_authority_v1",
+  "sourceRoot": "C:\\fuman-release-owner\\fuman-terminal",
+  "productionRoot": "C:\\fuman-release-owner\\prod81",
+  "runtimeRoot": "C:\\fuman-runtime",
+  "approvedProductionSha": "690780e49d33fae4c1da8a5d1e3a05738738018f",
+  "policy": {
+    "sourceRootIsOnlyEditableAuthority": true,
+    "productionRootIsDetachedReadOnlyRelease": true,
+    "runtimeRootContainsNoCodeAuthority": true,
+    "productionRootMustBeClean": true,
+    "productionHeadMustMatchApprovedSha": true,
+    "rootDriftVerdict": "FAIL_CLOSED",
+    "rootDriftReasonCode": "RELEASE_ROOT_DRIFT",
+    "directProductionEditsForbidden": true,
+    "previousGoodCannotProveCurrentRelease": true
+  },
+  "requiredEvidence": [
+    "releaseRoot",
+    "gitCommit",
+    "contractVersion",
+    "tradeDate"
+  ]
+}

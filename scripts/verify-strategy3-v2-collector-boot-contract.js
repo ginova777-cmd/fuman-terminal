@@ -49,7 +49,7 @@ function main() {
   const maxSymbols = 2000;
   const totalSubscriptions = 1800;
   const candleSymbols = 1000;
-  const aggregateSymbols = 80;
+  const aggregateSymbols = 600;
   const candleSubscribedSymbols = Math.min(candleSymbols, totalSubscriptions, maxSymbols);
   const aggregateSubscribedSymbols = Math.min(aggregateSymbols, Math.max(0, totalSubscriptions - candleSubscribedSymbols));
   const tradeRadarCapacity = Math.max(0, totalSubscriptions - candleSubscribedSymbols - aggregateSubscribedSymbols);
@@ -64,6 +64,7 @@ function main() {
   add(fs.existsSync(collectorPath), "strategy3_v2_collector_script_missing", { collectorPath });
   add(/\$env:FUGLE_STREAMING_CHANNELS\s*=\s*"trades,aggregates,candles"/.test(wrapper), "strategy3_v2_wrapper_channels_not_full");
   add(/\$env:FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS\s*=\s*"1800"/.test(wrapper), "strategy3_v2_wrapper_total_subscriptions_not_1800");
+  add(/\$env:FUGLE_STREAMING_AGGREGATE_SYMBOLS\s*=\s*"600"/.test(wrapper), "strategy3_v2_wrapper_aggregate_symbols_not_600");
   add(/\$env:FUGLE_STREAMING_MAX_SYMBOLS\s*=\s*"2000"/.test(wrapper), "strategy3_v2_wrapper_max_symbols_not_2000");
   add(/\$env:FUGLE_STREAMING_CANDLE_SYMBOLS\s*=\s*"1000"/.test(wrapper), "strategy3_v2_wrapper_candle_symbols_not_1000");
   const collectorWindowStops = wrapper.match(/TimeSpan\]::Parse\("13:30"\)/g) || [];
@@ -79,8 +80,7 @@ function main() {
     computedCandleSubscribedSymbols: candleSubscribedSymbols,
     required: MIN_READY_SYMBOLS,
   });
-  add(!orphanOldLimit,
-      livePidExists, "orphan_collector_process_alive_with_old_symbol_limit", {
+  add(!orphanOldLimit, "orphan_collector_process_alive_with_old_symbol_limit", {
     pid: livePid,
     updatedAt: liveUpdated,
     supervisorStatus: supervisor.status,

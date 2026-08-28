@@ -8,6 +8,8 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const RECEIPT = path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2-v3-water.json");
+const COLLECTOR = path.join(ROOT, "scripts", "fugle-websocket-collector.js");
+const COLLECTOR_WRAPPER = path.join(ROOT, "ops", "public-slot", "Run-DaytradeWebSocketCollector.ps1");
 const SCANNER = path.join(ROOT, "scripts", "run-strategy2-v3-water-scan.js");
 const CONTRACT = "strategy2-v3-fugle-deep-scan-water-v1";
 
@@ -33,6 +35,8 @@ function main() {
   const checks = [];
   const scanner = fs.readFileSync(SCANNER, "utf8");
   const receipt = JSON.parse(fs.readFileSync(RECEIPT, "utf8"));
+  const collector = fs.readFileSync(COLLECTOR, "utf8");
+  const collectorWrapper = fs.readFileSync(COLLECTOR_WRAPPER, "utf8");
 
   addCheck(checks, "scanner_has_v3_contract", scanner.includes(CONTRACT));
   addCheck(checks, "scanner_reads_priority_pool", scanner.includes('"fugle_daytrade_priority_pool"'));
@@ -41,6 +45,13 @@ function main() {
   addCheck(checks, "scanner_reads_formal_1m", scanner.includes("readFugleWebSocketCandles") && scanner.includes("fugle_daytrade_websocket_cache"));
   addCheck(checks, "scanner_rejects_old_view_queries", !/readRows\(source,\s*["']v_fugle_daytrade_mother_pool/i.test(scanner));
   addCheck(checks, "scanner_has_no_top40_gate", scanner.includes("noTop40Gate: true"));
+  addCheck(checks, "collector_reserves_dynamic_mother_pool_aggregate_capacity_600", collector.includes("FUGLE_STREAMING_AGGREGATE_SYMBOLS || 600"));
+  addCheck(checks, "collector_wrapper_pins_aggregate_capacity_600", /FUGLE_STREAMING_AGGREGATE_SYMBOLS\s*=\s*"600"/.test(collectorWrapper));
+  addCheck(checks, "collector_total_subscription_budget_remains_1800", /FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS\s*=\s*"1800"/.test(collectorWrapper));
+  addCheck(checks, "collector_candle_capacity_remains_1000", /FUGLE_STREAMING_CANDLE_SYMBOLS\s*=\s*"1000"/.test(collectorWrapper));
+  addCheck(checks, "collector_supervisor_poll_retains_sleep", /transient status-file read can never discard the formal candle cache\.\s*\r?\n\s*Start-Sleep -Seconds 5/.test(collectorWrapper));
+  addCheck(checks, "scanner_uses_current_water_reason_codes", scanner.includes("strategy2_v3_formal_water_ready") && scanner.includes("strategy2_v3_formal_water_incomplete"));
+  addCheck(checks, "scanner_rejects_retired_rules_not_attached_reason", !scanner.includes("strategy_rules_not_yet_attached"));
   addCheck(checks, "scanner_has_no_previous_good_fallback", scanner.includes("noPreviousGoodFallback: true"));
 
   addCheck(checks, "receipt_is_v3", receipt.version === "v3" && receipt.strategy === "strategy2");
@@ -48,6 +59,7 @@ function main() {
   addCheck(checks, "receipt_has_target_trade_date", receipt.dataDate === expectDate && receipt.tradeDate === expectDate, `${receipt.dataDate || "missing"} / ${expectDate}`);
   addCheck(checks, "receipt_completed_water_check", receipt.ok === true && receipt.complete === true, receipt.status);
   addCheck(checks, "all_deep_scan_symbols_read", asNumber(receipt.expectedCount) > 0 && asNumber(receipt.scannedCount) === asNumber(receipt.expectedCount), `${receipt.scannedCount}/${receipt.expectedCount}`);
+  addCheck(checks, "receipt_rejects_retired_rules_not_attached_reason", receipt.reason !== "strategy_rules_not_yet_attached", receipt.reason);
   addCheck(checks, "no_data_gap", asNumber(receipt.dataGapCount) === 0, String(receipt.dataGapCount));
   addCheck(checks, "no_formal_candidate_before_rules", receipt.publishAllowed === false && receipt.formalDisplayAllowed === false && asNumber(receipt.resultCount) === 0, receipt.reason);
   addCheck(checks, "receipt_declares_new_only_routes", receipt.sourceCoverage?.noLegacyReadbackViews === true && receipt.sourceCoverage?.noTop40Gate === true && receipt.sourceCoverage?.noPreviousGoodFallback === true);

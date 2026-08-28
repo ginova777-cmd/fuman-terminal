@@ -3833,6 +3833,7 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     daytradeFormalPrioritySymbols,
     bridgePayload.tradeDate || taipeiDate(),
   );
+  const strategy2FormalWaterSymbols = [...new Set(daytradeFormalPrioritySymbols)];
   const prependUnique = (preferred, values) => {
     const seen = new Set();
     const out = [];
@@ -3884,6 +3885,10 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     daytradeHotPoolMaxCount: HOT_POOL_MAX_SYMBOLS,
     daytradeFormalPrioritySymbols: daytradeFormalPrioritySymbols,
     daytradeFormalPriorityCount: daytradeFormalPrioritySymbols.length,
+    strategy2Symbols: strategy2FormalWaterSymbols,
+    strategy2FormalWaterSymbols,
+    strategy2FormalWaterCount: strategy2FormalWaterSymbols.length,
+    strategy2FormalWaterSource: "daytrade_deep_scan_pool",
     formalPriorityStrategyChip,
     terminalPrioritySymbols: prependUnique(daytradeMotherPoolSymbols, existing.terminalPrioritySymbols || existing.terminalSymbols || existing.terminalPriority),
     openingPrioritySymbols: prependUnique(daytradeMotherPoolSymbols, existing.openingPrioritySymbols || existing.primaryPrioritySymbols),
@@ -3898,10 +3903,13 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     && Number(existing.daytradePriorityExtensionCount || 0) === nextPriorityPayload.daytradePriorityExtensionCount;
   const bridgeChanged = Object.keys(bridgeFields).some((key) => JSON.stringify(existing[key]) !== JSON.stringify(bridgeFields[key]));
   const formalPriorityArtifactChanged = JSON.stringify(existing.formalPriorityStrategyChip || {}) !== JSON.stringify(formalPriorityStrategyChip);
+  const strategy2FormalWaterArtifactChanged = JSON.stringify(existing.strategy2Symbols || []) !== JSON.stringify(nextPriorityPayload.strategy2Symbols || [])
+    || JSON.stringify(existing.strategy2FormalWaterSymbols || []) !== JSON.stringify(nextPriorityPayload.strategy2FormalWaterSymbols || [])
+    || Number(existing.strategy2FormalWaterCount || 0) !== nextPriorityPayload.strategy2FormalWaterCount;
   const priceGateArtifactChanged = Number(existing.daytradeMinimumPrice || 0) !== MOTHER_POOL_MIN_PRICE
     || String(existing.daytradePriceGateStatus || "") !== (MOTHER_POOL_MIN_PRICE > 0 ? "minimum_price_enforced" : "no_price_floor")
     || JSON.stringify(existing.daytradePoolPriceBySymbol || {}) !== JSON.stringify(nextPriorityPayload.daytradePoolPriceBySymbol || {});
-  if (!sameSymbols || !samePriorityCounts || bridgeChanged || formalPriorityArtifactChanged || priceGateArtifactChanged) {
+  if (!sameSymbols || !samePriorityCounts || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
     writeJson(PRIORITY_SYMBOLS_FILE, nextPriorityPayload);
     writeFugleWebSocketSymbols(nextPriorityPayload.symbols, {
       source: "daytrade-dedicated-priority-bridge",
@@ -3922,6 +3930,7 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
       daytradePriceGateStatus: MOTHER_POOL_MIN_PRICE > 0 ? "minimum_price_enforced" : "no_price_floor",
       daytradeHotPoolCount: daytradeHotPoolSymbols.length,
       daytradeFormalPriorityCount: daytradeFormalPrioritySymbols.length,
+      strategy2FormalWaterCount: strategy2FormalWaterSymbols.length,
       terminalPriorityCount: nextPriorityPayload.terminalPrioritySymbols.length,
       openingPriorityCount: nextPriorityPayload.openingPrioritySymbols.length,
       preserveRecentSymbols: false,

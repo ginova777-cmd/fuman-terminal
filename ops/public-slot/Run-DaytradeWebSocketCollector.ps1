@@ -123,7 +123,7 @@ try {
   $env:FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS = "1800"
   $env:FUGLE_STREAMING_MAX_SYMBOLS = "2000"
   $env:FUGLE_STREAMING_CANDLE_SYMBOLS = "1000"
-  $env:FUGLE_STREAMING_AGGREGATE_SYMBOLS = "80"
+  $env:FUGLE_STREAMING_AGGREGATE_SYMBOLS = "600"
   # Dynamic Mother Pool: no fixed TOP40/pinned subset. Reserve 1,000 formal
   # 1m candle slots, then use the remaining 800 slots for the trade radar and
   # aggregate priority snapshots while rotating the wider market universe.
@@ -183,7 +183,8 @@ try {
       if ($process.HasExited) { break }
       # The Node collector owns WebSocket stale recovery using server heartbeat and
       # aggregates lastUpdated. The supervisor only restarts an exited child so a
-      # transient status-file read can never discard the formal candle cache.      Start-Sleep -Seconds 5
+      # transient status-file read can never discard the formal candle cache.
+      Start-Sleep -Seconds 5
     }
     if ($stopForWindow) {
       Write-State -Status "stopped_off_session" -ProcessId 0 -Reason "collector_window_closed" -BackoffSeconds 0

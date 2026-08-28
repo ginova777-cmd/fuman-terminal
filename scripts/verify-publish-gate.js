@@ -62,6 +62,7 @@ function main() {
   const requiredRootStages = [];
   const node = process.execPath;
   const checks = [
+    ["release_root_authority", node, ["scripts/verify-release-root-authority.js", "--require-production-root"]],
     ["desktop_api_only", node, ["scripts/verify-desktop-api-only.js"]],
     ["membership_e2e_layering", node, ["scripts/verify-membership-e2e-layering.js"]],
     ["buySellNoRollbackGuard", node, ["scripts/guard-buy-sell-no-rollback.js"]],
