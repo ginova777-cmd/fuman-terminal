@@ -17,6 +17,7 @@ const water = read("scripts/run-strategy2-v3-water-scan.js");
 const reader = read("lib/daytrade-intraday-burst-reader.js");
 const signal = read("lib/strategy2-v3-signal.js");
 const liveScan = read("scripts/run-strategy2-v3-live-scan.js");
+const readonlyVerifier = read("scripts/verify-daytrade-intraday-burst-readback-readonly.js");
 const sql = read("ops/public-slot/DaytradeIntradayBurstReadback_20260829.sql");
 const checks = {
   exact_price_rule: writer.includes("latest1mClose >= priceTriggerLevel"),
@@ -29,6 +30,7 @@ const checks = {
   merge_same_minute_triggers: rows.length === 1 && rows[0].burst_type === "pullup_and_volume",
   exact_merged_labels: observationLabel(rows[0]) === "觀察｜瞬間拉抬+瞬間巨量",
   valid_formula_stays_ok: rows[0]?.data_status === "OK",
+  zero_rows_requires_writer_health: readonlyVerifier.includes("v_fugle_daytrade_source_health_readback") && readonlyVerifier.includes("burst_writer_health_missing") && readonlyVerifier.includes('burstStatus = dataGap ? "DATA_GAP"'),
 };
 const failedChecks = Object.entries(checks).filter(([, value]) => !value).map(([key]) => key);
 console.log(JSON.stringify({ ok: failedChecks.length === 0, contract: "daytrade_intraday_burst_readback_contract_v1", checks, failed_checks: failedChecks, first_blocker: failedChecks[0] || null, read_only: true }, null, 2));
