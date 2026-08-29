@@ -52,14 +52,14 @@ async function main() {
   const healthyRows = healthRows.filter((item) => item?.data_gap !== true);
   const writerAlive = marketSession ? healthAvailable && healthRows.length > 0 && latestCandleAgeSeconds <= 180 && writerEvidenceAgeSeconds <= 180 : null;
   const dataGap = marketSession && (!healthAvailable || healthRows.length === 0 || healthyRows.length === 0 || !writerAlive);
-  const noMatch = readback.available && readback.rows.length === 0 && !dataGap;
+  const noMatch = marketSession && readback.available && readback.rows.length === 0 && !dataGap;
   const failedChecks = [];
   if (!readback.available) failedChecks.push(readback.reasonCode || "burst_readback_missing");
   if (marketSession && !healthAvailable) failedChecks.push("burst_writer_health_readback_unavailable");
   else if (marketSession && healthRows.length === 0) failedChecks.push(symbol ? "burst_symbol_health_missing" : "burst_writer_health_missing");
   else if (marketSession && healthyRows.length === 0) failedChecks.push(`burst_source_data_gap:${healthRows[0]?.data_gap_reason || "unspecified"}`);
   else if (marketSession && !writerAlive) failedChecks.push("burst_writer_or_intraday_1m_stale");
-  const burstStatus = dataGap ? "DATA_GAP" : (noMatch ? "NO_MATCH" : (readback.rows.length > 0 ? "MATCHED" : "OFF_SESSION"));
+  const burstStatus = !marketSession ? "OFF_SESSION" : (dataGap ? "DATA_GAP" : (noMatch ? "NO_MATCH" : "MATCHED"));
   console.log(JSON.stringify({
     ok: failedChecks.length === 0,
     contract: "daytrade_intraday_burst_readback_readonly_v1",

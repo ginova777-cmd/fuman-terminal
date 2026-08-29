@@ -30,7 +30,8 @@ const checks = {
   merge_same_minute_triggers: rows.length === 1 && rows[0].burst_type === "pullup_and_volume",
   exact_merged_labels: observationLabel(rows[0]) === "觀察｜瞬間拉抬+瞬間巨量",
   valid_formula_stays_ok: rows[0]?.data_status === "OK",
-  zero_rows_requires_writer_health: readonlyVerifier.includes("v_fugle_daytrade_source_health_readback") && readonlyVerifier.includes("burst_writer_health_missing") && readonlyVerifier.includes('burstStatus = dataGap ? "DATA_GAP"'),
+  zero_rows_requires_writer_health: readonlyVerifier.includes("v_fugle_daytrade_source_health_readback") && readonlyVerifier.includes("burst_writer_health_missing") && readonlyVerifier.includes('dataGap ? "DATA_GAP"'),
+  off_session_zero_rows_stays_off_session: readonlyVerifier.includes('const noMatch = marketSession &&') && readonlyVerifier.includes('const burstStatus = !marketSession ? "OFF_SESSION"'),
 };
 const failedChecks = Object.entries(checks).filter(([, value]) => !value).map(([key]) => key);
 console.log(JSON.stringify({ ok: failedChecks.length === 0, contract: "daytrade_intraday_burst_readback_contract_v1", checks, failed_checks: failedChecks, first_blocker: failedChecks[0] || null, read_only: true }, null, 2));
