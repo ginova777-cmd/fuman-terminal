@@ -184,6 +184,7 @@
     "verify:upload-gate": "node scripts/verify-upload-gate.js",
     "verify:publish-gate": "node scripts/verify-publish-gate.js",
     "verify:release-root-authority": "node scripts/verify-release-root-authority.js --require-production-root",
+    "verify:release-handoff-freeze": "node scripts/verify-release-handoff-freeze.js",
     "verify:deploy-worktree-clean": "node scripts/verify-deploy-worktree-clean.js",
     "monitor:deploy-worktree-clean": "node scripts/monitor-deploy-worktree-clean.js",
     "monitor:deploy-worktree-clean:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-deploy-worktree-clean-monitor-task.ps1",

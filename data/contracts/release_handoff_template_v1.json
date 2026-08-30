@@ -1,0 +1,23 @@
+{
+  "contract": "release_handoff_freeze_v1",
+  "releaseId": "scope-YYYYMMDD-01",
+  "status": "READY_FOR_HANDOFF",
+  "repository": "ginova777-cmd/fuman-terminal",
+  "prNumber": 0,
+  "branch": "agent/scope-YYYYMMDD",
+  "approvedCommitSha": "0000000000000000000000000000000000000000",
+  "changedFiles": ["path/to/changed-file.js"],
+  "verifier": {
+    "passed": true,
+    "commands": ["node scripts/verify-scope.js"],
+    "failedChecks": [],
+    "firstBlocker": null
+  },
+  "writes": {
+    "supabase": false,
+    "runtime": false,
+    "cache": false,
+    "schedules": false
+  },
+  "notes": "After handoff, stop pushing this branch. New work requires a new branch, PR, SHA and handoff."
+}
