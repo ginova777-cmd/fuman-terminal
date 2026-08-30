@@ -20,7 +20,6 @@ const {
 
 const tradeDate = process.argv.find((arg) => arg.startsWith("--trade-date="))?.slice("--trade-date=".length) || taipeiDate();
 const compactDate = tradeDate.replace(/\D/g, "");
-const productionApply = process.argv.includes("--apply");
 const issues = [];
 
 function add(condition, code, details = {}) {
@@ -117,24 +116,18 @@ function main() {
   add(Boolean(pkg.scripts?.["verify:strategy3-v2-collector-boot-contract"]), "package_script_missing_strategy3_v2_collector_boot_contract");
 
   const readinessRun = runNode("readiness", "check-strategy3-v2-readiness.js", [`--trade-date=${tradeDate}`]);
-  const scanArgs = [`--trade-date=${tradeDate}`];
-  if (productionApply) scanArgs.push("--apply");
-  const scanRun = runNode("scan", "run-strategy3-v2-complete-scan.js", scanArgs);
-  const lineRun = runNode("line_dry_run", "send-strategy3-v2-line-card.js", [`--trade-date=${tradeDate}`, "--dry-run"]);
   const waterUniverseRun = runNode("water_universe", "verify-strategy3-v2-water-universe.js", []);
   const schemaContractRun = runNode("schema_contract", "verify-strategy3-v2-schema-contract.js", []);
   const collectorBootRun = runNode("collector_boot_contract", "verify-strategy3-v2-collector-boot-contract.js", []);
   const terminalLegacyApiRun = runTerminalLegacyApiProbe(compactDate);
   const scanReceipt = readJson(scanReceiptPath(compactDate), {});
-  const lineReceipt = readJson(lineReceiptPath(compactDate, ".dry-run"), {});
+  const lineReceipt = readJson(lineReceiptPath(compactDate), {});
 
   add(scanReceipt.strategy === STRATEGY, "strategy3_v2_scan_receipt_strategy_mismatch", { value: scanReceipt.strategy });
   add(scanReceipt.contract === CONTRACT_VERSION, "strategy3_v2_scan_receipt_contract_mismatch", { value: scanReceipt.contract });
   add(scanReceipt.status === "FAIL_CLOSED" || scanReceipt.status === "COMPLETE", "strategy3_v2_scan_receipt_status_invalid", { value: scanReceipt.status });
   add(scanReceipt.run_id ? String(scanReceipt.run_id).startsWith("strategy3v2-") : scanReceipt.status === "FAIL_CLOSED", "strategy3_v2_runid_prefix_invalid", { run_id: scanReceipt.run_id });
-  add(lineReceipt.strategy === STRATEGY, "strategy3_v2_line_receipt_strategy_mismatch", { value: lineReceipt.strategy });
-  add(lineReceipt.line_card_design_contract?.title === "隔日沖參考", "strategy3_v2_line_title_mismatch");
-  add(lineReceipt.line_card_design_contract?.layout === "white_stock_card_pink_panel_six_box", "strategy3_v2_line_layout_mismatch");
+  add(scanReceipt.apply === true, "strategy3_v2_canonical_receipt_not_apply", { value: scanReceipt.apply });
   const scanFailedClosed = String(scanReceipt.status || "").toUpperCase() === "FAIL_CLOSED";
   const apiPayload = terminalLegacyApiRun.payload || {};
   const apiReadOnlyHistory = apiPayload.displayMode === "latest_readonly_history"
@@ -142,8 +135,13 @@ function main() {
     && ["HISTORY_ONLY", "NO"].includes(apiPayload.unattendedStatus)
     && ["historical_readonly", "insufficient"].includes(apiPayload.evidenceStatus);
   const failClosedSafe = scanFailedClosed
-    && lineReceipt.status === "FAIL_CLOSED"
+    && scanReceipt.formal_allowed === false
+    && scanReceipt.publish_allowed === false
+    && scanReceipt.line_allowed === false
     && apiReadOnlyHistory;
+  if (!scanFailedClosed) {
+    add(lineReceipt.strategy === STRATEGY, "strategy3_v2_line_receipt_strategy_mismatch", { value: lineReceipt.strategy });
+  }
 
   add(schemaContractRun.exitCode === 0, "strategy3_v2_schema_contract_verifier_failed", { exitCode: schemaContractRun.exitCode });
   add(collectorBootRun.exitCode === 0, "strategy3_v2_collector_boot_contract_verifier_failed", { exitCode: collectorBootRun.exitCode });
@@ -151,13 +149,15 @@ function main() {
   add(apiPayload.strategy === STRATEGY, "strategy3_v2_terminal_legacy_api_not_v2", { payload: apiPayload });
   if (scanFailedClosed) {
     add(failClosedSafe, "strategy3_v2_fail_closed_surface_not_safe", {
-      lineStatus: lineReceipt.status,
       apiDisplayMode: apiPayload.displayMode,
       apiPublishAllowed: apiPayload.publishAllowed,
       apiEvidenceStatus: apiPayload.evidenceStatus,
       apiUnattendedStatus: apiPayload.unattendedStatus,
     });
   } else {
+    add(lineReceipt.line_card_design_contract?.title === "隔日沖參考", "strategy3_v2_line_title_mismatch");
+    add(lineReceipt.line_card_design_contract?.layout === "white_stock_card_pink_panel_six_box", "strategy3_v2_line_layout_mismatch");
+    add(lineReceipt.status === "PUSHED", "strategy3_v2_line_not_pushed", { value: lineReceipt.status });
     add(waterUniverseRun.exitCode === 0, "strategy3_v2_water_universe_verifier_failed", { exitCode: waterUniverseRun.exitCode });
     add(readinessRun.exitCode === 0, "strategy3_v2_readiness_verifier_failed", { exitCode: readinessRun.exitCode, stderr: String(readinessRun.stderr || "").slice(0, 500) });
     add(apiPayload.runId === scanReceipt.run_id, "strategy3_v2_terminal_legacy_api_runid_mismatch", { apiRunId: apiPayload.runId, scanRunId: scanReceipt.run_id });
@@ -180,8 +180,8 @@ function main() {
     minimums: { candleReadySymbols: MIN_READY_SYMBOLS },
     stages: {
       readiness: { exitCode: readinessRun.exitCode },
-      scan: { exitCode: scanRun.exitCode, receipt: scanReceiptPath(compactDate), status: scanReceipt.status || "" },
-      lineDryRun: { exitCode: lineRun.exitCode, receipt: lineReceiptPath(compactDate, ".dry-run"), status: lineReceipt.status || "" },
+      scan: { executedByVerifier: false, receipt: scanReceiptPath(compactDate), status: scanReceipt.status || "" },
+      line: { executedByVerifier: false, receipt: lineReceiptPath(compactDate), status: lineReceipt.status || "" },
       waterUniverse: { exitCode: waterUniverseRun.exitCode },
       schemaContract: { exitCode: schemaContractRun.exitCode },
       collectorBootContract: { exitCode: collectorBootRun.exitCode },

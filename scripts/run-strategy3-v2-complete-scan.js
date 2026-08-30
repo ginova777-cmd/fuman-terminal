@@ -24,11 +24,13 @@ const {
 
 const tradeDate = process.argv.find((arg) => arg.startsWith("--trade-date="))?.slice("--trade-date=".length) || taipeiDate();
 const compactDate = tradeDate.replace(/\D/g, "");
-const runId = newRunId(compactDate);
 const apply = process.argv.includes("--apply");
+const generatedRunId = newRunId(compactDate);
+const runId = apply ? generatedRunId : generatedRunId.replace("strategy3v2-", "strategy3v2-diagnostic-");
+const diagnosticReceiptPath = path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-v2-complete-scan-diagnostic-${compactDate}.json`);
 const attemptPhase = process.argv.find((arg) => arg.startsWith("--attempt-phase="))?.slice("--attempt-phase=".length) || "";
-const quoteCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-quotes.json");
-const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles.json");
+const quoteCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-quotes-v2.json");
+const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles-v2.json");
 const MIN_LOCAL_COVERAGE_RATIO = Math.max(0.9, Number(process.env.STRATEGY3_V2_MIN_LOCAL_COVERAGE_RATIO || 0.9));
 
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
@@ -309,7 +311,7 @@ async function main() {
       reason_code: "market_closed_preserve_previous_good",
       previous_good_preserved: true,
     };
-    const file = writeJson(scanReceiptPath(compactDate), receipt);
+    const file = writeJson(apply ? scanReceiptPath(compactDate) : diagnosticReceiptPath, receipt);
     console.log(JSON.stringify({ ...receipt, receipt_path: file }, null, 2));
     return;
   }
@@ -413,6 +415,15 @@ async function main() {
         publish_allowed: true,
       };
 
+  if (!apply) {
+    receipt.diagnostic = true;
+    receipt.generated_run_id_noncanonical = true;
+    receipt.formal_allowed = false;
+    receipt.publish_allowed = false;
+    receipt.line_allowed = false;
+    receipt.allowed_action = "inspect_diagnostic_receipt_only";
+  }
+
   if (apply && receipt.ok) {
     try {
       receipt.supabase_apply = await applySupabaseRun(receipt);
@@ -426,7 +437,7 @@ async function main() {
       receipt.supabase_apply = { ok: false, error: String(error?.message || error).slice(0, 600) };
     }
   }
-  const file = writeJson(scanReceiptPath(compactDate), receipt);
+  const file = writeJson(apply ? scanReceiptPath(compactDate) : diagnosticReceiptPath, receipt);
   console.log(JSON.stringify({ ...receipt, receipt_path: file }, null, 2));
   process.exitCode = receipt.ok ? 0 : 1;
 }
