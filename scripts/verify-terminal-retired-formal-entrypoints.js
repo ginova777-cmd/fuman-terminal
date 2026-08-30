@@ -15,7 +15,20 @@ function add(ok, code, detail = "") {
 const scorecardPage = read("88.html");
 add(!/keyOrder\s*=\s*\[[^\]]*(strategy1|realtime-radar)/i.test(scorecardPage), "scorecard_key_order_retired_removed");
 add(!/normalized\.includes\("策略1"\)/.test(scorecardPage), "scorecard_strategy1_alias_removed");
+const marketClosedReadback = read("scripts/verify-market-closed-terminal-readback.js");
+for (const endpoint of ["open-buy-latest", "cb-detect-latest", "warrant-flow-latest", "realtime-radar-latest"]) {
+  add(!new RegExp(`\\[\\"[^\\"]+\\", \\"/api/${endpoint}`).test(marketClosedReadback), `market_closed_active_probe_retired_${endpoint}`);
+}
 
+add(marketClosedReadback.includes('result.payload?.marketStatus === "membership_locked"'), "market_closed_mobile_membership_lock_accepted");
+const strategy3Latest = read(path.join("api", "strategy3-latest.js"));
+add(strategy3Latest.includes("buildMarketCalendarContract") && strategy3Latest.includes("installMarketCalendarResponse"), "strategy3_v2_market_calendar_contract_installed");
+add(strategy3Latest.includes('withEntitlementRequired(strategy3LatestWithEvidence, "strategy3")'), "strategy3_v2_membership_guard_installed");
+const membershipVerifier = read(path.join("scripts", "verify-membership-access-contract.js"));
+for (const endpoint of ["cb-detect-latest", "warrant-flow-latest"]) {
+  const protectedPathEntry = `"/api/${endpoint}?live=1"`;
+  add(!membershipVerifier.includes(protectedPathEntry), `membership_active_probe_retired_${endpoint}`);
+}
 const syncSource = read(path.join("scripts", "sync-main-deploy-source.js"));
 for (const retired of [
   "api/open-buy-latest.js",
@@ -29,10 +42,10 @@ for (const retired of [
 for (const retiredProtectedCache of [
   'path.join("data", "institution-mobile-top.json")',
   'path.join("data", "strategy5-page-1.json")',
-  'path.join("data", "warrant-flow-mobile-top.json")',
 ]) {
   add(syncSource.includes(retiredProtectedCache), "sync_source_retired_protected_cache_listed", retiredProtectedCache);
 }
+add(!syncSource.includes('path.join("data", "warrant-flow-mobile-top.json")'), "sync_source_warrant_protected_cache_retired_removed");
 
 const sw = read("fuman-sw.js");
 add(!sw.includes("terminal-realtime-radar.css"), "sw_realtime_radar_precache_removed");

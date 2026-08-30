@@ -33,7 +33,6 @@ const STATIC_ASSETS = [
   "/terminal-chip-snapshot-module.js?v=public-terminal-fast-20260714-69",
   "/terminal-chip-flow.js?v=public-terminal-fast-20260714-69",
   "/terminal-watchlist-module.js?v=public-terminal-fast-20260714-69",
-  "/terminal-realtime-radar.css?v=public-terminal-fast-20260714-69",
   "/terminal-intraday-radar.css?v=public-terminal-fast-20260714-69",
   "/terminal-utility.css?v=public-terminal-fast-20260714-69",
   "/refresh.html?v=public-terminal-fast-20260714-69",

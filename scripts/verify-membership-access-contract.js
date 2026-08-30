@@ -69,8 +69,6 @@ async function verifyProductionProtection() {
     "/api/strategy4-latest?live=1",
     "/api/strategy5-latest?live=1",
     "/api/institution-latest?live=1",
-    "/api/cb-detect-latest?live=1",
-    "/api/warrant-flow-latest?live=1",
     "/api/scorecard?live=1",
     "/api/source-reports?live=1",
   ];

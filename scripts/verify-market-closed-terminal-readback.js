@@ -15,6 +15,13 @@ function argValue(name, fallback = "") {
 const baseUrl = (argValue("--base-url", process.env.FUMAN_LIVE_BASE_URL || DEFAULT_BASE_URL)).replace(/\/+$/, "");
 const timeoutMs = Number(argValue("--timeout-ms", process.env.FUMAN_VERIFY_TIMEOUT_MS || "30000"));
 
+const retiredTerminalEndpoints = [
+  "/api/open-buy-latest",
+  "/api/cb-detect-latest",
+  "/api/warrant-flow-latest",
+  "/api/realtime-radar-latest",
+];
+
 const jsonEndpoints = [
   ["market-calendar", "/api/market-calendar"],
   ["terminal-fast-bundle", "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70"],
@@ -22,15 +29,11 @@ const jsonEndpoints = [
   ["scorecard", "/api/scorecard?live=1"],
   ["heatmap", "/api/heatmap"],
   ["market-ai-live", "/api/market-ai-live"],
-  ["strategy1", "/api/open-buy-latest?canvas=1&compact=1&shell=1&limit=1200&live=1"],
   ["strategy2", "/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=1200&live=1"],
   ["strategy3", "/api/strategy3-latest?canvas=1&compact=1&shell=1&limit=1200&live=1"],
   ["strategy4", "/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=1200&live=1"],
   ["strategy5", "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=1200&live=1"],
   ["institution", "/api/institution-latest?canvas=1&compact=1&shell=1&limit=1200&live=1"],
-  ["cb", "/api/cb-detect-latest?limit=500&live=1"],
-  ["warrant", "/api/warrant-flow-latest?limit=500&live=1"],
-  ["realtime-radar", "/api/realtime-radar-latest?full=1&limit=1200&live=1"],
 ];
 
 const htmlSurfaces = [
@@ -137,7 +140,8 @@ async function main() {
     try {
       const result = await fetchWithTimeout(path, "json");
       const endpointIssues = [];
-      const membershipProtected = result.status === 401 && isMembershipRequiredPayload(result.payload);
+      const membershipProtected = isMembershipRequiredPayload(result.payload)
+        && (result.status === 401 || result.payload?.marketStatus === "membership_locked");
       if (membershipProtected) {
         jsonReports.push({ name, url: result.url, status: result.status, ok: true, membershipProtected: true, issues: endpointIssues });
         continue;
@@ -191,6 +195,7 @@ async function main() {
         noMarketClosedSkipReason: true,
       },
     },
+    retiredTerminalEndpoints,
     jsonReports,
     htmlReports,
     issues,
