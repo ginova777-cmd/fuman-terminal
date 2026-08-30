@@ -1,6 +1,8 @@
 "use strict";
 
 const { wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
+const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
+const { buildMarketCalendarContract, installMarketCalendarResponse } = require("../lib/market-calendar-contract");
 const {
   taipeiDate,
   readJson,
@@ -50,11 +52,13 @@ function shouldUseStrategy3V2(request) {
   return true;
 }
 
-module.exports = async function strategy3LatestWithEvidence(request, response) {
+async function strategy3LatestWithEvidence(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
   response.setHeader("Vercel-CDN-Cache-Control", "no-store");
   if (shouldUseStrategy3V2(request)) {
+    const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+    installMarketCalendarResponse(response, marketCalendar);
     const result = await strategy3V2Latest(request, response);
     response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
     response.setHeader("CDN-Cache-Control", "no-store");
@@ -73,5 +77,7 @@ module.exports = async function strategy3LatestWithEvidence(request, response) {
   return result;
 };
 
-Object.assign(module.exports, legacyHandler);
-module.exports.STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS = STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS;
+const protectedStrategy3Latest = withEntitlementRequired(strategy3LatestWithEvidence, "strategy3");
+Object.assign(protectedStrategy3Latest, legacyHandler);
+protectedStrategy3Latest.STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS = STRATEGY3_DESKTOP_ROUTE_SNAPSHOT_READ_TIMEOUT_MS;
+module.exports = protectedStrategy3Latest;

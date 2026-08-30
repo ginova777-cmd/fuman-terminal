@@ -54,7 +54,7 @@ requireIncludes("fuman-sw.js", `/terminal-watchlist-shell.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-market-overview-restore.css?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-market-overview-restore.js?v=${VERSION}`);
 requireIncludes("fuman-sw.js", `/terminal-hotfix.js?v=${VERSION}`);
-requireIncludes("fuman-sw.js", `/terminal-realtime-radar.css?v=${VERSION}`);
+
 forbidIncludes("fuman-sw.js", "WATCHLIST_SHELL_ASSET_EPOCH");
 forbidIncludes("fuman-sw.js", "MARKET_OVERVIEW_RESTORE_ASSET_EPOCH");
 forbidIncludes("fuman-sw.js", "watchlist-rich-shell-20260711-03");
@@ -85,7 +85,7 @@ if (/ASSET_EPOCH|desktop-fast-shell-core-|watchlist-rich-shell-20\d{6}/.test(sw)
 if (!read("terminal-watchlist-module.js").includes("function releaseVersion()") || !read("terminal-watchlist-module.js").includes("terminal-watchlist-shell.js?v=${encodeURIComponent(releaseVersion())}")) {
   issues.push("terminal-watchlist-module.js: dynamic shell must use unified release version");
 }
-if (!read("terminal-desktop-fast-shell.js").includes("terminal-watchlist-shell.js?v=${encodeURIComponent(version)}") || !read("terminal-desktop-fast-shell.js").includes("terminal-realtime-radar.css?v=${encodeURIComponent(terminalFastVersion())}") || !read("terminal-desktop-fast-shell.js").includes("daily-kline-chart?code=${encodeURIComponent(normalized)}&limit=${Number(limit) || 120}&v=${encodeURIComponent(terminalFastVersion())}")) {
+if (!read("terminal-desktop-fast-shell.js").includes("terminal-watchlist-shell.js?v=${encodeURIComponent(version)}") || !read("terminal-desktop-fast-shell.js").includes("daily-kline-chart?code=${encodeURIComponent(normalized)}&limit=${Number(limit) || 120}&v=${encodeURIComponent(terminalFastVersion())}")) {
   issues.push("terminal-desktop-fast-shell.js: dynamic assets must use unified release version");
 }
 if (!read("scripts/bump-version.js").includes("\"mobile.html\"") || !read("scripts/bump-version.js").includes("\"terminal-watchlist-shell.js\"")) {

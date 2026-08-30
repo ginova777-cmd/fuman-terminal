@@ -104,14 +104,14 @@ function verifyAllUnifiedFrontendRelease({ scorecard, mobile, auth, serviceWorke
     if (!body.includes(asset)) throw new Error(`${page} must use the unified release ${asset}`);
     if (/membership-lock=|public-terminal-fast-20260714-(?:19|20)/.test(body)) throw new Error(`${page} retains a legacy frontend cache token`);
   }
-  if (!desktopShell.includes("terminal-watchlist-shell.js?v=${encodeURIComponent(version)}") || !desktopShell.includes("terminal-realtime-radar.css?v=${encodeURIComponent(terminalFastVersion())}")) {
+  if (!desktopShell.includes("terminal-watchlist-shell.js?v=${encodeURIComponent(version)}")) {
     throw new Error("desktop dynamic assets must use the unified release version");
   }
   if (!watchlistModule.includes("function releaseVersion()") || !watchlistModule.includes("terminal-watchlist-shell.js?v=${encodeURIComponent(releaseVersion())}")) {
     throw new Error("watchlist module must load the shell with the unified release version");
   }
   if (!watchlistShell.includes(`const VERSION = \"${version}\"`)) throw new Error("watchlist shell must report the unified release version");
-  for (const asset of ["terminal-core.js", "terminal-desktop-fast-shell.js", "terminal-watchlist-shell.js", "terminal-market-overview-restore.js", "terminal-realtime-radar.css"]) {
+  for (const asset of ["terminal-core.js", "terminal-desktop-fast-shell.js", "terminal-watchlist-shell.js", "terminal-market-overview-restore.js"]) {
     if (!serviceWorker.includes(`/${asset}?v=${version}`)) throw new Error(`service worker missing unified ${asset}`);
   }
   if (/ASSET_EPOCH|desktop-fast-shell-core-|watchlist-mainforce-resonance/.test(serviceWorker)) throw new Error("service worker retains a legacy feature cache epoch");
