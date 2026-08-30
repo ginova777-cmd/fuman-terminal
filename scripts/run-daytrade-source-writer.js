@@ -192,6 +192,7 @@ const INTRADAY_PRICE_BURST_MIN_PCT = positiveNumber(process.env.DAYTRADE_INTRADA
 const INTRADAY_ROLLING_1M_WINDOW = 60;
 const INTRADAY_ROLLING_1M_MIN_SAMPLES = 20;
 const INTRADAY_VOLUME_BURST_ROLLING_MULTIPLIER = positiveNumber(process.env.DAYTRADE_INTRADAY_VOLUME_BURST_ROLLING_MULTIPLIER, 2);
+const INTRADAY_BURST_REPLAY_MAX_AGE_SECONDS = Math.max(60, Number(process.env.DAYTRADE_BURST_TELEGRAM_MAX_EVENT_AGE_SECONDS || 180));
 const HOT_POOL_MIN_SYMBOLS = 40;
 const HOT_POOL_MAX_SYMBOLS = 80;
 // The canonical live tables are read by several pool layers. Keep their
@@ -5151,6 +5152,53 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
         volume_trigger_level: volumeTriggerLevel,
       });
       emittedStrict = true;
+    }
+
+    // A writer tick can straddle a minute boundary. Replay recent completed
+    // formal candles so a burst is not lost merely because it is no longer
+    // the newest candle when this round runs.
+    const cachedCandles = candleCacheBySymbol.get(symbol) || [];
+    const checkedAtMs = Date.parse(checkedAt);
+    for (let offset = 1; offset < cachedCandles.length; offset += 1) {
+      const replayMetrics = buildIntradayBurstMetricsFromCandleCache(cachedCandles.slice(offset));
+      const replayTimeMs = Date.parse(replayMetrics.latest_1m_time);
+      const replayAgeSeconds = Number.isFinite(checkedAtMs) && Number.isFinite(replayTimeMs)
+        ? Math.max(0, (checkedAtMs - replayTimeMs) / 1000)
+        : 999999;
+      if (replayAgeSeconds > INTRADAY_BURST_REPLAY_MAX_AGE_SECONDS) break;
+      if (replayMetrics.rolling_1m_baseline_status !== "ready") continue;
+
+      const replayPriceTriggerLevel = replayMetrics.rolling_1m_prior_high_close * (1 + (INTRADAY_PRICE_BURST_MIN_PCT / 100));
+      const replayVolumeTriggerLevel = replayMetrics.rolling_1m_baseline_volume * INTRADAY_VOLUME_BURST_ROLLING_MULTIPLIER;
+      const replayCommon = {
+        ...common,
+        latest_1m_time: replayMetrics.latest_1m_time,
+        latest_1m_close: replayMetrics.latest_1m_close,
+        latest_1m_volume: replayMetrics.latest_1m_volume,
+        rolling_1m_prior_high_close: replayMetrics.rolling_1m_prior_high_close,
+        rolling_1m_baseline_volume: replayMetrics.rolling_1m_baseline_volume,
+        rolling_1m_baseline_sample_count: replayMetrics.rolling_1m_baseline_sample_count,
+        rolling_1m_baseline_status: replayMetrics.rolling_1m_baseline_status,
+        replayed_missed_candle: true,
+      };
+      if (replayMetrics.rolling_1m_prior_high_close > 0 && replayMetrics.latest_1m_close >= replayPriceTriggerLevel) {
+        events.push({
+          ...replayCommon,
+          trigger_type: "price_breakout_1pct",
+          price_trigger_level: replayPriceTriggerLevel,
+          volume_trigger_level: replayVolumeTriggerLevel,
+        });
+        emittedStrict = true;
+      }
+      if (replayMetrics.rolling_1m_baseline_volume > 0 && replayMetrics.latest_1m_volume >= replayVolumeTriggerLevel) {
+        events.push({
+          ...replayCommon,
+          trigger_type: "volume_burst_rolling60_x2",
+          price_trigger_level: replayPriceTriggerLevel,
+          volume_trigger_level: replayVolumeTriggerLevel,
+        });
+        emittedStrict = true;
+      }
     }
     if (!emittedStrict) addReject(symbol, "no_strict_burst_trigger");
   }
