@@ -16,6 +16,7 @@ function run(label, args) {
 }
 
 run("verify:release-root-authority", [process.execPath, path.join("scripts", "verify-release-root-authority.js"), "--require-production-root"]);
+run("verify:release-handoff-freeze", [process.execPath, path.join("scripts", "verify-release-handoff-freeze.js")]);
 run("verify:sync-hard-gate", [process.execPath, path.join("scripts", "verify-sync-hard-gate.js")]);
 run("verify:publish-gate", [process.execPath, path.join("scripts", "verify-publish-gate.js")]);
 run("verify:vercel-cost", [process.execPath, path.join("scripts", "verify-vercel-cost-guard.js")]);

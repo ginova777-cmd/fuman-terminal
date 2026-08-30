@@ -1,0 +1,30 @@
+{
+  "contract": "release_handoff_freeze_v1",
+  "version": "2026-08-30",
+  "branchPatterns": [
+    "^agent/[a-z0-9._-]+-[0-9]{8}$",
+    "^release/[a-z0-9._-]+-[0-9]{8}$"
+  ],
+  "requiredFields": [
+    "releaseId",
+    "repository",
+    "prNumber",
+    "branch",
+    "approvedCommitSha",
+    "changedFiles",
+    "verifier",
+    "writes"
+  ],
+  "frozenStatuses": ["FROZEN", "READY_FOR_RELEASE"],
+  "policy": {
+    "handoffStopsFurtherPushes": true,
+    "newChangesRequireNewBranchAndPr": true,
+    "releaseOwnerUsesApprovedCommitShaOnly": true,
+    "movingPrHeadIsBlocked": true,
+    "mainPushByNonReleaseOwnerForbidden": true,
+    "productionDeployByNonReleaseOwnerForbidden": true,
+    "dirtyWorktreeDeployForbidden": true
+  },
+  "driftStatus": "BLOCKED_PR_HEAD_DRIFT",
+  "scopeDriftStatus": "BLOCKED_SCOPE_DRIFT"
+}

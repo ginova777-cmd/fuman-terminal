@@ -278,6 +278,23 @@ The scorecard must read live `/api/release-manifest` and include:
 
 If live manifest SHA/deployId is missing, or live SHA differs from the fixed release SHA, API unattended status is `NO`. Do not use a moving `main` or a live view snapshot to prove a past run was healthy.
 
+## Release Handoff Freeze
+
+Every strategy/source Codex must finish work on an independent `agent/<scope>-<yyyymmdd>` branch, run the authoritative verifier, and provide a `release_handoff_freeze_v1` manifest based on `data/contracts/release_handoff_template_v1.json`.
+
+Required handoff fields are repository, PR number, branch, approved 40-character commit SHA, exact changed files, verifier commands/results, and whether Supabase, runtime, cache, or schedules were written. Run:
+
+```powershell
+npm run verify:release-handoff-freeze -- --handoff=<manifest.json>
+```
+
+Handoff freezes the branch. After `FROZEN` or `READY_FOR_RELEASE`, no agent may push another commit to that branch. New work requires a new branch, PR, SHA, verifier result, and handoff. The release owner verifies the remote head with:
+
+```powershell
+npm run verify:release-handoff-freeze -- --handoff=<manifest.json> --check-remote
+```
+
+If the remote branch head differs from `approvedCommitSha`, report `BLOCKED_PR_HEAD_DRIFT`; do not adopt the newer head, merge, push main, or deploy. If changed files exceed the approved list, report `BLOCKED_SCOPE_DRIFT`. Only the user or release owner may explicitly approve a replacement SHA after a fresh audit. Production `main` remains release-owner-only.
 ## Release Owner Merge Queue
 
 Production `main` is release-owner-only. Strategy/source Codex agents must not push `main`, deploy Vercel, or edit `C:\fuman-terminal`; they must work on `agent/<scope>-<yyyymmdd>` branches and hand off the branch name, commit SHA, changed file list, read-only scorecard, and whether Supabase/cache/runtime was written.
