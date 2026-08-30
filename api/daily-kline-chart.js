@@ -1,6 +1,7 @@
 "use strict";
 
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
+const { detectElliottWave } = require("../lib/elliott-wave");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const PRIMARY_TABLE = process.env.FUMAN_DAILY_KLINE_TABLE || "strategy4_daily_ohlcv_view";
@@ -96,7 +97,18 @@ function chartSvg(code, bars) {
   }).join("");
   const ticks = [0, Math.floor((bars.length - 1) / 3), Math.floor((bars.length - 1) * 2 / 3), bars.length - 1].map((index) => `<text x="${x(index).toFixed(1)}" y="354" text-anchor="middle" fill="#8194ad" font-family="system-ui, sans-serif" font-size="12">${escapeXml(bars[index].date.slice(5).replace("-", "/"))}</text>`).join("");
   const last = bars[bars.length - 1];
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(`${code} 正式日K線`)}"><rect width="${width}" height="${height}" fill="#0b1220"/>${grids}<line x1="${left}" x2="${width - right}" y1="268" y2="268" stroke="#34465d"/>${candles}${line(5, "#f4c656")}${line(10, "#4aa7ff")}${line(20, "#b18ae3")}<text x="${left}" y="22" fill="#dce9fa" font-family="system-ui, sans-serif" font-size="15" font-weight="800">${escapeXml(code)} 日K｜${escapeXml(last.date)}｜收 ${last.close.toFixed(2)}</text><text x="${width - right}" y="22" text-anchor="end" fill="#8ea1ba" font-family="system-ui, sans-serif" font-size="12">MA5 / MA10 / MA20｜下方成交量</text>${ticks}</svg>`;
+  const elliott = detectElliottWave(bars);
+  const wavePoints = ["confirmed", "probable"].includes(elliott.status) ? elliott.points.map((point) => {
+    const index = bars.findIndex((bar) => bar.date === point.date);
+    if (index < 0) return "";
+    const pointX = x(index);
+    const pointY = y(point.price);
+    return `<circle cx="${pointX.toFixed(1)}" cy="${pointY.toFixed(1)}" r="8" fill="#0b1220" stroke="#ffcc4d" stroke-width="2"/><text x="${pointX.toFixed(1)}" y="${(pointY + 4).toFixed(1)}" text-anchor="middle" fill="#ffcc4d" font-family="system-ui, sans-serif" font-size="10" font-weight="800">${escapeXml(point.label)}</text>`;
+  }).join("") : "";
+  const waveSummary = ["confirmed", "probable"].includes(elliott.status)
+    ? `${elliott.pattern === "impulse_1_5" ? "艾略特 1-5" : "艾略特 A-B-C"} ${elliott.status} ${(elliott.confidence * 100).toFixed(0)}%｜失效 ${elliott.invalidationPrice.toFixed(2)}`
+    : `艾略特 ${elliott.status === "DATA_GAP" ? "DATA_GAP" : "未確認"}`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(`${code} 正式日K線`)}"><rect width="${width}" height="${height}" fill="#0b1220"/>${grids}<line x1="${left}" x2="${width - right}" y1="268" y2="268" stroke="#34465d"/>${candles}${line(5, "#f4c656")}${line(10, "#4aa7ff")}${line(20, "#b18ae3")}${wavePoints}<text x="${left}" y="22" fill="#dce9fa" font-family="system-ui, sans-serif" font-size="15" font-weight="800">${escapeXml(code)} 日K｜${escapeXml(last.date)}｜收 ${last.close.toFixed(2)}</text><text x="${width - right}" y="22" text-anchor="end" fill="#ffcc4d" font-family="system-ui, sans-serif" font-size="12">${escapeXml(waveSummary)}</text>${ticks}</svg>`;
 }
 
 module.exports = async (request, response) => {

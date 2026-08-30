@@ -3,6 +3,7 @@ const CACHE_MS = 30 * 60 * 1000;
 let tpexDailyCache = null;
 const fs = require("fs");
 const path = require("path");
+const { detectElliottWave } = require("../lib/elliott-wave");
 const { fetchMisQuotes, mergeMisQuoteIntoHistory } = require("../lib/mis-quotes");
 const USE_MIS_QUOTES = process.env.STRATEGY4_USE_MIS === "1";
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
@@ -1042,6 +1043,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
   const saucerBreakout = (necklineBreak || rightHighBreak) &&
     daily.volumeRatio >= 1.1 && isRed && daily.realBody;
   const triangleBreakout = detectTriangleBreakout(daily.rows);
+  const elliottWave = detectElliottWave(daily.rows);
   const nState = detectNBase(daily.rows, daily.volMa20);
   const nBase = nState.triggered && daily.realBody && isRed;
   const roc3 = daily.closes.length > 3 ? ((last.close - daily.closes.at(-4)) / daily.closes.at(-4)) * 100 : 0;
@@ -1091,6 +1093,10 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     short: "三角收斂起漲",
     icon: "△",
     reason: triangleBreakout.reason,
+  });
+  if (["confirmed", "probable"].includes(elliottWave.status)) signals.push({
+    id: "elliott_wave", title: "艾略特波段", short: elliottWave.pattern === "impulse_1_5" ? "艾略特1-5" : "艾略特ABC", icon: "波",
+    reason: `${elliottWave.pattern === "impulse_1_5" ? "推進浪 1-5" : "修正浪 A-B-C"} ${elliottWave.status}，信心 ${(elliottWave.confidence * 100).toFixed(0)}%，失效價 ${elliottWave.invalidationPrice.toFixed(2)}；僅作波段加分證據。`,
   });
   if (breakawayGap) signals.push({ id: "breakaway_gap", short: "突破缺口", icon: "◆", reason: "跳空突破近20日整理高點，偏突破缺口。" });
   if (runawayGap) signals.push({ id: "runaway_gap", short: "逃逸缺口", icon: "🚀", reason: "跳空且站上MA20，多頭段延續，偏逃逸缺口。" });
@@ -1253,7 +1259,11 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     swingSignals: signals,
     signals,
     triangleBreakout,
-    patternTags: triangleBreakout.detected ? ["triangle_breakout"] : [],
+    elliottWave,
+    patternTags: [
+      ...(triangleBreakout.detected ? ["triangle_breakout"] : []),
+      ...(["confirmed", "probable"].includes(elliottWave.status) ? ["elliott_wave"] : []),
+    ],
     wallet: {
       mf: Math.round(daily.wallet.mf),
       controlLine: Math.round(daily.wallet.controlLine),
