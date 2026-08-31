@@ -390,6 +390,7 @@
     "guard:strategy3-1250-readiness:apply": "node --use-system-ca scripts/guard-strategy3-1250-readiness.js --apply",
     "verify:strategy-line-card-design": "node --use-system-ca scripts/verify-strategy-line-card-design.js",
     "verify:opening-report-0830-contract": "node --use-system-ca scripts/verify-opening-report-0830-contract.js",
+    "verify:opening-report-0830-bridge-handoff": "node scripts/verify-opening-report-0830-bridge-handoff-contract.js",
     "verify:opening-limit-order-0855": "node --use-system-ca scripts/verify-opening-limit-order-0855-readonly.js",
     "verify:daily-retention-maintenance": "node --use-system-ca scripts/verify-daily-retention-maintenance.js",
     "verify:terminal-egress-guard": "node scripts/verify-terminal-egress-guard.js",

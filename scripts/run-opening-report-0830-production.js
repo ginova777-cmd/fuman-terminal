@@ -409,7 +409,9 @@ async function main() {
   const compact = tradeDate.replace(/\D/g, "");
   const runId = argValue("--run-id", `opening-report-0830-${compact}-${Date.now()}`);
   const mock = hasFlag("--self-test") || hasFlag("--mock-overseas");
-  const applyBridge = hasFlag("--apply-bridge");
+  // Production always hands the same-day report to Mother Pool. Only an
+  // explicit isolated test may suppress the bridge.
+  const applyBridge = !mock && !hasFlag("--skip-bridge");
   if (hasFlag("--send-line")) throw new Error("line_delivery_retired_use_telegram_only");
   const sendLine = false;
   const dryRunLine = true;
