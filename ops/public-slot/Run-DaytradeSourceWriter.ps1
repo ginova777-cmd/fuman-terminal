@@ -359,7 +359,7 @@ try {
   $exitCode = 1
   for ($attempt = 1; $attempt -le $attempts; $attempt++) {
     Write-WrapperLog "NODE_ATTEMPT $attempt/$attempts stdout=$StdoutLog stderr=$StderrLog"
-    $nodeTimeoutSeconds = if ($env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS) { [int]$env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS } else { 180 }
+    $nodeTimeoutSeconds = if ($env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS) { [int]$env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS } else { 270 }
     if ($nodeTimeoutSeconds -lt 30) { $nodeTimeoutSeconds = 30 }
     $nodeProcess = Start-Process -FilePath $node -ArgumentList $args -RedirectStandardOutput $StdoutLog -RedirectStandardError $StderrLog -PassThru -WindowStyle Hidden
     if (-not $nodeProcess.WaitForExit($nodeTimeoutSeconds * 1000)) {
