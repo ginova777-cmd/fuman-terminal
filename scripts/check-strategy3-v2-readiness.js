@@ -18,9 +18,9 @@ const {
 
 const date = process.argv.find((arg) => arg.startsWith("--trade-date="))?.slice("--trade-date=".length) || taipeiDate();
 const compactDate = date.replace(/\D/g, "");
-const statusFile = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status.json");
+const statusFile = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status-v2.json");
 const sourceReceipt = path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-v2-readiness-${compactDate}.json`);
-const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles.json");
+const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles-v2.json");
 const MIN_LOCAL_COVERAGE_RATIO = Math.max(0.9, Number(process.env.STRATEGY3_V2_MIN_LOCAL_COVERAGE_RATIO || 0.9));
 const { loadStrategy3MotherPool } = require("../lib/strategy3-mother-pool-universe");
 
