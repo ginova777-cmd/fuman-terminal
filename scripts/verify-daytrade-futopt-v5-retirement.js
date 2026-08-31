@@ -23,6 +23,9 @@ const ageSeconds = (value) => {
 };
 const statusAgeSeconds = ageSeconds(status?.updatedAt);
 const mirrorAgeSeconds = ageSeconds(mirror?.checked_at);
+const taipeiParts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date()).reduce((out, part) => ({ ...out, [part.type]: part.value }), {});
+const minuteOfDay = Number(taipeiParts.hour) * 60 + Number(taipeiParts.minute);
+const marketSession = !["Sat", "Sun"].includes(taipeiParts.weekday) && minuteOfDay >= 525 && minuteOfDay <= 815;
 
 const checks = {
   collector_release_v5: collector.includes('COLLECTOR_RELEASE = "futopt-formal-live-mirror-v5"'),
@@ -31,15 +34,16 @@ const checks = {
   runtime_only_ticker_seed: !collector.includes("C:/fuman-terminal/ops/public-slot/runtime"),
   runtime_only_stock_seed: !collector.includes("C:/fuman-terminal/data/stocks-slim.json"),
   writer_requires_v5: writer.includes('FutoptCollectorRelease = "futopt-formal-live-mirror-v5"'),
+  writer_bounded_timeout_270: writer.includes('else { 270 }'),
   pinned_requires_v5: pinned.includes("approved_writer_futopt_release_mismatch:expected_v5"),
   installer_uses_pinned_wrapper: installer.includes("Run-DaytradeSourceWriterPinned.ps1"),
   no_v1_static_authority: ![collector, writer, pinned, installer].some((text) => text.includes("futopt-formal-live-mirror-v1")),
   live_status_v5: status?.collector_release === "futopt-formal-live-mirror-v5",
   live_symbol_scope_over_100: Number(status?.selectedSymbols || 0) > 100,
-  live_formal_ready: status?.formalReady === true,
+  live_formal_ready: !marketSession || status?.formalReady === true,
   live_status_fresh_120s: statusAgeSeconds <= 120,
-  mirror_stock_rows_over_100: Number(mirror?.stock_future_rows || 0) > 100,
-  mirror_written: mirror?.status === "written",
+  mirror_stock_rows_over_100: !marketSession || Number(mirror?.stock_future_rows || 0) > 100,
+  mirror_written: !marketSession || mirror?.status === "written",
   mirror_fresh_180s: mirrorAgeSeconds <= 180,
 };
 
@@ -49,6 +53,7 @@ const result = {
   contract: "daytrade_futopt_v5_retirement_v1",
   checked_at: new Date().toISOString(),
   checks,
+  market_session: marketSession,
   live: {
     collector_release: status?.collector_release || null,
     selected_symbols: Number(status?.selectedSymbols || 0),
