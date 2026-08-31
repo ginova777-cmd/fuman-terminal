@@ -45,6 +45,19 @@ function main() {
   const healthDate = health?.checkedAt ? taipeiDateKey(health.checkedAt) : "";
   if (!health || healthDate !== today) issues.push(`health_evidence_not_today:${healthDate || "missing"}:${today}`);
   if (health?.ok !== true) issues.push("health_evidence_not_ok");
+  const healthTradeDate = String(health?.tradeDate || "").replace(/\D/g, "");
+  const todayCompact = today.replace(/\D/g, "");
+  if (healthTradeDate !== todayCompact) issues.push(`health_trade_date_mismatch:${healthTradeDate || "missing"}:${todayCompact}`);
+  const ageChecks = [
+    ["latest", health?.latestAgeDays, health?.maxAgeDays],
+    ["institutional", health?.institutionalAgeDays, health?.maxAgeDays],
+    ["margin", health?.marginAgeDays, health?.marginMaxAgeDays],
+  ];
+  for (const [label, age, maximum] of ageChecks) {
+    if (!Number.isFinite(Number(age)) || !Number.isFinite(Number(maximum)) || Number(age) < 0 || Number(age) > Number(maximum)) {
+      issues.push(`${label}_trade_date_age_invalid:${age ?? "missing"}:${maximum ?? "missing"}`);
+    }
+  }
   if (!health?.institutionalTradeDate) issues.push("institutional_trade_date_missing");
   if (!health?.marginTradeDate) issues.push("margin_trade_date_missing");
   if (!health?.unifiedTradeDate) issues.push("unified_trade_date_missing");
