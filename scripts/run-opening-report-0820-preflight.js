@@ -85,7 +85,7 @@ async function main() {
   const receipt = {
     contract: "opening-report-0820-preflight-v2",
     ok,
-    phase: skippedForMarketClosed ? "skip_non_trading_day_no_terminal_no_line_no_bridge" : "preflight_only_no_terminal_no_telegram_no_codex_no_bridge",
+    phase: skippedForMarketClosed ? "skip_non_trading_day_no_terminal_no_line_no_bridge" : "preflight_only_no_terminal_no_line_no_bridge",
     market_calendar: marketCalendar,
     skipped_for_market_closed: skippedForMarketClosed,
     no_terminal_no_line_no_industry_bias_no_bridge: skippedForMarketClosed,
@@ -132,7 +132,7 @@ main().catch((error) => {
   const payload = {
     contract: "opening-report-0820-preflight-v2",
     ok: false,
-    phase: "preflight_only_no_terminal_no_telegram_no_codex_no_bridge",
+    phase: "preflight_only_no_terminal_no_line_no_bridge",
     trade_date: tradeDate,
     checked_at: new Date().toISOString(),
     reason_code: "opening_report_0820_preflight_runner_error",

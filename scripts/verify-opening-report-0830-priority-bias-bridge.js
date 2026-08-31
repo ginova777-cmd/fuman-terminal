@@ -30,19 +30,6 @@ function normalizedDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : "";
 }
 
-function findCurrentReceipt(expectedTradeDate) {
-  const compact = String(expectedTradeDate || "").replace(/\D/g, "");
-  const directory = "C:\\fuman-runtime\\data\\scan-receipts";
-  try {
-    const matches = fs.readdirSync(directory)
-      .filter((name) => new RegExp(`^opening-report-0830-priority-bias-bridge-.+-${compact}\\.json$`, "i").test(name))
-      .sort();
-    return matches.length ? path.join(directory, matches[matches.length - 1]) : "";
-  } catch {
-    return "";
-  }
-}
-
 function selfTest() {
   const valid = { date: "2026-08-06", report_time: "08:30", run_id: "daily-20260806-0830", source: "opening_report_0830", mode: "priority_bias_only", industry: "semiconductors", bias: "strong", confidence: 0.9, evidence_summary: "overseas strength", mapped_symbols: ["2330", "2454"], allowed_action: "boost_scan_priority_only", forbidden_action: "publish_formal_candidate_without_taiwan_evidence" };
   const invalid = { ...valid, mode: "formal_candidate" };
@@ -64,16 +51,24 @@ function main() {
     return;
   }
   const expectedTradeDate = normalizedDate(argValue("--trade-date", taipeiTradeDate()));
-  const explicitReceipt = argValue("--receipt", process.env.OPENING_REPORT_0830_BIAS_RECEIPT || "");
-  const receiptPath = explicitReceipt ? path.resolve(explicitReceipt) : findCurrentReceipt(expectedTradeDate);
-  const receipt = receiptPath ? readJson(receiptPath) : null;  const issues = [];
-  if (!receipt || receipt.contract !== "opening-report-0830-priority-bias-bridge-v1") issues.push("receipt_missing_or_contract_invalid");
+  const receiptPath = path.resolve(argValue("--receipt", process.env.OPENING_REPORT_0830_BIAS_RECEIPT || "C:\\fuman-runtime\\data\\scan-receipts\\opening-report-0830-priority-bias-bridge-latest.json"));
+  const receipt = readJson(receiptPath);
+  const issues = [];
+  const aggregate = receipt?.contract === "opening-report-0830-priority-bias-bridge-aggregate-v1";
+  const single = receipt?.contract === "opening-report-0830-priority-bias-bridge-v1";
+  if (!receipt || (!aggregate && !single)) issues.push("receipt_missing_or_contract_invalid");
   if (receipt && receipt.received !== true) issues.push("received_not_true");
   if (receipt && receipt.forbidden_publish_guard !== true) issues.push("forbidden_publish_guard_not_true");
   if (receipt && receipt.formal_candidate_count !== 0) issues.push("formal_candidate_count_not_zero");
   if (receipt && receipt.formal_candidate_allowed !== false) issues.push("formal_candidate_allowed_not_false");
-  if (receipt && receipt.status !== "priority_scan") issues.push("status_invalid");
-  if (receipt && receipt.reason_code !== bridge.constants.REASON_CODE) issues.push("reason_code_invalid");
+  if (aggregate) {
+    if (receipt.status !== "BRIDGE_OK") issues.push("aggregate_status_invalid");
+    if (Number(receipt.industry_count || 0) <= 0) issues.push("aggregate_industry_count_empty");
+    if (Number(receipt.successful_industry_count || 0) !== Number(receipt.industry_count || 0)) issues.push("aggregate_industry_count_mismatch");
+    if (!Array.isArray(receipt.bridge_results) || receipt.bridge_results.some((row) => row.apply_exit_code !== 0 || row.verify_exit_code !== 0)) issues.push("aggregate_bridge_result_failed");
+  }
+  if (single && receipt.status !== "priority_scan") issues.push("status_invalid");
+  if (single && receipt.reason_code !== bridge.constants.REASON_CODE) issues.push("reason_code_invalid");
   if (receipt && receipt.source !== bridge.constants.SOURCE) issues.push("source_invalid");
   if (receipt && receipt.mode !== bridge.constants.MODE) issues.push("mode_invalid");
   const receiptTradeDate = normalizedDate(receipt?.trade_date || receipt?.date);

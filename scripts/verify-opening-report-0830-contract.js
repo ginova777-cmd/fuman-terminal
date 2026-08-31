@@ -107,6 +107,10 @@ function main() {
     stage("static_stale_asia_isolation", source("scripts/run-opening-report-0830-production.js").includes("applyLeaderFreshness")
       && source("scripts/run-opening-report-0820-preflight.js").includes("overseas_stale_promoted_count")),
     stage("static_wrapper_pre_delivery", source("run-opening-report-0830-production-wrapper.ps1").includes("--pre-delivery")),
+    stage("preflight_freeze_only", source("scripts/run-opening-report-0820-preflight.js").includes("preflight_only_no_terminal_no_line_no_bridge")),
+    stage("bridge_after_delivery_required", source("scripts/run-opening-report-0830-production.js").includes("const applyBridge = true")
+      && source("run-opening-report-0830-production-wrapper.ps1").includes("bridge_handoff_required = $true")
+      && source("run-opening-report-0830-production-wrapper.ps1").includes("bridge_deferred_outside_delivery_chain = $false")),
   ];
 
   if (preDelivery || requireCurrent) {
