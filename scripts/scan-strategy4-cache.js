@@ -914,6 +914,7 @@ function strategy4EligibleYieldCount(output) {
 
 async function assertStrategy4MatchYieldGuard(output, previousRaw) {
   const currentCount = cleanNumber(output.count);
+  const activeClassificationContract = String(output.matchClassificationContract || "");
   const expectedTotal = cleanNumber(output.total);
   const scannedCount = cleanNumber(output.scannedCount || output.scanned || output.total);
   const eligibleCount = strategy4EligibleYieldCount(output);
@@ -929,6 +930,8 @@ async function assertStrategy4MatchYieldGuard(output, previousRaw) {
   // volume-filter contract. Comparing pre-filter runs to filtered runs creates
   // a false "yield collapse" even when the current full scan is healthy.
   const compatibleNormalHistory = normalHistory.filter((run) => {
+    const historicalClassificationContract = String(run?.payload?.matchClassificationContract || "");
+    if (historicalClassificationContract !== activeClassificationContract) return false;
     const filter = run?.payload?.volumeFilter || null;
     if (!activeVolumeFilterEnabled) return filter?.enabled !== true;
     return filter?.enabled === true
@@ -943,14 +946,16 @@ async function assertStrategy4MatchYieldGuard(output, previousRaw) {
   if (baselineCounts.length >= MATCH_YIELD_MIN_BASELINE_SAMPLES && currentCount < minByBaseline) issues.push("match_yield_collapse current=" + currentCount + " baselineMedian=" + baselineMedian + " min=" + minByBaseline);
   else if (baselineCounts.length < MATCH_YIELD_MIN_BASELINE_SAMPLES) warnings.push("baseline_samples_low:" + baselineCounts.length + "<" + MATCH_YIELD_MIN_BASELINE_SAMPLES);
   if (minByEligible && currentCount < minByEligible) issues.push("match_yield_below_eligible_floor current=" + currentCount + " eligible=" + eligibleCount + " min=" + minByEligible);
-  const previousCompleteCount = previousRaw?.complete === true ? cleanNumber(previousRaw.count) : 0;
+  const previousClassificationContract = String(previousRaw?.matchClassificationContract || "");
+  const previousContractCompatible = previousClassificationContract === activeClassificationContract;
+  const previousCompleteCount = previousRaw?.complete === true && previousContractCompatible ? cleanNumber(previousRaw.count) : 0;
   const minByPrevious = previousCompleteCount >= MIN_MATCH_COUNT ? Math.max(MIN_MATCH_COUNT, Math.floor(previousCompleteCount * MIN_MATCH_RATIO_TO_PREVIOUS)) : 0;
   const filterRuleChanged = volumeFilterRuleChanged(previousRaw, output);
   if (minByPrevious && currentCount < minByPrevious) {
     if (ALLOW_FILTER_RULE_DROP && filterRuleChanged && (!minByEligible || currentCount >= minByEligible)) warnings.push("previous_drop_allowed_after_filter_rule_change_and_eligible_floor current=" + currentCount + " previous=" + previousCompleteCount + " min=" + minByPrevious + " eligibleFloor=" + minByEligible);
     else issues.push("suspicious_match_drop current=" + currentCount + " previous=" + previousCompleteCount + " min=" + minByPrevious);
   }
-  const guard = { ok: issues.length === 0, checkedAt: new Date().toISOString(), currentCount, expectedTotal, scannedCount, eligibleCount, previousCompleteCount, minByPrevious, filterRuleChanged, baseline: { lookback: MATCH_YIELD_BASELINE_LOOKBACK, minNormalCount: MATCH_YIELD_MIN_NORMAL_COUNT, minBaselineSamples: MATCH_YIELD_MIN_BASELINE_SAMPLES, sampleCount: baselineCounts.length, compatibleSampleCount: compatibleNormalHistory.length, counts: baselineCounts, median: baselineMedian, minByBaseline, minRatioToBaseline: MATCH_YIELD_MIN_RATIO_TO_BASELINE }, eligibleFloor: { minRatioToEligible: MATCH_YIELD_MIN_RATIO_TO_ELIGIBLE, minByEligible }, warnings, issues };
+  const guard = { ok: issues.length === 0, checkedAt: new Date().toISOString(), classificationContract: activeClassificationContract, currentCount, expectedTotal, scannedCount, eligibleCount, previousCompleteCount, previousContractCompatible, minByPrevious, filterRuleChanged, baseline: { lookback: MATCH_YIELD_BASELINE_LOOKBACK, minNormalCount: MATCH_YIELD_MIN_NORMAL_COUNT, minBaselineSamples: MATCH_YIELD_MIN_BASELINE_SAMPLES, sampleCount: baselineCounts.length, compatibleSampleCount: compatibleNormalHistory.length, counts: baselineCounts, median: baselineMedian, minByBaseline, minRatioToBaseline: MATCH_YIELD_MIN_RATIO_TO_BASELINE }, eligibleFloor: { minRatioToEligible: MATCH_YIELD_MIN_RATIO_TO_ELIGIBLE, minByEligible }, warnings, issues };
   if (issues.length) throw new Error("Strategy4 match yield guard failed: " + issues.join("; "));
   return guard;
 }
@@ -1245,15 +1250,37 @@ function strategy4RiskFieldsValid(item = {}) {
   const fields = strategy4RiskFields(item);
   return fields.entryPrice > 0 && fields.targetPrice > 0 && fields.stopPrice > 0 && fields.score > 0 && Boolean(fields.zone);
 }
+const STRATEGY4_OBSERVATION_ONLY_SIGNAL_IDS = new Set([
+  "watch_trend",
+  "base_setup",
+  "full_scan_watch",
+  "below_20d_high_8",
+  "lower_half_60d",
+]);
+
+function strategy4SignalIds(item = {}) {
+  const source = Array.isArray(item.signals) && item.signals.length ? item.signals : item.swingSignals;
+  return normalizeArray(source)
+    .map((signal) => String(signal?.id || signal?.key || signal?.type || "").trim())
+    .filter(Boolean);
+}
+
+function strategy4HasActionableSignal(item = {}) {
+  return strategy4SignalIds(item).some((id) => !STRATEGY4_OBSERVATION_ONLY_SIGNAL_IDS.has(id));
+}
+
 function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, dataSourceCounts, complete, runMode, scanStamp, volumeFilter, quoteLiquidityFilter, supabaseCoverage, insufficientHistory = [] }) {
   const expectedMatchDate = normalizeIsoDate(scanStamp) || scanDateFromOutput({ scanStamp });
   const allMatches = [...currentMatches.values()];
   const staleMatches = allMatches.filter((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate) !== expectedMatchDate);
   const dateAlignedMatches = allMatches.filter((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate) === expectedMatchDate);
   const invalidRiskMatches = dateAlignedMatches.filter((item) => !strategy4RiskFieldsValid(item));
+  const observationOnlyMatches = dateAlignedMatches.filter((item) => strategy4RiskFieldsValid(item) && !strategy4HasActionableSignal(item));
   // invalid_risk_row_filter_v1: published Strategy4 rows must have positive entry/target/stop/score and a zone.
+  // observation_only_filter_v1: scan/watch/position annotations prove coverage, but are not Strategy4 matches.
   const matches = dateAlignedMatches
     .filter(strategy4RiskFieldsValid)
+    .filter(strategy4HasActionableSignal)
     .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0))
     .map((item, index) => ({ ...item, rank: index + 1 }));
   const noDataCount = noDataCodes.size;
@@ -1324,6 +1351,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
   return {
     ok: true,
     schemaVersion: STRATEGY4_CACHE_SCHEMA_VERSION,
+    matchClassificationContract: "strategy4_actionable_patterns_v1",
     volumeUnit: STRATEGY4_VOLUME_UNIT,
     source: baseComplete ? "github-actions" : "github-actions-partial",
     dataContractSource: strategy4VolumeCacheSource,
@@ -1382,6 +1410,13 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     invalidRiskFilteredCount: invalidRiskMatches.length,
     invalidRiskFilteredCodes: invalidRiskMatches.map((item) => item.code).filter(Boolean).slice(0, 80),
     count: matches.length,
+    matchedCount: matches.length,
+    observationOnlyCount: observationOnlyMatches.length,
+    observationOnlySample: observationOnlyMatches.slice(0, 20).map((item) => ({
+      code: item.code,
+      name: item.name || item.code,
+      signalIds: strategy4SignalIds(item),
+    })),
     triangleBreakoutCount,
     matches,
   };
@@ -2170,6 +2205,8 @@ module.exports = {
   buildSupabaseScanRows,
   buildStrategy4PrePublishSelfTest,
   assertStrategy4MatchYieldGuard,
+  strategy4HasActionableSignal,
+  strategy4SignalIds,
 };
 
 
