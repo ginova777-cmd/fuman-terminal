@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const HEALTH_RECEIPT = process.env.FUMAN_CHIP_SOURCE_HEALTH_RECEIPT || path.join(RUNTIME_DIR, "state", "chip-source-health-latest.json");
 const SUPABASE_URL = String(
   process.env.SUPABASE_URL
   || process.env.FUMAN_SUPABASE_URL
@@ -75,8 +76,16 @@ async function fetchRows(table, select, query = "") {
   }
 }
 
+function writeHealthReceipt(payload) {
+  fs.mkdirSync(path.dirname(HEALTH_RECEIPT), { recursive: true });
+  const temporary = `${HEALTH_RECEIPT}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+  fs.renameSync(temporary, HEALTH_RECEIPT);
+}
+
 async function main() {
   const maxAgeDays = Math.max(0, Number(process.env.CHIP_SOURCE_HEALTH_MAX_AGE_DAYS ?? 3));
+  const marginMaxAgeDays = Math.max(0, Number(process.env.CHIP_MARGIN_HEALTH_MAX_AGE_DAYS ?? 1));
   const healthRows = await fetchRows(
     "v_institution_source_health",
     [
@@ -100,8 +109,16 @@ async function main() {
     "order=trade_date.desc&limit=5"
   );
   const health = healthRows[0] || {};
-  const latestTradeDate = compactDate(health.latest_trade_date || chipRows[0]?.trade_date);
+  // The formal institution/unified feed is the primary 21:00 date authority.
+  // Official margin data may legally publish one day later and must not drag the
+  // whole chip chain back when current-day institution coverage is complete.
+  const institutionalTradeDate = compactDate(health.institutional_latest_trade_date);
+  const unifiedTradeDate = compactDate(health.unified_latest_trade_date || chipRows[0]?.trade_date);
+  const marginTradeDate = compactDate(health.margin_latest_trade_date);
+  const latestTradeDate = unifiedTradeDate || institutionalTradeDate || compactDate(chipRows[0]?.trade_date);
   const latestAgeDays = dateAgeDays(latestTradeDate);
+  const institutionalAgeDays = dateAgeDays(institutionalTradeDate);
+  const marginAgeDays = dateAgeDays(marginTradeDate);
   const coverageStatus = String(health.coverage_status || "").toLowerCase();
   const issues = [];
   if (!["ready", "ok", "healthy", "complete"].includes(coverageStatus)) {
@@ -109,26 +126,50 @@ async function main() {
   }
   if (latestAgeDays == null) issues.push("latest_trade_date missing");
   else if (latestAgeDays > maxAgeDays) issues.push(`latest_trade_date=${latestTradeDate} age=${latestAgeDays}d>${maxAgeDays}d`);
+  if (institutionalAgeDays == null) issues.push("institutional_latest_trade_date missing");
+  else if (institutionalAgeDays > maxAgeDays) issues.push(`institutional_latest_trade_date=${institutionalTradeDate} age=${institutionalAgeDays}d>${maxAgeDays}d`);
+  if (marginAgeDays == null) issues.push("margin_latest_trade_date missing");
+  else if (marginAgeDays > marginMaxAgeDays) issues.push(`margin_latest_trade_date=${marginTradeDate} age=${marginAgeDays}d>${marginMaxAgeDays}d`);
   if (Number(health.institutional_rows || 0) <= 0) issues.push("institutional_rows<=0");
   if (Number(health.margin_rows || 0) <= 0) issues.push("margin_rows<=0");
   if (!chipRows.length) issues.push("v_chip_flows_latest empty");
 
   const payload = {
+    contract: "fuman-chip-source-health-v1",
+    readOnly: true,
+    tradeDate: taipeiDateKey(),
     ok: issues.length === 0,
     checkedAt: new Date().toISOString(),
     maxAgeDays,
+    marginMaxAgeDays,
     latestTradeDate,
     latestAgeDays,
+    institutionalTradeDate,
+    institutionalAgeDays,
+    unifiedTradeDate,
+    marginTradeDate,
+    marginAgeDays,
     coverageStatus: health.coverage_status || "",
     health,
     chipLatest: chipRows,
     issues,
   };
+  writeHealthReceipt(payload);
   console.log(JSON.stringify(payload, null, 2));
   if (issues.length) process.exit(1);
 }
 
 main().catch((error) => {
-  console.error(JSON.stringify({ ok: false, error: error?.message || String(error) }, null, 2));
+  const payload = {
+    contract: "fuman-chip-source-health-v1",
+    readOnly: true,
+    tradeDate: taipeiDateKey(),
+    ok: false,
+    checkedAt: new Date().toISOString(),
+    error: error?.message || String(error),
+    issues: ["chip_source_health_exception"],
+  };
+  try { writeHealthReceipt(payload); } catch {}
+  console.error(JSON.stringify(payload, null, 2));
   process.exit(1);
 });
