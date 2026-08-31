@@ -5931,6 +5931,47 @@ async function captureFutoptPreopenBaseline(futoptRows) {
   }
 }
 
+function writeFutoptSpotJointStrengthReceipt(priorityRows) {
+  const tradeDate = taipeiDate();
+  const checkedAt = nowIso();
+  const rows = (priorityRows || []).filter((row) => row.payload?.motherPoolMetrics?.stockFutureIntradaySpotJointStrength === true);
+  const matchedSymbols = rows.map((row) => ({
+    symbol: normalizeCode(row.symbol),
+    name: row.name || normalizeCode(row.symbol),
+    priority_rank: numberValue(row.priority_rank),
+    pool_layer: row.payload?.pool_layer || "priority_pool",
+    deep_scan_eligible: row.payload?.deep_scan_eligible === true,
+    candles_priority_required: row.payload?.candles_priority_required === true,
+    spot_change_percent: numberValue(row.payload?.motherPoolMetrics?.changePercent),
+    futopt_change_percent: numberValue(row.payload?.motherPoolMetrics?.stockFutureInitial0846?.futoptChangePercent),
+    futopt_total_volume: numberValue(row.payload?.motherPoolMetrics?.stockFutureInitial0846?.futoptTotalVolume),
+    futopt_updated_at: row.payload?.motherPoolMetrics?.stockFutureInitial0846?.futoptUpdatedAt || "",
+    reason_code: "intraday_futopt_spot_joint_strength",
+  }));
+  const receipt = {
+    ok: true,
+    contract: "daytrade_futopt_spot_joint_strength_receipt_v1",
+    runner: "run-daytrade-source-writer.js",
+    trade_date: tradeDate,
+    run_id: SOURCE_NAME + ":" + compactDateKey(tradeDate) + ":futopt-spot-joint-strength",
+    checked_at: checkedAt,
+    status: matchedSymbols.length ? "MATCHED" : "NO_MATCH",
+    matched_count: matchedSymbols.length,
+    matched_symbols: matchedSymbols,
+    allowed_action: "boost_mother_priority_hot_deep_scan_only",
+    formal_candidate_count: 0,
+    formal_candidate_allowed: false,
+    forbidden_publish_guard: true,
+    first_blocker: null,
+  };
+  if (!DRY_RUN) {
+    const receiptDir = runtimePath("data", "scan-receipts");
+    fs.mkdirSync(receiptDir, { recursive: true });
+    writeJson(path.join(receiptDir, `daytrade-futopt-spot-joint-strength-${compactDateKey(tradeDate)}.json`), receipt);
+  }
+  return receipt;
+}
+
 async function tick() {
   await ensureWriterLease();
   const state = readWriterState();
@@ -6320,6 +6361,7 @@ async function tick() {
   result.payload.full_market_volume_surge_top100_candidates = intradaySignalEvidence.volumeSurgeTop100Candidates;
   result.payload.full_market_bullish_gain_volume_candidate_count = intradaySignalEvidence.bullishGainVolumeCandidateCount;
   result.payload.full_market_volume_surge_top100_candidate_count = intradaySignalEvidence.volumeSurgeTop100CandidateCount;
+  result.payload.futopt_spot_joint_strength_receipt = writeFutoptSpotJointStrengthReceipt(priorityRows);
   await writeStatusAndScorecard(result);
   const offSession = Boolean(result.payload.off_session);
   return {
