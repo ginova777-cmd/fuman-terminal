@@ -22,6 +22,7 @@ const statusFile = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-sta
 const sourceReceipt = path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-v2-readiness-${compactDate}.json`);
 const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles.json");
 const MIN_LOCAL_COVERAGE_RATIO = Math.max(0.9, Number(process.env.STRATEGY3_V2_MIN_LOCAL_COVERAGE_RATIO || 0.9));
+const { loadStrategy3MotherPool } = require("../lib/strategy3-mother-pool-universe");
 
 function issue(list, condition, code, details = {}) {
   if (!condition) list.push({ code, ...details });
@@ -49,7 +50,7 @@ function readCacheArray(file, key) {
   };
 }
 
-function readLocalFormalCacheReadiness() {
+function readLocalFormalCacheReadiness(motherPool) {
   const candleCache = readCacheArray(candleCachePath, "candles");
   const candlesByCode = new Map();
   for (const candle of candleCache.rows) {
@@ -60,17 +61,19 @@ function readLocalFormalCacheReadiness() {
     candlesByCode.set(code, candlesByCode.get(code) + 1);
   }
   let ready20Count = 0;
-  for (const count of candlesByCode.values()) {
+  for (const symbol of motherPool.symbols) {
+    const count = candlesByCode.get(symbol) || 0;
     if (count >= MIN_CANDLES_PER_SYMBOL) ready20Count += 1;
   }
-  const coverageRatio = MIN_READY_SYMBOLS > 0 ? ready20Count / MIN_READY_SYMBOLS : 0;
+  const coverageRatio = motherPool.expectedCount > 0 ? ready20Count / motherPool.expectedCount : 0;
   return {
-    ok: coverageRatio >= MIN_LOCAL_COVERAGE_RATIO,
-    source: "local_fugle_daytrade_ws_candles_cache",
+    ok: motherPool.ok && coverageRatio >= MIN_LOCAL_COVERAGE_RATIO,
+    source: "canonical_daytrade_mother_pool_intersect_local_fugle_daytrade_ws_candles_cache",
     tradeDate: date,
     sameDayCandleSymbols: candlesByCode.size,
     localReady20CandleSymbols: ready20Count,
-    minimumReadySymbols: MIN_READY_SYMBOLS,
+    motherPoolExpectedCount: motherPool.expectedCount,
+    minimumReadySymbols: Math.ceil(motherPool.expectedCount * MIN_LOCAL_COVERAGE_RATIO),
     minimumCandlesPerSymbol: MIN_CANDLES_PER_SYMBOL,
     coverageRatio: Math.round(coverageRatio * 10000) / 10000,
     minimumCoverageRatio: MIN_LOCAL_COVERAGE_RATIO,
@@ -110,9 +113,10 @@ function runMotherPoolReadback() {
 
 function main() {
   const ws = readJson(statusFile, {});
+  const motherPoolUniverse = loadStrategy3MotherPool({ runtimeDir: RUNTIME_DIR, tradeDate: date, readJson });
   const motherPoolRun = runMotherPoolReadback();
   const mother = motherPoolRun.payload || {};
-  const localFormalCache = readLocalFormalCacheReadiness();
+  const localFormalCache = readLocalFormalCacheReadiness(motherPoolUniverse);
   const issues = [];
   const diagnostics = [];
 
@@ -135,7 +139,7 @@ function main() {
 
   const motherTradeDate = String(mother.tradeDate || mother.trade_date || "");
   const motherReadyCount = Number(mother.sessionReadyCount || mother.mother_pool_ready_symbols || mother.readyCount || 0);
-  const motherMinimum = Math.max(MIN_READY_SYMBOLS, Number(mother.minIntraday1mCandidates || mother.minimum_ready_symbols || 0));
+  const motherMinimum = Math.ceil(motherPoolUniverse.expectedCount * MIN_LOCAL_COVERAGE_RATIO);
   const source = String(mother.source || mother.formal_readiness_source || "");
   const sameDay = motherTradeDate === date;
   const sourceOk = source === "v_fugle_daytrade_intraday_1m_status"
@@ -150,7 +154,7 @@ function main() {
     && motherReadyCount >= motherMinimum
     && latestMinuteOk;
   const v2LocalReady = localFormalCache.ok === true;
-  const readinessReady = motherReady || v2LocalReady;
+  const readinessReady = motherPoolUniverse.ok && (motherReady || v2LocalReady);
   const gateIssues = v2LocalReady ? diagnostics : issues;
 
   issue(gateIssues, motherPoolRun.exitCode === 0, "mother_pool_readback_exit_nonzero", { exitCode: motherPoolRun.exitCode, stderrTail: motherPoolRun.stderrTail, error: motherPoolRun.error });
@@ -160,7 +164,8 @@ function main() {
   }
   issue(gateIssues, sameDay, "mother_pool_trade_date_mismatch", { tradeDate: motherTradeDate, expected: date });
   issue(gateIssues, sourceOk, "mother_pool_formal_source_not_allowed", { source });
-  issue(gateIssues, motherReadyCount >= motherMinimum, "mother_pool_ready_symbols_below_1000", { readyCount: motherReadyCount, required: motherMinimum });
+  issue(gateIssues, motherPoolUniverse.ok, "strategy3_canonical_mother_pool_not_ready", { issues: motherPoolUniverse.issues });
+  issue(gateIssues, motherReadyCount >= motherMinimum, "mother_pool_ready_symbols_below_canonical_coverage", { readyCount: motherReadyCount, required: motherMinimum, expectedCount: motherPoolUniverse.expectedCount });
   issue(gateIssues, latestMinuteOk, "mother_pool_latest_minute_before_1300_window", { sessionLatestMinute, required: 770 });
   issue(issues, readinessReady, "strategy3_v2_readiness_sources_not_ready", { motherReady, v2LocalReady });
 
@@ -179,6 +184,7 @@ function main() {
       motherPoolReadySymbols: motherMinimum,
     },
     local_formal_cache: localFormalCache,
+    mother_pool_universe: { source: motherPoolUniverse.source, file: motherPoolUniverse.file, tradeDate: motherPoolUniverse.tradeDate, expectedCount: motherPoolUniverse.expectedCount, requiredReadyCount: motherMinimum, issues: motherPoolUniverse.issues },
     mother_pool: {
       exitCode: motherPoolRun.exitCode,
       source,

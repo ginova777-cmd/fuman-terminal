@@ -404,6 +404,7 @@
     "strategy3-v2:line:dry-run": "node --use-system-ca scripts/send-strategy3-v2-line-card.js --dry-run",
     "verify:strategy3-v2-full-closure": "node --use-system-ca scripts/verify-strategy3-v2-full-closure.js",
     "verify:strategy3-v2-water-universe": "node --use-system-ca scripts/verify-strategy3-v2-water-universe.js",
+    "verify:strategy3-v2-mother-pool-universe": "node scripts/verify-strategy3-v2-mother-pool-universe.js",
     "verify:strategy3-v2-schema-contract": "node --use-system-ca scripts/verify-strategy3-v2-schema-contract.js",
     "verify:strategy3-v2-collector-boot-contract": "node --use-system-ca scripts/verify-strategy3-v2-collector-boot-contract.js",
     "strategy2:v3:live": "node --use-system-ca scripts/run-strategy2-v3-live-scan.js --source-event",
