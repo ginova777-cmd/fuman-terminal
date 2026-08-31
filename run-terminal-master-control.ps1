@@ -10,6 +10,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $startedAt = Get-Date
+$controllerRunDate = $startedAt.ToString("yyyy-MM-dd")
 $effectiveMode = $Mode
 if ($effectiveMode -eq "Auto") {
   $effectiveMode = if ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("23:10") -and $startedAt.TimeOfDay -lt [TimeSpan]::Parse("23:59")) { "Full" } else { "Checkpoint" }
@@ -62,9 +63,9 @@ if (-not $RequestedCheckpoint) {
     foreach ($history in @(Get-ChildItem -LiteralPath $earlyReceiptDir -Filter "terminal-master-checkpoint-$($startedAt.ToString('yyyyMMdd'))-*.json" -File -ErrorAction SilentlyContinue)) {
       try {
         $prior = Get-Content -LiteralPath $history.FullName -Raw | ConvertFrom-Json
-        $priorDate = if ($prior.tradeDate) { [string]$prior.tradeDate } elseif ($prior.startedAt) { ([datetime]$prior.startedAt).ToString("yyyy-MM-dd") } else { "" }
+        $priorControllerRunDate = if ($prior.controllerRunDate) { [string]$prior.controllerRunDate } elseif ($prior.startedAt) { ([datetime]$prior.startedAt).ToString("yyyy-MM-dd") } else { "" }
         $priorCheckpoint = [string]$prior.checkpointId -replace "-final$", ""
-        if ($priorDate -eq $startedAt.ToString("yyyy-MM-dd") -and $checkpointContracts.Contains($priorCheckpoint)) {
+        if ($priorControllerRunDate -eq $controllerRunDate -and $checkpointContracts.Contains($priorCheckpoint)) {
           $processedCheckpointIds += $priorCheckpoint
         }
       } catch { }
@@ -181,6 +182,7 @@ try {
       status = "BLOCKED"
       allowedStatuses = @("PASS", "SELF_HEALED_PASS", "FAIL_CLOSED", "BLOCKED")
       firstBlocker = "master_controller_already_running"
+      controllerRunDate = $controllerRunDate
       tradeDate = $startedAt.ToString("yyyy-MM-dd")
       runId = $null
       keyCounts = [ordered]@{ expectedCount=$null; scannedCount=$null; resultCount=$null; dataGapCount=$null; formalWaterCoverageRatio=$null }
@@ -227,6 +229,7 @@ try {
       status = "FAIL_CLOSED"
       allowedStatuses = @("PASS", "SELF_HEALED_PASS", "FAIL_CLOSED", "BLOCKED")
       firstBlocker = "market_calendar_unavailable_fail_closed"
+      controllerRunDate = $controllerRunDate
       tradeDate = if ($marketCalendar.tradeDate) { [string]$marketCalendar.tradeDate } else { $startedAt.ToString("yyyy-MM-dd") }
       runId = $null
       keyCounts = [ordered]@{ expectedCount=$null; scannedCount=$null; resultCount=$null; dataGapCount=$null; formalWaterCoverageRatio=$null }
@@ -601,6 +604,7 @@ try {
     else { $null }
   # Stable evidence envelope: every checkpoint receipt exposes the same audit fields.
   $canonicalEvidence = [ordered]@{
+    controllerRunDate = $controllerRunDate
     tradeDate = $startedAt.ToString("yyyy-MM-dd")
     runId = $null
     expectedCount = $null
@@ -696,6 +700,7 @@ try {
     originalTaskWait = $originalTaskWait
     originalTaskWaitFailure = $originalTaskWaitFailure
     dailyCheckpointCoverage = $dailyCheckpointCoverage
+    controllerRunDate = $controllerRunDate
     tradeDate = $canonicalEvidence.tradeDate
     runId = $canonicalEvidence.runId
     keyCounts = [ordered]@{
@@ -801,6 +806,7 @@ try {
     status = "FAIL_CLOSED"
     allowedStatuses = @("PASS", "SELF_HEALED_PASS", "FAIL_CLOSED", "BLOCKED")
     firstBlocker = "master_controller_exception"
+    controllerRunDate = $controllerRunDate
     tradeDate = $startedAt.ToString("yyyy-MM-dd")
     runId = $null
     keyCounts = [ordered]@{ expectedCount=$null; scannedCount=$null; resultCount=$null; dataGapCount=$null; formalWaterCoverageRatio=$null }

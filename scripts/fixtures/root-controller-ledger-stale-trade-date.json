@@ -1,0 +1,7 @@
+{
+  "controllerRunDate": "2026-08-31",
+  "tradeDate": "2026-08-28",
+  "checkpointId": "12:30",
+  "startedAt": "2026-08-31T12:30:01+08:00",
+  "expectedNextCheckpointAt1240": "12:40"
+}

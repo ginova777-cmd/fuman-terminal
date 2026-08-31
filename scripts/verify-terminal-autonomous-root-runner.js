@@ -256,6 +256,17 @@ async function main() {
     if (windowsTask.installed && !windowsTask.hasS4U) addIssue(issues, "windows_task_not_s4u_unattended", { raw: windowsTask.raw.slice(0, 1200), xml: windowsTask.xmlRaw.slice(0, 1200) });
   }
 
+  const ledgerFixture = JSON.parse(readText("scripts/fixtures/root-controller-ledger-stale-trade-date.json"));
+  const fixtureProcessed = ledgerFixture.controllerRunDate === "2026-08-31" ? [ledgerFixture.checkpointId] : [];
+  const fixtureDue = ["12:30", "12:40"];
+  const fixtureNext = fixtureDue.find((checkpoint) => !fixtureProcessed.includes(checkpoint));
+  const ledgerDateIsolationOk = fixtureNext === ledgerFixture.expectedNextCheckpointAt1240
+    && masterRunner.includes("$priorControllerRunDate")
+    && masterRunner.includes("$prior.controllerRunDate")
+    && masterRunner.includes("controllerRunDate = $controllerRunDate")
+    && !masterRunner.includes("$priorDate = if ($prior.tradeDate)");
+  if (!ledgerDateIsolationOk) addIssue(issues, "controller_ledger_must_ignore_strategy_trade_date", { fixtureNext });
+
   const payload = {
     ok: issues.length === 0,
     contract: "terminal-autonomous-root-runner-contract-v1",
@@ -294,6 +305,7 @@ async function main() {
       disabled: legacyConflictTask.disabled,
       exitCode: legacyConflictTask.exitCode,
     },
+    ledgerDateIsolation: { ok: ledgerDateIsolationOk, fixture: ledgerFixture, computedNextCheckpoint: fixtureNext },
     guarantees: [
       "one master-control wrapper is the only scheduled and npm controller entrypoint",
       "Windows task wakes the same read-only verifier at each due checkpoint",
