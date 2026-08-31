@@ -50,6 +50,7 @@ const FORMAL_LIVE_MIRROR_MS = Math.max(30000, Number(process.env.FUGLE_FUTOPT_FO
 const FORMAL_LIVE_MIRROR_RETRIES = Math.max(1, Math.min(4, Number(process.env.FUGLE_FUTOPT_FORMAL_LIVE_MIRROR_RETRIES || 3)));
 const FORMAL_LIVE_MIRROR_BACKOFF_MS = Math.max(250, Number(process.env.FUGLE_FUTOPT_FORMAL_LIVE_MIRROR_BACKOFF_MS || 1000));
 const FORMAL_LIVE_MIRROR_TIMEOUT_MS = Math.max(1000, Number(process.env.FUGLE_FUTOPT_FORMAL_LIVE_MIRROR_TIMEOUT_MS || 10000));
+const FORMAL_LIVE_MIRROR_BATCH_SIZE = Math.max(25, Math.min(100, Number(process.env.FUGLE_FUTOPT_FORMAL_LIVE_MIRROR_BATCH_SIZE || 50)));
 const CACHE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_FUTOPT_WS_CACHE_TTL_MS || 5 * 60 * 1000));
 const STREAMING_AFTER_HOURS_RAW = String(process.env.FUGLE_FUTOPT_STREAMING_AFTER_HOURS || "").trim().toLowerCase();
 const STREAMING_AFTER_HOURS = /^(1|true|yes|on)$/.test(STREAMING_AFTER_HOURS_RAW)
@@ -294,6 +295,14 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function chunkRows(rows, batchSize) {
+  const batches = [];
+  for (let index = 0; index < rows.length; index += batchSize) {
+    batches.push(rows.slice(index, index + batchSize));
+  }
+  return batches;
+}
+
 async function fetchWithTimeout(url, options, timeoutMs = FORMAL_LIVE_MIRROR_TIMEOUT_MS) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -360,6 +369,9 @@ async function mirrorFormalFutoptLive() {
     interval_seconds: Math.round(FORMAL_LIVE_MIRROR_MS / 1000),
     retry_limit: FORMAL_LIVE_MIRROR_RETRIES,
     attempts: 0,
+    batch_size: FORMAL_LIVE_MIRROR_BATCH_SIZE,
+    batch_count: 0,
+    written_batches: 0,
     status: "pending",
     first_blocker: null,
   };
@@ -381,38 +393,50 @@ async function mirrorFormalFutoptLive() {
     writeJson(FORMAL_LIVE_MIRROR_RECEIPT_FILE, receipt);
     return receipt;
   }
-  for (let attempt = 1; attempt <= FORMAL_LIVE_MIRROR_RETRIES; attempt += 1) {
-    receipt.attempts = attempt;
-    try {
-      const response = await fetchWithTimeout(`${baseUrl}/rest/v1/fugle_daytrade_futopt_quotes_live?on_conflict=future_symbol`, {
-        method: "POST",
-        headers: {
-          apikey: apiKey,
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          Prefer: "resolution=merge-duplicates,return=minimal",
-        },
-        body: JSON.stringify(rows),
-      });
-      if (!response.ok) throw Object.assign(new Error(`futopt_formal_live_mirror_http_${response.status}`), { status: response.status });
-      receipt.status = "written";
-      writeJson(FORMAL_LIVE_MIRROR_RECEIPT_FILE, receipt);
-      return receipt;
-    } catch (error) {
-      const status = Number(error?.status || 0);
-      receipt.last_error = error?.message || String(error);
-      if (attempt >= FORMAL_LIVE_MIRROR_RETRIES || !retryableFormalLiveMirrorError(status)) {
-        receipt.status = "retry_exhausted";
-        receipt.first_blocker = status ? `futopt_formal_live_mirror_http_${status}` : "futopt_formal_live_mirror_exception";
+  const batches = chunkRows(rows, FORMAL_LIVE_MIRROR_BATCH_SIZE);
+  receipt.batch_count = batches.length;
+  for (const [batchIndex, batch] of batches.entries()) {
+    let batchWritten = false;
+    for (let attempt = 1; attempt <= FORMAL_LIVE_MIRROR_RETRIES; attempt += 1) {
+      receipt.attempts += 1;
+      try {
+        const response = await fetchWithTimeout(`${baseUrl}/rest/v1/fugle_daytrade_futopt_quotes_live?on_conflict=future_symbol`, {
+          method: "POST",
+          headers: {
+            apikey: apiKey,
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            Prefer: "resolution=merge-duplicates,return=minimal",
+          },
+          body: JSON.stringify(batch),
+        });
+        if (!response.ok) throw Object.assign(new Error(`futopt_formal_live_mirror_http_${response.status}`), { status: response.status });
+        receipt.written_batches += 1;
+        batchWritten = true;
+        break;
+      } catch (error) {
+        const status = Number(error?.status || 0);
+        receipt.last_error = error?.message || String(error);
+        if (attempt >= FORMAL_LIVE_MIRROR_RETRIES || !retryableFormalLiveMirrorError(status)) {
+          receipt.status = "retry_exhausted";
+          receipt.failed_batch_index = batchIndex;
+          receipt.failed_batch_rows = batch.length;
+          receipt.first_blocker = status ? `futopt_formal_live_mirror_http_${status}` : "futopt_formal_live_mirror_exception";
+          writeJson(FORMAL_LIVE_MIRROR_RECEIPT_FILE, receipt);
+          return receipt;
+        }
+        const delayMs = Math.min(60000, FORMAL_LIVE_MIRROR_BACKOFF_MS * (2 ** (attempt - 1)));
+        receipt.next_retry_at = new Date(Date.now() + delayMs).toISOString();
         writeJson(FORMAL_LIVE_MIRROR_RECEIPT_FILE, receipt);
-        return receipt;
+        await delay(delayMs);
       }
-      const delayMs = Math.min(60000, FORMAL_LIVE_MIRROR_BACKOFF_MS * (2 ** (attempt - 1)));
-      receipt.next_retry_at = new Date(Date.now() + delayMs).toISOString();
-      writeJson(FORMAL_LIVE_MIRROR_RECEIPT_FILE, receipt);
-      await delay(delayMs);
     }
+    if (!batchWritten) return receipt;
   }
+  receipt.status = "written";
+  delete receipt.last_error;
+  delete receipt.next_retry_at;
+  writeJson(FORMAL_LIVE_MIRROR_RECEIPT_FILE, receipt);
   return receipt;
 }
 
