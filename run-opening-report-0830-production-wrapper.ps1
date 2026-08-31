@@ -40,6 +40,9 @@ if ($preDelivery.exitCode -ne 0) {
     terminal_delivery_allowed = $false
     telegram_delivery_allowed = $false
     mother_pool_bridge_allowed = $false
+    bridge_handoff_required = $true
+    bridge_completed_inside_delivery_chain = $false
+    bridge_deferred_outside_delivery_chain = $false
     steps = @($preDelivery)
   } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8
   exit 1
@@ -82,7 +85,10 @@ $ok = $run.exitCode -eq 0 -and $contract.exitCode -eq 0 -and $terminal.exitCode 
   telegram_required = $false
   formal_candidates = 0
   watchlist_only = $true
-  mother_pool_bridge_allowed = $false
+  mother_pool_bridge_allowed = $true
+  bridge_handoff_required = $true
+  bridge_completed_inside_delivery_chain = $true
+  bridge_deferred_outside_delivery_chain = $false
   second_formal_run_allowed = $false
   steps = @($preDelivery, $run, $contract, $terminal, $telegram)
 } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8

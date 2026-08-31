@@ -1103,8 +1103,8 @@ async function main() {
     return;
   }
   const mock = hasFlag("--self-test") || hasFlag("--mock-overseas");
-  // Bridge runs after delivery as an optional handoff; it cannot delay report or LINE.
-  const applyBridge = false;
+  // Bridge is a required observation-only handoff consumed read-only by the 08:35 controller.
+  const applyBridge = true;
   if (hasFlag("--send-line")) throw new Error("line_delivery_retired_use_terminal_telegram_codex");
   const sendLine = false;
   const dryRunLine = true;
@@ -1152,13 +1152,32 @@ async function main() {
   const motherPoolBridgeOk = applyBridge
     ? bridgeResults.length > 0 && bridgeResults.every((row) => row.result?.exitCode === 0 && row.verify?.exitCode === 0)
     : null;
+  const bridgeAggregatePath = path.join(RUNTIME_DIR, "data", "scan-receipts", "opening-report-0830-priority-bias-bridge-latest.json");
+  writeJson(bridgeAggregatePath, {
+    contract: "opening-report-0830-priority-bias-bridge-aggregate-v1",
+    received: bridgeResults.length > 0,
+    date: tradeDate,
+    run_id: runId,
+    source: SOURCE,
+    mode: MODE,
+    status: motherPoolBridgeOk === true ? "BRIDGE_OK" : "BRIDGE_FAIL_CLOSED",
+    industry_count: bridgeResults.length,
+    successful_industry_count: bridgeResults.filter((row) => row.result?.exitCode === 0 && row.verify?.exitCode === 0).length,
+    forbidden_publish_guard: true,
+    formal_candidate_count: 0,
+    formal_candidate_allowed: false,
+    allowed_action: ALLOWED_ACTION,
+    forbidden_action: FORBIDDEN_ACTION,
+    bridge_results: bridgeResults.map((row) => ({ industry: row.industry, receipt_path: row.receiptPath, apply_exit_code: row.result?.exitCode ?? null, verify_exit_code: row.verify?.exitCode ?? null })),
+    checked_at: timestamp(),
+  });
   const lineReceiptPath = path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`);
   writeJson(lineReceiptPath, lineReceipt);
   const reportCoreOk = Boolean(reportPath) && fs.existsSync(reportPath);
   const lineDeliveryOk = !sendLine || lineReceipt.line_push_ok === true;
   const overseasSnapshotReadable = marketSnapshotRows(marketSnapshot).some((row) => hasMarketPercent(row.percent));
   const reportDataStatus = overseasPreflight.ok === true && overseasSnapshotReadable ? "REPORT_OK" : "REPORT_DEGRADED";
-  const reportOk = reportCoreOk && lineDeliveryOk;
+  const reportOk = reportCoreOk && lineDeliveryOk && motherPoolBridgeOk === true;
   const motherPoolBridgeStatus = applyBridge
     ? (motherPoolBridgeOk === true ? "BRIDGE_OK" : "BRIDGE_FAIL_CLOSED")
     : "BRIDGE_NOT_REQUESTED";
@@ -1174,7 +1193,7 @@ async function main() {
     stage_status: {
       report_core: reportCoreOk ? "PASS" : "FAIL",
       line_flex_card: lineDeliveryOk ? (sendLine ? "PASS" : "SKIP_DRY_RUN") : "FAIL",
-      mother_pool_priority_bias_bridge: motherPoolBridgeOk === true ? "PASS" : "OPTIONAL_FAIL_CLOSED",
+      mother_pool_priority_bias_bridge: motherPoolBridgeOk === true ? "PASS" : "FAIL_CLOSED",
       taiwan_formal_gate: "NOT_PART_OF_0830_REPORT",
     },
     overseas_sources_ok: overseasPreflight.ok === true && overseasSnapshotReadable,
@@ -1188,7 +1207,8 @@ async function main() {
     mother_pool_bridge_attempted: applyBridge,
     mother_pool_bridge_ok: motherPoolBridgeOk,
     mother_pool_bridge_status: motherPoolBridgeStatus,
-    mother_pool_bridge_optional_handoff: true,
+    mother_pool_bridge_required_handoff: true,
+    bridge_aggregate_receipt: bridgeAggregatePath,
     line_push_attempted: sendLine,
     line_push_ok: lineReceipt.line_push_ok,
     line_message_type: lineReceipt.message_type || "flex",
