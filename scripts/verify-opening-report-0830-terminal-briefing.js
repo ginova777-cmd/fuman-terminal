@@ -28,7 +28,7 @@ assert(apiSource.includes("opening_report_0830_final_receipt_missing"), "missing
 assert(apiSource.includes("readOpeningShortwave") && apiSource.includes("strategy5"), "shortwave sources must include Strategy5 previous closed run");
 assert(apiSource.includes("readOpeningMorningReportSnapshot") && apiSource.includes("opening_report_0830_terminal_briefing"), "market-ai-live must read opening report terminal briefing snapshot");
 assert(runnerSource.includes("upsertSnapshot") && runnerSource.includes("syncTerminalBriefingSnapshot") && runnerSource.includes("opening_report_0830_terminal_briefing"), "08:30 runner must upsert terminal briefing snapshot");
-assert(wrapperSource.includes("opening-report-0830-wrapper-v4") && wrapperSource.includes("success_gate = \"delivery_chain\"") && wrapperSource.includes("verify-opening-report-0830-delivery-chain.js") && wrapperSource.includes("production_verifier_does_not_affect_ok"), "08:30 wrapper must use delivery-chain as success gate");
+assert(wrapperSource.includes("opening-report-0830-wrapper-v9-partial-source-gap") && wrapperSource.includes("--pre-delivery") && wrapperSource.includes("telegram_optional"), "08:30 wrapper must preserve terminal delivery when Telegram is optional");
 assert(appSource.includes("installOpeningReport0830TerminalBriefing"), "terminal app missing 08:30 briefing installer");
 assert(appSource.includes("opening-report-0830-sunlight-polish-20260813") && appSource.includes("body.fuman-light-theme .opening-report-0830-briefing"), "terminal app sunlight briefing polish missing");
 assert(appSource.includes("window.__fumanRenderOpeningReport0830=renderBriefing") && appSource.includes("__fumanRenderOpeningReport0830?.(payload?.openingMorningReport"), "opening report render hook missing from live renderer");
@@ -76,7 +76,9 @@ if (briefing.ok) {
 
 const receiptPath = path.join(RUNTIME_ROOT, "data", "opening-report-0830", "opening-report-0830-terminal-briefing-verifier-" + compact + ".json");
 fs.mkdirSync(path.dirname(receiptPath), { recursive: true });
-fs.writeFileSync(receiptPath, JSON.stringify({ ok: true, contract: "opening-report-0830-terminal-briefing-verifier-v1", checked_at: new Date().toISOString(), date: compact, briefing_status: briefing.ok ? "PASS" : "FAIL_CLOSED", reason_code: briefing.reason_code, run_id: briefing.run_id || "", display_label: briefing.display_label, industry_bias_count: briefing.industry_bias?.count || 0 }, null, 2) + "\n", "utf8");
+const finalReceipt = (() => { try { return JSON.parse(fs.readFileSync(path.join(RUNTIME_ROOT, "data", "opening-report-0830", "opening-report-0830-final-receipt-" + compact + ".json"), "utf8")); } catch { return null; } })();
+const contentHash = briefing.ok && briefing.run_id && briefing.run_id === finalReceipt?.run_id ? String(finalReceipt?.delivery_content_hash || "") : "";
+fs.writeFileSync(receiptPath, JSON.stringify({ ok: true, contract: "opening-report-0830-terminal-briefing-verifier-v1", checked_at: new Date().toISOString(), date: compact, briefing_status: briefing.ok ? "PASS" : "FAIL_CLOSED", reason_code: briefing.reason_code, run_id: briefing.run_id || "", content_hash: contentHash, display_label: briefing.display_label, industry_bias_count: briefing.industry_bias?.count || 0 }, null, 2) + "\n", "utf8");
 console.log(JSON.stringify({ ok: true, receipt: receiptPath, briefing_status: briefing.ok ? "PASS" : "FAIL_CLOSED", reason_code: briefing.reason_code, run_id: briefing.run_id || "" }, null, 2));
 
 
