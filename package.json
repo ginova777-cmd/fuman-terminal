@@ -69,7 +69,7 @@
     "verify:fugle-source-contract": "node --use-system-ca scripts/verify-fugle-source-contract.js",
     "verify:unified-source-gate": "node scripts/verify-unified-source-gate-contract.js",
     "verify:source-layer-contract": "node scripts/verify-source-layer-contract.js",
-    "verify:daytrade-source-speed": "node --use-system-ca scripts/verify-daytrade-source-speed-readonly.js",
+    "verify:daytrade-source-speed": "node scripts/verify-daytrade-websocket-transport-readonly.js && node --use-system-ca scripts/verify-daytrade-source-contract-alignment.js && node scripts/verify-daytrade-mother-pool-skeleton.js && node scripts/verify-daytrade-source-speed-retirement-contract.js",
     "verify:daytrade-source-contract-alignment": "node --use-system-ca scripts/verify-daytrade-source-contract-alignment.js",
     "verify:daytrade-mother-pool-skeleton": "node scripts/verify-daytrade-mother-pool-skeleton.js",
     "apply:daytrade-source-contract-alignment": "node --use-system-ca scripts/apply-daytrade-source-contract-alignment.js",
