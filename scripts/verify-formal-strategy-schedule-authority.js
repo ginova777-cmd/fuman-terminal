@@ -5,13 +5,13 @@ const fs = require("fs");
 const path = require("path");
 
 const FORMAL_ROOT = "C:\\fuman-release-owner\\fuman-terminal";
-const FORMAL_ROOT_PATTERN = /^C:\\fuman-release-owner\\fuman-terminal(?:-release-\d{8}-git)?$/i;
-function isFormalRoot(value) { return FORMAL_ROOT_PATTERN.test(String(value || "").trim()); }
-function actionUsesFormalRoot(value) { return /C:\\fuman-release-owner\\fuman-terminal(?:-release-\d{8}-git)?(?:\\|\b)/i.test(String(value || "")); }
+const authorityPath = path.join(FORMAL_ROOT, "data", "contracts", "release_root_authority_v1.json");
+const authority = JSON.parse(fs.readFileSync(authorityPath, "utf8"));
+const PRODUCTION_ROOT = path.resolve(String(authority.productionRoot || ""));
 const expected = [
-  ["Fuman Terminal Autonomous Root Monitor", "run-terminal-master-control.ps1", ["06:05", "07:08", "08:00", "08:20", "08:36", "12:40", "13:15", "16:10", "17:00", "21:40", "22:00", "23:10"]],
-  ["Fuman Daytrade Source Writer 0600-1330", "Run-DaytradeSourceWriter", ["06:00"], { allowRuntimeAction: true }],
-  ["Fuman Fugle Daytrade WebSocket Collector 0600-1330", "Run-DaytradeWebSocketCollector.ps1", ["06:00"]],
+  ["Fuman Terminal Autonomous Root Monitor", "run-terminal-master-control.ps1", ["06:00","06:05","07:00","07:08","08:20","08:29","08:30","08:35","08:36","08:40","08:45","08:50","08:55","09:00","12:30","12:40","12:50","12:55","13:00","13:15","13:30","15:35","16:00","17:00","17:10","17:40","18:10","18:40","19:10","20:05","21:00","21:10","21:15","21:40","22:00","23:10"]],
+  ["Fuman Daytrade Source Writer 0600-1330", "Run-DaytradeSourceWriterPinned.ps1", ["06:00"], { allowRuntimeAction: true, authorityRoot: "production", requireAuthorityArgument: true }],
+  ["Fuman Fugle Daytrade WebSocket Collector 0600-1330", "Run-DaytradeWebSocketCollector.ps1", ["06:00"], { authorityRoot: "production" }],
   ["Fuman Daytrade Source Gate 0700", "Run-DaytradeUnattendedGate.ps1", ["07:00"], { allowRuntimeAction: true }],
   ["Fuman Opening Report 0820 Preflight", "run-opening-report-0820-preflight.js", ["08:20"]],
   ["Fuman Opening Report 0830 Telegram", "run-opening-report-0830-production-wrapper.ps1", ["08:30"]],
@@ -64,9 +64,16 @@ for (const [name, marker, expectedTimes, options = {}] of expected) {
   if (task && task.name !== name) issues.push(`formal_task_name_drift:${name}:${task.name}`);
   const action = `${task?.execute || ""} ${task?.arguments || ""}`;
   const active = task && ["Ready", "Running", "Queued"].includes(String(task.state || ""));
-  const actionRootOk = actionUsesFormalRoot(action) || (options.allowRuntimeAction === true && action.toLowerCase().includes("c:\\fuman-runtime\\ops"));
-  const rootOk = actionRootOk && isFormalRoot(task?.workingDirectory);
-  const markerOk = action.toLowerCase().includes(marker.toLowerCase());
+  const expectedRoot = options.authorityRoot === "production" ? PRODUCTION_ROOT : FORMAL_ROOT;
+  const normalizedAction = action.toLowerCase();
+  const normalizedWorkingDirectory = String(task?.workingDirectory || "").toLowerCase();
+  const actionHasExpectedRoot = normalizedAction.includes(expectedRoot.toLowerCase());
+  const runtimeWrapperOk = options.allowRuntimeAction === true
+    && normalizedAction.includes("c:\\fuman-runtime\\ops")
+    && (options.requireAuthorityArgument !== true || actionHasExpectedRoot);
+  const workingDirectoryOk = !normalizedWorkingDirectory ? actionHasExpectedRoot : normalizedWorkingDirectory === expectedRoot.toLowerCase();
+  const rootOk = (actionHasExpectedRoot || runtimeWrapperOk) && workingDirectoryOk;
+  const markerOk = normalizedAction.includes(marker.toLowerCase());
   const actualTimes = triggerTimes(task);
   const timeOk = JSON.stringify(actualTimes) === JSON.stringify([...expectedTimes].sort());
   if (!task) issues.push(`formal_task_missing:${name}`);
@@ -74,7 +81,7 @@ for (const [name, marker, expectedTimes, options = {}] of expected) {
   if (task && !rootOk) issues.push(`formal_task_root_drift:${name}`);
   if (task && !markerOk) issues.push(`formal_task_runner_mismatch:${name}`);
   if (task && !timeOk) issues.push(`formal_task_time_drift:${name}:expected=${expectedTimes.join(",")}:actual=${actualTimes.join(",") || "missing"}`);
-  evidence.push({ name, state: task?.state || "missing", rootOk, markerOk, timeOk, expectedTimes, actualTimes, lastResult: task?.lastResult ?? null });
+  evidence.push({ name, state: task?.state || "missing", authorityRoot: expectedRoot, rootOk, markerOk, timeOk, expectedTimes, actualTimes, lastResult: task?.lastResult ?? null });
 }
 
 for (const task of tasks) {
@@ -85,7 +92,7 @@ for (const task of tasks) {
   if (/\bCB\b|warrant|權證/i.test(task.name || "")) issues.push(`retired_strategy_task_active:${task.name}`);
 }
 
-for (const name of ["Fuman Strategy2 V3 Water Gate 0845", "Fuman Strategy2 V2 Unattended", "Fuman Strategy2 V2 Recovery", "Fuman Opening Report 0830 Line", "Fuman Opening Report 0830 LINE Bridge", "Fuman Opening Limit Order Morning Readonly 0845", "Fuman Opening Limit Order 0900 Readonly Verify"]) {
+for (const name of ["Fuman Strategy2 Unified 0845-1210", "Fuman Strategy2 V3 Water Gate 0845", "Fuman Strategy2 V2 Unattended", "Fuman Strategy2 V2 Recovery", "Fuman Opening Report 0830 LINE", "Fuman Opening Report 0830 Line", "Fuman Opening Report 0830 LINE Bridge", "Fuman Opening Limit Order Morning Readonly 0845", "Fuman Opening Limit Order 0900 Readonly Verify"]) {
   const task = tasks.find((row) => row.name === name && ["Ready", "Running", "Queued"].includes(String(row.state || "")));
   if (task) issues.push(`retired_formal_task_active:${name}`);
 }
@@ -98,10 +105,11 @@ const strategy2TimelineChecks = {
   preflightAt0845Only: strategy2Runner.includes("08:45 is a single water preflight"),
   scanStartsAt0900: strategy2Runner.includes("$scanStart = (Get-Date).Date.AddHours(9)"),
   finalizeAt1230: strategy2Runner.includes("$finalizeAt = (Get-Date).Date.AddHours(12).AddMinutes(30)"),
-  runner1230Deadline: strategy2Runner.includes("AddMinutes(30)"),
+  runnerHas1230Deadline: strategy2Runner.includes("AddMinutes(30)"),
   liveWindowEnds1230: strategy2Live.includes("clock.minuteOfDay <= (12 * 60 + 30)"),
   waterWindowEnds1230: strategy2Water.includes("clock.minuteOfDay <= (12 * 60 + 30)"),
-  noSleepPastFinalize: strategy2Runner.includes("$remainingSeconds") && strategy2Runner.includes("[Math]::Min(60, $remainingSeconds)"),
+  noSleepPastFinalize: strategy2Runner.includes("$remainingSeconds") && /\[Math\]::Min\((?:60|3), \$remainingSeconds\)/.test(strategy2Runner),
+  oneMinuteEvidenceCadence: strategy2Runner.includes("[Math]::Min(60, $remainingSeconds)") && !strategy2Runner.includes("[Math]::Min(3, $remainingSeconds)"),
 };
 for (const [check, ok] of Object.entries(strategy2TimelineChecks)) {
   if (!ok) issues.push(`strategy2_timeline_drift:${check}`);
@@ -111,6 +119,7 @@ const report = {
   contract: "fuman-formal-strategy-schedule-authority-v1",
   checkedAt: new Date().toISOString(),
   formalRoot: FORMAL_ROOT,
+  productionRoot: PRODUCTION_ROOT,
   expectedTaskCount: expected.length,
   evidence,
   issues,
