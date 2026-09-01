@@ -132,22 +132,27 @@ function normalizePreopen(row) {
 function normalizeMapping(row) {
   const code = normalizeCode(row?.stock_symbol || row?.underlying_symbol || row?.symbol);
   const sourceStatus = String(row?.source_status || "").trim().toLowerCase();
+  const futureSymbol = String(row?.future_symbol || "").trim().toUpperCase();
+  const futureLastPrice = cleanNumber(row?.futopt_last_price);
+  const hasFutureContract = futureSymbol.length > 0 && futureSymbol !== "TXF";
+  const hasQuote = hasFutureContract && futureLastPrice > 0;
   return {
     code,
     name: row?.stock_name || row?.underlying_name || code,
-    futureSymbol: String(row?.future_symbol || "").trim().toUpperCase(),
-    futureLastPrice: cleanNumber(row?.futopt_last_price),
+    futureSymbol,
+    futureLastPrice,
     futurePct: cleanNumber(row?.futopt_change_percent ?? row?.fut_change_percent ?? row?.change_percent),
     txfPct: cleanNumber(row?.txf_change_percent),
     futureRelativeTxf: cleanNumber(row?.relative_to_txf_percent ?? row?.rel_to_txf),
     futureVolume: cleanNumber(row?.futopt_total_volume ?? row?.total_volume),
     quoteUpdatedAt: row?.futopt_updated_at || row?.quote_updated_at || row?.updated_at || "",
     quoteAgeSeconds: cleanNumber(row?.quote_age_seconds),
-    hasMapping: normalizeBool(row?.has_mapping) || row?.source_status !== undefined,
-    hasQuote: normalizeBool(row?.has_quote) || row?.source_status !== undefined,
-    quoteFresh180s: normalizeBool(row?.quote_fresh_180s) || sourceStatus === "ready",
-    sourceStatus,
-    futoptReady: normalizeBool(row?.futopt_ready) || sourceStatus === "ready",
+    hasFutureContract,
+    hasMapping: hasFutureContract && (normalizeBool(row?.has_mapping) || row?.source_status !== undefined),
+    hasQuote: hasQuote && (normalizeBool(row?.has_quote) || row?.source_status !== undefined),
+    quoteFresh180s: hasQuote && (normalizeBool(row?.quote_fresh_180s) || sourceStatus === "ready"),
+    sourceStatus: hasFutureContract ? sourceStatus : "no_contract",
+    futoptReady: hasQuote && (normalizeBool(row?.futopt_ready) || sourceStatus === "ready"),
     sourceTables: row?.source_status !== undefined ? ["v_stock_future_live_contract"] : ["v_futopt_stock_mapping_ready"],
   };
 }

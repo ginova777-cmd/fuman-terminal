@@ -79,9 +79,11 @@ function normalizeIso(value, fallback = "") {
 }
 
 function taipeiDate(value = new Date()) {
+  const instant = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(instant.getTime())) return "";
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit",
-  }).formatToParts(value);
+  }).formatToParts(instant);
   const get = (type) => parts.find((part) => part.type === type)?.value || "";
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
@@ -224,10 +226,21 @@ function tickerUnderlying(row) {
 }
 
 function tickerExpiry(row) {
-  return parseExpiry(row?.end_date || row?.expiry_date || row?.payload?.end_date || row?.payload?.expiry_date);
+  return parseExpiry(row?.end_date || row?.endDate || row?.expiry_date || row?.expiryDate || row?.payload?.end_date || row?.payload?.endDate || row?.payload?.expiry_date || row?.payload?.expiryDate);
 }
 
 async function readTickerMap(tradeDate) {
+  const liveMappings = await supabaseGetPaged(
+    "fugle_daytrade_futopt_quotes_live",
+    "select=future_symbol,underlying_symbol,updated_at&order=updated_at.desc",
+    { service: true, pageSize: 1000 },
+  );
+  const underlyingByFuture = new Map();
+  for (const row of liveMappings) {
+    const future = normalizeFutureSymbol(row?.future_symbol);
+    const underlying = normalizeCode(row?.underlying_symbol);
+    if (future && underlying && !underlyingByFuture.has(future)) underlyingByFuture.set(future, underlying);
+  }
   const rows = await supabaseGetPaged(
     "futopt_tickers",
     "select=future_symbol,name,product,contract_type,end_date,exchange,underlying_name,underlying_symbol,session,updated_at,payload&order=underlying_symbol.asc,end_date.asc",
@@ -235,8 +248,8 @@ async function readTickerMap(tradeDate) {
   );
   const byUnderlying = new Map();
   for (const row of rows) {
-    const symbol = tickerUnderlying(row);
     const futureSymbol = normalizeFutureSymbol(row?.future_symbol);
+    const symbol = tickerUnderlying(row) || underlyingByFuture.get(futureSymbol) || "";
     const expiry = tickerExpiry(row);
     const product = String(row?.product || row?.payload?.product || "").toUpperCase();
     if (!symbol || !futureSymbol || product === "TXF" || futureSymbol.startsWith("TXF")) continue;
@@ -316,17 +329,31 @@ async function readPreopenRows(symbols) {
     const filter = group.map((symbol) => encodeURIComponent(symbol)).join(",");
     rows.push(...await supabaseGetPaged(
       "fugle_preopen_snapshot",
-      `select=symbol,updated_at,reference_price,trial_price,trial_change_pct,best_bid_price,best_ask_price,bid_volume,ask_volume,bid1_price,bid1_volume,ask1_price,ask1_volume,payload&symbol=in.(${filter})&order=updated_at.desc`,
+      `select=symbol,updated_at,reference_price,trial_price,best_bid_price,best_ask_price,bid_volume,ask_volume,bid1_price,bid1_volume,ask1_price,ask1_volume,payload&symbol=in.(${filter})&order=updated_at.desc`,
       { service: true, pageSize: 200 },
     ));
   }
+  for (let offset = 0; offset < symbols.length; offset += 200) {
+    const group = symbols.slice(offset, offset + 200);
+    const filter = group.map((symbol) => encodeURIComponent(symbol)).join(",");
+    const liveRows = await supabaseGetPaged(
+      "fugle_daytrade_quotes_live",
+      `select=symbol,updated_at,previous_close,price,bid_price,ask_price,bid_volume,ask_volume,payload&symbol=in.(${filter})&order=updated_at.desc`,
+      { service: true, pageSize: 200 },
+    );
+    rows.push(...liveRows.map((row) => ({
+      symbol: row.symbol, updated_at: row.updated_at, reference_price: row.previous_close, trial_price: row.price,
+      best_bid_price: row.bid_price, best_ask_price: row.ask_price, bid_volume: row.bid_volume, ask_volume: row.ask_volume,
+      payload: { ...(row.payload || {}), preopen_fallback_source: "fugle_daytrade_quotes_live" },
+    })));
+  }
   return rows;
 }
-function latestBySymbol(rows) {
+function latestBySymbol(rows, tradeDate) {
   const map = new Map();
   for (const row of rows || []) {
     const symbol = normalizeCode(row?.symbol);
-    if (!symbol || map.has(symbol)) continue;
+    if (!symbol || map.has(symbol) || taipeiDate(row?.updated_at) !== tradeDate) continue;
     map.set(symbol, row);
   }
   return map;
@@ -338,7 +365,7 @@ async function captureSlotRows(tradeDate, slot, canonicalRows, quoteRows, preope
     const future = normalizeFutureSymbol(row?.future_symbol);
     if (future) byFuture.set(future, row);
   }
-  const preopenBySymbol = latestBySymbol(preopenRows);
+  const preopenBySymbol = latestBySymbol(preopenRows, tradeDate);
   const capturedAt = new Date().toISOString();
   const rows = [];
   for (const contract of canonicalRows) {
@@ -387,13 +414,14 @@ async function runOnce() {
     mode: APPLY ? "apply" : "dry-run",
     tradeDate,
     captureSlot: slot || null,
-    naturalScheduleEvidence: Boolean(slot && CAPTURE_SLOTS.includes(slot)),
+    naturalScheduleEvidence: Boolean(slot && CAPTURE_SLOTS.includes(slot) && captureSlot() === slot),
     canonicalRows: 0,
     snapshotRows: 0,
     sourceStatus: "unknown",
     failedChecks: [],
   };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(tradeDate)) result.failedChecks.push("invalid_trade_date");
+  if (!result.naturalScheduleEvidence) result.failedChecks.push("natural_schedule_minute_mismatch");
   if (!slot || !CAPTURE_SLOTS.includes(slot)) result.failedChecks.push("not_in_natural_capture_slot");
   const tickerResult = await readTickerMap(tradeDate);
   result.canonicalRows = tickerResult.rows.length;
@@ -420,8 +448,9 @@ async function runOnce() {
   result.snapshotRows = snapshotRows.length;
   result.snapshotCompleteRows = snapshotRows.filter((row) => row.fut_price !== null && row.trial_price !== null).length;
   if (slot && !snapshotRows.length) result.failedChecks.push("natural_snapshot_rows_missing");
+  if (slot && result.snapshotCompleteRows === 0) result.failedChecks.push("natural_snapshot_complete_rows_missing");
   let pendingSnapshotRows = snapshotRows;
-  if (APPLY && slot) {
+  if (APPLY && slot && result.naturalScheduleEvidence) {
     const existing = await supabaseGet(
       "fugle_daytrade_preopen_futopt_snapshots",
       `select=underlying_symbol&trade_date=eq.${encodeURIComponent(tradeDate)}&capture_slot=eq.${encodeURIComponent(slot)}`,
@@ -432,7 +461,7 @@ async function runOnce() {
     result.existingSnapshotRows = existing.length;
     result.pendingSnapshotRows = pendingSnapshotRows.length;
   }
-  if (APPLY) {
+  if (APPLY && result.naturalScheduleEvidence) {
     await supabaseUpsert("fugle_daytrade_canonical_near_one_contracts", tickerResult.rows, "trade_date,symbol");
     if (pendingSnapshotRows.length) await supabaseInsertIgnore(
       "fugle_daytrade_preopen_futopt_snapshots",
