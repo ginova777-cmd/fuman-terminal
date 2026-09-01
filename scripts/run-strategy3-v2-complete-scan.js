@@ -24,13 +24,14 @@ const {
 
 const tradeDate = process.argv.find((arg) => arg.startsWith("--trade-date="))?.slice("--trade-date=".length) || taipeiDate();
 const compactDate = tradeDate.replace(/\D/g, "");
-const runId = newRunId(compactDate);
 const apply = process.argv.includes("--apply");
+const generatedRunId = newRunId(compactDate);
+const runId = apply ? generatedRunId : generatedRunId.replace("strategy3v2-", "strategy3v2-diagnostic-");
+const diagnosticReceiptPath = path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-v2-complete-scan-diagnostic-${compactDate}.json`);
 const attemptPhase = process.argv.find((arg) => arg.startsWith("--attempt-phase="))?.slice("--attempt-phase=".length) || "";
-const quoteCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-quotes.json");
-const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles.json");
+const quoteCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-quotes-v2.json");
+const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles-v2.json");
 const MIN_LOCAL_COVERAGE_RATIO = Math.max(0.9, Number(process.env.STRATEGY3_V2_MIN_LOCAL_COVERAGE_RATIO || 0.9));
-const { loadStrategy3MotherPool } = require("../lib/strategy3-mother-pool-universe");
 
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
@@ -176,8 +177,6 @@ function round(value, digits = 2) {
 }
 
 function buildScannerCoreResults() {
-  const motherPool = loadStrategy3MotherPool({ runtimeDir: RUNTIME_DIR, tradeDate, readJson });
-  const motherPoolSet = new Set(motherPool.symbols);
   const quoteCache = readCacheArray(quoteCachePath, "quotes");
   const candleCache = readCacheArray(candleCachePath, "candles");
   const quoteByCode = new Map();
@@ -198,11 +197,8 @@ function buildScannerCoreResults() {
   const candidates = [];
   let ready20Count = 0;
   let entryWindowCount = 0;
-  let outOfPoolRejectedCount = 0;
-  let quoteReadyCount = 0;
 
   for (const [code, candles] of candlesByCode.entries()) {
-    if (!motherPoolSet.has(code)) { outOfPoolRejectedCount += 1; continue; }
     candles.sort((a, b) => Date.parse(a.candleTime || "") - Date.parse(b.candleTime || ""));
     const count = candles.length;
     if (count >= 20) ready20Count += 1;
@@ -213,9 +209,7 @@ function buildScannerCoreResults() {
     if (entryCandles.length) entryWindowCount += 1;
     if (count < 20 || !entryCandles.length) continue;
 
-    const quote = quoteByCode.get(code);
-    if (!quote) continue;
-    quoteReadyCount += 1;
+    const quote = quoteByCode.get(code) || {};
     const entry = entryCandles[0];
     const last = candles[candles.length - 1] || {};
     const entryPrice = Number(entry.close || entry.average || 0);
@@ -282,12 +276,6 @@ function buildScannerCoreResults() {
   candidates.sort((a, b) => b.score - a.score || b.change_percent - a.change_percent || b.tail_volume_share_pct - a.tail_volume_share_pct);
   candidates.forEach((item, index) => { item.rank = index + 1; });
   return {
-    mother_pool: motherPool,
-    mother_pool_expected_count: motherPool.expectedCount,
-    mother_pool_scanned_count: [...candlesByCode.keys()].filter((code) => motherPoolSet.has(code)).length,
-    mother_pool_ready_20_count: ready20Count,
-    mother_pool_quote_ready_count: quoteReadyCount,
-    out_of_pool_rejected_count: outOfPoolRejectedCount,
     quote_cache: { file: quoteCache.file, updated_at: quoteCache.updated_at, count: quoteCache.count },
     candle_cache: { file: candleCache.file, updated_at: candleCache.updated_at, count: candleCache.count },
     same_day_candle_symbols: candlesByCode.size,
@@ -323,7 +311,7 @@ async function main() {
       reason_code: "market_closed_preserve_previous_good",
       previous_good_preserved: true,
     };
-    const file = writeJson(scanReceiptPath(compactDate), receipt);
+    const file = writeJson(apply ? scanReceiptPath(compactDate) : diagnosticReceiptPath, receipt);
     console.log(JSON.stringify({ ...receipt, receipt_path: file }, null, 2));
     return;
   }
@@ -358,16 +346,15 @@ async function main() {
   }
   const issues = [];
   const scanner = buildScannerCoreResults();
-  const formalReadyTarget = scanner.mother_pool_expected_count;
-  const localCoverageRatio = formalReadyTarget > 0 ? scanner.mother_pool_ready_20_count / formalReadyTarget : 0;
+  const formalReadyTarget = Number(readiness.payload?.mother_pool?.minimumReadySymbols || readiness.payload?.minimums?.motherPoolReadySymbols || 1000);
+  const localCoverageRatio = formalReadyTarget > 0 ? scanner.local_ready_20_candle_symbols / formalReadyTarget : 0;
   const localCoverageOk = localCoverageRatio >= MIN_LOCAL_COVERAGE_RATIO;
-  const scannerCoreReady = scanner.mother_pool.ok && scanner.results.length > 0 && localCoverageOk;
+  const scannerCoreReady = scanner.results.length > 0 && localCoverageOk;
   const readinessOk = readiness.ok && readiness.payload?.ok === true;
   if (!readinessOk && !scannerCoreReady) {
     issues.push("readiness_not_ready");
   }
   if (!localCoverageOk) issues.push("strategy3_v2_local_1m_coverage_below_90_percent");
-  if (!scanner.mother_pool.ok) issues.push(...scanner.mother_pool.issues);
   if (!scanner.results.length) issues.push("strategy3_v2_no_candidates_from_local_formal_cache");
 
   const receipt = issues.length
@@ -380,13 +367,6 @@ async function main() {
         scanner_core_ready: scannerCoreReady,
         scanner_source: "local_fugle_daytrade_ws_candles+local_fugle_daytrade_ws_quotes",
         scanner_summary: {
-          mother_pool_source: scanner.mother_pool.source,
-          mother_pool_expected_count: scanner.mother_pool_expected_count,
-          mother_pool_scanned_count: scanner.mother_pool_scanned_count,
-          mother_pool_ready_20_count: scanner.mother_pool_ready_20_count,
-          mother_pool_quote_ready_count: scanner.mother_pool_quote_ready_count,
-          mother_pool_coverage_ratio: round(localCoverageRatio, 4),
-          out_of_pool_rejected_count: scanner.out_of_pool_rejected_count,
           same_day_candle_symbols: scanner.same_day_candle_symbols,
           local_ready_20_candle_symbols: scanner.local_ready_20_candle_symbols,
           local_entry_window_symbols: scanner.local_entry_window_symbols,
@@ -415,13 +395,6 @@ async function main() {
         scanner_core_ready: true,
         scanner_source: "local_fugle_daytrade_ws_candles+local_fugle_daytrade_ws_quotes",
         scanner_summary: {
-          mother_pool_source: scanner.mother_pool.source,
-          mother_pool_expected_count: scanner.mother_pool_expected_count,
-          mother_pool_scanned_count: scanner.mother_pool_scanned_count,
-          mother_pool_ready_20_count: scanner.mother_pool_ready_20_count,
-          mother_pool_quote_ready_count: scanner.mother_pool_quote_ready_count,
-          mother_pool_coverage_ratio: round(localCoverageRatio, 4),
-          out_of_pool_rejected_count: scanner.out_of_pool_rejected_count,
           same_day_candle_symbols: scanner.same_day_candle_symbols,
           local_ready_20_candle_symbols: scanner.local_ready_20_candle_symbols,
           local_entry_window_symbols: scanner.local_entry_window_symbols,
@@ -442,6 +415,15 @@ async function main() {
         publish_allowed: true,
       };
 
+  if (!apply) {
+    receipt.diagnostic = true;
+    receipt.generated_run_id_noncanonical = true;
+    receipt.formal_allowed = false;
+    receipt.publish_allowed = false;
+    receipt.line_allowed = false;
+    receipt.allowed_action = "inspect_diagnostic_receipt_only";
+  }
+
   if (apply && receipt.ok) {
     try {
       receipt.supabase_apply = await applySupabaseRun(receipt);
@@ -455,7 +437,7 @@ async function main() {
       receipt.supabase_apply = { ok: false, error: String(error?.message || error).slice(0, 600) };
     }
   }
-  const file = writeJson(scanReceiptPath(compactDate), receipt);
+  const file = writeJson(apply ? scanReceiptPath(compactDate) : diagnosticReceiptPath, receipt);
   console.log(JSON.stringify({ ...receipt, receipt_path: file }, null, 2));
   process.exitCode = receipt.ok ? 0 : 1;
 }
