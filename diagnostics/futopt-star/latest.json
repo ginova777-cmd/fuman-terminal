@@ -1,0 +1,59 @@
+{
+  "ok": true,
+  "contract": "futopt_star_backfill_diagnostic_public_v1",
+  "mode": "BACKFILL_DIAGNOSTIC",
+  "tradeDate": "2026-09-01",
+  "sourceRunId": "futopt-star-backfill-diagnostic-20260901-20260901092001214",
+  "symbols": [
+    {
+      "symbol": "2481",
+      "future_symbol": "GYFI6",
+      "futopt_last_price": 159,
+      "futopt_change_percent": 4.26,
+      "relative_to_txf_percent": 1.58,
+      "futopt_total_volume": 3659,
+      "has_future_contract": true,
+      "empty_shell_row": false,
+      "near_one_present": false,
+      "preopen_snapshot_count": 0
+    },
+    {
+      "symbol": "3211",
+      "future_symbol": "NCFI6",
+      "futopt_last_price": 409,
+      "futopt_change_percent": 4.74,
+      "relative_to_txf_percent": 2.06,
+      "futopt_total_volume": 161,
+      "has_future_contract": true,
+      "empty_shell_row": false,
+      "near_one_present": false,
+      "preopen_snapshot_count": 0
+    },
+    {
+      "symbol": "3264",
+      "future_symbol": "NEFI6",
+      "futopt_last_price": 238.5,
+      "futopt_change_percent": 3.7,
+      "relative_to_txf_percent": 1.02,
+      "futopt_total_volume": 349,
+      "has_future_contract": true,
+      "empty_shell_row": false,
+      "near_one_present": false,
+      "preopen_snapshot_count": 0
+    }
+  ],
+  "diagnosticOnly": true,
+  "natural_schedule_evidence": false,
+  "formalCandidateAllowed": false,
+  "publishAllowed": false,
+  "formalDisplayAllowed": false,
+  "latestOverwriteAllowed": false,
+  "writesSupabase": false,
+  "writesFormalReceipt": false,
+  "strategyRerun": false,
+  "reconstructedFromAfterHoursReadback": true,
+  "dataGapCount": 3,
+  "finalStatus": "DIAGNOSTIC_DATA_GAP",
+  "limitation": "No 08:45/08:50 historical trial snapshot was captured; this payload must never satisfy formal or natural-evidence gates.",
+  "contentSha256": "a9d1405513073ba529034344b457258d8e4f0e9828ee2a580e6becb05bf52436"
+}
