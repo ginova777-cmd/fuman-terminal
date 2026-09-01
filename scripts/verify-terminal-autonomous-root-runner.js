@@ -73,6 +73,14 @@ async function main() {
   const runner = readText("run-terminal-autonomous-root.ps1");
   const masterRunner = readText("run-terminal-master-control.ps1");
   const installer = readText("scripts/install-terminal-autonomous-root-task.ps1");
+  const sourceStartupVerifier = readText("scripts/verify-daytrade-fugle-source-startup.js");
+  const strategy3ClosureVerifier = readText("scripts/verify-strategy3-v2-full-closure.js");
+  const strategy3Scanner = readText("scripts/run-strategy3-v2-complete-scan.js");
+  const mobileFragmentPublisher = readText("scripts/publish-mobile-fragment-snapshots.js");
+  const strategy4Scanner = readText("scripts/scan-strategy4-cache.js");
+  const mobileFragmentApi = readText("api/mobile-fragment.js");
+  const scorecard88Collector = readText("scripts/collect-terminal-scorecard-88.js");
+  const rowAuditVerifier = readText("scripts/verify-terminal-row-audit-consistency.js");
   const pkg = readJson("package.json", { scripts: {} });
   const registry = readJson("scripts/fuman-schedule-registry.json", {});
 
@@ -113,6 +121,102 @@ async function main() {
     '"Full"',
     '"Checkpoint"',
   ]) requireMarker(issues, "run-terminal-master-control.ps1", masterRunner, marker);
+  const masterCheckpointMarkers = [
+    "$checkpointContracts", "$checkpointContract", "$checkpointVerifierChecks",
+    "$checkpointVerifierFailure", "checkpoint_specific_verifier_failed:",
+    "strategyExecutionAllowed = $false", "scannerApplyAllowed = $false",
+    "sourceRecoveryCheckpoints", "Start-ScheduledTask", "limitedSelfHealActions",
+    "recheckedAfterSelfHeal", "dueCheckpointIds", "recoveryPolicy",
+    "deploymentAllowed = $false", "killedProcess = $false",
+    "PASS", "SELF_HEALED_PASS", "FAIL_CLOSED", "BLOCKED",
+    "Get-FumanTaskStartGuard", "scheduled_task_not_unique",
+    "original_task_already_ran_today_no_second_writer_run", "writer_self_heal_refused",
+    "canonicalEvidence", "tradeDate = $canonicalEvidence.tradeDate",
+    "runId = $canonicalEvidence.runId", "keyCounts = [ordered]@{",
+    "surfaceConsistency = $canonicalEvidence.surfaceConsistency", "canonicalEvidenceSource",
+    "master_controller_already_running", 'status = "BLOCKED"',
+    "check-strategy2-trading-day.js", "quiet_non_trading_day_skip", "market_calendar_unavailable_fail_closed",
+    "$exactCheckpointId", "$boundedCheckpointIds", "$delayMinutes -ge 0 -and $delayMinutes -le 5", "if (-not $RequestedCheckpoint -and $effectiveMode -eq \"Checkpoint\")",
+    "$dailyCheckpointCoverageFailure", "daily_checkpoint_receipts_missing", "dailyCheckpointCoverage", "dailyCheckpointResults", "priorCheckpointFailures", "prior_checkpoint_failed:",
+    "function Send-FumanMasterAlert", 'Send-FumanMasterAlert -Status "BLOCKED"', "market_calendar_unavailable_fail_closed", "master_controller_exception",
+    "$daytradeWriterVerifierInCheckpoint", "$writerCheckpointCheck",
+    "Fuman Daytrade Source Gate 0700", "Fuman Opening Report 0820 Preflight", "Fuman Opening Report 0830 Telegram", "Fuman Opening Limit Order Morning Readonly 0840", "Fuman Daytrade Futopt Preopen Evidence 0845", "Fuman Daytrade Futopt Preopen Evidence 0850", "Fuman Strategy4 Source Prewarm 1535", "Fuman Scorecard88 Collect Strategy2 1240",
+    'owner="EXTERNAL_OWNER"', 'disposition="READ_ONLY_BRIDGE"', 'disposition="READ_ONLY_BRIDGE_CLOSURE"', 'same_day_bridge_aggregate_19_of_19_run_id_trade_date_and_allowed_action_no_recalculation_or_retry', 'today_frozen_preflight_and_pre_delivery_contract_gate_complete_before_delivery', '--pre-delivery', '$firstFailedCheckpointVerifier', 'checkpoint_specific_verifier_failed:', 'reportedFirstBlocker', 'reportedFailedChecks', 'checkpointVerifierOutput',
+    '"20:05" = @{ name="chip_source_sync"', 'start_missed_original_chip_source_sync_once', 'today_or_immutable_receipt_exists',
+    '"21:15" = @{ name="institution_watchdog"', 'verify-institution-watchdog-2115.js',
+    'verify-daytrade-mother-pool-contract.js', 'verify-opening-limit-order-closed-loop.js', 'verify-terminal-row-audit-consistency.js', '--strategy=$rowAuditStrategy', 'Fuman Scorecard88 Collect Strategy3 1315', 'Fuman Scorecard88 Collect Strategy4 1700', 'Fuman Scorecard88 Collect Evening 2140',
+    'verify-strategy2-v3-unified-contract.js', 'Fuman Strategy2 Unified 0845-1230',
+    '$strategy2LiveReceipt', 'scope="not_due_until_12:40"',
+    '"12:30" = @{ name="strategy2_finalize"', '$strategy2VerifierDue = @("12:40", "23:10")',
+    'Fuman API-Only Retired Artifact Cleanup 1535', 'Fuman Supabase Vercel History Cleanup 1545',
+    'Fuman Global Cost Janitor Scorecard 1555', 'Fuman Daytrade Intraday Retention 1605',
+    'Fuman Daily Retention Maintenance 1625', '$originalTaskWaitFailure = @($originalTaskWait',
+    'verify-daytrade-postclose-1330.js', 'Fuman Daytrade Source Writer 0600-1330',
+    'Fuman Fugle Daytrade WebSocket Collector 0600-1330', 'no_residual_lock_or_cross_day_rollback',
+    'verify-opening-limit-order-0840-checkpoint-readonly.js', '--slots=0845',
+    'verify-strategy2-v3-water.js', 'transport_pool_0845_futopt_trial_strategy2_formal_water_preflight_and_isolation',
+  ];
+  for (const marker of masterCheckpointMarkers) {
+    requireMarker(issues, "run-terminal-master-control.ps1", masterRunner, marker);
+  }
+  for (const marker of ["fuman-daytrade-fugle-source-startup-v2", "WRITER_TASK", "queryActiveWriterOwners", "writer_active_owner_not_unique", "writer_production_root_mismatch", "startsTask: false"]) {
+    requireMarker(issues, "scripts/verify-daytrade-fugle-source-startup.js", sourceStartupVerifier, marker);
+  }
+  for (const marker of ["data-row-symbol", "data-row-price", "data-row-score", "data-row-rank"]) {
+    requireMarker(issues, "api/mobile-fragment.js", mobileFragmentApi, marker);
+  }
+  for (const marker of ["rowAuditSignatures", "rowAuditSignatureComplete", "canonical_${key}_api_readonly", "row_audit_run_id_mismatch", "row_audit_count_mismatch", "row_audit_fields_incomplete"]) {
+    requireMarker(issues, "scripts/collect-terminal-scorecard-88.js", scorecard88Collector, marker);
+  }
+  for (const marker of ["terminal-four-surface-row-audit-v1", "desktop_rows_match_canonical", "mobile_rows_match_canonical", "scorecard88_rows_match_canonical", "source_reports_rows_match_canonical"]) {
+    requireMarker(issues, "scripts/verify-terminal-row-audit-consistency.js", rowAuditVerifier, marker);
+  }
+  const checkpointIds = ["06:00","06:05","07:00","07:08","08:20","08:29","08:30","08:35","08:36","08:40","08:45","08:50","08:55","09:00","12:30","12:40","12:50","12:55","13:00","13:15","13:30","15:35","16:00","17:00","17:10","17:40","18:10","18:40","19:10","20:05","21:00","21:10","21:15","21:40","22:00","23:10"];
+  for (const checkpointId of checkpointIds) {
+    requireMarker(issues, "run-terminal-master-control.ps1", masterRunner, `"${checkpointId}" = @{`);
+  }
+  const masterVerifierFiles = [...new Set([...masterRunner.matchAll(/verify-[A-Za-z0-9-]+\.js/g)].map((match) => match[0]))];
+  for (const verifierFile of masterVerifierFiles) {
+    if (!fs.existsSync(path.join(ROOT, "scripts", verifierFile))) addIssue(issues, `master_checkpoint_verifier_file_missing:${verifierFile}`);
+  }
+  const countMarker = (text, marker) => text.split(marker).length - 1;
+  if (/\$earliestUnprocessedDue|\$processedCheckpointIds/.test(masterRunner)) addIssue(issues, "master_checkpoint_must_not_retarget_to_earlier_missing_receipt");
+  if (countMarker(masterRunner, "$exactCheckpointId") < 2) addIssue(issues, "master_checkpoint_exact_trigger_routing_missing");
+  if (countMarker(masterRunner, "$boundedCheckpointIds") < 2) addIssue(issues, "master_checkpoint_bounded_delay_routing_missing");
+  if (countMarker(masterRunner, "function Send-FumanMasterAlert") !== 1) addIssue(issues, "master_alert_function_must_be_declared_once");
+  if ((masterRunner.match(/^param\(/gm) || []).length !== 1) addIssue(issues, "master_runner_top_param_must_be_declared_once");
+  for (const marker of [
+    'if ($apiScorecardRequired)',
+    'verify-cleanup-stage-receipt.js',
+    '--stage=$(if ($checkpointId',
+    'verify-strategy4-prewarm-receipt.js',
+    'verify-cleanup-natural-completion.js',
+    'verify-evening-natural-task-start.js',
+  ]) requireMarker(issues, "run-terminal-master-control.ps1", masterRunner, marker);
+  if (!masterRunner.includes('$verifierExit = $null')) addIssue(issues, "api_scorecard_must_default_to_not_run_outside_fixed_slots");
+  if (/repair_nonformal_cache_or_telegram_outbox|redeliver_single_missing_surface_with_original_run_id_and_hash/.test(masterRunner)) addIssue(issues, "master_recovery_policy_claims_unimplemented_actions");
+  if (/Stop-ScheduledTask|schtasks\s+\/End|Stop-Process|taskkill/i.test(masterRunner)) addIssue(issues, "master_checkpoint_contract_contains_forbidden_stop_or_kill_action");
+  if (/run-strategy|scan-strategy|deploy-production/.test(masterRunner)) addIssue(issues, "master_checkpoint_contract_contains_forbidden_strategy_or_deploy_entrypoint");
+  const nonTradingBranch = masterRunner.match(/if \(\$nonTradingDay\) \{([\s\S]*?)\n\s*\}/)?.[1] || "";
+  if (!/quiet_non_trading_day_skip/.test(nonTradingBranch) || !/exit 0/.test(nonTradingBranch)) addIssue(issues, "non_trading_day_must_quietly_exit");
+  if (/Set-Content|Copy-Item|Send-FumanMasterAlert|Start-ScheduledTask/.test(nonTradingBranch)) addIssue(issues, "non_trading_day_must_not_write_alert_or_start_task");
+  if (/runNode\(\s*["']scan["']/.test(strategy3ClosureVerifier)) {
+    addIssue(issues, "strategy3_closure_verifier_must_not_execute_scanner");
+  }
+  if (/runNode\(\s*["']line/.test(strategy3ClosureVerifier)) {
+    addIssue(issues, "strategy3_closure_verifier_must_not_generate_line_card");
+  }
+  for (const marker of ["strategy3-v2-complete-scan-diagnostic-", "generated_run_id_noncanonical", "apply ? scanReceiptPath(compactDate) : diagnosticReceiptPath"]) {
+    requireMarker(issues, "scripts/run-strategy3-v2-complete-scan.js", strategy3Scanner, marker);
+  }
+  for (const marker of ['arg.startsWith("--tabs=")', "for (const tab of tabs)", "requestedTabs: tabs"]) {
+    requireMarker(issues, "scripts/publish-mobile-fragment-snapshots.js", mobileFragmentPublisher, marker);
+  }
+  if (/for \(const tab of TABS\)/.test(mobileFragmentPublisher)) addIssue(issues, "mobile_fragment_publisher_ignores_requested_tab_scope");
+  for (const marker of ['enforcement: "diagnostic-only"', 'reason: "strategy4-full-scan-must-not-drop-symbols-by-avg5"', "const REQUIRE_QUOTE_LIQUIDITY_PREFILTER = false", "filtered: []"]) {
+    requireMarker(issues, "scripts/scan-strategy4-cache.js", strategy4Scanner, marker);
+  }
+  if (/STRATEGY4_REQUIRE_QUOTE_LIQUIDITY_PREFILTER\s*===\s*["']1["']/.test(strategy4Scanner)) addIssue(issues, "strategy4_formal_scanner_must_not_enable_quote_liquidity_prefilter");
   if (!/formalScanSkipped\s+-ne\s+\$true/.test(runner) || !/scannerAction\s+-ne\s+["']skip_formal_scan["']/.test(runner)) addIssue(issues, "root_scanner_date_gate_must_block_formal_scan_skipped");
 
   const installerMarkers = [
@@ -121,12 +225,13 @@ async function main() {
     "Register-ScheduledTask",
     "06:05",
     "07:08",
-    "08:00",
     "08:20",
     "08:36",
+    "08:40",
     "12:40",
+    "08:50",
+    "08:55",
     "13:15",
-    "16:10",
     "17:00",
     "21:40",
     "22:00",
@@ -136,6 +241,10 @@ async function main() {
     "InteractiveFallback",
   ];
   for (const marker of installerMarkers) requireMarker(issues, "scripts/install-terminal-autonomous-root-task.ps1", installer, marker);
+  const checkpointContract = ["06:00","06:05","07:00","07:08","08:20","08:29","08:30","08:35","08:36","08:40","08:45","08:50","08:55","09:00","12:30","12:40","12:50","12:55","13:00","13:15","13:30","15:35","16:00","17:00","17:10","17:40","18:10","18:40","19:10","20:05","21:00","21:10","21:15","21:40","22:00","23:10"];
+  for (const checkpoint of checkpointContract) {
+    requireMarker(issues, "scripts/install-terminal-autonomous-root-task.ps1", installer, `"${checkpoint}"`);
+  }
 
   const scripts = pkg.scripts || {};
   const invokedScripts = [...runner.matchAll(/Invoke-NpmStep\s+"[^"]+"\s+"([^"]+)"/g)].map((match) => match[1]);
@@ -220,7 +329,7 @@ async function main() {
     guarantees: [
       "one master-control wrapper is the only scheduled and npm controller entrypoint",
       "Windows task wakes the same read-only verifier at each due checkpoint",
-      "08:00 and 08:20 are separated checkpoints; 08:36 is a lightweight delivery closure",
+      "08:20-08:30 verify external-owner frozen evidence read-only; 08:35 validates bridge apply and 08:36 validates aggregate closure read-only",
       "23:10 performs the full-day read-only audit through the same verifier",
       "the wrapper forbids strategy execution, scanner apply, deployment, and process killing",
     ],
@@ -235,4 +344,3 @@ main().catch((error) => {
   console.error(`[terminal-autonomous-root-runner-contract] failed: ${error.stack || error.message || error}`);
   process.exit(1);
 });
-
