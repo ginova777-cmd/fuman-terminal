@@ -53,7 +53,7 @@ Expected result:
 Run read-only verification:
 
 ```text
-npm run verify:daytrade-source-speed -- --json-only
+npm run verify:daytrade-source-speed
 ```
 
 Expected immediately after bootstrap:

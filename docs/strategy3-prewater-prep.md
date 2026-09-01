@@ -41,6 +41,7 @@ Do not run these during Supabase incident.
 
 2. Source contract health  
    `npm run verify:fugle-source-contract && npm run verify:daytrade-source-speed`  
+   This runs the v2 transport heartbeat, canonical alignment, and Mother Pool contract.
    Expected PASS: dedicated daytrade gate A.
 
 3. Strategy source coverage  

@@ -285,6 +285,8 @@ Run:
 npm run verify:daytrade-source-speed
 ```
 
+This command now runs the v2 WebSocket transport heartbeat, canonical source alignment, and Mother Pool warmup contract. The retired monolithic speed verifier is not part of the formal chain.
+
 Default checked source:
 
 ```text
