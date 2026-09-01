@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { callInternalApi } = require("./e2e-membership-closure-utils");
 
 const runtimeRoot = process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
 const dataDir = path.join(runtimeRoot, "data");
@@ -64,6 +65,30 @@ function runDate(runId) { return (String(runId || "").match(/20\d{6}/) || [""])[
 function num(...values) {
   for (const value of values) if (Number.isFinite(Number(value))) return Number(value);
   return 0;
+}
+function displayRows(payload = {}) {
+  let empty = [];
+  for (const key of ["currentCandidates", "records", "results", "matches", "rows", "data"]) {
+    if (!Array.isArray(payload?.[key])) continue;
+    if (payload[key].length) return payload[key];
+    empty = payload[key];
+  }
+  return empty;
+}
+function rowAudit(payload = {}) {
+  const rows = displayRows(payload);
+  const signatures = [];
+  let complete = true;
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index] || {};
+    const symbol = String(row.code || row.symbol || row.stock_id || row.stockId || "").trim();
+    const price = Number(row.entryPrice ?? row.price ?? row.close ?? row.observedPrice ?? row.latestSeenPrice ?? row.latestAPrice ?? row.firstAPrice ?? row.supportPrice);
+    const score = Number(row.finalScore ?? row.score ?? row.rankScore ?? row.totalScore ?? row.baseScore ?? row.rank ?? row.ranking);
+    const rank = Number(row.rank ?? row.ranking ?? row.priorityRank ?? row.sortRank ?? (index + 1));
+    if (!symbol || !Number.isFinite(price) || !Number.isFinite(score) || !Number.isFinite(rank)) complete = false;
+    signatures.push(`${symbol}:${Number.isFinite(price) ? price.toFixed(4) : "MISSING"}:${Number.isFinite(score) ? score.toFixed(4) : "MISSING"}:${Number.isFinite(rank) ? rank : "MISSING"}`);
+  }
+  return { signatures: signatures.sort(), count: rows.length, complete };
 }
 function text(...values) {
   for (const value of values) if (value !== undefined && value !== null && String(value).trim()) return String(value).trim();
@@ -254,6 +279,38 @@ const payload = {
   },
 };
 async function main() {
+  const apiConfigs = {
+    strategy2: { module: "api/strategy2-latest.js", query: { compact: "1", live: "1", today: "1", verify: "1", limit: "240" } },
+    strategy3: { module: "api/strategy3-latest.js", query: { compact: "1", live: "1", today: "1", limit: "240" } },
+    strategy4: { module: "api/strategy4-latest.js", query: { compact: "1", live: "1", today: "1", limit: "240" } },
+    strategy5: { module: "api/strategy5-latest.js", query: { compact: "1", live: "1", today: "1", limit: "240" } },
+    institution: { module: "api/institution-latest.js", query: { compact: "1", live: "1", today: "1", limit: "1200" } },
+  };
+  for (const key of slots[slot].filter((value) => value !== "battle")) {
+    const config = apiConfigs[key];
+    const report = payload.sourceReports.find((row) => row?.key === key);
+    const receiptRow = receipts.find((row) => row?.key === key);
+    if (!config || !report) continue;
+    const api = await callInternalApi(config.module, config.query);
+    const apiPayload = api.payload || {};
+    const audit = rowAudit(apiPayload);
+    const sameRun = api.ok && String(apiPayload.runId || apiPayload.latestRunId || "") === String(report.runId || "");
+    for (const row of [report, receiptRow].filter(Boolean)) {
+      row.rowAuditSignatures = sameRun ? audit.signatures : [];
+      row.rowAuditSignatureCount = sameRun ? audit.count : 0;
+      row.rowAuditSignatureComplete = sameRun && audit.complete;
+      row.rowAuditSignatureSource = sameRun ? `canonical_${key}_api_readonly` : `canonical_${key}_api_run_mismatch`;
+    }
+    const expectedCount = Number(report.resultCount ?? report.count ?? 0);
+    if (!sameRun || expectedCount !== audit.count || (expectedCount > 0 && !audit.complete)) {
+      report.ok = false;
+      report.complete = false;
+      report.status = "FAIL_CLOSED";
+      report.firstBlocker = !sameRun ? `${key}_row_audit_run_id_mismatch` : expectedCount !== audit.count ? `${key}_row_audit_count_mismatch` : `${key}_row_audit_fields_incomplete`;
+      report.blockingReason = report.firstBlocker;
+      payload.ok = false;
+    }
+  }
   writeJsonAtomic(outputFile, payload);
   let blob = null;
   let blobError = "";

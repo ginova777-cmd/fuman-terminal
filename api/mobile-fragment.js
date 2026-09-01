@@ -806,6 +806,10 @@ function strategy4TriangleSvg(row) {
 function rowHtml(row, index, tab = "") {
   const code = firstValue(row, ["code", "stock_id", "stockId", "symbol", "underlyingCode", "ticker"], "--");
   const name = firstValue(row, ["name", "stock_name", "stockName", "underlyingName", "company"], "");
+  const auditPrice = firstValue(row, ["entryPrice", "price", "close", "observedPrice", "latestSeenPrice", "latestAPrice", "firstAPrice", "supportPrice"], "");
+  const auditScore = firstValue(row, ["finalScore", "score", "rankScore", "totalScore", "baseScore"], "");
+  const auditRank = firstValue(row, ["rank", "ranking", "priorityRank", "sortRank"], index + 1);
+  const auditAttrs = `data-row-symbol="${esc(code)}" data-row-price="${esc(auditPrice)}" data-row-score="${esc(auditScore)}" data-row-rank="${esc(auditRank)}"`;
   if (tab === "strategy2") {
     const entryTime = strategy2EntryTime(row);
     const entryPrice = firstValue(row, ["entryPrice", "observedPrice", "latestSeenPrice", "latestAPrice", "firstAPrice", "supportPrice"], "--");
@@ -813,7 +817,7 @@ function rowHtml(row, index, tab = "") {
     const reason = firstValue(row, ["reason", "stateReason", "summary", "description", "memo", "note"], "");
     const mainForceCosts = mobileMainForceHtml(row);
     return `
-    <article class="mobile-terminal-row">
+    <article class="mobile-terminal-row" ${auditAttrs}>
       <b>#${index + 1}</b>
       <div>
         <h4>${esc(intradayTimeText(entryTime))}｜${esc(code)} ${esc(name)}</h4>
@@ -840,7 +844,7 @@ function rowHtml(row, index, tab = "") {
     const tags = arrayAt(row, ["tags"]).slice(0, 3).join(" / ");
     const line = `${action}｜${score}｜溢價 ${premium === null ? "--" : `${numberText(premium)}%`}`;
     return `
-    <article class="mobile-terminal-row">
+    <article class="mobile-terminal-row" ${auditAttrs}>
       <b>#${index + 1}</b>
       <div>
         <h4>${esc(cbCode)} ${esc(cbName)}</h4>
@@ -863,7 +867,7 @@ function rowHtml(row, index, tab = "") {
   const strategy4Matched = tab === "strategy5" && Boolean(firstValue(row, ["strategy4Matched", "strategy4_matched", "strategy4RunId", "strategy4_run_id"], ""));
   const displayName = strategy4Matched ? `🔥 ${name}` : name;
   return `
-    <article class="mobile-terminal-row">
+    <article class="mobile-terminal-row" ${auditAttrs}>
       <b>#${index + 1}</b>
       <div>
         <h4>${esc(code)} ${esc(displayName)}</h4>
