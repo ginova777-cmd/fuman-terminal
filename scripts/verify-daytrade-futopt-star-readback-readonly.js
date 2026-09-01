@@ -40,22 +40,29 @@ async function main() {
     const raw = latestLive.get(symbol) || null;
     const contract = contractBySymbol.get(symbol) || null;
     const near = nearBySymbol.get(symbol) || null;
-    const hasFutureContract = Boolean(contract?.future_symbol) && positive(contract?.futopt_last_price);
-    const emptyShell = Boolean(contract) && !hasFutureContract;
+    const futureSymbol = String(contract?.future_symbol || "").trim().toUpperCase();
+    const lastPrice = Number(contract?.futopt_last_price);
+    const totalVolume = Number(contract?.futopt_total_volume);
+    const hasFutureContract = Boolean(contract) && Boolean(futureSymbol) && futureSymbol !== "TXF";
+    const emptyShell = Boolean(contract) && (!hasFutureContract || !positive(lastPrice) || !positive(totalVolume));
+    if (!contract) failures.push(`${symbol}:future_contract_missing`);
+    if (contract && !hasFutureContract) failures.push(`${symbol}:future_symbol_missing_or_invalid`);
+    if (contract && !positive(lastPrice)) failures.push(`${symbol}:futopt_last_price_not_positive`);
+    if (contract && !positive(totalVolume)) failures.push(`${symbol}:futopt_total_volume_not_positive`);
     if (emptyShell) failures.push(`${symbol}:empty_future_contract_shell_row`);
     if (raw && !contract) failures.push(`${symbol}:live_quote_not_exposed_by_contract_view`);
-    if (hasFutureContract && !near) failures.push(`${symbol}:near_one_contract_missing`);
-    if (hasFutureContract && !(snapshotCount.get(symbol) > 0)) failures.push(`${symbol}:preopen_snapshot_missing`);
+    if (!near) failures.push(`${symbol}:near_one_contract_missing`);
+    if (!(snapshotCount.get(symbol) > 0)) failures.push(`${symbol}:preopen_snapshot_missing`);
     return {
-      symbol, has_future_contract: hasFutureContract, future_symbol: hasFutureContract ? contract.future_symbol : null,
-      futopt_last_price: hasFutureContract ? Number(contract.futopt_last_price) : null,
-      futopt_change_percent: hasFutureContract ? Number(contract.futopt_change_percent) : null,
-      futopt_total_volume: hasFutureContract ? Number(contract.futopt_total_volume) : null,
-      relative_to_txf_percent: hasFutureContract ? Number(contract.relative_to_txf_percent) : null,
+      symbol, has_future_contract: hasFutureContract, future_symbol: futureSymbol || null,
+      futopt_last_price: Number.isFinite(lastPrice) ? lastPrice : null,
+      futopt_change_percent: Number.isFinite(Number(contract?.futopt_change_percent)) ? Number(contract.futopt_change_percent) : null,
+      futopt_total_volume: Number.isFinite(totalVolume) ? totalVolume : null,
+      relative_to_txf_percent: Number.isFinite(Number(contract?.relative_to_txf_percent)) ? Number(contract.relative_to_txf_percent) : null,
       raw_live_present: Boolean(raw), contract_view_present: Boolean(contract), empty_shell_row: emptyShell,
       near_one_present: Boolean(near), preopen_snapshot_count: snapshotCount.get(symbol) || 0,
       source_status: hasFutureContract ? contract.source_status : "no_contract",
-      reason_code: emptyShell ? "empty_future_contract_shell_row" : (!contract ? "no_future_contract" : null),
+      reason_code: !contract ? "future_contract_missing" : (emptyShell ? "empty_future_contract_shell_row" : null),
     };
   });
   const output = { ok: failures.length === 0, producer_path: producerPath, producer_exists: true, contract: "daytrade_futopt_star_readback_readonly_v1", trade_date: tradeDate, checked_at: new Date().toISOString(), symbols, cases, failed_checks: failures, first_blocker: failures[0] || null, read_only: true };
