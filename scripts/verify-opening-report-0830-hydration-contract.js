@@ -59,4 +59,3 @@ const output = {
 };
 console.log(JSON.stringify(output, null, 2));
 if (!output.ok) process.exitCode = 1;
-

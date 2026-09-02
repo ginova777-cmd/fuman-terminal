@@ -223,4 +223,3 @@ if (require.main === module) {
 }
 
 module.exports = { applyBridge, validateInput, selectTop3, buildBoosts, constants: { CONTRACT, ALLOWED_ACTION, FORBIDDEN_ACTION } };
-
