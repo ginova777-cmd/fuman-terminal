@@ -30,7 +30,8 @@ const MIN_SOURCE_ROW_COUNT = Number(process.env.STRATEGY4_MIN_SOURCE_ROW_COUNT |
 const STRATEGY4_MIN_HISTORY_COVERAGE_RATIO = Number(process.env.STRATEGY4_MIN_HISTORY_COVERAGE_RATIO || 0.95);
 const MIN_AVG_VOLUME_5 = Number(process.env.STRATEGY4_MIN_AVG_VOLUME_5 || 3000);
 const MIN_CUMULATIVE_BID_ASK_VOLUME = Number(process.env.STRATEGY4_MIN_CUMULATIVE_BID_ASK_VOLUME || 3000);
-const REQUIRE_QUOTE_LIQUIDITY_PREFILTER = process.env.STRATEGY4_REQUIRE_QUOTE_LIQUIDITY_PREFILTER === "1";
+// Formal Strategy4 must evaluate the full universe; liquidity is diagnostic only.
+const REQUIRE_QUOTE_LIQUIDITY_PREFILTER = false;
 const STRATEGY4_CACHE_SCHEMA_VERSION = "strategy4-cache-v3-unit-contract";
 const STRATEGY4_VOLUME_CACHE_SCHEMA_VERSION = "strategy4-volume-avg5-v3-unit-contract";
 const STRATEGY4_VOLUME_UNIT = "lots";
@@ -745,7 +746,7 @@ function cachedAvgVolume5(code) {
 }
 
 function buildVolumePrefilter(stocks) {
-  const filtered = [];
+  const belowMin = [];
   let cacheHit = 0;
   let cacheMiss = 0;
   stocks.forEach((stock) => {
@@ -756,14 +757,18 @@ function buildVolumePrefilter(stocks) {
     }
     cacheHit += 1;
     if (avgVolume5 < MIN_AVG_VOLUME_5) {
-      filtered.push({ code: stock.code, name: stock.name || stock.code, avgVolume5 });
+      belowMin.push({ code: stock.code, name: stock.name || stock.code, avgVolume5 });
     }
   });
   return {
     enabled: true,
     rule: "avgVolume5-gte",
+    enforcement: "diagnostic-only",
+    reason: "strategy4-full-scan-must-not-drop-symbols-by-avg5",
     minAvgVolume5: MIN_AVG_VOLUME_5,
-    filtered,
+    belowMin,
+    belowMinCount: belowMin.length,
+    filtered: [],
     cacheHit,
     cacheMiss,
   };
@@ -872,6 +877,9 @@ function volumeFilterRuleChanged(previous, current) {
   const currentFiltered = Number(current?.volumeFilteredCount || currentFilter?.filtered?.length || 0);
   const previousQuoteFiltered = Number(previous?.quoteLiquidityFilteredCount || previous?.quoteLiquidityFilter?.filtered?.length || 0);
   const currentQuoteFiltered = Number(current?.quoteLiquidityFilteredCount || current?.quoteLiquidityFilter?.filtered?.length || 0);
+  const previousEnforcement = String(previousFilter?.enforcement || (previousFilter?.enabled === true ? "enforced" : "disabled"));
+  const currentEnforcement = String(currentFilter?.enforcement || (currentFilter?.enabled === true ? "enforced" : "disabled"));
+  if (previousEnforcement !== currentEnforcement) return true;
   if (!currentFilter || currentFiltered <= 0) return false;
   if (!previousFilter && currentFiltered > 0) return true;
   if (previousThreshold !== currentThreshold) return true;
@@ -925,13 +933,17 @@ async function assertStrategy4MatchYieldGuard(output, previousRaw) {
   const activeVolumeFilter = output?.volumeFilter || null;
   const activeVolumeFilterEnabled = activeVolumeFilter?.enabled === true;
   const activeVolumeThreshold = cleanNumber(activeVolumeFilter?.minAvgVolume5 || activeVolumeFilter?.threshold);
+  const activeVolumeEnforcement = String(activeVolumeFilter?.enforcement || (activeVolumeFilterEnabled ? "enforced" : "disabled"));
   // A result count is comparable only when it was produced with the same
   // volume-filter contract. Comparing pre-filter runs to filtered runs creates
   // a false "yield collapse" even when the current full scan is healthy.
   const compatibleNormalHistory = normalHistory.filter((run) => {
     const filter = run?.payload?.volumeFilter || null;
+    const enabled = filter?.enabled === true;
+    const enforcement = String(filter?.enforcement || (enabled ? "enforced" : "disabled"));
     if (!activeVolumeFilterEnabled) return filter?.enabled !== true;
-    return filter?.enabled === true
+    return enabled
+      && enforcement === activeVolumeEnforcement
       && cleanNumber(filter?.minAvgVolume5 || filter?.threshold) === activeVolumeThreshold;
   });
   const baselineCounts = compatibleNormalHistory.map((run) => cleanNumber(run.result_count));
@@ -1674,6 +1686,30 @@ async function fetchSupabaseSelfTestRows(table, query) {
   return Array.isArray(rows) ? rows : [];
 }
 
+async function fetchSupabaseSelfTestRowsPaged(table, query, expectedRows = 0) {
+  const baseUrl = SUPABASE_URL.replace(/\/+$/, "");
+  const pageSize = 1000;
+  const out = [];
+  const maxRows = Math.max(cleanNumber(expectedRows) + 5, pageSize);
+  for (let offset = 0; offset < maxRows; offset += pageSize) {
+    const response = await fetch(`${baseUrl}/rest/v1/${table}?${query}`, {
+      headers: {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        Accept: "application/json",
+        Range: `${offset}-${offset + pageSize - 1}`,
+      },
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`${table} paged readback HTTP ${response.status} ${text.slice(0, 240)}`.trim());
+    const rows = JSON.parse(text || "[]");
+    if (!Array.isArray(rows) || rows.length === 0) break;
+    out.push(...rows);
+    if (rows.length < pageSize || out.length >= expectedRows) break;
+  }
+  return out;
+}
+
 async function verifyStrategy4PublishedSelfTest(output, runId) {
   const expectedCount = cleanNumber(output.count);
   const expectedTotal = cleanNumber(output.total);
@@ -1681,15 +1717,15 @@ async function verifyStrategy4PublishedSelfTest(output, runId) {
   const outputCoverageRatio = cleanNumber(output.coverageRatio);
   const outputNoDataCount = cleanNumber(output.noDataCount);
   const outputCoverageAcceptable = outputCoverageRatio >= STRATEGY4_MIN_HISTORY_COVERAGE_RATIO;
-  const resultRows = await fetchSupabaseSelfTestRows(
+  const resultRows = await fetchSupabaseSelfTestRowsPaged(
     SUPABASE_RESULTS_TABLE,
     [
       "select=run_id,code,payload,complete,quality_status,schema_version,volume_unit,data_contract_source,price_source",
       "strategy=eq.strategy4",
       `run_id=eq.${encodeURIComponent(runId)}`,
       "order=rank.asc",
-      `limit=${Math.max(expectedCount + 5, 25)}`,
-    ].join("&")
+    ].join("&"),
+    expectedCount
   );
   const missingBreakdown = resultRows.filter((row) => {
     const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
@@ -2171,5 +2207,7 @@ module.exports = {
   buildStrategy4PrePublishSelfTest,
   assertStrategy4MatchYieldGuard,
 };
+
+
 
 

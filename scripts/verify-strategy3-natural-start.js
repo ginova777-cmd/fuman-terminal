@@ -1,0 +1,13 @@
+#!/usr/bin/env node
+"use strict";
+const { spawnSync }=require("child_process");
+const TASK="Fuman Strategy3 V2 Complete Scan 1300";
+const issues=[];
+const parts=Object.fromEntries(new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(new Date()).filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
+const today=`${parts.year}-${parts.month}-${parts.day}`;
+const minute=Number(parts.hour)*60+Number(parts.minute);
+const sleep=ms=>Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,ms);
+function query(){const command=`$t=Get-ScheduledTask -TaskName '${TASK}' -ErrorAction Stop; $i=Get-ScheduledTaskInfo -TaskName '${TASK}' -ErrorAction Stop; $a=$t.Actions|Select-Object -First 1; [ordered]@{count=@($t).Count;state=[string]$t.State;execute=[string]$a.Execute;arguments=[string]$a.Arguments;lastRunTime=$i.LastRunTime.ToString('o');lastResult=[int64]$i.LastTaskResult}|ConvertTo-Json -Compress`;const r=spawnSync("powershell.exe",["-NoProfile","-Command",command],{encoding:"utf8",windowsHide:true,timeout:15000});if(r.status!==0)return{error:String(r.stderr||r.stdout||"task_query_failed").trim()};try{return JSON.parse(String(r.stdout||"").trim())}catch{return{error:"task_query_invalid_json"}}}
+let task=null;for(let i=0;i<16;i+=1){task=query();const d=String(task?.lastRunTime||"").slice(0,10);if(String(task?.state)==="Running"||d===today)break;if(i<15)sleep(2000)}
+if(task?.error)issues.push(task.error);if(Number(task?.count)!==1)issues.push(`strategy3_task_not_unique:${task?.count??"missing"}`);if(!/run-strategy3-v2-complete-scan\.ps1/i.test(`${task?.execute||""} ${task?.arguments||""}`))issues.push("strategy3_task_action_not_authoritative");const runDate=String(task?.lastRunTime||"").slice(0,10);if(String(task?.state)!=="Running"&&runDate!==today)issues.push(`strategy3_task_not_started_today:${runDate||"missing"}`);if(minute>=13*60&&minute<=13*60+2&&runDate===today){const hhmm=String(task.lastRunTime).slice(11,16);if(hhmm<"12:59"||hhmm>"13:02")issues.push(`strategy3_start_outside_entry_window:${hhmm}`)}
+const result={ok:issues.length===0,contract:"fuman-strategy3-natural-start-v1",tradeDate:today,readOnly:true,scannerStartedByVerifier:false,secondRunAllowed:false,task,failed_checks:issues,first_blocker:issues[0]||null};console.log(JSON.stringify(result,null,2));process.exitCode=result.ok?0:1;

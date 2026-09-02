@@ -6,6 +6,16 @@ const AUTH_KEY = "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
 const BASE_URL = (process.env.FUMAN_PRODUCTION_URL || process.env.FUMAN_TERMINAL_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const TABS = ["strategy2", "strategy3", "strategy4", "strategy5", "chip"];
 
+function selectedTabs(argv = process.argv.slice(2)) {
+  const option = argv.find((arg) => arg.startsWith("--tabs="));
+  if (!option) return [...TABS];
+  const requested = [...new Set(option.slice("--tabs=".length).split(",").map((value) => value.trim()).filter(Boolean))];
+  if (!requested.length) throw new Error("--tabs requires at least one tab");
+  const invalid = requested.filter((tab) => !TABS.includes(tab));
+  if (invalid.length) throw new Error(`unsupported mobile fragment tabs: ${invalid.join(",")}`);
+  return requested;
+}
+
 function required(value, name) {
   const text = String(value || "").trim();
   if (!text) throw new Error(`missing ${name}`);
@@ -81,10 +91,11 @@ async function publishOne(tab, token) {
 }
 
 async function main() {
+  const tabs = selectedTabs();
   const token = await login();
   const results = [];
   const failures = [];
-  for (const tab of TABS) {
+  for (const tab of tabs) {
     try {
       const result = await publishOne(tab, token);
       results.push(result);
@@ -95,7 +106,7 @@ async function main() {
       console.error(`[mobile-fragment-snapshot] ${tab} failed: ${failure.error}`);
     }
   }
-  console.log(JSON.stringify({ ok: failures.length === 0, baseUrl: BASE_URL, count: results.length, results, failures }, null, 2));
+  console.log(JSON.stringify({ ok: failures.length === 0, baseUrl: BASE_URL, requestedTabs: tabs, count: results.length, results, failures }, null, 2));
   if (failures.length) process.exitCode = 1;
 }
 

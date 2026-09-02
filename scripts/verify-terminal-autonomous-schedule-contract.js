@@ -11,7 +11,7 @@ const taskName = "Fuman Terminal Autonomous Root Monitor";
 const legacyTaskName = "Fuman Terminal Autonomous Ops 5m";
 const REQUIRE_LIVE = process.argv.includes("--require-live");
 const issues = [];
-const expectedCheckpoints = ["06:05","07:08","08:00","08:20","08:36","12:40","13:15","16:10","17:00","21:40","22:00","23:10"];
+const expectedCheckpoints = ["06:00","06:05","07:00","07:08","08:00","08:20","08:29","08:30","08:35","08:36","08:45","09:00","12:30","12:40","12:50","12:55","13:00","13:15","13:30","15:35","16:00","17:00","17:10","17:40","18:10","18:40","19:10","20:05","21:00","21:10","21:15","21:40","22:00","23:10"];
 
 function read(file) {
   try { return fs.readFileSync(file, "utf8"); } catch { return ""; }
@@ -40,15 +40,17 @@ for (const marker of [
   "08:36",
   "12:40",
   "13:15",
-  "16:10",
   "17:00",
   "21:40",
   "22:00",
   "23:10",
-  "MultipleInstances IgnoreNew",
+  "MultipleInstances Queue",
   "StartWhenAvailable",
+  "-WakeToRun",
   "LogonType S4U",
   "Register-ScheduledTask",
+  "-Weekly",
+  "Monday,Tuesday,Wednesday,Thursday,Friday",
 ]) {
   if (!installer.includes(marker)) issues.push(`installer_missing:${marker}`);
 }
@@ -62,7 +64,7 @@ if (!task) issues.push("schedule_registry_missing_task_definition");
 if (task && task.expectedState && task.expectedState !== "Ready") issues.push("schedule_registry_task_not_ready");
 
 function readLiveTask() {
-  const command = `$task=Get-ScheduledTask -TaskName '${taskName}' -ErrorAction SilentlyContinue; if(-not $task){[pscustomobject]@{exists=$false}|ConvertTo-Json -Compress; exit 0}; $action=$task.Actions|Select-Object -First 1; $info=Get-ScheduledTaskInfo -TaskName '${taskName}' -ErrorAction SilentlyContinue; $state=switch([int]$task.State){0{'Unknown'}1{'Disabled'}2{'Queued'}3{'Ready'}4{'Running'}default{[string]$task.State}}; $triggers=@($task.Triggers|ForEach-Object {[pscustomobject]@{start=[string]$_.StartBoundary;repetitionInterval=[string]$_.Repetition.Interval;repetitionDuration=[string]$_.Repetition.Duration}}); [pscustomobject]@{exists=$true;state=$state;execute=[string]$action.Execute;arguments=[string]$action.Arguments;multipleInstances=[string]$task.Settings.MultipleInstances;startWhenAvailable=[bool]$task.Settings.StartWhenAvailable;lastTaskResult=[long]$info.LastTaskResult;triggers=$triggers}|ConvertTo-Json -Depth 5 -Compress`;
+  const command = `$task=Get-ScheduledTask -TaskName '${taskName}' -ErrorAction SilentlyContinue; if(-not $task){[pscustomobject]@{exists=$false}|ConvertTo-Json -Compress; exit 0}; $action=$task.Actions|Select-Object -First 1; $info=Get-ScheduledTaskInfo -TaskName '${taskName}' -ErrorAction SilentlyContinue; $state=switch([int]$task.State){0{'Unknown'}1{'Disabled'}2{'Queued'}3{'Ready'}4{'Running'}default{[string]$task.State}}; $triggers=@($task.Triggers|ForEach-Object {[pscustomobject]@{start=[string]$_.StartBoundary;repetitionInterval=[string]$_.Repetition.Interval;repetitionDuration=[string]$_.Repetition.Duration;daysOfWeek=[string]$_.DaysOfWeek;weeksInterval=[string]$_.WeeksInterval}}); [pscustomobject]@{exists=$true;state=$state;execute=[string]$action.Execute;arguments=[string]$action.Arguments;multipleInstances=[string]$task.Settings.MultipleInstances;startWhenAvailable=[bool]$task.Settings.StartWhenAvailable;wakeToRun=[bool]$task.Settings.WakeToRun;lastTaskResult=[long]$info.LastTaskResult;triggers=$triggers}|ConvertTo-Json -Depth 5 -Compress`;
   const result = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command], {
     encoding: "utf8",
     timeout: 10000,
@@ -82,8 +84,9 @@ if (REQUIRE_LIVE) {
   if (live.exists === true && !/run-terminal-master-control\.ps1/i.test(String(live.arguments || ""))) issues.push("live_task_runner_mismatch");
   if (live.exists === true && /-ApplyScanners/i.test(String(live.arguments || ""))) issues.push("live_task_must_be_read_only_no_apply_scanners");
   if (live.exists === true && !/-RequireProtectedReadback/i.test(String(live.arguments || ""))) issues.push("live_task_protected_readback_argument_missing");
-  if (live.exists === true && String(live.multipleInstances || "") !== "IgnoreNew") issues.push(`live_task_multiple_instances_not_ignore_new:${live.multipleInstances || "missing"}`);
+  if (live.exists === true && String(live.multipleInstances || "") !== "Queue") issues.push(`live_task_multiple_instances_not_queue:${live.multipleInstances || "missing"}`);
   if (live.exists === true && live.startWhenAvailable !== true) issues.push("live_task_start_when_available_false");
+  if (live.exists === true && live.wakeToRun !== true) issues.push("live_task_wake_to_run_false");
   if (live.exists === true) {
     const triggers = Array.isArray(live.triggers) ? live.triggers : [];
     const liveTimes = new Set(triggers.map((row) => String(row.start || "").match(/T(\d{2}:\d{2})/)?.[1]).filter(Boolean));
@@ -91,6 +94,14 @@ if (REQUIRE_LIVE) {
     const unexpectedCheckpoints = [...liveTimes].filter((time) => !expectedCheckpoints.includes(time));
     if (missingCheckpoints.length > 0) issues.push(`live_task_expected_root_checkpoints_missing:${missingCheckpoints.join(",")}`);
     if (unexpectedCheckpoints.length > 0) issues.push(`live_task_unexpected_root_checkpoints_present:${unexpectedCheckpoints.join(",")}`);
+    const expectedWeekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+    for (const row of triggers) {
+      const days = String(row.daysOfWeek || "");
+      const missingDays = expectedWeekdays.filter((day) => !days.includes(day));
+      const windowsWeekdayMask = Number(days) === 62;
+      const namedWeekdaysOnly = missingDays.length === 0 && !/Saturday|Sunday/i.test(days);
+      if (!windowsWeekdayMask && !namedWeekdaysOnly) issues.push(`live_task_trigger_not_weekdays_only:${String(row.start || "missing")}:${days || "missing"}`);
+    }
   }
 }
 
@@ -119,4 +130,3 @@ const result = {
 };
 console.log(JSON.stringify(result, null, 2));
 if (!result.ok) process.exit(1);
-
