@@ -12,6 +12,7 @@ const {
   readFugleFutoptWebSocketQuotes,
 } = require("../lib/fugle-futopt-websocket");
 const { readSnapshot } = require("../lib/supabase-snapshots");
+const { CONTRACT: INTRADAY_BURST_READBACK_CONTRACT, normalizeBurstEvents } = require("../lib/daytrade-intraday-burst-readback");
 
 const SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
 const SOURCE_HOST_ID = String(process.env.FUMAN_DAYTRADE_SOURCE_HOST_ID || process.env.FUMAN_SOURCE_HOST_ID || process.env.COMPUTERNAME || "unknown").trim();
@@ -25,6 +26,7 @@ const STATE_FILE = statePath("daytrade-source-writer-state.json");
 const ENRICHMENT_PENDING_STATE_FILE = statePath("daytrade-source-writer-enrichment-pending.json");
 const MOTHER_POOL_DELTA_STATE_FILE = statePath("daytrade-mother-pool-delta.json");
 const INTRADAY_BURST_TELEGRAM_OUTBOX_FILE = statePath("daytrade-intraday-burst-telegram-outbox.json");
+const INTRADAY_BURST_READBACK_FILE = statePath("daytrade-intraday-burst-readback.json");
 const RUNTIME_CONFIG_FILE = runtimePath("config", "daytrade-source-speed.json");
 const REPO_CONFIG_FILE = repoPath("ops", "public-slot", "daytrade-source-speed.config.example.json");
 const PRIORITY_SYMBOLS_FILE = process.env.FUGLE_DAYTRADE_PRIORITY_SYMBOLS_FILE || cachePath("intraday", "fugle-daytrade-ws-priority-symbols.json");
@@ -5229,8 +5231,27 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
     sample_rejected: sampleRejected,
     events,
   };
-  if (!DRY_RUN) writeJson(INTRADAY_BURST_TELEGRAM_OUTBOX_FILE, payload);
-  return { path: INTRADAY_BURST_TELEGRAM_OUTBOX_FILE, event_count: events.length, events, diagnostics: payload };
+  const readbackRows = normalizeBurstEvents(events, { tradeDate, checkedAt });
+  const readback = {
+    contract: INTRADAY_BURST_READBACK_CONTRACT,
+    source: "fugle_formal_1m",
+    trade_date: tradeDate,
+    updated_at: checkedAt,
+    run_id: runId,
+    rows: readbackRows,
+  };
+  if (!DRY_RUN) {
+    writeJson(INTRADAY_BURST_TELEGRAM_OUTBOX_FILE, payload);
+    writeJson(INTRADAY_BURST_READBACK_FILE, readback);
+  }
+  return {
+    path: INTRADAY_BURST_TELEGRAM_OUTBOX_FILE,
+    readback_path: INTRADAY_BURST_READBACK_FILE,
+    event_count: events.length,
+    readback_rows: readbackRows,
+    events,
+    diagnostics: payload,
+  };
 }
 function updateMotherPoolDelta(result) {
   const priorityRows = Array.isArray(result?.priorityRows) ? result.priorityRows : [];
@@ -5450,6 +5471,7 @@ function updateMotherPoolDelta(result) {
   const burstRows = priorityRows;
   const intradayBurstTelegramOutbox = writeIntradayBurstTelegramOutbox(burstRows, tradeDate, checkedAt, runId, result?.quoteMap);
   roundSummary.intraday_burst_telegram_event_count = intradayBurstTelegramOutbox.event_count;
+  roundSummary.intraday_burst_readback_rows = intradayBurstTelegramOutbox.readback_rows.length;
 
   if (!DRY_RUN) writeJson(MOTHER_POOL_DELTA_STATE_FILE, {
     source_name: SOURCE_NAME,
@@ -5499,6 +5521,11 @@ function updateMotherPoolDelta(result) {
     downgrade_receipt: downgradeReceiptPath ? { contract: "daytrade-mother-pool-downgrade-receipt-v1", run_id: runId, downgraded_at: checkedAt, downgrades: downgradeRows } : null,
     round_summary: roundSummary,
     target_symbol_diagnostics: targetSymbolDiagnostics,
+    intraday_burst_readback: {
+      contract: INTRADAY_BURST_READBACK_CONTRACT,
+      path: intradayBurstTelegramOutbox.readback_path,
+      rows: intradayBurstTelegramOutbox.readback_rows,
+    },
   };
 }async function writeStatusAndScorecard(result) {
   const motherPoolDelta = updateMotherPoolDelta(result);
@@ -5507,6 +5534,33 @@ function updateMotherPoolDelta(result) {
   result.payload.target_symbol_diagnostics = motherPoolDelta.target_symbol_diagnostics;
   await ensureWriterLease();
   const nonFatalWriteErrors = result.payload.nonfatal_write_errors || [];
+  const burstReadbackRows = Array.isArray(motherPoolDelta?.intraday_burst_readback?.rows)
+    ? motherPoolDelta.intraday_burst_readback.rows
+    : [];
+  try {
+    const burstWrite = await supabaseUpsert(
+      "fugle_daytrade_intraday_burst_events",
+      burstReadbackRows,
+      "trade_date,symbol,candle_time",
+      { batchSize: 100, timeoutMs: 15000, retries: 1, retryDelayMs: 500 },
+    );
+    result.payload.intraday_burst_readback = {
+      ...motherPoolDelta.intraday_burst_readback,
+      supabase_table: "fugle_daytrade_intraday_burst_events",
+      written: burstWrite.written || 0,
+      status: "OK",
+    };
+  } catch (error) {
+    // This is observation evidence only: it must not halt the formal source writer.
+    nonFatalWriteErrors.push({ code: "intraday_burst_readback_write_failed", message: error?.message || String(error) });
+    result.payload.intraday_burst_readback = {
+      ...motherPoolDelta.intraday_burst_readback,
+      supabase_table: "fugle_daytrade_intraday_burst_events",
+      written: 0,
+      status: "DATA_GAP",
+      reason_code: "burst_readback_missing",
+    };
+  }
   result.payload.source_host_id = SOURCE_HOST_ID;
   result.payload.source_host_role = SOURCE_HOST_ROLE;
   result.payload.writer_instance_id = WRITER_INSTANCE_ID;

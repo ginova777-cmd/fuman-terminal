@@ -69,7 +69,7 @@ function compactTerminalRow(row = {}) {
     p: row.entryPrice ?? row.price ?? null, x: row.pct || "", s: row.score ?? null,
     l: row.signalLine || "", r: row.reason || "", u: row.supportPrice ?? null,
     k: row.stopLoss ?? null, o: row.targetPrice ?? null, a: row.entryTradeDate || "",
-    m: row.candleCount ?? null, v: row.volumeRatio1m ?? null, f: row.formalCandidate === true,
+    m: row.candleCount ?? null, v: row.volumeRatio1m ?? null, b: row.burstObservationLabel || "", bg: row.burstDataGapReason || "", f: row.formalCandidate === true,
     sm: row.scanMode || "",
   };
 }
@@ -214,6 +214,7 @@ async function main() {
       formalIntradayOneMinuteReadySymbols: water.rows.length - dataGaps.length,
       websocket: water.websocket,
       websocketFormalReady,
+      burstReadback: water.burstReadback,
       noLegacyReadbackViews: true,
       noTop40Gate: true,
       noPreviousGoodFallback: true,

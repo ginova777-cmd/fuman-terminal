@@ -13,6 +13,7 @@ const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 process.env.FUMAN_RUNTIME_DIR = RUNTIME_DIR;
 process.env.FUGLE_COLLECTOR_ROLE = "daytrade";
 const { readFugleWebSocketCandles, readFugleWebSocketQuotes } = require("../lib/fugle-websocket-quotes");
+const { readBurstReadback } = require("../lib/daytrade-intraday-burst-reader");
 const SOURCE_NAME = "fugle_daytrade_source";
 const CONTRACT = "strategy2-v3-fugle-deep-scan-water-v1";
 const MIN_CANDLES = 35;
@@ -216,6 +217,7 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
   const poolRows = pool.filter((row) => isDeepScanEligible(row.payload || {}, tradeDate));
   const symbols = [...new Set(poolRows.map((row) => String(row.symbol || "")).filter((symbol) => /^\d{4}$/.test(symbol)))];
   const requestedSymbols = new Set(symbols);
+  const burstReadback = await readBurstReadback(source, tradeDate, readRows);
   const liveQuotes = readFugleWebSocketQuotes({ maxAgeMs: 120000 });
   const liveCandles = readFugleWebSocketCandles({ maxAgeMs: 6 * 60 * 60 * 1000 });
   const quoteBySymbol = new Map();
@@ -263,6 +265,7 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
     const payload = poolRow.payload || {};
     const metrics = payload.motherPoolMetrics || {};
     const quote = quoteBySymbol.get(symbol) || {};
+    const burst = burstReadback.bySymbol.get(symbol) || null;
     const symbolCandles = (candleBySymbol.get(symbol) || []).sort((left, right) => String(left.candle_time).localeCompare(String(right.candle_time)));
     const quoteTime = quote.quote_seen_at || quote.updated_at || "";
     const quoteSeenMs = Date.parse(String(quoteTime || ""));
@@ -297,6 +300,9 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
       deepScanEligible: true,
       formalQuoteReady: hasFormalQuote,
       formalOneMinuteReady: websocket.formalReady && hasRequired1mWindow,
+      burstReadback: burst,
+      burstReadbackStatus: burstReadback.available ? (burst?.data_status || "NO_BURST") : "DATA_GAP",
+      burstReadbackReason: burstReadback.available ? (burst?.reason_code || "") : burstReadback.reasonCode,
       poolEvidence: {
         canonicalPoolLayer: payload.canonical_pool_layer || payload.pool_tier || "",
         dataGap: payload.dataGap || null,
@@ -316,6 +322,11 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
     quoteRows: quoteBySymbol.size,
     candleRows,
     candleBySymbol,
+    burstReadback: {
+      available: burstReadback.available,
+      reasonCode: burstReadback.reasonCode,
+      rows: burstReadback.rows.length,
+    },
     websocket,
     formalReadyRows,
     formalWaterCoverageRatio,
