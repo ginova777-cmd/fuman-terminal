@@ -40,7 +40,7 @@ Do not run these during Supabase incident.
    Expected PASS: no 522/timeout; run twice 5-10 minutes apart.
 
 2. Source contract health  
-   `npm run verify:fugle-source-contract && npm run verify:daytrade-source-speed`  
+   `npm run verify:fugle-source-contract && npm run verify:daytrade-websocket-transport`  
    Expected PASS: dedicated daytrade gate A.
 
 3. Strategy source coverage  

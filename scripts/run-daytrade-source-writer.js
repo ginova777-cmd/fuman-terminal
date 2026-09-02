@@ -155,7 +155,7 @@ const MIN_FRESH_QUOTE_COVERAGE = positiveNumber(CONFIG.speedTargets?.minFreshQuo
 const MAX_QUOTE_AGE_SECONDS = positiveNumber(CONFIG.speedTargets?.maxQuoteAgeSeconds, 90);
 const SELECTED_SYMBOL_MAX_AGE_SECONDS = positiveNumber(CONFIG.speedTargets?.selectedSymbolMaxQuoteAgeSeconds, 60);
 const MIN_PRIORITY_POOL_SYMBOLS = 1; // Formal Gate evaluates the dynamic deep-scan pool, never a fixed priority count.
-const MAX_PRIORITY_POOL_SYMBOLS = 600;
+const MAX_PRIORITY_POOL_SYMBOLS = 800;
 const MIN_PRIORITY_FRESH_COVERAGE = positiveNumber(CONFIG.priorityPool?.minFreshQuoteCoverageForA, 0.90);
 const MIN_PRIORITY_INJECTING_QUOTES = positiveNumber(CONFIG.priorityPool?.minFreshQuotesForInjectingA, 1);
 const DEEP_SCAN_POOL_MAX_SYMBOLS = Math.max(1, positiveNumber(process.env.DAYTRADE_DEEP_SCAN_POOL_MAX_SYMBOLS, 1000));
@@ -165,7 +165,7 @@ const FORMAL_SIGNAL_MAX_VOLUME_RANK = positiveNumber(process.env.DAYTRADE_FORMAL
 const MOTHER_POOL_MIN_SYMBOLS = 300;
 const MOTHER_POOL_MAX_SYMBOLS = Math.max(
   MOTHER_POOL_MIN_SYMBOLS,
-  Math.min(600, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MAX_SYMBOLS, 600)),
+  Math.min(800, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MAX_SYMBOLS, 800)),
 );
 // Fugle streaming is the formal live source. REST quote calls are deliberately
 // kept as a small, low-frequency correction path for priority symbols only.
@@ -173,7 +173,7 @@ const REST_PRIORITY_BATCH_LIMIT = Math.max(1, Math.min(80, positiveNumber(proces
 const REST_FALLBACK_INTERVAL_SECONDS = Math.max(60, positiveNumber(process.env.DAYTRADE_REST_FALLBACK_INTERVAL_SECONDS ?? CONFIG.collector?.restFallbackIntervalSeconds, 300));
 const MOTHER_POOL_MIN_PRICE = Math.max(50, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_PRICE ?? CONFIG.motherPool?.minimumPrice, 50));
 const MOTHER_POOL_MIN_TURNOVER_RATE = Math.max(1, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_TURNOVER_RATE ?? CONFIG.motherPool?.minimumTurnoverRate, 1));
-const MOTHER_POOL_RULE_VERSION = 'daytrade_mother_pool_dynamic_300_600_deep_scan_20260813_v5';
+const MOTHER_POOL_RULE_VERSION = 'daytrade_mother_pool_dynamic_300_800_deep_scan_20260902_v6';
 const PREOPEN_REFERENCE_PRICE_CACHE_MS = Math.max(60000, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_CACHE_MS || 15 * 60 * 1000));
 const PREOPEN_REFERENCE_PRICE_MIN_ROWS = Math.max(300, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_MIN_ROWS || 1000));
 let preopenReferencePriceCache = { loadedAt: 0, tradeDate: '', source: 'unavailable', bySymbol: new Map() };

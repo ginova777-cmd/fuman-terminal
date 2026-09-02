@@ -33,6 +33,14 @@ function main() {
   if (contract.rules?.oldSupabaseMarketSnapshotsFallbackDisabled !== true) issues.push("old Supabase market_snapshots fallback rule is not hard-enabled");
   if (contract.rules?.top40IsNotLimitGateOrOnlyEntry !== true) issues.push("TOP40 compatibility rule missing");
   if (contract.rules?.dataGapMustNotDisplayAsNoSignal !== true) issues.push("DATA_GAP display guard missing");
+  if (contract.rules?.motherPoolHotMarketMaximum !== 800) issues.push("Mother Pool hot-market maximum 800 rule missing");
+  if (contract.rules?.motherPoolMinimumIsWarningNotFormalGate !== true) issues.push("Mother Pool minimum warning-only rule missing");
+  if (contract.rules?.productionRootResolvedFromScheduleReceiptAndSha !== true) issues.push("dynamic production-root authority rule missing");
+  for (const verifier of ["verify-daytrade-websocket-transport-readonly.js", "verify-daytrade-source-contract-alignment.js", "verify-daytrade-mother-pool-skeleton.js"]) {
+    if (!contract.rules?.officialVerifiers?.includes(verifier)) issues.push(`official verifier missing: ${verifier}`);
+  }
+  const retiredSpeedVerifier = ["verify-daytrade", "source-speed-readonly.js"].join("-");
+  if (fs.existsSync(path.join(ROOT, "scripts", retiredSpeedVerifier))) issues.push("retired speed verifier still exists");
 
   if (version.formalSkeletonContract !== CONTRACT) issues.push("version.json formalSkeletonContract mismatch");
   if (version.formalSkeletonBaseline !== BASELINE) issues.push("version.json formalSkeletonBaseline mismatch");

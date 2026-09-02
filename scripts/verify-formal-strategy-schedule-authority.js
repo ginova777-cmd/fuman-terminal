@@ -4,10 +4,10 @@ const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
-const FORMAL_ROOT = "C:\\fuman-release-owner\\fuman-terminal";
+const FORMAL_ROOT = path.resolve(__dirname, "..");
 const authorityPath = path.join(FORMAL_ROOT, "data", "contracts", "release_root_authority_v1.json");
 const authority = JSON.parse(fs.readFileSync(authorityPath, "utf8"));
-const PRODUCTION_ROOT = path.resolve(String(authority.productionRoot || ""));
+const CONFIGURED_PRODUCTION_ROOT = path.resolve(String(authority.productionRoot || ""));
 const expected = [
   ["Fuman Terminal Autonomous Root Monitor", "run-terminal-master-control.ps1", ["06:00","06:05","07:00","07:08","08:20","08:29","08:30","08:35","08:36","08:40","08:45","08:50","08:55","09:00","12:30","12:40","12:50","12:55","13:00","13:15","13:30","15:35","16:00","17:00","17:10","17:40","18:10","18:40","19:10","20:05","21:00","21:10","21:15","21:40","22:00","23:10"]],
   ["Fuman Daytrade Source Writer 0600-1330", "Run-DaytradeSourceWriterPinned.ps1", ["06:00"], { allowRuntimeAction: true, authorityRoot: "production", requireAuthorityArgument: true }],
@@ -52,7 +52,21 @@ function rows() {
 }
 
 const tasks = rows();
+function scheduledRoot(task) {
+  const action = String(task?.arguments || "");
+  const explicit = /-FumanRoot\s+"([^"]+)"/i.exec(action)?.[1];
+  return path.resolve(explicit || task?.workingDirectory || "");
+}
+const writerAuthorityTask = tasks.find((row) => row.name === "Fuman Daytrade Source Writer 0600-1330");
+const collectorAuthorityTask = tasks.find((row) => row.name === "Fuman Fugle Daytrade WebSocket Collector 0600-1330");
+const writerScheduledRoot = scheduledRoot(writerAuthorityTask);
+const collectorScheduledRoot = scheduledRoot(collectorAuthorityTask);
+const PRODUCTION_ROOT = writerScheduledRoot;
 const issues = [];
+if (!writerScheduledRoot) issues.push("production_root_missing_from_writer_schedule");
+if (!collectorScheduledRoot) issues.push("production_root_missing_from_collector_schedule");
+if (writerScheduledRoot && collectorScheduledRoot && writerScheduledRoot.toLowerCase() !== collectorScheduledRoot.toLowerCase()) issues.push("production_root_schedule_disagreement");
+if (writerScheduledRoot && CONFIGURED_PRODUCTION_ROOT.toLowerCase() !== writerScheduledRoot.toLowerCase()) issues.push("production_root_authority_receipt_mismatch");
 const evidence = [];
 function triggerTimes(task) {
   return [...new Set((Array.isArray(task?.triggers) ? task.triggers : task?.triggers ? [task.triggers] : [])
@@ -120,6 +134,9 @@ const report = {
   checkedAt: new Date().toISOString(),
   formalRoot: FORMAL_ROOT,
   productionRoot: PRODUCTION_ROOT,
+  productionRootSource: "windows_schedule_action",
+  configuredProductionRoot: CONFIGURED_PRODUCTION_ROOT,
+  approvedProductionSha: authority.approvedProductionSha || "",
   expectedTaskCount: expected.length,
   evidence,
   issues,

@@ -290,14 +290,14 @@ function gateWebsocketOk(gate) {
 }
 
 const MOTHER_POOL_MIN_SYMBOLS = 300;
-const MOTHER_POOL_MAX_SYMBOLS = 600;
+const MOTHER_POOL_MAX_SYMBOLS = 800;
 const DYNAMIC_FORMAL_SCOPES = new Set([
   "mother_pool_complete_dynamic_scan",
   "priority_hot_deep_scan_pool_only",
 ]);
 
 function hasDynamicPoolLayers(item) {
-  return item.motherPoolSymbols >= MOTHER_POOL_MIN_SYMBOLS
+  return item.motherPoolSymbols > 0
     && item.motherPoolSymbols <= MOTHER_POOL_MAX_SYMBOLS
     && item.priorityPoolSymbols > 0
     && item.priorityPoolSymbols <= item.motherPoolSymbols
@@ -460,9 +460,9 @@ function writerCodeRegressionChecks() {
       && source.includes('formal_gate_scope: "priority_hot_deep_scan_pool_only"')
       && source.includes('mother_pool_scan_min_symbols')
       && source.includes('mother_pool_scan_max_symbols'),
-    motherPoolMinimum300: source.includes('const MOTHER_POOL_MIN_SYMBOLS = 300;')
+    motherPoolTarget300DynamicMax800: source.includes('const MOTHER_POOL_MIN_SYMBOLS = 300;')
       && source.includes('const MOTHER_POOL_MAX_SYMBOLS')
-      && source.includes('Math.min(600,'),
+      && source.includes('Math.min(800,'),
     motherPoolFreshnessFirst: source.includes('Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true)')
       && source.includes('mother_pool_fresh_coverage_120s'),
     motherPoolOptionalPriceFloor: source.includes('MOTHER_POOL_MIN_PRICE') && source.includes('price_below_'),

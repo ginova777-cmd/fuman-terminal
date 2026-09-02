@@ -35,6 +35,14 @@
     "top40IsNotLimitGateOrOnlyEntry": true,
     "websocketCandlesAreFormal1mSource": true,
     "dataGapMustNotDisplayAsNoSignal": true,
-    "oldSupabaseMarketSnapshotsFallbackDisabled": true
+    "oldSupabaseMarketSnapshotsFallbackDisabled": true,
+    "motherPoolHotMarketMaximum": 800,
+    "motherPoolMinimumIsWarningNotFormalGate": true,
+    "productionRootResolvedFromScheduleReceiptAndSha": true,
+    "officialVerifiers": [
+      "verify-daytrade-websocket-transport-readonly.js",
+      "verify-daytrade-source-contract-alignment.js",
+      "verify-daytrade-mother-pool-skeleton.js"
+    ]
   }
 }

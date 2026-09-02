@@ -282,7 +282,7 @@ PS1 gate wiring:
 Run:
 
 ```text
-npm run verify:daytrade-source-speed
+npm run verify:daytrade-websocket-transport
 ```
 
 Default checked source:
