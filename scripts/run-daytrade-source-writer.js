@@ -3834,7 +3834,7 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     daytradeFormalPrioritySymbols,
     bridgePayload.tradeDate || taipeiDate(),
   );
-  const strategy2FormalWaterSymbols = [...new Set(daytradeFormalPrioritySymbols)];
+  const strategy2FormalWaterSymbols = [...new Set(formalPoolRows.filter((row) => row.deepScanEligible === true || row.deep_scan_eligible === true || row.payload?.deep_scan_eligible === true).map((row) => normalizeCode(row.symbol)).filter((code) => /^\d{4}$/.test(code)))];
   const prependUnique = (preferred, values) => {
     const seen = new Set();
     const out = [];

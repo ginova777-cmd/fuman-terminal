@@ -83,6 +83,7 @@ const OPENING_BOOST_DELAY_MS = Math.max(0, Number(process.env.FUGLE_COLLECTOR_OP
 const OPENING_BOOST_TARGET_COVERAGE = Math.max(0.5, Math.min(1, Number(process.env.FUGLE_COLLECTOR_OPENING_BOOST_TARGET_COVERAGE || 0.95)));
 const STATE_DIR = path.dirname(FUGLE_WS_STATUS_FILE);
 const SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE = path.join(STATE_DIR, "fugle-daytrade-source-status-heartbeat.json");
+const WEBSOCKET_RECOVERY_RECEIPT_FILE = process.env.FUGLE_WS_RECOVERY_RECEIPT_FILE || path.join(STATE_DIR, "fugle-daytrade-websocket-recovery.json");
 const RATE_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-rate-state.json");
 const UNSUPPORTED_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-unsupported-symbols.json");
 const DAYTRADE_PRIORITY_SYMBOLS_CONTRACT_FILE = "fugle-daytrade-ws-priority-symbols.json";
@@ -614,7 +615,7 @@ function readPrioritySymbols(symbols) {
   return {
     symbols: priorityOrdered.length ? priorityOrdered : ordered,
     allSymbols: ordered,
-    strategy2Symbols: (Array.isArray(payload.strategy2) ? payload.strategy2 : payload.strategy2Symbols || [])
+    strategy2Symbols: (payload.strategy2FormalWaterSymbols || (Array.isArray(payload.strategy2) ? payload.strategy2 : payload.strategy2Symbols) || [])
       .map((value) => normalizeCode(value?.symbol || value?.code || value))
       .filter((code, index, values) => /^\d{4}$/.test(code) && universe.has(code) && values.indexOf(code) === index),
     counts,
@@ -1173,7 +1174,8 @@ function selectStreamingSymbols(rotationCursor = 0) {
   const candleChannel = STREAMING_CHANNELS.includes("candles") ? "candles" : "";
   const taipeiParts = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" }).formatToParts(new Date());
   const taipeiValues = Object.fromEntries(taipeiParts.map((part) => [part.type, part.value]));
-  const taipeiMinute = Number(taipeiValues.hour) * 60 + Number(taipeiValues.minute);
+  const diagnosticMinute = Number(process.env.FUGLE_STREAMING_DIAGNOSTIC_TAIPEI_MINUTE);
+  const taipeiMinute = Number.isFinite(diagnosticMinute) ? diagnosticMinute : Number(taipeiValues.hour) * 60 + Number(taipeiValues.minute);
   if (aggregateRadarChannel && taipeiMinute < 525) {
     const seen = new Set();
     const selected = [];
@@ -1671,7 +1673,7 @@ async function runStreamingCollector() {
       ws.addEventListener("error", (event) => {
         writeStreamingStatus({ ok: false, websocketError: event?.message || "websocket_error" });
       });
-      ws.addEventListener("close", () => {
+      ws.addEventListener("close", (event) => {
         closed = true;
         clearInterval(statusTimer);
         clearInterval(subscribeTimer);
@@ -1679,7 +1681,7 @@ async function runStreamingCollector() {
         clearInterval(staleRecoveryTimer);
         clearInterval(priorityRefreshTimer);
         writeStreamingStatus({ websocketConnected: false });
-        resolve();
+        resolve({ reason: staleRecoveryTriggered ? "stale_source" : "websocket_closed", closeCode: Number(event?.code || 0), closeReason: String(event?.reason || "") });
       });
       const statusTimer = setInterval(() => {
         if (closed) clearInterval(statusTimer);
@@ -1723,20 +1725,21 @@ async function runStreamingCollector() {
       }, Math.min(STREAMING_STATUS_MS, 5000));
     } catch (error) {
       writeStreamingStatus({ ok: false, websocketError: error?.message || String(error) });
-      resolve();
+      resolve({ reason: "websocket_exception", error: error?.message || String(error) });
     }
   });
 
   // eslint-disable-next-line no-constant-condition
   let reconnectDelayMs = STREAMING_RECONNECT_INITIAL_MS;
+  let recoveryAttempt = 0;
   while (true) {
     const runStartedAt = Date.now();
-    await runOnce();
+    const outcome = await runOnce();
     const delayMs = reconnectDelayMs;
     const connectedLongEnough = Date.now() - runStartedAt >= STREAMING_RECONNECT_MAX_MS;
-    reconnectDelayMs = connectedLongEnough
-      ? STREAMING_RECONNECT_INITIAL_MS
-      : Math.min(STREAMING_RECONNECT_MAX_MS, reconnectDelayMs * 2);
+    recoveryAttempt = connectedLongEnough ? 1 : recoveryAttempt + 1;
+    reconnectDelayMs = connectedLongEnough ? STREAMING_RECONNECT_INITIAL_MS : Math.min(STREAMING_RECONNECT_MAX_MS, reconnectDelayMs * 2);
+    writeJson(WEBSOCKET_RECOVERY_RECEIPT_FILE, { ok: true, contract: "fugle-daytrade-websocket-recovery-v1", action: "bounded_resubscribe", attempt: recoveryAttempt, reason: outcome?.reason || "websocket_closed", closeCode: outcome?.closeCode || 0, closeReason: outcome?.closeReason || "", error: outcome?.error || "", retryDelayMs: delayMs, retryDelayBounded: delayMs >= STREAMING_RECONNECT_INITIAL_MS && delayMs <= STREAMING_RECONNECT_MAX_MS, nextAction: "reconnect_authenticate_resubscribe", updatedAt: nowIso() });
     await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
 }
@@ -1754,7 +1757,11 @@ async function main() {
   }
 }
 
-if (COLLECTOR_MODE === "rest") {
+if (process.argv.includes("--diagnose-streaming-plan")) {
+  const plan = selectStreamingSymbols(0);
+  const pinned = plan.strategy2Subscription?.expectedSymbols.every((symbol) => plan.strategy2Subscription.candles.includes(symbol) && plan.strategy2Subscription.trades.includes(symbol) && plan.strategy2Subscription.aggregates.includes(symbol)) || false;
+  process.stdout.write(JSON.stringify({ ok: plan.candleRadarSymbols.length === 1000 && plan.quoteRadarSymbols.length === 400 && plan.aggregateRadarSymbols.length === 400 && pinned, contract: "fugle-daytrade-websocket-subscription-plan-readonly-v1", candles: plan.candleRadarSymbols.length, trades: plan.quoteRadarSymbols.length, aggregates: plan.aggregateRadarSymbols.length, strategy2Expected: plan.strategy2Subscription?.expectedSymbols.length || 0, strategy2PinnedAllChannels: pinned, writes: 0 }, null, 2) + "\n");
+} else if (COLLECTOR_MODE === "rest") {
   main();
 } else {
   runStreamingCollector().catch((error) => {

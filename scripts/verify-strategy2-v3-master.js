@@ -5,9 +5,10 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const FORMAL_ROOT = "C:/fuman-release-owner/fuman-terminal";
+const VERIFIER_ROOT = path.resolve(__dirname, "..");
 const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const LIVE_RECEIPT = path.join(RUNTIME_ROOT, "data", "scan-receipts", "strategy2-v3-live.json");
-const TRI_RECEIPT = path.join(RUNTIME_ROOT, "data", "scan-receipts", "strategy2-tri-surface-canonical-latest.json");
+const TRI_RECEIPT = process.env.STRATEGY2_TRI_SURFACE_RECEIPT_FILE || path.join(RUNTIME_ROOT, "data", "scan-receipts", "strategy2-tri-surface-canonical-latest.json");
 const CONTRACT = "strategy2-live-v3-fugle-deep-scan-1m";
 const MIN_FORMAL_WATER_COVERAGE_RATIO = 0.90;
 
@@ -24,8 +25,8 @@ function taskExists(name) {
 }
 
 function runTriSurface(tradeDate) {
-  const child = spawnSync(process.execPath, [path.join(FORMAL_ROOT, "scripts", "verify-strategy2-terminal-visible-readback.js"), `--trade-date=${tradeDate}`], {
-    cwd: FORMAL_ROOT,
+  const child = spawnSync(process.execPath, [path.join(VERIFIER_ROOT, "scripts", "verify-strategy2-terminal-visible-readback.js"), `--trade-date=${tradeDate}`], {
+    cwd: VERIFIER_ROOT,
     encoding: "utf8",
     windowsHide: true,
     env: process.env,
