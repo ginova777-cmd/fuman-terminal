@@ -16,15 +16,12 @@ const {
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
-  "C:/fuman-terminal/secrets/fugle-api-key.txt",
 ];
 const FUTOPT_TICKERS_CACHE_FILES = [
   path.join(RUNTIME_DIR, "cache", "intraday", "fugle-futopt-tickers.json"),
-  "C:/fuman-terminal/ops/public-slot/runtime/public-slot-futopt-tickers-cache.json",
 ];
 const STOCKS_SLIM_FILES = [
   path.join(RUNTIME_DIR, "data", "stocks-slim.json"),
-  "C:/fuman-terminal/data/stocks-slim.json",
 ];
 
 const STREAMING_URL = process.env.FUGLE_FUTOPT_STREAMING_URL || "wss://api.fugle.tw/marketdata/v1.0/futopt/streaming";
@@ -36,6 +33,7 @@ const STREAMING_MAX_SYMBOLS = Math.max(1, Number(process.env.FUGLE_FUTOPT_STREAM
 const STREAMING_MAX_TOTAL_SUBSCRIPTIONS = Math.max(STREAMING_CHANNELS.length, Number(process.env.FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS || 1800));
 const STREAMING_SUBSCRIBE_CHUNK_SIZE = Math.max(1, Math.min(50, Number(process.env.FUGLE_FUTOPT_STREAMING_SUBSCRIBE_CHUNK_SIZE || 50)));
 const STREAMING_RESUBSCRIBE_MS = Math.max(30000, Number(process.env.FUGLE_FUTOPT_STREAMING_RESUBSCRIBE_MS || 60000));
+const STREAMING_SUBSCRIBE_PACE_MS = Math.max(50, Number(process.env.FUGLE_FUTOPT_STREAMING_SUBSCRIBE_PACE_MS || 200));
 const STREAMING_RECONNECT_INITIAL_MS = Math.max(1000, Number(
   process.env.FUGLE_FUTOPT_STREAMING_RECONNECT_INITIAL_MS
   || process.env.FUGLE_FUTOPT_STREAMING_RECONNECT_MS
@@ -50,6 +48,7 @@ const FORMAL_LIVE_MIRROR_MS = Math.max(30000, Number(process.env.FUGLE_FUTOPT_FO
 const FORMAL_LIVE_MIRROR_RETRIES = Math.max(1, Math.min(4, Number(process.env.FUGLE_FUTOPT_FORMAL_LIVE_MIRROR_RETRIES || 3)));
 const FORMAL_LIVE_MIRROR_BACKOFF_MS = Math.max(250, Number(process.env.FUGLE_FUTOPT_FORMAL_LIVE_MIRROR_BACKOFF_MS || 1000));
 const FORMAL_LIVE_MIRROR_TIMEOUT_MS = Math.max(1000, Number(process.env.FUGLE_FUTOPT_FORMAL_LIVE_MIRROR_TIMEOUT_MS || 10000));
+const FORMAL_LIVE_MIRROR_BATCH_SIZE = Math.max(10, Math.min(100, Number(process.env.FUGLE_FUTOPT_FORMAL_LIVE_MIRROR_BATCH_SIZE || 50)));
 const CACHE_TTL_MS = Math.max(30000, Number(process.env.FUGLE_FUTOPT_WS_CACHE_TTL_MS || 5 * 60 * 1000));
 const STREAMING_AFTER_HOURS_RAW = String(process.env.FUGLE_FUTOPT_STREAMING_AFTER_HOURS || "").trim().toLowerCase();
 const STREAMING_AFTER_HOURS = /^(1|true|yes|on)$/.test(STREAMING_AFTER_HOURS_RAW)
@@ -59,7 +58,7 @@ const STREAMING_AFTER_HOURS = /^(1|true|yes|on)$/.test(STREAMING_AFTER_HOURS_RAW
     : null;
 
 const FORMAL_LIVE_MIRROR_RECEIPT_FILE = path.join(path.dirname(FUGLE_FUTOPT_WS_STATUS_FILE), "fugle-daytrade-futopt-live-mirror.json");
-const COLLECTOR_RELEASE = "futopt-formal-live-mirror-v3";
+const COLLECTOR_RELEASE = "futopt-formal-live-mirror-v5";
 
 let lastMessageAt = "";
 let lastFormalLiveMirrorAt = 0;
@@ -384,17 +383,24 @@ async function mirrorFormalFutoptLive() {
   for (let attempt = 1; attempt <= FORMAL_LIVE_MIRROR_RETRIES; attempt += 1) {
     receipt.attempts = attempt;
     try {
-      const response = await fetchWithTimeout(`${baseUrl}/rest/v1/fugle_daytrade_futopt_quotes_live?on_conflict=future_symbol`, {
-        method: "POST",
-        headers: {
-          apikey: apiKey,
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          Prefer: "resolution=merge-duplicates,return=minimal",
-        },
-        body: JSON.stringify(rows),
-      });
-      if (!response.ok) throw Object.assign(new Error(`futopt_formal_live_mirror_http_${response.status}`), { status: response.status });
+      receipt.written_rows = 0;
+      const batches = chunkArray(rows, FORMAL_LIVE_MIRROR_BATCH_SIZE);
+      receipt.batch_count = batches.length;
+      for (const batch of batches) {
+        const response = await fetchWithTimeout(`${baseUrl}/rest/v1/fugle_daytrade_futopt_quotes_live?on_conflict=future_symbol`, {
+          method: "POST",
+          headers: {
+            apikey: apiKey,
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            Prefer: "resolution=merge-duplicates,return=minimal",
+          },
+          body: JSON.stringify(batch),
+        });
+        if (!response.ok) throw Object.assign(new Error(`futopt_formal_live_mirror_http_${response.status}`), { status: response.status });
+        receipt.written_rows += batch.length;
+        await delay(100);
+      }
       receipt.status = "written";
       writeJson(FORMAL_LIVE_MIRROR_RECEIPT_FILE, receipt);
       return receipt;
@@ -521,7 +527,7 @@ async function run() {
       scheduleFormalFutoptLiveMirror(statusSnapshot);
     };
 
-    const subscribe = () => {
+    const subscribe = async () => {
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
       selection = selectStreamingTickers();
       chunks = chunkArray(selection.selectedSymbols, STREAMING_SUBSCRIBE_CHUNK_SIZE);
@@ -542,6 +548,7 @@ async function run() {
         for (const symbols of chunks) {
           ws.send(JSON.stringify(buildSubscribeMessage(channel, symbols)));
           chunksSent += 1;
+          await delay(STREAMING_SUBSCRIBE_PACE_MS);
         }
       }
       writeStreamingStatus();

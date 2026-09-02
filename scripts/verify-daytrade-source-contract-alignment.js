@@ -658,7 +658,7 @@ function writerSupervisorRegressionChecks() {
     applyReconcilesFutopt: source.includes("Invoke-FugleFutoptCollectorReleaseReconcile"),
     requiredChannels: source.includes("$env:FUGLE_FUTOPT_STREAMING_CHANNELS = \"trades,aggregates,candles\""),
     subscriptionBudget: source.includes("$env:FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS = \"1800\"") && source.includes("$env:FUGLE_FUTOPT_STREAMING_MAX_SYMBOLS = \"500\""),
-    versionedFutoptRelease: source.includes("$FutoptCollectorRelease = \"futopt-formal-live-mirror-v1\"") && source.includes("FUGLE_FUTOPT_COLLECTOR_RELEASE"),
+    versionedFutoptRelease: source.includes("$FutoptCollectorRelease = \"futopt-formal-live-mirror-v5\"") && source.includes("FUGLE_FUTOPT_COLLECTOR_RELEASE"),
     rotationReceiptAndFailClosed: source.includes("fugle-daytrade-futopt-collector-rotation.json") && source.includes("collector_rotation_stop_failed") && source.includes("canonical gate remains fail-closed"),
   };  const issues = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => `writer_supervisor_${name}_missing`);
   return { ok: issues.length === 0, path: wrapperPath, checks, issues };
