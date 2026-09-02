@@ -2886,6 +2886,7 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
   let files = [];
   try { files = fs.readdirSync(stateDir).filter((file) => /^opening_report_0830\.industry_bias\..+\.json$/i.test(file)); } catch {}
   const bySymbol = new Map();
+  const warmupBySymbol = new Map();
   let acceptedFiles = 0;
   let rejectedFiles = 0;
   let inputFilesValid = 0;
@@ -2941,6 +2942,16 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
       && Array.isArray(payload.mapped_symbols) && payload.mapped_symbols.length > 0;
     if (!valid) { rejectedFiles += 1; continue; }
     inputFilesValid += 1;
+    for (const value of payload.mapped_symbols) {
+      const symbol = normalizeCode(value?.symbol || value?.code || value);
+      if (!symbol || !activeSet.has(symbol)) continue;
+      const inputPrice = numberValue(value?.price ?? value?.last_price ?? value?.lastPrice ?? value?.close);
+      if (inputPrice > 0 && inputPrice < MOTHER_POOL_MIN_PRICE) continue;
+      const previous = warmupBySymbol.get(symbol) || { symbol, sources: [], reports: [] };
+      previous.sources.push("opening_report_0830");
+      previous.reports.push({ industry: payload.industry, runId, inputPath });
+      warmupBySymbol.set(symbol, previous);
+    }
     const receiptPath = path.join(receiptDir, "opening-report-0830-priority-bias-bridge-" + String(payload.industry).trim() + "-" + todayKey + ".json");
     const receipt = readJson(receiptPath);
     if (!bridgeReceiptIsValid(receipt, payload, runId, inputPath, receiptPath)) {
@@ -2970,7 +2981,8 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
   }
   return {
     symbols: [...bySymbol.values()],
-    counts: { filesAccepted: acceptedFiles, filesRejected: rejectedFiles, inputFilesValid, bridgeReceiptsAccepted, bridgeReceiptsRejected, symbols: bySymbol.size },
+    warmupSymbols: [...warmupBySymbol.values()],
+    counts: { filesAccepted: acceptedFiles, filesRejected: rejectedFiles, inputFilesValid, bridgeReceiptsAccepted, bridgeReceiptsRejected, symbols: bySymbol.size, warmupSymbols: warmupBySymbol.size },
     updatedAt: latestUpdatedAt,
     source: "opening_report_0830_industry_bias_bridge_verified",
     status: acceptedFiles > 0 ? "ready" : "missing",
@@ -3755,6 +3767,10 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
 
 function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
   const existing = readJson(PRIORITY_SYMBOLS_FILE, {});
+  const openingReport0830 = readOpeningReport0830PrioritySeeds(activeSymbols);
+  const openingReportQuoteRefreshSymbols = (openingReport0830.warmupSymbols || [])
+    .map((value) => normalizeCode(value?.symbol || value?.code || value))
+    .filter((code) => /^\d{4}$/.test(code));
   // This function runs after the strategy/chip bridge refresh. Keep the bridge
   // from the current artifact, or recover it from its cache when another
   // source writer has just replaced the priority shell.
@@ -3795,11 +3811,13 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
   const priceEligibleSymbolSet = new Set(formalPoolRows
     .map((row) => normalizeCode(row.symbol))
     .filter((code) => /^\d{4}$/.test(code)));
-  const openingReportCandlePrioritySymbols = compactDateKey(existing.openingReport0830PrewarmTradeDate) === compactDateKey(taipeiDate())
-    ? (existing.openingReport0830PrewarmSymbols || [])
-      .map((value) => normalizeCode(value?.symbol || value?.code || value))
-      .filter((code) => priceEligibleSymbolSet.has(code))
-    : [];
+  const openingReportCandlePrioritySymbols = [...new Set([
+    ...openingReportQuoteRefreshSymbols,
+    ...(compactDateKey(existing.openingReport0830PrewarmTradeDate) === compactDateKey(taipeiDate())
+      ? (existing.openingReport0830PrewarmSymbols || [])
+      : []),
+  ].map((value) => normalizeCode(value?.symbol || value?.code || value))
+    .filter((code) => priceEligibleSymbolSet.has(code)))];
   const fixedUserCasePrefix = [...USER_CASE_SYMBOLS].filter((code) => priceEligibleSymbolSet.has(code));
   const userCaseCandlePrioritySymbols = [...new Set([
     ...fixedUserCasePrefix,
@@ -3872,6 +3890,12 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     daytradePriorityCount: daytradePrioritySymbols.length,
     daytradeCandlePrioritySymbols: [...new Set(daytradeCandlePrioritySymbols)],
     daytradeCandlePriorityCount: new Set(daytradeCandlePrioritySymbols).size,
+    openingReport0830PrewarmTradeDate: taipeiDate(),
+    openingReport0830PrewarmSymbols: [...new Set(openingReportQuoteRefreshSymbols)],
+    openingReport0830QuoteRefreshTradeDate: taipeiDate(),
+    openingReport0830QuoteRefreshSymbols: [...new Set(openingReportQuoteRefreshSymbols)],
+    openingReport0830QuoteRefreshCount: new Set(openingReportQuoteRefreshSymbols).size,
+    openingReport0830HydrationPolicy: "quote_refresh_then_hard_filter_then_candle_priority",
     userCaseSymbols: [...new Set(userCaseCandlePrioritySymbols)],
     userCaseCandlePrioritySymbols: [...new Set(userCaseCandlePrioritySymbols)],
     userCaseCandlePriorityCount: new Set(userCaseCandlePrioritySymbols).size,
@@ -3910,7 +3934,10 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
   const priceGateArtifactChanged = Number(existing.daytradeMinimumPrice || 0) !== MOTHER_POOL_MIN_PRICE
     || String(existing.daytradePriceGateStatus || "") !== (MOTHER_POOL_MIN_PRICE > 0 ? "minimum_price_enforced" : "no_price_floor")
     || JSON.stringify(existing.daytradePoolPriceBySymbol || {}) !== JSON.stringify(nextPriorityPayload.daytradePoolPriceBySymbol || {});
-  if (!sameSymbols || !samePriorityCounts || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
+  const openingReportHydrationChanged = compactDateKey(existing.openingReport0830QuoteRefreshTradeDate) !== compactDateKey(taipeiDate())
+    || JSON.stringify(existing.openingReport0830QuoteRefreshSymbols || []) !== JSON.stringify(nextPriorityPayload.openingReport0830QuoteRefreshSymbols || [])
+    || JSON.stringify(existing.openingReport0830PrewarmSymbols || []) !== JSON.stringify(nextPriorityPayload.openingReport0830PrewarmSymbols || []);
+  if (!sameSymbols || !samePriorityCounts || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged || openingReportHydrationChanged) {
     writeJson(PRIORITY_SYMBOLS_FILE, nextPriorityPayload);
     writeFugleWebSocketSymbols(nextPriorityPayload.symbols, {
       source: "daytrade-dedicated-priority-bridge",

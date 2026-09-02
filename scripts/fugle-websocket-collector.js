@@ -570,6 +570,7 @@ function readPrioritySymbols(symbols) {
     hot: 0,
     daytrade: 0,
     daytradeCandlePriority: 0,
+    openingReport0830QuoteRefresh: 0,
     terminalPriority: 0,
     openingPriority: 0,
     symbols: 0,
@@ -593,6 +594,7 @@ function readPrioritySymbols(symbols) {
     counts[key] = count;
   };
 
+  addMany("openingReport0830QuoteRefresh", payload.openingReport0830QuoteRefreshSymbols, { priority: true });
   addMany("daytradeCandlePriority", payload.daytradeCandlePrioritySymbols, { priority: true });
   addMany("daytrade", payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, { priority: true });
   addMany("terminalPriority", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, { priority: true });

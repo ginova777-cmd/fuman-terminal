@@ -9,6 +9,7 @@ const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
 const RECEIPT_DIR = path.join(RUNTIME_DIR, "data", "opening-report-0830");
 const BRIDGE_SCRIPT = path.resolve(__dirname, "apply-opening-report-0830-priority-bias-bridge.js");
+const MOTHER_POOL_BRIDGE_SCRIPT = path.resolve(__dirname, "apply-opening-report-mother-pool-bridge.js");
 const SOURCE = "opening_report_0830";
 const MODE = "priority_bias_only";
 const ALLOWED_ACTION = "boost_scan_priority_only";
@@ -404,6 +405,19 @@ async function syncTerminalBriefingSnapshot(tradeDate, runId) {
   }
 }
 
+function runMotherPoolBridge(tradeDate) {
+  const result = spawnSync(process.execPath, [MOTHER_POOL_BRIDGE_SCRIPT, `--trade-date=${tradeDate}`], {
+    cwd: path.resolve(__dirname, ".."),
+    encoding: "utf8",
+    windowsHide: true,
+    env: { ...process.env, FUMAN_RUNTIME_DIR: RUNTIME_DIR },
+  });
+  return {
+    exitCode: result.status ?? 1,
+    stdout: String(result.stdout || "").trim(),
+    stderr: String(result.stderr || "").trim(),
+  };
+}
 async function main() {
   const tradeDate = argValue("--date", process.env.FUMAN_TRADE_DATE || taipeiDateKey());
   const compact = tradeDate.replace(/\D/g, "");
@@ -434,6 +448,11 @@ async function main() {
     if (applyBridge) bridgeResults.push({ industry: item.industry, inputPath, receiptPath, result: runBridge(inputPath, receiptPath, tradeDate) });
     else bridgeResults.push({ industry: item.industry, inputPath, receiptPath, skipped: true, reason_code: "bridge_apply_not_requested" });
   }
+  // This independent bridge runs only after every industry state file is written.
+  // Its result never changes report, terminal, or notification success.
+  const motherPoolTop3Bridge = applyBridge
+    ? runMotherPoolBridge(tradeDate)
+    : { exitCode: null, stdout: "", stderr: "", skipped: true };
   const lineReceipt = await pushLine({ cardText: `Fuman 08:30 日報 ${tradeDate}\n${items.map(approxBiasText).join("\n")}\n台股：${taiwanGate.reason_code}`, runId, dryRun: dryRunLine });
   const lineReceiptPath = path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`);
   writeJson(lineReceiptPath, lineReceipt);
@@ -455,6 +474,7 @@ async function main() {
     overseas_preflight_receipt: overseasPath,
     line_push_receipt: lineReceiptPath,
     bridge_results: bridgeResults.map((row) => ({ industry: row.industry, inputPath: row.inputPath, receiptPath: row.receiptPath, skipped: row.skipped === true, exitCode: row.result?.exitCode ?? null, reason_code: row.reason_code || "" })),
+    mother_pool_top3_bridge: { attempted: applyBridge, exitCode: motherPoolTop3Bridge.exitCode, skipped: motherPoolTop3Bridge.skipped === true, receipt_path: path.join(RECEIPT_DIR, `opening-report-0830-mother-pool-bridge-${compact}.json`) },
     taiwan_gate: taiwanGate,
     checked_at: timestamp()
   };
@@ -470,4 +490,3 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, reason_code: "opening_report_0830_runner_error", error: error?.stack || error?.message || String(error) }, null, 2));
   process.exitCode = 1;
 });
-
