@@ -6,6 +6,7 @@ const path = require("path");
 const {
   fetchFutoptStockMappingReady,
   fetchStockFutureLiveContracts,
+  fetchStarPreopenReadback,
   fetchPreopenFinalBlindBuyReady,
   fetchPreopenSnapshotHistory,
   fetchPreopenSnapshots,
@@ -245,10 +246,11 @@ async function main() {
   const date = taipeiDateKey(now);
   const updatedAt = now.toISOString();
 
-  const [mappingResult, preopenResult, sourceStatus] = await Promise.all([
+  const [mappingResult, preopenResult, sourceStatus, readbackResult] = await Promise.all([
     fetchStockFutureLiveContracts().catch(() => fetchFutoptStockMappingReady()),
     fetchPreopenSnapshots(),
     fetchSourceStatus().catch((error) => ({ ok: false, error: error?.message || String(error), rows: [] })),
+    fetchStarPreopenReadback().catch((error) => ({ ok: false, error: error?.message || String(error), rows: [] })),
   ]);
 
   const mappings = (mappingResult.rows || []).map(normalizeMapping).filter((row) => /^\d{4}$/.test(row.code));
@@ -271,6 +273,20 @@ async function main() {
     .sort((a, b) => b.futurePct - a.futurePct
       || b.futureRelativeTxf - a.futureRelativeTxf
       || b.futureVolume - a.futureVolume);
+  const dataGapRows = (readbackResult.rows || [])
+    .filter((row) => row.star_final_ok !== true)
+    .map((row) => ({
+      code: normalizeCode(row.symbol), name: row.stock_name || row.symbol,
+      futureSymbol: row.future_symbol || "", futureLastPrice: cleanNumber(row.futopt_last_price),
+      futurePct: cleanNumber(row.futopt_change_percent), futureRelativeTxf: cleanNumber(row.relative_to_txf_percent),
+      futureVolume: cleanNumber(row.futopt_total_volume), trialPrice: cleanNumber(row.trial_price),
+      referencePrice: cleanNumber(row.reference_price), trialPct: cleanNumber(row.trial_rise_percent),
+      bidAskRatio: cleanNumber(row.bid_ask_ratio), bestBidPrice: cleanNumber(row.best_bid_price),
+      nearOnePresent: normalizeBool(row.near_one_present), preopenSnapshotCount: cleanNumber(row.preopen_snapshot_count),
+      dataGapReason: row.data_gap_reason || "STAR_CONDITION_NOT_MET",
+      displayLabel: row.display_label || "盤前觀察", sourceStatus: row.source_status || "DATA_GAP",
+      sourceTables: ["v_fugle_daytrade_star_preopen_readback"],
+    }));
   const candidates = [];
   const diagnostics = {
     futoptQuoteLiveHasStockFutures: mappings.some((row) => row.hasQuote && row.futureSymbol && row.futureSymbol !== "TXF"),
@@ -471,6 +487,8 @@ async function main() {
     futureInitialMatches,
     preopenConfirmMatches,
     finalMatches: finalStageMatches,
+    dataGapRows,
+    readbackRows: (readbackResult.rows || []).length,
     matches,
     rawFinalMatches: finalMatches,
     watchCount: matches.length,

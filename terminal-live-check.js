@@ -1481,6 +1481,7 @@ let openBuyBuyCount = 0;
 let openBuyStageCards = [];
 let openBuyStageCounts = {};
 let openBuyFutureInitialMatches = [];
+let openBuyDataGapRows = [];
 let openBuyPreopenConfirmMatches = [];
 let openBuyFinalMatches = [];
 let strategy3Data = [];
@@ -2211,6 +2212,7 @@ function mergeOpenBuyCache(payload) {
   openBuyStageCards = normalizeArray(payload?.stageCards);
   openBuyStageCounts = payload?.stageCounts && typeof payload.stageCounts === "object" ? payload.stageCounts : {};
   openBuyFutureInitialMatches = normalizeArray(payload?.futureInitialMatches);
+  openBuyDataGapRows = normalizeArray(payload?.dataGapRows);
   openBuyPreopenConfirmMatches = normalizeArray(payload?.preopenConfirmMatches);
   openBuyFinalMatches = normalizeArray(payload?.finalMatches);
   openBuyScanMatches = {};
@@ -5421,6 +5423,13 @@ function renderOpenBuyPreopenRows(rows) {
   </article>`).join("");
 }
 
+function renderOpenBuyDataGapRows(rows) {
+  if (!rows.length) return `<div class="open-buy-empty">目前沒有資料缺口</div>`;
+  return rows.slice(0, 40).map((row, index) => `<article class="open-buy-stage-item is-data-gap">
+    <div class="open-buy-stage-item-top"><strong>#${index + 1} ${openBuyStageName(row)}</strong><span>${escapeAttr(row.displayLabel || "DATA_GAP")}</span></div>
+    <div class="open-buy-stage-metrics"><div>原因 <mark>${escapeAttr(row.dataGapReason || "資料不完整")}</mark></div><div>近月 <mark>${row.nearOnePresent ? "有" : "缺"}</mark></div><div>試撮筆數 <mark>${cleanNumber(row.preopenSnapshotCount)}</mark></div><div>期貨 <mark>${openBuyStagePercent(row.futurePct)}</mark></div></div>
+  </article>`).join("");
+}
 function renderOpenBuyStagePanel(title, hint, count, body) {
   return `<section class="open-buy-stage-panel"><div class="open-buy-stage-panel-head"><div><strong>${title}</strong><small>${hint}</small></div><em>${cleanNumber(count).toLocaleString("zh-TW")}</em></div><div class="open-buy-stage-list">${body}</div></section>`;
 }
@@ -5483,6 +5492,7 @@ function renderOpenBuyRadar(universe) {
         ${renderOpenBuyStagePanel("08:46 期貨初動", "只列期貨強勢排序，不代表可買。", futureRows.length || cleanNumber(openBuyStageCounts.futureInitial0846), renderOpenBuyFutureRows(futureRows))}
         ${renderOpenBuyStagePanel("08:55 期現試撮", "列期貨 + 試撮 + 正逆價差，主要觀察名單。", preopenRows.length || cleanNumber(openBuyStageCounts.preopenConfirm0855), renderOpenBuyPreopenRows(preopenRows))}
         ${renderOpenBuyStagePanel("08:58~08:59 終判", "最接近 STAR / 開盤可衝，沒過不硬列。", finalRows.length || cleanNumber(openBuyStageCounts.finalJudgement0858), finalRows.length ? renderOpenBuyPreopenRows(finalRows) : `<div class="open-buy-empty">目前沒有終判通過名單</div>`)}
+        ${renderOpenBuyStagePanel("資料缺口", "所有個股期貨近月均保留一列；缺資料不得 STAR PASS。", openBuyDataGapRows.length, renderOpenBuyDataGapRows(openBuyDataGapRows))}
       </div>
       <section class="swing-panel open-buy-final-table-wrap"><div class="swing-tabs"><button class="active" type="button">正式名單(${rows.length})</button><div class="swing-actions"><input type="search" placeholder="搜尋代號/名稱" value="${escapeAttr(strategyKeyword)}" autocomplete="off" spellcheck="false" inputmode="search" data-strategy-inline-search><button type="button" data-export-action>匯出</button><button type="button" data-export-settings>設定</button></div></div><table class="swing-table"><thead><tr><th>股票代號</th><th>股票名稱</th><th>狀態</th><th>收盤價</th><th>昨日漲幅</th><th>買入</th><th>停利</th><th>停損</th><th>分數</th><th>原因</th></tr></thead><tbody>${tableRows}</tbody></table>${pager}</section>
     </section>`;

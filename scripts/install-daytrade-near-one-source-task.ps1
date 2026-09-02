@@ -1,8 +1,7 @@
 param(
   [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
   [string]$RuntimeRoot = $(if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }),
-  [string]$TaskName = "Fuman Daytrade Near-One Natural Source",
-  [string[]]$At = @("08:45", "08:50", "08:55", "08:59")
+  [string]$TaskName = "Fuman Daytrade Near-One Natural Source"
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,10 +13,9 @@ if (-not $node) { throw "node.exe not found on the source host" }
 
 $argument = ('--use-system-ca "{0}" --apply --once' -f $runner)
 $action = New-ScheduledTaskAction -Execute $node.Source -Argument $argument -WorkingDirectory $ProjectRoot
-$triggers = @()
-foreach ($time in $At) {
-  $triggers += New-ScheduledTaskTrigger -Daily -At ([DateTime]::ParseExact($time, "HH:mm", $null))
-}
+$triggers = @(New-ScheduledTaskTrigger -Daily -At ([DateTime]::ParseExact("08:45", "HH:mm", $null)))
+$triggers[0].Repetition.Interval = "PT1M"
+$triggers[0].Repetition.Duration = "PT15M"
 $settings = New-ScheduledTaskSettingsSet `
   -AllowStartIfOnBatteries `
   -DontStopIfGoingOnBatteries `
@@ -34,4 +32,4 @@ Register-ScheduledTask `
   -Force | Out-Null
 
 Get-ScheduledTask -TaskName $TaskName | Select-Object TaskName, State
-Write-Host ("[daytrade-near-one-source-task] installed task={0} root={1} triggers={2}" -f $TaskName, $ProjectRoot, ($At -join ","))
+Write-Host ("[daytrade-near-one-source-task] installed task={0} root={1} window=08:45-08:59 interval=1m" -f $TaskName, $ProjectRoot)
