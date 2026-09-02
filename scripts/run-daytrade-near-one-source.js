@@ -29,8 +29,7 @@ const READ_TIMEOUT_MS = Math.max(3000, Number(process.env.DAYTRADE_SUPABASE_READ
 const WRITE_TIMEOUT_MS = Math.max(5000, Number(process.env.DAYTRADE_SUPABASE_WRITE_TIMEOUT_MS || 12000));
 const APPLY = process.argv.includes("--apply") || /^(1|true|yes|on)$/i.test(process.env.FUMAN_DAYTRADE_NEAR_ONE_APPLY || "");
 const ONCE = process.argv.includes("--once");
-const SYMBOLS = ["3105", "2455", "2303", "2327"];
-const CAPTURE_SLOTS = ["0845", "0850", "0855", "0859"];
+const CAPTURE_SLOTS = Array.from({ length: 15 }, (_, index) => `08${String(45 + index).padStart(2, "0")}`);
 
 function readText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -100,7 +99,7 @@ function captureSlot(now = new Date()) {
   const minutes = taipeiMinutes(now);
   const hour = Math.floor(minutes / 60);
   const minute = minutes % 60;
-  if (hour === 8 && [45, 50, 55, 59].includes(minute)) return `${String(hour).padStart(2, "0")}${String(minute).padStart(2, "0")}`;
+  if (hour === 8 && minute >= 45 && minute <= 59) return `${String(hour).padStart(2, "0")}${String(minute).padStart(2, "0")}`;
   return "";
 }
 
@@ -313,11 +312,13 @@ function trialFromSnapshot(row) {
   const trialChange = numberValue(row.trial_change_pct ?? row.payload?.trialChangePercent ?? row.payload?.trial_change_pct);
   return {
     trial_price: trial,
+    reference_price: ref,
     trial_change_pct: trialChange !== null ? trialChange : (trial !== null && ref ? ((trial - ref) / ref) * 100 : null),
     best_bid: numberValue(row.best_bid_price ?? row.bid1_price ?? row.payload?.bestBidPrice),
     best_ask: numberValue(row.best_ask_price ?? row.ask1_price ?? row.payload?.bestAskPrice),
     bid_volume: numberValue(row.bid_volume ?? row.bid1_volume ?? row.payload?.bidVolume),
     ask_volume: numberValue(row.ask_volume ?? row.ask1_volume ?? row.payload?.askVolume),
+    is_limit_up_bid: row.is_limit_up_bid === true || row.payload?.isLimitUpBid === true,
     payload: row.payload || {},
   };
 }
@@ -333,20 +334,7 @@ async function readPreopenRows(symbols) {
       { service: true, pageSize: 200 },
     ));
   }
-  for (let offset = 0; offset < symbols.length; offset += 200) {
-    const group = symbols.slice(offset, offset + 200);
-    const filter = group.map((symbol) => encodeURIComponent(symbol)).join(",");
-    const liveRows = await supabaseGetPaged(
-      "fugle_daytrade_quotes_live",
-      `select=symbol,updated_at,previous_close,price,bid_price,ask_price,bid_volume,ask_volume,payload&symbol=in.(${filter})&order=updated_at.desc`,
-      { service: true, pageSize: 200 },
-    );
-    rows.push(...liveRows.map((row) => ({
-      symbol: row.symbol, updated_at: row.updated_at, reference_price: row.previous_close, trial_price: row.price,
-      best_bid_price: row.bid_price, best_ask_price: row.ask_price, bid_volume: row.bid_volume, ask_volume: row.ask_volume,
-      payload: { ...(row.payload || {}), preopen_fallback_source: "fugle_daytrade_quotes_live" },
-    })));
-  }
+  // Trial-auction evidence only: never substitute regular/post-09:00 live quotes.
   return rows;
 }
 function latestBySymbol(rows, tradeDate) {
@@ -396,6 +384,10 @@ async function captureSlotRows(tradeDate, slot, canonicalRows, quoteRows, preope
         natural_schedule_phase: slot,
         websocket_quote_seen_at: quote?.observed_at || null,
         preopen_snapshot_updated_at: preopenBySymbol.get(contract.symbol)?.updated_at || null,
+        reference_price: trial?.reference_price ?? null,
+        bid_volume: trial?.bid_volume ?? null,
+        ask_volume: trial?.ask_volume ?? null,
+        is_limit_up_bid: trial?.is_limit_up_bid === true,
         missing_fields: [
           ["fut_price", quote?.fut_price], ["trial_price", trial?.trial_price],
           ["best_bid", trial?.best_bid], ["best_ask", trial?.best_ask],
