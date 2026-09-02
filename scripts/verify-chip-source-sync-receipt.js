@@ -38,6 +38,21 @@ function main() {
   if (String(receipt?.source || "") !== "finmind-first-official-gap-fill") {
     issues.push(`receipt_source_mismatch:${receipt?.source || "missing"}`);
   }
+  if (String(receipt?.payloadPath || "") !== "supabase:finmind_institutional_flows,finmind_margin_short,v_chip_flows_latest") {
+    issues.push(`receipt_payload_path_mismatch:${receipt?.payloadPath || "missing"}`);
+  }
+  const health = receipt?.healthEvidence || null;
+  const healthDate = health?.checkedAt ? taipeiDateKey(health.checkedAt) : "";
+  if (!health || healthDate !== today) issues.push(`health_evidence_not_today:${healthDate || "missing"}:${today}`);
+  if (health?.ok !== true) issues.push("health_evidence_not_ok");
+  if (!health?.institutionalTradeDate) issues.push("institutional_trade_date_missing");
+  if (!health?.marginTradeDate) issues.push("margin_trade_date_missing");
+  if (!health?.unifiedTradeDate) issues.push("unified_trade_date_missing");
+  if (Number(health?.health?.institutional_rows || 0) <= 0) issues.push("institutional_rows_not_positive");
+  if (Number(health?.health?.margin_rows || 0) <= 0) issues.push("margin_rows_not_positive");
+  if (Number(health?.health?.unified_rows || 0) <= 0) issues.push("unified_rows_not_positive");
+  const sourceRows = Array.isArray(health?.chipLatest) ? health.chipLatest : [];
+  if (!sourceRows.length || sourceRows.some((row) => !String(row?.source || "").trim())) issues.push("chip_latest_sources_missing");
 
   const report = {
     ok: issues.length === 0,
@@ -52,6 +67,8 @@ function main() {
       exitCode: receipt.exitCode ?? null,
       complete: receipt.complete === true,
       source: receipt.source || "",
+      payloadPath: receipt.payloadPath || "",
+      healthEvidence: receipt.healthEvidence || null,
       warnings: Array.isArray(receipt.warnings) ? receipt.warnings : [],
       log: receipt.log || "",
     } : null,

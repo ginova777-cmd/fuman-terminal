@@ -13,6 +13,7 @@ $env:NODE_OPTIONS = "--use-system-ca"
 
 $logDir = Join-Path $runtime "logs"
 $receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
+$healthReceipt = Join-Path $env:FUMAN_STATE_DIR "chip-source-health-latest.json"
 New-Item -ItemType Directory -Force -Path $logDir, $receiptDir | Out-Null
 $log = Join-Path $logDir ("chip-source-sync-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
 $startedAt = (Get-Date).ToString("o")
@@ -42,6 +43,8 @@ function Invoke-NpmScript($Label, $ScriptName) {
 }
 
 function Write-Receipt($Status, $ExitCode, $Warnings = @()) {
+  $healthEvidence = $null
+  try { $healthEvidence = Get-Content -LiteralPath $healthReceipt -Raw | ConvertFrom-Json } catch { }
   $receipt = [ordered]@{
     strategy = "chip-source-sync"
     label = "FinMind plus official chip source sync"
@@ -54,6 +57,7 @@ function Write-Receipt($Status, $ExitCode, $Warnings = @()) {
     fallback = $false
     source = "finmind-first-official-gap-fill"
     payloadPath = "supabase:finmind_institutional_flows,finmind_margin_short,v_chip_flows_latest"
+    healthEvidence = $healthEvidence
     warnings = @($Warnings)
     log = $log
   }
