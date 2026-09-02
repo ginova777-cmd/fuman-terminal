@@ -1787,6 +1787,12 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   if (turnoverRate3To5d >= 8 && volumeRatio5 >= 2 && shortChange3To5d > 0) daytradeCrowdedBasis.push("volume_turnover_short_up_3_5d");
   const daytradeCrowded3To5d = daytradeCrowdedBasis.length > 0;
   const daytradeCrowded = boolValue(payload.daytradeCrowded || payload.daytrade_crowded || payload.daytradeBigPlayer || dailyPayload.daytradeCrowded || dailyPayload.daytrade_crowded || dailyPayload.daytradeBigPlayer) || daytradeCrowded3To5d;
+  const stockFutureIntradaySpotJointStrength = quoteFresh
+    && String(stockFuture.sourceStatus || "").toLowerCase() === "ready"
+    && ageSeconds(stockFuture.futoptUpdatedAt) <= 180
+    && stockFuture.futoptChangePercent >= 1
+    && changePercent >= 1
+    && stockFuture.futoptTotalVolume > 0;
   return {
     price,
     quotePresent,
@@ -1873,6 +1879,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     stockFutureInitial0846Ok: stockFuture.futoptChangePercent >= 2
       && stockFuture.relativeToTxfPercent >= 1
       && stockFuture.futoptTotalVolume >= 50,
+    stockFutureIntradaySpotJointStrength,
     exDividend,
     exDividend3To5d,
     exDividendDate,
@@ -2404,7 +2411,7 @@ async function fetchStockFutureInitialMap() {
       const change = numberValue(row.change_percent ?? row.payload?.changePercent);
       const volume = numberValue(row.total_volume ?? row.payload?.total?.tradeVolume);
       const relative = change - txfChange;
-      if (change < 2 || relative < 1 || volume < 50) continue;
+      if (numberValue(row.last_price ?? row.payload?.lastPrice) <= 0) continue;
       map.set(symbol, {
         tradeDate: String(row.payload?.date || ""),
         stockName: String(row.payload?.underlying_name || row.payload?.name || "").trim(),
@@ -3243,6 +3250,10 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       entryScore += 680;
       reasons.push(`turnover_3_5d_rank_top${turnoverRank}`);
     }
+    if (metrics.stockFutureIntradaySpotJointStrength) {
+      entryScore += 240;
+      reasons.push("intraday_futopt_spot_joint_strength");
+    }
     if (metrics.stockFutureInitial0846Ok) {
       entryScore += 170;
       reasons.push("stock_future_initial_0846_observe");
@@ -3289,7 +3300,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     const seedEntry = sourceSeedBySymbol.get(row.symbol) || {};
     const seedSources = [...new Set((seedEntry.sources || []).filter((value) => value && value !== "symbols"))];
     const openingReport0830BiasOnly = seedEntry.openingReport0830BiasOnly === true;
-    const sourceSignal = seedSources.length > 0 || metrics.stockFutureInitial0846Ok || metrics.trackedBuyPointActive;
+    const sourceSignal = seedSources.length > 0 || metrics.stockFutureInitial0846Ok || metrics.stockFutureIntradaySpotJointStrength || metrics.trackedBuyPointActive;
     const openingPriceBreakout = metrics.openPrice > 0 && metrics.price > metrics.openPrice;
     const motherPoolDynamicDiscoveryUnion = {
       gain_gt_2: metrics.changePercent > 2,
@@ -3302,6 +3313,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       intraday_surge: metrics.surgeFlag,
       intraday_volume_spike: metrics.volumeSpikeFlag,
       rapid_gain: metrics.rapidGainIncrease,
+      futopt_spot_joint_strength: metrics.stockFutureIntradaySpotJointStrength,
       opening_range_break: metrics.openingRangeBreak || openingPriceBreakout,
       pattern_candidate: metrics.fibSupport || metrics.ma10PullbackSupport || metrics.wBottomNecklineBreak
         || metrics.scatterGunPattern || metrics.pppPattern || metrics.middleGateBreak || metrics.threeBottomPattern
@@ -3359,6 +3371,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     if (metrics.movingAverageTurnBullish) upgradeScore += 120;
     if (metrics.openingRangeBreak) upgradeScore += 90;
     if (metrics.stockFutureInitial0846Ok) upgradeScore += 100;
+    if (metrics.stockFutureIntradaySpotJointStrength) upgradeScore += 360;
     if (seedSources.length) upgradeScore += Math.min(100, seedSources.length * 28);
     if (hotBurstFastPath) upgradeScore += 480;
     if (userCasePatternBoost > 0) upgradeScore += userCasePatternBoost;
@@ -3372,6 +3385,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     if (metrics.volumeRatio5 >= 2 || metrics.estimatedVolumeRatio >= 2) upgradeReasons.push("relative_volume_expansion");
     if (metrics.movingAverageTurnBullish) upgradeReasons.push("moving_average_turn_bullish");
     if (metrics.openingRangeBreak) upgradeReasons.push("opening_range_break_0901");
+    if (metrics.stockFutureIntradaySpotJointStrength) upgradeReasons.push("intraday_futopt_spot_joint_strength");
     if (seedSources.length) upgradeReasons.push("source_seed_resonance");
     if (consecutiveScoreDeclines >= 2 && !downgradeProtection) upgradeReasons.push("consecutive_score_decline");
     if (fastRemove) upgradeReasons.push("fast_remove_stale_or_below_ma58");
@@ -3488,6 +3502,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         shortChange3To5d: Number(metrics.shortChange3To5d.toFixed(4)),
         stockFutureInitial0846Ok: metrics.stockFutureInitial0846Ok,
         stockFutureInitial0846: metrics.stockFutureInitial0846,
+        stockFutureIntradaySpotJointStrength: metrics.stockFutureIntradaySpotJointStrength,
         stockGroupContract: metrics.groupContract,
         groupKeys: metrics.groupKeys,
         groupLimitUpLeader: groupLeader || null,
@@ -3617,7 +3632,8 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     const hotExtensionRank = index + 1 >= 41 && index + 1 <= 80 ? index + 1 : null;
     const sourceFlags = Array.isArray(row.sourceFlags) ? row.sourceFlags : [];
     const userTracked = sourceFlags.some((source) => /manual_watchlist|user_watchlist/i.test(String(source)));
-    const intradayBurst = row.hotBurstFastPath === true || row.priorityMetrics?.surgeFlag === true || row.priorityMetrics?.volumeSpikeFlag === true;
+    const futoptSpotJointStrength = row.priorityMetrics?.stockFutureIntradaySpotJointStrength === true;
+    const intradayBurst = row.hotBurstFastPath === true || row.priorityMetrics?.surgeFlag === true || row.priorityMetrics?.volumeSpikeFlag === true || futoptSpotJointStrength;
     const warmingPending = row.warmingPending === true;
     const wantsDeepScan = !warmingPending && (index + 1 <= HOT_POOL_MAX_SYMBOLS || userTracked || row.userCaseSeedMatched === true || row.userCaseLearningActive === true || row.priorityMetrics?.trackedBuyPointActive === true || intradayBurst);
     const rowDataGap = row.priorityMetrics?.dataGap || {};
@@ -3641,7 +3657,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     // queue that is responsible for filling and reporting its candles.
     // Formal publication remains gated later by rowFormal1mReady coverage.
     const deepScanEligible = wantsDeepScan;
-    const candlesPriorityReasons = [wantsDeepScan ? "formal_deep_scan_candidate" : "", index + 1 <= HOT_POOL_MAX_SYMBOLS ? "hot_pool" : "", userTracked ? "user_watchlist" : "", row.userCaseSeedMatched === true ? "designated_case" : "", row.userCaseLearningActive === true ? "case_pattern" : "", row.priorityMetrics?.trackedBuyPointActive === true ? "tracked_buy_point" : "", intradayBurst ? "intraday_surge_or_volume_spike" : ""].filter(Boolean);
+    const candlesPriorityReasons = [wantsDeepScan ? "formal_deep_scan_candidate" : "", index + 1 <= HOT_POOL_MAX_SYMBOLS ? "hot_pool" : "", userTracked ? "user_watchlist" : "", row.userCaseSeedMatched === true ? "designated_case" : "", row.userCaseLearningActive === true ? "case_pattern" : "", row.priorityMetrics?.trackedBuyPointActive === true ? "tracked_buy_point" : "", intradayBurst ? "intraday_surge_or_volume_spike" : "", futoptSpotJointStrength ? "intraday_futopt_spot_joint_strength" : ""].filter(Boolean);
     return ({
       poolReasons: Array.isArray(row.poolReasons) && row.poolReasons.length ? [...new Set(row.poolReasons)] : ["radar_rotation_fill"],
       symbol: row.symbol,
@@ -5963,6 +5979,47 @@ async function captureFutoptPreopenBaseline(futoptRows) {
   }
 }
 
+function writeFutoptSpotJointStrengthReceipt(priorityRows) {
+  const tradeDate = taipeiDate();
+  const checkedAt = nowIso();
+  const rows = (priorityRows || []).filter((row) => row.payload?.motherPoolMetrics?.stockFutureIntradaySpotJointStrength === true);
+  const matchedSymbols = rows.map((row) => ({
+    symbol: normalizeCode(row.symbol),
+    name: row.name || normalizeCode(row.symbol),
+    priority_rank: numberValue(row.priority_rank),
+    pool_layer: row.payload?.pool_layer || "priority_pool",
+    deep_scan_eligible: row.payload?.deep_scan_eligible === true,
+    candles_priority_required: row.payload?.candles_priority_required === true,
+    spot_change_percent: numberValue(row.payload?.motherPoolMetrics?.changePercent),
+    futopt_change_percent: numberValue(row.payload?.motherPoolMetrics?.stockFutureInitial0846?.futoptChangePercent),
+    futopt_total_volume: numberValue(row.payload?.motherPoolMetrics?.stockFutureInitial0846?.futoptTotalVolume),
+    futopt_updated_at: row.payload?.motherPoolMetrics?.stockFutureInitial0846?.futoptUpdatedAt || "",
+    reason_code: "intraday_futopt_spot_joint_strength",
+  }));
+  const receipt = {
+    ok: true,
+    contract: "daytrade_futopt_spot_joint_strength_receipt_v1",
+    runner: "run-daytrade-source-writer.js",
+    trade_date: tradeDate,
+    run_id: SOURCE_NAME + ":" + compactDateKey(tradeDate) + ":futopt-spot-joint-strength",
+    checked_at: checkedAt,
+    status: matchedSymbols.length ? "MATCHED" : "NO_MATCH",
+    matched_count: matchedSymbols.length,
+    matched_symbols: matchedSymbols,
+    allowed_action: "boost_mother_priority_hot_deep_scan_only",
+    formal_candidate_count: 0,
+    formal_candidate_allowed: false,
+    forbidden_publish_guard: true,
+    first_blocker: null,
+  };
+  if (!DRY_RUN) {
+    const receiptDir = runtimePath("data", "scan-receipts");
+    fs.mkdirSync(receiptDir, { recursive: true });
+    writeJson(path.join(receiptDir, `daytrade-futopt-spot-joint-strength-${compactDateKey(tradeDate)}.json`), receipt);
+  }
+  return receipt;
+}
+
 async function tick() {
   await ensureWriterLease();
   const state = readWriterState();
@@ -6352,6 +6409,7 @@ async function tick() {
   result.payload.full_market_volume_surge_top100_candidates = intradaySignalEvidence.volumeSurgeTop100Candidates;
   result.payload.full_market_bullish_gain_volume_candidate_count = intradaySignalEvidence.bullishGainVolumeCandidateCount;
   result.payload.full_market_volume_surge_top100_candidate_count = intradaySignalEvidence.volumeSurgeTop100CandidateCount;
+  result.payload.futopt_spot_joint_strength_receipt = writeFutoptSpotJointStrengthReceipt(priorityRows);
   await writeStatusAndScorecard(result);
   const offSession = Boolean(result.payload.off_session);
   return {

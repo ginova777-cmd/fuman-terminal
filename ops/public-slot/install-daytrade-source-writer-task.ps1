@@ -1,11 +1,15 @@
 param(
-  [string]$FumanRoot = "C:\fuman-release-owner\fuman-terminal",
+  [Parameter(Mandatory = $true)]
+  [string]$FumanRoot,
   [string]$RuntimeDir = "C:\fuman-runtime",
   [string]$TaskName = "Fuman Daytrade Source Writer 0600-1330"
 )
 
 $ErrorActionPreference = "Stop"
-$script = Join-Path $RuntimeDir "ops\Run-DaytradeSourceWriter.ps1"
+$sourceScript = Join-Path $FumanRoot "ops\public-slot\Run-DaytradeSourceWriterPinned.ps1"
+$script = Join-Path $RuntimeDir "ops\Run-DaytradeSourceWriterPinned.ps1"
+if (-not (Test-Path -LiteralPath $sourceScript)) { throw "Pinned daytrade writer source missing: $sourceScript" }
+Copy-Item -LiteralPath $sourceScript -Destination $script -Force
 $pwsh = "C:\Program Files\PowerShell\7\pwsh.exe"
 if (-not (Test-Path -LiteralPath $script)) { throw "Daytrade writer wrapper missing: $script" }
 if (-not (Test-Path -LiteralPath $pwsh)) { throw "PowerShell 7 missing: $pwsh" }

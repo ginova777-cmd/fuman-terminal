@@ -1,5 +1,6 @@
 param(
-  [string]$FumanRoot = "C:\fuman-release-owner\fuman-terminal",
+  [Parameter(Mandatory = $true)]
+  [string]$FumanRoot,
   [string]$RuntimeDir = "C:\fuman-runtime",
   [switch]$Apply,
   [switch]$Fetch,
@@ -13,7 +14,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$RepoRoot = $FumanRoot
+$RepoRoot = if ([string]::IsNullOrWhiteSpace($FumanRoot)) { Split-Path -Parent (Split-Path -Parent $ScriptDir) } else { [IO.Path]::GetFullPath($FumanRoot) }
 $WriterScript = Join-Path $RepoRoot "scripts\run-daytrade-source-writer.js"
 $LogDir = Join-Path $RuntimeDir "logs"
 $StateDir = Join-Path $RuntimeDir "state"
