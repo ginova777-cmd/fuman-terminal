@@ -11,19 +11,25 @@ if (-not (Test-Path -LiteralPath $runner)) { throw "near-one source worker missi
 $node = (Get-Command node.exe -ErrorAction SilentlyContinue)
 if (-not $node) { throw "node.exe not found on the source host" }
 
-$taskCommand = ('"{0}" --use-system-ca "{1}" --apply --once' -f $node.Source, $runner)
-$schtasks = Join-Path $env:SystemRoot "System32\schtasks.exe"
-if (-not (Test-Path -LiteralPath $schtasks)) { throw "schtasks.exe not found" }
+$argument = ('--use-system-ca "{0}" --apply --once' -f $runner)
+$action = New-ScheduledTaskAction -Execute $node.Source -Argument $argument -WorkingDirectory $ProjectRoot
+$triggers = 45..59 | ForEach-Object {
+  New-ScheduledTaskTrigger -Daily -At ([DateTime]::ParseExact(("08:{0:D2}" -f $_), "HH:mm", $null))
+}
+$settings = New-ScheduledTaskSettingsSet `
+  -AllowStartIfOnBatteries `
+  -DontStopIfGoingOnBatteries `
+  -StartWhenAvailable `
+  -MultipleInstances IgnoreNew `
+  -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
 
-& $schtasks /Create `
-  /TN $TaskName `
-  /TR $taskCommand `
-  /SC MINUTE `
-  /MO 1 `
-  /ST 08:45 `
-  /ET 08:59 `
-  /F | Out-Null
-if ($LASTEXITCODE -ne 0) { throw "schtasks create failed exit=$LASTEXITCODE" }
+Register-ScheduledTask `
+  -TaskName $TaskName `
+  -Action $action `
+  -Trigger $triggers `
+  -Settings $settings `
+  -Description "Daytrade source-only near-one and immutable natural preopen snapshots; no WebSocket is opened by this task." `
+  -Force | Out-Null
 
 Get-ScheduledTask -TaskName $TaskName | Select-Object TaskName, State
-Write-Host ("[daytrade-near-one-source-task] installed task={0} root={1} window=08:45-08:59 interval=1m" -f $TaskName, $ProjectRoot)
+Write-Host ("[daytrade-near-one-source-task] installed task={0} root={1} triggers=08:45-08:59 daily" -f $TaskName, $ProjectRoot)
