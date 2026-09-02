@@ -41,7 +41,7 @@ const STREAMING_CHANNEL = STREAMING_CHANNELS.join(",");
 const STREAMING_MAX_SYMBOLS = Math.max(1, Number(process.env.FUGLE_STREAMING_MAX_SYMBOLS || process.env.FUGLE_STREAMING_MAX_SUBSCRIPTIONS || 600));
 const STREAMING_MAX_TOTAL_SUBSCRIPTIONS = Math.max(STREAMING_CHANNELS.length, Number(process.env.FUGLE_STREAMING_MAX_TOTAL_SUBSCRIPTIONS || 1800));
 const STREAMING_CANDLE_SYMBOLS = Math.max(0, Number(process.env.FUGLE_STREAMING_CANDLE_SYMBOLS || 1000));
-const STREAMING_AGGREGATE_SYMBOLS = Math.max(0, Number(process.env.FUGLE_STREAMING_AGGREGATE_SYMBOLS || 600));
+const STREAMING_AGGREGATE_SYMBOLS = Math.max(0, Number(process.env.FUGLE_STREAMING_AGGREGATE_SYMBOLS || 400));
 const STREAMING_SUBSCRIBE_CHUNK_SIZE = Math.max(1, Math.min(50, Number(process.env.FUGLE_STREAMING_SUBSCRIBE_CHUNK_SIZE || 50)));
 const STREAMING_RESUBSCRIBE_MS = Math.max(30000, Number(process.env.FUGLE_STREAMING_RESUBSCRIBE_MS || (COLLECTOR_ROLE === "daytrade" ? 16200000 : 30000)));
 const STREAMING_RECONNECT_INITIAL_MS = Math.max(1000, Number(
@@ -614,6 +614,9 @@ function readPrioritySymbols(symbols) {
   return {
     symbols: priorityOrdered.length ? priorityOrdered : ordered,
     allSymbols: ordered,
+    strategy2Symbols: (Array.isArray(payload.strategy2) ? payload.strategy2 : payload.strategy2Symbols || [])
+      .map((value) => normalizeCode(value?.symbol || value?.code || value))
+      .filter((code, index, values) => /^\d{4}$/.test(code) && universe.has(code) && values.indexOf(code) === index),
     counts,
     updatedAt: payload.updatedAt || "",
     source: payload.source || "",
@@ -1221,6 +1224,8 @@ function selectStreamingSymbols(rotationCursor = 0) {
       prioritySymbols.push(symbol);
     }
   };
+  // Strategy2 is the formal deep-scan water set. Pin it before rotating priorities.
+  for (const code of priority.strategy2Symbols) addPriority(code);
   for (const code of priority.symbols) addPriority(code);
   const rotatingSeen = new Set(prioritySymbols);
   for (const code of allSymbols) {
@@ -1242,6 +1247,13 @@ function selectStreamingSymbols(rotationCursor = 0) {
   const candleRadarSymbols = selectPool(candleBudget, safeCursor, true);
   const quoteRadarSymbols = selectPool(tradeBudget, (safeCursor + Math.max(1, candleRadarSymbols.length)) % Math.max(1, rotating.length), true);
   const aggregateRadarSymbols = selectPool(aggregateBudget, safeCursor, true);
+  const strategy2Set = new Set(priority.strategy2Symbols);
+  const strategy2Subscription = {
+    expectedSymbols: priority.strategy2Symbols,
+    candles: candleRadarSymbols.filter((symbol) => strategy2Set.has(symbol)),
+    trades: quoteRadarSymbols.filter((symbol) => strategy2Set.has(symbol)),
+    aggregates: aggregateRadarSymbols.filter((symbol) => strategy2Set.has(symbol)),
+  };
   const selected = candleRadarSymbols;
   const subscriptionCount = candleRadarSymbols.length + quoteRadarSymbols.length + aggregateRadarSymbols.length;
   const rotationWindow = Math.max(candleRadarSymbols.length, quoteRadarSymbols.length, aggregateRadarSymbols.length);
@@ -1268,6 +1280,7 @@ function selectStreamingSymbols(rotationCursor = 0) {
     rotationWindow,
     totalSubscriptionLimit: STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
     candleCoverageTarget: candleRadarSymbols.length,
+    strategy2Subscription,
     subscriptionPlan: "formal_1m_1000_plus_trade_radar_plus_aggregate_priority",
   };
 }
@@ -1476,6 +1489,14 @@ async function runStreamingCollector() {
         candleSubscribedSymbols: selection.formalSymbols.length + selection.candleRadarSymbols.length,
         tradeSubscribedSymbols: selection.formalSymbols.length + selection.quoteRadarSymbols.length,
         aggregateSubscribedSymbols: selection.formalSymbols.length + selection.aggregateRadarSymbols.length,
+        candleSubscribedSymbolList: [...selection.formalSymbols, ...selection.candleRadarSymbols],
+        tradeSubscribedSymbolList: [...selection.formalSymbols, ...selection.quoteRadarSymbols],
+        aggregateSubscribedSymbolList: [...selection.formalSymbols, ...selection.aggregateRadarSymbols],
+        strategy2ExpectedSymbols: selection.strategy2Subscription?.expectedSymbols || [],
+        strategy2CandleSubscribedSymbols: selection.strategy2Subscription?.candles || [],
+        strategy2TradeSubscribedSymbols: selection.strategy2Subscription?.trades || [],
+        strategy2AggregateSubscribedSymbols: selection.strategy2Subscription?.aggregates || [],
+        strategy2SubscriptionComplete: Boolean(selection.strategy2Subscription) && selection.strategy2Subscription.expectedSymbols.every((symbol) => selection.strategy2Subscription.candles.includes(symbol) && selection.strategy2Subscription.trades.includes(symbol) && selection.strategy2Subscription.aggregates.includes(symbol)),
         subscriptionPlan: selection.subscriptionPlan,
         rotationCursor: selection.rotationCursor,
         nextRotationCursor: selection.nextRotationCursor,
@@ -1501,6 +1522,7 @@ async function runStreamingCollector() {
         staleDataWindow,
         staleRecoveryTriggered,
         collectorRole: COLLECTOR_ROLE,
+        collectorProductionRoot: ROOT_DIR,
         sourceHostId: SOURCE_HOST_ID,
         sourceHostRole: SOURCE_HOST_ROLE,
         sourceHostApprovalFile: SOURCE_HOST_APPROVAL_FILE,
