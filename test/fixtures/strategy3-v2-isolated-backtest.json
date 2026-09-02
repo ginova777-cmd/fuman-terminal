@@ -1,0 +1,30 @@
+{
+  "symbols": ["2330", "2317"],
+  "candles_by_symbol": {
+    "2330": [
+      {"date":"2026-08-25T04:40:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:41:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:42:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:43:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:44:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:45:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:46:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:47:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:48:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:49:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:50:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:51:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:52:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:53:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:54:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:55:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:56:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:57:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T04:58:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10},
+      {"date":"2026-08-25T05:00:00.000Z","open":100,"high":102,"low":99,"close":101,"volume":20}
+    ],
+    "2317": [
+      {"date":"2026-08-25T05:00:00.000Z","open":100,"high":101,"low":99,"close":100,"volume":10}
+    ]
+  }
+}
