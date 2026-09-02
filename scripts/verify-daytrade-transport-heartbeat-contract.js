@@ -7,7 +7,7 @@ const root = __dirname;
 const targets = {
   writer: path.join(root, "run-daytrade-source-writer.js"),
   collector: path.join(root, "fugle-websocket-collector.js"),
-  bridge: path.join(root, "apply-opening-report-0830-priority-bias-bridge.js")
+  bridge: path.join(root, "apply-opening-report-mother-pool-bridge.js")
 };
 
 function read(file) {
@@ -27,8 +27,8 @@ const checks = {
   collector_records_server_heartbeat: collector.includes("lastWebSocketHeartbeatAt"),
   collector_records_aggregates_last_updated: collector.includes("lastAggregatesLastUpdatedAt"),
   collector_refreshes_priority_subscriptions: collector.includes("STREAMING_PRIORITY_REFRESH_MS") && collector.includes("void subscribe();"),
-  bridge_has_bounded_retry: bridge.includes("REST_RETRIES") && bridge.includes("for (let attempt = 0; attempt <= REST_RETRIES; attempt += 1)"),
-  bridge_retry_has_backoff: bridge.includes("REST_RETRY_BACKOFF_MS") && bridge.includes("setTimeout")
+  bridge_is_local_fail_closed: bridge.includes("FAIL_CLOSED") && bridge.includes("opening_report_status_unchanged"),
+  bridge_has_formal_publish_guard: bridge.includes("formal_candidate_count: 0") && bridge.includes("publish_allowed: false")
 };
 
 const failed_checks = Object.entries(checks)

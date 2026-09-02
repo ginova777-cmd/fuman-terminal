@@ -8,7 +8,6 @@ const { upsertSnapshot } = require("../lib/supabase-snapshots");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
 const RECEIPT_DIR = path.join(RUNTIME_DIR, "data", "opening-report-0830");
-const BRIDGE_SCRIPT = path.resolve(__dirname, "apply-opening-report-0830-priority-bias-bridge.js");
 const MOTHER_POOL_BRIDGE_SCRIPT = path.resolve(__dirname, "apply-opening-report-mother-pool-bridge.js");
 const SOURCE = "opening_report_0830";
 const MODE = "priority_bias_only";
@@ -251,15 +250,6 @@ function markdownReport({ tradeDate, runId, overseasPreflight, items, taiwanGate
   return `${lines.join("\n")}\n`;
 }
 
-function runBridge(inputPath, receiptPath, tradeDate) {
-  const result = spawnSync(process.execPath, [BRIDGE_SCRIPT, `--input=${inputPath}`, `--receipt=${receiptPath}`, `--expected-date=${tradeDate.replace(/\D/g, "")}`], {
-    encoding: "utf8",
-    windowsHide: true,
-    cwd: path.resolve(__dirname, "..")
-  });
-  return { exitCode: result.status, stdout: result.stdout, stderr: result.stderr };
-}
-
 function splitLineTargets(value) {
   return String(value || "")
     .split(/[\s,;]+/)
@@ -440,13 +430,11 @@ async function main() {
   fs.writeFileSync(reportPath, markdownReport({ tradeDate, runId, overseasPreflight, items, taiwanGate }), "utf8");
   writeJson(overseasPath, overseasPreflight);
   const bridgeResults = [];
-  if (applyBridge && !mock) await waitUntilTaipeiMinute(8 * 60 + 35);
   for (const item of items) {
     const inputPath = path.join(STATE_DIR, `opening_report_0830.industry_bias.${item.industry}.json`);
     const receiptPath = path.join(RUNTIME_DIR, "data", "scan-receipts", `opening-report-0830-priority-bias-bridge-${item.industry}-${compact}.json`);
     writeJson(inputPath, item);
-    if (applyBridge) bridgeResults.push({ industry: item.industry, inputPath, receiptPath, result: runBridge(inputPath, receiptPath, tradeDate) });
-    else bridgeResults.push({ industry: item.industry, inputPath, receiptPath, skipped: true, reason_code: "bridge_apply_not_requested" });
+    bridgeResults.push({ industry: item.industry, inputPath, receiptPath: null, skipped: true, reason_code: "legacy_per_industry_bridge_retired" });
   }
   // This independent bridge runs only after every industry state file is written.
   // Its result never changes report, terminal, or notification success.
@@ -463,7 +451,8 @@ async function main() {
     overseas_sources_ok: overseasPreflight.ok,
     industry_bias_exported: true,
     mother_pool_bridge_attempted: applyBridge,
-    mother_pool_bridge_ok: applyBridge ? bridgeResults.every((row) => row.result?.exitCode === 0) : null,
+    mother_pool_bridge_ok: applyBridge ? motherPoolTop3Bridge.exitCode === 0 : null,
+    mother_pool_bridge_optional_handoff: true,
     line_push_attempted: sendLine,
     line_push_ok: lineReceipt.line_push_ok,
     formal_candidates: 0,
@@ -473,7 +462,7 @@ async function main() {
     report_path: reportPath,
     overseas_preflight_receipt: overseasPath,
     line_push_receipt: lineReceiptPath,
-    bridge_results: bridgeResults.map((row) => ({ industry: row.industry, inputPath: row.inputPath, receiptPath: row.receiptPath, skipped: row.skipped === true, exitCode: row.result?.exitCode ?? null, reason_code: row.reason_code || "" })),
+    bridge_results: bridgeResults.map((row) => ({ industry: row.industry, inputPath: row.inputPath, skipped: true, reason_code: row.reason_code })),
     mother_pool_top3_bridge: { attempted: applyBridge, exitCode: motherPoolTop3Bridge.exitCode, skipped: motherPoolTop3Bridge.skipped === true, receipt_path: path.join(RECEIPT_DIR, `opening-report-0830-mother-pool-bridge-${compact}.json`) },
     taiwan_gate: taiwanGate,
     checked_at: timestamp()

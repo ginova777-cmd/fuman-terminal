@@ -4,7 +4,7 @@ const path = require("path");
 const root = path.resolve(__dirname, "..");
 const writer = fs.readFileSync(path.join(root, "scripts", "run-daytrade-source-writer.js"), "utf8");
 const collector = fs.readFileSync(path.join(root, "scripts", "fugle-websocket-collector.js"), "utf8");
-const bridge = fs.readFileSync(path.join(root, "scripts", "apply-opening-report-0830-priority-bias-bridge.js"), "utf8");
+const bridge = fs.readFileSync(path.join(root, "scripts", "apply-opening-report-mother-pool-bridge.js"), "utf8");
 
 const checks = {
   valid_report_builds_warmup_symbols: writer.includes("const warmupBySymbol = new Map()")
@@ -59,4 +59,3 @@ const output = {
 };
 console.log(JSON.stringify(output, null, 2));
 if (!output.ok) process.exitCode = 1;
-

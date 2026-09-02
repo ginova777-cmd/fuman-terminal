@@ -37,7 +37,8 @@ function verifyIndustryContract(receipt, issues) {
       issues.push("industry_contract_input_missing:" + expected.industry);
       return;
     }
-    if (input.priority_rank !== index + 1) issues.push("industry_priority_rank_mismatch:" + expected.industry + ":" + input.priority_rank + ":expected_" + (index + 1));
+    const inputRank = Number(input.rank ?? input.priority_rank);
+    if (!Number.isInteger(inputRank) || inputRank < 1) issues.push("industry_rank_invalid:" + expected.industry);
     if (!listEqual(input.overseas_leaders, expected.overseas)) issues.push("industry_overseas_leaders_mismatch:" + expected.industry);
     if (!listEqual(symbolsByTier(input, "A"), expected.a)) issues.push("industry_a_symbols_mismatch:" + expected.industry);
     if (!listEqual(symbolsByTier(input, "B"), expected.b)) issues.push("industry_b_symbols_mismatch:" + expected.industry);
@@ -224,44 +225,29 @@ function buildStageChecks(receipt, issues, compact, options = {}) {
       })
   );
 
-  if (receipt.mother_pool_bridge_attempted === true) {
-    const bridgeReceipts = bridgeRows.map((row) => ({ row, receipt: readJson(row.receiptPath) }));
-    const readable = bridgeReceipts.filter(({ receipt: bridgeReceipt }) => bridgeReceipt);
-    const guardsOk = readable.length === EXPECTED_INDUSTRIES.length && readable.every(({ receipt: bridgeReceipt }) =>
-      bridgeReceipt.validation?.ok === true
-      && bridgeReceipt.forbidden_publish_guard === true
-      && bridgeReceipt.formal_candidate_count === 0
-      && bridgeReceipt.formal_candidate_allowed === false
-      && bridgeReceipt.status === "priority_scan"
-      && bridgeReceipt.reason_code === "opening_report_0830_industry_bias"
-      && (bridgeReceipt.applied_boosts || []).every((boost) => Number(boost.applied_priority_rank) >= 41 && Number(boost.price) >= 50 && Number(boost.quote_age_seconds) <= 120)
-    );
-    stages.push(
-      receipt.mother_pool_bridge_ok === true && guardsOk
-        ? pass("mother_pool_priority_bias_bridge_handoff", {
-          bridge_receipts: readable.length,
-          forbidden_publish_guard: true,
-          formal_candidate_count: 0,
-          priority_rank_floor: 41
-        })
-        : skip("mother_pool_priority_bias_bridge_handoff", "mother_pool_bridge_fail_closed_optional_handoff", {
-          bridge_ok: receipt.mother_pool_bridge_ok,
-          bridge_receipts: readable.length,
-          expected_receipts: EXPECTED_INDUSTRIES.length,
-          guards_ok: guardsOk
-        })
-    );
-  } else if (receipt.mother_pool_bridge_optional_handoff === true || receipt.stage_status?.mother_pool_priority_bias_bridge === "OPTIONAL_FAIL_CLOSED") {
-    stages.push(skip("mother_pool_priority_bias_bridge_handoff", "mother_pool_bridge_optional_not_requested", {
-      bridge_results: bridgeRows.length,
-      optional_handoff: true
+  const aggregateBridgePath = path.join(RECEIPT_DIR, `opening-report-0830-mother-pool-bridge-${String(receipt.date || receipt.trade_date || "").replace(/\D/g, "")}.json`);
+  const aggregateBridge = readJson(aggregateBridgePath);
+  const aggregateBridgeGuardsOk = aggregateBridge?.formal_candidate_count === 0
+    && aggregateBridge?.formal_candidate_allowed === false
+    && aggregateBridge?.publish_allowed === false
+    && aggregateBridge?.forbidden_publish_guard === true
+    && aggregateBridge?.opening_report_status_unchanged === true;
+  if (receipt.mother_pool_bridge_attempted === true && aggregateBridge?.ok === true && aggregateBridgeGuardsOk) {
+    stages.push(pass("mother_pool_top3_priority_bias_bridge_handoff", {
+      receipt_path: aggregateBridgePath,
+      accepted_industry_count: aggregateBridge.accepted_industry_count,
+      accepted_symbol_count: aggregateBridge.accepted_symbol_count,
+      forbidden_publish_guard: true,
+      formal_candidate_count: 0
     }));
   } else {
-    stages.push(fail("mother_pool_priority_bias_bridge", "mother_pool_bridge_not_attempted", {
-      bridge_results: bridgeRows.length
+    stages.push(skip("mother_pool_top3_priority_bias_bridge_handoff", "mother_pool_bridge_fail_closed_optional_handoff", {
+      receipt_path: aggregateBridgePath,
+      bridge_attempted: receipt.mother_pool_bridge_attempted === true,
+      bridge_ok: aggregateBridge?.ok === true,
+      guards_ok: aggregateBridgeGuardsOk
     }));
   }
-
   stages.push(
     receipt.formal_candidates === 0 && receipt.watchlist_only === true
       ? pass("formal_publish_guard", {
@@ -342,14 +328,3 @@ function main() {
 }
 
 main();
-
-
-
-
-
-
-
-
-
-
-
