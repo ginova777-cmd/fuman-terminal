@@ -33,6 +33,8 @@
     "tradingDayOnly": true,
     "sameTradeDateAndRunIdRequired": true,
     "top40IsNotLimitGateOrOnlyEntry": true,
+    "motherPoolTargetMinimumSymbols": 300,
+    "motherPoolMinimumCountIsHardGate": false,
     "websocketCandlesAreFormal1mSource": true,
     "priorThreeTradingDayAverageVolumeLotsMinimum": 3000,
     "priorThreeTradingDayAverageVolumeIsWarmupHardGate": true,

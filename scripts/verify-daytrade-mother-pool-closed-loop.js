@@ -100,7 +100,7 @@ function main() {
   check("mother_pool_same_day", motherIdentity.tradeDate === clock.tradeDate, "mother_pool_trade_date_mismatch");
   check("mother_pool_canonical", motherIdentity.canonicalRunId === canonicalRunId, "mother_pool_canonical_run_mismatch");
   check("mother_pool_fresh", ageSeconds(motherPool?.updated_at) <= 300, "mother_pool_receipt_stale");
-  check("mother_pool_dynamic_size", motherRows.length >= 300 && motherRows.length <= 800, `mother_pool_dynamic_size_out_of_range:${motherRows.length}`);
+  check("mother_pool_dynamic_size", motherRows.length > 0 && motherRows.length <= 800, `mother_pool_dynamic_size_out_of_range:${motherRows.length}`);
   check("mother_pool_price_readback_complete", motherRows.length > 0 && motherPrices.length === motherRows.length, "mother_pool_price_readback_incomplete");
   check("mother_pool_price_floor", motherPrices.length === motherRows.length && motherPrices.every((price) => price >= 50), "mother_pool_contains_price_below_50");
 

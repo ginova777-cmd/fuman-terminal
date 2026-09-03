@@ -199,7 +199,7 @@ function normalizeSourceStatus(row) {
     formalScanPoolSymbols: numberValue(payload.formal_scan_pool_symbols),
     basePoolEligibleSymbols: numberValue(payload.base_pool_eligible_symbols ?? payload.mother_pool_base_pool_symbols),
     basePoolPendingSymbols: numberValue(payload.base_pool_pending_symbols ?? payload.mother_pool_base_pool_pending_symbols),
-    basePoolShortfall: numberValue(payload.base_pool_shortfall),
+    basePoolTargetShortfall: numberValue(payload.base_pool_target_shortfall ?? payload.base_pool_shortfall),
     motherPoolFreshQuoteCoverage120s: numberValue(payload.mother_pool_fresh_coverage_120s),
     motherPoolFreshQuotes120s: numberValue(payload.mother_pool_fresh_quotes_120s),
     reasonCode: stringValue(payload.reason_code),
@@ -289,7 +289,6 @@ function gateWebsocketOk(gate) {
   return sourceWebsocketOk(gate) && gate.websocketFormalReady === true;
 }
 
-const MOTHER_POOL_MIN_SYMBOLS = 300;
 const MOTHER_POOL_MAX_SYMBOLS = 600;
 const DYNAMIC_FORMAL_SCOPES = new Set([
   "mother_pool_complete_dynamic_scan",
@@ -297,7 +296,7 @@ const DYNAMIC_FORMAL_SCOPES = new Set([
 ]);
 
 function hasDynamicPoolLayers(item) {
-  return item.motherPoolSymbols >= MOTHER_POOL_MIN_SYMBOLS
+  return item.motherPoolSymbols > 0
     && item.motherPoolSymbols <= MOTHER_POOL_MAX_SYMBOLS
     && item.priorityPoolSymbols > 0
     && item.priorityPoolSymbols <= item.motherPoolSymbols
@@ -468,11 +467,12 @@ function writerCodeRegressionChecks() {
       && source.includes('if (!prev)'),
     fullMarketMotherPoolRotation: source.includes('prioritySource: "dynamic_daytrade_mother_pool"')
       && source.includes('formal_gate_scope: "priority_hot_deep_scan_pool_only"')
-      && source.includes('mother_pool_scan_min_symbols')
+      && source.includes('mother_pool_target_min_symbols')
       && source.includes('mother_pool_scan_max_symbols'),
-    motherPoolMinimum300: source.includes('const MOTHER_POOL_MIN_SYMBOLS = 300;')
-      && source.includes('const MOTHER_POOL_MAX_SYMBOLS')
-      && source.includes('Math.min(600,'),
+    motherPoolCountTargetNotHardGate: source.includes('const MOTHER_POOL_TARGET_MIN_SYMBOLS = 300;')
+      && source.includes('mother_pool_minimum_count_is_hard_gate: false')
+      && source.includes('motherPoolSymbols > 0')
+      && !source.includes('motherPoolSymbols >= MOTHER_POOL_MIN_SYMBOLS'),
     motherPoolFreshnessFirst: source.includes('Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true)')
       && source.includes('mother_pool_fresh_coverage_120s'),
     motherPoolOptionalPriceFloor: source.includes('MOTHER_POOL_MIN_PRICE') && source.includes('price_below_'),
@@ -640,7 +640,7 @@ function writerCodeRegressionChecks() {
       && source.includes('select=symbol,name,market,industry,is_active,is_etf,is_warrant,is_cb,is_blacklisted,is_daytrade_unsuitable,payload&order=symbol.asc'),
     reasonCodePayload: source.includes('const failedChecks = []')
       && source.includes('reason_code: reasonCode')
-      && source.includes('base_pool_shortfall'),
+      && source.includes('base_pool_target_shortfall'),
     fullMarketVolumeMirror: source.includes('syncDailyVolumeMirror(dailyVolumeMap, activeSymbols)')
       && source.includes('activeOrdinaryStockUniverse: true')
       && source.includes('DAILY_VOLUME_MIRROR_SYNC_INTERVAL_MS')
