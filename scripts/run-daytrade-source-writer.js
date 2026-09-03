@@ -173,10 +173,12 @@ const REST_PRIORITY_BATCH_LIMIT = Math.max(1, Math.min(80, positiveNumber(proces
 const REST_FALLBACK_INTERVAL_SECONDS = Math.max(60, positiveNumber(process.env.DAYTRADE_REST_FALLBACK_INTERVAL_SECONDS ?? CONFIG.collector?.restFallbackIntervalSeconds, 300));
 const MOTHER_POOL_MIN_PRICE = Math.max(50, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_PRICE ?? CONFIG.motherPool?.minimumPrice, 50));
 const MOTHER_POOL_MIN_TURNOVER_RATE = Math.max(1, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_TURNOVER_RATE ?? CONFIG.motherPool?.minimumTurnoverRate, 1));
-const MOTHER_POOL_RULE_VERSION = 'daytrade_mother_pool_dynamic_300_600_deep_scan_20260813_v5';
+const MOTHER_POOL_MIN_AVG_VOLUME3_LOTS = Math.max(3000, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_AVG_VOLUME3_LOTS, 3000));
+const MOTHER_POOL_RULE_VERSION = 'daytrade_mother_pool_dynamic_300_600_avg3_3000_outside_ratio_20260903_v6';
 const PREOPEN_REFERENCE_PRICE_CACHE_MS = Math.max(60000, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_CACHE_MS || 15 * 60 * 1000));
 const PREOPEN_REFERENCE_PRICE_MIN_ROWS = Math.max(300, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_MIN_ROWS || 1000));
 let preopenReferencePriceCache = { loadedAt: 0, tradeDate: '', source: 'unavailable', bySymbol: new Map() };
+let recentThreeDayVolumeCache = { loadedAt: 0, tradeDate: '', source: 'unavailable', bySymbol: new Map() };
 const USER_CASE_SYMBOLS = new Set(String(process.env.DAYTRADE_MOTHER_POOL_USER_CASE_SYMBOLS || '8069,6213,3042,4956,3105')
   .split(',')
   .map((value) => normalizeCode(value))
@@ -823,7 +825,9 @@ function evaluateMotherPoolBasePool(row, metrics) {
       pendingChecks.push("turnover_rate_pending");
     }
   }
-  // avg5 is a liquidity grade only. It must never be a direct mother-pool rejection.
+  if (metrics.avgVolume3SampleDays < 3 || metrics.avgVolume3 <= 0) pendingChecks.push("avg_volume3_history_pending");
+  else if (metrics.avgVolume3 < MOTHER_POOL_MIN_AVG_VOLUME3_LOTS) failedChecks.push(`avg_volume3_below_${MOTHER_POOL_MIN_AVG_VOLUME3_LOTS}`);
+  // avg5 remains a liquidity grade. The prior-three-trading-day average is the warmup hard gate.
   // Missing live quote data remains pending; the 50-dollar price floor is a hard mother-pool gate.
   if (!metrics.quotePresent) pendingChecks.push("quote_pending");
   else if (!metrics.quoteFresh) pendingChecks.push("quote_stale");
@@ -900,12 +904,49 @@ function dailyVolumeRowsToMap(rows, source) {
     trade_date: row.trade_date || null,
     volume: numberValue(row.volume),
     avg_volume5: numberValue(row.avg_volume5 ?? row.avg5_volume),
+    avg_volume3: numberValue(row.avg_volume3 ?? row.avg3_volume),
+    avg_volume3_sample_days: numberValue(row.avg_volume3_sample_days ?? row.avg3_volume_sample_days),
     updated_at: row.updated_at || nowIso(),
     source,
     payload: row.payload || {},
   }]).filter(([symbol]) => symbol));
   map.source = source;
   return map;
+}
+
+async function fetchRecentThreeDayAverageVolume() {
+  const tradeDate = taipeiDate();
+  if (recentThreeDayVolumeCache.tradeDate === tradeDate && Date.now() - recentThreeDayVolumeCache.loadedAt <= 30 * 60 * 1000) {
+    return recentThreeDayVolumeCache;
+  }
+  const fromDate = taipeiDateDaysAgo(14);
+  const rows = await supabaseGetPaged(
+    "strategy4_daily_ohlcv_view",
+    `select=symbol,trade_date,volume_lots&trade_date=gte.${fromDate}&trade_date=lt.${tradeDate}&order=trade_date.desc,symbol.asc`,
+    { service: true, pageSize: 1000 },
+  );
+  const samplesBySymbol = new Map();
+  for (const row of rows) {
+    const symbol = normalizeCode(row.symbol);
+    const date = String(row.trade_date || "").slice(0, 10);
+    const volumeLots = numberValue(row.volume_lots);
+    if (!symbol || !date || volumeLots < 0) continue;
+    const samples = samplesBySymbol.get(symbol) || [];
+    if (!samples.some((sample) => sample.trade_date === date) && samples.length < 3) samples.push({ trade_date: date, volume_lots: volumeLots });
+    samplesBySymbol.set(symbol, samples);
+  }
+  const bySymbol = new Map();
+  for (const [symbol, samples] of samplesBySymbol.entries()) {
+    if (samples.length !== 3) continue;
+    bySymbol.set(symbol, {
+      avg_volume3: samples.reduce((sum, sample) => sum + sample.volume_lots, 0) / 3,
+      avg_volume3_sample_days: 3,
+      avg_volume3_dates: samples.map((sample) => sample.trade_date),
+      avg_volume3_source: "strategy4_daily_ohlcv_view:prior_3_trading_days",
+    });
+  }
+  recentThreeDayVolumeCache = { loadedAt: Date.now(), tradeDate, source: "strategy4_daily_ohlcv_view", bySymbol };
+  return recentThreeDayVolumeCache;
 }
 
 async function fetchDailyVolumeAvg() {
@@ -962,6 +1003,16 @@ async function fetchDailyVolumeAvg() {
       }
     }
     if (!loaded && spec.resource === "fugle_daytrade_daily_volume_avg" && combined.size >= DEEP_SCAN_POOL_MAX_SYMBOLS) break;
+  }
+  try {
+    const recentThreeDay = await fetchRecentThreeDayAverageVolume();
+    for (const [symbol, history] of recentThreeDay.bySymbol.entries()) {
+      combined.set(symbol, { ...(combined.get(symbol) || { symbol }), ...history });
+    }
+    combined.recentThreeDaySource = recentThreeDay.source;
+  } catch (error) {
+    readErrors.push({ resource: "strategy4_daily_ohlcv_view", service: true, message: error?.message || String(error) });
+    combined.recentThreeDaySource = "unavailable";
   }
   combined.source = combined.source || "missing_daily_volume";
   combined.readErrors = readErrors;
@@ -1533,6 +1584,8 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const tradeValue = firstNumber(quote.trade_value, payload.tradeValue, payload.trade_value, price > 0 ? price * totalVolume * 1000 : 0);
   const previousVolume = firstNumber(daily.volume, dailyPayload.volume, payload.previousVolume, payload.previous_volume);
   const avgVolume5 = firstNumber(daily.avg_volume5, dailyPayload.avgVolume5, dailyPayload.avg_volume5, payload.avgVolume5, payload.avg_volume5);
+  const avgVolume3 = firstNumber(daily.avg_volume3, dailyPayload.avgVolume3, dailyPayload.avg_volume3, payload.avgVolume3, payload.avg_volume3);
+  const avgVolume3SampleDays = numberValue(daily.avg_volume3_sample_days ?? dailyPayload.avgVolume3SampleDays ?? dailyPayload.avg_volume3_sample_days);
   const volumeRatio5 = avgVolume5 > 0 ? totalVolume / avgVolume5 : 0;
   const quotePresent = quoteMap?.has(symbol) === true;
   const quoteFresh = ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS;
@@ -1670,6 +1723,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const outsideVolume = firstNumber(quote.cumulative_ask_volume, payload.cumulativeAskVolume, payload.cumulative_ask_volume);
   const sideTotal = firstNumber(quote.cumulative_bid_ask_volume, payload.cumulativeBidAskVolume, payload.cumulative_bid_ask_volume, insideVolume + outsideVolume);
   const outsideInsideRatio = insideVolume > 0 ? outsideVolume / insideVolume : outsideVolume > 0 ? 99 : 0;
+  const outsideVolumeGtInsideTimes2 = outsideVolume > 0 && outsideVolume > insideVolume * 2;
   const bidVolume = firstNumber(quote.bid_volume, payload.bidVolume, payload.bid_volume);
   const askVolume = firstNumber(quote.ask_volume, payload.askVolume, payload.ask_volume);
   const bidAskRatio = askVolume > 0 ? bidVolume / askVolume : bidVolume > 0 ? 99 : 0;
@@ -1797,6 +1851,8 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     totalVolume,
     tradeValue,
     avgVolume5,
+    avgVolume3,
+    avgVolume3SampleDays,
     previousVolume,
     issuedShares,
     volumeRatio5,
@@ -1852,6 +1908,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     outsideVolume,
     sideTotal,
     outsideInsideRatio,
+    outsideVolumeGtInsideTimes2,
     bidAskRatio,
     turnoverRate,
     turnoverRate3To5d,
@@ -3258,9 +3315,9 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       entryScore += 80;
       reasons.push("rebound_from_low");
     }
-    if (metrics.outsideVolume > metrics.insideVolume && metrics.sideTotal >= 1000) {
-      entryScore += 90;
-      reasons.push("mitake_outside_gt_inside");
+    if (metrics.outsideVolumeGtInsideTimes2) {
+      entryScore += 180;
+      reasons.push("outside_volume_gt_inside_times_2_priority");
     }
     if (metrics.bidAskRatio >= 1.5) {
       entryScore += 45;
@@ -3388,6 +3445,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     upgradeScore += topRankScore(valueRank, 150, 150);
     upgradeScore += topRankScore(turnoverRank, 50, 110);
     if (metrics.quoteFresh) upgradeScore += 30;
+    if (metrics.outsideVolumeGtInsideTimes2) upgradeScore += 180;
     if (metrics.changePercent >= 2) upgradeScore += 130;
     if (metrics.turnoverRate >= MOTHER_POOL_MIN_TURNOVER_RATE) upgradeScore += 55;
     if (metrics.volumeRatio5 >= 2 || metrics.estimatedVolumeRatio >= 2) upgradeScore += 150;
@@ -3407,6 +3465,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     if (metrics.volumeRatio5 >= 2 || metrics.estimatedVolumeRatio >= 2) upgradeReasons.push("relative_volume_expansion");
     if (metrics.movingAverageTurnBullish) upgradeReasons.push("moving_average_turn_bullish");
     if (metrics.openingRangeBreak) upgradeReasons.push("opening_range_break_0901");
+    if (metrics.outsideVolumeGtInsideTimes2) upgradeReasons.push("outside_volume_gt_inside_times_2_priority");
     if (seedSources.length) upgradeReasons.push("source_seed_resonance");
     if (consecutiveScoreDeclines >= 2 && !downgradeProtection) upgradeReasons.push("consecutive_score_decline");
     if (fastRemove) upgradeReasons.push("fast_remove_stale_or_below_ma58");
@@ -3485,6 +3544,8 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         totalVolume: Math.round(metrics.totalVolume),
         tradeValue: Math.round(metrics.tradeValue),
         avgVolume5: Math.round(metrics.avgVolume5),
+        avgVolume3: Math.round(metrics.avgVolume3),
+        avgVolume3SampleDays: metrics.avgVolume3SampleDays,
         issuedShares: Math.round(metrics.issuedShares),
         volumeRatio5: Number(metrics.volumeRatio5.toFixed(4)),
         previousVolume: Math.round(metrics.previousVolume),
@@ -3509,6 +3570,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         outsideVolume: Math.round(metrics.outsideVolume),
         insideVolume: Math.round(metrics.insideVolume),
         outsideInsideRatio: Number(metrics.outsideInsideRatio.toFixed(4)),
+        outsideVolumeGtInsideTimes2: metrics.outsideVolumeGtInsideTimes2,
         turnoverRate: Number(metrics.turnoverRate.toFixed(4)),
         turnoverRate3To5d: Number(metrics.turnoverRate3To5d.toFixed(4)),
         marginSampledDays: metrics.marginSampledDays,
@@ -3715,6 +3777,14 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         is_daytrade_allowed: row.basePool?.eligible === true,
         warming_pending: warmingPending,
         formal_pool_eligible: row.basePool?.eligible === true,
+        avg3_volume: Math.round(numberValue(row.priorityMetrics?.avgVolume3)),
+        avg3_volume_sample_days: numberValue(row.priorityMetrics?.avgVolume3SampleDays),
+        avg3_volume_gate_status: numberValue(row.priorityMetrics?.avgVolume3SampleDays) < 3
+          ? "history_pending"
+          : (numberValue(row.priorityMetrics?.avgVolume3) >= MOTHER_POOL_MIN_AVG_VOLUME3_LOTS ? "pass" : "below_3000_lots"),
+        inside_volume: Math.round(numberValue(row.priorityMetrics?.insideVolume)),
+        outside_volume: Math.round(numberValue(row.priorityMetrics?.outsideVolume)),
+        outside_volume_gt_inside_times_2: row.priorityMetrics?.outsideVolumeGtInsideTimes2 === true,
         price_gate_status: MOTHER_POOL_MIN_PRICE > 0 ? (numberValue(row.metrics?.price) >= MOTHER_POOL_MIN_PRICE ? "pass" : "below_minimum") : "no_price_floor",
         score_components: {
           entry_score: numberValue(row.entryScore ?? row.score),
@@ -4893,7 +4963,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     mother_pool_quote_pending_symbols: priorityRows.basePoolMeta?.quotePendingSymbols || [],
     mother_pool_quote_stale_symbols: priorityRows.basePoolMeta?.quoteStaleSymbols || [],
     mother_pool_avg5_policy: "classification_only_avg5_never_hard_excludes",
-    mother_pool_required_readback_fields: ["trade_date", "symbol", "name", "market", "price", "open_price", "previous_close", "change_percent", "total_volume", "trade_value", "avg5_volume", "relative_volume_ratio", "volume_rank", "trade_value_rank", "ma3_turn_up", "ma5_turn_up", "ma10_turn_up", "ma30_turn_up", "ma58_turn_up", "ma_bull_stack_short", "ma_bull_stack_mid", "above_ma30", "above_ma58", "opening_range_break", "surge_flag", "volume_spike_flag", "strategy_source_flags", "sector_name", "sector_strength_score", "liquidity_grade", "mother_pool_score", "entry_score", "upgrade_score", "matched_case_patterns", "upgrade_reasons", "hot_burst_valid_seconds", "hot_burst_cooldown_seconds", "hot_burst_triggered_at", "hot_extension_rank", "mother_pool_rank", "pool_reasons", "source_name", "updated_at"],
+    mother_pool_required_readback_fields: ["trade_date", "symbol", "name", "market", "price", "open_price", "previous_close", "change_percent", "total_volume", "trade_value", "avg3_volume", "avg3_volume_sample_days", "avg5_volume", "relative_volume_ratio", "inside_volume", "outside_volume", "outside_volume_gt_inside_times_2", "volume_rank", "trade_value_rank", "ma3_turn_up", "ma5_turn_up", "ma10_turn_up", "ma30_turn_up", "ma58_turn_up", "ma_bull_stack_short", "ma_bull_stack_mid", "above_ma30", "above_ma58", "opening_range_break", "surge_flag", "volume_spike_flag", "strategy_source_flags", "sector_name", "sector_strength_score", "liquidity_grade", "mother_pool_score", "entry_score", "upgrade_score", "matched_case_patterns", "upgrade_reasons", "hot_burst_valid_seconds", "hot_burst_cooldown_seconds", "hot_burst_triggered_at", "hot_extension_rank", "mother_pool_rank", "pool_reasons", "source_name", "updated_at"],
     priority_source_injecting: prioritySourceInjecting,
     priority_min_injecting_quotes: MIN_PRIORITY_INJECTING_QUOTES,
     priority_fresh_quote_coverage_target_120s: MIN_PRIORITY_FRESH_COVERAGE,

@@ -34,6 +34,10 @@
     "sameTradeDateAndRunIdRequired": true,
     "top40IsNotLimitGateOrOnlyEntry": true,
     "websocketCandlesAreFormal1mSource": true,
+    "priorThreeTradingDayAverageVolumeLotsMinimum": 3000,
+    "priorThreeTradingDayAverageVolumeIsWarmupHardGate": true,
+    "intradayOutsideVolumePriorityFormula": "outside_volume > inside_volume * 2",
+    "intradayOutsideVolumePriorityIsRankingOnly": true,
     "dataGapMustNotDisplayAsNoSignal": true,
     "oldSupabaseMarketSnapshotsFallbackDisabled": true
   }

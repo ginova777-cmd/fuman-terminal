@@ -446,10 +446,16 @@ function writerCodeRegressionChecks() {
       && source.includes('max_run_seconds_reached_after_active_tick')
       && !source.includes('process.exit(124)'),
     motherPoolBaseEligibilityContract: source.includes('function evaluateMotherPoolBasePool')
-      && source.includes('avg5 is a liquidity grade only')
-      && !source.includes('avg5_volume_not_gt_3000')
+      && source.includes('MOTHER_POOL_MIN_AVG_VOLUME3_LOTS')
+      && source.includes('avg_volume3_history_pending')
+      && source.includes('avg_volume3_below_${MOTHER_POOL_MIN_AVG_VOLUME3_LOTS}')
+      && source.includes('strategy4_daily_ohlcv_view:prior_3_trading_days')
       && source.includes('market_not_twse_otc')
       && source.includes('price_below_'),
+    outsideVolumePriorityContract: source.includes('outsideVolume > insideVolume * 2')
+      && source.includes('outside_volume_gt_inside_times_2_priority')
+      && source.includes('outsideVolumeGtInsideTimes2')
+      && !source.includes('outsideVolume * 2 > insideVolume'),
     warmingMotherPoolIncludesPending: source.includes('const warmingPendingCandidates = pendingCandidates.filter')
       && source.includes('const rankingCandidates = warmingPhase')
       && source.includes('warming_pending')
