@@ -37,13 +37,14 @@ function eventLabel(type) {
 }
 function eventMessage(event) {
   const identity = (String(event.symbol || "") + " " + String(event.name || "")).trim();
-  const time = String(event.latest_1m_time || event.checked_at || "").replace("T", " ").replace("Z", " UTC");
-  const detail = event.trigger_type === "price_breakout_1pct"
-    ? "最新 1分K 收 " + formatNumber(event.latest_1m_close) + "｜前60根最高收 " + formatNumber(event.rolling_1m_prior_high_close) + "｜門檻 " + formatNumber(event.price_trigger_level)
-    : "最新 1分K 量 " + formatNumber(event.latest_1m_volume, 0) + "｜前60根平均量 " + formatNumber(event.rolling_1m_baseline_volume, 0) + "｜門檻 " + formatNumber(event.volume_trigger_level, 0);
   const signalLabels = { kd_5_3_3: "KD(5,3,3)黃金交叉", rsi_4_cross_6: "RSI(4)突破RSI(6)", macd_7_12_20: "MACD(7,12,20)黃金交叉" };
   const technical = (Array.isArray(event.technical_golden_cross_signals) ? event.technical_golden_cross_signals : []).map((key) => signalLabels[key] || key).join("／");
-  return ["當沖盤中雷達｜" + eventLabel(event.trigger_type), identity, detail, "技術確認｜" + technical, "前置樣本 " + event.rolling_1m_baseline_sample_count + " 根｜K棒 " + time, "僅為 Mother Pool 雷達提醒；非正式候選、非下單訊號。"].join("\n");
+  return [
+    "當沖盤中雷達｜" + eventLabel(event.trigger_type),
+    identity,
+    "入場價: " + formatNumber(event.latest_1m_close),
+    "技術確認: " + technical,
+  ].join("\n");
 }
 function eventKey(event) { return String(event.trade_date) + ":" + event.symbol + ":" + event.trigger_type; }
 function telegramIdempotencyKey(tradeDate, event) {

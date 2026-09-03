@@ -118,6 +118,11 @@ const checks = {
     "瞬間拉抬",
     "瞬間巨量",
   ]),
+  compact_notification_template_contract: includesAll(notifier, [
+    '"入場價: " + formatNumber(event.latest_1m_close)',
+    '"技術確認: " + technical',
+    '"當沖盤中雷達｜" + eventLabel(event.trigger_type)',
+  ]) && !includesAll(notifier, ["最新 1分K 收 ", "前置樣本 ", "僅為 Mother Pool 雷達提醒"]),
   formal_1m_data_gate: includesAll(notifier, [
     "source: \"fugle_formal_1m\"",
     "rolling_1m_baseline_status",
@@ -142,10 +147,7 @@ const checks = {
     "cooldown_active",
     "idempotencyKey",
   ]),
-  notification_is_radar_only: includesAll(notifier, [
-    "非正式候選、非下單訊號",
-    "motherPoolIntradayBurstTelegram: true",
-  ]),
+  notification_is_radar_only: includesAll(notifier, ["motherPoolIntradayBurstTelegram: true"]),
   telegram_result_readback: includesAll(telegram, [
     "const results = [];",
     "return results;",
