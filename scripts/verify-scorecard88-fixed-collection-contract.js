@@ -48,11 +48,18 @@ for (const [name, time] of definitions) {
   const allowed = registry.policy.allowedResults[name] || [];
   if (!allowed.includes(0) || !allowed.includes(3) || !allowed.includes(4)) issues.push(`registry_allowed_results_missing:${name}`);
 }
-const namesLiteral = definitions.map(([name]) => `'${name.replace(/'/g, "''")}'`).join(",");
-const ps = `$OutputEncoding=[Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $rows=Get-ScheduledTask -TaskName @(${namesLiteral}) -ErrorAction SilentlyContinue | ForEach-Object {$a=$_.Actions|Select-Object -First 1; [pscustomobject]@{name=$_.TaskName; enabled=$_.Settings.Enabled; arguments=[string]$a.Arguments; logonType=[string]$_.Principal.LogonType; triggers=@($_.Triggers|ForEach-Object{if([string]$_.StartBoundary -match 'T(\\d{2}:\\d{2})'){$Matches[1]}})}}; @($rows)|ConvertTo-Json -Depth 4 -Compress`;
-const liveResult = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", ps], { encoding: "utf8", timeout: 15000, windowsHide: true });
-let live = [];
-try { const parsed = JSON.parse(String(liveResult.stdout || "[]").trim() || "[]"); live = Array.isArray(parsed) ? parsed : [parsed]; } catch (error) { issues.push(`live_task_query_invalid:${error.message}`); }
+const live = definitions.flatMap(([name]) => {
+  const query = spawnSync("schtasks", ["/Query", "/TN", name, "/XML"], { encoding: "utf8", timeout: 15000, windowsHide: true });
+  if (query.status !== 0) return [];
+  const xml = String(query.stdout || "");
+  return [{
+    name,
+    enabled: !/<Enabled>false<\/Enabled>/i.test(xml),
+    arguments: xml.match(/<Arguments>([\s\S]*?)<\/Arguments>/i)?.[1] || "",
+    logonType: xml.match(/<LogonType>([\s\S]*?)<\/LogonType>/i)?.[1] || "",
+    triggers: [...xml.matchAll(/<StartBoundary>[^<]*T(\d{2}:\d{2})/gi)].map((match) => match[1]),
+  }];
+});
 for (const [name, time] of definitions) {
   const row = live.find((item) => item.name === name);
   if (!row || row.enabled === false) { issues.push(`live_task_missing_or_disabled:${name}`); continue; }

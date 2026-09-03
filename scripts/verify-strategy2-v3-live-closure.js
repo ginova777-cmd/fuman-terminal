@@ -50,13 +50,13 @@ function main() {
 
   add(checks, "live_scanner_has_v3_contract", scanner.includes(`const CONTRACT = \"${CONTRACT}\"`));
   add(checks, "live_scanner_reuses_v3_water", scanner.includes("readFormalWater") && scanner.includes("strategy2-v3-water-scan"));
-  add(checks, "formal_live_requires_fugle_websocket", water.includes("readWebSocketEvidence") && water.includes("fugle-websocket") && water.includes("restDisabled") && scanner.includes("websocketFormalReady"));
+  add(checks, "formal_live_requires_fugle_websocket", water.includes("sharedSourceEvidence") && water.includes("supabase_shared_fugle_daytrade_source") && scanner.includes("websocketFormalReady"));
   add(checks, "formal_live_uses_90pct_water_coverage_contract", scanner.includes("MIN_FORMAL_WATER_COVERAGE_RATIO") && scanner.includes("formalWaterCoverageOk") && scanner.includes("formalWaterCoverageRatio") && scanner.includes("requiredFormalWaterCoverageRatio") && water.includes("MIN_FORMAL_WATER_COVERAGE_RATIO = 0.90"));
   add(checks, "diagnostic_water_never_overwrites_canonical_receipt", water.includes("strategy2-v3-water-diagnostic-latest.json") && water.includes("const receiptPath = diagnostic ? diagnosticReceiptPath : formalReceiptPath"));
-  add(checks, "water_reads_canonical_v2_websocket_status_only", water.includes("fugle-daytrade-websocket-status-v2.json") && !water.includes('"fugle-daytrade-websocket-status.json"'));
+  add(checks, "water_reads_canonical_shared_source_status_only", water.includes('safeReadRows(source, "source_status"') && water.includes("expectedCanonicalRunId") && !water.includes("fugle-daytrade-websocket-status-v2.json"));
   add(checks, "water_reads_cross_machine_supabase_quote_and_candles", water.includes('"fugle_daytrade_quotes_live"') && water.includes('"fugle_daytrade_intraday_1m"') && !water.includes("readFugleWebSocketQuotes") && !water.includes("readFugleWebSocketCandles"));
   add(checks, "water_scopes_to_dynamic_priority_mother_pool", water.includes('"fugle_daytrade_priority_pool"') && water.includes("deep_scan_pool + basePoolEligible") && water.includes('"top40"'));
-  add(checks, "websocket_handover_is_bounded_to_fresh_evidence", water.includes("handoverGrace") && water.includes("reauthGrace") && water.includes("evidenceAgeSeconds <= 45") && water.includes("restDisabled"));
+  add(checks, "websocket_handover_is_bounded_to_fresh_evidence", water.includes("ageSeconds <= 180") && water.includes("statusTradeDate === tradeDate") && water.includes("canonicalRunId === expectedCanonicalRunId"));
   add(checks, "collector_has_no_top40_default", collector.includes("FUGLE_STREAMING_MAX_SYMBOLS || process.env.FUGLE_STREAMING_MAX_SUBSCRIPTIONS || 600") && !collector.includes("FUGLE_STREAMING_PINNED_PRIORITY_SYMBOLS || 40"));
   add(checks, "collector_wrapper_overrides_legacy_top40_environment", !collectorWrapper.includes('PINNED_PRIORITY_SYMBOLS = "40"') && !collectorWrapper.includes('|| 40'));
   add(checks, "live_scanner_uses_v3_signal", scanner.includes("strategy2-v3-signal"));

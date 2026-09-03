@@ -52,8 +52,8 @@ function main() {
   const formalComplete = receipt?.status === "complete" && receipt?.complete === true && receipt?.qualityStatus === "complete" && receipt?.formalDisplayAllowed === true && receipt?.publishAllowed === true && formalWaterCoverageOk;
   const blockedComplete = receipt?.status === "blocked" && receipt?.complete === false && receipt?.formalDisplayAllowed === false && receipt?.publishAllowed === false && receipt?.displayOnlyBlockedEvidence === true && Boolean(receipt?.blockedReason) && expected > 0 && scanned === expected;
 
-  check(checks, "unique_runner_present", taskExists("Fuman Strategy2 Unified 0845-1230"));
-  for (const retired of ["Fuman Strategy2 Unified 0845-1210", "Fuman Strategy2 V3 Water Gate 0845", "Fuman Strategy2 V2 Unattended", "Fuman Strategy2 V2 Recovery"]) {
+  check(checks, "unique_runner_present", taskExists("Fuman Strategy2 Unified 0845-1210"));
+  for (const retired of ["Fuman Strategy2 Unified 0845-1230", "Fuman Strategy2 V3 Water Gate 0845", "Fuman Strategy2 V2 Unattended", "Fuman Strategy2 V2 Recovery"]) {
     check(checks, `retired_task_absent:${retired}`, !taskExists(retired));
   }
   check(checks, "receipt_exists", Boolean(receipt), LIVE_RECEIPT);
