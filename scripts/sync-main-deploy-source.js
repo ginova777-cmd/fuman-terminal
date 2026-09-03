@@ -232,7 +232,7 @@ const FILES = [
   "scripts/verify-production-api-freshness-contract.js",
   "scripts/verify-realtime-radar-frontend-contract.js",
   "scripts/install-realtime-radar-watchdog-task.ps1",
-  "scripts/verify-strategy5-battle-state.js",
+  "scripts/verify-strategy5-complete.js",
   "scripts/verify-heatmap-realtime.js",
   "scripts/verify-market-ai-freshness-guard.js",
   "scripts/verify-market-surfaces-chain.js",

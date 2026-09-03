@@ -175,7 +175,7 @@ const STRATEGIES = [
     writeBudget: "strategy5 runner receipt / chip health verifier",
     verifierCommands: [
       ["scripts/verify-chip-source-health.js"],
-      ["scripts/verify-strategy5-battle-state.js"],
+      ["scripts/verify-strategy5-complete.js"],
     ],
   },
   {

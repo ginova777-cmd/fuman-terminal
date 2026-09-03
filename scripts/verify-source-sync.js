@@ -111,7 +111,7 @@ const KEY_FILES = [
   "scripts/verify-api-unattended-scorecard.js",
   "scripts/verify-production-api-freshness-contract.js",
   "scripts/verify-realtime-radar-frontend-contract.js",
-  "scripts/verify-strategy5-battle-state.js",
+  "scripts/verify-strategy5-complete.js",
   "scripts/verify-heatmap-realtime.js",
   "scripts/verify-market-ai-freshness-guard.js",
   "scripts/verify-production-guard.js",

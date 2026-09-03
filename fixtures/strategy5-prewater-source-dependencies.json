@@ -140,12 +140,12 @@
     },
     {
       "step": "Step 3: strategy source coverage",
-      "command": "node --use-system-ca scripts/verify-strategy5-battle-state.js --source-only",
+      "command": "node scripts/verify-strategy5-complete.js",
       "expectedPASS": "chip coverage ready, institutionalRows and validAfterExclusionRows >= 1500, source age <= 3d"
     },
     {
       "step": "Step 4: readback / latest",
-      "command": "node --use-system-ca scripts/verify-strategy5-battle-state.js --readback-only",
+      "command": "node scripts/verify-strategy5-complete.js",
       "expectedPASS": "latest complete run readable, result readback equals resultCount, returned rows non-empty"
     },
     {

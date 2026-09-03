@@ -37,7 +37,7 @@ const CHECKS = [
   {
     key: "strategy5_institution",
     label: "Strategy5 / institution",
-    script: "scripts/verify-strategy5-battle-state.js",
+    script: "scripts/verify-strategy5-complete.js",
     normalize: normalizeStrategy5Institution,
   },
   {

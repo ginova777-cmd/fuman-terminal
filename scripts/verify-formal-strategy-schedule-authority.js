@@ -26,7 +26,7 @@ const expected = [
   ["Fuman Strategy4 Source Prewarm 1535", "run-strategy4-source-prewarm.ps1", ["15:35"]],
   ["Fuman Strategy4 Cache 1600", "run-strategy4.ps1", ["16:00"]],
   ["Fuman Chip Source Sync 2005", "run-chip-source-sync.ps1", ["20:05"]],
-  ["Fuman Strategy5 Cache 2100", "run-strategy5.ps1", ["21:00"]],
+  ["Fuman Strategy5 Cache 2100", "run-strategy5-complete.ps1", ["21:00"]],
   ["Fuman 買賣超 Cache 2100", "run-institution.ps1", ["21:00"]],
   ["Fuman Buy Sell Complete 2110", "run-buy-sell-complete.ps1", ["21:10"]],
   ["Fuman 買賣超 Watchdog 2115", "run-flow-watchdog.ps1", ["21:15"]],
