@@ -102,6 +102,16 @@ const checks = {
     "(metrics.intradayPriceBurst1Pct === true || priceRuleMet)",
     "(metrics.intradayVolumeBurstRolling60X2 === true || volumeRuleMet)",
   ]),
+  technical_indicator_gate_contract: includesAll(writer, [
+    "buildIntradayTechnicalIndicators",
+    "kd_parameters: { rsv_period: 5, k_smoothing: 3, d_smoothing: 3 }",
+    "rsi_parameters: { fast_period: 4, slow_period: 6, method: \"wilder\" }",
+    "macd_parameters: { fast_period: 7, slow_period: 12, signal_period: 20 }",
+    "technical_golden_cross_any === true",
+    "technical_golden_cross_not_met",
+    "technical_indicator_readback: technicalIndicatorReadback",
+    "min_rolling_samples: 60",
+  ]),
   notifier_strict_trigger_contract: includesAll(notifier, [
     "price_breakout_1pct",
     "volume_burst_rolling60_x2",
@@ -112,7 +122,12 @@ const checks = {
     "source: \"fugle_formal_1m\"",
     "rolling_1m_baseline_status",
     "rolling_1m_baseline_not_ready",
-    "rolling_1m_samples_below_20",
+    "rolling_1m_samples_below_60",
+    "technical_indicator_not_ready",
+    "technical_golden_cross_not_met",
+    "kd_5_3_3",
+    "rsi_4_cross_6",
+    "macd_7_12_20",
   ]),
   price_and_quote_gate: includesAll(notifier, [
     "price_below_50",
@@ -196,6 +211,13 @@ if (requireToday) {
   checks.runtime_today_outbox_present = Boolean(outbox) && String(outbox?.trade_date || "") === taipeiDate();
   checks.runtime_today_receipt_present = Boolean(receipt) && String(receipt?.trade_date || "") === taipeiDate();
   checks.runtime_no_send_after_1230 = !receipt || receiptSentEvents.every((event) => taipeiMinutesFromIso(event?.sent_at) <= 750);
+  checks.runtime_today_technical_indicator_readback_present = Array.isArray(outbox?.technical_indicator_readback) && outbox.technical_indicator_readback.length > 0;
+  checks.runtime_today_events_require_technical_cross = outboxEvents.every((event) =>
+    event?.technical_indicator_status === "ready"
+    && event?.technical_golden_cross_any === true
+    && Array.isArray(event?.technical_golden_cross_signals)
+    && event.technical_golden_cross_signals.length > 0
+  );
 }
 
 const rejectedReasonCounts = outbox?.rejected_reason_counts || null;
@@ -205,6 +227,15 @@ const baselineRejectedRatio = candidateCount ? baselineRejectedCount / candidate
 const cacheReadyCount = Number.isFinite(Number(outbox?.cache_rolling_1m_ready_count)) ? Number(outbox.cache_rolling_1m_ready_count) : null;
 const candleCacheSymbolCount = Number.isFinite(Number(outbox?.candle_cache_symbol_count)) ? Number(outbox.candle_cache_symbol_count) : null;
 const outboxUpdatedAt = outbox?.updated_at || "";
+checks.runtime_technical_indicator_contract = !outbox?.technical_indicator_readback || outbox.technical_indicator_readback.every((row) =>
+  row?.kd_parameters?.rsv_period === 5
+  && row?.rsi_parameters?.fast_period === 4
+  && row?.rsi_parameters?.slow_period === 6
+  && row?.macd_parameters?.fast_period === 7
+  && row?.macd_parameters?.slow_period === 12
+  && row?.macd_parameters?.signal_period === 20
+  && typeof row?.technical_golden_cross_any === "boolean"
+);
 function taipeiMinutesFromIso(value) {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) return 0;

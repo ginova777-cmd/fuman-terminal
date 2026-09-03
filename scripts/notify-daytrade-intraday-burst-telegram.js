@@ -41,7 +41,9 @@ function eventMessage(event) {
   const detail = event.trigger_type === "price_breakout_1pct"
     ? "最新 1分K 收 " + formatNumber(event.latest_1m_close) + "｜前60根最高收 " + formatNumber(event.rolling_1m_prior_high_close) + "｜門檻 " + formatNumber(event.price_trigger_level)
     : "最新 1分K 量 " + formatNumber(event.latest_1m_volume, 0) + "｜前60根平均量 " + formatNumber(event.rolling_1m_baseline_volume, 0) + "｜門檻 " + formatNumber(event.volume_trigger_level, 0);
-  return ["當沖盤中雷達｜" + eventLabel(event.trigger_type), identity, detail, "前置樣本 " + event.rolling_1m_baseline_sample_count + " 根｜K棒 " + time, "僅為 Mother Pool 雷達提醒；非正式候選、非下單訊號。"].join("\n");
+  const signalLabels = { kd_5_3_3: "KD(5,3,3)黃金交叉", rsi_4_cross_6: "RSI(4)突破RSI(6)", macd_7_12_20: "MACD(7,12,20)黃金交叉" };
+  const technical = (Array.isArray(event.technical_golden_cross_signals) ? event.technical_golden_cross_signals : []).map((key) => signalLabels[key] || key).join("／");
+  return ["當沖盤中雷達｜" + eventLabel(event.trigger_type), identity, detail, "技術確認｜" + technical, "前置樣本 " + event.rolling_1m_baseline_sample_count + " 根｜K棒 " + time, "僅為 Mother Pool 雷達提醒；非正式候選、非下單訊號。"].join("\n");
 }
 function eventKey(event) { return String(event.trade_date) + ":" + event.symbol + ":" + event.trigger_type; }
 function telegramIdempotencyKey(tradeDate, event) {
@@ -124,7 +126,11 @@ function validEvent(event, tradeDate, nowMs) {
   if (event.quote_fresh !== true || numberValue(event.quote_age_seconds, 999999) > 120) failures.push("quote_not_fresh");
   if (!["price_breakout_1pct", "volume_burst_rolling60_x2"].includes(triggerType)) failures.push("trigger_type_invalid");
   if (String(event.rolling_1m_baseline_status || "") !== "ready") failures.push("rolling_1m_baseline_not_ready");
-  if (numberValue(event.rolling_1m_baseline_sample_count) < 20) failures.push("rolling_1m_samples_below_20");
+  if (numberValue(event.rolling_1m_baseline_sample_count) < 60) failures.push("rolling_1m_samples_below_60");
+  if (String(event.technical_indicator_status || "") !== "ready") failures.push("technical_indicator_not_ready");
+  const technicalSignals = Array.isArray(event.technical_golden_cross_signals) ? event.technical_golden_cross_signals : [];
+  const allowedTechnicalSignals = ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"];
+  if (event.technical_golden_cross_any !== true || !technicalSignals.some((signal) => allowedTechnicalSignals.includes(String(signal)))) failures.push("technical_golden_cross_not_met");
   if (triggerType === "price_breakout_1pct" && !(numberValue(event.latest_1m_close) >= numberValue(event.rolling_1m_prior_high_close) * 1.01)) failures.push("price_rule_not_met");
   if (triggerType === "volume_burst_rolling60_x2" && !(numberValue(event.latest_1m_volume) >= numberValue(event.rolling_1m_baseline_volume) * 2)) failures.push("volume_rule_not_met");
   const eventTime = Date.parse(event.latest_1m_time || event.checked_at || "");
