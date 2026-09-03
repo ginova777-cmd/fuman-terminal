@@ -13,7 +13,7 @@ const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const DATA_DIR = path.join(RUNTIME_DIR, "data");
 const SNAPSHOT_KEY = "strategy2_live_v3";
 const REPLAY_SNAPSHOT_KEY = "strategy2_live_v3_diagnostic_replay";
-const CONTRACT = "strategy2-seven-strategy-live-v1";
+const CONTRACT = "strategy2-live-v3";
 const HISTORY_FILE = path.join(DATA_DIR, "strategy2-v3", "live-history.json");
 
 function writeJson(file, value) {
@@ -95,8 +95,8 @@ function blockedReasonFor({ displayReplay, diagnostic, allowed, tradingDay, obse
   if (!observationWindow) return "outside_strategy2_v3_observation_window";
   if (!finalize) return "strategy2_v3_scan_in_progress_not_finalized";
   if (!websocketFormalReady) return water.websocket?.reason || "fugle_websocket_not_formal_ready";
-  if (coverageGrade === "B") return "strategy2_seven_strategy_degraded_observation_only";
-  return "strategy2_seven_strategy_water_hard_blocked";
+  if (coverageGrade === "B") return "strategy2_degraded_observation_only";
+  return "strategy2_water_hard_blocked";
 }
 function terminalSnapshotPayload(payload = {}) {
   const records = Array.isArray(payload.records) ? payload.records : [];
@@ -229,8 +229,8 @@ async function main() {
     displayBlockReason: displayReplay ? "V3 回測驗證：非正式候選、不發布、不寫入 /88" : blockedReason,
     sourceCoverage: {
       motherPool: "fugle_daytrade_priority_pool",
-      quote: "fugle_daytrade_websocket_cache",
-      intraday1m: "fugle_daytrade_websocket_cache",
+      quote: "fugle_daytrade_quotes_live",
+      intraday1m: "fugle_daytrade_intraday_1m",
       formalDeepScanPoolRows: water.poolRows,
       formalDeepScanQuoteRows: water.quoteRows,
       formalIntradayOneMinuteRows: water.candleRows,

@@ -1,6 +1,6 @@
 {
-  "contract": "strategy2-seven-strategy-scanner-v1",
-  "authority": "seven_strategy_scanner_handover_20260903",
+  "contract": "strategy2-scanner-v1",
+  "authority": "strategy2_intraday_method_contract_20260903",
   "formalEntryCutoffTaipei": "12:00",
   "quoteFormalMaxAgeSeconds": 120,
   "candleFormalMaxAgeSeconds": 120,

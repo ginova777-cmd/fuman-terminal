@@ -9,7 +9,7 @@ const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SOURCE_FILE = path.join(RUNTIME_DIR, "data", "strategy2-v3", "latest-live.json");
 const RECEIPT_FILE = path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy2-v3-blocked-evidence-migration.json");
 const SNAPSHOT_KEY = "strategy2_live_v3";
-const CONTRACT = "strategy2-seven-strategy-live-v1";
+const CONTRACT = "strategy2-live-v3";
 
 function taipeiDate() {
   return new Intl.DateTimeFormat("en-CA", {

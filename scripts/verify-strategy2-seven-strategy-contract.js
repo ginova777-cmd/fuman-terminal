@@ -47,11 +47,12 @@ const futureOnly = candidateFromWaterRow(row({ stockFutureSync: true, changePerc
 const wrongRun = candidateFromWaterRow(row({ canonicalRunMatches: false }), candles(), { now: new Date("2026-09-03T10:30:00+08:00"), tradeDate: "2026-09-03" });
 const chase = candidateFromWaterRow(row(), candles().map((candle, index) => ({ ...candle, open: 100 + index * 0.2 - 0.1, high: 100 + index * 0.2 + 0.1, low: 100 + index * 0.2 - 0.1, close: 100 + index * 0.2 })), { now: new Date("2026-09-03T10:30:00+08:00"), tradeDate: "2026-09-03" });
 
-check("contract_authority", contract.contract === "strategy2-seven-strategy-scanner-v1");
+check("contract_authority", contract.contract === "strategy2-scanner-v1");
 check("legacy_v3_authority_removed", !signalSource.includes("s2_v3_1m_trend_volume_breakout") && !signalSource.includes("evaluateJiangCore"));
 for (const marker of contract.formalRules) check(`formal_rule_${marker}`, signalSource.includes(`"${marker}"`));
 for (const marker of ["stock_future_txf_sync", "star_preopen"]) check(`observation_rule_${marker}`, signalSource.includes(`"${marker}"`));
-for (const marker of ["fugle_daytrade_daily_volume_avg", "strategy4_daily_ohlcv_view", "v_stock_future_live_contract", "fugle_preopen_snapshot", "v_fugle_daytrade_canonical_gate"]) check(`water_source_${marker}`, waterSource.includes(`"${marker}"`));
+for (const marker of ["fugle_daytrade_priority_pool", "fugle_daytrade_quotes_live", "fugle_daytrade_intraday_1m", "fugle_daytrade_daily_volume_avg", "strategy4_daily_ohlcv_view", "v_stock_future_live_contract", "fugle_preopen_snapshot", "v_fugle_daytrade_canonical_gate", "source_status"]) check(`water_source_${marker}`, waterSource.includes(`"${marker}"`));
+check("cross_machine_no_local_market_cache", !waterSource.includes("readFugleWebSocketQuotes") && !waterSource.includes("readFugleWebSocketCandles") && !waterSource.includes("WEBSOCKET_STATUS_FILE"));
 check("canonical_run_exact_match", waterSource.includes("canonicalRunMatches") && waterSource.includes("expectedCanonicalRunId"));
 check("formal_fixture_passes", formal.formalCandidate === true, formal.reason);
 check("gate_d_observation_only", gateD.formalCandidate === false && gateD.observation === true, gateD.state);
@@ -64,6 +65,6 @@ check("degraded_never_formal", liveSource.includes("degradedObservationAllowed")
 check("same_strategy_twenty_minute_cooldown", liveSource.includes("20 * 60 * 1000") && liveSource.includes("cooldownHit"));
 
 const issues = checks.filter((item) => !item.ok).map((item) => item.code);
-const report = { ok: issues.length === 0, verifier: "verify-strategy2-seven-strategy-contract", contract: contract.contract, checkedAt: new Date().toISOString(), checks, issues };
+const report = { ok: issues.length === 0, verifier: "verify-strategy2-contract", contract: contract.contract, checkedAt: new Date().toISOString(), checks, issues };
 console.log(JSON.stringify(report, null, 2));
 if (!report.ok) process.exitCode = 1;

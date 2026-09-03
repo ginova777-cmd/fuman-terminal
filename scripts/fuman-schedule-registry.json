@@ -1345,7 +1345,7 @@
         "08:45"
       ],
       "runner": "run-strategy2-v3-unified.ps1",
-      "sourceContract": "strategy2-seven-strategy-live-v1",
+      "sourceContract": "strategy2-live-v3",
       "unattendedStatus": "s4u_background_single_runner"
     },
     {

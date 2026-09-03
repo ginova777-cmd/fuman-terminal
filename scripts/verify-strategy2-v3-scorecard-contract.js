@@ -5,7 +5,7 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const source = fs.readFileSync(path.join(ROOT, "api", "scorecard.js"), "utf8");
-const contract = "strategy2-seven-strategy-live-v1";
+const contract = "strategy2-live-v3";
 const api = fs.readFileSync(path.join(ROOT, "api", "strategy2-latest.js"), "utf8");
 const generator = fs.readFileSync(path.join(ROOT, "scripts", "generate-terminal-scorecard-source.js"), "utf8");
 const ruleLock = fs.readFileSync(path.join(ROOT, "lib", "scorecard-rule-locks.js"), "utf8");

@@ -1,23 +1,18 @@
 "use strict";
 
-// Strategy2 reads the complete seven-strategy water contract. It does not own
-// writers, create candidates from Mother Pool membership, or use fallbacks.
+// Strategy2 reads its formal shared-water contract from Supabase. The source
+// writer may run on another computer; local Collector runtime is never an
+// market-data authority for this scanner.
 const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-// V3 scans the dedicated daytrade WebSocket cache directly. The database is
-// the durable mirror, not the live-clock authority for Strategy2.
-process.env.FUMAN_RUNTIME_DIR = RUNTIME_DIR;
-process.env.FUGLE_COLLECTOR_ROLE = "daytrade";
-const { readFugleWebSocketCandles, readFugleWebSocketQuotes } = require("../lib/fugle-websocket-quotes");
 const SOURCE_NAME = "fugle_daytrade_source";
-const CONTRACT = "strategy2-seven-strategy-water-v1";
+const CONTRACT = "strategy2-shared-water-v1";
 const MIN_CANDLES = 35;
 const MIN_FORMAL_WATER_COVERAGE_RATIO = 0.90;
-const WEBSOCKET_STATUS_FILE = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status-v2.json");
 
 function marketClosedReport(label, clock) {
   const { spawnSync } = require("child_process");
@@ -132,52 +127,27 @@ function writeJson(file, value) {
   fs.writeFileSync(file, JSON.stringify(value, null, 2) + "\n", "utf8");
 }
 
-function readWebSocketEvidence(now = new Date()) {
-  try {
-    const status = JSON.parse(fs.readFileSync(WEBSOCKET_STATUS_FILE, "utf8"));
-    const channels = Array.isArray(status.streamingChannels) ? status.streamingChannels : [];
-    const updatedAt = status.updatedAt || status.websocketLastMessageAt || status.lastMessageAt || "";
-    const updatedMs = Date.parse(updatedAt);
-    const ageSeconds = Number.isFinite(updatedMs) ? Math.max(0, Math.round((now.getTime() - updatedMs) / 1000)) : 999999;
-    const latestEvidenceAt = status.lastMessageAt || status.aggregatesLastUpdatedAt || status.websocketHeartbeatAt || "";
-    const latestEvidenceMs = Date.parse(latestEvidenceAt);
-    const evidenceAgeSeconds = Number.isFinite(latestEvidenceMs) ? Math.max(0, Math.round((now.getTime() - latestEvidenceMs) / 1000)) : 999999;
-    const requiredChannels = ["trades", "aggregates", "candles"];
-    const statusExplicitlyBlocksFormal = status.formalReady === false;
-    const socketConnected = bool(status.websocketConnected);
-    const socketAuthenticated = bool(status.websocketAuthenticated);
-    // Subscription refresh briefly emits disconnected before the same authenticated socket reopens.
-    // Permit that handover only with fresh Fugle evidence; a silent or stale socket remains blocked.
-    const handoverGrace = !socketConnected && socketAuthenticated && evidenceAgeSeconds <= 45;
-    const reauthGrace = socketConnected && !socketAuthenticated && evidenceAgeSeconds <= 45;
-    const connectionReady = socketConnected || handoverGrace;
-    const authenticationReady = socketAuthenticated || reauthGrace;
-    const formalReady = !statusExplicitlyBlocksFormal
-      && status.primarySource === "fugle-websocket"
-      && status.mode === "streaming"
-      && connectionReady
-      && authenticationReady
-      && bool(status.restDisabled)
-      && requiredChannels.every((channel) => channels.includes(channel))
-      && ageSeconds <= 180;
-    return {
-      formalReady,
-      primarySource: String(status.primarySource || ""),
-      mode: String(status.mode || ""),
-      connected: socketConnected,
-      authenticated: socketAuthenticated,
-      authenticationMode: handoverGrace ? "recent_websocket_handover_grace" : socketAuthenticated ? "authenticated" : reauthGrace ? "recent_websocket_reconnect_grace" : "not_ready",
-      recentEvidenceAt: latestEvidenceAt,
-      evidenceAgeSeconds,
-      restDisabled: bool(status.restDisabled),
-      channels,
-      updatedAt,
-      ageSeconds,
-      reason: formalReady ? "ready" : "fugle_websocket_not_formal_ready",
-    };
-  } catch {
-    return { formalReady: false, primarySource: "", mode: "", connected: false, authenticated: false, restDisabled: false, channels: [], updatedAt: "", ageSeconds: 999999, reason: "fugle_websocket_status_missing_or_invalid" };
-  }
+function sharedSourceEvidence(statusRow, tradeDate, expectedCanonicalRunId, now = new Date()) {
+  const payload = statusRow?.payload || {};
+  const statusTradeDate = String(payload.tradeDate || payload.trade_date || statusRow?.trade_date || "");
+  const canonicalRunId = String(payload.canonicalRunId || payload.canonical_run_id || payload.runId || payload.run_id || "");
+  const updatedAt = statusRow?.updated_at || payload.updatedAt || payload.updated_at || payload.lastMessageAt || "";
+  const updatedMs = Date.parse(updatedAt);
+  const ageSeconds = Number.isFinite(updatedMs) ? Math.max(0, Math.round((now.getTime() - updatedMs) / 1000)) : 999999;
+  const statusOk = String(statusRow?.status || payload.status || "").toLowerCase();
+  const formalReady = statusTradeDate === tradeDate && canonicalRunId === expectedCanonicalRunId
+    && bool(payload.formalReady ?? payload.formal_ready ?? payload.websocket_formal_ready ?? statusOk === "ok")
+    && ageSeconds <= 180;
+  return {
+    formalReady,
+    primarySource: "supabase_shared_fugle_daytrade_source",
+    mode: "cross_machine_shared_water",
+    tradeDate: statusTradeDate,
+    canonicalRunId,
+    updatedAt,
+    ageSeconds,
+    reason: formalReady ? "ready" : statusTradeDate !== tradeDate ? "shared_source_trade_date_mismatch" : canonicalRunId !== expectedCanonicalRunId ? "shared_source_canonical_run_mismatch" : "shared_source_not_formal_ready",
+  };
 }
 
 function config() {
@@ -206,10 +176,10 @@ async function safeReadRows(source, table, params, issues) {
   }
 }
 
-async function readRowsForSymbols(source, table, params, symbols, issues) {
+async function readRowsForSymbols(source, table, params, symbols, issues, rowsPerSymbol = 5, groupSize = 200) {
   const output = [];
-  for (const group of chunk(symbols, 200)) {
-    output.push(...await safeReadRows(source, table, { ...params, symbol: `in.(${group.join(",")})`, limit: String(Math.max(group.length * 5, 200)) }, issues));
+  for (const group of chunk(symbols, groupSize)) {
+    output.push(...await safeReadRows(source, table, { ...params, symbol: `in.(${group.join(",")})`, limit: String(Math.max(group.length * rowsPerSymbol, 200)) }, issues));
   }
   return output;
 }
@@ -236,7 +206,6 @@ function isDeepScanEligible(payload, tradeDate) {
 }
 
 async function readFormalWater(source, tradeDate, now = new Date()) {
-  const websocket = readWebSocketEvidence(now);
   const ancillaryIssues = [];
   const expectedCanonicalRunId = `${SOURCE_NAME}:${tradeDate.replace(/-/g, "")}:canonical`;
   const pool = await readRows(source, "fugle_daytrade_priority_pool", {
@@ -247,7 +216,9 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
   const poolRows = pool.filter((row) => isDeepScanEligible(row.payload || {}, tradeDate));
   const symbols = [...new Set(poolRows.map((row) => String(row.symbol || "")).filter((symbol) => /^\d{4}$/.test(symbol)))];
   const requestedSymbols = new Set(symbols);
-  const [dailyAverageRows, previousDailyRows, futureRows, preopenRows, canonicalRows, sourceStatusRows] = await Promise.all([
+  const [quoteRows, candleRowsRaw, dailyAverageRows, previousDailyRows, futureRows, preopenRows, canonicalRows, sourceStatusRows] = await Promise.all([
+    readRowsForSymbols(source, "fugle_daytrade_quotes_live", { select: "*", order: "quote_seen_at.desc" }, symbols, ancillaryIssues),
+    readRowsForSymbols(source, "fugle_daytrade_intraday_1m", { select: "symbol,market,trade_date,candle_time,open,high,low,close,volume,updated_at,source_name,is_fallback,intraday_odd_lot,is_formal_entry_eligible", trade_date: `eq.${tradeDate}`, order: "symbol.asc,candle_time.asc" }, symbols, ancillaryIssues, 400, 2),
     readRowsForSymbols(source, "fugle_daytrade_daily_volume_avg", { select: "*", order: "symbol.asc" }, symbols, ancillaryIssues),
     readRowsForSymbols(source, "strategy4_daily_ohlcv_view", { select: "symbol,trade_date,open,high,low,close", trade_date: `lt.${tradeDate}`, order: "trade_date.desc,symbol.asc" }, symbols, ancillaryIssues),
     readRowsForSymbols(source, "v_stock_future_live_contract", { select: "*", order: "relative_to_txf_percent.desc,futopt_total_volume.desc" }, symbols, ancillaryIssues),
@@ -261,31 +232,21 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
   const preopenBySymbol = newestBySymbol(preopenRows.filter((row) => String(row.trade_date || row.payload?.trade_date || tradeDate) === tradeDate));
   const canonicalGate = canonicalRows.find((row) => String(row.trade_date || row.date || "") === tradeDate) || {};
   const sourceStatusPayload = sourceStatusRows[0]?.payload || {};
+  const websocket = sharedSourceEvidence(sourceStatusRows[0] || {}, tradeDate, expectedCanonicalRunId, now);
   const gateGrade = String(canonicalGate.canonical_gate_grade || canonicalGate.gate_grade || sourceStatusPayload.daytrade_gate_grade || sourceStatusPayload.gate_grade || "").toUpperCase();
   const formalEntryAllowed = bool(canonicalGate.formal_entry_allowed ?? sourceStatusPayload.formal_entry_allowed);
-  const liveQuotes = readFugleWebSocketQuotes({ maxAgeMs: 120000 });
-  const liveCandles = readFugleWebSocketCandles({ maxAgeMs: 6 * 60 * 60 * 1000 });
   const quoteBySymbol = new Map();
-  for (const rawQuote of liveQuotes.quotes.values()) {
-    const symbol = String(rawQuote.code || rawQuote.symbol || "").replace(/\D/g, "").slice(0, 4);
+  for (const rawQuote of quoteRows) {
+    const symbol = symbolOf(rawQuote);
     if (!requestedSymbols.has(symbol)) continue;
-    quoteBySymbol.set(symbol, {
-      symbol,
-      name: rawQuote.name || symbol,
-      market: rawQuote.market || "",
-      price: number(rawQuote.close),
-      total_volume: number(rawQuote.tradeVolume || rawQuote.totalVolume || rawQuote.volume),
-      quote_seen_at: rawQuote.quoteSeenAt || rawQuote.quoteTime || rawQuote.time || "",
-      updated_at: rawQuote.quoteSeenAt || rawQuote.quoteTime || rawQuote.time || "",
-      source: "fugle_websocket_cache_formal",
-    });
+    if (!quoteBySymbol.has(symbol)) quoteBySymbol.set(symbol, rawQuote);
   }
   const candleBySymbol = new Map();
   let candleRows = 0;
-  for (const rawCandle of liveCandles.candles.values()) {
-    const symbol = String(rawCandle.code || rawCandle.symbol || "").replace(/\D/g, "").slice(0, 4);
-    const candleTime = rawCandle.candleTime || rawCandle.candle_time || rawCandle.date || "";
-    const candleTradeDate = rawCandle.tradeDate || rawCandle.trade_date || taipeiClock(new Date(candleTime)).date;
+  for (const rawCandle of candleRowsRaw) {
+    const symbol = symbolOf(rawCandle);
+    const candleTime = rawCandle.candle_time || "";
+    const candleTradeDate = rawCandle.trade_date || "";
     if (!requestedSymbols.has(symbol) || candleTradeDate !== tradeDate || !candleTime || number(rawCandle.close) <= 0) continue;
     if (!candleBySymbol.has(symbol)) candleBySymbol.set(symbol, []);
     candleBySymbol.get(symbol).push({
@@ -297,11 +258,11 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
       low: number(rawCandle.low),
       close: number(rawCandle.close),
       volume: number(rawCandle.volume),
-      source_name: SOURCE_NAME,
-      is_fallback: false,
-      intraday_odd_lot: false,
-      is_formal_entry_eligible: true,
-      updated_at: rawCandle.candleSeenAt || "",
+      source_name: rawCandle.source_name || "",
+      is_fallback: bool(rawCandle.is_fallback),
+      intraday_odd_lot: bool(rawCandle.intraday_odd_lot),
+      is_formal_entry_eligible: bool(rawCandle.is_formal_entry_eligible),
+      updated_at: rawCandle.updated_at || "",
     });
     candleRows += 1;
   }
@@ -322,7 +283,7 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
     const lastCandleMs = Date.parse(String(lastCandleTime || ""));
     const intraday1mStaleSeconds = Number.isFinite(lastCandleMs) ? Math.max(0, Math.round((now.getTime() - lastCandleMs) / 1000)) : 999999;
     const hasRequired1mWindow = symbolCandles.length >= MIN_CANDLES && intraday1mStaleSeconds <= 180;
-    const hasFormalQuote = websocket.formalReady && /^fugle/i.test(String(quote.source || "")) && number(quote.price) >= 50 && number(quote.total_volume) > 0 && quoteAgeSeconds <= 120;
+    const hasFormalQuote = websocket.formalReady && number(quote.price) >= 50 && number(quote.total_volume) > 0 && quoteAgeSeconds <= 120;
     const avg5Volume = number(dailyAverage.avg5_volume || dailyAverage.avg_volume5 || dailyAverage.volume);
     const estimatedVolumeRatio = number(metrics.volumeRatio5) || (avg5Volume > 0 ? number(quote.total_volume) / avg5Volume : 0);
     const previousClose = number(previousDaily.close);
@@ -375,7 +336,7 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
       sourceRunId: String(payload.canonical_run_id || payload.run_id || ""),
       expectedCanonicalRunId,
       canonicalRunMatches,
-      quoteSource: quote.source || "",
+      quoteSource: "fugle_daytrade_quotes_live",
       quoteSeenAt: quoteTime,
       quoteAgeSeconds,
       candleCount: symbolCandles.length,
@@ -399,7 +360,7 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
       preopenEvidence: preopen,
       formalQuoteReady: hasFormalQuote,
       formalOneMinuteReady: websocket.formalReady && hasRequired1mWindow,
-      sevenStrategyWaterReady: !dataGap,
+      strategy2WaterReady: !dataGap,
       poolEvidence: {
         canonicalPoolLayer: payload.canonical_pool_layer || payload.pool_tier || "",
         dataGap: payload.dataGap || null,
@@ -411,7 +372,7 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
       },
     };
   });
-  const formalReadyRows = rows.filter((row) => row.sevenStrategyWaterReady).length;
+  const formalReadyRows = rows.filter((row) => row.strategy2WaterReady).length;
   const formalWaterCoverageRatio = ratio(formalReadyRows, rows.length);
   return {
     rows,
@@ -434,7 +395,7 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
     },
     requiredFormalWaterCoverageRatio: MIN_FORMAL_WATER_COVERAGE_RATIO,
     formalWaterCoverageOk: rows.length > 0 && formalWaterCoverageRatio >= MIN_FORMAL_WATER_COVERAGE_RATIO,
-    liveEvidence: "fugle_daytrade_websocket_cache",
+    liveEvidence: "supabase:fugle_daytrade_quotes_live+fugle_daytrade_intraday_1m",
   };
 }
 
@@ -466,7 +427,7 @@ async function main() {
   const source = config();
   if (!source.url || !source.key) throw new Error("strategy2_v3_supabase_credentials_missing");
   const water = await readFormalWater(source, clock.date);
-  const scanned = water.rows.filter((row) => row.sevenStrategyWaterReady);
+  const scanned = water.rows.filter((row) => row.strategy2WaterReady);
   const dataGaps = water.rows.filter((row) => row.dataGap);
   const liveWindow = clock.minuteOfDay >= 9 * 60 && clock.minuteOfDay <= (12 * 60 + 30);
   const complete = water.formalWaterCoverageOk === true;
@@ -498,8 +459,8 @@ async function main() {
       : complete ? "strategy2_v3_formal_water_ready" : "strategy2_v3_formal_water_incomplete",
     sourceContract: {
       motherPool: "fugle_daytrade_priority_pool",
-      quote: "fugle_daytrade_websocket_cache",
-      intraday1m: "fugle_daytrade_websocket_cache",
+      quote: "fugle_daytrade_quotes_live",
+      intraday1m: "fugle_daytrade_intraday_1m",
       scope: "deep_scan_pool + basePoolEligible",
       rejectedLegacyRoutes: ["all_v_fugle_daytrade_mother_pool_readback_views", "top40", "previous_good", "v2_snapshot"],
     },
@@ -545,5 +506,5 @@ if (require.main === module) {
   });
 }
 
-module.exports = { CONTRACT, MIN_CANDLES, MIN_FORMAL_WATER_COVERAGE_RATIO, taipeiClock, number, bool, ratio, config, readWebSocketEvidence, readFormalWater };
+module.exports = { CONTRACT, MIN_CANDLES, MIN_FORMAL_WATER_COVERAGE_RATIO, taipeiClock, number, bool, ratio, config, sharedSourceEvidence, readFormalWater };
 

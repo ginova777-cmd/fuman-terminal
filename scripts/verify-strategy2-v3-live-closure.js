@@ -8,7 +8,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const RECEIPT = path.join(RUNTIME, "data", "scan-receipts", "strategy2-v3-live.json");
-const CONTRACT = "strategy2-seven-strategy-live-v1";
+const CONTRACT = "strategy2-live-v3";
 const MIN_FORMAL_WATER_COVERAGE_RATIO = 0.90;
 
 function taipeiDate() {
@@ -54,7 +54,7 @@ function main() {
   add(checks, "formal_live_uses_90pct_water_coverage_contract", scanner.includes("MIN_FORMAL_WATER_COVERAGE_RATIO") && scanner.includes("formalWaterCoverageOk") && scanner.includes("formalWaterCoverageRatio") && scanner.includes("requiredFormalWaterCoverageRatio") && water.includes("MIN_FORMAL_WATER_COVERAGE_RATIO = 0.90"));
   add(checks, "diagnostic_water_never_overwrites_canonical_receipt", water.includes("strategy2-v3-water-diagnostic-latest.json") && water.includes("const receiptPath = diagnostic ? diagnosticReceiptPath : formalReceiptPath"));
   add(checks, "water_reads_canonical_v2_websocket_status_only", water.includes("fugle-daytrade-websocket-status-v2.json") && !water.includes('"fugle-daytrade-websocket-status.json"'));
-  add(checks, "water_reads_direct_fugle_websocket_quote_and_candles", water.includes("readFugleWebSocketQuotes") && water.includes("readFugleWebSocketCandles") && water.includes("fugle_daytrade_websocket_cache"));
+  add(checks, "water_reads_cross_machine_supabase_quote_and_candles", water.includes('"fugle_daytrade_quotes_live"') && water.includes('"fugle_daytrade_intraday_1m"') && !water.includes("readFugleWebSocketQuotes") && !water.includes("readFugleWebSocketCandles"));
   add(checks, "water_scopes_to_dynamic_priority_mother_pool", water.includes('"fugle_daytrade_priority_pool"') && water.includes("deep_scan_pool + basePoolEligible") && water.includes('"top40"'));
   add(checks, "websocket_handover_is_bounded_to_fresh_evidence", water.includes("handoverGrace") && water.includes("reauthGrace") && water.includes("evidenceAgeSeconds <= 45") && water.includes("restDisabled"));
   add(checks, "collector_has_no_top40_default", collector.includes("FUGLE_STREAMING_MAX_SYMBOLS || process.env.FUGLE_STREAMING_MAX_SUBSCRIPTIONS || 600") && !collector.includes("FUGLE_STREAMING_PINNED_PRIORITY_SYMBOLS || 40"));
@@ -109,7 +109,7 @@ function main() {
   const requiredRatio = Number(coverage.requiredFormalWaterCoverageRatio || MIN_FORMAL_WATER_COVERAGE_RATIO);
   const actualRatio = Number(coverage.formalWaterCoverageRatio || (expected > 0 ? ready / expected : 0));
   const minimumReady = Math.ceil(expected * requiredRatio);
-  add(checks, "receipt_uses_direct_fugle_websocket_water", coverage.motherPool === "fugle_daytrade_priority_pool" && coverage.quote === "fugle_daytrade_websocket_cache" && coverage.intraday1m === "fugle_daytrade_websocket_cache", JSON.stringify({ motherPool: coverage.motherPool, quote: coverage.quote, intraday1m: coverage.intraday1m }));
+  add(checks, "receipt_uses_cross_machine_shared_water", coverage.motherPool === "fugle_daytrade_priority_pool" && coverage.quote === "fugle_daytrade_quotes_live" && coverage.intraday1m === "fugle_daytrade_intraday_1m", JSON.stringify({ motherPool: coverage.motherPool, quote: coverage.quote, intraday1m: coverage.intraday1m }));
   add(checks, "receipt_websocket_evidence_is_formal", coverage.websocketFormalReady === true && coverage.websocket?.formalReady === true && coverage.websocket?.primarySource === "fugle-websocket" && coverage.websocket?.restDisabled === true && coverage.noLegacyReadbackViews === true && coverage.noTop40Gate === true && coverage.noPreviousGoodFallback === true, JSON.stringify(coverage.websocket || {}));
 
   if (requireComplete) {
