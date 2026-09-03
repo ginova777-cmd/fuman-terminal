@@ -946,7 +946,7 @@ function scannerClosureStepsForKey(key = "") {
   const map = {
     strategy2: ["verify:strategy2-e2e-closure"],
     strategy3: ["verify:daytrade-strategy3-closure-live"],
-    strategy4: ["verify:strategy4-postscan-closure"],
+    strategy4: ["verify:strategy4-full-closure"],
     strategy5: ["verify:strategy5-e2e-closure"],
     institution: ["verify:institution-e2e-closure"],
     cb: ["verify:cb-e2e-closure"],

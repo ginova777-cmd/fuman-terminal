@@ -474,12 +474,6 @@
           "strategy4-source-prewarm-latest.json"
         ],
         "detail": "Strategy4 source prewarm receipt"
-      },
-      "Fuman Strategy4 Postscan Closure 1605": {
-        "files": [
-          "strategy4-postscan-closure-latest.json"
-        ],
-        "detail": "Strategy4 postscan terminal closure receipt"
       }
     },
     "alertSeverity": {

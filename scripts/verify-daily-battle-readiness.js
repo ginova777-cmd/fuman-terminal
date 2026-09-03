@@ -31,8 +31,7 @@ const CHECKS = [
   {
     key: "strategy4",
     label: "Strategy4",
-    script: "scripts/verify-strategy4-standard-gate.js",
-    args: ["--json"],
+    script: "scripts/verify-strategy4-canonical-closure.js",
     normalize: normalizeStrategy4,
   },
   {
@@ -298,26 +297,22 @@ function normalizeStrategy3(payload = {}) {
 }
 
 function normalizeStrategy4(payload = {}) {
-  const details = payload.details || {};
-  const health = details.resourceHealth || {};
-  const run = details.latestCompleteRun || {};
-  const published = details.publishedResults || {};
-  const api = details.api || {};
-  const terminal = Array.isArray(details.terminal) ? details.terminal : [];
+  const count = cleanNumber(payload.count);
+  const expectedTotal = cleanNumber(payload.expectedTotal);
+  const scannedCount = cleanNumber(payload.scannedCount);
   return {
-    dataExists: payload.ok === true
-      && Boolean(run.run_id)
-      && cleanNumber(run.result_count) > 0
-      && cleanNumber(published.rows) === cleanNumber(run.result_count),
-    healthViewCorrect: payload.ok === true && health.status === "ready",
+    dataExists: payload.ok === true && Boolean(payload.runId) && count > 0,
+    healthViewCorrect: payload.ok === true && expectedTotal > 0 && scannedCount === expectedTotal,
     terminalKeysVisible: payload.ok === true
-      && cleanNumber(published.missingBreakdown) === 0
-      && terminal.every((item) => item.ok === true),
-    status: health.status || (payload.ok ? "ready" : "failed"),
-    reason: health.reason || "",
-    runId: run.run_id || api.runId || published.runId || "",
-    count: run.result_count || api.count || published.rows || 0,
-    updatedAt: health.updatedAt || health.updated_at || run.finished_at || payload.checkedAt || "",
+      && payload.api?.runId === payload.runId
+      && payload.published?.runId === payload.runId
+      && payload.scanReceipt?.runId === payload.runId
+      && payload.line?.runId === payload.runId,
+    status: payload.ok ? "ready" : "failed",
+    reason: Array.isArray(payload.issues) ? payload.issues.join("; ") : "",
+    runId: payload.runId || "",
+    count,
+    updatedAt: payload.checked_at || "",
   };
 }
 

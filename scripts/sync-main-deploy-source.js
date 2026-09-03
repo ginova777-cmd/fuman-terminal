@@ -341,7 +341,6 @@ const FILES = [
   "run-strategy4.ps1",
   "run-strategy4-source-prewarm.ps1",
   "install-strategy4-source-prewarm-task.ps1",
-  "run-strategy4-postscan-closure.ps1",
   "run-strategy5.ps1",
   "run-strategy5-watchdog.ps1",
   "run-institution.ps1",

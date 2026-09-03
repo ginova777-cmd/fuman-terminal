@@ -157,8 +157,8 @@ const STRATEGIES = [
     retentionPolicy: "API-only complete runs; static Strategy4 JSON retired",
     writeBudget: "strategy4 runner receipt",
     verifierCommands: [
-      ["scripts/verify-strategy4-autonomy-readonly.js"],
-      ["scripts/verify-strategy4-standard-gate.js"],
+      ["scripts/verify-strategy4-canonical-closure.js"],
+      ["scripts/verify-strategy4-88-data-chain.js"],
     ],
   },
   {
