@@ -20,6 +20,7 @@ const FORMAL_RANK_FLOOR = 41;
 const MOTHER_POOL_START_RANK = 300;
 const BOOST_STEP = 25;
 const MOTHER_POOL_MIN_PRICE = 50;
+const MAX_QUOTE_AGE_SECONDS = 120;
 const REST_TIMEOUT_MS = Math.max(5000, Number(process.env.OPENING_REPORT_0830_REST_TIMEOUT_MS || 12000));
 const REST_RETRIES = Math.max(0, Number(process.env.OPENING_REPORT_0830_REST_RETRIES || 2));
 const REST_RETRY_BACKOFF_MS = Math.max(250, Number(process.env.OPENING_REPORT_0830_REST_RETRY_BACKOFF_MS || 750));
@@ -46,6 +47,17 @@ function normalizeSymbol(value) {
 
 function compactDate(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
+}
+
+function quoteAgeSeconds(value, nowMs = Date.now()) {
+  const updatedMs = Date.parse(String(value || ""));
+  if (!Number.isFinite(updatedMs)) return Number.POSITIVE_INFINITY;
+  return Math.max(0, Math.round((nowMs - updatedMs) / 1000));
+}
+
+function quoteTimestamp(row) {
+  const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
+  return payload.quote_seen_at || payload.quoteSeenAt || payload.received_at || payload.receivedAt || payload.lastUpdated || payload.last_updated_at || row?.updated_at || "";
 }
 
 function taipeiDateKey(date = new Date()) {
@@ -116,6 +128,7 @@ async function restRequest(key, resource, options = {}) {
 function buildReceipt({ inputPath, receiptPath, payload, validation, acceptedSymbols, rejectedSymbols, appliedBoosts, error = "" }) {
   return {
     contract: "opening-report-0830-priority-bias-bridge-v1",
+    ok: validation.ok && !error,
     received: Boolean(payload),
     accepted_symbols: acceptedSymbols,
     rejected_symbols: rejectedSymbols,
@@ -123,8 +136,11 @@ function buildReceipt({ inputPath, receiptPath, payload, validation, acceptedSym
     forbidden_publish_guard: true,
     formal_candidate_count: 0,
     formal_candidate_allowed: false,
+    publish_allowed: false,
+    opening_report_status_unchanged: true,
     run_id: validation.runId,
     date: validation.date,
+    trade_date: validation.date,
     source: payload?.source || SOURCE,
     mode: payload?.mode || MODE,
     reason_code: REASON_CODE,
@@ -194,16 +210,31 @@ async function main() {
       if (Array.isArray(rows) && rows[0]) existingRows.push(rows[0]);
     }
     const bySymbol = new Map(existingRows.map((row) => [symbolFromEntry(row), row]));
-    const priceFloorRejected = [];
+    const quoteRejected = [];
+    const quoteCheckedAt = Date.now();
     acceptedSymbols = acceptedSymbols.filter((symbol) => {
-      const existingPrice = Number(bySymbol.get(symbol)?.price);
-      if (Number.isFinite(existingPrice) && existingPrice > 0 && existingPrice < MOTHER_POOL_MIN_PRICE) {
-        priceFloorRejected.push({ symbol, reason: "price_below_50", price: existingPrice });
+      const existing = bySymbol.get(symbol);
+      if (!existing) {
+        quoteRejected.push({ symbol, reason: "not_in_canonical_priority_pool", price: null });
+        return false;
+      }
+      const existingPrice = Number(existing.price);
+      if (!Number.isFinite(existingPrice) || existingPrice <= 0) {
+        quoteRejected.push({ symbol, reason: "fresh_quote_missing", price: null });
+        return false;
+      }
+      if (existingPrice < MOTHER_POOL_MIN_PRICE) {
+        quoteRejected.push({ symbol, reason: "price_below_50", price: existingPrice });
+        return false;
+      }
+      const age = quoteAgeSeconds(quoteTimestamp(existing), quoteCheckedAt);
+      if (!Number.isFinite(age) || age > MAX_QUOTE_AGE_SECONDS) {
+        quoteRejected.push({ symbol, reason: "fresh_quote_stale", price: existingPrice, quote_age_seconds: Number.isFinite(age) ? age : null });
         return false;
       }
       return true;
     });
-    rejectedSymbols.push(...priceFloorRejected);
+    rejectedSymbols.push(...quoteRejected);
     if (!acceptedSymbols.length) {
       validation.issues.push("no_mapped_symbols_at_or_above_50");
       validation.ok = false;
@@ -217,12 +248,18 @@ async function main() {
     const now = new Date().toISOString();
     const rows = acceptedSymbols.map((symbol, index) => {
       const old = bySymbol.get(symbol) || {};
+      const price = Number(old.price);
+      const quoteAge = quoteAgeSeconds(quoteTimestamp(old), quoteCheckedAt);
       const oldRank = Number.isFinite(Number(old.priority_rank)) ? Number(old.priority_rank) : null;
       const baseRank = oldRank !== null && oldRank < 999999 ? oldRank : MOTHER_POOL_START_RANK + index;
-      const nextRank = Math.max(FORMAL_RANK_FLOOR, baseRank - BOOST_STEP);
       const oldPayload = old.payload && typeof old.payload === "object" ? old.payload : {};
-      const biasEvidence = { date: payload.date, report_time: payload.report_time, run_id: payload.run_id, source: SOURCE, mode: MODE, industry: payload.industry, bias: payload.bias, confidence: payload.confidence, evidence_summary: payload.evidence_summary, reason_code: REASON_CODE, status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true };
-      appliedBoosts.push({ symbol, previous_priority_rank: oldRank, applied_priority_rank: nextRank, boost: Math.max(0, baseRank - nextRank), status: "watchlist_boosted" });
+      const previousEvidence = oldPayload.openingReport0830IndustryBias && typeof oldPayload.openingReport0830IndustryBias === "object" ? oldPayload.openingReport0830IndustryBias : {};
+      const alreadyBoostedToday = compactDate(previousEvidence.date) === validation.date && previousEvidence.boost_once === true;
+      const nextRank = alreadyBoostedToday ? baseRank : Math.max(FORMAL_RANK_FLOOR, baseRank - BOOST_STEP);
+      const linkedIndustries = [...new Set([...(Array.isArray(previousEvidence.linked_industries) ? previousEvidence.linked_industries : []), previousEvidence.industry, payload.industry].filter(Boolean))];
+      const biasEvidence = { date: payload.date, report_time: payload.report_time, run_id: payload.run_id, source: SOURCE, mode: MODE, industry: payload.industry, linked_industries: linkedIndustries, highest_industry_rank: Math.min(Number(previousEvidence.highest_industry_rank || Number.POSITIVE_INFINITY), Number(payload.positive_return_rank || Number.POSITIVE_INFINITY)), boost_once: true, bias: payload.bias, confidence: payload.confidence, evidence_summary: payload.evidence_summary, reason_code: REASON_CODE, status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true };
+      const appliedBoost = Math.max(0, baseRank - nextRank);
+      appliedBoosts.push({ symbol, previous_priority_rank: oldRank, applied_priority_rank: nextRank, boost: appliedBoost, boost_once: true, duplicate_boost_skipped: alreadyBoostedToday, linked_industries: linkedIndustries, price, quote_age_seconds: quoteAge, status: "watchlist_boosted" });
       return { symbol, name: old.name || mappedEntryBySymbol.get(symbol)?.name || symbol, market: old.market || "", priority_rank: nextRank, priority_reason: REASON_CODE, source: SOURCE, updated_at: now, payload: { ...oldPayload, openingReport0830IndustryBias: biasEvidence, priority_reason: REASON_CODE, priority_status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true } };
     });
     await restRequest(key, "fugle_daytrade_priority_pool", { method: "POST", body: rows });
@@ -239,4 +276,4 @@ async function main() {
 
 if (require.main === module) main();
 
-module.exports = { validate, parseInput, normalizeSymbol, buildReceipt, constants: { SOURCE, MODE, ALLOWED_ACTION, FORBIDDEN_ACTION, REASON_CODE, FORMAL_RANK_FLOOR } };
+module.exports = { validate, parseInput, normalizeSymbol, buildReceipt, quoteAgeSeconds, quoteTimestamp, constants: { SOURCE, MODE, ALLOWED_ACTION, FORBIDDEN_ACTION, REASON_CODE, FORMAL_RANK_FLOOR, MOTHER_POOL_MIN_PRICE, MAX_QUOTE_AGE_SECONDS } };

@@ -72,6 +72,8 @@ function main() {
   if (receipt && receipt.forbidden_publish_guard !== true) issues.push("forbidden_publish_guard_not_true");
   if (receipt && receipt.formal_candidate_count !== 0) issues.push("formal_candidate_count_not_zero");
   if (receipt && receipt.formal_candidate_allowed !== false) issues.push("formal_candidate_allowed_not_false");
+  if (receipt && receipt.publish_allowed !== false) issues.push("publish_allowed_not_false");
+  if (receipt && receipt.opening_report_status_unchanged !== true) issues.push("opening_report_status_changed");
   if (receipt && receipt.status !== "priority_scan") issues.push("status_invalid");
   if (receipt && receipt.reason_code !== bridge.constants.REASON_CODE) issues.push("reason_code_invalid");
   if (receipt && receipt.source !== bridge.constants.SOURCE) issues.push("source_invalid");
@@ -80,6 +82,8 @@ function main() {
   const staleCacheRejected = Boolean(receipt && expectedTradeDate && receiptTradeDate !== expectedTradeDate);
   if (staleCacheRejected) issues.push("receipt_trade_date_mismatch_stale_cache_rejected");
   if (receipt && receipt.validation?.ok === true && receipt.accepted_symbols?.length > 0 && !receipt.applied_boosts?.length) issues.push("accepted_symbols_missing_applied_boosts");
+  if (receipt && receipt.validation?.ok === true && receipt.applied_boosts?.some((boost) => !(Number(boost.price) >= 50) || !(Number(boost.quote_age_seconds) <= 120))) issues.push("writer_receipt_readback_fields_invalid");
+  if (receipt && receipt.validation?.ok === true && receipt.applied_boosts?.some((boost) => boost.boost_once !== true || !Array.isArray(boost.linked_industries))) issues.push("boost_once_evidence_invalid");
   const output = {
     ok: issues.length === 0,
     contract: "opening-report-0830-priority-bias-bridge-v1-verifier",
