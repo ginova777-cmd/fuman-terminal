@@ -3,7 +3,7 @@
   "sourceRoot": "C:\\fuman-release-owner\\fuman-terminal",
   "productionRoot": "C:\\fuman-release-owner\\prod81",
   "runtimeRoot": "C:\\fuman-runtime",
-  "approvedProductionSha": "f96d061a6a6b37c77f03e7ed767f2c08f1227436",
+  "approvedProductionSha": "0f2702d579544e7351f95357df82b93f6231afeb",
   "policy": {
     "sourceRootIsOnlyEditableAuthority": true,
     "productionRootIsDetachedReadOnlyRelease": true,
