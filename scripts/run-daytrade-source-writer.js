@@ -162,9 +162,9 @@ const DEEP_SCAN_POOL_MAX_SYMBOLS = Math.max(1, positiveNumber(process.env.DAYTRA
 const FORMAL_SIGNAL_MIN_TOTAL_VOLUME = positiveNumber(process.env.DAYTRADE_FORMAL_SIGNAL_MIN_TOTAL_VOLUME, 5000);
 const FORMAL_SIGNAL_MIN_TRADE_VALUE = positiveNumber(process.env.DAYTRADE_FORMAL_SIGNAL_MIN_TRADE_VALUE, 30000000);
 const FORMAL_SIGNAL_MAX_VOLUME_RANK = positiveNumber(process.env.DAYTRADE_FORMAL_SIGNAL_MAX_VOLUME_RANK, 300);
-const MOTHER_POOL_TARGET_MIN_SYMBOLS = 300;
+const MOTHER_POOL_MIN_SYMBOLS = 300;
 const MOTHER_POOL_MAX_SYMBOLS = Math.max(
-  MOTHER_POOL_TARGET_MIN_SYMBOLS,
+  MOTHER_POOL_MIN_SYMBOLS,
   Math.min(600, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MAX_SYMBOLS, 600)),
 );
 // Fugle streaming is the formal live source. REST quote calls are deliberately
@@ -174,7 +174,7 @@ const REST_FALLBACK_INTERVAL_SECONDS = Math.max(60, positiveNumber(process.env.D
 const MOTHER_POOL_MIN_PRICE = Math.max(50, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_PRICE ?? CONFIG.motherPool?.minimumPrice, 50));
 const MOTHER_POOL_MIN_TURNOVER_RATE = Math.max(1, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_TURNOVER_RATE ?? CONFIG.motherPool?.minimumTurnoverRate, 1));
 const MOTHER_POOL_MIN_AVG_VOLUME3_LOTS = Math.max(3000, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_AVG_VOLUME3_LOTS, 3000));
-const MOTHER_POOL_RULE_VERSION = 'daytrade_mother_pool_target_300_600_nonblocking_avg3_3000_outside_ratio_20260904_v7';
+const MOTHER_POOL_RULE_VERSION = 'daytrade_mother_pool_dynamic_300_600_avg3_3000_outside_ratio_20260903_v6';
 const PREOPEN_REFERENCE_PRICE_CACHE_MS = Math.max(60000, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_CACHE_MS || 15 * 60 * 1000));
 const PREOPEN_REFERENCE_PRICE_MIN_ROWS = Math.max(300, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_MIN_ROWS || 1000));
 let preopenReferencePriceCache = { loadedAt: 0, tradeDate: '', source: 'unavailable', bySymbol: new Map() };
@@ -3668,7 +3668,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     .filter((row) => row.basePool?.eligible === true && row.metrics?.quoteFresh === true && Number(row.metrics?.price) >= MOTHER_POOL_MIN_PRICE)
     .sort((a, b) => Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true) || b.entryScore - a.entryScore || a.symbol.localeCompare(b.symbol));
   const selectedFreshEligibleCount = selectedCandidates.filter((row) => row.basePool?.eligible === true && row.metrics?.quoteFresh === true && Number(row.metrics?.price) >= MOTHER_POOL_MIN_PRICE).length;
-  const rotationFillNeeded = Math.max(0, Math.min(MOTHER_POOL_MAX_SYMBOLS, MOTHER_POOL_TARGET_MIN_SYMBOLS) - selectedFreshEligibleCount);
+  const rotationFillNeeded = Math.max(0, Math.min(MOTHER_POOL_MAX_SYMBOLS, MOTHER_POOL_MIN_SYMBOLS) - selectedFreshEligibleCount);
   const rotationFillSelected = rotationFillCandidates.slice(0, rotationFillNeeded).map((row) => ({
     ...row,
     priorityReason: row.priorityReason || 'radar_rotation_fill',
@@ -3834,7 +3834,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     basePoolEligibleSymbols: qualifiedCandidates.length,
     basePoolPendingSymbols: pendingCandidates.length,
     basePoolExcludedSymbols: Math.max(0, candidates.length - qualifiedCandidates.length - pendingCandidates.length),
-    targetMinimumSymbols: MOTHER_POOL_TARGET_MIN_SYMBOLS,
+    minimumSymbols: MOTHER_POOL_MIN_SYMBOLS,
     maximumSymbols: MOTHER_POOL_MAX_SYMBOLS,
     minimumPrice: MOTHER_POOL_MIN_PRICE,
     minimumTurnoverRate: MOTHER_POOL_MIN_TURNOVER_RATE,
@@ -4616,7 +4616,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const warmupIndicatorsAvailable = readyMa20 > 0
     && (!REQUIRE_MA35_FOR_FORMAL_DAYTRADE || readyMa35 > 0);
   const warmupGateReady = !after0900
-    && motherPoolSymbols > 0
+    && motherPoolSymbols >= MOTHER_POOL_MIN_SYMBOLS
     && formalScanPoolSymbols > 0
     && dailyVolumeStatus === "ready"
     && rateLimitStatus === "ok"
@@ -4732,7 +4732,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   if (!offSession && deepScanIntraday1mDataGapSymbols.length) {
     discoveryWarnings.push('formal_scan_data_gap_symbols=' + deepScanIntraday1mDataGapSymbols.length);
   }
-  if (!offSession && motherPoolSymbols < MOTHER_POOL_TARGET_MIN_SYMBOLS) discoveryWarnings.push('mother_pool_discovery_below_target_warning');
+  if (!offSession && motherPoolSymbols < MOTHER_POOL_MIN_SYMBOLS) discoveryWarnings.push('mother_pool_discovery_below_target_warning');
   // Mother pool is the full-market discovery layer. Formal entry uses dynamic priority/hot/deep-scan pools.
   const motherPoolFreshnessWarning = !offSession && motherFreshCoverage < 0.8;
   if (!offSession && priorityPoolSymbols < minFormalPrioritySymbols) failedChecks.push('priority_pool_empty');
@@ -4741,7 +4741,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   // Strategy/chip results are a formal-entry dependency after the opening gate; before then they remain warmup evidence.
   if (!offSession && after0900 && latestQuoteAge > MAX_QUOTE_AGE_SECONDS) failedChecks.push('quote_stale');
   if (!offSession && dailyVolumeStatus !== 'ready') failedChecks.push('daily_volume_not_ready');
-  if (!offSession && after0900 && motherPoolSymbols < MOTHER_POOL_TARGET_MIN_SYMBOLS) discoveryWarnings.push('intraday_1m_mother_pool_discovery_below_target_warning');
+  if (!offSession && after0900 && motherPoolSymbols < MOTHER_POOL_MIN_SYMBOLS) discoveryWarnings.push('intraday_1m_mother_pool_discovery_below_target_warning');
   if (!offSession && after0900 && formalScanIntraday1mReadySymbols < intraday1mReadyMinSymbols) failedChecks.push('intraday_1m_ready_symbols_below_dynamic_min');
   if (!offSession && after0900 && formalScanIntraday1mReadyCoverage < MIN_INTRADAY_1M_READY_COVERAGE) failedChecks.push('intraday_1m_ready_coverage_below_090');
 
@@ -4780,8 +4780,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     gate_mode: "priority_first",
     formal_gate_scope: "priority_hot_deep_scan_pool_only",
     formal_scan_scope: "priority_hot_deep_scan_pool_only",
-    mother_pool_target_min_symbols: MOTHER_POOL_TARGET_MIN_SYMBOLS,
-    mother_pool_minimum_count_is_hard_gate: false,
+    mother_pool_scan_min_symbols: MOTHER_POOL_MIN_SYMBOLS,
     mother_pool_scan_max_symbols: MOTHER_POOL_MAX_SYMBOLS,
     formal_source_name: SOURCE_NAME,
     formal_gate_source: "source_status.payload+v_fugle_daytrade_canonical_gate",
@@ -4801,7 +4800,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     discovery_warnings: discoveryWarnings,
     base_pool_eligible_symbols: priorityRows.basePoolMeta?.basePoolEligibleSymbols || motherPoolSymbols,
     base_pool_pending_symbols: priorityRows.basePoolMeta?.basePoolPendingSymbols || 0,
-    base_pool_target_shortfall: Math.max(0, MOTHER_POOL_TARGET_MIN_SYMBOLS - (priorityRows.basePoolMeta?.basePoolEligibleSymbols || motherPoolSymbols)),
+    base_pool_shortfall: Math.max(0, MOTHER_POOL_MIN_SYMBOLS - (priorityRows.basePoolMeta?.basePoolEligibleSymbols || motherPoolSymbols)),
     formal_priority_speed_ok: formalPrioritySpeedOk,
     full_market_speed_ok: fullMarketGateA,
     full_market_speed_blocking: false,
@@ -6624,7 +6623,7 @@ async function tick() {
     openingBoostScope: result.payload.opening_boost_scope,
     priorityPoolSymbols: result.payload.priority_pool_symbols,
     motherPoolSymbols: result.payload.mother_pool_symbols,
-    motherPoolTargetMin: MOTHER_POOL_TARGET_MIN_SYMBOLS,
+    motherPoolRangeMin: MOTHER_POOL_MIN_SYMBOLS,
     motherPoolRangeMax: MOTHER_POOL_MAX_SYMBOLS,
     motherPoolRuleVersion: result.payload.mother_pool_rule_version,
     motherPoolRuleHitCounts: result.payload.mother_pool_rule_hit_counts,
@@ -6683,7 +6682,7 @@ async function main() {
       minPriorityPoolSymbols: MIN_PRIORITY_POOL_SYMBOLS,
       maxPriorityPoolSymbols: MAX_PRIORITY_POOL_SYMBOLS,
       formalPriorityLimit: DEEP_SCAN_POOL_MAX_SYMBOLS,
-      motherPoolTargetMin: MOTHER_POOL_TARGET_MIN_SYMBOLS,
+      motherPoolRangeMin: MOTHER_POOL_MIN_SYMBOLS,
       motherPoolRangeMax: MOTHER_POOL_MAX_SYMBOLS,
     }, null, 2));
     return;

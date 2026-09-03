@@ -13,7 +13,7 @@ const checks = [
   { name: "Fuman Strategy3 V2 Readiness Guard 1250", contains: "run-strategy3-v2-readiness-guard.ps1" },
   { name: "Fuman Strategy3 V2 First Attempt 1255", contains: "run-strategy3-v2" },
   { name: "Fuman Strategy3 V2 Complete Scan 1300", contains: "run-strategy3-v2-complete-scan.ps1" },
-  { name: "Fuman Strategy3 V2 Daily Closure Verify 1315", contains: "verify-strategy3-v2-daily-unattended-closure.js" }
+  { name: "Fuman Strategy3 V2 Daily Closure Verify 1310", contains: "verify-strategy3-v2-daily-unattended-closure.js" }
 ];
 
 function query(name) {

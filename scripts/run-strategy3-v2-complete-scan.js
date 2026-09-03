@@ -27,8 +27,8 @@ const compactDate = tradeDate.replace(/\D/g, "");
 const runId = newRunId(compactDate);
 const apply = process.argv.includes("--apply");
 const attemptPhase = process.argv.find((arg) => arg.startsWith("--attempt-phase="))?.slice("--attempt-phase=".length) || "";
-const quoteCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-quotes.json");
-const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles.json");
+const quoteCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-quotes-v2.json");
+const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles-v2.json");
 const MIN_LOCAL_COVERAGE_RATIO = Math.max(0.9, Number(process.env.STRATEGY3_V2_MIN_LOCAL_COVERAGE_RATIO || 0.9));
 
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
@@ -344,8 +344,8 @@ async function main() {
   }
   const issues = [];
   const scanner = buildScannerCoreResults();
-  const formalReadyTarget = Number(readiness.payload?.mother_pool?.minimumReadySymbols || readiness.payload?.minimums?.motherPoolReadySymbols || 1000);
-  const localCoverageRatio = formalReadyTarget > 0 ? scanner.local_ready_20_candle_symbols / formalReadyTarget : 0;
+  const formalReadyTarget = Number(readiness.payload?.minimums?.candleSubscribedSymbols || readiness.payload?.mother_pool?.minimumReadySymbols || 300);
+  const localCoverageRatio = formalReadyTarget > 0 ? Math.min(1, scanner.local_ready_20_candle_symbols / formalReadyTarget) : 0;
   const localCoverageOk = localCoverageRatio >= MIN_LOCAL_COVERAGE_RATIO;
   const scannerCoreReady = scanner.results.length > 0 && localCoverageOk;
   const readinessOk = readiness.ok && readiness.payload?.ok === true;

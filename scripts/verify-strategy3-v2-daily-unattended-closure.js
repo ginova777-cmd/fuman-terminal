@@ -26,6 +26,14 @@ function writeJson(file, value) {
   fs.writeFileSync(file, JSON.stringify(value, null, 2), "utf8");
 }
 
+function parseLastJson(text) {
+  const value = String(text || "").trim();
+  for (let index = value.lastIndexOf("{"); index >= 0; index = value.lastIndexOf("{", index - 1)) {
+    try { return JSON.parse(value.slice(index)); } catch {}
+  }
+  return null;
+}
+
 function runNode(script, args = [], timeout = 180000) {
   const child = spawnSync(process.execPath, ["--use-system-ca", path.join(ROOT, script), ...args], {
     cwd: ROOT,
@@ -35,12 +43,7 @@ function runNode(script, args = [], timeout = 180000) {
     env: { ...process.env, FUMAN_RUNTIME_DIR: RUNTIME_DIR, FUMAN_ROOT: ROOT },
   });
   const stdout = String(child.stdout || "");
-  let payload = null;
-  const start = stdout.indexOf("{");
-  const end = stdout.lastIndexOf("}");
-  if (start >= 0 && end > start) {
-    try { payload = JSON.parse(stdout.slice(start, end + 1)); } catch {}
-  }
+  const payload = parseLastJson(stdout);
   return { exitCode: child.status ?? 1, payload, stdoutTail: stdout.slice(-1600), stderrTail: String(child.stderr || "").slice(-1600), error: child.error?.message || "" };
 }
 
@@ -129,8 +132,15 @@ const firstAttempt1255 = readJson(receipts.firstAttempt1255, null);
 const scan = readJson(receipts.scan, null);
 const line = readJson(receipts.line, null);
 const threeSurfaceLine = readJson(receipts.threeSurfaceLine, null);
-const surfaceRun = runNode("scripts/verify-strategy3-v2-surface-closure.js", [`--trade-date=${tradeDate}`], 120000);
-const surface = surfaceRun.payload || {};
+const surfaceRun = runNode("scripts/verify-strategy3-v2-surface-closure.js", [`--trade-date=${tradeDate}`], 240000);
+const rawSurface = surfaceRun.payload || {};
+const strategy3Surface = rawSurface?.summary?.tabs?.strategy3 || {};
+const surface = rawSurface.canonical_api ? rawSurface : {
+  ...rawSurface,
+  canonical_api: strategy3Surface.api || {},
+  desktop_fast_bundle: strategy3Surface.terminal || {},
+  mobile_fragment: strategy3Surface.mobileFragment || {},
+};
 const firstAttemptRun = runNode("scripts/verify-strategy3-v2-1255-first-attempt.js", [`--trade-date=${tradeDate}`], 30000);
 const firstAttemptVerify = firstAttemptRun.payload || {};
 const firstAttemptEnforcedFrom = process.env.STRATEGY3_V2_1255_ENFORCED_FROM || "2026-08-21";

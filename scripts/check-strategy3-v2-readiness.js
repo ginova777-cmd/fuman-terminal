@@ -20,7 +20,7 @@ const date = process.argv.find((arg) => arg.startsWith("--trade-date="))?.slice(
 const compactDate = date.replace(/\D/g, "");
 const statusFile = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status.json");
 const sourceReceipt = path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-v2-readiness-${compactDate}.json`);
-const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles.json");
+const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles-v2.json");
 const MIN_LOCAL_COVERAGE_RATIO = Math.max(0.9, Number(process.env.STRATEGY3_V2_MIN_LOCAL_COVERAGE_RATIO || 0.9));
 
 function issue(list, condition, code, details = {}) {
@@ -63,7 +63,7 @@ function readLocalFormalCacheReadiness() {
   for (const count of candlesByCode.values()) {
     if (count >= MIN_CANDLES_PER_SYMBOL) ready20Count += 1;
   }
-  const coverageRatio = MIN_READY_SYMBOLS > 0 ? ready20Count / MIN_READY_SYMBOLS : 0;
+  const coverageRatio = MIN_READY_SYMBOLS > 0 ? Math.min(1, ready20Count / MIN_READY_SYMBOLS) : 0;
   return {
     ok: coverageRatio >= MIN_LOCAL_COVERAGE_RATIO,
     source: "local_fugle_daytrade_ws_candles_cache",
@@ -127,15 +127,16 @@ function main() {
   issue(diagnostics, ws.ok === true, "websocket_status_not_ok", { value: ws.ok });
   issue(diagnostics, ws.collectorRole === "daytrade", "collector_role_not_daytrade", { value: ws.collectorRole });
   issue(diagnostics, subscribedChannels.includes("candles"), "candles_channel_missing", { subscribedChannels });
-  issue(diagnostics, candleSubscribedSymbols >= MIN_READY_SYMBOLS, "candle_subscribed_symbols_below_1000", { candleSubscribedSymbols, required: MIN_READY_SYMBOLS });
-  issue(diagnostics, candleCoverageTarget >= MIN_READY_SYMBOLS, "candle_coverage_target_below_1000", { candleCoverageTarget, required: MIN_READY_SYMBOLS });
+  issue(diagnostics, candleSubscribedSymbols >= MIN_READY_SYMBOLS, "candle_subscribed_symbols_below_dynamic_mother_pool_minimum", { candleSubscribedSymbols, required: MIN_READY_SYMBOLS });
+  issue(diagnostics, candleCoverageTarget >= MIN_READY_SYMBOLS, "candle_coverage_target_below_dynamic_mother_pool_minimum", { candleCoverageTarget, required: MIN_READY_SYMBOLS });
   issue(diagnostics, candleMessages > 0, "candle_messages_missing", { candleMessages });
   issue(diagnostics, candleSymbols >= Math.min(candleSubscribedSymbols, MIN_READY_SYMBOLS), "candle_stream_symbol_readback_below_target", { candleSymbols, candleSubscribedSymbols });
   issue(diagnostics, ageSeconds <= 180, "websocket_status_stale", { ageSeconds, updatedAt });
 
   const motherTradeDate = String(mother.tradeDate || mother.trade_date || "");
   const motherReadyCount = Number(mother.sessionReadyCount || mother.mother_pool_ready_symbols || mother.readyCount || 0);
-  const motherMinimum = Math.max(MIN_READY_SYMBOLS, Number(mother.minIntraday1mCandidates || mother.minimum_ready_symbols || 0));
+  const reportedLegacyMinimum = Number(mother.minIntraday1mCandidates || mother.minimum_ready_symbols || 0);
+  const motherMinimum = MIN_READY_SYMBOLS;
   const source = String(mother.source || mother.formal_readiness_source || "");
   const sameDay = motherTradeDate === date;
   const sourceOk = source === "v_fugle_daytrade_intraday_1m_status"
@@ -160,7 +161,7 @@ function main() {
   }
   issue(gateIssues, sameDay, "mother_pool_trade_date_mismatch", { tradeDate: motherTradeDate, expected: date });
   issue(gateIssues, sourceOk, "mother_pool_formal_source_not_allowed", { source });
-  issue(gateIssues, motherReadyCount >= motherMinimum, "mother_pool_ready_symbols_below_1000", { readyCount: motherReadyCount, required: motherMinimum });
+  issue(gateIssues, motherReadyCount >= motherMinimum, "mother_pool_ready_symbols_below_dynamic_minimum", { readyCount: motherReadyCount, required: motherMinimum });
   issue(gateIssues, latestMinuteOk, "mother_pool_latest_minute_before_1300_window", { sessionLatestMinute, required: 770 });
   issue(issues, readinessReady, "strategy3_v2_readiness_sources_not_ready", { motherReady, v2LocalReady });
 
@@ -185,6 +186,7 @@ function main() {
       tradeDate: motherTradeDate,
       sessionReadyCount: motherReadyCount,
       minimumReadySymbols: motherMinimum,
+      reportedLegacyMinimum,
       latestCandleTime: mother.latestCandleTime || mother.latest_candle_time || "",
       sessionLatestMinute,
       rawLatestValidDay: mother.rawLatestValidDay || null,

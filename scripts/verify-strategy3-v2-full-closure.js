@@ -20,7 +20,6 @@ const {
 
 const tradeDate = process.argv.find((arg) => arg.startsWith("--trade-date="))?.slice("--trade-date=".length) || taipeiDate();
 const compactDate = tradeDate.replace(/\D/g, "");
-const productionApply = process.argv.includes("--apply");
 const issues = [];
 
 function add(condition, code, details = {}) {
@@ -117,14 +116,11 @@ function main() {
   add(Boolean(pkg.scripts?.["verify:strategy3-v2-collector-boot-contract"]), "package_script_missing_strategy3_v2_collector_boot_contract");
 
   const readinessRun = runNode("readiness", "check-strategy3-v2-readiness.js", [`--trade-date=${tradeDate}`]);
-  const scanArgs = [`--trade-date=${tradeDate}`];
-  if (productionApply) scanArgs.push("--apply");
-  const scanRun = runNode("scan", "run-strategy3-v2-complete-scan.js", scanArgs);
-  const lineRun = runNode("line_dry_run", "send-strategy3-v2-line-card.js", [`--trade-date=${tradeDate}`, "--dry-run"]);
+  // Verifiers are read-only. They must never rerun the scanner or rewrite receipts.
+  const surfaceRun = runNode("surface", "verify-strategy3-v2-surface-closure.js", [`--trade-date=${tradeDate}`]);
   const waterUniverseRun = runNode("water_universe", "verify-strategy3-v2-water-universe.js", []);
   const schemaContractRun = runNode("schema_contract", "verify-strategy3-v2-schema-contract.js", []);
   const collectorBootRun = runNode("collector_boot_contract", "verify-strategy3-v2-collector-boot-contract.js", []);
-  const terminalLegacyApiRun = runTerminalLegacyApiProbe(compactDate);
   const scanReceipt = readJson(scanReceiptPath(compactDate), {});
   const lineReceipt = readJson(lineReceiptPath(compactDate, ".dry-run"), {});
 
@@ -136,35 +132,14 @@ function main() {
   add(lineReceipt.line_card_design_contract?.title === "隔日沖參考", "strategy3_v2_line_title_mismatch");
   add(lineReceipt.line_card_design_contract?.layout === "white_stock_card_pink_panel_six_box", "strategy3_v2_line_layout_mismatch");
   const scanFailedClosed = String(scanReceipt.status || "").toUpperCase() === "FAIL_CLOSED";
-  const apiPayload = terminalLegacyApiRun.payload || {};
-  const apiReadOnlyHistory = apiPayload.displayMode === "latest_readonly_history"
-    && apiPayload.publishAllowed === false
-    && ["HISTORY_ONLY", "NO"].includes(apiPayload.unattendedStatus)
-    && ["historical_readonly", "insufficient"].includes(apiPayload.evidenceStatus);
-  const failClosedSafe = scanFailedClosed
-    && lineReceipt.status === "FAIL_CLOSED"
-    && apiReadOnlyHistory;
-
   add(schemaContractRun.exitCode === 0, "strategy3_v2_schema_contract_verifier_failed", { exitCode: schemaContractRun.exitCode });
   add(collectorBootRun.exitCode === 0, "strategy3_v2_collector_boot_contract_verifier_failed", { exitCode: collectorBootRun.exitCode });
-  add(terminalLegacyApiRun.exitCode === 0, "strategy3_v2_terminal_legacy_api_probe_failed", { exitCode: terminalLegacyApiRun.exitCode, stderr: String(terminalLegacyApiRun.stderr || "").slice(0, 500) });
-  add(apiPayload.strategy === STRATEGY, "strategy3_v2_terminal_legacy_api_not_v2", { payload: apiPayload });
+  add(surfaceRun.exitCode === 0, "strategy3_v2_surface_verifier_failed", { exitCode: surfaceRun.exitCode, stderr: String(surfaceRun.stderr || "").slice(0, 500) });
   if (scanFailedClosed) {
-    add(failClosedSafe, "strategy3_v2_fail_closed_surface_not_safe", {
-      lineStatus: lineReceipt.status,
-      apiDisplayMode: apiPayload.displayMode,
-      apiPublishAllowed: apiPayload.publishAllowed,
-      apiEvidenceStatus: apiPayload.evidenceStatus,
-      apiUnattendedStatus: apiPayload.unattendedStatus,
-    });
+    add(lineReceipt.status === "FAIL_CLOSED", "strategy3_v2_fail_closed_surface_not_safe", { lineStatus: lineReceipt.status });
   } else {
     add(waterUniverseRun.exitCode === 0, "strategy3_v2_water_universe_verifier_failed", { exitCode: waterUniverseRun.exitCode });
     add(readinessRun.exitCode === 0, "strategy3_v2_readiness_verifier_failed", { exitCode: readinessRun.exitCode, stderr: String(readinessRun.stderr || "").slice(0, 500) });
-    add(apiPayload.runId === scanReceipt.run_id, "strategy3_v2_terminal_legacy_api_runid_mismatch", { apiRunId: apiPayload.runId, scanRunId: scanReceipt.run_id });
-    add(Number(apiPayload.count || 0) === Number(scanReceipt.result_count || 0), "strategy3_v2_terminal_legacy_api_count_mismatch", { apiCount: apiPayload.count, scanCount: scanReceipt.result_count });
-    add(apiPayload.publishAllowed === true, "strategy3_v2_terminal_legacy_api_publish_not_allowed", { payload: apiPayload });
-    add(apiPayload.evidenceStatus === "complete", "strategy3_v2_terminal_legacy_api_evidence_not_complete", { payload: apiPayload });
-    add(apiPayload.unattendedStatus === "YES", "strategy3_v2_terminal_legacy_api_unattended_not_yes", { payload: apiPayload });
   }
   add(JSON.stringify(lineReceipt).includes("strategy3_scan_results") === false || lineReceipt.status === "FAIL_CLOSED", "strategy3_v2_line_receipt_mentions_legacy_results");
 
@@ -180,12 +155,12 @@ function main() {
     minimums: { candleReadySymbols: MIN_READY_SYMBOLS },
     stages: {
       readiness: { exitCode: readinessRun.exitCode },
-      scan: { exitCode: scanRun.exitCode, receipt: scanReceiptPath(compactDate), status: scanReceipt.status || "" },
-      lineDryRun: { exitCode: lineRun.exitCode, receipt: lineReceiptPath(compactDate, ".dry-run"), status: lineReceipt.status || "" },
+      scan: { exitCode: null, readOnly: true, receipt: scanReceiptPath(compactDate), status: scanReceipt.status || "" },
+      lineDryRun: { exitCode: null, readOnly: true, receipt: lineReceiptPath(compactDate, ".dry-run"), status: lineReceipt.status || "" },
       waterUniverse: { exitCode: waterUniverseRun.exitCode },
       schemaContract: { exitCode: schemaContractRun.exitCode },
       collectorBootContract: { exitCode: collectorBootRun.exitCode },
-      terminalLegacyApi: { exitCode: terminalLegacyApiRun.exitCode, payload: terminalLegacyApiRun.payload },
+      surface: { exitCode: surfaceRun.exitCode },
       mode: scanFailedClosed ? "fail_closed_safe" : "formal_complete",
       blocker: scanFailedClosed ? (scanReceipt.reason_code || scanReceipt.status || "source_not_ready") : "",
     },

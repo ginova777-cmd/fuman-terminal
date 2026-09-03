@@ -52,8 +52,8 @@ for (const [name, time, phase] of [["Fuman Strategy3 V2 Readiness Guard 1230", "
   add(installerText.includes(`Phase = "${phase}"`), "strategy3_v2_readiness_guard_task_phase_missing_in_installer", { name, phase });
   add(closureText.includes(`strategy3-v2-readiness-guard-${phase}-`), "strategy3_v2_readiness_guard_receipt_not_required_by_closure", { phase });
 }
-add(registryText.includes("Fuman Strategy3 V2 Daily Closure Verify 1315"), "strategy3_v2_daily_closure_1315_missing_from_registry");
-add(!registryText.includes("Fuman Strategy3 V2 Daily Closure Verify 1310"), "strategy3_v2_daily_closure_1310_still_in_registry");
+add(registryText.includes("Fuman Strategy3 V2 Daily Closure Verify 1310"), "strategy3_v2_daily_closure_1310_missing_from_registry");
+add(!registryText.includes("Fuman Strategy3 V2 Daily Closure Verify 1315"), "strategy3_v2_daily_closure_1315_still_in_registry");
 
 const liveEvidence = [];
 if (live) {
@@ -87,7 +87,7 @@ const payload = {
   static_contract: {
     runner,
     installer,
-    daily_closure_1315: registryText.includes("Fuman Strategy3 V2 Daily Closure Verify 1315"),
+    daily_closure_1310: registryText.includes("Fuman Strategy3 V2 Daily Closure Verify 1310"),
     guard_phases: ["1230", "1250"],
     no_formal_or_publish_or_line: true,
   },

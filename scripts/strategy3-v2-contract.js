@@ -12,7 +12,9 @@ const RUN_ID_PREFIX = "strategy3v2";
 const RESULTS_TABLE = process.env.STRATEGY3_V2_RESULTS_TABLE || "strategy3_v2_scan_results";
 const RUNS_TABLE = process.env.STRATEGY3_V2_RUNS_TABLE || "strategy3_v2_scan_runs";
 const LATEST_VIEW = process.env.STRATEGY3_V2_LATEST_VIEW || "v_strategy3_v2_latest_complete_run";
-const MIN_READY_SYMBOLS = Math.max(1000, Number(process.env.STRATEGY3_V2_MIN_READY_SYMBOLS || 1000));
+// Strategy3's canonical mother pool is dynamic 300-600 symbols. Requiring 1000
+// here was a retired full-universe gate and incorrectly blocked a healthy pool.
+const MIN_READY_SYMBOLS = Math.max(300, Number(process.env.STRATEGY3_V2_MIN_READY_SYMBOLS || 300));
 const MIN_CANDLES_PER_SYMBOL = Math.max(20, Number(process.env.STRATEGY3_V2_MIN_CANDLES_PER_SYMBOL || 20));
 const ENTRY_WINDOW = "12:59-13:02";
 
