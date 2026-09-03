@@ -190,7 +190,7 @@ const HOT_BURST_MAX_STALE_SECONDS = Math.max(60, Math.min(MAX_INTRADAY_1M_STALE_
 const HOT_BURST_COOLDOWN_SECONDS = Math.max(60, Number(process.env.DAYTRADE_HOT_BURST_COOLDOWN_SECONDS || 300));
 const INTRADAY_PRICE_BURST_MIN_PCT = positiveNumber(process.env.DAYTRADE_INTRADAY_PRICE_BURST_MIN_PCT, 1);
 const INTRADAY_ROLLING_1M_WINDOW = 60;
-const INTRADAY_ROLLING_1M_MIN_SAMPLES = 20;
+const INTRADAY_ROLLING_1M_MIN_SAMPLES = 60;
 const INTRADAY_VOLUME_BURST_ROLLING_MULTIPLIER = positiveNumber(process.env.DAYTRADE_INTRADAY_VOLUME_BURST_ROLLING_MULTIPLIER, 2);
 const INTRADAY_BURST_REPLAY_MAX_AGE_SECONDS = Math.max(60, Number(process.env.DAYTRADE_BURST_TELEGRAM_MAX_EVENT_AGE_SECONDS || 180));
 const HOT_POOL_MIN_SYMBOLS = 40;
@@ -5054,6 +5054,8 @@ function buildIntradayBurstCandleCacheBySymbol(tradeDate) {
       rows.push({
         symbol,
         candle_time: candleTime,
+        high: numberValue(row?.high),
+        low: numberValue(row?.low),
         close,
         volume,
         source: "fugle_websocket_candle_cache",
@@ -5069,6 +5071,78 @@ function buildIntradayBurstCandleCacheBySymbol(tradeDate) {
   return bySymbol;
 }
 
+function buildIntradayTechnicalIndicators(candles) {
+  const chronological = (Array.isArray(candles) ? candles : []).slice().reverse().map((row) => ({
+    high: numberValue(row?.high), low: numberValue(row?.low), close: numberValue(row?.close),
+  })).filter((row) => row.close > 0);
+  const closes = chronological.map((row) => row.close);
+  const round = (value) => Number.isFinite(value) ? Number(value.toFixed(6)) : null;
+  const smaAt = (values, endIndex, period) => {
+    if (endIndex - period + 1 < 0) return null;
+    const window = values.slice(endIndex - period + 1, endIndex + 1);
+    return window.every(Number.isFinite) ? window.reduce((sum, value) => sum + value, 0) / period : null;
+  };
+  const ema = (values, period) => {
+    const output = new Array(values.length).fill(null);
+    if (values.length < period || !values.slice(0, period).every(Number.isFinite)) return output;
+    output[period - 1] = values.slice(0, period).reduce((sum, value) => sum + value, 0) / period;
+    const multiplier = 2 / (period + 1);
+    for (let index = period; index < values.length; index += 1) output[index] = ((values[index] - output[index - 1]) * multiplier) + output[index - 1];
+    return output;
+  };
+  const wilderRsi = (values, period) => {
+    const output = new Array(values.length).fill(null);
+    if (values.length <= period) return output;
+    let averageGain = 0, averageLoss = 0;
+    for (let index = 1; index <= period; index += 1) {
+      const change = values[index] - values[index - 1];
+      averageGain += Math.max(0, change); averageLoss += Math.max(0, -change);
+    }
+    averageGain /= period; averageLoss /= period;
+    const current = () => averageLoss === 0 ? (averageGain > 0 ? 100 : 50) : 100 - (100 / (1 + (averageGain / averageLoss)));
+    output[period] = current();
+    for (let index = period + 1; index < values.length; index += 1) {
+      const change = values[index] - values[index - 1];
+      averageGain = ((averageGain * (period - 1)) + Math.max(0, change)) / period;
+      averageLoss = ((averageLoss * (period - 1)) + Math.max(0, -change)) / period;
+      output[index] = current();
+    }
+    return output;
+  };
+  const rawK = chronological.map((row, index) => {
+    if (index < 4) return null;
+    const window = chronological.slice(index - 4, index + 1);
+    if (window.some((item) => !(item.high > 0) || !(item.low > 0))) return null;
+    const highest = Math.max(...window.map((item) => item.high));
+    const lowest = Math.min(...window.map((item) => item.low));
+    return highest === lowest ? 50 : ((row.close - lowest) / (highest - lowest)) * 100;
+  });
+  const kValues = rawK.map((_, index) => smaAt(rawK, index, 3));
+  const dValues = kValues.map((_, index) => smaAt(kValues, index, 3));
+  const rsi4 = wilderRsi(closes, 4), rsi6 = wilderRsi(closes, 6);
+  const ema7 = ema(closes, 7), ema12 = ema(closes, 12);
+  const dif = closes.map((_, index) => Number.isFinite(ema7[index]) && Number.isFinite(ema12[index]) ? ema7[index] - ema12[index] : null);
+  const firstDifIndex = dif.findIndex(Number.isFinite), signal = new Array(dif.length).fill(null);
+  if (firstDifIndex >= 0) ema(dif.slice(firstDifIndex), 20).forEach((value, index) => { signal[firstDifIndex + index] = value; });
+  const now = closes.length - 1, previous = now - 1;
+  const crossedUp = (fast, slow) => previous >= 0 && [fast[previous], slow[previous], fast[now], slow[now]].every(Number.isFinite) && fast[previous] <= slow[previous] && fast[now] > slow[now];
+  const kdGoldenCross = crossedUp(kValues, dValues), rsiGoldenCross = crossedUp(rsi4, rsi6), macdGoldenCross = crossedUp(dif, signal);
+  const ready = [kValues[now], dValues[now], rsi4[now], rsi6[now], dif[now], signal[now]].every(Number.isFinite);
+  return {
+    technical_indicator_source: "fugle_websocket_candle_cache_1m",
+    technical_indicator_status: ready ? "ready" : "DATA_GAP_TECHNICAL_INDICATOR_WARMUP",
+    technical_indicator_sample_count: closes.length,
+    kd_parameters: { rsv_period: 5, k_smoothing: 3, d_smoothing: 3 },
+    kd_k: round(kValues[now]), kd_d: round(dValues[now]), kd_previous_k: round(kValues[previous]), kd_previous_d: round(dValues[previous]), kd_golden_cross: kdGoldenCross,
+    rsi_parameters: { fast_period: 4, slow_period: 6, method: "wilder" },
+    rsi_4: round(rsi4[now]), rsi_6: round(rsi6[now]), rsi_previous_4: round(rsi4[previous]), rsi_previous_6: round(rsi6[previous]), rsi_golden_cross: rsiGoldenCross,
+    macd_parameters: { fast_period: 7, slow_period: 12, signal_period: 20 },
+    macd_dif: round(dif[now]), macd_signal: round(signal[now]), macd_previous_dif: round(dif[previous]), macd_previous_signal: round(signal[previous]), macd_golden_cross: macdGoldenCross,
+    technical_golden_cross_any: kdGoldenCross || rsiGoldenCross || macdGoldenCross,
+    technical_golden_cross_signals: [kdGoldenCross ? "kd_5_3_3" : "", rsiGoldenCross ? "rsi_4_cross_6" : "", macdGoldenCross ? "macd_7_12_20" : ""].filter(Boolean),
+  };
+}
+
 function buildIntradayBurstMetricsFromCandleCache(candles) {
   const rows = Array.isArray(candles) ? candles : [];
   const latest = rows[0] || null;
@@ -5078,6 +5152,7 @@ function buildIntradayBurstMetricsFromCandleCache(candles) {
   const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
   const sampleCount = priorVolumes.length;
   return {
+    ...buildIntradayTechnicalIndicators(rows),
     latest_1m_time: latest?.candle_time || "",
     latest_1m_close: numberValue(latest?.close),
     latest_1m_volume: Math.max(0, numberValue(latest?.volume)),
@@ -5094,6 +5169,7 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
   const inputRows = Array.isArray(rows) ? rows : [];
   const candleCacheBySymbol = buildIntradayBurstCandleCacheBySymbol(tradeDate);
   const events = [];
+  const technicalIndicatorReadback = [];
   const rejectedReasonCounts = {};
   const sampleRejected = [];
   let cacheRolling1mReadyCount = 0;
@@ -5166,9 +5242,21 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
       rolling_1m_baseline_sample_count: sampleCount,
       rolling_1m_baseline_status: baselineStatus,
       cache_rolling_1m_baseline_source: cacheMetrics.cache_rolling_1m_baseline_source || "",
+      technical_indicator_source: cacheMetrics.technical_indicator_source,
+      technical_indicator_status: cacheMetrics.technical_indicator_status,
+      technical_indicator_sample_count: cacheMetrics.technical_indicator_sample_count,
+      kd_parameters: cacheMetrics.kd_parameters,
+      kd_k: cacheMetrics.kd_k, kd_d: cacheMetrics.kd_d, kd_previous_k: cacheMetrics.kd_previous_k, kd_previous_d: cacheMetrics.kd_previous_d, kd_golden_cross: cacheMetrics.kd_golden_cross,
+      rsi_parameters: cacheMetrics.rsi_parameters,
+      rsi_4: cacheMetrics.rsi_4, rsi_6: cacheMetrics.rsi_6, rsi_previous_4: cacheMetrics.rsi_previous_4, rsi_previous_6: cacheMetrics.rsi_previous_6, rsi_golden_cross: cacheMetrics.rsi_golden_cross,
+      macd_parameters: cacheMetrics.macd_parameters,
+      macd_dif: cacheMetrics.macd_dif, macd_signal: cacheMetrics.macd_signal, macd_previous_dif: cacheMetrics.macd_previous_dif, macd_previous_signal: cacheMetrics.macd_previous_signal, macd_golden_cross: cacheMetrics.macd_golden_cross,
+      technical_golden_cross_any: cacheMetrics.technical_golden_cross_any,
+      technical_golden_cross_signals: cacheMetrics.technical_golden_cross_signals,
       checked_at: checkedAt,
       run_id: runId,
     };
+    technicalIndicatorReadback.push(common);
     const hotCommonFailures = [];
     if (!/^\d{4}$/.test(symbol)) hotCommonFailures.push("symbol_invalid");
     if (price < MOTHER_POOL_MIN_PRICE) hotCommonFailures.push("price_below_minimum");
@@ -5176,7 +5264,8 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
     if (!quoteFresh || quoteAgeSeconds > WINDOW_SECONDS) hotCommonFailures.push("quote_not_fresh");
     const strictFailures = [...hotCommonFailures];
     if (baselineStatus !== "ready") strictFailures.push("rolling_1m_baseline_not_ready");
-    if (sampleCount < INTRADAY_ROLLING_1M_MIN_SAMPLES) strictFailures.push("rolling_1m_samples_below_20");
+    if (sampleCount < INTRADAY_ROLLING_1M_MIN_SAMPLES) strictFailures.push("rolling_1m_samples_below_60");
+    if (cacheMetrics.technical_indicator_status !== "ready") strictFailures.push("technical_indicator_not_ready");
     if (intraday1mStaleSeconds > MAX_INTRADAY_1M_STALE_SECONDS) strictFailures.push("intraday_1m_stale");
     if (strictFailures.length) {
       addReject(symbol, strictFailures[0]);
@@ -5187,7 +5276,7 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
     const priceRuleMet = rollingHigh > 0 && latest1mClose >= priceTriggerLevel;
     const volumeRuleMet = rollingVolume > 0 && latest1mVolume >= volumeTriggerLevel;
     let emittedStrict = false;
-    if ((metrics.intradayPriceBurst1Pct === true || priceRuleMet) && priceRuleMet) {
+    if ((metrics.intradayPriceBurst1Pct === true || priceRuleMet) && priceRuleMet && cacheMetrics.technical_golden_cross_any === true) {
       events.push({
         ...common,
         trigger_type: "price_breakout_1pct",
@@ -5196,7 +5285,7 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
       });
       emittedStrict = true;
     }
-    if ((metrics.intradayVolumeBurstRolling60X2 === true || volumeRuleMet) && volumeRuleMet) {
+    if ((metrics.intradayVolumeBurstRolling60X2 === true || volumeRuleMet) && volumeRuleMet && cacheMetrics.technical_golden_cross_any === true) {
       events.push({
         ...common,
         trigger_type: "volume_burst_rolling60_x2",
@@ -5224,6 +5313,7 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
       const replayVolumeTriggerLevel = replayMetrics.rolling_1m_baseline_volume * INTRADAY_VOLUME_BURST_ROLLING_MULTIPLIER;
       const replayCommon = {
         ...common,
+        ...replayMetrics,
         latest_1m_time: replayMetrics.latest_1m_time,
         latest_1m_close: replayMetrics.latest_1m_close,
         latest_1m_volume: replayMetrics.latest_1m_volume,
@@ -5233,7 +5323,7 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
         rolling_1m_baseline_status: replayMetrics.rolling_1m_baseline_status,
         replayed_missed_candle: true,
       };
-      if (replayMetrics.rolling_1m_prior_high_close > 0 && replayMetrics.latest_1m_close >= replayPriceTriggerLevel) {
+      if (replayMetrics.technical_indicator_status === "ready" && replayMetrics.technical_golden_cross_any === true && replayMetrics.rolling_1m_prior_high_close > 0 && replayMetrics.latest_1m_close >= replayPriceTriggerLevel) {
         events.push({
           ...replayCommon,
           trigger_type: "price_breakout_1pct",
@@ -5242,7 +5332,7 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
         });
         emittedStrict = true;
       }
-      if (replayMetrics.rolling_1m_baseline_volume > 0 && replayMetrics.latest_1m_volume >= replayVolumeTriggerLevel) {
+      if (replayMetrics.technical_indicator_status === "ready" && replayMetrics.technical_golden_cross_any === true && replayMetrics.rolling_1m_baseline_volume > 0 && replayMetrics.latest_1m_volume >= replayVolumeTriggerLevel) {
         events.push({
           ...replayCommon,
           trigger_type: "volume_burst_rolling60_x2",
@@ -5252,7 +5342,7 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
         emittedStrict = true;
       }
     }
-    if (!emittedStrict) addReject(symbol, "no_strict_burst_trigger");
+    if (!emittedStrict) addReject(symbol, (priceRuleMet || volumeRuleMet) && cacheMetrics.technical_golden_cross_any !== true ? "technical_golden_cross_not_met" : "no_strict_burst_trigger");
   }
   const strictBurstEventCount = events.length;
   const hotRankFallbackEventCount = 0;
@@ -5266,8 +5356,9 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
     conditions: {
       price_breakout: "latest_1m_close >= prior_rolling60_high_close * 1.01",
       volume_burst: "latest_1m_volume >= prior_rolling60_average_volume * 2",
+      technical_confirmation: "KD(5,3,3) OR RSI(4) cross RSI(6) OR MACD(7,12,20)",
       hot_rank_fallback: "disabled; telegram only sends price_breakout_1pct and volume_burst_rolling60_x2",
-      min_rolling_samples: 20,
+      min_rolling_samples: 60,
       min_price: MOTHER_POOL_MIN_PRICE,
       max_quote_age_seconds: WINDOW_SECONDS,
       max_1m_stale_seconds: MAX_INTRADAY_1M_STALE_SECONDS,
@@ -5279,6 +5370,7 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
     hot_rank_fallback_event_count: hotRankFallbackEventCount,
     rejected_reason_counts: rejectedReasonCounts,
     sample_rejected: sampleRejected,
+    technical_indicator_readback: technicalIndicatorReadback,
     events,
   };
   if (!DRY_RUN) writeJson(INTRADAY_BURST_TELEGRAM_OUTBOX_FILE, payload);
