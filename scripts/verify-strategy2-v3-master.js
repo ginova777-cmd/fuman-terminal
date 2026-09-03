@@ -8,7 +8,7 @@ const FORMAL_ROOT = "C:/fuman-release-owner/fuman-terminal";
 const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const LIVE_RECEIPT = path.join(RUNTIME_ROOT, "data", "scan-receipts", "strategy2-v3-live.json");
 const TRI_RECEIPT = path.join(RUNTIME_ROOT, "data", "scan-receipts", "strategy2-tri-surface-canonical-latest.json");
-const CONTRACT = "strategy2-live-v3-fugle-deep-scan-1m";
+const CONTRACT = "strategy2-seven-strategy-live-v1";
 const MIN_FORMAL_WATER_COVERAGE_RATIO = 0.90;
 
 function readJson(file) {

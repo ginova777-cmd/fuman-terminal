@@ -465,7 +465,7 @@ function attachOpsAuthorityToEndpoints(endpoints = {}, authority = {}) {
     if (!payload || typeof payload !== "object") continue;
     const key = opsModuleKeyForEndpoint(endpoint);
     const v3Strategy2 = key === "strategy2"
-      && payload.strategyContract === "strategy2-live-v3-fugle-deep-scan-1m"
+      && payload.strategyContract === "strategy2-seven-strategy-live-v1"
       && payload.version === "v3";
     const v2Strategy3 = key === "strategy3" ? strategy3V2DirectAuthority(payload) : null;
     const directInstitution = key === "institution" ? institutionDirectAuthority(payload) : null;
@@ -549,13 +549,13 @@ async function ensureStrategy2V3Endpoint(request, endpoints) {
     ...compactQuery(240), today: "1", live: "1",
   }, 15000);
   const payload = direct.payload && typeof direct.payload === "object" ? direct.payload : {};
-  const contractOk = payload.strategyContract === "strategy2-live-v3-fugle-deep-scan-1m" && payload.version === "v3";
+  const contractOk = payload.strategyContract === "strategy2-seven-strategy-live-v1" && payload.version === "v3";
   const endpoint = direct.label || buildEndpoint("/api/strategy2-latest", { ...compactQuery(240), today: "1", live: "1" });
   endpoints[endpoint] = contractOk ? payload : {
     ok: false,
     strategy: "strategy2",
     version: "v3",
-    strategyContract: "strategy2-live-v3-fugle-deep-scan-1m",
+    strategyContract: "strategy2-seven-strategy-live-v1",
     status: "strategy2_v3_endpoint_unavailable",
     dataDate: "",
     runId: "",

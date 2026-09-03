@@ -853,7 +853,7 @@ function buildStrategy2SourceReport(result) {
   const date = cleanText(payload.dataDate || payload.tradeDate || payload.date);
   const isToday = compactDate(date) === today;
   const isBlockedEvidence = payload.status === "blocked" && payload.displayOnlyBlockedEvidence === true && isToday;
-  const isFormalV3 = payload.strategyContract === "strategy2-live-v3-fugle-deep-scan-1m"
+  const isFormalV3 = payload.strategyContract === "strategy2-seven-strategy-live-v1"
     && payload.status === "complete"
     && payload.complete === true
     && payload.publishAllowed === true

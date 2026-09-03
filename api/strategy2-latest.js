@@ -9,7 +9,7 @@ const { attachThreeGatePricesToPayload } = require("../lib/terminal-three-gate-p
 
 const SNAPSHOT_KEY = "strategy2_live_v3";
 const REPLAY_SNAPSHOT_KEY = "strategy2_live_v3_diagnostic_replay";
-const CONTRACT = "strategy2-live-v3-fugle-deep-scan-1m";
+const CONTRACT = "strategy2-seven-strategy-live-v1";
 
 function taipeiDate() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -39,10 +39,10 @@ function expandTerminalSnapshotRow(row = {}) {
     code: row.c, symbol: row.c, name: row.n || row.c, entryAt: row.t || "", timestamp: row.t || "",
     entryCandleTime: row.t || "", entryPrice: row.p, price: row.p, pct,
     changePercent: Number.isFinite(changePercent) ? changePercent : 0, score: row.s,
-    strategy: "V3量價突破", signalId: "s2_v3_1m_trend_volume_breakout", signalLine: row.l || "",
-    reason: row.r || "", state: row.f ? "LIVE候選" : replay ? "回測資料完整，未達正式訊號" : "資料完整，未達訊號",
-    stateId: row.f ? "candidate" : "watch", stateLabel: row.f ? "正式候選" : replay ? "回測觀察" : "觀察",
-    formalCandidate: row.f === true, supportPrice: row.u, stopLoss: row.k, targetPrice: row.o,
+    strategy: row.sn || "七策略命中觀察", signalId: row.si || "seven_strategy_observation", signalLine: row.l || "",
+    reason: row.r || "", state: row.f ? "正式進場" : replay ? "回測資料完整，非正式" : "策略命中觀察",
+    stateId: row.st || (row.f ? "formal" : "observation"), stateLabel: row.f ? "正式進場" : replay ? "回測觀察" : "策略命中觀察",
+    formalCandidate: row.f === true, FormalEntry: row.fe === true, strategyHits: Array.isArray(row.hits) ? row.hits : [], supportPrice: row.u, stopLoss: row.k, targetPrice: row.o,
     entryTradeDate: row.a || "", entryPriceSource: "fugle_daytrade_source_formal_1m",
     candleCount: row.m, volumeRatio1m: row.v, scanMode: row.sm || "",
     eventOrigin: row.sm || "", observationKind: row.sm || "",

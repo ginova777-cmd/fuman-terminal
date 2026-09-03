@@ -1,7 +1,7 @@
 "use strict";
 
-// Strategy2 V3 starts with a deliberately narrow contract: validate and scan
-// the current Fugle deep-scan pool. It does not import V2 rules or fallbacks.
+// Strategy2 reads the complete seven-strategy water contract. It does not own
+// writers, create candidates from Mother Pool membership, or use fallbacks.
 const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
@@ -14,7 +14,7 @@ process.env.FUMAN_RUNTIME_DIR = RUNTIME_DIR;
 process.env.FUGLE_COLLECTOR_ROLE = "daytrade";
 const { readFugleWebSocketCandles, readFugleWebSocketQuotes } = require("../lib/fugle-websocket-quotes");
 const SOURCE_NAME = "fugle_daytrade_source";
-const CONTRACT = "strategy2-v3-fugle-deep-scan-water-v1";
+const CONTRACT = "strategy2-seven-strategy-water-v1";
 const MIN_CANDLES = 35;
 const MIN_FORMAL_WATER_COVERAGE_RATIO = 0.90;
 const WEBSOCKET_STATUS_FILE = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status-v2.json");
@@ -198,6 +198,35 @@ async function readRows(source, table, params) {
   return text ? JSON.parse(text) : [];
 }
 
+async function safeReadRows(source, table, params, issues) {
+  try { return await readRows(source, table, params); }
+  catch (error) {
+    issues.push(`${table}:${String(error?.message || error).slice(0, 180)}`);
+    return [];
+  }
+}
+
+async function readRowsForSymbols(source, table, params, symbols, issues) {
+  const output = [];
+  for (const group of chunk(symbols, 200)) {
+    output.push(...await safeReadRows(source, table, { ...params, symbol: `in.(${group.join(",")})`, limit: String(Math.max(group.length * 5, 200)) }, issues));
+  }
+  return output;
+}
+
+function symbolOf(row) {
+  return String(row?.symbol || row?.stock_symbol || row?.underlying_symbol || "").replace(/\D/g, "").slice(0, 4);
+}
+
+function newestBySymbol(rows) {
+  const output = new Map();
+  for (const row of rows) {
+    const symbol = symbolOf(row);
+    if (symbol && !output.has(symbol)) output.set(symbol, row);
+  }
+  return output;
+}
+
 function isDeepScanEligible(payload, tradeDate) {
   const metrics = payload?.motherPoolMetrics || {};
   return String(payload?.trade_date || "") === tradeDate
@@ -208,6 +237,8 @@ function isDeepScanEligible(payload, tradeDate) {
 
 async function readFormalWater(source, tradeDate, now = new Date()) {
   const websocket = readWebSocketEvidence(now);
+  const ancillaryIssues = [];
+  const expectedCanonicalRunId = `${SOURCE_NAME}:${tradeDate.replace(/-/g, "")}:canonical`;
   const pool = await readRows(source, "fugle_daytrade_priority_pool", {
     select: "symbol,name,market,priority_rank,updated_at,payload",
     order: "priority_rank.asc",
@@ -216,6 +247,22 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
   const poolRows = pool.filter((row) => isDeepScanEligible(row.payload || {}, tradeDate));
   const symbols = [...new Set(poolRows.map((row) => String(row.symbol || "")).filter((symbol) => /^\d{4}$/.test(symbol)))];
   const requestedSymbols = new Set(symbols);
+  const [dailyAverageRows, previousDailyRows, futureRows, preopenRows, canonicalRows, sourceStatusRows] = await Promise.all([
+    readRowsForSymbols(source, "fugle_daytrade_daily_volume_avg", { select: "*", order: "symbol.asc" }, symbols, ancillaryIssues),
+    readRowsForSymbols(source, "strategy4_daily_ohlcv_view", { select: "symbol,trade_date,open,high,low,close", trade_date: `lt.${tradeDate}`, order: "trade_date.desc,symbol.asc" }, symbols, ancillaryIssues),
+    readRowsForSymbols(source, "v_stock_future_live_contract", { select: "*", order: "relative_to_txf_percent.desc,futopt_total_volume.desc" }, symbols, ancillaryIssues),
+    readRowsForSymbols(source, "fugle_preopen_snapshot", { select: "*", order: "updated_at.desc" }, symbols, ancillaryIssues),
+    safeReadRows(source, "v_fugle_daytrade_canonical_gate", { select: "*", limit: "5" }, ancillaryIssues),
+    safeReadRows(source, "source_status", { select: "source_name,status,updated_at,payload", source_name: `eq.${SOURCE_NAME}`, order: "updated_at.desc", limit: "1" }, ancillaryIssues),
+  ]);
+  const dailyAverageBySymbol = newestBySymbol(dailyAverageRows);
+  const previousDailyBySymbol = newestBySymbol(previousDailyRows);
+  const futureBySymbol = newestBySymbol(futureRows.filter((row) => String(row.trade_date || "") === tradeDate));
+  const preopenBySymbol = newestBySymbol(preopenRows.filter((row) => String(row.trade_date || row.payload?.trade_date || tradeDate) === tradeDate));
+  const canonicalGate = canonicalRows.find((row) => String(row.trade_date || row.date || "") === tradeDate) || {};
+  const sourceStatusPayload = sourceStatusRows[0]?.payload || {};
+  const gateGrade = String(canonicalGate.canonical_gate_grade || canonicalGate.gate_grade || sourceStatusPayload.daytrade_gate_grade || sourceStatusPayload.gate_grade || "").toUpperCase();
+  const formalEntryAllowed = bool(canonicalGate.formal_entry_allowed ?? sourceStatusPayload.formal_entry_allowed);
   const liveQuotes = readFugleWebSocketQuotes({ maxAgeMs: 120000 });
   const liveCandles = readFugleWebSocketCandles({ maxAgeMs: 6 * 60 * 60 * 1000 });
   const quoteBySymbol = new Map();
@@ -262,6 +309,10 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
     const symbol = String(poolRow.symbol || "");
     const payload = poolRow.payload || {};
     const metrics = payload.motherPoolMetrics || {};
+    const dailyAverage = dailyAverageBySymbol.get(symbol) || {};
+    const previousDaily = previousDailyBySymbol.get(symbol) || {};
+    const future = futureBySymbol.get(symbol) || {};
+    const preopen = preopenBySymbol.get(symbol) || {};
     const quote = quoteBySymbol.get(symbol) || {};
     const symbolCandles = (candleBySymbol.get(symbol) || []).sort((left, right) => String(left.candle_time).localeCompare(String(right.candle_time)));
     const quoteTime = quote.quote_seen_at || quote.updated_at || "";
@@ -272,8 +323,43 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
     const intraday1mStaleSeconds = Number.isFinite(lastCandleMs) ? Math.max(0, Math.round((now.getTime() - lastCandleMs) / 1000)) : 999999;
     const hasRequired1mWindow = symbolCandles.length >= MIN_CANDLES && intraday1mStaleSeconds <= 180;
     const hasFormalQuote = websocket.formalReady && /^fugle/i.test(String(quote.source || "")) && number(quote.price) >= 50 && number(quote.total_volume) > 0 && quoteAgeSeconds <= 120;
-    const dataGap = !hasRequired1mWindow;
-    const dataGapReason = symbolCandles.length < MIN_CANDLES ? "formal_1m_below_minimum" : intraday1mStaleSeconds > 180 ? "formal_1m_stale" : "";
+    const avg5Volume = number(dailyAverage.avg5_volume || dailyAverage.avg_volume5 || dailyAverage.volume);
+    const estimatedVolumeRatio = number(metrics.volumeRatio5) || (avg5Volume > 0 ? number(quote.total_volume) / avg5Volume : 0);
+    const previousClose = number(previousDaily.close);
+    const changePercent = previousClose > 0 ? ((number(quote.price) - previousClose) / previousClose) * 100 : 0;
+    const previousHigh = number(previousDaily.high);
+    const previousLow = number(previousDaily.low);
+    const previousRange = previousHigh - previousLow;
+    const threeGateLevels = previousRange >= 0 && previousLow > 0 ? {
+      upper: previousLow + previousRange * 1.382,
+      middle: (previousHigh + previousLow) / 2,
+      lower: previousHigh - previousRange * 1.382,
+      referenceDate: previousDaily.trade_date || "",
+    } : null;
+    const candleMinuteSet = new Set(symbolCandles.map((candle) => String(candle.candle_time || "").slice(11, 16)));
+    const openingWindowReady = ["09:00", "09:01", "09:02", "09:03"].every((minute) => candleMinuteSet.has(minute));
+    const openingCandle = symbolCandles.find((candle) => String(candle.candle_time || "").slice(11, 16) === "09:01") || {};
+    const futureFresh = bool(future.futopt_fresh_60s ?? future.source_status === "ok") && bool(future.txf_fresh_60s ?? future.source_status === "ok");
+    const stockFutureSync = futureFresh && number(future.futopt_change_percent) > 0 && number(future.relative_to_txf_percent) > 0 && changePercent > 0;
+    const bidAskRatio = number(preopen.ask_volume) > 0 ? number(preopen.bid_volume) / number(preopen.ask_volume) : 0;
+    const trialRisePct = number(preopen.reference_price) > 0 ? ((number(preopen.trial_price) - number(preopen.reference_price)) / number(preopen.reference_price)) * 100 : 0;
+    const starPreopen = String(future.future_symbol || "").toUpperCase() !== "TXF"
+      && number(future.futopt_last_price) > 0 && number(future.futopt_change_percent) >= 2
+      && number(future.relative_to_txf_percent) >= 1 && number(future.futopt_total_volume) >= 50
+      && number(preopen.trial_price) > 0 && number(preopen.reference_price) > 0 && trialRisePct >= 2
+      && bidAskRatio >= 1.5 && number(preopen.best_bid_price) >= number(preopen.trial_price);
+    const canonicalRunMatches = String(payload.canonical_run_id || payload.run_id || "") === expectedCanonicalRunId;
+    const commonStockDaytradeEligible = bool(payload.basePoolEligible ?? metrics.basePoolEligible);
+    const waterGapReasons = [];
+    if (!hasFormalQuote) waterGapReasons.push("formal_quote_missing_or_stale");
+    if (symbolCandles.length < MIN_CANDLES) waterGapReasons.push("formal_1m_below_minimum");
+    else if (intraday1mStaleSeconds > 180) waterGapReasons.push("formal_1m_stale");
+    if (!canonicalRunMatches) waterGapReasons.push("canonical_run_mismatch");
+    if (!commonStockDaytradeEligible) waterGapReasons.push("common_stock_daytrade_eligibility_missing");
+    if (estimatedVolumeRatio < 1) waterGapReasons.push("estimated_volume_ratio_below_one_or_missing");
+    if (!threeGateLevels) waterGapReasons.push("previous_day_high_low_missing");
+    const dataGap = waterGapReasons.length > 0;
+    const dataGapReason = waterGapReasons.join(",");
     return {
       code: symbol,
       symbol,
@@ -281,8 +367,14 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
       market: quote.market || poolRow.market || "",
       price: number(quote.price),
       totalVolume: number(quote.total_volume),
+      previousClose,
+      changePercent,
+      avg5Volume,
+      estimatedVolumeRatio,
       priorityRank: number(poolRow.priority_rank),
       sourceRunId: String(payload.canonical_run_id || payload.run_id || ""),
+      expectedCanonicalRunId,
+      canonicalRunMatches,
       quoteSource: quote.source || "",
       quoteSeenAt: quoteTime,
       quoteAgeSeconds,
@@ -295,8 +387,19 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
       dataGapReason,
       basePoolEligible: true,
       deepScanEligible: true,
+      commonStockDaytradeEligible,
+      gateGrade,
+      formalEntryAllowed,
+      threeGateLevels,
+      openingWindowReady,
+      openingReferencePrice: number(openingCandle.high || openingCandle.open),
+      stockFutureSync,
+      starPreopen,
+      futureEvidence: future,
+      preopenEvidence: preopen,
       formalQuoteReady: hasFormalQuote,
       formalOneMinuteReady: websocket.formalReady && hasRequired1mWindow,
+      sevenStrategyWaterReady: !dataGap,
       poolEvidence: {
         canonicalPoolLayer: payload.canonical_pool_layer || payload.pool_tier || "",
         dataGap: payload.dataGap || null,
@@ -308,7 +411,7 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
       },
     };
   });
-  const formalReadyRows = rows.filter((row) => row.formalQuoteReady && row.formalOneMinuteReady).length;
+  const formalReadyRows = rows.filter((row) => row.sevenStrategyWaterReady).length;
   const formalWaterCoverageRatio = ratio(formalReadyRows, rows.length);
   return {
     rows,
@@ -319,6 +422,16 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
     websocket,
     formalReadyRows,
     formalWaterCoverageRatio,
+    expectedCanonicalRunId,
+    ancillaryIssues,
+    ancillaryCoverage: {
+      dailyVolumeAverageRows: dailyAverageBySymbol.size,
+      previousDailyRows: previousDailyBySymbol.size,
+      stockFutureRows: futureBySymbol.size,
+      preopenRows: preopenBySymbol.size,
+      gateGrade,
+      formalEntryAllowed,
+    },
     requiredFormalWaterCoverageRatio: MIN_FORMAL_WATER_COVERAGE_RATIO,
     formalWaterCoverageOk: rows.length > 0 && formalWaterCoverageRatio >= MIN_FORMAL_WATER_COVERAGE_RATIO,
     liveEvidence: "fugle_daytrade_websocket_cache",
@@ -353,7 +466,7 @@ async function main() {
   const source = config();
   if (!source.url || !source.key) throw new Error("strategy2_v3_supabase_credentials_missing");
   const water = await readFormalWater(source, clock.date);
-  const scanned = water.rows.filter((row) => row.formalQuoteReady && row.formalOneMinuteReady);
+  const scanned = water.rows.filter((row) => row.sevenStrategyWaterReady);
   const dataGaps = water.rows.filter((row) => row.dataGap);
   const liveWindow = clock.minuteOfDay >= 9 * 60 && clock.minuteOfDay <= (12 * 60 + 30);
   const complete = water.formalWaterCoverageOk === true;
@@ -405,6 +518,10 @@ async function main() {
       formalWaterCoverageRatio: water.formalWaterCoverageRatio,
       requiredFormalWaterCoverageRatio: water.requiredFormalWaterCoverageRatio,
       formalWaterCoverageOk: water.formalWaterCoverageOk,
+      coverageGrade: water.formalWaterCoverageRatio >= 0.9 ? "A" : water.formalWaterCoverageRatio >= 0.7 ? "B" : "C",
+      expectedCanonicalRunId: water.expectedCanonicalRunId,
+      ancillaryCoverage: water.ancillaryCoverage,
+      ancillaryIssues: water.ancillaryIssues,
       dataGapCount: dataGaps.length,
       noLegacyReadbackViews: true,
       noTop40Gate: true,

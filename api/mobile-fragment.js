@@ -187,7 +187,7 @@ function strategy2V3TerminalAuthority(payload = {}) {
 
 function attachTerminalAuthority(tab, payload = {}) {
   const isStrategy2V3 = String(tab || "").toLowerCase() === "strategy2"
-    && payload?.strategyContract === "strategy2-live-v3-fugle-deep-scan-1m"
+    && payload?.strategyContract === "strategy2-seven-strategy-live-v1"
     && payload?.version === "v3";
   let terminalAuthority = isStrategy2V3 ? strategy2V3TerminalAuthority(payload) : (payload?.terminalAuthority || terminalAuthorityForTab(tab));
   // A same-day Strategy3 complete run is authoritative on its own. The nightly

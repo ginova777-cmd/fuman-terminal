@@ -8,7 +8,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const RECEIPT = path.join(RUNTIME, "data", "scan-receipts", "strategy2-v3-live.json");
-const CONTRACT = "strategy2-live-v3-fugle-deep-scan-1m";
+const CONTRACT = "strategy2-seven-strategy-live-v1";
 const MIN_FORMAL_WATER_COVERAGE_RATIO = 0.90;
 
 function taipeiDate() {

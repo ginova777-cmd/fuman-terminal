@@ -13,7 +13,7 @@ const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const DATA_DIR = path.join(RUNTIME_DIR, "data");
 const SNAPSHOT_KEY = "strategy2_live_v3";
 const REPLAY_SNAPSHOT_KEY = "strategy2_live_v3_diagnostic_replay";
-const CONTRACT = "strategy2-live-v3-fugle-deep-scan-1m";
+const CONTRACT = "strategy2-seven-strategy-live-v1";
 const HISTORY_FILE = path.join(DATA_DIR, "strategy2-v3", "live-history.json");
 
 function writeJson(file, value) {
@@ -35,7 +35,15 @@ function appendTodayEvents(previous, current, tradeDate) {
   for (const row of Array.isArray(previous?.events) ? previous.events : []) {
     if (row?.entryTradeDate === tradeDate) seen.set(eventKey(row), row);
   }
-  for (const row of current) seen.set(eventKey(row), row);
+  for (const row of current) {
+    const currentMs = Date.parse(String(row.entryCandleTime || row.entryAt || ""));
+    const cooldownHit = [...seen.values()].some((prior) => {
+      if (String(prior.code || prior.symbol) !== String(row.code || row.symbol) || prior.signalId !== row.signalId) return false;
+      const priorMs = Date.parse(String(prior.entryCandleTime || prior.entryAt || ""));
+      return Number.isFinite(currentMs) && Number.isFinite(priorMs) && Math.abs(currentMs - priorMs) < 20 * 60 * 1000;
+    });
+    if (!cooldownHit) seen.set(eventKey(row), row);
+  }
   return [...seen.values()]
     .sort((left, right) => String(right.entryAt || "").localeCompare(String(left.entryAt || "")))
     .slice(0, 1000);
@@ -70,6 +78,8 @@ function compactTerminalRow(row = {}) {
     l: row.signalLine || "", r: row.reason || "", u: row.supportPrice ?? null,
     k: row.stopLoss ?? null, o: row.targetPrice ?? null, a: row.entryTradeDate || "",
     m: row.candleCount ?? null, v: row.volumeRatio1m ?? null, f: row.formalCandidate === true,
+    fe: row.FormalEntry === true, st: row.stateId || "", si: row.signalId || "", sn: row.strategy || "",
+    hits: Array.isArray(row.strategyHits) ? row.strategyHits.map((hit) => hit.id) : [],
     sm: row.scanMode || "",
   };
 }
@@ -77,7 +87,7 @@ function compactTerminalRow(row = {}) {
 function encodeTerminalRows(rows = []) {
   return zlib.gzipSync(Buffer.from(JSON.stringify(rows.map(compactTerminalRow)), "utf8")).toString("base64");
 }
-function blockedReasonFor({ displayReplay, diagnostic, allowed, tradingDay, observationWindow, finalize, websocketFormalReady, water }) {
+function blockedReasonFor({ displayReplay, diagnostic, allowed, tradingDay, observationWindow, finalize, websocketFormalReady, water, coverageGrade }) {
   if (displayReplay) return "strategy2_v3_diagnostic_replay_visible_not_formal";
   if (diagnostic) return "strategy2_v3_diagnostic_only";
   if (allowed) return "";
@@ -85,7 +95,8 @@ function blockedReasonFor({ displayReplay, diagnostic, allowed, tradingDay, obse
   if (!observationWindow) return "outside_strategy2_v3_observation_window";
   if (!finalize) return "strategy2_v3_scan_in_progress_not_finalized";
   if (!websocketFormalReady) return water.websocket?.reason || "fugle_websocket_not_formal_ready";
-  return "strategy2_v3_formal_water_incomplete";
+  if (coverageGrade === "B") return "strategy2_seven_strategy_degraded_observation_only";
+  return "strategy2_seven_strategy_water_hard_blocked";
 }
 function terminalSnapshotPayload(payload = {}) {
   const records = Array.isArray(payload.records) ? payload.records : [];
@@ -139,27 +150,34 @@ async function main() {
     water.candleBySymbol.get(String(row.symbol || "")) || [],
     { now: evaluationNow, tradeDate: clock.date },
   ));
-  const candidates = evaluations.filter((row) => row.formalCandidate === true)
+  const formalCandidates = evaluations.filter((row) => row.formalCandidate === true)
+    .sort((left, right) => right.score - left.score || String(right.entryAt).localeCompare(String(left.entryAt)));
+  const observationCandidates = evaluations.filter((row) => row.formalCandidate !== true && row.observation === true)
     .sort((left, right) => right.score - left.score || String(right.entryAt).localeCompare(String(left.entryAt)));
   const dataGaps = evaluations.filter((row) => row.hardGate?.complete !== true);
   const formalWaterReadyCount = evaluations.length - dataGaps.length;
   const formalWaterCoverageRatio = ratio(formalWaterReadyCount, evaluations.length);
   const requiredFormalWaterCoverageRatio = MIN_FORMAL_WATER_COVERAGE_RATIO;
   const formalWaterCoverageOk = evaluations.length > 0 && formalWaterCoverageRatio >= requiredFormalWaterCoverageRatio;
+  const coverageGrade = formalWaterCoverageRatio >= 0.9 ? "A" : formalWaterCoverageRatio >= 0.7 ? "B" : "C";
   const websocketFormalReady = water.websocket?.formalReady === true;
+  const degradedObservationAllowed = websocketFormalReady && coverageGrade !== "C";
+  const gateFormalReady = String(water.ancillaryCoverage?.gateGrade || "").toUpperCase() === "A"
+    && water.ancillaryCoverage?.formalEntryAllowed === true;
   const waterComplete = websocketFormalReady && formalWaterCoverageOk;
   const complete = finalize && waterComplete;
-  const allowed = tradingDay.isTradingDay === true && liveWindow && complete;
+  const allowed = tradingDay.isTradingDay === true && liveWindow && complete && gateFormalReady;
   const runId = diagnostic || displayReplay
     ? `strategy2-v3-live-${clock.ymd}-diagnostic-${String(clock.hour).padStart(2, "0")}${String(clock.minute).padStart(2, "0")}${String(clock.second).padStart(2, "0")}`
     : `strategy2-v3-live-${clock.ymd}-canonical`;
   const previous = readJson(HISTORY_FILE, {});
-  const events = displayReplay ? [] : appendTodayEvents(previous, candidates, clock.date);
+  const visibleCurrent = allowed ? formalCandidates : degradedObservationAllowed ? observationCandidates : [];
+  const events = displayReplay ? [] : appendTodayEvents(previous, visibleCurrent, clock.date);
   const replayRows = displayReplay ? evaluations.map(diagnosticReplayRow) : [];
   const displayRows = displayReplay ? replayRows : events;
   const replayWaterAvailable = displayReplay && replayRows.length > 0
     && replayRows.every((row) => row.entryTradeDate === clock.date && row.entryPrice > 0 && row.candleCount >= 35);
-  const blockedReason = blockedReasonFor({ displayReplay, diagnostic, allowed, tradingDay, observationWindow, finalize, websocketFormalReady, water });
+  const blockedReason = blockedReasonFor({ displayReplay, diagnostic, allowed, tradingDay, observationWindow, finalize, websocketFormalReady, water, coverageGrade });
   const payload = {
     ok: allowed,
     strategy: "strategy2",
@@ -186,16 +204,21 @@ async function main() {
     displayOnlyBlockedEvidence: !displayReplay && !diagnostic && !allowed,
     expectedCount: water.rows.length,
     scannedCount: water.rows.length,
-    resultCount: candidates.length,
-    count: candidates.length,
-    readbackCount: candidates.length,
+    resultCount: visibleCurrent.length,
+    count: visibleCurrent.length,
+    readbackCount: visibleCurrent.length,
+    formalCandidateCount: formalCandidates.length,
+    observationCount: observationCandidates.length,
     dataGapCount: dataGaps.length,
-    currentCandidates: candidates,
+    currentCandidates: visibleCurrent,
     observations: evaluations,
       formalWaterReadyCount,
       formalWaterCoverageRatio,
       requiredFormalWaterCoverageRatio,
       formalWaterCoverageOk,
+      coverageGrade,
+      degradedObservationAllowed,
+      gateFormalReady,
     events: displayRows,
     records: displayRows,
     rows: displayRows,
@@ -212,6 +235,10 @@ async function main() {
       formalDeepScanQuoteRows: water.quoteRows,
       formalIntradayOneMinuteRows: water.candleRows,
       formalIntradayOneMinuteReadySymbols: water.rows.length - dataGaps.length,
+      coverageGrade,
+      ancillaryCoverage: water.ancillaryCoverage,
+      ancillaryIssues: water.ancillaryIssues,
+      expectedCanonicalRunId: water.expectedCanonicalRunId,
       websocket: water.websocket,
       websocketFormalReady,
       noLegacyReadbackViews: true,
