@@ -5,6 +5,7 @@
   "private": true,
   "description": "Fuman stock terminal with a Vercel API proxy for official market data.",
   "scripts": {
+    "verify:terminal-surface-parity": "node scripts/verify-terminal-canonical-surface-parity.js",
     "deploy": "node scripts/deploy-production-safe.js",
     "release:main": "node scripts/require-version-bump-approval.js npm run release:main && pwsh.exe -NoProfile -ExecutionPolicy Bypass -File run-main-release-pipeline.ps1",
     "release": "node scripts/release.js",
