@@ -124,7 +124,6 @@ const FILES = [
   "scripts/verify-protected-readback-credential.js",
   "scripts/verify-terminal-ops-production-live.js",
   "scripts/write-production-unattended-readiness-report.js",
-  "scripts/verify-daytrade-mother-pool-contract.js",
   "scripts/verify-strategy2-terminal-visible-readback.js",
   "scripts/verify-strategy3-live-readback.js",
   "scripts/verify-strategy4-88-data-chain.js",

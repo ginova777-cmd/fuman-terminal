@@ -108,10 +108,16 @@ function main() {
     skeleton: runStatic("scripts/verify-daytrade-mother-pool-skeleton.js"),
     dailyIdentity: runStatic("scripts/verify-daytrade-priority-daily-rollover-contract.js"),
     futoptLockRetry: runStatic("scripts/verify-daytrade-futopt-lock-retry-contract.js"),
+    legacyVerifierRetired: {
+      ok: !fs.existsSync(path.join(ROOT, "scripts", "verify-daytrade-mother-pool-contract.js")),
+      retired_path: "scripts/verify-daytrade-mother-pool-contract.js",
+      replacement: "scripts/verify-daytrade-mother-pool-closed-loop.js",
+    },
   };
   check("static_skeleton_contract", staticChecks.skeleton.ok, "static_skeleton_contract_failed");
   check("static_daily_identity_contract", staticChecks.dailyIdentity.ok, "static_daily_identity_contract_failed");
   check("static_futopt_lock_retry_contract", staticChecks.futoptLockRetry.ok, "static_futopt_lock_retry_contract_failed");
+  check("legacy_mother_pool_verifier_retired", staticChecks.legacyVerifierRetired.ok, "legacy_mother_pool_verifier_still_present");
 
   const openingRequired = clock.minute >= 8 * 60 + 36;
   const openingOk = !openingRequired || (

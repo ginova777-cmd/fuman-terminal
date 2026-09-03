@@ -365,7 +365,6 @@
     "verify:terminal-unattended-root-policy": "node scripts/verify-terminal-unattended-root-policy.js",
     "verify:terminal-autonomous-root-runner": "node scripts/verify-terminal-autonomous-root-runner.js",
     "verify:daytrade-mother-pool-static-contract": "node scripts/verify-daytrade-mother-pool-static-contract.js",
-    "verify:daytrade-mother-pool-contract": "npm run verify:daytrade-mother-pool-static-contract && node --use-system-ca scripts/verify-daytrade-mother-pool-contract.js",
     "verify:terminal-job-queue-contract": "node scripts/verify-terminal-job-queue-contract.js",
     "verify:terminal-snapshot-freshness-contract": "node scripts/verify-terminal-snapshot-freshness-contract.js",
     "verify:daytrade-viewer-dream-readonly": "node --use-system-ca scripts/verify-daytrade-viewer-dream-readonly.js",
