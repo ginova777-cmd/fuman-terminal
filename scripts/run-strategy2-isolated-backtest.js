@@ -3,7 +3,11 @@
 const fs = require("fs");
 const path = require("path");
 const { candidateFromWaterRow } = require("../lib/strategy2-v3-signal");
+const { upsertSnapshot } = require("../lib/supabase-snapshots");
+const { terminalSnapshotPayload } = require("./run-strategy2-v3-live-scan");
 const waterReader = require("./run-strategy2-v3-water-scan");
+
+const REPLAY_SNAPSHOT_KEY = "strategy2_live_v3_diagnostic_replay";
 
 function arg(name, fallback = "") {
   const value = process.argv.find((item) => item.startsWith(`--${name}=`));
@@ -23,6 +27,7 @@ function writeJson(file, value) {
 async function main() {
   const tradeDate = arg("trade-date", waterReader.taipeiClock().date);
   const output = path.resolve(arg("output", path.join(process.cwd(), "work", `strategy2-isolated-backtest-${tradeDate}.json`)));
+  const publishDiagnostic = process.argv.includes("--publish-diagnostic");
   const water = await waterReader.readFormalWater(waterReader.config(), tradeDate);
   const events = [];
   const symbols = [];
@@ -104,8 +109,42 @@ async function main() {
     symbols,
     generatedAt: new Date().toISOString(),
   };
+  const runId = `strategy2-v3-live-${tradeDate.replace(/\D/g, "")}-diagnostic-backtest`;
+  const replayRows = deduped.map((event) => ({
+    code: event.symbol, symbol: event.symbol, name: event.name, entryAt: event.at, timestamp: event.at,
+    entryCandleTime: event.at, entryTradeDate: tradeDate, entryPrice: event.price, price: event.price,
+    score: event.priority, strategy: event.method, signalId: event.methodId,
+    signalLine: "策略2隔離回測方法命中", reason: "隔離回測；非正式候選",
+    state: "回測條件命中，非正式候選", stateId: "watch", stateLabel: "回測觀察",
+    formalCandidate: false, FormalEntry: false, observation: true,
+    scanMode: "strategy2_v3_diagnostic_replay", eventOrigin: "strategy2_v3_diagnostic_replay",
+    observationKind: "strategy2_v3_diagnostic_replay",
+  }));
+  const replayPayload = {
+    ok: true, strategy: "strategy2", version: "v3", strategyContract: "strategy2-live-v3",
+    waterContract: waterReader.CONTRACT, runId, dataDate: tradeDate, date: tradeDate, tradeDate,
+    updatedAt: report.generatedAt, trigger: "isolated_read_only_method_replay", status: "diagnostic_replay",
+    complete: false, qualityStatus: "diagnostic_replay", unattendedStatus: "NO",
+    formalDisplayAllowed: false, publishAllowed: false, latestOverwriteAllowed: false,
+    preservePreviousGood: false, fallbackUsed: false, reason: "strategy2_isolated_backtest_visible_not_formal",
+    expectedCount: water.poolRows, scannedCount: symbols.length, resultCount: replayRows.length, count: replayRows.length,
+    readbackCount: replayRows.length, dataGapCount: symbols.length - readySymbols.length,
+    currentCandidates: replayRows, records: replayRows, diagnosticReplay: true, replayDisplayAllowed: report.ok,
+    replayReferenceAt: replayRows.at(-1)?.entryAt || "", displayBlockReason: "策略2隔離回測：非正式、不發布、不寫入 /88 績效",
+    sourceCoverage: { ...report.source, coverageGrade: report.coverage.grade, replayCoverageRatio },
+    transport: { source: "strategy2-isolated-backtest", snapshotKey: REPLAY_SNAPSHOT_KEY, runId },
+  };
+  report.replay = { runId, snapshotKey: REPLAY_SNAPSHOT_KEY, published: false };
+  if (publishDiagnostic) {
+    const snapshot = await upsertSnapshot(REPLAY_SNAPSHOT_KEY, terminalSnapshotPayload(replayPayload), {
+      tradeDate: tradeDate.replace(/\D/g, ""), snapshotId: runId,
+      source: "strategy2-isolated-backtest-diagnostic", reason: replayPayload.reason, timeoutMs: 20000,
+    });
+    if (snapshot.ok !== true) throw new Error(`strategy2_diagnostic_snapshot_write_failed:${snapshot.reason || "unknown"}`);
+    report.replay = { runId, snapshotKey: REPLAY_SNAPSHOT_KEY, published: true, snapshot };
+  }
   writeJson(output, report);
-  console.log(JSON.stringify({ ok: report.ok, tradeDate, poolRows: report.source.poolRows, quoteRows: report.source.quoteRows, candleRows: report.source.candleRows, ready35: report.coverage.symbolsReady35, evaluatedMinutes: report.evaluatedMinutes, hits: report.cooldownDedupedHits, methodCounts, output }, null, 2));
+  console.log(JSON.stringify({ ok: report.ok, tradeDate, runId, diagnosticPublished: report.replay.published, poolRows: report.source.poolRows, quoteRows: report.source.quoteRows, candleRows: report.source.candleRows, ready35: report.coverage.symbolsReady35, evaluatedMinutes: report.evaluatedMinutes, hits: report.cooldownDedupedHits, methodCounts, output }, null, 2));
   if (!report.ok) process.exitCode = 1;
 }
 
