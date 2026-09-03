@@ -66,7 +66,9 @@ if ($finmindExit -ne 0) {
   Write-Log "FinMind chip sync failed; continuing to official source gap fill"
 }
 $officialExit = Invoke-NpmScript "TWSE/TPEx official chip gap fill" "sync:official:chip"
-$env:CHIP_SOURCE_HEALTH_MAX_AGE_DAYS = "0"
+# Margin/short data is an end-of-day source and may legitimately remain on the
+# previous effective trading day while same-day institutional rows are ready.
+$env:CHIP_SOURCE_HEALTH_MAX_AGE_DAYS = "1"
 $healthExit = Invoke-NpmScript "chip source health verification" "verify:chip-source"
 
 $warnings = @()
