@@ -456,6 +456,10 @@ function writerCodeRegressionChecks() {
       && source.includes('outside_volume_gt_inside_times_2_priority')
       && source.includes('outsideVolumeGtInsideTimes2')
       && !source.includes('outsideVolume * 2 > insideVolume'),
+    volumePolicyReceiptReadbackContract: source.includes('avg3_volume_gate_status')
+      && source.includes('outside_volume_gt_inside_times_2: row.priority_metrics?.outsideVolumeGtInsideTimes2 === true')
+      && source.includes('mother_pool_delta = motherPoolDelta')
+      && source.includes('target_symbol_diagnostics: targetSymbolDiagnostics'),
     warmingMotherPoolIncludesPending: source.includes('const warmingPendingCandidates = pendingCandidates.filter')
       && source.includes('const rankingCandidates = warmingPhase')
       && source.includes('warming_pending')

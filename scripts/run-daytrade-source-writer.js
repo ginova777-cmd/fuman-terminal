@@ -5638,6 +5638,16 @@ function updateMotherPoolDelta(result) {
       has_required_1m_window: gap.has_required_1m_window === true,
       latest_1m_time: row?.priority_metrics?.latestCandleTime || "",
       quote_age_seconds: row?.priority_metrics?.quoteAgeSeconds ?? null,
+      avg3_volume: row ? Math.round(numberValue(row.priority_metrics?.avgVolume3)) : null,
+      avg3_volume_sample_days: row ? numberValue(row.priority_metrics?.avgVolume3SampleDays) : 0,
+      avg3_volume_gate_status: !row
+        ? "not_in_current_pool"
+        : (numberValue(row.priority_metrics?.avgVolume3SampleDays) < 3
+          ? "history_pending"
+          : (numberValue(row.priority_metrics?.avgVolume3) >= MOTHER_POOL_MIN_AVG_VOLUME3_LOTS ? "pass" : "below_3000_lots")),
+      inside_volume: row ? Math.round(numberValue(row.priority_metrics?.insideVolume)) : null,
+      outside_volume: row ? Math.round(numberValue(row.priority_metrics?.outsideVolume)) : null,
+      outside_volume_gt_inside_times_2: row?.priority_metrics?.outsideVolumeGtInsideTimes2 === true,
       formal_gate_blocked: payload.formal_entry_allowed !== true,
       blocked_reason: payload.formal_entry_allowed === true ? "" : payload.reason_code || payload.gate_status || "formal_gate_not_ready",
     };
@@ -5696,6 +5706,14 @@ function updateMotherPoolDelta(result) {
         score: row.entry_score,
         entry_score: row.entry_score,
         upgrade_score: row.upgrade_score,
+        avg3_volume: Math.round(numberValue(row.priority_metrics?.avgVolume3)),
+        avg3_volume_sample_days: numberValue(row.priority_metrics?.avgVolume3SampleDays),
+        avg3_volume_gate_status: numberValue(row.priority_metrics?.avgVolume3SampleDays) < 3
+          ? "history_pending"
+          : (numberValue(row.priority_metrics?.avgVolume3) >= MOTHER_POOL_MIN_AVG_VOLUME3_LOTS ? "pass" : "below_3000_lots"),
+        inside_volume: Math.round(numberValue(row.priority_metrics?.insideVolume)),
+        outside_volume: Math.round(numberValue(row.priority_metrics?.outsideVolume)),
+        outside_volume_gt_inside_times_2: row.priority_metrics?.outsideVolumeGtInsideTimes2 === true,
         score_history: history,
         first_seen_at: row.first_seen_at,
       };
