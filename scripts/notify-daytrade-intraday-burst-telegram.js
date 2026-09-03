@@ -115,6 +115,9 @@ function writeReceiptWithHistory(receipt) {
   };
   // A later out-of-window pass is informational; it cannot erase a proven same-day send.
   if (receipt.sent_events.length > 0 && receipt.first_blocker === "outside_trading_window") receipt.first_blocker = null;
+  receipt.complete = true;
+  receipt.status = receipt.ok === true ? "complete" : "failed";
+  receipt.finished_at = new Date().toISOString();
   writeJson(file, receipt);
 }
 function validEvent(event, tradeDate, nowMs) {
@@ -139,14 +142,15 @@ function validEvent(event, tradeDate, nowMs) {
   return failures;
 }
 async function notifyFromOutbox(options = {}) {
-  const checkedAt = new Date().toISOString();
+  const startedAt = new Date().toISOString();
+  const checkedAt = startedAt;
   const nowMs = Date.now();
   const tradeDate = options.tradeDate || taipeiDate();
   const outbox = readJson(OUTBOX_FILE, {});
   const receipt = {
-    ok: false, contract: "daytrade_intraday_burst_telegram_v1", trade_date: tradeDate, checked_at: checkedAt,
+    ok: false, complete: false, status: "running", contract: "daytrade_intraday_burst_telegram_v1", trade_date: tradeDate, checked_at: checkedAt, started_at: startedAt, finished_at: null,
     source: "fugle_formal_1m", alert_scope: "strategy2_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage",
-    conditions: { price_breakout: "latest_1m_close >= prior_rolling60_high_close * 1.01", volume_burst: "latest_1m_volume >= prior_rolling60_average_volume * 2", min_rolling_samples: 20 },
+    conditions: { price_breakout: "latest_1m_close >= prior_rolling60_high_close * 1.01", volume_burst: "latest_1m_volume >= prior_rolling60_average_volume * 2", min_rolling_samples: 60, technical_cross_any: ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"] },
     detected_events: 0, sent_events: [], skipped_events: [], first_blocker: null,
   };
   if (String(outbox.trade_date || "") !== tradeDate) {

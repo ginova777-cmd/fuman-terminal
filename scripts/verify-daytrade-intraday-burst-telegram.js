@@ -12,6 +12,7 @@ const runnerFile = path.join(ROOT, "run-daytrade-intraday-burst-telegram.ps1");
 const installerFile = path.join(ROOT, "scripts", "install-daytrade-intraday-burst-telegram-task.ps1");
 const outboxFile = path.join(RUNTIME_ROOT, "state", "daytrade-intraday-burst-telegram-outbox.json");
 const receiptFile = path.join(RUNTIME_ROOT, "data", "scan-receipts", "daytrade-intraday-burst-telegram-" + taipeiDate().replace(/-/g, "") + ".json");
+const runnerReceiptFile = path.join(RUNTIME_ROOT, "data", "scan-receipts", "daytrade-intraday-burst-telegram-runner-" + taipeiDate().replace(/-/g, "") + ".json");
 
 function read(file) {
   try { return fs.readFileSync(file, "utf8"); } catch { return ""; }
@@ -66,6 +67,16 @@ const checks = {
     "strategy2_mother_pool_only_0900_1230",
   ]),
   dedicated_task_contract: includesAll(runner, ["notify-daytrade-intraday-burst-telegram.js"]) && includesAll(installer, ["Fuman Mother Pool Telegram 0900-1230", "<Interval>PT1M</Interval>", "<Duration>PT3H31M</Duration>", "<StopAtDurationEnd>true</StopAtDurationEnd>", "<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>", "<LogonType>S4U</LogonType>", "<RunLevel>HighestAvailable</RunLevel>", "<Monday />", "<Friday />", "Register-ScheduledTask -TaskName $TaskName -Xml $taskXml -Force"]),
+  runner_receipt_contract: includesAll(runner, [
+    "daytrade_intraday_burst_telegram_runner_v1",
+    "daytrade-intraday-burst-telegram-runner-",
+    "started_at = $startedAt",
+    "finished_at = $finishedAt",
+    "exit_code = $exitCode",
+    "notifier_receipt_path",
+    "Move-Item -LiteralPath $temporaryFile -Destination $receiptFile -Force",
+    "exit $exitCode",
+  ]),
   outbox_hooked_after_delta: includesAll(writer, [
     "const burstRows = priorityRows;",
     "writeIntradayBurstTelegramOutbox(burstRows, tradeDate, checkedAt, runId, result?.quoteMap)",
@@ -174,6 +185,13 @@ const checks = {
     "send_result: \"sent\"",
     "const attemptSentCount",
     "sent_events: attemptSentCount",
+    "complete: false",
+    'status: "running"',
+    "receipt.complete = true",
+    'receipt.status = receipt.ok === true ? "complete" : "failed"',
+    "receipt.finished_at = new Date().toISOString()",
+    "min_rolling_samples: 60",
+    "technical_cross_any",
   ]),
 };
 
@@ -187,6 +205,7 @@ if (requireLive) {
 
 const outbox = readJson(outboxFile);
 const receipt = readJson(receiptFile);
+const runnerReceipt = readJson(runnerReceiptFile);
 const receiptSentEvents = Array.isArray(receipt?.sent_events) ? receipt.sent_events : [];
 const receiptEventKeys = receiptSentEvents.map((event) => String(event?.event_key || ""));
 const expectedAlertScope = "strategy2_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage";
@@ -212,6 +231,16 @@ checks.runtime_receipt_count_matches = !receipt || Number(receipt?.sent_event_co
 if (requireToday) {
   checks.runtime_today_outbox_present = Boolean(outbox) && String(outbox?.trade_date || "") === taipeiDate();
   checks.runtime_today_receipt_present = Boolean(receipt) && String(receipt?.trade_date || "") === taipeiDate();
+  checks.runtime_today_runner_receipt_present = Boolean(runnerReceipt) && String(runnerReceipt?.trade_date || "") === taipeiDate();
+  checks.runtime_today_runner_receipt_complete = !runnerReceipt || (
+    runnerReceipt?.contract === "daytrade_intraday_burst_telegram_runner_v1"
+    && runnerReceipt?.complete === true
+    && runnerReceipt?.status === "complete"
+    && Number(runnerReceipt?.exit_code) === 0
+    && Boolean(runnerReceipt?.started_at)
+    && Boolean(runnerReceipt?.finished_at)
+    && String(runnerReceipt?.notifier_receipt_path || "").toLowerCase() === receiptFile.toLowerCase()
+  );
   checks.runtime_no_send_after_1230 = !receipt || receiptSentEvents.every((event) => taipeiMinutesFromIso(event?.sent_at) <= 750);
   checks.runtime_today_technical_indicator_readback_present = Array.isArray(outbox?.technical_indicator_readback) && outbox.technical_indicator_readback.length > 0;
   checks.runtime_today_events_require_technical_cross = outboxEvents.every((event) =>
@@ -265,6 +294,10 @@ const runtime = {
   receipt_event_keys_unique: checks.runtime_receipt_event_keys_unique,
   receipt_canonical_fields: checks.runtime_receipt_canonical_fields,
   receipt_last_attempt_sent_events: Number(receipt?.last_attempt?.sent_events || 0),
+  runner_receipt_path: runnerReceiptFile,
+  runner_receipt_exists: Boolean(runnerReceipt),
+  runner_receipt_status: runnerReceipt?.status || null,
+  runner_receipt_exit_code: Number.isFinite(Number(runnerReceipt?.exit_code)) ? Number(runnerReceipt.exit_code) : null,
   strict_burst_event_count: Number.isFinite(Number(outbox?.strict_burst_event_count)) ? Number(outbox.strict_burst_event_count) : null,
   hot_rank_fallback_event_count: Number.isFinite(Number(outbox?.hot_rank_fallback_event_count)) ? Number(outbox.hot_rank_fallback_event_count) : null,
   candidate_count: candidateCount,
