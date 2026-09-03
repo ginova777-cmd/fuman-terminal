@@ -256,6 +256,7 @@ const FILES = [
   "scripts/verify-production-mirror-guard.js",
   "scripts/verify-final-readonly.js",
   "scripts/verify-retired-artifacts-clean.js",
+  "scripts/verify-terminal-retired-formal-entrypoints.js",
   "scripts/verify-mobile-health.js",
   "scripts/verify-mobile-layout.js",
   "scripts/verify-mobile-entry-redirect.js",

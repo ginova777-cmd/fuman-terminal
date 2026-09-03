@@ -12,6 +12,26 @@ function add(ok, code, detail = "") {
   checks.push({ ok, code, detail });
 }
 
+const retiredDaytradeEntrypoints = [
+  "FugleDayTradeScanner.ps1",
+  "Watch-FugleSupabaseCoverage.ps1",
+];
+for (const retired of retiredDaytradeEntrypoints) {
+  add(!fs.existsSync(path.join(root, retired)), "legacy_daytrade_entrypoint_absent", retired);
+  add(!fs.existsSync(path.join(root, "scripts", retired)), "legacy_daytrade_script_absent", retired);
+}
+for (const activeContractFile of [
+  "package.json",
+  "run-terminal-master-control.ps1",
+  "scripts/fuman-schedule-registry.json",
+  "scripts/sync-main-deploy-source.js",
+]) {
+  const source = read(activeContractFile);
+  for (const retired of retiredDaytradeEntrypoints) {
+    add(!source.includes(retired), "legacy_daytrade_reference_absent", `${activeContractFile}:${retired}`);
+  }
+}
+
 const scorecardPage = read("88.html");
 add(!/keyOrder\s*=\s*\[[^\]]*(strategy1|realtime-radar)/i.test(scorecardPage), "scorecard_key_order_retired_removed");
 add(!/normalized\.includes\("策略1"\)/.test(scorecardPage), "scorecard_strategy1_alias_removed");
