@@ -37,6 +37,22 @@ When the user asks for a complete scan / fresh / readiness / UI / health / immed
 
 Do not answer from terminal appearance alone. The receipts, snapshot contract, UI E2E, health, readiness, and schedule must agree.
 
+## Codex One-Request Completion Contract
+
+For every strategy and data-backed terminal module, a user request such as `處理好`, `完整掃描`, `三端閉環`, or `一次處理到好` is a terminal-condition request. Codex must keep diagnosing, repairing, retrying bounded transient failures, publishing through the approved path, and verifying until the affected strategy receipt proves `status=complete`, `complete=true`, and `exitCode=0`.
+
+The required single-request chain is:
+
+```text
+runner -> authoritative DB/API readback -> desktop snapshot -> mobile fragment -> /88 fixed-slot collector or audited recovery -> tri-surface verifier -> canonical verifier -> final receipt
+```
+
+Completion additionally requires the authoritative runId to equal `desktopRunId`, `mobileRunId`, and `scorecardRunId`; `triSurfaceStatus=complete`; `blockingReason` empty; no fallback; and full scan totals distinct from display/readback limits. Codex must not ask the user to run individual PowerShell scripts, manually edit `/88`, manually alter receipts, or execute verifiers one by one.
+
+Normal execution and audited recovery must remain within the same strategy runner. Recovery may reuse only an already complete authoritative run with independently matching desktop/mobile evidence; it must never fabricate rows, generate a replacement runId, bypass source-quality gates, or convert an incomplete scan into complete.
+
+Codex may stop short of completion only for a new permission requirement, a destructive or irreversible action, a confirmed external outage after bounded retries, or a materially ambiguous business decision. In that case it must preserve the last good publication and report the exact blocking receipt and required authority. These rules apply to Strategy1/open-buy, Strategy2, Strategy3, Strategy4, Strategy5, institution/chip, warrant-flow, CB-detect, realtime radar, watchlist, and future strategies.
+
 ## All-Terminal UI Acceptance
 
 UI acceptance must cover every terminal route and every data-backed strategy surface touched by the change. Do not validate only the data contract, JSON schema, row counts, scan receipt, snapshot contract, or Supabase readback. The actual rendered desktop and mobile UI must also be verified.
