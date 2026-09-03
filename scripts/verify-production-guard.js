@@ -57,6 +57,7 @@ const warnings = [];
 const deploySafe = read("scripts/deploy-production-safe.js");
 for (const marker of [
   "FUMAN_PRODUCTION_WINDOW_GO",
+  "FUMAN_RELEASE_OWNER_EMERGENCY_GO",
   "FUMAN_APPROVED_DEPLOY_SOURCE_ROOT",
   "legacy_fuman_terminal_deploy_root_forbidden",
   "production_deploy_outside_2200_window",
