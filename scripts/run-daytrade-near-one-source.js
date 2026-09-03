@@ -307,7 +307,10 @@ function selectQuote(byFuture, contract, tradeDate) {
 
 function trialFromSnapshot(row) {
   if (!row) return null;
-  const trial = numberValue(row.trial_price ?? row.payload?.trialPrice ?? row.payload?.trial_price);
+  const rawTrial = numberValue(row.trial_price ?? row.payload?.trialPrice ?? row.payload?.trial_price);
+  // A zero trial price means the auction source has not produced a usable
+  // price. Keep it null so it cannot be misclassified as a positive basis.
+  const trial = rawTrial !== null && rawTrial > 0 ? rawTrial : null;
   const ref = numberValue(row.reference_price ?? row.payload?.referencePrice ?? row.payload?.reference_price);
   const trialChange = numberValue(row.trial_change_pct ?? row.payload?.trialChangePercent ?? row.payload?.trial_change_pct);
   return {
@@ -473,6 +476,9 @@ async function runOnce() {
 async function main() {
   if (!acquireLock()) {
     console.log(JSON.stringify({ ok: false, status: "already_running", lockFile: LOCK_FILE }));
+    // The preopen evidence wrapper retries only non-zero producer exits.
+    // EX_TEMPFAIL (75) marks this as transient lock contention.
+    process.exitCode = 75;
     return;
   }
   try {
