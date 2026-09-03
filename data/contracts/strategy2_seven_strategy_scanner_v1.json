@@ -1,0 +1,20 @@
+{
+  "contract": "strategy2-scanner-v1",
+  "authority": "strategy2_intraday_method_contract_20260903",
+  "formalEntryCutoffTaipei": "12:00",
+  "quoteFormalMaxAgeSeconds": 120,
+  "candleFormalMaxAgeSeconds": 120,
+  "hardBlockAgeSeconds": 180,
+  "minimumCandles": 35,
+  "minimumEstimatedVolumeRatio": 1,
+  "minimumPrice": 50,
+  "coverageGrades": {
+    "A": { "minimum": 0.9, "formalAllowed": true },
+    "B": { "minimum": 0.7, "formalAllowed": false, "observationAllowed": true },
+    "C": { "minimum": 0, "formalAllowed": false, "observationAllowed": false }
+  },
+  "requiredWater": ["tradeDate", "canonicalRunId", "motherPoolEligibility", "quote", "intraday1mOhlcv", "dailyVolumeAverage", "previousDayHighLow", "canonicalGate", "stockFutureNearMonth", "txfBenchmark", "preopenTrial"],
+  "formalRules": ["opening_breakout", "pullback_second_entry", "ppp_pullback", "shotgun_reversal", "bird_beak", "n_pattern", "w_bottom", "fib_support_or_breakout", "three_gate_retest_or_breakout"],
+  "observationOnlyRules": ["volume_price_strengthening", "star_preopen", "stock_future_txf_sync", "single_indicator", "degraded_trial"],
+  "forbidden": ["legacy_v3_volume_breakout_authority", "jiang_primary_signal_authority", "top40_gate", "previous_good_as_today", "mass_fugle_rest_fallback", "future_data_lookahead"]
+}

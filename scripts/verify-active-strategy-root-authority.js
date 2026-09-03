@@ -18,7 +18,7 @@ const ACTIVE_FILES = [
   "run-strategy4-source-prewarm.ps1",
   "scripts/strategy3-v2-contract.js",
   "scripts/verify-strategy3-v2-daily-unattended-closure.js",
-  "scripts/verify-strategy2-v3-water.js",
+  "scripts/verify-strategy2-seven-strategy-contract.js",
   "scripts/verify-strategy2-v3-live-closure.js",
   "scripts/verify-strategy4-postscan-closure.js",
   "scripts/verify-strategy4-88-data-chain.js",

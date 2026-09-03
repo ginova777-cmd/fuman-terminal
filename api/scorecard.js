@@ -409,12 +409,17 @@ async function callStrategy2Latest(timeoutMs = Number(process.env.STRATEGY2_SCOR
   // wrapper or membership transport from dropping formal fields between the
   // scanner and scorecard. The predicate below remains fail-closed.
   const today = taipeiDateKey();
-  const snapshot = await readSnapshot("strategy2_live_v3", {
-    tradeDate: today.replace(/\D/g, ""),
-    allowLatestFallback: false,
-    timeoutMs,
-  }).catch(() => null);
-  const payload = snapshot?.payload && typeof snapshot.payload === "object" ? snapshot.payload : null;
+  const options = { tradeDate: today.replace(/\D/g, ""), allowLatestFallback: false, timeoutMs };
+  const [snapshot, replaySnapshot] = await Promise.all([
+    readSnapshot("strategy2_live_v3", options).catch(() => null),
+    readSnapshot("strategy2_live_v3_diagnostic_replay", options).catch(() => null),
+  ]);
+  const formalPayload = snapshot?.payload && typeof snapshot.payload === "object" ? snapshot.payload : null;
+  const replayPayload = replaySnapshot?.payload && typeof replaySnapshot.payload === "object" ? replaySnapshot.payload : null;
+  const formalComplete = formalPayload?.status === "complete" && formalPayload?.complete === true && formalPayload?.publishAllowed === true;
+  const replayVisible = replayPayload?.status === "diagnostic_replay" && replayPayload?.diagnosticReplay === true
+    && replayPayload?.replayDisplayAllowed === true && replayPayload?.publishAllowed === false;
+  const payload = formalComplete ? formalPayload : replayVisible ? replayPayload : formalPayload;
   if (!payload) {
     return {
       statusCode: 504,
@@ -425,7 +430,7 @@ async function callStrategy2Latest(timeoutMs = Number(process.env.STRATEGY2_SCOR
     statusCode: 200,
     payload: {
       ...payload,
-      transport: { ...(payload.transport || {}), source: "supabase:market_snapshots:strategy2_live_v3", via: "api/scorecard" },
+      transport: { ...(payload.transport || {}), source: replayVisible && !formalComplete ? "supabase:market_snapshots:strategy2_live_v3_diagnostic_replay" : "supabase:market_snapshots:strategy2_live_v3", via: "api/scorecard" },
     },
   };
 }
@@ -853,12 +858,15 @@ function buildStrategy2SourceReport(result) {
   const date = cleanText(payload.dataDate || payload.tradeDate || payload.date);
   const isToday = compactDate(date) === today;
   const isBlockedEvidence = payload.status === "blocked" && payload.displayOnlyBlockedEvidence === true && isToday;
-  const isFormalV3 = payload.strategyContract === "strategy2-live-v3-fugle-deep-scan-1m"
+  const isDiagnosticReplay = payload.status === "diagnostic_replay" && payload.diagnosticReplay === true
+    && payload.replayDisplayAllowed === true && payload.publishAllowed === false && isToday;
+  const isFormalV3 = payload.strategyContract === "strategy2-live-v3"
     && payload.status === "complete"
     && payload.complete === true
     && payload.publishAllowed === true
     && isToday
     && /^strategy2-v3-live-/.test(runId);
+  const blockedReason = isFormalV3 ? "" : cleanText(payload.displayBlockReason || payload.reason || "strategy2_v3_requires_today_complete_finalization");
   return {
     key: "strategy2",
     strategy: "策略2成績單",
@@ -866,10 +874,11 @@ function buildStrategy2SourceReport(result) {
     statusCode: Number(result?.statusCode || 0) || 0,
     ok: Number(result?.statusCode || 0) < 400 && isFormalV3,
     runId,
+    terminalSourceRunId: runId,
     count: cleanNumber(payload.count ?? payload.resultCount ?? payload.total),
     emittedRows: Array.isArray(payload.rows) ? payload.rows.length : Array.isArray(payload.matches) ? payload.matches.length : cleanNumber(payload.snapshotRecordCount ?? payload.readbackCount ?? payload.resultCount),
     date,
-    evidenceStatus: isFormalV3 ? "complete" : isBlockedEvidence ? "blocked" : "not_formal_v3_complete",
+    evidenceStatus: isFormalV3 ? "complete" : isDiagnosticReplay ? "diagnostic_replay" : isBlockedEvidence ? "blocked" : "not_formal_v3_complete",
     expectedCount: cleanNumber(payload.expectedCount),
     scannedCount: cleanNumber(payload.scannedCount),
     resultCount: cleanNumber(payload.resultCount),
@@ -879,8 +888,22 @@ function buildStrategy2SourceReport(result) {
     latestOverwriteAllowed: isFormalV3,
     preservePreviousGood: false,
     fallbackUsed: false,
-    blockedReason: isFormalV3 ? "" : cleanText(payload.displayBlockReason || payload.reason || "strategy2_v3_requires_today_complete_finalization"),
-    reason: isFormalV3 ? "strategy2_v3_formal_scorecard_source" : isBlockedEvidence ? "strategy2_v3_blocked_evidence_visible_no_scorecard_records" : "strategy2_v3_not_formal_or_not_today_no_scorecard_records",
+    blockedReason,
+    blocking_reason: blockedReason,
+    firstBlocker: isFormalV3 ? "" : isDiagnosticReplay ? "diagnostic_replay_nonformal" : blockedReason,
+    source: isDiagnosticReplay ? "supabase:market_snapshots:strategy2_live_v3_diagnostic_replay" : "supabase:market_snapshots:strategy2_live_v3",
+    collectionContract: isDiagnosticReplay ? "strategy2-diagnostic-tri-surface-v1" : "strategy2_v3_afternoon_scorecard_import_v1",
+    querySupabase: true,
+    recalculated: false,
+    generatedRunId: false,
+    rowAuditSignatures: isDiagnosticReplay ? [] : undefined,
+    rowAuditSignatureCount: isDiagnosticReplay ? 0 : undefined,
+    rowAuditSignatureComplete: isDiagnosticReplay ? false : undefined,
+    rowAuditSignatureSource: isDiagnosticReplay ? "diagnostic_replay_no_formal_rows" : undefined,
+    candidateSignatures: isDiagnosticReplay ? [] : undefined,
+    candidateSignatureCount: isDiagnosticReplay ? 0 : undefined,
+    candidateSignatureSource: isDiagnosticReplay ? "diagnostic_replay_no_formal_rows" : undefined,
+    reason: isFormalV3 ? "strategy2_v3_formal_scorecard_source" : isDiagnosticReplay ? "strategy2_v3_diagnostic_replay_visible_no_scorecard_records" : isBlockedEvidence ? "strategy2_v3_blocked_evidence_visible_no_scorecard_records" : "strategy2_v3_not_formal_or_not_today_no_scorecard_records",
   };
 }
 function isStrategy2ScorecardImportComplete(payload, liveReport) {
@@ -1821,7 +1844,12 @@ async function buildPayload(requestedDate = "", options = {}) {
   const terminalSnapshot = await readTerminalCanonicalSnapshot("terminal_fixed_slot_snapshot");
   const fixedSlotPayload = requestedDate ? selectPayloadDate(terminalSnapshot, requestedDate) : terminalSnapshot;
   fixedSlotPayload.cacheSource = "terminal-canonical-json";
-  return fixedSlotPayload;
+  // Keep /88 performance records fixed-slot only, but overlay today's
+  // Strategy2 status so a failed full scan can still disclose a successful
+  // isolated replay. Diagnostic replay never contributes scorecard records.
+  const fixedDisplayDate = isoDate(requestedDate || fixedSlotPayload?.selectedDate || fixedSlotPayload?.latestDate || "");
+  const fixedHistoricalSelection = Boolean(fixedDisplayDate && compactDate(fixedDisplayDate) !== taipeiDateKey());
+  return fixedHistoricalSelection ? fixedSlotPayload : selectPayloadDate(await withCurrentStrategy2V3SourceReport(fixedSlotPayload), requestedDate);
   const liveSourceReports = options.liveSourceReports === true;
   const noCache = options.noCache === true || liveSourceReports;
   const cacheKey = JSON.stringify({ requestedDate, liveSourceReports });

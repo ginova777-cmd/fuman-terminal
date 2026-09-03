@@ -9,7 +9,7 @@ const mobileFragment = require("../api/mobile-fragment");
 
 const RUNTIME = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const RECEIPT = path.join(RUNTIME, "data", "scan-receipts", "strategy2-v3-replay.json");
-const CONTRACT = "strategy2-live-v3-fugle-deep-scan-1m";
+const CONTRACT = "strategy2-live-v3";
 const REPLAY_SNAPSHOT_KEY = "strategy2_live_v3_diagnostic_replay";
 
 function taipeiDate() {

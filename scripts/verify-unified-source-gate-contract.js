@@ -203,7 +203,7 @@ const apiEntries = Object.entries(API_BY_MODULE).filter(([key]) => ACTIVE_MODULE
 for (const [key, file] of apiEntries) {
   if (key === "strategy2") {
     const text = requireMarkers(file, [
-      "strategy2-live-v3-fugle-deep-scan-1m",
+      "strategy2-live-v3",
       "readV3SnapshotWithRetry",
       "allowLatestFallback: false",
     ], "strategy2 V3 API");
