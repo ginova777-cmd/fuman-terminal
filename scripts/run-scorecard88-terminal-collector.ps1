@@ -1,7 +1,10 @@
 param(
   [Parameter(Mandatory=$true)][ValidateSet('12:40','13:15','17:00','21:40')][string]$Slot,
   [string]$ProjectRoot = 'C:\fuman-release-owner\fuman-terminal',
-  [string]$RuntimeRoot = 'C:\fuman-runtime'
+  [string]$RuntimeRoot = 'C:\fuman-runtime',
+  [switch]$Recovery,
+  [string]$ExpectedRunId = '',
+  [string]$RecoveryReason = ''
 )
 $ErrorActionPreference = 'Stop'
 $env:FUMAN_RUNTIME_ROOT = $RuntimeRoot
@@ -12,7 +15,9 @@ if (-not (Test-Path -LiteralPath $surfaceEvidence)) { throw "surface_evidence_co
 if (-not (Test-Path -LiteralPath $script)) { throw "collector_missing:$script" }
 & node $surfaceEvidence "--slot=$Slot"
 $surfaceEvidenceExit = $LASTEXITCODE
-& node $script "--slot=$Slot"
+$collectorArgs = @("--slot=$Slot")
+if ($Recovery) { $collectorArgs += @('--recovery', "--expected-run-id=$ExpectedRunId", "--recovery-reason=$RecoveryReason") }
+& node $script @collectorArgs
 $collectorExit = $LASTEXITCODE
 if ($collectorExit -notin @(0,3)) { exit $collectorExit }
 if ($surfaceEvidenceExit -notin @(0,3)) { exit $surfaceEvidenceExit }

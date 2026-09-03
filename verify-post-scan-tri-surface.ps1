@@ -75,7 +75,9 @@ function Invoke-PostScanSurfacePublication {
     [Parameter(Mandatory = $true)][string]$Route,
     [Parameter(Mandatory = $true)][string]$LogPath,
     [Parameter(Mandatory = $true)][string]$NodeExe,
-    [Parameter(Mandatory = $true)][string]$RepoRoot
+    [Parameter(Mandatory = $true)][string]$RepoRoot,
+    [Parameter(Mandatory = $true)][string]$RuntimeRoot,
+    [Parameter(Mandatory = $true)][string]$RunId
   )
   $mobileTab = if ($Route -eq "institution") { "chip" } else { $Route }
   "[$Route] post-scan publication start: /88 source report + mobile fragment=$mobileTab" | Tee-Object -FilePath $LogPath -Append | Out-Null
@@ -84,6 +86,15 @@ function Invoke-PostScanSurfacePublication {
     & npm.cmd run scorecard:terminal-source *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
     $scorecardExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
     if ($scorecardExit -ne 0) { throw "scorecard source refresh exit=$scorecardExit" }
+    if ($Route -eq "strategy4") {
+      & $NodeExe "scripts\collect-scorecard88-terminal-surface-evidence.js" "--slot=17:00" *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw "scorecard88 surface evidence exit=$LASTEXITCODE" }
+      & $NodeExe "scripts\build-strategy4-recovery-evidence.js" "--run-id=$RunId" *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw "scorecard88 recovery evidence exit=$LASTEXITCODE" }
+      & (Join-Path $RepoRoot "scripts\run-scorecard88-terminal-collector.ps1") -Slot '17:00' -ProjectRoot $RepoRoot -RuntimeRoot $RuntimeRoot -Recovery -ExpectedRunId $RunId -RecoveryReason 'post_scan_tri_surface_recovery' *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
+      $collectorExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+      if ($collectorExit -ne 0) { throw "scorecard88 recovery collector exit=$collectorExit" }
+    }
     & $NodeExe "--use-system-ca" "scripts\publish-mobile-fragment-snapshots.js" "--tabs=$mobileTab" *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
     $mobileExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
     if ($mobileExit -ne 0) { throw "mobile fragment publish exit=$mobileExit tab=$mobileTab" }
@@ -106,7 +117,12 @@ function Assert-PostScanTriSurfaceClosure {
   $reportPath = Join-Path $outDir "terminal-resource-chain-audit.json"
   $nodeExe = if ($env:NODE_EXE) { $env:NODE_EXE } else { "node" }
   $lastError = ""
-  Invoke-PostScanSurfacePublication -Route $Route -LogPath $LogPath -NodeExe $nodeExe -RepoRoot $repoRoot
+  New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+  Push-Location $repoRoot
+  try {
+    & $nodeExe "scripts\verify-terminal-resource-chain.js" "--routes=$Route" "--expected-date=$expectedDate" "--require-unattended" "--out=$outDir" *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
+  } finally { Pop-Location }
+  Invoke-PostScanSurfacePublication -Route $Route -LogPath $LogPath -NodeExe $nodeExe -RepoRoot $repoRoot -RuntimeRoot $runtimeRoot -RunId $RunId
 
   for ($attempt = 1; $attempt -le 6; $attempt++) {
     New-Item -ItemType Directory -Force -Path $outDir | Out-Null

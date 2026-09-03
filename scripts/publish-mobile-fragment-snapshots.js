@@ -4,7 +4,10 @@ const { resolveProtectedReadbackCredential } = require("../lib/protected-readbac
 const AUTH_URL = "https://jxnqyqnigsppqsxinlrq.supabase.co";
 const AUTH_KEY = "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
 const BASE_URL = (process.env.FUMAN_PRODUCTION_URL || process.env.FUMAN_TERMINAL_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
-const TABS = ["strategy2", "strategy3", "strategy4", "strategy5", "chip"];
+const ALL_TABS = ["strategy2", "strategy3", "strategy4", "strategy5", "chip"];
+const requestedTabs = String(process.argv.find((arg) => arg.startsWith("--tabs=")) || "").split("=")[1] || "";
+const TABS = requestedTabs ? requestedTabs.split(",").map((value) => value.trim()).filter((value) => ALL_TABS.includes(value)) : ALL_TABS;
+if (!TABS.length) throw new Error("no_valid_mobile_fragment_tabs_requested");
 
 function required(value, name) {
   const text = String(value || "").trim();

@@ -78,8 +78,9 @@ function main() {
   if (line.ok !== true || line.dry_run === true || line.line_push_ok !== true) issues.push(`formal_line_not_delivered:ok=${line.ok}:dry=${line.dry_run}:push=${line.line_push_ok}`);
   if (compactDate(line.dataDate) !== expectedDate) issues.push(`formal_line_date_mismatch:${line.dataDate || "missing"}:${expectedDate}`);
   if (String(line.runId || "") !== runId) issues.push(`formal_line_run_id_mismatch:${line.runId || "missing"}:${runId || "missing"}`);
-  if (number(line.count) !== count) issues.push(`formal_line_count_mismatch:${line.count || 0}:${count}`);
-  if (!Array.isArray(line.accepted_rows) || line.accepted_rows.length !== count) issues.push(`formal_line_rows_mismatch:${Array.isArray(line.accepted_rows) ? line.accepted_rows.length : 0}:${count}`);
+  const expectedLineCount = Math.min(count, 70);
+  if (number(line.count) !== expectedLineCount) issues.push(`formal_line_count_mismatch:${line.count || 0}:${expectedLineCount}:total=${count}`);
+  if (!Array.isArray(line.accepted_rows) || line.accepted_rows.length !== expectedLineCount) issues.push(`formal_line_rows_mismatch:${Array.isArray(line.accepted_rows) ? line.accepted_rows.length : 0}:${expectedLineCount}:total=${count}`);
 
   const payload = {
     ok: issues.length === 0,

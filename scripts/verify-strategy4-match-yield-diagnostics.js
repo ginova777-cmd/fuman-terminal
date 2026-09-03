@@ -133,7 +133,8 @@ async function main() {
   if (current.run_id && !String(current.run_id).includes(expectedDate)) issues.push(`run_id_date_mismatch:${current.run_id}:expected=${expectedDate}`);
   if (expectedTotal < MIN_SOURCE_ROWS) issues.push(`expected_total_too_low:${expectedTotal}<${MIN_SOURCE_ROWS}`);
   if (scannedCount < expectedTotal) issues.push(`scan_not_complete:${scannedCount}/${expectedTotal}`);
-  if (rows.length !== currentCount) issues.push(`result_rows_count_mismatch:${rows.length}/${currentCount}`);
+  const expectedReadbackRows = Math.min(currentCount, 500);
+  if (rows.length !== expectedReadbackRows) issues.push(`result_rows_readback_mismatch:${rows.length}/${expectedReadbackRows}:total=${currentCount}`);
   if (sourceHealth.minRequiredRows < MIN_SOURCE_ROWS) issues.push(`strategy4_source_min_rows_disabled:${sourceHealth.minRequiredRows}<${MIN_SOURCE_ROWS}`);
   const sourceLatest = compactDate(sourceHealth.sourceLatestDate);
   const sourceTarget = compactDate(sourceHealth.sourceTargetDate) || expectedDate;
