@@ -72,16 +72,16 @@
       "order": 9,
       "required": true,
       "receipt": "mother_pool",
-      "verifier": "scripts/verify-daytrade-mother-pool-contract.js",
-      "allowed_action": "restore_300_to_600_symbol_mother_pool_then_rerun"
+      "verifier": "scripts/verify-daytrade-mother-pool-closed-loop.js",
+      "allowed_action": "restore_dynamic_mother_pool_closed_loop_then_rerun"
     },
     {
       "key": "top40_priority_pool",
       "order": 10,
       "required": true,
       "receipt": "top40",
-      "verifier": "scripts/verify-daytrade-mother-pool-contract.js",
-      "allowed_action": "restore_top40_priority_pool_and_fresh_quote_coverage_then_rerun"
+      "verifier": "scripts/verify-daytrade-mother-pool-closed-loop.js",
+      "allowed_action": "restore_dynamic_priority_pool_and_fresh_quote_coverage_then_rerun"
     },
     {
       "key": "natural_evidence_0700_0845_0900",
