@@ -8,6 +8,8 @@
 )
 
 $ErrorActionPreference = "Stop"
+$env:FUMAN_TERMINAL_DIR = $TerminalDir
+$env:FUMAN_RUNTIME_DIR = $RuntimeDir
 
 function Resolve-NodeExe {
   $preferred = "C:\Program Files\nodejs\node.exe"
@@ -144,7 +146,8 @@ try {
   $futoptSlots = [ordered]@{}
   foreach ($slot in @("0845", "0850")) {
     # Natural evidence is read only after its scheduled capture slot exists.
-    Wait-UntilTaipeiTime -HHmmss ("{0}:00" -f $slot)
+    $slotTime = "{0}:{1}:00" -f $slot.Substring(0, 2), $slot.Substring(2, 2)
+    Wait-UntilTaipeiTime -HHmmss $slotTime
     $slotPath = $futoptSlotPaths[$slot]
     $slotReceipt = Read-JsonFile -Path $slotPath
     $slotOk = ($slotReceipt -and $slotReceipt.ok -eq $true)

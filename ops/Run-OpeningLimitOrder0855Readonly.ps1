@@ -8,6 +8,8 @@
 )
 
 $ErrorActionPreference = "Stop"
+$env:FUMAN_TERMINAL_DIR = $TerminalDir
+$env:FUMAN_RUNTIME_DIR = $RuntimeDir
 
 function Resolve-NodeExe {
   $preferred = "C:\Program Files\nodejs\node.exe"
