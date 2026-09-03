@@ -39,7 +39,12 @@ function assertApprovedProductionWindow() {
   if (!approvedRoot || approvedRoot !== actualRoot) throw new Error(`approved_deploy_source_mismatch approved=${approvedRoot || "(missing)"} actual=${actualRoot}`);
   if (actualRoot === LEGACY_DEPLOY_ROOT) throw new Error("legacy_fuman_terminal_deploy_root_forbidden");
   const minute = taipeiClock();
-  if (minute < 22 * 60 || minute >= 22 * 60 + 30) throw new Error("production_deploy_outside_2200_window");
+  const insideScheduledWindow = minute >= 22 * 60 && minute < 22 * 60 + 30;
+  const releaseOwnerEmergencyGo = process.env.FUMAN_RELEASE_OWNER_EMERGENCY_GO === "1";
+  if (!insideScheduledWindow && !releaseOwnerEmergencyGo) throw new Error("production_deploy_outside_2200_window");
+  if (!insideScheduledWindow) {
+    console.warn("[deploy-safe] release-owner emergency deployment approved outside 2200 window");
+  }
   const status = git(["status", "--porcelain"]);
   if (status) throw new Error("approved_deploy_source_not_clean");
   const head = git(["rev-parse", "HEAD"]);
