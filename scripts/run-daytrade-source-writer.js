@@ -2603,6 +2603,18 @@ function compactDateKey(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
 }
 
+function canonicalDaytradeRunId(tradeDate = taipeiDate()) {
+  return `fugle_daytrade_source:${compactDateKey(tradeDate)}:canonical`;
+}
+
+function artifactTradeDate(value) {
+  return String(value?.tradeDate || value?.trade_date || value?.date || "").slice(0, 10);
+}
+
+function sameDayArtifact(value, tradeDate = taipeiDate()) {
+  return Boolean(value && typeof value === "object" && artifactTradeDate(value) === tradeDate);
+}
+
 function strategyPriorityRunValidation(run) {
   const payload = objectPayload(run?.payload);
   const status = String(run?.status || payload.status || "").trim().toLowerCase();
@@ -2793,8 +2805,18 @@ function buildFormalStrategyChipArtifact(bridge, formalPrioritySymbols = [], fal
 
 function mergeStrategyPriorityBridgeIntoRuntimeFile(bridge) {
   const existing = readJson(PRIORITY_SYMBOLS_FILE, {});
+  const tradeDate = taipeiDate();
+  const canonicalRunId = canonicalDaytradeRunId(tradeDate);
+  const currentExisting = sameDayArtifact(existing, tradeDate)
+    && String(existing.canonicalRunId || existing.canonical_run_id || "") === canonicalRunId
+    ? existing
+    : {};
   const next = {
-    ...existing,
+    ...currentExisting,
+    tradeDate,
+    canonicalRunId,
+    trade_date: tradeDate,
+    canonical_run_id: canonicalRunId,
     priorityBridge: {
       schemaVersion: bridge.schemaVersion,
       source: bridge.source,
@@ -2806,8 +2828,8 @@ function mergeStrategyPriorityBridgeIntoRuntimeFile(bridge) {
     },
     formalPriorityStrategyChip: buildFormalStrategyChipArtifact(
       bridge,
-      existing.daytradeFormalPrioritySymbols || [],
-      bridge.tradeDate || taipeiDate(),
+      currentExisting.daytradeFormalPrioritySymbols || [],
+      tradeDate,
     ),
   };
   for (const source of STRATEGY_PRIORITY_BRIDGE_SOURCES) {
@@ -2823,6 +2845,8 @@ function mergeStrategyPriorityBridgeIntoRuntimeFile(bridge) {
       source: "daytrade-strategy-chip-priority-bridge",
       prioritySource: "daytrade-strategy-chip-priority-bridge",
       strategyPriorityBridgeStatus: bridge.status,
+      tradeDate,
+      canonicalRunId,
     });
   } catch {}
   return true;
@@ -2865,6 +2889,7 @@ async function refreshStrategyChipPriorityBridge() {
       status: readyCount === STRATEGY_PRIORITY_BRIDGE_SOURCES.length ? "ready" : readyCount ? "partial" : errorCount === statuses.length ? "error" : "blocked",
       updatedAt: nowIso(),
       tradeDate: taipeiDate(),
+      canonicalRunId: canonicalDaytradeRunId(taipeiDate()),
       groups,
       counts: Object.fromEntries(Object.entries(groups).map(([key, group]) => [key, Array.isArray(group.symbols) ? group.symbols.length : 0])),
       readyGroups: readyCount,
@@ -2978,8 +3003,18 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
   };
 }
 function readRuntimePrioritySeeds(activeSymbols) {
-  const payload = readJson(PRIORITY_SYMBOLS_FILE, {});
-  const bridge = objectPayload(payload.priorityBridge) || readJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE, {});
+  const tradeDate = taipeiDate();
+  const canonicalRunId = canonicalDaytradeRunId(tradeDate);
+  const rawPayload = readJson(PRIORITY_SYMBOLS_FILE, {});
+  const payload = sameDayArtifact(rawPayload, tradeDate)
+    && String(rawPayload.canonicalRunId || rawPayload.canonical_run_id || "") === canonicalRunId
+    ? rawPayload
+    : {};
+  const embeddedBridge = objectPayload(payload.priorityBridge);
+  const cachedBridge = objectPayload(readJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE, {}));
+  const bridge = sameDayArtifact(embeddedBridge, tradeDate)
+    ? embeddedBridge
+    : (sameDayArtifact(cachedBridge, tradeDate) ? cachedBridge : {});
   const bridgeGroups = objectPayload(bridge.groups);
   const bridgeValues = (key) => {
     const group = objectPayload(bridgeGroups[key]);
@@ -3755,11 +3790,20 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
 
 function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
   const existing = readJson(PRIORITY_SYMBOLS_FILE, {});
+  const tradeDate = taipeiDate();
+  const canonicalRunId = canonicalDaytradeRunId(tradeDate);
+  const existingCanonicalRunId = String(existing.canonicalRunId || existing.canonical_run_id || "");
+  const currentExisting = sameDayArtifact(existing, tradeDate) && existingCanonicalRunId === canonicalRunId
+    ? existing
+    : {};
   // This function runs after the strategy/chip bridge refresh. Keep the bridge
   // from the current artifact, or recover it from its cache when another
   // source writer has just replaced the priority shell.
-  const bridgePayload = objectPayload(existing.priorityBridge)
-    || objectPayload(readJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE, {}));
+  const existingBridge = objectPayload(currentExisting.priorityBridge);
+  const cachedBridge = objectPayload(readJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE, {}));
+  const bridgePayload = sameDayArtifact(existingBridge, tradeDate)
+    ? existingBridge
+    : (sameDayArtifact(cachedBridge, tradeDate) ? cachedBridge : {});
   const bridgeGroups = objectPayload(bridgePayload?.groups);
   const bridgeFields = {};
   if (Object.keys(bridgeGroups).length > 0) {
@@ -3795,8 +3839,8 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
   const priceEligibleSymbolSet = new Set(formalPoolRows
     .map((row) => normalizeCode(row.symbol))
     .filter((code) => /^\d{4}$/.test(code)));
-  const openingReportCandlePrioritySymbols = compactDateKey(existing.openingReport0830PrewarmTradeDate) === compactDateKey(taipeiDate())
-    ? (existing.openingReport0830PrewarmSymbols || [])
+  const openingReportCandlePrioritySymbols = compactDateKey(currentExisting.openingReport0830PrewarmTradeDate) === compactDateKey(tradeDate)
+    ? (currentExisting.openingReport0830PrewarmSymbols || [])
       .map((value) => normalizeCode(value?.symbol || value?.code || value))
       .filter((code) => priceEligibleSymbolSet.has(code))
     : [];
@@ -3832,7 +3876,7 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
   const formalPriorityStrategyChip = buildFormalStrategyChipArtifact(
     bridgePayload,
     daytradeFormalPrioritySymbols,
-    bridgePayload.tradeDate || taipeiDate(),
+    tradeDate,
   );
   const strategy2FormalWaterSymbols = [...new Set(daytradeFormalPrioritySymbols)];
   const prependUnique = (preferred, values) => {
@@ -3848,8 +3892,12 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     return out;
   };
   const nextPriorityPayload = {
-    ...existing,
+    ...currentExisting,
     ...bridgeFields,
+    tradeDate,
+    canonicalRunId,
+    trade_date: tradeDate,
+    canonical_run_id: canonicalRunId,
     updatedAt: nowIso(),
     source: "daytrade-dedicated-priority-bridge",
     // Keep the complete mother pool on the WebSocket/data-rotation path.
@@ -3891,14 +3939,16 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     strategy2FormalWaterCount: strategy2FormalWaterSymbols.length,
     strategy2FormalWaterSource: "daytrade_deep_scan_pool",
     formalPriorityStrategyChip,
-    terminalPrioritySymbols: prependUnique(daytradeMotherPoolSymbols, existing.terminalPrioritySymbols || existing.terminalSymbols || existing.terminalPriority),
-    openingPrioritySymbols: prependUnique(daytradeMotherPoolSymbols, existing.openingPrioritySymbols || existing.primaryPrioritySymbols),
+    terminalPrioritySymbols: prependUnique(daytradeMotherPoolSymbols, currentExisting.terminalPrioritySymbols || currentExisting.terminalSymbols || currentExisting.terminalPriority),
+    openingPrioritySymbols: prependUnique(daytradeMotherPoolSymbols, currentExisting.openingPrioritySymbols || currentExisting.primaryPrioritySymbols),
     // Keep the complete current active universe on the live quote radar; do not carry a smaller stale list forward.
     symbols: prependUnique(daytradeMotherPoolSymbols, activeUniverseSymbols),
     activeUniverseCount: activeUniverseSymbols.length,
     activeUniverseSource: "run-daytrade-source-writer.activeSymbols",
   };
   const sameSymbols = JSON.stringify(existing.symbols || []) === JSON.stringify(nextPriorityPayload.symbols || []);
+  const sameDailyIdentity = artifactTradeDate(existing) === tradeDate
+    && existingCanonicalRunId === canonicalRunId;
   const samePriorityCounts = Number(existing.daytradeMotherPoolCount || 0) === nextPriorityPayload.daytradeMotherPoolCount
     && Number(existing.daytradeFormalPriorityCount || 0) === nextPriorityPayload.daytradeFormalPriorityCount
     && Number(existing.daytradePriorityExtensionCount || 0) === nextPriorityPayload.daytradePriorityExtensionCount;
@@ -3910,11 +3960,13 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
   const priceGateArtifactChanged = Number(existing.daytradeMinimumPrice || 0) !== MOTHER_POOL_MIN_PRICE
     || String(existing.daytradePriceGateStatus || "") !== (MOTHER_POOL_MIN_PRICE > 0 ? "minimum_price_enforced" : "no_price_floor")
     || JSON.stringify(existing.daytradePoolPriceBySymbol || {}) !== JSON.stringify(nextPriorityPayload.daytradePoolPriceBySymbol || {});
-  if (!sameSymbols || !samePriorityCounts || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
+  if (!sameDailyIdentity || !sameSymbols || !samePriorityCounts || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
     writeJson(PRIORITY_SYMBOLS_FILE, nextPriorityPayload);
     writeFugleWebSocketSymbols(nextPriorityPayload.symbols, {
       source: "daytrade-dedicated-priority-bridge",
       prioritySource: "daytrade-dedicated-priority-bridge",
+      tradeDate,
+      canonicalRunId,
       daytradePriorityCount: daytradePrioritySymbols.length,
       daytradeMotherPoolCount: daytradeMotherPoolSymbols.length,
       daytradeMotherPoolWarmingPendingSymbols: priceEligiblePriorityRows
@@ -5237,9 +5289,14 @@ function updateMotherPoolDelta(result) {
   const payload = result?.payload || {};
   const tradeDate = taipeiDate();
   const checkedAt = nowIso();
-  const runId = String(WRITER_INSTANCE_ID || SOURCE_NAME) + ":" + compactDateKey(tradeDate) + ":" + Date.now();
+  const runId = canonicalDaytradeRunId(tradeDate);
+  const writerRunId = String(WRITER_INSTANCE_ID || SOURCE_NAME) + ":" + compactDateKey(tradeDate) + ":" + Date.now();
   const previousPayload = readJson(MOTHER_POOL_DELTA_STATE_FILE, {});
-  const previous = new Map((Array.isArray(previousPayload.rows) ? previousPayload.rows : []).map((row) => [
+  const previousPayloadCanonicalRunId = String(previousPayload.canonical_run_id || previousPayload.canonicalRunId || previousPayload.run_id || "");
+  const currentPreviousPayload = sameDayArtifact(previousPayload, tradeDate) && previousPayloadCanonicalRunId === runId
+    ? previousPayload
+    : {};
+  const previous = new Map((Array.isArray(currentPreviousPayload.rows) ? currentPreviousPayload.rows : []).map((row) => [
     normalizeCode(row.symbol),
     {
       symbol: normalizeCode(row.symbol),
@@ -5321,6 +5378,7 @@ function updateMotherPoolDelta(result) {
       hot_burst_fast_path: row.priority_metrics?.hotBurstFastPath === true,
       user_case_learning_active: row.priority_metrics?.userCaseLearningActive === true,
       run_id: runId,
+      writer_run_id: writerRunId,
     };
   });
   const downgradeRows = downgraded.map((row) => {
@@ -5340,6 +5398,7 @@ function updateMotherPoolDelta(result) {
       latest_1m_time: metrics.latestCandleTime || "",
       downgraded_at: checkedAt,
       run_id: runId,
+      writer_run_id: writerRunId,
     };
   });
 
@@ -5354,6 +5413,7 @@ function updateMotherPoolDelta(result) {
       source_name: SOURCE_NAME,
       trade_date: tradeDate,
       run_id: runId,
+      writer_run_id: writerRunId,
       upgraded_at: upgradedAt,
       upgrades: upgradeRows,
     });
@@ -5367,6 +5427,7 @@ function updateMotherPoolDelta(result) {
       source_name: SOURCE_NAME,
       trade_date: tradeDate,
       run_id: runId,
+      writer_run_id: writerRunId,
       downgraded_at: checkedAt,
       downgrades: downgradeRows,
     });
@@ -5423,6 +5484,8 @@ function updateMotherPoolDelta(result) {
     trade_date: tradeDate,
     checked_at: checkedAt,
     run_id: runId,
+    canonical_run_id: runId,
+    writer_run_id: writerRunId,
     mother_pool_rows: current.size,
     priority_pool_rows: current.size,
     hot_pool_rows: [...current.values()].filter((row) => row.rank <= HOT_POOL_MAX_SYMBOLS).length,
@@ -5456,6 +5519,8 @@ function updateMotherPoolDelta(result) {
     trade_date: tradeDate,
     updated_at: checkedAt,
     run_id: runId,
+    canonical_run_id: runId,
+    writer_run_id: writerRunId,
     rows: [...current.values()].map((row) => {
       const previousRow = previous.get(row.symbol) || {};
       const history = [...(Array.isArray(previousRow.score_history) ? previousRow.score_history : []), row.entry_score]
@@ -5502,6 +5567,12 @@ function updateMotherPoolDelta(result) {
   };
 }async function writeStatusAndScorecard(result) {
   const motherPoolDelta = updateMotherPoolDelta(result);
+  const tradeDate = taipeiDate();
+  const canonicalRunId = canonicalDaytradeRunId(tradeDate);
+  result.payload.trade_date = tradeDate;
+  result.payload.tradeDate = tradeDate;
+  result.payload.canonical_run_id = canonicalRunId;
+  result.payload.canonicalRunId = canonicalRunId;
   result.payload.mother_pool_delta = motherPoolDelta;
   result.payload.mother_pool_round_summary = motherPoolDelta.round_summary;
   result.payload.target_symbol_diagnostics = motherPoolDelta.target_symbol_diagnostics;
@@ -5518,7 +5589,7 @@ function updateMotherPoolDelta(result) {
   result.payload.reader_policy = "supabase_read_only_no_writer_no_fugle_fallback";
   const sourceRow = {
     source_name: SOURCE_NAME,
-    trade_date: taipeiDate(),
+    trade_date: tradeDate,
     updated_at: nowIso(),
     status: result.status,
     message: result.message,
@@ -5528,7 +5599,7 @@ function updateMotherPoolDelta(result) {
   if (result.status === "ok") sourceRow.last_success_at = nowIso();
 
   const scorecardRow = {
-    trade_date: taipeiDate(),
+    trade_date: tradeDate,
     source_name: SOURCE_NAME,
     gate_grade: result.gateGrade,
     status: result.status,

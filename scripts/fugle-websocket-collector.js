@@ -142,6 +142,19 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function taipeiDate(value = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Taipei",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(value);
+}
+
+function canonicalDaytradeRunId(tradeDate = taipeiDate()) {
+  return `fugle_daytrade_source:${String(tradeDate).replace(/\D/g, "").slice(0, 8)}:canonical`;
+}
+
 function volumeToLots(value) {
   const number = cleanNumber(value);
   if (!number) return 0;
@@ -150,7 +163,12 @@ function volumeToLots(value) {
 
 function readSymbols() {
   const payload = readJson(FUGLE_WS_SYMBOLS_FILE, {});
-  const primary = normalizeSymbolList(payload.symbols);
+  const tradeDate = taipeiDate();
+  const payloadTradeDate = String(payload.tradeDate || payload.trade_date || "").slice(0, 10);
+  const payloadCanonicalRunId = String(payload.canonicalRunId || payload.canonical_run_id || "");
+  const dailyIdentityReady = COLLECTOR_ROLE !== "daytrade"
+    || (payloadTradeDate === tradeDate && payloadCanonicalRunId === canonicalDaytradeRunId(tradeDate));
+  const primary = dailyIdentityReady ? normalizeSymbolList(payload.symbols) : [];
   if (primary.length || COLLECTOR_ROLE !== "daytrade") return primary;
   return readDaytradeSymbolBootstrap();
 }
@@ -162,6 +180,10 @@ function normalizeSymbolList(values) {
 function readDaytradeSymbolBootstrap() {
   if (COLLECTOR_ROLE !== "daytrade") return [];
   const bridge = readJson(PRIORITY_SYMBOLS_FILE, {});
+  const tradeDate = taipeiDate();
+  const bridgeTradeDate = String(bridge.tradeDate || bridge.trade_date || "").slice(0, 10);
+  const bridgeCanonicalRunId = String(bridge.canonicalRunId || bridge.canonical_run_id || "");
+  if (bridgeTradeDate !== tradeDate || bridgeCanonicalRunId !== canonicalDaytradeRunId(tradeDate)) return [];
   return normalizeSymbolList([
     ...(bridge.symbols || []),
     ...(bridge.daytradeMotherPoolSymbols || []),
@@ -173,14 +195,22 @@ function readDaytradeSymbolBootstrap() {
 
 function symbolSource() {
   const payload = readJson(FUGLE_WS_SYMBOLS_FILE, {});
-  if (normalizeSymbolList(payload.symbols).length) return "daytrade_symbols_cache";
+  const tradeDate = taipeiDate();
+  const payloadTradeDate = String(payload.tradeDate || payload.trade_date || "").slice(0, 10);
+  const payloadCanonicalRunId = String(payload.canonicalRunId || payload.canonical_run_id || "");
+  const dailyIdentityReady = COLLECTOR_ROLE !== "daytrade"
+    || (payloadTradeDate === tradeDate && payloadCanonicalRunId === canonicalDaytradeRunId(tradeDate));
+  if (dailyIdentityReady && normalizeSymbolList(payload.symbols).length) return "daytrade_symbols_cache";
   if (readDaytradeSymbolBootstrap().length) return "priority_bridge_bootstrap_codes_only";
   return "empty";
 }
 function writeStatus(extra = {}) {
   const currentSymbolSource = symbolSource();
+  const tradeDate = taipeiDate();
   const payload = {
     ok: extra.ok !== false,
+    tradeDate,
+    canonicalRunId: canonicalDaytradeRunId(tradeDate),
     pid: process.pid,
     channel: "rest-quote-collector",
     subscribed: extra.subscribed || 0,
@@ -549,7 +579,13 @@ function freshCachedCodeSet(symbols) {
 }
 
 function readPrioritySymbols(symbols) {
-  const payload = readJson(PRIORITY_SYMBOLS_FILE, {});
+  let payload = readJson(PRIORITY_SYMBOLS_FILE, {});
+  if (COLLECTOR_ROLE === "daytrade") {
+    const tradeDate = taipeiDate();
+    const payloadTradeDate = String(payload.tradeDate || payload.trade_date || "").slice(0, 10);
+    const payloadCanonicalRunId = String(payload.canonicalRunId || payload.canonical_run_id || "");
+    if (payloadTradeDate !== tradeDate || payloadCanonicalRunId !== canonicalDaytradeRunId(tradeDate)) payload = {};
+  }
   const universe = new Set(symbols);
   const seen = new Set();
   const ordered = [];
