@@ -20,6 +20,8 @@ if ($Mode -eq "Status") {
   & $nodeExe "--use-system-ca" "scripts\verify-buy-sell-complete.js"
   exit $LASTEXITCODE
 }
+. "$PSScriptRoot\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Buy/sell complete" -LogPath $log -AllowAfterFormalSourceWindow
 try {
   Invoke-Required "chip source sync" { & $pwshExe -NoProfile -File ".\run-chip-source-sync.ps1" }
   Invoke-Required "institution formal scan" { & $pwshExe -NoProfile -File ".\run-institution.ps1" }

@@ -315,8 +315,8 @@ failed     => do not publish; preserve latest complete run; show failed reason
 ## 驗證指令
 
 ```powershell
-Set-Location -LiteralPath C:\fuman-terminal
-.\run-institution-battle-verify.ps1
+Set-Location -LiteralPath C:\fuman-release-owner\fuman-terminal
+.\run-buy-sell-complete.ps1 -Mode Status
 npm run guard:buy-sell-no-rollback
 npm run verify:buy-sell-field-contract
 npm run verify:publish-gate

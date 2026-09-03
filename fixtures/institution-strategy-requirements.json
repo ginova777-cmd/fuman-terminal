@@ -88,7 +88,7 @@
     { "step": 2, "command": "npm run supabase:probe:light", "expected": "PASS after 5-10 minutes" },
     { "step": 3, "command": "npm run supabase:incident:exit", "expected": "incident cleared" },
     { "step": 4, "command": "npm run verify:chip-source", "expected": "chip source health readable and ready" },
-    { "step": 5, "command": "node --use-system-ca scripts/verify-institution-battle-state.js", "expected": "ok=true issues=[]" },
+    { "step": 5, "command": "node --use-system-ca scripts/verify-buy-sell-complete.js", "expected": "complete=true issues=[]" },
     { "step": 6, "command": "npm run verify:institution-prewater-strict", "expected": "local strict PASS before live publish" },
     { "step": 7, "command": "npm run guard:production", "expected": "PASS only after source health is ready" }
   ],

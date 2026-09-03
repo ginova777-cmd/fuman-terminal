@@ -28,7 +28,7 @@ const expected = [
   ["Fuman Chip Source Sync 2005", "run-chip-source-sync.ps1", ["20:05"]],
   ["Fuman Strategy5 Cache 2100", "run-strategy5.ps1", ["21:00"]],
   ["Fuman 買賣超 Cache 2100", "run-institution.ps1", ["21:00"]],
-  ["Fuman Institution Battle Verify 2110", "run-institution-battle-verify.ps1", ["21:10"]],
+  ["Fuman Buy Sell Complete 2110", "run-buy-sell-complete.ps1", ["21:10"]],
   ["Fuman 買賣超 Watchdog 2115", "run-flow-watchdog.ps1", ["21:15"]],
   ["Fuman Strategy5 Watchdog 2130", "run-strategy5-watchdog.ps1", ["21:30"]],
 ];

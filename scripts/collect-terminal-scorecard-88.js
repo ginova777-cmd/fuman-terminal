@@ -142,8 +142,7 @@ function canonicalFromDesktop(key, desktop) {
   };
 }function canonicalBattle() {
   const candidates = [
-    "institution-battle-verify.json",
-    "institution-battle-verify-alert.json",
+    "buy-sell-complete.json",
     "daily-battle-readiness-verify.json",
   ];
   for (const name of candidates) {

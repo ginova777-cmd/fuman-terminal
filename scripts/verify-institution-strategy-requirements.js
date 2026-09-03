@@ -77,7 +77,7 @@ function main() {
     assert.strictEqual(value, "YES", `selfAssessment ${key} must be YES`);
   }
   assert.strictEqual(requirements.postWaterLiveRunbook[0]?.command, "npm run supabase:probe:light", "first post-water command must be light probe");
-  assert(requirements.postWaterLiveRunbook.some((step) => step.command.includes("verify-institution-battle-state.js")), "battle verifier command missing");
+  assert(requirements.postWaterLiveRunbook.some((step) => step.command.includes("verify-buy-sell-complete.js")), "buy-sell complete verifier command missing");
   assert(requirements.postWaterLiveRunbook.some((step) => step.command === "npm run guard:production"), "production guard command missing");
 
   const api = apiLatestPayload();

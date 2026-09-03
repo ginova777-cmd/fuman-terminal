@@ -172,12 +172,10 @@ if (/institution-latest\.json/.test(read("run-flow-watchdog.ps1"))) {
   fail("run-flow-watchdog.ps1 must not use runtime institution-latest.json as a buy-sell freshness fallback");
 }
 
-requireIncludes("run-institution-battle-verify.ps1", [
-  "Invoke-InstitutionBattleFailureAlert",
-  "send-workflow-alert.js",
-  "FUMAN_ALERT_RECEIPT_FILE",
-  "institution-battle-verify-alert.json",
-]);
+for (const retired of ["run-institution-battle-verify.ps1", "scripts/verify-institution-battle-state.js"]) {
+  if (fs.existsSync(path.join(ROOT, retired))) fail(`${retired} retired verifier must stay absent`);
+}
+requireIncludes("run-buy-sell-complete.ps1", ["verify-buy-sell-complete.js", "run-chip-source-sync.ps1", "run-institution.ps1"]);
 
 requireIncludes("index.html", [
   "terminal-desktop-fast-shell.js?buy-sell-derived-fields=20260629-01&strategy2-history=20260629-01",

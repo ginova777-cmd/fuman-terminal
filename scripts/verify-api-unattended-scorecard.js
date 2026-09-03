@@ -196,7 +196,7 @@ const STRATEGIES = [
       chip: ["foreignNet", "foreign_net", "trustNet", "dealerNet", "totalNet", "institutionTotalNet"],
     },
     verifierCommands: [
-      ["scripts/verify-institution-battle-state.js"],
+      ["scripts/verify-buy-sell-complete.js"],
       ["scripts/verify-buy-sell-field-contract.js"],
     ],
   },

@@ -14,7 +14,7 @@
       "Fuman Daytrade Source Writer 0600-1330",
       "Fuman Fugle Daytrade WebSocket Collector 0600-1330",
       "Fuman Global Cost Janitor Scorecard 1555",
-      "Fuman Institution Battle Verify 2110",
+      "Fuman Buy Sell Complete 2110",
       "Fuman Market Calendar Auto Update 1900-0830",
       "Fuman Mother Pool Telegram 0900-1230",
       "Fuman Opening Limit Order Morning Readonly 0840",
@@ -573,9 +573,9 @@
       ]
     },
     {
-      "taskName": "\\Fuman Institution Battle Verify 2110",
-      "displayName": "Fuman Institution Battle Verify 2110",
-      "description": "Institution battle verification.",
+      "taskName": "\\Fuman Buy Sell Complete 2110",
+      "displayName": "Fuman Buy Sell Complete 2110",
+      "description": "Buy/sell complete runner and read-only closure verification.",
       "time": "21:10",
       "expectedState": "Ready",
       "expectedTriggers": [

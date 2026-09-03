@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$root = "C:\fuman-terminal"
+$root = $PSScriptRoot
 
 function Register-FumanVerifyTask {
   param(
@@ -17,7 +17,7 @@ function Register-FumanVerifyTask {
   schtasks /Create /TN $Name /SC DAILY /ST $Time /TR $action /F | Out-Host
 }
 
-Register-FumanVerifyTask -Name "Fuman Institution Battle Verify 2110" -Time "21:10" -Script "$root\run-institution-battle-verify.ps1"
+Register-FumanVerifyTask -Name "Fuman Buy Sell Complete 2110" -Time "21:10" -Script "$root\run-buy-sell-complete.ps1"
 Register-FumanVerifyTask -Name "Fuman Daily Battle Verify 2155" -Time "21:55" -Script "$root\run-daily-battle-verify.ps1"
 
 Write-Host "Installed battle verify tasks."

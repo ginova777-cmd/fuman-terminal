@@ -6,7 +6,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..");
 const ACTIVE_FILES = [
   "run-strategy2-battle-verify.ps1",
-  "run-institution-battle-verify.ps1",
+  "run-buy-sell-complete.ps1",
   "run-strategy3-v2-complete-scan.ps1",
   "run-strategy3-battle-verify.ps1",
   "run-strategy3-v2-1255-first-attempt.ps1",
