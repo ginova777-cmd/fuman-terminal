@@ -243,6 +243,11 @@ function lineTargetType(target) {
   return "unknown";
 }
 
+function invalidLineTarget(target) {
+  const value = String(target || "").trim();
+  return !/^[UCR][0-9a-f]{32}$/i.test(value);
+}
+
 function collectLineTargets() {
   const envNames = [
     "FUMAN_LINE_TO",
@@ -381,7 +386,8 @@ async function main() {
   // Production always hands the same-day report to Mother Pool. Only an
   // explicit isolated test may suppress the bridge.
   const applyBridge = !mock && !hasFlag("--skip-bridge");
-  const sendLine = !mock;
+  const reuseLineReceipt = hasFlag("--reuse-line-receipt");
+  const sendLine = !mock && !reuseLineReceipt;
   const dryRunLine = mock;
 
   const overseasPreflight = await buildOverseasPreflight(tradeDate, runId, mock);
@@ -406,19 +412,23 @@ async function main() {
     if (applyBridge && top3) bridgeResults.push({ industry: item.industry, positive_return_rank: item.positive_return_rank, inputPath, receiptPath, result: runBridge(inputPath, receiptPath, tradeDate) });
     else bridgeResults.push({ industry: item.industry, positive_return_rank: item.positive_return_rank, inputPath, receiptPath, skipped: true, reason_code: top3 ? "bridge_apply_not_requested" : "not_positive_return_top3_bridge_skip" });
   }
-  const lineReceipt = await pushLine({ cardText: `Fuman 08:30 漲幅族群晨報 Top 3 ${tradeDate}\n${displayTop3.map((item) => `${item.positive_return_rank}. ${item.display_name}: ${Number(item.overseas_return_1d_pct).toFixed(2)}%`).join("\n")}\n台股：${taiwanGate.reason_code}`, runId, dryRun: dryRunLine });
   const lineReceiptPath = path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`);
-  writeJson(lineReceiptPath, lineReceipt);
+  const lineReceipt = reuseLineReceipt
+    ? readJson(lineReceiptPath)
+    : await pushLine({ cardText: `Fuman 08:30 漲幅族群晨報 Top 3 ${tradeDate}\n${displayTop3.map((item) => `${item.positive_return_rank}. ${item.display_name}: ${Number(item.overseas_return_1d_pct).toFixed(2)}%`).join("\n")}\n台股：${taiwanGate.reason_code}`, runId, dryRun: dryRunLine });
+  if (!reuseLineReceipt) writeJson(lineReceiptPath, lineReceipt);
+  const lineDeliveryOk = lineReceipt?.line_push_ok === true && (!reuseLineReceipt || String(lineReceipt?.report_run_id || lineReceipt?.run_id || "") === runId);
   const final = {
     contract: "opening-report-0830-production-v1",
-    ok: overseasPreflight.ok && Boolean(reportPath) && (!sendLine || lineReceipt.line_push_ok),
+    ok: overseasPreflight.ok && Boolean(reportPath) && lineDeliveryOk,
     report_status: taiwanGate.ok ? "PASS" : "FAIL_CLOSED",
     overseas_sources_ok: overseasPreflight.ok,
     industry_bias_exported: true,
     mother_pool_bridge_attempted: applyBridge,
     mother_pool_bridge_ok: applyBridge ? bridgeResults.filter((row) => Number(row.positive_return_rank) >= 1 && Number(row.positive_return_rank) <= 3).every((row) => row.result?.exitCode === 0) : null,
     line_push_attempted: sendLine,
-    line_push_ok: lineReceipt.line_push_ok,
+    line_push_ok: lineDeliveryOk,
+    line_receipt_reused: reuseLineReceipt,
     display_contract: "opening_report_positive_return_top3_only_v1",
     display_top3: displayTop3.map((row) => ({ rank: row.positive_return_rank, industry: row.industry, display_name: row.display_name, average_percent: row.overseas_return_1d_pct })),
     formal_candidates: 0,
@@ -435,9 +445,14 @@ async function main() {
   writeJson(finalPath, final);
   const terminalBriefingSnapshot = await syncTerminalBriefingSnapshot(tradeDate, runId);
   final.terminal_briefing_snapshot = terminalBriefingSnapshot;
+  final.complete = final.ok === true && final.mother_pool_bridge_ok === true && final.line_push_ok === true && terminalBriefingSnapshot.ok === true && displayTop3.length === 3;
+  final.status = final.complete ? "complete" : "fail_closed";
+  final.report_status = final.complete ? "COMPLETE" : "FAIL_CLOSED";
+  final.exitCode = final.complete ? 0 : 1;
+  final.first_blocker = final.complete ? null : (!final.mother_pool_bridge_ok ? "mother_pool_bridge_not_complete" : !final.line_push_ok ? "line_delivery_not_complete" : terminalBriefingSnapshot.ok !== true ? "terminal_snapshot_not_complete" : displayTop3.length !== 3 ? "positive_top3_not_complete" : "opening_report_not_complete");
   writeJson(finalPath, final);
   console.log(JSON.stringify({ ok: final.ok, final_receipt: finalPath, report_path: reportPath, run_id: runId, report_status: final.report_status, terminal_briefing_snapshot_ok: terminalBriefingSnapshot.ok === true }, null, 2));
-  if (hasFlag("--self-test") && !final.industry_bias_exported) process.exitCode = 1;
+  if (!final.complete) process.exitCode = 1;
 }
 
 main().catch((error) => {

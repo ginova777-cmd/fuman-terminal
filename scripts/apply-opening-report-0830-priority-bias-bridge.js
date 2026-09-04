@@ -57,7 +57,14 @@ function quoteAgeSeconds(value, nowMs = Date.now()) {
 
 function quoteTimestamp(row) {
   const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
-  return payload.quote_seen_at || payload.quoteSeenAt || payload.received_at || payload.receivedAt || payload.lastUpdated || payload.last_updated_at || row?.updated_at || "";
+  return payload.quote_seen_at || payload.quoteSeenAt || payload.received_at || payload.receivedAt || payload.lastUpdated || payload.last_updated_at || payload.motherPoolMetrics?.quoteUpdatedAt || payload.motherPoolMetrics?.quote_updated_at || row?.updated_at || "";
+}
+
+function priorityPoolPrice(row) {
+  const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
+  const value = payload.price ?? payload.last_price ?? payload.lastPrice ?? payload.close ?? payload.motherPoolMetrics?.price ?? payload.mother_pool_metrics?.price;
+  const price = Number(value);
+  return Number.isFinite(price) ? price : 0;
 }
 
 function taipeiDateKey(date = new Date()) {
@@ -206,7 +213,7 @@ async function main() {
   try {
     const existingRows = [];
     for (const symbol of acceptedSymbols) {
-      const rows = await restRequest(key, "fugle_daytrade_priority_pool?select=symbol,name,market,price,priority_rank,priority_reason,source,updated_at,payload&symbol=eq." + encodeURIComponent(symbol) + "&limit=1");
+      const rows = await restRequest(key, "fugle_daytrade_priority_pool?select=symbol,name,market,priority_rank,hot_extension_rank,priority_reason,source,updated_at,payload&symbol=eq." + encodeURIComponent(symbol) + "&limit=1");
       if (Array.isArray(rows) && rows[0]) existingRows.push(rows[0]);
     }
     const bySymbol = new Map(existingRows.map((row) => [symbolFromEntry(row), row]));
@@ -218,7 +225,7 @@ async function main() {
         quoteRejected.push({ symbol, reason: "not_in_canonical_priority_pool", price: null });
         return false;
       }
-      const existingPrice = Number(existing.price);
+      const existingPrice = priorityPoolPrice(existing);
       if (!Number.isFinite(existingPrice) || existingPrice <= 0) {
         quoteRejected.push({ symbol, reason: "fresh_quote_missing", price: null });
         return false;
@@ -248,7 +255,7 @@ async function main() {
     const now = new Date().toISOString();
     const rows = acceptedSymbols.map((symbol, index) => {
       const old = bySymbol.get(symbol) || {};
-      const price = Number(old.price);
+      const price = priorityPoolPrice(old);
       const quoteAge = quoteAgeSeconds(quoteTimestamp(old), quoteCheckedAt);
       const oldRank = Number.isFinite(Number(old.priority_rank)) ? Number(old.priority_rank) : null;
       const baseRank = oldRank !== null && oldRank < 999999 ? oldRank : MOTHER_POOL_START_RANK + index;
@@ -260,7 +267,7 @@ async function main() {
       const biasEvidence = { date: payload.date, report_time: payload.report_time, run_id: payload.run_id, source: SOURCE, mode: MODE, industry: payload.industry, linked_industries: linkedIndustries, highest_industry_rank: Math.min(Number(previousEvidence.highest_industry_rank || Number.POSITIVE_INFINITY), Number(payload.positive_return_rank || Number.POSITIVE_INFINITY)), boost_once: true, bias: payload.bias, confidence: payload.confidence, evidence_summary: payload.evidence_summary, reason_code: REASON_CODE, status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true };
       const appliedBoost = Math.max(0, baseRank - nextRank);
       appliedBoosts.push({ symbol, previous_priority_rank: oldRank, applied_priority_rank: nextRank, boost: appliedBoost, boost_once: true, duplicate_boost_skipped: alreadyBoostedToday, linked_industries: linkedIndustries, price, quote_age_seconds: quoteAge, status: "watchlist_boosted" });
-      return { symbol, name: old.name || mappedEntryBySymbol.get(symbol)?.name || symbol, market: old.market || "", priority_rank: nextRank, priority_reason: REASON_CODE, source: SOURCE, updated_at: now, payload: { ...oldPayload, openingReport0830IndustryBias: biasEvidence, priority_reason: REASON_CODE, priority_status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true } };
+      return { symbol, name: old.name || mappedEntryBySymbol.get(symbol)?.name || symbol, market: old.market || "", priority_rank: nextRank, hot_extension_rank: Number.isFinite(Number(old.hot_extension_rank)) ? Number(old.hot_extension_rank) : null, priority_reason: REASON_CODE, source: SOURCE, updated_at: now, payload: { ...oldPayload, openingReport0830IndustryBias: biasEvidence, priority_reason: REASON_CODE, priority_status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true } };
     });
     await restRequest(key, "fugle_daytrade_priority_pool", { method: "POST", body: rows });
     const receipt = buildReceipt({ inputPath, receiptPath, payload, validation, acceptedSymbols, rejectedSymbols, appliedBoosts });
