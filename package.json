@@ -201,6 +201,7 @@
     "scan:star:source": "node --use-system-ca scripts/scan-star-preopen.js",
     "verify:star-preopen-readback": "node --use-system-ca scripts/verify-daytrade-futopt-star-readback-readonly.js",
     "verify:star-future-retest-contract": "node scripts/verify-daytrade-futopt-star-retest-contract.js",
+    "apply:star-future-retest-readback": "node --use-system-ca scripts/apply-daytrade-futopt-star-retest-readback.js",
     "verify:run-gates": "node --use-system-ca scripts/verify-run-id-complete-gates.js",
     "verify:mobile-cache-contract": "node --use-system-ca scripts/verify-mobile-cache-contract.js",
     "verify:mobile-cache-contract:live": "node --dns-result-order=ipv4first --use-system-ca scripts/verify-mobile-cache-contract.js --live",
