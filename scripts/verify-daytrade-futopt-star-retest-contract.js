@@ -19,8 +19,8 @@ const checks = {
   exact_0845_open: sql.includes("capture_slot='0845'"),
   natural_slots_only: sql.includes("natural_schedule_evidence is true") && sql.includes("capture_slot between '0845' and '0859'"),
   no_live_price_fallback: !sql.includes("coalesce(l.futopt_last_price"),
-  exact_retest_thresholds: sql.includes("future_open_near_percent") && sql.includes("future_0859_last_price>=future_0845_open_price*0.995") && sql.includes("futopt_change_percent>=2") && sql.includes("relative_to_txf_percent>=1") && sql.includes("futopt_total_volume>=50"),
-  future_only_star: sql.includes("future_open_retest_ok as star_final_ok") && sql.includes("when future_open_retest_ok then 'STAR'"),
+  exact_retest_thresholds: sql.includes("future_open_near_percent") && sql.includes("futopt_last_price>=future_open_price*0.995") && sql.includes("futopt_change_percent>=2") && sql.includes("relative_to_txf_percent>=1") && sql.includes("futopt_total_volume>=50"),
+  future_only_star: sql.includes("(future_pattern='開盤回測守住') as star_final_ok") && sql.includes("when future_pattern='開盤回測守住' then 'STAR'"),
   producer_pins_txf_evidence: producer.includes("txf_change_percent: txfChangePercent") && producer.includes("relative_to_txf_percent:"),
   verifier_fails_closed: verifier.includes("missing_natural_future_window_must_fail_closed") && verifier.includes("future_open_retest_ok"),
 };
