@@ -352,6 +352,11 @@ function latestBySymbol(rows, tradeDate) {
 
 async function captureSlotRows(tradeDate, slot, canonicalRows, quoteRows, preopenRows) {
   const byFuture = new Map();
+  const txfQuote = (quoteRows || []).find((row) => {
+    const future = normalizeFutureSymbol(row?.future_symbol || row?.symbol);
+    return future.startsWith("TXF") && taipeiDate(row?.updated_at || row?.quoteSeenAt) === tradeDate;
+  }) || null;
+  const txfChangePercent = numberValue(txfQuote?.change_percent ?? txfQuote?.payload?.changePercent);
   for (const row of quoteRows) {
     const future = normalizeFutureSymbol(row?.future_symbol);
     if (future) byFuture.set(future, row);
@@ -391,6 +396,10 @@ async function captureSlotRows(tradeDate, slot, canonicalRows, quoteRows, preope
         bid_volume: trial?.bid_volume ?? null,
         ask_volume: trial?.ask_volume ?? null,
         is_limit_up_bid: trial?.is_limit_up_bid === true,
+        txf_change_percent: txfChangePercent,
+        relative_to_txf_percent: quote?.fut_change_pct !== null && quote?.fut_change_pct !== undefined && txfChangePercent !== null
+          ? quote.fut_change_pct - txfChangePercent
+          : null,
         missing_fields: [
           ["fut_price", quote?.fut_price], ["trial_price", trial?.trial_price],
           ["best_bid", trial?.best_bid], ["best_ask", trial?.best_ask],
