@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
+const { OPENING_REPORT_0830_INDUSTRY_MAP } = require("./opening-report-0830-industry-map-contract.js");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
@@ -94,62 +95,27 @@ function approxBiasText(item) {
 }
 
 function baseIndustryItems(tradeDate, runId) {
-  return [
-    {
-      industry: "PCB_CCL",
-      display_name: "PCB／CCL",
-      bias: "positive_mixed",
-      confidence: 0.72,
-      evidence_summary: "韓系 Simmtech/Daeduck 偏強、MEIKO 前收強；Fujikura 偏弱，整體分歧偏多。",
-      mapped_symbols: [
-        { symbol: "2383", name: "台光電", tier: "A" },
-        { symbol: "6274", name: "台燿", tier: "A" },
-        { symbol: "2368", name: "金像電", tier: "A" },
-        { symbol: "3044", name: "健鼎", tier: "A" },
-        { symbol: "4958", name: "臻鼎-KY", tier: "A" },
-        { symbol: "2313", name: "華通", tier: "A" },
-        { symbol: "8358", name: "金居", tier: "A" },
-        { symbol: "3037", name: "欣興", tier: "B" },
-        { symbol: "8046", name: "南電", tier: "B" },
-        { symbol: "3189", name: "景碩", tier: "B" }
-      ]
-    },
-    {
-      industry: "MEMORY",
-      display_name: "記憶體",
-      bias: "positive_mixed",
-      confidence: 0.68,
-      evidence_summary: "Micron 近持平，SK Hynix/韓系記憶體 proxy 分歧偏多。",
-      mapped_symbols: [
-        { symbol: "2408", name: "南亞科", tier: "A" },
-        { symbol: "2344", name: "華邦電", tier: "A" },
-        { symbol: "6770", name: "力積電", tier: "A" },
-        { symbol: "8299", name: "群聯", tier: "A" },
-        { symbol: "3260", name: "威剛", tier: "A" },
-        { symbol: "2337", name: "旺宏", tier: "B" },
-        { symbol: "3006", name: "晶豪科", tier: "B" }
-      ]
-    },
-    {
-      industry: "AI_GPU_CLOUD",
-      display_name: "AI GPU／雲端",
-      bias: "negative_mixed",
-      confidence: 0.6,
-      evidence_summary: "Nasdaq 偏弱、AMD 明顯弱，NVDA 個別支撐，AI 題材分歧。",
-      mapped_symbols: [
-        { symbol: "2382", name: "廣達", tier: "A" },
-        { symbol: "3231", name: "緯創", tier: "A" },
-        { symbol: "6669", name: "緯穎", tier: "A" },
-        { symbol: "2356", name: "英業達", tier: "A" },
-        { symbol: "2376", name: "技嘉", tier: "A" },
-        { symbol: "2317", name: "鴻海", tier: "A" },
-        { symbol: "2330", name: "台積電", tier: "B" },
-        { symbol: "2308", name: "台達電", tier: "B" },
-        { symbol: "3017", name: "奇鋐", tier: "B" },
-        { symbol: "3324", name: "雙鴻", tier: "B" }
-      ]
-    }
-  ].map((item) => ({
+  const compact = tradeDate.replace(/\D/g, "");
+  const leaders = readJson(path.join(RECEIPT_DIR, `overseas-leaders-0830-${compact}.json`));
+  const detected = new Map((leaders?.industries || []).map((row) => [row.industry, row]));
+  const rows = OPENING_REPORT_0830_INDUSTRY_MAP.map((mapRow) => {
+    const row = detected.get(mapRow.industry) || {};
+    const average = Number(row.average_percent);
+    const direction = row.direction || (average > 0.3 ? "positive" : average < -0.3 ? "negative" : "neutral");
+    return {
+      industry: mapRow.industry,
+      display_name: mapRow.display_name,
+      bias: `${direction}_mixed`,
+      confidence: Number(mapRow.default_confidence || 0),
+      evidence_summary: Number.isFinite(average) ? `海外族群平均漲幅 ${average.toFixed(2)}%` : mapRow.evidence_summary,
+      overseas_return_1d_pct: Number.isFinite(average) ? average : null,
+      overseas_leader_detection: row,
+      mapped_symbols: [...mapRow.a, ...mapRow.b],
+    };
+  });
+  const positive = rows.filter((row) => row.bias.startsWith("positive")).sort((a, b) => Number(b.overseas_return_1d_pct) - Number(a.overseas_return_1d_pct));
+  const positiveRank = new Map(positive.map((row, index) => [row.industry, index + 1]));
+  return rows.map((item) => ({
     date: tradeDate,
     report_time: "08:30",
     run_id: `${runId}-${item.industry}`,
@@ -159,6 +125,9 @@ function baseIndustryItems(tradeDate, runId) {
     bias: item.bias,
     confidence: item.confidence,
     evidence_summary: item.evidence_summary,
+    overseas_return_1d_pct: item.overseas_return_1d_pct,
+    positive_return_rank: positiveRank.get(item.industry) || null,
+    overseas_leader_detection: item.overseas_leader_detection,
     mapped_symbols: item.mapped_symbols,
     allowed_action: ALLOWED_ACTION,
     forbidden_action: FORBIDDEN_ACTION
@@ -228,7 +197,7 @@ function markdownReport({ tradeDate, runId, overseasPreflight, items, taiwanGate
   lines.push("");
   lines.push("| 產業 | bias | confidence | 台股對應 | 判讀 |");
   lines.push("|---|---|---:|---|---|");
-  for (const item of items) {
+  for (const item of items.filter((row) => Number(row.positive_return_rank) >= 1 && Number(row.positive_return_rank) <= 3).sort((a, b) => a.positive_return_rank - b.positive_return_rank)) {
     lines.push(`| ${item.industry} | ${item.bias} | ${item.confidence} | ${item.mapped_symbols.map((row) => `${row.symbol} ${row.name}`).join("、")} | ${item.evidence_summary} |`);
   }
   lines.push("");
@@ -431,8 +400,9 @@ async function main() {
     const inputPath = path.join(STATE_DIR, `opening_report_0830.industry_bias.${item.industry}.json`);
     const receiptPath = path.join(RUNTIME_DIR, "data", "scan-receipts", `opening-report-0830-priority-bias-bridge-${item.industry}-${compact}.json`);
     writeJson(inputPath, item);
-    if (applyBridge) bridgeResults.push({ industry: item.industry, inputPath, receiptPath, result: runBridge(inputPath, receiptPath, tradeDate) });
-    else bridgeResults.push({ industry: item.industry, inputPath, receiptPath, skipped: true, reason_code: "bridge_apply_not_requested" });
+    const top3 = Number(item.positive_return_rank) >= 1 && Number(item.positive_return_rank) <= 3;
+    if (applyBridge && top3) bridgeResults.push({ industry: item.industry, positive_return_rank: item.positive_return_rank, inputPath, receiptPath, result: runBridge(inputPath, receiptPath, tradeDate) });
+    else bridgeResults.push({ industry: item.industry, positive_return_rank: item.positive_return_rank, inputPath, receiptPath, skipped: true, reason_code: top3 ? "bridge_apply_not_requested" : "not_positive_return_top3_bridge_skip" });
   }
   const lineReceipt = await pushLine({ cardText: `Fuman 08:30 日報 ${tradeDate}\n${items.map(approxBiasText).join("\n")}\n台股：${taiwanGate.reason_code}`, runId, dryRun: dryRunLine });
   const lineReceiptPath = path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`);
@@ -444,7 +414,7 @@ async function main() {
     overseas_sources_ok: overseasPreflight.ok,
     industry_bias_exported: true,
     mother_pool_bridge_attempted: applyBridge,
-    mother_pool_bridge_ok: applyBridge ? bridgeResults.every((row) => row.result?.exitCode === 0) : null,
+    mother_pool_bridge_ok: applyBridge ? bridgeResults.filter((row) => Number(row.positive_return_rank) >= 1 && Number(row.positive_return_rank) <= 3).every((row) => row.result?.exitCode === 0) : null,
     line_push_attempted: sendLine,
     line_push_ok: lineReceipt.line_push_ok,
     formal_candidates: 0,
@@ -454,7 +424,7 @@ async function main() {
     report_path: reportPath,
     overseas_preflight_receipt: overseasPath,
     line_push_receipt: lineReceiptPath,
-    bridge_results: bridgeResults.map((row) => ({ industry: row.industry, inputPath: row.inputPath, receiptPath: row.receiptPath, skipped: row.skipped === true, exitCode: row.result?.exitCode ?? null, reason_code: row.reason_code || "" })),
+    bridge_results: bridgeResults.map((row) => ({ industry: row.industry, positive_return_rank: row.positive_return_rank ?? null, inputPath: row.inputPath, receiptPath: row.receiptPath, skipped: row.skipped === true, exitCode: row.result?.exitCode ?? null, reason_code: row.reason_code || "" })),
     taiwan_gate: taiwanGate,
     checked_at: timestamp()
   };
