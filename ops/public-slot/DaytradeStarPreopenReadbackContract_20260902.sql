@@ -78,15 +78,16 @@ select r.*,
     and futopt_change_percent is not null and relative_to_txf_percent is not null and futopt_total_volume is not null
     then 'ready' else 'DATA_GAP' end as source_status,
   future_ok as star_precheck_ok,
-  (future_pattern='開盤回測守住') as star_type1_ok,
+  coalesce(future_pattern='開盤回測守住',false) as star_type1_ok,
   (future_ok and preopen_ok) as star_blind_buy_ok,
-  (future_pattern='開盤回測守住') as star_final_ok,
+  coalesce(future_pattern='開盤回測守住',false) as star_final_ok,
   case
     when future_pattern='開盤回測守住' then null
     when future_symbol is null or future_symbol='' or future_symbol like 'TXF%' then 'NO_CONTRACT'
     when futopt_last_price<=0 then 'FUTURE_PRICE_MISSING'
     when preopen_snapshot_count=0 then 'NATURAL_FUTURE_PREOPEN_DATA_GAP'
     when future_open_price is null or futopt_last_price is null then 'NATURAL_FUTURE_PREOPEN_DATA_GAP'
+    when futopt_change_percent is null or relative_to_txf_percent is null or futopt_total_volume is null then 'NATURAL_FUTURE_PREOPEN_DATA_GAP'
     when reference_price is null or reference_price<=0 then 'REFERENCE_PRICE_MISSING'
     when not preopen_ok then 'PREOPEN_CONDITION_NOT_MET'
     when future_pattern is null then 'FUTURE_OPEN_RETEST_NOT_MET'
@@ -106,7 +107,7 @@ select r.*,
   r.futopt_total_volume as future_total_volume,
   case when r.future_open_price>0 and r.futopt_last_price>0
     then abs(r.futopt_last_price-r.future_open_price)/r.future_open_price*100 else null end as future_open_near_percent,
-  (r.future_pattern='開盤回測守住') as future_open_retest_ok,
+  coalesce(r.future_pattern='開盤回測守住',false) as future_open_retest_ok,
   case when r.future_pattern='開盤回測守住' then '期貨0845開盤後，0859前回到開盤價附近並守住'
     else 'DATA_GAP_OR_FUTURE_OPEN_RETEST_NOT_MET' end as future_open_retest_reason
 from rules r;
