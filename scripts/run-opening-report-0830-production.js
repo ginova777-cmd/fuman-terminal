@@ -381,12 +381,14 @@ async function main() {
   // Production always hands the same-day report to Mother Pool. Only an
   // explicit isolated test may suppress the bridge.
   const applyBridge = !mock && !hasFlag("--skip-bridge");
-  if (hasFlag("--send-line")) throw new Error("line_delivery_retired_use_telegram_only");
-  const sendLine = false;
-  const dryRunLine = true;
+  const sendLine = !mock;
+  const dryRunLine = mock;
 
   const overseasPreflight = await buildOverseasPreflight(tradeDate, runId, mock);
   const items = baseIndustryItems(tradeDate, runId);
+  const displayTop3 = items
+    .filter((row) => Number(row.positive_return_rank) >= 1 && Number(row.positive_return_rank) <= 3)
+    .sort((a, b) => Number(a.positive_return_rank) - Number(b.positive_return_rank));
   const taiwanGate = readTaiwanGate(tradeDate);
   const reportPath = path.join(RECEIPT_DIR, `opening-report-0830-${compact}.md`);
   const overseasPath = path.join(RECEIPT_DIR, `overseas-preflight-${compact}.json`);
@@ -404,7 +406,7 @@ async function main() {
     if (applyBridge && top3) bridgeResults.push({ industry: item.industry, positive_return_rank: item.positive_return_rank, inputPath, receiptPath, result: runBridge(inputPath, receiptPath, tradeDate) });
     else bridgeResults.push({ industry: item.industry, positive_return_rank: item.positive_return_rank, inputPath, receiptPath, skipped: true, reason_code: top3 ? "bridge_apply_not_requested" : "not_positive_return_top3_bridge_skip" });
   }
-  const lineReceipt = await pushLine({ cardText: `Fuman 08:30 日報 ${tradeDate}\n${items.map(approxBiasText).join("\n")}\n台股：${taiwanGate.reason_code}`, runId, dryRun: dryRunLine });
+  const lineReceipt = await pushLine({ cardText: `Fuman 08:30 漲幅族群晨報 Top 3 ${tradeDate}\n${displayTop3.map((item) => `${item.positive_return_rank}. ${item.display_name}: ${Number(item.overseas_return_1d_pct).toFixed(2)}%`).join("\n")}\n台股：${taiwanGate.reason_code}`, runId, dryRun: dryRunLine });
   const lineReceiptPath = path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`);
   writeJson(lineReceiptPath, lineReceipt);
   const final = {
@@ -417,6 +419,8 @@ async function main() {
     mother_pool_bridge_ok: applyBridge ? bridgeResults.filter((row) => Number(row.positive_return_rank) >= 1 && Number(row.positive_return_rank) <= 3).every((row) => row.result?.exitCode === 0) : null,
     line_push_attempted: sendLine,
     line_push_ok: lineReceipt.line_push_ok,
+    display_contract: "opening_report_positive_return_top3_only_v1",
+    display_top3: displayTop3.map((row) => ({ rank: row.positive_return_rank, industry: row.industry, display_name: row.display_name, average_percent: row.overseas_return_1d_pct })),
     formal_candidates: 0,
     watchlist_only: true,
     run_id: runId,
