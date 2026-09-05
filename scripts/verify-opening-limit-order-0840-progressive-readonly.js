@@ -64,7 +64,7 @@ function main() {
   const displayVerifier = read(files.displayVerifier);
 
   if (!progressive.includes("Wait-UntilTaipeiTime") || !progressive.includes("08:40:00")) failures.push("0840_wait_contract_missing");
-  if (!progressive.includes('Wait-UntilTaipeiTime -HHmmss ("{0}:00" -f $slot)')) failures.push("futopt_slot_wait_contract_missing");
+  if (!progressive.includes('$slotTime = "{0}:{1}:00"') || !progressive.includes('Wait-UntilTaipeiTime -HHmmss $slotTime')) failures.push("futopt_slot_wait_contract_missing");
   if (!progressive.includes('Wait-UntilTaipeiTime -HHmmss "08:55:00"')) failures.push("0855_wait_contract_missing");
   if (!progressive.includes("opening-limit-order-0840-pre-candidates")) failures.push("0840_pre_candidates_receipt_missing");
   if (!progressive.includes("opening-limit-order-0845-futopt-readback")) failures.push("0845_futopt_receipt_missing");
@@ -74,10 +74,10 @@ function main() {
   if (!progressive.includes("creates_order = $false") || !progressive.includes("creates_formal_candidate = $false") || !progressive.includes("publish_allowed = $false")) failures.push("action_guard_static_missing");
   if (!progressive.includes("requires_second_confirm_before_action = $true")) failures.push("second_confirm_guard_missing");
   if (!morning.includes("Run-OpeningLimitOrder0840ProgressiveReadonly.ps1") || !morning.includes("-WaitUntil0840")) failures.push("morning_runner_not_using_0840_progressive");
-  if (!runner0855.includes("weighted score first") || !runner0855.includes("matched_rule_count") || !runner0855.includes("futopt_positive_basis") || !runner0855.includes("industry_futures_combo_score")) failures.push("0855_weighted_ranking_static_missing");
+  if (!runner0855.includes("evidence-first") || !runner0855.includes("Sort-Object -Property") || !runner0855.includes("matched_rule_count") || !runner0855.includes("futopt_positive_basis") || !runner0855.includes("industry_futures_combo_score")) failures.push("0855_weighted_ranking_static_missing");
   if (!runner0855.includes("final_score = $row.entry_score") || !runner0855.includes("score_components") || !runner0855.includes("futures_score") || !runner0855.includes("industry_futures_combo_score")) failures.push("0855_final_score_fields_missing");
   if (!displayVerifier.includes("final_score_order_invalid")) failures.push("display_verifier_final_score_order_missing");
-  const scheduledTaskName = "Fuman Opening Limit Order Morning Readonly 0845";
+  const scheduledTaskName = "Fuman Opening Limit Order Morning Readonly 0840";
   const scheduledTask = childProcess.spawnSync("schtasks", ["/Query", "/TN", scheduledTaskName, "/V", "/FO", "LIST"], { encoding: "utf8" });
   const scheduledTaskText = String(scheduledTask.stdout || "") + String(scheduledTask.stderr || "");
   if (scheduledTask.status !== 0) failures.push("schedule_task_unreadable");
@@ -167,13 +167,13 @@ function main() {
     checked_at: new Date().toISOString(),
     static_contract: {
       morning_uses_0840_progressive: !failures.includes("morning_runner_not_using_0840_progressive"),
-      no_0900_data_before_open: !failures.some((f) => f.includes("0900")),
+      no_0900_data_before_open: !failures.includes("0900_data_guard_missing"),
       final_score_desc_required: !failures.includes("display_verifier_final_score_order_missing"),
       action_guard_required: !failures.some((f) => f.includes("action_guard_static_missing") || f.includes("second_confirm_guard_missing")),
       schedule_0840_ready: !failures.some((f) => f === "schedule_not_0840" || f === "schedule_not_enabled" || f === "schedule_not_using_morning_runner"),
     },
     runtime_readback: requireRuntime ? {
-      schedule_task_name: "Fuman Opening Limit Order Morning Readonly 0845",
+      schedule_task_name: "Fuman Opening Limit Order Morning Readonly 0840",
       schedule_next_run_0840: !failures.includes("schedule_not_0840"),
       pre_candidates_path: files.preCandidates,
       futopt_readback_path: files.futoptReadback,

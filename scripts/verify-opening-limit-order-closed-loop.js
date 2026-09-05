@@ -90,8 +90,7 @@ function main() {
   if (verifier0900.includes("Invoke-FumanWeekdayGuard")) failures.push("0900_verifier_uses_formal_source_window_guard");
   if (!candidateVerifier.includes("rule_definitions: RULE_DEFINITIONS") || !candidateVerifier.includes("implemented_rules: RULES") || !candidateVerifier.includes("main().catch")) failures.push("candidate_contract_fallback_missing");
 
-  const task0840 = queryTask("Fuman Opening Limit Order Morning Readonly 0845");
-  const task0900 = queryTask("Fuman Opening Limit Order 0900 Readonly Verify");
+  const task0840 = queryTask("Fuman Opening Limit Order Morning Readonly 0840");
   if (task0840.status !== 0) failures.push("task_0840_unreadable");
   else {
     if (!taskEnabled(task0840.text)) failures.push("task_0840_not_enabled");
@@ -99,14 +98,6 @@ function main() {
     if (!taskHasStart(task0840.text, "08:40:00")) failures.push("task_0840_wrong_start_time");
     if (!taskRuns(task0840.text, "Run-OpeningLimitOrderMorningReadonly.ps1")) failures.push("task_0840_wrong_runner");
     if (requireRuntime && taskLastResult(task0840.text) !== 0) failures.push("task_0840_last_result_not_zero");
-  }
-  if (task0900.status !== 0) failures.push("task_0900_unreadable");
-  else {
-    if (!taskEnabled(task0900.text)) failures.push("task_0900_not_enabled");
-    if (!taskReady(task0900.text)) warnings.push("task_0900_not_ready_now");
-    if (!taskHasStart(task0900.text, "09:00:00")) failures.push("task_0900_wrong_start_time");
-    if (!taskRuns(task0900.text, "Run-OpeningLimitOrder0900Verifier.ps1")) failures.push("task_0900_wrong_runner");
-    if (requireRuntime && taskLastResult(task0900.text) !== 0) failures.push("task_0900_last_result_not_zero");
   }
 
   const runtimeFiles = {
@@ -169,7 +160,7 @@ function main() {
     checked_at: new Date().toISOString(),
     closed_loop: {
       schedule_0840: task0840.status === 0 && taskEnabled(task0840.text) && taskHasStart(task0840.text, "08:40:00") && taskRuns(task0840.text, "Run-OpeningLimitOrderMorningReadonly.ps1"),
-      schedule_0900: task0900.status === 0 && taskEnabled(task0900.text) && taskHasStart(task0900.text, "09:00:00") && taskRuns(task0900.text, "Run-OpeningLimitOrder0900Verifier.ps1"),
+      schedule_0900: "chained_by_single_0840_runner",
       runner_chains_0900: progressiveRunner.includes("Run-OpeningLimitOrder0900Verifier.ps1"),
       total_receipt_contract: progressiveRunner.includes("opening_limit_order_morning_readonly_chain_v1"),
       no_order_no_publish_guard: true,
@@ -187,7 +178,7 @@ function main() {
       late_repair_accepted: Boolean(runtime.verifier0900 && runtime.verifier0900.ok !== true && allowLateRepair && lateOnly(runtime.verifier0900.failed_checks)),
       morning_total_receipt_exists: Boolean(runtime.morningReceipt),
       task_0840_last_result: taskLastResult(task0840.text),
-      task_0900_last_result: taskLastResult(task0900.text),
+      task_0900_last_result: "not_applicable_single_runner_chain",
       run_id_readback: runtime.preCandidates ? {
         preCandidates: runtime.preCandidates?.run_id || "",
         futoptReadback: runtime.futoptReadback?.run_id || "",

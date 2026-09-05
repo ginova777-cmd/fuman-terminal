@@ -284,8 +284,9 @@ function main() {
       continue;
     }
     const today = prices[index]; const previous = prices[index - 1]; const ma60 = ma(prices, index, 60); const ma60Previous = ma(prices, index - 1, 60); const ma240 = ma(prices, index, 240); const ma240Previous = ma(prices, index - 1, 240);
-    const close = n(today.close); const cost = weightedCost(item.branch_rows); const topNetBuyBroker = preferredTopNetBuyBroker(item.branch_rows); const overnight = item.overnight || {}; const wNeckline = detectWNeckline(prices, index);
-    const eligible = Number.isFinite(close) && close >= 50;
+    const close = n(today.close); const open = n(today.open); const cost = weightedCost(item.branch_rows); const topNetBuyBroker = preferredTopNetBuyBroker(item.branch_rows); const overnight = item.overnight || {}; const wNeckline = detectWNeckline(prices, index);
+    const tDayBlackKRejected = Number.isFinite(open) && Number.isFinite(close) && close < open;
+    const eligible = Number.isFinite(close) && close >= 50 && !tDayBlackKRejected;
     const staticRules = [];
     if (eligible && limitDownReopened(today, previous) && Number.isFinite(cost) && cost >= close * 0.99) staticRules.push("limit_down_reopened_main_force_cost_high");
     if (eligible && reboundFromLow(prices, index) && twoDayUp(prices, index) && institutionTwoDayBuy(item.institutional_rows, item.signal_date)) staticRules.push("low_rebound_two_day_up_institution_buy");
@@ -313,7 +314,7 @@ function main() {
       symbol, trade_date: tradeDate, signal_date: item.signal_date,
       status: !eligible ? "REJECTED" : staticRules.length ? "STATIC_MATCH" : pendingRules.length ? "CONDITIONALLY_READY" : "NO_STATIC_MATCH",
       qualified_label: staticRules.length ? "符合開盤入靜態標的" : pendingRules.length ? "待 08:45-08:55 / 海外條件確認" : "未符合開盤入",
-      preopen_price_reference: round(close), eligibility: eligible ? "eligible" : Number.isFinite(close) ? "price_below_50" : "price_unknown",
+      preopen_price_reference: round(close), eligibility: eligible ? "eligible" : tDayBlackKRejected ? "t_day_black_k_rejected" : Number.isFinite(close) ? "price_below_50" : "price_unknown",
       static_matched_rules: staticRules,
       static_matched_strategy_numbers: ruleNos(staticRules),
       static_matched_strategy_labels: ruleDisplays(staticRules),
