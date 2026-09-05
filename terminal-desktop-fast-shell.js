@@ -1390,7 +1390,9 @@
       canvasState.route = key;
       canvasState.source = renderSource;
       canvasState.rows = Array.isArray(rows) ? rows : [];
-      canvasState.meta = canvasStore.get(key)?.meta || canvasState.meta || null;
+      // Metadata is route-owned. Never let the previous strategy run id leak
+      // into Institution while its own rows are hydrating.
+      canvasState.meta = canvasStore.get(key)?.meta || null;
       applyCanvasFilter();
       return renderUnifiedListShell(key, meta, panel);
     };
@@ -2220,7 +2222,7 @@
     const age = Date.now() - Number(memory.at || 0);
     const ttl = Number(canvasOptionsForRoute(route).ttl || CANVAS_REFRESH_TTL_MS);
     if (age > ttl) return false;
-    if (!/^(api|api-only-poll|bundle)(?:-|$)/.test(source)) return false;
+    if (!/^(api|api-only-poll|bundle|fast-bundle)(?:-|$)/.test(source)) return false;
     if (/snapshot|session|indexeddb|dom|html|member-preview/i.test(source)) return false;
     return true;
   }
@@ -5523,7 +5525,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-87";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-88";
   }
 
   function loadScriptOnce(src, attr) {
