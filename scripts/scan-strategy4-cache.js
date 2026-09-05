@@ -43,6 +43,7 @@ const ALLOW_FILTER_RULE_DROP = process.env.STRATEGY4_ALLOW_FILTER_RULE_DROP !== 
 const ALLOW_LEGACY_VOLUME_FALLBACK = process.env.STRATEGY4_ALLOW_LEGACY_VOLUME_FALLBACK === "1";
 const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "fugle", "historical");
 const STRATEGY4_VOLUME_CACHE_FILE = path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "strategy4-volume-avg5.json");
+const STRATEGY4_PRIORITY_FILE = path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "intraday", "fugle-daytrade-ws-priority-symbols.json");
 const STRATEGY4_VOLUME_REFRESH_DAYS = Number(process.env.STRATEGY4_VOLUME_REFRESH_DAYS || 20);
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
@@ -760,8 +761,9 @@ function buildVolumePrefilter(stocks) {
     }
   });
   return {
-    enabled: true,
-    rule: "avgVolume5-gte",
+    enabled: false,
+    rule: "avgVolume5-diagnostic-only",
+    policy: "avg5_never_excludes_strategy4",
     minAvgVolume5: MIN_AVG_VOLUME_5,
     filtered,
     cacheHit,
@@ -1979,11 +1981,33 @@ async function main() {
   }
 
   const volumeFilter = buildVolumePrefilter(universe);
-  volumeFilter.filtered.forEach((item) => {
-    currentMatches.delete(item.code);
-    noDataCodes.delete(item.code);
-    scanned.add(item.code);
+  if (volumeFilter.enabled) {
+    volumeFilter.filtered.forEach((item) => {
+      currentMatches.delete(item.code);
+      noDataCodes.delete(item.code);
+      scanned.add(item.code);
+    });
+  }
+  // Prioritize the canonical daytrade pool, whose ordering is built from the
+  // volume-ranking and turnover-ranking union. This changes scan order only;
+  // every remaining Strategy4-eligible stock is still scanned.
+  const priorityArtifact = readJson(STRATEGY4_PRIORITY_FILE, {});
+  if (String(priorityArtifact.source || "").trim() !== "daytrade-dedicated-priority-bridge") {
+    throw new Error(`Strategy4 Mother Pool source contract mismatch: ${priorityArtifact.source || "missing_source"}`);
+  }
+  if (!Array.isArray(priorityArtifact.daytradeMotherPoolSymbols) || !priorityArtifact.daytradeMotherPoolSymbols.length) {
+    throw new Error("Strategy4 Mother Pool source missing daytradeMotherPoolSymbols; Strategy2 fallback is forbidden");
+  }
+  const prioritySymbols = [...new Set((priorityArtifact.daytradeMotherPoolSymbols || [])
+    .map((value) => normalizeCode(value?.symbol || value?.code || value))
+    .filter((code) => /^\d{4}$/.test(code)))];
+  const priorityOrder = new Map(prioritySymbols.map((code, index) => [code, index]));
+  universe.sort((a, b) => {
+    const left = priorityOrder.has(a.code) ? priorityOrder.get(a.code) : Number.MAX_SAFE_INTEGER;
+    const right = priorityOrder.has(b.code) ? priorityOrder.get(b.code) : Number.MAX_SAFE_INTEGER;
+    return left - right || a.code.localeCompare(b.code);
   });
+  console.log(`strategy4 scan priority: volume+turnover ranking union first ${universe.filter((stock) => priorityOrder.has(stock.code)).length}, fullUniverse ${universe.length}, hardGate=false`);
   const quoteLiquidityFilter = await buildQuoteLiquidityPrefilter(universe);
   quoteLiquidityFilter.filtered.forEach((item) => {
     currentMatches.delete(item.code);
@@ -2000,7 +2024,7 @@ async function main() {
   const chunksToRun = Math.min(Math.ceil(pendingCodes.length / CHUNK_SIZE), BATCHES_PER_RUN);
   const runMode = FULL_SCAN ? "full" : "resume";
 
-  console.log(`strategy4 volume prefilter: cacheHit ${volumeFilter.cacheHit}, cacheMiss ${volumeFilter.cacheMiss}, filtered ${volumeFilter.filtered.length} below avg5 ${MIN_AVG_VOLUME_5}`);
+  console.log(`strategy4 volume diagnostic: cacheHit ${volumeFilter.cacheHit}, cacheMiss ${volumeFilter.cacheMiss}, belowAvg5 ${volumeFilter.filtered.length}, hardFilter=false`);
   console.log(`strategy4 quote liquidity prefilter: cacheHit ${quoteLiquidityFilter.cacheHit}, cacheMiss ${quoteLiquidityFilter.cacheMiss}, quoteRows ${quoteLiquidityFilter.quoteRows}, filtered ${quoteLiquidityFilter.filtered.length} below cumulative bid+ask ${MIN_CUMULATIVE_BID_ASK_VOLUME}`);
   console.log(`strategy4 cache start: ${runMode} scan, ${codes.length} total codes, ${pendingCodes.length} pending codes, ${chunksToRun} chunks in this run`);
   for (let chunk = 0; chunk < chunksToRun; chunk++) {
@@ -2133,6 +2157,20 @@ async function main() {
     supabaseCoverage,
     insufficientHistory,
   });
+
+  output.strategy4MotherPoolSource = {
+    contract: "strategy4-direct-daytrade-mother-pool-v1",
+    source: String(priorityArtifact.source || ""),
+    sourceFile: STRATEGY4_PRIORITY_FILE,
+    tradeDate: String(priorityArtifact.tradeDate || priorityArtifact.trade_date || ""),
+    canonicalRunId: String(priorityArtifact.canonicalRunId || priorityArtifact.canonical_run_id || ""),
+    symbolField: "daytradeMotherPoolSymbols",
+    symbolCount: prioritySymbols.length,
+    priorityOnly: true,
+    hardGate: false,
+    strategy2Dependency: false,
+    strategy2FallbackAllowed: false,
+  };
 
   output.supabasePublishGate = assertStrategy4PublishGate();
   console.log(`strategy4 publish hard gate ok: status=${output.supabasePublishGate.status} publishAllowed=${output.supabasePublishGate.publishAllowed} staleSeconds=${output.supabasePublishGate.staleSeconds}`);

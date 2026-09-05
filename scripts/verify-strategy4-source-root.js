@@ -2,6 +2,7 @@
 const fs = require("fs");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { isTwseTradingDay } = require("./twse-trading-day");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -98,6 +99,31 @@ function inspectHistoryCache(date) {
 async function main() {
   const targetDate = isoDate(process.argv.find((arg) => arg.startsWith("--date="))?.slice(7) || process.env.FUMAN_SCANNER_TARGET_DATE || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || taipeiDate());
   if (!targetDate) throw new Error("missing_target_date");
+  const tradingDay = await isTwseTradingDay(new Date(`${targetDate}T04:00:00.000Z`), { stateDir: process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state") });
+  if (!tradingDay.isTradingDay) {
+    const payload = {
+      ok: true,
+      status: "skipped",
+      complete: false,
+      verifier: "verify-strategy4-source-root",
+      checked_at: new Date().toISOString(),
+      targetDate,
+      marketOpen: false,
+      formalScanSkipped: true,
+      preservePreviousGood: true,
+      latestPointerUpdated: false,
+      reason_code: "market_calendar_non_trading_day",
+      closed_reason: tradingDay.reason || "market_closed",
+      allowed_action: "skip_formal_scan_preserve_previous_good",
+      warnings: [],
+      issues: [],
+    };
+    fs.mkdirSync(OUT_DIR, { recursive: true });
+    const key = targetDate.replace(/-/g, "");
+    fs.writeFileSync(path.join(OUT_DIR, `strategy4-source-root-market-closed-${key}.json`), JSON.stringify(payload, null, 2) + "\n", "utf8");
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
   const issues = [];
   const warnings = [];
   const [universe, ohlcvRows, volumeRows, stockDailyRows, latestOhlcv, latestVolume, latestStockDaily, syncStatus] = await Promise.all([

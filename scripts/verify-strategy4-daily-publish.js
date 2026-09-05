@@ -76,6 +76,13 @@ function main() {
   if (number(scan.matches) !== count) issues.push(`scan_match_count_mismatch:${scan.matches || 0}:${count}`);
 
   if (line.ok !== true || line.dry_run === true || line.line_push_ok !== true) issues.push(`formal_line_not_delivered:ok=${line.ok}:dry=${line.dry_run}:push=${line.line_push_ok}`);
+  if (line.layout_contract !== "strategy4-line-single-card-v2") issues.push(`formal_line_layout_contract_mismatch:${line.layout_contract || "missing"}`);
+  if (line.single_card !== true) issues.push("formal_line_single_card_not_true");
+  if (line.grouping !== "strategyLabel" || line.ordering !== "score_desc_then_source_rank_asc") issues.push("formal_line_grouping_or_ordering_mismatch");
+  const hiddenSections = Array.isArray(line.hidden_sections) ? line.hidden_sections : [];
+  for (const required of ["selected_count_metric", "highest_score_metric", "sorting_caption"]) {
+    if (!hiddenSections.includes(required)) issues.push(`formal_line_hidden_section_missing:${required}`);
+  }
   if (compactDate(line.dataDate) !== expectedDate) issues.push(`formal_line_date_mismatch:${line.dataDate || "missing"}:${expectedDate}`);
   if (String(line.runId || "") !== runId) issues.push(`formal_line_run_id_mismatch:${line.runId || "missing"}:${runId || "missing"}`);
   const expectedLineCount = Math.min(count, 70);
@@ -91,7 +98,7 @@ function main() {
     count,
     source: "fugle_snapshot",
     scan: { runId: scan.runId || "", scanned: number(closure.scannedCount), total: number(closure.expectedTotal), matches: number(scan.matches), complete: scan.complete === true },
-    formalLine: { runId: line.runId || "", count: number(line.count), dataDate: line.dataDate || "", line_push_ok: line.line_push_ok === true, dry_run: line.dry_run === true },
+    formalLine: { runId: line.runId || "", count: number(line.count), dataDate: line.dataDate || "", line_push_ok: line.line_push_ok === true, dry_run: line.dry_run === true, layoutContract: line.layout_contract || "", singleCard: line.single_card === true, grouping: line.grouping || "", ordering: line.ordering || "", hiddenSections },
     files: { closureFile, scanFile, lineFile },
     issues,
   };

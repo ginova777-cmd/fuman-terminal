@@ -25,6 +25,8 @@ $scanStartedAt = (Get-Date).ToString("o")
 function Normalize-Strategy4DateStamp($value) {
   $raw = [string]$value
   if ([string]::IsNullOrWhiteSpace($raw)) { return "" }
+  $dateMatch = [regex]::Match($raw, "(?<![0-9])(?<date>20[0-9]{6})(?![0-9])")
+  if ($dateMatch.Success) { return [string]$dateMatch.Groups["date"].Value }
   $digits = ($raw -replace "[^0-9]", "")
   if ($digits.Length -ge 8) { return $digits.Substring(0, 8) }
   return ""
@@ -40,12 +42,15 @@ function Write-Log($message) {
 }
 
 function Write-Strategy4Receipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "", $Scanned = 0, $Total = 0) {
+  $runDateStamp = Normalize-Strategy4DateStamp $RunId
+  if ([string]::IsNullOrWhiteSpace($runDateStamp)) { $runDateStamp = $strategy4Stamp }
   $receipt = [ordered]@{
     strategy = "strategy4"
     label = "strategy4 full scan"
     tier = "critical"
     startedAt = $scanStartedAt
-    marketDate = (Get-Date).ToString("yyyyMMdd")
+    marketDate = $runDateStamp
+    tradeDate = if ($runDateStamp.Length -eq 8) { "$($runDateStamp.Substring(0,4))-$($runDateStamp.Substring(4,2))-$($runDateStamp.Substring(6,2))" } else { "" }
     finishedAt = (Get-Date).ToString("o")
     status = $Status
     exitCode = $ExitCode
@@ -69,9 +74,6 @@ function Write-Strategy4Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     "scorecard scan audit publish exception: $($_.Exception.Message)" >> $log
   }
 }
-
-Write-Strategy4Receipt "running" 0 $false 0 "" @("formal runner entered; awaiting source gate and tri-surface closure") "strategy4_runner_started"
-Write-Log "Strategy4 formal runner entered; receipt status=running."
 
 function Assert-Strategy4LatestApi {
   $apiUrl = "https://fuman-terminal.vercel.app/api/strategy4-latest?canvas=1&compact=1&shell=1&limit=70&live=1&fresh=$([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())"
@@ -103,15 +105,34 @@ function Invoke-Strategy4ScorecardSourceRefresh($RunId = "") {
   Write-Log "Strategy4 scorecard/sourceReports refresh start runId=$RunId"
   $previousExpected = $env:EXPECTED_STRATEGY4_RUN_ID
   $previousRuntime = $env:FUMAN_RUNTIME_DIR
+  $previousAllowCurrentShrink = $env:FUMAN_SCORECARD_ALLOW_CURRENT_SHRINK
   try {
     if (-not [string]::IsNullOrWhiteSpace($RunId)) { $env:EXPECTED_STRATEGY4_RUN_ID = $RunId }
     $env:FUMAN_RUNTIME_DIR = $RuntimeRoot
+    # Strategy4 has already passed its complete-run Supabase readback at this point.
+    # Its result count may legitimately shrink when strategy conditions change, so
+    # do not let the shared scorecard shrink guard preserve a stale Strategy4 runId.
+    $env:FUMAN_SCORECARD_ALLOW_CURRENT_SHRINK = "1"
     & npm.cmd run scorecard:terminal-source *>&1 | Tee-Object -FilePath $log -Append
     $scorecardExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
     if ($scorecardExit -ne 0) { throw "scorecard terminal-source refresh exit=$scorecardExit" }
+    if (-not [string]::IsNullOrWhiteSpace($RunId)) {
+      & $nodeExe "--use-system-ca" "scripts\publish-mobile-fragment-snapshots.js" "--tabs=strategy4" *>&1 | Tee-Object -FilePath $log -Append
+      if ($LASTEXITCODE -ne 0) { throw "Strategy4 mobile fragment publish exit=$LASTEXITCODE" }
+      & $nodeExe "scripts\collect-scorecard88-terminal-surface-evidence.js" "--slot=17:00" *>&1 | Tee-Object -FilePath $log -Append
+      if ($LASTEXITCODE -ne 0) { throw "scorecard88 surface evidence exit=$LASTEXITCODE" }
+      $triSeedOut = Join-Path $RuntimeRoot ("outputs\post-scan-tri-surface\strategy4\{0}" -f $RunId)
+      New-Item -ItemType Directory -Force -Path $triSeedOut | Out-Null
+      & $nodeExe "scripts\verify-terminal-resource-chain.js" "--routes=strategy4" ("--expected-date={0}" -f (Get-Date).ToString("yyyyMMdd")) "--require-unattended" ("--out={0}" -f $triSeedOut) *>&1 | Tee-Object -FilePath $log -Append | Out-Null
+      & $nodeExe "scripts\build-strategy4-recovery-evidence.js" "--run-id=$RunId" *>&1 | Tee-Object -FilePath $log -Append
+      if ($LASTEXITCODE -ne 0) { throw "scorecard88 Strategy4 evidence exit=$LASTEXITCODE" }
+      & (Join-Path $repo "scripts\run-scorecard88-terminal-collector.ps1") -Slot '17:00' -ProjectRoot $repo -RuntimeRoot $RuntimeRoot -Recovery -ExpectedRunId $RunId -RecoveryReason 'strategy4_pre_verifier_publication' *>&1 | Tee-Object -FilePath $log -Append
+      if ($LASTEXITCODE -ne 0) { throw "scorecard88 Strategy4 collector exit=$LASTEXITCODE" }
+    }
   } finally {
     if ($null -ne $previousExpected) { $env:EXPECTED_STRATEGY4_RUN_ID = $previousExpected } else { Remove-Item Env:EXPECTED_STRATEGY4_RUN_ID -ErrorAction SilentlyContinue }
     if ($null -ne $previousRuntime) { $env:FUMAN_RUNTIME_DIR = $previousRuntime } else { Remove-Item Env:FUMAN_RUNTIME_DIR -ErrorAction SilentlyContinue }
+    if ($null -ne $previousAllowCurrentShrink) { $env:FUMAN_SCORECARD_ALLOW_CURRENT_SHRINK = $previousAllowCurrentShrink } else { Remove-Item Env:FUMAN_SCORECARD_ALLOW_CURRENT_SHRINK -ErrorAction SilentlyContinue }
   }
   Write-Log "Strategy4 scorecard/sourceReports refresh complete runId=$RunId"
 }
@@ -229,6 +250,8 @@ function Invoke-Strategy4ClosureAndLine {
   }
   & $nodeExe "--use-system-ca" "scripts\send-strategy-line-card.js" "--strategy=strategy4" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
   if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE dry-run failed exit=$LASTEXITCODE" }
+  & $nodeExe "scripts\verify-strategy4-line-card-contract.js" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
+  if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE dry-run canonical verifier failed exit=$LASTEXITCODE" }
   foreach ($command in @(@("scripts\verify-strategy4-canonical-closure.js"), @("scripts\verify-strategy4-88-data-chain.js"), @("scripts\verify-terminal-daily-ohlcv.js"))) {
     & $nodeExe "--use-system-ca" @command *>&1 | Tee-Object -FilePath $log -Append
     if ($LASTEXITCODE -ne 0) { throw "Strategy4 closure verifier failed: $($command[0]) exit=$LASTEXITCODE" }
@@ -239,6 +262,11 @@ function Invoke-Strategy4ClosureAndLine {
   $lineReceipt = Get-Content -LiteralPath $lineFile -Raw | ConvertFrom-Json
   $expectedLineCount = [Math]::Min($ExpectedCount, 70)
   if ($lineReceipt.line_push_ok -ne $true -or [string]$lineReceipt.runId -ne $RunId -or [int]$lineReceipt.count -ne $expectedLineCount) { throw "Strategy4 LINE receipt mismatch push=$($lineReceipt.line_push_ok) runId=$($lineReceipt.runId) count=$($lineReceipt.count) expectedDisplay=$expectedLineCount" }
+  & $nodeExe "scripts\verify-strategy4-line-card-contract.js" *>&1 | Tee-Object -FilePath $log -Append
+  if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE canonical verifier failed exit=$LASTEXITCODE" }
+  $lineVerifierFile = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-canonical-verifier-receipt-$((Get-Date).ToString('yyyyMMdd')).json"
+  $lineVerifierReceipt = Get-Content -LiteralPath $lineVerifierFile -Raw | ConvertFrom-Json
+  if ($lineVerifierReceipt.status -ne "complete" -or $lineVerifierReceipt.ok -ne $true -or [string]$lineVerifierReceipt.run_id -ne $RunId) { throw "Strategy4 LINE canonical verifier receipt mismatch" }
   $dailyPublishExit = 1
   for ($attempt = 1; $attempt -le 3; $attempt++) {
     & $nodeExe "--use-system-ca" "scripts\verify-strategy4-daily-publish.js" "--expect-run-id=$RunId" "--expect-count=$ExpectedCount" *>&1 | Tee-Object -FilePath $log -Append
@@ -247,6 +275,23 @@ function Invoke-Strategy4ClosureAndLine {
     if ($attempt -lt 3) { Start-Sleep -Seconds 8 }
   }
   if ($dailyPublishExit -ne 0) { throw "Strategy4 formal daily publish verifier failed after retries exit=$dailyPublishExit" }
+  $lineWrapperFile = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-wrapper-receipt-$((Get-Date).ToString('yyyyMMdd')).json"
+  [ordered]@{
+    contract = "strategy4-line-card-wrapper-receipt-v2"
+    status = "complete"
+    ok = $true
+    checked_at = [DateTimeOffset]::UtcNow.ToString("o")
+    trade_date = (Get-Date).ToString("yyyy-MM-dd")
+    run_id = $RunId
+    expected_count = $ExpectedCount
+    displayed_count = $expectedLineCount
+    runner_receipt = $lineFile
+    canonical_verifier_receipt = $lineVerifierFile
+    runner_status = $lineReceipt.status
+    verifier_status = $lineVerifierReceipt.status
+    line_push_ok = [bool]$lineReceipt.line_push_ok
+    first_blocker = $null
+  } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $lineWrapperFile -Encoding utf8
   Write-Log "Strategy4 LINE closure complete runId=$RunId count=$ExpectedCount"
 }
 . "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
@@ -267,9 +312,16 @@ if ($Recovery) {
   if ($audit.ok -ne $true -or $row.ok -ne $true -or [string]$row.supabase.runId -ne [string]$tri.runId) { throw "Strategy4 recovery audit is not complete or runId aligned" }
   $recoveryRunId = [string]$tri.runId
   $recoveryCount = [int]$row.supabase.count
-  Write-Strategy4Receipt "complete" 0 $true $recoveryCount $recoveryRunId @("strict tri-surface recovery verified") "" ([int]$row.supabase.scannedCount) ([int]$row.supabase.expectedTotal)
-  Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId $recoveryRunId -ExpectedDate ((Get-Date).ToString("yyyyMMdd")) -Row $row
-  Invoke-Strategy4ClosureAndLine $recoveryRunId $recoveryCount
+  $recoveryDate = Normalize-Strategy4DateStamp ([string]$tri.expectedDate)
+  if ([string]::IsNullOrWhiteSpace($recoveryDate)) { $recoveryDate = Normalize-Strategy4DateStamp $recoveryRunId }
+  $lineEvidence = Get-Content -LiteralPath (Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-$recoveryDate.json") -Raw | ConvertFrom-Json
+  $publishEvidence = Get-Content -LiteralPath (Join-Path $RuntimeRoot "data\scan-receipts\strategy4-daily-publish-$recoveryDate.json") -Raw | ConvertFrom-Json
+  if ($lineEvidence.line_push_ok -ne $true -or [string]$lineEvidence.runId -ne $recoveryRunId) { throw "Strategy4 recovery requires delivered LINE evidence for runId=$recoveryRunId" }
+  if ($publishEvidence.ok -ne $true -or [string]$publishEvidence.runId -ne $recoveryRunId) { throw "Strategy4 recovery requires complete daily publish evidence for runId=$recoveryRunId" }
+  Write-Strategy4Receipt "complete" 0 $true $recoveryCount $recoveryRunId @() "" ([int]$row.supabase.scannedCount) ([int]$row.supabase.expectedTotal)
+  Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId $recoveryRunId -ExpectedDate $recoveryDate -Row $row
+  if ($recoveryDate -eq (Get-Date).ToString("yyyyMMdd")) { Invoke-Strategy4ClosureAndLine $recoveryRunId $recoveryCount }
+  else { Write-Log "Strategy4 historical recovery reused existing delivered LINE evidence; no notification resent. runId=$recoveryRunId tradeDate=$recoveryDate" }
   Write-Log "Strategy4 one-entry recovery complete runId=$recoveryRunId count=$recoveryCount"
   exit 0
 }
@@ -291,6 +343,9 @@ if ($datePreflightExit -ne 0) {
   Write-Strategy4Receipt "failed" $datePreflightExit $false 0 "" @($reason) $reason
   exit $datePreflightExit
 }
+
+Write-Strategy4Receipt "running" 0 $false 0 "" @("formal runner entered; awaiting source gate and tri-surface closure") "strategy4_runner_started"
+Write-Log "Strategy4 formal runner entered after market-calendar gate; receipt status=running."
 
 & $nodeExe "scripts\verify-supabase-publish-hard-gate.js" "--strategy=strategy4" *>&1 | Tee-Object -FilePath $log -Append
 $publishGateExit = $LASTEXITCODE
