@@ -2145,7 +2145,7 @@
       }
       const shell = currentCanvasShell();
       if (isStrategy2Route(route)) {
-        updateStrategy2BattleShell(shell, route, strategyMeta(route));
+        renderStrategyRouteShell(linkForRouteKey(route) || route, source, cleanRows);
         return true;
       }
       if (isStrategy3Route(route) || isStrategy4Route(route) || isStrategy5Route(route)) {
@@ -5523,7 +5523,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-86";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-87";
   }
 
   function loadScriptOnce(src, attr) {
@@ -9116,8 +9116,12 @@
     const meta = strategyMeta(link);
     const drawableRows = (canvasState.filtered?.length ? canvasState.filtered : canvasState.rows || []).filter((row) => row && (row.code || row.title || row.line));
     if (isMemberStrategyPreviewRoute(key) && !drawableRows.length && hasMemberPreviewToken() && !payloadMetaHasResolvedResponse(canvasPayloadMeta(key))) return renderMemberStrategyPendingShell(key, meta, panel);
-    if (isStrategy3Route(key)) return renderUnifiedListShell(key, meta, panel);
-    if (!isStrategy2Route(key)) return renderUnifiedListShell(key, meta, panel);
+    // Every live strategy owns and rebuilds the same current-route shell.  The
+    // retired Strategy2 DOM updater could only mutate its old table nodes, so a
+    // switch from Strategy3/4/5 left the previous strategy visible.
+    if (isStrategy2Route(key) || isStrategy3Route(key) || isStrategy4Route(key) || isStrategy5Route(key)) {
+      return renderUnifiedListShell(key, meta, panel);
+    }
     panel.dataset.fumanRouteSnapshotRestoring = "1";
     panel.dataset.fumanCanvasPersistent = "1";
     panel.classList.add("fuman-api-only-strategy-route");
