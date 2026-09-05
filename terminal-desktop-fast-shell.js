@@ -1892,7 +1892,10 @@
         .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.stageKey).localeCompare(String(b.stageKey), "zh-Hant") || String(a.code).localeCompare(String(b.code), "zh-Hant"))
         .slice(0, Math.max(minLimit, Math.min(240, limit)));
     }
-    const best = arrays
+    const directRows = [payload?.rows, payload?.results, payload?.matches, payload?.items, payload?.displayCandidates]
+      .find((rows) => Array.isArray(rows) && rows.some((row) => row && typeof row === "object" && (row.code || row.symbol || row.stockNo || row.stock_no || row.title || row.name)));
+    const candidateArrays = directRows ? [directRows] : arrays;
+    const best = candidateArrays
       .map((rows) => rows
         .map((row, index) => normalizeCanvasRow(row, index, route))
         .filter((row) => isStrategy3Route(route) ? /^\d{4}$/.test(String(row.code || "")) : (row.code || row.title)))
@@ -5497,7 +5500,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-82";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-83";
   }
 
   function loadScriptOnce(src, attr) {
@@ -8866,6 +8869,7 @@
   }
 
   function renderUnifiedListShell(route, meta, panel) {
+    meta = strategyMeta(route);
     const payloadMeta = canvasPayloadMeta(route) || {};
     const allRows = (Array.isArray(canvasState.rows) ? canvasState.rows : []).filter((row) => row && typeof row === "object");
     let cards = unifiedRunCards(route, allRows, payloadMeta);
