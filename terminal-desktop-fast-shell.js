@@ -218,6 +218,22 @@
   let marketRadarBundlePayload = null;
   let strategy5WatchlistMatchIndexPayload = null;
   let strategy5WatchlistMatchIndexPromise = null;
+
+  function strategy5WatchlistIndexIsUsable(payload) {
+    return Boolean(
+      payload
+      && typeof payload === "object"
+      && payload.ok !== false
+      && payload.byCode
+      && typeof payload.byCode === "object"
+    );
+  }
+
+  function strategy5WatchlistEntriesByCode() {
+    return strategy5WatchlistIndexIsUsable(strategy5WatchlistMatchIndexPayload)
+      ? strategy5WatchlistMatchIndexPayload.byCode
+      : {};
+  }
   let marketHeatmapMode = "all";
   let marketHeatmapPayload = null;
   let marketHeatmapGroups = {};
@@ -5503,7 +5519,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-84";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-85";
   }
 
   function loadScriptOnce(src, attr) {
