@@ -31,8 +31,8 @@ const OPENING_REPORT_0830_INDUSTRY_MAP = [
     display_name: "晶圓代工／先進製程",
     default_bias: "neutral_mixed",
     default_confidence: 0.70,
-    evidence_summary: "TSM、ASML、AMAT、LRCX、KLAC、東京威力作為先進製程 proxy。",
-    overseas_leaders: [["TSM", "TSM"], ["ASML", "ASML"], ["AMAT", "AMAT"], ["LRCX", "LRCX"], ["KLAC", "KLAC"], ["東京威力", "8035.T"]],
+    evidence_summary: "TSM、ASML、AMAT、LRCX、KLAC 作為先進製程 proxy。",
+    overseas_leaders: [["TSM", "TSM"], ["ASML", "ASML"], ["AMAT", "AMAT"], ["LRCX", "LRCX"], ["KLAC", "KLAC"]],
     a: [["2330", "台積電"], ["2404", "漢唐"], ["6196", "帆宣"], ["3680", "家登"], ["3131", "弘塑"], ["3583", "辛耘"], ["8028", "昇陽半導體"]],
     b: [["2360", "致茂"], ["6515", "穎崴"], ["6223", "旺矽"], ["3711", "日月光投控"]],
   },
@@ -121,20 +121,10 @@ const OPENING_REPORT_0830_INDUSTRY_MAP = [
     display_name: "III-V 材料／光通訊",
     default_bias: "neutral_mixed",
     default_confidence: 0.54,
-    evidence_summary: "AXTI、IQE、Coherent 作為 III-V proxy；3105 穩懋固定列入 A。",
-    overseas_leaders: [["AXTI", "AXTI"], ["IQE", "IQEPF"], ["Coherent", "COHR"]],
+    evidence_summary: "AXTI、Coherent 作為 III-V proxy；3105 穩懋固定列入 A。",
+    overseas_leaders: [["AXTI", "AXTI"], ["Coherent", "COHR"]],
     a: [["3105", "穩懋"], ["3081", "聯亞"], ["2455", "全新"], ["8086", "宏捷科"]],
     b: [["4991", "環宇-KY"], ["6426", "統新"], ["4971", "IET-KY"]],
-  },
-  {
-    industry: "EV_AUTOMOTIVE",
-    display_name: "車用／電動車",
-    default_bias: "neutral_mixed",
-    default_confidence: 0.51,
-    evidence_summary: "TSLA、BYD、Denso、Aptiv、Nidec 作為車用/電動車 proxy。",
-    overseas_leaders: [["TSLA", "TSLA"], ["BYD", "1211.HK"], ["Denso", "6902.T"], ["Aptiv", "APTV"], ["Nidec", "6594.T"]],
-    a: [["2317", "鴻海"], ["3665", "貿聯-KY"], ["1536", "和大"], ["1319", "東陽"], ["2360", "致茂"]],
-    b: [["2308", "台達電"], ["2301", "光寶科"], ["1524", "耿鼎"], ["6279", "胡連"]],
   },
   {
     industry: "ROBOTICS_AUTOMATION",
@@ -165,36 +155,6 @@ const OPENING_REPORT_0830_INDUSTRY_MAP = [
     overseas_leaders: [["AAPL", "AAPL"], ["QCOM", "QCOM"], ["Sony", "SONY"], ["Hon Hai ADR proxy", "HNHPF"]],
     a: [["2317", "鴻海"], ["3008", "大立光"], ["2474", "可成"], ["3673", "TPK-KY"]],
     b: [["2330", "台積電"], ["2327", "國巨"], ["4938", "和碩"], ["2354", "鴻準"]],
-  },
-  {
-    industry: "SHIPPING",
-    display_name: "航運",
-    default_bias: "neutral_mixed",
-    default_confidence: 0.47,
-    evidence_summary: "Maersk、Hapag-Lloyd、ZIM、Matson、BDRY ETF proxy 作為航運 proxy；WCI/SCFI/BDI 不列入 08:30 即時偵測。",
-    overseas_leaders: [["Maersk", "MAERSK-B.CO"], ["Hapag-Lloyd", "HLAG.DE"], ["ZIM", "ZIM"], ["Matson", "MATX"], ["BDRY ETF proxy", "BDRY"]],
-    a: [["2603", "長榮"], ["2609", "陽明"], ["2615", "萬海"]],
-    b: [["2618", "長榮航"], ["2610", "華航"], ["2637", "慧洋-KY"]],
-  },
-  {
-    industry: "MATERIALS",
-    display_name: "原物料",
-    default_bias: "neutral_mixed",
-    default_confidence: 0.48,
-    evidence_summary: "Brent、WTI、Copper、Steel、FCX、BHP、RIO 作為原物料背景。",
-    overseas_leaders: [["Brent", "BZ=F"], ["WTI", "CL=F"], ["Copper", "HG=F"], ["Steel", "SLX"], ["FCX", "FCX"], ["BHP", "BHP"], ["RIO", "RIO"]],
-    a: [["2002", "中鋼"], ["2009", "第一銅"], ["1605", "華新"]],
-    b: [["1301", "台塑"], ["1303", "南亞"], ["1326", "台化"], ["6505", "台塑化"]],
-  },
-  {
-    industry: "BIOTECH",
-    display_name: "生技",
-    default_bias: "neutral_mixed",
-    default_confidence: 0.46,
-    evidence_summary: "LLY、NVO、MRNA、XBI、IBB 作為生技 proxy；以事件股觀察。",
-    overseas_leaders: [["LLY", "LLY"], ["NVO", "NVO"], ["MRNA", "MRNA"], ["XBI", "XBI"], ["IBB", "IBB"]],
-    a: [["6446", "藥華藥"], ["6472", "保瑞"], ["6919", "康霈*"], ["6589", "台康生技"]],
-    b: [["1795", "美時"], ["4105", "東洋"], ["4743", "合一"], ["4147", "中裕"]],
   },
 ].map((row, index) => ({
   ...row,
@@ -233,7 +193,7 @@ function listEqual(actual, expected) {
 
 function validateIndustryMapContract(rows = OPENING_REPORT_0830_INDUSTRY_MAP) {
   const issues = [];
-  if (!Array.isArray(rows) || rows.length !== 19) issues.push(`industry_map_count_mismatch:${Array.isArray(rows) ? rows.length : "not_array"}:expected_19`);
+  if (!Array.isArray(rows) || rows.length !== 15) issues.push(`industry_map_count_mismatch:${Array.isArray(rows) ? rows.length : "not_array"}:expected_15`);
   const seen = new Set();
   rows.forEach((row, index) => {
     if (!row.industry) issues.push(`industry_missing_at_index:${index}`);
@@ -243,6 +203,7 @@ function validateIndustryMapContract(rows = OPENING_REPORT_0830_INDUSTRY_MAP) {
     if (!row.display_name) issues.push(`display_name_missing:${row.industry}`);
     if (!Array.isArray(row.overseas_leaders) || row.overseas_leaders.length === 0) issues.push(`overseas_leaders_missing:${row.industry}`);
     if (!Array.isArray(row.a) || row.a.length === 0) issues.push(`tier_a_missing:${row.industry}`);
+    if (!Array.isArray(row.b) || row.b.length === 0) issues.push(`tier_b_missing:${row.industry}`);
     for (const leader of row.overseas_leaders || []) {
       if (!leader.name || !leader.yahoo_symbol) issues.push(`overseas_leader_identity_missing:${row.industry}:${leader.name || "unknown"}`);
       if (FORBIDDEN_OVERSEAS_LEADERS.includes(String(leader.name))) issues.push(`forbidden_overseas_leader:${row.industry}:${leader.name}`);
@@ -250,6 +211,10 @@ function validateIndustryMapContract(rows = OPENING_REPORT_0830_INDUSTRY_MAP) {
     for (const stockRow of [...(row.a || []), ...(row.b || [])]) {
       if (!/^\d{4}$/.test(String(stockRow.symbol || ""))) issues.push(`taiwan_symbol_invalid:${row.industry}:${stockRow.symbol || "unknown"}`);
       if (!stockRow.name) issues.push(`taiwan_symbol_name_missing:${row.industry}:${stockRow.symbol || "unknown"}`);
+    }
+    const tierA = new Set((row.a || []).map((stockRow) => String(stockRow.symbol || "")));
+    for (const stockRow of row.b || []) {
+      if (tierA.has(String(stockRow.symbol || ""))) issues.push(`tier_a_b_overlap:${row.industry}:${stockRow.symbol}`);
     }
   });
   const byIndustry = new Map(rows.map((row) => [row.industry, row]));

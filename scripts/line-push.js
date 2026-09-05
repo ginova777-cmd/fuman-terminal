@@ -99,19 +99,25 @@ async function pushLineMessages(messages, options = {}) {
   if (!token || !targets.length) {
     throw new Error("Missing LINE_CHANNEL_ACCESS_TOKEN and LINE_TO or LINE_USER_ID");
   }
+  const results = [];
   for (const to of targets) {
     const payload = { to, messages };
+    const targetOptions = options.idempotencyKey
+      ? { ...options, idempotencyKey: `${options.idempotencyKey}:${to}` }
+      : options;
     const result = await guardedSend({
       channel: "line",
       target: to,
       payload,
-      options,
+      options: targetOptions,
       send: () => fetchLine(payload, token),
     });
     if (!result.sent && process.env.NOTIFY_GUARD_VERBOSE === "1") {
       console.log(`LINE notification skipped: ${guardSummary(result.claim)}`);
     }
+    results.push({ target: to, sent: result.sent === true, reason: result.reason || result.claim?.reason || "" });
   }
+  return results;
 }
 
 async function sendLineText(text, options = {}) {
@@ -119,7 +125,7 @@ async function sendLineText(text, options = {}) {
 }
 
 async function sendLineFlex(altText, contents, options = {}) {
-  await pushLineMessages([{ type: "flex", altText: trimAltText(altText), contents }], options);
+  return pushLineMessages([{ type: "flex", altText: trimAltText(altText), contents }], options);
 }
 
 module.exports = {

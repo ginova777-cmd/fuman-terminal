@@ -85,7 +85,7 @@ async function main() {
   const receipt = {
     contract: "opening-report-0820-preflight-v2",
     ok,
-    phase: skippedForMarketClosed ? "skip_non_trading_day_no_terminal_no_line_no_bridge" : "preflight_only_no_terminal_no_telegram_no_codex_no_bridge",
+    phase: skippedForMarketClosed ? "skip_non_trading_day_no_terminal_no_line_no_bridge" : "preflight_only_no_terminal_no_line_no_codex_no_bridge",
     market_calendar: marketCalendar,
     skipped_for_market_closed: skippedForMarketClosed,
     no_terminal_no_line_no_industry_bias_no_bridge: skippedForMarketClosed,
@@ -118,7 +118,7 @@ async function main() {
     valid_leaders: shouldRunDetector ? (detectorReceipt?.valid_leaders ?? 0) : 0,
     total_leaders: shouldRunDetector ? (detectorReceipt?.total_leaders ?? 0) : 0,
     reason_code: skippedForMarketClosed ? "market_calendar_non_trading_day" : (detectorHasStalePromotion ? "opening_report_0820_stale_asia_leader_promoted" : (ok ? (detectorFreshness.source_gap_count ? "opening_report_0820_preflight_ok_with_source_gaps" : "opening_report_0820_preflight_ok") : "opening_report_0820_preflight_fail_closed")),
-    next_action: skippedForMarketClosed ? "skip_all_report_actions_until_next_trading_day" : "08:30 delivery must consume only this frozen 08:20 evidence and publish terminal_plus_telegram_plus_codex",
+    next_action: skippedForMarketClosed ? "skip_all_report_actions_until_next_trading_day" : "08:30 delivery must consume only this frozen 08:20 evidence and publish line_personal_plus_line_group_plus_terminal_plus_mother_pool",
   };
   writeJson(receiptPath, { ...receipt, receipt_path: receiptPath });
   console.log(JSON.stringify({ ok, receipt_path: receiptPath, run_id: runId, phase: receipt.phase, reason_code: receipt.reason_code, valid_leaders: receipt.valid_leaders, total_leaders: receipt.total_leaders }, null, 2));
@@ -132,7 +132,7 @@ main().catch((error) => {
   const payload = {
     contract: "opening-report-0820-preflight-v2",
     ok: false,
-    phase: "preflight_only_no_terminal_no_telegram_no_codex_no_bridge",
+    phase: "preflight_only_no_terminal_no_line_no_codex_no_bridge",
     trade_date: tradeDate,
     checked_at: new Date().toISOString(),
     reason_code: "opening_report_0820_preflight_runner_error",
@@ -143,4 +143,3 @@ main().catch((error) => {
   console.error(JSON.stringify(payload, null, 2));
   process.exitCode = 1;
 });
-

@@ -1,6 +1,7 @@
+param([switch]$IsolatedBacktest)
+
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
-
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
 $RuntimeDir = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
@@ -9,57 +10,131 @@ $env:FUMAN_DATA_DIR = if ($env:FUMAN_DATA_DIR) { $env:FUMAN_DATA_DIR } else { Jo
 $env:FUMAN_STATE_DIR = if ($env:FUMAN_STATE_DIR) { $env:FUMAN_STATE_DIR } else { Join-Path $RuntimeDir "state" }
 $env:NODE_OPTIONS = "--use-system-ca"
 
-foreach ($name in @("TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID", "TELEGRAM_TO")) {
-  if (-not [Environment]::GetEnvironmentVariable($name, "Process")) {
-    $value = [Environment]::GetEnvironmentVariable($name, "User")
-    if ($value) { [Environment]::SetEnvironmentVariable($name, $value, "Process") }
-  }
-}
-
 $logDir = Join-Path $RuntimeDir "logs"
 $receiptDir = Join-Path $RuntimeDir "data\opening-report-0830"
 New-Item -ItemType Directory -Force -Path $logDir, $receiptDir | Out-Null
-$today = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date), "Taipei Standard Time").ToString("yyyyMMdd")
+$nowTaipei = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date), "Taipei Standard Time")
+$today = $nowTaipei.ToString("yyyyMMdd")
+$tradeDate = $nowTaipei.ToString("yyyy-MM-dd")
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $runId = "opening-report-0830-$today-$stamp"
 $wrapperReceipt = Join-Path $receiptDir "opening-report-0830-wrapper-receipt-$today.json"
 
+# Every formal entry point owns its market-calendar guard. Do not rely on the
+# 08:20 preflight to protect the 08:30 runner, because Task Scheduler launches
+# them independently.
+if (-not $IsolatedBacktest) {
+  $calendarOutput = & "C:\Program Files\nodejs\node.exe" "scripts\check-market-calendar-action.js" "--date=$tradeDate" "--label=Opening-report-0830-wrapper" 2>&1
+  $calendarExit = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
+  $calendar = $null
+  try { $calendar = (($calendarOutput | Out-String).Trim() | ConvertFrom-Json) } catch { $calendar = $null }
+  if ($calendarExit -eq 10 -or ($null -ne $calendar -and $calendar.marketOpen -eq $false)) {
+    [ordered]@{
+      contract = "opening-report-morning-wrapper-v1"
+      status = "skipped"
+      ok = $true
+      complete = $false
+      reason_code = "market_calendar_non_trading_day"
+      mode = "production"
+      date = $today
+      trade_date = $tradeDate
+      run_id = $runId
+      checked_at = (Get-Date).ToString("o")
+      market_status = if ($null -ne $calendar) { [string]$calendar.marketStatus } else { "closed" }
+      closed_reason = if ($null -ne $calendar) { [string]$calendar.closedReason } else { "market_closed" }
+      formal_scan_skipped = $true
+      latest_pointer_updated = $false
+      line_push_attempted = $false
+      terminal_snapshot_attempted = $false
+      mother_pool_bridge_attempted = $false
+      no_side_effects = $true
+      steps = @()
+      canonical_verifier = "scripts/verify-opening-report-morning-contract.js"
+      telegram_enabled = $false
+    } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8
+    exit 0
+  }
+  if ($calendarExit -ne 0 -or $null -eq $calendar) {
+    [ordered]@{
+      contract = "opening-report-morning-wrapper-v1"
+      status = "fail_closed"
+      ok = $false
+      complete = $false
+      reason_code = "market_calendar_guard_failed"
+      mode = "production"
+      date = $today
+      trade_date = $tradeDate
+      run_id = $runId
+      checked_at = (Get-Date).ToString("o")
+      formal_scan_skipped = $true
+      latest_pointer_updated = $false
+      line_push_attempted = $false
+      terminal_snapshot_attempted = $false
+      mother_pool_bridge_attempted = $false
+      no_side_effects = $true
+      calendar_exit_code = $calendarExit
+      steps = @()
+      canonical_verifier = "scripts/verify-opening-report-morning-contract.js"
+      telegram_enabled = $false
+    } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8
+    exit 1
+  }
+}
+
 function Invoke-NodeStep {
-  param([string[]]$Args, [string]$Label)
+  param([string[]]$NodeArgs, [string]$Label)
   $stdout = Join-Path $logDir "opening-report-0830-$today-$stamp.$Label.stdout.log"
   $stderr = Join-Path $logDir "opening-report-0830-$today-$stamp.$Label.stderr.log"
-  & "C:\Program Files\nodejs\node.exe" @Args 1> $stdout 2> $stderr
+  & "C:\Program Files\nodejs\node.exe" @NodeArgs 1> $stdout 2> $stderr
   $exitCode = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
   return [pscustomobject]@{ label = $Label; exitCode = $exitCode; stdout = $stdout; stderr = $stderr }
 }
 
-$run = Invoke-NodeStep -Args @("scripts\run-opening-report-0830-production.js", "--apply-bridge", "--run-id=$runId") -Label "run"
-$terminal = Invoke-NodeStep -Args @("scripts\verify-opening-report-0830-terminal-briefing.js") -Label "terminal"
-$telegram = if ($run.exitCode -eq 0 -and $terminal.exitCode -eq 0) { Invoke-NodeStep -Args @("scripts\send-opening-report-0830-telegram.js") -Label "telegram" } else { [pscustomobject]@{ label = "telegram"; exitCode = -1; stdout = ""; stderr = "" } }
-$closure = if ($telegram.exitCode -eq 0) { Invoke-NodeStep -Args @("scripts\verify-opening-report-0830-telegram-closure.js") -Label "closure" } else { [pscustomobject]@{ label = "closure"; exitCode = -1; stdout = ""; stderr = "" } }
-$advisory = Invoke-NodeStep -Args @("scripts\verify-opening-report-0830-production.js") -Label "advisory"
+# Formal contract: runner -> one canonical verifier -> wrapper receipt.
+# LINE personal/group, terminal output, and Mother Pool bridge remain runner-owned.
+$runnerArgs = @("scripts\run-opening-report-0830-production.js", "--apply-bridge", "--date=$tradeDate", "--run-id=$runId")
+if ($IsolatedBacktest) { $runnerArgs += "--isolated-backtest" }
+$run = Invoke-NodeStep -NodeArgs $runnerArgs -Label "runner"
+$verifierArgs = @("scripts\verify-opening-report-morning-contract.js", "--trade-date=$tradeDate")
+if (-not $IsolatedBacktest) { $verifierArgs += "--require-current" }
+$verifier = if ($run.exitCode -eq 0) { Invoke-NodeStep -NodeArgs $verifierArgs -Label "canonical-verifier" } else { [pscustomobject]@{ label = "canonical-verifier"; exitCode = -1; stdout = ""; stderr = "" } }
 
 $finalFile = Join-Path $receiptDir "opening-report-0830-final-receipt-$today.json"
 $final = if (Test-Path -LiteralPath $finalFile) { Get-Content -LiteralPath $finalFile -Raw | ConvertFrom-Json } else { $null }
+$lineFile = Join-Path $receiptDir "line-push-receipt-$today.json"
+$line = if (Test-Path -LiteralPath $lineFile) { Get-Content -LiteralPath $lineFile -Raw | ConvertFrom-Json } else { $null }
+$runnerOk = ($run.exitCode -eq 0 -and $null -ne $final -and $final.ok -eq $true)
+$verifierOk = ($verifier.exitCode -eq 0)
+$linePersonalOk = ($null -ne $line -and $line.line_push_ok -eq $true -and $line.has_user_target -eq $true)
+$lineGroupOk = ($null -ne $line -and $line.line_push_ok -eq $true -and $line.has_group_target -eq $true)
+$terminalOk = ($null -ne $final -and $final.terminal_briefing_snapshot.ok -eq $true)
 $bridgeOk = ($null -ne $final -and $final.mother_pool_bridge_attempted -eq $true -and $final.mother_pool_bridge_ok -eq $true)
-$ok = ($run.exitCode -eq 0 -and $terminal.exitCode -eq 0 -and $telegram.exitCode -eq 0 -and $closure.exitCode -eq 0 -and $bridgeOk)
+$expected = if ($null -ne $final -and $null -ne $final.expected_industry_count) { [int]$final.expected_industry_count } else { 0 }
+$scanned = if ($null -ne $final -and $null -ne $final.scanned_industry_count) { [int]$final.scanned_industry_count } else { 0 }
+$ok = ($runnerOk -and $verifierOk -and $linePersonalOk -and $lineGroupOk -and $terminalOk -and $bridgeOk -and $expected -eq 15 -and $scanned -eq 15)
+$reasonCode = if ($ok) { "complete" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } else { "industry_scan_incomplete" }
+
 $receipt = [ordered]@{
-  contract = "opening-report-0830-wrapper-v5-telegram"
+  contract = "opening-report-morning-wrapper-v1"
+  status = if ($ok) { "complete" } else { "failed" }
   ok = $ok
-  reason_code = if ($ok) { "opening_report_0830_telegram_closure_ok" } elseif (-not $bridgeOk) { "mother_pool_bridge_not_complete" } elseif ($run.exitCode -ne 0) { "opening_report_runner_failed" } elseif ($terminal.exitCode -ne 0) { "terminal_briefing_failed" } elseif ($telegram.exitCode -ne 0) { "telegram_delivery_failed" } else { "telegram_closure_failed" }
+  reason_code = $reasonCode
+  mode = if ($IsolatedBacktest) { "isolated_backtest" } else { "production" }
   date = $today
+  trade_date = $tradeDate
   run_id = $runId
   checked_at = (Get-Date).ToString("o")
-  channel = "telegram_only"
-  formal_candidates = 0
-  watchlist_only = $true
-  mother_pool_bridge_required = $true
+  expected_industry_count = $expected
+  scanned_industry_count = $scanned
+  line_personal_ok = $linePersonalOk
+  line_group_ok = $lineGroupOk
+  terminal_ok = $terminalOk
   mother_pool_bridge_ok = $bridgeOk
-  line_delivery_allowed = $false
-  telegram_delivery_required = $true
-  steps = @($run, $terminal, $telegram, $closure, $advisory)
-  strategy_execution_allowed = $false
-  second_formal_run_allowed = $false
+  runner_ok = $runnerOk
+  canonical_verifier_ok = $verifierOk
+  steps = @($run, $verifier)
+  canonical_verifier = "scripts/verify-opening-report-morning-contract.js"
+  telegram_enabled = $false
 }
 $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8
 if (-not $ok) { exit 1 }

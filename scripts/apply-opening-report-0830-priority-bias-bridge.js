@@ -95,6 +95,8 @@ function validate(payload, options = {}) {
   const confidence = Number(payload?.confidence);
   if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) issues.push("confidence_invalid");
   if (typeof payload?.evidence_summary !== "string" || !payload.evidence_summary.trim()) issues.push("evidence_summary_missing");
+  const positiveRank = Number(payload?.positive_return_rank);
+  if (!Number.isInteger(positiveRank) || positiveRank < 1 || positiveRank > 3) issues.push("industry_not_positive_return_top3");
   return { ok: issues.length === 0, issues, date, runId: String(payload?.run_id || "") };
 }
 

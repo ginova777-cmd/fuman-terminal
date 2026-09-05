@@ -124,7 +124,10 @@ function localGate(channel, options = {}) {
   const allowMotherPoolBurstTelegram = channel === "telegram"
     && options.motherPoolIntradayBurstTelegram === true
     && envFlag("FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM");
-  if (notificationsDisabled() && !allowMotherPoolBurstTelegram) return { ok: false, reason: "notifications-disabled" };
+  // Strategy3 V2 is an explicitly authorized formal notification channel.
+  // This does not re-enable retired LINE/Telegram/SMTP notification paths.
+  const allowStrategy3V2Line = channel === "line" && options.strategy3V2Line === true;
+  if (notificationsDisabled() && !allowMotherPoolBurstTelegram && !allowStrategy3V2Line) return { ok: false, reason: "notifications-disabled" };
   if (envFlag("NOTIFICATION_GUARD_DISABLED") || envFlag("NOTIFY_GUARD_DISABLED")) {
     return { ok: true, reason: "guard-disabled" };
   }

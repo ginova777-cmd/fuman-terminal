@@ -90,7 +90,11 @@ async function yahooChartSnapshot(leader, tradeDate) {
   const cut = cutoffMs(tradeDate);
   const period1 = Math.floor((cut - 8 * 24 * 3600 * 1000) / 1000);
   const period2 = Math.floor((cut + 60 * 1000) / 1000);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(leader.yahoo)}?period1=${period1}&period2=${period2}&interval=5m&includePrePost=false`;
+  // US leaders must include the overnight after-hours/pre-market session that is
+  // available at the 08:20 Taipei freeze.  Japan/Korea are still constrained
+  // below to their 08:00-08:20 Asia/Taipei window.
+  const includePrePost = true;
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(leader.yahoo)}?period1=${period1}&period2=${period2}&interval=5m&includePrePost=${includePrePost}`;
   const fetched = await fetchJson(url);
   if (!fetched.ok) return { ok: false, source: "Yahoo Finance chart", source_url: url, reason_code: `yahoo_chart_http_${fetched.status || 0}`, attempts: fetched.attempts };
   const result = fetched.json?.chart?.result?.[0];
@@ -102,7 +106,8 @@ async function yahooChartSnapshot(leader, tradeDate) {
     const ms = timestamps[index] * 1000;
     if (ms <= cut && Number.isFinite(Number(closes[index])) && Number(closes[index]) > 0) selected = index;
   }
-  if (selected < 0) return { ok: false, source: "Yahoo Finance chart", source_url: url, reason_code: "no_bar_at_or_before_0820_cutoff", attempts: fetched.attempts };
+  const usLeader = !/\.(?:T|KS)$/i.test(String(leader.yahoo || ""));
+  if (selected < 0) return { ok: false, source: "Yahoo Finance chart", source_url: url, reason_code: usLeader ? "us_overnight_bar_missing_before_0820" : "no_bar_at_or_before_0820_cutoff", attempts: fetched.attempts };
   const selectedMs = timestamps[selected] * 1000;
   const asiaWindowStart = Date.parse(`${tradeDate}T08:00:00+08:00`);
   const asiaEarlySessionRequired = /\.(?:T|KS)$/i.test(String(leader.yahoo || ""));
@@ -139,7 +144,8 @@ async function yahooChartSnapshot(leader, tradeDate) {
     percent: Number.isFinite(percent) ? Number(percent.toFixed(2)) : null,
     direction: classified.direction,
     display: classified.display,
-    reason_code: Number.isFinite(percent) ? classified.reason_code : "previous_close_missing",
+    session_contract: usLeader ? "us_overnight_after_hours" : "08:00-08:20 Asia/Taipei",
+    reason_code: Number.isFinite(percent) ? (usLeader ? "us_overnight_after_hours" : classified.reason_code) : "previous_close_missing",
     attempts: fetched.attempts,
   };
 }
@@ -226,4 +232,3 @@ main().catch((error) => {
   console.error(error?.stack || error?.message || String(error));
   process.exit(1);
 });
-

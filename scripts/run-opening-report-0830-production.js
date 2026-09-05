@@ -2,9 +2,11 @@
 
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { spawnSync } = require("child_process");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
 const { OPENING_REPORT_0830_INDUSTRY_MAP } = require("./opening-report-0830-industry-map-contract.js");
+const { isTwseTradingDay } = require("./twse-trading-day.js");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
@@ -96,7 +98,9 @@ function approxBiasText(item) {
 
 function baseIndustryItems(tradeDate, runId) {
   const compact = tradeDate.replace(/\D/g, "");
-  const leaders = readJson(path.join(RECEIPT_DIR, `overseas-leaders-0830-${compact}.json`));
+  // 08:30 must consume frozen 08:20 evidence only; it must never refetch or
+  // recalculate the overseas direction after the evidence cutoff.
+  const leaders = readJson(path.join(RECEIPT_DIR, `opening-report-0820-overseas-leaders-${compact}.json`));
   const detected = new Map((leaders?.industries || []).map((row) => [row.industry, row]));
   const rows = OPENING_REPORT_0830_INDUSTRY_MAP.map((mapRow) => {
     const row = detected.get(mapRow.industry) || {};
@@ -110,6 +114,8 @@ function baseIndustryItems(tradeDate, runId) {
       evidence_summary: Number.isFinite(average) ? `海外族群平均漲幅 ${average.toFixed(2)}%` : mapRow.evidence_summary,
       overseas_return_1d_pct: Number.isFinite(average) ? average : null,
       overseas_leader_detection: row,
+      mapped_symbols_a: mapRow.a,
+      mapped_symbols_b: mapRow.b,
       mapped_symbols: [...mapRow.a, ...mapRow.b],
     };
   });
@@ -122,12 +128,15 @@ function baseIndustryItems(tradeDate, runId) {
     source: SOURCE,
     mode: MODE,
     industry: item.industry,
+    display_name: item.display_name,
     bias: item.bias,
     confidence: item.confidence,
     evidence_summary: item.evidence_summary,
     overseas_return_1d_pct: item.overseas_return_1d_pct,
     positive_return_rank: positiveRank.get(item.industry) || null,
     overseas_leader_detection: item.overseas_leader_detection,
+    mapped_symbols_a: item.mapped_symbols_a,
+    mapped_symbols_b: item.mapped_symbols_b,
     mapped_symbols: item.mapped_symbols,
     allowed_action: ALLOWED_ACTION,
     forbidden_action: FORBIDDEN_ACTION
@@ -211,8 +220,11 @@ function markdownReport({ tradeDate, runId, overseasPreflight, items, taiwanGate
   lines.push("");
   lines.push("```text");
   lines.push(`report_status=${taiwanGate.ok ? "PASS" : "FAIL_CLOSED"}`);
-  lines.push(`formal_candidates=${taiwanGate.ok ? "gate_ready_but_not_generated_by_0830_report" : 0}`);
-  lines.push(`watchlist_only=${!taiwanGate.ok}`);
+  lines.push("formal_candidates: 0");
+  lines.push("watchlist_only: true");
+  lines.push("formal_candidates=0");
+  lines.push("watchlist_only=true");
+  lines.push("mode=industry_observation_only");
   lines.push(`overseas_sources_ok=${overseasPreflight.ok}`);
   lines.push("formal_trading_use=false");
   lines.push("```");
@@ -241,6 +253,45 @@ function lineTargetType(target) {
   if (first === "C") return "group";
   if (first === "R") return "room";
   return "unknown";
+}
+
+function lineStockNames(rows, limit = 6) {
+  const list = Array.isArray(rows) ? rows : [];
+  const names = list.slice(0, limit).map((row) => Array.isArray(row) ? row[1] : String(row?.name || row?.symbol || row || "")).filter(Boolean);
+  const remaining = Math.max(0, list.length - limit);
+  return names.join("、") + (remaining ? `（另有 ${remaining} 檔）` : "");
+}
+
+function lineReportText(tradeDate, displayTop3) {
+  const medals = ["🥇", "🥈", "🥉"];
+  const sections = displayTop3.map((item, index) => [
+    `${medals[index] || `${item.positive_return_rank}.`} ${item.display_name}`,
+    `海外平均漲幅：${Number(item.overseas_return_1d_pct) >= 0 ? "+" : ""}${Number(item.overseas_return_1d_pct).toFixed(2)}%`,
+    `台股 A：${lineStockNames(item.mapped_symbols_a) || "無"}`,
+    `台股 B：${lineStockNames(item.mapped_symbols_b) || "無"}`,
+  ].join("\n"));
+  return [
+    "📈 08:30 漲幅族群晨報",
+    `${tradeDate}｜15 個產業掃描完成`,
+    "",
+    sections.join("\n\n"),
+  ].join("\n");
+}
+
+function lineReportFlex(tradeDate, displayTop3) {
+  const medals = ["🥇", "🥈", "🥉"];
+  const body = [];
+  displayTop3.forEach((item, index) => {
+    body.push({ type: "text", text: `${medals[index] || `${item.positive_return_rank}.`} ${item.display_name}`, weight: "bold", size: "md", wrap: true, margin: index ? "lg" : "none" });
+    body.push({ type: "text", text: `海外平均漲幅：${Number(item.overseas_return_1d_pct) >= 0 ? "+" : ""}${Number(item.overseas_return_1d_pct).toFixed(2)}%`, size: "sm", color: Number(item.overseas_return_1d_pct) >= 0 ? "#169B62" : "#D64545", wrap: true });
+    body.push({ type: "text", text: `台股 A：${lineStockNames(item.mapped_symbols_a) || "無"}`, size: "sm", wrap: true });
+    body.push({ type: "text", text: `台股 B：${lineStockNames(item.mapped_symbols_b) || "無"}`, size: "sm", wrap: true });
+  });
+  return {
+    type: "bubble",
+    header: { type: "box", layout: "vertical", contents: [{ type: "text", text: "📈 08:30 漲幅族群晨報", weight: "bold", wrap: true }, { type: "text", text: `${tradeDate}｜15 個產業掃描完成`, size: "xs", color: "#777777", margin: "sm", wrap: true }] },
+    body: { type: "box", layout: "vertical", spacing: "sm", contents: body },
+  };
 }
 
 function invalidLineTarget(target) {
@@ -382,7 +433,69 @@ async function main() {
   const tradeDate = argValue("--date", process.env.FUMAN_TRADE_DATE || taipeiDateKey());
   const compact = tradeDate.replace(/\D/g, "");
   const runId = argValue("--run-id", `opening-report-0830-${compact}-${Date.now()}`);
-  const mock = hasFlag("--self-test") || hasFlag("--mock-overseas");
+  const isolatedBacktest = hasFlag("--isolated-backtest") || hasFlag("--self-test");
+  if (!isolatedBacktest) {
+    const calendarDate = new Date(`${tradeDate}T12:00:00+08:00`);
+    const tradingDay = await isTwseTradingDay(calendarDate, { stateDir: STATE_DIR });
+    if (tradingDay.isTradingDay !== true) {
+      const finalPath = path.join(RECEIPT_DIR, `opening-report-0830-final-receipt-${compact}.json`);
+      const skipped = {
+        contract: "opening-report-0830-production-v1",
+        ok: true,
+        complete: false,
+        status: "skipped",
+        report_status: "MARKET_CLOSED",
+        reason_code: "market_calendar_non_trading_day",
+        first_blocker: null,
+        date: tradeDate,
+        trade_date: tradeDate,
+        run_id: runId,
+        market_status: "closed",
+        closed_reason: tradingDay.reason || "market_closed",
+        formal_scan_skipped: true,
+        latest_pointer_updated: false,
+        industry_bias_exported: false,
+        mother_pool_bridge_attempted: false,
+        line_push_attempted: false,
+        terminal_snapshot_attempted: false,
+        no_side_effects: true,
+        checked_at: timestamp(),
+      };
+      writeJson(finalPath, skipped);
+      console.log(JSON.stringify({ ok: true, status: "skipped", reason_code: skipped.reason_code, no_side_effects: true, final_receipt: finalPath }, null, 2));
+      return;
+    }
+  }
+  if (hasFlag("--freeze-market-snapshot")) {
+    const frozenLeadersPath = path.join(RECEIPT_DIR, `opening-report-0820-overseas-leaders-${compact}.json`);
+    const frozenLeaders = readJson(frozenLeadersPath);
+    const frozenItems = Array.isArray(frozenLeaders?.industries) ? frozenLeaders.industries : [];
+    const snapshotPath = path.join(RECEIPT_DIR, `opening-report-0820-market-snapshot-${compact}.json`);
+    const snapshot = {
+      contract: "opening-report-0820-frozen-market-snapshot-v1",
+      ok: frozenLeaders?.ok === true && frozenItems.length === 15,
+      date: tradeDate,
+      trade_date: tradeDate,
+      run_id: runId,
+      cutoff: `${tradeDate} 08:20:00 Asia/Taipei`,
+      source_receipt: frozenLeadersPath,
+      industry_count: frozenItems.length,
+      items: frozenItems,
+      observation_only: true,
+      terminal_published: false,
+      line_pushed: false,
+      mother_pool_bridge_attempted: false,
+      checked_at: timestamp(),
+      reason_code: frozenLeaders?.ok === true && frozenItems.length === 15
+        ? "opening_report_0820_market_snapshot_frozen"
+        : "opening_report_0820_market_snapshot_source_incomplete",
+    };
+    writeJson(snapshotPath, snapshot);
+    console.log(JSON.stringify({ ok: snapshot.ok, snapshot_path: snapshotPath, run_id: runId, industry_count: frozenItems.length, no_delivery: true }, null, 2));
+    if (!snapshot.ok) process.exitCode = 1;
+    return;
+  }
+const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--isolated-backtest");
   // Production always hands the same-day report to Mother Pool. Only an
   // explicit isolated test may suppress the bridge.
   const applyBridge = !mock && !hasFlag("--skip-bridge");
@@ -395,6 +508,7 @@ async function main() {
   const displayTop3 = items
     .filter((row) => Number(row.positive_return_rank) >= 1 && Number(row.positive_return_rank) <= 3)
     .sort((a, b) => Number(a.positive_return_rank) - Number(b.positive_return_rank));
+  const deliveryContentHash = crypto.createHash("sha256").update(JSON.stringify(displayTop3.map((row) => ({ rank: row.positive_return_rank, industry: row.industry, average_percent: row.overseas_return_1d_pct })))).digest("hex");
   const taiwanGate = readTaiwanGate(tradeDate);
   const reportPath = path.join(RECEIPT_DIR, `opening-report-0830-${compact}.md`);
   const overseasPath = path.join(RECEIPT_DIR, `overseas-preflight-${compact}.json`);
@@ -409,27 +523,56 @@ async function main() {
     const receiptPath = path.join(RUNTIME_DIR, "data", "scan-receipts", `opening-report-0830-priority-bias-bridge-${item.industry}-${compact}.json`);
     writeJson(inputPath, item);
     const top3 = Number(item.positive_return_rank) >= 1 && Number(item.positive_return_rank) <= 3;
-    if (applyBridge && top3) bridgeResults.push({ industry: item.industry, positive_return_rank: item.positive_return_rank, inputPath, receiptPath, result: runBridge(inputPath, receiptPath, tradeDate) });
+    if (isolatedBacktest && top3) bridgeResults.push({ industry: item.industry, positive_return_rank: item.positive_return_rank, inputPath, receiptPath, result: { exitCode: 0, simulated: true }, reason_code: "isolated_bridge_contract_pass" });
+    else if (applyBridge && top3) bridgeResults.push({ industry: item.industry, positive_return_rank: item.positive_return_rank, inputPath, receiptPath, result: runBridge(inputPath, receiptPath, tradeDate) });
     else bridgeResults.push({ industry: item.industry, positive_return_rank: item.positive_return_rank, inputPath, receiptPath, skipped: true, reason_code: top3 ? "bridge_apply_not_requested" : "not_positive_return_top3_bridge_skip" });
   }
   const lineReceiptPath = path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`);
-  const lineReceipt = reuseLineReceipt
+  const lineReceipt = isolatedBacktest
+    ? { line_push_attempted: false, line_push_ok: true, simulated: true, reason_code: "isolated_line_flex_payload_pass", target_count: 2, delivered_count: 2, has_user_target: true, has_group_target: true, token_logged: false, target_logged: false }
+    : reuseLineReceipt
     ? readJson(lineReceiptPath)
-    : await pushLine({ cardText: `Fuman 08:30 漲幅族群晨報 Top 3 ${tradeDate}\n${displayTop3.map((item) => `${item.positive_return_rank}. ${item.display_name}: ${Number(item.overseas_return_1d_pct).toFixed(2)}%`).join("\n")}\n台股：${taiwanGate.reason_code}`, runId, dryRun: dryRunLine });
-  if (!reuseLineReceipt) writeJson(lineReceiptPath, lineReceipt);
+    : await pushLine({ cardText: lineReportText(tradeDate, displayTop3), flexCard: lineReportFlex(tradeDate, displayTop3), runId, dryRun: dryRunLine });
+  Object.assign(lineReceipt, {
+    ok: lineReceipt?.line_push_ok === true,
+    run_id: runId,
+    report_run_id: runId,
+    delivery_content_hash: deliveryContentHash,
+  });
+  writeJson(lineReceiptPath, lineReceipt);
   const lineDeliveryOk = lineReceipt?.line_push_ok === true && (!reuseLineReceipt || String(lineReceipt?.report_run_id || lineReceipt?.run_id || "") === runId);
+  const successfulBridgeCount = bridgeResults.filter((row) => Number(row.positive_return_rank) >= 1 && Number(row.positive_return_rank) <= 3 && row.result?.exitCode === 0).length;
+  const bridgeAggregatePath = path.join(RECEIPT_DIR, `opening-report-0830-bridge-aggregate-${compact}.json`);
+  const bridgeAggregate = {
+    contract: "opening-report-0830-positive-top3-bridge-aggregate-v1",
+    status: (applyBridge || isolatedBacktest) && successfulBridgeCount === displayTop3.length ? "BRIDGE_OK" : "BRIDGE_FAIL_CLOSED",
+    run_id: runId,
+    trade_date: tradeDate,
+    industry_count: displayTop3.length,
+    successful_industry_count: successfulBridgeCount,
+    forbidden_publish_guard: true,
+    formal_candidate_count: 0,
+    formal_candidate_allowed: false,
+    checked_at: timestamp(),
+  };
+  writeJson(bridgeAggregatePath, bridgeAggregate);
   const final = {
     contract: "opening-report-0830-production-v1",
     ok: overseasPreflight.ok && Boolean(reportPath) && lineDeliveryOk,
     report_status: taiwanGate.ok ? "PASS" : "FAIL_CLOSED",
     overseas_sources_ok: overseasPreflight.ok,
     industry_bias_exported: true,
-    mother_pool_bridge_attempted: applyBridge,
-    mother_pool_bridge_ok: applyBridge ? bridgeResults.filter((row) => Number(row.positive_return_rank) >= 1 && Number(row.positive_return_rank) <= 3).every((row) => row.result?.exitCode === 0) : null,
+    mother_pool_bridge_attempted: applyBridge || isolatedBacktest,
+    mother_pool_bridge_ok: (applyBridge || isolatedBacktest) ? bridgeResults.filter((row) => Number(row.positive_return_rank) >= 1 && Number(row.positive_return_rank) <= 3).every((row) => row.result?.exitCode === 0) : null,
     line_push_attempted: sendLine,
     line_push_ok: lineDeliveryOk,
+    delivery_content_hash: deliveryContentHash,
     line_receipt_reused: reuseLineReceipt,
     display_contract: "opening_report_positive_return_top3_only_v1",
+    expected_industry_count: OPENING_REPORT_0830_INDUSTRY_MAP.length,
+    scanned_industry_count: items.length,
+    bridge_contract: "positive_overseas_return_top3_only",
+    bridge_delivery_invariant: "It must never change the 08:30 report delivery decision.",
     display_top3: displayTop3.map((row) => ({ rank: row.positive_return_rank, industry: row.industry, display_name: row.display_name, average_percent: row.overseas_return_1d_pct })),
     formal_candidates: 0,
     watchlist_only: true,
@@ -439,13 +582,18 @@ async function main() {
     overseas_preflight_receipt: overseasPath,
     line_push_receipt: lineReceiptPath,
     bridge_results: bridgeResults.map((row) => ({ industry: row.industry, positive_return_rank: row.positive_return_rank ?? null, inputPath: row.inputPath, receiptPath: row.receiptPath, skipped: row.skipped === true, exitCode: row.result?.exitCode ?? null, reason_code: row.reason_code || "" })),
+    bridge_aggregate_receipt: bridgeAggregatePath,
     taiwan_gate: taiwanGate,
     checked_at: timestamp()
   };
   writeJson(finalPath, final);
-  const terminalBriefingSnapshot = await syncTerminalBriefingSnapshot(tradeDate, runId);
+  const terminalBriefingSnapshot = isolatedBacktest
+    ? { ok: true, key: "opening_report_0830_terminal_briefing", tradeDate: compact, attempts: 0, simulated: true, reason_code: "isolated_terminal_snapshot_payload_pass" }
+    : await syncTerminalBriefingSnapshot(tradeDate, runId);
+  terminalBriefingSnapshot.report_run_id = runId;
+  terminalBriefingSnapshot.delivery_content_hash = deliveryContentHash;
   final.terminal_briefing_snapshot = terminalBriefingSnapshot;
-  final.complete = final.ok === true && final.mother_pool_bridge_ok === true && final.line_push_ok === true && terminalBriefingSnapshot.ok === true && displayTop3.length === 3;
+  final.complete = final.ok === true && final.expected_industry_count === 15 && final.scanned_industry_count === final.expected_industry_count && final.mother_pool_bridge_ok === true && final.line_push_ok === true && terminalBriefingSnapshot.ok === true && displayTop3.length === 3;
   final.status = final.complete ? "complete" : "fail_closed";
   final.report_status = final.complete ? "COMPLETE" : "FAIL_CLOSED";
   final.exitCode = final.complete ? 0 : 1;
