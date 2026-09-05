@@ -7,6 +7,7 @@ const runtime = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const date = process.argv.find((x) => x.startsWith("--trade-date="))?.split("=")[1] || c.taipeiDate();
 const compact = date.replace(/\D/g, "");
 const dryRun = process.argv.includes("--dry-run");
+const retryTarget = process.argv.find((x) => x.startsWith("--retry-target="))?.split("=")[1] || "";
 
 function reg(name) {
   try { return execFileSync("reg.exe", ["query", "HKCU\\Environment", "/v", name], { encoding: "utf8", windowsHide: true }).trim().split(/\s{2,}/).pop().trim(); }
@@ -20,6 +21,18 @@ function config() {
   const values = [...names.map((n) => process.env[n]), ...names.map(reg), secret("line-target-id.txt")];
   const targets = [...new Set(values.flatMap((v) => String(v || "").split(",")).map((v) => v.trim()).filter((v) => type(v) !== "invalid"))];
   return { token, targets };
+}
+function priorSent(target, runId) {
+  try {
+    const file = path.join(runtime, "state", "notification-guard", "sent-notifications.jsonl");
+    return fs.readFileSync(file, "utf8").trim().split(/\r?\n/).some((line) => {
+      try {
+        const row = JSON.parse(line);
+        return row.channel === "line" && row.target === target && row.status === "sent"
+          && (row.idempotencyKey === `strategy3-v2:${runId}` || row.idempotencyKey === `strategy3-v2:${runId}:${target}`);
+      } catch { return false; }
+    });
+  } catch { return false; }
 }
 function card(scan) {
   return { type: "bubble",
@@ -49,11 +62,26 @@ async function main() {
       source_contract: "Strategy3 V2 applied complete receipt only; legacy Strategy3 tables forbidden" } };
   if (!dryRun) {
     if (!cfg.token || !cfg.targets.length) throw new Error("strategy3_v2_line_config_missing");
-    process.env.LINE_CHANNEL_ACCESS_TOKEN = cfg.token; process.env.LINE_TO = cfg.targets.join(",");
+    const targetsToSend = retryTarget ? cfg.targets.filter((target) => type(target) === retryTarget) : cfg.targets;
+    if (!targetsToSend.length) throw new Error(`strategy3_v2_line_retry_target_missing:${retryTarget}`);
+    process.env.LINE_CHANNEL_ACCESS_TOKEN = cfg.token; process.env.LINE_TO = targetsToSend.join(",");
     process.env.LINE_PUSH_RETRIES = process.env.LINE_PUSH_RETRIES || "3"; process.env.LINE_PUSH_TIMEOUT_MS = process.env.LINE_PUSH_TIMEOUT_MS || "4500";
     process.env.NOTIFY_GUARD_DISABLED = "1";
-    await require("./line-push").sendLineFlex(`隔日沖參考 ${scan.trade_date}`, card(scan), { idempotencyKey: `strategy3-v2:${scan.run_id}` });
-    receipt.line_push_ok = true; receipt.line_push_personal_ok = types.has("personal"); receipt.line_push_group_ok = types.has("group");
+    const deliveries = await require("./line-push").sendLineFlex(`隔日沖參考 ${scan.trade_date}`, card(scan), {
+      idempotencyKey: `strategy3-v2:${scan.run_id}`,
+      strategy3V2Line: true,
+      dataConfirmed: true,
+    });
+    if (!Array.isArray(deliveries) || deliveries.length !== targetsToSend.length || deliveries.some((item) => item.sent !== true)) {
+      throw new Error(`strategy3_v2_line_not_delivered:${JSON.stringify(deliveries || [])}`);
+    }
+    const delivered = new Map(deliveries.map((item) => [item.target, item.sent === true]));
+    const targetOk = (target) => delivered.get(target) === true || priorSent(target, scan.run_id);
+    receipt.delivery_evidence = cfg.targets.map((target) => ({ target_type: type(target), sent: targetOk(target), sent_now: delivered.get(target) === true }));
+    receipt.retry_target = retryTarget || null;
+    receipt.line_push_personal_ok = cfg.targets.filter((target) => type(target) === "personal").every(targetOk) && types.has("personal");
+    receipt.line_push_group_ok = cfg.targets.filter((target) => type(target) === "group").every(targetOk) && types.has("group");
+    receipt.line_push_ok = receipt.line_push_personal_ok && receipt.line_push_group_ok;
     receipt.ok = receipt.line_push_personal_ok && receipt.line_push_group_ok;
     if (!receipt.ok) receipt.status = "PARTIAL_TARGETS";
   }

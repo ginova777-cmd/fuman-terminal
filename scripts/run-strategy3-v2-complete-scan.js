@@ -29,6 +29,7 @@ const apply = process.argv.includes("--apply");
 const attemptPhase = process.argv.find((arg) => arg.startsWith("--attempt-phase="))?.slice("--attempt-phase=".length) || "";
 const quoteCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-quotes-v2.json");
 const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles-v2.json");
+const motherPoolPath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-priority-symbols.json");
 const MIN_LOCAL_COVERAGE_RATIO = Math.max(0.9, Number(process.env.STRATEGY3_V2_MIN_LOCAL_COVERAGE_RATIO || 0.9));
 
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
@@ -175,6 +176,14 @@ function round(value, digits = 2) {
 }
 
 function buildScannerCoreResults() {
+  const motherPool = readJson(motherPoolPath, {});
+  const motherPoolTradeDate = String(motherPool.tradeDate || motherPool.trade_date || "").slice(0, 10);
+  const motherPoolSymbols = [...new Set((motherPool.daytradeMotherPoolSymbols || [])
+    .map((value) => String(value?.symbol || value?.code || value || "").replace(/\D/g, "").slice(0, 4))
+    .filter((code) => /^\d{4}$/.test(code)))];
+  if (motherPoolTradeDate !== tradeDate) throw new Error(`strategy3_v2_mother_pool_trade_date_mismatch:${motherPoolTradeDate || "missing"}`);
+  if (!motherPoolSymbols.length) throw new Error("strategy3_v2_mother_pool_empty");
+  const motherPoolSet = new Set(motherPoolSymbols);
   const quoteCache = readCacheArray(quoteCachePath, "quotes");
   const candleCache = readCacheArray(candleCachePath, "candles");
   const quoteByCode = new Map();
@@ -188,6 +197,7 @@ function buildScannerCoreResults() {
     if (String(candle.tradeDate || "").slice(0, 10) !== tradeDate) continue;
     const code = String(candle.code || candle.symbol || "").replace(/\D/g, "").slice(0, 4);
     if (!/^\d{4}$/.test(code)) continue;
+    if (!motherPoolSet.has(code)) continue;
     if (!candlesByCode.has(code)) candlesByCode.set(code, []);
     candlesByCode.get(code).push(candle);
   }
@@ -268,12 +278,15 @@ function buildScannerCoreResults() {
         "strategy3_v2_positive_quote_change",
       ],
       formal_source: "local_fugle_daytrade_ws_candles+local_fugle_daytrade_ws_quotes",
+      universe_source: "daytradeMotherPoolSymbols",
+      in_daytrade_mother_pool: true,
     });
   }
 
   candidates.sort((a, b) => b.score - a.score || b.change_percent - a.change_percent || b.tail_volume_share_pct - a.tail_volume_share_pct);
   candidates.forEach((item, index) => { item.rank = index + 1; });
   return {
+    mother_pool: { file: motherPoolPath, trade_date: motherPoolTradeDate, symbol_count: motherPoolSymbols.length },
     quote_cache: { file: quoteCache.file, updated_at: quoteCache.updated_at, count: quoteCache.count },
     candle_cache: { file: candleCache.file, updated_at: candleCache.updated_at, count: candleCache.count },
     same_day_candle_symbols: candlesByCode.size,
@@ -344,7 +357,9 @@ async function main() {
   }
   const issues = [];
   const scanner = buildScannerCoreResults();
-  const formalReadyTarget = Number(readiness.payload?.minimums?.candleSubscribedSymbols || readiness.payload?.mother_pool?.minimumReadySymbols || 300);
+  // The 300-symbol Mother Pool size is a discovery target, not a hard scan
+  // gate. Measure Strategy3 against the actual same-day Mother Pool instead.
+  const formalReadyTarget = Number(scanner.mother_pool?.symbol_count || 0);
   const localCoverageRatio = formalReadyTarget > 0 ? Math.min(1, scanner.local_ready_20_candle_symbols / formalReadyTarget) : 0;
   const localCoverageOk = localCoverageRatio >= MIN_LOCAL_COVERAGE_RATIO;
   const scannerCoreReady = scanner.results.length > 0 && localCoverageOk;
@@ -365,6 +380,8 @@ async function main() {
         scanner_core_ready: scannerCoreReady,
         scanner_source: "local_fugle_daytrade_ws_candles+local_fugle_daytrade_ws_quotes",
         scanner_summary: {
+          universe_scope: "daytrade_mother_pool_only",
+          mother_pool: scanner.mother_pool,
           same_day_candle_symbols: scanner.same_day_candle_symbols,
           local_ready_20_candle_symbols: scanner.local_ready_20_candle_symbols,
           local_entry_window_symbols: scanner.local_entry_window_symbols,
@@ -393,6 +410,8 @@ async function main() {
         scanner_core_ready: true,
         scanner_source: "local_fugle_daytrade_ws_candles+local_fugle_daytrade_ws_quotes",
         scanner_summary: {
+          universe_scope: "daytrade_mother_pool_only",
+          mother_pool: scanner.mother_pool,
           same_day_candle_symbols: scanner.same_day_candle_symbols,
           local_ready_20_candle_symbols: scanner.local_ready_20_candle_symbols,
           local_entry_window_symbols: scanner.local_entry_window_symbols,

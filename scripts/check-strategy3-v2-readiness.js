@@ -21,6 +21,7 @@ const compactDate = date.replace(/\D/g, "");
 const statusFile = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status.json");
 const sourceReceipt = path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-v2-readiness-${compactDate}.json`);
 const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles-v2.json");
+const motherPoolPath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-priority-symbols.json");
 const MIN_LOCAL_COVERAGE_RATIO = Math.max(0.9, Number(process.env.STRATEGY3_V2_MIN_LOCAL_COVERAGE_RATIO || 0.9));
 
 function issue(list, condition, code, details = {}) {
@@ -50,12 +51,19 @@ function readCacheArray(file, key) {
 }
 
 function readLocalFormalCacheReadiness() {
+  const mother = readJson(motherPoolPath, {});
+  const motherTradeDate = String(mother.tradeDate || mother.trade_date || "").slice(0, 10);
+  const motherSymbols = [...new Set((mother.daytradeMotherPoolSymbols || [])
+    .map((value) => String(value?.symbol || value?.code || value || "").replace(/\D/g, "").slice(0, 4))
+    .filter((code) => /^\d{4}$/.test(code)))];
+  const motherSet = new Set(motherSymbols);
   const candleCache = readCacheArray(candleCachePath, "candles");
   const candlesByCode = new Map();
   for (const candle of candleCache.rows) {
     if (String(candle.tradeDate || "").slice(0, 10) !== date) continue;
     const code = String(candle.code || candle.symbol || "").replace(/\D/g, "").slice(0, 4);
     if (!/^\d{4}$/.test(code)) continue;
+    if (!motherSet.has(code)) continue;
     if (!candlesByCode.has(code)) candlesByCode.set(code, 0);
     candlesByCode.set(code, candlesByCode.get(code) + 1);
   }
@@ -63,14 +71,17 @@ function readLocalFormalCacheReadiness() {
   for (const count of candlesByCode.values()) {
     if (count >= MIN_CANDLES_PER_SYMBOL) ready20Count += 1;
   }
-  const coverageRatio = MIN_READY_SYMBOLS > 0 ? Math.min(1, ready20Count / MIN_READY_SYMBOLS) : 0;
+  const requiredReadyCount = Math.ceil(motherSymbols.length * MIN_LOCAL_COVERAGE_RATIO);
+  const coverageRatio = motherSymbols.length > 0 ? Math.min(1, ready20Count / motherSymbols.length) : 0;
   return {
-    ok: coverageRatio >= MIN_LOCAL_COVERAGE_RATIO,
-    source: "local_fugle_daytrade_ws_candles_cache",
+    ok: motherTradeDate === date && motherSymbols.length > 0 && coverageRatio >= MIN_LOCAL_COVERAGE_RATIO,
+    source: "strategy3_direct_daytrade_mother_pool_v2_cache",
     tradeDate: date,
+    motherPoolTradeDate: motherTradeDate,
+    motherPoolExpectedCount: motherSymbols.length,
     sameDayCandleSymbols: candlesByCode.size,
     localReady20CandleSymbols: ready20Count,
-    minimumReadySymbols: MIN_READY_SYMBOLS,
+    minimumReadySymbols: requiredReadyCount,
     minimumCandlesPerSymbol: MIN_CANDLES_PER_SYMBOL,
     coverageRatio: Math.round(coverageRatio * 10000) / 10000,
     minimumCoverageRatio: MIN_LOCAL_COVERAGE_RATIO,
@@ -79,6 +90,7 @@ function readLocalFormalCacheReadiness() {
       updated_at: candleCache.updated_at,
       count: candleCache.count,
     },
+    motherPool: { file: motherPoolPath, tradeDate: motherTradeDate, symbolCount: motherSymbols.length },
     tolerancePolicy: "strategy3_v2_accepts_same_day_local_1m_cache_when_coverage_at_least_90_percent",
   };
 }
@@ -86,7 +98,7 @@ function readLocalFormalCacheReadiness() {
 function runMotherPoolReadback() {
   const child = spawnSync(process.execPath, [
     "--use-system-ca",
-    path.join(ROOT, "scripts", "check-strategy3-session-readiness.js"),
+    path.join(ROOT, "scripts", "check-strategy3-direct-mother-pool-readiness.js"),
     `--trade-date=${date}`,
   ], {
     cwd: ROOT,
@@ -136,12 +148,10 @@ function main() {
   const motherTradeDate = String(mother.tradeDate || mother.trade_date || "");
   const motherReadyCount = Number(mother.sessionReadyCount || mother.mother_pool_ready_symbols || mother.readyCount || 0);
   const reportedLegacyMinimum = Number(mother.minIntraday1mCandidates || mother.minimum_ready_symbols || 0);
-  const motherMinimum = MIN_READY_SYMBOLS;
+  const motherMinimum = Number(mother.requiredReadyCount || Math.ceil(Number(mother.expectedCount || 0) * MIN_LOCAL_COVERAGE_RATIO));
   const source = String(mother.source || mother.formal_readiness_source || "");
   const sameDay = motherTradeDate === date;
-  const sourceOk = source === "v_fugle_daytrade_intraday_1m_status"
-    || source === "source_status:fugle_daytrade_source.payload"
-    || source === "v_strategy2_intraday_ready:fugle_daytrade_intraday_1m";
+  const sourceOk = source === "strategy3_direct_daytrade_mother_pool_v2_cache";
   const sessionLatestMinute = Number(mother.sessionLatestMinute ?? 0);
   const latestMinuteOk = sessionLatestMinute >= 770;
   const motherReady = motherPoolRun.exitCode === 0
@@ -173,7 +183,7 @@ function main() {
     trade_date: date,
     status: readinessReady ? "ready" : "not_ready",
     formal_allowed: readinessReady,
-    readiness_source: motherReady ? "mother_pool_formal_intraday_1m_readback" : "local_fugle_daytrade_ws_candles_cache_90pct_tolerance",
+    readiness_source: motherReady ? "strategy3_direct_daytrade_mother_pool_v2_cache" : "local_fugle_daytrade_ws_candles_cache_90pct_tolerance",
     minimums: {
       candleSubscribedSymbols: MIN_READY_SYMBOLS,
       candlesPerSymbol: MIN_CANDLES_PER_SYMBOL,

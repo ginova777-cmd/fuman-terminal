@@ -152,7 +152,11 @@ function main() {
     strategy: STRATEGY,
     trade_date: tradeDate,
     tables: { results: RESULTS_TABLE, runs: RUNS_TABLE, latestView: LATEST_VIEW },
-    minimums: { candleReadySymbols: MIN_READY_SYMBOLS },
+    minimums: {
+      motherPoolExpectedSymbols: Number(scanReceipt?.scanner_summary?.formal_ready_target || 0),
+      motherPoolRequiredReadySymbols: Math.ceil(Number(scanReceipt?.scanner_summary?.formal_ready_target || 0) * Number(scanReceipt?.scanner_summary?.min_local_coverage_ratio || 0.9)),
+      transportDiagnosticSymbols: MIN_READY_SYMBOLS,
+    },
     stages: {
       readiness: { exitCode: readinessRun.exitCode },
       scan: { exitCode: null, readOnly: true, receipt: scanReceiptPath(compactDate), status: scanReceipt.status || "" },

@@ -13,6 +13,9 @@ $env:NODE_OPTIONS = "--use-system-ca"
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 if (-not (Test-Path -LiteralPath $nodeExe)) { $nodeExe = "node.exe" }
 
+. "${PSScriptRoot}\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label ("Strategy3 V2 readiness guard {0}" -f $Phase)
+
 $compactDate = Get-Date -Format yyyyMMdd
 $receiptDir = Join-Path $runtimeDir "data\scan-receipts"
 $logDir = Join-Path $runtimeDir "logs"

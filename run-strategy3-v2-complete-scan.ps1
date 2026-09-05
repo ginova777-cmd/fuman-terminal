@@ -23,6 +23,8 @@ if ($Mode -eq "Status") {
   & $nodeExe "--use-system-ca" "scripts\finalize-strategy3-complete.js" "--status-only"
   exit $LASTEXITCODE
 }
+. "${PSScriptRoot}\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Strategy3 V2 complete scan"
 try {
   Invoke-Required "water metadata contract" { & $nodeExe "--use-system-ca" "scripts\repair-strategy3-v2-water-metadata.js" }
   Invoke-Required "12:30 readiness evidence" { & $pwshExe -NoProfile -File ".\run-strategy3-v2-readiness-guard.ps1" -Phase 1230 }

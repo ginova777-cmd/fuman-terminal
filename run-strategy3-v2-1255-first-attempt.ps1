@@ -5,6 +5,10 @@ $runtimeDir = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\
 $env:FUMAN_RUNTIME_DIR = $runtimeDir
 $env:NODE_OPTIONS = "--use-system-ca"
 $nodeExe = "C:\Program Files\nodejs\node.exe"
+
+. "${PSScriptRoot}\schedule-guard.ps1"
+Invoke-FumanWeekdayGuard -Label "Strategy3 V2 first attempt 1255"
+
 $compactDate = Get-Date -Format yyyyMMdd
 $receiptDir = Join-Path $runtimeDir "data\scan-receipts"
 $logDir = Join-Path $runtimeDir "logs"
