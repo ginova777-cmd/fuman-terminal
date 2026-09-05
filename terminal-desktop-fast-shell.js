@@ -1387,7 +1387,10 @@
       const loadingShell = panel.querySelector('[data-initial-loading-skeleton="institution"]');
       if (loadingShell) loadingShell.setAttribute("aria-busy", "true");
     }
-    fetchCanvasRows(key, true)
+    // The first institution paint must consume the persisted desktop snapshot.
+    // A forced request here used to occupy the shared in-flight slot and block
+    // snapshot-first hydration until the slower live API completed.
+    fetchCanvasRows(key, false)
       .then((rows) => {
         if (keepInstitutionLoadingShell) renderRows(Array.isArray(rows) ? rows : [], "api");
         else if (rows?.length) renderRows(rows, "api");
@@ -5500,7 +5503,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-83";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-84";
   }
 
   function loadScriptOnce(src, attr) {
@@ -8699,7 +8702,6 @@
     ensureStrategy5WNecklineConfig();
     const defs = window.FUMAN_STRATEGY_CONFIG?.STRATEGY_BY_ID || {};
     const order = window.FUMAN_STRATEGY_CONFIG?.STRATEGY5_PRESET_IDS || [];
-    fetchStrategy5WatchlistMatchIndexIfNeeded();
     const liveCounts = new Map(strategy5SignalCounts(rows).map((item) => [item.key, item]));
     const ids = order.filter((id) => id && id !== "multi_strategy_confluence" && id !== "chip_k_confluence");
     const counts = ids.length ? ids.map((id) => ({
@@ -9294,7 +9296,10 @@
     switchStrategyViewNow(link);
     markLatency("nav", key);
     const rows = rowsForRoute(key);
-    const memberFastHydrate = isMemberStrategyPreviewRoute(key) && !rows.length && hasMemberPreviewToken();
+    // Strategy2 is current-session only and can legitimately resolve to zero on
+    // weekends. Render its own resolved/empty shell immediately instead of
+    // leaving the generic member loading shell visible.
+    const memberFastHydrate = !isStrategy2Route(key) && isMemberStrategyPreviewRoute(key) && !rows.length && hasMemberPreviewToken();
     if (memberFastHydrate) {
       renderMemberStrategyPendingShell(key, strategyMeta(link || key), panel);
       setCanvasStatus("先顯示已驗證快照，正式 API 背景刷新");
