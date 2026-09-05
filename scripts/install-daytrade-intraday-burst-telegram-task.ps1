@@ -22,7 +22,7 @@ $taskXml = @"
   <RegistrationInfo>
     <Date>$(Get-Date -Format s)</Date>
     <Author>$escapedUserName</Author>
-    <Description>Telegram-only Strategy2 Mother Pool burst notifier; consumes formal outbox only; never starts a strategy run.</Description>
+    <Description>Telegram-only Mother Pool industry-flow burst notifier; consumes formal outbox only; never starts a strategy run.</Description>
   </RegistrationInfo>
   <Principals>
     <Principal id="Author">

@@ -20,7 +20,7 @@ function visit(relative) {
 for (const entry of roots) visit(entry);
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const command = packageJson.scripts?.["verify:daytrade-source-speed"] || "";
-for (const required of ["verify-daytrade-websocket-transport-readonly.js", "verify-daytrade-source-contract-alignment.js", "verify-daytrade-mother-pool-skeleton.js"]) {
+for (const required of ["verify-daytrade-websocket-transport-readonly.js", "verify-daytrade-source-contract-alignment.js", "verify-daytrade-mother-pool-closed-loop.js --static-only"]) {
   if (!command.includes(required)) issues.push(`replacement chain missing ${required}`);
 }
 if (issues.length) { console.error(JSON.stringify({ ok: false, issues })); process.exit(1); }

@@ -33,6 +33,7 @@ const STREAMING_MAX_SYMBOLS = Math.max(1, Number(process.env.FUGLE_FUTOPT_STREAM
 const STREAMING_MAX_TOTAL_SUBSCRIPTIONS = Math.max(STREAMING_CHANNELS.length, Number(process.env.FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS || 1800));
 const STREAMING_SUBSCRIBE_CHUNK_SIZE = Math.max(1, Math.min(50, Number(process.env.FUGLE_FUTOPT_STREAMING_SUBSCRIBE_CHUNK_SIZE || 50)));
 const STREAMING_RESUBSCRIBE_MS = Math.max(30000, Number(process.env.FUGLE_FUTOPT_STREAMING_RESUBSCRIBE_MS || 60000));
+const STREAMING_STALE_RECONNECT_MS = Math.max(60000, Number(process.env.FUGLE_FUTOPT_STREAMING_STALE_RECONNECT_MS || 120000));
 const STREAMING_SUBSCRIBE_PACE_MS = Math.max(50, Number(process.env.FUGLE_FUTOPT_STREAMING_SUBSCRIBE_PACE_MS || 200));
 const STREAMING_RECONNECT_INITIAL_MS = Math.max(1000, Number(
   process.env.FUGLE_FUTOPT_STREAMING_RECONNECT_INITIAL_MS
@@ -518,6 +519,7 @@ async function run() {
         resubscribeEveryMs: STREAMING_RESUBSCRIBE_MS,
         reconnectInitialMs: STREAMING_RECONNECT_INITIAL_MS,
         reconnectMaxMs: STREAMING_RECONNECT_MAX_MS,
+        staleReconnectMs: STREAMING_STALE_RECONNECT_MS,
         subscribeForbiddenChunks: forbiddenChunks,
         subscribeForbiddenLastAt: lastForbiddenAt,
         subscribeForbiddenLastMessage: lastForbiddenMessage,
@@ -608,8 +610,18 @@ async function run() {
         resolve();
       });
       const statusTimer = setInterval(() => {
-        if (closed) clearInterval(statusTimer);
-        else writeStreamingStatus();
+        if (closed) {
+          clearInterval(statusTimer);
+          return;
+        }
+        writeStreamingStatus();
+        const lastMessageMs = Date.parse(lastMessageAt || "");
+        if (authenticated
+          && Number.isFinite(lastMessageMs)
+          && Date.now() - lastMessageMs > STREAMING_STALE_RECONNECT_MS
+          && ws.readyState === WebSocket.OPEN) {
+          ws.close(4000, "stale websocket stream; reconnect required");
+        }
       }, STREAMING_STATUS_MS);
       const subscribeTimer = setInterval(() => {
         if (closed) clearInterval(subscribeTimer);

@@ -17,6 +17,7 @@ const path = require("path");
 const {
   readFugleFutoptWebSocketQuotes,
 } = require("../lib/fugle-futopt-websocket");
+const { isTwseTradingDay } = require("./twse-trading-day");
 
 const SUPABASE_URL = (process.env.SUPABASE_URL
   || process.env.FUMAN_SUPABASE_URL
@@ -483,6 +484,26 @@ async function runOnce() {
 }
 
 async function main() {
+  const tradeDate = argValue("trade-date", taipeiDate());
+  const calendar = await isTwseTradingDay(
+    new Date(`${tradeDate}T04:00:00.000Z`),
+    { stateDir: path.join(RUNTIME_DIR, "state") },
+  );
+  if (!calendar.isTradingDay) {
+    console.log(JSON.stringify({
+      ok: true,
+      status: "skipped",
+      complete: false,
+      tradeDate,
+      reasonCode: "market_calendar_non_trading_day",
+      calendarReason: calendar.reason || null,
+      noSideEffects: true,
+      lockAttempted: false,
+      databaseReadAttempted: false,
+      databaseWriteAttempted: false,
+    }, null, 2));
+    return;
+  }
   if (!acquireLock()) {
     console.log(JSON.stringify({ ok: false, status: "already_running", lockFile: LOCK_FILE }));
     // The preopen evidence wrapper retries only non-zero producer exits.

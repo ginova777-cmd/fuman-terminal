@@ -31,9 +31,18 @@ function includesAll(source, fragments) {
 function readLiveTask() {
   if (process.platform !== "win32") return { applicable: false };
   const command = "$task=Get-ScheduledTask -TaskName 'Fuman Mother Pool Telegram 0900-1230' -ErrorAction SilentlyContinue;if(-not $task){[pscustomobject]@{exists=$false}|ConvertTo-Json -Compress;exit 0};$action=$task.Actions|Select-Object -First 1;$info=Get-ScheduledTaskInfo -TaskName $task.TaskName;$trigger=$task.Triggers|Select-Object -First 1;$state=switch([int]$task.State){2{'Queued'}3{'Ready'}4{'Running'}default{[string]$task.State}};[pscustomobject]@{exists=$true;state=$state;arguments=[string]$action.Arguments;workingDirectory=[string]$action.WorkingDirectory;lastResult=[long]$info.LastTaskResult;start=[string]$trigger.StartBoundary;interval=[string]$trigger.Repetition.Interval;duration=[string]$trigger.Repetition.Duration;stopAtDurationEnd=[bool]$trigger.Repetition.StopAtDurationEnd;multipleInstances=[string]$task.Settings.MultipleInstances}|ConvertTo-Json -Compress";
-  const result = spawnSync("C:\\Program Files\\PowerShell\\7\\pwsh.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", timeout: 15000, windowsHide: true });
+  // ScheduledTasks is a Windows PowerShell module. Query it through the
+  // inbox host so verifier readback is stable even when pwsh module discovery
+  // differs from an interactive shell.
+  const result = spawnSync("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", timeout: 15000, windowsHide: true });
   try { return JSON.parse(String(result.stdout || "").trim()); }
   catch { return { exists: false, error: String(result.stderr || result.error?.message || "live_task_query_failed").trim() }; }
+}
+
+function argValue(name, fallback = "") {
+  const prefix = `--${name}=`;
+  const found = process.argv.find((argument) => argument.startsWith(prefix));
+  return found ? found.slice(prefix.length) : fallback;
 }
 
 const writer = read(writerFile);
@@ -44,7 +53,10 @@ const runner = read(runnerFile);
 const installer = read(installerFile);
 const requireLive = process.argv.includes("--require-live");
 const requireToday = process.argv.includes("--require-today");
-const liveTask = requireLive ? readLiveTask() : { required: false };
+const liveTaskEvidenceFile = argValue("live-task-evidence");
+const liveTask = requireLive
+  ? (liveTaskEvidenceFile ? { ...readJson(liveTaskEvidenceFile), evidence_file: liveTaskEvidenceFile } : readLiveTask())
+  : { required: false };
 const checks = {
   writer_readable: Boolean(writer),
   notifier_readable: Boolean(notifier),
@@ -64,7 +76,7 @@ const checks = {
     "const burstRows = priorityRows;",
     "tradableMotherPool",
     "not_daytrade_mother_pool_eligible",
-    "strategy2_mother_pool_only_0900_1230",
+    "daytrade_mother_pool_only_0900_1230",
   ]),
   dedicated_task_contract: includesAll(runner, ["notify-daytrade-intraday-burst-telegram.js"]) && includesAll(installer, ["Fuman Mother Pool Telegram 0900-1230", "<Interval>PT1M</Interval>", "<Duration>PT3H31M</Duration>", "<StopAtDurationEnd>true</StopAtDurationEnd>", "<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>", "<LogonType>S4U</LogonType>", "<RunLevel>HighestAvailable</RunLevel>", "<Monday />", "<Friday />", "Register-ScheduledTask -TaskName $TaskName -Xml $taskXml -Force"]),
   runner_receipt_contract: includesAll(runner, [
@@ -80,7 +92,7 @@ const checks = {
   outbox_hooked_after_delta: includesAll(writer, [
     "const burstRows = priorityRows;",
     "writeIntradayBurstTelegramOutbox(burstRows, tradeDate, checkedAt, runId, result?.quoteMap)",
-    "strategy2_mother_pool_only_0900_1230",
+    "daytrade_mother_pool_only_0900_1230",
     "INTRADAY_BURST_TELEGRAM_OUTBOX_FILE",
   ]),
   telegram_strict_only_contract: includesAll(writer, [
@@ -122,6 +134,22 @@ const checks = {
     "technical_golden_cross_not_met",
     "technical_indicator_readback: technicalIndicatorReadback",
     "min_rolling_samples: 60",
+  ]),
+  industry_heatmap_flow_contract: includesAll(writer, [
+    "finalizeIntradayIndustryHeatmap",
+    "fugle_formal_quote_mother_pool_heatmap",
+    "industry_flow_direction",
+    "industry_net_flow_proxy",
+    "then scan burst rules only inside net-inflow industries",
+    "highest capital concentration is sent first",
+    "industry heatmap is finalized first; symbols are scanned by industry_flow_rank asc before burst evaluation",
+  ]) && includesAll(notifier, [
+    '"產業資金: "',
+    '"｜集中度 "',
+    '"｜排行 "',
+    "industry_heatmap_not_ready",
+    "industry_flow_invalid",
+    "industry_not_net_inflow",
   ]),
   notifier_strict_trigger_contract: includesAll(notifier, [
     "price_breakout_1pct",
@@ -208,7 +236,7 @@ const receipt = readJson(receiptFile);
 const runnerReceipt = readJson(runnerReceiptFile);
 const receiptSentEvents = Array.isArray(receipt?.sent_events) ? receipt.sent_events : [];
 const receiptEventKeys = receiptSentEvents.map((event) => String(event?.event_key || ""));
-const expectedAlertScope = "strategy2_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage";
+const expectedAlertScope = "daytrade_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage_and_industry_heatmap";
 const outboxEvents = Array.isArray(outbox?.events) ? outbox.events : [];
 checks.runtime_outbox_mother_pool_scope = !outbox || String(outbox.alert_scope || "") === expectedAlertScope;
 checks.runtime_events_mother_pool_only = !outbox || outboxEvents.every((event) =>
@@ -228,6 +256,22 @@ checks.runtime_receipt_canonical_fields = !receipt || receiptSentEvents.every((e
 );
 checks.runtime_receipt_event_keys_unique = !receipt || receiptEventKeys.length === new Set(receiptEventKeys).size;
 checks.runtime_receipt_count_matches = !receipt || Number(receipt?.sent_event_count) === receiptSentEvents.length;
+checks.runtime_industry_heatmap_ready = !outbox || (
+  outbox?.industry_heatmap_status === "ready"
+  && outbox?.industry_heatmap_source === "fugle_formal_quote_mother_pool_heatmap"
+  && Array.isArray(outbox?.industry_heatmap)
+  && outbox.industry_heatmap.length > 0
+);
+checks.runtime_events_have_industry_flow = !outbox || outboxEvents.every((event) =>
+  event?.industry_flow_status === "ready"
+  && Boolean(String(event?.industry || "").trim())
+  && String(event?.industry_flow_direction || "") === "inflow"
+  && Number.isFinite(Number(event?.industry_heat_score))
+);
+checks.runtime_events_industry_concentration_ordered = !outbox || outboxEvents.every((event, index) =>
+  index === 0
+  || Number(outboxEvents[index - 1]?.industry_flow_rank || 999999) <= Number(event?.industry_flow_rank || 999999)
+);
 if (requireToday) {
   checks.runtime_today_outbox_present = Boolean(outbox) && String(outbox?.trade_date || "") === taipeiDate();
   checks.runtime_today_receipt_present = Boolean(receipt) && String(receipt?.trade_date || "") === taipeiDate();

@@ -35,6 +35,8 @@
     "top40IsNotLimitGateOrOnlyEntry": true,
     "motherPoolTargetMinimumSymbols": 300,
     "motherPoolMinimumCountIsHardGate": false,
+    "motherPoolMinimumRequiredSymbols": 1,
+    "motherPoolRunnerReceiptContract": "daytrade-mother-pool-runner-receipt-v2",
     "websocketCandlesAreFormal1mSource": true,
     "priorThreeTradingDayAverageVolumeLotsMinimum": 3000,
     "priorThreeTradingDayAverageVolumeIsWarmupHardGate": true,

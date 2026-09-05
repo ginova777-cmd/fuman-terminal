@@ -44,6 +44,7 @@ function eventMessage(event) {
     identity,
     "入場價: " + formatNumber(event.latest_1m_close),
     "技術確認: " + technical,
+    "產業資金: " + String(event.industry || "未分類") + "｜" + String(event.industry_flow_label || "產業資料缺口") + "｜集中度 " + formatNumber(event.industry_heat_score, 1) + "｜排行 " + formatNumber(event.industry_flow_rank, 0),
   ].join("\n");
 }
 function eventKey(event) { return String(event.trade_date) + ":" + event.symbol + ":" + event.trigger_type; }
@@ -69,6 +70,13 @@ function canonicalSentEvent(event, tradeDate) {
     sent_at: sentAt,
     sent: true,
     send_result: "sent",
+    industry: String(event?.industry || ""),
+    industry_flow_direction: String(event?.industry_flow_direction || ""),
+    industry_flow_label: String(event?.industry_flow_label || ""),
+    industry_flow_rank: Number.isFinite(Number(event?.industry_flow_rank)) ? Number(event.industry_flow_rank) : null,
+    industry_heat_score: Number.isFinite(Number(event?.industry_heat_score)) ? Number(event.industry_heat_score) : null,
+    industry_flow_priority: String(event?.industry_flow_priority || ""),
+    industry_net_flow_proxy: Number.isFinite(Number(event?.industry_net_flow_proxy)) ? Number(event.industry_net_flow_proxy) : null,
   };
   if (Number.isFinite(Number(event?.telegram_target_count))) normalized.telegram_target_count = Number(event.telegram_target_count);
   return normalized;
@@ -132,6 +140,9 @@ function validEvent(event, tradeDate, nowMs) {
   if (String(event.rolling_1m_baseline_status || "") !== "ready") failures.push("rolling_1m_baseline_not_ready");
   if (numberValue(event.rolling_1m_baseline_sample_count) < 60) failures.push("rolling_1m_samples_below_60");
   if (String(event.technical_indicator_status || "") !== "ready") failures.push("technical_indicator_not_ready");
+  if (String(event.industry_flow_status || "") !== "ready" || !String(event.industry || "").trim()) failures.push("industry_heatmap_not_ready");
+  if (!Number.isFinite(Number(event.industry_heat_score)) || !["inflow", "outflow", "neutral"].includes(String(event.industry_flow_direction || ""))) failures.push("industry_flow_invalid");
+  if (String(event.industry_flow_direction || "") !== "inflow") failures.push("industry_not_net_inflow");
   const technicalSignals = Array.isArray(event.technical_golden_cross_signals) ? event.technical_golden_cross_signals : [];
   const allowedTechnicalSignals = ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"];
   if (event.technical_golden_cross_any !== true || !technicalSignals.some((signal) => allowedTechnicalSignals.includes(String(signal)))) failures.push("technical_golden_cross_not_met");
@@ -149,7 +160,7 @@ async function notifyFromOutbox(options = {}) {
   const outbox = readJson(OUTBOX_FILE, {});
   const receipt = {
     ok: false, complete: false, status: "running", contract: "daytrade_intraday_burst_telegram_v1", trade_date: tradeDate, checked_at: checkedAt, started_at: startedAt, finished_at: null,
-    source: "fugle_formal_1m", alert_scope: "strategy2_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage",
+    source: "fugle_formal_1m", alert_scope: "daytrade_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage_and_industry_heatmap",
     conditions: { price_breakout: "latest_1m_close >= prior_rolling60_high_close * 1.01", volume_burst: "latest_1m_volume >= prior_rolling60_average_volume * 2", min_rolling_samples: 60, technical_cross_any: ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"] },
     detected_events: 0, sent_events: [], skipped_events: [], first_blocker: null,
   };
@@ -157,8 +168,12 @@ async function notifyFromOutbox(options = {}) {
     receipt.first_blocker = "outbox_trade_date_mismatch_or_missing";
     writeReceiptWithHistory(receipt); return receipt;
   }
-  if (String(outbox.alert_scope || "") !== "strategy2_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage") {
+  if (String(outbox.alert_scope || "") !== "daytrade_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage_and_industry_heatmap") {
     receipt.first_blocker = "outbox_scope_not_mother_pool_only";
+    writeReceiptWithHistory(receipt); return receipt;
+  }
+  if (String(outbox.industry_heatmap_status || "") !== "ready" || !Array.isArray(outbox.industry_heatmap) || outbox.industry_heatmap.length === 0) {
+    receipt.first_blocker = "industry_heatmap_not_ready";
     writeReceiptWithHistory(receipt); return receipt;
   }
   if (!isTradingWindow()) {

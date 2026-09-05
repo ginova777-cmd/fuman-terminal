@@ -196,6 +196,8 @@ function normalizeSourceStatus(row) {
     priorityPoolSymbols: numberValue(payload.priority_pool_symbols),
     priorityFreshQuoteCoverage120s: numberValue(payload.priority_fresh_quote_coverage_120s),
     motherPoolSymbols: numberValue(payload.mother_pool_symbols),
+    motherPoolTargetMinSymbols: numberValue(payload.mother_pool_target_min_symbols),
+    motherPoolMinimumCountIsHardGate: payload.mother_pool_minimum_count_is_hard_gate,
     formalScanPoolSymbols: numberValue(payload.formal_scan_pool_symbols),
     basePoolEligibleSymbols: numberValue(payload.base_pool_eligible_symbols ?? payload.mother_pool_base_pool_symbols),
     basePoolPendingSymbols: numberValue(payload.base_pool_pending_symbols ?? payload.mother_pool_base_pool_pending_symbols),
@@ -814,6 +816,14 @@ async function main() {
   issues.push(...writerCodeRegression.issues);
   issues.push(...writerSupervisorRegression.issues);
   issues.push(...websocketCodeRegression.issues);
+  if (sourceStatus.motherPoolTargetMinSymbols !== 300) issues.push("source_mother_pool_target_min_symbols_invalid");
+  if (sourceStatus.motherPoolMinimumCountIsHardGate !== false) issues.push("source_mother_pool_minimum_count_hard_gate_must_be_false");
+  if (sourceStatus.failedChecks.some((check) => /mother_pool.*(300|min|minimum|below_target)/i.test(String(check)))) {
+    issues.push("source_mother_pool_target_in_failed_checks");
+  }
+  if (/mother_pool.*(300|min|minimum|below_target)/i.test(sourceStatus.reasonCode)) {
+    issues.push("source_mother_pool_target_used_as_first_blocker");
+  }
 
   for (const [label, item] of [["source", sourceStatus], ["canonical", canonicalGate], ["unattended", unattendedGate]]) {
     if (item.hasPriorityPoolSymbols !== true) issues.push(`${label}_priority_pool_symbols_missing`);

@@ -149,8 +149,15 @@ function Invoke-FugleFutoptCollectorReleaseReconcile {
   try { if ($null -ne $current) { $targetProcessId = [int]$current.pid } } catch {}
   $alive = $false
   if ($targetProcessId -gt 0) { try { $alive = $null -ne (Get-Process -Id $targetProcessId -ErrorAction Stop) } catch {} }
+  $streamStale = $false
+  if ($null -ne $current -and -not [string]::IsNullOrWhiteSpace([string]$current.lastMessageAt)) {
+    try {
+      $lastMessageUtc = [DateTimeOffset]::Parse([string]$current.lastMessageAt).ToUniversalTime()
+      $streamStale = ([DateTimeOffset]::UtcNow - $lastMessageUtc).TotalSeconds -gt 300
+    } catch { $streamStale = $true }
+  }
   $receipt = [ordered]@{ contract="fugle_daytrade_futopt_collector_rotation_v1"; checked_at=[DateTimeOffset]::UtcNow.ToString("o"); trade_date=$TradeDate; desired_release=$FutoptCollectorRelease; current_release=$currentRelease; current_pid=$targetProcessId; status="pending"; reason="" }
-  if ($alive -and $currentRelease -eq $FutoptCollectorRelease) {
+  if ($alive -and $currentRelease -eq $FutoptCollectorRelease -and -not $streamStale) {
     $receipt.status = "current"
     $receipt.reason = "collector_release_current"
     $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $receiptPath -Encoding utf8
@@ -162,7 +169,7 @@ function Invoke-FugleFutoptCollectorReleaseReconcile {
       Start-Sleep -Milliseconds 800
       if (Get-Process -Id $targetProcessId -ErrorAction SilentlyContinue) { throw "collector_pid_still_running" }
       $receipt.status = "retired"
-      $receipt.reason = "collector_release_mismatch"
+      $receipt.reason = if ($streamStale) { "collector_stream_stale" } else { "collector_release_mismatch" }
       Write-WrapperLog "futopt collector retired pid=$targetProcessId for release=$FutoptCollectorRelease"
     } catch {
       $receipt.status = "blocked"
