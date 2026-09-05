@@ -3,6 +3,7 @@ param(
   [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
   [string]$ProductionMirrorRoot = $ProjectRoot,
   [string]$At = "21:15",
+  [string]$UserId = "$env:USERDOMAIN\$env:USERNAME",
   [switch]$RunNow,
   [switch]$Uninstall
 )
@@ -27,8 +28,11 @@ $action = New-ScheduledTaskAction `
 
 $trigger = New-ScheduledTaskTrigger -Daily -At $At
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+$principal = New-ScheduledTaskPrincipal -UserId $UserId -LogonType S4U -RunLevel Limited
 
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force -ErrorAction Stop | Out-Null
+$installed = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+if ([string]$installed.Principal.LogonType -ne "S4U") { throw "Vercel cost task postcondition failed: logon=$($installed.Principal.LogonType) expected=S4U" }
 Write-Host "[vercel-cost-monitor-task] registered $TaskName at $At"
 Write-Host "[vercel-cost-monitor-task] projectRoot=$ProjectRoot"
 Write-Host "[vercel-cost-monitor-task] productionMirrorRoot=$ProductionMirrorRoot"

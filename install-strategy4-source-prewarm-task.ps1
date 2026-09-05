@@ -2,7 +2,7 @@ param(
   [string]$TaskName = "Fuman Strategy4 Source Prewarm 1535",
   [string]$StartTime = "15:35",
   [int]$ExecutionHours = 2,
-  [string]$ProjectRoot = "C:\fuman-terminal"
+  [string]$ProjectRoot = "C:\fuman-release-owner\fuman-terminal"
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,7 +22,7 @@ $action = New-ScheduledTaskAction `
   -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$scriptPath`"" `
   -WorkingDirectory $ProjectRoot
 
-$trigger = New-ScheduledTaskTrigger -Daily -At $StartTime
+$trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At $StartTime
 $settings = New-ScheduledTaskSettingsSet `
   -AllowStartIfOnBatteries `
   -DontStopIfGoingOnBatteries `

@@ -2,7 +2,7 @@ param(
   [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path,
   [string]$RuntimeRoot = $(if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }),
   [string]$TaskName = "Fuman Terminal Autonomous Root Monitor",
-  [string[]]$At = @("06:05", "07:08", "08:00", "08:20", "08:36", "12:40", "13:15", "16:10", "17:00", "21:40", "22:00", "23:10"),
+  [string[]]$At = @("06:00", "06:05", "07:00", "07:08", "08:20", "08:29", "08:30", "08:35", "08:36", "08:40", "08:45", "08:50", "08:55", "09:00", "12:30", "12:40", "12:50", "12:55", "13:00", "13:15", "13:30", "15:35", "16:00", "17:00", "17:10", "17:40", "18:10", "18:40", "19:10", "20:05", "21:00", "21:10", "21:15", "21:40", "22:00", "23:10"),
   [switch]$RequireProtectedReadback,
   [switch]$InteractiveFallback
 )

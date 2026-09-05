@@ -26,7 +26,7 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType S4U -RunLevel Highest
 foreach ($task in $tasks) {
   $action = New-ScheduledTaskAction -Execute $pwsh -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$runner`" -Phase $($task.Phase)" -WorkingDirectory $rootPath
-  $trigger = New-ScheduledTaskTrigger -Daily -At $task.Time
+  $trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At $task.Time
   Register-ScheduledTask -TaskName $task.Name -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "Strategy3 V2 $($task.Phase) readiness-only guard. Writes receipt; cannot scan, publish, create a formal candidate, or send LINE." -Force | Out-Null
 }
 

@@ -16,21 +16,29 @@ const EXPECTED_TASKS = [
     name: "\\Fuman API-Only Retired Artifact Cleanup 1535",
     purpose: "local retired API/static/runtime artifact cleanup",
     allowedResults: [0],
+    expectedTime: "17:10",
+    requireS4U: true,
   },
   {
     name: "\\Fuman Supabase Vercel History Cleanup 1545",
     purpose: "Supabase/Vercel history retention cleanup",
     allowedResults: [0],
+    expectedTime: "17:40",
+    requireS4U: true,
   },
   {
     name: "\\Fuman Vercel Cost Health Monitor 2115",
     purpose: "Vercel cost/project/mirror read-only monitor",
     allowedResults: [0],
+    expectedTime: "21:15",
+    requireS4U: true,
   },
   {
     name: "\\Fuman Global Cost Janitor Scorecard 1555",
     purpose: "global cost janitor read-only scorecard",
     allowedResults: [0, 267009],
+    expectedTime: "18:10",
+    requireS4U: true,
   },
 ];
 
@@ -139,6 +147,8 @@ function checkTasks(issues, warnings) {
     `    LastRunTime = if ($null -ne $info) { [string]$info.LastRunTime } else { "" }`,
     `    NextRunTime = if ($null -ne $info) { [string]$info.NextRunTime } else { "" }`,
     `    TaskToRun = $actions`,
+    `    LogonType = [string]$task.Principal.LogonType`,
+    `    TriggerTimes = @($task.Triggers | ForEach-Object { if ([string]$_.StartBoundary -match 'T(\\d{2}:\\d{2})') { $Matches[1] } } | Where-Object { $_ } | Sort-Object -Unique)`,
     `  }`,
     `}`,
     `$rows | ConvertTo-Json -Depth 6 -Compress`,
@@ -170,6 +180,8 @@ function checkTasks(issues, warnings) {
       lastRunTime: row.LastRunTime,
       nextRunTime: row.NextRunTime,
       taskToRun: row.TaskToRun,
+      logonType: row.LogonType,
+      triggerTimes: Array.isArray(row.TriggerTimes) ? row.TriggerTimes : row.TriggerTimes ? [row.TriggerTimes] : [],
       purpose: expected.purpose,
     };
     if (!["Ready", "Running"].includes(row.Status)) {
@@ -179,6 +191,13 @@ function checkTasks(issues, warnings) {
       issues.push({ issue: "scheduled_task_bad_last_result", taskName: expected.name, lastResult, allowed: expected.allowedResults });
     } else if (lastResult === 267009) {
       warnings.push({ warning: "scheduled_task_currently_running", taskName: expected.name, lastResult });
+    }
+    if (expected.requireS4U && String(row.LogonType || "").toLowerCase() !== "s4u") {
+      issues.push({ issue: "scheduled_task_not_unattended_s4u", taskName: expected.name, actual: row.LogonType || "missing" });
+    }
+    const triggerTimes = Array.isArray(row.TriggerTimes) ? row.TriggerTimes : row.TriggerTimes ? [row.TriggerTimes] : [];
+    if (expected.expectedTime && !triggerTimes.includes(expected.expectedTime)) {
+      issues.push({ issue: "scheduled_task_time_drift", taskName: expected.name, expected: expected.expectedTime, actual: triggerTimes });
     }
   }
   return evidence;

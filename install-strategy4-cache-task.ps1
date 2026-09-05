@@ -15,7 +15,7 @@ $action = New-ScheduledTaskAction `
   -Execute $pwsh `
   -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$script`"" `
   -WorkingDirectory $root
-$trigger = New-ScheduledTaskTrigger -Daily -At $StartTime
+$trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At $StartTime
 $settings = New-ScheduledTaskSettingsSet `
   -AllowStartIfOnBatteries `
   -DontStopIfGoingOnBatteries `

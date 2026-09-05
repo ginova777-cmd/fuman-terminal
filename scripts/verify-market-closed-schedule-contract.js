@@ -1,6 +1,7 @@
 "use strict";
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
@@ -11,14 +12,21 @@ const requiredGuardFiles = [
   "run-strategy4.ps1",
   "run-strategy5.ps1",
   "run-institution.ps1",
-  "run-warrant-flow.ps1",
-  "run-cb-detect.ps1",
   "run-market-overview.ps1",
   "run-flow.ps1",
+  "run-strategy3-v2-complete-scan.ps1",
+  "run-strategy3-v2-readiness-guard.ps1",
+  "run-strategy3-v2-1255-first-attempt.ps1",
+  "run-strategy4-source-prewarm.ps1",
+];
+
+const requiredDirectGuardFiles = [
+  "run-opening-report-0830-production-wrapper.ps1",
+  "scripts/run-opening-report-0830-production.js",
 ];
 
 function read(file) {
-  return fs.readFileSync(path.join(repo, file), "utf8");
+  try { return fs.readFileSync(path.join(repo, file), "utf8"); } catch { return ""; }
 }
 
 const issues = [];
@@ -35,9 +43,29 @@ for (const marker of [
 
 for (const file of requiredGuardFiles) {
   const text = read(file);
+  if (!text) {
+    issues.push(`${file} is missing`);
+    continue;
+  }
   if (!text.includes("schedule-guard.ps1")) issues.push(`${file} does not load schedule-guard.ps1`);
   if (!text.includes("Invoke-FumanWeekdayGuard")) issues.push(`${file} does not call Invoke-FumanWeekdayGuard`);
 }
+
+for (const file of requiredDirectGuardFiles) {
+  const text = read(file);
+  if (!text.includes("check-market-calendar-action.js") && !text.includes("isTwseTradingDay")) issues.push(`${file} does not own a market-calendar guard`);
+  if (!text.includes("market_calendar_non_trading_day")) issues.push(`${file} does not expose the canonical non-trading-day reason`);
+  if (!text.includes("line_push_attempted") || !text.includes("mother_pool_bridge_attempted")) issues.push(`${file} does not prove notification and bridge side effects are suppressed`);
+}
+
+const nearOneRunner = read("scripts/run-daytrade-near-one-source.js");
+for (const marker of ["isTwseTradingDay", "market_calendar_non_trading_day", "noSideEffects", "lockAttempted: false", "databaseWriteAttempted: false"]) {
+  if (!nearOneRunner.includes(marker)) issues.push(`scripts/run-daytrade-near-one-source.js missing closed-market marker ${marker}`);
+}
+const nearOneInstaller = read("scripts/install-daytrade-near-one-source-task.ps1");
+if (!nearOneInstaller.includes("New-ScheduledTaskTrigger -Weekly")) issues.push("near-one installer must use weekday triggers");
+if (!nearOneInstaller.includes("Monday,Tuesday,Wednesday,Thursday,Friday")) issues.push("near-one installer weekday set is incomplete");
+if (!nearOneInstaller.includes("LogonType S4U")) issues.push("near-one installer must be unattended under S4U");
 
 const probe = spawnSync(process.execPath, ["scripts/check-market-calendar-action.js", "--date=2026-07-10", "--label=verify-market-closed-schedule"], {
   cwd: repo,
@@ -65,15 +93,16 @@ if (payload) {
   }
 }
 
+const receiptFixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), "fuman-market-closed-contract-"));
 const receiptProbe = spawnSync(process.execPath, ["scripts/check-market-calendar-action.js", "--date=2026-07-10", "--label=verify-market-closed-receipt", "--receipt=1"], {
   cwd: repo,
   encoding: "utf8",
-  env: { ...process.env, NODE_OPTIONS: "--use-system-ca", FUMAN_RUNTIME_DIR: path.join(repo, "outputs", "market-closed-schedule-contract-fixture"), FUMAN_DATA_DIR: path.join(repo, "outputs", "market-closed-schedule-contract-fixture", "data") },
+  env: { ...process.env, NODE_OPTIONS: "--use-system-ca", FUMAN_RUNTIME_DIR: receiptFixtureRoot, FUMAN_DATA_DIR: path.join(receiptFixtureRoot, "data") },
 });
 let receiptPayload = null;
 try { receiptPayload = JSON.parse(receiptProbe.stdout); } catch {}
 if (receiptProbe.status !== 10) issues.push(`closed day receipt probe exit expected 10 got ${receiptProbe.status}; stderr=${receiptProbe.stderr}`);
-const receiptFile = path.join(repo, "outputs", "market-closed-schedule-contract-fixture", "data", "scan-receipts", "market-closed-verify-market-closed-receipt.json");
+const receiptFile = path.join(receiptFixtureRoot, "data", "scan-receipts", "market-closed-verify-market-closed-receipt.json");
 let receipt = null;
 try { receipt = JSON.parse(fs.readFileSync(receiptFile, "utf8")); } catch {}
 if (!receipt) issues.push("closed day receipt probe did not write a receipt");
@@ -94,6 +123,7 @@ const result = {
   ok: issues.length === 0,
   contract: "market-closed-schedule-contract-v1",
   checkedFiles: requiredGuardFiles,
+  checkedDirectGuardFiles: requiredDirectGuardFiles,
   closedDayProbe: payload,
   closedDayReceiptProbe: receipt,
   openDayProbe: openPayload,

@@ -12,6 +12,10 @@ for (const file of wrappers) {
   if (!text.includes("rerunAllowed=false")) failures.push(`${file}: missing fail-closed rerun marker`);
   if (/for\s*\(\s*\$attempt/i.test(text)) failures.push(`${file}: retry loop is forbidden`);
   if (/Waiting 60 seconds before retry/i.test(text)) failures.push(`${file}: retry sleep is forbidden`);
+  const scorecardRefresh = text.indexOf("scorecard/sourceReports refresh start before strict tri-surface verification");
+  const triSurface = text.indexOf('Assert-PostScanTriSurfaceClosure -Route');
+  if (scorecardRefresh < 0) failures.push(`${file}: missing pre-verifier scorecard/sourceReports refresh`);
+  if (triSurface < 0 || scorecardRefresh >= triSurface) failures.push(`${file}: scorecard/sourceReports refresh must precede strict tri-surface verification`);
 }
 
 const watchdogs = ["run-strategy5-watchdog.ps1", "run-flow-watchdog.ps1"];

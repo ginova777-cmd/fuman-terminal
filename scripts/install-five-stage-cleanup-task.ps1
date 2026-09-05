@@ -21,7 +21,7 @@ $rows = foreach ($spec in $specs) {
   $runner = Join-Path $ProjectRoot $spec.Runner
   if (-not (Test-Path -LiteralPath $runner)) { throw "Missing cleanup runner: $runner" }
   $action = New-ScheduledTaskAction -Execute $pwsh -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$runner`"$($spec.Extra)" -WorkingDirectory $ProjectRoot
-  $trigger = New-ScheduledTaskTrigger -Daily -At $spec.At
+  $trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At $spec.At
   Register-ScheduledTask -TaskName $spec.Name -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Five-stage cleanup $($spec.Purpose); actual trigger $($spec.At) Asia/Taipei." -Force | Out-Null
   $task = Get-ScheduledTask -TaskName $spec.Name
   $info = Get-ScheduledTaskInfo -TaskName $spec.Name
