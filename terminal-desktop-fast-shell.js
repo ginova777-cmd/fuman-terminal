@@ -58,7 +58,7 @@
     "strategy|策略5": { limit: 140, ttl: 22000 },
     "chip-trade|買賣超": { limit: 60, ttl: 32000 },
   };
-  const CHIP_TRADE_DEFAULT_FILTER = "foreignTrustVolumePct";
+  const CHIP_TRADE_DEFAULT_FILTER = "";
   const CHIP_TRADE_FILTERS = [
     { key: "foreignStreak", label: "外資連買日", endpoint: "/api/institution-latest" },
     { key: "trustStreak", label: "投信連買日", endpoint: "/api/institution-latest" },
@@ -2121,6 +2121,14 @@
       const shell = currentCanvasShell();
       if (isStrategy2Route(route)) {
         updateStrategy2BattleShell(shell, route, strategyMeta(route));
+        return true;
+      }
+      if (isStrategy3Route(route) || isStrategy4Route(route) || isStrategy5Route(route)) {
+        renderStrategyRouteShell(linkForRouteKey(route) || route, source, cleanRows);
+        return true;
+      }
+      if (isChipTradeRoute(route)) {
+        renderFixedPageShell(linkForRouteKey(route) || route, source, cleanRows);
         return true;
       }
       updateCanvasShell(shell, route, strategyMeta(route));
@@ -5489,7 +5497,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-81";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-82";
   }
 
   function loadScriptOnce(src, attr) {

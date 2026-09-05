@@ -23,7 +23,7 @@ function hasFlag(name) {
 const BASE_URL = readArg("base-url", process.env.FUMAN_STRESS_BASE_URL || "https://fuman-terminal.vercel.app");
 const CDP_BLANK_URL = "data:text/html,FUMAN_ROUTE_STRESS";
 const LOOPS = Math.max(1, Math.min(80, Number(readArg("loops", process.env.FUMAN_STRESS_LOOPS || "3")) || 3));
-const ROUTES = readArg("routes", process.env.FUMAN_STRESS_ROUTES || "market-ai,watchlist,strategy2,strategy3,strategy4,strategy5,institution,cb,warrant")
+const ROUTES = readArg("routes", process.env.FUMAN_STRESS_ROUTES || "market-ai,watchlist,strategy2,strategy3,strategy4,strategy5,institution")
   .split(",")
   .map((route) => route.trim())
   .filter(Boolean);
@@ -115,8 +115,6 @@ const PROTECTED_ROUTES = new Set([
   "strategy5",
   "chip-trade",
   "institution",
-  "cb",
-  "warrant",
   "warrant-flow",
   "watchlist",
 ]);
