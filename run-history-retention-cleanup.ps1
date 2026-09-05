@@ -12,6 +12,10 @@ $script = Join-Path $root "scripts\cleanup-supabase-vercel-history.js"
 if (-not (Test-Path -LiteralPath $script)) {
   throw "history cleanup script missing: $script"
 }
+if ($Apply) {
+  . (Join-Path $root "schedule-guard.ps1")
+  Invoke-FumanWeekdayGuard -Label "Supabase Vercel history cleanup"
+}
 
 $argsList = @("--use-system-ca", $script)
 if ($Apply) { $argsList += "--apply" } else { $argsList += "--dry-run" }

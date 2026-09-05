@@ -4,6 +4,10 @@ $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
 $node = (Get-Command node -ErrorAction Stop).Source
 $suffix = if ($Apply) { @('--apply', '--json') } else { @('--json') }
+if ($Apply) {
+  . (Join-Path $root 'schedule-guard.ps1')
+  Invoke-FumanWeekdayGuard -Label "Daily retention maintenance"
+}
 
 & $node (Join-Path $root 'scripts\cleanup-runtime-retention.js') @suffix
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

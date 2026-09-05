@@ -12,10 +12,15 @@ $logDir = Join-Path $runtimeRoot "logs"
 $dateToken = Get-Date -Format "yyyyMMdd"
 $receiptFile = Join-Path $statusDir "daytrade-intraday-retention-$dateToken.json"
 $logFile = Join-Path $logDir "daytrade-intraday-retention-$dateToken.log"
-$nodeCandidates = @(
+$nodeCandidates = @(@(
   "C:\Program Files\nodejs\node.exe",
   (Get-Command node -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -First 1)
-) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique
+) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique)
+
+if ($Apply) {
+  . (Join-Path $root "schedule-guard.ps1")
+  Invoke-FumanWeekdayGuard -Label "Daytrade intraday retention"
+}
 
 try {
   New-Item -ItemType Directory -Force -Path $statusDir, $logDir | Out-Null
@@ -24,7 +29,8 @@ try {
 
   $argsList = @("--use-system-ca", $script, "--max-batches=$MaxBatches", "--json")
   if ($Apply) { $argsList += "--apply" } else { $argsList += "--dry-run" }
-  & $nodeCandidates[0] @argsList *> $logFile
+  $nodeExe = [string]$nodeCandidates[0]
+  & $nodeExe @argsList *> $logFile
   $exitCode = $LASTEXITCODE
   if ($exitCode -ne 0) { throw "daytrade intraday retention failed with exit code $exitCode" }
   if (-not (Test-Path -LiteralPath $receiptFile)) { throw "daytrade intraday retention receipt missing after successful process exit" }

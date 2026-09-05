@@ -3,6 +3,7 @@
 const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { isTwseTradingDay } = require("./twse-trading-day");
 
 const ROOT = path.basename(__dirname).toLowerCase() === "scripts" ? path.resolve(__dirname, "..") : path.resolve(__dirname, "..", "..");
 const RUNTIME = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
@@ -58,8 +59,37 @@ function receiptCheck(name, expectedContract, file) {
   const current = Number.isFinite(checked) && Date.now() - checked < DAY_MS;
   return { name, ok: payload?.ok === true && payload?.applied === true && payload?.contract === expectedContract && current, file, exists: !!payload, contract: payload?.contract || null, applied: payload?.applied === true, checkedAt: payload?.checkedAt || null, current, reasonCode: payload?.reasonCode || null, readError: receipt.error || null };
 }
-function main() {
+async function main() {
   const date = taipeiParts(); const issues = []; const warnings = [];
+  const tradingDay = await isTwseTradingDay(new Date(`${date.iso}T04:00:00.000Z`), { stateDir: path.join(RUNTIME, "state") });
+  if (!tradingDay.isTradingDay) {
+    const payload = {
+      ok: true,
+      status: "skipped",
+      complete: false,
+      exitCode: 0,
+      unattendedReady: false,
+      checkedAt: new Date().toISOString(),
+      tradeDate: date.iso,
+      contract: "daily-retention-maintenance-v1",
+      marketOpen: false,
+      cleanupApplyAllowed: false,
+      formalCleanupSkipped: true,
+      preservePreviousGood: true,
+      latestPointerUpdated: false,
+      issues: [],
+      warnings: [],
+      reasonCode: "market_calendar_non_trading_day",
+      closedReason: tradingDay.reason || "market_closed",
+      allowedAction: "skip_apply_cleanup_read_only_health_only",
+    };
+    const output = path.join(STATUS, `daily-retention-maintenance-verifier-${date.id}.json`);
+    fs.mkdirSync(STATUS, { recursive: true });
+    fs.writeFileSync(output, `${JSON.stringify(payload, null, 2)}\n`);
+    payload.receiptFile = output;
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
   const tasks = scheduledTasks();
   if (!tasks.ok) issues.push("scheduled_task_query_failed");
   const schedule = TASKS.map((expected) => {
@@ -82,8 +112,13 @@ function main() {
     sourceObservability: run(process.execPath, ["--use-system-ca", "scripts/verify-source-observability-retention.js"]),
   };
   for (const [name, result] of Object.entries(liveChecks)) if (!result.ok) issues.push(`live_verifier_failed:${name}`);
+  const complete = issues.length === 0 && warnings.length === 0;
   const payload = {
-    ok: issues.length === 0, unattendedReady: issues.length === 0 && !warnings.length,
+    ok: issues.length === 0,
+    status: complete ? "complete" : (issues.length ? "failed" : "degraded"),
+    complete,
+    exitCode: issues.length === 0 ? 0 : 1,
+    unattendedReady: complete,
     checkedAt: new Date().toISOString(), tradeDate: date.iso, contract: "daily-retention-maintenance-v1", schedule, receipts,
     liveChecks: Object.fromEntries(Object.entries(liveChecks).map(([name, result]) => [name, { ok: result.ok, status: result.status, output: result.stdout.slice(0, 2000), error: result.stderr.slice(0, 500) || result.error }])),
     protected: ["daily OHLCV and daily volume", "Strategy3 and Strategy4 canonical results", "/88, desktop, mobile, and latest scorecard", "latest 15 days of formal evidence", "production-health.jsonl", "formal candidates"],
@@ -95,5 +130,8 @@ function main() {
   payload.receiptFile = output; console.log(JSON.stringify(payload, null, 2));
   if (!payload.ok) process.exitCode = 1;
 }
-main();
+main().catch((error) => {
+  console.error(JSON.stringify({ ok: false, contract: "daily-retention-maintenance-v1", error: error?.message || String(error) }, null, 2));
+  process.exitCode = 1;
+});
 

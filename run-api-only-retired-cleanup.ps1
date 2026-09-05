@@ -10,6 +10,9 @@ $lockFile = Join-Path $runtimeRoot "locks\api-only-retired-cleanup.lock"
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $script = Join-Path $root "scripts\cleanup-api-only-retired-artifacts.js"
 
+. (Join-Path $root "schedule-guard.ps1")
+Invoke-FumanWeekdayGuard -Label "API-only retired artifact cleanup"
+
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $lockFile) | Out-Null
 $log = Join-Path $logDir ("api-only-retired-cleanup-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
