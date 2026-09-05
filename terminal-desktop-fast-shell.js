@@ -1370,7 +1370,7 @@
   function renderFixedDomUnifiedRoute(key, link, source, panel) {
     const meta = strategyMeta(link || key);
     const renderRows = (rows, renderSource = source || "api") => {
-      if (!panel || panel.hidden || !panel.classList.contains("active")) return false;
+      if (!panel || panel.hidden) return false;
       canvasState.route = key;
       canvasState.source = renderSource;
       canvasState.rows = Array.isArray(rows) ? rows : [];
@@ -1380,12 +1380,23 @@
     };
     const availableRows = (canvasState.filtered?.length ? canvasState.filtered : canvasState.rows || []).filter((row) => row && (row.code || row.title || row.line));
     if (availableRows.length) return renderRows(availableRows, source || "api-cache");
-    restoreNativeFixedDomRoute(key, panel);
-    fetchFixedDomRouteRows(key)
-      .then(({ rows }) => {
-        if (rows?.length) renderRows(rows, "api");
+    const keepInstitutionLoadingShell = isChipTradeRoute(key);
+    if (!keepInstitutionLoadingShell) restoreNativeFixedDomRoute(key, panel);
+    else {
+      panel.classList.add("fuman-unified-list-panel", "fuman-fixed-shell-panel", "fuman-fixed-shell-active");
+      const loadingShell = panel.querySelector('[data-initial-loading-skeleton="institution"]');
+      if (loadingShell) loadingShell.setAttribute("aria-busy", "true");
+    }
+    fetchCanvasRows(key, true)
+      .then((rows) => {
+        if (keepInstitutionLoadingShell) renderRows(Array.isArray(rows) ? rows : [], "api");
+        else if (rows?.length) renderRows(rows, "api");
       })
       .catch(() => {
+        if (keepInstitutionLoadingShell) {
+          const message = panel.querySelector('[data-initial-loading-skeleton="institution"] .empty-state');
+          if (message) message.innerHTML = "<strong>買賣超正式 API 暫時無法讀取</strong><span>未切換舊版格式；請稍後重新整理。</span>";
+        }
       })
       .finally(() => {
         window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
@@ -1568,6 +1579,7 @@
     if (options.today) query.set("today", "1");
     if (isChipTradeRoute(route)) query.set("fieldContract", CHIP_TRADE_FIELD_CONTRACT_VERSION);
     if (isChipTradeRoute(route) && canvasState.signalFilter) query.set("mode", canvasState.signalFilter);
+    if (isChipTradeRoute(route) && endpoint === "/api/institution-latest" && !withBust) query.set("firstPaint", "1");
     if (withBust) query.set("t", String(Date.now()));
     return `${endpoint}${endpoint.includes("?") ? "&" : "?"}${query.toString()}`;
   }
@@ -5477,7 +5489,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-69";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-81";
   }
 
   function loadScriptOnce(src, attr) {
@@ -9404,7 +9416,17 @@
       fetchCanvasRows(key, false).then((apiRows) => {
         if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key) return;
         if (apiRows?.length) {
-          scheduleRoutePaint(key, seq, () => renderFixedPageShell(link, "api", apiRows), "api");
+          const snapshotFirst = isChipTradeRoute(key) && String(canvasPayloadMeta(key)?.cacheSource || "").includes("desktop_route_snapshot");
+          scheduleRoutePaint(key, seq, () => renderFixedPageShell(link, snapshotFirst ? "snapshot-first-refreshing" : "api", apiRows), snapshotFirst ? "snapshot" : "api");
+          if (snapshotFirst) {
+            window.setTimeout(() => {
+              if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key) return;
+              fetchCanvasRows(key, true).then((liveRows) => {
+                if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key) return;
+                if (liveRows?.length) scheduleRoutePaint(key, seq, () => renderFixedPageShell(link, "api-live", liveRows), "api-live");
+              }).catch(() => setCanvasStatus("買賣超快照已顯示｜正式 API 稍後重試"));
+            }, 900);
+          }
         } else {
           scheduleCanvasDraw();
         }

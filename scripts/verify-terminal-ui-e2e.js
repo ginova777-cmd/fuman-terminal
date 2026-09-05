@@ -44,7 +44,6 @@ const DESKTOP_ROUTES = [
   { key: "strategy4", label: "strategy4", selector: "aside.sidebar a[data-view=\"strategy\"] .s4", expectedRouteKey: "strategy|策略4", expectedPanelId: "strategy-view" },
   { key: "strategy5", label: "strategy5", selector: "aside.sidebar a[data-view=\"strategy\"] .s5", expectedRouteKey: "strategy|策略5", expectedPanelId: "strategy-view" },
   { key: "institution", label: "institution", selector: "aside.sidebar a[data-view=\"chip-trade\"]", expectedRouteKey: "chip-trade|買賣超", expectedPanelId: "chip-trade-view" },
-  { key: "cb", label: "cb detect", selector: "aside.sidebar a[data-view=\"cb-detect\"]", expectedRouteKey: "cb-detect|CB可轉債", expectedPanelId: "cb-detect-view" },
   { key: "warrant", label: "warrant flow", selector: "aside.sidebar a[data-view=\"warrant-flow\"]", expectedRouteKey: "warrant-flow|權證走向", expectedPanelId: "warrant-flow-view" },
   { key: "watchlist", label: "watchlist", selector: "aside.sidebar .watchlist-chip-link[data-view=\"watchlist\"]", expectedRouteKey: "watchlist|自選股", expectedPanelId: "watchlist-view", allowWaitingEmpty: true, requiredText: ["自選股"], requiredFieldSignals: ["codeName", "reasonScoreActionRisk"] },
 ];
@@ -1352,7 +1351,6 @@ function collectDesktopStats(route) {
     ".intraday-table tbody tr",
     ".swing-table tbody tr",
     "#chip-trade-body tr",
-    "#cb-detect-list > *:not(.cb-detect-empty)",
     ".warrant-flow-panel tbody tr",
     ".warrant-flow-card",
     ".warrant-flow-list > *",

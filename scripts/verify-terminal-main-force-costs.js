@@ -52,7 +52,7 @@ check(strategy2.includes('await attachMainForceCostsToPayload(responsePayload);'
 check(strategy3.includes('await attachMainForceCostsToPayload(await applyStrategy3Entry1mGate'), "strategy3_main_force_direct_api_missing");
 check(strategy4.includes('await attachMainForceCostsToPayload(cached);') && strategy4.includes('await attachMainForceCostsToPayload(payload);'), "strategy4_main_force_direct_or_snapshot_api_missing");
 check(strategy5.includes('await attachMainForceCostsToPayload(cached);') && strategy5.includes('await attachMainForceCostsToPayload(payload);'), "strategy5_main_force_direct_or_snapshot_api_missing");
-check(institution.includes('await attachMainForceCostsToPayload(cached);') && institution.includes('await attachMainForceCostsToPayload(payload);'), "institution_main_force_direct_or_snapshot_api_missing");
+check(institution.includes('allowStale: marketCalendar?.marketOpen === false') && institution.includes('attachMainForceCostsToPayload(payload)'), "institution_main_force_live_api_or_weekend_snapshot_fast_path_missing");
 
 async function main() {
   if (process.argv.includes("--live")) {

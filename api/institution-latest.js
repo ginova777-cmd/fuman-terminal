@@ -2,7 +2,7 @@ const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const { buildMarketCalendarContract, installMarketCalendarResponse } = require("../lib/market-calendar-contract");
 const fs = require("fs");
 const path = require("path");
-const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
+const { readEndpointFromDesktopSnapshot, readDesktopRouteSnapshotForRoute } = require("../lib/desktop-route-snapshot-cache");
 const { runTimeSourceSnapshotResponseFields, wrapJsonRunTimeSourceEvidence } = require("../lib/run-time-source-snapshot-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
 const { attachMainForceCostsToPayload } = require("../lib/terminal-main-force-costs");
@@ -96,9 +96,10 @@ function readRequestOptions(request) {
     const smallPayload = canvas || compact;
     const limit = Math.max(1, Math.min(smallPayload ? 120 : 3000, cleanNumber(url.searchParams.get("limit")) || (smallPayload ? 80 : 3000)));
     const fieldContract = String(url.searchParams.get("fieldContract") || "").trim();
-    return { canvas, compact, live, smallPayload, limit, fieldContract };
+    const firstPaint = url.searchParams.get("firstPaint") === "1";
+    return { canvas, compact, live, smallPayload, limit, fieldContract, firstPaint };
   } catch {
-    return { canvas: false, compact: false, live: false, smallPayload: false, limit: 3000, fieldContract: "" };
+    return { canvas: false, compact: false, live: false, smallPayload: false, limit: 3000, fieldContract: "", firstPaint: false };
   }
 }
 
@@ -474,8 +475,6 @@ async function fetchLatestCompleteRows() {
 }
 
 async function handler(request, response) {
-  const marketCalendar = await buildMarketCalendarContract().catch(() => null);
-  installMarketCalendarResponse(response, marketCalendar);
   wrapJsonRunTimeSourceEvidence(response, { strategy: "institution", endpoint: "api/institution-latest" });
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -487,14 +486,24 @@ async function handler(request, response) {
   }
 
   const options = readRequestOptions(request);
+  if (options.firstPaint) {
+    const routeSnapshot = await readDesktopRouteSnapshotForRoute("institution", { timeoutMs: 900, allowStale: true }).catch(() => null);
+    const cached = routeSnapshot?.payload;
+    if (cached && payloadMatchesFieldContract(cached, options.fieldContract) && payloadHasMachineState(cached)) {
+      setDesktopSnapshotCache(response);
+      response.status(200).json({ ...cached, firstPaint: true, cacheSource: "supabase:desktop_route_snapshot:route" });
+      return;
+    }
+  }
+  const marketCalendar = await buildMarketCalendarContract().catch(() => null);
+  installMarketCalendarResponse(response, marketCalendar);
   if (!options.live) {
     const cached = await readEndpointFromDesktopSnapshot(request, {
       timeoutMs: 650,
       via: "api/institution-latest",
+      allowStale: marketCalendar?.marketOpen === false,
     });
     if (cached && payloadMatchesFieldContract(cached, options.fieldContract) && payloadHasMachineState(cached)) {
-      await attachMainForceCostsToPayload(cached);
-    await attachThreeGatePricesToPayload(cached);
       setDesktopSnapshotCache(response);
       response.status(200).json(cached);
       return;
@@ -513,8 +522,10 @@ async function handler(request, response) {
       return;
     }
     const payload = buildPayload(latest.rows, latest.run, { ...options, sourceHealth });
-    await attachMainForceCostsToPayload(payload);
-    await attachThreeGatePricesToPayload(payload);
+    await Promise.all([
+      attachMainForceCostsToPayload(payload),
+      attachThreeGatePricesToPayload(payload),
+    ]);
     setDesktopSnapshotCache(response);
     response.status(200).json(payload);
   } catch (error) {

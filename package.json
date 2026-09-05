@@ -152,6 +152,8 @@
     "verify:market-ai-freshness": "node scripts/verify-market-ai-freshness-guard.js",
     "verify:watchlist-autonomy": "node --use-system-ca scripts/verify-watchlist-autonomy.js",
     "verify:watchlist-daily-kline": "node --use-system-ca scripts/verify-watchlist-daily-kline-ui.js",
+    "verify:mobile-daily-kline": "node --use-system-ca scripts/verify-mobile-daily-kline-contract.js",
+    "run:mobile-daily-kline-contract": "node --use-system-ca scripts/run-mobile-daily-kline-contract.js",
     "verify:strategy3-daily-kline": "node --use-system-ca scripts/verify-watchlist-daily-kline-ui.js --skip-live",
     "verify:strategy5-daily-kline": "node --use-system-ca scripts/verify-watchlist-daily-kline-ui.js",
     "verify:three-gate-prices": "node --use-system-ca scripts/verify-three-gate-prices.js",

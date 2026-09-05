@@ -93,12 +93,6 @@ const ROUTE_CONFIG = {
     rows: ".chip-trade-row,.chip-trade-card,.strategy-row",
     allowEmpty: true,
   },
-  cb: {
-    view: "cb-detect",
-    selector: 'aside.sidebar a[data-view="cb-detect"]',
-    panel: "#cb-detect-view",
-    rows: ".cb-detect-card,#cb-detect-list > *:not(.cb-detect-empty)",
-  },
   warrant: {
     view: "warrant-flow",
     selector: 'aside.sidebar a[data-view="warrant-flow"]',

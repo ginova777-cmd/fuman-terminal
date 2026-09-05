@@ -7,8 +7,8 @@
   const ALLOWED_STATUSES = new Set(["active", "approved", "admin", "paid", "pro", "premium"]);
   const UNLOCKED_MEMBERSHIP_CONTENT = new Set(["verified", "token_unlocked"]);
   const PUBLIC_VIEWS = new Set(["market", "member"]);
-  const PROTECTED_VIEWS = new Set(["strategy", "chip-trade", "cb-detect", "warrant-flow", "realtime-radar"]);
-  const PROTECTED_LABELS = ["策略1", "策略2", "策略3", "策略4", "策略5", "買賣超", "CB可轉債", "CB", "權證走向", "權證", "回測研究"];
+  const PROTECTED_VIEWS = new Set(["strategy", "chip-trade", "warrant-flow", "realtime-radar"]);
+  const PROTECTED_LABELS = ["策略1", "策略2", "策略3", "策略4", "策略5", "買賣超", "權證走向", "權證", "回測研究"];
 
   function parseJson(value) {
     try {
@@ -223,7 +223,7 @@
 
   function isProtectedApiUrl(url) {
     if (!url || url.origin !== location.origin) return false;
-    return /^\/api\/(open-buy-latest|strategy2-latest|strategy3-latest|strategy4-latest|strategy5-latest|institution-latest|cb-detect-latest|warrant-flow-latest|scorecard|source-reports|terminal-fast-bundle|mobile-boot|mobile-fragment)(?:$|[/?#])/i.test(url.pathname);
+    return /^\/api\/(open-buy-latest|strategy2-latest|strategy3-latest|strategy4-latest|strategy5-latest|institution-latest|terminal-route-first-paint|warrant-flow-latest|scorecard|source-reports|terminal-fast-bundle|mobile-boot|mobile-fragment)(?:$|[/?#])/i.test(url.pathname);
   }
 
   function readAccessToken() {
@@ -347,7 +347,6 @@
   function lockedTitle(viewName, targetLabel) {
     if (viewName === "strategy") return "策略中心";
     if (viewName === "chip-trade") return "買賣超";
-    if (viewName === "cb-detect") return "CB可轉債";
     if (viewName === "warrant-flow") return "權證走向";
     return targetLabel || "會員功能";
   }
@@ -558,7 +557,7 @@
   function sanitizeSavedRoute() {
     if (isEntitled()) return;
     const saved = localStorage.getItem(LAST_ROUTE_KEY) || "";
-    let locked = /^(strategy|chip-trade|cb-detect|warrant-flow|realtime-radar)\|/.test(saved);
+    let locked = /^(strategy|chip-trade|warrant-flow|realtime-radar)\|/.test(saved);
     if (!locked) {
       const route = parseJson(saved);
       locked = isProtectedView(String(route?.viewName || route?.view || ""));

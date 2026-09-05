@@ -27,8 +27,6 @@ const STRATEGY_ALIASES = new Map([
   ["strategy5", "Strategy5 / institution"],
   ["institution", "Strategy5 / institution"],
   ["chip", "Strategy5 / institution"],
-  ["cb", "CB"],
-  ["cb-detect", "CB"],
   ["warrant", "Warrant"],
   ["warrant-flow", "Warrant"],
 ]);

@@ -1,4 +1,4 @@
-<!doctype html><html lang="zh-Hant" data-mobile-locked="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>輔滿極速手機版</title><script src="/terminal-entitlement-guard.js?v=public-terminal-fast-20260714-69"></script><link rel="preload" href="/api/mobile-boot" as="fetch"><style>:root{color-scheme:dark;--bg:#070a12;--panel:#101623;--line:#223047;--text:#edf3ff;--muted:#91a0b8;--blue:#74a7ff}html[data-sun="1"]{color-scheme:light;--bg:#f7f9ff;--panel:#fff;--line:#cbd6e6;--text:#142033;--muted:#5b6b82;--blue:#1763c7}
+<!doctype html><html lang="zh-Hant" data-mobile-locked="1"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>輔滿極速手機版</title><script src="/terminal-entitlement-guard.js?v=public-terminal-fast-20260714-81"></script><link rel="preload" href="/api/mobile-boot" as="fetch"><style>:root{color-scheme:dark;--bg:#070a12;--panel:#101623;--line:#223047;--text:#edf3ff;--muted:#91a0b8;--blue:#74a7ff}html[data-sun="1"]{color-scheme:light;--bg:#f7f9ff;--panel:#fff;--line:#cbd6e6;--text:#142033;--muted:#5b6b82;--blue:#1763c7}
     *{box-sizing:border-box}
     html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",Arial,sans-serif}
     body{padding:12px;line-height:1.45;letter-spacing:0}
@@ -690,6 +690,49 @@ async function loadFragment(k,force=false){const seq=++fragmentSeq;const m=membe
     }
   }, true);
   window.FUMAN_MOBILE_AI_STARTUP_REPAIR = "mobile-ai-startup-repair-20260710-01";
+})();
+</script>
+<style id="fuman-mobile-daily-kline-style">
+  .mobile-daily-kline-button{min-height:34px;border:1px solid #3187cf;border-radius:8px;background:rgba(30,100,170,.18);color:#9bd2ff;font-weight:900;padding:7px 12px}
+  .watch-row .mobile-daily-kline-button{grid-column:auto}
+  .mobile-kline-modal{position:fixed;z-index:10020;inset:10px;background:#08111e;border:1px solid #3187cf;border-radius:12px;padding:14px;color:#e8f1ff;overflow:auto;box-shadow:0 24px 70px rgba(0,0,0,.62)}
+  .mobile-kline-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}.mobile-kline-head h3{margin:0;font-size:20px}.mobile-kline-head p{margin:5px 0 0;color:#91a8c4;font-size:12px}.mobile-kline-close{border:1px solid #536a82;border-radius:8px;background:#142236;color:#fff;padding:8px 12px;font-weight:900}
+  .mobile-kline-svg{display:block;width:100%;height:min(58vh,420px);border:1px solid #263d56;border-radius:9px;background:#0b1726}.mobile-kline-grid{stroke:#23364b;stroke-width:1}.mobile-kline-axis{fill:#8fa4bc;font-size:10px}.mobile-kline-volume{opacity:.5}.mobile-kline-summary{margin:10px 0;color:#d5e5f7;font-size:13px;font-weight:800}.mobile-kline-error{padding:28px 8px;text-align:center;color:#ffbd75}
+  .mobile-kline-ranges{display:flex;gap:8px;margin:10px 0}.mobile-kline-range{flex:1;min-height:38px;border:1px solid #536a82;border-radius:8px;background:#142236;color:#b9c9dc;font-weight:900}.mobile-kline-range.active{border-color:#f1b544;background:#604817;color:#ffe099}
+  .mobile-kline-legend{display:flex;gap:14px;margin:7px 0;font-size:12px;font-weight:900}.mobile-kline-legend .ma5{color:#f4c656}.mobile-kline-legend .ma10{color:#4aa7ff}.mobile-kline-legend .ma20{color:#b18ae3}
+  html[data-sun="1"] .mobile-kline-modal{background:#fff;color:#10243a}.mobile-kline-loading{padding:34px 8px;text-align:center;color:#91a8c4}
+</style>
+<script data-mobile-daily-kline="mobile-daily-kline-v2">
+(() => {
+  if (self.FUMAN_MOBILE_DAILY_KLINE === "mobile-daily-kline-v2") return;
+  self.FUMAN_MOBILE_DAILY_KLINE = "mobile-daily-kline-v2";
+  const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+  const codeOf = (node) => String(node?.dataset?.aiStockCode || node?.dataset?.code || node?.textContent || "").match(/\b\d{4}\b/)?.[0] || "";
+  const nameOf = (node, code) => String(node?.dataset?.aiStockName || node?.querySelector?.("h4")?.textContent || "").replace(code, "").trim();
+  const number = (v) => Number.isFinite(Number(v)) ? Number(v) : 0;
+  function chartSvg(rows, range) {
+    const bars = rows.slice(-range), w = 720, h = 430, left = 48, right = 12, top = 18, priceBottom = 310, volumeTop = 330, bottom = 405;
+    const highs = bars.map(x => number(x.high)), lows = bars.map(x => number(x.low)), max = Math.max(...highs), min = Math.min(...lows), span = Math.max(.01, max - min), maxVol = Math.max(1, ...bars.map(x => number(x.volumeLots)));
+    const step = (w-left-right)/Math.max(1,bars.length), body = Math.max(1.6,Math.min(5,step*.62));
+    const x = i => left + step*(i+.5), y = v => top + (max-number(v))/span*(priceBottom-top), vy = v => bottom-number(v)/maxVol*(bottom-volumeTop);
+    const grid = [0,.25,.5,.75,1].map(p => { const yy=top+p*(priceBottom-top), val=max-p*span; return `<line class="mobile-kline-grid" x1="${left}" y1="${yy}" x2="${w-right}" y2="${yy}"/><text class="mobile-kline-axis" x="2" y="${yy+4}">${val.toFixed(2)}</text>`; }).join("");
+    const candles = bars.map((b,i) => { const up=number(b.close)>=number(b.open), color=up?"#ef5350":"#26a69a", xx=x(i), yo=y(b.open), yc=y(b.close), yt=y(b.high), yb=y(b.low), bh=Math.max(1.5,Math.abs(yc-yo)); return `<line x1="${xx}" y1="${yt}" x2="${xx}" y2="${yb}" stroke="${color}"/><rect x="${xx-body/2}" y="${Math.min(yo,yc)}" width="${body}" height="${bh}" fill="${color}"/><rect class="mobile-kline-volume" x="${xx-body/2}" y="${vy(b.volumeLots)}" width="${body}" height="${bottom-vy(b.volumeLots)}" fill="${color}"/>`; }).join("");
+    const ma = (period,color) => { const points=bars.map((bar,i)=>{const absolute=rows.length-bars.length+i;if(absolute<period-1)return "";const window=rows.slice(absolute-period+1,absolute+1),average=window.reduce((sum,item)=>sum+number(item.close),0)/period;return `${x(i)},${y(average)}`}).filter(Boolean).join(" ");return points?`<polyline points="${points}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`:""; };
+    const labels = [0,Math.floor((bars.length-1)/2),bars.length-1].map(i => `<text class="mobile-kline-axis" text-anchor="${i===0?'start':i===bars.length-1?'end':'middle'}" x="${x(i)}" y="425">${esc(String(bars[i]?.date||"").slice(5))}</text>`).join("");
+    return `<div class="mobile-kline-legend"><span class="ma5">MA5</span><span class="ma10">MA10</span><span class="ma20">MA20</span><span>下方為成交量（張）</span></div><svg class="mobile-kline-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="${bars.length} 根日 K 線、MA5、MA10、MA20 與成交量">${grid}<line class="mobile-kline-grid" x1="${left}" y1="320" x2="${w-right}" y2="320"/>${candles}${ma(5,"#f4c656")}${ma(10,"#4aa7ff")}${ma(20,"#b18ae3")}${labels}</svg>`;
+  }
+  async function openKline(code, name) {
+    document.querySelector(".mobile-kline-modal")?.remove();
+    const modal=document.createElement("section"); modal.className="mobile-kline-modal"; modal.innerHTML=`<header class="mobile-kline-head"><div><h3>${esc(code)} ${esc(name)}</h3><p>正式日 OHLCV</p></div><button class="mobile-kline-close" type="button">關閉</button></header><div class="mobile-kline-ranges" role="group" aria-label="日 K 顯示區間">${[60,120,240].map(range=>`<button type="button" class="mobile-kline-range ${range===120?'active':''}" data-mobile-kline-range="${range}" aria-pressed="${range===120?'true':'false'}">${range} 日</button>`).join('')}</div><div class="mobile-kline-loading">日 K 載入中...</div>`; document.body.appendChild(modal);
+    modal.querySelector(".mobile-kline-close").onclick=()=>modal.remove();
+    try { const response=await fetch(`/api/daily-kline?code=${encodeURIComponent(code)}&limit=260&t=${Date.now()}`,{cache:"no-store"}); const payload=await response.json(); if(!response.ok||payload?.ok!==true||!Array.isArray(payload.bars)||payload.bars.length<2) throw Error(payload?.error||`HTTP ${response.status}`); const last=payload.bars[payload.bars.length-1], summary=`<div class="mobile-kline-summary">${esc(last.date)}　開 ${number(last.open)}　高 ${number(last.high)}　低 ${number(last.low)}　收 ${number(last.close)}　量 ${Math.round(number(last.volumeLots)).toLocaleString("zh-TW")} 張</div>`; const paint=(range)=>{const old=modal.querySelector("[data-mobile-kline-chart]"); const html=`<div data-mobile-kline-chart="${range}">${summary}${chartSvg(payload.bars,range)}</div>`; if(old)old.outerHTML=html; else modal.querySelector(".mobile-kline-loading").outerHTML=html; modal.querySelectorAll("[data-mobile-kline-range]").forEach(button=>{const active=Number(button.dataset.mobileKlineRange)===range; button.classList.toggle("active",active); button.setAttribute("aria-pressed",active?'true':'false')});}; modal.addEventListener("click",event=>{const button=event.target.closest("[data-mobile-kline-range]"); if(button)paint(Number(button.dataset.mobileKlineRange)||120)}); paint(120); }
+    catch(error) { modal.querySelector(".mobile-kline-loading").outerHTML=`<div class="mobile-kline-error">正式日 K 暫時無法顯示：${esc(error?.message||error)}</div>`; }
+  }
+  function enhance() {
+    document.querySelectorAll("#content .watch-row,#content [data-ai-stock-code]").forEach(row => { if(row.matches("button,[data-mobile-daily-kline]")||row.querySelector?.("[data-mobile-daily-kline]")) return; const code=codeOf(row); if(!code)return; const button=document.createElement("button"); button.type="button"; button.className="mobile-daily-kline-button"; button.dataset.mobileDailyKline=code; button.dataset.mobileDailyKlineName=nameOf(row,code); button.textContent="日 K"; row.appendChild(button); });
+  }
+  document.addEventListener("click", event => { const button=event.target.closest?.("[data-mobile-daily-kline]"); if(!button)return; event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); openKline(button.dataset.mobileDailyKline,button.dataset.mobileDailyKlineName); }, true);
+  new MutationObserver(enhance).observe(document.querySelector("#content")||document.body,{childList:true,subtree:true}); enhance();
 })();
 </script>
 </body></html>
