@@ -61,6 +61,8 @@ function Invoke-AfterhoursSupabaseVerification {
 . "${PSScriptRoot}\schedule-guard.ps1"
 . "${PSScriptRoot}\flow-health.ps1"
 
+Invoke-FumanWeekdayGuard -Label "Institution and afterhours flow"
+
 $institutionExit = Invoke-NodeScan "scripts\scan-institution-cache.js" "Institution scan" 3 60
 if ($institutionExit -ne 0) {
   Write-FlowLog "Institution scan failed after retries with exit code $institutionExit"
@@ -69,8 +71,6 @@ if ($institutionExit -ne 0) {
   exit $institutionExit
 }
 Write-FlowHealth "institution" "ok" "Institution scan completed" @{ exitCode = 0; log = $log }
-
-}
 
 $syncScript = "${PSScriptRoot}\run-cache-sync.ps1"
 if (-not (Test-Path -LiteralPath $syncScript)) {

@@ -261,27 +261,58 @@ function rowBox(row, index, strategy) {
 }
 
 function strategy4CompactTextBlocks(rows) {
-  const lines = rows.map((row, index) => {
-    const codeName = `${rowCode(row)} ${rowName(row)}`.slice(0, 18);
-    return `${String(index + 1).padStart(2, "0")} ${codeName} 進${rowEntryPrice(row)} 目${rowTargetPrice(row)}`;
-  });
-  const chunks = [];
-  for (let i = 0; i < lines.length; i += 18) chunks.push(lines.slice(i, i + 18));
-  return chunks.map((chunk) => ({
-    type: "box",
-    layout: "vertical",
-    backgroundColor: "#101827",
-    borderColor: "#273951",
-    borderWidth: "1px",
-    cornerRadius: "6px",
-    paddingAll: "8px",
-    contents: [boxText(chunk.join("\n"), { size: "xxs", color: "#ffffff", wrap: true })],
-  }));
+  const selectedRows = [...rows]
+    .sort((a, b) => cleanNumber(b.score) - cleanNumber(a.score) || cleanNumber(a.rank) - cleanNumber(b.rank))
+    .slice(0, 10);
+  const grouped = new Map();
+  for (const row of selectedRows) {
+    const label = rowStrategyLabel(row, "strategy4").replace(/\+/g, "＋") || "其他策略";
+    if (!grouped.has(label)) grouped.set(label, []);
+    grouped.get(label).push(row);
+  }
+  const output = [];
+  let displayRank = 0;
+  for (const [label, selected] of grouped.entries()) {
+    output.push({
+      type: "box",
+      layout: "horizontal",
+      paddingTop: "8px",
+      paddingBottom: "3px",
+      contents: [
+        boxText(`【${label}】`, { size: "sm", weight: "bold", color: "#173750", flex: 6 }),
+        boxText(`${selected.length} 檔`, { size: "xs", color: "#897552", align: "end", flex: 1 }),
+      ],
+    });
+    for (const row of selected) {
+      displayRank += 1;
+      const zone = text(row.zone || row.zoneLabel, "-").slice(0, 1).toUpperCase();
+      const accent = zone === "A" ? "#119b86" : zone === "B" ? "#c99d45" : "#668da3";
+      output.push({
+        type: "box",
+        layout: "horizontal",
+        backgroundColor: "#fffefd",
+        borderColor: "#d8cbb7",
+        borderWidth: "1px",
+        cornerRadius: "12px",
+        paddingAll: "10px",
+        contents: [
+          boxText(String(displayRank).padStart(2, "0"), { size: "lg", weight: "bold", color: "#b28b42", flex: 1 }),
+          { type: "box", layout: "vertical", flex: 5, contents: [
+            boxText(`${rowCode(row)} ${rowName(row)}`, { size: "md", weight: "bold", color: "#173750" }),
+            boxText(`目標 ${rowTargetPrice(row)}／停損 ${signedPrice(row.stopPrice ?? row.mutakiV17?.stopPrice ?? row.payload?.stopPrice)}`, { size: "xs", color: accent }),
+            boxText(`${zone}區／score ${rowScore(row)}`, { size: "xs", color: accent }),
+          ] },
+          boxText(`進場 ${rowEntryPrice(row)}`, { size: "md", weight: "bold", color: "#173750", align: "end", flex: 3 }),
+        ],
+      });
+    }
+  }
+  return output;
 }
 function buildCard(strategy, payload, receipt = {}) {
   const isStrategy4 = strategy === "strategy4";
-  const title = isStrategy4 ? "FUMAN 16:00" : "FUMAN 13:00";
-  const subtitle = isStrategy4 ? "策略4完整掃描 LINE 圖卡" : "隔日沖完整掃描 LINE 圖卡";
+  const title = isStrategy4 ? "波段雷達" : "FUMAN 13:00";
+  const subtitle = isStrategy4 ? "FUMAN STRATEGY 4 RADAR" : "隔日沖完整掃描 LINE 圖卡";
   const matches = Array.isArray(payload.matches) ? payload.matches : Array.isArray(payload.rows) ? payload.rows : [];
   const count = cleanNumber(payload.count || payload.resultCount || matches.length || receipt.matches);
   const blockedReason = text(payload.blockedReason || payload.scanner_block_reason || payload.error || receipt.blockingReason || "", "");
@@ -293,44 +324,45 @@ function buildCard(strategy, payload, receipt = {}) {
   const runId = text(payload.runId || receipt.runId, "-");
   const expected = cleanNumber(payload.expectedTotal || payload.sourceHealth?.expectedTotal || receipt.total);
   const maxScore = displayRows.reduce((max, row) => Math.max(max, cleanNumber(row.score ?? row.overnightScore ?? row.swingScore ?? row.totalScore)), 0);
+  const strategy4ZoneCounts = Object.fromEntries(["A", "B", "C"].map((key) => [key, displayRows.filter((row) => String(row.zone || row.zoneLabel || "").toUpperCase().startsWith(key)).length]));
   const summary = isStrategy4
-    ? `策略4完整掃描：本卡列出全部 ${count} 檔；正式使用仍以 terminal gate / runId closure 為準。`
+    ? `以上為策略4波段觀察名單，依 A／B／C 優先級排列；每檔已標示本次命中的策略組合。僅供研究參考。`
     : `隔日沖雷達：本卡列出全部 ${count} 檔可回讀標的；進場價格優先顯示。`;
 
   return {
     type: "bubble",
     size: "giga",
-    styles: { body: { backgroundColor: "#070b12" }, footer: { backgroundColor: "#070b12" } },
+    styles: { body: { backgroundColor: isStrategy4 ? "#f8f5ee" : "#070b12" }, footer: { backgroundColor: isStrategy4 ? "#f8f5ee" : "#070b12" } },
     body: {
       type: "box",
       layout: "vertical",
       spacing: "md",
       paddingAll: "16px",
-      backgroundColor: "#070b12",
+      backgroundColor: isStrategy4 ? "#f8f5ee" : "#070b12",
       contents: [
         {
           type: "box",
           layout: "horizontal",
           contents: [
             { type: "box", layout: "vertical", flex: 5, contents: [
-              boxText(title, { size: "xxl", weight: "bold", color: "#ffd76a" }),
-              boxText(subtitle, { size: "sm", color: "#ffffff" }),
+              boxText(subtitle, { size: "xs", color: isStrategy4 ? "#9b6f34" : "#ffffff" }),
+              boxText(title, { size: "xxl", weight: "bold", color: isStrategy4 ? "#173750" : "#ffd76a" }),
+              ...(isStrategy4 ? [boxText(String(scanDate).slice(0, 10).replace(/-/g, "／"), { size: "lg", weight: "bold", color: "#173750" })] : []),
             ] },
 
           ],
         },
-        { type: "separator", color: "#d89b20" },
-        {
+        { type: "separator", color: isStrategy4 ? "#173750" : "#d89b20" },
+        ...(!isStrategy4 ? [{
           type: "box",
           layout: "horizontal",
           spacing: "sm",
           contents: [
-            metricBox("可回讀", String(count), "#ff5b4a"),
-            metricBox("最高分", maxScore ? String(maxScore) : "-", "#ffd76a"),
-            metricBox(isStrategy4 ? "掃描" : "進場", isStrategy4 && expected ? String(expected) : "13:00", "#ffffff"),
+            metricBox(isStrategy4 ? "精選標的" : "可回讀", isStrategy4 ? String(Math.min(displayRows.length, 10)) : String(count), isStrategy4 ? "#b28b42" : "#ff5b4a"),
+            metricBox("最高分", maxScore ? String(maxScore) : "-", isStrategy4 ? "#b28b42" : "#ffd76a"),
           ],
-        },
-        {
+        }] : []),
+        ...(!isStrategy4 ? [{
           type: "box",
           layout: "vertical",
           backgroundColor: "#0d1420",
@@ -343,12 +375,12 @@ function buildCard(strategy, payload, receipt = {}) {
             boxText(`資料時間：${scanDate}`, { size: "xxs", color: "#9fb2ce" }),
 
           ],
-        },
-        boxText(matches.length ? `全部標的 ${matches.length} 檔` : (ok ? "全部標的" : "狀態"), { size: "md", weight: "bold", color: "#ffd76a" }),
+        }] : []),
+        ...(!isStrategy4 ? [boxText(matches.length ? `全部標的 ${matches.length} 檔` : (ok ? "全部標的" : "狀態"), { size: "md", weight: "bold", color: "#ffd76a" })] : []),
         ...(displayRows.length ? rowContents : [
           { type: "box", layout: "vertical", backgroundColor: "#101827", borderColor: "#273951", borderWidth: "1px", cornerRadius: "6px", paddingAll: "12px", contents: [boxText("目前無可回讀標的", { size: "sm", color: "#ffffff", align: "center" })] },
         ]),
-        { type: "box", layout: "vertical", backgroundColor: "#f2bd4b", cornerRadius: "6px", paddingAll: "10px", contents: [boxText(summary, { size: "sm", weight: "bold", color: "#090909" })] },
+        ...(!isStrategy4 ? [{ type: "box", layout: "vertical", backgroundColor: "#f2bd4b", cornerRadius: "6px", paddingAll: "10px", contents: [boxText(summary, { size: "sm", weight: "bold", color: "#090909" })] }] : []),
       ],
     },
   };
@@ -525,6 +557,7 @@ async function main() {
   const strategy = String(argValue("strategy", "")).toLowerCase();
   if (!new Set(["strategy3", "strategy4"]).has(strategy)) throw new Error("Use --strategy=strategy3 or --strategy=strategy4");
   const dryRun = process.argv.includes("--dry-run");
+  const deliveryId = text(argValue("delivery-id", ""), "").replace(/[^A-Za-z0-9._-]/g, "").slice(0, 48);
   const lineEnv = loadLineEnv();
   const scanReceipt = readScanReceipt(strategy);
   let payload;
@@ -563,6 +596,9 @@ async function main() {
   const publicCount = dateAligned && readyForLine ? count : 0;
   const publicRunId = dateAligned && readyForLine ? runId : "";
   const receipt = {
+    contract: "strategy4-line-card-runner-v2",
+    format_contract: strategy === "strategy4" ? "strategy4-line-customer-grouped-v2" : "strategy3-line-card-v1",
+    format_version: strategy === "strategy4" ? "2026-09-04-v2" : "v1",
     ok: readyForLine,
     date: today,
     strategy,
@@ -607,11 +643,28 @@ async function main() {
       tailVolumeRatio: cleanNumber(row.tailVolumeRatio || row.payload?.tailVolumeRatio),
       tailVolumeHistoryCount: cleanNumber(row.tailVolumeHistoryCount || row.payload?.tailVolumeHistoryCount),
     })).filter((row) => row.code) : [],
+    grouping: strategy === "strategy4" ? "zone_A_B_C" : "flat",
+    customer_safe: true,
+    internal_status_visible: false,
+    disclaimer: strategy === "strategy4" ? "僅供研究參考，不是自動下單訊號" : "",
     dataDate,
     dateAligned,
     blockedReason,
     api_error: apiError,
+    ...(strategy === "strategy4" ? {
+      layout_contract: "strategy4-line-single-card-v2",
+      visual_style: "cream-rounded-strategy-groups",
+      grouping: "strategyLabel",
+      ordering: "score_desc_then_source_rank_asc",
+      display_limit: 10,
+      hidden_sections: ["selected_count_metric", "highest_score_metric", "sorting_caption"],
+      single_card: true,
+    } : {}),
   };
+  if (strategy === "strategy4") {
+    receipt.zone_counts = Object.fromEntries(["A", "B", "C"].map((key) => [key, receipt.accepted_rows.filter((row) => String(row.zone || row.zoneLabel || "").toUpperCase().startsWith(key)).length]));
+    receipt.strategy_combination_count = new Set(receipt.accepted_rows.map((row) => row.strategyLabel).filter(Boolean)).size;
+  }
 
   if (!readyForLine) {
     const file = writeReceipt(strategy, receipt, { dryRun });
@@ -624,8 +677,13 @@ async function main() {
   if (!dryRun) {
     if (!lineEnv.token || invalidLineTarget(lineEnv.to)) throw new Error("Missing valid LINE token or target userId");
     const { sendLineFlex } = require(path.join(ROOT, "scripts", "line-push.js"));
-    await sendLineFlex(altText, card, { idempotencyKey: `strategy-line-card:${strategy}:${receipt.date}:${receipt.runId || "no-run"}:${receipt.status}` });
+    const deliveries = await sendLineFlex(altText, card, { idempotencyKey: `strategy-line-card:${strategy}:${receipt.date}:${receipt.runId || "no-run"}:${receipt.status}${deliveryId ? `:${deliveryId}` : ""}` });
+    const attempted = Array.isArray(deliveries) ? deliveries : [];
+    const failed = attempted.filter((item) => item?.sent !== true);
+    if (!attempted.length || failed.length) throw new Error(`LINE delivery not confirmed: attempted=${attempted.length};failed=${failed.length}`);
     receipt.line_push_ok = true;
+    receipt.delivery_id = deliveryId;
+    receipt.delivery_count = attempted.length;
   }
   const file = writeReceipt(strategy, receipt, { dryRun });
   console.log(JSON.stringify({ ok: true, dry_run: dryRun, strategy, line_push_ok: receipt.line_push_ok, status: receipt.status, count, runId: receipt.runId, blockedReason, receipt_path: file }, null, 2));

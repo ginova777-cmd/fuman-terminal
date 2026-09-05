@@ -388,6 +388,22 @@ try {
 
 Invoke-InstitutionSnapshotRefresh ([string]$verifiedPayload.runId)
 
+"Institution scorecard/sourceReports refresh start before strict tri-surface verification" >> $log
+try {
+  $env:FUMAN_SCORECARD_REFRESH_KEY = "institution"
+  $env:FUMAN_SCORECARD_REFRESH_RUN_ID = [string]$verifiedPayload.runId
+  $env:FUMAN_SCORECARD_ALLOW_CURRENT_SHRINK = "1"
+  & npm.cmd run scorecard:terminal-source *>&1 | Tee-Object -FilePath $log -Append
+  if ($LASTEXITCODE -ne 0) {
+    $reason = "critical scan failed during scorecard/sourceReports refresh: exit=$LASTEXITCODE"
+    Write-InstitutionReceipt "failed" $LASTEXITCODE $false 0 ([string]$verifiedPayload.runId) @($reason) $reason
+    Write-FumanFlowHealth -Scope institution -Status publish_delayed -Message $reason -Detail @{ log = $log; runId = [string]$verifiedPayload.runId }
+    exit $LASTEXITCODE
+  }
+} finally {
+  Remove-Item Env:FUMAN_SCORECARD_REFRESH_KEY, Env:FUMAN_SCORECARD_REFRESH_RUN_ID, Env:FUMAN_SCORECARD_ALLOW_CURRENT_SHRINK -ErrorAction SilentlyContinue
+}
+
 . "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
 Write-InstitutionReceipt "verifying" 0 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 try {

@@ -1320,7 +1320,54 @@ async function main() {
     sourceReports: activeReports,
     scanAudit: buildScanAudit({ runtimeDir: RUNTIME_DIR }),
   };
-  const ruleVerification = verifyScorecardStrategyRules(payload, { source: "terminal-complete-run-scorecard", requireContract: true });
+  const strategy4RefreshRunId = cleanText(process.env.EXPECTED_STRATEGY4_RUN_ID);
+  const scopedRefreshKey = cleanText(process.env.FUMAN_SCORECARD_REFRESH_KEY || (strategy4RefreshRunId ? "strategy4" : "")).toLowerCase();
+  const scopedRefreshRunId = cleanText(process.env.FUMAN_SCORECARD_REFRESH_RUN_ID || strategy4RefreshRunId);
+  const scopedStrategyLabels = { strategy4: "策略4成績單", strategy5: "策略5成績單", institution: "買賣超成績單" };
+  const scopedStrategyLabel = scopedStrategyLabels[scopedRefreshKey] || "";
+  if (scopedRefreshKey && scopedStrategyLabel && scopedRefreshRunId) {
+    const previous = readJsonSafe(OUT_FILE) || {};
+    const previousRecords = Array.isArray(previous.records) ? previous.records : [];
+    const previousReports = Array.isArray(previous.sourceReports) ? previous.sourceReports : [];
+    const scopedRecords = payload.records.filter((row) => cleanText(row.strategy) === scopedStrategyLabel);
+    const scopedReports = payload.sourceReports.filter((row) => cleanText(row.key).toLowerCase() === scopedRefreshKey);
+    if (scopedReports.length !== 1 || cleanText(scopedReports[0].runId) !== scopedRefreshRunId) {
+      throw new Error(`scoped scorecard refresh runId mismatch key=${scopedRefreshKey} expected=${scopedRefreshRunId} actual=${cleanText(scopedReports[0]?.runId) || "missing"}`);
+    }
+    payload.records = [
+      ...previousRecords.filter((row) => cleanText(row.strategy) !== scopedStrategyLabel),
+      ...scopedRecords,
+    ];
+    payload.sourceReports = [
+      ...previousReports.filter((row) => cleanText(row.key).toLowerCase() !== scopedRefreshKey),
+      ...scopedReports,
+    ];
+    const mergedDaily = summarize(payload.records);
+    payload.summary = {
+      latestDate: payload.latestDate,
+      rows: payload.records.length,
+      daily: mergedDaily,
+      byStrategy: mergedDaily.map((row) => ({
+        strategy: row.strategy,
+        rows: row.signals,
+        wins: row.wins,
+        losses: row.losses,
+        flats: row.flats,
+        winRate: row.win_rate_pct,
+        pnl: row.total_pnl,
+      })),
+    };
+    payload.refreshScope = `${scopedRefreshKey}-only`;
+    payload.refreshRunId = scopedRefreshRunId;
+  }
+  const verificationPayload = scopedRefreshKey && scopedStrategyLabel && scopedRefreshRunId
+    ? {
+        ...payload,
+        records: payload.records.filter((row) => cleanText(row.strategy) === scopedStrategyLabel),
+        sourceReports: payload.sourceReports.filter((row) => cleanText(row.key).toLowerCase() === scopedRefreshKey),
+      }
+    : payload;
+  const ruleVerification = verifyScorecardStrategyRules(verificationPayload, { source: "terminal-complete-run-scorecard", requireContract: true });
   payload.ruleVerification = ruleVerification;
   if (!ruleVerification.ok) {
     payload.ok = false;

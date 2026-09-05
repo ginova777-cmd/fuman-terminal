@@ -20,6 +20,7 @@ $log = Join-Path $logDir ("full-scan-{0}.log" -f (Get-Date -Format "yyyyMMdd-HHm
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $receipts = New-Object System.Collections.Generic.List[object]
 $criticalFailures = New-Object System.Collections.Generic.List[string]
+$strictRequiredStrategies = @("strategy3", "institution", "strategy4", "strategy5")
 $env:NOTIFY_FAST_MODE = "1"
 $env:NOTIFY_PUSH_TIMEOUT_MS = "1500"
 $env:NOTIFY_PUSH_RETRIES = "1"

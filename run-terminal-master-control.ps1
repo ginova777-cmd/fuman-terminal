@@ -36,18 +36,22 @@ try {
     exit 0
   }
   Set-Location $ProjectRoot
+  $marketCalendarOutput = & node --use-system-ca (Join-Path $ProjectRoot "scripts\check-market-calendar-action.js") "--label=terminal-master-control" 2>$null
+  $marketCalendarExit = [int]$LASTEXITCODE
+  $marketOpenToday = ($marketCalendarExit -eq 0)
+  if ($marketCalendarExit -notin @(0, 10)) { throw "market calendar check failed exit=$marketCalendarExit output=$($marketCalendarOutput -join ' ')" }
   $env:FUMAN_API_UNATTENDED_SCORECARD_FILE = $jsonFile
   $env:FUMAN_API_UNATTENDED_REPORT_FILE = $mdFile
   & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-api-unattended-scorecard.js")
   $verifierExit = [int]$LASTEXITCODE
   & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-formal-strategy-schedule-authority.js")
   $scheduleAuthorityExit = [int]$LASTEXITCODE
-  $chipSourceVerifierDue = (($startedAt.DayOfWeek -ne [DayOfWeek]::Saturday) -and ($startedAt.DayOfWeek -ne [DayOfWeek]::Sunday) -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("20:05")))
+  $chipSourceVerifierDue = ($marketOpenToday -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("20:05")))
   & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-fuman-schedule-registry-live-alignment.js")
   $scheduleAlignmentExit = [int]$LASTEXITCODE
   & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-scorecard88-fixed-collection-contract.js")
   $scorecard88ContractExit = [int]$LASTEXITCODE
-  $daytradeWriterVerifierDue = (($startedAt.DayOfWeek -ne [DayOfWeek]::Saturday) -and ($startedAt.DayOfWeek -ne [DayOfWeek]::Sunday) -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("06:05")) -and ($startedAt.TimeOfDay -le [TimeSpan]::Parse("13:35")))
+  $daytradeWriterVerifierDue = ($marketOpenToday -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("06:05")) -and ($startedAt.TimeOfDay -le [TimeSpan]::Parse("13:35")))
   $daytradeWriterVerifierExit = $null
   $daytradeWriterVerifierReceipt = Join-Path $receiptDir ("daytrade-writer-checkpoint-health-{0}.json" -f $startedAt.ToString("yyyyMMdd"))
   if ($daytradeWriterVerifierDue) {
@@ -62,13 +66,13 @@ try {
     & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-chip-source-sync-receipt.js")
     $chipSourceVerifierExit = [int]$LASTEXITCODE
   }
-  $telegramVerifierDue = (($startedAt.DayOfWeek -ne [DayOfWeek]::Saturday) -and ($startedAt.DayOfWeek -ne [DayOfWeek]::Sunday) -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("09:00")))
+  $telegramVerifierDue = ($marketOpenToday -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("09:00")))
   $telegramVerifierExit = $null
   if ($telegramVerifierDue) {
     & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-daytrade-intraday-burst-telegram.js") --require-live --require-today
     $telegramVerifierExit = [int]$LASTEXITCODE
   }
-  $strategy2VerifierDue = (($startedAt.DayOfWeek -ne [DayOfWeek]::Saturday) -and ($startedAt.DayOfWeek -ne [DayOfWeek]::Sunday) -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("12:30")))
+  $strategy2VerifierDue = ($marketOpenToday -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("12:30")))
   $strategy2VerifierExit = $null
   $strategy2VerifierReceipt = Join-Path $receiptDir "strategy2-tri-surface-canonical-latest.json"
   if ($strategy2VerifierDue) {
@@ -76,7 +80,7 @@ try {
     & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-strategy2-terminal-visible-readback.js")
     $strategy2VerifierExit = [int]$LASTEXITCODE
   }
-  $cleanupVerifierDue = ($effectiveMode -eq "Full")
+  $cleanupVerifierDue = ($effectiveMode -eq "Full" -and $marketOpenToday)
   $cleanupVerifierExit = $null
   $cleanupVerifierFile = Join-Path $RuntimeRoot ("status\daily-retention-maintenance-verifier-{0}.json" -f $startedAt.ToString("yyyyMMdd"))
   if ($cleanupVerifierDue) {
@@ -126,6 +130,8 @@ try {
     strategy2VerifierExitCode = $strategy2VerifierExit
     scheduleAlignmentExitCode = $scheduleAlignmentExit
     scorecard88ContractExitCode = $scorecard88ContractExit
+    marketOpenToday = $marketOpenToday
+    marketCalendarExitCode = $marketCalendarExit
     daytradeWriterVerifierDue = $daytradeWriterVerifierDue
     daytradeWriterVerifierExitCode = $daytradeWriterVerifierExit
     daytradeWriterVerifierReceipt = $daytradeWriterVerifierReceipt

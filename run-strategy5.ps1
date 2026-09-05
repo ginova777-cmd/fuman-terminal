@@ -210,6 +210,21 @@ if (Test-Path -LiteralPath $snapshotScript) {
   Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 desktop snapshot refresh skipped; helper not found."
 }
 
+Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 scorecard/sourceReports refresh start before strict tri-surface verification"
+try {
+  $env:FUMAN_SCORECARD_REFRESH_KEY = "strategy5"
+  $env:FUMAN_SCORECARD_REFRESH_RUN_ID = [string]$verifiedPayload.runId
+  $env:FUMAN_SCORECARD_ALLOW_CURRENT_SHRINK = "1"
+  & npm.cmd run scorecard:terminal-source *>&1 | Tee-Object -FilePath $log -Append
+  if ($LASTEXITCODE -ne 0) {
+    $reason = "critical scan failed during scorecard/sourceReports refresh: exit=$LASTEXITCODE"
+    Write-Strategy5Receipt "failed" $LASTEXITCODE $false 0 ([string]$verifiedPayload.runId) @($reason) $reason
+    exit $LASTEXITCODE
+  }
+} finally {
+  Remove-Item Env:FUMAN_SCORECARD_REFRESH_KEY, Env:FUMAN_SCORECARD_REFRESH_RUN_ID, Env:FUMAN_SCORECARD_ALLOW_CURRENT_SHRINK -ErrorAction SilentlyContinue
+}
+
 . "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
 Write-Strategy5Receipt "verifying" 0 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 try {

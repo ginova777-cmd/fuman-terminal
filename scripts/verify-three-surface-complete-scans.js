@@ -6,12 +6,14 @@ const BASE_URL = (process.env.FUMAN_TERMINAL_URL || "https://fuman-terminal.verc
 const CONTRACT = "daytrade_mother_pool_skeleton_v1";
 const BASELINE = "public-terminal-fast-20260714-22";
 const BASELINE_COMMIT = "4d6ba88c19c5924093fcbe8afb0566df3c80a921";
-const TABS = [
+const ALL_TABS = [
   { key: "strategy3", route: "strategy3", api: "/api/strategy3-latest", fragment: "strategy3" },
   { key: "strategy4", route: "strategy4", api: "/api/strategy4-latest", fragment: "strategy4" },
   { key: "strategy5", route: "strategy5", api: "/api/strategy5-latest", fragment: "strategy5" },
   { key: "institution", route: "institution", api: "/api/institution-latest", fragment: "chip" },
 ];
+const STRATEGY3_ONLY = process.argv.includes("--strategy3-only");
+const TABS = STRATEGY3_ONLY ? ALL_TABS.filter((tab) => tab.key === "strategy3") : ALL_TABS;
 
 const issues = [];
 function fail(code, details = {}) { issues.push({ code, ...details }); }
@@ -58,7 +60,7 @@ async function main() {
   if (version.formalSkeletonBaseline !== BASELINE) fail("formal_baseline_drift", { actual: version.formalSkeletonBaseline });
   if (version.formalSkeletonBaselineCommit !== BASELINE_COMMIT) fail("formal_baseline_commit_drift", { actual: version.formalSkeletonBaselineCommit });
 
-  const summary = { version: version.version || "", tabs: {}, mobileBoot: {}, strategy2: {} };
+  const summary = { version: version.version || "", scope: STRATEGY3_ONLY ? "strategy3" : "all", tabs: {}, mobileBoot: {}, strategy2: {} };
   for (const tab of TABS) {
     const direct = await read(`${tab.api}?canvas=1&compact=1&shell=1&limit=1200&live=1`, headers);
     const directRunId = payloadRunId(direct.payload);
@@ -97,10 +99,12 @@ async function main() {
     if (!waiting && fragment.runId !== expectedRunId) fail(`mobile_boot_${tab.key}_stale_run_id`, { expected: expectedRunId, actual: fragment.runId });
   }
 
-  const strategy2 = await read("/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=1200&live=1", headers);
-  const strategy2Count = countOf(strategy2.payload);
-  summary.strategy2 = { status: strategy2.payload?.status || "", reason: strategy2.payload?.reason || strategy2.payload?.error || "", count: strategy2Count, runId: payloadRunId(strategy2.payload) };
-  if (strategy2Count <= 0 && !isExplicitWaiting(strategy2.payload)) fail("strategy2_zero_without_explicit_waiting_state", { status: strategy2.payload?.status, reason: strategy2.payload?.reason });
+  if (!STRATEGY3_ONLY) {
+    const strategy2 = await read("/api/strategy2-latest?canvas=1&compact=1&shell=1&limit=1200&live=1", headers);
+    const strategy2Count = countOf(strategy2.payload);
+    summary.strategy2 = { status: strategy2.payload?.status || "", reason: strategy2.payload?.reason || strategy2.payload?.error || "", count: strategy2Count, runId: payloadRunId(strategy2.payload) };
+    if (strategy2Count <= 0 && !isExplicitWaiting(strategy2.payload)) fail("strategy2_zero_without_explicit_waiting_state", { status: strategy2.payload?.status, reason: strategy2.payload?.reason });
+  }
 
   const result = { ok: issues.length === 0, checkedAt: new Date().toISOString(), contract: CONTRACT, baseline: BASELINE, baselineCommit: BASELINE_COMMIT, summary, issues };
   console.log(JSON.stringify(result, null, 2));
