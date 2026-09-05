@@ -1486,7 +1486,10 @@
   }
 
   function writeMemberStrategyPreview(route, rows, meta = null, source = "api", at = Date.now()) {
-    if (!isMemberStrategyPreviewRoute(route) || !Array.isArray(rows) || !rows.length) return false;
+    // Strategy2 is live/current-session only. Never persist it as a previous-good
+    // member preview, otherwise a historic cross-route payload can reappear on
+    // weekends after the live endpoint correctly resolves to zero rows.
+    if (isStrategy2Route(route) || !isMemberStrategyPreviewRoute(route) || !Array.isArray(rows) || !rows.length) return false;
     const item = {
       version: 1,
       route,
@@ -1506,7 +1509,7 @@
   }
 
   function readMemberStrategyPreview(route) {
-    if (!isMemberStrategyPreviewRoute(route) || !hasMemberPreviewToken()) return null;
+    if (isStrategy2Route(route) || !isMemberStrategyPreviewRoute(route) || !hasMemberPreviewToken()) return null;
     try {
       const raw = localStorage.getItem(memberStrategyPreviewKey(route));
       if (!raw) return null;
@@ -2226,6 +2229,7 @@
     const memory = canvasStore.get(route);
     if (isProtectedDataRoute(route)) {
       if (isTrustedProtectedMemory(route, memory)) return memory.rows;
+      if (isStrategy2Route(route)) return [];
       const memberPreview = readMemberStrategyPreview(route);
       if (memberPreview?.rows?.length) {
         setCanvasRows(route, memberPreview.rows, "member-preview-cache", memberPreview.at || Date.now(), memberPreview.meta || null); /* protected_route_snapshot_first_rows_for_route */
@@ -5519,7 +5523,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-85";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-86";
   }
 
   function loadScriptOnce(src, attr) {
