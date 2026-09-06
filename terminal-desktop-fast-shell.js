@@ -5525,7 +5525,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-89";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-90";
   }
 
   function loadScriptOnce(src, attr) {
@@ -9124,7 +9124,7 @@
     // Strategy2 keeps its original two-column battle appearance. Rebuild its
     // own host nodes every time we return from a unified Strategy3/4/5 page so
     // the legacy visual renderer never mutates another strategy's DOM.
-    if (isStrategy2Route(key) && !panel.querySelector("#strategy-table")) {
+    if (isStrategy2Route(key) && !panel.querySelector(".strategy2-battle-shell")) {
       panel.innerHTML = `
         <header class="strategy-header">
           <div><span class="console-badge"></span><h1></h1><p></p></div>
