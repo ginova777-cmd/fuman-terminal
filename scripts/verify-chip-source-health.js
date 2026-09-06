@@ -45,11 +45,21 @@ function compactDate(value) {
   return "";
 }
 
-function dateAgeDays(dateKey) {
+function targetDateKey() {
+  return compactDate(
+    process.env.FUMAN_SCANNER_TARGET_DATE
+    || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE
+    || process.env.FUMAN_TERMINAL_TARGET_TRADE_DATE
+    || process.env.FUMAN_EXPECTED_DATE
+    || taipeiDateKey()
+  );
+}
+
+function dateAgeDays(dateKey, referenceDateKey = targetDateKey()) {
   if (!/^\d{8}$/.test(String(dateKey || ""))) return null;
-  const today = taipeiDateKey();
+  if (!/^\d{8}$/.test(String(referenceDateKey || ""))) return null;
   const toUtc = (value) => Date.UTC(Number(value.slice(0, 4)), Number(value.slice(4, 6)) - 1, Number(value.slice(6, 8)));
-  return Math.floor((toUtc(today) - toUtc(dateKey)) / 86400000);
+  return Math.floor((toUtc(referenceDateKey) - toUtc(dateKey)) / 86400000);
 }
 
 async function fetchRows(table, select, query = "") {
@@ -100,8 +110,9 @@ async function main() {
     "order=trade_date.desc&limit=5"
   );
   const health = healthRows[0] || {};
+  const expectedTradeDate = targetDateKey();
   const latestTradeDate = compactDate(health.latest_trade_date || chipRows[0]?.trade_date);
-  const latestAgeDays = dateAgeDays(latestTradeDate);
+  const latestAgeDays = dateAgeDays(latestTradeDate, expectedTradeDate);
   const coverageStatus = String(health.coverage_status || "").toLowerCase();
   const issues = [];
   if (!["ready", "ok", "healthy", "complete"].includes(coverageStatus)) {
@@ -117,6 +128,7 @@ async function main() {
     ok: issues.length === 0,
     checkedAt: new Date().toISOString(),
     maxAgeDays,
+    expectedTradeDate,
     latestTradeDate,
     latestAgeDays,
     coverageStatus: health.coverage_status || "",
