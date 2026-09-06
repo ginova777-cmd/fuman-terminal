@@ -180,7 +180,13 @@ function normalizeRow(row) {
 }
 
 function buildInstitutionFilterCounts(rows) {
-  const normalized = (Array.isArray(rows) ? rows : []).map((row) => normalizeRow(row));
+  // Count the final response rows directly. They have already passed through
+  // normalizeRow(); normalizing them a second time would discard their
+  // top-level derived fields because normalized rows no longer contain the
+  // original nested payload object.
+  const normalized = (Array.isArray(rows) ? rows : []).map((row) => (
+    row?.payload && typeof row.payload === "object" ? normalizeRow(row) : row
+  ));
   const ratioHit = (row) => {
     const explicit = cleanNumber(row.foreignTrustBuyVolumePct ?? row.foreign_trust_buy_volume_pct ?? row.institutionBuyVolumePct ?? row.foreignTrustVolumePct);
     const avg = cleanNumber(row.fiveDayAvgVolume ?? row.five_day_avg_volume);
