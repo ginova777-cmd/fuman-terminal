@@ -38,19 +38,33 @@ alter table public.fugle_intraday_5m_signal_cache
  add column if not exists gap_reason text,
  add column if not exists calculated_at timestamptz not null default now();
 create index if not exists fugle_intraday_5m_signal_cache_latest on public.fugle_intraday_5m_signal_cache(symbol,trade_date desc,candle_time desc);
+create table if not exists public.fugle_intraday_5m_history
+ (like public.fugle_intraday_5m_signal_cache including defaults);
+do $$ begin
+ if not exists(select 1 from pg_constraint where conrelid='public.fugle_intraday_5m_history'::regclass and contype='p') then
+  alter table public.fugle_intraday_5m_history add primary key(run_id,trade_date,symbol,candle_time);
+ end if;
+end $$;
+create index if not exists fugle_intraday_5m_history_replay
+ on public.fugle_intraday_5m_history(symbol,trade_date,run_id,bar_end);
+insert into public.fugle_intraday_5m_history
+ select * from public.fugle_intraday_5m_signal_cache
+ on conflict(run_id,trade_date,symbol,candle_time) do nothing;
 create or replace view public.v_fugle_intraday_5m_readback as
  select * from (
   select c.*,row_number() over(partition by trade_date,symbol order by candle_time desc,updated_at desc) as latest_rank
   from public.fugle_intraday_5m_signal_cache c
  ) x where latest_rank=1;
 create or replace view public.v_fugle_intraday_5m_history_readback as
- select * from public.fugle_intraday_5m_signal_cache;
+ select * from public.fugle_intraday_5m_history;
 grant select on public.v_fugle_intraday_5m_readback to anon,authenticated,service_role;
 grant select on public.v_fugle_intraday_5m_history_readback to anon,authenticated,service_role;
 revoke insert,update,delete on public.fugle_intraday_5m_signal_cache from anon,authenticated;
 grant select,insert,update,delete on public.fugle_intraday_5m_signal_cache to service_role;
+revoke insert,update,delete on public.fugle_intraday_5m_history from anon,authenticated;
+grant select,insert,update,delete on public.fugle_intraday_5m_history to service_role;
 comment on view public.v_fugle_intraday_5m_readback is 'Lightweight canonical 5m trend readback. Only the independent service-role writer may populate completed bars.';
-comment on view public.v_fugle_intraday_5m_history_readback is 'Canonical versioned 5m history for replay. Consumers must filter symbol, trade_date, run_id and bar_end <= as_of.';
+comment on view public.v_fugle_intraday_5m_history_readback is 'Canonical versioned 5m history for replay. Retention is 30 calendar days. Consumers must filter symbol, trade_date, run_id and bar_end <= as_of. Unique evidence key is run_id+trade_date+symbol+candle_time.';
 
 create table if not exists public.fugle_intraday_5m_verification_receipts(
  run_id text primary key,
