@@ -5525,7 +5525,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-91";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-92";
   }
 
   function loadScriptOnce(src, attr) {
@@ -9339,6 +9339,14 @@
     const route = publishActiveRoute(link, key, source || "strategy");
     const seq = route?.seq || ++routeSwitchSeq;
     switchStrategyViewNow(link);
+    if (isStrategy2Route(key)) {
+      const reassertStrategy2BattleView = () => {
+        if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key) return;
+        renderStrategyRouteShell(link, "strategy2-battle-route-reassert", rowsForRoute(key));
+      };
+      window.setTimeout(reassertStrategy2BattleView, 0);
+      window.setTimeout(reassertStrategy2BattleView, 180);
+    }
     markLatency("nav", key);
     const rows = rowsForRoute(key);
     // Strategy2 is current-session only and can legitimately resolve to zero on
