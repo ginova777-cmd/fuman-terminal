@@ -7,6 +7,7 @@ const realtimeRadarLatest = require("./realtime-radar-latest");
 const market = require("./market");
 const heatmap = require("./heatmap");
 const { readSnapshot } = require("../lib/supabase-snapshots");
+const { OPENING_REPORT_0830_INDUSTRY_MAP } = require("../scripts/opening-report-0830-industry-map-contract");
 const {
   attachRunTimeSourceEvidence,
   buildRunTimeSourceSnapshotFields,
@@ -25,6 +26,7 @@ const SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MARKET_AI_SNAPSHOT_TIMEOUT_
 const HEATMAP_LIVE_TIMEOUT_MS = Number(process.env.FUMAN_MARKET_AI_HEATMAP_LIVE_TIMEOUT_MS || 7000);
 const ALLOW_CODE_REPO_CACHE = process.env.FUMAN_MARKET_AI_ALLOW_CODE_REPO_CACHE === "1";
 const MARKET_AI_RUN_TIME_SOURCE_SNAPSHOT_REQUIRED_FIELD = "source_snapshot_captured_at";
+const OPENING_REPORT_0830_REQUIRED_INDUSTRIES = OPENING_REPORT_0830_INDUSTRY_MAP.length;
 
 function cacheCandidates(file = CACHE_FILE) {
   const candidates = [path.join(RUNTIME_ROOT, "data", file)];
@@ -1468,7 +1470,7 @@ function readOpeningMorningReport(clock = taipeiClock()) {
     };
   }
   const finalDateOk = compactDate(finalReceipt.date) === compact;
-  const industryRows = listOpeningIndustryBiasFiles(clock)
+  const stateIndustryRows = listOpeningIndustryBiasFiles(clock)
     .map((row) => ({
       industry: row.payload.industry,
       display_name: row.payload.display_name || row.payload.industry,
@@ -1484,6 +1486,34 @@ function readOpeningMorningReport(clock = taipeiClock()) {
       score: openingBiasScore(row.payload),
     }))
     .sort((a, b) => b.score - a.score);
+  // Cleanup may retire the per-industry state files after the run closes. The
+  // frozen 08:20 receipt plus the canonical 15-industry map is sufficient to
+  // reconstruct the same observation-only terminal briefing.
+  const frozenByIndustry = new Map(normalizeArray(overseasLeaders?.industries).map((row) => [String(row?.industry || ""), row]));
+  const frozenIndustryRows = OPENING_REPORT_0830_INDUSTRY_MAP.map((mapRow) => {
+    const frozen = frozenByIndustry.get(mapRow.industry) || {};
+    const average = Number(frozen.average_percent);
+    const direction = String(frozen.direction || (average > 0.3 ? "positive" : average < -0.3 ? "negative" : "neutral"));
+    const payload = {
+      industry: mapRow.industry,
+      display_name: mapRow.display_name,
+      bias: `${direction}_mixed`,
+      confidence: Number(mapRow.default_confidence || 0),
+      evidence_summary: Number.isFinite(average) ? `海外族群平均漲幅 ${average.toFixed(2)}%` : mapRow.evidence_summary,
+      overseas_leader_detection: frozen,
+      a_symbols: normalizeArray(mapRow.a),
+      b_symbols: normalizeArray(mapRow.b),
+      allowed_action: "priority_scan_only",
+      forbidden_action: "publish_formal_candidate_without_taiwan_evidence",
+    };
+    return { ...payload, file: overseasLeadersPath, score: openingBiasScore({ ...payload, overseas_return_1d_pct: Number.isFinite(average) ? average : null }) };
+  }).filter((row) => frozenByIndustry.has(row.industry));
+  const industryRows = (stateIndustryRows.length >= OPENING_REPORT_0830_REQUIRED_INDUSTRIES
+    ? stateIndustryRows
+    : frozenIndustryRows.length >= OPENING_REPORT_0830_REQUIRED_INDUSTRIES
+      ? frozenIndustryRows
+      : stateIndustryRows
+  ).sort((a, b) => b.score - a.score);
   const marketItems = normalizeArray(finalReceipt?.overseas_market_snapshot?.items).map((row) => ({
     key: row.key || "",
     label: row.label || row.key || "",
@@ -1501,7 +1531,7 @@ function readOpeningMorningReport(clock = taipeiClock()) {
   const issues = [];
   const deliveryWarnings = [];
   if (!finalDateOk) issues.push("final_receipt_date_mismatch");
-  if (industryRows.length < 19) issues.push("industry_bias_json_incomplete");
+  if (industryRows.length < OPENING_REPORT_0830_REQUIRED_INDUSTRIES) issues.push("industry_bias_json_incomplete");
   // LINE delivery is an independent side effect, never a terminal briefing gate.
   if (finalReceipt.line_required === true && finalReceipt.line_delivery_ok !== true) deliveryWarnings.push("line_delivery_not_ok");
   return {
@@ -1535,9 +1565,9 @@ function readOpeningMorningReport(clock = taipeiClock()) {
     priority_industries: topPriority,
     recommended_symbols: recommended.slice(0, 24),
     industry_bias: {
-      status: industryRows.length >= 19 ? "ok" : "incomplete",
+      status: industryRows.length >= OPENING_REPORT_0830_REQUIRED_INDUSTRIES ? "ok" : "incomplete",
       count: industryRows.length,
-      required: 19,
+      required: OPENING_REPORT_0830_REQUIRED_INDUSTRIES,
     },
     paths: {
       final_receipt: finalReceiptPath,

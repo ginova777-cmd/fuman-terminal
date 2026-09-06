@@ -408,6 +408,14 @@ async function syncTerminalBriefingSnapshot(tradeDate, runId) {
       seconds: 8 * 60 * 60 + 30 * 60,
       time: "08:30:00",
     });
+    if (briefing?.ok !== true) {
+      return {
+        ok: false,
+        skipped: true,
+        preserve_previous_good: true,
+        reason_code: briefing?.reason_code || "opening_report_0830_terminal_briefing_incomplete",
+      };
+    }
     const payload = {
       ...briefing,
       source: "opening_report_0830_terminal_briefing",
