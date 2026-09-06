@@ -199,10 +199,13 @@ function verifyWiring() {
   assert.ok(scannerSource.includes("strategy5CompositeRules"), "run payload must publish composite rule contract");
   assert.ok(scannerSource.includes("fetchDailyHistory(stock, runMarketDate)"), "daily history lookup must require the Strategy5 run market date");
   assert.ok(runnerSource.includes("FUMAN_SCANNER_TARGET_DATE") && runnerSource.includes("Strategy5ScannedCount"), "runner must honor target date and publish full scan counts");
-  const strategy4DailyIndex = scannerSource.indexOf('{ table: "strategy4_daily_ohlcv_view"');
-  const stockDailyIndex = scannerSource.indexOf('{ table: "stock_daily_volume"');
-  const finmindDailyIndex = scannerSource.indexOf('{ table: "finmind_daily_ohlcv"');
-  assert.ok(strategy4DailyIndex >= 0 && stockDailyIndex > strategy4DailyIndex && finmindDailyIndex > stockDailyIndex, "Strategy5 daily history must prefer Strategy4, then stock daily, with FinMind as third source");
+  const historySourceStart = scannerSource.indexOf("async function fetchSupabaseDailyHistory");
+  const historySourceEnd = scannerSource.indexOf("async function fetchDailyHistory", historySourceStart);
+  const historySources = scannerSource.slice(historySourceStart, historySourceEnd);
+  const strategy4DailyIndex = historySources.indexOf("STRATEGY4_DAILY_VIEW");
+  const strategy4ViewIndex = historySources.indexOf('table: "strategy4_daily_ohlcv_view"');
+  const finmindDailyIndex = historySources.indexOf('table: "finmind_daily_ohlcv"');
+  assert.ok(strategy4DailyIndex >= 0 && strategy4ViewIndex > strategy4DailyIndex && finmindDailyIndex > strategy4ViewIndex, "Strategy5 daily history must prefer the Strategy4 configured daily source, then its canonical view, with FinMind only as backup");
   assert.ok(!completeRunnerSource.includes("verify-finmind-daily-ohlcv-sync.js"), "Strategy5 complete must not block on the optional FinMind daily backup");
   assert.ok(completeVerifierSource.includes("desktopRunId") && completeVerifierSource.includes("strategy5_scan_coverage_incomplete"), "complete verifier must enforce tri-surface runId and full scan coverage");
   assert.ok(dailySyncSource.includes("fetchRowsForDate") && dailySyncSource.includes("await upsert(rows)") && dailySyncSource.includes("row?.date"), "FinMind range sync must validate and persist one date at a time");
@@ -285,9 +288,32 @@ async function verifySourceReadback(expectedTradeDate) {
   return result;
 }
 
+async function verifyDailyVolumeReadback(expectedTradeDate) {
+  const date = String(expectedTradeDate || "").replace(/\D/g, "").slice(0, 8);
+  assert.match(date, /^\d{8}$/, "--daily-volume-readback requires YYYYMMDD");
+  const result = await scanner.fetchStrategy4HistoricalVolumes(date);
+  const minimum = Number(process.env.STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE || 1500);
+  assert.ok(
+    ["supabase:stock_daily_volume", "supabase:strategy4_daily_ohlcv_view"].includes(result.source),
+    `unexpected Strategy4 daily source ${result.source}`
+  );
+  assert.ok(result.map.size >= minimum, `Strategy4 daily volume coverage ${result.map.size}/${minimum}`);
+  assert.ok(result.previousMap.size >= minimum, `Strategy4 previous volume coverage ${result.previousMap.size}/${minimum}`);
+  console.log("[strategy5-daily-volume-source-readback] PASS");
+  console.log(JSON.stringify({ ok: true, expectedTradeDate: date, source: result.source, fetchedRows: result.fetchedRows, averageCodes: result.map.size, previousCodes: result.previousMap.size, minimum }, null, 2));
+  return result;
+}
+
 if (require.main === module) {
   const sourceArg = process.argv.find((item) => item.startsWith("--source-readback="));
-  Promise.resolve(sourceArg ? verifySourceReadback(sourceArg.split("=").slice(1).join("=")) : main()).catch((error) => {
+  const volumeArg = process.argv.find((item) => item.startsWith("--daily-volume-readback="));
+  Promise.resolve(
+    sourceArg
+      ? verifySourceReadback(sourceArg.split("=").slice(1).join("="))
+      : volumeArg
+        ? verifyDailyVolumeReadback(volumeArg.split("=").slice(1).join("="))
+        : main()
+  ).catch((error) => {
     console.error(`[strategy5-composite-producers] FAIL: ${error.stack || error.message || error}`);
     process.exitCode = 1;
   });
@@ -300,5 +326,6 @@ module.exports = {
   verifyWiring,
   verifyCompositeSourceGate,
   verifySourceReadback,
+  verifyDailyVolumeReadback,
   main,
 };
