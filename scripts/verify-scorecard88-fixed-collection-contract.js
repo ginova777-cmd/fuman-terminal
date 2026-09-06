@@ -24,6 +24,7 @@ const definitions = [
 const scorecardFetch = page.match(/fetch\(`\/api\/scorecard[^\n]+/)?.[0] || "";
 if (/refreshSourceReports=1|strictLiveReports=1|[?&]live=1/.test(scorecardFetch)) issues.push("page88_live_rebuild_query_present");
 if ((page.match(/loadDaytradeEntries\(\);/g) || []).length || (page.match(/loadSevenStrategyDailyHistory\(\);/g) || []).length || (page.match(/loadStrategy4Live\(\);/g) || []).length) issues.push("page88_live_or_supabase_autoload_present");
+if (!page.includes("本月可選") || !page.includes("個交易日")) issues.push("page88_calendar_month_trading_day_label_missing");
 if (!api.includes("terminal_fixed_slot_snapshot") || !api.includes('cacheSource = "terminal-canonical-json"')) issues.push("scorecard_api_not_terminal_snapshot_only");
 if (!api.includes("terminal_scorecard_snapshot_missing_or_legacy")) issues.push("scorecard_api_legacy_static_fallback_not_fail_closed");
 if (/await readSnapshot\s*\(SNAPSHOT_KEY/.test(api)) issues.push("scorecard_api_executes_supabase_snapshot_read");
@@ -34,7 +35,7 @@ for (const invariant of ["publishCurrent = payload.ok === true", "if (publishCur
 if (!/publishBlob\(payload, todayKey, slot\.replace\(\":\", \"\"\), \{ publishCurrent \}\)/.test(collector)) issues.push("collector_blob_current_publish_not_guarded");
 for (const invariant of ["retainCalendarMonthRecords", "scorecardHistoryDates", "scorecard-calendar-month-trading-days-v1", "scorecard_current_month_trade_date_missing"]) if (!collector.includes(invariant)) issues.push(`collector_month_retention_missing:${invariant}`);
 for (const invariant of ["mergeCalendarMonthRecords", "buildCalendarMonthRetention", "payload.historyDates", "payload.days = payload.historyDates.length"]) if (!generator.includes(invariant)) issues.push(`generator_month_retention_missing:${invariant}`);
-for (const invariant of ["retainCalendarMonthRecords", "buildCalendarMonthRetention", "days: dates.length"]) if (!api.includes(invariant)) issues.push(`scorecard_api_month_retention_missing:${invariant}`);
+for (const invariant of ["retainCalendarMonthRecords", "buildCalendarMonthRetention", "days: dates.length", "dates.includes(canonicalLatestDate)"]) if (!api.includes(invariant)) issues.push(`scorecard_api_month_retention_missing:${invariant}`);
 for (const invariant of ["calendarMonthBounds", "record_date=lte.${through}", "summary_date=lte.${through}", "buildCalendarMonthRetention"]) if (!exporter.includes(invariant)) issues.push(`scorecard_export_month_retention_missing:${invariant}`);
 for (const field of ["sourceDate", "startedAt", "finishedAt", "universeCount", "scannedCount", "resultCount", "qualityStatus", "evidenceStatus", "fallbackUsed", "publishAllowed", "desktopStatus", "mobileStatus", "scorecardUpdatedAt", "firstBlocker", "reasonCode"]) {
   if (!collector.includes(field)) issues.push(`collector_required_field_missing:${field}`);
@@ -96,6 +97,6 @@ if (fixtureRows.length !== 3) issues.push(`month_merge_row_count_invalid:${fixtu
 if (JSON.stringify(fixtureDates) !== JSON.stringify(["2026-09-04", "2026-09-01"])) issues.push(`month_merge_dates_invalid:${JSON.stringify(fixtureDates)}`);
 if (fixtureRows.some((row) => ["aug", "old", "weekend"].includes(row.record_id))) issues.push("month_merge_retired_rows_present");
 if (!fixtureRows.some((row) => row.record_id === "new" && row.score === 2)) issues.push("month_merge_fresh_row_missing");
-const result = { ok: issues.length === 0, contract: "scorecard88-fixed-collection-contract-v6", fixedSlots: definitions.map(([,time]) => time), liveTaskCount: live.length, invariants: { scans: false, supabaseQueries: false, recalculation: false, runIdGeneration: false, authenticatedMobileRequiredForPass: true, nonCircularSurfaceEvidence: true, completeFieldContract: true, blockedCurrentPreservesPreviousGood: true, calendarMonthTradingDaysOnly: true, crossMonthRecordsAllowed: false, nonTradingDayPlaceholders: false }, issues };
+const result = { ok: issues.length === 0, contract: "scorecard88-fixed-collection-contract-v6", fixedSlots: definitions.map(([,time]) => time), liveTaskCount: live.length, invariants: { scans: false, supabaseQueries: false, recalculation: false, runIdGeneration: false, authenticatedMobileRequiredForPass: true, nonCircularSurfaceEvidence: true, completeFieldContract: true, blockedCurrentPreservesPreviousGood: true, calendarMonthTradingDaysOnly: true, calendarMonthTradingDayLabel: true, oneSelectedTradingDayPerResponse: true, crossMonthRecordsAllowed: false, nonTradingDayPlaceholders: false }, issues };
 console.log(JSON.stringify(result, null, 2));
 process.exit(result.ok ? 0 : 1);

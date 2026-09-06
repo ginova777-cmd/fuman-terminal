@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>輔滿成績單</title>
-  <script src="/terminal-entitlement-guard.js?v=public-terminal-fast-20260714-97"></script>
+  <script src="/terminal-entitlement-guard.js?v=public-terminal-fast-20260714-98"></script>
   <style>
     :root {
       color-scheme: dark;
@@ -1245,7 +1245,7 @@ function render() {
   const summary = payload.summary?.rows === rows.length ? payload.summary : summarizeRows(rows, activeDate || payload.latestDate || "--");
   const latestDate = summary.latestDate || payload.latestDate || "--";
   const updatedAt = payload.updatedAt ? new Date(payload.updatedAt).toLocaleString("zh-TW", { hour12: false }) : "--";
-  byId("subtitle").textContent = `資料日期 ${latestDate}｜可選最近 ${payload.days || 30} 天｜${updatedAt}`;
+  byId("subtitle").textContent = `資料日期 ${latestDate}｜本月可選 ${payload.days || dates.length} 個交易日｜${updatedAt}`;
   const status = sourceStatus(payload, latestDate);
   const statusNode = byId("sourceStatus");
   statusNode.className = `status-line ${status.qualityStatus}`;

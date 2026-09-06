@@ -1679,7 +1679,10 @@ function selectPayloadDate(payload, requestedDate = "") {
   const monthAnchor = isoDate(payload?.latestDate || payload?.marketDate || newestRecordDate);
   const allRecords = retainCalendarMonthRecords(activeRecords, monthAnchor);
   const dates = historyDates(allRecords);
-  const selectedDate = dates.includes(requestedDate) ? requestedDate : (defaultScorecardDate(payload, allRecords, dates) || dates[0] || "");
+  const canonicalLatestDate = isoDate(payload?.latestDate || payload?.marketDate || "");
+  const selectedDate = dates.includes(requestedDate)
+    ? requestedDate
+    : (dates.includes(canonicalLatestDate) ? canonicalLatestDate : (defaultScorecardDate(payload, allRecords, dates) || dates[0] || ""));
   const selectedRecords = selectedDate ? allRecords.filter((row) => cleanText(row.record_date) === selectedDate) : allRecords;
   const allDaily = (Array.isArray(payload?.summary?.daily) ? payload.summary.daily : [])
     .filter((row) => !isRetiredScorecardSurfaceName(row?.strategy));
@@ -1848,14 +1851,14 @@ async function buildPayload(requestedDate = "", options = {}) {
   // /88 reads only the artifact collected from terminal canonical results at fixed slots.
   // It performs no scan, Supabase lookup, recalculation, or runId generation.
   const terminalSnapshot = await readTerminalCanonicalSnapshot("terminal_fixed_slot_snapshot");
-  const fixedSlotPayload = requestedDate ? selectPayloadDate(terminalSnapshot, requestedDate) : terminalSnapshot;
+  const fixedSlotPayload = selectPayloadDate(terminalSnapshot, requestedDate);
   fixedSlotPayload.cacheSource = "terminal-canonical-json";
   // Keep /88 performance records fixed-slot only, but overlay today's
   // Strategy2 status so a failed full scan can still disclose a successful
   // isolated replay. Diagnostic replay never contributes scorecard records.
   const fixedDisplayDate = isoDate(requestedDate || fixedSlotPayload?.selectedDate || fixedSlotPayload?.latestDate || "");
   const fixedHistoricalSelection = Boolean(fixedDisplayDate && compactDate(fixedDisplayDate) !== taipeiDateKey());
-  return fixedHistoricalSelection ? fixedSlotPayload : selectPayloadDate(await withCurrentStrategy2V3SourceReport(fixedSlotPayload), requestedDate);
+  return fixedHistoricalSelection ? fixedSlotPayload : selectPayloadDate(await withCurrentStrategy2V3SourceReport(terminalSnapshot), requestedDate);
   const liveSourceReports = options.liveSourceReports === true;
   const noCache = options.noCache === true || liveSourceReports;
   const cacheKey = JSON.stringify({ requestedDate, liveSourceReports });
