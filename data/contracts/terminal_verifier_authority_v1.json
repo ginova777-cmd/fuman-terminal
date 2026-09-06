@@ -1,0 +1,35 @@
+{
+  "contract": "terminal_verifier_authority_v1",
+  "status": "active",
+  "canonicalTotalVerifier": "verify:terminal-perfect",
+  "authorityRule": "Only the canonical total verifier may declare the whole Fuman Terminal complete. Component verifiers are read-only evidence and cannot independently declare total completion.",
+  "requiredComponentVerifiers": [
+    "verify:terminal-entitlement-session-proof",
+    "verify:terminal-reset-preserve-login",
+    "verify:terminal-fields",
+    "verify:terminal-resource-chain",
+    "verify:terminal-cold-start",
+    "verify:terminal-ui-state-acceptance",
+    "verify:terminal-ui-e2e"
+  ],
+  "retiredTotalVerifierAliases": [
+    "verify:terminal-complete",
+    "verify:terminal-full",
+    "verify:terminal-final",
+    "verify:terminal-operation",
+    "verify:terminal-operations",
+    "verify:fuman-terminal-complete",
+    "verify:fuman-terminal-perfect",
+    "verify:terminal-perfect-old",
+    "verify:terminal-perfect-v1"
+  ],
+  "completionRequirements": [
+    "canonical verifier exitCode equals 0",
+    "runner and verifier receipts refer to the same authoritative runId",
+    "API, Supabase, desktop and mobile readback agree",
+    "no fallback or blocking reason",
+    "previous-good is never represented as the current run"
+  ],
+  "latestFlowDocument": "Fuman-Terminal-最新完整運作流程-2026-09-06-修正版.md",
+  "updatedAt": "2026-09-06T17:40:00+08:00"
+}

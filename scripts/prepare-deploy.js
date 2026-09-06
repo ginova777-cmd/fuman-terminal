@@ -29,6 +29,7 @@ run("verify:vercel-cost", ["npm", "run", "verify:vercel-cost"]);
 run("verify:vercel-projects", ["npm", "run", "verify:vercel-projects"]);
 run("guard:source", ["npm", "run", "guard:source"]);
 run("verify:retired-artifacts", ["npm", "run", "verify:retired-artifacts"]);
+run("verify:terminal-verifier-authority", ["npm", "run", "verify:terminal-verifier-authority"]);
 run("verify:master-control-contract", ["npm", "run", "verify:master-control-contract"]);
 run("verify:after-hours-scan-guard", ["npm", "run", "verify:after-hours-scan-guard"]);
 run("verify:daytrade-burst-telegram", ["npm", "run", "verify:daytrade-burst-telegram"]);

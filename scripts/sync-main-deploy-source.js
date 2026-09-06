@@ -263,6 +263,8 @@ const FILES = [
   "scripts/verify-final-readonly.js",
   "scripts/verify-retired-artifacts-clean.js",
   "scripts/verify-terminal-retired-formal-entrypoints.js",
+  "scripts/verify-terminal-verifier-authority.js",
+  "data/contracts/terminal_verifier_authority_v1.json",
   "scripts/verify-mobile-health.js",
   "scripts/verify-mobile-layout.js",
   "scripts/verify-mobile-entry-redirect.js",
