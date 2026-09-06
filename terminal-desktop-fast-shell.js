@@ -5525,7 +5525,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-94";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-95";
   }
 
   function loadScriptOnce(src, attr) {
@@ -9805,6 +9805,10 @@
         || (key === "strategy|策略4" && !/策略4|波段/.test(text))
         || (key === "strategy|策略5" && !/策略5|綜合策略/.test(text));
       const resolved = payloadMetaHasResolvedResponse(canvasPayloadMeta(key));
+      if (routeMismatch && isStrategy2Route(key)) {
+        renderStrategyRouteShell(key, "watchdog-strategy2-battle-immediate", rowsForRoute(key));
+        return true;
+      }
       if ((pending || routeMismatch) && isMemberStrategyPreviewRoute(key) && hasMemberPreviewToken()) {
         const now = Date.now();
         const last = Number(reconcilePaintState.get(key) || 0);
