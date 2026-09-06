@@ -26,6 +26,7 @@ const WRITE_BUDGET_LIMIT_ROWS = Number(process.env.STRATEGY5_WRITE_BUDGET_LIMIT_
 const RAW_RETENTION_DAYS = Number(process.env.STRATEGY5_RAW_RETENTION_DAYS || 7);
 const STRATEGY5_MIN_ISSUED_SHARES_COVERAGE = Number(process.env.STRATEGY5_MIN_ISSUED_SHARES_COVERAGE || 1500);
 const STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE = Number(process.env.STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE || 1500);
+const STRATEGY5_MIN_CHIP_HISTORY_COVERAGE = Number(process.env.STRATEGY5_MIN_CHIP_HISTORY_COVERAGE || 1500);
 const STRATEGY5_RUN_FALLBACK_LIMIT = Number(process.env.STRATEGY5_RUN_FALLBACK_LIMIT || 8);
 const FORBIDDEN_UI_MATCH_IDS = new Set(["foreign_trust_breakout"]);
 const STRATEGY5_UI_MATCH_META = {
@@ -907,10 +908,15 @@ function strategy5PublishableRunIssue(run, rows = []) {
   const sourceHealth = run?.payload?.sourceHealth && typeof run.payload.sourceHealth === "object" ? run.payload.sourceHealth : {};
   const issuedSharesCount = cleanNumber(sourceHealth.issuedSharesCount || sourceHealth.issued_shares_count);
   const volumeAverageCount = cleanNumber(sourceHealth.volumeAverageCount || sourceHealth.volume_average_count);
+  const compositeProducerContract = String(run?.payload?.strategy5CompositeRules?.contract || "");
+  const alignedChipHistoryCodeCount = cleanNumber(sourceHealth.alignedChipHistoryCodeCount || sourceHealth.aligned_chip_history_code_count);
   const marginShortAlignmentOk = sourceHealth.marginShortAlignmentOk !== false;
   const matchCounts = strategy5RowMatchCounts(rows);
   if (issuedSharesCount < STRATEGY5_MIN_ISSUED_SHARES_COVERAGE) return `issued_shares_coverage_low:${issuedSharesCount}/${STRATEGY5_MIN_ISSUED_SHARES_COVERAGE}`;
   if (volumeAverageCount < STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE) return `volume_average_coverage_low:${volumeAverageCount}/${STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE}`;
+  if (compositeProducerContract === "strategy5-composite-producers-v1" && alignedChipHistoryCodeCount < STRATEGY5_MIN_CHIP_HISTORY_COVERAGE) {
+    return `chip_history_coverage_low:${alignedChipHistoryCodeCount}/${STRATEGY5_MIN_CHIP_HISTORY_COVERAGE}`;
+  }
   // Margin-short alignment and volume-turnover hits are sub-strategy evidence, not global publish blockers.
   // A zero-result volume-turnover branch must not hide other valid Strategy5 matches.
   return "";

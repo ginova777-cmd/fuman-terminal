@@ -50,6 +50,11 @@ const STRATEGY5_BOLLINGER_NORMAL_PCT = Number(process.env.STRATEGY5_BOLLINGER_NO
 const STRATEGY5_BOLLINGER_WIDE_PCT = Number(process.env.STRATEGY5_BOLLINGER_WIDE_PCT || 20);
 const STRATEGY5_KD_RSV_PERIOD = Number(process.env.STRATEGY5_KD_RSV_PERIOD || 5);
 const STRATEGY5_KD_SMOOTHING = Number(process.env.STRATEGY5_KD_SMOOTHING || 3);
+const STRATEGY5_CHIP_HISTORY_LIMIT = Number(process.env.STRATEGY5_CHIP_HISTORY_LIMIT || 16000);
+const STRATEGY5_MIN_CHIP_HISTORY_COVERAGE = Number(process.env.STRATEGY5_MIN_CHIP_HISTORY_COVERAGE || 1500);
+const STRATEGY5_INSTITUTION_BUY_DAYS = Number(process.env.STRATEGY5_INSTITUTION_BUY_DAYS || 2);
+const STRATEGY5_W_LOOKBACK_DAYS = Number(process.env.STRATEGY5_W_LOOKBACK_DAYS || 80);
+const STRATEGY5_W_TROUGH_TOLERANCE_PCT = Number(process.env.STRATEGY5_W_TROUGH_TOLERANCE_PCT || 8);
 let universeSourceHealth = {};
 
 function readJson(file, fallback) {
@@ -267,9 +272,14 @@ function buildStrategy5CorePublishQuality(output = {}) {
   const volumeAverageCount = cleanNumber(sourceHealth.volumeAverageCount || sourceHealth.volume_average_count);
   const marginShortAlignmentOk = sourceHealth.marginShortAlignmentOk !== false;
   const volumeTurnoverCount = cleanNumber(matchCounts.volume_turnover_breakout);
+  const compositeProducerContract = String(output?.strategy5CompositeRules?.contract || "");
+  const alignedChipHistoryCodeCount = cleanNumber(sourceHealth.alignedChipHistoryCodeCount || sourceHealth.aligned_chip_history_code_count);
   const issues = [];
   if (issuedSharesCount < STRATEGY5_MIN_ISSUED_SHARES_COVERAGE) issues.push(`issued_shares_coverage_low:${issuedSharesCount}/${STRATEGY5_MIN_ISSUED_SHARES_COVERAGE}`);
   if (volumeAverageCount < STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE) issues.push(`volume_average_coverage_low:${volumeAverageCount}/${STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE}`);
+  if (compositeProducerContract === "strategy5-composite-producers-v1" && alignedChipHistoryCodeCount < STRATEGY5_MIN_CHIP_HISTORY_COVERAGE) {
+    issues.push(`chip_history_coverage_low:${alignedChipHistoryCodeCount}/${STRATEGY5_MIN_CHIP_HISTORY_COVERAGE}`);
+  }
   // Margin-short alignment and volume-turnover hits are sub-strategy evidence, not global publish blockers.
   // When this sub-strategy has no eligible rows, Strategy5 can still publish other formal matches as a complete run.
   return {
@@ -284,6 +294,9 @@ function buildStrategy5CorePublishQuality(output = {}) {
       minVolumeAverageCoverage: STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE,
       marginShortAlignmentOk,
       volumeTurnoverCount,
+      compositeProducerContract,
+      alignedChipHistoryCodeCount,
+      minChipHistoryCoverage: STRATEGY5_MIN_CHIP_HISTORY_COVERAGE,
     },
   };
 }
@@ -403,6 +416,7 @@ function buildStrategy5RunRow(output, runId, status = "complete") {
       generatedDate: output.generatedDate || "",
       schedule: output.schedule || "",
       sourceHealth: output.sourceHealth || {},
+      strategy5CompositeRules: output.strategy5CompositeRules || {},
     },
   };
 }
@@ -1252,6 +1266,80 @@ async function fetchFinMindChipLatestMap(limit = 5000) {
   return map;
 }
 
+function strategy5ChipHistoryBucket(map, code) {
+  const current = map.get(code) || {
+    institutionByDate: new Map(),
+    marginByDate: new Map(),
+    institutionRows: [],
+    marginRows: [],
+  };
+  map.set(code, current);
+  return current;
+}
+
+function finalizeStrategy5ChipHistory(map) {
+  map.forEach((bucket) => {
+    bucket.institutionRows = [...bucket.institutionByDate.values()]
+      .sort((a, b) => String(a.tradeDate).localeCompare(String(b.tradeDate)));
+    bucket.marginRows = [...bucket.marginByDate.values()]
+      .sort((a, b) => String(a.tradeDate).localeCompare(String(b.tradeDate)));
+    delete bucket.institutionByDate;
+    delete bucket.marginByDate;
+  });
+  return map;
+}
+
+async function fetchStrategy5ChipHistoryMap(expectedTradeDate = "") {
+  const expected = compactDateKey(expectedTradeDate);
+  const dateFilter = expected ? `&trade_date=lte.${expected.slice(0, 4)}-${expected.slice(4, 6)}-${expected.slice(6, 8)}` : "";
+  const [institutionRows, marginRows] = await Promise.all([
+    fetchSupabaseRowsPaged(
+      "finmind_institutional_flows",
+      `select=symbol,trade_date,foreign_net,investment_trust_net,dealer_net,total_net,source${dateFilter}&order=trade_date.desc`,
+      STRATEGY5_CHIP_HISTORY_LIMIT
+    ).catch(() => []),
+    fetchSupabaseRowsPaged(
+      "finmind_margin_short",
+      `select=symbol,trade_date,margin_buy,margin_sell,margin_cash_repayment,margin_balance,source${dateFilter}&order=trade_date.desc`,
+      STRATEGY5_CHIP_HISTORY_LIMIT
+    ).catch(() => []),
+  ]);
+  const map = new Map();
+  institutionRows.forEach((row) => {
+    const code = normalizeCode(row.symbol);
+    const tradeDate = compactDateKey(row.trade_date);
+    if (!/^\d{4}$/.test(code) || !/^\d{8}$/.test(tradeDate) || (expected && tradeDate > expected)) return;
+    const foreign = firstNullableNumber(row.foreign_net) ?? 0;
+    const trust = firstNullableNumber(row.investment_trust_net) ?? 0;
+    const dealer = firstNullableNumber(row.dealer_net) ?? 0;
+    const totalNet = firstNullableNumber(row.total_net) ?? (foreign + trust + dealer);
+    strategy5ChipHistoryBucket(map, code).institutionByDate.set(tradeDate, {
+      tradeDate,
+      foreign,
+      trust,
+      dealer,
+      totalNet,
+      source: row.source || "finmind_institutional_flows",
+    });
+  });
+  marginRows.forEach((row) => {
+    const code = normalizeCode(row.symbol);
+    const tradeDate = compactDateKey(row.trade_date);
+    if (!/^\d{4}$/.test(code) || !/^\d{8}$/.test(tradeDate) || (expected && tradeDate > expected)) return;
+    const marginBalance = firstNullableNumber(row.margin_balance);
+    if (marginBalance == null) return;
+    strategy5ChipHistoryBucket(map, code).marginByDate.set(tradeDate, {
+      tradeDate,
+      marginBuy: firstNullableNumber(row.margin_buy) ?? 0,
+      marginSell: firstNullableNumber(row.margin_sell) ?? 0,
+      marginCashRepayment: firstNullableNumber(row.margin_cash_repayment) ?? 0,
+      marginBalance,
+      source: row.source || "finmind_margin_short",
+    });
+  });
+  return finalizeStrategy5ChipHistory(map);
+}
+
 function latestFinMindChipTradeDate(finmindMap = new Map()) {
   return latestDateKey(Array.from(finmindMap.values()).flatMap((row) => [
     row.tradeDate,
@@ -1642,6 +1730,114 @@ function buildVolumeTurnoverMatch({ stock, inst, issuedSharesMap, volumeAverageM
   };
 }
 
+function strategy5HistoryRowsAtOrBefore(rows = [], expectedTradeDate = "") {
+  const expected = compactDateKey(expectedTradeDate);
+  return (Array.isArray(rows) ? rows : [])
+    .filter((row) => {
+      const date = compactDateKey(row?.date || row?.tradeDate || row?.trade_date);
+      return /^\d{8}$/.test(date) && (!expected || date <= expected);
+    })
+    .sort((a, b) => compactDateKey(a?.date || a?.tradeDate || a?.trade_date).localeCompare(compactDateKey(b?.date || b?.tradeDate || b?.trade_date)));
+}
+
+function formalStrategy5DailyHistory(rows = [], expectedTradeDate = "", minimumRows = 2) {
+  const eligible = strategy5HistoryRowsAtOrBefore(rows, expectedTradeDate);
+  const expected = compactDateKey(expectedTradeDate);
+  if (eligible.length < minimumRows) return [];
+  const latestDate = compactDateKey(eligible.at(-1)?.date);
+  if (expected && latestDate !== expected) return [];
+  const evidenceRows = eligible.slice(-Math.max(minimumRows, 2));
+  if (!evidenceRows.every((row) => String(row?.source || "").startsWith("supabase:"))) return [];
+  return eligible;
+}
+
+function strategy5TwoDayInstitutionBuyEvidence(chipHistory = {}, expectedTradeDate = "", requiredDays = STRATEGY5_INSTITUTION_BUY_DAYS) {
+  const expected = compactDateKey(expectedTradeDate);
+  const count = Math.max(2, cleanNumber(requiredDays) || 2);
+  const rows = (Array.isArray(chipHistory?.institutionRows) ? chipHistory.institutionRows : [])
+    .filter((row) => !expected || compactDateKey(row?.tradeDate) <= expected)
+    .sort((a, b) => compactDateKey(a?.tradeDate).localeCompare(compactDateKey(b?.tradeDate)))
+    .slice(-count);
+  const dates = rows.map((row) => compactDateKey(row?.tradeDate));
+  const totalNets = rows.map((row) => cleanNumber(row?.totalNet));
+  const ok = rows.length === count
+    && (!expected || dates.at(-1) === expected)
+    && totalNets.every((value) => value > 0);
+  return {
+    ok,
+    requiredDays: count,
+    dates,
+    totalNets,
+    foreignNets: rows.map((row) => cleanNumber(row?.foreign)),
+    trustNets: rows.map((row) => cleanNumber(row?.trust)),
+    sources: rows.map((row) => String(row?.source || "")),
+  };
+}
+
+function buildMarginPriceInstitutionMatch({ stock, chipHistory = {}, valueRank = 0, volumeRank = 0, rows = [], runMarketDate = "", direction = "up" }) {
+  const history = formalStrategy5DailyHistory(rows, runMarketDate, 2);
+  if (history.length < 2) return null;
+  const latest = history.at(-1);
+  const previous = history.at(-2);
+  const priceUpPct = pctChange(cleanNumber(previous?.close), cleanNumber(latest?.close));
+  if (!(priceUpPct > 0)) return null;
+
+  const institution = strategy5TwoDayInstitutionBuyEvidence(chipHistory, runMarketDate);
+  if (!institution.ok) return null;
+  const expected = compactDateKey(runMarketDate);
+  const marginRows = (Array.isArray(chipHistory?.marginRows) ? chipHistory.marginRows : [])
+    .filter((row) => !expected || compactDateKey(row?.tradeDate) <= expected)
+    .sort((a, b) => compactDateKey(a?.tradeDate).localeCompare(compactDateKey(b?.tradeDate)))
+    .slice(-2);
+  if (marginRows.length !== 2 || (expected && compactDateKey(marginRows.at(-1)?.tradeDate) !== expected)) return null;
+  if (marginRows.map((row) => compactDateKey(row.tradeDate)).join(",") !== institution.dates.slice(-2).join(",")) return null;
+
+  const previousMarginBalance = cleanNumber(marginRows[0]?.marginBalance);
+  const marginBalance = cleanNumber(marginRows[1]?.marginBalance);
+  if (!(previousMarginBalance > 0) || !(marginBalance > 0)) return null;
+  const marginBalanceDelta = marginBalance - previousMarginBalance;
+  const marginBalanceDeltaPct = previousMarginBalance ? (marginBalanceDelta / previousMarginBalance) * 100 : 0;
+  const marginDirectionOk = direction === "down" ? marginBalanceDelta < 0 : marginBalanceDelta > 0;
+  if (!marginDirectionOk) return null;
+
+  const directionId = direction === "down"
+    ? "margin_down_price_up_institutional_continuous_buy"
+    : "margin_up_price_up_institutional_continuous_buy";
+  const directionLabel = direction === "down" ? "資減股漲" : "資增股漲";
+  const score = clamp(Math.round(
+    58
+    + Math.min(priceUpPct * 5, 20)
+    + Math.min(cleanNumber(valueRank) * 0.12, 12)
+    + Math.min(cleanNumber(volumeRank) * 0.08, 8)
+    + Math.min(institution.requiredDays * 4, 12)
+    + Math.min(Math.abs(marginBalanceDeltaPct) * 5, 10)
+  ), 65, 100);
+  const reason = `${directionLabel}：股價上漲 ${priceUpPct.toFixed(2)}%，融資餘額由 ${Math.round(previousMarginBalance).toLocaleString("zh-TW")} 變為 ${Math.round(marginBalance).toLocaleString("zh-TW")}（${marginBalanceDelta >= 0 ? "+" : ""}${Math.round(marginBalanceDelta).toLocaleString("zh-TW")}），法人合計連 ${institution.requiredDays} 個交易日買超。`;
+  return {
+    id: directionId,
+    short: directionLabel,
+    icon: direction === "down" ? "減" : "增",
+    score,
+    reason,
+    compositeStrategy: "strategy5_margin_price_institutional_continuous_buy",
+    formalDailyOhlcv: true,
+    priceUp: true,
+    priceUpPct: roundNumber(priceUpPct, 2),
+    marginDirection: direction,
+    marginBalance: Math.round(marginBalance),
+    previousMarginBalance: Math.round(previousMarginBalance),
+    marginBalanceDelta: Math.round(marginBalanceDelta),
+    marginBalanceDeltaPct: roundNumber(marginBalanceDeltaPct, 2),
+    marginDates: marginRows.map((row) => compactDateKey(row.tradeDate)),
+    marginSources: marginRows.map((row) => String(row.source || "")),
+    institutionalContinuousBuy: true,
+    institutionalBuyDays: institution.requiredDays,
+    institutionalBuyDates: institution.dates,
+    institutionalTotalNets: institution.totalNets.map((value) => Math.round(value)),
+    institutionalSources: institution.sources,
+  };
+}
+
 function avg(values) {
   const nums = values.filter((value) => Number.isFinite(value) && value > 0);
   return nums.length ? nums.reduce((sum, value) => sum + value, 0) / nums.length : 0;
@@ -1723,9 +1919,9 @@ async function fetchSupabaseDailyHistory(stock, expectedDate = "") {
   const symbol = String(stock?.code || stock?.symbol || "").trim();
   if (!/^\d{4}$/.test(symbol)) return [];
   const sources = [
-    { table: "finmind_daily_ohlcv", select: "symbol,trade_date,open,high,low,close,volume_shares,volume_lots,source", source: "supabase:finmind_daily_ohlcv", timeout: 30000 },
     { table: "strategy4_daily_ohlcv_view", select: "symbol,trade_date,open,high,low,close,volume_shares,volume_lots,source", source: "supabase:strategy4_daily_ohlcv_view", timeout: 20000 },
     { table: "stock_daily_volume", select: "symbol,code,trade_date,open,high,low,close,volume_shares,volume_lots,volume", source: "supabase:stock_daily_volume", timeout: 20000 },
+    { table: "finmind_daily_ohlcv", select: "symbol,trade_date,open,high,low,close,volume_shares,volume_lots,source", source: "supabase:finmind_daily_ohlcv", timeout: 30000 },
   ];
   for (const item of sources) {
     try {
@@ -1737,8 +1933,8 @@ async function fetchSupabaseDailyHistory(stock, expectedDate = "") {
   return [];
 }
 
-async function fetchDailyHistory(stock) {
-  const supabaseRows = await fetchSupabaseDailyHistory(stock);
+async function fetchDailyHistory(stock, expectedDate = "") {
+  const supabaseRows = await fetchSupabaseDailyHistory(stock, expectedDate);
   if (supabaseRows.length >= 35) return supabaseRows;
   try {
     const rows = await fetchYahooHistory(stock);
@@ -1761,6 +1957,221 @@ async function mapLimit(items, limit, iteratee) {
     }
   }));
   return results;
+}
+
+function strategy5TaiwanTick(price) {
+  const value = cleanNumber(price);
+  if (!(value > 0)) return 0;
+  if (value < 10) return 0.01;
+  if (value < 50) return 0.05;
+  if (value < 100) return 0.1;
+  if (value < 500) return 0.5;
+  if (value < 1000) return 1;
+  return 5;
+}
+
+function strategy5FindLowestRow(rows, from, to) {
+  let index = -1;
+  let price = Infinity;
+  for (let cursor = Math.max(0, from); cursor <= Math.min(rows.length - 1, to); cursor += 1) {
+    const low = cleanNumber(rows[cursor]?.low);
+    if (low > 0 && low < price) {
+      index = cursor;
+      price = low;
+    }
+  }
+  return { index, price };
+}
+
+function strategy5WNecklinePattern(rows = []) {
+  const index = rows.length - 1;
+  if (index < 11) return null;
+  const start = Math.max(0, index - STRATEGY5_W_LOOKBACK_DAYS);
+  let best = null;
+  for (let neckIndex = start + 3; neckIndex <= index - 3; neckIndex += 1) {
+    const neckline = cleanNumber(rows[neckIndex]?.high);
+    if (!(neckline > 0)) continue;
+    const left = strategy5FindLowestRow(rows, Math.max(start, neckIndex - 20), neckIndex - 1);
+    const right = strategy5FindLowestRow(rows, neckIndex + 1, Math.min(index - 2, neckIndex + 20));
+    if (!(left.price > 0) || !(right.price > 0)) continue;
+    const localHigh = Math.max(...rows.slice(Math.max(start, neckIndex - 2), Math.min(index - 1, neckIndex + 2) + 1).map((row) => cleanNumber(row?.high)));
+    const leftDepth = (neckline - left.price) / neckline;
+    const rightDepth = (neckline - right.price) / neckline;
+    const troughDifferencePct = Math.abs(left.price - right.price) / Math.max(left.price, right.price) * 100;
+    if (neckline < localHigh * 0.995 || Math.min(leftDepth, rightDepth) < 0.025 || troughDifferencePct > STRATEGY5_W_TROUGH_TOLERANCE_PCT) continue;
+    const tick = strategy5TaiwanTick(neckline);
+    const holdRows = [rows[index - 1], rows[index]];
+    const holdLows = holdRows.map((row) => cleanNumber(row?.low));
+    const baseHold = holdLows.every((low) => low >= neckline - tick) && cleanNumber(rows[index]?.close) >= neckline - tick;
+    if (!baseHold) continue;
+    const symmetryPenalty = Math.abs((neckIndex - left.index) - (right.index - neckIndex)) * 0.0005;
+    const quality = Math.min(leftDepth, rightDepth) - symmetryPenalty;
+    if (!best || quality > best.quality) {
+      best = {
+        quality,
+        necklinePrice: roundNumber(neckline, 2),
+        necklineTick: tick,
+        leftTroughPrice: roundNumber(left.price, 2),
+        rightTroughPrice: roundNumber(right.price, 2),
+        leftTroughDate: String(rows[left.index]?.date || ""),
+        rightTroughDate: String(rows[right.index]?.date || ""),
+        troughDifferencePct: roundNumber(troughDifferencePct, 2),
+        holdDates: holdRows.map((row) => String(row?.date || "")),
+        holdLows: holdLows.map((low) => roundNumber(low, 2)),
+      };
+    }
+  }
+  if (!best) return null;
+  const recentNeckline = cleanNumber(rows[index - 2]?.close);
+  const recentTick = strategy5TaiwanTick(recentNeckline);
+  const recentHoldLows = [cleanNumber(rows[index - 1]?.low), cleanNumber(rows[index]?.low)];
+  const recentRetestHold = recentNeckline > best.necklinePrice + recentTick
+    && recentHoldLows.every((low) => low >= recentNeckline - recentTick)
+    && cleanNumber(rows[index]?.close) >= recentNeckline - recentTick;
+  if (!recentRetestHold) return null;
+  return {
+    ...best,
+    baseNecklinePrice: best.necklinePrice,
+    necklinePrice: roundNumber(recentNeckline, 2),
+    necklineTick: recentTick,
+    necklineSource: "recent_breakout_close_retest",
+    holdLows: recentHoldLows.map((low) => roundNumber(low, 2)),
+  };
+}
+
+function buildWNecklineRecentRetestMatch({ stock, valueRank = 0, volumeRank = 0, rows = [], runMarketDate = "" }) {
+  const history = formalStrategy5DailyHistory(rows, runMarketDate, 12);
+  if (history.length < 12 || cleanNumber(stock?.close) < 10) return null;
+  const pattern = strategy5WNecklinePattern(history);
+  if (!pattern) return null;
+  const depthPct = Math.max(0, ((pattern.necklinePrice - Math.max(pattern.leftTroughPrice, pattern.rightTroughPrice)) / pattern.necklinePrice) * 100);
+  const score = clamp(Math.round(
+    66
+    + Math.min(depthPct * 1.2, 14)
+    + Math.min(cleanNumber(valueRank) * 0.1, 10)
+    + Math.min(cleanNumber(volumeRank) * 0.06, 6)
+    + Math.max(0, 4 - pattern.troughDifferencePct * 0.5)
+  ), 70, 100);
+  const reason = `近期 W 頸線 ${pattern.baseNecklinePrice.toFixed(2)} 突破後，以 ${pattern.necklinePrice.toFixed(2)} 為回測頸線，最近兩日低點 ${pattern.holdLows.map((value) => value.toFixed(2)).join("、")} 均守住。`;
+  return {
+    id: "w_neckline_recent_retest_two_day_hold",
+    short: "W頸線守住",
+    icon: "W",
+    score,
+    reason,
+    formalDailyOhlcv: true,
+    twoDayHold: true,
+    necklinePrice: pattern.necklinePrice,
+    necklineTick: pattern.necklineTick,
+    baseNecklinePrice: pattern.baseNecklinePrice,
+    necklineSource: pattern.necklineSource,
+    leftTroughPrice: pattern.leftTroughPrice,
+    rightTroughPrice: pattern.rightTroughPrice,
+    leftTroughDate: pattern.leftTroughDate,
+    rightTroughDate: pattern.rightTroughDate,
+    troughDifferencePct: pattern.troughDifferencePct,
+    holdDates: pattern.holdDates,
+    holdLows: pattern.holdLows,
+    strictEvidence: {
+      contract: "strategy5-w-neckline-recent-retest-two-day-hold-v1",
+      lookbackTradingDays: STRATEGY5_W_LOOKBACK_DAYS,
+      minimumTroughDepthPct: 2.5,
+      maximumTroughDifferencePct: STRATEGY5_W_TROUGH_TOLERANCE_PCT,
+      holdToleranceTicks: 1,
+      latestDailyDate: String(history.at(-1)?.date || ""),
+      dailySource: String(history.at(-1)?.source || ""),
+    },
+  };
+}
+
+function strategy5MovingAverageAt(rows, index, period) {
+  if (index < period - 1) return 0;
+  const values = rows.slice(index - period + 1, index + 1).map((row) => cleanNumber(row?.close));
+  return values.length === period && values.every((value) => value > 0) ? values.reduce((sum, value) => sum + value, 0) / period : 0;
+}
+
+function buildWBottomReboundMatch({ stock, chipHistory = {}, valueRank = 0, volumeRank = 0, rows = [], runMarketDate = "" }) {
+  const history = formalStrategy5DailyHistory(rows, runMarketDate, 20);
+  if (history.length < 20 || cleanNumber(stock?.close) < 10) return null;
+  const secondIndex = history.length - 1;
+  const firstIndex = secondIndex - 1;
+  const first = history[firstIndex];
+  const second = history[secondIndex];
+  const twoRedCandles = cleanNumber(first?.close) > cleanNumber(first?.open)
+    && cleanNumber(second?.close) > cleanNumber(second?.open)
+    && cleanNumber(second?.close) >= cleanNumber(first?.close);
+  if (!twoRedCandles) return null;
+
+  const right = strategy5FindLowestRow(history, Math.max(5, firstIndex - 12), firstIndex - 1);
+  if (right.index < 5 || !(right.price > 0)) return null;
+  const left = strategy5FindLowestRow(history, Math.max(0, right.index - 40), right.index - 5);
+  if (left.index < 0 || !(left.price > 0)) return null;
+  const troughDifferencePct = Math.abs(left.price - right.price) / Math.max(left.price, right.price) * 100;
+  if (troughDifferencePct > STRATEGY5_W_TROUGH_TOLERANCE_PCT) return null;
+  const necklineRows = history.slice(left.index + 1, right.index);
+  const necklinePrice = Math.max(...necklineRows.map((row) => cleanNumber(row?.high)).filter((value) => value > 0));
+  const troughDepthPct = necklinePrice > 0 ? ((necklinePrice - Math.max(left.price, right.price)) / necklinePrice) * 100 : 0;
+  if (!(troughDepthPct >= 2.5)) return null;
+
+  const ma3First = strategy5MovingAverageAt(history, firstIndex, 3);
+  const ma5Second = strategy5MovingAverageAt(history, secondIndex, 5);
+  const ma10Second = strategy5MovingAverageAt(history, secondIndex, 10);
+  const firstAboveMa3 = ma3First > 0 && cleanNumber(first.close) >= ma3First;
+  const secondAboveMa5OrMa10 = (ma5Second > 0 && cleanNumber(second.close) >= ma5Second)
+    || (ma10Second > 0 && cleanNumber(second.close) >= ma10Second);
+  if (!firstAboveMa3 || !secondAboveMa5OrMa10) return null;
+
+  const institution = strategy5TwoDayInstitutionBuyEvidence(chipHistory, runMarketDate, 2);
+  const candleDates = [compactDateKey(first?.date), compactDateKey(second?.date)];
+  if (!institution.ok || institution.dates.slice(-2).join(",") !== candleDates.join(",")) return null;
+  const reboundPct = pctChange(right.price, cleanNumber(second.close));
+  if (!(reboundPct >= 2) || reboundPct > 35) return null;
+
+  const score = clamp(Math.round(
+    60
+    + Math.min(reboundPct * 1.2, 18)
+    + Math.min(troughDepthPct, 12)
+    + Math.min(cleanNumber(valueRank) * 0.08, 8)
+    + Math.min(cleanNumber(volumeRank) * 0.05, 5)
+    + 8
+  ), 70, 100);
+  const reason = `W 底右腳 ${right.price.toFixed(2)} 反彈 ${reboundPct.toFixed(2)}%；連兩根紅 K，第一根站上 MA3 ${ma3First.toFixed(2)}，第二根站上 MA5 ${ma5Second.toFixed(2)} 或 MA10 ${ma10Second.toFixed(2)}，法人連兩日買超。`;
+  return {
+    id: "w_bottom_rebound_ma3_ma5_ma10_institution_two_day_buy",
+    short: "W底轉強",
+    icon: "W",
+    score,
+    reason,
+    formalDailyOhlcv: true,
+    institutionalTwoDayTotalBuy: true,
+    troughDate: String(history[right.index]?.date || ""),
+    troughLow: roundNumber(right.price, 2),
+    troughAgeTradingDays: firstIndex - right.index,
+    leftTroughDate: String(history[left.index]?.date || ""),
+    leftTroughLow: roundNumber(left.price, 2),
+    necklinePrice: roundNumber(necklinePrice, 2),
+    troughDifferencePct: roundNumber(troughDifferencePct, 2),
+    troughDepthPct: roundNumber(troughDepthPct, 2),
+    firstRedDate: String(first.date || ""),
+    secondRedDate: String(second.date || ""),
+    firstRedClose: roundNumber(cleanNumber(first.close), 2),
+    secondRedClose: roundNumber(cleanNumber(second.close), 2),
+    ma3First: roundNumber(ma3First, 2),
+    ma5Second: roundNumber(ma5Second, 2),
+    ma10Second: roundNumber(ma10Second, 2),
+    reboundPct: roundNumber(reboundPct, 2),
+    institutionalBuyDates: institution.dates,
+    institutionalTotalNets: institution.totalNets.map((value) => Math.round(value)),
+    institutionalSources: institution.sources,
+    strictEvidence: {
+      contract: "strategy5-w-bottom-rebound-ma-institution-two-day-buy-v1",
+      maximumTroughDifferencePct: STRATEGY5_W_TROUGH_TOLERANCE_PCT,
+      minimumTroughDepthPct: 2.5,
+      minimumReboundPct: 2,
+      maximumReboundPct: 35,
+      dailySource: String(second?.source || ""),
+    },
+  };
 }
 
 function limitUpDojiPatternFromRows(rows) {
@@ -2085,7 +2496,7 @@ function buildBollingerKdjMatch({ stock, inst = {}, valueRank, volumeRank, rows 
   };
 }
 
-async function buildMatches(stocks, institutionData, issuedSharesMap = new Map(), volumeAverageMap = new Map(), previousVolumeMap = new Map(), runMarketDate = "") {
+async function buildMatches(stocks, institutionData, issuedSharesMap = new Map(), volumeAverageMap = new Map(), previousVolumeMap = new Map(), runMarketDate = "", chipHistoryByCode = new Map()) {
   const stocksWithVolumeUnits = stocks.map((stock) => {
     const volumeUnits = normalizeTradeVolumeUnits(stock);
     return {
@@ -2189,12 +2600,16 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
   const historyCandidates = baseRows
     .filter((stock) => {
       const jointBuying = stock.inst.foreign > 0 && stock.inst.trust > 0 && stock.inst.total > 0;
+      const institutionalBuying = stock.inst.total > 0;
+      const hasChipHistory = chipHistoryByCode.has(stock.code);
       const hasBaseMatch = Array.isArray(stock.matches) && stock.matches.length > 0;
       return cleanNumber(stock.close) >= 10 && (
         stock.valueRank >= 20
         || stock.volumeRank >= 20
         || cleanNumber(stock.percent) >= 3
         || jointBuying
+        || institutionalBuying
+        || hasChipHistory
         || hasBaseMatch
       );
     })
@@ -2202,7 +2617,7 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
     .slice(0, Number(process.env.STRATEGY5_HISTORY_CANDIDATE_LIMIT || 900));
   const historyByCode = new Map();
   await mapLimit(historyCandidates, HISTORY_CONCURRENCY, async (stock) => {
-    const rows = await fetchDailyHistory(stock);
+    const rows = await fetchDailyHistory(stock, runMarketDate);
     if (rows.length) historyByCode.set(stock.code, rows);
   });
 
@@ -2216,18 +2631,20 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
       strategy4Reason: strategy4.reason || "",
       strategy4Signals: strategy4.signals || strategy4.swingSignals || [],
     };
+    const dailyRows = historyByCode.get(stock.code) || [];
+    const chipHistory = chipHistoryByCode.get(stock.code) || {};
     const limitUpDoji = buildLimitUpDojiMatch({
       stock: mergedStock,
       valueRank: stock.valueRank,
       volumeRank: stock.volumeRank,
-      rows: historyByCode.get(stock.code) || [],
+      rows: dailyRows,
     });
     const foreignTrustBreakout = buildStrategy5Match({
       stock: mergedStock,
       inst: stock.inst,
       valueRank: stock.valueRank,
       volumeRank: stock.volumeRank,
-      rows: historyByCode.get(stock.code) || [],
+      rows: dailyRows,
       confluenceSources,
     });
     const bollingerKdj = buildBollingerKdjMatch({
@@ -2235,9 +2652,51 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
       inst: stock.inst,
       valueRank: stock.valueRank,
       volumeRank: stock.volumeRank,
-      rows: historyByCode.get(stock.code) || [],
+      rows: dailyRows,
     });
-    const matches = [...stock.matches, foreignTrustBreakout, limitUpDoji, bollingerKdj].filter(Boolean);
+    const marginUpPriceUp = buildMarginPriceInstitutionMatch({
+      stock: mergedStock,
+      chipHistory,
+      valueRank: stock.valueRank,
+      volumeRank: stock.volumeRank,
+      rows: dailyRows,
+      runMarketDate,
+      direction: "up",
+    });
+    const marginDownPriceUp = buildMarginPriceInstitutionMatch({
+      stock: mergedStock,
+      chipHistory,
+      valueRank: stock.valueRank,
+      volumeRank: stock.volumeRank,
+      rows: dailyRows,
+      runMarketDate,
+      direction: "down",
+    });
+    const wNecklineRecentRetest = buildWNecklineRecentRetestMatch({
+      stock: mergedStock,
+      valueRank: stock.valueRank,
+      volumeRank: stock.volumeRank,
+      rows: dailyRows,
+      runMarketDate,
+    });
+    const wBottomRebound = buildWBottomReboundMatch({
+      stock: mergedStock,
+      chipHistory,
+      valueRank: stock.valueRank,
+      volumeRank: stock.volumeRank,
+      rows: dailyRows,
+      runMarketDate,
+    });
+    const matches = [
+      ...stock.matches,
+      foreignTrustBreakout,
+      marginUpPriceUp,
+      marginDownPriceUp,
+      wNecklineRecentRetest,
+      wBottomRebound,
+      limitUpDoji,
+      bollingerKdj,
+    ].filter(Boolean);
     const sortedMatches = matches.sort((a, b) => (b.score || 0) - (a.score || 0));
     const score = sortedMatches.length ? Math.max(...sortedMatches.map((match) => match.score || 0)) : 0;
     return { ...mergedStock, score, matches: sortedMatches, activeMatch: sortedMatches[0] || null };
@@ -2282,7 +2741,27 @@ async function main() {
   const runMarketDate = sourceDate;
   const marginShortSourceDate = compactDateKey(chipSourceHealth.marginLatestTradeDate || "");
   const marginShortAlignmentOk = Boolean(marginShortSourceDate && marginShortSourceDate === runMarketDate);
-  const matches = await buildMatches(stocks, institutionData, issuedSharesResult.map, volumeAverageResult.map, volumeAverageResult.previousMap, runMarketDate);
+  const chipHistoryByCode = await fetchStrategy5ChipHistoryMap(runMarketDate).catch((error) => {
+    console.warn(`strategy5 chip history skipped: ${error.message}`);
+    return new Map();
+  });
+  const chipHistoryRows = [...chipHistoryByCode.values()];
+  const chipHistoryInstitutionCodeCount = chipHistoryRows.filter((row) => (row.institutionRows?.length || 0) >= STRATEGY5_INSTITUTION_BUY_DAYS).length;
+  const chipHistoryMarginCodeCount = chipHistoryRows.filter((row) => (row.marginRows?.length || 0) >= 2).length;
+  const alignedChipHistoryCodeCount = chipHistoryRows.filter((row) => {
+    const institutionDates = (row.institutionRows || []).slice(-2).map((item) => compactDateKey(item.tradeDate));
+    const marginDates = (row.marginRows || []).slice(-2).map((item) => compactDateKey(item.tradeDate));
+    return institutionDates.length === 2 && institutionDates.join(",") === marginDates.join(",") && institutionDates.at(-1) === runMarketDate;
+  }).length;
+  const matches = await buildMatches(
+    stocks,
+    institutionData,
+    issuedSharesResult.map,
+    volumeAverageResult.map,
+    volumeAverageResult.previousMap,
+    runMarketDate,
+    chipHistoryByCode
+  );
   const output = {
     ok: true,
     source: USE_MIS_QUOTES ? "github-actions-mis-realtime" : "github-actions-official-daily",
@@ -2307,6 +2786,13 @@ async function main() {
       volumeAverageAnchorDate: volumeAverageResult.anchorDate,
       finmindChipCount: finmindChipMap.size,
       branchFlowCount: [...finmindChipMap.values()].filter((row) => row.branchTradeDate).length,
+      chipHistoryCodeCount: chipHistoryByCode.size,
+      chipHistoryInstitutionCodeCount,
+      chipHistoryMarginCodeCount,
+      alignedChipHistoryCodeCount,
+      minChipHistoryCoverage: STRATEGY5_MIN_CHIP_HISTORY_COVERAGE,
+      chipHistoryInstitutionRowCount: chipHistoryRows.reduce((sum, row) => sum + (row.institutionRows?.length || 0), 0),
+      chipHistoryMarginRowCount: chipHistoryRows.reduce((sum, row) => sum + (row.marginRows?.length || 0), 0),
       chipLatestTradeDate,
       institutionLatestDate: institutionDate,
       marginShortSourceDate,
@@ -2315,6 +2801,33 @@ async function main() {
       marketQuoteDate: quoteDate,
       warningCount: sourceWarnings.length,
       warnings: sourceWarnings.slice(0, 8),
+    },
+    strategy5CompositeRules: {
+      contract: "strategy5-composite-producers-v1",
+      institutionalContinuousBuyDays: STRATEGY5_INSTITUTION_BUY_DAYS,
+      marginPriceInstitutional: {
+        ids: [
+          "margin_up_price_up_institutional_continuous_buy",
+          "margin_down_price_up_institutional_continuous_buy",
+        ],
+        requires: [
+          "formal_daily_ohlcv_current_date",
+          "price_up",
+          "two_aligned_margin_balance_rows",
+          "two_aligned_positive_institution_total_net_rows",
+        ],
+      },
+      wNeckline: {
+        id: "w_neckline_recent_retest_two_day_hold",
+        lookbackTradingDays: STRATEGY5_W_LOOKBACK_DAYS,
+        maximumTroughDifferencePct: STRATEGY5_W_TROUGH_TOLERANCE_PCT,
+        holdToleranceTicks: 1,
+      },
+      wBottomRebound: {
+        id: "w_bottom_rebound_ma3_ma5_ma10_institution_two_day_buy",
+        maximumTroughDifferencePct: STRATEGY5_W_TROUGH_TOLERANCE_PCT,
+        institutionalBuyDays: 2,
+      },
     },
     count: matches.length,
     matches,
@@ -2358,4 +2871,10 @@ module.exports = {
   buildStrategy5FieldCompleteness,
   buildWriteBudget,
   normalizeTradeVolumeUnits,
+  fetchStrategy5ChipHistoryMap,
+  strategy5TwoDayInstitutionBuyEvidence,
+  buildMarginPriceInstitutionMatch,
+  strategy5WNecklinePattern,
+  buildWNecklineRecentRetestMatch,
+  buildWBottomReboundMatch,
 };

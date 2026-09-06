@@ -82,13 +82,13 @@
   };
 
   const STRATEGY5_DISPLAY_FALLBACKS = [
-    { id: "multi_strategy_confluence", label: "綜合共振", short: "綜合共振", icon: "綜", description: "全終端策略與籌碼至少命中 2 項，符合越多項排序越前。" },
+    { id: "multi_strategy_confluence", label: "策略共振", short: "策略共振", icon: "綜", description: "終端3／終端4／終端5／買賣超共同出現排名；命中來源越多，排名越前（最高 4 次）。" },
     { id: "volume_turnover_breakout", label: "量價周轉強攻", short: "量價周轉強攻", icon: "量", description: "漲幅、成交量、周轉率與量比共同放大。" },
     { id: "bollinger_kdj_buy", label: "布林通道", short: "布林通道", icon: "布", description: "布林通道搭配 KDJ 與主力條件。" },
-    { id: "margin_up_price_up_institutional_continuous_buy", label: "資增股漲", short: "資增股漲", icon: "增", description: "融資餘額上升且股價上漲，並有法人連續買超；列為策略5波段籌碼觀察。" },
-    { id: "margin_down_price_up_institutional_continuous_buy", label: "資減股漲", short: "資減股漲", icon: "減", description: "融資餘額下降但股價上漲，且法人連續買超；列為策略5波段籌碼觀察。" },
-    { id: "w_neckline_recent_retest_two_day_hold", label: "近期 W 頸線回測、兩日守住", short: "W頸線守住", icon: "W", description: "正式日 OHLCV 偵測近期 W 型頸線；最近兩日低點守住頸線才命中，日K展開後會標出頸線、左右谷底與兩日守住K棒。" },
-    { id: "w_bottom_rebound_ma3_ma5_ma10_institution_two_day_buy", label: "W底反彈、MA轉強", short: "W底轉強", icon: "W", description: "W底右腳低點反彈後連兩根紅K；第一根站上 MA3，第二根站上 MA5 或 MA10。日K展開後會框出兩根紅K。" },
+    { id: "margin_up_price_up_institutional_continuous_buy", label: "資增股漲", short: "資增股漲", icon: "增", description: "連兩個對齊交易日法人合計買超，股價上漲且融資餘額增加。" },
+    { id: "margin_down_price_up_institutional_continuous_buy", label: "資減股漲", short: "資減股漲", icon: "減", description: "連兩個對齊交易日法人合計買超，股價上漲且融資餘額下降。" },
+    { id: "w_neckline_recent_retest_two_day_hold", label: "近期 W 頸線回測、兩日守住", short: "W頸線守住", icon: "W", description: "正式日K辨識近期 W 型，突破後以新頸線回測，最近兩日低點均守住一個台股跳動點。" },
+    { id: "w_bottom_rebound_ma3_ma5_ma10_institution_two_day_buy", label: "W底反彈、MA轉強", short: "W底轉強", icon: "W", description: "W 底右腳反彈後連兩根紅K；第一根站上 MA3、第二根站上 MA5 或 MA10，且法人合計連兩日買超。" },
     { id: "limit_up_doji", label: "漲停十字星", short: "漲停十字星", icon: "十", description: "漲停後十字星與整理突破觀察。" },
   ];
 
@@ -8737,7 +8737,7 @@
       count: cleanNumber(liveCounts.get(id)?.count),
     })) : [...liveCounts.values()];
     const confluence = strategy5TerminalConfluenceRows(rows).length;
-    const primary = [{ key: "multi_strategy_confluence", label: "綜合共振", count: confluence }];
+    const primary = [{ key: "multi_strategy_confluence", label: "策略共振", count: confluence, sub: "終端3/4/5＋買賣超排名" }];
     return cardsFromCounts([...primary, ...counts], "Strategy5 細分策略");
   }
 

@@ -59,19 +59,37 @@ function normalizeRow(row) {
   };
 }
 
-async function fetchRows(startDate, endDate) {
+function dailyDates(startDate, endDate) {
+  const dates = [];
+  const start = new Date(`${startDate}T12:00:00Z`);
+  const end = new Date(`${endDate}T12:00:00Z`);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start > end) {
+    throw new Error(`invalid FinMind daily range: ${startDate}..${endDate}`);
+  }
+  for (const cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    const weekday = cursor.getUTCDay();
+    if (weekday !== 0 && weekday !== 6) dates.push(ymd(cursor));
+  }
+  return dates;
+}
+
+async function fetchRowsForDate(day) {
   if (!FINMIND_TOKEN) throw new Error("missing FinMind token");
   const url = new URL("https://api.finmindtrade.com/api/v4/data");
   url.searchParams.set("dataset", "TaiwanStockPrice");
-  url.searchParams.set("start_date", startDate);
-  url.searchParams.set("end_date", endDate);
+  url.searchParams.set("start_date", day);
+  url.searchParams.set("end_date", day);
   const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${FINMIND_TOKEN}`, "User-Agent": "FumanFinMindDaily/1.0" },
+    headers: { Authorization: `Bearer ${FINMIND_TOKEN}`, "User-Agent": "FumanFinMindDaily/1.1" },
     signal: AbortSignal.timeout ? AbortSignal.timeout(120000) : undefined,
   });
-  if (!response.ok) throw new Error(`FinMind TaiwanStockPrice HTTP ${response.status}`);
+  if (!response.ok) throw new Error(`FinMind TaiwanStockPrice ${day} HTTP ${response.status}`);
   const payload = await response.json();
-  return Array.isArray(payload?.data) ? payload.data : [];
+  const rawRows = Array.isArray(payload?.data) ? payload.data : [];
+  return {
+    rawCount: rawRows.length,
+    rows: rawRows.filter((row) => String(row?.date || "").slice(0, 10) === day),
+  };
 }
 
 async function upsert(rows) {
@@ -102,10 +120,23 @@ async function upsert(rows) {
 async function main() {
   const startDate = argValue("--start", defaultStart(Number(process.env.FINMIND_DAILY_LOOKBACK_DAYS || 35)));
   const endDate = argValue("--end", ymd(new Date()));
-  const rawRows = await fetchRows(startDate, endDate);
-  const rows = rawRows.map(normalizeRow).filter(Boolean);
-  const written = await upsert(rows);
-  console.log(JSON.stringify({ ok: true, source: "finmind:TaiwanStockPrice", startDate, endDate, rawRows: rawRows.length, normalizedRows: rows.length, written }));
+  let rawCount = 0;
+  let normalizedCount = 0;
+  let written = 0;
+  const dates = dailyDates(startDate, endDate);
+  const writtenDates = [];
+  for (const day of dates) {
+    const daily = await fetchRowsForDate(day);
+    const normalized = daily.rows.map(normalizeRow).filter(Boolean);
+    const rows = [...new Map(normalized.map((row) => [`${row.symbol}:${row.trade_date}`, row])).values()];
+    const dailyWritten = await upsert(rows);
+    rawCount += daily.rawCount;
+    normalizedCount += rows.length;
+    written += dailyWritten;
+    if (dailyWritten > 0) writtenDates.push(day);
+    console.error(`[finmind-daily] ${day} raw=${daily.rawCount} normalized=${rows.length} written=${dailyWritten}`);
+  }
+  console.log(JSON.stringify({ ok: true, source: "finmind:TaiwanStockPrice", startDate, endDate, requestedDates: dates.length, writtenDates, rawRows: rawCount, normalizedRows: normalizedCount, written }));
 }
 
 main().catch((error) => {
