@@ -5525,7 +5525,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-92";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-93";
   }
 
   function loadScriptOnce(src, attr) {
@@ -9341,7 +9341,7 @@
     switchStrategyViewNow(link);
     if (isStrategy2Route(key)) {
       const reassertStrategy2BattleView = () => {
-        if (!isRouteCurrent(key, seq) || activeSnapshotRoute !== key) return;
+        if (window.__fumanDesktopActiveRoute?.key !== key || activeSnapshotRoute !== key) return;
         renderStrategyRouteShell(link, "strategy2-battle-route-reassert", rowsForRoute(key));
       };
       window.setTimeout(reassertStrategy2BattleView, 0);
