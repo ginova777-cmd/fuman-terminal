@@ -3,6 +3,9 @@ const strategy3Latest = require("./strategy3-latest");
 const strategy5Latest = require("./strategy5-latest");
 const watchlistMatchIndex = require("./watchlist-match-index");
 
+const STRATEGY5_CONFLUENCE_SOURCE_KEYS = ["strategy3", "strategy4", "strategy5", "institution"];
+const STRATEGY5_CONFLUENCE_SOURCE_SET = new Set(STRATEGY5_CONFLUENCE_SOURCE_KEYS);
+
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,+%]/g, "").trim());
   return Number.isFinite(number) ? number : 0;
@@ -33,7 +36,17 @@ function buildConfluencePayload(index, { minCount = 2, limit = 120 } = {}) {
   const namesByCode = index?.namesByCode && typeof index.namesByCode === "object" ? index.namesByCode : {};
   const quoteByCode = index?.quoteByCode && typeof index.quoteByCode === "object" ? index.quoteByCode : {};
   const rows = Object.entries(byCode).map(([code, entries]) => {
-    const matches = Array.isArray(entries) ? entries : [];
+    const sourceMatches = Array.isArray(entries) ? entries : [];
+    const matchesBySource = new Map();
+    sourceMatches.forEach((item) => {
+      const key = String(item?.key || "").trim().toLowerCase();
+      if (!STRATEGY5_CONFLUENCE_SOURCE_SET.has(key)) return;
+      const previous = matchesBySource.get(key);
+      if (!previous || cleanNumber(item?.rawScore ?? item?.score) > cleanNumber(previous?.rawScore ?? previous?.score)) {
+        matchesBySource.set(key, item);
+      }
+    });
+    const matches = STRATEGY5_CONFLUENCE_SOURCE_KEYS.map((key) => matchesBySource.get(key)).filter(Boolean);
     const quote = quoteByCode[code] && typeof quoteByCode[code] === "object" ? quoteByCode[code] : {};
     const sourceCount = matches.length;
     const totalRawScore = matches.reduce((sum, item) => sum + cleanNumber(item?.rawScore ?? item?.score), 0);
@@ -61,6 +74,8 @@ function buildConfluencePayload(index, { minCount = 2, limit = 120 } = {}) {
       rawScore: totalRawScore,
       maxScore,
       sourceCount,
+      sourceTotal: STRATEGY5_CONFLUENCE_SOURCE_KEYS.length,
+      sourceKeys: matches.map((item) => String(item?.key || "").trim().toLowerCase()),
       confluenceCount: sourceCount,
       terminalConfluenceCount: sourceCount,
       strategy5InternalCount,
@@ -87,6 +102,7 @@ function buildConfluencePayload(index, { minCount = 2, limit = 120 } = {}) {
     matches: rows,
     rows,
     strategies: index?.strategies || {},
+    confluenceSources: STRATEGY5_CONFLUENCE_SOURCE_KEYS,
     transport: {
       ...(index?.transport || {}),
       via: "api/latest-signals",
@@ -164,3 +180,5 @@ module.exports = async function handler(request, response) {
     supported: ["strategy3", "strategy4", "strategy5", "multi", "confluence"],
   });
 };
+
+module.exports.buildConfluencePayload = buildConfluencePayload;

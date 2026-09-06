@@ -13,6 +13,8 @@ $log = Join-Path $runtime ("logs\strategy5-complete-{0}.log" -f (Get-Date -Forma
 Invoke-FumanWeekdayGuard -Label "Strategy5 complete" -LogPath $log -AllowAfterFormalSourceWindow
 & $pwshExe -NoProfile -File ".\run-chip-source-sync.ps1"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+& $nodeExe "scripts\verify-strategy5-composite-producers.js"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $pwshExe -NoProfile -File ".\run-strategy5.ps1"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $nodeExe "scripts\verify-strategy5-complete.js" "--write-receipt"

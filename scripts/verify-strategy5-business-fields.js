@@ -131,8 +131,18 @@ function blankField(row, key) {
   } else if (key === "reason") {
     row.reason = "";
     payload.reason = "";
-    if (payload.activeMatch) payload.activeMatch.reason = "";
-    if (Array.isArray(payload.matches)) payload.matches.forEach((signal) => { if (signal) signal.reason = ""; });
+    const blankReason = (signal) => {
+      if (!signal) return;
+      signal.id = "business_field_reason_mutation";
+      signal.reason = "";
+    };
+    blankReason(row.activeMatch);
+    if (Array.isArray(row.signals)) row.signals.forEach(blankReason);
+    if (Array.isArray(row.sourceSignals)) row.sourceSignals.forEach(blankReason);
+    blankReason(payload.activeMatch);
+    if (Array.isArray(payload.matches)) payload.matches.forEach(blankReason);
+    if (Array.isArray(payload.signals)) payload.signals.forEach(blankReason);
+    if (Array.isArray(payload.sourceSignals)) payload.sourceSignals.forEach(blankReason);
   } else if (key === "signals") {
     row.signals = [];
     row.sourceSignals = [];

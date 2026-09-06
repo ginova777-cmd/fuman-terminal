@@ -379,7 +379,7 @@ function updateMobileAiStaleNote(){const note=marketAiPanel?.querySelector?.("[d
   window.__fumanTerminalConfluenceRunIdPolling=!0;
   let seenRunId="";
   let loading=!1;
-  const CACHE_KEY="fuman-terminal-confluence-valid-cache-v1";
+  const CACHE_KEY="fuman-terminal-confluence-s345-institution-v2";
   const pollMs=Math.max(3e4,cleanNumber(FUMAN_TUNING_CONFIG.terminalConfluencePollMs||6e4));
   const fresh=url=>`${url}${String(url||"").includes("?")?"&":"?"}t=${Date.now()}`;
   const indexUrl=()=>endpoints.strategyMatchIndex||"/api/watchlist-match-index";

@@ -404,6 +404,7 @@
     "verify:native-daily-kline": "node --use-system-ca scripts/verify-watchlist-daily-kline-ui.js",
     "verify:strategy5-w-bottom-rebound": "node --use-system-ca scripts/verify-strategy5-w-bottom-rebound-readonly.js",
     "verify:strategy5-terminal-confluence": "node --use-system-ca scripts/verify-strategy5-terminal-confluence.js",
+    "verify:strategy5-composite-producers": "node --use-system-ca scripts/verify-strategy5-composite-producers.js",
     "verify:member-fast-bundle-snapshot-recovery": "node --use-system-ca scripts/verify-member-fast-bundle-snapshot-recovery.js",
     "strategy3-v2:readiness": "node --use-system-ca scripts/check-strategy3-v2-readiness.js",
     "strategy3-v2:scan": "node --use-system-ca scripts/run-strategy3-v2-complete-scan.js --apply",
