@@ -5,10 +5,9 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..");
 const ACTIVE_FILES = [
-  "run-strategy2-battle-verify.ps1",
+  "ops/run-strategy2-v3-unified.ps1",
   "run-buy-sell-complete.ps1",
   "run-strategy3-v2-complete-scan.ps1",
-  "run-strategy3-battle-verify.ps1",
   "run-strategy3-v2-1255-first-attempt.ps1",
   "run-strategy3-ready-snapshot.ps1",
   "run-strategy5-complete.ps1",
@@ -19,6 +18,7 @@ const ACTIVE_FILES = [
   "scripts/verify-strategy3-v2-daily-unattended-closure.js",
   "scripts/verify-strategy2-seven-strategy-contract.js",
   "scripts/verify-strategy2-v3-live-closure.js",
+  "scripts/verify-strategy3-v2-full-closure.js",
   "scripts/verify-strategy4-canonical-closure.js",
   "scripts/verify-strategy4-88-data-chain.js",
   "scripts/verify-strategy5-88-data-chain.js",

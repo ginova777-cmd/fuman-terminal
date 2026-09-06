@@ -49,7 +49,7 @@ Do not run these during Supabase incident.
    Expected PASS: formal chain ready, no formal fallback.
 
 4. Readback/latest  
-   `node --use-system-ca scripts/verify-strategy3-battle-state.js --strict-live`  
+   `node --use-system-ca scripts/verify-strategy3-v2-full-closure.js`
    Expected PASS: evidence complete, readback count aligned.
 
 5. Capture latest pointer before any Strategy3 scanner run  

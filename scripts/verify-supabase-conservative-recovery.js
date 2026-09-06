@@ -17,7 +17,6 @@ const HEAVY_TASKS = [
   "\\Fuman Freshness Gate Fast 0845-1645",
   "\\Fuman Terminal Local Freshness Verify 0830-2230",
   "\\Fuman CB Battle Verify 2150",
-  "\\Fuman Daily Battle Verify 2155",
   "\\Fuman Warrant Battle Verify 2055",
 ];
 

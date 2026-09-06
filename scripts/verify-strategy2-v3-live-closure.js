@@ -48,6 +48,13 @@ function main() {
   const collectorWrapper = read("ops/public-slot/Run-DaytradeWebSocketCollector.ps1");
   const checks = [];
 
+  for (const retired of [
+    "run-strategy2-battle-verify.ps1",
+    "scripts/verify-strategy2-battle-state.js",
+  ]) {
+    add(checks, "retired_strategy2_verifier_absent", !fs.existsSync(path.join(ROOT, retired)), retired);
+  }
+
   add(checks, "live_scanner_has_v3_contract", scanner.includes(`const CONTRACT = \"${CONTRACT}\"`));
   add(checks, "live_scanner_reuses_v3_water", scanner.includes("readFormalWater") && scanner.includes("strategy2-v3-water-scan"));
   add(checks, "formal_live_requires_fugle_websocket", water.includes("sharedSourceEvidence") && water.includes("supabase_shared_fugle_daytrade_source") && scanner.includes("websocketFormalReady"));
@@ -75,7 +82,7 @@ function main() {
   add(checks, "terminal_has_no_retired_strategy2_stream", !terminalApp.includes("/api/strategy2-stream"));
   add(checks, "scorecard_accepts_only_v3", scorecard.includes("strategy2_v3_afternoon_scorecard_import_v1") && scorecard.includes(CONTRACT) && !/Strategy2V2|strategy2-live-v2|strategy2_v2/i.test(scorecard));
   add(checks, "scorecard_generator_requires_v3_formal_complete", scorecardGenerator.includes('endpoint: "/api/strategy2-latest"') && scorecardGenerator.includes('modulePath: "../api/strategy2-latest"') && api.includes("strategy2_v3_snapshot_not_formal_complete"));
-  add(checks, "unique_schedule_runner_owns_v3", scheduleRegistry.includes('"Fuman Strategy2 Unified 0845-1230"') && scheduleRegistry.includes('"runner": "run-strategy2-v3-unified.ps1"') && scheduleRegistry.includes(`"sourceContract": "${CONTRACT}"`));
+  add(checks, "unique_schedule_runner_owns_v3", scheduleRegistry.includes('"Fuman Strategy2 Unified 0845-1230"') && scheduleRegistry.includes('"runner": "ops/run-strategy2-v3-unified.ps1"') && scheduleRegistry.includes(`"sourceContract": "${CONTRACT}"`));
   const retiredLegacyFiles = [
     "run-strategy2-intraday.ps1",
     "run-strategy2-e2e-closure.ps1",
@@ -110,7 +117,14 @@ function main() {
   const actualRatio = Number(coverage.formalWaterCoverageRatio || (expected > 0 ? ready / expected : 0));
   const minimumReady = Math.ceil(expected * requiredRatio);
   add(checks, "receipt_uses_cross_machine_shared_water", coverage.motherPool === "fugle_daytrade_priority_pool" && coverage.quote === "fugle_daytrade_quotes_live" && coverage.intraday1m === "fugle_daytrade_intraday_1m", JSON.stringify({ motherPool: coverage.motherPool, quote: coverage.quote, intraday1m: coverage.intraday1m }));
-  add(checks, "receipt_websocket_evidence_is_formal", coverage.websocketFormalReady === true && coverage.websocket?.formalReady === true && coverage.websocket?.primarySource === "fugle-websocket" && coverage.websocket?.restDisabled === true && coverage.noLegacyReadbackViews === true && coverage.noTop40Gate === true && coverage.noPreviousGoodFallback === true, JSON.stringify(coverage.websocket || {}));
+  add(checks, "receipt_shared_websocket_evidence_is_formal", coverage.websocketFormalReady === true
+    && coverage.websocket?.formalReady === true
+    && coverage.websocket?.primarySource === "supabase_shared_fugle_daytrade_source"
+    && coverage.websocket?.mode === "cross_machine_shared_water"
+    && coverage.noLegacyReadbackViews === true
+    && coverage.noTop40Gate === true
+    && coverage.noPreviousGoodFallback === true,
+  JSON.stringify(coverage.websocket || {}));
 
   if (requireComplete) {
     add(checks, "formal_run_complete", receipt.status === "complete" && receipt.complete === true && receipt.publishAllowed === true && receipt.formalDisplayAllowed === true, receipt.status || "missing");

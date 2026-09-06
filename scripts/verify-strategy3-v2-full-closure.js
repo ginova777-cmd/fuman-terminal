@@ -77,6 +77,14 @@ function runTerminalLegacyApiProbe(date) {
 
 function main() {
   add(ROOT === path.resolve(__dirname, ".."), "strategy3_v2_root_not_self_derived", { root: ROOT });
+  for (const retired of [
+    "run-strategy3-battle-verify.ps1",
+    "scripts/verify-strategy3-battle-state.js",
+    "scripts/verify-strategy3-alert-path.js",
+    "install-strategy3-battle-tasks.ps1",
+  ]) {
+    add(!fs.existsSync(path.join(ROOT, retired)), "strategy3_v2_retired_verifier_still_exists", { file: retired });
+  }
   const files = [
     "scripts/strategy3-v2-contract.js",
     "scripts/check-strategy3-v2-readiness.js",
@@ -118,7 +126,7 @@ function main() {
   const readinessRun = runNode("readiness", "check-strategy3-v2-readiness.js", [`--trade-date=${tradeDate}`]);
   // Verifiers are read-only. They must never rerun the scanner or rewrite receipts.
   const surfaceRun = runNode("surface", "verify-strategy3-v2-surface-closure.js", [`--trade-date=${tradeDate}`]);
-  const waterUniverseRun = runNode("water_universe", "verify-strategy3-v2-water-universe.js", []);
+  const waterUniverseRun = runNode("water_universe", "verify-strategy3-v2-water-universe.js", [`--trade-date=${tradeDate}`]);
   const schemaContractRun = runNode("schema_contract", "verify-strategy3-v2-schema-contract.js", []);
   const collectorBootRun = runNode("collector_boot_contract", "verify-strategy3-v2-collector-boot-contract.js", []);
   const scanReceipt = readJson(scanReceiptPath(compactDate), {});

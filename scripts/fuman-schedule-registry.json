@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-08-27T12:04:39.989Z",
+  "updatedAt": "2026-09-06T05:18:27.387Z",
   "policyVersion": 4,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
@@ -113,6 +113,7 @@
       "Fuman Strategy2 V2 Recovery",
       "Fuman Strategy2 V2 Unattended",
       "Fuman Strategy2 V3 Water Gate 0845",
+      "Fuman Strategy3 Battle Verify 1305",
       "Fuman Strategy3 Battle Verify 1323",
       "Fuman Strategy3 Battle Verify 1335",
       "Fuman Strategy3 Complete Scan 1318",
@@ -456,12 +457,6 @@
       }
     },
     "receiptCoverage": {
-      "Fuman Strategy3 Battle Verify 1305": {
-        "files": [
-          "strategy3.json"
-        ],
-        "detail": "covered by later Strategy3 complete receipt"
-      },
       "Fuman Strategy3 Complete Scan 1300": {
         "files": [
           "strategy3.json"
@@ -542,13 +537,6 @@
       "expectedTriggers": [
         "20:05"
       ]
-    },
-    {
-      "taskName": "\\Fuman Daily Battle Verify 2155",
-      "displayName": "Fuman Daily Battle Verify 2155",
-      "description": "Daily battle verification.",
-      "time": "21:55",
-      "expectedState": "Ready"
     },
     {
       "taskName": "\\Fuman Freshness Gate Fast 0845-1645",
@@ -856,20 +844,6 @@
       "displayName": "Fuman Market Overview Watchdog 0901",
       "description": "Disabled: market overview patrol is disabled.",
       "time": "09:01",
-      "expectedState": "Disabled"
-    },
-    {
-      "taskName": "\\Fuman Strategy3 Battle Verify 1323",
-      "displayName": "Fuman Strategy3 Battle Verify 1323",
-      "description": "Disabled: duplicate Strategy3 battle verify.",
-      "time": "13:23",
-      "expectedState": "Disabled"
-    },
-    {
-      "taskName": "\\Fuman Strategy3 Battle Verify 1335",
-      "displayName": "Fuman Strategy3 Battle Verify 1335",
-      "description": "Disabled: duplicate Strategy3 battle verify.",
-      "time": "13:35",
       "expectedState": "Disabled"
     },
     {
@@ -1400,7 +1374,7 @@
       "expectedTriggers": [
         "08:45"
       ],
-      "runner": "run-strategy2-v3-unified.ps1",
+      "runner": "ops/run-strategy2-v3-unified.ps1",
       "sourceContract": "strategy2-live-v3",
       "unattendedStatus": "s4u_background_single_runner"
     },

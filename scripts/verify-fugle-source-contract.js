@@ -411,7 +411,7 @@ function staticChecks() {
     "ops/public-slot/Strategy2ReadinessContractCache.sql",
     "ops/public-slot/SupabasePublicSlot-StrategyViewsAndHealthPatch.sql",
     "lib/supabase-public-slot.js",
-    "scripts/verify-strategy2-battle-state.js",
+    "scripts/verify-strategy2-v3-live-closure.js",
   ]) {
     forbidRegex(file, /today_candle_count\W*>=\W*(20|35)|rows_today\W*>=\W*(20|35)/, "today-only candle count as MA readiness");
     forbidRegex(file, /intraday_1m_not_ready_ge_35/, "old intraday_1m_not_ready_ge_35 reason");

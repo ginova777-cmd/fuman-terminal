@@ -100,7 +100,7 @@ npm run verify:data-freshness
 Readiness:
 
 ```powershell
-node --use-system-ca scripts\verify-daily-battle-readiness.js
+npm run verify:canonical-verifier-authority
 ```
 
 Health:

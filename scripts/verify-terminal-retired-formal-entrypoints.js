@@ -16,6 +16,38 @@ const retiredDaytradeEntrypoints = [
   "FugleDayTradeScanner.ps1",
   "Watch-FugleSupabaseCoverage.ps1",
 ];
+
+const retiredVerifierEntrypoints = [
+  "run-strategy2-battle-verify.ps1",
+  "scripts/verify-strategy2-battle-state.js",
+  "run-strategy3-battle-verify.ps1",
+  "scripts/verify-strategy3-battle-state.js",
+  "scripts/verify-strategy3-alert-path.js",
+  "install-strategy3-battle-tasks.ps1",
+  "run-daily-battle-verify.ps1",
+  "scripts/verify-daily-battle-readiness.js",
+  "install-battle-verify-tasks.ps1",
+  "package.json.pre-no-fake-root-chain-20260809.bak",
+  "scripts/verify-terminal-no-fake-unattended.js.bak-20260809-readiness",
+  "scripts/verify-terminal-recovery-queue.js.pre-deferred-receipt-hardgate-20260809.bak",
+];
+for (const retired of retiredVerifierEntrypoints) {
+  add(!fs.existsSync(path.join(root, retired)), "legacy_verifier_entrypoint_absent", retired);
+}
+for (const activeContractFile of [
+  "AGENTS.md",
+  "package.json",
+  "scripts/verify-active-strategy-root-authority.js",
+  "scripts/verify-api-unattended-scorecard.js",
+  "scripts/verify-fugle-source-contract.js",
+  "scripts/verify-strategy3-prewater-static.js",
+  "scripts/verify-supabase-conservative-recovery.js",
+]) {
+  const source = read(activeContractFile);
+  for (const retired of retiredVerifierEntrypoints) {
+    add(!source.includes(path.basename(retired)), "legacy_verifier_reference_absent", `${activeContractFile}:${retired}`);
+  }
+}
 for (const retired of retiredDaytradeEntrypoints) {
   add(!fs.existsSync(path.join(root, retired)), "legacy_daytrade_entrypoint_absent", retired);
   add(!fs.existsSync(path.join(root, "scripts", retired)), "legacy_daytrade_script_absent", retired);

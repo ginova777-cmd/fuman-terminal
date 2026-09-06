@@ -26,6 +26,18 @@ const RESERVED_ROUTE_ARTIFACTS = new Set(RESERVED_PRODUCTION_ROUTES.flatMap((rou
 }));
 
 const EXACT_RETIRED = [
+  "run-strategy2-battle-verify.ps1",
+  "scripts/verify-strategy2-battle-state.js",
+  "run-strategy3-battle-verify.ps1",
+  "scripts/verify-strategy3-battle-state.js",
+  "scripts/verify-strategy3-alert-path.js",
+  "install-strategy3-battle-tasks.ps1",
+  "run-daily-battle-verify.ps1",
+  "scripts/verify-daily-battle-readiness.js",
+  "install-battle-verify-tasks.ps1",
+  "package.json.pre-no-fake-root-chain-20260809.bak",
+  "scripts/verify-terminal-no-fake-unattended.js.bak-20260809-readiness",
+  "scripts/verify-terminal-recovery-queue.js.pre-deferred-receipt-hardgate-20260809.bak",
   "scan-intraday-signals.js",
   "intraday-radar-rules.js",
   "scan-institution-cache.js",
