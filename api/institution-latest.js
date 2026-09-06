@@ -179,6 +179,34 @@ function normalizeRow(row) {
   };
 }
 
+function buildInstitutionFilterCounts(rows) {
+  const normalized = (Array.isArray(rows) ? rows : []).map((row) => normalizeRow(row));
+  const ratioHit = (row) => {
+    const explicit = cleanNumber(row.foreignTrustBuyVolumePct ?? row.foreign_trust_buy_volume_pct ?? row.institutionBuyVolumePct ?? row.foreignTrustVolumePct);
+    const avg = cleanNumber(row.fiveDayAvgVolume ?? row.five_day_avg_volume);
+    const percent = explicit || (avg > 0 ? ((cleanNumber(row.foreign) + cleanNumber(row.trust)) / avg) * 100 : 0);
+    return cleanNumber(row.foreign) + cleanNumber(row.trust) > 0 && percent > 0;
+  };
+  const tdccHit = (row) => {
+    const increasing = cleanNumber(row.ratioIncrease ?? row.ratio_increase) > 0
+      || (cleanNumber(row.ratio3 ?? row.ratio1000Week3) > 0
+        && cleanNumber(row.ratio3 ?? row.ratio1000Week3) >= cleanNumber(row.ratio2 ?? row.ratio1000Week2)
+        && cleanNumber(row.ratio2 ?? row.ratio1000Week2) >= cleanNumber(row.ratio1 ?? row.ratio1000Week1));
+    return cleanNumber(row.foreignStreak ?? row.foreign_streak) >= 3
+      && (cleanNumber(row.foreignLots ?? row.foreign_lots) > 0 || cleanNumber(row.foreign) > 0)
+      && increasing;
+  };
+  return {
+    contract: "institution-filter-counts-v1",
+    rowsChecked: normalized.length,
+    foreignStreak: normalized.filter((row) => cleanNumber(row.foreignStreak ?? row.foreign_streak) > 0).length,
+    trustStreak: normalized.filter((row) => cleanNumber(row.trustStreak ?? row.trust_streak) > 0).length,
+    jointStreak: normalized.filter((row) => cleanNumber(row.jointStreak ?? row.joint_streak) > 0).length,
+    foreignTrustVolumePct: normalized.filter(ratioHit).length,
+    tdcc1000: normalized.filter(tdccHit).length,
+  };
+}
+
 function hasFieldValue(row, field) {
   const value = row?.[field];
   if (value === null || value === undefined) return false;
@@ -287,6 +315,7 @@ function buildPayload(rows, run, options = {}) {
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
     .map(normalizeRow);
   const outputRows = options.smallPayload ? sorted.slice(0, options.limit || 80) : sorted;
+  const filterCounts = buildInstitutionFilterCounts(outputRows);
   const data = Object.fromEntries(outputRows.map((row) => [row.code, row]).filter(([code]) => code));
   const fieldCompleteness = buildFieldCompleteness(sorted);
   const scanDate = String(run?.scan_date || rows[0]?.scan_date || "").replace(/-/g, "");
@@ -363,6 +392,7 @@ function buildPayload(rows, run, options = {}) {
     fieldContractVersion: INSTITUTION_FIELD_CONTRACT_VERSION,
     count: resultCount,
     returnedCount: outputRows.length,
+    filterCounts,
     sourceCoverage,
     institution_source_status_at_run: institutionSourceStatusAtRun,
     chip_source_status_at_run: institutionSourceStatusAtRun,
@@ -536,6 +566,7 @@ async function handler(request, response) {
 module.exports = withEntitlementRequired(handler, "institution");
 module.exports._test = {
   buildPayload,
+  buildInstitutionFilterCounts,
   normalizeRow,
   normalizeSourceHealth,
   buildFieldCompleteness,

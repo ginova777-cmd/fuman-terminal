@@ -56,7 +56,7 @@
     "strategy|策略3": { limit: 60, ttl: 22000, live: true, verify: true, noSnapshot: true },
     "strategy|策略4": { limit: 70, ttl: 24000 },
     "strategy|策略5": { limit: 140, ttl: 22000 },
-    "chip-trade|買賣超": { limit: 60, ttl: 32000 },
+    "chip-trade|買賣超": { limit: 60, ttl: 32000, live: true, noSnapshot: true },
   };
   const CHIP_TRADE_DEFAULT_FILTER = "";
   const CHIP_TRADE_FILTERS = [
@@ -1607,7 +1607,7 @@
     if (options.today) query.set("today", "1");
     if (isChipTradeRoute(route)) query.set("fieldContract", CHIP_TRADE_FIELD_CONTRACT_VERSION);
     if (isChipTradeRoute(route) && canvasState.signalFilter) query.set("mode", canvasState.signalFilter);
-    if (isChipTradeRoute(route) && endpoint === "/api/institution-latest" && !withBust) query.set("firstPaint", "1");
+    if (isChipTradeRoute(route) && endpoint === "/api/institution-latest" && !withBust && !options.noSnapshot) query.set("firstPaint", "1");
     if (withBust) query.set("t", String(Date.now()));
     return `${endpoint}${endpoint.includes("?") ? "&" : "?"}${query.toString()}`;
   }
@@ -2495,6 +2495,7 @@
         latestOverwriteAllowed: payload.latestOverwriteAllowed ?? quality.latestOverwriteAllowed,
         sourceStatus: payload.source_status_at_run?.status || payload.sourceCoverage?.status || payload.sourceHealth?.status || "",
         cacheSource: payload.cacheSource || payload.transport?.source || payload.source || "",
+        filterCounts: payload.filterCounts && typeof payload.filterCounts === "object" ? payload.filterCounts : null,
       };
     }
     if (!isStrategy2Route(route)) return null;
@@ -8740,11 +8741,17 @@
     return cardsFromCounts([...primary, ...counts], "Strategy5 細分策略");
   }
 
-  function institutionOptionCards(rows) {
+  function institutionOptionCards(rows, payloadMeta = {}) {
+    const canonical = payloadMeta?.filterCounts?.contract === "institution-filter-counts-v1"
+      && cleanNumber(payloadMeta.filterCounts.rowsChecked) === (Array.isArray(rows) ? rows.length : 0)
+      ? payloadMeta.filterCounts
+      : null;
     return cardsFromCounts(CHIP_TRADE_FILTERS.map((item) => ({
       key: item.key,
       label: item.label,
-      count: chipTradeFilterCount(rows, item.key),
+      count: canonical && Object.prototype.hasOwnProperty.call(canonical, item.key)
+        ? cleanNumber(canonical[item.key])
+        : chipTradeFilterCount(rows, item.key),
     })), "買賣超細分策略");
   }
 
@@ -8776,7 +8783,7 @@
     if (isStrategy4Route(route)) return strategy4OptionCards(rows);
     if (isStrategy5Route(route)) return strategy5OptionCards(rows);
     if (isStrategy3Route(route)) return strategy3OptionCards(rows);
-    if (isChipTradeRoute(route)) return institutionOptionCards(rows);
+    if (isChipTradeRoute(route)) return institutionOptionCards(rows, payloadMeta);
     if (isCbDetectRoute(route)) return cbOptionCards(rows);
     if (isWarrantFlowRoute(route)) return warrantOptionCards(rows);
     return cardsFromCounts(unifiedListTags(rows[0] || {}, route).map((label) => ({ label, count: rows.length })), "細分策略選項");
