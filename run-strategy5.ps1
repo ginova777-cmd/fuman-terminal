@@ -248,7 +248,7 @@ try {
 } catch {
   $reason = "critical scan failed during strict tri-surface verification: $($_.Exception.Message)"
   Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 $reason"
-  Write-Strategy5Receipt "failed" 1 $false 0 "" @($reason) $reason
+  Write-Strategy5Receipt "failed" 1 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason
   exit 1
 }
 Write-Strategy5Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
