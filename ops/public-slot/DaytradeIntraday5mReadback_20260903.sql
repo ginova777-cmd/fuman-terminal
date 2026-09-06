@@ -14,6 +14,16 @@ create table if not exists public.fugle_intraday_5m_signal_cache(
  ma20_warmup_mode text not null default 'previous_and_current_trade_date',source text not null default 'fugle_daytrade_intraday_1m',
  run_id text not null,updated_at timestamptz not null default now(),primary key(trade_date,symbol,candle_time)
 );
+alter table public.fugle_intraday_5m_signal_cache
+ add column if not exists rsi3_5m numeric,
+ add column if not exists rsi3_cross_rsi6_up_5m boolean,
+ add column if not exists kd_5_3_golden_cross_5m boolean,
+ add column if not exists kd_period integer not null default 5,
+ add column if not exists kd_k_smoothing integer not null default 3,
+ add column if not exists kd_d_smoothing integer not null default 3,
+ add column if not exists kd_seed numeric not null default 50,
+ add column if not exists trend_5m_strategy_version text not null default 'golden-cross-any-v3',
+ add column if not exists golden_cross_any_5m boolean;
 create index if not exists fugle_intraday_5m_signal_cache_latest on public.fugle_intraday_5m_signal_cache(symbol,trade_date desc,candle_time desc);
 create or replace view public.v_fugle_intraday_5m_readback as select * from public.fugle_intraday_5m_signal_cache;
 grant select on public.v_fugle_intraday_5m_readback to anon,authenticated,service_role;
@@ -40,10 +50,13 @@ create table if not exists public.fugle_intraday_5m_verification_receipts(
  writer_update_frequency text not null default 'event_driven_and_every_5_minutes_during_market',
  created_at timestamptz not null default now()
 );
+alter table public.fugle_intraday_5m_verification_receipts
+ add column if not exists strategy_version text not null default 'golden-cross-any-v3';
 create index if not exists fugle_intraday_5m_verification_receipts_latest
  on public.fugle_intraday_5m_verification_receipts(trade_date desc,verified_at desc);
+drop view if exists public.v_fugle_intraday_5m_verification_readback;
 create or replace view public.v_fugle_intraday_5m_verification_readback as
- select contract,run_id,trade_date,status,complete,exit_code,first_blocker,
+ select contract,strategy_version,run_id,trade_date,status,complete,exit_code,first_blocker,
         anon_http_status,ssl_ok,verified_at,latest_complete_bar_end,
         requested_symbols,written_symbols,missing_symbols,readback_rows,
         writer_update_frequency
