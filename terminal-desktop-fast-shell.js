@@ -5525,7 +5525,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-88";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-89";
   }
 
   function loadScriptOnce(src, attr) {
@@ -9118,11 +9118,30 @@
     const meta = strategyMeta(link);
     const drawableRows = (canvasState.filtered?.length ? canvasState.filtered : canvasState.rows || []).filter((row) => row && (row.code || row.title || row.line));
     if (isMemberStrategyPreviewRoute(key) && !drawableRows.length && hasMemberPreviewToken() && !payloadMetaHasResolvedResponse(canvasPayloadMeta(key))) return renderMemberStrategyPendingShell(key, meta, panel);
-    // Every live strategy owns and rebuilds the same current-route shell.  The
-    // retired Strategy2 DOM updater could only mutate its old table nodes, so a
-    // switch from Strategy3/4/5 left the previous strategy visible.
-    if (isStrategy2Route(key) || isStrategy3Route(key) || isStrategy4Route(key) || isStrategy5Route(key)) {
+    if (isStrategy3Route(key) || isStrategy4Route(key) || isStrategy5Route(key)) {
       return renderUnifiedListShell(key, meta, panel);
+    }
+    // Strategy2 keeps its original two-column battle appearance. Rebuild its
+    // own host nodes every time we return from a unified Strategy3/4/5 page so
+    // the legacy visual renderer never mutates another strategy's DOM.
+    if (isStrategy2Route(key) && !panel.querySelector("#strategy-table")) {
+      panel.innerHTML = `
+        <header class="strategy-header">
+          <div><span class="console-badge"></span><h1></h1><p></p></div>
+          <div class="header-time strategy-time"></div>
+        </header>
+        <section class="strategy-terminal" aria-label="Strategy scanner">
+          <section class="strategy-results">
+            <div class="strategy-toolbar"><div><span class="console-badge"></span><h2></h2><p id="strategy-summary"></p></div></div>
+            <div class="strategy-metrics">
+              <article><span>符合股票</span><strong id="strategy-match-count">--</strong></article>
+              <article><span>平均分數</span><strong id="strategy-avg-score">--</strong></article>
+              <article><span>最高命中</span><strong id="strategy-top-hit">--</strong></article>
+            </div>
+            <label class="strategy-search"><span>搜尋股票</span><input id="strategy-search" type="search" autocomplete="off"></label>
+            <div class="strategy-table" id="strategy-table"></div>
+          </section>
+        </section>`;
     }
     panel.dataset.fumanRouteSnapshotRestoring = "1";
     panel.dataset.fumanCanvasPersistent = "1";
