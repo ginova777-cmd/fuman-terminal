@@ -193,6 +193,7 @@ function verifyWiring() {
     assert.ok(desktopSource.includes(id), `${id} must remain visible in Strategy5 UI`);
   });
   assert.ok(scannerSource.includes("strategy5CompositeRules"), "run payload must publish composite rule contract");
+  assert.ok(scannerSource.includes("fetchDailyHistory(stock, runMarketDate)"), "daily history lookup must require the Strategy5 run market date");
 }
 
 function verifyCompositeSourceGate() {

@@ -1933,8 +1933,8 @@ async function fetchSupabaseDailyHistory(stock, expectedDate = "") {
   return [];
 }
 
-async function fetchDailyHistory(stock) {
-  const supabaseRows = await fetchSupabaseDailyHistory(stock);
+async function fetchDailyHistory(stock, expectedDate = "") {
+  const supabaseRows = await fetchSupabaseDailyHistory(stock, expectedDate);
   if (supabaseRows.length >= 35) return supabaseRows;
   try {
     const rows = await fetchYahooHistory(stock);
@@ -2617,7 +2617,7 @@ async function buildMatches(stocks, institutionData, issuedSharesMap = new Map()
     .slice(0, Number(process.env.STRATEGY5_HISTORY_CANDIDATE_LIMIT || 900));
   const historyByCode = new Map();
   await mapLimit(historyCandidates, HISTORY_CONCURRENCY, async (stock) => {
-    const rows = await fetchDailyHistory(stock);
+    const rows = await fetchDailyHistory(stock, runMarketDate);
     if (rows.length) historyByCode.set(stock.code, rows);
   });
 
