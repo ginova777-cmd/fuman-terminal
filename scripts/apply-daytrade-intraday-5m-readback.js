@@ -17,7 +17,7 @@ async function main() {
   catch(first){ try { method="exec_sql.sql"; await rpc({sql}); }
     catch(second){ method="psql"; const db=secret("supabase-db-url.txt"); if(!db)throw second; const psql=process.env.PSQL_PATH||"C:\\Program Files\\PostgreSQL\\17\\bin\\psql.exe"; const result=spawnSync(psql,[db,"-v","ON_ERROR_STOP=1","-f",SQL_FILE],{encoding:"utf8",timeout:120000,windowsHide:true}); if(result.error||result.status!==0)throw new Error(String(result.stderr||result.error||"psql failed").slice(0,1000)); }
   }
-  const receipt = {ok:true,contract:"daytrade_intraday_5m_readback_apply_v1",applied_at:new Date().toISOString(),sql_file:SQL_FILE,view:"v_fugle_intraday_5m_readback",method,formal_buy_authority:false};
+  const receipt = {ok:true,contract:"daytrade_intraday_5m_readback_apply_v2",applied_at:new Date().toISOString(),sql_file:SQL_FILE,view:"v_fugle_intraday_5m_readback",verification_view:"v_fugle_intraday_5m_verification_readback",method,formal_buy_authority:false};
   const receiptPath=path.join("C:\\fuman-runtime","data","scan-receipts","daytrade-intraday-5m-readback-apply.json");
   fs.mkdirSync(path.dirname(receiptPath),{recursive:true}); fs.writeFileSync(receiptPath,JSON.stringify({...receipt,receipt_path:receiptPath},null,2)+"\n");
   console.log(JSON.stringify({...receipt,receipt_path:receiptPath},null,2));

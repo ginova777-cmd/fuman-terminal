@@ -20,5 +20,37 @@ grant select on public.v_fugle_intraday_5m_readback to anon,authenticated,servic
 revoke insert,update,delete on public.fugle_intraday_5m_signal_cache from anon,authenticated;
 grant select,insert,update,delete on public.fugle_intraday_5m_signal_cache to service_role;
 comment on view public.v_fugle_intraday_5m_readback is 'Lightweight canonical 5m trend readback. Only the independent service-role writer may populate completed bars.';
+
+create table if not exists public.fugle_intraday_5m_verification_receipts(
+ run_id text primary key,
+ contract text not null,
+ trade_date date not null,
+ status text not null check(status in ('complete','blocked')),
+ complete boolean not null,
+ exit_code integer not null,
+ first_blocker text,
+ anon_http_status integer,
+ ssl_ok boolean not null,
+ verified_at timestamptz not null,
+ latest_complete_bar_end timestamptz,
+ requested_symbols text[] not null default '{}',
+ written_symbols text[] not null default '{}',
+ missing_symbols text[] not null default '{}',
+ readback_rows integer not null default 0,
+ writer_update_frequency text not null default 'event_driven_and_every_5_minutes_during_market',
+ created_at timestamptz not null default now()
+);
+create index if not exists fugle_intraday_5m_verification_receipts_latest
+ on public.fugle_intraday_5m_verification_receipts(trade_date desc,verified_at desc);
+create or replace view public.v_fugle_intraday_5m_verification_readback as
+ select contract,run_id,trade_date,status,complete,exit_code,first_blocker,
+        anon_http_status,ssl_ok,verified_at,latest_complete_bar_end,
+        requested_symbols,written_symbols,missing_symbols,readback_rows,
+        writer_update_frequency
+ from public.fugle_intraday_5m_verification_receipts;
+grant select on public.v_fugle_intraday_5m_verification_readback to anon,authenticated,service_role;
+revoke insert,update,delete on public.fugle_intraday_5m_verification_receipts from anon,authenticated;
+grant select,insert,update,delete on public.fugle_intraday_5m_verification_receipts to service_role;
+comment on view public.v_fugle_intraday_5m_verification_readback is 'Canonical anon-readable result of a real 5m writer plus verifier run; join technical rows by run_id and trade_date.';
 notify pgrst,'reload schema';
 commit;
