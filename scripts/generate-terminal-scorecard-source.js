@@ -6,6 +6,7 @@ const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase
 const { isTwseTradingDay } = require("./twse-trading-day");
 const { RULE_CONTRACT, applyScorecardRuleMetadata, verifyScorecardStrategyRules } = require("../lib/scorecard-rule-locks");
 const { buildScanAudit } = require("../lib/scorecard-scan-audit");
+const { mergeCalendarMonthRecords, scorecardHistoryDates, buildCalendarMonthRetention } = require("../lib/scorecard-calendar-month-retention");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -1301,7 +1302,8 @@ async function main() {
       followupPositiveGrowthDays: 7,
       followupPositiveGrowthRule: "close_or_high_T+7 > entry_price",
     },
-    days: 1,
+    days: 0,
+    historyDates: [],
     records: activeFiltered,
     summary: {
       latestDate,
@@ -1325,41 +1327,37 @@ async function main() {
   const scopedRefreshRunId = cleanText(process.env.FUMAN_SCORECARD_REFRESH_RUN_ID || strategy4RefreshRunId);
   const scopedStrategyLabels = { strategy4: "策略4成績單", strategy5: "策略5成績單", institution: "買賣超成績單" };
   const scopedStrategyLabel = scopedStrategyLabels[scopedRefreshKey] || "";
+  const previous = readJsonSafe(OUT_FILE) || {};
+  const previousRecords = Array.isArray(previous.records) ? previous.records : [];
+  const previousReports = Array.isArray(previous.sourceReports) ? previous.sourceReports : [];
+  let freshRecords = payload.records;
+  let replaceStrategies = activeReports.filter((report) => report.ok === true).map((report) => cleanText(report.strategy)).filter(Boolean);
   if (scopedRefreshKey && scopedStrategyLabel && scopedRefreshRunId) {
-    const previous = readJsonSafe(OUT_FILE) || {};
-    const previousRecords = Array.isArray(previous.records) ? previous.records : [];
-    const previousReports = Array.isArray(previous.sourceReports) ? previous.sourceReports : [];
     const scopedRecords = payload.records.filter((row) => cleanText(row.strategy) === scopedStrategyLabel);
     const scopedReports = payload.sourceReports.filter((row) => cleanText(row.key).toLowerCase() === scopedRefreshKey);
     if (scopedReports.length !== 1 || cleanText(scopedReports[0].runId) !== scopedRefreshRunId) {
       throw new Error(`scoped scorecard refresh runId mismatch key=${scopedRefreshKey} expected=${scopedRefreshRunId} actual=${cleanText(scopedReports[0]?.runId) || "missing"}`);
     }
-    payload.records = [
-      ...previousRecords.filter((row) => cleanText(row.strategy) !== scopedStrategyLabel),
-      ...scopedRecords,
-    ];
+    freshRecords = scopedRecords;
+    replaceStrategies = [scopedStrategyLabel];
     payload.sourceReports = [
       ...previousReports.filter((row) => cleanText(row.key).toLowerCase() !== scopedRefreshKey),
       ...scopedReports,
     ];
-    const mergedDaily = summarize(payload.records);
-    payload.summary = {
-      latestDate: payload.latestDate,
-      rows: payload.records.length,
-      daily: mergedDaily,
-      byStrategy: mergedDaily.map((row) => ({
-        strategy: row.strategy,
-        rows: row.signals,
-        wins: row.wins,
-        losses: row.losses,
-        flats: row.flats,
-        winRate: row.win_rate_pct,
-        pnl: row.total_pnl,
-      })),
-    };
     payload.refreshScope = `${scopedRefreshKey}-only`;
     payload.refreshRunId = scopedRefreshRunId;
   }
+  payload.records = mergeCalendarMonthRecords({ previousRecords, freshRecords, anchorDate: payload.latestDate, replaceDate: payload.latestDate, replaceStrategies });
+  payload.historyDates = scorecardHistoryDates(payload.records);
+  payload.days = payload.historyDates.length;
+  payload.retention = buildCalendarMonthRetention(payload.latestDate, payload.records);
+  const mergedDaily = summarize(payload.records);
+  payload.summary = {
+    latestDate: payload.latestDate,
+    rows: payload.records.length,
+    daily: mergedDaily,
+    byStrategy: mergedDaily.map((row) => ({ strategy: row.strategy, rows: row.signals, wins: row.wins, losses: row.losses, flats: row.flats, winRate: row.win_rate_pct, pnl: row.total_pnl })),
+  };
   const verificationPayload = scopedRefreshKey && scopedStrategyLabel && scopedRefreshRunId
     ? {
         ...payload,
@@ -1384,8 +1382,8 @@ async function main() {
       ok: true,
       out: OUT_FILE,
       latestDate,
-      rows: activeFiltered.length,
-      dailyRows: daily.length,
+      rows: payload.records.length,
+      dailyRows: payload.summary.daily.length,
       reports: activeReports,
       currentWriteAllowed: false,
       previousGoodPreserved: true,
@@ -1400,8 +1398,8 @@ async function main() {
     ok: true,
     out: OUT_FILE,
     latestDate,
-    rows: activeFiltered.length,
-    dailyRows: daily.length,
+    rows: payload.records.length,
+    dailyRows: payload.summary.daily.length,
     reports: activeReports,
     currentWriteAllowed: true,
     writeDecision,

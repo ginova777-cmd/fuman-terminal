@@ -55,6 +55,7 @@ const FILES = [
   "lib/desktop-route-snapshot-cache.js",
   "lib/chip-trade-exclusions.js",
   "lib/scorecard-rule-locks.js",
+  "lib/scorecard-calendar-month-retention.js",
   "lib/supabase-public-slot.js",
   "lib/run-time-source-snapshot-contract.js",
   "lib/strategy-cache-status.js",

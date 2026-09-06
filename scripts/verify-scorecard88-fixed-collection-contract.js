@@ -7,10 +7,13 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const page = read("88.html");
 const api = read("api/scorecard.js");
 const collector = read("scripts/collect-terminal-scorecard-88.js");
+const generator = read("scripts/generate-terminal-scorecard-source.js");
+const exporter = read("scripts/export-scorecard-supabase-source.js");
 const surfaceEvidence = read("scripts/collect-scorecard88-terminal-surface-evidence.js");
 const wrapper = read("scripts/run-scorecard88-terminal-collector.ps1");
 const master = read("run-terminal-master-control.ps1");
 const registry = JSON.parse(read("scripts/fuman-schedule-registry.json").replace(/^\uFEFF/, ""));
+const { calendarMonthBounds, mergeCalendarMonthRecords, scorecardHistoryDates } = require("../lib/scorecard-calendar-month-retention");
 const issues = [];
 const definitions = [
   ["Fuman Scorecard88 Collect Strategy2 1240", "12:40"],
@@ -29,6 +32,10 @@ for (const invariant of ["querySupabase: false", "recalculated: false", "generat
 for (const invariant of ["outside_fixed_collection_window", "writeAllowed: false", "blobPublishAllowed: false", "fixedCollectionWindow(slot)"]) if (!collector.includes(invariant)) issues.push(`collector_window_guard_missing:${invariant}`);
 for (const invariant of ["publishCurrent = payload.ok === true", "if (publishCurrent) writeJsonAtomic(outputFile, payload)", "currentPublished: publishCurrent", "previousGoodPreserved: !publishCurrent"]) if (!collector.includes(invariant)) issues.push(`collector_previous_good_guard_missing:${invariant}`);
 if (!/publishBlob\(payload, todayKey, slot\.replace\(\":\", \"\"\), \{ publishCurrent \}\)/.test(collector)) issues.push("collector_blob_current_publish_not_guarded");
+for (const invariant of ["retainCalendarMonthRecords", "scorecardHistoryDates", "scorecard-calendar-month-trading-days-v1", "scorecard_current_month_trade_date_missing"]) if (!collector.includes(invariant)) issues.push(`collector_month_retention_missing:${invariant}`);
+for (const invariant of ["mergeCalendarMonthRecords", "buildCalendarMonthRetention", "payload.historyDates", "payload.days = payload.historyDates.length"]) if (!generator.includes(invariant)) issues.push(`generator_month_retention_missing:${invariant}`);
+for (const invariant of ["retainCalendarMonthRecords", "buildCalendarMonthRetention", "days: dates.length"]) if (!api.includes(invariant)) issues.push(`scorecard_api_month_retention_missing:${invariant}`);
+for (const invariant of ["calendarMonthBounds", "record_date=lte.${through}", "summary_date=lte.${through}", "buildCalendarMonthRetention"]) if (!exporter.includes(invariant)) issues.push(`scorecard_export_month_retention_missing:${invariant}`);
 for (const field of ["sourceDate", "startedAt", "finishedAt", "universeCount", "scannedCount", "resultCount", "qualityStatus", "evidenceStatus", "fallbackUsed", "publishAllowed", "desktopStatus", "mobileStatus", "scorecardUpdatedAt", "firstBlocker", "reasonCode"]) {
   if (!collector.includes(field)) issues.push(`collector_required_field_missing:${field}`);
 }
@@ -69,6 +76,26 @@ for (const [name, time] of definitions) {
   if (!Array.isArray(row.triggers) || !row.triggers.includes(time)) issues.push(`live_task_trigger_mismatch:${name}`);
   if (row.logonType !== "S4U") issues.push(`live_task_not_s4u:${name}:${row.logonType || "unknown"}`);
 }
-const result = { ok: issues.length === 0, contract: "scorecard88-fixed-collection-contract-v5", fixedSlots: definitions.map(([,time]) => time), liveTaskCount: live.length, invariants: { scans: false, supabaseQueries: false, recalculation: false, runIdGeneration: false, authenticatedMobileRequiredForPass: true, nonCircularSurfaceEvidence: true, completeFieldContract: true, blockedCurrentPreservesPreviousGood: true }, issues };
+const september = calendarMonthBounds("2026-09-04");
+if (JSON.stringify(september) !== JSON.stringify({ month: "2026-09", startDate: "2026-09-01", endDate: "2026-09-30" })) issues.push(`september_bounds_invalid:${JSON.stringify(september)}`);
+const fixtureRows = mergeCalendarMonthRecords({
+  anchorDate: "2026-09-04", replaceDate: "2026-09-04", replaceStrategies: ["策略2成績單"],
+  previousRecords: [
+    { record_id: "aug", record_date: "2026-08-31", strategy: "策略2成績單", ticker: "1101", entry_time: "09:01" },
+    { record_id: "sep1", record_date: "2026-09-01", strategy: "策略2成績單", ticker: "1101", entry_time: "09:01" },
+    { record_id: "old", record_date: "2026-09-04", strategy: "策略2成績單", ticker: "2330", entry_time: "09:05", score: 1 },
+    { record_id: "weekend", record_date: "2026-09-05", strategy: "策略2成績單", ticker: "9999", entry_time: "09:05" },
+  ],
+  freshRecords: [
+    { record_id: "new", record_date: "2026-09-04", strategy: "策略2成績單", ticker: "2330", entry_time: "09:05", score: 2 },
+    { record_id: "new2", record_date: "2026-09-04", strategy: "策略2成績單", ticker: "2454", entry_time: "09:06" },
+  ],
+});
+const fixtureDates = scorecardHistoryDates(fixtureRows);
+if (fixtureRows.length !== 3) issues.push(`month_merge_row_count_invalid:${fixtureRows.length}`);
+if (JSON.stringify(fixtureDates) !== JSON.stringify(["2026-09-04", "2026-09-01"])) issues.push(`month_merge_dates_invalid:${JSON.stringify(fixtureDates)}`);
+if (fixtureRows.some((row) => ["aug", "old", "weekend"].includes(row.record_id))) issues.push("month_merge_retired_rows_present");
+if (!fixtureRows.some((row) => row.record_id === "new" && row.score === 2)) issues.push("month_merge_fresh_row_missing");
+const result = { ok: issues.length === 0, contract: "scorecard88-fixed-collection-contract-v6", fixedSlots: definitions.map(([,time]) => time), liveTaskCount: live.length, invariants: { scans: false, supabaseQueries: false, recalculation: false, runIdGeneration: false, authenticatedMobileRequiredForPass: true, nonCircularSurfaceEvidence: true, completeFieldContract: true, blockedCurrentPreservesPreviousGood: true, calendarMonthTradingDaysOnly: true, crossMonthRecordsAllowed: false, nonTradingDayPlaceholders: false }, issues };
 console.log(JSON.stringify(result, null, 2));
 process.exit(result.ok ? 0 : 1);

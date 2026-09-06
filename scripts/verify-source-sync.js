@@ -49,6 +49,7 @@ const KEY_FILES = [
   "lib/strategy2-source-publish-gate.js",
   "lib/run-time-source-snapshot-contract.js",
   "lib/scorecard-rule-locks.js",
+  "lib/scorecard-calendar-month-retention.js",
   "terminal-strategy-config.js",
   "version.json",
   "package.json",

@@ -4,6 +4,7 @@ const path = require("path");
 const { readSnapshot } = require("../lib/supabase-snapshots");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
+const { retainCalendarMonthRecords, buildCalendarMonthRetention } = require("../lib/scorecard-calendar-month-retention");
 
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
@@ -1673,7 +1674,10 @@ function enrichRoute88SourceReport(report, scorecardUpdatedAt = "") {
 }
 
 function selectPayloadDate(payload, requestedDate = "") {
-  const allRecords = (Array.isArray(payload?.records) ? payload.records : []).filter((row) => !isRetiredScorecardSurfaceName(row?.strategy));
+  const activeRecords = (Array.isArray(payload?.records) ? payload.records : []).filter((row) => !isRetiredScorecardSurfaceName(row?.strategy));
+  const newestRecordDate = historyDates(activeRecords)[0] || "";
+  const monthAnchor = isoDate(payload?.latestDate || payload?.marketDate || newestRecordDate);
+  const allRecords = retainCalendarMonthRecords(activeRecords, monthAnchor);
   const dates = historyDates(allRecords);
   const selectedDate = dates.includes(requestedDate) ? requestedDate : (defaultScorecardDate(payload, allRecords, dates) || dates[0] || "");
   const selectedRecords = selectedDate ? allRecords.filter((row) => cleanText(row.record_date) === selectedDate) : allRecords;
@@ -1704,6 +1708,8 @@ function selectPayloadDate(payload, requestedDate = "") {
     selectedDate: selectedDate || payload.latestDate || "",
     historyLatestDate: dates[0] || payload.latestDate || "",
     historyDates: dates,
+    days: dates.length,
+    retention: buildCalendarMonthRetention(monthAnchor, allRecords),
     sourceQuery: sanitizeScorecardSourceQuery(payload.sourceQuery || {}),
     records,
     sourceReports,

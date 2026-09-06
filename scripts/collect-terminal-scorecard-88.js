@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { retainCalendarMonthRecords, scorecardHistoryDates, buildCalendarMonthRetention } = require("../lib/scorecard-calendar-month-retention");
 
 const runtimeRoot = process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
 const dataDir = path.join(runtimeRoot, "data");
@@ -250,15 +251,24 @@ if (recoveryAuthorized && receipts.some((row) => row.runId !== expectedRunId)) {
   process.exit(7);
 }
 
+const retainedRecords = retainCalendarMonthRecords(previous.records, today);
+const retainedHistoryDates = scorecardHistoryDates(retainedRecords);
+const currentTradingDatePresent = retainedHistoryDates.includes(today);
+const payloadBlocker = !currentTradingDatePresent ? "scorecard_current_month_trade_date_missing" : receipts.find((row) => !row.ok)?.firstBlocker || "";
+
 const payload = {
   ...previous,
-  ok: receipts.every((row) => row.ok),
+  ok: receipts.every((row) => row.ok) && currentTradingDatePresent,
   source: "terminal-canonical-fixed-slot-collector",
   cacheSource: "terminal-canonical-json",
   contract: "scorecard88-terminal-canonical-collector-v1",
   latestDate: today,
   marketDate: today,
   updatedAt: collectedAt,
+  days: retainedHistoryDates.length,
+  records: retainedRecords,
+  historyDates: retainedHistoryDates,
+  retention: buildCalendarMonthRetention(today, retainedRecords),
   sourceReports: [...reportsByKey.values()],
   collectionPolicy: {
     fixedSlots: Object.keys(slots),
@@ -267,6 +277,7 @@ const payload = {
     scanAllowed: false,
     recalculateAllowed: false,
     generateRunIdAllowed: false,
+    retentionContract: "scorecard-calendar-month-trading-days-v1",
     recoveryAuthorized,
     recoveryReason: recoveryAuthorized ? recoveryReason : "",
   },
@@ -291,7 +302,7 @@ async function main() {
     immutableBlobPublished: Boolean(blob?.immutableUrl),
     previousGoodPreserved: !publishCurrent,
     blob,
-    firstBlocker: payload.ok ? blobError : receipts.find((row) => !row.ok)?.firstBlocker || "terminal_canonical_not_complete",
+    firstBlocker: payload.ok ? blobError : payloadBlocker || "terminal_canonical_not_complete",
     reports: receipts,
   };
   writeJsonAtomic(path.join(receiptDir, `scorecard88-collection-${todayKey}-${slot.replace(":", "")}.json`), receipt);

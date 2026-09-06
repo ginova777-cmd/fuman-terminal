@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 const { hydrateScorecardRuleMetadataFromReason } = require("../lib/scorecard-rule-locks");
+const { calendarMonthBounds, retainCalendarMonthRecords, scorecardHistoryDates, buildCalendarMonthRetention } = require("../lib/scorecard-calendar-month-retention");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUT_FILE = path.join(ROOT, "data", "scorecard-latest.json");
@@ -39,10 +40,8 @@ function cleanNumber(value) {
   return Number.isFinite(number) ? number : 0;
 }
 
-function dateDaysAgo(days) {
-  const date = new Date();
-  date.setUTCDate(date.getUTCDate() - Math.max(0, days - 1));
-  return date.toISOString().slice(0, 10);
+function taipeiDate(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 }
 
 function compactDate(value) {
@@ -273,7 +272,10 @@ async function main() {
   const outFile = argValue("out", OUT_FILE);
   const exportSource = cleanText(argValue("source", process.env.FUMAN_SCORECARD_EXPORT_SOURCE || TERMINAL_SCORECARD_SOURCE));
   const expectedDate = dateOnly(argValue("expected-date", process.env.FUMAN_SCANNER_TARGET_DATE || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || process.env.FUMAN_SCORECARD_EXPECTED_DATE || ""));
-  const since = dateDaysAgo(DAYS);
+  const monthAnchor = expectedDate || taipeiDate();
+  const monthRange = calendarMonthBounds(monthAnchor);
+  const since = monthRange.startDate;
+  const through = monthRange.endDate;
   const selectRecords = [
     "record_id",
     "record_date",
@@ -304,22 +306,25 @@ async function main() {
     "note",
     "source",
   ].join(",");
-  const records = (await supabaseGetPaged(
+  const queriedRecords = (await supabaseGetPaged(
     "trade_records",
     [
       `select=${selectRecords}`,
       exportSource ? `source=eq.${encodeURIComponent(exportSource)}` : "",
       `record_date=gte.${since}`,
+      `record_date=lte.${through}`,
       "order=record_date.desc,strategy.asc,ticker.asc",
     ].filter(Boolean).join("&"),
     RECORD_LIMIT,
   )).map(normalizeRecord).filter((row) => row.record_date && row.ticker);
+  const records = retainCalendarMonthRecords(queriedRecords, monthAnchor);
   const dailyRows = (await supabaseGetPaged(
     "strategy_daily_summary",
     [
       `select=${selectDaily}`,
       exportSource ? `source=eq.${encodeURIComponent(exportSource)}` : "",
       `summary_date=gte.${since}`,
+      `summary_date=lte.${through}`,
       "order=summary_date.desc,strategy.asc",
     ].filter(Boolean).join("&"),
     5000,
@@ -343,6 +348,7 @@ async function main() {
     sourceQuery: {
       source: exportSource,
       since,
+      through,
       expectedDate,
       selectedLatestDateReason: latestSelection.reason,
       latestDateRowFloor: MIN_LATEST_DATE_ROWS,
@@ -350,7 +356,9 @@ async function main() {
     },
     updatedAt: new Date().toISOString(),
     latestDate,
-    days: DAYS,
+    days: scorecardHistoryDates(records).length,
+    historyDates: scorecardHistoryDates(records),
+    retention: buildCalendarMonthRetention(monthAnchor, records),
     records,
     sourceReports,
     summary: summarize(records, dailyRows, latestDate),
