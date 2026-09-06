@@ -16,6 +16,11 @@ for (const file of wrappers) {
   const triSurface = text.indexOf('Assert-PostScanTriSurfaceClosure -Route');
   if (scorecardRefresh < 0) failures.push(`${file}: missing pre-verifier scorecard/sourceReports refresh`);
   if (triSurface < 0 || scorecardRefresh >= triSurface) failures.push(`${file}: scorecard/sourceReports refresh must precede strict tri-surface verification`);
+  if (file === "run-strategy5.ps1") {
+    const scorecardPublish = text.indexOf("publish-strategy5-scorecard-source-report.js");
+    if (scorecardPublish < 0) failures.push(`${file}: missing scorecard_latest source report publisher`);
+    if (triSurface < 0 || scorecardPublish >= triSurface) failures.push(`${file}: scorecard_latest source report publish must precede strict tri-surface verification`);
+  }
 }
 
 const watchdogs = ["run-strategy5-watchdog.ps1", "run-flow-watchdog.ps1"];

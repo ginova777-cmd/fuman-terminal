@@ -237,6 +237,12 @@ try {
     Write-Strategy5Receipt "failed" $LASTEXITCODE $false 0 ([string]$verifiedPayload.runId) @($reason) $reason
     exit $LASTEXITCODE
   }
+  & node.exe --use-system-ca "${PSScriptRoot}\scripts\publish-strategy5-scorecard-source-report.js" *>&1 | Tee-Object -FilePath $log -Append
+  if ($LASTEXITCODE -ne 0) {
+    $reason = "critical scan failed during scorecard_latest sourceReports publish: exit=$LASTEXITCODE"
+    Write-Strategy5Receipt "failed" $LASTEXITCODE $false 0 ([string]$verifiedPayload.runId) @($reason) $reason
+    exit $LASTEXITCODE
+  }
 } finally {
   Remove-Item Env:FUMAN_SCORECARD_REFRESH_KEY, Env:FUMAN_SCORECARD_REFRESH_RUN_ID, Env:FUMAN_SCORECARD_ALLOW_CURRENT_SHRINK -ErrorAction SilentlyContinue
 }

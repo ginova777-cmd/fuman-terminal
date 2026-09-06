@@ -294,6 +294,7 @@ const FILES = [
   "scripts/verify-version-consistency.js",
   "scripts/export-scorecard-supabase-source.js",
   "scripts/generate-terminal-scorecard-source.js",
+  "scripts/publish-strategy5-scorecard-source-report.js",
   "scripts/scorecard-source-supabase-ops.js",
   "scripts/export-scorecard-snapshot.py",
   "scripts/publish-scorecard-snapshot.js",
