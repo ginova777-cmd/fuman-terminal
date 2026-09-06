@@ -3,7 +3,7 @@ $PSNativeCommandUseErrorActionPreference = $false
 . "${PSScriptRoot}\legacy-entrypoint-guard.ps1" -Label "run-strategy5-watchdog.ps1"
 Set-Location "${PSScriptRoot}"
 
-$runtimeDir = "C:\fuman-runtime"
+$runtimeDir = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
 $logDir = Join-Path $runtimeDir "logs"
 $stateDir = Join-Path $runtimeDir "state"
 New-Item -ItemType Directory -Force -Path $logDir, $stateDir | Out-Null
@@ -65,6 +65,32 @@ function Invoke-Strategy5WatchdogFailureAlert {
 }
 
 . "${PSScriptRoot}\schedule-guard.ps1"
+$watchdogNow = Get-FumanTaipeiNow
+$watchdogDate = $watchdogNow.ToString("yyyy-MM-dd")
+$isWeekend = $watchdogNow.DayOfWeek -in @([DayOfWeek]::Saturday, [DayOfWeek]::Sunday)
+$isMarketHoliday = @(Get-FumanMarketHolidays) -contains $watchdogDate
+if ($isWeekend -or $isMarketHoliday) {
+  $closedReason = if ($isWeekend) { "WEEKEND" } else { "MARKET_HOLIDAY" }
+  $closedStatus = if ($isWeekend) { "weekend" } else { "market_closed" }
+  $receiptFile = Join-Path $runtimeDir "data\scan-receipts\strategy5.json"
+  $receiptHealthy = $false
+  $receiptRunId = ""
+  $receiptMatches = 0
+  if (Test-Path -LiteralPath $receiptFile) {
+    try {
+      $receipt = Get-Content -LiteralPath $receiptFile -Raw | ConvertFrom-Json
+      $receiptRunId = [string]$receipt.runId
+      $receiptMatches = [int]($receipt.matches ?? 0)
+      $receiptHealthy = $receipt.status -eq "complete" -and $receipt.complete -eq $true -and $receipt.exitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($receiptRunId)
+    } catch {
+      Write-WatchdogLog "${closedReason} receipt read warning: $($_.Exception.Message)"
+    }
+  }
+  $message = "${closedReason}: Strategy5 formal scan not required; preserve previous good; no rerun; no alert; receiptHealthy=$receiptHealthy runId=$receiptRunId matches=$receiptMatches"
+  Write-WatchdogLog $message
+  Write-WatchdogStatus $closedStatus $message 0
+  exit 0
+}
 Invoke-FumanWeekdayGuard -Label "Strategy5 watchdog" -LogPath $log -AllowAfterFormalSourceWindow
 
 function Get-TaipeiNow {

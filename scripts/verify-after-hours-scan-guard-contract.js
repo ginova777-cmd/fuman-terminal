@@ -19,6 +19,9 @@ for (const file of ["run-flow-watchdog.ps1", "run-strategy5-watchdog.ps1"]) {
   if (/& \$pwshExe[^\r\n]*(run-institution|run-strategy5)|starting rerun|starting strategy5 runner/.test(source)) issues.push(`${file}:watchdog_must_not_rerun_scanner`);
   if (!/read-only watchdog will not start a second formal run/.test(source)) issues.push(`${file}:read_only_contract_missing`);
 }
+const strategy5Watchdog = read("run-strategy5-watchdog.ps1");
+if (!/Strategy5 formal scan not required; preserve previous good; no rerun; no alert/.test(strategy5Watchdog)) issues.push("run-strategy5-watchdog.ps1:weekend_preserve_contract_missing");
+if (!(strategy5Watchdog.indexOf("if ($isWeekend -or $isMarketHoliday)") < strategy5Watchdog.indexOf('Invoke-FumanWeekdayGuard -Label "Strategy5 watchdog"'))) issues.push("run-strategy5-watchdog.ps1:weekend_status_must_precede_shared_exit_guard");
 const result = { ok: issues.length === 0, contract: "after-hours-formal-scan-guard-v1", allowed: ["strategy4", "strategy5", "institution", "buy-sell-complete", "institution-watchdog-readonly", "strategy5-watchdog-readonly"], issues };
 console.log(JSON.stringify(result, null, 2));
 if (!result.ok) process.exitCode = 1;
