@@ -1557,18 +1557,24 @@ function readOpeningMorningReport(clock = taipeiClock()) {
 }
 
 async function readOpeningMorningReportSnapshot(clock = taipeiClock(), timeoutMs = Number(process.env.FUMAN_OPENING_REPORT_0830_SNAPSHOT_TIMEOUT_MS || 2000)) {
+  const allowPreviousTradingDay = isWeekend(clock);
   const snapshot = await readSnapshot("opening_report_0830_terminal_briefing", {
     tradeDate: clock.date,
-    allowLatestFallback: false,
+    // On weekends there is no new 08:30 run. Keep the last completed trading
+    // day briefing visible, matching the terminal's previous-good banner.
+    allowLatestFallback: allowPreviousTradingDay,
     // A short retry is more useful to the terminal than one long stalled request.
     timeoutMs: Math.min(Math.max(500, Number(timeoutMs) || 2000), 1300),
     maxAttempts: 3,
   }).catch(() => null);
   const payload = snapshot?.payload;
   if (!payload || payload.contract !== "opening-report-0830-terminal-briefing-v1") return null;
-  if (compactDate(payload.date) !== clock.ymd) return null;
+  const payloadDate = compactDate(payload.date);
+  if (payloadDate !== clock.ymd && !allowPreviousTradingDay) return null;
+  if (!payloadDate || payloadDate > clock.ymd || payload.ok !== true) return null;
   return {
     ...payload,
+    previousTradingDay: payloadDate !== clock.ymd,
     cacheSource: "supabase:market_snapshots",
     snapshot_updated_at: snapshot.updatedAt || "",
   };

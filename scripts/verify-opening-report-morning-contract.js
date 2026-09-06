@@ -219,7 +219,9 @@ function staticContractChecks(checks) {
 
   const terminalApp = readText("terminal-app.js");
   const terminalShell = readText("terminal-desktop-fast-shell.js");
+  const marketApi = readText("api/market-ai-live.js");
   addCheck(checks, "terminal_displays_0830_window_observation_only", (terminalApp + terminalShell).includes("08:30-08:59") && (terminalApp + terminalShell).includes("僅供觀察排序"), "terminal must show morning report as observation-only");
+  addCheck(checks, "terminal_weekend_uses_last_complete_morning_report", marketApi.includes("const allowPreviousTradingDay = isWeekend(clock)") && marketApi.includes("allowLatestFallback: allowPreviousTradingDay") && marketApi.includes("previousTradingDay: payloadDate !== clock.ymd"), "weekends must retain the last completed trading-day morning report");
 }
 
 function sourceTimeOk(value, cutoffMs) {

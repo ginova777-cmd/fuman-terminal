@@ -1472,7 +1472,8 @@
     return route === "strategy|策略2"
       || route === "strategy|策略3"
       || route === "strategy|策略4"
-      || route === "strategy|策略5";
+      || route === "strategy|策略5"
+      || route === CHIP_TRADE_ROUTE;
   }
 
   function hasMemberPreviewToken() {
@@ -1517,7 +1518,10 @@
       if (!raw) return null;
       const item = JSON.parse(raw);
       if (item?.route !== route || !Array.isArray(item.rows) || !item.rows.length) return null;
-      if (Date.now() - Number(item.at || 0) > MEMBER_STRATEGY_PREVIEW_MAX_AGE_MS) return null;
+      const maxAge = isChipTradeRoute(route)
+        ? 4 * 24 * 60 * 60 * 1000
+        : MEMBER_STRATEGY_PREVIEW_MAX_AGE_MS;
+      if (Date.now() - Number(item.at || 0) > maxAge) return null;
       return item;
     } catch (error) {
       return null;
@@ -5525,7 +5529,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-95";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-96";
   }
 
   function loadScriptOnce(src, attr) {
