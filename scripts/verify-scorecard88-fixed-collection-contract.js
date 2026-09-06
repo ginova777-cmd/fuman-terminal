@@ -27,6 +27,8 @@ if (/await readSnapshot\s*\(SNAPSHOT_KEY/.test(api)) issues.push("scorecard_api_
 for (const slot of definitions.map((row) => row[1])) if (!collector.includes(`"${slot}"`)) issues.push(`collector_slot_missing:${slot}`);
 for (const invariant of ["querySupabase: false", "recalculated: false", "generatedRunId: false", "terminal_canonical_not_complete"]) if (!collector.includes(invariant)) issues.push(`collector_invariant_missing:${invariant}`);
 for (const invariant of ["outside_fixed_collection_window", "writeAllowed: false", "blobPublishAllowed: false", "fixedCollectionWindow(slot)"]) if (!collector.includes(invariant)) issues.push(`collector_window_guard_missing:${invariant}`);
+for (const invariant of ["publishCurrent = payload.ok === true", "if (publishCurrent) writeJsonAtomic(outputFile, payload)", "currentPublished: publishCurrent", "previousGoodPreserved: !publishCurrent"]) if (!collector.includes(invariant)) issues.push(`collector_previous_good_guard_missing:${invariant}`);
+if (!/publishBlob\(payload, todayKey, slot\.replace\(\":\", \"\"\), \{ publishCurrent \}\)/.test(collector)) issues.push("collector_blob_current_publish_not_guarded");
 for (const field of ["sourceDate", "startedAt", "finishedAt", "universeCount", "scannedCount", "resultCount", "qualityStatus", "evidenceStatus", "fallbackUsed", "publishAllowed", "desktopStatus", "mobileStatus", "scorecardUpdatedAt", "firstBlocker", "reasonCode"]) {
   if (!collector.includes(field)) issues.push(`collector_required_field_missing:${field}`);
 }
@@ -67,6 +69,6 @@ for (const [name, time] of definitions) {
   if (!Array.isArray(row.triggers) || !row.triggers.includes(time)) issues.push(`live_task_trigger_mismatch:${name}`);
   if (row.logonType !== "S4U") issues.push(`live_task_not_s4u:${name}:${row.logonType || "unknown"}`);
 }
-const result = { ok: issues.length === 0, contract: "scorecard88-fixed-collection-contract-v4", fixedSlots: definitions.map(([,time]) => time), liveTaskCount: live.length, invariants: { scans: false, supabaseQueries: false, recalculation: false, runIdGeneration: false, authenticatedMobileRequiredForPass: true, nonCircularSurfaceEvidence: true, completeFieldContract: true }, issues };
+const result = { ok: issues.length === 0, contract: "scorecard88-fixed-collection-contract-v5", fixedSlots: definitions.map(([,time]) => time), liveTaskCount: live.length, invariants: { scans: false, supabaseQueries: false, recalculation: false, runIdGeneration: false, authenticatedMobileRequiredForPass: true, nonCircularSurfaceEvidence: true, completeFieldContract: true, blockedCurrentPreservesPreviousGood: true }, issues };
 console.log(JSON.stringify(result, null, 2));
 process.exit(result.ok ? 0 : 1);

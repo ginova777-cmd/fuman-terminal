@@ -24,9 +24,8 @@ const issues = [];
 const publicPage = page.replace(/<template\s+id="scorecardPrivateContractMarkers"[\s\S]*?<\/template>/i, "");
 
 assertMarker(issues, page, "/api/scorecard?t=", "/88 snapshot scorecard API");
-if (!/\/api\/scorecard\?[^`"']*live=1[^`"']*noCache=1/.test(page)) {
-  issues.push("/88 must request the current published scorecard with no-cache");
-}
+const scorecardFetch = page.match(/fetch\(`\/api\/scorecard[^\n]+/)?.[0] || "";
+if (/refreshSourceReports=1|strictLiveReports=1|[?&]live=1|[?&]noCache=1/.test(scorecardFetch)) issues.push("/88 must read the fixed-slot current artifact without live rebuild flags");
 assertMarker(issues, page, "terminal-entitlement-guard.js?v=", "/88 must load current membership guard");
 assertMarker(issues, page, "cache: \"no-store\"", "/88 no-store fetch");
 assertMarker(issues, page, "renderMembershipLock", "/88 membership lock renderer");
@@ -63,7 +62,10 @@ assertMarker(issues, api, "sources", "scorecard API top-level sources");
 assertMarker(issues, api, "issues", "scorecard API top-level issues");
 assertMarker(issues, api, "warnings", "scorecard API top-level warnings");
 assertRegex(issues, api, /qualityStatus[\s\S]*complete/, "scorecard API complete quality path");
-assertRegex(issues, api, /cacheSource[\s\S]*supabase-snapshot/, "scorecard API supabase snapshot path");
+assertMarker(issues, api, "terminal_fixed_slot_snapshot", "scorecard API fixed-slot artifact path");
+assertMarker(issues, api, 'cacheSource = "terminal-canonical-json"', "scorecard API terminal canonical cache source");
+assertMarker(issues, api, "terminal_scorecard_snapshot_missing_or_legacy", "scorecard API legacy artifact fail-closed guard");
+if (/await readSnapshot\s*\(SNAPSHOT_KEY/.test(api)) issues.push("scorecard API must not execute the retired Supabase snapshot path");
 
 assertRegex(issues, sourceReportsApi, /withEntitlementRequired\(handler, ["']source-reports["']\)|module\.exports\s*=\s*withEntitlementRequired\(handler, ["']source-reports["']\)/, "source reports API membership-protected handler");
 assertMarker(issues, page, "renderMembershipLock", "/88 membership lock renderer");
@@ -97,6 +99,6 @@ if (issues.length) {
   process.exit(1);
 }
 
-console.log("[scorecard-page-contract] PASS static markers include /88 live fetch, private evidence gate, hidden public evidence/rule/reason columns, runtime builder, and validator");
+console.log("[scorecard-page-contract] PASS static markers include /88 fixed-slot fetch, membership gate, hidden private columns, terminal canonical artifact, runtime builder, and validator");
 
 

@@ -48,16 +48,24 @@ function blobToken() {
   if (process.env.BLOB_READ_WRITE_TOKEN) return String(process.env.BLOB_READ_WRITE_TOKEN).trim();
   try { return fs.readFileSync(blobTokenFile, "utf8").trim(); } catch { return ""; }
 }
-async function publishBlob(payload, todayKey, slotKey) {
+async function publishBlob(payload, todayKey, slotKey, publishOptions = {}) {
   const token = blobToken();
   if (!token) throw new Error("scorecard88_blob_token_missing");
   const { put } = await import("@vercel/blob");
   const body = `${JSON.stringify(payload, null, 2)}\n`;
-  const options = { access: "private", token, addRandomSuffix: false, allowOverwrite: true, contentType: "application/json; charset=utf-8", cacheControlMaxAge: 60 };
+  const putOptions = { access: "private", token, addRandomSuffix: false, allowOverwrite: true, contentType: "application/json; charset=utf-8", cacheControlMaxAge: 60 };
   const immutablePath = `scorecard88/${todayKey}/${slotKey}.json`;
-  const immutable = await put(immutablePath, body, options);
-  const current = await put(blobCurrentPath, body, options);
-  return { immutablePath, currentPath: blobCurrentPath, immutableUrl: immutable.url, currentUrl: current.url };
+  const immutable = await put(immutablePath, body, putOptions);
+  const publishCurrent = publishOptions.publishCurrent === true;
+  const current = publishCurrent ? await put(blobCurrentPath, body, putOptions) : null;
+  return {
+    immutablePath,
+    currentPath: blobCurrentPath,
+    immutableUrl: immutable.url,
+    currentUrl: current?.url || "",
+    currentPublished: publishCurrent,
+    previousGoodPreserved: !publishCurrent,
+  };
 }
 function taipeiDate() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -264,12 +272,28 @@ const payload = {
   },
 };
 async function main() {
-  writeJsonAtomic(outputFile, payload);
+  const publishCurrent = payload.ok === true;
+  if (publishCurrent) writeJsonAtomic(outputFile, payload);
   let blob = null;
   let blobError = "";
-  try { blob = await publishBlob(payload, todayKey, slot.replace(":", "")); } catch (error) { blobError = error?.message || String(error); }
-  const ok = payload.ok && Boolean(blob) && !blobError;
-  const receipt = { ok, status: ok ? "PASS" : payload.ok ? "FAIL_CLOSED" : "BLOCKED", slot, tradeDate: today, collectedAt, collectionWindow, outputFile, blobPublished: Boolean(blob), blob, firstBlocker: payload.ok ? blobError : receipts.find((row) => !row.ok)?.firstBlocker || "terminal_canonical_not_complete", reports: receipts };
+  try { blob = await publishBlob(payload, todayKey, slot.replace(":", ""), { publishCurrent }); } catch (error) { blobError = error?.message || String(error); }
+  const ok = payload.ok && blob?.currentPublished === true && !blobError;
+  const receipt = {
+    ok,
+    status: ok ? "PASS" : payload.ok ? "FAIL_CLOSED" : "BLOCKED",
+    slot,
+    tradeDate: today,
+    collectedAt,
+    collectionWindow,
+    outputFile,
+    outputFileWritten: publishCurrent,
+    blobPublished: blob?.currentPublished === true,
+    immutableBlobPublished: Boolean(blob?.immutableUrl),
+    previousGoodPreserved: !publishCurrent,
+    blob,
+    firstBlocker: payload.ok ? blobError : receipts.find((row) => !row.ok)?.firstBlocker || "terminal_canonical_not_complete",
+    reports: receipts,
+  };
   writeJsonAtomic(path.join(receiptDir, `scorecard88-collection-${todayKey}-${slot.replace(":", "")}.json`), receipt);
   console.log(JSON.stringify(receipt, null, 2));
   process.exitCode = ok ? 0 : payload.ok ? 4 : 3;

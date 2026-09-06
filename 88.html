@@ -1327,7 +1327,7 @@ async function load(date = "") {
       renderMembershipLock(payload.reason || payload.error || `HTTP ${response.status}`);
       return;
     }
-    if (!payload.ok) throw new Error(payload.reason || payload.error || "scorecard unavailable");
+    if (!payload.ok) throw new Error(payload.reason || payload.error || payload.blockingReason || payload.fallbackReason || "scorecard unavailable");
     activeDate = payload.selectedDate || payload.latestDate || availableDates(payload.records || [])[0] || "";
     render();
   } catch (error) {
