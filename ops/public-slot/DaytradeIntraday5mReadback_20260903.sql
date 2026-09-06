@@ -23,13 +23,34 @@ alter table public.fugle_intraday_5m_signal_cache
  add column if not exists kd_d_smoothing integer not null default 3,
  add column if not exists kd_seed numeric not null default 50,
  add column if not exists trend_5m_strategy_version text not null default 'golden-cross-any-v3',
- add column if not exists golden_cross_any_5m boolean;
+ add column if not exists golden_cross_any_5m boolean,
+ add column if not exists calculation_version text not null default 'five-minute-indicators-v3',
+ add column if not exists bar_kind text not null default 'regular_session',
+ add column if not exists confirmation_eligible boolean not null default false,
+ add column if not exists previous_bar_end timestamptz,
+ add column if not exists previous_rsi3_5m numeric,
+ add column if not exists previous_rsi6_5m numeric,
+ add column if not exists previous_kd_k_5m numeric,
+ add column if not exists previous_kd_d_5m numeric,
+ add column if not exists previous_ma5_5m numeric,
+ add column if not exists previous_ma10_5m numeric,
+ add column if not exists previous_ma20_5m numeric,
+ add column if not exists gap_reason text,
+ add column if not exists calculated_at timestamptz not null default now();
 create index if not exists fugle_intraday_5m_signal_cache_latest on public.fugle_intraday_5m_signal_cache(symbol,trade_date desc,candle_time desc);
-create or replace view public.v_fugle_intraday_5m_readback as select * from public.fugle_intraday_5m_signal_cache;
+create or replace view public.v_fugle_intraday_5m_readback as
+ select * from (
+  select c.*,row_number() over(partition by trade_date,symbol order by candle_time desc,updated_at desc) as latest_rank
+  from public.fugle_intraday_5m_signal_cache c
+ ) x where latest_rank=1;
+create or replace view public.v_fugle_intraday_5m_history_readback as
+ select * from public.fugle_intraday_5m_signal_cache;
 grant select on public.v_fugle_intraday_5m_readback to anon,authenticated,service_role;
+grant select on public.v_fugle_intraday_5m_history_readback to anon,authenticated,service_role;
 revoke insert,update,delete on public.fugle_intraday_5m_signal_cache from anon,authenticated;
 grant select,insert,update,delete on public.fugle_intraday_5m_signal_cache to service_role;
 comment on view public.v_fugle_intraday_5m_readback is 'Lightweight canonical 5m trend readback. Only the independent service-role writer may populate completed bars.';
+comment on view public.v_fugle_intraday_5m_history_readback is 'Canonical versioned 5m history for replay. Consumers must filter symbol, trade_date, run_id and bar_end <= as_of.';
 
 create table if not exists public.fugle_intraday_5m_verification_receipts(
  run_id text primary key,
@@ -51,15 +72,18 @@ create table if not exists public.fugle_intraday_5m_verification_receipts(
  created_at timestamptz not null default now()
 );
 alter table public.fugle_intraday_5m_verification_receipts
- add column if not exists strategy_version text not null default 'golden-cross-any-v3';
+ add column if not exists strategy_version text not null default 'golden-cross-any-v3',
+ add column if not exists calculation_version text not null default 'five-minute-indicators-v3',
+ add column if not exists history_readback_rows integer not null default 0,
+ add column if not exists diagnostic_summary jsonb not null default '{}'::jsonb;
 create index if not exists fugle_intraday_5m_verification_receipts_latest
  on public.fugle_intraday_5m_verification_receipts(trade_date desc,verified_at desc);
 drop view if exists public.v_fugle_intraday_5m_verification_readback;
 create or replace view public.v_fugle_intraday_5m_verification_readback as
- select contract,strategy_version,run_id,trade_date,status,complete,exit_code,first_blocker,
+ select contract,strategy_version,calculation_version,run_id,trade_date,status,complete,exit_code,first_blocker,
         anon_http_status,ssl_ok,verified_at,latest_complete_bar_end,
         requested_symbols,written_symbols,missing_symbols,readback_rows,
-        writer_update_frequency
+        writer_update_frequency,history_readback_rows,diagnostic_summary
  from public.fugle_intraday_5m_verification_receipts;
 grant select on public.v_fugle_intraday_5m_verification_readback to anon,authenticated,service_role;
 revoke insert,update,delete on public.fugle_intraday_5m_verification_receipts from anon,authenticated;
