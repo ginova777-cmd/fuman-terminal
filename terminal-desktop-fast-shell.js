@@ -5525,7 +5525,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-90";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-91";
   }
 
   function loadScriptOnce(src, attr) {
@@ -9117,7 +9117,7 @@
     }
     const meta = strategyMeta(link);
     const drawableRows = (canvasState.filtered?.length ? canvasState.filtered : canvasState.rows || []).filter((row) => row && (row.code || row.title || row.line));
-    if (isMemberStrategyPreviewRoute(key) && !drawableRows.length && hasMemberPreviewToken() && !payloadMetaHasResolvedResponse(canvasPayloadMeta(key))) return renderMemberStrategyPendingShell(key, meta, panel);
+    if (!isStrategy2Route(key) && isMemberStrategyPreviewRoute(key) && !drawableRows.length && hasMemberPreviewToken() && !payloadMetaHasResolvedResponse(canvasPayloadMeta(key))) return renderMemberStrategyPendingShell(key, meta, panel);
     if (isStrategy3Route(key) || isStrategy4Route(key) || isStrategy5Route(key)) {
       return renderUnifiedListShell(key, meta, panel);
     }
