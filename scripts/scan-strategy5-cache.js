@@ -40,6 +40,7 @@ const STRATEGY5_RUNS_TABLE = process.env.STRATEGY5_SUPABASE_RUNS_TABLE || "strat
 const STRATEGY5_RESULTS_TABLE = process.env.STRATEGY5_SUPABASE_RESULTS_TABLE || "strategy5_scan_results";
 const STRATEGY4_RUNS_TABLE = process.env.STRATEGY4_SUPABASE_RUNS_TABLE || "strategy4_scan_runs";
 const STRATEGY4_RESULTS_TABLE = process.env.STRATEGY4_SUPABASE_RESULTS_TABLE || "strategy4_scan_results";
+const STRATEGY4_DAILY_VIEW = process.env.STRATEGY4_DAILY_VIEW || "stock_daily_volume";
 const STRATEGY5_API_ONLY = true;
 const STRATEGY5_MIN_ISSUED_SHARES_COVERAGE = Number(process.env.STRATEGY5_MIN_ISSUED_SHARES_COVERAGE || 1500);
 const STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE = Number(process.env.STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE || 1500);
@@ -986,7 +987,64 @@ function collectVolume(bucket, code, volume) {
   bucket.set(code, list);
 }
 
-async function fetchHistoricalVolumes(anchorDateKey = "") {
+async function fetchStrategy4HistoricalVolumes(anchorDateKey = "") {
+  const anchor = compactDateKey(anchorDateKey);
+  const dates = recentTradingDates(8, anchor).map((date) => date.toISOString().slice(0, 10));
+  const from = dates.at(-1);
+  const to = dates[0];
+  const candidates = [
+    {
+      table: STRATEGY4_DAILY_VIEW,
+      select: "symbol,trade_date,volume_shares,volume_lots",
+    },
+    { table: "stock_daily_volume", select: "symbol,trade_date,volume_shares,volume_lots" },
+    { table: "strategy4_daily_ohlcv_view", select: "symbol,trade_date,volume_shares,volume_lots" },
+  ].filter((candidate, index, list) => list.findIndex((item) => item.table === candidate.table) === index);
+  let rows = [];
+  let selectedTable = "";
+  for (const candidate of candidates) {
+    const candidateRows = await fetchSupabaseRowsPaged(
+      candidate.table,
+      `select=${candidate.select}&trade_date=gte.${from}&trade_date=lte.${to}&order=trade_date.desc,symbol.asc`,
+      20000
+    ).catch(() => []);
+    if (!candidateRows.length) continue;
+    rows = candidateRows;
+    selectedTable = candidate.table;
+    break;
+  }
+  const bucket = new Map();
+  rows.forEach((row) => {
+    const code = normalizeCode(row.symbol || row.code);
+    const tradeDate = compactDateKey(row.trade_date);
+    const volume = cleanNumber(row.volume_shares)
+      || cleanNumber(row.volume_lots) * 1000
+      || cleanNumber(row.volume) * 1000;
+    if (!/^\d{4}$/.test(code) || /^00/.test(code) || !tradeDate || volume <= 0) return;
+    const entries = bucket.get(code) || [];
+    entries.push({ tradeDate, volume });
+    bucket.set(code, entries);
+  });
+  const averages = new Map();
+  const previous = new Map();
+  bucket.forEach((entries, code) => {
+    const ordered = entries.sort((a, b) => b.tradeDate.localeCompare(a.tradeDate));
+    const usable = ordered.slice(0, 5).map((entry) => entry.volume);
+    if (usable.length) averages.set(code, usable.reduce((sum, value) => sum + value, 0) / usable.length);
+    const previousEntry = ordered.find((entry) => !anchor || entry.tradeDate < anchor);
+    if (previousEntry?.volume > 0) previous.set(code, previousEntry.volume);
+  });
+  return {
+    map: averages,
+    previousMap: previous,
+    warnings: [],
+    anchorDate: anchor,
+    source: selectedTable ? `supabase:${selectedTable}` : `supabase:${STRATEGY4_DAILY_VIEW}`,
+    fetchedRows: rows.length,
+  };
+}
+
+async function fetchOfficialHistoricalVolumes(anchorDateKey = "") {
   const bucket = new Map();
   const warnings = [];
   const anchor = compactDateKey(anchorDateKey);
@@ -1024,7 +1082,25 @@ async function fetchHistoricalVolumes(anchorDateKey = "") {
     const previousValue = (anchor || shouldIncludeTodayVolume()) ? (values[1] || 0) : values[0];
     if (previousValue > 0) previous.set(code, previousValue);
   });
-  return { map: averages, previousMap: previous, warnings, anchorDate: anchor };
+  return { map: averages, previousMap: previous, warnings, anchorDate: anchor, source: "official:twse+tpex" };
+}
+
+async function fetchHistoricalVolumes(anchorDateKey = "") {
+  const primary = await fetchStrategy4HistoricalVolumes(anchorDateKey);
+  if (primary.map.size >= STRATEGY5_MIN_VOLUME_AVERAGE_COVERAGE) return primary;
+  const official = await fetchOfficialHistoricalVolumes(anchorDateKey);
+  official.map.forEach((value, code) => {
+    if (!primary.map.has(code)) primary.map.set(code, value);
+  });
+  official.previousMap.forEach((value, code) => {
+    if (!primary.previousMap.has(code)) primary.previousMap.set(code, value);
+  });
+  return {
+    ...primary,
+    warnings: official.warnings,
+    source: `${primary.source}+official-gap-fill`,
+    officialGapFillCount: official.map.size,
+  };
 }
 
 function rankMap(stocks, key) {
@@ -1919,10 +1995,10 @@ async function fetchSupabaseDailyHistory(stock, expectedDate = "") {
   const symbol = String(stock?.code || stock?.symbol || "").trim();
   if (!/^\d{4}$/.test(symbol)) return [];
   const sources = [
+    { table: STRATEGY4_DAILY_VIEW, select: "symbol,trade_date,open,high,low,close,volume_shares,volume_lots", source: `supabase:${STRATEGY4_DAILY_VIEW}`, timeout: 20000 },
     { table: "strategy4_daily_ohlcv_view", select: "symbol,trade_date,open,high,low,close,volume_shares,volume_lots,source", source: "supabase:strategy4_daily_ohlcv_view", timeout: 20000 },
-    { table: "stock_daily_volume", select: "symbol,code,trade_date,open,high,low,close,volume_shares,volume_lots,volume", source: "supabase:stock_daily_volume", timeout: 20000 },
     { table: "finmind_daily_ohlcv", select: "symbol,trade_date,open,high,low,close,volume_shares,volume_lots,source", source: "supabase:finmind_daily_ohlcv", timeout: 30000 },
-  ];
+  ].filter((item, index, list) => list.findIndex((candidate) => candidate.table === item.table) === index);
   for (const item of sources) {
     try {
       const query = "select=" + item.select + "&symbol=eq." + encodeURIComponent(symbol) + "&order=trade_date.desc&limit=220";
@@ -2784,6 +2860,8 @@ async function main() {
       issuedSharesCount: issuedSharesResult.map.size,
       volumeAverageCount: volumeAverageResult.map.size,
       volumeAverageAnchorDate: volumeAverageResult.anchorDate,
+      volumeAverageSource: volumeAverageResult.source,
+      volumeAverageFetchedRows: volumeAverageResult.fetchedRows || 0,
       finmindChipCount: finmindChipMap.size,
       branchFlowCount: [...finmindChipMap.values()].filter((row) => row.branchTradeDate).length,
       chipHistoryCodeCount: chipHistoryByCode.size,
@@ -2872,6 +2950,7 @@ module.exports = {
   buildWriteBudget,
   normalizeTradeVolumeUnits,
   fetchStrategy5ChipHistoryMap,
+  fetchStrategy4HistoricalVolumes,
   strategy5TwoDayInstitutionBuyEvidence,
   buildMarginPriceInstitutionMatch,
   strategy5WNecklinePattern,
