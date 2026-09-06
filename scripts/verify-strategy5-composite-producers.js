@@ -199,9 +199,13 @@ function verifyWiring() {
   assert.ok(scannerSource.includes("strategy5CompositeRules"), "run payload must publish composite rule contract");
   assert.ok(scannerSource.includes("fetchDailyHistory(stock, runMarketDate)"), "daily history lookup must require the Strategy5 run market date");
   assert.ok(runnerSource.includes("FUMAN_SCANNER_TARGET_DATE") && runnerSource.includes("Strategy5ScannedCount"), "runner must honor target date and publish full scan counts");
-  assert.ok(completeRunnerSource.includes("verify-finmind-daily-ohlcv-sync.js"), "complete runner must verify formal FinMind daily coverage");
+  const strategy4DailyIndex = scannerSource.indexOf('{ table: "strategy4_daily_ohlcv_view"');
+  const stockDailyIndex = scannerSource.indexOf('{ table: "stock_daily_volume"');
+  const finmindDailyIndex = scannerSource.indexOf('{ table: "finmind_daily_ohlcv"');
+  assert.ok(strategy4DailyIndex >= 0 && stockDailyIndex > strategy4DailyIndex && finmindDailyIndex > stockDailyIndex, "Strategy5 daily history must prefer Strategy4, then stock daily, with FinMind as third source");
+  assert.ok(!completeRunnerSource.includes("verify-finmind-daily-ohlcv-sync.js"), "Strategy5 complete must not block on the optional FinMind daily backup");
   assert.ok(completeVerifierSource.includes("desktopRunId") && completeVerifierSource.includes("strategy5_scan_coverage_incomplete"), "complete verifier must enforce tri-surface runId and full scan coverage");
-  assert.ok(dailySyncSource.includes("cursor.setUTCDate") && dailySyncSource.includes("row?.date"), "FinMind range sync must fetch and validate one date at a time");
+  assert.ok(dailySyncSource.includes("fetchRowsForDate") && dailySyncSource.includes("await upsert(rows)") && dailySyncSource.includes("row?.date"), "FinMind range sync must validate and persist one date at a time");
 }
 
 function verifyCompositeSourceGate() {

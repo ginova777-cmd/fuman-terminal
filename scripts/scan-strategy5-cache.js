@@ -1919,9 +1919,9 @@ async function fetchSupabaseDailyHistory(stock, expectedDate = "") {
   const symbol = String(stock?.code || stock?.symbol || "").trim();
   if (!/^\d{4}$/.test(symbol)) return [];
   const sources = [
-    { table: "finmind_daily_ohlcv", select: "symbol,trade_date,open,high,low,close,volume_shares,volume_lots,source", source: "supabase:finmind_daily_ohlcv", timeout: 30000 },
     { table: "strategy4_daily_ohlcv_view", select: "symbol,trade_date,open,high,low,close,volume_shares,volume_lots,source", source: "supabase:strategy4_daily_ohlcv_view", timeout: 20000 },
     { table: "stock_daily_volume", select: "symbol,code,trade_date,open,high,low,close,volume_shares,volume_lots,volume", source: "supabase:stock_daily_volume", timeout: 20000 },
+    { table: "finmind_daily_ohlcv", select: "symbol,trade_date,open,high,low,close,volume_shares,volume_lots,source", source: "supabase:finmind_daily_ohlcv", timeout: 30000 },
   ];
   for (const item of sources) {
     try {

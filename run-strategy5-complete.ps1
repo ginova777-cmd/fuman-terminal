@@ -13,16 +13,6 @@ $log = Join-Path $runtime ("logs\strategy5-complete-{0}.log" -f (Get-Date -Forma
 Invoke-FumanWeekdayGuard -Label "Strategy5 complete" -LogPath $log -AllowAfterFormalSourceWindow
 & $pwshExe -NoProfile -File ".\run-chip-source-sync.ps1"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-$targetDate = @(
-  $env:FUMAN_SCANNER_TARGET_DATE,
-  $env:FUMAN_SCANNER_TARGET_TRADE_DATE,
-  $env:FUMAN_TERMINAL_TARGET_TRADE_DATE,
-  $env:FUMAN_EXPECTED_DATE
-) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -First 1
-$targetDate = ([string]$targetDate -replace "[^0-9]", "")
-if ($targetDate.Length -ne 8) { $targetDate = (Get-Date).ToString("yyyyMMdd") }
-& $nodeExe "--use-system-ca" "scripts\verify-finmind-daily-ohlcv-sync.js" "--target-date=$targetDate" "--min-count=1500"
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $nodeExe "scripts\verify-strategy5-composite-producers.js"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $pwshExe -NoProfile -File ".\run-strategy5.ps1"
