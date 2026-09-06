@@ -186,6 +186,7 @@ function verifyWiring() {
   const completeRunnerSource = fs.readFileSync(path.join(ROOT, "run-strategy5-complete.ps1"), "utf8");
   const completeVerifierSource = fs.readFileSync(path.join(ROOT, "scripts", "verify-strategy5-complete.js"), "utf8");
   const dailySyncSource = fs.readFileSync(path.join(ROOT, "scripts", "sync-finmind-daily-ohlcv.js"), "utf8");
+  const mobilePublisherSource = fs.readFileSync(path.join(ROOT, "scripts", "publish-mobile-fragment-snapshots.js"), "utf8");
   const ids = [
     "margin_up_price_up_institutional_continuous_buy",
     "margin_down_price_up_institutional_continuous_buy",
@@ -209,6 +210,8 @@ function verifyWiring() {
   assert.ok(!completeRunnerSource.includes("verify-finmind-daily-ohlcv-sync.js"), "Strategy5 complete must not block on the optional FinMind daily backup");
   assert.ok(completeVerifierSource.includes("desktopRunId") && completeVerifierSource.includes("strategy5_scan_coverage_incomplete"), "complete verifier must enforce tri-surface runId and full scan coverage");
   assert.ok(dailySyncSource.includes("fetchRowsForDate") && dailySyncSource.includes("await upsert(rows)") && dailySyncSource.includes("row?.date"), "FinMind range sync must validate and persist one date at a time");
+  assert.ok(mobilePublisherSource.includes("FUMAN_TERMINAL_TARGET_TRADE_DATE") && mobilePublisherSource.includes("expectedTradeDate()"), "mobile fragment publisher must honor the explicit scanner target trade date");
+  assert.ok(runnerSource.includes('Write-Strategy5Receipt "failed" 1 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)'), "tri-surface failure receipt must preserve the completed scan runId and match count");
 }
 
 function verifyCompositeSourceGate() {

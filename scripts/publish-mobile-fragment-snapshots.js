@@ -35,6 +35,17 @@ function runIdTradeDate(runId) {
   return match ? `20${match[1]}` : "";
 }
 
+function expectedTradeDate() {
+  const requested = [
+    process.env.FUMAN_SCANNER_TARGET_DATE,
+    process.env.FUMAN_SCANNER_TARGET_TRADE_DATE,
+    process.env.FUMAN_TERMINAL_TARGET_TRADE_DATE,
+    process.env.FUMAN_EXPECTED_DATE,
+  ].find((value) => String(value || "").trim());
+  const key = String(requested || "").replace(/\D/g, "").slice(0, 8);
+  return /^\d{8}$/.test(key) ? key : taipeiDateKey();
+}
+
 async function fetchFragment(tab, token) {
   const url = `${BASE_URL}/api/mobile-fragment?tab=${encodeURIComponent(tab)}&live=1&verify=1&noSnapshot=1&publish_mobile_snapshot=${Date.now()}`;
   const startedAt = Date.now();
@@ -53,9 +64,9 @@ async function fetchFragment(tab, token) {
   if (key !== tab) throw new Error(`${tab} fragment key mismatch actual=${key || "<missing>"}`);
   if (!runId) throw new Error(`${tab} data-run-id missing`);
   const tradeDate = runIdTradeDate(runId);
-  const expectedTradeDate = taipeiDateKey();
+  const expectedDate = expectedTradeDate();
   if (!tradeDate) throw new Error(`${tab} runId date missing runId=${runId}`);
-  if (tradeDate !== expectedTradeDate) throw new Error(`${tab} stale runId=${runId} tradeDate=${tradeDate} expected=${expectedTradeDate}`);
+  if (tradeDate !== expectedDate) throw new Error(`${tab} stale runId=${runId} tradeDate=${tradeDate} expected=${expectedDate}`);
   return { tab, html, runId, tradeDate, elapsedMs: Date.now() - startedAt };
 }
 
