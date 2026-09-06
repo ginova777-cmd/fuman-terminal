@@ -34,6 +34,18 @@ function Write-PostScanTriSurfaceReceipt {
   $payload | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "$Route.json") -Encoding utf8
 }
 
+function Get-PostScanExpectedDateKey {
+  $value = @(
+    $env:FUMAN_SCANNER_TARGET_DATE,
+    $env:FUMAN_SCANNER_TARGET_TRADE_DATE,
+    $env:FUMAN_TERMINAL_TARGET_TRADE_DATE,
+    $env:FUMAN_EXPECTED_DATE
+  ) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -First 1
+  $key = ([string]$value -replace "[^0-9]", "")
+  if ($key.Length -eq 8) { return $key }
+  return (Get-Date).ToString("yyyyMMdd")
+}
+
 function Update-PostScanReceiptEvidence {
   param(
     [string]$RuntimeRoot,
@@ -111,7 +123,7 @@ function Assert-PostScanTriSurfaceClosure {
   if ([string]::IsNullOrWhiteSpace($RunId)) { throw "post-scan tri-surface verify missing runId for $Route" }
   $repoRoot = $PSScriptRoot
   $runtimeRoot = if ([string]::IsNullOrWhiteSpace($env:FUMAN_RUNTIME_DIR)) { "C:\fuman-runtime" } else { $env:FUMAN_RUNTIME_DIR }
-  $expectedDate = (Get-Date).ToString("yyyyMMdd")
+  $expectedDate = Get-PostScanExpectedDateKey
   $safeRunId = $RunId -replace "[^A-Za-z0-9._-]", "_"
   $outDir = Join-Path $runtimeRoot "outputs\post-scan-tri-surface\$Route\$safeRunId"
   $reportPath = Join-Path $outDir "terminal-resource-chain-audit.json"

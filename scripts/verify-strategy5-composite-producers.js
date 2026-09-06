@@ -182,6 +182,10 @@ function verifyWBottomProducer() {
 function verifyWiring() {
   const scannerSource = fs.readFileSync(path.join(ROOT, "scripts", "scan-strategy5-cache.js"), "utf8");
   const desktopSource = fs.readFileSync(path.join(ROOT, "terminal-desktop-fast-shell.js"), "utf8");
+  const runnerSource = fs.readFileSync(path.join(ROOT, "run-strategy5.ps1"), "utf8");
+  const completeRunnerSource = fs.readFileSync(path.join(ROOT, "run-strategy5-complete.ps1"), "utf8");
+  const completeVerifierSource = fs.readFileSync(path.join(ROOT, "scripts", "verify-strategy5-complete.js"), "utf8");
+  const dailySyncSource = fs.readFileSync(path.join(ROOT, "scripts", "sync-finmind-daily-ohlcv.js"), "utf8");
   const ids = [
     "margin_up_price_up_institutional_continuous_buy",
     "margin_down_price_up_institutional_continuous_buy",
@@ -194,6 +198,10 @@ function verifyWiring() {
   });
   assert.ok(scannerSource.includes("strategy5CompositeRules"), "run payload must publish composite rule contract");
   assert.ok(scannerSource.includes("fetchDailyHistory(stock, runMarketDate)"), "daily history lookup must require the Strategy5 run market date");
+  assert.ok(runnerSource.includes("FUMAN_SCANNER_TARGET_DATE") && runnerSource.includes("Strategy5ScannedCount"), "runner must honor target date and publish full scan counts");
+  assert.ok(completeRunnerSource.includes("verify-finmind-daily-ohlcv-sync.js"), "complete runner must verify formal FinMind daily coverage");
+  assert.ok(completeVerifierSource.includes("desktopRunId") && completeVerifierSource.includes("strategy5_scan_coverage_incomplete"), "complete verifier must enforce tri-surface runId and full scan coverage");
+  assert.ok(dailySyncSource.includes("cursor.setUTCDate") && dailySyncSource.includes("row?.date"), "FinMind range sync must fetch and validate one date at a time");
 }
 
 function verifyCompositeSourceGate() {

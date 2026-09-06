@@ -16,6 +16,16 @@ $log = "C:\fuman-runtime\logs\strategy5-$(Get-Date -Format yyyyMMdd-HHmmss).log"
 $receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
 New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
 $scanStartedAt = (Get-Date).ToString("o")
+$strategy5ExpectedDate = @(
+  $env:FUMAN_SCANNER_TARGET_DATE,
+  $env:FUMAN_SCANNER_TARGET_TRADE_DATE,
+  $env:FUMAN_TERMINAL_TARGET_TRADE_DATE,
+  $env:FUMAN_EXPECTED_DATE
+) | Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } | Select-Object -First 1
+$strategy5ExpectedDate = ([string]$strategy5ExpectedDate -replace "[^0-9]", "")
+if ($strategy5ExpectedDate.Length -ne 8) { $strategy5ExpectedDate = (Get-Date).ToString("yyyyMMdd") }
+$script:Strategy5ScannedCount = 0
+$script:Strategy5ExpectedTotal = 0
 
 function Write-Strategy5Receipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "") {
   $receipt = [ordered]@{
@@ -23,12 +33,12 @@ function Write-Strategy5Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     label = "strategy5 raw refresh"
     tier = "critical"
     startedAt = $scanStartedAt
-    marketDate = (Get-Date).ToString("yyyyMMdd")
+    marketDate = $strategy5ExpectedDate
     finishedAt = (Get-Date).ToString("o")
     status = $Status
     exitCode = $ExitCode
-    scanned = 0
-    total = 0
+    scanned = [int]$script:Strategy5ScannedCount
+    total = [int]$script:Strategy5ExpectedTotal
     matches = $Matches
     complete = $Complete
     qualityStatus = if ($Complete) { "complete" } else { "" }
@@ -70,6 +80,8 @@ function Invoke-Strategy5InlineTerminalVerify {
     return [pscustomobject]@{
       runId = [string]$report.runId
       count = [int]($report.resultCount ?? $report.readbackCount ?? 0)
+      scannedCount = [int]($report.scannedCount ?? 0)
+      expectedTotal = [int]($report.expectedTotal ?? 0)
       cacheSource = "internal-terminal-sourceReports-readback"
     }
   } finally {
@@ -180,6 +192,8 @@ try {
     $verifiedPayload = [pscustomobject]@{
       runId = [string]$latestAfterScanner.runId
       count = [int]($latestAfterScanner.resultCount ?? $latestAfterScanner.count ?? 0)
+      scannedCount = [int]($latestAfterScanner.scannedCount ?? 0)
+      expectedTotal = [int]($latestAfterScanner.expectedTotal ?? 0)
       cacheSource = "strategy5-latest-readback-scorecard-closure-pending"
     }
     Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 scanner/API readback complete; deferring scorecard/sourceReports closure instead of failing scanner receipt. runId=$($verifiedPayload.runId) count=$($verifiedPayload.count)"
@@ -189,7 +203,9 @@ try {
   }
 }
 
-$expectedRunDate = (Get-Date).ToString("yyyyMMdd")
+$script:Strategy5ScannedCount = [int]($verifiedPayload.scannedCount ?? 0)
+$script:Strategy5ExpectedTotal = [int]($verifiedPayload.expectedTotal ?? 0)
+$expectedRunDate = $strategy5ExpectedDate
 $actualRunDate = Get-Strategy5RunDateKey ([string]$verifiedPayload.runId)
 if ([string]::IsNullOrWhiteSpace($actualRunDate) -or $actualRunDate -ne $expectedRunDate) {
   $actualLabel = if ($actualRunDate) { $actualRunDate } else { "missing" }
@@ -236,7 +252,7 @@ try {
   exit 1
 }
 Write-Strategy5Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
-Update-PostScanReceiptEvidence -RuntimeRoot $env:FUMAN_RUNTIME_DIR -Route "strategy5" -RunId ([string]$verifiedPayload.runId) -ExpectedDate ((Get-Date).ToString("yyyyMMdd")) -Row $triSurfaceRow
+Update-PostScanReceiptEvidence -RuntimeRoot $env:FUMAN_RUNTIME_DIR -Route "strategy5" -RunId ([string]$verifiedPayload.runId) -ExpectedDate $strategy5ExpectedDate -Row $triSurfaceRow
 Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 API-only: scanner success verifies /api/strategy5-latest through scorecard source report; terminal reads Supabase/API plus desktop snapshot."
 
 Remove-Item Env:STRATEGY5_USE_MIS -ErrorAction SilentlyContinue
