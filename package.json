@@ -28,6 +28,7 @@
     "verify:scorecard-no-rollback": "node --use-system-ca scripts/verify-scorecard-no-rollback.js",
     "verify:scorecard-health": "node --use-system-ca scripts/verify-scorecard-health.js",
     "verify:scorecard-rules": "node --use-system-ca scripts/verify-scorecard-strategy-rules.js",
+    "verify:scorecard-performance": "node scripts/verify-scorecard-performance-evaluation.js",
     "cleanup:api-only-retired": "node scripts/cleanup-api-only-retired-artifacts.js",
     "cleanup:supabase-retired": "node --use-system-ca scripts/cleanup-retired-supabase-formal.js --json",
     "cleanup:supabase-retired:apply": "node --use-system-ca scripts/cleanup-retired-supabase-formal.js --apply --json",

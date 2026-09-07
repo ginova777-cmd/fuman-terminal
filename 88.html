@@ -496,6 +496,10 @@
   </section>
 
   <section class="grid" id="metrics" data-testid="scorecard-metrics"></section>
+  <section class="panel" id="performanceEvaluation" data-testid="scorecard-performance-evaluation">
+    <h2>策略績效與回測狀況</h2>
+    <div class="status-line">正在整理每個策略的實盤追蹤與回測可用性...</div>
+  </section>
   <section class="status-line" id="sourceStatus" data-testid="scorecard-source-status" hidden></section>
   <section class="status-line" id="scorecardSourceReports" data-testid="scorecard-source-reports" hidden>sourceReports 讀取中...</section>
   <section class="panel" id="scanAudit" data-testid="scorecard-scan-audit" hidden></section>
@@ -1228,6 +1232,48 @@ function summarizeRows(rows, latestDate) {
   };
 }
 
+function performanceValue(value, suffix = "") {
+  const number = Number(value);
+  return Number.isFinite(number) ? `${number.toFixed(2)}${suffix}` : "--";
+}
+
+function renderPerformanceEvaluation() {
+  const node = byId("performanceEvaluation");
+  if (!node) return;
+  const evaluation = payload?.performanceEvaluation || {};
+  const strategies = Array.isArray(evaluation.byStrategy) ? evaluation.byStrategy : [];
+  if (!strategies.length) {
+    node.innerHTML = `<h2>策略績效與回測狀況</h2><div class="status-line blocked">NOT_EVALUABLE｜目前沒有可核對的成績單歷史樣本</div>`;
+    return;
+  }
+  const complete = evaluation.status === "COMPLETE";
+  node.innerHTML = `
+    <h2>策略績效與回測狀況</h2>
+    <div class="status-line ${complete ? "complete" : "partial"}">
+      ${esc(evaluation.status || "PARTIAL")}｜當月樣本 ${count(evaluation.samples)}｜可正式回測 ${count(evaluation.completeStrategies)} 個策略｜資料不足 ${count(evaluation.notEvaluableStrategies)} 個策略
+    </div>
+    <p class="muted">MFE 是進場後觀察到的最高有利幅度，不是實際賣出獲利。只有具備出場價與淨成本證據才列為正式回測 COMPLETE。</p>
+    <div class="table-wrap">
+      <table style="min-width: 980px">
+        <thead><tr><th>策略</th><th>狀態</th><th>樣本</th><th>MFE 正向率</th><th>平均 MFE</th><th>中位 MFE</th><th>已實現樣本</th><th>淨勝率</th><th>平均淨報酬</th><th>說明</th></tr></thead>
+        <tbody>${strategies.map((item) => `
+          <tr>
+            <td>${esc(item.strategy)}</td>
+            <td><span class="badge ${item.status === "COMPLETE" ? "good" : ""}">${esc(item.status)}</span></td>
+            <td>${count(item.samples)}</td>
+            <td>${performanceValue(item.tracking?.positiveRatePct, "%")}</td>
+            <td>${performanceValue(item.tracking?.averageMfePct, "%")}</td>
+            <td>${performanceValue(item.tracking?.medianMfePct, "%")}</td>
+            <td>${count(item.realizedSamples)}</td>
+            <td>${item.realizedSamples ? performanceValue(item.backtest?.winRatePct, "%") : "--"}</td>
+            <td>${item.backtest?.averageNetReturnPct === null ? "--" : performanceValue(item.backtest?.averageNetReturnPct, "%")}</td>
+            <td>${esc(item.status === "COMPLETE" ? "已具出場與成本證據" : "缺出場價或淨成本；目前僅顯示 MFE")}</td>
+          </tr>`).join("")}</tbody>
+      </table>
+    </div>
+  `;
+}
+
 function renderHistoryDateOptions(dates) {
   const select = byId("historyDate");
   select.innerHTML = dates.map((date) =>
@@ -1256,6 +1302,7 @@ function render() {
   reportsNode.textContent = reportsStatus.text;
   renderAuditPanel(rows);
   renderScanAudit(payload);
+  renderPerformanceEvaluation();
 
   byId("metrics").innerHTML = [
     metric("逐筆筆數", count(summary.rows), "", "scorecard-metric-rows"),

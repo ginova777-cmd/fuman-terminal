@@ -5,6 +5,7 @@ const { readSnapshot } = require("../lib/supabase-snapshots");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const { retainCalendarMonthRecords, buildCalendarMonthRetention } = require("../lib/scorecard-calendar-month-retention");
+const { buildScorecardPerformanceEvaluation } = require("../lib/scorecard-performance-evaluation");
 
 const SNAPSHOT_KEY = process.env.FUMAN_SCORECARD_SNAPSHOT_KEY || "scorecard_latest";
 const SNAPSHOT_FILE = path.join(process.cwd(), "data", "scorecard-latest.json");
@@ -1733,6 +1734,10 @@ function selectPayloadDate(payload, requestedDate = "") {
       suppressedRows: suppressedRows.length,
       blockedStrategies: [...blockedStrategies],
     },
+    performanceEvaluation: buildScorecardPerformanceEvaluation(allRecords, {
+      selectedDate: selectedDate || payload.latestDate || "",
+      scope: "calendar_month_scorecard_records",
+    }),
   };
   selected.records = decorateRecords(selected, selected.fallbackReason || "");
   selected.audit = summarizeAudit(selected, selected.fallbackReason || "");
