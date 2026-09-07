@@ -80,6 +80,7 @@ function main() {
     ["deploy_worktree_clean", node, ["scripts/verify-deploy-worktree-clean.js"]],
     ["scorecard_no_rollback", node, ["scripts/verify-scorecard-no-rollback.js", "--no-live", "--no-output", "--skip-schedule"]],
     ["scorecard_strategy_rules", node, ["scripts/verify-scorecard-strategy-rules.js", "--no-live", "--no-output"]],
+    ["scorecard_verifier_authority", node, ["scripts/verify-scorecard88-collection.js", "--contract-only"]],
     ["fugle_source_contract_static", node, ["--use-system-ca", "scripts/verify-fugle-source-contract.js", "--static-only"]],
     ["terminal_ui_state_acceptance", node, ["scripts/verify-terminal-ui-state-acceptance.js"]],
   ];

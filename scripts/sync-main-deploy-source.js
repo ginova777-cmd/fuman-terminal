@@ -262,6 +262,7 @@ const FILES = [
   "scripts/verify-scorecard-ui-e2e.js",
   "scripts/verify-scorecard-page-contract.js",
   "scripts/verify-scorecard-a-readiness.js",
+  "scripts/verify-scorecard88-collection.js",
   "scripts/verify-live-version.js",
   "scripts/verify-service-worker-smoke.js",
   "scripts/verify-source-sync.js",

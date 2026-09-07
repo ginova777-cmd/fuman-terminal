@@ -11,8 +11,10 @@ $env:FUMAN_RUNTIME_ROOT = $RuntimeRoot
 $env:FUMAN_RUNTIME_DIR = $RuntimeRoot
 $surfaceEvidence = Join-Path $ProjectRoot 'scripts\collect-scorecard88-terminal-surface-evidence.js'
 $script = Join-Path $ProjectRoot 'scripts\collect-terminal-scorecard-88.js'
+$verifier = Join-Path $ProjectRoot 'scripts\verify-scorecard88-collection.js'
 if (-not (Test-Path -LiteralPath $surfaceEvidence)) { throw "surface_evidence_collector_missing:$surfaceEvidence" }
 if (-not (Test-Path -LiteralPath $script)) { throw "collector_missing:$script" }
+if (-not (Test-Path -LiteralPath $verifier)) { throw "canonical_verifier_missing:$verifier" }
 & node $surfaceEvidence "--slot=$Slot"
 $surfaceEvidenceExit = $LASTEXITCODE
 $collectorArgs = @("--slot=$Slot")
@@ -21,5 +23,8 @@ if ($Recovery) { $collectorArgs += @('--recovery', "--expected-run-id=$ExpectedR
 $collectorExit = $LASTEXITCODE
 if ($collectorExit -notin @(0,3)) { exit $collectorExit }
 if ($surfaceEvidenceExit -notin @(0,3)) { exit $surfaceEvidenceExit }
+& node $verifier "--slot=$Slot"
+$verifierExit = $LASTEXITCODE
+if ($verifierExit -ne 0) { exit $verifierExit }
 if ($collectorExit -eq 3 -or $surfaceEvidenceExit -eq 3) { exit 3 }
 exit 0

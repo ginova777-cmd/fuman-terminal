@@ -50,6 +50,7 @@ if (/server-supabase|supabase-snapshots|callInternalApi/i.test(surfaceEvidence))
 const surfaceFetchCalls = [...surfaceEvidence.matchAll(/await fetchResult\(([^\n]+)/g)].map((match) => match[1]);
 if (surfaceFetchCalls.some((call) => !/terminal-fast-bundle|mobile-fragment/.test(call))) issues.push("surface_evidence_unapproved_endpoint_fetch_present");
 if (!wrapper.includes("collect-scorecard88-terminal-surface-evidence.js") || wrapper.indexOf("collect-scorecard88-terminal-surface-evidence.js") > wrapper.indexOf("collect-terminal-scorecard-88.js")) issues.push("surface_evidence_not_run_before_scorecard_collection");
+if (!wrapper.includes("verify-scorecard88-collection.js") || wrapper.indexOf("collect-terminal-scorecard-88.js") > wrapper.indexOf("verify-scorecard88-collection.js")) issues.push("canonical_collection_verifier_not_run_after_collector");
 if (!master.includes("verify-scorecard88-fixed-collection-contract.js") || !master.includes("scorecard88ContractExitCode")) issues.push("master_checkpoint_missing_scorecard88_contract");
 for (const [name, time] of definitions) {
   if (!registry.policy.activeTasks.includes(name)) issues.push(`registry_active_missing:${name}`);
