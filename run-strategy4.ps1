@@ -187,22 +187,6 @@ function Test-Strategy4PrewarmReceiptReady {
   return $ready
 }
 
-function Invoke-Strategy4ScorecardSync {
-  Write-Log "Strategy4 scorecard sync start after Supabase publish."
-  Push-Location $repo
-  try {
-    & npm.cmd run scorecard:sync *>&1 | Tee-Object -FilePath $log -Append
-    $scorecardExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
-    if ($scorecardExit -ne 0) {
-      Write-Log "Strategy4 scorecard sync non-blocking failure exit=$scorecardExit; scanner/readback remains authoritative and daily manifest will queue scorecard publish repair."
-      return $false
-    }
-    Write-Log "Strategy4 scorecard sync ok after Supabase publish."
-    return $true
-  } finally {
-    Pop-Location
-  }
-}
 function Invoke-Strategy4InlineTerminalVerify {
   param([string]$RunId)
   if ([string]::IsNullOrWhiteSpace($RunId)) { throw "Strategy4 inline terminal verify missing runId" }
@@ -536,7 +520,6 @@ try {
       ok = $true
     }
     $postScanWarnings = @("production API verification protected/failed: $apiVerifyError; Supabase DB readback complete")
-    try { Invoke-Strategy4ScorecardSync } catch { $postScanWarnings += "scorecard sync failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard sync warning after DB readback: $($_.Exception.Message)" }
     try { Invoke-Strategy4SnapshotRefresh ([string]$dbVerify.runId) } catch { $postScanWarnings += "desktop snapshot refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 desktop snapshot warning after DB readback: $($_.Exception.Message)" }
     try { Invoke-Strategy4ScorecardSourceRefresh ([string]$dbVerify.runId) } catch { $postScanWarnings += "scorecard sourceReports refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard/sourceReports warning after DB readback: $($_.Exception.Message)" }
     try {
@@ -565,7 +548,6 @@ try {
 
 $postScanWarnings = @()
 try { Invoke-Strategy4SnapshotRefresh ([string]$strategy4Output.runId) } catch { $postScanWarnings += "desktop snapshot refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 desktop snapshot warning: $($_.Exception.Message)" }
-try { Invoke-Strategy4ScorecardSync } catch { $postScanWarnings += "scorecard sync failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard sync warning: $($_.Exception.Message)" }
 try { Invoke-Strategy4ScorecardSourceRefresh ([string]$strategy4Output.runId) } catch { $postScanWarnings += "scorecard sourceReports refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard/sourceReports warning: $($_.Exception.Message)" }
 try {
   Write-Strategy4Receipt "verifying" 0 $false ([int]$strategy4Output.count) ([string]$strategy4Output.runId) $postScanWarnings "" ([int]$strategy4Output.scannedCount) ([int]$strategy4Output.total)

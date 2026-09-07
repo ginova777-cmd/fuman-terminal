@@ -49,6 +49,14 @@ if (!wrapperSource.includes("$isTodayRecovery") || !wrapperSource.includes("Stra
   failures.push("same-day recovery cannot safely complete a missing LINE receipt after verifier repair");
 }
 
+if (wrapperSource.includes("Invoke-Strategy4ScorecardSync") || wrapperSource.includes("scorecard:sync")) {
+  failures.push("Strategy4 runner still invokes the shared all-strategy scorecard sync and schedule audit");
+}
+
+if (!wrapperSource.includes("Invoke-Strategy4ScorecardSourceRefresh") || !wrapperSource.includes("scorecard:terminal-source")) {
+  failures.push("Strategy4 runner does not retain its scoped scorecard and three-surface refresh");
+}
+
 if (!apiSource.includes('id: "full_scan_watch"')) {
   failures.push("API no longer preserves unmatched stocks in the full-scan watch result");
 }
@@ -59,4 +67,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Strategy4 full-scan volume contract OK: avg5 is diagnostic-only and cannot exclude scanned stocks.");
+console.log("Strategy4 full-scan contract OK: avg5 is diagnostic-only, formal results are separated, and scorecard refresh is Strategy4-scoped.");
