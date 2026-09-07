@@ -110,6 +110,16 @@ function main() {
     }
   }
 
+  for (const relative of [
+    "scripts/check-strategy3-v2-readiness.js",
+    "scripts/verify-strategy3-v2-water-universe.js",
+  ]) {
+    const file = path.join(ROOT, relative);
+    const text = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+    add(text.includes("fugle-daytrade-websocket-status-v2.json"), "strategy3_v2_canonical_status_path_missing", { file });
+    add(!text.includes('"fugle-daytrade-websocket-status.json"'), "strategy3_v2_legacy_status_path_present", { file });
+  }
+
   for (const file of files.filter((file) => file.endsWith(".js"))) {
     try { execFileSync(process.execPath, ["--check", file], { cwd: ROOT, encoding: "utf8", windowsHide: true, timeout: 20000 }); }
     catch (error) { add(false, "strategy3_v2_node_check_failed", { file, error: String(error?.stderr || error?.message || "").slice(0, 500) }); }
