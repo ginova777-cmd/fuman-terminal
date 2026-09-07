@@ -8,6 +8,8 @@ const STATE_FILE = statePath("daytrade-intraday-burst-telegram-state.json");
 const RECEIPT_DIR = runtimePath("data", "scan-receipts");
 const COOLDOWN_SECONDS = Math.max(60, Number(process.env.DAYTRADE_BURST_TELEGRAM_COOLDOWN_SECONDS || 300));
 const MAX_EVENT_AGE_SECONDS = Math.max(30, Number(process.env.DAYTRADE_BURST_TELEGRAM_MAX_EVENT_AGE_SECONDS || 180));
+const FIVE_MINUTE_MAX_STALE_SECONDS = Math.max(300, Number(process.env.DAYTRADE_BURST_TELEGRAM_5M_MAX_STALE_SECONDS || 600));
+const SUPABASE_URL = String(process.env.SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
 
 function readJson(file, fallback = {}) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -15,6 +17,9 @@ function readJson(file, fallback = {}) {
 function writeJson(file, payload) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify(payload, null, 2) + "\n");
+}
+function readSecret(name) {
+  try { return fs.readFileSync(runtimePath("secrets", name), "utf8").trim(); } catch { return ""; }
 }
 function taipeiDate(value = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
@@ -36,7 +41,8 @@ function eventLabel(type) {
   return "盤中雷達";
 }
 function eventMessage(event) {
-  const identity = (String(event.symbol || "") + " " + String(event.name || "")).trim();
+  const fiveMinuteSuffix = event.five_minute_confirmation_status === "CONFIRMED_STRONG_5M" ? " (5分K強)" : "";
+  const identity = (String(event.symbol || "") + " " + String(event.name || "")).trim() + fiveMinuteSuffix;
   const signalLabels = { kd_5_3_3: "KD(5,3,3)黃金交叉", rsi_4_cross_6: "RSI(4)突破RSI(6)", macd_7_12_20: "MACD(7,12,20)黃金交叉" };
   const technical = (Array.isArray(event.technical_golden_cross_signals) ? event.technical_golden_cross_signals : []).map((key) => signalLabels[key] || key).join("／");
   return [
@@ -44,8 +50,47 @@ function eventMessage(event) {
     identity,
     "入場價: " + formatNumber(event.latest_1m_close),
     "技術確認: " + technical,
-    "產業資金: " + String(event.industry || "未分類") + "｜" + String(event.industry_flow_label || "產業資料缺口") + "｜集中度 " + formatNumber(event.industry_heat_score, 1) + "｜排行 " + formatNumber(event.industry_flow_rank, 0),
+    "產業雷達: " + String(event.industry || "未分類") + "｜" + (event.industry_persistent_large_inflow === true ? "前三名持續流入" : "盤中突發大額流入") + "｜量價續強｜排行 " + formatNumber(event.industry_flow_rank, 0),
   ].join("\n");
+}
+async function readFiveMinuteConfirmations(events, tradeDate, nowMs = Date.now()) {
+  const symbols = [...new Set((Array.isArray(events) ? events : []).map((event) => String(event?.symbol || "")).filter((symbol) => /^\d{4}$/.test(symbol)))];
+  const result = { status: symbols.length ? "DATA_GAP_5M" : "not_required", view: "v_fugle_intraday_5m_readback", rows: 0, confirmed_strong: 0, bySymbol: new Map(), reason: null };
+  if (!symbols.length) return result;
+  const key = process.env.SUPABASE_ANON_KEY || readSecret("supabase-anon-key.txt");
+  if (!key) { result.reason = "anon_key_missing"; return result; }
+  const fields = ["symbol", "trade_date", "bar_end", "bar_complete", "data_gap_5m", "trend_5m_status", "rsi3_cross_rsi6_up_5m", "kd_5_3_golden_cross_5m", "ma5_cross_ma10_up_5m", "ma10_cross_ma20_up_5m", "ma5_cross_ma20_up_5m"];
+  const url = `${SUPABASE_URL}/rest/v1/v_fugle_intraday_5m_readback?select=${fields.join(",")}&trade_date=eq.${tradeDate}&symbol=in.(${symbols.join(",")})`;
+  try {
+    const response = await fetch(url, { headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
+    if (!response.ok) { result.reason = `anon_http_${response.status}`; return result; }
+    const rows = await response.json();
+    result.rows = Array.isArray(rows) ? rows.length : 0;
+    for (const row of Array.isArray(rows) ? rows : []) {
+      const barEndMs = Date.parse(row?.bar_end || "");
+      const freshCompleted = String(row?.trade_date || "") === tradeDate
+        && row?.bar_complete === true
+        && row?.data_gap_5m !== true
+        && Number.isFinite(barEndMs)
+        && barEndMs <= nowMs
+        && nowMs - barEndMs <= FIVE_MINUTE_MAX_STALE_SECONDS * 1000;
+      const confirmed = freshCompleted && row?.trend_5m_status === "CONFIRMED_STRONG_5M";
+      const signals = [
+        row?.rsi3_cross_rsi6_up_5m === true ? "rsi3_cross_rsi6" : "",
+        row?.kd_5_3_golden_cross_5m === true ? "kd_5_3_3" : "",
+        row?.ma5_cross_ma10_up_5m === true ? "ma5_cross_ma10" : "",
+        row?.ma10_cross_ma20_up_5m === true ? "ma10_cross_ma20" : "",
+        row?.ma5_cross_ma20_up_5m === true ? "ma5_cross_ma20" : "",
+      ].filter(Boolean);
+      result.bySymbol.set(String(row.symbol), { five_minute_confirmation_status: confirmed ? "CONFIRMED_STRONG_5M" : (freshCompleted ? String(row.trend_5m_status || "WAIT_5M_CONFIRMATION") : "DATA_GAP_5M"), five_minute_bar_end: String(row?.bar_end || ""), five_minute_confirmation_signals: signals });
+      if (confirmed) result.confirmed_strong += 1;
+    }
+    result.status = "ready";
+    return result;
+  } catch (error) {
+    result.reason = error?.message || String(error);
+    return result;
+  }
 }
 function eventKey(event) { return String(event.trade_date) + ":" + event.symbol + ":" + event.trigger_type; }
 function telegramIdempotencyKey(tradeDate, event) {
@@ -77,6 +122,9 @@ function canonicalSentEvent(event, tradeDate) {
     industry_heat_score: Number.isFinite(Number(event?.industry_heat_score)) ? Number(event.industry_heat_score) : null,
     industry_flow_priority: String(event?.industry_flow_priority || ""),
     industry_net_flow_proxy: Number.isFinite(Number(event?.industry_net_flow_proxy)) ? Number(event.industry_net_flow_proxy) : null,
+    five_minute_confirmation_status: String(event?.five_minute_confirmation_status || "DATA_GAP_5M"),
+    five_minute_bar_end: String(event?.five_minute_bar_end || ""),
+    five_minute_confirmation_signals: Array.isArray(event?.five_minute_confirmation_signals) ? event.five_minute_confirmation_signals : [],
   };
   if (Number.isFinite(Number(event?.telegram_target_count))) normalized.telegram_target_count = Number(event.telegram_target_count);
   return normalized;
@@ -142,10 +190,14 @@ function validEvent(event, tradeDate, nowMs) {
   if (String(event.technical_indicator_status || "") !== "ready") failures.push("technical_indicator_not_ready");
   if (String(event.industry_flow_status || "") !== "ready" || !String(event.industry || "").trim()) failures.push("industry_heatmap_not_ready");
   if (!Number.isFinite(Number(event.industry_heat_score)) || !["inflow", "outflow", "neutral"].includes(String(event.industry_flow_direction || ""))) failures.push("industry_flow_invalid");
-  if (String(event.industry_flow_direction || "") !== "inflow") failures.push("industry_not_net_inflow");
+  if (event.industry_persistent_large_inflow !== true && event.industry_sudden_large_inflow !== true) failures.push("industry_not_top3_or_sudden_inflow");
+  if (event.industry_volume_expansion_confirmed !== true) failures.push("industry_volume_expansion_not_confirmed");
+  if (event.industry_price_rise_continuing !== true) failures.push("industry_price_rise_not_continuing");
   const technicalSignals = Array.isArray(event.technical_golden_cross_signals) ? event.technical_golden_cross_signals : [];
   const allowedTechnicalSignals = ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"];
   if (event.technical_golden_cross_any !== true || !technicalSignals.some((signal) => allowedTechnicalSignals.includes(String(signal)))) failures.push("technical_golden_cross_not_met");
+  const fiveMinuteSignals = Array.isArray(event.five_minute_confirmation_signals) ? event.five_minute_confirmation_signals : [];
+  if (String(event.five_minute_confirmation_status || "") !== "CONFIRMED_STRONG_5M" || fiveMinuteSignals.length === 0) failures.push("five_minute_not_confirmed_strong");
   if (triggerType === "price_breakout_1pct" && !(numberValue(event.latest_1m_close) >= numberValue(event.rolling_1m_prior_high_close) * 1.01)) failures.push("price_rule_not_met");
   if (triggerType === "volume_burst_rolling60_x2" && !(numberValue(event.latest_1m_volume) >= numberValue(event.rolling_1m_baseline_volume) * 2)) failures.push("volume_rule_not_met");
   const eventTime = Date.parse(event.latest_1m_time || event.checked_at || "");
@@ -161,7 +213,7 @@ async function notifyFromOutbox(options = {}) {
   const receipt = {
     ok: false, complete: false, status: "running", contract: "daytrade_intraday_burst_telegram_v1", trade_date: tradeDate, checked_at: checkedAt, started_at: startedAt, finished_at: null,
     source: "fugle_formal_1m", alert_scope: "daytrade_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage_and_industry_heatmap",
-    conditions: { price_breakout: "latest_1m_close >= prior_rolling60_high_close * 1.01", volume_burst: "latest_1m_volume >= prior_rolling60_average_volume * 2", min_rolling_samples: 60, technical_cross_any: ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"] },
+    conditions: { price_breakout: "latest_1m_close >= prior_rolling60_high_close * 1.01", volume_burst: "latest_1m_volume >= prior_rolling60_average_volume * 2", min_rolling_samples: 60, technical_cross_any: ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"], five_minute_confirmation_required: true, five_minute_required_status: "CONFIRMED_STRONG_5M" },
     detected_events: 0, sent_events: [], skipped_events: [], first_blocker: null,
   };
   if (String(outbox.trade_date || "") !== tradeDate) {
@@ -188,10 +240,13 @@ async function notifyFromOutbox(options = {}) {
   const sent = state && state.trade_date === tradeDate && state.sent && typeof state.sent === "object" ? state.sent : {};
   const events = Array.isArray(outbox.events) ? outbox.events : [];
   receipt.detected_events = events.length;
+  const fiveMinute = await readFiveMinuteConfirmations(events, tradeDate, nowMs);
+  receipt.five_minute_confirmation = { status: fiveMinute.status, view: fiveMinute.view, rows: fiveMinute.rows, confirmed_strong: fiveMinute.confirmed_strong, reason: fiveMinute.reason };
   const oldBypass = process.env.FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM;
   process.env.FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM = "true";
   try {
-    for (const event of events) {
+    for (const rawEvent of events) {
+      const event = { ...rawEvent, ...(fiveMinute.bySymbol.get(String(rawEvent?.symbol || "")) || { five_minute_confirmation_status: "DATA_GAP_5M", five_minute_bar_end: "", five_minute_confirmation_signals: [] }) };
       const failures = validEvent(event, tradeDate, nowMs);
       const key = eventKey(event);
       const sentAt = Date.parse(sent[key]?.sent_at || "");
@@ -233,7 +288,7 @@ if (require.main === module) {
     process.exitCode = result.first_blocker && result.first_blocker !== "outside_trading_window" ? 1 : 0;
   }).catch((error) => { console.error(error.stack || error.message || String(error)); process.exitCode = 1; });
 }
-module.exports = { notifyFromOutbox };
+module.exports = { notifyFromOutbox, eventMessage, readFiveMinuteConfirmations };
 
 
 

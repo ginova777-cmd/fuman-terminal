@@ -10,6 +10,8 @@ const telegramFile = path.join(ROOT, "scripts", "telegram-push.js");
 const guardFile = path.join(ROOT, "scripts", "notification-guard.js");
 const runnerFile = path.join(ROOT, "run-daytrade-intraday-burst-telegram.ps1");
 const installerFile = path.join(ROOT, "scripts", "install-daytrade-intraday-burst-telegram-task.ps1");
+const packageFile = path.join(ROOT, "package.json");
+const masterControlFile = path.join(ROOT, "run-terminal-master-control.ps1");
 const outboxFile = path.join(RUNTIME_ROOT, "state", "daytrade-intraday-burst-telegram-outbox.json");
 const receiptFile = path.join(RUNTIME_ROOT, "data", "scan-receipts", "daytrade-intraday-burst-telegram-" + taipeiDate().replace(/-/g, "") + ".json");
 const runnerReceiptFile = path.join(RUNTIME_ROOT, "data", "scan-receipts", "daytrade-intraday-burst-telegram-runner-" + taipeiDate().replace(/-/g, "") + ".json");
@@ -51,6 +53,15 @@ const telegram = read(telegramFile);
 const guard = read(guardFile);
 const runner = read(runnerFile);
 const installer = read(installerFile);
+const packageSource = read(packageFile);
+const masterControl = read(masterControlFile);
+const formalTelegramVerifierFiles = (() => {
+  try {
+    return fs.readdirSync(path.join(ROOT, "scripts"))
+      .filter((name) => /^verify-.*daytrade.*telegram.*\.js$/i.test(name) || /^verify-.*telegram.*daytrade.*\.js$/i.test(name))
+      .sort();
+  } catch { return []; }
+})();
 const requireLive = process.argv.includes("--require-live");
 const requireToday = process.argv.includes("--require-today");
 const liveTaskEvidenceFile = argValue("live-task-evidence");
@@ -60,6 +71,12 @@ const liveTask = requireLive
 const checks = {
   writer_readable: Boolean(writer),
   notifier_readable: Boolean(notifier),
+  single_canonical_telegram_verifier: formalTelegramVerifierFiles.length === 1
+    && formalTelegramVerifierFiles[0] === "verify-daytrade-intraday-burst-telegram.js",
+  no_retired_verifier_reference: includesAll(packageSource, [
+    '"verify:daytrade-burst-telegram": "node scripts/verify-daytrade-intraday-burst-telegram.js"',
+  ]) && !/verify:daytrade[^"\r\n]*telegram[^"\r\n]*":(?!\s*"node scripts\/verify-daytrade-intraday-burst-telegram\.js")/i.test(packageSource)
+    && includesAll(masterControl, ["scripts\\verify-daytrade-intraday-burst-telegram.js"]),
   writer_never_invokes_notifier: !writer.includes("notifyFromOutbox")
     && !writer.includes("notify-daytrade-intraday-burst-telegram"),
   exact_price_rule: includesAll(writer, [
@@ -91,7 +108,8 @@ const checks = {
   ]),
   outbox_hooked_after_delta: includesAll(writer, [
     "const burstRows = priorityRows;",
-    "writeIntradayBurstTelegramOutbox(burstRows, tradeDate, checkedAt, runId, result?.quoteMap)",
+    "writeIntradayBurstTelegramOutbox(burstRows, tradeDate, checkedAt, runId, result?.quoteMap, result?.industryUniverseRows)",
+    "result.industryUniverseRows = activeSymbols.map",
     "daytrade_mother_pool_only_0900_1230",
     "INTRADAY_BURST_TELEGRAM_OUTBOX_FILE",
   ]),
@@ -104,11 +122,11 @@ const checks = {
     "sample_rejected",
   ]) && !writer.includes("events.push(...hotRankFallbackEvents"),
   price_quote_map_fallback_contract: includesAll(writer, [
-    "writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quoteMap = new Map())",
+    "writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quoteMap = new Map(), heatmapUniverseRows = rows)",
     "const quote = quoteMap instanceof Map ? (quoteMap.get(symbol) || {}) : {}",
     "quotePayload.price",
     "ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS",
-    "writeIntradayBurstTelegramOutbox(burstRows, tradeDate, checkedAt, runId, result?.quoteMap)",
+    "writeIntradayBurstTelegramOutbox(burstRows, tradeDate, checkedAt, runId, result?.quoteMap, result?.industryUniverseRows)",
     "result.quoteMap = quoteMap",
   ]),
   fugle_candle_cache_baseline_contract: includesAll(writer, [
@@ -137,19 +155,33 @@ const checks = {
   ]),
   industry_heatmap_flow_contract: includesAll(writer, [
     "finalizeIntradayIndustryHeatmap",
-    "fugle_formal_quote_mother_pool_heatmap",
+    "taiwan_domestic_detailed_industry+twse_tpex_mops_parent+fugle_formal_quote_full_market",
+    "industry_subgroup_role: \"formal_domestic_industry_ranking\"",
+    "industry_heatmap_universe: \"full_market_active_ordinary_stock\"",
+    "IC生產製造\": \"IC代工",
+    "CPU/ASIC/IP\": \"IC設計",
+    "overseas_priority_role: \"mother_pool_priority_weight_only\"",
+    "warmup_waiting_for_taiwan_open",
     "industry_flow_direction",
     "industry_net_flow_proxy",
-    "then scan burst rules only inside net-inflow industries",
-    "highest capital concentration is sent first",
-    "industry heatmap is finalized first; symbols are scanned by industry_flow_rank asc before burst evaluation",
+    "top3_persistent_large_inflow_volume_price_confirmed",
+    "sudden_large_inflow_volume_price_confirmed",
+    "industry_not_top3_or_sudden_inflow",
+    "flow_delta_proxy >= 500000000",
+    "industry_volume_expansion_confirmed",
+    "industry_price_rise_continuing",
+    "volume_expansion_symbol_count",
+    "previous_average_change_percent",
   ]) && includesAll(notifier, [
-    '"產業資金: "',
-    '"｜集中度 "',
-    '"｜排行 "',
+    '"產業雷達: "',
+    '"前三名持續流入"',
+    '"盤中突發大額流入"',
+    '"｜量價續強｜排行 "',
     "industry_heatmap_not_ready",
     "industry_flow_invalid",
-    "industry_not_net_inflow",
+    "industry_not_top3_or_sudden_inflow",
+    "industry_volume_expansion_not_confirmed",
+    "industry_price_rise_not_continuing",
   ]),
   notifier_strict_trigger_contract: includesAll(notifier, [
     "price_breakout_1pct",
@@ -162,6 +194,17 @@ const checks = {
     '"技術確認: " + technical',
     '"當沖盤中雷達｜" + eventLabel(event.trigger_type)',
   ]) && !includesAll(notifier, ["最新 1分K 收 ", "前置樣本 ", "僅為 Mother Pool 雷達提醒"]),
+  five_minute_strong_hard_gate_contract: includesAll(notifier, [
+    "v_fugle_intraday_5m_readback",
+    "CONFIRMED_STRONG_5M",
+    '" (5分K強)"',
+    "five_minute_confirmation_required: true",
+    'five_minute_required_status: "CONFIRMED_STRONG_5M"',
+    "five_minute_not_confirmed_strong",
+    "row?.bar_complete === true",
+    "row?.data_gap_5m !== true",
+    "FIVE_MINUTE_MAX_STALE_SECONDS",
+  ]),
   formal_1m_data_gate: includesAll(notifier, [
     "source: \"fugle_formal_1m\"",
     "rolling_1m_baseline_status",
@@ -264,15 +307,21 @@ const fullMarketDomesticHeatmap = (
   && Number(outbox?.industry_heatmap_universe_rows) > 0
 );
 checks.runtime_industry_heatmap_ready = !outbox || (
-  outbox?.industry_heatmap_status === "ready"
-  && (legacyMotherPoolHeatmap || fullMarketDomesticHeatmap)
-  && Array.isArray(outbox?.industry_heatmap)
-  && outbox.industry_heatmap.length > 0
+  (outbox?.industry_heatmap_status === "warmup_waiting_for_taiwan_open"
+    && taipeiMinutesFromIso(outbox?.updated_at) < 540
+    && Array.isArray(outbox?.industry_heatmap)
+    && outbox.industry_heatmap.length === 0)
+  || (outbox?.industry_heatmap_status === "ready"
+    && (legacyMotherPoolHeatmap || fullMarketDomesticHeatmap)
+    && Array.isArray(outbox?.industry_heatmap)
+    && outbox.industry_heatmap.length > 0)
 );
 checks.runtime_events_have_industry_flow = !outbox || outboxEvents.every((event) =>
   event?.industry_flow_status === "ready"
   && Boolean(String(event?.industry || "").trim())
-  && String(event?.industry_flow_direction || "") === "inflow"
+  && (event?.industry_persistent_large_inflow === true || event?.industry_sudden_large_inflow === true)
+  && event?.industry_volume_expansion_confirmed === true
+  && event?.industry_price_rise_continuing === true
   && Number.isFinite(Number(event?.industry_heat_score))
 );
 checks.runtime_events_industry_concentration_ordered = !outbox || outboxEvents.every((event, index) =>
@@ -326,10 +375,21 @@ function taipeiMinutesFromIso(value) {
   return Number(values.hour) * 60 + Number(values.minute);
 }
 const outboxTaipeiMinutes = taipeiMinutesFromIso(outboxUpdatedAt);
+const sameDayBaselineWarmup = Boolean(outbox)
+  && String(outbox?.trade_date || "") === taipeiDate()
+  && outboxTaipeiMinutes >= 9 * 60
+  && outboxTaipeiMinutes < 10 * 60
+  && candidateCount > 0
+  && cacheReadyCount === 0
+  && baselineRejectedCount === candidateCount;
 const baselineRuntimeHealthy = !outbox
   || candidateCount === 0
-  || outboxTaipeiMinutes < 9 * 60 + 25
+  || sameDayBaselineWarmup
   || baselineRejectedRatio <= 0.5;
+const technicalReadback = Array.isArray(outbox?.technical_indicator_readback) ? outbox.technical_indicator_readback : [];
+checks.runtime_candidate_readback_mother_pool_only = !outbox
+  || technicalReadback.length === candidateCount
+  && technicalReadback.every((row) => row?.tradable_mother_pool === true && String(row?.trade_date || "") === String(outbox?.trade_date || ""));
 const runtime = {
   outbox_path: outboxFile,
   outbox_exists: Boolean(outbox),
@@ -357,8 +417,12 @@ const runtime = {
   cache_rolling_1m_ready_count: cacheReadyCount,
   rolling_1m_baseline_rejected_count: baselineRejectedCount,
   rolling_1m_baseline_rejected_ratio: Number(baselineRejectedRatio.toFixed(4)),
+  rolling_1m_baseline_same_day_warmup: sameDayBaselineWarmup,
+  rolling_1m_baseline_expected_ready_at: sameDayBaselineWarmup ? `${outbox.trade_date}T10:00:00+08:00` : null,
   rolling_1m_baseline_runtime_healthy: baselineRuntimeHealthy,
-  runtime_status: outbox ? (baselineRuntimeHealthy ? "available" : "rolling_1m_baseline_not_ready") : "awaiting_next_writer_tick",
+  runtime_status: outbox
+    ? (sameDayBaselineWarmup ? "same_day_rolling60_warmup" : (baselineRuntimeHealthy ? "available" : "rolling_1m_baseline_not_ready"))
+    : "awaiting_next_writer_tick",
   live_task: liveTask,
 };
 
