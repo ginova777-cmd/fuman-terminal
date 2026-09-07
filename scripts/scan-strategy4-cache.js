@@ -1663,17 +1663,32 @@ function buildSupabaseScanRows(output, mode = "full", runId = "", includeRunId =
 
 async function fetchSupabaseSelfTestRows(table, query) {
   const baseUrl = SUPABASE_URL.replace(/\/+$/, "");
-  const response = await fetch(`${baseUrl}/rest/v1/${table}?${query}`, {
-    headers: {
-      apikey: SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
-      Accept: "application/json",
-    },
-  });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`${table} readback HTTP ${response.status} ${text.slice(0, 240)}`.trim());
-  const rows = JSON.parse(text || "[]");
-  return Array.isArray(rows) ? rows : [];
+  const params = new URLSearchParams(query);
+  const requestedLimit = Math.max(1, cleanNumber(params.get("limit")) || 1000);
+  const pageSize = Math.min(1000, requestedLimit);
+  params.delete("limit");
+  params.delete("offset");
+  const rows = [];
+  for (let offset = 0; offset < requestedLimit; offset += pageSize) {
+    const pageLimit = Math.min(pageSize, requestedLimit - offset);
+    const pageParams = new URLSearchParams(params);
+    pageParams.set("limit", String(pageLimit));
+    pageParams.set("offset", String(offset));
+    const response = await fetch(`${baseUrl}/rest/v1/${table}?${pageParams.toString()}`, {
+      headers: {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        Accept: "application/json",
+      },
+    });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`${table} readback HTTP ${response.status} ${text.slice(0, 240)}`.trim());
+    const page = JSON.parse(text || "[]");
+    if (!Array.isArray(page)) return rows;
+    rows.push(...page);
+    if (page.length < pageLimit) break;
+  }
+  return rows;
 }
 
 async function verifyStrategy4PublishedSelfTest(output, runId) {

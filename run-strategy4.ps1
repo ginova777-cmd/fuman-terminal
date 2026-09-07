@@ -314,13 +314,18 @@ if ($Recovery) {
   $recoveryCount = [int]$row.supabase.count
   $recoveryDate = Normalize-Strategy4DateStamp ([string]$tri.expectedDate)
   if ([string]::IsNullOrWhiteSpace($recoveryDate)) { $recoveryDate = Normalize-Strategy4DateStamp $recoveryRunId }
-  $lineEvidence = Get-Content -LiteralPath (Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-$recoveryDate.json") -Raw | ConvertFrom-Json
-  $publishEvidence = Get-Content -LiteralPath (Join-Path $RuntimeRoot "data\scan-receipts\strategy4-daily-publish-$recoveryDate.json") -Raw | ConvertFrom-Json
-  if ($lineEvidence.line_push_ok -ne $true -or [string]$lineEvidence.runId -ne $recoveryRunId) { throw "Strategy4 recovery requires delivered LINE evidence for runId=$recoveryRunId" }
-  if ($publishEvidence.ok -ne $true -or [string]$publishEvidence.runId -ne $recoveryRunId) { throw "Strategy4 recovery requires complete daily publish evidence for runId=$recoveryRunId" }
+  $lineEvidencePath = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-$recoveryDate.json"
+  $lineEvidence = if (Test-Path -LiteralPath $lineEvidencePath) { Get-Content -LiteralPath $lineEvidencePath -Raw | ConvertFrom-Json } else { $null }
+  $publishEvidencePath = Join-Path $RuntimeRoot "data\scan-receipts\strategy4-daily-publish-$recoveryDate.json"
+  $publishEvidence = if (Test-Path -LiteralPath $publishEvidencePath) { Get-Content -LiteralPath $publishEvidencePath -Raw | ConvertFrom-Json } else { $null }
+  $isTodayRecovery = $recoveryDate -eq (Get-Date).ToString("yyyyMMdd")
+  if ($null -ne $lineEvidence -and ($lineEvidence.line_push_ok -ne $true -or [string]$lineEvidence.runId -ne $recoveryRunId)) { throw "Strategy4 recovery found mismatched LINE evidence for runId=$recoveryRunId" }
+  if ($null -eq $lineEvidence -and -not $isTodayRecovery) { throw "Strategy4 historical recovery requires delivered LINE evidence for runId=$recoveryRunId" }
+  if ($null -ne $publishEvidence -and ($publishEvidence.ok -ne $true -or [string]$publishEvidence.runId -ne $recoveryRunId)) { throw "Strategy4 recovery found mismatched daily publish evidence for runId=$recoveryRunId" }
+  if ($null -eq $publishEvidence -and -not $isTodayRecovery) { throw "Strategy4 historical recovery requires complete daily publish evidence for runId=$recoveryRunId" }
   Write-Strategy4Receipt "complete" 0 $true $recoveryCount $recoveryRunId @() "" ([int]$row.supabase.scannedCount) ([int]$row.supabase.expectedTotal)
   Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId $recoveryRunId -ExpectedDate $recoveryDate -Row $row
-  if ($recoveryDate -eq (Get-Date).ToString("yyyyMMdd")) { Invoke-Strategy4ClosureAndLine $recoveryRunId $recoveryCount }
+  if ($isTodayRecovery) { Invoke-Strategy4ClosureAndLine $recoveryRunId $recoveryCount }
   else { Write-Log "Strategy4 historical recovery reused existing delivered LINE evidence; no notification resent. runId=$recoveryRunId tradeDate=$recoveryDate" }
   Write-Log "Strategy4 one-entry recovery complete runId=$recoveryRunId count=$recoveryCount"
   exit 0

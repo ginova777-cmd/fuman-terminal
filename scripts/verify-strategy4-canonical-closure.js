@@ -112,13 +112,28 @@ async function supabaseRows(pathname) {
   if (!response.ok) throw new Error(`${pathname} HTTP ${response.status} ${text.slice(0, 240)}`.trim());
   return text ? JSON.parse(text) : [];
 }
+async function supabaseAllRows(pathname, expectedCount) {
+  const rows = [];
+  const pageSize = 1000;
+  for (let offset = 0; offset < expectedCount; offset += pageSize) {
+    const separator = pathname.includes("?") ? "&" : "?";
+    const page = await supabaseRows(`${pathname}${separator}limit=${Math.min(pageSize, expectedCount - offset)}&offset=${offset}`);
+    if (!Array.isArray(page)) break;
+    rows.push(...page);
+    if (page.length < Math.min(pageSize, expectedCount - offset)) break;
+  }
+  return rows;
+}
 async function readPublishedRun() {
   const selectRun = encodeURIComponent("run_id,scan_date,status,complete,expected_total,scanned_count,result_count,no_data_count,error_count,quality_status,finished_at");
   const runs = await supabaseRows(`${RUNS_TABLE}?select=${selectRun}&strategy=eq.strategy4&status=eq.complete&complete=eq.true&order=finished_at.desc&limit=1`);
   const run = Array.isArray(runs) ? runs[0] : null;
   if (!run?.run_id) throw new Error("strategy4_latest_complete_run_missing");
   const selectRows = encodeURIComponent("run_id,scan_date,code,name,price,change_percent,score,zone,zone_label,rank,price_source,payload");
-  const rows = await supabaseRows(`${RESULTS_TABLE}?select=${selectRows}&run_id=eq.${encodeURIComponent(run.run_id)}&strategy=eq.strategy4&order=rank.asc&limit=500`);
+  const rows = await supabaseAllRows(
+    `${RESULTS_TABLE}?select=${selectRows}&run_id=eq.${encodeURIComponent(run.run_id)}&strategy=eq.strategy4&order=rank.asc`,
+    cleanNumber(run.result_count)
+  );
   return {
     runId: run.run_id,
     scanDate: run.scan_date,
