@@ -50,7 +50,7 @@ function processExists(pid) {
 function main() {
   const cachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-symbols.json");
   const sharedPath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-ws-symbols.json");
-  const statusPath = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status.json");
+  const statusPath = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status-v2.json");
   const writerPath = path.join(ROOT, "scripts", "run-daytrade-source-writer.js");
 
   const cache = readJson(cachePath, null);

@@ -18,7 +18,7 @@ const {
 
 const date = process.argv.find((arg) => arg.startsWith("--trade-date="))?.slice("--trade-date=".length) || taipeiDate();
 const compactDate = date.replace(/\D/g, "");
-const statusFile = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status.json");
+const statusFile = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status-v2.json");
 const sourceReceipt = path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-v2-readiness-${compactDate}.json`);
 const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles-v2.json");
 const motherPoolPath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-priority-symbols.json");
