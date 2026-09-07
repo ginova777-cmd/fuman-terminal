@@ -223,7 +223,7 @@ function Invoke-Strategy4InlineTerminalVerify {
   }
 }
 function Invoke-Strategy4ClosureAndLine {
-  param([string]$RunId, [int]$ExpectedCount)
+  param([string]$RunId, [int]$ExpectedCount, [switch]$ReuseDeliveredLineEvidence)
   if ([string]::IsNullOrWhiteSpace($RunId) -or $ExpectedCount -le 0) { throw "Strategy4 LINE closure missing runId or count" }
   $commands = @(
     @("scripts\verify-strategy4-source-root.js"), @("scripts\verify-strategy4-match-yield-diagnostics.js")
@@ -232,16 +232,22 @@ function Invoke-Strategy4ClosureAndLine {
     & $nodeExe "--use-system-ca" @command *>&1 | Tee-Object -FilePath $log -Append
     if ($LASTEXITCODE -ne 0) { throw "Strategy4 closure verifier failed: $($command[0]) exit=$LASTEXITCODE" }
   }
-  & $nodeExe "--use-system-ca" "scripts\send-strategy-line-card.js" "--strategy=strategy4" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
-  if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE dry-run failed exit=$LASTEXITCODE" }
-  & $nodeExe "scripts\verify-strategy4-line-card-contract.js" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
-  if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE dry-run canonical verifier failed exit=$LASTEXITCODE" }
+  if (-not $ReuseDeliveredLineEvidence) {
+    & $nodeExe "--use-system-ca" "scripts\send-strategy-line-card.js" "--strategy=strategy4" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
+    if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE dry-run failed exit=$LASTEXITCODE" }
+    & $nodeExe "scripts\verify-strategy4-line-card-contract.js" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
+    if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE dry-run canonical verifier failed exit=$LASTEXITCODE" }
+  }
   foreach ($command in @(@("scripts\verify-strategy4-canonical-closure.js"), @("scripts\verify-strategy4-88-data-chain.js"), @("scripts\verify-terminal-daily-ohlcv.js"))) {
     & $nodeExe "--use-system-ca" @command *>&1 | Tee-Object -FilePath $log -Append
     if ($LASTEXITCODE -ne 0) { throw "Strategy4 closure verifier failed: $($command[0]) exit=$LASTEXITCODE" }
   }
-  & $nodeExe "--use-system-ca" "scripts\send-strategy-line-card.js" "--strategy=strategy4" *>&1 | Tee-Object -FilePath $log -Append
-  if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE push failed exit=$LASTEXITCODE" }
+  if (-not $ReuseDeliveredLineEvidence) {
+    & $nodeExe "--use-system-ca" "scripts\send-strategy-line-card.js" "--strategy=strategy4" *>&1 | Tee-Object -FilePath $log -Append
+    if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE push failed exit=$LASTEXITCODE" }
+  } else {
+    Write-Log "Strategy4 LINE push skipped; reusing delivered same-run evidence runId=$RunId"
+  }
   $lineFile = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-$((Get-Date).ToString('yyyyMMdd')).json"
   $lineReceipt = Get-Content -LiteralPath $lineFile -Raw | ConvertFrom-Json
   $expectedLineCount = [Math]::Min($ExpectedCount, 70)
@@ -309,7 +315,9 @@ if ($Recovery) {
   if ($null -eq $publishEvidence -and -not $isTodayRecovery) { throw "Strategy4 historical recovery requires complete daily publish evidence for runId=$recoveryRunId" }
   Write-Strategy4Receipt "complete" 0 $true $recoveryCount $recoveryRunId @() "" ([int]$row.supabase.scannedCount) ([int]$row.supabase.expectedTotal)
   Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId $recoveryRunId -ExpectedDate $recoveryDate -Row $row
-  if ($isTodayRecovery) { Invoke-Strategy4ClosureAndLine $recoveryRunId $recoveryCount }
+  if ($isTodayRecovery) {
+    Invoke-Strategy4ClosureAndLine $recoveryRunId $recoveryCount -ReuseDeliveredLineEvidence:($null -ne $lineEvidence)
+  }
   else { Write-Log "Strategy4 historical recovery reused existing delivered LINE evidence; no notification resent. runId=$recoveryRunId tradeDate=$recoveryDate" }
   Write-Log "Strategy4 one-entry recovery complete runId=$recoveryRunId count=$recoveryCount"
   exit 0

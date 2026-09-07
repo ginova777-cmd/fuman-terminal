@@ -49,6 +49,14 @@ if (!wrapperSource.includes("$isTodayRecovery") || !wrapperSource.includes("Stra
   failures.push("same-day recovery cannot safely complete a missing LINE receipt after verifier repair");
 }
 
+if (!wrapperSource.includes("[switch]$ReuseDeliveredLineEvidence") || !wrapperSource.includes("-ReuseDeliveredLineEvidence:($null -ne $lineEvidence)")) {
+  failures.push("same-day recovery does not reuse matching delivered LINE evidence and may send a duplicate notification");
+}
+
+if (!wrapperSource.includes("Strategy4 LINE push skipped; reusing delivered same-run evidence")) {
+  failures.push("Strategy4 recovery does not expose auditable evidence when an existing LINE delivery is reused");
+}
+
 if (wrapperSource.includes("Invoke-Strategy4ScorecardSync") || wrapperSource.includes("scorecard:sync")) {
   failures.push("Strategy4 runner still invokes the shared all-strategy scorecard sync and schedule audit");
 }
