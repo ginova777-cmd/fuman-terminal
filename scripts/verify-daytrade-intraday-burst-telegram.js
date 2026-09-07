@@ -15,6 +15,8 @@ const masterControlFile = path.join(ROOT, "run-terminal-master-control.ps1");
 const outboxFile = path.join(RUNTIME_ROOT, "state", "daytrade-intraday-burst-telegram-outbox.json");
 const receiptFile = path.join(RUNTIME_ROOT, "data", "scan-receipts", "daytrade-intraday-burst-telegram-" + taipeiDate().replace(/-/g, "") + ".json");
 const runnerReceiptFile = path.join(RUNTIME_ROOT, "data", "scan-receipts", "daytrade-intraday-burst-telegram-runner-" + taipeiDate().replace(/-/g, "") + ".json");
+const industryFastInjectFile = path.join(RUNTIME_ROOT, "state", "daytrade-industry-signal-fast-inject.json");
+const motherPoolFile = path.join(RUNTIME_ROOT, "state", "daytrade-mother-pool-delta.json");
 
 function read(file) {
   try { return fs.readFileSync(file, "utf8"); } catch { return ""; }
@@ -172,6 +174,10 @@ const checks = {
     "industry_price_rise_continuing",
     "volume_expansion_symbol_count",
     "previous_average_change_percent",
+    "daytrade_industry_signal_fast_inject_v1",
+    "industry_signal_fast_inject",
+    "mother_pool_fast_inject_count",
+    "expires_at",
   ]) && includesAll(notifier, [
     '"產業雷達: "',
     '"前三名持續流入"',
@@ -196,6 +202,17 @@ const checks = {
   ]) && !includesAll(notifier, ["最新 1分K 收 ", "前置樣本 ", "僅為 Mother Pool 雷達提醒"]),
   five_minute_strong_hard_gate_contract: includesAll(notifier, [
     "v_fugle_intraday_5m_readback",
+    "v_fugle_intraday_5m_verification_readback",
+    "daytrade_intraday_5m_runner_verifier_receipt_v4",
+    "daytrade_intraday_5m_branch_independent_strict_wait_v1",
+    "golden-cross-any-macd-3-9-3-v4",
+    "five-minute-indicators-macd-3-9-3-v4",
+    "macd_3_9_3_golden_cross_5m",
+    "macd_fast_period",
+    "macd_slow_period",
+    "macd_signal_period",
+    "allBranchesFalse",
+    "anyBranchTrue",
     "CONFIRMED_STRONG_5M",
     '" (5分K強)"',
     "five_minute_confirmation_required: true",
@@ -204,7 +221,7 @@ const checks = {
     "row?.bar_complete === true",
     "row?.data_gap_5m !== true",
     "FIVE_MINUTE_MAX_STALE_SECONDS",
-  ]),
+  ]) && ["macd_dif_5m", "macd_signal_5m", "macd_golden_cross_5m", "macd_zero_cross_up_5m"].every((marker) => !notifier.includes(marker)),
   formal_1m_data_gate: includesAll(notifier, [
     "source: \"fugle_formal_1m\"",
     "rolling_1m_baseline_status",
@@ -277,6 +294,8 @@ if (requireLive) {
 const outbox = readJson(outboxFile);
 const receipt = readJson(receiptFile);
 const runnerReceipt = readJson(runnerReceiptFile);
+const industryFastInject = readJson(industryFastInjectFile);
+const motherPool = readJson(motherPoolFile);
 const receiptSentEvents = Array.isArray(receipt?.sent_events) ? receipt.sent_events : [];
 const receiptEventKeys = receiptSentEvents.map((event) => String(event?.event_key || ""));
 const expectedAlertScope = "daytrade_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage_and_industry_heatmap";
@@ -328,6 +347,22 @@ checks.runtime_events_industry_concentration_ordered = !outbox || outboxEvents.e
   index === 0
   || Number(outboxEvents[index - 1]?.industry_flow_rank || 999999) <= Number(event?.industry_flow_rank || 999999)
 );
+const fastInjectRows = Array.isArray(industryFastInject?.rows) ? industryFastInject.rows : [];
+const motherPoolRows = Array.isArray(motherPool?.rows) ? motherPool.rows : [];
+const motherPoolBySymbol = new Map(motherPoolRows.map((row) => [String(row?.symbol || ""), row]));
+checks.runtime_industry_fast_inject_contract = !industryFastInject || (
+  industryFastInject?.contract === "daytrade_industry_signal_fast_inject_v1"
+  && String(industryFastInject?.trade_date || "") === String(outbox?.trade_date || "")
+  && Array.isArray(industryFastInject?.industries)
+  && Array.isArray(industryFastInject?.symbols)
+  && Number(industryFastInject?.injection_count) === fastInjectRows.length
+  && fastInjectRows.every((row) => row?.source === "industry_signal_fast_inject" && Number(row?.price) >= 50 && Number(row?.change_percent) > 0)
+);
+checks.runtime_industry_fast_inject_mother_pool_readback = !industryFastInject || fastInjectRows.every((row) => {
+  const poolRow = motherPoolBySymbol.get(String(row?.symbol || ""));
+  return Boolean(poolRow) && poolRow?.industry_signal_fast_injected === true
+    && Array.isArray(poolRow?.source_flags) && poolRow.source_flags.includes("industry_signal_fast_inject");
+});
 if (requireToday) {
   checks.runtime_today_outbox_present = Boolean(outbox) && String(outbox?.trade_date || "") === taipeiDate();
   checks.runtime_today_receipt_present = Boolean(receipt) && String(receipt?.trade_date || "") === taipeiDate();

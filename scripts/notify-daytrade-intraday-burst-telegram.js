@@ -10,6 +10,10 @@ const COOLDOWN_SECONDS = Math.max(60, Number(process.env.DAYTRADE_BURST_TELEGRAM
 const MAX_EVENT_AGE_SECONDS = Math.max(30, Number(process.env.DAYTRADE_BURST_TELEGRAM_MAX_EVENT_AGE_SECONDS || 180));
 const FIVE_MINUTE_MAX_STALE_SECONDS = Math.max(300, Number(process.env.DAYTRADE_BURST_TELEGRAM_5M_MAX_STALE_SECONDS || 600));
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
+const FIVE_MINUTE_RECEIPT_CONTRACT = "daytrade_intraday_5m_runner_verifier_receipt_v4";
+const FIVE_MINUTE_CLASSIFICATION_CONTRACT = "daytrade_intraday_5m_branch_independent_strict_wait_v1";
+const FIVE_MINUTE_STRATEGY_VERSION = "golden-cross-any-macd-3-9-3-v4";
+const FIVE_MINUTE_CALCULATION_VERSION = "five-minute-indicators-macd-3-9-3-v4";
 
 function readJson(file, fallback = {}) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -55,34 +59,74 @@ function eventMessage(event) {
 }
 async function readFiveMinuteConfirmations(events, tradeDate, nowMs = Date.now()) {
   const symbols = [...new Set((Array.isArray(events) ? events : []).map((event) => String(event?.symbol || "")).filter((symbol) => /^\d{4}$/.test(symbol)))];
-  const result = { status: symbols.length ? "DATA_GAP_5M" : "not_required", view: "v_fugle_intraday_5m_readback", rows: 0, confirmed_strong: 0, bySymbol: new Map(), reason: null };
+  const result = { status: symbols.length ? "DATA_GAP_5M" : "not_required", view: "v_fugle_intraday_5m_readback", receipt_view: "v_fugle_intraday_5m_verification_readback", receipt_contract: FIVE_MINUTE_RECEIPT_CONTRACT, run_id: "", rows: 0, confirmed_strong: 0, bySymbol: new Map(), reason: null };
   if (!symbols.length) return result;
   const key = process.env.SUPABASE_ANON_KEY || readSecret("supabase-anon-key.txt");
   if (!key) { result.reason = "anon_key_missing"; return result; }
-  const fields = ["symbol", "trade_date", "bar_end", "bar_complete", "data_gap_5m", "trend_5m_status", "rsi3_cross_rsi6_up_5m", "kd_5_3_golden_cross_5m", "ma5_cross_ma10_up_5m", "ma10_cross_ma20_up_5m", "ma5_cross_ma20_up_5m"];
-  const url = `${SUPABASE_URL}/rest/v1/v_fugle_intraday_5m_readback?select=${fields.join(",")}&trade_date=eq.${tradeDate}&symbol=in.(${symbols.join(",")})`;
   try {
+    const headers = { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" };
+    const receiptFields = ["contract", "strategy_version", "calculation_version", "classification_contract", "run_id", "trade_date", "status", "complete", "exit_code", "first_blocker", "anon_http_status", "ssl_ok", "verified_at", "latest_complete_bar_end", "macd_parameters"];
+    const receiptUrl = `${SUPABASE_URL}/rest/v1/v_fugle_intraday_5m_verification_readback?select=${receiptFields.join(",")}&trade_date=eq.${tradeDate}&order=verified_at.desc&limit=1`;
+    const receiptResponse = await fetch(receiptUrl, { headers, signal: AbortSignal.timeout(10000) });
+    if (!receiptResponse.ok) { result.reason = `receipt_anon_http_${receiptResponse.status}`; return result; }
+    const receipt = (await receiptResponse.json())?.[0];
+    const macdParameters = receipt?.macd_parameters || {};
+    const receiptOk = receipt?.contract === FIVE_MINUTE_RECEIPT_CONTRACT
+      && receipt?.strategy_version === FIVE_MINUTE_STRATEGY_VERSION
+      && receipt?.calculation_version === FIVE_MINUTE_CALCULATION_VERSION
+      && receipt?.classification_contract === FIVE_MINUTE_CLASSIFICATION_CONTRACT
+      && receipt?.trade_date === tradeDate
+      && receipt?.status === "complete"
+      && receipt?.complete === true
+      && Number(receipt?.exit_code) === 0
+      && !receipt?.first_blocker
+      && receipt?.ssl_ok === true
+      && Number(receipt?.anon_http_status) === 200
+      && Number(macdParameters.fast) === 3
+      && Number(macdParameters.slow) === 9
+      && Number(macdParameters.signal) === 3
+      && /^five-minute-/.test(String(receipt?.run_id || ""));
+    if (!receiptOk) { result.reason = "five_minute_v4_receipt_not_complete_or_mismatched"; return result; }
+    result.run_id = String(receipt.run_id);
+
+    const fields = ["symbol", "trade_date", "run_id", "bar_end", "bar_complete", "bar_kind", "confirmation_eligible", "data_gap_5m", "source_status", "trend_5m_status", "golden_cross_any_5m", "trend_5m_strategy_version", "calculation_version", "classification_contract", "macd_fast_period", "macd_slow_period", "macd_signal_period", "rsi3_cross_rsi6_up_5m", "kd_5_3_golden_cross_5m", "macd_3_9_3_dif_5m", "macd_3_9_3_dea_5m", "macd_3_9_3_histogram_5m", "previous_macd_3_9_3_dif_5m", "previous_macd_3_9_3_dea_5m", "macd_3_9_3_golden_cross_5m", "macd_3_9_3_zero_cross_up_5m", "ma5_cross_ma10_up_5m", "ma10_cross_ma20_up_5m", "ma5_cross_ma20_up_5m"];
+    const url = `${SUPABASE_URL}/rest/v1/v_fugle_intraday_5m_readback?select=${fields.join(",")}&trade_date=eq.${tradeDate}&run_id=eq.${encodeURIComponent(result.run_id)}&symbol=in.(${symbols.join(",")})`;
     const response = await fetch(url, { headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" }, signal: AbortSignal.timeout(10000) });
     if (!response.ok) { result.reason = `anon_http_${response.status}`; return result; }
     const rows = await response.json();
     result.rows = Array.isArray(rows) ? rows.length : 0;
     for (const row of Array.isArray(rows) ? rows : []) {
       const barEndMs = Date.parse(row?.bar_end || "");
-      const freshCompleted = String(row?.trade_date || "") === tradeDate
+      const branchValues = [row?.rsi3_cross_rsi6_up_5m, row?.kd_5_3_golden_cross_5m, row?.macd_3_9_3_golden_cross_5m, row?.ma5_cross_ma10_up_5m, row?.ma10_cross_ma20_up_5m, row?.ma5_cross_ma20_up_5m];
+      const anyBranchTrue = branchValues.some((value) => value === true);
+      const allBranchesFalse = branchValues.every((value) => value === false);
+      const rowContractOk = String(row?.trade_date || "") === tradeDate
+        && String(row?.run_id || "") === result.run_id
         && row?.bar_complete === true
+        && row?.bar_kind === "regular_session"
+        && row?.confirmation_eligible === true
         && row?.data_gap_5m !== true
+        && row?.source_status === "ok"
+        && row?.trend_5m_strategy_version === FIVE_MINUTE_STRATEGY_VERSION
+        && row?.calculation_version === FIVE_MINUTE_CALCULATION_VERSION
+        && row?.classification_contract === FIVE_MINUTE_CLASSIFICATION_CONTRACT
+        && Number(row?.macd_fast_period) === 3
+        && Number(row?.macd_slow_period) === 9
+        && Number(row?.macd_signal_period) === 3
         && Number.isFinite(barEndMs)
         && barEndMs <= nowMs
         && nowMs - barEndMs <= FIVE_MINUTE_MAX_STALE_SECONDS * 1000;
-      const confirmed = freshCompleted && row?.trend_5m_status === "CONFIRMED_STRONG_5M";
+      const confirmed = rowContractOk && row?.trend_5m_status === "CONFIRMED_STRONG_5M" && row?.golden_cross_any_5m === true && anyBranchTrue;
+      const waiting = rowContractOk && row?.trend_5m_status === "WAIT_5M_CONFIRMATION" && row?.golden_cross_any_5m === false && allBranchesFalse;
       const signals = [
         row?.rsi3_cross_rsi6_up_5m === true ? "rsi3_cross_rsi6" : "",
         row?.kd_5_3_golden_cross_5m === true ? "kd_5_3_3" : "",
+        row?.macd_3_9_3_golden_cross_5m === true ? "macd_3_9_3" : "",
         row?.ma5_cross_ma10_up_5m === true ? "ma5_cross_ma10" : "",
         row?.ma10_cross_ma20_up_5m === true ? "ma10_cross_ma20" : "",
         row?.ma5_cross_ma20_up_5m === true ? "ma5_cross_ma20" : "",
       ].filter(Boolean);
-      result.bySymbol.set(String(row.symbol), { five_minute_confirmation_status: confirmed ? "CONFIRMED_STRONG_5M" : (freshCompleted ? String(row.trend_5m_status || "WAIT_5M_CONFIRMATION") : "DATA_GAP_5M"), five_minute_bar_end: String(row?.bar_end || ""), five_minute_confirmation_signals: signals });
+      result.bySymbol.set(String(row.symbol), { five_minute_confirmation_status: confirmed ? "CONFIRMED_STRONG_5M" : (waiting ? "WAIT_5M_CONFIRMATION" : "DATA_GAP_5M"), five_minute_bar_end: String(row?.bar_end || ""), five_minute_run_id: String(row?.run_id || ""), five_minute_confirmation_signals: signals, five_minute_macd_parameters: { fast: 3, slow: 9, signal: 3 }, five_minute_macd_zero_cross_up_diagnostic: rowContractOk ? row?.macd_3_9_3_zero_cross_up_5m === true : null });
       if (confirmed) result.confirmed_strong += 1;
     }
     result.status = "ready";
@@ -241,7 +285,7 @@ async function notifyFromOutbox(options = {}) {
   const events = Array.isArray(outbox.events) ? outbox.events : [];
   receipt.detected_events = events.length;
   const fiveMinute = await readFiveMinuteConfirmations(events, tradeDate, nowMs);
-  receipt.five_minute_confirmation = { status: fiveMinute.status, view: fiveMinute.view, rows: fiveMinute.rows, confirmed_strong: fiveMinute.confirmed_strong, reason: fiveMinute.reason };
+  receipt.five_minute_confirmation = { status: fiveMinute.status, view: fiveMinute.view, receipt_view: fiveMinute.receipt_view, receipt_contract: fiveMinute.receipt_contract, run_id: fiveMinute.run_id, strategy_version: FIVE_MINUTE_STRATEGY_VERSION, calculation_version: FIVE_MINUTE_CALCULATION_VERSION, classification_contract: FIVE_MINUTE_CLASSIFICATION_CONTRACT, macd_parameters: { fast: 3, slow: 9, signal: 3 }, rows: fiveMinute.rows, confirmed_strong: fiveMinute.confirmed_strong, reason: fiveMinute.reason };
   const oldBypass = process.env.FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM;
   process.env.FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM = "true";
   try {
