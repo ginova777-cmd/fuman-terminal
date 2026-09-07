@@ -25,6 +25,14 @@ if (!runnerSource.includes('policy: "avg5_never_excludes_strategy4"')) {
   failures.push("runner does not declare the avg5_never_excludes_strategy4 policy");
 }
 
+for (const signalId of ["watch_trend", "base_setup", "full_scan_watch", "below_20d_high_8", "lower_half_60d"]) {
+  if (!runnerSource.includes(`"${signalId}"`)) failures.push(`observation-only signal ${signalId} is not classified`);
+}
+
+if (!runnerSource.includes('resultClass: "formal_actionable"') || !runnerSource.includes("observationOnlyCount") || !runnerSource.includes("dataGapCount")) {
+  failures.push("runner does not split formal actionable results, observation-only evaluations, and data gaps");
+}
+
 if (!runnerSource.includes('enabled: false') || !runnerSource.includes('rule: "avgVolume5-diagnostic-only"')) {
   failures.push("runner volume check is not diagnostic-only");
 }

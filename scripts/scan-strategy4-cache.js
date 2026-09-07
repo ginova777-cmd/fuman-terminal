@@ -259,6 +259,7 @@ function buildStrategy4PrePublishSelfTest(output) {
   const coverage = output.supabaseCoverage && typeof output.supabaseCoverage === "object" ? output.supabaseCoverage : {};
   const requireSupabaseCoverage = output.conditionRefresh !== true;
   const breakdownIssues = matches.flatMap(strategy4BreakdownIssues);
+  const nonActionableRows = matches.filter((item) => !strategy4IsActionable(item));
   const issues = [];
 
   if (output.complete !== true) issues.push("complete must be true");
@@ -271,6 +272,10 @@ function buildStrategy4PrePublishSelfTest(output) {
   if (!["complete", "degraded"].includes(outputQualityStatus)) issues.push(`qualityStatus must be complete/degraded, got ${output.qualityStatus || "(blank)"}`);
   if (cleanNumber(output.total) < MIN_SOURCE_ROW_COUNT) issues.push(`total ${cleanNumber(output.total)} below ${MIN_SOURCE_ROW_COUNT}`);
   if (outputCount <= 0) issues.push("count must be > 0 for Strategy4 publish; zero-result runs need an explicit empty-complete contract");
+  if (nonActionableRows.length) issues.push(`formal results contain ${nonActionableRows.length} observation-only rows`);
+  if (cleanNumber(output.matchedCount) !== outputCount || cleanNumber(output.resultCount) !== outputCount) issues.push(`formal count mismatch count=${outputCount} matched=${output.matchedCount} result=${output.resultCount}`);
+  if (cleanNumber(output.evaluatedCount) !== outputCount + cleanNumber(output.observationOnlyCount) + cleanNumber(output.invalidRiskFilteredCount)) issues.push(`evaluation partition mismatch evaluated=${output.evaluatedCount} formal=${outputCount} observation=${output.observationOnlyCount} invalidRisk=${output.invalidRiskFilteredCount}`);
+  if (cleanNumber(output.dataGapCount) !== outputNoDataCount + cleanNumber(output.insufficientHistoryCount)) issues.push(`dataGapCount mismatch ${output.dataGapCount}`);
   if (outputErrorCount !== 0) issues.push(`errorCount must be 0, got ${output.errorCount}`);
   if (cleanNumber(output.executionRate) !== 1) issues.push(`executionRate must be 1, got ${output.executionRate}`);
   if (!outputCoverageAcceptable) issues.push(`coverageRatio must be >= ${STRATEGY4_MIN_HISTORY_COVERAGE_RATIO}, got ${output.coverageRatio}`);
@@ -932,6 +937,8 @@ async function assertStrategy4MatchYieldGuard(output, previousRaw) {
   // a false "yield collapse" even when the current full scan is healthy.
   const compatibleNormalHistory = normalHistory.filter((run) => {
     const filter = run?.payload?.volumeFilter || null;
+    const resultContract = String(run?.payload?.resultContract || "");
+    if (String(output.resultContract || "") && resultContract !== String(output.resultContract)) return false;
     if (!activeVolumeFilterEnabled) return filter?.enabled !== true;
     return filter?.enabled === true
       && cleanNumber(filter?.minAvgVolume5 || filter?.threshold) === activeVolumeThreshold;
@@ -1247,17 +1254,41 @@ function strategy4RiskFieldsValid(item = {}) {
   const fields = strategy4RiskFields(item);
   return fields.entryPrice > 0 && fields.targetPrice > 0 && fields.stopPrice > 0 && fields.score > 0 && Boolean(fields.zone);
 }
+const STRATEGY4_OBSERVATION_ONLY_SIGNAL_IDS = new Set([
+  "watch_trend",
+  "base_setup",
+  "full_scan_watch",
+  "below_20d_high_8",
+  "lower_half_60d",
+]);
+
+function strategy4ActionableSignals(item = {}) {
+  return strategy4Signals(item).filter((signal) => !STRATEGY4_OBSERVATION_ONLY_SIGNAL_IDS.has(String(signal?.id || "").trim()));
+}
+
+function strategy4IsActionable(item = {}) {
+  return strategy4ActionableSignals(item).length > 0;
+}
+
 function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, dataSourceCounts, complete, runMode, scanStamp, volumeFilter, quoteLiquidityFilter, supabaseCoverage, insufficientHistory = [] }) {
   const expectedMatchDate = normalizeIsoDate(scanStamp) || scanDateFromOutput({ scanStamp });
   const allMatches = [...currentMatches.values()];
   const staleMatches = allMatches.filter((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate) !== expectedMatchDate);
   const dateAlignedMatches = allMatches.filter((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate) === expectedMatchDate);
-  const invalidRiskMatches = dateAlignedMatches.filter((item) => !strategy4RiskFieldsValid(item));
+  const actionableMatches = dateAlignedMatches.filter(strategy4IsActionable);
+  const observationOnlyMatches = dateAlignedMatches.filter((item) => !strategy4IsActionable(item));
+  const invalidRiskMatches = actionableMatches.filter((item) => !strategy4RiskFieldsValid(item));
   // invalid_risk_row_filter_v1: published Strategy4 rows must have positive entry/target/stop/score and a zone.
-  const matches = dateAlignedMatches
+  const matches = actionableMatches
     .filter(strategy4RiskFieldsValid)
     .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0))
-    .map((item, index) => ({ ...item, rank: index + 1 }));
+    .map((item, index) => ({
+      ...item,
+      rank: index + 1,
+      actionable: true,
+      resultClass: "formal_actionable",
+      actionableSignals: strategy4ActionableSignals(item),
+    }));
   const noDataCount = noDataCodes.size;
   const errorCount = scanErrors.length;
   const pendingCount = codes.length - scanned.size + noDataCount;
@@ -1335,6 +1366,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     fallbackAllowed: false,
     fallbackDetails: [],
     fallbackContract: STRATEGY4_FALLBACK_CONTRACT,
+    resultContract: "strategy4_actionable_patterns_v1",
     generatedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     scanStamp,
@@ -1384,6 +1416,12 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     invalidRiskFilteredCount: invalidRiskMatches.length,
     invalidRiskFilteredCodes: invalidRiskMatches.map((item) => item.code).filter(Boolean).slice(0, 80),
     count: matches.length,
+    matchedCount: matches.length,
+    resultCount: matches.length,
+    observationOnlyCount: observationOnlyMatches.length,
+    dataGapCount: noDataCount + insufficientHistory.length,
+    evaluatedCount: dateAlignedMatches.length,
+    observationOnlyCodes: observationOnlyMatches.map((item) => normalizeCode(item.code)).filter(Boolean),
     triangleBreakoutCount,
     matches,
   };
