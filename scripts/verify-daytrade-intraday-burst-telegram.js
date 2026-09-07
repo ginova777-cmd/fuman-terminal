@@ -256,9 +256,16 @@ checks.runtime_receipt_canonical_fields = !receipt || receiptSentEvents.every((e
 );
 checks.runtime_receipt_event_keys_unique = !receipt || receiptEventKeys.length === new Set(receiptEventKeys).size;
 checks.runtime_receipt_count_matches = !receipt || Number(receipt?.sent_event_count) === receiptSentEvents.length;
+const legacyMotherPoolHeatmap = outbox?.industry_heatmap_source === "fugle_formal_quote_mother_pool_heatmap";
+const fullMarketDomesticHeatmap = (
+  outbox?.industry_heatmap_source === "taiwan_domestic_detailed_industry+twse_tpex_mops_parent+fugle_formal_quote_full_market"
+  && outbox?.industry_taxonomy === "taiwan_domestic_detailed_industry_v1"
+  && outbox?.industry_heatmap_universe === "full_market_active_ordinary_stock"
+  && Number(outbox?.industry_heatmap_universe_rows) > 0
+);
 checks.runtime_industry_heatmap_ready = !outbox || (
   outbox?.industry_heatmap_status === "ready"
-  && outbox?.industry_heatmap_source === "fugle_formal_quote_mother_pool_heatmap"
+  && (legacyMotherPoolHeatmap || fullMarketDomesticHeatmap)
   && Array.isArray(outbox?.industry_heatmap)
   && outbox.industry_heatmap.length > 0
 );
