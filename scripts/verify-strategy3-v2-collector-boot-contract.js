@@ -11,7 +11,7 @@ const {
 
 const wrapperPath = path.join(ROOT, "ops", "public-slot", "Run-DaytradeWebSocketCollector.ps1");
 const collectorPath = path.join(ROOT, "scripts", "fugle-websocket-collector.js");
-const statusPath = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status.json");
+const statusPath = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status-v2.json");
 const supervisorPath = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-supervisor.json");
 const issues = [];
 
@@ -56,6 +56,7 @@ function main() {
   const livePid = Number(status.pid || 0);
   const liveUpdated = status.updatedAt || status.checkedAt || "";
   const liveRecent = isRecentIso(liveUpdated, 5 * 60 * 1000);
+  const supervisorRunning = supervisor.status === "running";
   const supervisorStopped = supervisor.status === "stopped_off_session" || supervisor.status === "duplicate_blocked";
   const livePidExists = processExists(livePid);
   const orphanOldLimit = Boolean(livePid && livePidExists && liveRecent && supervisorStopped && Number(status.subscriptionSymbolLimit || 0) < MIN_READY_SYMBOLS);
@@ -76,6 +77,9 @@ function main() {
   add(/process\.env\.FUGLE_STREAMING_CANDLE_SYMBOLS/.test(collector), "strategy3_v2_collector_does_not_read_candle_symbols_env");
   add(/process\.env\.FUGLE_STREAMING_AGGREGATE_SYMBOLS/.test(collector), "strategy3_v2_collector_does_not_read_aggregate_symbols_env");
   add(collector.includes("formal_1m_1000_plus_trade_radar_plus_aggregate_priority"), "strategy3_v2_collector_transport_plan_missing");
+  add(!supervisorRunning || fs.existsSync(statusPath), "strategy3_v2_live_status_v2_missing_while_supervisor_running", { statusPath });
+  add(!supervisorRunning || liveRecent, "strategy3_v2_live_status_v2_stale_while_supervisor_running", { updatedAt: liveUpdated });
+  add(!supervisorRunning || livePidExists, "strategy3_v2_live_pid_missing_while_supervisor_running", { pid: livePid });
   add(candleSubscribedSymbols >= MIN_READY_SYMBOLS, "strategy3_v2_boot_contract_cannot_reach_1000_candles", {
     computedCandleSubscribedSymbols: candleSubscribedSymbols,
     required: MIN_READY_SYMBOLS,
