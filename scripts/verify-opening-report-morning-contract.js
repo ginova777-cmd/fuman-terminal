@@ -206,6 +206,7 @@ function staticContractChecks(checks) {
   addCheck(checks, "japan_korea_freeze_window_0800_0820", detector.includes("08:00-08:20 Asia/Taipei") && detector.includes("T08:20:59.999+08:00"), "Japan/Korea must freeze by 08:20 minute end");
   addCheck(checks, "korea_naver_percent_only_primary_present", detector.includes("korea_naver_change_percent_primary") && detector.includes("fluctuationsRatio") && detector.includes("localTradedAt") && detector.includes("KQ"), "Korean .KS/.KQ rows must use Naver directly with same-day percent and source time");
   const detectorModule = require(path.join(ROOT, "scripts", "run-opening-report-0830-overseas-leader-detector.js"));
+  addCheck(checks, "overseas_market_classifier_contract", detectorModule.classifyLeaderMarket("AAPL") === "us" && detectorModule.classifyLeaderMarket("6861.T") === "japan" && detectorModule.classifyLeaderMarket("005930.KS") === "korea" && detectorModule.classifyLeaderMarket("222800.KQ") === "korea" && detectorModule.classifyLeaderMarket("000725.SZ") === "other", "US, Japan, Korea and unsupported markets must not be conflated");
   const naverFixture = detectorModule.parseNaverKoreaBasic({ itemCode: "005930", fluctuationsRatio: "1.11", localTradedAt: "2026-09-08T09:20:59+09:00" }, { yahoo: "005930.KS" }, "2026-09-08");
   const naverAfterCutoff = detectorModule.parseNaverKoreaBasic({ itemCode: "005930", fluctuationsRatio: "1.12", localTradedAt: "2026-09-08T09:21:00+09:00" }, { yahoo: "005930.KS" }, "2026-09-08");
   addCheck(checks, "korea_naver_percent_fixture", naverFixture.ok === true && naverFixture.percent === 1.11 && naverFixture.reason_code === "korea_naver_change_percent_primary", JSON.stringify(naverFixture));
@@ -315,8 +316,11 @@ function currentReceiptChecks(checks, tradeDate) {
 
   const usMarket = leaders.us_market || {};
   addCheck(checks, "current_us_market_status_contract", ["regular", "early_close", "market_closed"].includes(usMarket.us_market_status) && typeof usMarket.no_new_us_session === "boolean" && usMarket.calendar_timezone === "America/New_York", JSON.stringify(usMarket));
-  const usRows = rows.filter((row) => row.yahoo_symbol && !/\.(?:T|KS|KQ)$/i.test(String(row.yahoo_symbol)));
+  const currentDetectorModule = require(path.join(ROOT, "scripts", "run-opening-report-0830-overseas-leader-detector.js"));
+  const usRows = rows.filter((row) => currentDetectorModule.classifyLeaderMarket(row.yahoo_symbol) === "us");
   addCheck(checks, "current_us_closed_rows_not_promoted", usMarket.no_new_us_session !== true || usRows.every((row) => row.ok !== true && row.percent == null && row.reason_code === "us_market_closed_no_new_session"), "closed US rows must be background-only and excluded from ranking");
+  const otherMarketRows = rows.filter((row) => currentDetectorModule.classifyLeaderMarket(row.yahoo_symbol) === "other");
+  addCheck(checks, "current_other_market_rows_not_ranked", otherMarketRows.every((row) => row.ok !== true && row.percent == null), JSON.stringify(otherMarketRows.map((row) => ({ symbol: row.yahoo_symbol, reason_code: row.reason_code }))));
   const koreaRows = rows.filter((row) => /\.(?:KS|KQ)$/i.test(String(row.yahoo_symbol || "")));
   const naverRequired = tradeDate >= KOREA_NAVER_ENFORCE_FROM;
   addCheck(checks, "current_korea_uses_naver_primary", !naverRequired || koreaRows.every((row) => row.source === "Naver Finance KRX basic"), JSON.stringify({ enforce_from: KOREA_NAVER_ENFORCE_FROM, required: naverRequired, count: koreaRows.length, sources: [...new Set(koreaRows.map((row) => row.source))] }));
