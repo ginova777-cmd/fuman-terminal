@@ -1,0 +1,20 @@
+{
+  "contract": "canonical-reader-v1",
+  "timezone": "Asia/Taipei",
+  "sessions": {
+    "preopen": "08:00-08:59",
+    "intraday": "09:00-13:30",
+    "postmarket": "13:31-23:59",
+    "closed": "non-trading day or 00:00-07:59"
+  },
+  "canonicalIdentity": ["trade_date", "canonical_run_id", "verification_run_id", "batch_id"],
+  "versionIdentity": ["receipt_id", "contract_version", "field_version"],
+  "requiredSurfaces": ["desktop", "mobile", "route88", "line", "telegram"],
+  "policy": {
+    "failClosed": true,
+    "fallbackMustBeDeclared": true,
+    "strategyVerifierRemainsAuthoritative": true,
+    "strategySelectionLogicOwnedByStrategy": true,
+    "intraday5mIsCapabilityOptIn": true
+  }
+}
