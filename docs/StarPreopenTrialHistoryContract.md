@@ -4,6 +4,8 @@
 
 時區：`Asia/Taipei`
 
+唯一正式 STAR SQL：`ops/public-slot/DaytradeStarPreopenReadbackContract_20260908.sql`。2026-09-02 舊版已刪除，不得由排程、手動部署或文件重新引用。
+
 ## 正式鏈
 
 ```text

@@ -5,7 +5,7 @@ const path = require("path");
 
 const root = path.resolve(__dirname, "..");
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
-const sql = read("ops/public-slot/DaytradeStarPreopenReadbackContract_20260902.sql");
+const sql = read("ops/public-slot/DaytradeStarPreopenReadbackContract_20260908.sql");
 const producer = read("scripts/run-daytrade-near-one-source.js");
 const verifier = read("scripts/verify-daytrade-futopt-star-readback-readonly.js");
 const trialHistoryVerifier = read("scripts/verify-star-preopen-trial-history-contract.js");

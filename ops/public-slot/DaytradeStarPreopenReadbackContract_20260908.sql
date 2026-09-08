@@ -1,3 +1,5 @@
+-- Canonical STAR preopen readback contract. Supersedes and removes the
+-- retired 2026-09-02 SQL filename so operators cannot apply an older path.
 begin;
 
 -- Full stock-futures roster.  This view intentionally retains excluded

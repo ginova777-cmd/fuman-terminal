@@ -5,7 +5,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const SQL_FILE = path.join(ROOT, "ops", "public-slot", "DaytradeStarPreopenReadbackContract_20260902.sql");
+const SQL_FILE = path.join(ROOT, "ops", "public-slot", "DaytradeStarPreopenReadbackContract_20260908.sql");
 const URL = (process.env.SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
 function secret(name) { for (const file of [path.join(RUNTIME, "secrets", name), path.join(ROOT, "secrets", name)]) { try { const value=fs.readFileSync(file,"utf8").trim(); if(value)return value; } catch {} } return ""; }
 async function main() {
