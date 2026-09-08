@@ -166,18 +166,23 @@ const checks = {
     "mother_pool_field_coverage",
     "side_volume_data_gap_rows",
   ]),
-  quote_table_trade_date_derivation_contract: includesAll(canonicalWaterReader, [
+  quote_table_explicit_trade_date_contract: includesAll(canonicalWaterReader, [
     "function quoteTimestamp",
     "function quoteTradeDate",
     "function normalizeQuoteRow",
-    'quote_trade_date_policy: "derive_asia_taipei_from_quote_seen_at_last_trade_time_updated_at"',
+    "const explicitTradeDate",
+    "trade_date: quoteTradeDate(row)",
+    'quote_trade_date_policy: "require_explicit_fugle_daytrade_quotes_live_trade_date_v1"',
     "row?.quote_seen_at",
     "row?.last_trade_time",
     "canonical_quote_time",
     "normalizedQuoteRows",
   ]) && quoteReadBlock.includes("last_trade_time")
-    && !quoteReadBlock.includes(",trade_date\"")
-    && !quoteReadBlock.includes("trade_date:"),
+    && quoteReadBlock.includes(",trade_date,")
+    && quoteReadBlock.includes("trade_date: `eq.${tradeDate}`"),
+  retired_quote_trade_date_derivation_absent: !canonicalWaterReader.includes(
+    'quote_trade_date_policy: "derive_asia_taipei_from_quote_seen_at_last_trade_time_updated_at"',
+  ),
   notifier_uses_canonical_water_before_send: includesAll(notifier, [
     'require("../lib/daytrade-canonical-water-reader")',
     "await readCanonicalDaytradeWater",
