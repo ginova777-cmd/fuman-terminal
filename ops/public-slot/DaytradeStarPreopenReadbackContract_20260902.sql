@@ -1,11 +1,85 @@
 begin;
 
+-- Full stock-futures roster.  This view intentionally retains excluded
+-- contracts so readers can prove that selection was not limited to a fixed
+-- symbol list, Mother Pool, display rank, or the first REST page.
+create or replace view public.v_fugle_daytrade_star_universe_readback as
+with clock as (
+  select (now() at time zone 'Asia/Taipei')::date as trade_date
+), normalized as (
+  select
+    c.trade_date,
+    coalesce(nullif(t.underlying_symbol,''), nullif(t.payload->>'underlying_symbol',''), nullif(t.payload->>'underlyingSymbol','')) as underlying_symbol,
+    coalesce(nullif(t.underlying_name,''), nullif(t.payload->>'underlying_name',''), nullif(t.payload->>'underlyingName','')) as underlying_name,
+    upper(nullif(t.future_symbol,'')) as future_symbol,
+    t.name as future_name,
+    upper(coalesce(nullif(t.product,''), nullif(t.payload->>'product',''), 'STOCK_FUTURE')) as product,
+    t.contract_type,
+    case
+      when nullif(t.end_date::text,'') ~ '^\d{4}-\d{2}-\d{2}$' then t.end_date::date
+      when nullif(t.end_date::text,'') ~ '^\d{8}$' then to_date(t.end_date::text,'YYYYMMDD')
+      when nullif(t.payload->>'CDate','') ~ '^\d{8}$' then to_date(t.payload->>'CDate','YYYYMMDD')
+      else null
+    end as contract_end_date,
+    t.exchange,
+    t.session,
+    t.updated_at as contract_source_updated_at
+  from public.futopt_tickers t
+  cross join clock c
+  where nullif(t.future_symbol,'') is not null
+), stock_candidates as (
+  select *
+  from normalized
+  where underlying_symbol ~ '^\d{4}$'
+    and future_symbol not like 'TXF%'
+    and product in ('S','STOCK_FUTURE')
+), ranked as (
+  select s.*,
+    row_number() over (
+      partition by underlying_symbol
+      order by
+        case when contract_end_date >= trade_date then 0 when contract_end_date is null then 1 else 2 end,
+        contract_end_date asc nulls last,
+        contract_source_updated_at desc nulls last,
+        future_symbol asc
+    ) as candidate_rank,
+    count(*) over (partition by underlying_symbol) as candidate_count
+  from stock_candidates s
+)
+select
+  trade_date,
+  underlying_symbol,
+  coalesce(underlying_name, underlying_symbol) as underlying_name,
+  future_symbol,
+  future_name,
+  product,
+  contract_type,
+  contract_end_date,
+  exchange,
+  session,
+  candidate_rank,
+  candidate_count,
+  (candidate_rank=1 and contract_end_date is not null and contract_end_date>=trade_date) as selected_near_one,
+  case when candidate_rank=1 and contract_end_date is not null and contract_end_date>=trade_date then 'selected' else 'excluded' end as selection_status,
+  case
+    when candidate_rank=1 and contract_end_date is not null and contract_end_date>=trade_date then null
+    when contract_end_date is null then 'EXPIRY_MISSING'
+    when contract_end_date<trade_date then 'EXPIRED'
+    else 'DUPLICATE_LATER_EXPIRY'
+  end as exclusion_reason,
+  'earliest_non_expired_end_date'::text as selection_rule,
+  contract_source_updated_at,
+  contract_source_updated_at as resolved_at,
+  underlying_symbol as symbol,
+  future_symbol as fut_contract
+from ranked;
+
 create or replace view public.v_fugle_daytrade_star_preopen_readback as
 with near_one as (
   select n.*
-  from public.v_fugle_daytrade_near_one_contract n
+  from public.v_fugle_daytrade_star_universe_readback n
   where n.trade_date = (now() at time zone 'Asia/Taipei')::date
-    and n.is_near_one is true
+    and n.selected_near_one is true
 ), snapshots as (
   select s.*
   from public.v_fugle_daytrade_preopen_snapshot_contract s
@@ -48,12 +122,8 @@ with near_one as (
     a.relative_to_txf_percent,
     a.futopt_total_volume,
     a.future_open_price, a.future_high_price, a.future_low_price,
-    a.future_open_source_event_at, a.future_last_source_event_at,
     a.trial_price,
     nullif(a.latest_payload->>'reference_price','')::numeric as reference_price,
-    a.latest_payload->>'trial_event_at' as trial_event_at,
-    a.latest_payload->>'run_id' as run_id,
-    a.latest_payload->>'generation_id' as generation_id,
     a.trial_rise_percent, a.best_bid_price,
     nullif(a.latest_payload->>'bid_volume','')::numeric as bid_volume,
     nullif(a.latest_payload->>'ask_volume','')::numeric as ask_volume,
@@ -69,7 +139,9 @@ with near_one as (
   select b.*,
     (future_symbol is not null and future_symbol<>'' and future_symbol not like 'TXF%' and futopt_last_price>0
       and futopt_change_percent>=2 and relative_to_txf_percent>=1 and futopt_total_volume>=50) as future_ok,
-    (trial_price>0 and reference_price>0 and trial_rise_percent>=2 and bid_ask_ratio>=1.5
+    -- User removed the old trial-rise, limit-up-bid, and bid/ask-ratio hard
+    -- gates.  Keep only usable auction evidence plus best bid >= trial.
+    (trial_price>0 and reference_price>0
       and best_bid_price>=trial_price and preopen_snapshot_count>0) as preopen_ok,
     case when future_open_price>0 and futopt_last_price>0
       and abs(futopt_last_price-future_open_price)/future_open_price*100<=1
@@ -86,41 +158,67 @@ select r.*,
   future_ok as star_precheck_ok,
   coalesce(future_pattern='開盤回測守住',false) as star_type1_ok,
   (future_ok and preopen_ok) as star_blind_buy_ok,
-  coalesce(future_pattern='開盤回測守住',false) as star_final_ok,
+  (coalesce(future_pattern='開盤回測守住',false) and preopen_ok) as star_final_ok,
   case
-    when future_pattern='開盤回測守住' then null
     when future_symbol is null or future_symbol='' or future_symbol like 'TXF%' then 'NO_CONTRACT'
     when futopt_last_price<=0 then 'FUTURE_PRICE_MISSING'
     when preopen_snapshot_count=0 then 'NATURAL_FUTURE_PREOPEN_DATA_GAP'
     when future_open_price is null or futopt_last_price is null then 'NATURAL_FUTURE_PREOPEN_DATA_GAP'
     when futopt_change_percent is null or relative_to_txf_percent is null or futopt_total_volume is null then 'NATURAL_FUTURE_PREOPEN_DATA_GAP'
+    when trial_price is null or trial_price<=0 then 'TRIAL_PRICE_MISSING'
     when reference_price is null or reference_price<=0 then 'REFERENCE_PRICE_MISSING'
-    when not preopen_ok then 'PREOPEN_CONDITION_NOT_MET'
-    when future_pattern is null then 'FUTURE_OPEN_RETEST_NOT_MET'
+    when best_bid_price is null or best_bid_price<=0 then 'BEST_BID_MISSING'
     else null end as data_gap_reason,
   case
-    when future_pattern='開盤回測守住' then 'STAR'
+    when future_pattern='開盤回測守住' and preopen_ok then 'STAR'
     when preopen_snapshot_count=0 or future_open_price is null or futopt_last_price is null then 'DATA_GAP｜期貨自然時槽缺資料'
-    when not future_ok or not preopen_ok then 'DATA_GAP｜' || coalesce(case when preopen_snapshot_count=0 then '試撮缺資料' else '條件未通過' end,'條件未通過')
-    else '盤前觀察' end as display_label,
+    when trial_price is null or trial_price<=0 then 'DATA_GAP｜試撮價缺失'
+    when reference_price is null or reference_price<=0 then 'DATA_GAP｜參考價缺失'
+    when best_bid_price is null or best_bid_price<=0 then 'DATA_GAP｜最佳委買缺失'
+    else 'NO_MATCH｜條件未通過' end as display_label,
   r.symbol as underlying_symbol,
   r.stock_name as name,
   r.future_open_price as future_0845_open_price,
-  r.future_open_source_event_at as future_0845_source_event_at,
   r.future_high_price as future_preopen_high_price,
   r.future_low_price as future_preopen_low_price,
   r.futopt_last_price as future_0859_last_price,
-  r.future_last_source_event_at as future_0859_source_event_at,
   r.futopt_change_percent as future_change_percent,
   r.futopt_total_volume as future_total_volume,
   case when r.future_open_price>0 and r.futopt_last_price>0
     then abs(r.futopt_last_price-r.future_open_price)/r.future_open_price*100 else null end as future_open_near_percent,
   coalesce(r.future_pattern='開盤回測守住',false) as future_open_retest_ok,
   case when r.future_pattern='開盤回測守住' then '期貨0845開盤後，0859前回到開盤價附近並守住'
-    else 'DATA_GAP_OR_FUTURE_OPEN_RETEST_NOT_MET' end as future_open_retest_reason
-from rules r;
+    else 'DATA_GAP_OR_FUTURE_OPEN_RETEST_NOT_MET' end as future_open_retest_reason,
+  sa.future_open_source_event_at as future_0845_source_event_at,
+  sa.future_last_source_event_at as future_0859_source_event_at,
+  sa.latest_payload->>'trial_event_at' as trial_event_at,
+  sa.latest_payload->>'run_id' as run_id,
+  sa.latest_payload->>'generation_id' as generation_id,
+  case
+    when future_symbol is null or future_symbol='' or future_symbol like 'TXF%'
+      or futopt_last_price is null or futopt_last_price<=0
+      or preopen_snapshot_count=0
+      or future_open_price is null
+      or futopt_change_percent is null or relative_to_txf_percent is null or futopt_total_volume is null
+      or trial_price is null or trial_price<=0
+      or reference_price is null or reference_price<=0
+      or best_bid_price is null or best_bid_price<=0 then 'DATA_GAP'
+    when coalesce(future_pattern='開盤回測守住',false) and preopen_ok then 'PASS'
+    else 'NO_MATCH'
+  end as strategy_result,
+  case
+    when trial_price>0 and reference_price>0 and best_bid_price<trial_price then 'BEST_BID_BELOW_TRIAL'
+    when futopt_change_percent<2 then 'FUTURE_CHANGE_BELOW_2_PERCENT'
+    when relative_to_txf_percent<1 then 'RELATIVE_TO_TXF_BELOW_1_PERCENT'
+    when futopt_total_volume<50 then 'FUTURE_VOLUME_BELOW_50'
+    when future_pattern is null then 'FUTURE_OPEN_RETEST_NOT_MET'
+    else null end as strategy_no_match_reason
+from rules r
+left join snapshot_agg sa on sa.trade_date=r.trade_date and sa.underlying_symbol=r.symbol;
 
 grant select on public.v_fugle_daytrade_star_preopen_readback to anon, authenticated;
+grant select on public.v_fugle_daytrade_star_universe_readback to anon, authenticated;
+comment on view public.v_fugle_daytrade_star_universe_readback is 'Full anon-readable stock-futures contract roster. Exactly one valid non-expired near contract per underlying is selected; exclusions and reasons remain visible.';
 comment on view public.v_fugle_daytrade_star_preopen_readback is 'All current stock-futures near-one underlyings; same-day natural 08:45-08:59 evidence only; missing rows remain explicit and STAR fails closed.';
 notify pgrst, 'reload schema';
 commit;

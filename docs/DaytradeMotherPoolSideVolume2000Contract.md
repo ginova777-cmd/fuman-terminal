@@ -1,6 +1,6 @@
 # Mother Pool 內外盤 2,000 張正式契約
 
-版本：`daytrade_side_volume_2000_canonical_verifier_v1`
+版本：`daytrade_side_volume_2000_canonical_verifier_v2`
 時區：`Asia/Taipei`
 
 ## 唯一正式鏈
@@ -11,7 +11,8 @@ Fugle regular-board quote trades/aggregates
   -> fugle_daytrade_priority_pool.payload.motherPoolMetrics
   -> public.v_fugle_daytrade_mother_pool.mother_pool_metrics
   -> scripts/verify-daytrade-side-volume-contract.js
-  -> daytrade-side-volume-2000-canonical-receipt-YYYYMMDD.json
+  -> fugle_daytrade_side_volume_verification_receipts
+  -> v_fugle_daytrade_side_volume_verification_readback (anon read-only)
 ```
 
 本契約不改 Mother Pool 容量、不另外啟動 Writer，也不允許 Viewer 自行推算或回填欄位。`v_fugle_daytrade_mother_pool` 仍由既有 priority-pool payload 對外提供 JSON，因此不需要新增另一個 Supabase view。
@@ -40,7 +41,7 @@ Fugle regular-board quote trades/aggregates
 
 ## Canonical readback 欄位
 
-Writer 必須在 `mother_pool_metrics` 發布下列 camelCase 欄位；priority payload 同時保留 snake_case 相容欄位：
+Writer 必須在 `mother_pool_metrics` 發布下列 camelCase 欄位；priority payload 同時保留 snake_case 相容欄位。若兩種命名同時存在但值不同，canonical verifier 必須回報 `CAMEL_SNAKE_VALUE_CONFLICT`：
 
 ```text
 insideVolume
@@ -112,12 +113,33 @@ Canonical receipt：
 npm run verify:daytrade-side-volume-contract:receipt
 ```
 
+發布可跨電腦 receipt：
+
+```powershell
+npm run verify:daytrade-side-volume-contract:publish
+```
+
 Receipt 路徑：
 
 ```text
 C:\fuman-runtime\data\scan-receipts\daytrade-side-volume-2000-canonical-receipt-YYYYMMDD.json
 C:\fuman-runtime\data\scan-receipts\daytrade-side-volume-2000-canonical-receipt-latest.json
 ```
+
+本機 JSON 只供隔離診斷。Viewer 的正式入口是：
+
+```text
+GET /rest/v1/v_fugle_daytrade_side_volume_verification_readback
+  ?select=*
+  &trade_date=eq.YYYY-MM-DD
+  &canonical_run_id=eq.fugle_daytrade_source:YYYYMMDD:canonical
+  &order=verified_at.desc
+  &limit=1
+```
+
+Viewer 使用 anon key，禁止 service role。Reader 對更新中批次最多重試三次；仍不完整時保留 `DATA_GAP`。不可讀另一日期或另一 `canonical_run_id` 湊成功，也不可只保留成功 receipt 而刪除失敗紀錄。
+
+Receipt 會分別統計 `read_rows`、`contract_complete_rows`、`missing_field_rows`、`wrong_trade_date_rows`、`wrong_run_rows`、`stale_rows`、`threshold_met_rows`。新鮮度只看 `sideVolumeSourceEventAt`；Mother Pool `updated_at` 不得更新它。
 
 只有以下條件同時成立才可 `complete=true`：
 

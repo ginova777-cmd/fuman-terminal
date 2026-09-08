@@ -1,6 +1,6 @@
 # STAR 盤前試撮自然歷史契約
 
-版本：`star_preopen_trial_history_canonical_verifier_v1`
+版本：`star_preopen_trial_history_canonical_verifier_v2`
 
 時區：`Asia/Taipei`
 
@@ -15,7 +15,8 @@ Fugle stock WebSocket trades + aggregates
   -> fugle_daytrade_preopen_futopt_snapshots
   -> v_fugle_daytrade_star_preopen_readback
   -> verify-star-preopen-trial-history-contract.js
-  -> star-preopen-trial-history-canonical-receipt-YYYYMMDD.json
+  -> fugle_daytrade_star_verification_receipts
+  -> v_fugle_daytrade_star_verification_readback (anon read-only)
 ```
 
 ## 試撮事件
@@ -52,7 +53,9 @@ Fugle stock WebSocket trades + aggregates
 
 ## 正式時槽
 
-目前 STAR 關鍵 readback 時槽是：
+STAR 掃描母體來自 `v_fugle_daytrade_star_universe_readback`，是全部有效個股近月期貨，不得以 Mother Pool、TOP20、TOP40、固定 symbol 或 API 第一頁裁切。TXF 只作比較基準，不計入個股 STAR。每個 underlying 只能選一個最早到期且未過期的合約；其他合約仍保留 `exclusion_reason`。
+
+STAR 關鍵 readback 時槽是：
 
 - `08:45`
 - `08:50`
@@ -69,13 +72,51 @@ Fugle stock WebSocket trades + aggregates
 npm run verify:star-preopen-trial-history
 ```
 
-當日 anon 唯讀閉環與 receipt：
+當日全清冊 anon 唯讀閉環與本機 JSON/CSV：
 
 ```powershell
-npm run verify:star-preopen-trial-history:live -- --trade-date=YYYY-MM-DD --symbols=2337,2344
+npm run verify:star-preopen-trial-history:live -- --trade-date=YYYY-MM-DD
 ```
 
-只有 live receipt 同時具備四個自然時槽、有效試撮 history、事件時間與 run 身分時，才允許 `complete=true`。
+由 Writer／Release Owner 明確發布 receipt（唯一允許使用 service role 的步驟）：
+
+```powershell
+npm run verify:star-preopen-trial-history:publish -- --trade-date=YYYY-MM-DD
+```
+
+Viewer 不得使用 service role。跨電腦只讀：
+
+```text
+GET /rest/v1/v_fugle_daytrade_star_verification_readback
+  ?select=*
+  &trade_date=eq.YYYY-MM-DD
+  &canonical_run_id=eq.star_preopen:YYYYMMDD:canonical
+  &order=verified_at.desc
+  &limit=1
+```
+
+再以相同 `trade_date` 讀取 `v_fugle_daytrade_star_universe_readback`、`v_fugle_daytrade_star_preopen_readback`、`v_fugle_daytrade_preopen_snapshot_contract` 與 `v_fugle_preopen_snapshot_history`。Reader 最多重試三次；不得拿另一交易日或另一 canonical batch 補齊。
+
+兩份正式 receipt 的跨電腦聯合檢查：
+
+```powershell
+npm run verify:star-side-volume:cross-computer -- --trade-date=YYYY-MM-DD
+```
+
+`canonical_run_id` 是整個交易日的驗收批次身分；`run_id`／`generation_id` 是單一 Writer 執行與事件身分。四個時槽可以來自不同 Writer run，不能要求四槽共用同一 `run_id`，也不能把不同 `canonical_run_id` 的資料混批。
+
+正式統計必含 `universe_count`、`evaluated_count`、`pass_count`、`no_match_count`、`data_gap_count`、`missing_symbols`、`duplicate_underlying_count`、`page_count`、`read_rows`。必須符合：
+
+```text
+evaluated_count = universe_count
+pass_count + no_match_count + data_gap_count = evaluated_count
+```
+
+`DATA_GAP` 永遠保留在分母。前 20 名只影響顯示，不影響掃描、history 或 receipt。
+
+目前 Type1 只保留有效 `trial_price/reference_price`、`best_bid >= trial`、期漲至少 2%、RelTXF 至少 1%、期量至少 50 與期貨開盤回測守住。舊「試撮漲幅」「漲停買盤」「買賣盤比」都不是硬 Gate。
+
+只有全清冊 live receipt 同時具備四個自然時槽、有效試撮 history、事件時間與身分，且 `data_gap_count=0` 時，才允許 `complete=true`。
 
 ## Fail-closed
 
