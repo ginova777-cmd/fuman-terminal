@@ -263,6 +263,16 @@ try {
 }
 Write-Strategy5Receipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 Update-PostScanReceiptEvidence -RuntimeRoot $env:FUMAN_RUNTIME_DIR -Route "strategy5" -RunId ([string]$verifiedPayload.runId) -ExpectedDate $strategy5ExpectedDate -Row $triSurfaceRow
+$scorecard88Runner = Join-Path $PSScriptRoot "scripts\run-scorecard88-terminal-collector.ps1"
+try {
+  & $scorecard88Runner -Slot "21:40" -ProjectRoot $PSScriptRoot -RuntimeRoot $env:FUMAN_RUNTIME_DIR -Recovery -ExpectedRunId ([string]$verifiedPayload.runId) -RecoveryReason "strategy5-complete-run-scorecard88-closure"
+  if ($LASTEXITCODE -ne 0) { throw "scorecard88 recovery exit=$LASTEXITCODE" }
+} catch {
+  $reason = "critical scan failed during Strategy5 scorecard88 closure: $($_.Exception.Message)"
+  Add-Content -LiteralPath $log -Encoding utf8 -Value $reason
+  Write-Strategy5Receipt "failed" 1 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason
+  exit 1
+}
 Add-Content -LiteralPath $log -Encoding utf8 -Value "Strategy5 API-only: scanner success verifies /api/strategy5-latest through scorecard source report; terminal reads Supabase/API plus desktop snapshot."
 
 Remove-Item Env:STRATEGY5_USE_MIS -ErrorAction SilentlyContinue

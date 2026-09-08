@@ -195,8 +195,11 @@ if (!slots[slot]) {
   process.exit(2);
 }
 const collectionWindow = fixedCollectionWindow(slot);
-const recoveryRunAllowed = (slot === "17:00" && /^strategy4-\d{8}-\d{14}$/.test(expectedRunId))
-  || (slot === "13:15" && /^strategy3v2-\d{8}-\d{14}$/.test(expectedRunId));
+const recoveryKey = /^strategy5-\d{8}-\d{14}$/.test(expectedRunId) ? "strategy5"
+  : /^strategy4-\d{8}-\d{14}$/.test(expectedRunId) ? "strategy4"
+    : /^strategy3v2-\d{8}-\d{14}$/.test(expectedRunId) ? "strategy3"
+      : "";
+const recoveryRunAllowed = Boolean(recoveryKey && slots[slot].includes(recoveryKey));
 const recoveryAuthorized = recovery && recoveryRunAllowed && runDate(expectedRunId) === compactDate(taipeiDate()) && recoveryReason.length >= 8;
 if (!collectionWindow.allowed && !recoveryAuthorized) {
   console.error(JSON.stringify({ ok: false, status: "FAIL_CLOSED", reason: "outside_fixed_collection_window", slot, writeAllowed: false, blobPublishAllowed: false, collectionWindow }));
@@ -211,8 +214,9 @@ const previous = readJson(outputFile) || { records: [], sourceReports: [] };
 const collectedAt = new Date().toISOString();
 const reportsByKey = new Map((Array.isArray(previous.sourceReports) ? previous.sourceReports : []).map((row) => [String(row.key || row.strategy || "").toLowerCase(), row]));
 const receipts = [];
+const selectedKeys = recoveryAuthorized ? [recoveryKey] : slots[slot];
 
-for (const key of slots[slot]) {
+for (const key of selectedKeys) {
   const canonical = key === "battle" ? canonicalBattle() : canonicalFromDesktop(key, desktop);
   const canonicalRunDate = canonical ? runDate(canonical.runId) : "";
   const sameDate = canonical && (canonicalRunDate ? canonicalRunDate === todayKey : compactDate(canonical.tradeDate) === todayKey);
@@ -281,6 +285,7 @@ const payload = {
     generateRunIdAllowed: false,
     retentionContract: "scorecard-calendar-month-trading-days-v1",
     recoveryAuthorized,
+    recoveryKey: recoveryAuthorized ? recoveryKey : "",
     recoveryReason: recoveryAuthorized ? recoveryReason : "",
   },
 };

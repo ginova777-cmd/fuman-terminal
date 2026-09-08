@@ -15,7 +15,15 @@ $verifier = Join-Path $ProjectRoot 'scripts\verify-scorecard88-collection.js'
 if (-not (Test-Path -LiteralPath $surfaceEvidence)) { throw "surface_evidence_collector_missing:$surfaceEvidence" }
 if (-not (Test-Path -LiteralPath $script)) { throw "collector_missing:$script" }
 if (-not (Test-Path -LiteralPath $verifier)) { throw "canonical_verifier_missing:$verifier" }
-& node $surfaceEvidence "--slot=$Slot"
+$surfaceArgs = @("--slot=$Slot")
+$recoveryKey = ''
+if ($Recovery) {
+  if ($ExpectedRunId -match '^strategy5-\d{8}-\d{14}$') { $recoveryKey = 'strategy5' }
+  elseif ($ExpectedRunId -match '^strategy4-\d{8}-\d{14}$') { $recoveryKey = 'strategy4' }
+  elseif ($ExpectedRunId -match '^strategy3v2-\d{8}-\d{14}$') { $recoveryKey = 'strategy3' }
+  if ($recoveryKey) { $surfaceArgs += "--only=$recoveryKey" }
+}
+& node $surfaceEvidence @surfaceArgs
 $surfaceEvidenceExit = $LASTEXITCODE
 $collectorArgs = @("--slot=$Slot")
 if ($Recovery) { $collectorArgs += @('--recovery', "--expected-run-id=$ExpectedRunId", "--recovery-reason=$RecoveryReason") }
