@@ -71,6 +71,20 @@ alter table public.fugle_daytrade_side_volume_verification_receipts
   add column if not exists source_common_valid boolean not null default false;
 alter table public.fugle_daytrade_side_volume_verification_receipts
   add column if not exists data_gap_rows integer not null default 0;
+alter table public.fugle_daytrade_side_volume_verification_receipts
+  add column if not exists symbol_result_rows integer not null default 0;
+alter table public.fugle_daytrade_side_volume_verification_receipts
+  add column if not exists mother_pool_rows integer not null default 0;
+alter table public.fugle_daytrade_side_volume_verification_receipts
+  add column if not exists diagnostic_extra_rows integer not null default 0;
+alter table public.fugle_daytrade_side_volume_verification_receipts
+  add column if not exists ready_rows integer not null default 0;
+alter table public.fugle_daytrade_side_volume_verification_receipts
+  add column if not exists below_threshold_rows integer not null default 0;
+alter table public.fugle_daytrade_side_volume_verification_receipts
+  add column if not exists blocked_common_rows integer not null default 0;
+alter table public.fugle_daytrade_side_volume_verification_receipts
+  add column if not exists symbol_result_view text not null default 'v_fugle_daytrade_side_volume_symbol_readback';
 
 create table if not exists public.fugle_daytrade_side_volume_symbol_results (
   verification_run_id text not null references public.fugle_daytrade_side_volume_verification_receipts(verification_run_id) on delete cascade,
@@ -99,9 +113,25 @@ create table if not exists public.fugle_daytrade_side_volume_symbol_results (
   side_volume_trade_date date,
   side_volume_canonical_run_id text,
   total_matches_inside_plus_outside boolean not null default false,
+  threshold_status text not null default 'DATA_GAP'
+    check (threshold_status in ('READY_GE_2000_LOTS','READY_BELOW_2000_LOTS','DATA_GAP','BLOCKED_COMMON')),
+  source_event_age_seconds_at_verification numeric,
+  source_fresh_120s_at_verification boolean not null default false,
   verified_at timestamptz not null,
   primary key (verification_run_id,symbol)
 );
+
+alter table public.fugle_daytrade_side_volume_symbol_results
+  add column if not exists threshold_status text not null default 'DATA_GAP';
+alter table public.fugle_daytrade_side_volume_symbol_results
+  drop constraint if exists fugle_daytrade_side_volume_symbol_results_threshold_status_check;
+alter table public.fugle_daytrade_side_volume_symbol_results
+  add constraint fugle_daytrade_side_volume_symbol_results_threshold_status_check
+  check (threshold_status in ('READY_GE_2000_LOTS','READY_BELOW_2000_LOTS','DATA_GAP','BLOCKED_COMMON'));
+alter table public.fugle_daytrade_side_volume_symbol_results
+  add column if not exists source_event_age_seconds_at_verification numeric;
+alter table public.fugle_daytrade_side_volume_symbol_results
+  add column if not exists source_fresh_120s_at_verification boolean not null default false;
 
 create index if not exists fugle_daytrade_side_volume_receipts_trade_batch
   on public.fugle_daytrade_side_volume_verification_receipts(trade_date desc, canonical_run_id, verified_at desc);
@@ -113,7 +143,9 @@ select verification_run_id,contract,contract_version,trade_date,canonical_run_id
        status,complete,exit_code,verified_at,failed_checks,first_blocker,
        source_view,read_rows,contract_complete_rows,missing_field_rows,
        wrong_trade_date_rows,wrong_run_rows,stale_rows,threshold_met_rows,
-       source_identity,diagnostic_summary,source_common_valid,data_gap_rows
+       source_identity,diagnostic_summary,source_common_valid,data_gap_rows,
+       symbol_result_rows,mother_pool_rows,diagnostic_extra_rows,ready_rows,
+       below_threshold_rows,blocked_common_rows,symbol_result_view
 from public.fugle_daytrade_side_volume_verification_receipts;
 
 create or replace view public.v_fugle_daytrade_side_volume_symbol_readback as
@@ -123,8 +155,58 @@ select verification_run_id,contract,contract_version,trade_date,canonical_run_id
        inside_volume,outside_volume,side_volume_total,side_volume_unit,
        side_volume_available,side_volume_threshold_lots,side_volume_ge_2000_lots,
        side_volume_source,side_volume_source_event_at,side_volume_trade_date,
-       side_volume_canonical_run_id,total_matches_inside_plus_outside,verified_at
+       side_volume_canonical_run_id,total_matches_inside_plus_outside,
+       threshold_status,source_event_age_seconds_at_verification,
+       source_fresh_120s_at_verification,verified_at
 from public.fugle_daytrade_side_volume_symbol_results;
+
+-- A verification_run_id is an immutable evidence snapshot.  The only legal
+-- receipt mutation is the single pending -> final publication transition.
+create or replace function public.guard_fugle_daytrade_verification_receipt_immutable()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'IMMUTABLE_VERIFICATION_RUN_DELETE_FORBIDDEN';
+  end if;
+  if old.status <> 'pending' then
+    raise exception 'IMMUTABLE_VERIFICATION_RUN_ALREADY_FINAL';
+  end if;
+  if (to_jsonb(new) - array['status','complete','exit_code','first_blocker'])
+     is distinct from
+     (to_jsonb(old) - array['status','complete','exit_code','first_blocker']) then
+    raise exception 'IMMUTABLE_VERIFICATION_RUN_IDENTITY_OR_EVIDENCE_CHANGED';
+  end if;
+  if new.status = 'pending' then
+    raise exception 'IMMUTABLE_VERIFICATION_RUN_PENDING_REWRITE_FORBIDDEN';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.guard_fugle_daytrade_verification_symbol_immutable()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  raise exception 'IMMUTABLE_VERIFICATION_SYMBOL_RESULT';
+end;
+$$;
+
+drop trigger if exists trg_side_volume_receipt_immutable on public.fugle_daytrade_side_volume_verification_receipts;
+create trigger trg_side_volume_receipt_immutable
+before update or delete on public.fugle_daytrade_side_volume_verification_receipts
+for each row execute function public.guard_fugle_daytrade_verification_receipt_immutable();
+
+drop trigger if exists trg_side_volume_symbol_immutable on public.fugle_daytrade_side_volume_symbol_results;
+create trigger trg_side_volume_symbol_immutable
+before update or delete on public.fugle_daytrade_side_volume_symbol_results
+for each row execute function public.guard_fugle_daytrade_verification_symbol_immutable();
 
 alter table public.fugle_daytrade_star_verification_receipts enable row level security;
 alter table public.fugle_daytrade_side_volume_verification_receipts enable row level security;
@@ -140,8 +222,8 @@ grant select on public.v_fugle_daytrade_side_volume_verification_readback to ano
 grant select on public.v_fugle_daytrade_side_volume_symbol_readback to anon,authenticated,service_role;
 
 comment on view public.v_fugle_daytrade_star_verification_readback is 'Canonical cross-computer STAR receipts. Select one immutable verification_run_id by trade_date/canonical_run_id; bind evidence to that receipt and never mix batches.';
-comment on view public.v_fugle_daytrade_side_volume_verification_readback is 'Canonical cross-computer side-volume v3 receipts. A partial receipt preserves READY symbol rows while isolating DATA_GAP; common source failure blocks the batch.';
-comment on view public.v_fugle_daytrade_side_volume_symbol_readback is 'Immutable per-symbol side-volume result bound to verification_run_id. Viewer may use READY rows only when source_common_valid=true.';
+comment on view public.v_fugle_daytrade_side_volume_verification_readback is 'Canonical cross-computer side-volume v3 receipts. symbol_result_rows is the denominator; mother_pool_rows plus diagnostic_extra_rows explains 157/158. no-match semantics are READY_BELOW_2000_LOTS.';
+comment on view public.v_fugle_daytrade_side_volume_symbol_readback is 'Immutable per-symbol side-volume result bound to verification_run_id. Viewer may use READY rows only when source_common_valid=true and must independently enforce current event age <=120 seconds.';
 
 notify pgrst,'reload schema';
 commit;

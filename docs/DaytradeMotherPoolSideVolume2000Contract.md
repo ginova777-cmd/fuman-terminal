@@ -141,6 +141,60 @@ GET /rest/v1/v_fugle_daytrade_side_volume_verification_readback
   &limit=1
 ```
 
+逐檔正式入口（不能從摘要 `source_view` 猜名稱）：
+
+```text
+GET /rest/v1/v_fugle_daytrade_side_volume_symbol_readback
+  ?select=*
+  &verification_run_id=eq.<receipt.verification_run_id>
+  &order=symbol.asc
+```
+
+兩個 view 均已 `GRANT SELECT TO anon, authenticated, service_role`；raw table 不提供 anon 寫入或 schema 列舉權限。REST 根目錄回 401 不影響指定 view 的 SELECT 契約。
+
+## Receipt 與逐檔 schema
+
+Receipt 的分母固定為 `symbol_result_rows`：
+
+```text
+symbol_result_rows = mother_pool_rows + diagnostic_extra_rows
+ready_rows + data_gap_rows + blocked_common_rows = symbol_result_rows
+below_threshold_rows <= ready_rows
+```
+
+`mother_pool_rows` 是該輪實際母池成員；`diagnostic_extra_rows` 是明確標示 `in_mother_pool=false` 的診斷股票。若 157 檔母池另讀 3030，receipt 必須顯示 `mother_pool_rows=157`、`diagnostic_extra_rows=1`、`symbol_result_rows=158`；3030 不因診斷列取得母池資格。
+
+Receipt 主要型別：識別字／狀態／view 為 `text`，日期為 `date`，`verified_at` 為 `timestamptz`，所有 count 為 `integer`，`complete/source_common_valid` 為 `boolean`，`failed_checks` 為 `text[]`，來源與診斷摘要為 `jsonb`。
+
+逐檔主要型別：量為 `numeric`，時間為 `timestamptz`，識別字／品質／門檻狀態為 `text`，資格與品質旗標為 `boolean`，`failed_checks` 為 `text[]`。`threshold_status` 合法值只有：
+
+```text
+READY_GE_2000_LOTS
+READY_BELOW_2000_LOTS
+DATA_GAP
+BLOCKED_COMMON
+```
+
+- `READY_GE_2000_LOTS`：單檔品質完整且達 2,000 張，可交由 Viewer 繼續判斷其他條件。
+- `READY_BELOW_2000_LOTS`：資料完整但未達門檻，等同單檔 `NO_MATCH`，不是資料缺口。
+- `DATA_GAP`：該檔缺欄位、錯日期／run、或驗證當下事件超過 120 秒；只隔離該檔。
+- `BLOCKED_COMMON`：共同來源、批次身分、讀取或 universe 完整性錯誤；整批阻擋。
+
+摘要為 `partial` 不能推定任何單檔 PASS；Viewer 必須綁定 receipt 的 `verification_run_id` 再讀逐檔 `quality_status`。
+
+## 五分鐘 verifier 與 120 秒新鮮度
+
+五分鐘 verifier 只證明 `verified_at` 當下的一個不可變批次。它不能保證兩次 verifier 之間持續新鮮，也不能把 120 秒放寬到 300 秒。
+
+- 可沿用：`trade_date`、`canonical_run_id`、單位、來源定義、2,000 張門檻、不可變批次身分。
+- 必須在 Viewer 決策當下重新核對：最新同批 `side_volume_source_event_at`、內盤、外盤、合計與事件年齡 `<=120` 秒。
+- `source_event_age_seconds_at_verification` 與 `source_fresh_120s_at_verification` 是 verifier 當下證據，不是未來五分鐘的通行證。
+- 事件超過 120 秒只能 `DATA_GAP`／等待下一輪，不得以 Mother Pool `updated_at` 刷新或延長年齡。
+
+## 不可變發布
+
+Producer 的來源 evidence 可以用同槽 key 更新；canonical verifier 每次必須產生新的 `verification_run_id`。發布流程只允許 receipt 從 `pending` 一次轉為 `complete/partial/failed`，逐檔列一經插入禁止 update/delete，final receipt 禁止再次更新。後到完整資料必須建立新 verification run，不得改寫 Viewer 已綁定的舊 run。
+
 Viewer 使用 anon key，禁止 service role。Reader 對更新中批次最多重試三次；仍不完整時保留 `DATA_GAP`。不可讀另一日期或另一 `canonical_run_id` 湊成功，也不可只保留成功 receipt 而刪除失敗紀錄。
 
 Receipt 會分別統計 `read_rows`、`contract_complete_rows`、`missing_field_rows`、`wrong_trade_date_rows`、`wrong_run_rows`、`stale_rows`、`threshold_met_rows`。新鮮度只看 `sideVolumeSourceEventAt`；Mother Pool `updated_at` 不得更新它。

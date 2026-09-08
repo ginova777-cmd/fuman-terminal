@@ -70,6 +70,12 @@ const checks = {
     && ["future_0845_open_price", "future_preopen_high_price", "future_preopen_low_price", "future_preopen_sample_count"].every((field) => slotSql.includes(field)),
   no_fake_recent_one_minute_history: slotSql.includes("recent_1m_three_sample_supported")
     && slotVerifier.includes("recent_one_minute_three_sample_not_fabricated"),
+  slot_v2_mode_enum_fail_closed: slotVerifier.includes("FUTURE_PATTERN_EVIDENCE_MODE_INVALID")
+    && slotVerifier.includes("RECENT_1M_THREE_SAMPLE_MODE_MUST_BE_FALSE")
+    && slotVerifier.includes("natural_slot_snapshots_0845_through_current_slot"),
+  slot_verification_run_immutable: slotSql.includes("IMMUTABLE_VERIFICATION_RUN_ALREADY_FINAL")
+    && slotSql.includes("IMMUTABLE_VERIFICATION_SYMBOL_RESULT")
+    && slotSql.includes("status in ('complete','partial','failed','pending')"),
   wrapper_runs_canonical_slot_verifier: evidenceWrapper.includes("verify-star-preopen-slot-symbol-contract.js")
     && evidenceWrapper.includes("--publish")
     && evidenceWrapper.includes("v_fugle_daytrade_star_slot_symbol_readback"),
