@@ -12,6 +12,7 @@ const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
 const RECEIPT_DIR = path.join(RUNTIME_DIR, "data", "opening-report-0830");
 const BRIDGE_SCRIPT = path.resolve(__dirname, "apply-opening-report-0830-priority-bias-bridge.js");
+const FIELD_ACK_SCRIPT = path.resolve(__dirname, "verify-opening-report-0830-mother-pool-field-ack.js");
 const SOURCE = "opening_report_0830";
 const MODE = "priority_bias_only";
 const ALLOWED_ACTION = "boost_scan_priority_only";
@@ -306,6 +307,16 @@ function runBridge(inputPath, receiptPath, tradeDate) {
     cwd: path.resolve(__dirname, "..")
   });
   return { exitCode: result.status, stdout: result.stdout, stderr: result.stderr };
+}
+
+function runMotherPoolFieldAck(tradeDate, runId, bridgeAggregatePath, isolatedBacktest) {
+  const args = isolatedBacktest
+    ? [FIELD_ACK_SCRIPT, "--fixture"]
+    : [FIELD_ACK_SCRIPT, `--trade-date=${tradeDate}`, `--report-run-id=${runId}`, `--bridge-aggregate=${bridgeAggregatePath}`];
+  const result = spawnSync(process.execPath, args, { encoding: "utf8", windowsHide: true, cwd: path.resolve(__dirname, "..") });
+  let receipt = null;
+  try { receipt = JSON.parse(String(result.stdout || "").trim()); } catch {}
+  return { exitCode: result.status, stdout: result.stdout, stderr: result.stderr, receipt };
 }
 
 function splitLineTargets(value) {
@@ -654,6 +665,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     checked_at: timestamp(),
   };
   writeJson(bridgeAggregatePath, bridgeAggregate);
+  const motherPoolFieldAckRun = runMotherPoolFieldAck(tradeDate, runId, bridgeAggregatePath, isolatedBacktest);
+  const motherPoolFieldAck = motherPoolFieldAckRun.receipt || { ok: false, complete: false, first_blocker: "mother_pool_field_ack_output_invalid" };
   const final = {
     contract: "opening-report-0830-production-v1",
     ok: overseasPreflight.ok && Boolean(reportPath) && lineDeliveryOk,
@@ -684,6 +697,9 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     line_push_receipt: lineReceiptPath,
     bridge_results: bridgeResults.map((row) => ({ industry: row.industry, priority_observation_rank: row.priority_observation_rank ?? null, priority_observation_basis: row.priority_observation_basis || "", inputPath: row.inputPath, receiptPath: row.receiptPath, skipped: row.skipped === true, exitCode: row.result?.exitCode ?? null, reason_code: row.reason_code || "" })),
     bridge_aggregate_receipt: bridgeAggregatePath,
+    mother_pool_field_ack_receipt: motherPoolFieldAck.receipt_path || null,
+    mother_pool_field_ack: motherPoolFieldAck,
+    mother_pool_field_ack_ok: motherPoolFieldAckRun.exitCode === 0 && motherPoolFieldAck.ok === true,
     checked_at: timestamp()
   };
   writeJson(finalPath, final);
@@ -699,11 +715,11 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   final.positive_industry_count = positiveIndustryRows.length;
   final.priority_observation_contract_ok = priorityObservationContractOk;
   final.priority_observation_count = displayTop3.length;
-  final.complete = final.ok === true && final.expected_industry_count === 15 && final.scanned_industry_count === final.expected_industry_count && final.mother_pool_bridge_ok === true && final.line_push_ok === true && terminalBriefingSnapshot.ok === true && final.positive_top3_contract_ok === true && priorityObservationContractOk;
+  final.complete = final.ok === true && final.expected_industry_count === 15 && final.scanned_industry_count === final.expected_industry_count && final.mother_pool_bridge_ok === true && final.mother_pool_field_ack_ok === true && final.line_push_ok === true && terminalBriefingSnapshot.ok === true && final.positive_top3_contract_ok === true && priorityObservationContractOk;
   final.status = final.complete ? "complete" : "fail_closed";
   final.report_status = final.complete ? "COMPLETE" : "FAIL_CLOSED";
   final.exitCode = final.complete ? 0 : 1;
-  final.first_blocker = final.complete ? null : (!final.mother_pool_bridge_ok ? "mother_pool_bridge_not_complete" : !final.line_push_ok ? "line_delivery_not_complete" : terminalBriefingSnapshot.ok !== true ? "terminal_snapshot_not_complete" : !priorityObservationContractOk ? "priority_observation_top3_invalid" : "opening_report_not_complete");
+  final.first_blocker = final.complete ? null : (!final.mother_pool_bridge_ok ? "mother_pool_bridge_not_complete" : !final.mother_pool_field_ack_ok ? (motherPoolFieldAck.first_blocker || "mother_pool_field_ack_not_complete") : !final.line_push_ok ? "line_delivery_not_complete" : terminalBriefingSnapshot.ok !== true ? "terminal_snapshot_not_complete" : !priorityObservationContractOk ? "priority_observation_top3_invalid" : "opening_report_not_complete");
   writeJson(finalPath, final);
   console.log(JSON.stringify({ ok: final.ok, final_receipt: finalPath, report_path: reportPath, run_id: runId, report_status: final.report_status, terminal_briefing_snapshot_ok: terminalBriefingSnapshot.ok === true }, null, 2));
   if (!final.complete) process.exitCode = 1;

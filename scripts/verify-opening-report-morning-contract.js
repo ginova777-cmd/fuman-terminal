@@ -219,6 +219,7 @@ function staticContractChecks(checks) {
   addCheck(checks, "preflight_freezes_at_0820", preflight.includes("08:20:59.999 Asia/Taipei"), "08:20 minute-end freeze must be explicit");
 
   const runner = readText("scripts/run-opening-report-0830-production.js");
+  const fieldAck = readText("scripts/verify-opening-report-0830-mother-pool-field-ack.js");
   addCheck(checks, "runner_owns_non_trading_day_guard", runner.includes("isTwseTradingDay") && runner.includes("market_calendar_non_trading_day") && runner.includes("no_side_effects") && runner.includes("line_push_attempted: false") && runner.includes("mother_pool_bridge_attempted: false"), "direct runner invocation must skip before every side effect on market-closed days");
   addCheck(checks, "runner_consumes_frozen_snapshot_only", runner.includes("frozen 08:20 evidence only") || runner.includes("凍結"), "08:30 runner must not refetch overseas direction");
   addCheck(checks, "runner_observation_only", runner.includes("formal_candidates: 0") && runner.includes("watchlist_only: true") && runner.includes("industry_observation_only"), "morning report must never create formal candidates");
@@ -231,13 +232,16 @@ function staticContractChecks(checks) {
   addCheck(checks, "us_closed_asia_positive_leader_top3_handoff", runner.includes("us_market_closed_asia_positive_leader_top3") && runner.includes("asiaPositiveLeaderObservations") && runner.includes("priority_overseas_leaders"), "US-closed days must hand positive Japan/Korea leader Top 3 mappings to Mother Pool");
   addCheck(checks, "positive_top3_zero_to_three_is_valid", runner.includes("displayTop3.length <= 3") && !runner.includes("displayTop3.length === 3"), "Zero to three positive observations is a valid completed report");
   addCheck(checks, "bridge_priority_observation_nonblocking", runner.includes("us_open_positive_industry_or_us_closed_asia_positive_leader_top3_v2") && runner.includes("It must never change the 08:30 report delivery decision."), "Mother Pool bridge only changes scan priority");
+  addCheck(checks, "runner_requires_mother_pool_field_ack", runner.includes("runMotherPoolFieldAck") && runner.includes("mother_pool_field_ack_ok") && runner.includes("mother_pool_field_ack_not_complete"), "final complete must require Mother Pool anon readback field acknowledgement");
+  addCheck(checks, "mother_pool_field_ack_contract_present", fieldAck.includes("opening-report-0830-mother-pool-field-ack-v1") && fieldAck.includes("credential_role: \"anon_read_only\"") && fieldAck.includes("db_readback_ok"), "Mother Pool must publish its own canonical field acknowledgement receipt");
+  addCheck(checks, "mother_pool_field_ack_checks_observation_only", ["formal_candidate_count", "formal_candidate_allowed", "forbidden_publish_guard", "market_not_TW"].every((token) => fieldAck.includes(token)), "field acknowledgement must preserve observation-only and canonical TW market fields");
 
   const wrapper = readText("run-opening-report-0830-production-wrapper.ps1");
   addCheck(checks, "wrapper_owns_non_trading_day_guard", wrapper.includes("check-market-calendar-action.js") && wrapper.includes("market_calendar_non_trading_day") && wrapper.includes("line_push_attempted = $false") && wrapper.includes("mother_pool_bridge_attempted = $false"), "Task Scheduler wrapper must guard independently before invoking the runner");
   addCheck(checks, "wrapper_runner_verifier_receipt_chain", wrapper.includes("run-opening-report-0830-production.js") && wrapper.includes("verify-opening-report-morning-contract.js") && wrapper.includes("opening-report-morning-wrapper-v1"), "wrapper must be runner -> canonical verifier -> wrapper receipt");
   addCheck(checks, "wrapper_audited_line_receipt_recovery", wrapper.includes("ReuseLineReceipt") && wrapper.includes("--reuse-line-receipt") && wrapper.includes("existingLine.line_push_ok"), "bounded recovery may reuse only the already successful same-run LINE receipt");
   addCheck(checks, "wrapper_has_no_telegram_execution", !wrapper.includes("send-opening-report-0830-telegram") && !wrapper.includes("TELEGRAM_BOT_TOKEN") && wrapper.includes("telegram_enabled = $false"), "Telegram must remain retired from morning wrapper");
-  addCheck(checks, "wrapper_complete_requires_all_channels", wrapper.includes("$linePersonalOk") && wrapper.includes("$lineGroupOk") && wrapper.includes("$terminalOk") && wrapper.includes("$bridgeOk") && wrapper.includes("$expected -eq 15") && wrapper.includes("$scanned -eq 15"), "complete must require 15/15 + LINE personal/group + terminal + Mother Pool");
+  addCheck(checks, "wrapper_complete_requires_all_channels", wrapper.includes("$linePersonalOk") && wrapper.includes("$lineGroupOk") && wrapper.includes("$terminalOk") && wrapper.includes("$bridgeOk") && wrapper.includes("$fieldAckOk") && wrapper.includes("$expected -eq 15") && wrapper.includes("$scanned -eq 15"), "complete must require 15/15 + LINE personal/group + terminal + Mother Pool field acknowledgement");
 
   const bridge = readText("scripts/apply-opening-report-0830-priority-bias-bridge.js");
   addCheck(checks, "bridge_cannot_publish_formal_candidates", bridge.includes("formal_candidate_allowed") && bridge.includes("formal_candidate_count") && bridge.includes("forbidden_publish_guard"), "bridge only boosts scan priority");
@@ -373,6 +377,12 @@ function currentReceiptChecks(checks, tradeDate) {
   addCheck(checks, "current_bridge_aggregate_ok", bridge?.status === "BRIDGE_OK" && Number(bridge?.successful_industry_count || 0) === Number(bridge?.industry_count || 0) && Number(bridge?.observation_count || 0) === priorityRows.length, JSON.stringify({ status: bridge?.status, observation_count: bridge?.observation_count, industry_count: bridge?.industry_count, successful_industry_count: bridge?.successful_industry_count }));
   addCheck(checks, "current_bridge_same_run_id", bridge?.run_id === runId, String(bridge?.run_id || "") + "/" + String(runId || ""));
   addCheck(checks, "current_bridge_observation_only", bridge?.forbidden_publish_guard === true && Number(bridge?.formal_candidate_count || 0) === 0 && bridge?.formal_candidate_allowed === false, JSON.stringify({ forbidden_publish_guard: bridge?.forbidden_publish_guard, formal_candidate_count: bridge?.formal_candidate_count, formal_candidate_allowed: bridge?.formal_candidate_allowed }));
+  const fieldAckPath = String(finalReceipt.mother_pool_field_ack_receipt || path.join(RUNTIME, "data", "scan-receipts", "opening-report-0830-mother-pool-field-ack-" + compactDate(tradeDate) + ".json"));
+  const fieldAckReceipt = fieldAckPath && exists(fieldAckPath) ? readJson(fieldAckPath) : null;
+  addCheck(checks, "current_mother_pool_field_ack_exists", Boolean(fieldAckReceipt), fieldAckPath);
+  addCheck(checks, "current_mother_pool_field_ack_same_run", fieldAckReceipt?.report_run_id === runId, String(fieldAckReceipt?.report_run_id || "") + "/" + String(runId || ""));
+  addCheck(checks, "current_mother_pool_field_ack_complete", fieldAckReceipt?.contract === "opening-report-0830-mother-pool-field-ack-v1" && fieldAckReceipt?.complete === true && fieldAckReceipt?.db_readback_ok === true && fieldAckReceipt?.first_blocker == null, JSON.stringify({ contract: fieldAckReceipt?.contract, complete: fieldAckReceipt?.complete, db_readback_ok: fieldAckReceipt?.db_readback_ok, first_blocker: fieldAckReceipt?.first_blocker }));
+  addCheck(checks, "current_mother_pool_field_ack_observation_only", Number(fieldAckReceipt?.formal_candidate_count || 0) === 0 && fieldAckReceipt?.formal_candidate_allowed === false && fieldAckReceipt?.forbidden_publish_guard === true, JSON.stringify({ formal_candidate_count: fieldAckReceipt?.formal_candidate_count, formal_candidate_allowed: fieldAckReceipt?.formal_candidate_allowed, forbidden_publish_guard: fieldAckReceipt?.forbidden_publish_guard }));
 }
 
 function writeReceipt(result, tradeDate) {
@@ -398,6 +408,9 @@ function main() {
   const failures = checks.filter((check) => !check.ok);
   const result = {
     ok: failures.length === 0,
+    status: failures.length === 0 ? "complete" : "failed",
+    complete: failures.length === 0,
+    exitCode: failures.length === 0 ? 0 : 1,
     contract: CONTRACT,
     checked_at: new Date().toISOString(),
     trade_date: args.tradeDate,
