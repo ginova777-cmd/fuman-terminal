@@ -166,24 +166,6 @@ async function supabaseUpsert(resource, rows, onConflict) {
   return { written };
 }
 
-async function supabaseInsertIgnore(resource, rows, onConflict) {
-  if (!APPLY || !rows.length) return { written: 0, dryRun: !APPLY };
-  const key = requireKey(true);
-  let written = 0;
-  for (let offset = 0; offset < rows.length; offset += 200) {
-    const chunk = rows.slice(offset, offset + 200);
-    const response = await fetch(`${SUPABASE_URL}/rest/v1/${resource}?on_conflict=${encodeURIComponent(onConflict)}`, {
-      method: "POST",
-      headers: { ...headers(key), Prefer: "resolution=ignore-duplicates,return=minimal" },
-      body: JSON.stringify(chunk),
-      signal: AbortSignal.timeout ? AbortSignal.timeout(WRITE_TIMEOUT_MS) : undefined,
-    });
-    const body = await response.text();
-    if (!response.ok) throw new Error(`${resource} HTTP ${response.status}: ${body.slice(0, 240)}`);
-    written += chunk.length;
-  }
-  return { written };
-}
 function acquireLock() {
   fs.mkdirSync(path.dirname(LOCK_FILE), { recursive: true });
   try {
@@ -455,7 +437,15 @@ async function runOnce() {
   const preopenRows = await readPreopenRows(tickerResult.rows.map((row) => row.symbol));
   const snapshotRows = slot ? await captureSlotRows(tradeDate, slot, tickerResult.rows, [...dedicatedRows, ...cacheRows], preopenRows) : [];
   result.snapshotRows = snapshotRows.length;
-  result.snapshotCompleteRows = snapshotRows.filter((row) => row.fut_price !== null && row.trial_price !== null).length;
+  result.snapshotCompleteRows = snapshotRows.filter((row) => row.fut_price !== null
+    && row.trial_price !== null
+    && row.best_bid !== null
+    && row.payload?.reference_price !== null
+    && row.payload?.reference_price !== undefined
+    && Boolean(row.payload?.websocket_quote_seen_at)
+    && Boolean(row.payload?.trial_event_at)
+    && Boolean(row.payload?.run_id)
+    && Boolean(row.payload?.generation_id)).length;
   if (slot && !snapshotRows.length) result.failedChecks.push("natural_snapshot_rows_missing");
   if (slot && result.snapshotCompleteRows === 0) result.failedChecks.push("natural_snapshot_complete_rows_missing");
   let pendingSnapshotRows = snapshotRows;
@@ -466,13 +456,17 @@ async function runOnce() {
       { service: true },
     );
     const existingSymbols = new Set(existing.map((row) => normalizeCode(row?.underlying_symbol)).filter(Boolean));
-    pendingSnapshotRows = snapshotRows.filter((row) => !existingSymbols.has(row.underlying_symbol));
+    // A bounded retry inside the same natural slot must be allowed to replace
+    // an earlier incomplete row for the same symbol. The old insert-ignore
+    // behavior permanently froze the first DATA_GAP observation.
+    pendingSnapshotRows = snapshotRows;
     result.existingSnapshotRows = existing.length;
     result.pendingSnapshotRows = pendingSnapshotRows.length;
+    result.retryRefreshRows = snapshotRows.filter((row) => existingSymbols.has(row.underlying_symbol)).length;
   }
   if (APPLY && result.naturalScheduleEvidence) {
     await supabaseUpsert("fugle_daytrade_canonical_near_one_contracts", tickerResult.rows, "trade_date,symbol");
-    if (pendingSnapshotRows.length) await supabaseInsertIgnore(
+    if (pendingSnapshotRows.length) await supabaseUpsert(
       "fugle_daytrade_preopen_futopt_snapshots",
       pendingSnapshotRows,
       "trade_date,capture_slot,underlying_symbol",

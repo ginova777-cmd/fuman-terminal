@@ -8,7 +8,7 @@ const ROOT = path.resolve(__dirname, "..");
 const RUNTIME = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const URL_ROOT = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
 const CONTRACT = "star_preopen_slot_symbol_canonical_verifier_v1";
-const VERSION = "slot-symbol-isolation-v1";
+const VERSION = "slot-symbol-isolation-v2";
 const VALID_SLOTS = ["0845", "0850", "0855", "0859"];
 
 function readSecret(name) {
@@ -65,6 +65,13 @@ function classifyEvidence(universeRow, evidence, context) {
   if (evidence && !positive(evidence.trial_price)) failures.push("TRIAL_PRICE_MISSING");
   if (evidence && !positive(evidence.reference_price)) failures.push("REFERENCE_PRICE_MISSING");
   if (evidence && !positive(evidence.best_bid)) failures.push("BEST_BID_MISSING");
+  if (evidence && !positive(evidence.future_0845_open_price)) failures.push("FUTURE_0845_OPEN_MISSING");
+  if (evidence && !positive(evidence.future_preopen_high_price)) failures.push("FUTURE_PREOPEN_HIGH_MISSING");
+  if (evidence && !positive(evidence.future_preopen_low_price)) failures.push("FUTURE_PREOPEN_LOW_MISSING");
+  if (evidence && !(finite(evidence.future_preopen_sample_count) > 0)) failures.push("FUTURE_PREOPEN_SAMPLE_COUNT_MISSING");
+  if (evidence && !validTime(evidence.future_preopen_range_start_at, tradeDate)) failures.push("FUTURE_PREOPEN_RANGE_START_INVALID");
+  if (evidence && !validTime(evidence.future_preopen_range_end_at, tradeDate)) failures.push("FUTURE_PREOPEN_RANGE_END_INVALID");
+  if (evidence && !validTime(evidence.future_0845_source_event_at, tradeDate)) failures.push("FUTURE_0845_SOURCE_EVENT_TIME_INVALID");
   if (evidence && !validTime(evidence.future_source_event_at, tradeDate)) failures.push("FUTURE_SOURCE_EVENT_TIME_INVALID");
   if (evidence && !validTime(evidence.trial_event_at, tradeDate)) failures.push("TRIAL_EVENT_TIME_INVALID");
   if (evidence && !evidence.run_id) failures.push("RUN_ID_MISSING");
@@ -102,6 +109,16 @@ function classifyEvidence(universeRow, evidence, context) {
       trial_price: finite(evidence?.trial_price), reference_price: finite(evidence?.reference_price),
       best_bid: finite(evidence?.best_bid), best_ask: finite(evidence?.best_ask), bid_ask_ratio: finite(evidence?.bid_ask_ratio),
       future_source_event_at: evidence?.future_source_event_at || null, trial_event_at: evidence?.trial_event_at || null,
+      future_0845_open_price: finite(evidence?.future_0845_open_price),
+      future_preopen_high_price: finite(evidence?.future_preopen_high_price),
+      future_preopen_low_price: finite(evidence?.future_preopen_low_price),
+      future_preopen_sample_count: finite(evidence?.future_preopen_sample_count),
+      future_preopen_range_start_at: evidence?.future_preopen_range_start_at || null,
+      future_preopen_range_end_at: evidence?.future_preopen_range_end_at || null,
+      future_0845_source_event_at: evidence?.future_0845_source_event_at || null,
+      future_latest_source_event_at: evidence?.future_latest_source_event_at || null,
+      future_pattern_evidence_mode: evidence?.future_pattern_evidence_mode || null,
+      recent_1m_three_sample_supported: evidence?.recent_1m_three_sample_supported === true,
     },
     strategy_evaluable: qualityStatus === "READY",
     strategy_result: qualityStatus === "READY" ? "VIEWER_PENDING" : qualityStatus === "BLOCKED_COMMON" ? "BLOCKED_COMMON" : "BLOCKED_DATA_GAP",
@@ -134,6 +151,8 @@ function buildReceipt(universeRows, evidenceRows, options) {
   const results = universeRows.map((row) => classifyEvidence(row, evidenceBySymbol.get(String(row.underlying_symbol || row.symbol || "")) || null, { tradeDate, slot, sourceCommonValid, verificationRunId, verifiedAt: checkedAt, publishedAt }));
   const sourceValidCount = results.filter((row) => row.quality_status === "READY").length;
   const dataGapCount = results.filter((row) => row.quality_status !== "READY").length;
+  const failureCounts = {};
+  for (const row of results) for (const code of row.failed_checks || []) failureCounts[code] = (failureCounts[code] || 0) + 1;
   const status = !sourceCommonValid ? "failed" : dataGapCount ? "partial" : "complete";
   return {
     receipt: {
@@ -146,7 +165,13 @@ function buildReceipt(universeRows, evidenceRows, options) {
       data_gap_count: dataGapCount, failed_checks: commonFailures,
       first_blocker: commonFailures[0] || (dataGapCount ? "SYMBOL_DATA_GAP_PRESENT" : null),
       source_identity: { trade_date: tradeDate, capture_slot: slot, bounded_retry_max: 3, batch_mixing_allowed: false },
-      diagnostic_summary: { ready_symbols: results.filter((row) => row.quality_ok).map((row) => row.symbol), data_gap_symbols: results.filter((row) => !row.quality_ok).map((row) => row.symbol), strategy_evaluation_owner: "viewer_live_rule" },
+      diagnostic_summary: {
+        ready_symbols: results.filter((row) => row.quality_ok).map((row) => row.symbol),
+        data_gap_symbols: results.filter((row) => !row.quality_ok).map((row) => row.symbol),
+        failure_counts: failureCounts,
+        technical_data_schema: ["fut_price", "fut_change_pct", "relative_to_txf_percent", "fut_volume", "trial_price", "reference_price", "best_bid", "best_ask", "bid_ask_ratio", "future_source_event_at", "trial_event_at", "future_0845_open_price", "future_preopen_high_price", "future_preopen_low_price", "future_preopen_sample_count", "future_preopen_range_start_at", "future_preopen_range_end_at", "future_0845_source_event_at", "future_latest_source_event_at", "future_pattern_evidence_mode", "recent_1m_three_sample_supported"],
+        strategy_evaluation_owner: "viewer_live_rule",
+      },
     },
     results,
   };
@@ -155,15 +180,22 @@ function buildReceipt(universeRows, evidenceRows, options) {
 function fixture() {
   const tradeDate = "2026-09-08"; const slot = "0855"; const event = "2026-09-08T00:55:10.000Z";
   const universe = Array.from({ length: 245 }, (_, index) => ({ underlying_symbol: String(1000 + index), future_symbol: `F${index}` }));
-  const evidence = universe.map((row) => ({ trade_date: tradeDate, capture_slot: slot, symbol: row.underlying_symbol, future_symbol: row.future_symbol, future_source_event_at: event, trial_event_at: event, source_event_at: event, received_at: "2026-09-08T00:55:11.000Z", natural_schedule_evidence: true, fut_price: 101, fut_change_pct: 2.5, relative_to_txf_percent: 1.2, fut_volume: 80, trial_price: 100, reference_price: 98, best_bid: 100, best_ask: 101, bid_ask_ratio: 2, run_id: "fixture-run", generation_id: `fixture:${row.underlying_symbol}` }));
+  const evidence = universe.map((row) => ({ trade_date: tradeDate, capture_slot: slot, symbol: row.underlying_symbol, future_symbol: row.future_symbol, future_source_event_at: event, trial_event_at: event, source_event_at: event, received_at: "2026-09-08T00:55:11.000Z", natural_schedule_evidence: true, fut_price: 101, fut_change_pct: 2.5, relative_to_txf_percent: 1.2, fut_volume: 80, trial_price: 100, reference_price: 98, best_bid: 100, best_ask: 101, bid_ask_ratio: 2, future_0845_open_price: 100, future_preopen_high_price: 102, future_preopen_low_price: 99, future_preopen_sample_count: 3, future_preopen_range_start_at: "2026-09-08T00:45:10.000Z", future_preopen_range_end_at: event, future_0845_source_event_at: "2026-09-08T00:45:09.000Z", future_latest_source_event_at: event, future_pattern_evidence_mode: "natural_slot_snapshots_0845_through_current_slot", recent_1m_three_sample_supported: false, run_id: "fixture-run", generation_id: `fixture:${row.underlying_symbol}` }));
   evidence[244] = { ...evidence[244], trial_price: null };
   const built = buildReceipt(universe, evidence, { tradeDate, slot, checkedAt: "2026-09-08T00:55:12.000Z", publishedAt: "2026-09-08T00:55:13.000Z" });
   const lateUniverse = [{ underlying_symbol: "2330", future_symbol: "CDFI6" }];
   const lateEvidence = [{ ...evidence[0], symbol: "2330", future_symbol: "CDFI6", capture_slot: "0859", future_source_event_at: "2026-09-08T00:59:50.000Z", trial_event_at: "2026-09-08T00:59:50.000Z", source_event_at: "2026-09-08T00:59:50.000Z", received_at: "2026-09-08T01:00:01.000Z", generation_id: "fixture:late-2330" }];
   const late = buildReceipt(lateUniverse, lateEvidence, { tradeDate, slot: "0859", checkedAt: "2026-09-08T01:00:02.000Z", publishedAt: "2026-09-08T01:00:03.000Z" });
   const commonFault = buildReceipt(lateUniverse, [lateEvidence[0], lateEvidence[0]], { tradeDate, slot: "0859", checkedAt: "2026-09-08T01:00:02.000Z", publishedAt: "2026-09-08T01:00:03.000Z" });
+  const missingPatternField = buildReceipt([universe[0]], [{ ...evidence[0], future_0845_open_price: null }], { tradeDate, slot, checkedAt: "2026-09-08T00:55:12.000Z", publishedAt: "2026-09-08T00:55:13.000Z" });
   const pass = built.receipt.complete === false && built.receipt.status === "partial" && built.receipt.universe_count === 245 && built.receipt.source_valid_count === 244 && built.receipt.data_gap_count === 1 && built.results.filter((row) => row.quality_status === "READY").length === 244 && built.results.filter((row) => row.quality_status === "DATA_GAP").length === 1 && built.results[244].first_blocker === "TRIAL_PRICE_MISSING" && built.results.every((row) => row.formal_entry_allowed === false && row.order_allowed === false);
-  return { ok: pass && late.results[0].late_publication === true && late.results[0].preopen_realtime_usable === false && commonFault.receipt.source_common_valid === false && commonFault.results.every((row) => row.quality_status === "BLOCKED_COMMON"), contract: "star_slot_symbol_isolation_fixture_v1", fixture: true, writes_supabase: false, sends_telegram: false, receipt: built.receipt, samples: { slot_symbol_ready: built.results[0], slot_symbol_data_gap: built.results[244], overall_partial_with_ready_symbols: built.receipt, late_0859_post_0900_publication: { ...late.results[0], retrospective_only: true }, common_identity_failure: commonFault.receipt }, assertions: { overall_incomplete: !built.receipt.complete, ready_244: built.receipt.source_valid_count === 244, data_gap_1: built.receipt.data_gap_count === 1, single_gap_isolated: built.results[244].first_blocker === "TRIAL_PRICE_MISSING", formal_gate_unchanged: built.results.every((row) => !row.formal_entry_allowed && !row.order_allowed), late_publication_not_realtime: late.results[0].late_publication === true && late.results[0].preopen_realtime_usable === false, common_failure_blocks_batch: commonFault.receipt.source_common_valid === false && commonFault.results.every((row) => row.quality_status === "BLOCKED_COMMON") } };
+  const patternFixtures = {
+    retest_holds_open: { future_0845_open_price: 100, future_preopen_high_price: 103, future_preopen_low_price: 99.6, fut_price: 100.2 },
+    one_way_higher_no_retest: { future_0845_open_price: 100, future_preopen_high_price: 108, future_preopen_low_price: 100, fut_price: 108 },
+    falling_pullback: { future_0845_open_price: 100, future_preopen_high_price: 101, future_preopen_low_price: 95, fut_price: 96 },
+    missing_pattern_field: { future_0845_open_price: null, future_preopen_high_price: 103, future_preopen_low_price: 99.6, fut_price: 100.2 },
+  };
+  return { ok: pass && late.results[0].late_publication === true && late.results[0].preopen_realtime_usable === false && commonFault.receipt.source_common_valid === false && commonFault.results.every((row) => row.quality_status === "BLOCKED_COMMON") && missingPatternField.results[0].first_blocker === "FUTURE_0845_OPEN_MISSING", contract: "star_slot_symbol_isolation_fixture_v2", fixture: true, writes_supabase: false, sends_telegram: false, receipt: built.receipt, samples: { slot_symbol_ready: built.results[0], slot_symbol_data_gap: built.results[244], missing_pattern_field_isolated: missingPatternField.results[0], overall_partial_with_ready_symbols: built.receipt, late_0859_post_0900_publication: { ...late.results[0], retrospective_only: true }, common_identity_failure: commonFault.receipt, viewer_pattern_inputs: patternFixtures }, assertions: { overall_incomplete: !built.receipt.complete, ready_244: built.receipt.source_valid_count === 244, data_gap_1: built.receipt.data_gap_count === 1, single_gap_isolated: built.results[244].first_blocker === "TRIAL_PRICE_MISSING", missing_pattern_field_isolated: missingPatternField.results[0].quality_status === "DATA_GAP" && missingPatternField.results[0].first_blocker === "FUTURE_0845_OPEN_MISSING", formal_gate_unchanged: built.results.every((row) => !row.formal_entry_allowed && !row.order_allowed), natural_pattern_fields_present: positive(built.results[0].technical_data.future_0845_open_price) && positive(built.results[0].technical_data.future_preopen_high_price) && positive(built.results[0].technical_data.future_preopen_low_price) && built.results[0].technical_data.future_preopen_sample_count === 3, recent_one_minute_three_sample_not_fabricated: built.results[0].technical_data.recent_1m_three_sample_supported === false, late_publication_not_realtime: late.results[0].late_publication === true && late.results[0].preopen_realtime_usable === false, common_failure_blocks_batch: commonFault.receipt.source_common_valid === false && commonFault.results.every((row) => row.quality_status === "BLOCKED_COMMON") } };
 }
 
 async function publish(built, serviceKey) {

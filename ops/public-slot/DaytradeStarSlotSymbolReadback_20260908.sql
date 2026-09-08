@@ -96,8 +96,37 @@ select
   s.best_bid,
   s.best_ask,
   s.bid_ask_ratio,
-  s.source
-from public.fugle_daytrade_preopen_futopt_snapshots s;
+  s.source,
+  h.future_0845_open_price,
+  h.future_preopen_high_price,
+  h.future_preopen_low_price,
+  h.future_preopen_sample_count,
+  h.future_preopen_range_start_at,
+  h.future_preopen_range_end_at,
+  h.future_0845_source_event_at,
+  h.future_latest_source_event_at,
+  'natural_slot_snapshots_0845_through_current_slot'::text as future_pattern_evidence_mode,
+  false as recent_1m_three_sample_supported
+from public.fugle_daytrade_preopen_futopt_snapshots s
+left join lateral (
+  select
+    (array_agg(p.fut_price order by p.captured_at asc)
+      filter (where p.capture_slot='0845' and p.fut_price>0))[1] as future_0845_open_price,
+    max(p.fut_price) filter (where p.fut_price>0) as future_preopen_high_price,
+    min(p.fut_price) filter (where p.fut_price>0) as future_preopen_low_price,
+    count(*) filter (where p.fut_price>0)::integer as future_preopen_sample_count,
+    min(p.captured_at) filter (where p.fut_price>0) as future_preopen_range_start_at,
+    max(p.captured_at) filter (where p.fut_price>0) as future_preopen_range_end_at,
+    (array_agg(nullif(p.payload->>'websocket_quote_seen_at','')::timestamptz order by p.captured_at asc)
+      filter (where p.capture_slot='0845' and p.fut_price>0))[1] as future_0845_source_event_at,
+    (array_agg(nullif(p.payload->>'websocket_quote_seen_at','')::timestamptz order by p.captured_at desc)
+      filter (where p.fut_price>0))[1] as future_latest_source_event_at
+  from public.fugle_daytrade_preopen_futopt_snapshots p
+  where p.trade_date=s.trade_date
+    and p.underlying_symbol=s.underlying_symbol
+    and p.natural_schedule_evidence is true
+    and p.capture_slot between '0845' and s.capture_slot
+) h on true;
 
 create or replace view public.v_fugle_daytrade_star_slot_verification_readback as
 select verification_run_id,contract,contract_version,trade_date,capture_slot,
@@ -128,6 +157,6 @@ grant select on public.v_fugle_daytrade_star_slot_verification_readback to anon,
 grant select on public.v_fugle_daytrade_star_slot_symbol_readback to anon,authenticated,service_role;
 
 comment on view public.v_fugle_daytrade_star_slot_verification_readback is 'Canonical slot-level receipt. complete means full slot coverage; partial preserves READY symbols while isolating per-symbol DATA_GAP.';
-comment on view public.v_fugle_daytrade_star_slot_symbol_readback is 'Canonical immutable per-symbol slot result. Viewer binds verification_run_id and may evaluate only quality_status=READY; formal entry remains false.';
+comment on view public.v_fugle_daytrade_star_slot_symbol_readback is 'Canonical immutable per-symbol slot result v2. Viewer binds verification_run_id and may evaluate only quality_status=READY; technical_data includes natural 08:45 open and the 08:45-through-current-slot high/low range; formal entry remains false.';
 notify pgrst,'reload schema';
 commit;

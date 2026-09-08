@@ -79,6 +79,7 @@
     "verify:daytrade-side-volume-contract": "node --use-system-ca scripts/verify-daytrade-side-volume-contract.js",
     "verify:daytrade-side-volume-contract:receipt": "node --use-system-ca scripts/verify-daytrade-side-volume-contract.js --write-receipt",
     "verify:daytrade-side-volume-contract:publish": "node --use-system-ca scripts/verify-daytrade-side-volume-contract.js --write-receipt --publish-receipt",
+    "apply:daytrade-side-volume-receipt-schema": "node --use-system-ca scripts/apply-daytrade-star-side-volume-receipts.js",
     "apply:daytrade-intraday-5m-readback": "node --use-system-ca scripts/apply-daytrade-intraday-5m-readback.js",
     "verify:daytrade-intraday-5m-readback": "node --use-system-ca scripts/verify-daytrade-intraday-5m-readback.js",
     "run:daytrade-intraday-5m-writer": "node --use-system-ca scripts/run-daytrade-intraday-5m-writer.js",

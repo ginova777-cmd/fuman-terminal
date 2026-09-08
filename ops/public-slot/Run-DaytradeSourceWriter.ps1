@@ -237,6 +237,62 @@ function Write-FailureArtifact {
   $artifact | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $StateDir "daytrade-source-writer.failure.json") -Encoding utf8
 }
 
+function Invoke-DaytradeSideVolumeCanonicalVerifier {
+  if (-not $Apply -or $LocalCheck) { return }
+  $taipeiNow = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, "Taipei Standard Time")
+  $minuteOfDay = ($taipeiNow.Hour * 60) + $taipeiNow.Minute
+  if ($minuteOfDay -lt 540 -or $minuteOfDay -gt 810) { return }
+
+  $verifierScript = Join-Path $RepoRoot "scripts\verify-daytrade-side-volume-contract.js"
+  if (-not (Test-Path -LiteralPath $verifierScript)) {
+    Write-WrapperLog "SIDE_VOLUME_VERIFIER_SKIP reason=verifier_missing path=$verifierScript"
+    return
+  }
+
+  $throttleSeconds = if ($env:FUMAN_SIDE_VOLUME_VERIFY_INTERVAL_SECONDS) { [int]$env:FUMAN_SIDE_VOLUME_VERIFY_INTERVAL_SECONDS } else { 300 }
+  if ($throttleSeconds -lt 60) { $throttleSeconds = 60 }
+  $scheduleStatePath = Join-Path $StateDir "daytrade-side-volume-verifier-schedule.json"
+  $previous = $null
+  try { if (Test-Path -LiteralPath $scheduleStatePath) { $previous = Get-Content -LiteralPath $scheduleStatePath -Raw | ConvertFrom-Json } } catch {}
+  $previousAgeSeconds = Get-IsoAgeSeconds $previous.started_at
+  if ($previousAgeSeconds -lt $throttleSeconds) {
+    Write-WrapperLog "SIDE_VOLUME_VERIFIER_THROTTLED age_seconds=$previousAgeSeconds interval_seconds=$throttleSeconds"
+    return
+  }
+
+  $verifierStamp = [DateTimeOffset]::UtcNow.ToString("yyyyMMddHHmmss")
+  $verifierLog = Join-Path $LogDir "daytrade-side-volume-verifier-$($TradeDate.Replace('-',''))-$verifierStamp.log"
+  $state = [ordered]@{
+    contract = "daytrade_side_volume_writer_schedule_v1"
+    trade_date = $TradeDate
+    started_at = [DateTimeOffset]::UtcNow.ToString("o")
+    completed_at = $null
+    verifier = "scripts/verify-daytrade-side-volume-contract.js"
+    arguments = @("--write-receipt", "--publish-receipt")
+    status = "running"
+    exit_code = $null
+    receipt_status = $null
+    receipt_complete = $false
+    log = $verifierLog
+  }
+  $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $scheduleStatePath -Encoding utf8
+  $verifierOutput = & $node --use-system-ca $verifierScript "--write-receipt" "--publish-receipt" 2>&1
+  $verifierExit = [int]$LASTEXITCODE
+  $verifierText = ($verifierOutput | Out-String).Trim()
+  $verifierText | Set-Content -LiteralPath $verifierLog -Encoding utf8
+  $verifierPayload = $null
+  try { $verifierPayload = $verifierText | ConvertFrom-Json } catch {}
+  $state.completed_at = [DateTimeOffset]::UtcNow.ToString("o")
+  $state.exit_code = $verifierExit
+  $state.receipt_status = if ($null -ne $verifierPayload) { [string]$verifierPayload.status } else { "unparseable" }
+  $state.receipt_complete = $null -ne $verifierPayload -and $verifierPayload.complete -eq $true
+  $state.status = if ($verifierExit -eq 0) { "complete" } elseif ($null -ne $verifierPayload -and [string]$verifierPayload.status -eq "partial") { "partial" } else { "failed" }
+  $state.verification_run_id = if ($null -ne $verifierPayload) { [string]$verifierPayload.verification_run_id } else { "" }
+  $state.first_blocker = if ($null -ne $verifierPayload) { [string]$verifierPayload.first_blocker } else { "verifier_output_unparseable" }
+  $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $scheduleStatePath -Encoding utf8
+  Write-WrapperLog "SIDE_VOLUME_VERIFIER_DONE status=$($state.status) receipt_status=$($state.receipt_status) complete=$($state.receipt_complete) exit=$verifierExit verification_run_id=$($state.verification_run_id)"
+}
+
 if (-not (Test-Path -LiteralPath $WriterScript)) {
   Write-FailureArtifact 9002 "writer_script_missing"
   throw "Missing writer script: $WriterScript"
@@ -390,6 +446,7 @@ try {
     Write-WrapperLog "FAIL writer_exit_$exitCode detail=$diagnostic stdout=$StdoutLog stderr=$StderrLog"
     exit $exitCode
   }
+  Invoke-DaytradeSideVolumeCanonicalVerifier
   Write-WrapperLog "DONE ok stdout=$StdoutLog stderr=$StderrLog"
   exit 0
 } catch {
