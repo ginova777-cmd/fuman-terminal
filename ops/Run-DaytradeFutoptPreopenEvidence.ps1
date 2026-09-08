@@ -9,6 +9,7 @@ param(
 $ErrorActionPreference = "Stop"
 $node = "C:\Program Files\nodejs\node.exe"
 $producer = Join-Path $TerminalDir "scripts\run-daytrade-near-one-source.js"
+$canonicalVerifier = Join-Path $TerminalDir "scripts\verify-star-preopen-slot-symbol-contract.js"
 $calendar = Join-Path $TerminalDir "scripts\check-market-calendar-action.js"
 $receiptDir = Join-Path $RuntimeDir "data\scan-receipts"
 $logDir = Join-Path $RuntimeDir "logs"
@@ -23,6 +24,8 @@ $logPath = Join-Path $logDir "daytrade-futopt-preopen-evidence-$compactDate.log"
 $lockWaitSeconds = 0
 $retryCount = 0
 $lockOwner = $null
+$verifierExit = $null
+$verifierPayload = $null
 
 function Write-TaskLog([string]$Message) {
   "[{0}] slot={1} {2}" -f ([DateTimeOffset]::UtcNow.ToString("o")), $Slot, $Message |
@@ -88,7 +91,11 @@ function Write-Receipt {
     evidence_window = "08:45-08:59 Asia/Taipei"
     runner = "ops/Run-DaytradeFutoptPreopenEvidence.ps1"
     producer = "scripts/run-daytrade-near-one-source.js"
-    verifier = "scripts/verify-star-preopen-trial-history-contract.js"
+    verifier = "scripts/verify-star-preopen-slot-symbol-contract.js"
+    verifier_exit = $verifierExit
+    verifier_receipt = $verifierPayload
+    slot_receipt_view = "v_fugle_daytrade_star_slot_verification_readback"
+    symbol_results_view = "v_fugle_daytrade_star_slot_symbol_readback"
     producer_exit = $ProducerExit
     producer_ok = $ProducerOk
     collector_health = $CollectorHealth
@@ -110,7 +117,7 @@ if ($actualSlot -ne $Slot) {
   Write-Receipt $false "natural_schedule_minute_mismatch" "wrong_slot"
   exit 1
 }
-if (-not (Test-Path -LiteralPath $node) -or -not (Test-Path -LiteralPath $producer)) {
+if (-not (Test-Path -LiteralPath $node) -or -not (Test-Path -LiteralPath $producer) -or -not (Test-Path -LiteralPath $canonicalVerifier)) {
   Write-Receipt $false "producer_or_node_missing" "blocked"
   exit 1
 }
@@ -163,5 +170,17 @@ if ($payload.ok -ne $true -or $payload.naturalScheduleEvidence -ne $true) {
   Write-Receipt $false "producer_evidence_incomplete" "evidence_incomplete" $producerExit $false $collectorHealth
   exit 1
 }
-Write-Receipt $true "preopen_evidence_ready" "complete" $producerExit $true $collectorHealth
+$verifierOutput = & $node --use-system-ca $canonicalVerifier "--slot=$Slot" "--trade-date=$tradeDate" --publish 2>&1
+$verifierExit = $LASTEXITCODE
+$verifierOutput | ForEach-Object { Write-TaskLog "canonical_verifier: $_" }
+try { $verifierPayload = (($verifierOutput | Out-String).Trim() | ConvertFrom-Json) } catch {
+  Write-Receipt $false "canonical_slot_verifier_output_invalid" "verifier_failed" $producerExit $true $collectorHealth
+  exit 1
+}
+if ($verifierPayload.complete -ne $true -or $verifierExit -ne 0) {
+  $reason = if ($verifierPayload.first_blocker) { [string]$verifierPayload.first_blocker } else { "canonical_slot_verifier_incomplete" }
+  Write-Receipt $false $reason "verifier_incomplete" $producerExit $true $collectorHealth
+  exit 1
+}
+Write-Receipt $true "preopen_slot_verified_and_published" "complete" $producerExit $true $collectorHealth
 exit 0

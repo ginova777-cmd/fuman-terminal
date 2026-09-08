@@ -12,6 +12,8 @@ const trialHistoryVerifier = read("scripts/verify-star-preopen-trial-history-con
 const evidenceVerifier = read("scripts/verify-daytrade-futopt-preopen-evidence-readonly.js");
 const evidenceWrapper = read("ops/Run-DaytradeFutoptPreopenEvidence.ps1");
 const taskInstaller = read("scripts/install-daytrade-futopt-preopen-evidence-tasks.ps1");
+const slotSql = read("ops/public-slot/DaytradeStarSlotSymbolReadback_20260908.sql");
+const slotVerifier = read("scripts/verify-star-preopen-slot-symbol-contract.js");
 const requiredFields = [
   "future_0845_open_price", "future_preopen_high_price", "future_preopen_low_price",
   "future_0859_last_price", "future_change_percent", "relative_to_txf_percent",
@@ -45,6 +47,17 @@ const checks = {
   four_slot_tasks_single_wrapper: ["0845", "0850", "0855", "0859"].every((slot) => taskInstaller.includes(`Slot="${slot}"`))
     && taskInstaller.includes("Disable-ScheduledTask")
     && taskInstaller.includes("Fuman Daytrade Near-One Natural Source"),
+  slot_receipt_anon_contract: slotSql.includes("v_fugle_daytrade_star_slot_verification_readback")
+    && slotSql.includes("v_fugle_daytrade_star_slot_symbol_readback")
+    && slotSql.includes("grant select") && slotSql.includes("to anon,authenticated,service_role"),
+  slot_symbol_isolation_contract: slotVerifier.includes('status === "partial"')
+    && slotVerifier.includes("source_valid_count")
+    && slotVerifier.includes("strategy_evaluation_owner")
+    && slotVerifier.includes("BLOCKED_COMMON")
+    && slotVerifier.includes("bounded_retry_max: 3"),
+  wrapper_runs_canonical_slot_verifier: evidenceWrapper.includes("verify-star-preopen-slot-symbol-contract.js")
+    && evidenceWrapper.includes("--publish")
+    && evidenceWrapper.includes("v_fugle_daytrade_star_slot_symbol_readback"),
 };
 const failed = Object.entries(checks).filter(([, ok]) => !ok).map(([key]) => key);
 console.log(JSON.stringify({ ok: failed.length === 0, contract: "daytrade-futopt-star-open-retest-v2", checks, failed, firstBlocker: failed[0] || null }, null, 2));

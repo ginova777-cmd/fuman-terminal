@@ -74,6 +74,49 @@ npm run install:daytrade-futopt-preopen-evidence-tasks
 
 舊 `Fuman Daytrade Near-One Natural Source` 逐分鐘 direct runner 必須維持停用，避免和四個正式 wrapper 爭用同一把 producer lock。
 
+### 當槽即時發布與四槽總驗收分流
+
+每個工作排程在指定分鐘啟動後，依序完成 `producer → slot canonical verifier → Supabase receipt publish → local wrapper receipt`。完成時間不是固定整分，也不得把 09:00 後完成的 08:59 receipt 回標成 08:59 當時已可見。正式時間欄位如下：
+
+- `source_event_at`：富果來源事件時間。
+- `received_at`：自然 snapshot 寫入端接收／捕捉時間。
+- `published_at`：slot 結果發布時間。
+- `verified_at`：canonical verifier 實際驗證時間。
+- Viewer 另在本機記錄 `read_at`，以 `read_at - source_event_at` 與 `read_at - published_at` 計算實際可見延遲。
+
+盤前讀取分成兩個層級：
+
+```text
+當槽當檔 READY／DATA_GAP：08:45–08:59 可逐槽使用
+四槽總 receipt complete：09:00 後做全覆蓋與稽核
+STAR 策略命中：Viewer Live 規則負責
+formal_candidate／formal_entry_allowed／order_allowed：永遠不由資料 READY 自動推論
+```
+
+正式 anon 入口：
+
+```text
+GET /rest/v1/v_fugle_daytrade_star_slot_verification_readback
+  ?select=*
+  &trade_date=eq.YYYY-MM-DD
+  &capture_slot=eq.0855
+  &order=verified_at.desc
+  &limit=1
+
+GET /rest/v1/v_fugle_daytrade_star_slot_symbol_readback
+  ?select=*
+  &trade_date=eq.YYYY-MM-DD
+  &capture_slot=eq.0855
+  &symbol=eq.2330
+  &verification_run_id=eq.<slot receipt verification_run_id>
+```
+
+Receipt 主要型別：`complete/source_common_valid:boolean`、各 count 與 `exit_code:integer`、時間欄位 `timestamptz`、`failed_checks:text[]`、`source_identity/diagnostic_summary:jsonb`。單檔主要型別：`quality_ok/strategy_evaluable/formal_candidate/formal_entry_allowed/order_allowed:boolean`、`quality_status/first_blocker/run_id/generation_id:text`、`technical_data:jsonb`、事件及發布時間 `timestamptz`。
+
+Viewer 必須先讀最新 slot receipt，固定其 `verification_run_id`，再用同一 ID 分頁讀單檔結果；若看到 `PUBLISH_IN_PROGRESS`、receipt 尚不存在或單檔筆數未達 receipt `universe_count`，採 500ms、1000ms、1500ms 最多三次 bounded retry。仍不一致即阻擋該批，禁止混用另一個 verification run。
+
+`quality_status=READY` 的股票可獨立交給 Viewer Live 規則評估；單一股票 `DATA_GAP` 不會把其他 READY 股票改成 NO_SIGNAL。若 `source_common_valid=false`，同批全部為 `BLOCKED_COMMON`。四個排程只提供四次自然 snapshot，不宣稱逐事件或逐分鐘連續偵測；若未來需要連續 capture，必須擴充同一 writer/runner 契約。
+
 若未來要求完整逐分鐘 replay，必須由同一正式 runner 擴充自然 capture；不得啟用第二支競爭 Writer，也不得以 09:00 後行情、forward-fill 或合成 K 棒補值。
 
 ## 驗收
