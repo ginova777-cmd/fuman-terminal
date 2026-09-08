@@ -9,6 +9,9 @@ const sql = read("ops/public-slot/DaytradeStarPreopenReadbackContract_20260908.s
 const producer = read("scripts/run-daytrade-near-one-source.js");
 const verifier = read("scripts/verify-daytrade-futopt-star-readback-readonly.js");
 const trialHistoryVerifier = read("scripts/verify-star-preopen-trial-history-contract.js");
+const evidenceVerifier = read("scripts/verify-daytrade-futopt-preopen-evidence-readonly.js");
+const evidenceWrapper = read("ops/Run-DaytradeFutoptPreopenEvidence.ps1");
+const taskInstaller = read("scripts/install-daytrade-futopt-preopen-evidence-tasks.ps1");
 const requiredFields = [
   "future_0845_open_price", "future_preopen_high_price", "future_preopen_low_price",
   "future_0859_last_price", "future_change_percent", "relative_to_txf_percent",
@@ -29,6 +32,18 @@ const checks = {
   trial_history_verifier_wired: trialHistoryVerifier.includes("star_preopen_trial_history_canonical_verifier_v2")
     && trialHistoryVerifier.includes("v_fugle_preopen_snapshot_history")
     && trialHistoryVerifier.includes("uses_0900_data: false"),
+  universe_live_mapping_fallback: sql.includes("live_mapping as")
+    && sql.includes("fugle_daytrade_futopt_quotes_live")
+    && sql.includes("lm.underlying_symbol"),
+  universe_stock_master_name_fallback: sql.includes("left join lateral")
+    && sql.includes("public.stock_tickers")
+    && sql.includes("sm.symbol"),
+  four_natural_slots_required: evidenceVerifier.includes('["0845", "0850", "0855", "0859"]')
+    && evidenceVerifier.includes("08:45-08:59 Asia/Taipei")
+    && evidenceWrapper.includes('[ValidateSet("0845", "0850", "0855", "0859")]'),
+  four_slot_tasks_single_wrapper: ["0845", "0850", "0855", "0859"].every((slot) => taskInstaller.includes(`Slot="${slot}"`))
+    && taskInstaller.includes("Disable-ScheduledTask")
+    && taskInstaller.includes("Fuman Daytrade Near-One Natural Source"),
 };
 const failed = Object.entries(checks).filter(([, ok]) => !ok).map(([key]) => key);
 console.log(JSON.stringify({ ok: failed.length === 0, contract: "daytrade-futopt-star-open-retest-v2", checks, failed, firstBlocker: failed[0] || null }, null, 2));

@@ -8,11 +8,33 @@ begin;
 create or replace view public.v_fugle_daytrade_star_universe_readback as
 with clock as (
   select (now() at time zone 'Asia/Taipei')::date as trade_date
+), live_mapping as (
+  select distinct on (upper(nullif(q.future_symbol,'')))
+    upper(nullif(q.future_symbol,'')) as future_symbol,
+    nullif(q.underlying_symbol,'') as underlying_symbol,
+    nullif(q.underlying_name,'') as underlying_name,
+    q.updated_at
+  from public.fugle_daytrade_futopt_quotes_live q
+  where nullif(q.future_symbol,'') is not null
+    and nullif(q.underlying_symbol,'') ~ '^\d{4}$'
+  order by upper(nullif(q.future_symbol,'')), q.updated_at desc nulls last
 ), normalized as (
   select
     c.trade_date,
-    coalesce(nullif(t.underlying_symbol,''), nullif(t.payload->>'underlying_symbol',''), nullif(t.payload->>'underlyingSymbol','')) as underlying_symbol,
-    coalesce(nullif(t.underlying_name,''), nullif(t.payload->>'underlying_name',''), nullif(t.payload->>'underlyingName','')) as underlying_name,
+    coalesce(
+      nullif(t.underlying_symbol,''),
+      nullif(t.payload->>'underlying_symbol',''),
+      nullif(t.payload->>'underlyingSymbol',''),
+      lm.underlying_symbol,
+      sm.symbol
+    ) as underlying_symbol,
+    coalesce(
+      nullif(t.underlying_name,''),
+      nullif(t.payload->>'underlying_name',''),
+      nullif(t.payload->>'underlyingName',''),
+      lm.underlying_name,
+      sm.name
+    ) as underlying_name,
     upper(nullif(t.future_symbol,'')) as future_symbol,
     t.name as future_name,
     upper(coalesce(nullif(t.product,''), nullif(t.payload->>'product',''), 'STOCK_FUTURE')) as product,
@@ -28,6 +50,16 @@ with clock as (
     t.updated_at as contract_source_updated_at
   from public.futopt_tickers t
   cross join clock c
+  left join live_mapping lm on lm.future_symbol=upper(nullif(t.future_symbol,''))
+  left join lateral (
+    select s.symbol, s.name
+    from public.stock_tickers s
+    where s.symbol ~ '^\d{4}$'
+      and regexp_replace(s.name, '[[:space:]]+', '', 'g') =
+        regexp_replace(regexp_replace(regexp_replace(t.name, '^小型', ''), '期貨\d*$', ''), '[[:space:]]+', '', 'g')
+    order by coalesce(s.is_suspended,false) asc, s.updated_at desc nulls last
+    limit 1
+  ) sm on true
   where nullif(t.future_symbol,'') is not null
 ), stock_candidates as (
   select *

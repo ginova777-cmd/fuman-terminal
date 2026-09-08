@@ -1,6 +1,6 @@
 {
-  "updatedAt": "2026-09-06T05:18:27.387Z",
-  "policyVersion": 4,
+  "updatedAt": "2026-09-08T08:30:00.000Z",
+  "policyVersion": 5,
   "description": "Canonical Fuman Terminal Windows Task Scheduler registry. The full freshness gate is 20:10 only; morning coverage is handled by fast/readiness/local verify tasks.",
   "policy": {
     "activeTasks": [
@@ -13,7 +13,8 @@
       "Fuman Daytrade Futopt Collector Recovery 0835",
       "Fuman Daytrade Futopt Preopen Evidence 0845",
       "Fuman Daytrade Futopt Preopen Evidence 0850",
-      "Fuman Daytrade Near-One Natural Source",
+      "Fuman Daytrade Futopt Preopen Evidence 0855",
+      "Fuman Daytrade Futopt Preopen Evidence 0859",
       "Fuman Daytrade Source Gate 0700",
       "Fuman Daytrade Source Writer 0600-1330",
       "Fuman Fugle Daytrade WebSocket Collector 0600-1330",
@@ -46,8 +47,7 @@
       "Fuman Public Slot Shared Source 0800",
       "Fuman Strategy3 LINE Card 1308",
       "Fuman Strategy4 LINE Card 1610",
-      "Fuman Daytrade Futopt Preopen Evidence 0855",
-      "Fuman Daytrade Futopt Preopen Evidence 0859",
+      "Fuman Daytrade Near-One Natural Source",
       "Fuman Opening Limit Order 0831 Prewarm Readonly",
       "Fuman Strategy3 Complete Scan 1300",
       "Fuman Strategy3 Readiness Guard 1230",
@@ -1115,9 +1115,9 @@
     {
       "taskName": "\\Fuman Daytrade Near-One Natural Source",
       "displayName": "Fuman Daytrade Near-One Natural Source",
-      "description": "Source-only canonical near-one and immutable natural preopen snapshots; TWSE-calendar guarded and never opens a WebSocket.",
+      "description": "Disabled overlapping direct runner; four receipt-owning canonical slot wrappers are authoritative.",
       "time": "08:45-08:59",
-      "expectedState": "Ready",
+      "expectedState": "Disabled",
       "expectedTriggers": [
         "08:45",
         "08:46",
@@ -1308,9 +1308,9 @@
     {
       "taskName": "\\Fuman Daytrade Futopt Preopen Evidence 0855",
       "displayName": "Fuman Daytrade Futopt Preopen Evidence 0855",
-      "description": "Observed production Windows Task Scheduler entry.",
+      "description": "Canonical STAR natural slot wrapper: runner -> readback -> verifier -> receipt.",
       "time": "08:55",
-      "expectedState": "Disabled",
+      "expectedState": "Ready",
       "expectedTriggers": [
         "08:55"
       ]
@@ -1318,9 +1318,9 @@
     {
       "taskName": "\\Fuman Daytrade Futopt Preopen Evidence 0859",
       "displayName": "Fuman Daytrade Futopt Preopen Evidence 0859",
-      "description": "Observed production Windows Task Scheduler entry.",
+      "description": "Canonical STAR natural slot wrapper: runner -> readback -> verifier -> receipt.",
       "time": "08:59",
-      "expectedState": "Disabled",
+      "expectedState": "Ready",
       "expectedTriggers": [
         "08:59"
       ]
