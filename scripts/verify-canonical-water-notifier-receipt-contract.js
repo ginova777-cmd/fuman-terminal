@@ -76,6 +76,8 @@ async function main() {
   const result = await notifyFromOutbox({ tradeDate, canonicalWaterResult, tradingWindowOverride: true });
   const receiptFile = path.join(runtimeRoot, "data", "scan-receipts", `daytrade-intraday-burst-telegram-${tradeDate.replace(/\D/g, "")}.json`);
   const saved = JSON.parse(fs.readFileSync(receiptFile, "utf8"));
+  const outsideResult = await notifyFromOutbox({ tradeDate, now: new Date(`${tradeDate}T05:00:00+08:00`) });
+  const outsideSaved = JSON.parse(fs.readFileSync(receiptFile, "utf8"));
   const checks = {
     complete_zero_result_is_success: result.ok === true && result.complete === true && result.status === "complete" && result.detected_events === 0,
     canonical_water_receipt_saved: saved?.canonical_water?.contract === "daytrade_canonical_water_reader_v1" && saved?.canonical_water?.complete === true,
@@ -88,6 +90,12 @@ async function main() {
       && Array.isArray(saved?.failed_checks)
       && saved.failed_checks.length === 0,
     no_notification_sent_for_zero_events: saved?.sent_event_count === 0 && saved?.last_attempt?.sent_events === 0,
+    outside_window_completes_without_live_water_read: outsideResult.ok === true
+      && outsideResult.complete === true
+      && outsideResult.status === "complete"
+      && outsideResult.first_blocker === "outside_trading_window"
+      && outsideSaved?.canonical_water === undefined
+      && outsideSaved?.last_attempt?.sent_events === 0,
   };
   const failedChecks = Object.entries(checks).filter(([, value]) => value !== true).map(([name]) => name);
   console.log(JSON.stringify({ ok: failedChecks.length === 0, contract: "canonical_water_notifier_receipt_verifier_v1", checks, failed_checks: failedChecks, first_blocker: failedChecks[0] || null }, null, 2));

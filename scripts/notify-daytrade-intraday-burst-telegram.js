@@ -38,7 +38,7 @@ function taipeiMinutes(value = new Date()) {
 }
 function compactDate(value) { return String(value || "").replace(/\D/g, "").slice(0, 8); }
 function numberValue(value, fallback = 0) { const number = Number(value); return Number.isFinite(number) ? number : fallback; }
-function isTradingWindow() { const minutes = taipeiMinutes(); return minutes >= 540 && minutes <= 750; }
+function isTradingWindow(value = new Date()) { const minutes = taipeiMinutes(value); return minutes >= 540 && minutes <= 750; }
 function formatNumber(value, digits = 2) { return numberValue(value, 0).toLocaleString("zh-TW", { maximumFractionDigits: digits, minimumFractionDigits: 0 }); }
 function eventLabel(type) {
   if (type === "price_breakout_1pct") return "瞬間拉抬";
@@ -254,9 +254,10 @@ function validEvent(event, tradeDate, nowMs) {
   return failures;
 }
 async function notifyFromOutbox(options = {}) {
-  const startedAt = new Date().toISOString();
+  const now = options.now instanceof Date ? options.now : new Date();
+  const startedAt = now.toISOString();
   const checkedAt = startedAt;
-  const nowMs = Date.now();
+  const nowMs = now.getTime();
   const tradeDate = options.tradeDate || taipeiDate();
   const outbox = readJson(OUTBOX_FILE, {});
   const events = Array.isArray(outbox.events) ? outbox.events : [];
@@ -281,6 +282,10 @@ async function notifyFromOutbox(options = {}) {
     data_gap_count: 0, failed_checks: [],
     detected_events: 0, sent_events: [], skipped_events: [], first_blocker: null,
   };
+  if (options.tradingWindowOverride !== true && !isTradingWindow(now)) {
+    receipt.ok = true; receipt.first_blocker = "outside_trading_window";
+    writeReceiptWithHistory(receipt); return receipt;
+  }
   const canonicalWater = options.canonicalWaterResult || await readCanonicalDaytradeWater({
     tradeDate,
     symbols: events.map((event) => event?.symbol),
@@ -318,10 +323,6 @@ async function notifyFromOutbox(options = {}) {
   }
   if (String(outbox.industry_heatmap_status || "") !== "ready" || !Array.isArray(outbox.industry_heatmap) || outbox.industry_heatmap.length === 0) {
     receipt.first_blocker = "industry_heatmap_not_ready";
-    writeReceiptWithHistory(receipt); return receipt;
-  }
-  if (options.tradingWindowOverride !== true && !isTradingWindow()) {
-    receipt.ok = true; receipt.first_blocker = "outside_trading_window";
     writeReceiptWithHistory(receipt); return receipt;
   }
   if (!hasTelegramConfig()) {

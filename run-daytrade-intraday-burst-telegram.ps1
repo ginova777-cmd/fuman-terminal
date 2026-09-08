@@ -43,7 +43,8 @@ try {
       [bool]$notifierReceipt.ok -eq $true -and
       [bool]$notifierReceipt.complete -eq $true -and
       [string]$notifierReceipt.status -eq "complete" -and
-      [string]::IsNullOrWhiteSpace([string]$notifierReceipt.first_blocker) -and
+      ([string]::IsNullOrWhiteSpace([string]$notifierReceipt.first_blocker) -or
+        [string]$notifierReceipt.first_blocker -eq "outside_trading_window") -and
       $notifierStartedAt -ge $runnerStartedAt
     )
     if (-not $notifierReceiptVerified) {
