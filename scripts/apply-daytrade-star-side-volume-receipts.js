@@ -17,6 +17,24 @@ function secret(name) {
   return "";
 }
 
+async function anonReadback(view, select) {
+  const anonKey = process.env.SUPABASE_ANON_KEY
+    || process.env.FUMAN_SUPABASE_ANON_KEY
+    || secret("supabase-anon-key.txt");
+  if (!anonKey) throw new Error("SUPABASE_ANON_KEY is required for post-apply schema readback");
+  const query = new URLSearchParams({ select, limit: "1" });
+  const response = await fetch(`${URL}/rest/v1/${view}?${query}`, {
+    headers: { apikey: anonKey, Authorization: `Bearer ${anonKey}` },
+    signal: AbortSignal.timeout(30000),
+  });
+  const body = await response.text();
+  if (!response.ok) throw new Error(`anon schema readback ${view} HTTP ${response.status}: ${body.slice(0, 600)}`);
+  let rows;
+  try { rows = JSON.parse(body); } catch { throw new Error(`anon schema readback ${view} returned invalid JSON`); }
+  if (!Array.isArray(rows)) throw new Error(`anon schema readback ${view} did not return an array`);
+  return { view, ok: true, row_count: rows.length };
+}
+
 async function main() {
   const guard = spawnSync(process.execPath, [path.join(ROOT, "scripts", "supabase-incident-guard.js"), "check", "--class=writer", "--action=apply-daytrade-star-side-volume-receipts"], { cwd: ROOT, stdio: "inherit", windowsHide: true });
   if (guard.status !== 0) throw new Error("supabase_incident_guard_blocked");
@@ -44,7 +62,17 @@ async function main() {
       if (result.error || result.status !== 0) throw new Error(String(result.stderr || result.error || "psql failed").slice(0, 1000));
     }
   }
-  console.log(JSON.stringify({ ok: true, status: "complete", contract: "star_side_volume_receipt_schema_apply_v2", applied_at: new Date().toISOString(), sql_file: SQL_FILE, method, views: ["v_fugle_daytrade_side_volume_verification_readback", "v_fugle_daytrade_side_volume_symbol_readback"], natural_evidence_mutated: false }, null, 2));
+  const schemaReadback = await Promise.all([
+    anonReadback(
+      "v_fugle_daytrade_side_volume_verification_readback",
+      "verification_run_id,symbol_result_rows,mother_pool_rows,diagnostic_extra_rows,ready_rows,below_threshold_rows,data_gap_rows,blocked_common_rows,symbol_result_view",
+    ),
+    anonReadback(
+      "v_fugle_daytrade_side_volume_symbol_readback",
+      "verification_run_id,verified_at,threshold_status,source_event_age_seconds_at_verification,source_fresh_120s_at_verification",
+    ),
+  ]);
+  console.log(JSON.stringify({ ok: true, status: "complete", contract: "star_side_volume_receipt_schema_apply_v2", applied_at: new Date().toISOString(), sql_file: SQL_FILE, method, views: ["v_fugle_daytrade_side_volume_verification_readback", "v_fugle_daytrade_side_volume_symbol_readback"], schema_readback: schemaReadback, natural_evidence_mutated: false }, null, 2));
 }
 
 main().catch((error) => { console.error(error.message); process.exitCode = 1; });

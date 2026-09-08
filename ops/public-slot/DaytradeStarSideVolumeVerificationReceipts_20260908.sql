@@ -156,8 +156,9 @@ select verification_run_id,contract,contract_version,trade_date,canonical_run_id
        side_volume_available,side_volume_threshold_lots,side_volume_ge_2000_lots,
        side_volume_source,side_volume_source_event_at,side_volume_trade_date,
        side_volume_canonical_run_id,total_matches_inside_plus_outside,
+       verified_at,
        threshold_status,source_event_age_seconds_at_verification,
-       source_fresh_120s_at_verification,verified_at
+       source_fresh_120s_at_verification
 from public.fugle_daytrade_side_volume_symbol_results;
 
 -- A verification_run_id is an immutable evidence snapshot.  The only legal
