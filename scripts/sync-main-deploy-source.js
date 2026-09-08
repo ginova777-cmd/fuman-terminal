@@ -326,7 +326,6 @@ const FILES = [
   "ops/Run-OpeningLimitOrderMorningReadonly.ps1",
 
   "ops/public-slot/FinMindUnifiedQuoteViews.sql",
-  "ops/public-slot/Strategy3QuoteReadyFugleFirstFix.sql",
   "ops/public-slot/Strategy5RunIdCompleteGate.sql",
   "ops/public-slot/SupabaseCostGovernanceAuditPatch_20260630.sql",
   "ops/public-slot/InstitutionRunIdCompleteGate.sql",
@@ -388,6 +387,7 @@ const LEGACY_FRESHNESS_OK_FILE = path.join("data", "live-" + "freshness-ok.json"
 
 const RETIRED_ARTIFACTS = [
   "run-open-buy-sync-retry.ps1",
+  "ops/public-slot/Strategy3QuoteReadyFugleFirstFix.sql",
   "run-freshness-gate-task.ps1",
   "run-local-freshness-repair.ps1",
   "open-buy-latest.json",
