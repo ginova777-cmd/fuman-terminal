@@ -191,6 +191,13 @@ select r.*,
   coalesce(r.future_pattern='開盤回測守住',false) as future_open_retest_ok,
   case when r.future_pattern='開盤回測守住' then '期貨0845開盤後，0859前回到開盤價附近並守住'
     else 'DATA_GAP_OR_FUTURE_OPEN_RETEST_NOT_MET' end as future_open_retest_reason,
+  coalesce(r.reference_price>0,false) as reference_price_ok,
+  coalesce(r.trial_price>0,false) as trial_price_ok,
+  case when r.reference_price>0 and r.trial_price>0 then 'ok' else 'DATA_GAP' end as preopen_evidence_status,
+  case
+    when r.reference_price is null or r.reference_price<=0 then 'REFERENCE_PRICE_MISSING'
+    when r.trial_price is null or r.trial_price<=0 then 'TRIAL_PRICE_MISSING'
+    else null end as preopen_data_gap_reason,
   si.identity_future_open_source_event_at as future_0845_source_event_at,
   si.identity_future_last_source_event_at as future_0859_source_event_at,
   si.identity_latest_payload->>'trial_event_at' as trial_event_at,
