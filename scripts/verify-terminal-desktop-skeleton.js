@@ -77,7 +77,8 @@ function main() {
   requireMarker(vercel, "\"value\": \"no-store\"", "vercel", failures);
   for (const route of contract.source_routes) { const file = route.replace(/^\/api\//, "api/") + ".js"; if (!fs.existsSync(path.join(ROOT, file))) failures.push("source_route_missing:" + route); }
   if (pkg.scripts["verify:terminal-desktop-skeleton"] !== "node scripts/verify-terminal-desktop-skeleton.js") failures.push("package_verifier_script_missing");
-  if (pkg.scripts["verify:terminal-opening-report-0830-standalone"] !== "node scripts/verify-terminal-opening-report-0830-standalone-renderer.js") failures.push("standalone_renderer_verifier_missing");
+  if (pkg.scripts["verify:terminal-opening-report-0830-standalone"]) failures.push("retired_standalone_renderer_verifier_present");
+  if (fs.existsSync(path.join(ROOT, "scripts", "verify-terminal-opening-report-0830-standalone-renderer.js"))) failures.push("retired_standalone_renderer_verifier_file_present");
   if (!String(pkg.scripts.postdeploy || "").includes("verify:terminal-desktop-skeleton")) failures.push("postdeploy_skeleton_verifier_missing");
   const result = {ok: failures.length === 0,contract: CONTRACT,baseline: contract.baseline,entry: contract.entry,canonical_flow: contract.canonical_flow,source_routes: contract.source_routes,morning_report: contract.morning_report,failed_checks: failures,first_blocker: failures[0] || null,read_only: true};
   console.log(JSON.stringify(result, null, 2));
