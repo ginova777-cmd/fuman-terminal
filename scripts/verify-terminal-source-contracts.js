@@ -85,23 +85,19 @@ const CONTRACTS = [
     key: "strategy3",
     label: "strategy3 overnight",
     checks: [
-      runView("v_strategy3_latest_complete_run", "strategy3"),
-      resultTable("strategy3_scan_results", [...COMMON_RESULT_FIELDS, "strategy", "rank", "score", "signals", "reason"]),
-      sourceTable("fugle_quotes_latest", [
-        "symbol", "code", "name", "market", "updated_at", "quote_time", "last_trade_time", "close", "last_price", "open", "high", "low",
-        "prev_close", "previous_close", "change_percent", "trade_volume", "trade_volume_lots", "trade_volume_shares", "total_volume",
-        "trade_value", "quote_source", "quote_age_seconds", "session", "stock_type", "is_halted", "is_trial",
-      ], { order: "updated_at.desc", requireToday: true, level: "warning", purpose: "legacy Strategy3 quote source; Strategy3 V2 formal gate uses daytrade 1m readiness" }),
-      sourceTable("v_strategy2_intraday_ready", [
-        "symbol", "latest_candle_time", "today_candle_count", "continuous_candle_count", "ready_ge_35", "ready_ma35_continuous",
-      ], { order: "latest_candle_time.desc", requireToday: true, minRows: 1, purpose: "formal Strategy3 intraday session readiness source via Strategy2 daytrade 1m" }),
-      retiredSourceTable(
-        "v_strategy3_quote_ready",
-        "fugle_quotes_latest+v_strategy2_intraday_ready+stock_daily_volume",
-        "Strategy3 formal gating no longer reads quote-ready view"
+      runTableSelect(
+        "strategy3_v2_scan_runs",
+        "strategy3_v2",
+        "run_id,trade_date,finished_at,status,complete,contract,coverage",
+        { resultCountPath: "coverage.result_count" }
       ),
-      sourceTable("stock_capital_latest", ["code", "issued_shares", "market", "updated_at"], { order: "updated_at.desc", maxAgeDays: 45, level: "warning" }),
-      sourceTable("stock_daily_volume", ["symbol", "code", "trade_date", "volume", "volume_lots", "volume_shares", "close", "updated_at"], { order: "updated_at.desc", maxAgeDays: 3 }),
+      resultTable("strategy3_v2_scan_results", ["run_id", "trade_date", "code", "name", "rank", "score", "complete", "quality_status", "payload", "created_at"], "created_at.desc"),
+      sourceTable("v_fugle_daytrade_mother_pool", [
+        "symbol", "name", "trade_date", "priority_rank", "mother_pool_rule_version", "mother_updated_at"
+      ], { order: "priority_rank.asc", requireToday: true, minRows: 1, purpose: "Strategy3 V2 direct Mother Pool membership" }),
+      sourceTable("fugle_daytrade_intraday_1m", [
+        "symbol", "trade_date", "candle_time", "open", "high", "low", "close", "volume", "updated_at"
+      ], { order: "candle_time.desc", requireToday: true, minRows: 1, purpose: "Strategy3 V2 direct one-minute candle water" }),
     ],
   },
   {
@@ -203,22 +199,30 @@ function runTable(table, strategy) {
   );
 }
 
-function runTableSelect(table, strategy, select) {
+function runTableSelect(table, strategy, select, options = {}) {
   return {
     kind: "latest-run-table",
     table,
     strategy,
     select,
     query: `strategy=eq.${encodeURIComponent(strategy)}&status=eq.complete&complete=eq.true&order=finished_at.desc&limit=1`,
+    resultCountPath: options.resultCountPath || "result_count",
   };
 }
 
-function resultTable(table, fields) {
+function nestedValue(object, keyPath) {
+  return String(keyPath || "")
+    .split(".")
+    .filter(Boolean)
+    .reduce((value, key) => (value && typeof value === "object" ? value[key] : undefined), object);
+}
+
+function resultTable(table, fields, order = "updated_at.desc") {
   return {
     kind: "result-table",
     table,
     select: fields.join(","),
-    query: "order=updated_at.desc&limit=1",
+    query: `order=${order}&limit=1`,
     minRows: 1,
   };
 }
@@ -605,7 +609,12 @@ async function checkOne(strategy, check) {
   if (result.ok && check.kind.startsWith("latest-run") && !result.rows[0]?.run_id) {
     issues.push(`${check.table} latest complete run missing run_id`);
   }
-  if (result.ok && check.kind.startsWith("latest-run") && Number(result.rows[0]?.result_count || 0) <= 0 && strategy.key !== "strategy2") {
+  if (
+    result.ok
+    && check.kind.startsWith("latest-run")
+    && Number(nestedValue(result.rows[0], check.resultCountPath || "result_count") || 0) <= 0
+    && strategy.key !== "strategy2"
+  ) {
     issues.push(`${check.table} latest complete run result_count<=0`);
   }
   if (result.ok && check.requireToday && !liveSourceSkipped) {

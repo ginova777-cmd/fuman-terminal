@@ -36,45 +36,6 @@ function runNode(label, script, args = []) {
   return { label, exitCode: child.status, stdout: child.stdout, stderr: child.stderr };
 }
 
-function runTerminalLegacyApiProbe(date) {
-  const probe = `
-    const handler = require("./api/strategy3-latest.js");
-    const result = {};
-    const response = {
-      headers: {},
-      setHeader(key, value) { this.headers[key] = value; },
-      status(code) { this.code = code; return this; },
-      json(payload) {
-        result.payload = payload;
-        console.log(JSON.stringify({
-          code: this.code,
-          ok: payload && payload.ok,
-          strategy: payload && payload.strategy,
-          runId: payload && payload.runId,
-          count: payload && (payload.count || payload.resultCount || (payload.rows || []).length),
-          publishAllowed: payload && payload.publishAllowed,
-          evidenceStatus: payload && payload.evidenceStatus,
-          unattendedStatus: payload && payload.unattendedStatus,
-          displayMode: payload && payload.terminalAuthority && payload.terminalAuthority.displayMode,
-          firstCode: payload && payload.rows && payload.rows[0] && payload.rows[0].code
-        }));
-      },
-    };
-    Promise.resolve(handler({ query: { date: "${date}" }, url: "/api/strategy3-latest?date=${date}" }, response))
-      .catch((error) => { console.error(error && (error.stack || error.message) || String(error)); process.exit(1); });
-  `;
-  const child = spawnSync(process.execPath, ["--use-system-ca", "-e", probe], {
-    cwd: ROOT,
-    encoding: "utf8",
-    windowsHide: true,
-    timeout: 30000,
-  });
-  let payload = null;
-  try { payload = JSON.parse(String(child.stdout || "").trim().split(/\r?\n/).pop() || "{}"); } catch {}
-  return { label: "terminal_legacy_api", exitCode: child.status, stdout: child.stdout, stderr: child.stderr, payload };
-}
-
-
 function main() {
   add(ROOT === path.resolve(__dirname, ".."), "strategy3_v2_root_not_self_derived", { root: ROOT });
   for (const retired of [
@@ -82,6 +43,18 @@ function main() {
     "scripts/verify-strategy3-battle-state.js",
     "scripts/verify-strategy3-alert-path.js",
     "install-strategy3-battle-tasks.ps1",
+    "api/strategy3-latest.shared-probe-legacy.js",
+    "run-strategy3.ps1",
+    "run-strategy3-complete-scan.ps1",
+    "run-strategy3-ready-snapshot.ps1",
+    "run-strategy3-watchdog.ps1",
+    "run-daytrade-strategy3-closure-verify.ps1",
+    "scripts/scan-strategy3-cache.js",
+    "scripts/strategy3-business-field-contract.js",
+    "scripts/strategy3-prewater-payload-verifier.js",
+    "scripts/verify-daytrade-strategy3-closure-live.js",
+    "scripts/verify-strategy3-water-scan-surface-scorecard.js",
+    "scripts/repair-strategy3-v2-water-metadata.js",
   ]) {
     add(!fs.existsSync(path.join(ROOT, retired)), "strategy3_v2_retired_verifier_still_exists", { file: retired });
   }
@@ -100,6 +73,10 @@ function main() {
     "api/strategy3-latest.js",
     "run-strategy3-v2-complete-scan.ps1",
     "run-strategy3-v2-1255-first-attempt.ps1",
+    "run-strategy3-v2-readiness-guard.ps1",
+    "scripts/verify-strategy3-v2-surface-closure.js",
+    "scripts/retire-strategy3-legacy-authority.js",
+    "ops/public-slot/Strategy3LegacyAuthorityRetirement_20260908.sql",
   ].map((file) => path.join(ROOT, file));
 
   for (const file of files) {
@@ -132,6 +109,48 @@ function main() {
   add(Boolean(pkg.scripts?.["verify:strategy3-v2-water-universe"]), "package_script_missing_strategy3_v2_water_universe");
   add(Boolean(pkg.scripts?.["verify:strategy3-v2-schema-contract"]), "package_script_missing_strategy3_v2_schema_contract");
   add(Boolean(pkg.scripts?.["verify:strategy3-v2-collector-boot-contract"]), "package_script_missing_strategy3_v2_collector_boot_contract");
+  add(Boolean(pkg.scripts?.["verify:strategy3-v2-legacy-retirement"]), "package_script_missing_strategy3_v2_legacy_retirement");
+
+  const sourceWriterText = fs.readFileSync(path.join(ROOT, "scripts", "run-daytrade-source-writer.js"), "utf8");
+  add(sourceWriterText.includes('websocketSymbolUniversePolicy: "active_universe_for_quote_and_candle_water_only_not_formal_gate"'), "strategy3_v2_source_writer_water_policy_not_durable");
+  add(/formalCandidateAllowed:\s*false/.test(sourceWriterText) && /publishAllowed:\s*false/.test(sourceWriterText), "strategy3_v2_source_writer_water_privilege_guards_missing");
+  const terminalResourceText = fs.readFileSync(path.join(ROOT, "scripts", "verify-terminal-resource-chain.js"), "utf8");
+  add(terminalResourceText.includes('runView: { table: "v_strategy3_v2_latest_complete_run", strategy: "strategy3_v2" }'), "strategy3_v2_tri_surface_still_reads_legacy_run_view");
+  add(terminalResourceText.includes('resultTable: "strategy3_v2_scan_results"'), "strategy3_v2_tri_surface_result_table_missing");
+  const scorecardSourceText = fs.readFileSync(path.join(ROOT, "scripts", "generate-terminal-scorecard-source.js"), "utf8");
+  add(scorecardSourceText.includes('process.env.STRATEGY3_V2_RUNS_TABLE || "strategy3_v2_scan_runs"'), "strategy3_v2_scorecard_still_reads_legacy_runs");
+  add(scorecardSourceText.includes('process.env.STRATEGY3_V2_RESULTS_TABLE || "strategy3_v2_scan_results"'), "strategy3_v2_scorecard_still_reads_legacy_results");
+  add(scorecardSourceText.includes('strategy3: "策略3隔日沖成績單"'), "strategy3_v2_scorecard_scope_label_mismatch");
+  const finalizerText = fs.readFileSync(path.join(ROOT, "scripts", "finalize-strategy3-complete.js"), "utf8");
+  add(finalizerText.includes("triSurfaceStatus") && finalizerText.includes("scorecardRunId") && finalizerText.includes("awaiting_scorecard_1315"), "strategy3_v2_final_receipt_missing_scorecard_closure_contract");
+  const runnerText = fs.readFileSync(path.join(ROOT, "run-strategy3-v2-complete-scan.ps1"), "utf8");
+  add(runnerText.includes("[switch]$Recovery") && runnerText.includes("scan and LINE push are not repeated"), "strategy3_v2_audited_recovery_contract_missing");
+
+  const singleAuthorityFiles = [
+    "api/strategy3-latest.js",
+    "api/scorecard.js",
+    "api/terminal-home.js",
+    "run-full-scan.ps1",
+    "run-live-freshness-gate.ps1",
+    "scripts/run-daytrade-source-writer.js",
+    "scripts/run-terminal-auto-roll-forward.js",
+    "scripts/generate-terminal-scorecard-source.js",
+    "ops/public-slot/Run-PublicSlotSharedSource.ps1",
+  ];
+  const retiredAuthorityMarkers = [
+    "v_strategy3_latest_complete_run",
+    "strategy3_scan_results",
+    "strategy3_scan_runs",
+    "scan-strategy3-cache.js",
+    "run-strategy3-complete-scan.ps1",
+    "strategy3-latest.shared-probe-legacy.js",
+  ];
+  for (const relative of singleAuthorityFiles) {
+    const text = fs.readFileSync(path.join(ROOT, relative), "utf8");
+    for (const marker of retiredAuthorityMarkers) {
+      add(!text.includes(marker), "strategy3_v2_retired_authority_reference_present", { file: relative, marker });
+    }
+  }
 
   const readinessRun = runNode("readiness", "check-strategy3-v2-readiness.js", [`--trade-date=${tradeDate}`]);
   // Verifiers are read-only. They must never rerun the scanner or rewrite receipts.
@@ -139,6 +158,7 @@ function main() {
   const waterUniverseRun = runNode("water_universe", "verify-strategy3-v2-water-universe.js", [`--trade-date=${tradeDate}`]);
   const schemaContractRun = runNode("schema_contract", "verify-strategy3-v2-schema-contract.js", []);
   const collectorBootRun = runNode("collector_boot_contract", "verify-strategy3-v2-collector-boot-contract.js", []);
+  const legacyRetirementRun = runNode("legacy_retirement", "retire-strategy3-legacy-authority.js", ["--no-write"]);
   const scanReceipt = readJson(scanReceiptPath(compactDate), {});
   const lineReceipt = readJson(lineReceiptPath(compactDate, ".dry-run"), {});
 
@@ -152,6 +172,7 @@ function main() {
   const scanFailedClosed = String(scanReceipt.status || "").toUpperCase() === "FAIL_CLOSED";
   add(schemaContractRun.exitCode === 0, "strategy3_v2_schema_contract_verifier_failed", { exitCode: schemaContractRun.exitCode });
   add(collectorBootRun.exitCode === 0, "strategy3_v2_collector_boot_contract_verifier_failed", { exitCode: collectorBootRun.exitCode });
+  add(legacyRetirementRun.exitCode === 0, "strategy3_v2_legacy_retirement_verifier_failed", { exitCode: legacyRetirementRun.exitCode, stderr: String(legacyRetirementRun.stderr || "").slice(0, 500) });
   add(surfaceRun.exitCode === 0, "strategy3_v2_surface_verifier_failed", { exitCode: surfaceRun.exitCode, stderr: String(surfaceRun.stderr || "").slice(0, 500) });
   if (scanFailedClosed) {
     add(lineReceipt.status === "FAIL_CLOSED", "strategy3_v2_fail_closed_surface_not_safe", { lineStatus: lineReceipt.status });
@@ -182,6 +203,7 @@ function main() {
       waterUniverse: { exitCode: waterUniverseRun.exitCode },
       schemaContract: { exitCode: schemaContractRun.exitCode },
       collectorBootContract: { exitCode: collectorBootRun.exitCode },
+      legacyRetirement: { exitCode: legacyRetirementRun.exitCode },
       surface: { exitCode: surfaceRun.exitCode },
       mode: scanFailedClosed ? "fail_closed_safe" : "formal_complete",
       blocker: scanFailedClosed ? (scanReceipt.reason_code || scanReceipt.status || "source_not_ready") : "",

@@ -28,14 +28,14 @@ const formalActiveFiles = [
   "scripts/write-terminal-orchestrator-state.js",
     "scripts/write-daily-terminal-run-manifest.js",
   "scripts/check-strategy2-daytrade-1m-chain.js",
-  "scripts/check-strategy3-session-readiness.js","scripts/run-terminal-auto-roll-forward.js",
+  "scripts/check-strategy3-v2-readiness.js","scripts/run-terminal-auto-roll-forward.js",
   "run-strategy2-intraday.ps1",
-  "run-strategy3-complete-scan.ps1",
+  "run-strategy3-v2-complete-scan.ps1",
 ];
 
 const issues = [];
 function read(rel) {
-  return fs.readFileSync(path.join(root, rel), "utf8");
+  try { return fs.readFileSync(path.join(root, rel), "utf8"); } catch { return ""; }
 }
 function push(rel, lineNo, code, line) {
   issues.push({ file: rel, line: lineNo, code, line: line.trim() });

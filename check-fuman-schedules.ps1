@@ -44,7 +44,7 @@ $rules = @{
     Done = @()
     Detail = @()
   }
-  "run-strategy3.ps1" = @{
+  "run-strategy3-v2-complete-scan.ps1" = @{
     Log = "strategy3-*.log"
     Done = @("Strategy3 scan end")
     Detail = @("Strategy3 scan end")

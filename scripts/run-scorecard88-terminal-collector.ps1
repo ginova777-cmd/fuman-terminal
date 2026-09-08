@@ -27,4 +27,21 @@ if ($surfaceEvidenceExit -notin @(0,3)) { exit $surfaceEvidenceExit }
 $verifierExit = $LASTEXITCODE
 if ($verifierExit -ne 0) { exit $verifierExit }
 if ($collectorExit -eq 3 -or $surfaceEvidenceExit -eq 3) { exit 3 }
+if ($Slot -eq '13:15') {
+  $todayKey = Get-Date -Format 'yyyyMMdd'
+  $collectionReceiptPath = Join-Path $RuntimeRoot "data\scan-receipts\scorecard88-collection-$todayKey-1315.json"
+  $collectionReceipt = Get-Content -LiteralPath $collectionReceiptPath -Raw | ConvertFrom-Json
+  $strategy3Report = @($collectionReceipt.reports | Where-Object { $_.key -eq 'strategy3' }) | Select-Object -First 1
+  if ($collectionReceipt.ok -ne $true -or $strategy3Report.ok -ne $true -or [string]::IsNullOrWhiteSpace([string]$strategy3Report.runId)) { throw 'strategy3_scorecard_collection_not_complete' }
+  $strategy3RunId = [string]$strategy3Report.runId
+  $logDir = Join-Path $RuntimeRoot 'logs'
+  New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+  $logPath = Join-Path $logDir "strategy3-final-closure-$todayKey.log"
+  . (Join-Path $ProjectRoot 'verify-post-scan-tri-surface.ps1')
+  Assert-PostScanTriSurfaceClosure -Route 'strategy3' -RunId $strategy3RunId -LogPath $logPath -SkipPublication | Out-Null
+  & node (Join-Path $ProjectRoot 'scripts\verify-strategy3-v2-daily-unattended-closure.js') "--trade-date=$((Get-Date).ToString('yyyy-MM-dd'))"
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  & node (Join-Path $ProjectRoot 'scripts\finalize-strategy3-complete.js')
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 exit 0

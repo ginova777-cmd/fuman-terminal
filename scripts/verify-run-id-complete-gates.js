@@ -60,7 +60,7 @@ const dateStrictStrategies = new Set(String(process.env.RUN_GATE_DATE_STRICT || 
 
 const gates = [
   { key: "strategy2", view: "v_strategy2_latest_complete_run" },
-  { key: "strategy3", view: "v_strategy3_latest_complete_run" },
+  { key: "strategy3", view: "v_strategy3_v2_latest_complete_run", strategy: "strategy3_v2", select: "run_id,trade_date,finished_at,status,complete,coverage", dateColumn: "trade_date", resultCountPath: "coverage.result_count" },
   { key: "strategy4", table: "strategy4_scan_runs" },
   { key: "strategy5", view: "v_strategy5_latest_complete_run" },
   { key: "institution", view: "v_institution_latest_complete_run" },
@@ -68,20 +68,23 @@ const gates = [
 ];
 
 async function checkGate(gate) {
-  const select = "run_id,scan_date,finished_at,status,complete,result_count";
+  const select = gate.select || "run_id,scan_date,finished_at,status,complete,result_count";
   const target = gate.view || gate.table;
+  const strategy = gate.strategy || gate.key;
   const query = gate.view
-    ? `select=${select}&strategy=eq.${gate.key}&status=eq.complete&complete=eq.true&limit=1`
-    : `select=${select}&strategy=eq.${gate.key}&status=eq.complete&complete=eq.true&order=finished_at.desc&limit=1`;
+    ? `select=${select}&strategy=eq.${strategy}&status=eq.complete&complete=eq.true&limit=1`
+    : `select=${select}&strategy=eq.${strategy}&status=eq.complete&complete=eq.true&order=finished_at.desc&limit=1`;
   const result = await fetchRows(target, query);
   if (!result.ok) return { ...gate, ok: false, issue: `${target} unreadable HTTP ${result.status}: ${String(result.text || "").slice(0, 160)}` };
   const row = Array.isArray(result.rows) ? result.rows[0] : null;
   if (!row?.run_id) return { ...gate, ok: false, issue: `${target} missing latest complete run` };
-  const rowDate = normalizeDate(row.scan_date || row.finished_at);
+  const rowDate = normalizeDate(row[gate.dateColumn || "scan_date"] || row.finished_at);
   if (dateStrictStrategies.has(gate.key) && expectedDate && rowDate && rowDate !== expectedDate) {
     return { ...gate, ok: false, row, issue: `${target} date-strict scan_date=${rowDate} expected=${expectedDate}` };
   }
-  if (Number(row.result_count || 0) <= 0 && gate.key !== "strategy2") {
+  const resultCount = gate.resultCountPath === "coverage.result_count" ? Number(row.coverage?.result_count || 0) : Number(row.result_count || 0);
+  row.result_count = resultCount;
+  if (resultCount <= 0 && gate.key !== "strategy2") {
     return { ...gate, ok: false, row, issue: `${target} complete run has zero result_count` };
   }
   return { ...gate, ok: true, row };

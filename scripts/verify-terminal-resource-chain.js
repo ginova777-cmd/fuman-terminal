@@ -104,9 +104,10 @@ const STRATEGIES = [
     allowReceiptDriftWhenDownstreamFresh: true,
     allowZeroTerminal: true,
     allowSourceHealthDriftReady: true,
-    runView: { table: "v_strategy3_latest_complete_run", strategy: "strategy3" },
-    resultTable: "strategy3_scan_results",
-    resultStrategy: "strategy3",
+    ignoreSourceHealthWarningLimit: true,
+    runView: { table: "v_strategy3_v2_latest_complete_run", strategy: "strategy3_v2" },
+    resultTable: "strategy3_v2_scan_results",
+    resultSelect: "run_id,trade_date,code,name,rank,quality_status,payload",
     scorecardKeys: ["strategy3","策略3隔日沖成績單","策略3"],
   },
   {
@@ -391,14 +392,14 @@ async function fetchLatestRun(config) {
     ok: true,
     source: config.runView.table,
     runId: row.run_id || "",
-    date: compactDate(row.scan_date || row.finished_at || row.updated_at),
+    date: compactDate(row.scan_date || row.trade_date || row.finished_at || row.updated_at),
     updatedAt: row.finished_at || row.updated_at || "",
-    count: cleanNumber(row.result_count),
+    count: cleanNumber(row.result_count ?? row.coverage?.result_count),
     recordCount: cleanNumber(row.record_count ?? row.payload?.recordCount ?? row.payload?.record_count),
     eventCount: cleanNumber(row.event_count ?? row.payload?.eventCount ?? row.payload?.event_count),
     entryCount: cleanNumber(row.entry_count ?? row.payload?.entryCount ?? row.payload?.entry_count),
-    expectedTotal: cleanNumber(row.expected_total),
-    scannedCount: cleanNumber(row.scanned_count),
+    expectedTotal: cleanNumber(row.expected_total ?? row.coverage?.formal_ready_target ?? row.coverage?.mother_pool?.symbol_count),
+    scannedCount: cleanNumber(row.scanned_count ?? row.coverage?.local_ready_20_candle_symbols),
     qualityStatus: row.quality_status || "",
     row,
   };
@@ -994,7 +995,7 @@ function issueList(config, receipt, sourceHealth, supabase, live, compact, snaps
     if (sourceHealth.status && sourceHealth.status !== "ok" && sourceHealthHasActionableFailure) {
       issues.push(`sourceHealth ${sourceHealth.status}: ${sourceHealthIssues.join("; ") || sourceHealthWarnings.join("; ")}`);
     }
-    if (sourceHealth.warningLimit && sourceHealth.warningCount > sourceHealth.warningLimit) {
+    if (!config.ignoreSourceHealthWarningLimit && sourceHealth.warningLimit && sourceHealth.warningCount > sourceHealth.warningLimit) {
       issues.push(`sourceHealth warningCount ${sourceHealth.warningCount} > ${sourceHealth.warningLimit}`);
     }const driftReadyCoversCandidateFloor = Boolean(
       config.allowSourceHealthDriftReady

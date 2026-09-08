@@ -10,7 +10,7 @@ The legacy Strategy2 coverage monitor is preserved as `scripts/check-strategy2-s
 
 ## Strategy3
 
-The production Strategy3 API wrapper rewrites its old shared-source health probe to the dedicated daytrade source. The previous handler is retained as `api/strategy3-latest.shared-probe-legacy.js` for audit comparison only.
+The production Strategy3 API wrapper routes only to Strategy3 V2. The legacy shared-probe handler and its query switch are removed; Strategy3 V2 reads the dedicated Mother Pool and local Fugle daytrade candle/quote caches directly.
 
 ## Retired modules
 

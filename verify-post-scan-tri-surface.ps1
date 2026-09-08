@@ -94,7 +94,13 @@ function Invoke-PostScanSurfacePublication {
   $mobileTab = if ($Route -eq "institution") { "chip" } else { $Route }
   "[$Route] post-scan publication start: /88 source report + mobile fragment=$mobileTab" | Tee-Object -FilePath $LogPath -Append | Out-Null
   Push-Location $RepoRoot
+  $previousRefreshKey = $env:FUMAN_SCORECARD_REFRESH_KEY
+  $previousRefreshRunId = $env:FUMAN_SCORECARD_REFRESH_RUN_ID
   try {
+    if ($Route -eq "strategy3") {
+      $env:FUMAN_SCORECARD_REFRESH_KEY = "strategy3"
+      $env:FUMAN_SCORECARD_REFRESH_RUN_ID = $RunId
+    }
     & npm.cmd run scorecard:terminal-source *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
     $scorecardExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
     if ($scorecardExit -ne 0) { throw "scorecard source refresh exit=$scorecardExit" }
@@ -107,17 +113,29 @@ function Invoke-PostScanSurfacePublication {
       $collectorExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
       if ($collectorExit -ne 0) { throw "scorecard88 recovery collector exit=$collectorExit" }
     }
+    if ($Route -eq "strategy3") {
+      & $NodeExe "scripts\collect-scorecard88-terminal-surface-evidence.js" "--slot=13:15" *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
+      if ($LASTEXITCODE -ne 0) { throw "scorecard88 strategy3 surface evidence exit=$LASTEXITCODE" }
+      & (Join-Path $RepoRoot "scripts\run-scorecard88-terminal-collector.ps1") -Slot '13:15' -ProjectRoot $RepoRoot -RuntimeRoot $RuntimeRoot -Recovery -ExpectedRunId $RunId -RecoveryReason 'strategy3_post_scan_tri_surface_recovery' *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
+      $collectorExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
+      if ($collectorExit -ne 0) { throw "scorecard88 strategy3 recovery collector exit=$collectorExit" }
+    }
     & $NodeExe "--use-system-ca" "scripts\publish-mobile-fragment-snapshots.js" "--tabs=$mobileTab" *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
     $mobileExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
     if ($mobileExit -ne 0) { throw "mobile fragment publish exit=$mobileExit tab=$mobileTab" }
-  } finally { Pop-Location }
+  } finally {
+    if ($null -ne $previousRefreshKey) { $env:FUMAN_SCORECARD_REFRESH_KEY = $previousRefreshKey } else { Remove-Item Env:FUMAN_SCORECARD_REFRESH_KEY -ErrorAction SilentlyContinue }
+    if ($null -ne $previousRefreshRunId) { $env:FUMAN_SCORECARD_REFRESH_RUN_ID = $previousRefreshRunId } else { Remove-Item Env:FUMAN_SCORECARD_REFRESH_RUN_ID -ErrorAction SilentlyContinue }
+    Pop-Location
+  }
   "[$Route] post-scan publication complete" | Tee-Object -FilePath $LogPath -Append | Out-Null
 }
 function Assert-PostScanTriSurfaceClosure {
   param(
     [Parameter(Mandatory = $true)][string]$Route,
     [Parameter(Mandatory = $true)][string]$RunId,
-    [Parameter(Mandatory = $true)][string]$LogPath
+    [Parameter(Mandatory = $true)][string]$LogPath,
+    [switch]$SkipPublication
   )
 
   if ([string]::IsNullOrWhiteSpace($RunId)) { throw "post-scan tri-surface verify missing runId for $Route" }
@@ -134,7 +152,9 @@ function Assert-PostScanTriSurfaceClosure {
   try {
     & $nodeExe "scripts\verify-terminal-resource-chain.js" "--routes=$Route" "--expected-date=$expectedDate" "--require-unattended" "--out=$outDir" *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
   } finally { Pop-Location }
-  Invoke-PostScanSurfacePublication -Route $Route -LogPath $LogPath -NodeExe $nodeExe -RepoRoot $repoRoot -RuntimeRoot $runtimeRoot -RunId $RunId
+  if (-not $SkipPublication) {
+    Invoke-PostScanSurfacePublication -Route $Route -LogPath $LogPath -NodeExe $nodeExe -RepoRoot $repoRoot -RuntimeRoot $runtimeRoot -RunId $RunId
+  }
 
   for ($attempt = 1; $attempt -le 6; $attempt++) {
     New-Item -ItemType Directory -Force -Path $outDir | Out-Null

@@ -20,7 +20,7 @@ const DEFAULT_DAILY_HISTORY_RETENTION_DAYS = Number(process.env.FUMAN_SUPABASE_D
 const RUN_TABLES = [
   { key: "strategy1", runsTable: "strategy1_open_buy_runs", resultsTable: "strategy1_open_buy_results", strategy: "strategy1", dateColumn: "finished_at" },
   { key: "strategy2", runsTable: "strategy2_scan_runs", resultsTable: "strategy2_scan_results", strategy: "strategy2", dateColumn: "updated_at", retentionDays: 14, keepRuns: 60, batchSize: 1 },
-  { key: "strategy3", runsTable: "strategy3_scan_runs", resultsTable: "strategy3_scan_results", strategy: "strategy3", dateColumn: "finished_at" },
+  { key: "strategy3", runsTable: "strategy3_v2_scan_runs", resultsTable: "strategy3_v2_scan_results", strategy: "strategy3_v2", dateColumn: "finished_at" },
   { key: "strategy4", runsTable: "strategy4_scan_runs", resultsTable: "strategy4_scan_results", strategy: "strategy4", dateColumn: "finished_at" },
   { key: "strategy5", runsTable: "strategy5_scan_runs", resultsTable: "strategy5_scan_results", strategy: "strategy5", dateColumn: "finished_at" },
   { key: "institution", runsTable: "institution_scan_runs", resultsTable: "institution_scan_results", strategy: "institution", dateColumn: "finished_at" },

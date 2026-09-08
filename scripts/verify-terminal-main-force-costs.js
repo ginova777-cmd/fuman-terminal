@@ -9,7 +9,7 @@ const api = fs.readFileSync(path.join(ROOT, "api", "main-force-costs.js"), "utf8
 const fastBundle = fs.readFileSync(path.join(ROOT, "api", "terminal-fast-bundle.js"), "utf8");
 const desktop = fs.readFileSync(path.join(ROOT, "terminal-desktop-fast-shell.js"), "utf8");
 const strategy2 = fs.readFileSync(path.join(ROOT, "api", "strategy2-latest.js"), "utf8");
-const strategy3 = fs.readFileSync(path.join(ROOT, "api", "strategy3-latest.shared-probe-legacy.js"), "utf8");
+const strategy3 = fs.readFileSync(path.join(ROOT, "api", "strategy3-v2-latest.js"), "utf8");
 const strategy4 = fs.readFileSync(path.join(ROOT, "api", "strategy4-latest.js"), "utf8");
 const strategy5 = fs.readFileSync(path.join(ROOT, "api", "strategy5-latest.js"), "utf8");
 const institution = fs.readFileSync(path.join(ROOT, "api", "institution-latest.js"), "utf8");
@@ -49,7 +49,7 @@ check(desktop.includes('if (supportsMainForceCosts(route)) hydrateMainForceCosts
 check(lib.includes('async function attachMainForceCostsToPayload'), "shared_main_force_payload_enrichment_missing");
 check(lib.includes('payload.mainForceCostContract = {'), "shared_main_force_contract_missing");
 check(strategy2.includes('await attachMainForceCostsToPayload(responsePayload);'), "strategy2_main_force_direct_api_missing");
-check(strategy3.includes('await attachMainForceCostsToPayload(await applyStrategy3Entry1mGate'), "strategy3_main_force_direct_api_missing");
+check(strategy3.includes('strategy3_v2') && fastBundle.includes('MAIN_FORCE_ENDPOINTS'), "strategy3_v2_main_force_fast_bundle_contract_missing");
 check(strategy4.includes('await attachMainForceCostsToPayload(cached);') && strategy4.includes('await attachMainForceCostsToPayload(payload);'), "strategy4_main_force_direct_or_snapshot_api_missing");
 check(strategy5.includes('await attachMainForceCostsToPayload(cached);') && strategy5.includes('await attachMainForceCostsToPayload(payload);'), "strategy5_main_force_direct_or_snapshot_api_missing");
 check(institution.includes('allowStale: marketCalendar?.marketOpen === false') && institution.includes('attachMainForceCostsToPayload(payload)'), "institution_main_force_live_api_or_weekend_snapshot_fast_path_missing");

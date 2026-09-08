@@ -712,24 +712,23 @@ function applyStrategy3Entry1m(rows = [], entryMapResult = {}) {
 }
 async function fetchStrategy3PayloadForScanDate(scanDate) {
   const runRows = await fetchSupabaseRows(
-    process.env.STRATEGY3_SUPABASE_RUNS_TABLE || "strategy3_scan_runs",
+    process.env.STRATEGY3_V2_RUNS_TABLE || "strategy3_v2_scan_runs",
     [
-      "select=run_id,scan_date,finished_at,status,complete,result_count,updated_at,payload",
-      "strategy=eq.strategy3",
+      "select=*",
+      "strategy=eq.strategy3_v2",
       "status=eq.complete",
       "complete=eq.true",
-      `scan_date=eq.${encodeURIComponent(scanDate)}`,
-      "order=updated_at.desc",
+      `trade_date=eq.${encodeURIComponent(scanDate)}`,
+      "order=finished_at.desc",
       "limit=1",
     ].join("&"),
   );
   const run = runRows[0];
   if (!run?.run_id) return null;
   const resultRows = await fetchSupabaseRows(
-    process.env.STRATEGY3_SUPABASE_RESULTS_TABLE || "strategy3_scan_results",
+    process.env.STRATEGY3_V2_RESULTS_TABLE || "strategy3_v2_scan_results",
     [
-      "select=run_id,scan_date,code,name,price,close,change_percent,volume,trade_volume,trade_value,score,rank,reason,signals,payload,complete,quality_status,generated_at,updated_at",
-      "strategy=eq.strategy3",
+      "select=*",
       `run_id=eq.${encodeURIComponent(run.run_id)}`,
       "order=rank.asc",
       "limit=120",
@@ -743,8 +742,8 @@ async function fetchStrategy3PayloadForScanDate(scanDate) {
       code: cleanText(payload.code || row.code),
       name: cleanText(payload.rawName || payload.name || row.name || row.code),
       rawName: cleanText(payload.rawName || payload.name || row.name || row.code),
-      close: cleanNumber(payload.close || payload.price || row.close || row.price),
-      price: cleanNumber(payload.price || payload.close || row.price || row.close),
+      close: cleanNumber(payload.close || payload.price || row.entry_price),
+      price: cleanNumber(payload.price || payload.close || row.entry_price),
       percent: cleanNumber(payload.percent ?? payload.changePercent ?? row.change_percent),
       tradeVolume: cleanNumber(payload.tradeVolume || payload.volume || row.trade_volume || row.volume),
       volume: cleanNumber(payload.volume || payload.tradeVolume || row.volume || row.trade_volume),
@@ -769,12 +768,12 @@ async function fetchStrategy3PayloadForScanDate(scanDate) {
   const evidenceComplete = enrichedRows.length === rows.length && missingSymbols.length === 0;
   return {
     ok: evidenceComplete && enrichedRows.length > 0,
-    source: "supabase:strategy3_scan_results+fugle_daytrade_intraday_1m_entry_evidence",
+    source: "supabase:strategy3_v2_scan_results+local_fugle_daytrade_ws_candles_entry_evidence",
     runId: cleanText(run.run_id),
     usedDate: scanDate,
     date: scanDate,
     updatedAt: cleanText(run.finished_at || run.updated_at),
-    count: Math.max(enrichedRows.length, cleanNumber(run.result_count)),
+    count: Math.max(enrichedRows.length, cleanNumber(run.result_count || run.coverage?.result_count)),
     matches: enrichedRows,
     rows: enrichedRows,
     publishAllowed: enrichedRows.length > 0,
@@ -1073,12 +1072,12 @@ function scorecardCurrentWriteDecision(nextPayload, outFile) {
   }
   const previousStrategies = strategySetOf(previousRecords);
   for (const report of Array.isArray(previous?.sourceReports) ? previous.sourceReports : []) {
-    const strategy = cleanText(report?.strategy || report?.strategyName || report?.source || report?.key);
+    const strategy = cleanText(report?.key || report?.strategy || report?.strategyName || report?.source);
     if (strategy && !isRetiredScorecardStrategy(strategy)) previousStrategies.add(strategy);
   }
   const nextStrategies = strategySetOf(nextRecords);
   for (const report of Array.isArray(nextPayload?.sourceReports) ? nextPayload.sourceReports : []) {
-    const strategy = cleanText(report?.strategy || report?.strategyName || report?.source || report?.key);
+    const strategy = cleanText(report?.key || report?.strategy || report?.strategyName || report?.source);
     if (strategy && !isRetiredScorecardStrategy(strategy)) nextStrategies.add(strategy);
   }
   const previousDate = isoDate(previous?.latestDate || previous?.summary?.latestDate || "", "");
@@ -1325,7 +1324,7 @@ async function main() {
   const strategy4RefreshRunId = cleanText(process.env.EXPECTED_STRATEGY4_RUN_ID);
   const scopedRefreshKey = cleanText(process.env.FUMAN_SCORECARD_REFRESH_KEY || (strategy4RefreshRunId ? "strategy4" : "")).toLowerCase();
   const scopedRefreshRunId = cleanText(process.env.FUMAN_SCORECARD_REFRESH_RUN_ID || strategy4RefreshRunId);
-  const scopedStrategyLabels = { strategy4: "策略4成績單", strategy5: "策略5成績單", institution: "買賣超成績單" };
+  const scopedStrategyLabels = { strategy3: "策略3隔日沖成績單", strategy4: "策略4成績單", strategy5: "策略5成績單", institution: "買賣超成績單" };
   const scopedStrategyLabel = scopedStrategyLabels[scopedRefreshKey] || "";
   const previous = readJsonSafe(OUT_FILE) || {};
   const previousRecords = Array.isArray(previous.records) ? previous.records : [];

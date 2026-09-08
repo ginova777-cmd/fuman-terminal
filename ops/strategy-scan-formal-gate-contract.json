@@ -20,8 +20,16 @@
     },
     {
       "strategy": "strategy3",
-      "script": "run-strategy3-complete-scan.ps1",
-      "gateStrategy": "strategy3"
+      "script": "run-strategy3-v2-complete-scan.ps1",
+      "receiptScript": "scripts/finalize-strategy3-complete.js",
+      "requiredPatterns": [
+        "verify-strategy3-v2-water-universe.js",
+        "verify-strategy3-v2-daily-unattended-closure.js",
+        "finalize-strategy3-complete.js",
+        "-PushLine",
+        "[switch]$Recovery"
+      ],
+      "gatePattern": "verify-strategy3-v2-water-universe.js"
     },
     {
       "strategy": "strategy4",
@@ -47,7 +55,6 @@
     "preserving latest"
   ],
   "strongReceiptRunners": [
-    "strategy3",
     "institution"
   ],
   "strongReceiptPatterns": [

@@ -163,7 +163,7 @@ function buildHomePayload(base, parts) {
   const statusEntries = {
     "institution-latest.json": buildStatusEntry(institution, "supabase:institution_scan_results"),
     "strategy2-v3-latest.json": buildStatusEntry(strategy2, "supabase:market_snapshots:strategy2_live_v3"),
-    "strategy3-latest.json": buildStatusEntry(strategy3, "supabase:strategy3_scan_results"),
+    "strategy3-latest.json": buildStatusEntry(strategy3, "supabase:strategy3_v2_scan_results"),
     "strategy4-latest.json": buildStatusEntry(strategy4, "supabase:strategy4_scan_results"),
     "strategy5-latest.json": buildStatusEntry(strategy5, "supabase:strategy5_scan_results"),
   };

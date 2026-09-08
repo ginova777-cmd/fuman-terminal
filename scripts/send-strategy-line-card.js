@@ -428,97 +428,8 @@ async function supabaseRest(pathname, options = {}) {
   }
 }
 
-function resultRowToPayload(row, index, runId, scanDate) {
-  const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
-  return {
-    ...payload,
-    code: text(payload.code || row.code, ""),
-    name: text(payload.rawName || payload.name || payload.displayName || row.name || row.code, ""),
-    rawName: text(payload.rawName || payload.name || row.name || row.code, ""),
-    rank: cleanNumber(payload.rank || row.rank || index + 1),
-    score: cleanNumber(payload.score || row.score),
-    price: cleanNumber(payload.price || payload.close || row.price || row.close),
-    close: cleanNumber(payload.close || payload.price || row.close || row.price),
-    changePercent: cleanNumber(payload.changePercent ?? payload.percent ?? row.change_percent),
-    percent: cleanNumber(payload.percent ?? payload.changePercent ?? row.change_percent),
-    reason: text(payload.reason || row.reason, ""),
-    signals: Array.isArray(payload.signals) ? payload.signals : [],
-    matches: Array.isArray(payload.matches) ? payload.matches : [],
-    runId,
-    usedDate: runIdDateKey(runId),
-    scanDate,
-    updatedAt: text(payload.updatedAt || row.updated_at, ""),
-    source: text(payload.source || "strategy3_scan_results", "strategy3_scan_results"),
-  };
-}
-
-async function readSupabaseStrategy3Payload() {
-  const latest = await supabaseRest("v_strategy3_latest_complete_run?select=run_id,scan_date,status,expected_total,scanned_count,result_count,updated_at&limit=1");
-  const latestRow = latest.rows?.[0] || {};
-  const runId = text(latestRow.run_id || latestRow.runId, "");
-  if (!runId) throw new Error("strategy3_latest_complete_run_missing_run_id");
-
-  const runResult = await supabaseRest(`strategy3_scan_runs?select=run_id,strategy,status,complete,scan_date,expected_total,scanned_count,result_count,quality_status,updated_at,payload&run_id=eq.${encodeURIComponent(runId)}&limit=1`);
-  const runRow = runResult.rows?.[0] || latestRow;
-  const resultCount = cleanNumber(runRow.result_count ?? latestRow.result_count);
-  const readLimit = Math.max(1, Math.min(2000, resultCount || 2000));
-  const results = await supabaseRest(`strategy3_scan_results?select=run_id,strategy,rank,code,name,price,close,change_percent,score,reason,signals,payload,updated_at&run_id=eq.${encodeURIComponent(runId)}&strategy=eq.strategy3&order=rank.asc&limit=${readLimit}`, { count: true });
-  const rows = Array.isArray(results.rows) ? results.rows : [];
-  const scanDate = text(runRow.scan_date || latestRow.scan_date || runIdDateKey(runId), "");
-  const matches = rows.map((row, index) => resultRowToPayload(row, index, runId, scanDate));
-  // strategy3_stale_quote_guard_v1: never publish a line card if scan results used stale quote prices.
-  const expectedDate = String(scanDate || runIdDateKey(runId) || "").replace(/\D/g, "").slice(0, 8);
-  const staleQuoteRows = matches.filter((row) => {
-    const quoteDate = String(row.quoteDate || row.sourceTradeDate || "").replace(/\D/g, "").slice(0, 8);
-    return expectedDate && quoteDate && quoteDate !== expectedDate;
-  });
-
-  if (runRow.status !== "complete" || runRow.complete === false) throw new Error(`strategy3_run_not_complete:${runRow.status || "unknown"}`);
-  if (resultCount > 0 && matches.length !== resultCount) throw new Error(`strategy3_result_readback_mismatch:${matches.length}/${resultCount}`);
-  if (staleQuoteRows.length) {
-    throw new Error(`strategy3_stale_quote_price_source:${staleQuoteRows.length}/${matches.length};sample=${staleQuoteRows.slice(0, 6).map((row) => row.code).join(",")}`);
-  }
-
-  return {
-    ok: true,
-    source: "supabase:strategy3_scan_results:line-card-readback",
-    cacheSource: "supabase-line-card-readback",
-    runId,
-    usedDate: runIdDateKey(runId),
-    scanDate,
-    scanStamp: scanDate,
-    count: resultCount || matches.length,
-    resultCount: resultCount || matches.length,
-    expectedTotal: cleanNumber(runRow.expected_total ?? latestRow.expected_total),
-    scannedCount: cleanNumber(runRow.scanned_count ?? latestRow.scanned_count),
-    qualityStatus: text(runRow.quality_status || "", ""),
-    blockedReason: "",
-    scanner_block_reason: "",
-    matches,
-    rows: matches,
-    readbackCount: matches.length,
-    lineCardReadback: {
-      source: "strategy3_scan_runs/results",
-      exactCount: results.exactCount,
-      rowsRead: matches.length,
-      checkedAt: new Date().toISOString(),
-    },
-  };
-}
-
-function shouldUseStrategy3SupabaseReadback(payload = {}) {
-  const matches = Array.isArray(payload.matches) ? payload.matches : [];
-  const count = cleanNumber(payload.count || payload.resultCount || matches.length);
-  const blocked = text(payload.blockedReason || payload.scanner_block_reason || payload.error || "", "");
-  if (payload.ok !== true || blocked) return true;
-  if (count <= 0) return true;
-  if (cleanNumber(payload.resultCount) > matches.length) return true;
-  if (count > matches.length) return true;
-  return false;
-}
-
 async function readApi(strategy) {
-  const apiFile = strategy === "strategy4" ? path.join(ROOT, "api", "strategy4-latest.js") : path.join(ROOT, "api", "strategy3-latest.js");
+  const apiFile = path.join(ROOT, "api", "strategy4-latest.js");
   const handler = require(apiFile);
   const url = `http://localhost/api/${strategy}-latest?canvas=1&compact=1&shell=1&limit=70&live=1&fresh=${Date.now()}`;
   const request = { method: "GET", url, headers: {}, query: {}, fumanInternalVerify: true };
@@ -555,7 +466,7 @@ function payloadDateKey(payload, receipt) {
 
 async function main() {
   const strategy = String(argValue("strategy", "")).toLowerCase();
-  if (!new Set(["strategy3", "strategy4"]).has(strategy)) throw new Error("Use --strategy=strategy3 or --strategy=strategy4");
+  if (strategy !== "strategy4") throw new Error("Use --strategy=strategy4; Strategy3 V2 owns a separate LINE runner");
   const dryRun = process.argv.includes("--dry-run");
   const deliveryId = text(argValue("delivery-id", ""), "").replace(/[^A-Za-z0-9._-]/g, "").slice(0, 48);
   const lineEnv = loadLineEnv();
@@ -568,17 +479,7 @@ async function main() {
     apiError = error?.message || String(error);
     payload = { ok: false, error: `${strategy}_latest_api_read_failed`, detail: apiError, matches: [] };
   }
-  // A completed same-day Strategy3 run may be read back after the session when the local terminal API has retained a stale blocked receipt.
-  if (strategy === "strategy3" && (shouldUseStrategy3SupabaseReadback(payload) || Boolean(scanReceipt.blockingReason))) {
-    const published = await readSupabaseStrategy3Payload();
-    const publishedDate = payloadDateKey(published, {});
-    if (published.ok !== true || publishedDate !== compactDate() || cleanNumber(published.scannedCount) !== cleanNumber(published.expectedTotal) || cleanNumber(published.readbackCount) !== cleanNumber(published.count)) {
-      throw new Error("strategy3_complete_run_readback_not_publishable");
-    }
-    payload = { ...published, httpStatusCode: 200, recoveredFrom: "strategy3_complete_run_readback" };
-    apiError = "";
-  }
-  const altText = strategy === "strategy4" ? "FUMAN 16:00 策略4完整掃描" : "FUMAN 13:00 隔日沖完整掃描";
+  const altText = "FUMAN 16:00 策略4完整掃描";
   const count = cleanNumber(payload.count || payload.resultCount || (Array.isArray(payload.matches) ? payload.matches.length : 0) || scanReceipt.matches);
   const baseBlockedReason = text(payload.blockedReason || payload.scanner_block_reason || payload.error || (payload.recoveredFrom ? "" : scanReceipt.blockingReason) || apiError, "");
   const today = compactDate();
@@ -597,8 +498,8 @@ async function main() {
   const publicRunId = dateAligned && readyForLine ? runId : "";
   const receipt = {
     contract: "strategy4-line-card-runner-v2",
-    format_contract: strategy === "strategy4" ? "strategy4-line-customer-grouped-v2" : "strategy3-line-card-v1",
-    format_version: strategy === "strategy4" ? "2026-09-04-v2" : "v1",
+    format_contract: "strategy4-line-customer-grouped-v2",
+    format_version: "2026-09-04-v2",
     ok: readyForLine,
     date: today,
     strategy,
@@ -643,15 +544,15 @@ async function main() {
       tailVolumeRatio: cleanNumber(row.tailVolumeRatio || row.payload?.tailVolumeRatio),
       tailVolumeHistoryCount: cleanNumber(row.tailVolumeHistoryCount || row.payload?.tailVolumeHistoryCount),
     })).filter((row) => row.code) : [],
-    grouping: strategy === "strategy4" ? "zone_A_B_C" : "flat",
+    grouping: "zone_A_B_C",
     customer_safe: true,
     internal_status_visible: false,
-    disclaimer: strategy === "strategy4" ? "僅供研究參考，不是自動下單訊號" : "",
+    disclaimer: "僅供研究參考，不是自動下單訊號",
     dataDate,
     dateAligned,
     blockedReason,
     api_error: apiError,
-    ...(strategy === "strategy4" ? {
+    ...({
       layout_contract: "strategy4-line-single-card-v2",
       visual_style: "cream-rounded-strategy-groups",
       grouping: "strategyLabel",
@@ -659,7 +560,7 @@ async function main() {
       display_limit: 10,
       hidden_sections: ["selected_count_metric", "highest_score_metric", "sorting_caption"],
       single_card: true,
-    } : {}),
+    }),
   };
   if (strategy === "strategy4") {
     receipt.zone_counts = Object.fromEntries(["A", "B", "C"].map((key) => [key, receipt.accepted_rows.filter((row) => String(row.zone || row.zoneLabel || "").toUpperCase().startsWith(key)).length]));

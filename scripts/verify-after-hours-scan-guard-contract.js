@@ -11,7 +11,7 @@ if (!/marketOpen\s*-eq\s*\$true/.test(guard)) issues.push("trading_day_open_requ
 for (const file of ["run-chip-source-sync.ps1", "run-strategy4.ps1", "run-strategy5.ps1", "run-institution.ps1", "run-buy-sell-complete.ps1", "run-flow-watchdog.ps1", "run-strategy5-watchdog.ps1"]) {
   if (!/Invoke-FumanWeekdayGuard[^\r\n]*-AllowAfterFormalSourceWindow/.test(read(file))) issues.push(`${file}:explicit_allow_missing`);
 }
-for (const file of ["run-strategy2.ps1", "run-strategy3.ps1"]) {
+for (const file of ["run-strategy2.ps1", "run-strategy3-v2-complete-scan.ps1"]) {
   if (fs.existsSync(path.join(root, file)) && /Invoke-FumanWeekdayGuard[^\r\n]*-AllowAfterFormalSourceWindow/.test(read(file))) issues.push(`${file}:intraday_runner_must_not_allow_after_window`);
 }
 for (const file of ["run-flow-watchdog.ps1", "run-strategy5-watchdog.ps1"]) {

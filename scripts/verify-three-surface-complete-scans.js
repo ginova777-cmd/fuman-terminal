@@ -94,7 +94,11 @@ async function main() {
   for (const tab of TABS) {
     const fragment = boot.payload?.fragments?.[tab.key === "institution" ? "chip" : tab.key];
     if (!fragment?.runId) fail(`mobile_boot_${tab.key}_missing_run_id`);
-    const expectedRunId = summary.tabs[tab.key].api.runId;
+    const expectedRunId = summary.tabs[tab.key]?.api?.runId || "";
+    if (!expectedRunId) {
+      fail(`mobile_boot_${tab.key}_expected_run_id_missing`);
+      continue;
+    }
     const waiting = /waiting|snapshot-not-ready|not-ready/i.test(String(fragment.runId));
     if (!waiting && fragment.runId !== expectedRunId) fail(`mobile_boot_${tab.key}_stale_run_id`, { expected: expectedRunId, actual: fragment.runId });
   }

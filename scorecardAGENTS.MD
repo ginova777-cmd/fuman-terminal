@@ -175,7 +175,7 @@ Primary key:
 | --- | --- | --- | --- |
 | `strategy1` | `/api/open-buy-latest` | `策略1開盤入成績單` | 120 |
 | `strategy2` | `/api/strategy2-latest` | `策略2成績單` | 只顯示 `09:00-12:00` |
-| `strategy3` | Supabase `strategy3_scan_runs/results` previous trading day | `策略3隔日沖成績單` | 來源日前一開盤日，進場 `13:00` |
+| `strategy3` | Supabase `strategy3_v2_scan_runs/results` previous trading day | `策略3隔日沖成績單` | 來源日前一開盤日，進場 `13:00` |
 | `strategy4` | `/api/strategy4-latest` | `策略4成績單` | 70 |
 | `strategy5` | `/api/strategy5-latest` | `策略5成績單` | 25 |
 | `institution` | `/api/institution-latest` | `買賣超成績單` | 120 |
@@ -294,8 +294,8 @@ pnl = high_price - entry_price
 來源：
 
 ```text
-strategy3_scan_runs
-strategy3_scan_results
+strategy3_v2_scan_runs
+strategy3_v2_scan_results
 ```
 
 查詢條件：
@@ -759,7 +759,7 @@ npm run guard:production
 | --- | --- | --- |
 | `strategy1` | `/api/open-buy-latest` | rows > 0 |
 | `strategy2` | `/api/strategy2-latest` | rows > 0, only `09:00-12:00` after scorecard filter |
-| `strategy3` | `strategy3_scan_runs/results` previous trading day | rows > 0, `entry_time=13:00`, source date marker present |
+| `strategy3` | `strategy3_v2_scan_runs/results` previous trading day | rows > 0, `entry_time=13:00`, source date marker present |
 | `strategy4` | `/api/strategy4-latest` | rows > 0 |
 | `strategy5` | `/api/strategy5-latest` | rows > 0 |
 | `institution` | `/api/institution-latest` | rows > 0 |

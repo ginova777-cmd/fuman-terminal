@@ -31,8 +31,9 @@ async function main() {
 
   const rootReport = fs.readFileSync(path.join(__dirname, "..", "send-intraday-report.js"), "utf8");
   assert(rootReport.includes("notificationsDisabled"), "root legacy SMTP report must honor notification disable guard");
-  const strategy3Scanner = fs.readFileSync(path.join(__dirname, "scan-strategy3-cache.js"), "utf8");
-  assert(strategy3Scanner.includes("legacyNotificationsDisabled()"), "Strategy3 direct notification path must honor legacy disable guard");
+  const strategy3Line = fs.readFileSync(path.join(__dirname, "send-strategy3-v2-line-card.js"), "utf8");
+  assert(strategy3Line.includes("idempotencyKey: `strategy3-v2:${scan.run_id}`"), "Strategy3 V2 LINE path must be idempotent by formal runId");
+  assert(strategy3Line.includes("priorSent(target, scan.run_id)"), "Strategy3 V2 LINE recovery must retain delivery evidence without duplicate sends");
 
   const payload = { text: "hello" };
   const first = claimNotification({ channel: "line", target: "u1", payload, options: { dedupeScope: "test" } });

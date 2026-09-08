@@ -342,7 +342,7 @@ try {
     Push-Location $syncRoot
     try {
       $null = Invoke-GateCommand "open buy raw refresh" { & $nodeExe "scripts\scan-open-buy-cache.js" } -AllowFailure
-      $null = Invoke-GateCommand "strategy3 raw refresh" { & $nodeExe "scripts\scan-strategy3-cache.js" } -AllowFailure
+      Write-GateLog "Strategy3 V2 is schedule-owned and reads the Mother Pool directly; live freshness gate does not start or refresh it."
       $previousFullScan = $env:FULL_SCAN
       $previousFailOnIncomplete = $env:STRATEGY4_FAIL_ON_INCOMPLETE
       $previousAllowPartialPublish = $env:STRATEGY4_ALLOW_PARTIAL_PUBLISH

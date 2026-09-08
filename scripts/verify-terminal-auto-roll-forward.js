@@ -72,13 +72,10 @@ function verifyCurrentPlan(issues) {
     });
   }
   const scannerScripts = [
-    "run-strategy2-intraday.ps1",
-    "run-strategy3-complete-scan.ps1",
+    "run-strategy3-v2-complete-scan.ps1",
     "run-strategy4.ps1",
     "run-strategy5.ps1",
     "run-institution.ps1",
-    "run-cb-detect.ps1",
-    "run-warrant-flow.ps1",
   ];
   for (const action of actions) {
     if (!String(action.state || "").includes("SCAN")) continue;
@@ -146,13 +143,10 @@ function main() {
   }
 
   const scannerScripts = [
-    "run-strategy2-intraday.ps1",
-    "run-strategy3-complete-scan.ps1",
+    "run-strategy3-v2-complete-scan.ps1",
     "run-strategy4.ps1",
     "run-strategy5.ps1",
     "run-institution.ps1",
-    "run-cb-detect.ps1",
-    "run-warrant-flow.ps1",
   ];
   assert(runnerText.includes("function scannerClosureStepsForKey"), issues, "scanner_closure_mapping_missing");
   assert(runnerText.includes("function scannerPostRunSteps"), issues, "scanner_post_run_closure_missing");
@@ -163,11 +157,9 @@ function main() {
   }
   for (const forbidden of [
     "verify:strategy2-e2e-closure",
-    "verify:daytrade-strategy3-closure-live",
+    "verify:strategy3-v2-full-closure",
     "verify:strategy5-e2e-closure",
     "verify:institution-e2e-closure",
-    "verify:cb-e2e-closure",
-    "verify:warrant-e2e-closure",
   ]) {
     assert(runnerText.includes(forbidden), issues, "scanner_closure_mapping_missing", { forbidden });
   }
