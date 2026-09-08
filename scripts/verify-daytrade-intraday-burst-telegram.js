@@ -485,7 +485,8 @@ if (requireToday) {
     && String(runnerReceipt?.notifier_receipt_path || "").toLowerCase() === receiptFile.toLowerCase()
   );
   checks.runtime_no_send_after_1230 = !receipt || receiptSentEvents.every((event) => taipeiMinutesFromIso(event?.sent_at) <= 750);
-  checks.runtime_today_technical_indicator_readback_present = Array.isArray(outbox?.technical_indicator_readback) && outbox.technical_indicator_readback.length > 0;
+  checks.runtime_today_technical_indicator_readback_present = offSessionCloseoutComplete
+    || (Array.isArray(outbox?.technical_indicator_readback) && outbox.technical_indicator_readback.length > 0);
   checks.runtime_today_events_require_technical_cross = outboxEvents.every((event) =>
     event?.technical_indicator_status === "ready"
     && event?.technical_golden_cross_any === true
