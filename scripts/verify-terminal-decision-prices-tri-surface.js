@@ -10,7 +10,7 @@ function check(ok, issue) { if (!ok) issues.push(issue); }
 
 const apiFiles = [
   "api/strategy2-latest.js",
-  "api/strategy3-latest.shared-probe-legacy.js",
+  "api/strategy3-v2-latest.js",
   "api/strategy4-latest.js",
   "api/strategy5-latest.js",
   "api/institution-latest.js",

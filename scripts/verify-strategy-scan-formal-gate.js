@@ -50,14 +50,16 @@ function main() {
       const parsed = parsePowerShell(file);
       if (!parsed.ok) issues.push(`${runner.strategy}:powershell_parse_failed:${parsed.output}`);
     }
-    for (const pattern of contract.requiredRunnerPatterns || []) {
+    for (const pattern of runner.requiredPatterns || contract.requiredRunnerPatterns || []) {
       if (!has(text, pattern)) issues.push(`${runner.strategy}:runner_missing:${pattern}`);
     }
-    const gatePattern = `Invoke-ScannerResourceHealthGate -Strategy "${runner.gateStrategy}"`;
+    const gatePattern = runner.gatePattern || `Invoke-ScannerResourceHealthGate -Strategy "${runner.gateStrategy}"`;
     if (!has(text, gatePattern)) issues.push(`${runner.strategy}:runner_missing_gate_strategy:${runner.gateStrategy}`);
     if ((contract.strongReceiptRunners || []).includes(runner.strategy)) {
+      const receiptText = runner.receiptScript ? readText(path.join(ROOT, runner.receiptScript)) : "";
+      const contractText = `${text}\n${receiptText}`;
       for (const pattern of contract.strongReceiptPatterns || []) {
-        if (!has(text, pattern)) issues.push(`${runner.strategy}:strong_receipt_missing:${pattern}`);
+        if (!has(contractText, pattern)) issues.push(`${runner.strategy}:strong_receipt_missing:${pattern}`);
       }
     }
   }

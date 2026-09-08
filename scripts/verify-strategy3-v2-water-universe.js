@@ -36,6 +36,11 @@ function firstBlocker() {
   return issues[0].code;
 }
 
+function writeJson(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(value, null, 2), "utf8");
+}
+
 
 function processExists(pid) {
   const id = Number(pid || 0);
@@ -52,6 +57,7 @@ function main() {
   const sharedPath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-ws-symbols.json");
   const statusPath = path.join(RUNTIME_DIR, "state", "fugle-daytrade-websocket-status-v2.json");
   const writerPath = path.join(ROOT, "scripts", "run-daytrade-source-writer.js");
+  const receiptPath = path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-v2-water-universe-${compactDate}.json`);
 
   const cache = readJson(cachePath, null);
   const shared = readJson(sharedPath, null);
@@ -103,6 +109,9 @@ function main() {
   });
   add(/symbols:\s*prependUnique\(daytradeMotherPoolSymbols,\s*activeUniverseSymbols\)/.test(writerText), "strategy3_v2_source_writer_not_using_active_universe_for_ws_water");
   add(!/symbols:\s*prependUnique\(daytradeMotherPoolSymbols,\s*activePriceEligibleSymbols\)/.test(writerText), "strategy3_v2_source_writer_still_uses_price_eligible_ws_water");
+  add(writerText.includes('websocketSymbolUniversePolicy: "active_universe_for_quote_and_candle_water_only_not_formal_gate"'), "strategy3_v2_source_writer_water_policy_metadata_missing");
+  add(/formalCandidateAllowed:\s*false/.test(writerText), "strategy3_v2_source_writer_formal_candidate_guard_missing");
+  add(/publishAllowed:\s*false/.test(writerText), "strategy3_v2_source_writer_publish_guard_missing");
   add(!orphanOldLimit, "orphan_collector_process_alive_with_old_symbol_limit", { pid: status.pid, pidExists: statusPidExists, supervisorStatus: supervisor.status, statusUpdatedAt, candleSubscribedSymbols, required: MIN_READY_SYMBOLS });
   if (offSessionNoLiveCollector) {
     add(scanCompleteWithFormalCache, "collector_not_running_off_session_wait_next_0600", {
@@ -128,6 +137,11 @@ function main() {
   const payload = {
     ok: issues.length === 0,
     status: issues.length === 0 ? "STRATEGY3_V2_WATER_UNIVERSE_READY" : "STRATEGY3_V2_WATER_UNIVERSE_NOT_READY",
+    contract: "strategy3-v2-water-universe-verifier-v1",
+    checked_at: new Date().toISOString(),
+    trade_date: tradeDate,
+    strategy: "strategy3_v2",
+    run_id: scanReceipt?.run_id || null,
     first_blocker: firstBlocker(),
     reason_code: firstBlocker(),
     minimums: {
@@ -161,7 +175,8 @@ function main() {
     issues,
   };
 
-  console.log(JSON.stringify(payload, null, 2));
+  writeJson(receiptPath, payload);
+  console.log(JSON.stringify({ ...payload, receipt_path: receiptPath }, null, 2));
   process.exitCode = payload.ok ? 0 : 1;
 }
 

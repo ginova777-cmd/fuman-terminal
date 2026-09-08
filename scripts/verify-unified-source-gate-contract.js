@@ -212,6 +212,11 @@ for (const [key, file] of apiEntries) {
     }
     continue;
   }
+  if (key === "strategy3") {
+    requireMarkers(file, ["strategy3-v2-latest.js"], "strategy3 V2 API wrapper");
+    requireMarkers("api/strategy3-v2-latest.js", ["strategy3_v2", "strategy3-v2-contract"], "strategy3 V2 API");
+    continue;
+  }
   requireMarkers(file, [
     "run-time-source-snapshot-contract",
     "wrapJsonRunTimeSourceEvidence",
@@ -229,7 +234,7 @@ for (const file of ["api/heatmap.js", "api/market-ai-live.js", "api/latest-strat
 const WRITER_BY_MODULE = {
   strategy1: "scripts/scan-open-buy-cache.js",
   strategy2: "scripts/run-strategy2-v3-live-scan.js",
-  strategy3: "scripts/scan-strategy3-cache.js",
+  strategy3: "scripts/run-strategy3-v2-complete-scan.js",
   strategy4: "scripts/scan-strategy4-cache.js",
   strategy5: "scripts/scan-strategy5-cache.js",
   institution: "scripts/scan-institution-cache.js",
@@ -245,6 +250,12 @@ for (const file of writerFiles) {
       "run_quality_at_publish",
       "unattendedStatus",
       "evidenceStatus",
+    ]);
+  } else if (file === "scripts/run-strategy3-v2-complete-scan.js") {
+    requireMarkers(file, [
+      "strategy3_v2_same_day_1m_ready",
+      "local_fugle_daytrade_ws_candles+local_fugle_daytrade_ws_quotes",
+      "publish_allowed",
     ]);
   } else {
     requireMarkers(file, [

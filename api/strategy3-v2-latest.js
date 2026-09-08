@@ -10,6 +10,8 @@ const {
   scanReceiptPath,
 } = require("../scripts/strategy3-v2-contract");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
+const { attachMainForceCostsToPayload } = require("../lib/terminal-main-force-costs");
+const { attachThreeGatePricesToPayload } = require("../lib/terminal-three-gate-prices");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
@@ -202,6 +204,12 @@ function payloadFromComplete({ source, runId, tradeDate, status, count, rows, sc
   };
 }
 
+async function enrichDecisionPrices(payload) {
+  await attachMainForceCostsToPayload(payload);
+  await attachThreeGatePricesToPayload(payload);
+  return payload;
+}
+
 module.exports = async function strategy3V2Latest(request, response) {
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
@@ -211,7 +219,7 @@ module.exports = async function strategy3V2Latest(request, response) {
 
   const supabase = await readSupabasePayload(dateDash).catch((error) => ({ ok: false, source: "supabase", reason: String(error?.message || error).slice(0, 240) }));
   if (supabase.ok) {
-    return response.status(200).json(payloadFromComplete({
+    return response.status(200).json(await enrichDecisionPrices(payloadFromComplete({
       source: "supabase:strategy3_v2",
       runId: supabase.run.run_id,
       tradeDate: supabase.run.trade_date || dateDash,
@@ -220,12 +228,12 @@ module.exports = async function strategy3V2Latest(request, response) {
       rows: supabase.rows,
       scannerSummary: supabase.run.coverage || {},
       latestReadOnly: supabase.latestReadOnly === true,
-    }));
+    })));
   }
 
   const latestSupabase = await readSupabasePayload(dateDash, { latestReadOnly: true }).catch(() => null);
   if (latestSupabase?.ok) {
-    return response.status(200).json(payloadFromComplete({
+    return response.status(200).json(await enrichDecisionPrices(payloadFromComplete({
       source: "supabase:strategy3_v2:latest_readonly_history",
       runId: latestSupabase.run.run_id,
       tradeDate: latestSupabase.run.trade_date || dateDash,
@@ -234,7 +242,7 @@ module.exports = async function strategy3V2Latest(request, response) {
       rows: latestSupabase.rows,
       scannerSummary: latestSupabase.run.coverage || {},
       latestReadOnly: true,
-    }));
+    })));
   }
 
   const receipt = readJson(scanReceiptPath(date), null);
@@ -266,5 +274,5 @@ module.exports = async function strategy3V2Latest(request, response) {
         matches: [],
         rows: [],
       };
-  return response.status(200).json(payload);
+  return response.status(200).json(await enrichDecisionPrices(payload));
 };

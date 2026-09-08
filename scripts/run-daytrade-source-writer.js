@@ -47,14 +47,6 @@ let strategyPriorityBridgeRefreshPromise = null;
 
 const STRATEGY_PRIORITY_BRIDGE_SOURCES = [
   {
-    key: "strategy3",
-    latestResource: "v_strategy3_latest_complete_run",
-    latestQuery: "select=*&limit=1",
-    resultsResource: "strategy3_scan_results",
-    resultSelect: "code,rank,score,complete,quality_status,scan_date,run_id,payload",
-    codeMode: "stock",
-  },
-  {
     key: "strategy4",
     latestResource: "strategy4_scan_runs",
     latestQuery: "select=*&status=eq.complete&complete=eq.true&order=finished_at.desc&limit=1",
@@ -4213,6 +4205,9 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
       strategy2FormalWaterCount: strategy2FormalWaterSymbols.length,
       terminalPriorityCount: nextPriorityPayload.terminalPrioritySymbols.length,
       openingPriorityCount: nextPriorityPayload.openingPrioritySymbols.length,
+      websocketSymbolUniversePolicy: "active_universe_for_quote_and_candle_water_only_not_formal_gate",
+      formalCandidateAllowed: false,
+      publishAllowed: false,
       preserveRecentSymbols: false,
     });
   }

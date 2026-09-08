@@ -304,14 +304,14 @@ function Invoke-ScanTask($strategy, $label, $tier, $script, $payloadPath, $envVa
   if ($blockingReason) { $criticalFailures.Add("${strategy}: $blockingReason") | Out-Null }
 }
 
-function Invoke-RunnerTask($strategy, $label, $tier, $runner) {
+function Invoke-RunnerTask($strategy, $label, $tier, $runner, [string[]]$runnerArgs = @()) {
   $startedAt = (Get-Date)
   Write-ScanLog "START [$tier] $label"
   $exitCode = 0
   try {
     Push-Location $syncRoot
     try {
-      & "${syncRoot}\${runner}" *>&1 | ForEach-Object {
+      & "${syncRoot}\${runner}" @runnerArgs *>&1 | ForEach-Object {
         $text = [string]$_
         Write-Host $text
         Add-Content -LiteralPath $log -Value $text -Encoding utf8
@@ -573,7 +573,9 @@ try {
     Write-ScanLog "Strategy2 is schedule-owned by Fuman Strategy2 Unified 0845-1210; full scan is read-only and must not start a second run."
   }
 
-  Invoke-RunnerTask "strategy3" "strategy3 full scan" "critical" "run-strategy3-complete-scan.ps1"
+  # Strategy3 V2 is schedule-owned. Full scan only closes the already-produced
+  # same-day run; it must never create a second run or resend LINE.
+  Invoke-RunnerTask "strategy3" "strategy3 V2 receipt recovery" "critical" "run-strategy3-v2-complete-scan.ps1" @("-Recovery")
 
   if (-not $SkipInstitution) {
     Invoke-RunnerTask "institution" "institution full scan" "critical" "run-institution.ps1"

@@ -195,7 +195,9 @@ if (!slots[slot]) {
   process.exit(2);
 }
 const collectionWindow = fixedCollectionWindow(slot);
-const recoveryAuthorized = recovery && /^strategy4-\d{8}-\d{14}$/.test(expectedRunId) && runDate(expectedRunId) === compactDate(taipeiDate()) && recoveryReason.length >= 8 && slot === "17:00";
+const recoveryRunAllowed = (slot === "17:00" && /^strategy4-\d{8}-\d{14}$/.test(expectedRunId))
+  || (slot === "13:15" && /^strategy3v2-\d{8}-\d{14}$/.test(expectedRunId));
+const recoveryAuthorized = recovery && recoveryRunAllowed && runDate(expectedRunId) === compactDate(taipeiDate()) && recoveryReason.length >= 8;
 if (!collectionWindow.allowed && !recoveryAuthorized) {
   console.error(JSON.stringify({ ok: false, status: "FAIL_CLOSED", reason: "outside_fixed_collection_window", slot, writeAllowed: false, blobPublishAllowed: false, collectionWindow }));
   process.exit(6);

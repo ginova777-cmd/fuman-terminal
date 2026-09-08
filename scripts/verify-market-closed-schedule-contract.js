@@ -8,7 +8,6 @@ const { spawnSync } = require("child_process");
 const repo = path.resolve(__dirname, "..");
 const requiredGuardFiles = [
   "run-strategy2-intraday.ps1",
-  "run-strategy3-complete-scan.ps1",
   "run-strategy4.ps1",
   "run-strategy5.ps1",
   "run-institution.ps1",

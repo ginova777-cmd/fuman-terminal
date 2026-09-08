@@ -196,7 +196,7 @@ function releaseSourceReports() {
   });
 }
 const LIGHTWEIGHT_SOURCE_REPORTS = [
-  { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", table: "v_strategy3_latest_complete_run", strategyFilter: "strategy3", order: "" },
+  { key: "strategy3", strategy: "strategy3", endpoint: "/api/strategy3-latest", table: "v_strategy3_v2_latest_complete_run", strategyFilter: "", order: "" },
   { key: "strategy4", strategy: "strategy4", endpoint: "/api/strategy4-latest", table: "strategy4_scan_runs", strategyFilter: "strategy4", order: "finished_at.desc" },
   { key: "strategy5", strategy: "strategy5", endpoint: "/api/strategy5-latest", table: "v_strategy5_latest_complete_run", strategyFilter: "strategy5", order: "" },
   { key: "institution", strategy: "institution", endpoint: "/api/institution-latest", table: "v_institution_latest_complete_run", strategyFilter: "institution", order: "" },];
@@ -378,7 +378,7 @@ function callStrategy3Latest(timeoutMs = 12000) {
       };
       timer = setTimeout(async () => resolve({
         statusCode: 504,
-        payload: await latestRunFallbackPayload({ table: "v_strategy3_latest_complete_run", strategy: "strategy3", order: "", error: "strategy3_source_report_timeout" }),
+        payload: await latestRunFallbackPayload({ table: "v_strategy3_v2_latest_complete_run", strategy: "", order: "", error: "strategy3_v2_source_report_timeout" }),
       }), timeoutMs);
       const finish = (result) => {
         clearTimeout(timer);

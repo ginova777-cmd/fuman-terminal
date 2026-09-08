@@ -1379,7 +1379,7 @@ function Get-TerminalPrioritySymbols {
   $payload = [ordered]@{
     strategy1 = @() # retired: do not read strategy1_open_buy_results during shared-source warmup
     strategy2 = @(Get-TerminalTableSymbols -PathAndQuery "strategy2_scan_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "strategy2")
-    strategy3 = @(Get-TerminalTableSymbols -PathAndQuery "strategy3_scan_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "strategy3")
+    strategy3 = @() # Strategy3 V2 consumes the Mother Pool and must never seed its own water priority.
     strategy4 = @(Get-TerminalTableSymbols -PathAndQuery "strategy4_scan_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "strategy4")
     strategy5 = @(Get-TerminalTableSymbols -PathAndQuery "strategy5_scan_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "strategy5")
     institution = @(Get-TerminalTableSymbols -PathAndQuery "institution_scan_results?select=code,symbol,payload" -Fields @("code", "symbol", "payload.code", "payload.symbol") -UniverseSet $universeSet -Label "institution")

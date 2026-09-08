@@ -52,7 +52,7 @@ function requireText(issues, file, text, marker, issue) {
 
 function verifyScannerServiceKeys(issues) {
   const files = [
-    "scripts/scan-strategy3-cache.js",
+    "scripts/run-strategy3-v2-complete-scan.js",
     "scripts/scan-strategy4-cache.js",
     "scripts/scan-strategy5-cache.js",
     "scripts/scan-institution-cache.js",
@@ -63,9 +63,11 @@ function verifyScannerServiceKeys(issues) {
   const rows = [];
   for (const file of files) {
     const text = readText(file);
-    const ok = hasAny(text, SERVICE_KEY_MARKERS) && /Authorization:\s*`Bearer\s+\$\{[^}]+\}`|Authorization:\s*["']Bearer/.test(text);
+    const v2KeyResolver = file === "scripts/run-strategy3-v2-complete-scan.js" && text.includes("terminalSupabaseKey");
+    const hasServiceKey = hasAny(text, SERVICE_KEY_MARKERS) || v2KeyResolver;
+    const ok = hasServiceKey && /Authorization:\s*`Bearer\s+\$\{[^}]+\}`|Authorization:\s*["']Bearer/.test(text);
     if (!text) addIssue(issues, `scanner_file_missing:${file}`, { file });
-    if (text && !hasAny(text, SERVICE_KEY_MARKERS)) addIssue(issues, `scanner_missing_service_role_key:${file}`, { file });
+    if (text && !hasServiceKey) addIssue(issues, `scanner_missing_service_role_key:${file}`, { file });
     if (text && !ok) addIssue(issues, `scanner_missing_service_authorization_header:${file}`, { file });
     rows.push({ file, ok });
   }

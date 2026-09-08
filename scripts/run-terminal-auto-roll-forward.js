@@ -917,16 +917,17 @@ function scannerRunnerForKey(key = "", fallbackCommand = "") {
   const pwsh = process.platform === "win32" ? "pwsh.exe" : "pwsh";
   const map = {
     // Strategy2 is schedule-owned; auto-roll-forward must never create a second run.
-    strategy3: "run-strategy3-complete-scan.ps1",
+    strategy3: "run-strategy3-v2-complete-scan.ps1",
     strategy4: "run-strategy4.ps1",
     strategy5: "run-strategy5.ps1",
     institution: "run-institution.ps1",
   };
   const scriptName = map[String(key || "").toLowerCase()];
   if (scriptName) {
+    const strategy3RecoveryArgs = String(key || "").toLowerCase() === "strategy3" ? ["-Recovery"] : [];
     return {
       command: pwsh,
-      args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".\\" + scriptName],
+      args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".\\" + scriptName, ...strategy3RecoveryArgs],
       label: "scanner:" + key,
       writesSource: true,
     };
@@ -945,7 +946,7 @@ function scannerRunnerForKey(key = "", fallbackCommand = "") {
 function scannerClosureStepsForKey(key = "") {
   const map = {
     strategy2: ["verify:strategy2-e2e-closure"],
-    strategy3: ["verify:daytrade-strategy3-closure-live"],
+    strategy3: ["verify:strategy3-v2-full-closure"],
     strategy4: ["verify:strategy4-full-closure"],
     strategy5: ["verify:strategy5-e2e-closure"],
     institution: ["verify:institution-e2e-closure"],
@@ -1311,7 +1312,7 @@ function selfTest() {
   }
   const strategy3ApplyAction = planForJob({ key: "strategy3", state: "FAILED_SCAN" }, policy, { waterRoot: waterOkFixture, applyScanners: true });
   const strategy3CommandLabels = strategy3ApplyAction.commands.map((command) => command.label || command.command || "");
-  for (const expectedLabel of ["scanner:strategy3", "npm:verify:daytrade-strategy3-closure-live", "npm:scan-receipts:normalize", "npm:verify:strategy-scan-receipt-contract"]) {
+  for (const expectedLabel of ["scanner:strategy3", "npm:verify:strategy3-v2-full-closure", "npm:scan-receipts:normalize", "npm:verify:strategy-scan-receipt-contract"]) {
     if (!strategy3CommandLabels.includes(expectedLabel)) failures.push(`strategy3 apply chain missing ${expectedLabel}`);
   }
   const strategy3Scanner = strategy3ApplyAction.commands.find((command) => command.label === "scanner:strategy3");

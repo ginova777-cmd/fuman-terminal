@@ -124,6 +124,7 @@ const receipts = {
   scan: path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-v2-complete-scan-${compactDate}.json`),
   line: path.join(RUNTIME_DIR, "data", "line-cards", `strategy3-v2-line-card-${compactDate}.json`),
   threeSurfaceLine: path.join(RUNTIME_DIR, "data", "line-cards", `strategy3-v2-three-surface-line-closure-${compactDate}.json`),
+  waterUniverse: path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-v2-water-universe-${compactDate}.json`),
 };
 
 const guard1230 = readJson(receipts.guard1230, null);
@@ -132,6 +133,8 @@ const firstAttempt1255 = readJson(receipts.firstAttempt1255, null);
 const scan = readJson(receipts.scan, null);
 const line = readJson(receipts.line, null);
 const threeSurfaceLine = readJson(receipts.threeSurfaceLine, null);
+const waterUniverseRun = runNode("scripts/verify-strategy3-v2-water-universe.js", [`--trade-date=${tradeDate}`], 120000);
+const waterUniverse = waterUniverseRun.payload || readJson(receipts.waterUniverse, null) || {};
 const surfaceRun = runNode("scripts/verify-strategy3-v2-surface-closure.js", [`--trade-date=${tradeDate}`], 240000);
 const rawSurface = surfaceRun.payload || {};
 const strategy3Surface = rawSurface?.summary?.tabs?.strategy3 || {};
@@ -166,11 +169,13 @@ issue(issues, line?.ok === true && line?.status === "PUSHED", "line_not_pushed",
 issue(issues, line?.line_push_personal_ok === true, "line_personal_push_failed", { value: line?.line_push_personal_ok });
 issue(issues, line?.line_push_group_ok === true, "line_group_push_failed", { value: line?.line_push_group_ok });
 issue(issues, line?.token_logged === false && line?.target_logged === false, "line_secret_logged", { token_logged: line?.token_logged, target_logged: line?.target_logged });
+issue(issues, waterUniverseRun.exitCode === 0 && waterUniverse.ok === true && waterUniverse.status === "STRATEGY3_V2_WATER_UNIVERSE_READY", "water_universe_contract_not_ready", { exitCode: waterUniverseRun.exitCode, status: waterUniverse.status, firstBlocker: waterUniverse.first_blocker, stderrTail: waterUniverseRun.stderrTail });
 issue(issues, surfaceRun.exitCode === 0 && surface.ok === true, "surface_closure_not_ready", { exitCode: surfaceRun.exitCode, status: surface.status, issues: surface.issues, stderrTail: surfaceRun.stderrTail });
 
 const runId = surface?.canonical_api?.runId || "";
 const count = Number(surface?.canonical_api?.count || 0);
 issue(issues, scan?.run_id === runId, "complete_scan_runid_mismatch", { scan_run_id: scan?.run_id, expected: runId });
+issue(issues, waterUniverse.run_id === runId, "water_universe_runid_mismatch", { water_run_id: waterUniverse.run_id, expected: runId });
 issue(issues, Number(scan?.result_count || 0) === count, "complete_scan_count_mismatch", { scan_count: scan?.result_count, expected: count });
 const first = surface?.canonical_api?.first || {};
 issue(issues, line?.run_id === runId, "line_runid_mismatch", { line_run_id: line?.run_id, expected: runId });
@@ -202,6 +207,7 @@ const payload = {
     firstAttempt1255: { enforced: requiresFirstAttempt, enforced_from: firstAttemptEnforcedFrom, receipt: firstAttempt1255 ? { status: firstAttempt1255.status, formal_allowed: firstAttempt1255.formal_allowed, publish_allowed: firstAttempt1255.publish_allowed, line_push_allowed: firstAttempt1255.line_push_allowed, retry_task: firstAttempt1255.retry_task } : null, verifier: { exitCode: firstAttemptRun.exitCode, ok: firstAttemptVerify.ok, first_blocker: firstAttemptVerify.first_blocker || null } },
   },
   scan: scan ? { ok: scan.ok, status: scan.status, run_id: scan.run_id, result_count: scan.result_count } : null,
+  water_universe: waterUniverse ? { ok: waterUniverse.ok, status: waterUniverse.status, run_id: waterUniverse.run_id, first_blocker: waterUniverse.first_blocker, readback: waterUniverse.readback } : null,
   surface: surface ? { ok: surface.ok, status: surface.status, canonical_api: surface.canonical_api, desktop_fast_bundle: surface.desktop_fast_bundle, mobile_fragment: surface.mobile_fragment } : null,
   line: line ? { ok: line.ok, status: line.status, run_id: line.run_id, count: line.count, line_push_ok: line.line_push_ok, line_push_personal_ok: line.line_push_personal_ok, line_push_group_ok: line.line_push_group_ok, token_logged: line.token_logged, target_logged: line.target_logged } : null,
   issues,
