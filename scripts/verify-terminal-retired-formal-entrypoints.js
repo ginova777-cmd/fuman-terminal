@@ -40,7 +40,6 @@ for (const activeContractFile of [
   "scripts/verify-active-strategy-root-authority.js",
   "scripts/verify-api-unattended-scorecard.js",
   "scripts/verify-fugle-source-contract.js",
-  "scripts/verify-strategy3-prewater-static.js",
   "scripts/verify-supabase-conservative-recovery.js",
 ]) {
   const source = read(activeContractFile);
