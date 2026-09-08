@@ -47,6 +47,32 @@ function summarizeCoverage(coverage) {
     remainingMissing,
   };
 }
+function normalizeCode(value) { return String(value || "").replace(/\D/g, "").slice(0, 4); }
+function collectDataGapCodes(payload = {}) {
+  const codes = new Set();
+  for (const value of [
+    ...(Array.isArray(payload.noDataCodes) ? payload.noDataCodes : []),
+    ...(Array.isArray(payload.staleDataGapCodes) ? payload.staleDataGapCodes : []),
+    ...(Array.isArray(payload.volumeCacheMissingCodes) ? payload.volumeCacheMissingCodes : []),
+    ...(Array.isArray(payload.insufficientHistory) ? payload.insufficientHistory.map((item) => item?.code || item?.symbol) : []),
+  ]) {
+    const code = normalizeCode(value);
+    if (/^\d{4}$/.test(code)) codes.add(code);
+  }
+  // Older same-contract runs may expose only the complete source-miss list.
+  // Reconstruct the Strategy4-relevant gaps by removing the symbols already
+  // rejected by the authoritative avg5-volume gate.
+  if (codes.size < Number(payload.dataGapCount || 0)) {
+    const volumeFiltered = new Set((Array.isArray(payload.volumeFilter?.filtered) ? payload.volumeFilter.filtered : [])
+      .map((item) => normalizeCode(item?.code || item?.symbol || item))
+      .filter((code) => /^\d{4}$/.test(code)));
+    for (const item of (Array.isArray(payload.supabaseCoverage?.remainingMissing) ? payload.supabaseCoverage.remainingMissing : [])) {
+      const code = normalizeCode(item?.code || item?.symbol || item);
+      if (/^\d{4}$/.test(code) && !volumeFiltered.has(code)) codes.add(code);
+    }
+  }
+  return [...codes].sort();
+}
 async function main() {
   const latestRun = await supabase(`/rest/v1/${RUNS_TABLE}?${query({ select: "*", strategy: "eq.strategy4", status: "eq.complete", order: "updated_at.desc", limit: 1 })}`);
   const row = Array.isArray(latestRun.json) ? latestRun.json[0] : null;
@@ -61,13 +87,22 @@ async function main() {
   const qualityStatus = String(row.quality_status || "");
   const noDataCount = Number(row.no_data_count || 0);
   const dataGapCount = Number(row.payload?.dataGapCount ?? noDataCount);
+  const dataGapCodes = collectDataGapCodes(row.payload || {});
+  let displayedDataGapCodes = [];
+  if (dataGapCodes.length) {
+    const gapFilter = `in.(${dataGapCodes.join(",")})`;
+    const gapRows = await supabase(`/rest/v1/${RESULTS_TABLE}?${query({ select: "code", run_id: `eq.${row.run_id}`, code: gapFilter })}`);
+    displayedDataGapCodes = [...new Set((Array.isArray(gapRows.json) ? gapRows.json : []).map((item) => normalizeCode(item?.code)).filter((code) => /^\d{4}$/.test(code)))].sort();
+  }
   const errorCount = Number(row.error_count || 0);
   const coverage = summarizeCoverage(row.payload?.supabaseCoverage || row.payload?.selfTest?.sourceHealth?.supabaseCoverage || null);
   const coverageAccepted = coverage && Number(coverage.coverageRatio || 0) >= MIN_ACCEPTED_COVERAGE_RATIO
     && (Number(coverage.remainingMiss || 0) === 0 || Number(coverage.remainingMiss || 0) === dataGapCount);
   const qualityAccepted = qualityStatus === "complete" || (qualityStatus === "degraded" && coverageAccepted);
-  const ok = row.complete === true && qualityAccepted && expectedTotal > 0 && scannedCount === expectedTotal && resultCount > 0 && readbackCount === resultCount && errorCount === 0;
-  console.log(JSON.stringify({ ok, runId: row.run_id, updatedAt: row.updated_at || row.finished_at || "", expectedTotal, scannedCount, resultCount, readbackCount, qualityStatus, qualityAccepted, complete: row.complete === true, noDataCount, dataGapCount, errorCount, sourceSnapshotCapturedAt: row.payload?.source_snapshot_captured_at || row.payload?.generatedAt || row.generated_at || "", supabaseCoverage: coverage }, null, 2));
+  const dataGapCodesComplete = dataGapCount === 0 || dataGapCodes.length === dataGapCount;
+  const dataGapsExcluded = displayedDataGapCodes.length === 0;
+  const ok = row.complete === true && qualityAccepted && expectedTotal > 0 && scannedCount === expectedTotal && resultCount > 0 && readbackCount === resultCount && errorCount === 0 && dataGapCodesComplete && dataGapsExcluded;
+  console.log(JSON.stringify({ ok, runId: row.run_id, updatedAt: row.updated_at || row.finished_at || "", expectedTotal, scannedCount, resultCount, readbackCount, qualityStatus, qualityAccepted, complete: row.complete === true, noDataCount, dataGapCount, dataGapCodes, dataGapCodesComplete, dataGapsExcluded, displayedDataGapCodes, errorCount, sourceSnapshotCapturedAt: row.payload?.source_snapshot_captured_at || row.payload?.generatedAt || row.generated_at || "", supabaseCoverage: coverage }, null, 2));
   if (!ok) process.exitCode = 1;
 }
 main().catch((error) => { console.error(JSON.stringify({ ok: false, error: error.message }, null, 2)); process.exit(1); });

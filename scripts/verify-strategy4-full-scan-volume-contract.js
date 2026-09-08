@@ -6,6 +6,8 @@ const apiSource = fs.readFileSync(path.join(root, "api", "scan-strategy4.js"), "
 const runnerSource = fs.readFileSync(path.join(root, "scripts", "scan-strategy4-cache.js"), "utf8");
 const closureSource = fs.readFileSync(path.join(root, "scripts", "verify-strategy4-canonical-closure.js"), "utf8");
 const wrapperSource = fs.readFileSync(path.join(root, "run-strategy4.ps1"), "utf8");
+const dailyPublishSource = fs.readFileSync(path.join(root, "scripts", "verify-strategy4-daily-publish.js"), "utf8");
+const dbVerifierSource = fs.readFileSync(path.join(root, "scripts", "verify-strategy4-db-latest-run.js"), "utf8");
 
 const failures = [];
 
@@ -41,6 +43,10 @@ if (!runnerSource.includes('dataGapContract: "target_date_coverage_gte_90_exclud
   failures.push("runner does not exclude stale daily-K rows under the 90-percent data-gap contract");
 }
 
+if (!runnerSource.includes("noDataCodes: normalizeArray(output.noDataCodes)") || !runnerSource.includes("insufficientHistory: normalizeArray(output.insufficientHistory)")) {
+  failures.push("published Strategy4 run payload does not retain auditable data-gap symbol evidence");
+}
+
 if (!runnerSource.includes('pageSize = Math.min(1000, requestedLimit)') || !runnerSource.includes('pageParams.set("offset", String(offset))')) {
   failures.push("Supabase published self-test does not paginate result sets larger than 1000 rows");
 }
@@ -59,6 +65,14 @@ if (!wrapperSource.includes("[switch]$ReuseDeliveredLineEvidence") || !wrapperSo
 
 if (!wrapperSource.includes("Strategy4 LINE push skipped; reusing delivered same-run evidence")) {
   failures.push("Strategy4 recovery does not expose auditable evidence when an existing LINE delivery is reused");
+}
+
+if (wrapperSource.includes('@("scripts\\verify-terminal-daily-ohlcv.js")') || dailyPublishSource.includes('"scripts/verify-terminal-daily-ohlcv.js"')) {
+  failures.push("Strategy4 closure is still coupled to the shared 20-trading-day OHLC verifier instead of its own target-date 90-percent data-gap contract");
+}
+
+if (!dbVerifierSource.includes("dataGapsExcluded") || !dbVerifierSource.includes("displayedDataGapCodes")) {
+  failures.push("Strategy4 DB verifier does not prove that accepted data-gap symbols are absent from formal results");
 }
 
 if (wrapperSource.includes("Invoke-Strategy4ScorecardSync") || wrapperSource.includes("scorecard:sync")) {

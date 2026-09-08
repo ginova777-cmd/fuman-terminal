@@ -29,14 +29,17 @@ function main() {
   const expectedCount = number(parseOption("expect-count"));
   const issues = [];
 
-  // Source-first gate: Fugle root, full scan, daily OHLCV coverage,
+  // Source-first gate: Fugle root, Strategy4 target-date data-gap coverage,
   // API/Supabase/desktop/mobile/88 alignment, and a fresh LINE dry-run.
+  // The Strategy4 match-yield verifier owns the >=90% target-date coverage
+  // contract. The shared 20-trading-day OHLC verifier is intentionally not a
+  // Strategy4 publish dependency because historical market-wide gaps are not
+  // grounds to reject an otherwise complete same-day Strategy4 scan.
   const verifierScripts = [
     "scripts/verify-strategy4-source-root.js",
     "scripts/verify-strategy4-match-yield-diagnostics.js",
     "scripts/verify-strategy4-canonical-closure.js",
     "scripts/verify-strategy4-88-data-chain.js",
-    "scripts/verify-terminal-daily-ohlcv.js",
   ];
   for (const script of verifierScripts) {
     try {

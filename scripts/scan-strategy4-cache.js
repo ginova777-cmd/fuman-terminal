@@ -1624,6 +1624,8 @@ function buildSupabaseRunRow(output, runId) {
       resultCount: cleanNumber(output.resultCount || output.count),
       observationOnlyCount: cleanNumber(output.observationOnlyCount),
       dataGapCount: cleanNumber(output.dataGapCount),
+      noDataCodes: normalizeArray(output.noDataCodes),
+      insufficientHistory: normalizeArray(output.insufficientHistory),
       patternEvaluatedCount: cleanNumber(output.patternEvaluatedCount || output.evaluatedCount),
       staleDataGapCount: cleanNumber(output.staleDataGapCount),
       staleDataGapCodes: normalizeArray(output.staleDataGapCodes),
