@@ -31,6 +31,7 @@ const quoteCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytra
 const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles-v2.json");
 const motherPoolPath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-priority-symbols.json");
 const MIN_LOCAL_COVERAGE_RATIO = Math.max(0.9, Number(process.env.STRATEGY3_V2_MIN_LOCAL_COVERAGE_RATIO || 0.9));
+const ACCEPTED_MOTHER_POOL_CONTRACT_VERSIONS = new Set(["2.0.0"]);
 
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
@@ -178,10 +179,12 @@ function round(value, digits = 2) {
 function buildScannerCoreResults() {
   const motherPool = readJson(motherPoolPath, {});
   const motherPoolTradeDate = String(motherPool.tradeDate || motherPool.trade_date || "").slice(0, 10);
+  const motherPoolContractVersion = String(motherPool.contract_version || motherPool.motherPoolContractVersion || "");
   const motherPoolSymbols = [...new Set((motherPool.daytradeMotherPoolSymbols || [])
     .map((value) => String(value?.symbol || value?.code || value || "").replace(/\D/g, "").slice(0, 4))
     .filter((code) => /^\d{4}$/.test(code)))];
   if (motherPoolTradeDate !== tradeDate) throw new Error(`strategy3_v2_mother_pool_trade_date_mismatch:${motherPoolTradeDate || "missing"}`);
+  if (!ACCEPTED_MOTHER_POOL_CONTRACT_VERSIONS.has(motherPoolContractVersion)) throw new Error(`strategy3_v2_mother_pool_contract_version_unsupported:${motherPoolContractVersion || "missing"}`);
   if (!motherPoolSymbols.length) throw new Error("strategy3_v2_mother_pool_empty");
   const motherPoolSet = new Set(motherPoolSymbols);
   const quoteCache = readCacheArray(quoteCachePath, "quotes");
@@ -286,7 +289,7 @@ function buildScannerCoreResults() {
   candidates.sort((a, b) => b.score - a.score || b.change_percent - a.change_percent || b.tail_volume_share_pct - a.tail_volume_share_pct);
   candidates.forEach((item, index) => { item.rank = index + 1; });
   return {
-    mother_pool: { file: motherPoolPath, trade_date: motherPoolTradeDate, symbol_count: motherPoolSymbols.length },
+    mother_pool: { file: motherPoolPath, trade_date: motherPoolTradeDate, contract_version: motherPoolContractVersion, accepted_contract_versions: [...ACCEPTED_MOTHER_POOL_CONTRACT_VERSIONS], symbol_count: motherPoolSymbols.length },
     quote_cache: { file: quoteCache.file, updated_at: quoteCache.updated_at, count: quoteCache.count },
     candle_cache: { file: candleCache.file, updated_at: candleCache.updated_at, count: candleCache.count },
     same_day_candle_symbols: candlesByCode.size,

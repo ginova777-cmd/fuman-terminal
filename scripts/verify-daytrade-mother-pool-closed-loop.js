@@ -12,6 +12,7 @@ const STATIC_ONLY = process.argv.includes("--static-only");
 const SKELETON_CONTRACT = "daytrade_mother_pool_skeleton_v1";
 const SKELETON_BASELINE = "public-terminal-fast-20260714-22";
 const SKELETON_BASELINE_COMMIT = "4d6ba88c19c5924093fcbe8afb0566df3c80a921";
+const EXPECTED_MOTHER_POOL_CONTRACT_VERSION = "2.0.0";
 
 function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
@@ -86,6 +87,19 @@ function verifySkeletonStatic() {
     if (fs.existsSync(path.join(ROOT, "scripts", retired))) issues.push(`retired Mother Pool verifier still exists: scripts/${retired}`);
   }
   return { ok: issues.length === 0, contract: SKELETON_CONTRACT, baseline: SKELETON_BASELINE, issues };
+}
+
+function verifyConsumerContractStatic() {
+  const strategy2 = fs.readFileSync(path.join(ROOT, "scripts", "run-strategy2-v3-water-scan.js"), "utf8");
+  const strategy3 = fs.readFileSync(path.join(ROOT, "scripts", "run-strategy3-v2-complete-scan.js"), "utf8");
+  const marker = `new Set(["${EXPECTED_MOTHER_POOL_CONTRACT_VERSION}"])`;
+  const checks = {
+    strategy2_accepts_current_contract: strategy2.includes(marker) && strategy2.includes("strategy2WaterReady"),
+    strategy2_receipt_reports_contract: strategy2.includes("motherPoolContractVersion: water.motherPoolContractVersion"),
+    strategy3_accepts_current_contract: strategy3.includes(marker) && strategy3.includes("mother_pool_contract_version_unsupported"),
+    strategy3_receipt_reports_contract: strategy3.includes("accepted_contract_versions"),
+  };
+  return { ok: Object.values(checks).every(Boolean), expected_contract_version: EXPECTED_MOTHER_POOL_CONTRACT_VERSION, checks };
 }
 
 function findRetiredMotherPoolVerifierReferences() {
@@ -209,6 +223,8 @@ async function main() {
   check("mother_pool_fresh", ageSeconds(motherPool?.updated_at) <= 300, "mother_pool_receipt_stale");
   check("mother_pool_dynamic_size", motherRows.length > 0 && motherRows.length <= 800, `mother_pool_dynamic_size_out_of_range:${motherRows.length}`);
   check("mother_pool_runner_receipt_contract", motherPool?.contract === "daytrade-mother-pool-runner-receipt-v2", "mother_pool_runner_receipt_contract_invalid");
+  check("mother_pool_contract_version", motherPool?.contract_version === EXPECTED_MOTHER_POOL_CONTRACT_VERSION, "mother_pool_contract_version_mismatch");
+  check("priority_contract_version", (priority?.contract_version || priority?.motherPoolContractVersion) === EXPECTED_MOTHER_POOL_CONTRACT_VERSION, "priority_contract_version_mismatch");
   check("mother_pool_300_is_target", Number(motherPool?.mother_pool_target_min_symbols) === 300, "mother_pool_target_min_symbols_invalid");
   check("mother_pool_300_not_hard_gate", motherPool?.mother_pool_minimum_count_is_hard_gate === false, "mother_pool_minimum_count_hard_gate_must_be_false");
   check("mother_pool_minimum_required_is_one", Number(motherPool?.minimum_required_mother_pool_symbols) === 1, "mother_pool_minimum_required_symbols_invalid");
@@ -222,6 +238,7 @@ async function main() {
     dailyIdentity: runStatic("scripts/verify-daytrade-priority-daily-rollover-contract.js"),
     futoptLockRetry: runStatic("scripts/verify-daytrade-futopt-lock-retry-contract.js"),
     sideVolume2000: runStatic("scripts/verify-daytrade-side-volume-contract.js", ["--static-only"]),
+    consumers: verifyConsumerContractStatic(),
     legacyVerifierRetired: {
       ok: !fs.existsSync(path.join(ROOT, "scripts", "verify-daytrade-mother-pool-contract.js"))
         && !fs.existsSync(path.join(ROOT, "scripts", "verify-daytrade-mother-pool-skeleton.js"))
@@ -235,6 +252,7 @@ async function main() {
   check("static_daily_identity_contract", staticChecks.dailyIdentity.ok, "static_daily_identity_contract_failed");
   check("static_futopt_lock_retry_contract", staticChecks.futoptLockRetry.ok, "static_futopt_lock_retry_contract_failed");
   check("static_side_volume_2000_contract", staticChecks.sideVolume2000.ok, "static_side_volume_2000_contract_failed");
+  check("static_consumer_contract_versions", staticChecks.consumers.ok, "static_consumer_contract_versions_failed");
   check("legacy_mother_pool_verifier_retired", staticChecks.legacyVerifierRetired.ok, "legacy_mother_pool_verifier_still_present");
 
   const openingRequired = clock.minute >= 8 * 60 + 36;
@@ -267,6 +285,7 @@ async function main() {
     ok: failures.length === 0,
     closed_loop_ok: failures.length === 0,
     contract: "daytrade_mother_pool_closed_loop_v1",
+    mother_pool_contract_version: EXPECTED_MOTHER_POOL_CONTRACT_VERSION,
     trade_date: clock.tradeDate,
     canonical_run_id: canonicalRunId,
     checked_at: new Date().toISOString(),

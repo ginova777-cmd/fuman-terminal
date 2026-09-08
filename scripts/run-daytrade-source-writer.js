@@ -209,6 +209,7 @@ const REST_FALLBACK_INTERVAL_SECONDS = Math.max(60, positiveNumber(process.env.D
 const MOTHER_POOL_MIN_PRICE = Math.max(50, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_PRICE ?? CONFIG.motherPool?.minimumPrice, 50));
 const MOTHER_POOL_MIN_TURNOVER_RATE = Math.max(1, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_TURNOVER_RATE ?? CONFIG.motherPool?.minimumTurnoverRate, 1));
 const MOTHER_POOL_MIN_AVG_VOLUME3_LOTS = Math.max(3000, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_AVG_VOLUME3_LOTS, 3000));
+const MOTHER_POOL_CONTRACT_VERSION = "2.0.0";
 const MOTHER_POOL_RULE_VERSION = 'daytrade_mother_pool_target_300_600_nonblocking_avg3_3000_outside_ratio_20260904_v7';
 const PREOPEN_REFERENCE_PRICE_CACHE_MS = Math.max(60000, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_CACHE_MS || 15 * 60 * 1000));
 const PREOPEN_REFERENCE_PRICE_MIN_ROWS = Math.max(300, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_MIN_ROWS || 1000));
@@ -3046,6 +3047,8 @@ function mergeStrategyPriorityBridgeIntoRuntimeFile(bridge) {
     canonicalRunId,
     trade_date: tradeDate,
     canonical_run_id: canonicalRunId,
+    contract_version: MOTHER_POOL_CONTRACT_VERSION,
+    motherPoolContractVersion: MOTHER_POOL_CONTRACT_VERSION,
     priorityBridge: {
       schemaVersion: bridge.schemaVersion,
       source: bridge.source,
@@ -3972,6 +3975,8 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         canonical_pool_layer: warmingPending ? "warming_pending" : (deepScanEligible ? "deep_scan_pool" : (index + 1 <= HOT_POOL_MAX_SYMBOLS ? "hot_pool" : "priority_pool")),
         trade_date: taipeiDate(),
         canonical_run_id: `${SOURCE_NAME}:${compactDateKey(taipeiDate())}:canonical`,
+        contract_version: MOTHER_POOL_CONTRACT_VERSION,
+        motherPoolContractVersion: MOTHER_POOL_CONTRACT_VERSION,
         deep_scan_eligible: deepScanEligible,
         candles_priority_required: deepScanEligible,
         candles_priority_reasons: candlesPriorityReasons,
@@ -4183,6 +4188,8 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     canonicalRunId,
     trade_date: tradeDate,
     canonical_run_id: canonicalRunId,
+    contract_version: MOTHER_POOL_CONTRACT_VERSION,
+    motherPoolContractVersion: MOTHER_POOL_CONTRACT_VERSION,
     updatedAt: nowIso(),
     source: "daytrade-dedicated-priority-bridge",
     // Keep the complete mother pool on the WebSocket/data-rotation path.
@@ -6214,6 +6221,7 @@ function updateMotherPoolDelta(result) {
     };
   });
   const roundSummary = {
+    contract_version: MOTHER_POOL_CONTRACT_VERSION,
     trade_date: tradeDate,
     checked_at: checkedAt,
     run_id: runId,
@@ -6252,6 +6260,7 @@ function updateMotherPoolDelta(result) {
 
   if (!DRY_RUN) writeJson(MOTHER_POOL_DELTA_STATE_FILE, {
     contract: "daytrade-mother-pool-runner-receipt-v2",
+    contract_version: MOTHER_POOL_CONTRACT_VERSION,
     source_name: SOURCE_NAME,
     trade_date: tradeDate,
     updated_at: checkedAt,
@@ -6336,6 +6345,8 @@ function updateMotherPoolDelta(result) {
   result.payload.tradeDate = tradeDate;
   result.payload.canonical_run_id = canonicalRunId;
   result.payload.canonicalRunId = canonicalRunId;
+  result.payload.mother_pool_contract_version = MOTHER_POOL_CONTRACT_VERSION;
+  result.payload.contract_version = MOTHER_POOL_CONTRACT_VERSION;
   result.payload.mother_pool_delta = motherPoolDelta;
   result.payload.mother_pool_round_summary = motherPoolDelta.round_summary;
   result.payload.target_symbol_diagnostics = motherPoolDelta.target_symbol_diagnostics;

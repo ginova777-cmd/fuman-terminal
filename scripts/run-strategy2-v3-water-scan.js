@@ -11,6 +11,7 @@ const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SOURCE_NAME = "fugle_daytrade_source";
 const CONTRACT = "strategy2-shared-water-v1";
+const ACCEPTED_MOTHER_POOL_CONTRACT_VERSIONS = new Set(["2.0.0"]);
 const MIN_CANDLES = 35;
 const MIN_FORMAL_WATER_COVERAGE_RATIO = 0.90;
 
@@ -199,7 +200,9 @@ function newestBySymbol(rows) {
 
 function isDeepScanEligible(payload, tradeDate) {
   const metrics = payload?.motherPoolMetrics || {};
-  return String(payload?.trade_date || "") === tradeDate
+  const contractVersion = String(payload?.contract_version || payload?.motherPoolContractVersion || "");
+  return ACCEPTED_MOTHER_POOL_CONTRACT_VERSIONS.has(contractVersion)
+    && String(payload?.trade_date || "") === tradeDate
     && String(payload?.canonical_pool_layer || payload?.pool_tier || "") === "deep_scan_pool"
     && bool(payload?.deep_scan_eligible)
     && (bool(payload?.basePoolEligible) || bool(metrics.basePoolEligible));
@@ -214,6 +217,7 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
     limit: "1000",
   });
   const poolRows = pool.filter((row) => isDeepScanEligible(row.payload || {}, tradeDate));
+  const observedContractVersions = [...new Set(pool.map((row) => String(row?.payload?.contract_version || row?.payload?.motherPoolContractVersion || "missing")))];
   const symbols = [...new Set(poolRows.map((row) => String(row.symbol || "")).filter((symbol) => /^\d{4}$/.test(symbol)))];
   const requestedSymbols = new Set(symbols);
   const [quoteRows, candleRowsRaw, dailyAverageRows, previousDailyRows, futureRows, preopenRows, canonicalRows, sourceStatusRows] = await Promise.all([
@@ -384,6 +388,8 @@ async function readFormalWater(source, tradeDate, now = new Date()) {
     formalReadyRows,
     formalWaterCoverageRatio,
     expectedCanonicalRunId,
+    motherPoolContractVersion: observedContractVersions.length === 1 ? observedContractVersions[0] : "mixed",
+    acceptedMotherPoolContractVersions: [...ACCEPTED_MOTHER_POOL_CONTRACT_VERSIONS],
     ancillaryIssues,
     ancillaryCoverage: {
       dailyVolumeAverageRows: dailyAverageBySymbol.size,
@@ -459,6 +465,8 @@ async function main() {
       : complete ? "strategy2_v3_formal_water_ready" : "strategy2_v3_formal_water_incomplete",
     sourceContract: {
       motherPool: "fugle_daytrade_priority_pool",
+      motherPoolContractVersion: water.motherPoolContractVersion,
+      acceptedMotherPoolContractVersions: water.acceptedMotherPoolContractVersions,
       quote: "fugle_daytrade_quotes_live",
       intraday1m: "fugle_daytrade_intraday_1m",
       scope: "deep_scan_pool + basePoolEligible",
