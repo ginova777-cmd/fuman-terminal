@@ -2805,14 +2805,16 @@ function Convert-FugleStockQuoteToWsLikeQuote {
     low = Get-Number $Quote.lowPrice
     prevClose = $previousClose
     percent = Get-Number $Quote.changePercent
-    tradeVolume = Convert-VolumeToLots $Quote.total.tradeVolume
+    # Fugle regular-board quote volumes are already lots. Never re-scale a
+    # high-volume stock merely because its lot count exceeds 100,000.
+    tradeVolume = Get-Number $Quote.total.tradeVolume
     tradeValue = [int64](Get-Number $Quote.total.tradeValue)
     bidPrice = Get-Number $bestBid.price
-    bidSize = Convert-VolumeToLots $bestBid.size
+    bidSize = Get-Number $bestBid.size
     askPrice = Get-Number $bestAsk.price
-    askSize = Convert-VolumeToLots $bestAsk.size
-    cumulativeBidVolume = Convert-VolumeToLots $Quote.total.tradeVolumeAtBid
-    cumulativeAskVolume = Convert-VolumeToLots $Quote.total.tradeVolumeAtAsk
+    askSize = Get-Number $bestAsk.size
+    cumulativeBidVolume = Get-Number $Quote.total.tradeVolumeAtBid
+    cumulativeAskVolume = Get-Number $Quote.total.tradeVolumeAtAsk
     quoteSeenAt = $updatedAt
     updatedAt = $updatedAt
     isTrial = $isTrial
@@ -3172,8 +3174,8 @@ function Convert-QuotesToRows {
     if (Test-BuiltInBlacklistedStock -Symbol $symbol -Name ([string]$quote.name)) { continue }
     $rowUpdatedAt = (Get-Date).ToUniversalTime().ToString("o")
     $lastTradeTime = Get-QuoteTimestamp -Quote $quote -Payload $Payload
-    $bidVolume = [int](Convert-VolumeToLots $quote.bidSize)
-    $askVolume = [int](Convert-VolumeToLots $quote.askSize)
+    $bidVolume = [int](Get-Number $quote.bidSize)
+    $askVolume = [int](Get-Number $quote.askSize)
     $cumulativeBidVolume = Get-NullableNumber @(
       $quote.cumulativeBidVolume,
       $quote.cumulative_bid_volume,
@@ -3232,7 +3234,7 @@ function Convert-QuotesToRows {
       bid1_price = $bidPrice
       ask1_price = $askPrice
       change_percent = Get-Number $quote.percent
-      total_volume = [int64](Convert-VolumeToLots $quote.tradeVolume)
+      total_volume = [int64](Get-Number $quote.tradeVolume)
       trade_value = [int64](Get-Number $quote.tradeValue)
       bid_volume = $bidVolume
       ask_volume = $askVolume
@@ -3275,8 +3277,8 @@ function Convert-QuotesToPreopenRows {
     if ($trialPrice -le 0) { $trialPrice = Get-Number $quote.close }
     $bidPrice = Get-Number $quote.bidPrice
     $askPrice = Get-Number $quote.askPrice
-    $bidVolume = [int](Convert-VolumeToLots $quote.bidSize)
-    $askVolume = [int](Convert-VolumeToLots $quote.askSize)
+    $bidVolume = [int](Get-Number $quote.bidSize)
+    $askVolume = [int](Get-Number $quote.askSize)
     $quoteName = [string]$quote.name
     if ([string]::IsNullOrWhiteSpace($quoteName)) { $quoteName = $symbol }
 

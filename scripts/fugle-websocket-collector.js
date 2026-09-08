@@ -87,6 +87,10 @@ const RATE_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-rate-state.js
 const UNSUPPORTED_STATE_FILE = path.join(STATE_DIR, "fugle-rest-collector-unsupported-symbols.json");
 const DAYTRADE_PRIORITY_SYMBOLS_CONTRACT_FILE = "fugle-daytrade-ws-priority-symbols.json";
 const PRIORITY_SYMBOLS_FILE = process.env.FUGLE_WS_PRIORITY_SYMBOLS_FILE || path.join(RUNTIME_DIR, "cache", "intraday", COLLECTOR_ROLE === "daytrade" ? DAYTRADE_PRIORITY_SYMBOLS_CONTRACT_FILE : "fugle-ws-priority-symbols.json");
+const SIDE_VOLUME_CONTRACT_PROBE_SYMBOLS = [...new Set(String(process.env.FUGLE_SIDE_VOLUME_CONTRACT_PROBE_SYMBOLS || "3030")
+  .split(",")
+  .map((value) => String(value || "").replace(/\D/g, "").slice(0, 4))
+  .filter((value) => /^\d{4}$/.test(value)))];
 const ADAPTIVE_INITIAL_RPM = Math.max(10, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_INITIAL_RPM || 60));
 const ADAPTIVE_MIN_RPM = Math.max(5, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MIN_RPM || 20));
 const ADAPTIVE_MAX_RPM = Math.max(ADAPTIVE_MIN_RPM, Number(process.env.FUGLE_COLLECTOR_ADAPTIVE_MAX_RPM || 180));
@@ -772,8 +776,14 @@ function normalizeQuote(payload, requestedCode) {
   const bid = Array.isArray(payload?.bids) ? payload.bids[0] : null;
   const ask = Array.isArray(payload?.asks) ? payload.asks[0] : null;
   const updatedAt = payload?.lastUpdated || nowIso();
-  const bidCum = volumeToLots(payload?.total?.tradeVolumeAtBid);
-  const askCum = volumeToLots(payload?.total?.tradeVolumeAtAsk);
+  // Fugle regular-board stock quote volumes are already expressed in lots.
+  // Do not apply the legacy shares-to-lots magnitude heuristic here.
+  const bidCum = payload?.total?.tradeVolumeAtBid === null || payload?.total?.tradeVolumeAtBid === undefined
+    ? null
+    : cleanNumber(payload.total.tradeVolumeAtBid);
+  const askCum = payload?.total?.tradeVolumeAtAsk === null || payload?.total?.tradeVolumeAtAsk === undefined
+    ? null
+    : cleanNumber(payload.total.tradeVolumeAtAsk);
   return {
     code,
     name: payload?.name || code,
@@ -785,15 +795,15 @@ function normalizeQuote(payload, requestedCode) {
     high: cleanNumber(payload?.highPrice || close),
     low: cleanNumber(payload?.lowPrice || close),
     prevClose,
-    tradeVolume: volumeToLots(payload?.total?.tradeVolume || payload?.tradeVolume || payload?.volume),
+    tradeVolume: cleanNumber(payload?.total?.tradeVolume || payload?.tradeVolume || payload?.volume),
     tradeValue: cleanNumber(payload?.total?.tradeValue),
     bidPrice: cleanNumber(bid?.price),
-    bidSize: volumeToLots(bid?.size),
+    bidSize: cleanNumber(bid?.size),
     askPrice: cleanNumber(ask?.price),
-    askSize: volumeToLots(ask?.size),
-    cumulativeBidVolume: bidCum || null,
-    cumulativeAskVolume: askCum || null,
-    cumulativeBidAskVolume: bidCum || askCum ? bidCum + askCum : null,
+    askSize: cleanNumber(ask?.size),
+    cumulativeBidVolume: bidCum,
+    cumulativeAskVolume: askCum,
+    cumulativeBidAskVolume: bidCum !== null && askCum !== null ? bidCum + askCum : null,
     market: payload?.market || payload?.exchange || "",
     time: updatedAt,
     quoteTime: updatedAt,
@@ -1210,7 +1220,7 @@ function selectStreamingSymbols(rotationCursor = 0) {
   if (aggregateRadarChannel && taipeiMinute < 525) {
     const seen = new Set();
     const selected = [];
-    for (const value of [...priority.symbols, ...allSymbols]) {
+    for (const value of [...SIDE_VOLUME_CONTRACT_PROBE_SYMBOLS, ...priority.symbols, ...allSymbols]) {
       const symbol = normalizeCode(value);
       if (/^\d{4}$/.test(symbol) && !seen.has(symbol)) {
         seen.add(symbol);
@@ -1230,6 +1240,7 @@ function selectStreamingSymbols(rotationCursor = 0) {
       rotationUniverse: allSymbols.length, rotationWindow: selected.length,
       totalSubscriptionLimit: STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
       candleCoverageTarget: 0,
+      sideVolumeContractProbeSymbols: SIDE_VOLUME_CONTRACT_PROBE_SYMBOLS,
       subscriptionPlan: "preopen_0600_0844_full_market_aggregate_radar",
     };
   }
@@ -1257,6 +1268,7 @@ function selectStreamingSymbols(rotationCursor = 0) {
       prioritySymbols.push(symbol);
     }
   };
+  for (const code of SIDE_VOLUME_CONTRACT_PROBE_SYMBOLS) addPriority(code);
   for (const code of priority.symbols) addPriority(code);
   const rotatingSeen = new Set(prioritySymbols);
   for (const code of allSymbols) {
@@ -1304,6 +1316,7 @@ function selectStreamingSymbols(rotationCursor = 0) {
     rotationWindow,
     totalSubscriptionLimit: STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
     candleCoverageTarget: candleRadarSymbols.length,
+    sideVolumeContractProbeSymbols: SIDE_VOLUME_CONTRACT_PROBE_SYMBOLS,
     subscriptionPlan: "formal_1m_1000_plus_trade_radar_plus_aggregate_priority",
   };
 }
@@ -1509,6 +1522,7 @@ async function runStreamingCollector() {
         quoteRadarChannel: selection.quoteRadarChannel,
         aggregateRadarSymbols: selection.aggregateRadarSymbols.length,
         aggregateRadarChannel: selection.aggregateRadarChannel,
+        sideVolumeContractProbeSymbols: selection.sideVolumeContractProbeSymbols,
         candleSubscribedSymbols: selection.formalSymbols.length + selection.candleRadarSymbols.length,
         tradeSubscribedSymbols: selection.formalSymbols.length + selection.quoteRadarSymbols.length,
         aggregateSubscribedSymbols: selection.formalSymbols.length + selection.aggregateRadarSymbols.length,
