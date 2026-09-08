@@ -199,12 +199,30 @@ function sentEventsFromState(tradeDate) {
     return event ? [event] : [];
   });
 }
+function completeCanonicalWaterReceipt(value, tradeDate) {
+  return value && typeof value === "object"
+    && value.contract === "daytrade_canonical_water_reader_v1"
+    && value.status === "complete"
+    && value.complete === true
+    && String(value.trade_date || "") === tradeDate
+    && !value.first_blocker
+    && Array.isArray(value.failed_checks)
+    && value.failed_checks.length === 0;
+}
 function writeReceiptWithHistory(receipt) {
   const file = receiptPath(receipt.trade_date);
   const previous = readJson(file, {});
   const previousSent = previous?.trade_date === receipt.trade_date ? previous.sent_events : [];
   const stateSent = sentEventsFromState(receipt.trade_date);
   const attemptSentCount = Array.isArray(receipt.sent_events) ? receipt.sent_events.length : 0;
+  const currentCompleteCanonicalWater = completeCanonicalWaterReceipt(receipt.canonical_water, receipt.trade_date)
+    ? receipt.canonical_water
+    : null;
+  const previousCompleteCanonicalWater = previous?.trade_date === receipt.trade_date
+    ? [previous?.last_complete_canonical_water, previous?.canonical_water]
+      .find((value) => completeCanonicalWaterReceipt(value, receipt.trade_date)) || null
+    : null;
+  receipt.last_complete_canonical_water = currentCompleteCanonicalWater || previousCompleteCanonicalWater;
   receipt.sent_events = uniqueEvents([...(Array.isArray(previousSent) ? previousSent : []), ...stateSent, ...(receipt.sent_events || [])], receipt.trade_date);
   receipt.sent_event_count = receipt.sent_events.length;
   receipt.last_attempt = {

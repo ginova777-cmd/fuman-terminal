@@ -356,7 +356,13 @@ const runnerReceipt = readJson(runnerReceiptFile);
 const industryFastInject = readJson(industryFastInjectFile);
 const motherPool = readJson(motherPoolFile);
 const receiptSentEvents = Array.isArray(receipt?.sent_events) ? receipt.sent_events : [];
-const canonicalWaterReceipt = receipt?.canonical_water && typeof receipt.canonical_water === "object" ? receipt.canonical_water : null;
+const currentCanonicalWaterReceipt = receipt?.canonical_water && typeof receipt.canonical_water === "object" ? receipt.canonical_water : null;
+const lastCompleteCanonicalWaterReceipt = receipt?.last_complete_canonical_water && typeof receipt.last_complete_canonical_water === "object"
+  ? receipt.last_complete_canonical_water
+  : null;
+const canonicalWaterReceipt = currentCanonicalWaterReceipt?.status === "complete" && currentCanonicalWaterReceipt?.complete === true
+  ? currentCanonicalWaterReceipt
+  : (lastCompleteCanonicalWaterReceipt || currentCanonicalWaterReceipt);
 const receiptEventKeys = receiptSentEvents.map((event) => String(event?.event_key || ""));
 const expectedAlertScope = "daytrade_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage_and_industry_heatmap";
 const outboxEvents = Array.isArray(outbox?.events) ? outbox.events : [];
@@ -453,11 +459,22 @@ checks.runtime_industry_fast_inject_mother_pool_readback = !industryFastInject |
     && Array.isArray(poolRow?.source_flags) && poolRow.source_flags.includes("industry_signal_fast_inject");
 });
 if (requireToday) {
+  const offSessionCloseoutComplete = taipeiMinutesFromIso() > 750
+    && receipt?.first_blocker === "outside_trading_window"
+    && receipt?.ok === true
+    && receipt?.complete === true
+    && receipt?.status === "complete"
+    && runnerReceipt?.ok === true
+    && runnerReceipt?.complete === true
+    && runnerReceipt?.status === "complete"
+    && Number(runnerReceipt?.exit_code) === 0;
   checks.runtime_today_outbox_present = Boolean(outbox) && String(outbox?.trade_date || "") === taipeiDate();
   checks.runtime_today_receipt_present = Boolean(receipt) && String(receipt?.trade_date || "") === taipeiDate();
   checks.runtime_today_runner_receipt_present = Boolean(runnerReceipt) && String(runnerReceipt?.trade_date || "") === taipeiDate();
-  checks.runtime_today_canonical_water_receipt_present = Boolean(canonicalWaterReceipt)
-    && String(canonicalWaterReceipt?.trade_date || "") === taipeiDate();
+  checks.runtime_today_canonical_water_receipt_present = (Boolean(canonicalWaterReceipt)
+    && String(canonicalWaterReceipt?.trade_date || "") === taipeiDate()) || offSessionCloseoutComplete;
+  checks.runtime_today_canonical_water_or_offsession_closeout = (Boolean(canonicalWaterReceipt)
+    && String(canonicalWaterReceipt?.trade_date || "") === taipeiDate()) || offSessionCloseoutComplete;
   checks.runtime_today_runner_receipt_complete = !runnerReceipt || (
     runnerReceipt?.contract === "daytrade_intraday_burst_telegram_runner_v1"
     && runnerReceipt?.complete === true

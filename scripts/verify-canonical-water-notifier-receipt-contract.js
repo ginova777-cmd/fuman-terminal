@@ -95,6 +95,9 @@ async function main() {
       && outsideResult.status === "complete"
       && outsideResult.first_blocker === "outside_trading_window"
       && outsideSaved?.canonical_water === undefined
+      && outsideSaved?.last_complete_canonical_water?.contract === "daytrade_canonical_water_reader_v1"
+      && outsideSaved?.last_complete_canonical_water?.trade_date === tradeDate
+      && outsideSaved?.last_complete_canonical_water?.complete === true
       && outsideSaved?.last_attempt?.sent_events === 0,
   };
   const failedChecks = Object.entries(checks).filter(([, value]) => value !== true).map(([name]) => name);
