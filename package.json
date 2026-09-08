@@ -440,7 +440,8 @@
     "verify:active-strategy-single-run-authority": "node scripts/verify-active-strategy-single-run-authority.js",
     "verify:strategy3-v2-readiness-guard-contract": "node --use-system-ca scripts/verify-strategy3-v2-readiness-guard-contract.js",
     "verify:strategy2-v3-master": "node scripts/verify-strategy2-v3-master.js",
-    "verify:daytrade-futopt-v5-release": "node scripts/verify-daytrade-futopt-v5-release-readonly.js"
+    "verify:daytrade-futopt-v5-release": "node scripts/verify-daytrade-futopt-v5-release-readonly.js",
+    "verify:canonical-reader": "node scripts/verify-canonical-reader.js"
   },
   "engines": {
     "node": "24.x"
