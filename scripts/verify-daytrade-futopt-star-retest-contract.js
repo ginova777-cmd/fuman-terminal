@@ -35,7 +35,8 @@ const checks = {
   universe_live_mapping_fallback: sql.includes("live_mapping as")
     && sql.includes("fugle_daytrade_futopt_quotes_live")
     && sql.includes("lm.underlying_symbol"),
-  universe_stock_master_name_fallback: sql.includes("left join lateral")
+  universe_stock_master_name_fallback: sql.includes("stock_mapping as")
+    && sql.includes("left join stock_mapping")
     && sql.includes("public.stock_tickers")
     && sql.includes("sm.symbol"),
   four_natural_slots_required: evidenceVerifier.includes('["0845", "0850", "0855", "0859"]')

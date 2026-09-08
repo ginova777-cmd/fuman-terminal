@@ -25,11 +25,29 @@ $settings = New-ScheduledTaskSettingsSet `
 $principal = New-ScheduledTaskPrincipal -UserId $UserId -LogonType S4U -RunLevel Highest
 
 foreach ($definition in $definitions) {
-  $taskName = "Fuman Daytrade Futopt Preopen Evidence $($definition.Slot)"
-  $arguments = "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$runner`" -Slot $($definition.Slot) -RuntimeDir `"$RuntimeRoot`" -TerminalDir `"$ProjectRoot`""
+  # Copy the values into scalars before passing them to ScheduledTasks cmdlets.
+  # Member expressions used directly as command arguments can be rebound by
+  # PowerShell's argument-mode parser and previously made later slots inherit
+  # the 08:45 trigger.
+  [string]$slot = $definition["Slot"]
+  [string]$at = $definition["At"]
+  $taskName = "Fuman Daytrade Futopt Preopen Evidence $slot"
+  $arguments = "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$runner`" -Slot $slot -RuntimeDir `"$RuntimeRoot`" -TerminalDir `"$ProjectRoot`""
   $action = New-ScheduledTaskAction -Execute $pwsh -Argument $arguments -WorkingDirectory $ProjectRoot
-  $trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At $definition.At
-  Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "Canonical STAR natural slot $($definition.At): runner -> DB readback -> verifier -> receipt; no 09:00 data and no formal order." -Force -ErrorAction Stop | Out-Null
+  $trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At $at
+  Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "Canonical STAR natural slot ${at}: runner -> DB readback -> verifier -> receipt; no 09:00 data and no formal order." -Force -ErrorAction Stop | Out-Null
+}
+
+# New tasks registered by an elevated process can inherit an administrator-only
+# task security descriptor. Copy the established 08:45 descriptor through the
+# Task Scheduler API so ordinary canonical verifiers can enumerate every slot.
+$scheduleService = New-Object -ComObject "Schedule.Service"
+$scheduleService.Connect()
+$scheduleFolder = $scheduleService.GetFolder("\")
+$securityTemplate = $scheduleFolder.GetTask("Fuman Daytrade Futopt Preopen Evidence 0845").GetSecurityDescriptor(7)
+foreach ($slot in @("0850", "0855", "0859")) {
+  $registeredTask = $scheduleFolder.GetTask("Fuman Daytrade Futopt Preopen Evidence $slot")
+  $registeredTask.SetSecurityDescriptor($securityTemplate, 0)
 }
 
 # This direct minute-by-minute runner overlaps the four receipt-owning wrappers
@@ -40,15 +58,17 @@ if (Get-ScheduledTask -TaskName $legacyTaskName -ErrorAction SilentlyContinue) {
 }
 
 $installed = foreach ($definition in $definitions) {
-  $taskName = "Fuman Daytrade Futopt Preopen Evidence $($definition.Slot)"
+  [string]$slot = $definition["Slot"]
+  [string]$at = $definition["At"]
+  $taskName = "Fuman Daytrade Futopt Preopen Evidence $slot"
   $task = Get-ScheduledTask -TaskName $taskName -ErrorAction Stop
   $times = @($task.Triggers | ForEach-Object { ([datetime]$_.StartBoundary).ToString("HH:mm") })
   $actionText = "$($task.Actions[0].Execute) $($task.Actions[0].Arguments)"
   if ([string]$task.State -notin @("Ready", "Running", "Queued")) { throw "task not active: $taskName state=$($task.State)" }
   if ([string]$task.Principal.LogonType -ne "S4U") { throw "task LogonType drift: $taskName" }
-  if ($times -notcontains $definition.At) { throw "task trigger drift: $taskName expected=$($definition.At) actual=$($times -join ',')" }
+  if ($times -notcontains $at) { throw "task trigger drift: $taskName expected=$at actual=$($times -join ',')" }
   if ($actionText -notmatch [regex]::Escape($runner)) { throw "task runner drift: $taskName" }
-  [pscustomobject]@{ TaskName=$taskName; State=$task.State; At=$definition.At; LogonType=$task.Principal.LogonType; Runner=$runner }
+  [pscustomobject]@{ TaskName=$taskName; State=$task.State; At=$at; LogonType=$task.Principal.LogonType; Runner=$runner }
 }
 
 $installed

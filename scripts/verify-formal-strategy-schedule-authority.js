@@ -65,8 +65,9 @@ function triggerTimes(task) {
     .filter(Boolean))].sort();
 }
 for (const [name, marker, expectedTimes, options = {}] of expected) {
-  const task = tasks.find((row) => row.name === name) || tasks.find((row) => `${row?.execute || ""} ${row?.arguments || ""}`.toLowerCase().includes(marker.toLowerCase()));
-  if (task && task.name !== name) issues.push(`formal_task_name_drift:${name}:${task.name}`);
+  // Formal schedule identity is the exact task name.  Runner-marker fallback is
+  // ambiguous when several canonical slots intentionally share one wrapper.
+  const task = tasks.find((row) => row.name === name);
   const action = `${task?.execute || ""} ${task?.arguments || ""}`;
   const active = task && ["Ready", "Running", "Queued"].includes(String(task.state || ""));
   const actionRootOk = actionUsesFormalRoot(action) || (options.allowRuntimeAction === true && action.toLowerCase().includes("c:\\fuman-runtime\\ops"));

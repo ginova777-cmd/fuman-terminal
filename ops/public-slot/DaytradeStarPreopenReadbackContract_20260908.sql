@@ -18,6 +18,21 @@ with clock as (
   where nullif(q.future_symbol,'') is not null
     and nullif(q.underlying_symbol,'') ~ '^\d{4}$'
   order by upper(nullif(q.future_symbol,'')), q.updated_at desc nulls last
+), stock_mapping_source as (
+  select
+    s.symbol,
+    s.name,
+    regexp_replace(s.name, '[[:space:]]+', '', 'g') as normalized_name,
+    coalesce(s.is_suspended,false) as is_suspended,
+    s.updated_at
+  from public.stock_tickers s
+  where s.symbol ~ '^\d{4}$'
+), stock_mapping as (
+  select distinct on (normalized_name)
+    symbol, name, normalized_name
+  from stock_mapping_source
+  where normalized_name<>''
+  order by normalized_name, is_suspended asc, updated_at desc nulls last
 ), normalized as (
   select
     c.trade_date,
@@ -51,15 +66,10 @@ with clock as (
   from public.futopt_tickers t
   cross join clock c
   left join live_mapping lm on lm.future_symbol=upper(nullif(t.future_symbol,''))
-  left join lateral (
-    select s.symbol, s.name
-    from public.stock_tickers s
-    where s.symbol ~ '^\d{4}$'
-      and regexp_replace(s.name, '[[:space:]]+', '', 'g') =
-        regexp_replace(regexp_replace(regexp_replace(t.name, '^小型', ''), '期貨\d*$', ''), '[[:space:]]+', '', 'g')
-    order by coalesce(s.is_suspended,false) asc, s.updated_at desc nulls last
-    limit 1
-  ) sm on true
+  left join stock_mapping sm
+    on lm.underlying_symbol is null
+   and sm.normalized_name =
+      regexp_replace(regexp_replace(regexp_replace(t.name, '^小型', ''), '期貨\d*$', ''), '[[:space:]]+', '', 'g')
   where nullif(t.future_symbol,'') is not null
 ), stock_candidates as (
   select *
