@@ -214,6 +214,7 @@
     "verify:star-preopen-trial-history:live": "node --use-system-ca scripts/verify-star-preopen-trial-history-contract.js --live --write-receipt",
     "verify:star-preopen-trial-history:publish": "node --use-system-ca scripts/verify-star-preopen-trial-history-contract.js --live --write-receipt --publish-receipt",
     "verify:star-side-volume:cross-computer": "node --use-system-ca scripts/verify-star-side-volume-cross-computer-readback.js",
+    "install:daytrade-futopt-preopen-evidence-tasks": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-daytrade-futopt-preopen-evidence-tasks.ps1",
     "verify:star-future-retest-contract": "node scripts/verify-daytrade-futopt-star-retest-contract.js",
     "apply:star-future-retest-readback": "node --use-system-ca scripts/apply-daytrade-futopt-star-retest-readback.js",
     "verify:run-gates": "node --use-system-ca scripts/verify-run-id-complete-gates.js",

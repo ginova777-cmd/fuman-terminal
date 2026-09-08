@@ -17,9 +17,10 @@ const expected = [
   ["Fuman Morning Report 0830 Complete", "run-opening-report-0830-production-wrapper.ps1", ["08:30"]],
   ["Fuman Opening Limit Order Morning Readonly 0840", "ops\\Run-OpeningLimitOrderMorningReadonly.ps1", ["08:40"]],
   ["Fuman Daytrade Futopt Collector Recovery 0835", "Ensure-DaytradeFutoptCollector0835.ps1", ["08:35"], { allowRuntimeAction: true }],
-  ["Fuman Daytrade Futopt Preopen Evidence 0845", "Run-DaytradeFutoptPreopenEvidence.ps1", ["08:45"], { allowRuntimeAction: true }],
-  ["Fuman Daytrade Futopt Preopen Evidence 0850", "Run-DaytradeFutoptPreopenEvidence.ps1", ["08:50"], { allowRuntimeAction: true }],
-  ["Fuman Daytrade Near-One Natural Source", "run-daytrade-near-one-source.js", ["08:45", "08:46", "08:47", "08:48", "08:49", "08:50", "08:51", "08:52", "08:53", "08:54", "08:55", "08:56", "08:57", "08:58", "08:59"], { requireS4U: true }],
+  ["Fuman Daytrade Futopt Preopen Evidence 0845", "ops\\Run-DaytradeFutoptPreopenEvidence.ps1", ["08:45"]],
+  ["Fuman Daytrade Futopt Preopen Evidence 0850", "ops\\Run-DaytradeFutoptPreopenEvidence.ps1", ["08:50"]],
+  ["Fuman Daytrade Futopt Preopen Evidence 0855", "ops\\Run-DaytradeFutoptPreopenEvidence.ps1", ["08:55"]],
+  ["Fuman Daytrade Futopt Preopen Evidence 0859", "ops\\Run-DaytradeFutoptPreopenEvidence.ps1", ["08:59"]],
   ["Fuman Strategy2 Unified 0845-1230", "ops\\run-strategy2-v3-unified.ps1", ["08:45"]],
   ["Fuman Mother Pool Telegram 0900-1230", "run-daytrade-intraday-burst-telegram.ps1", ["09:00"]],
   ["Fuman Strategy3 V2 Readiness Guard 1230", "run-strategy3-v2-readiness-guard.ps1", ["12:30"]],
@@ -96,7 +97,7 @@ for (const task of tasks) {
   if (/\bCB\b|warrant|權證/i.test(task.name || "")) issues.push(`retired_strategy_task_active:${task.name}`);
 }
 
-for (const name of ["Fuman Strategy2 V3 Water Gate 0845", "Fuman Strategy2 V2 Unattended", "Fuman Strategy2 V2 Recovery", "Fuman Opening Report 0830 Telegram", "Fuman Opening Report 0830 Line", "Fuman Opening Report 0830 LINE Bridge", "Fuman Opening Limit Order Morning Readonly 0845", "Fuman Opening Limit Order 0900 Readonly Verify"]) {
+for (const name of ["Fuman Daytrade Near-One Natural Source", "Fuman Strategy2 V3 Water Gate 0845", "Fuman Strategy2 V2 Unattended", "Fuman Strategy2 V2 Recovery", "Fuman Opening Report 0830 Telegram", "Fuman Opening Report 0830 Line", "Fuman Opening Report 0830 LINE Bridge", "Fuman Opening Limit Order Morning Readonly 0845", "Fuman Opening Limit Order 0900 Readonly Verify"]) {
   const task = tasks.find((row) => row.name === name && ["Ready", "Running", "Queued"].includes(String(row.state || "")));
   if (task) issues.push(`retired_formal_task_active:${name}`);
 }

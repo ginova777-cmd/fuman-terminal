@@ -3,7 +3,7 @@ const path = require("path");
 
 const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const REQUIRED_SLOTS = ["0845", "0850"];
+const REQUIRED_SLOTS = ["0845", "0850", "0855", "0859"];
 const TIMEOUT_MS = Math.max(3000, Number(process.env.DAYTRADE_SUPABASE_READ_TIMEOUT_MS || 10000));
 
 function readText(file) {
@@ -57,7 +57,7 @@ function unique(values) {
 function verifyFutoptTimestampParserGuard() {
   const scripts = [
     path.join(RUNTIME_DIR, "ops", "Ensure-DaytradeFutoptCollector0835.ps1"),
-    path.join(RUNTIME_DIR, "ops", "Run-DaytradeFutoptPreopenEvidence.ps1"),
+    path.join(__dirname, "..", "ops", "Run-DaytradeFutoptPreopenEvidence.ps1"),
   ];
   return scripts.map((file) => {
     const text = readText(file);
@@ -82,7 +82,7 @@ async function main() {
     contract: "daytrade_futopt_preopen_formal_evidence_v1",
     trade_date: tradeDate,
     checked_at: new Date().toISOString(),
-    evidence_window: "08:45-08:50 Asia/Taipei",
+    evidence_window: "08:45-08:59 Asia/Taipei",
     required_slots: REQUIRED_SLOTS,
     field_contract: {
       near_one: {

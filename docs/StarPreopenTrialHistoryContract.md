@@ -21,6 +21,8 @@ Fugle stock WebSocket trades + aggregates
   -> v_fugle_daytrade_star_verification_readback (anon read-only)
 ```
 
+個股期貨母體代號採單一 fail-closed fallback 順序：`futopt_tickers.underlying_symbol` → 同期貨合約最新 `fugle_daytrade_futopt_quotes_live.underlying_symbol` → `stock_tickers` 名稱映射。仍無法映射者只能列入 exclusion，不能被當成已掃描或靜默略過。
+
 ## 試撮事件
 
 - `aggregates.lastTrial.price` 是保存的試撮價。
@@ -63,6 +65,14 @@ STAR 關鍵 readback 時槽是：
 - `08:50`
 - `08:55`
 - `08:59`
+
+四個時槽各由同一版控 wrapper `ops/Run-DaytradeFutoptPreopenEvidence.ps1` 擁有一個 S4U 工作排程與獨立 receipt。安裝入口是：
+
+```powershell
+npm run install:daytrade-futopt-preopen-evidence-tasks
+```
+
+舊 `Fuman Daytrade Near-One Natural Source` 逐分鐘 direct runner 必須維持停用，避免和四個正式 wrapper 爭用同一把 producer lock。
 
 若未來要求完整逐分鐘 replay，必須由同一正式 runner 擴充自然 capture；不得啟用第二支競爭 Writer，也不得以 09:00 後行情、forward-fill 或合成 K 棒補值。
 
