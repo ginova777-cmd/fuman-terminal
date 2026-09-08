@@ -9,11 +9,49 @@ $tradeDate = $taipei.ToString("yyyy-MM-dd")
 $receiptFile = Join-Path $receiptDir ("daytrade-intraday-burst-telegram-runner-{0}.json" -f $taipei.ToString("yyyyMMdd"))
 $exitCode = 1
 $errorMessage = $null
+$notifierReceipt = $null
+$notifierReceiptVerified = $false
+$runnerStartedAt = [DateTimeOffset]::Parse(
+  $startedAt,
+  [Globalization.CultureInfo]::InvariantCulture,
+  [Globalization.DateTimeStyles]::RoundtripKind
+)
 
 try {
   $node = (Get-Command node.exe -ErrorAction Stop).Source
   & $node $notifier
   $exitCode = if ($null -eq $LASTEXITCODE) { 1 } else { [int]$LASTEXITCODE }
+  if ($exitCode -eq 0) {
+    $notifierReceiptFile = Join-Path $receiptDir ("daytrade-intraday-burst-telegram-{0}.json" -f $taipei.ToString("yyyyMMdd"))
+    if (-not (Test-Path -LiteralPath $notifierReceiptFile -PathType Leaf)) {
+      throw "notifier_receipt_missing: $notifierReceiptFile"
+    }
+    $notifierReceiptRaw = Get-Content -LiteralPath $notifierReceiptFile -Raw
+    $notifierReceipt = $notifierReceiptRaw | ConvertFrom-Json
+    $notifierStartedAtMatch = [regex]::Match($notifierReceiptRaw, '"started_at"\s*:\s*"(?<value>[^"]+)"')
+    if (-not $notifierStartedAtMatch.Success) {
+      throw "notifier_receipt_started_at_missing"
+    }
+    $notifierStartedAt = [DateTimeOffset]::Parse(
+      $notifierStartedAtMatch.Groups["value"].Value,
+      [Globalization.CultureInfo]::InvariantCulture,
+      [Globalization.DateTimeStyles]::RoundtripKind
+    )
+    $notifierReceiptVerified = (
+      [string]$notifierReceipt.contract -eq "daytrade_intraday_burst_telegram_v1" -and
+      [string]$notifierReceipt.trade_date -eq $tradeDate -and
+      [bool]$notifierReceipt.ok -eq $true -and
+      [bool]$notifierReceipt.complete -eq $true -and
+      [string]$notifierReceipt.status -eq "complete" -and
+      [string]::IsNullOrWhiteSpace([string]$notifierReceipt.first_blocker) -and
+      $notifierStartedAt -ge $runnerStartedAt
+    )
+    if (-not $notifierReceiptVerified) {
+      throw ("notifier_receipt_not_complete_or_stale: contract={0}; trade_date={1}; ok={2}; complete={3}; status={4}; first_blocker={5}; started_at={6}" -f
+        $notifierReceipt.contract, $notifierReceipt.trade_date, $notifierReceipt.ok, $notifierReceipt.complete,
+        $notifierReceipt.status, $notifierReceipt.first_blocker, $notifierReceipt.started_at)
+    }
+  }
 } catch {
   $errorMessage = $_.Exception.Message
   $exitCode = 1
@@ -22,9 +60,9 @@ try {
   $finishedAt = [DateTimeOffset]::UtcNow.ToString("o")
   $receipt = [ordered]@{
     contract = "daytrade_intraday_burst_telegram_runner_v1"
-    ok = ($exitCode -eq 0)
-    complete = $true
-    status = if ($exitCode -eq 0) { "complete" } else { "failed" }
+    ok = ($exitCode -eq 0 -and $notifierReceiptVerified)
+    complete = ($exitCode -eq 0 -and $notifierReceiptVerified)
+    status = if ($exitCode -eq 0 -and $notifierReceiptVerified) { "complete" } else { "failed" }
     trade_date = $tradeDate
     started_at = $startedAt
     finished_at = $finishedAt
@@ -33,6 +71,11 @@ try {
     working_directory = $root
     notifier_path = $notifier
     notifier_receipt_path = Join-Path $receiptDir ("daytrade-intraday-burst-telegram-{0}.json" -f $taipei.ToString("yyyyMMdd"))
+    notifier_receipt_verified = $notifierReceiptVerified
+    notifier_receipt_contract = if ($null -ne $notifierReceipt) { [string]$notifierReceipt.contract } else { $null }
+    notifier_receipt_status = if ($null -ne $notifierReceipt) { [string]$notifierReceipt.status } else { $null }
+    notifier_receipt_complete = if ($null -ne $notifierReceipt) { [bool]$notifierReceipt.complete } else { $false }
+    notifier_receipt_first_blocker = if ($null -ne $notifierReceipt) { [string]$notifierReceipt.first_blocker } else { $null }
     error = $errorMessage
   }
   $temporaryFile = "$receiptFile.tmp-$PID"

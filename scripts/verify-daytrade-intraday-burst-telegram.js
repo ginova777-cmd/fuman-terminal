@@ -6,6 +6,7 @@ const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || process.env.FUMAN_RUNTIME_ROOT || (process.platform === "win32" ? "C:\\fuman-runtime" : ROOT);
 const writerFile = path.join(ROOT, "scripts", "run-daytrade-source-writer.js");
 const notifierFile = path.join(ROOT, "scripts", "notify-daytrade-intraday-burst-telegram.js");
+const canonicalWaterReaderFile = path.join(ROOT, "lib", "daytrade-canonical-water-reader.js");
 const telegramFile = path.join(ROOT, "scripts", "telegram-push.js");
 const guardFile = path.join(ROOT, "scripts", "notification-guard.js");
 const runnerFile = path.join(ROOT, "run-daytrade-intraday-burst-telegram.ps1");
@@ -51,6 +52,7 @@ function argValue(name, fallback = "") {
 
 const writer = read(writerFile);
 const notifier = read(notifierFile);
+const canonicalWaterReader = read(canonicalWaterReaderFile);
 const telegram = read(telegramFile);
 const guard = read(guardFile);
 const runner = read(runnerFile);
@@ -73,6 +75,7 @@ const liveTask = requireLive
 const checks = {
   writer_readable: Boolean(writer),
   notifier_readable: Boolean(notifier),
+  canonical_water_reader_readable: Boolean(canonicalWaterReader),
   single_canonical_telegram_verifier: formalTelegramVerifierFiles.length === 1
     && formalTelegramVerifierFiles[0] === "verify-daytrade-intraday-burst-telegram.js",
   no_retired_verifier_reference: includesAll(packageSource, [
@@ -105,8 +108,64 @@ const checks = {
     "finished_at = $finishedAt",
     "exit_code = $exitCode",
     "notifier_receipt_path",
+    "notifier_receipt_verified = $notifierReceiptVerified",
+    "$notifierReceiptRaw = Get-Content -LiteralPath $notifierReceiptFile -Raw",
+    "[regex]::Match($notifierReceiptRaw",
+    "notifier_receipt_started_at_missing",
+    "[Globalization.DateTimeStyles]::RoundtripKind",
+    "$notifierStartedAt -ge $runnerStartedAt",
+    "notifier_receipt_not_complete_or_stale",
+    "complete = ($exitCode -eq 0 -and $notifierReceiptVerified)",
     "Move-Item -LiteralPath $temporaryFile -Destination $receiptFile -Force",
     "exit $exitCode",
+  ]),
+  canonical_water_reader_contract: includesAll(canonicalWaterReader, [
+    'SOURCE_NAME = "fugle_daytrade_source"',
+    'SOURCE_STATUS_TABLE = "source_status"',
+    'CANONICAL_GATE_VIEW = "v_fugle_daytrade_canonical_gate"',
+    'UNATTENDED_GATE_VIEW = "v_fugle_daytrade_unattended_gate_status"',
+    'MOTHER_POOL_VIEW = "v_fugle_daytrade_mother_pool"',
+    'QUOTE_TABLE = "fugle_daytrade_quotes_live"',
+    'INTRADAY_1M_STATUS_VIEW = "v_fugle_daytrade_intraday_1m_status"',
+    'INTRADAY_1M_RPC = "get_fugle_daytrade_intraday_1m_latest_n"',
+    'FIVE_MINUTE_VIEW = "v_fugle_intraday_5m_readback"',
+    'reader_policy: "supabase_read_only_no_writer_no_fugle_fallback"',
+    "mother_pool_capacity_is_hard_gate: false",
+    "priority_fresh_quote_coverage_120s < 0.95",
+    "quote_age_seconds > 90",
+    "canonical_water_mother_pool_empty",
+  ]),
+  canonical_water_reader_has_no_writer_authority: !canonicalWaterReader.includes("service_role")
+    && !canonicalWaterReader.includes("FUGLE_API_TOKEN")
+    && !canonicalWaterReader.includes("FUGLE_TOKEN")
+    && !canonicalWaterReader.includes("method: \"PATCH\"")
+    && !canonicalWaterReader.includes("method: \"DELETE\"")
+    && !canonicalWaterReader.includes("Prefer: resolution=merge-duplicates"),
+  canonical_water_field_mapping_contract: includesAll(canonicalWaterReader, [
+    "function normalizeMotherPoolRow",
+    "insideVolume",
+    "outsideVolume",
+    "outsideInsideRatio",
+    "sideVolumeAvailable",
+    "outsideVolumeGeInsideTimes2",
+    "outsideVolumeGtInsideTimes2",
+    "sourceFlags",
+    "industrySignalFastInjectIndustries",
+    "sectorStrengthScore",
+    "sectorMemberActiveCount",
+    "mother_pool_field_coverage",
+    "side_volume_data_gap_rows",
+  ]),
+  notifier_uses_canonical_water_before_send: includesAll(notifier, [
+    'require("../lib/daytrade-canonical-water-reader")',
+    "await readCanonicalDaytradeWater",
+    "receipt.canonical_water = canonicalWater.receipt",
+    "if (!canonicalWater.ok)",
+    'receipt.first_blocker = canonicalWater.firstBlocker || "canonical_water_data_gap"',
+    "outbox_canonical_run_id_mismatch",
+    "canonical_water_mother_pool_member",
+    "canonical_water_quote_fresh",
+    "canonical_water_intraday_1m_ready",
   ]),
   outbox_hooked_after_delta: includesAll(writer, [
     "const burstRows = priorityRows;",
@@ -297,6 +356,7 @@ const runnerReceipt = readJson(runnerReceiptFile);
 const industryFastInject = readJson(industryFastInjectFile);
 const motherPool = readJson(motherPoolFile);
 const receiptSentEvents = Array.isArray(receipt?.sent_events) ? receipt.sent_events : [];
+const canonicalWaterReceipt = receipt?.canonical_water && typeof receipt.canonical_water === "object" ? receipt.canonical_water : null;
 const receiptEventKeys = receiptSentEvents.map((event) => String(event?.event_key || ""));
 const expectedAlertScope = "daytrade_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage_and_industry_heatmap";
 const outboxEvents = Array.isArray(outbox?.events) ? outbox.events : [];
@@ -318,6 +378,35 @@ checks.runtime_receipt_canonical_fields = !receipt || receiptSentEvents.every((e
 );
 checks.runtime_receipt_event_keys_unique = !receipt || receiptEventKeys.length === new Set(receiptEventKeys).size;
 checks.runtime_receipt_count_matches = !receipt || Number(receipt?.sent_event_count) === receiptSentEvents.length;
+checks.runtime_canonical_water_receipt_contract = !canonicalWaterReceipt || (
+  canonicalWaterReceipt?.contract === "daytrade_canonical_water_reader_v1"
+  && canonicalWaterReceipt?.status === "complete"
+  && canonicalWaterReceipt?.complete === true
+  && String(canonicalWaterReceipt?.trade_date || "") === String(receipt?.trade_date || "")
+  && String(canonicalWaterReceipt?.canonical_run_id || "") === `fugle_daytrade_source:${taipeiDate().replace(/-/g, "")}:canonical`
+  && canonicalWaterReceipt?.source_name === "fugle_daytrade_source"
+  && canonicalWaterReceipt?.reader_policy === "supabase_read_only_no_writer_no_fugle_fallback"
+  && canonicalWaterReceipt?.credential_role === "anon_or_authenticated_reader"
+  && canonicalWaterReceipt?.writes_supabase === false
+  && canonicalWaterReceipt?.mother_pool_capacity_is_hard_gate === false
+  && Number(canonicalWaterReceipt?.mother_pool_read_rows) >= 1
+  && Number(canonicalWaterReceipt?.quote_fresh_coverage_120s) >= 0.95
+  && Array.isArray(canonicalWaterReceipt?.failed_checks)
+  && canonicalWaterReceipt.failed_checks.length === 0
+  && !canonicalWaterReceipt?.first_blocker
+  && canonicalWaterReceipt?.sources?.source_status === "source_status"
+  && canonicalWaterReceipt?.sources?.canonical_gate === "v_fugle_daytrade_canonical_gate"
+  && canonicalWaterReceipt?.sources?.unattended_gate === "v_fugle_daytrade_unattended_gate_status"
+  && canonicalWaterReceipt?.sources?.mother_pool === "v_fugle_daytrade_mother_pool"
+  && canonicalWaterReceipt?.sources?.quote === "fugle_daytrade_quotes_live"
+  && canonicalWaterReceipt?.sources?.intraday_1m_rpc === "get_fugle_daytrade_intraday_1m_latest_n"
+);
+checks.runtime_canonical_water_event_evidence = !canonicalWaterReceipt || !Array.isArray(canonicalWaterReceipt?.event_evidence)
+  || canonicalWaterReceipt.event_evidence.every((row) => row?.mother_pool_member === true
+    && row?.quote_trade_date_ok === true
+    && row?.quote_fresh === true
+    && row?.intraday_1m_trade_date_ok === true
+    && row?.intraday_1m_ready === true);
 const legacyMotherPoolHeatmap = outbox?.industry_heatmap_source === "fugle_formal_quote_mother_pool_heatmap";
 const fullMarketDomesticHeatmap = (
   outbox?.industry_heatmap_source === "taiwan_domestic_detailed_industry+twse_tpex_mops_parent+fugle_formal_quote_full_market"
@@ -367,6 +456,8 @@ if (requireToday) {
   checks.runtime_today_outbox_present = Boolean(outbox) && String(outbox?.trade_date || "") === taipeiDate();
   checks.runtime_today_receipt_present = Boolean(receipt) && String(receipt?.trade_date || "") === taipeiDate();
   checks.runtime_today_runner_receipt_present = Boolean(runnerReceipt) && String(runnerReceipt?.trade_date || "") === taipeiDate();
+  checks.runtime_today_canonical_water_receipt_present = Boolean(canonicalWaterReceipt)
+    && String(canonicalWaterReceipt?.trade_date || "") === taipeiDate();
   checks.runtime_today_runner_receipt_complete = !runnerReceipt || (
     runnerReceipt?.contract === "daytrade_intraday_burst_telegram_runner_v1"
     && runnerReceipt?.complete === true
@@ -440,6 +531,13 @@ const runtime = {
   receipt_event_keys_unique: checks.runtime_receipt_event_keys_unique,
   receipt_canonical_fields: checks.runtime_receipt_canonical_fields,
   receipt_last_attempt_sent_events: Number(receipt?.last_attempt?.sent_events || 0),
+  canonical_water_receipt_present: Boolean(canonicalWaterReceipt),
+  canonical_water_receipt_status: canonicalWaterReceipt?.status || null,
+  canonical_water_trade_date: canonicalWaterReceipt?.trade_date || null,
+  canonical_water_canonical_run_id: canonicalWaterReceipt?.canonical_run_id || null,
+  canonical_water_mother_pool_read_rows: Number.isFinite(Number(canonicalWaterReceipt?.mother_pool_read_rows)) ? Number(canonicalWaterReceipt.mother_pool_read_rows) : null,
+  canonical_water_quote_fresh_coverage_120s: Number.isFinite(Number(canonicalWaterReceipt?.quote_fresh_coverage_120s)) ? Number(canonicalWaterReceipt.quote_fresh_coverage_120s) : null,
+  canonical_water_failed_checks: canonicalWaterReceipt?.failed_checks || null,
   runner_receipt_path: runnerReceiptFile,
   runner_receipt_exists: Boolean(runnerReceipt),
   runner_receipt_status: runnerReceipt?.status || null,

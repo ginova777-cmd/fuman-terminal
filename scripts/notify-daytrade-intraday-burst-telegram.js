@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { statePath, runtimePath } = require("./runtime-paths");
 const { hasTelegramConfig, sendTelegramText } = require("./telegram-push");
+const { readCanonicalDaytradeWater, canonicalRunId } = require("../lib/daytrade-canonical-water-reader");
 
 const OUTBOX_FILE = statePath("daytrade-intraday-burst-telegram-outbox.json");
 const STATE_FILE = statePath("daytrade-intraday-burst-telegram-state.json");
@@ -224,6 +225,10 @@ function validEvent(event, tradeDate, nowMs) {
   const failures = [];
   const triggerType = String(event.trigger_type || "");
   if (String(event.trade_date || "") !== tradeDate) failures.push("trade_date_mismatch");
+  if (String(event.canonical_run_id || "") !== canonicalRunId(tradeDate)) failures.push("canonical_run_id_mismatch");
+  if (event.canonical_water_mother_pool_member !== true) failures.push("canonical_water_not_in_mother_pool");
+  if (event.canonical_water_quote_fresh !== true) failures.push("canonical_water_quote_not_fresh");
+  if (event.canonical_water_intraday_1m_ready !== true) failures.push("canonical_water_intraday_1m_not_ready");
   if (!/^\d{4}$/.test(String(event.symbol || ""))) failures.push("symbol_invalid");
   if (numberValue(event.price) < 50) failures.push("price_below_50");
   if (event.tradable_mother_pool !== true) failures.push("not_daytrade_mother_pool_eligible");
@@ -254,12 +259,50 @@ async function notifyFromOutbox(options = {}) {
   const nowMs = Date.now();
   const tradeDate = options.tradeDate || taipeiDate();
   const outbox = readJson(OUTBOX_FILE, {});
+  const events = Array.isArray(outbox.events) ? outbox.events : [];
   const receipt = {
     ok: false, complete: false, status: "running", contract: "daytrade_intraday_burst_telegram_v1", trade_date: tradeDate, checked_at: checkedAt, started_at: startedAt, finished_at: null,
+    strategy_name: "daytrade_intraday_burst_telegram",
+    strategy_contract: "daytrade_intraday_burst_telegram_v1",
+    run_id: canonicalRunId(tradeDate),
+    source_name: "fugle_daytrade_source",
+    writes_supabase: false,
+    event_candidate_source: "local_writer_outbox_after_supabase_canonical_revalidation",
     source: "fugle_formal_1m", alert_scope: "daytrade_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage_and_industry_heatmap",
     conditions: { price_breakout: "latest_1m_close >= prior_rolling60_high_close * 1.01", volume_burst: "latest_1m_volume >= prior_rolling60_average_volume * 2", min_rolling_samples: 60, technical_cross_any: ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"], five_minute_confirmation_required: true, five_minute_required_status: "CONFIRMED_STRONG_5M" },
+    source_status_at_run: null, canonical_gate_at_run: null, unattended_gate_at_run: null,
+    canonical_run_id: canonicalRunId(tradeDate), mother_pool_read_rows: 0,
+    requested_symbols: 0, evaluated_symbols: 0, matched_symbols: 0,
+    quote_source_table: "fugle_daytrade_quotes_live",
+    intraday_1m_source_table: "get_fugle_daytrade_intraday_1m_latest_n",
+    intraday_5m_source_view: "v_fugle_intraday_5m_readback",
+    latest_complete_5m_bar_end: null,
+    source_updated_at: null, latest_quote_time: null, latest_1m_time: null,
+    data_gap_count: 0, failed_checks: [],
     detected_events: 0, sent_events: [], skipped_events: [], first_blocker: null,
   };
+  const canonicalWater = options.canonicalWaterResult || await readCanonicalDaytradeWater({
+    tradeDate,
+    symbols: events.map((event) => event?.symbol),
+    barsPerSymbol: 61,
+  });
+  receipt.canonical_water = canonicalWater.receipt;
+  receipt.source_status_at_run = canonicalWater.receipt?.source_status_at_run || null;
+  receipt.canonical_gate_at_run = canonicalWater.receipt?.canonical_gate_at_run || null;
+  receipt.unattended_gate_at_run = canonicalWater.receipt?.unattended_gate_at_run || null;
+  receipt.canonical_run_id = canonicalWater.receipt?.canonical_run_id || canonicalRunId(tradeDate);
+  receipt.mother_pool_read_rows = numberValue(canonicalWater.receipt?.mother_pool_read_rows, 0);
+  receipt.requested_symbols = receipt.mother_pool_read_rows;
+  receipt.evaluated_symbols = events.length;
+  receipt.source_updated_at = canonicalWater.receipt?.source_status_at_run?.updated_at || null;
+  receipt.latest_quote_time = canonicalWater.receipt?.latest_quote_time || null;
+  receipt.latest_1m_time = canonicalWater.receipt?.latest_1m_time || null;
+  receipt.data_gap_count = numberValue(canonicalWater.receipt?.data_gap_count, 0);
+  receipt.failed_checks = Array.isArray(canonicalWater.failedChecks) ? canonicalWater.failedChecks : [];
+  if (!canonicalWater.ok) {
+    receipt.first_blocker = canonicalWater.firstBlocker || "canonical_water_data_gap";
+    writeReceiptWithHistory(receipt); return receipt;
+  }
   if (String(outbox.trade_date || "") !== tradeDate) {
     receipt.first_blocker = "outbox_trade_date_mismatch_or_missing";
     writeReceiptWithHistory(receipt); return receipt;
@@ -268,11 +311,16 @@ async function notifyFromOutbox(options = {}) {
     receipt.first_blocker = "outbox_scope_not_mother_pool_only";
     writeReceiptWithHistory(receipt); return receipt;
   }
+  if (String(outbox.canonical_run_id || outbox.run_id || "") !== receipt.canonical_run_id) {
+    receipt.first_blocker = "outbox_canonical_run_id_mismatch";
+    receipt.failed_checks = [receipt.first_blocker];
+    writeReceiptWithHistory(receipt); return receipt;
+  }
   if (String(outbox.industry_heatmap_status || "") !== "ready" || !Array.isArray(outbox.industry_heatmap) || outbox.industry_heatmap.length === 0) {
     receipt.first_blocker = "industry_heatmap_not_ready";
     writeReceiptWithHistory(receipt); return receipt;
   }
-  if (!isTradingWindow()) {
+  if (options.tradingWindowOverride !== true && !isTradingWindow()) {
     receipt.ok = true; receipt.first_blocker = "outside_trading_window";
     writeReceiptWithHistory(receipt); return receipt;
   }
@@ -282,15 +330,23 @@ async function notifyFromOutbox(options = {}) {
   }
   const state = readJson(STATE_FILE, { sent: {} });
   const sent = state && state.trade_date === tradeDate && state.sent && typeof state.sent === "object" ? state.sent : {};
-  const events = Array.isArray(outbox.events) ? outbox.events : [];
   receipt.detected_events = events.length;
   const fiveMinute = await readFiveMinuteConfirmations(events, tradeDate, nowMs);
   receipt.five_minute_confirmation = { status: fiveMinute.status, view: fiveMinute.view, receipt_view: fiveMinute.receipt_view, receipt_contract: fiveMinute.receipt_contract, run_id: fiveMinute.run_id, strategy_version: FIVE_MINUTE_STRATEGY_VERSION, calculation_version: FIVE_MINUTE_CALCULATION_VERSION, classification_contract: FIVE_MINUTE_CLASSIFICATION_CONTRACT, macd_parameters: { fast: 3, slow: 9, signal: 3 }, rows: fiveMinute.rows, confirmed_strong: fiveMinute.confirmed_strong, reason: fiveMinute.reason };
+  receipt.latest_complete_5m_bar_end = [...fiveMinute.bySymbol.values()].map((row) => String(row?.five_minute_bar_end || "")).filter(Boolean).sort().pop() || null;
   const oldBypass = process.env.FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM;
   process.env.FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM = "true";
   try {
     for (const rawEvent of events) {
-      const event = { ...rawEvent, ...(fiveMinute.bySymbol.get(String(rawEvent?.symbol || "")) || { five_minute_confirmation_status: "DATA_GAP_5M", five_minute_bar_end: "", five_minute_confirmation_signals: [] }) };
+      const canonicalEvidence = canonicalWater.evidenceBySymbol.get(String(rawEvent?.symbol || "")) || {};
+      const event = {
+        ...rawEvent,
+        canonical_run_id: receipt.canonical_run_id,
+        canonical_water_mother_pool_member: canonicalEvidence.mother_pool_member === true,
+        canonical_water_quote_fresh: canonicalEvidence.quote_fresh === true && canonicalEvidence.quote_trade_date_ok === true,
+        canonical_water_intraday_1m_ready: canonicalEvidence.intraday_1m_ready === true && canonicalEvidence.intraday_1m_trade_date_ok === true,
+        ...(fiveMinute.bySymbol.get(String(rawEvent?.symbol || "")) || { five_minute_confirmation_status: "DATA_GAP_5M", five_minute_bar_end: "", five_minute_confirmation_signals: [] }),
+      };
       const failures = validEvent(event, tradeDate, nowMs);
       const key = eventKey(event);
       const sentAt = Date.parse(sent[key]?.sent_at || "");
@@ -323,6 +379,7 @@ async function notifyFromOutbox(options = {}) {
     else process.env.FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM = oldBypass;
   }
   writeJson(STATE_FILE, { trade_date: tradeDate, updated_at: checkedAt, sent });
+  receipt.matched_symbols = receipt.sent_events.length;
   receipt.ok = true; writeReceiptWithHistory(receipt); return receipt;
 }
 if (require.main === module) {
