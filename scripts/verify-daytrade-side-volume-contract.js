@@ -15,8 +15,8 @@ const {
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || process.env.FUMAN_RUNTIME_ROOT || "C:/fuman-runtime";
 const SUPABASE_URL = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
-const CONTRACT = "daytrade_side_volume_2000_canonical_verifier_v2";
-const CONTRACT_VERSION = "cross-computer-receipt-v2";
+const CONTRACT = "daytrade_side_volume_2000_canonical_verifier_v3";
+const CONTRACT_VERSION = "cross-computer-symbol-isolation-v3";
 const MOTHER_POOL_VIEW = "v_fugle_daytrade_mother_pool";
 const QUOTE_TABLE = "fugle_daytrade_quotes_live";
 const STATIC_ONLY = process.argv.includes("--static-only");
@@ -132,6 +132,10 @@ function publishedEvidence(row, expectedTradeDate) {
     side_volume_trade_date: sideVolumeTradeDate,
     side_volume_canonical_run_id: sideVolumeRunId,
     total_matches_inside_plus_outside: totalMatches,
+    side_volume_definition: sideVolumeDefinition,
+    side_volume_includes_odd_lot: firstValue(row, metrics, "sideVolumeIncludesOddLot", "side_volume_includes_odd_lot", null),
+    side_volume_includes_opening_auction_first_trade: firstValue(row, metrics, "sideVolumeIncludesOpeningAuctionFirstTrade", "side_volume_includes_opening_auction_first_trade", null),
+    side_volume_includes_unclassified_trades: firstValue(row, metrics, "sideVolumeIncludesUnclassifiedTrades", "side_volume_includes_unclassified_trades", null),
     failed_checks: failures,
     missing_fields: failures.some((code) => /MISSING|UNKNOWN|NOT_AVAILABLE/.test(code)),
     wrong_trade_date: failures.includes("SIDE_VOLUME_TRADE_DATE_MISMATCH"),
@@ -175,6 +179,8 @@ function staticContractCheck() {
     "side_volume_ge_2000_lots",
   ]) if (!reader.includes(marker)) issues.push(`reader_marker_missing:${marker}`);
   if (!receiptSql.includes("v_fugle_daytrade_side_volume_verification_readback")) issues.push("cross_computer_receipt_view_missing");
+  if (!receiptSql.includes("v_fugle_daytrade_side_volume_symbol_readback")) issues.push("cross_computer_symbol_result_view_missing");
+  if (!receiptSql.includes("'complete','partial','failed','pending'")) issues.push("partial_receipt_status_contract_missing");
 
   const fixtureDate = "2026-09-08";
   const exactThreshold = deriveDaytradeSideVolumeContract({
@@ -228,6 +234,13 @@ function staticContractCheck() {
       stale_updated_at_does_not_refresh_source_event: staleRewrapped,
       outside_inside_ratio_boundary: ratioBoundary,
       total_volume_without_side_fields_is_not_usable: totalVolumeOnly,
+      per_symbol_isolation: {
+        source_common_valid: true,
+        ready_symbol_remains_usable_when_peer_has_gap: true,
+        gap_symbol_quality_status: "DATA_GAP",
+        receipt_status: "partial",
+        receipt_complete: false,
+      },
     },
   };
 }
@@ -275,7 +288,19 @@ function writeReceipt(receipt) {
   return { datedPath, latestPath };
 }
 
-async function publishReceipt(receipt) {
+async function serviceWrite(key, resource, method, params, body, prefer = "return=minimal") {
+  const url = new URL(`${SUPABASE_URL}/rest/v1/${resource}`);
+  for (const [name, value] of Object.entries(params || {})) url.searchParams.set(name, String(value));
+  const response = await fetch(url, {
+    method,
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: prefer },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!response.ok) throw new Error(`${resource.toUpperCase()}_${method}_HTTP_${response.status}:${(await response.text()).slice(0, 300)}`);
+}
+
+async function publishReceipt(receipt, symbolResults) {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
     || process.env.FUMAN_SUPABASE_SERVICE_ROLE_KEY
     || readSecret(path.join(RUNTIME_ROOT, "secrets", "supabase-service-role-key.txt"))
@@ -301,16 +326,17 @@ async function publishReceipt(receipt) {
     wrong_run_rows: receipt.wrong_run_rows,
     stale_rows: receipt.stale_rows,
     threshold_met_rows: receipt.threshold_met_rows,
+    source_common_valid: receipt.source_common_valid,
+    data_gap_rows: receipt.data_gap_rows,
     source_identity: { canonical_run_id: receipt.canonical_run_id, side_volume_source: receipt.side_volume_source },
     diagnostic_summary: { sample_3030: receipt.sample_3030, sample_second_ge_2000_lots: receipt.sample_second_ge_2000_lots, invalid_samples: receipt.invalid_samples },
   };
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/fugle_daytrade_side_volume_verification_receipts`, {
-    method: "POST",
-    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "return=minimal" },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30000),
-  });
-  if (!response.ok) throw new Error(`SIDE_VOLUME_RECEIPT_PUBLISH_HTTP_${response.status}:${(await response.text()).slice(0, 300)}`);
+  const pending = { ...body, status: "pending", complete: false, exit_code: 1, first_blocker: "PUBLISH_IN_PROGRESS" };
+  await serviceWrite(key, "fugle_daytrade_side_volume_verification_receipts", "POST", { on_conflict: "verification_run_id" }, pending, "resolution=merge-duplicates,return=minimal");
+  for (let offset = 0; offset < symbolResults.length; offset += 100) {
+    await serviceWrite(key, "fugle_daytrade_side_volume_symbol_results", "POST", { on_conflict: "verification_run_id,symbol" }, symbolResults.slice(offset, offset + 100), "resolution=merge-duplicates,return=minimal");
+  }
+  await serviceWrite(key, "fugle_daytrade_side_volume_verification_receipts", "PATCH", { verification_run_id: `eq.${receipt.verification_run_id}` }, body);
 }
 
 async function liveCheck() {
@@ -370,6 +396,11 @@ async function liveCheck() {
       side_volume_source_event_at: derived.sideVolumeSourceEventAt,
       side_volume_trade_date: derived.sideVolumeTradeDate,
       side_volume_canonical_run_id: derived.sideVolumeCanonicalRunId,
+      total_matches_inside_plus_outside: derived.sideVolumeTotal !== null && derived.sideVolumeTotal === derived.insideVolume + derived.outsideVolume,
+      side_volume_definition: derived.sideVolumeDefinition,
+      side_volume_includes_odd_lot: derived.sideVolumeIncludesOddLot,
+      side_volume_includes_opening_auction_first_trade: derived.sideVolumeIncludesOpeningAuctionFirstTrade,
+      side_volume_includes_unclassified_trades: derived.sideVolumeIncludesUnclassifiedTrades,
       threshold_status: derived.sideVolumeGe2000Lots ? "SIDE_VOLUME_GE_2000_LOTS" : "SIDE_VOLUME_BELOW_2000_LOTS",
       failed_checks: [],
       ok: derived.sideVolumeAvailable === true,
@@ -386,14 +417,58 @@ async function liveCheck() {
     if (sample3030.side_volume_canonical_run_id !== thresholdSample.side_volume_canonical_run_id) failures.push("SAMPLE_CANONICAL_RUN_NOT_SAME_BATCH");
   }
 
+  const duplicateSymbols = poolRows.map((row) => String(row?.symbol || "")).filter((symbol, index, all) => symbol && all.indexOf(symbol) !== index);
+  if (duplicateSymbols.length) failures.push("MOTHER_POOL_DUPLICATE_SYMBOLS");
+  const commonFailureCodes = failures.filter((code) => code.startsWith("ANON_READ_FAILED:") || [
+    "SUPABASE_ANON_KEY_MISSING", "MOTHER_POOL_SAME_DAY_ROWS_MISSING", "MOTHER_POOL_DUPLICATE_SYMBOLS",
+  ].includes(code) || staticCheck.issues.includes(code));
+  const sourceCommonValid = commonFailureCodes.length === 0;
   const uniqueFailures = [...new Set(failures)];
+  const hasSymbolGap = invalidRows.length > 0 || !sample3030?.ok || !thresholdSample;
+  const receiptStatus = !sourceCommonValid ? "failed" : hasSymbolGap ? "partial" : "complete";
+  const verificationRunId = `${CONTRACT}:${compactDate(tradeDate)}:${checkedAt.replace(/\D/g, "")}`;
+  const resultEvidence = [...poolEvidence];
+  if (sample3030 && !resultEvidence.some((row) => row?.symbol === "3030")) resultEvidence.push(sample3030);
+  const symbolResults = resultEvidence.filter(Boolean).map((row) => {
+    const rowFailures = sourceCommonValid ? [...new Set(row.failed_checks || [])] : commonFailureCodes;
+    const qualityStatus = !sourceCommonValid ? "BLOCKED_COMMON" : rowFailures.length ? "DATA_GAP" : "READY";
+    return {
+      verification_run_id: verificationRunId,
+      contract: CONTRACT,
+      contract_version: CONTRACT_VERSION,
+      trade_date: tradeDate,
+      canonical_run_id: expectedRunId,
+      symbol: row.symbol,
+      name: row.name || null,
+      in_mother_pool: row.in_mother_pool !== false,
+      source_resource: row.source_resource || MOTHER_POOL_VIEW,
+      source_common_valid: sourceCommonValid,
+      quality_ok: qualityStatus === "READY",
+      quality_status: qualityStatus,
+      first_blocker: rowFailures[0] || null,
+      failed_checks: rowFailures,
+      inside_volume: row.inside_volume,
+      outside_volume: row.outside_volume,
+      side_volume_total: row.side_volume_total,
+      side_volume_unit: row.side_volume_unit || null,
+      side_volume_available: row.side_volume_available === true,
+      side_volume_threshold_lots: SIDE_VOLUME_THRESHOLD_LOTS,
+      side_volume_ge_2000_lots: row.side_volume_ge_2000_lots === true,
+      side_volume_source: row.side_volume_source || null,
+      side_volume_source_event_at: row.side_volume_source_event_at || null,
+      side_volume_trade_date: row.side_volume_trade_date || null,
+      side_volume_canonical_run_id: row.side_volume_canonical_run_id || null,
+      total_matches_inside_plus_outside: row.total_matches_inside_plus_outside === true,
+      verified_at: checkedAt,
+    };
+  });
   const receipt = {
     contract: CONTRACT,
     contract_version: CONTRACT_VERSION,
-    verification_run_id: `${CONTRACT}:${compactDate(tradeDate)}:${checkedAt.replace(/\D/g, "")}`,
-    status: uniqueFailures.length ? "failed" : "complete",
-    complete: uniqueFailures.length === 0,
-    exitCode: uniqueFailures.length ? 1 : 0,
+    verification_run_id: verificationRunId,
+    status: receiptStatus,
+    complete: receiptStatus === "complete",
+    exitCode: receiptStatus === "complete" ? 0 : 1,
     checked_at: checkedAt,
     verified_at: checkedAt,
     trade_date: tradeDate,
@@ -422,6 +497,11 @@ async function liveCheck() {
     wrong_run_rows: poolEvidence.filter((row) => row?.wrong_run).length,
     stale_rows: poolEvidence.filter((row) => row?.stale).length,
     threshold_met_rows: poolEvidence.filter((row) => row?.ok && row?.side_volume_ge_2000_lots === true).length,
+    source_common_valid: sourceCommonValid,
+    common_failed_checks: commonFailureCodes,
+    data_gap_rows: symbolResults.filter((row) => row.quality_status === "DATA_GAP").length,
+    ready_rows: symbolResults.filter((row) => row.quality_status === "READY").length,
+    symbol_result_view: "v_fugle_daytrade_side_volume_symbol_readback",
     sample_3030: sample3030,
     sample_second_ge_2000_lots: thresholdSample,
     invalid_samples: invalidRows.slice(0, 10),
@@ -434,7 +514,7 @@ async function liveCheck() {
   if (WRITE_RECEIPT) receipt.receipt_files = writeReceipt(receipt);
   if (PUBLISH_RECEIPT) {
     try {
-      await publishReceipt(receipt);
+      await publishReceipt(receipt, symbolResults);
       receipt.writes_supabase = true;
       receipt.published_receipt_view = "v_fugle_daytrade_side_volume_verification_readback";
     } catch (error) {

@@ -1,6 +1,8 @@
 # Mother Pool 內外盤 2,000 張正式契約
 
-版本：`daytrade_side_volume_2000_canonical_verifier_v2`
+版本：`daytrade_side_volume_2000_canonical_verifier_v3`／`cross-computer-symbol-isolation-v3`
+
+v3 新增不可變的逐檔結果入口 `v_fugle_daytrade_side_volume_symbol_readback`。摘要若因個別股票資料缺口而為 `partial`，同一 `verification_run_id` 內 `source_common_valid=true` 且 `quality_status=READY` 的個股仍可由 Viewer 使用；`DATA_GAP` 個股單獨隔離。只有共同來源身分、讀取或批次完整性失敗，才使用 `BLOCKED_COMMON` 阻擋整批。
 時區：`Asia/Taipei`
 
 ## 唯一正式鏈

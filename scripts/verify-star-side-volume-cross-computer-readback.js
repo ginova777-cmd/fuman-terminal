@@ -25,6 +25,20 @@ async function readLatest(view, canonicalRunId) {
   throw lastError;
 }
 
+async function readBoundRows(view, verificationRunId) {
+  const rows = [];
+  for (let offset = 0; ; offset += 500) {
+    const url = new URL(`${URL_ROOT}/rest/v1/${view}`);
+    for (const [name, value] of Object.entries({ select: "*", verification_run_id: `eq.${verificationRunId}`, order: "symbol.asc", limit: "500", offset: String(offset) })) url.searchParams.set(name, value);
+    const response = await fetch(url, { headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, Accept: "application/json" }, signal: AbortSignal.timeout(20000) });
+    const text = await response.text();
+    if (!response.ok) throw new Error(`${view}_HTTP_${response.status}:${text.slice(0, 240)}`);
+    const page = JSON.parse(text) || [];
+    rows.push(...page);
+    if (page.length < 500) return rows;
+  }
+}
+
 async function main() {
   if (!KEY) throw new Error("SUPABASE_ANON_KEY_MISSING");
   const targets = [
@@ -38,12 +52,23 @@ async function main() {
       const result = await readLatest(view, runId);
       results[name] = { view, expected_canonical_run_id: runId, ...result };
       if (!result.row) failed.push(`${name.toUpperCase()}_CANONICAL_RECEIPT_MISSING`);
-      else if (result.row.complete !== true || result.row.status !== "complete" || Number(result.row.exit_code) !== 0) failed.push(`${name.toUpperCase()}_CANONICAL_RECEIPT_INCOMPLETE:${result.row.first_blocker || "UNKNOWN"}`);
+      else {
+        if (name === "side_volume" && result.row.verification_run_id) {
+          const symbolRows = await readBoundRows("v_fugle_daytrade_side_volume_symbol_readback", result.row.verification_run_id);
+          results[name].symbol_result_view = "v_fugle_daytrade_side_volume_symbol_readback";
+          results[name].symbol_rows = symbolRows.length;
+          results[name].ready_rows = symbolRows.filter((row) => row.source_common_valid === true && row.quality_status === "READY").length;
+          results[name].data_gap_rows = symbolRows.filter((row) => row.quality_status === "DATA_GAP").length;
+          results[name].blocked_common_rows = symbolRows.filter((row) => row.quality_status === "BLOCKED_COMMON").length;
+          results[name].ready_rows_remain_usable = result.row.source_common_valid === true && results[name].ready_rows > 0;
+        }
+        if (result.row.complete !== true || result.row.status !== "complete" || Number(result.row.exit_code) !== 0) failed.push(`${name.toUpperCase()}_CANONICAL_RECEIPT_INCOMPLETE:${result.row.first_blocker || "UNKNOWN"}`);
+      }
     } catch (error) { results[name] = { view, expected_canonical_run_id: runId, error: error.message }; failed.push(`${name.toUpperCase()}_ANON_READ_FAILED`); }
   }
-  const output = { contract: "star_side_volume_cross_computer_readback_v1", trade_date: tradeDate, credential_role: "anon_read_only", bounded_retry_max: 3, batch_mixing_allowed: false, writes_supabase: false, status: failed.length ? "failed" : "complete", complete: failed.length === 0, exitCode: failed.length ? 1 : 0, results, failed_checks: failed, first_blocker: failed[0] || null, checked_at: new Date().toISOString() };
+  const output = { contract: "star_side_volume_cross_computer_readback_v2", trade_date: tradeDate, credential_role: "anon_read_only", bounded_retry_max: 3, batch_mixing_allowed: false, per_symbol_gap_isolation: true, writes_supabase: false, status: failed.length ? "failed" : "complete", complete: failed.length === 0, exitCode: failed.length ? 1 : 0, results, failed_checks: failed, first_blocker: failed[0] || null, checked_at: new Date().toISOString() };
   console.log(JSON.stringify(output, null, 2));
   if (!output.complete) process.exitCode = 1;
 }
 
-main().catch((error) => { console.error(JSON.stringify({ contract: "star_side_volume_cross_computer_readback_v1", status: "failed", complete: false, exitCode: 1, failed_checks: [error.message], first_blocker: error.message }, null, 2)); process.exitCode = 1; });
+main().catch((error) => { console.error(JSON.stringify({ contract: "star_side_volume_cross_computer_readback_v2", status: "failed", complete: false, exitCode: 1, failed_checks: [error.message], first_blocker: error.message }, null, 2)); process.exitCode = 1; });
