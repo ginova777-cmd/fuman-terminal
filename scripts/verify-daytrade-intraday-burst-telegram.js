@@ -59,6 +59,7 @@ const runner = read(runnerFile);
 const installer = read(installerFile);
 const packageSource = read(packageFile);
 const masterControl = read(masterControlFile);
+const quoteReadBlock = canonicalWaterReader.match(/quoteRows\.push\(\.\.\.await readRows\(key, QUOTE_TABLE,[\s\S]*?\}, \{ timeout: 15000 \}\)\);/)?.[0] || "";
 const formalTelegramVerifierFiles = (() => {
   try {
     return fs.readdirSync(path.join(ROOT, "scripts"))
@@ -156,6 +157,18 @@ const checks = {
     "mother_pool_field_coverage",
     "side_volume_data_gap_rows",
   ]),
+  quote_table_trade_date_derivation_contract: includesAll(canonicalWaterReader, [
+    "function quoteTimestamp",
+    "function quoteTradeDate",
+    "function normalizeQuoteRow",
+    'quote_trade_date_policy: "derive_asia_taipei_from_quote_seen_at_last_trade_time_updated_at"',
+    "row?.quote_seen_at",
+    "row?.last_trade_time",
+    "canonical_quote_time",
+    "normalizedQuoteRows",
+  ]) && quoteReadBlock.includes("last_trade_time")
+    && !quoteReadBlock.includes(",trade_date\"")
+    && !quoteReadBlock.includes("trade_date:"),
   notifier_uses_canonical_water_before_send: includesAll(notifier, [
     'require("../lib/daytrade-canonical-water-reader")',
     "await readCanonicalDaytradeWater",
