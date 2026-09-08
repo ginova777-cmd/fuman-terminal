@@ -4,6 +4,8 @@
 
 Each strategy supplies a policy and its authoritative receipt. The reader resolves the Taipei trading session, validates the daily canonical and verification identities, receipt/contract/field versions, freshness, coverage, and fallback disclosure. It then requires desktop, mobile, `/88`, LINE, and Telegram to match the same immutable batch identity and result count.
 
+Canonical completion is fail-closed: transport or process `ok=true` is not completion evidence. A publishable receipt must explicitly carry both `status=complete` and `complete=true`, plus its canonical and verification identities.
+
 ```js
 const { buildPublicationEnvelope, readCanonicalBatch } = require("./lib/canonical-reader");
 
