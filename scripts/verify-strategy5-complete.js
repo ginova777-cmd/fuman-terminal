@@ -10,9 +10,20 @@ const read = f => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch
 const sourceFile = path.join(runtime, "data", "scan-receipts", "chip-source-sync.json");
 const scanFile = path.join(runtime, "data", "scan-receipts", "strategy5.json");
 const source = read(sourceFile), scan = read(scanFile);
+const readText = file => { try { return fs.readFileSync(file, "utf8"); } catch { return ""; } };
+const runnerSource = readText(path.join(root, "run-strategy5.ps1"));
+const publisherSource = readText(path.join(root, "scripts", "publish-strategy5-scorecard-source-report.js"));
+const watchdogSource = readText(path.join(root, "run-strategy5-watchdog.ps1"));
+const protectedReaderSource = readText(path.join(root, "scripts", "read-protected-production-api.js"));
 const auditFile = scan?.runId ? path.join(runtime, "outputs", "post-scan-tri-surface", "strategy5", scan.runId, "terminal-resource-chain-audit.json") : "";
 const audit = auditFile ? read(auditFile) : null;
 const issues = [];
+if (!runnerSource.includes('"--expected-run-id=$([string]$verifiedPayload.runId)"')
+  || !runnerSource.includes('"--expected-date=$strategy5ExpectedDate"')) issues.push("strategy5_scorecard_publisher_args_missing");
+if (!publisherSource.includes('argValue("expected-run-id"')
+  || !publisherSource.includes('argValue("expected-date"')) issues.push("strategy5_scorecard_publisher_arg_contract_missing");
+if (!watchdogSource.includes('"--summary-fields=runId,complete,count,updatedAt"')
+  || !protectedReaderSource.includes('arg("summary-fields")')) issues.push("strategy5_watchdog_compact_json_contract_missing");
 for (const retired of ["run-strategy5-battle-verify.ps1", "scripts/verify-strategy5-battle-state.js", "scripts/verify-strategy5-alert-path.js"]) {
   if (fs.existsSync(path.join(root, retired))) issues.push(`retired_verifier_returned:${retired}`);
 }

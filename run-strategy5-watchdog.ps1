@@ -118,7 +118,7 @@ function Get-Strategy5Payload {
   try {
     $helper = Join-Path $PSScriptRoot "scripts\read-protected-production-api.js"
     $endpoint = "/api/strategy5-latest?canvas=1&compact=1&shell=1&limit=70&live=1"
-    $raw = & node "--use-system-ca" $helper "--endpoint=$endpoint" 2>&1
+    $raw = & node "--use-system-ca" $helper "--endpoint=$endpoint" "--summary-fields=runId,complete,count,updatedAt" 2>&1
     $helperExit = $LASTEXITCODE
     if ($helperExit -ne 0) { throw "protected readback helper exit=$helperExit $($raw -join ' ')" }
     $envelope = ($raw | Out-String) | ConvertFrom-Json -ErrorAction Stop

@@ -5,12 +5,18 @@ const fs = require("fs");
 const path = require("path");
 const { readSnapshot, upsertSnapshot } = require("../lib/supabase-snapshots");
 
+function argValue(name, fallback = "") {
+  const prefix = `--${name}=`;
+  const found = process.argv.slice(2).find((value) => value.startsWith(prefix));
+  return found ? found.slice(prefix.length) : fallback;
+}
+
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SOURCE_FILE = process.env.FUMAN_SCORECARD_SOURCE_FILE
   || path.join(RUNTIME_DIR, "data", "scorecard-terminal-current.json");
 const RECEIPT_FILE = path.join(RUNTIME_DIR, "data", "scan-receipts", "strategy5-scorecard-source-report.json");
-const EXPECTED_RUN_ID = String(process.env.FUMAN_SCORECARD_REFRESH_RUN_ID || process.env.EXPECTED_STRATEGY5_RUN_ID || "").trim();
-const EXPECTED_DATE = String(process.env.FUMAN_SCANNER_TARGET_DATE || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || "").replace(/\D/g, "").slice(0, 8);
+const EXPECTED_RUN_ID = String(argValue("expected-run-id", process.env.FUMAN_SCORECARD_REFRESH_RUN_ID || process.env.EXPECTED_STRATEGY5_RUN_ID || "")).trim();
+const EXPECTED_DATE = String(argValue("expected-date", process.env.FUMAN_SCANNER_TARGET_DATE || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || "")).replace(/\D/g, "").slice(0, 8);
 const DRY_RUN = process.argv.includes("--dry-run");
 
 function compactDate(value) {

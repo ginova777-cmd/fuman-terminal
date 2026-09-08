@@ -8,6 +8,7 @@ function arg(name, fallback = "") {
 async function main() {
   const baseUrl = String(arg("base-url", process.env.FUMAN_VERCEL_BASE_URL || "https://fuman-terminal.vercel.app")).replace(/\/+$/, "");
   const endpoint = arg("endpoint");
+  const summaryFields = arg("summary-fields").split(",").map((value) => value.trim()).filter((value) => /^[A-Za-z][A-Za-z0-9_]*$/.test(value));
   if (!endpoint || !endpoint.startsWith("/api/")) throw new Error("--endpoint=/api/... is required");
   const credential = await resolveProtectedReadbackCredential({ timeoutMs: 20000 });
   if (!credential.ok || !credential.token) throw new Error(credential.reason || "protected readback credential unavailable");
@@ -24,7 +25,10 @@ async function main() {
     let payload;
     try { payload = JSON.parse(text); } catch { throw new Error(`protected API returned invalid JSON HTTP ${response.status}`); }
     if (!response.ok) throw new Error(`protected API HTTP ${response.status}: ${String(payload?.error || payload?.message || "request failed")}`);
-    process.stdout.write(JSON.stringify({ ok: true, status: response.status, endpoint, credential: publicCredentialSummary(credential), payload }));
+    const responsePayload = summaryFields.length
+      ? Object.fromEntries(summaryFields.map((field) => [field, payload?.[field] ?? null]))
+      : payload;
+    process.stdout.write(JSON.stringify({ ok: true, status: response.status, endpoint, credential: publicCredentialSummary(credential), payload: responsePayload }));
   } finally {
     clearTimeout(timer);
   }
