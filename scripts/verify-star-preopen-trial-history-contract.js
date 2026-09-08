@@ -37,8 +37,9 @@ function staticChecks() {
   const writer = readText(path.join(ROOT, "scripts", "run-daytrade-source-writer.js"));
   const nearOne = readText(path.join(ROOT, "scripts", "run-daytrade-near-one-source.js"));
   const collector = readText(path.join(ROOT, "scripts", "fugle-websocket-collector.js"));
-  const sql = readText(path.join(ROOT, "ops", "public-slot", "DaytradeStarPreopenReadbackContract_20260902.sql"));
+  const sql = readText(path.join(ROOT, "ops", "public-slot", "DaytradeStarPreopenReadbackContract_20260908.sql"));
   const receiptSql = readText(path.join(ROOT, "ops", "public-slot", "DaytradeStarSideVolumeVerificationReceipts_20260908.sql"));
+  const retiredSql = path.join(ROOT, "ops", "public-slot", ["DaytradeStarPreopenReadbackContract", "20260902.sql"].join("_"));
   add(checks, "collector_uses_field_aware_merge", collector.includes("mergeFugleQuoteState(previous, quote)"));
   add(checks, "history_uses_trial_event_time", writer.includes("const observedAt = trialEventAt || normalizeTimestamp"));
   add(checks, "history_run_identity", writer.includes("run_id: `${PREOPEN_WRITER_CONTRACT}:${tradeDate.replace(/-/g, \"\")}`"));
@@ -52,6 +53,7 @@ function staticChecks() {
   add(checks, "removed_bid_ask_ratio_hard_gate", !sql.includes("bid_ask_ratio>=1.5"));
   add(checks, "star_final_closes_stock_and_future", sql.includes("future_pattern='開盤回測守住',false) and preopen_ok"));
   add(checks, "cross_computer_receipt_view", receiptSql.includes("v_fugle_daytrade_star_verification_readback"));
+  add(checks, "legacy_star_sql_removed", !fs.existsSync(retiredSql));
   return checks;
 }
 
