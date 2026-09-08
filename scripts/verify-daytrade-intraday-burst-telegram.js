@@ -180,6 +180,9 @@ const checks = {
   ]) && quoteReadBlock.includes("last_trade_time")
     && quoteReadBlock.includes(",trade_date,")
     && quoteReadBlock.includes("trade_date: `eq.${tradeDate}`"),
+  retired_quote_trade_date_derivation_absent: !canonicalWaterReader.includes(
+    'quote_trade_date_policy: "derive_asia_taipei_from_quote_seen_at_last_trade_time_updated_at"',
+  ),
   notifier_uses_canonical_water_before_send: includesAll(notifier, [
     'require("../lib/daytrade-canonical-water-reader")',
     "await readCanonicalDaytradeWater",
