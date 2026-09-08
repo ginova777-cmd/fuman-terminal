@@ -112,15 +112,6 @@
       "status": "WIRED"
     },
     {
-      "key": "daily_ohlcv",
-      "dueTime": "16:00",
-      "requiredForUnattended": true,
-      "class": "data",
-      "requirementState": "required",
-      "wired": true,
-      "status": "WIRED"
-    },
-    {
       "key": "strategy2",
       "dueTime": "09:00",
       "requiredForUnattended": true,
@@ -299,6 +290,11 @@
       "key": "warrant",
       "retired": true,
       "reason": "product_retired"
+    },
+    {
+      "key": "daily_ohlcv",
+      "retired": true,
+      "reason": "replaced_by_strategy4_owned_target_date_coverage"
     }
   ]
 }

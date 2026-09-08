@@ -7,6 +7,10 @@ const read = (relative) => fs.readFileSync(path.join(root, relative), "utf8");
 const issues = [];
 const absent = (relative, pattern, label) => { if (pattern.test(read(relative))) issues.push(label + ": " + relative); };
 
+if (fs.existsSync(path.join(root, "scripts/verify-terminal-daily-ohlcv.js"))) issues.push("retired daily OHLCV verifier file still exists");
+absent("lib/terminal-full-module-contract.js", /verify-terminal-daily-ohlcv|key:\s*"daily_ohlcv"/, "terminal closure contract still references retired daily OHLCV verifier");
+absent("docs/terminal-unattended-requirements.json", /verify-terminal-daily-ohlcv|"receipt":\s*"daily_ohlcv"/, "unattended requirements still reference retired daily OHLCV verifier");
+
 absent("index.html", /<a\\b[^>]*data-view="(?:cb-detect|warrant-flow)"/, "desktop route remains visible");
 absent("index.github.html", /<a\\b[^>]*data-view="(?:cb-detect|warrant-flow)"/, "desktop mirror route remains visible");
 absent("mobile.html", /data-fragment="(?:cb|warrant)"/, "mobile tab remains visible");
@@ -31,10 +35,10 @@ if (modules.includes("warrantFlow:")) issues.push("terminal modules still declar
 if (modules.includes('viewName === "warrant-flow"')) issues.push("terminal modules still preloads warrant route");
 if (!/const CHIP_ROUTES = \["chip-trade"\]/.test(read("terminal-chip-snapshot-module.js"))) issues.push("chip snapshot module still exposes CB or warrant routes");
 if (read("scripts/should-run-scheduled-cache.js").includes("warrant-flow-latest.json")) issues.push("scheduled cache policy still tracks warrant output");const registry = JSON.parse(read("scripts/terminal-active-module-registry.json"));
-if ((registry.active || []).some((item) => ["cb", "warrant"].includes(item.key))) issues.push("active registry includes CB or warrant");
-if (!["cb", "warrant"].every((key) => (registry.retired || []).some((item) => item.key === key && item.retired === true))) issues.push("retired registry missing CB or warrant");
+if ((registry.active || []).some((item) => ["cb", "warrant", "daily_ohlcv"].includes(item.key))) issues.push("active registry includes CB, warrant, or daily_ohlcv");
+if (!["cb", "warrant", "daily_ohlcv"].every((key) => (registry.retired || []).some((item) => item.key === key && item.retired === true))) issues.push("retired registry missing CB, warrant, or daily_ohlcv");
 if (/strictRequiredStrategies\s*=\s*@\([^)]*(?:warrant-flow|cb-detect)/.test(read("run-full-scan.ps1"))) issues.push("full scan strict requirement includes retired module");
 if (/\$required\s*=\s*@\([^)]*(?:warrant-flow|cb-detect)/.test(read("run-publish-gate.ps1"))) issues.push("publish gate strict requirement includes retired module");
-const result = { ok: issues.length === 0, contract: "terminal-scorecard-retired-modules-v1", retiredModules: ["cb", "warrant"], checkedAt: new Date().toISOString(), issues };
+const result = { ok: issues.length === 0, contract: "terminal-scorecard-retired-modules-v1", retiredModules: ["cb", "warrant", "daily_ohlcv"], checkedAt: new Date().toISOString(), issues };
 console.log(JSON.stringify(result, null, 2));
 process.exitCode = result.ok ? 0 : 1;
