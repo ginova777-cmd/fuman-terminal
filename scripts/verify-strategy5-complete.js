@@ -22,6 +22,11 @@ if (!runnerSource.includes('"--expected-run-id=$([string]$verifiedPayload.runId)
   || !runnerSource.includes('"--expected-date=$strategy5ExpectedDate"')) issues.push("strategy5_scorecard_publisher_args_missing");
 if (!publisherSource.includes('argValue("expected-run-id"')
   || !publisherSource.includes('argValue("expected-date"')) issues.push("strategy5_scorecard_publisher_arg_contract_missing");
+if (!publisherSource.includes("const sourceRecords = Array.isArray(source.records)")
+  || !publisherSource.includes("const sourceDate = compactDate(source.latestDate")
+  || !publisherSource.includes("...source,")
+  || !publisherSource.includes("scorecard_latest_date_rollback_disallowed")
+  || publisherSource.includes("if (currentDate !== EXPECTED_DATE)")) issues.push("strategy5_scorecard_date_advance_contract_missing");
 if (!watchdogSource.includes('"--summary-fields=runId,complete,count,updatedAt"')
   || !protectedReaderSource.includes('arg("summary-fields")')) issues.push("strategy5_watchdog_compact_json_contract_missing");
 for (const retired of ["run-strategy5-battle-verify.ps1", "scripts/verify-strategy5-battle-state.js", "scripts/verify-strategy5-alert-path.js"]) {

@@ -65,6 +65,20 @@ async function main() {
   }
 
   const source = JSON.parse(fs.readFileSync(SOURCE_FILE, "utf8"));
+  const sourceRecords = Array.isArray(source.records) ? source.records : [];
+  const sourceDate = compactDate(source.latestDate || source.summary?.latestDate);
+  if (!sourceRecords.length) {
+    fail("scorecard_terminal_source_missing_or_empty", { sourceFile: SOURCE_FILE });
+    return;
+  }
+  if (sourceDate !== EXPECTED_DATE) {
+    fail("scorecard_terminal_source_date_mismatch", {
+      sourceFile: SOURCE_FILE,
+      sourceDate,
+      sourceRows: sourceRecords.length,
+    });
+    return;
+  }
   const sourceReports = Array.isArray(source.sourceReports) ? source.sourceReports : [];
   const report = sourceReports.find((row) => String(row?.key || "").toLowerCase() === "strategy5");
   const reportRunId = String(report?.runId || "").trim();
@@ -81,16 +95,17 @@ async function main() {
     return;
   }
 
-  const current = await readSnapshot("scorecard_latest", { allowLatestFallback: true, timeoutMs: 30000 });
+  const current = await readSnapshot("scorecard_latest", { allowLatestFallback: true, timeoutMs: 30000 }).catch(() => null);
   const currentPayload = current?.payload && typeof current.payload === "object" ? current.payload : null;
   const currentRecords = Array.isArray(currentPayload?.records) ? currentPayload.records : [];
   const currentDate = compactDate(currentPayload?.latestDate || current?.tradeDate);
-  if (!currentPayload || !currentRecords.length) {
-    fail("scorecard_latest_snapshot_missing_or_empty");
-    return;
-  }
-  if (currentDate !== EXPECTED_DATE) {
-    fail("scorecard_latest_date_mismatch", { currentDate, currentRows: currentRecords.length });
+  if (currentDate && currentDate > EXPECTED_DATE) {
+    fail("scorecard_latest_date_rollback_disallowed", {
+      currentDate,
+      currentRows: currentRecords.length,
+      sourceDate,
+      sourceRows: sourceRecords.length,
+    });
     return;
   }
 
@@ -114,9 +129,9 @@ async function main() {
     source: "strategy5-complete-run:scorecard-terminal-current",
     collectionContract: "strategy5-scorecard-source-report-v1",
   };
-  const previousReports = Array.isArray(currentPayload.sourceReports) ? currentPayload.sourceReports : [];
+  const previousReports = sourceReports;
   const mergedPayload = {
-    ...currentPayload,
+    ...source,
     updatedAt: now,
     sourceReports: [
       ...previousReports.filter((row) => String(row?.key || "").toLowerCase() !== "strategy5"),
@@ -152,7 +167,11 @@ async function main() {
     expectedRunId: EXPECTED_RUN_ID,
     expectedDate: EXPECTED_DATE,
     resultCount,
-    currentRowsPreserved: currentRecords.length,
+    sourceDate,
+    sourceRowsPublished: sourceRecords.length,
+    previousSnapshotDate: currentDate,
+    previousSnapshotRows: currentRecords.length,
+    dateAdvanced: Boolean(currentDate && currentDate < sourceDate),
     sourceReportsPreserved: previousReports.length,
     sourceFile: SOURCE_FILE,
     dryRun: DRY_RUN,
