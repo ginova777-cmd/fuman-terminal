@@ -96,11 +96,14 @@ function approxBiasText(item) {
   return `${item.display_name}: ${item.bias}, confidence=${item.confidence}, ${item.evidence_summary}`;
 }
 
-function baseIndustryItems(tradeDate, runId) {
+function frozenLeadersReceipt(tradeDate) {
   const compact = tradeDate.replace(/\D/g, "");
-  // 08:30 must consume frozen 08:20 evidence only; it must never refetch or
-  // recalculate the overseas direction after the evidence cutoff.
-  const leaders = readJson(path.join(RECEIPT_DIR, `opening-report-0820-overseas-leaders-${compact}.json`));
+  return readJson(path.join(RECEIPT_DIR, `opening-report-0820-overseas-leaders-${compact}.json`));
+}
+
+function baseIndustryItems(tradeDate, runId, leaders = frozenLeadersReceipt(tradeDate)) {
+  // 08:30 consumes frozen 08:20 evidence only. It never refetches or
+  // recalculates overseas prices after the evidence cutoff.
   const detected = new Map((leaders?.industries || []).map((row) => [row.industry, row]));
   const rows = OPENING_REPORT_0830_INDUSTRY_MAP.map((mapRow) => {
     const row = detected.get(mapRow.industry) || {};
@@ -143,40 +146,103 @@ function baseIndustryItems(tradeDate, runId) {
   }));
 }
 
-function readTaiwanGate(tradeDate) {
-  const preflight = readJson(path.join(STATE_DIR, "daytrade-preflight-0830.json"));
-  const watchdogCandidates = fs.existsSync(STATE_DIR)
-    ? fs.readdirSync(STATE_DIR).filter((name) => name.startsWith(`daytrade-unattended-gate-watchdog-evidence-${tradeDate.replace(/\D/g, "")}`)).sort()
-    : [];
-  const watchdog = watchdogCandidates.length ? readJson(path.join(STATE_DIR, watchdogCandidates.at(-1))) : readJson(path.join(STATE_DIR, "daytrade-unattended-gate-watchdog.json"));
-  const ok = preflight?.ok === true && watchdog?.formal_entry_allowed === true;
+function uniqueMappedSymbols(rows) {
+  const seen = new Set();
+  return (Array.isArray(rows) ? rows : []).filter((row) => {
+    const symbol = String(row?.symbol || row?.[0] || "");
+    if (!symbol || seen.has(symbol)) return false;
+    seen.add(symbol);
+    return true;
+  });
+}
+
+function asiaPositiveLeaderObservations(items) {
+  const bySymbol = new Map();
+  for (const item of items) {
+    for (const leader of item.overseas_leader_detection?.leaders || []) {
+      const symbol = String(leader?.yahoo_symbol || "");
+      if (!/\.(?:T|KS|KQ)$/i.test(symbol) || leader?.ok !== true || !Number.isFinite(Number(leader?.percent)) || Number(leader.percent) <= 0) continue;
+      const entry = bySymbol.get(symbol) || {
+        observation_type: "asia_positive_leader",
+        overseas_name: leader.name || symbol,
+        overseas_symbol: symbol,
+        market: /\.T$/i.test(symbol) ? "Japan" : "Korea",
+        percent: Number(leader.percent),
+        source_time: leader.source_time || "",
+        source: leader.source || "",
+        linked_industries: [],
+        mapped_symbols_a: [],
+        mapped_symbols_b: [],
+      };
+      if (!entry.linked_industries.some((row) => row.industry === item.industry)) {
+        entry.linked_industries.push({ industry: item.industry, display_name: item.display_name });
+        entry.mapped_symbols_a.push(...item.mapped_symbols_a);
+        entry.mapped_symbols_b.push(...item.mapped_symbols_b);
+      }
+      bySymbol.set(symbol, entry);
+    }
+  }
+  return [...bySymbol.values()]
+    .sort((a, b) => Number(b.percent) - Number(a.percent) || a.overseas_symbol.localeCompare(b.overseas_symbol))
+    .slice(0, 3)
+    .map((row, index) => ({
+      ...row,
+      rank: index + 1,
+      industry: row.linked_industries[0]?.industry || "",
+      display_name: row.linked_industries.map((item) => item.display_name).join("／"),
+      mapped_symbols_a: uniqueMappedSymbols(row.mapped_symbols_a),
+      mapped_symbols_b: uniqueMappedSymbols(row.mapped_symbols_b),
+    }));
+}
+
+function positiveIndustryObservations(items) {
+  return items
+    .filter((row) => Number(row.positive_return_rank) >= 1 && Number(row.positive_return_rank) <= 3)
+    .sort((a, b) => Number(a.positive_return_rank) - Number(b.positive_return_rank))
+    .map((row) => ({
+      observation_type: "positive_industry",
+      rank: Number(row.positive_return_rank),
+      industry: row.industry,
+      display_name: row.display_name,
+      percent: Number(row.overseas_return_1d_pct),
+      linked_industries: [{ industry: row.industry, display_name: row.display_name }],
+      mapped_symbols_a: row.mapped_symbols_a,
+      mapped_symbols_b: row.mapped_symbols_b,
+    }));
+}
+
+function buildPriorityObservations(items, usMarket) {
+  const usClosed = usMarket?.no_new_us_session === true;
+  const observations = usClosed ? asiaPositiveLeaderObservations(items) : positiveIndustryObservations(items);
   return {
-    ok,
-    preflight_ok: preflight?.ok === true,
-    formal_entry_allowed: watchdog?.formal_entry_allowed === true,
-    canonical_gate_status: watchdog?.metrics?.canonical_gate_status || watchdog?.canonical_gate_status || "",
-    canonical_gate_grade: watchdog?.metrics?.canonical_gate_grade || watchdog?.canonical_gate_grade || "",
-    first_blocker: ok ? "" : "daytrade_preflight_0830_or_formal_gate_not_ready",
-    reason_code: ok ? "taiwan_formal_gate_ready" : "taiwan_formal_gate_fail_closed"
+    mode: usClosed ? "us_market_closed_asia_positive_leader_top3" : "positive_industry_top3",
+    observations,
   };
 }
 
-async function buildOverseasPreflight(tradeDate, runId, mock) {
-  const groups = [
-    { key: "us_close", url: "https://www.google.com/finance/quote/.IXIC:INDEXNASDAQ", required: true },
-    { key: "japan_morning", url: "https://www.google.com/finance/quote/NI225:INDEXNIKKEI", required: true },
-    { key: "korea_morning", url: "https://www.google.com/finance/quote/KOSPI:KRX", required: true }
-  ];
-  const checks = [];
-  for (const group of groups) {
-    if (mock) {
-      checks.push({ key: group.key, ok: true, status: 200, attempts: [{ attempt: 1, status: 200 }], mode: "mock_self_test" });
-      continue;
-    }
-    const result = await fetchWithRetry(group.url, { timeoutMs: 9000 });
-    checks.push({ key: group.key, ok: result.ok, status: result.status, attempts: result.attempts, url: group.url });
-  }
-  const ok = checks.every((row) => row.ok || !groups.find((group) => group.key === row.key)?.required);
+function attachPriorityObservation(items, priority) {
+  return items.map((item) => {
+    const linked = priority.observations.filter((row) => row.linked_industries.some((industry) => industry.industry === item.industry));
+    return {
+      ...item,
+      priority_observation_basis: priority.mode,
+      priority_observation_rank: linked.length ? Math.min(...linked.map((row) => Number(row.rank))) : null,
+      priority_overseas_leaders: linked.map((row) => ({
+        rank: row.rank,
+        name: row.overseas_name || "",
+        symbol: row.overseas_symbol || "",
+        market: row.market || "",
+        percent: Number(row.percent),
+        source_time: row.source_time || "",
+        source: row.source || "",
+      })),
+    };
+  });
+}
+
+async function buildOverseasPreflight(tradeDate, runId, frozenLeaders) {
+  const industries = Array.isArray(frozenLeaders?.industries) ? frozenLeaders.industries : [];
+  const ok = frozenLeaders?.ok === true && frozenLeaders?.date === tradeDate && industries.length === 15;
   return {
     contract: "opening-report-0830-overseas-preflight-v1",
     ok,
@@ -184,47 +250,49 @@ async function buildOverseasPreflight(tradeDate, runId, mock) {
     date: tradeDate,
     run_id: runId,
     checked_at: timestamp(),
-    mode: "directional_approximate",
-    max_attempts: 3,
-    retry_on: ["network_timeout", "dns_error", "http_429", "http_5xx"],
-    checks,
-    reason_code: ok ? "overseas_directional_sources_available" : "overseas_source_preflight_failed"
+    mode: "consume_frozen_0820_only",
+    source_receipt_run_id: frozenLeaders?.run_id || "",
+    source_cutoff: frozenLeaders?.cutoff || "",
+    industry_count: industries.length,
+    us_market: frozenLeaders?.us_market || null,
+    reason_code: ok ? "frozen_0820_overseas_evidence_valid" : "frozen_0820_overseas_evidence_invalid"
   };
 }
 
-function markdownReport({ tradeDate, runId, overseasPreflight, items, taiwanGate }) {
+function markdownReport({ tradeDate, runId, overseasPreflight, priority }) {
   const lines = [];
   lines.push(`# Fuman 台股 08:30 開盤前日報`);
   lines.push("");
   lines.push(`日期：${tradeDate}`);
   lines.push(`run_id：${runId}`);
-  lines.push(`資料截點：${tradeDate} 08:30:59 Asia/Taipei`);
+  lines.push(`資料截點：${tradeDate} 08:20:59 Asia/Taipei`);
   lines.push("");
-  lines.push(`結論：${taiwanGate.ok ? "台股 Formal Gate READY" : "FAIL_CLOSED，正式可沖候選 0 檔"}。海外方向已完成預檢，可提供母池 priority_scan。`);
+  lines.push("結論：晨報 15 產業觀察已完成；優先觀察名單已提供 Mother Pool priority_scan。晨報不判定盤中 Gate，也不產生正式候選。");
   lines.push("");
-  lines.push("## 海外產業方向");
+  lines.push(priority.mode === "us_market_closed_asia_positive_leader_top3" ? "## 日韓正漲幅個股優先觀察" : "## 海外正報酬產業優先觀察");
   lines.push("");
-  lines.push("| 產業 | bias | confidence | 台股對應 | 判讀 |");
-  lines.push("|---|---|---:|---|---|");
-  for (const item of items.filter((row) => Number(row.positive_return_rank) >= 1 && Number(row.positive_return_rank) <= 3).sort((a, b) => a.positive_return_rank - b.positive_return_rank)) {
-    lines.push(`| ${item.industry} | ${item.bias} | ${item.confidence} | ${item.mapped_symbols.map((row) => `${row.symbol} ${row.name}`).join("、")} | ${item.evidence_summary} |`);
+  lines.push("| 排名 | 海外觀察 | 產業 | 漲幅 | 台股 A | 台股 B |");
+  lines.push("|---:|---|---|---:|---|---|");
+  for (const row of priority.observations) {
+    const overseas = row.observation_type === "asia_positive_leader" ? `${row.overseas_name}（${row.overseas_symbol}）` : row.display_name;
+    lines.push(`| ${row.rank} | ${overseas} | ${row.display_name} | +${Number(row.percent).toFixed(2)}% | ${lineStockNames(row.mapped_symbols_a) || "無"} | ${lineStockNames(row.mapped_symbols_b) || "無"} |`);
   }
+  if (!priority.observations.length) lines.push("| - | 今日無正漲幅觀察 | - | - | - | - |");
   lines.push("");
-  lines.push("## 台股 Gate");
+  lines.push("## Mother Pool 交接邊界");
   lines.push("");
-  lines.push("```json");
-  lines.push(JSON.stringify(taiwanGate, null, 2));
-  lines.push("```");
+  lines.push("只提高對應台股的掃描優先序；不得建立正式候選、不得略過盤中正式 verifier、不得下單。");
   lines.push("");
   lines.push("## Final");
   lines.push("");
   lines.push("```text");
-  lines.push(`report_status=${taiwanGate.ok ? "PASS" : "FAIL_CLOSED"}`);
+  lines.push("report_status=REPORT_OBSERVATION_READY");
   lines.push("formal_candidates: 0");
   lines.push("watchlist_only: true");
   lines.push("formal_candidates=0");
   lines.push("watchlist_only=true");
   lines.push("mode=industry_observation_only");
+  lines.push(`priority_observation_mode=${priority.mode}`);
   lines.push(`overseas_sources_ok=${overseasPreflight.ok}`);
   lines.push("formal_trading_use=false");
   lines.push("```");
@@ -262,34 +330,52 @@ function lineStockNames(rows, limit = 6) {
   return names.join("、") + (remaining ? `（另有 ${remaining} 檔）` : "");
 }
 
-function lineReportText(tradeDate, displayTop3) {
+function usMarketDisplayText(usMarket) {
+  if (usMarket?.no_new_us_session) return "美股休市／無新 session｜本次以日韓早盤正漲幅個股觀察";
+  if (usMarket?.us_market_status === "early_close") return "美股提早收盤 session｜日韓早盤同步觀察";
+  return "美股與日韓早盤同步觀察";
+}
+
+function lineObservationTitle(item, medal) {
+  if (item.observation_type === "asia_positive_leader") return `${medal} ${item.overseas_name}（${item.overseas_symbol}）｜${item.display_name}`;
+  return `${medal} ${item.display_name}`;
+}
+
+function lineObservationPercent(item) {
+  const label = item.observation_type === "asia_positive_leader" ? "日韓早盤漲幅" : "海外平均漲幅";
+  return `${label}：+${Number(item.percent).toFixed(2)}%`;
+}
+
+function lineReportText(tradeDate, observations, usMarket) {
   const medals = ["🥇", "🥈", "🥉"];
-  const sections = displayTop3.map((item, index) => [
-    `${medals[index] || `${item.positive_return_rank}.`} ${item.display_name}`,
-    `海外平均漲幅：${Number(item.overseas_return_1d_pct) >= 0 ? "+" : ""}${Number(item.overseas_return_1d_pct).toFixed(2)}%`,
+  const sections = observations.map((item, index) => [
+    lineObservationTitle(item, medals[index] || `${item.rank}.`),
+    lineObservationPercent(item),
     `台股 A：${lineStockNames(item.mapped_symbols_a) || "無"}`,
     `台股 B：${lineStockNames(item.mapped_symbols_b) || "無"}`,
   ].join("\n"));
   return [
     "📈 08:30 漲幅族群晨報",
     `${tradeDate}｜15 個產業掃描完成`,
+    usMarketDisplayText(usMarket),
     "",
-    sections.join("\n\n"),
+    sections.length ? sections.join("\n\n") : "今日無正漲幅優先觀察標的",
   ].join("\n");
 }
 
-function lineReportFlex(tradeDate, displayTop3) {
+function lineReportFlex(tradeDate, observations, usMarket) {
   const medals = ["🥇", "🥈", "🥉"];
   const body = [];
-  displayTop3.forEach((item, index) => {
-    body.push({ type: "text", text: `${medals[index] || `${item.positive_return_rank}.`} ${item.display_name}`, weight: "bold", size: "md", wrap: true, margin: index ? "lg" : "none" });
-    body.push({ type: "text", text: `海外平均漲幅：${Number(item.overseas_return_1d_pct) >= 0 ? "+" : ""}${Number(item.overseas_return_1d_pct).toFixed(2)}%`, size: "sm", color: Number(item.overseas_return_1d_pct) >= 0 ? "#169B62" : "#D64545", wrap: true });
+  observations.forEach((item, index) => {
+    body.push({ type: "text", text: lineObservationTitle(item, medals[index] || `${item.rank}.`), weight: "bold", size: "md", wrap: true, margin: index ? "lg" : "none" });
+    body.push({ type: "text", text: lineObservationPercent(item), size: "sm", color: "#169B62", wrap: true });
     body.push({ type: "text", text: `台股 A：${lineStockNames(item.mapped_symbols_a) || "無"}`, size: "sm", wrap: true });
     body.push({ type: "text", text: `台股 B：${lineStockNames(item.mapped_symbols_b) || "無"}`, size: "sm", wrap: true });
   });
+  if (!body.length) body.push({ type: "text", text: "今日無正漲幅優先觀察標的", size: "sm", color: "#777777", wrap: true });
   return {
     type: "bubble",
-    header: { type: "box", layout: "vertical", contents: [{ type: "text", text: "📈 08:30 漲幅族群晨報", weight: "bold", wrap: true }, { type: "text", text: `${tradeDate}｜15 個產業掃描完成`, size: "xs", color: "#777777", margin: "sm", wrap: true }] },
+    header: { type: "box", layout: "vertical", contents: [{ type: "text", text: "📈 08:30 漲幅族群晨報", weight: "bold", wrap: true }, { type: "text", text: `${tradeDate}｜15 個產業掃描完成`, size: "xs", color: "#777777", margin: "sm", wrap: true }, { type: "text", text: usMarketDisplayText(usMarket), size: "xs", color: "#777777", margin: "sm", wrap: true }] },
     body: { type: "box", layout: "vertical", spacing: "sm", contents: body },
   };
 }
@@ -485,7 +571,7 @@ async function main() {
       date: tradeDate,
       trade_date: tradeDate,
       run_id: runId,
-      cutoff: `${tradeDate} 08:20:00 Asia/Taipei`,
+      cutoff: `${tradeDate} 08:20:59.999 Asia/Taipei`,
       source_receipt: frozenLeadersPath,
       industry_count: frozenItems.length,
       items: frozenItems,
@@ -511,18 +597,19 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   const sendLine = !mock && !reuseLineReceipt;
   const dryRunLine = mock;
 
-  const overseasPreflight = await buildOverseasPreflight(tradeDate, runId, mock);
-  const items = baseIndustryItems(tradeDate, runId);
-  const displayTop3 = items
-    .filter((row) => Number(row.positive_return_rank) >= 1 && Number(row.positive_return_rank) <= 3)
-    .sort((a, b) => Number(a.positive_return_rank) - Number(b.positive_return_rank));
-  const deliveryContentHash = crypto.createHash("sha256").update(JSON.stringify(displayTop3.map((row) => ({ rank: row.positive_return_rank, industry: row.industry, average_percent: row.overseas_return_1d_pct })))).digest("hex");
-  const taiwanGate = readTaiwanGate(tradeDate);
+  const frozenLeaders = frozenLeadersReceipt(tradeDate);
+  const overseasPreflight = await buildOverseasPreflight(tradeDate, runId, frozenLeaders);
+  const baseItems = baseIndustryItems(tradeDate, runId, frozenLeaders);
+  const usMarket = frozenLeaders?.us_market || {};
+  const priority = buildPriorityObservations(baseItems, usMarket);
+  const items = attachPriorityObservation(baseItems, priority);
+  const displayTop3 = priority.observations;
+  const deliveryContentHash = crypto.createHash("sha256").update(JSON.stringify({ mode: priority.mode, observations: displayTop3.map((row) => ({ rank: row.rank, industry: row.industry, overseas_symbol: row.overseas_symbol || null, percent: row.percent })) })).digest("hex");
   const reportPath = path.join(RECEIPT_DIR, `opening-report-0830-${compact}.md`);
   const overseasPath = path.join(RECEIPT_DIR, `overseas-preflight-${compact}.json`);
   const finalPath = path.join(RECEIPT_DIR, `opening-report-0830-final-receipt-${compact}.json`);
   ensureDir(reportPath);
-  fs.writeFileSync(reportPath, markdownReport({ tradeDate, runId, overseasPreflight, items, taiwanGate }), "utf8");
+  fs.writeFileSync(reportPath, markdownReport({ tradeDate, runId, overseasPreflight, priority }), "utf8");
   writeJson(overseasPath, overseasPreflight);
   const bridgeResults = [];
   if (applyBridge && !mock) await waitUntilTaipeiMinute(8 * 60 + 35);
@@ -530,17 +617,17 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     const inputPath = path.join(STATE_DIR, `opening_report_0830.industry_bias.${item.industry}.json`);
     const receiptPath = path.join(RUNTIME_DIR, "data", "scan-receipts", `opening-report-0830-priority-bias-bridge-${item.industry}-${compact}.json`);
     writeJson(inputPath, item);
-    const top3 = Number(item.positive_return_rank) >= 1 && Number(item.positive_return_rank) <= 3;
-    if (isolatedBacktest && top3) bridgeResults.push({ industry: item.industry, positive_return_rank: item.positive_return_rank, inputPath, receiptPath, result: { exitCode: 0, simulated: true }, reason_code: "isolated_bridge_contract_pass" });
-    else if (applyBridge && top3) bridgeResults.push({ industry: item.industry, positive_return_rank: item.positive_return_rank, inputPath, receiptPath, result: runBridge(inputPath, receiptPath, tradeDate) });
-    else bridgeResults.push({ industry: item.industry, positive_return_rank: item.positive_return_rank, inputPath, receiptPath, skipped: true, reason_code: top3 ? "bridge_apply_not_requested" : "not_positive_return_top3_bridge_skip" });
+    const top3 = Number(item.priority_observation_rank) >= 1 && Number(item.priority_observation_rank) <= 3;
+    if (isolatedBacktest && top3) bridgeResults.push({ industry: item.industry, priority_observation_rank: item.priority_observation_rank, priority_observation_basis: item.priority_observation_basis, inputPath, receiptPath, result: { exitCode: 0, simulated: true }, reason_code: "isolated_bridge_contract_pass" });
+    else if (applyBridge && top3) bridgeResults.push({ industry: item.industry, priority_observation_rank: item.priority_observation_rank, priority_observation_basis: item.priority_observation_basis, inputPath, receiptPath, result: runBridge(inputPath, receiptPath, tradeDate) });
+    else bridgeResults.push({ industry: item.industry, priority_observation_rank: item.priority_observation_rank, priority_observation_basis: item.priority_observation_basis, inputPath, receiptPath, skipped: true, reason_code: top3 ? "bridge_apply_not_requested" : "not_priority_observation_top3_bridge_skip" });
   }
   const lineReceiptPath = path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`);
   const lineReceipt = isolatedBacktest
     ? { line_push_attempted: false, line_push_ok: true, simulated: true, reason_code: "isolated_line_flex_payload_pass", target_count: 2, delivered_count: 2, has_user_target: true, has_group_target: true, token_logged: false, target_logged: false }
     : reuseLineReceipt
     ? readJson(lineReceiptPath)
-    : await pushLine({ cardText: lineReportText(tradeDate, displayTop3), flexCard: lineReportFlex(tradeDate, displayTop3), runId, dryRun: dryRunLine });
+    : await pushLine({ cardText: lineReportText(tradeDate, displayTop3, usMarket), flexCard: lineReportFlex(tradeDate, displayTop3, usMarket), runId, dryRun: dryRunLine });
   Object.assign(lineReceipt, {
     ok: lineReceipt?.line_push_ok === true,
     run_id: runId,
@@ -549,14 +636,17 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   });
   writeJson(lineReceiptPath, lineReceipt);
   const lineDeliveryOk = lineReceipt?.line_push_ok === true && (!reuseLineReceipt || String(lineReceipt?.report_run_id || lineReceipt?.run_id || "") === runId);
-  const successfulBridgeCount = bridgeResults.filter((row) => Number(row.positive_return_rank) >= 1 && Number(row.positive_return_rank) <= 3 && row.result?.exitCode === 0).length;
+  const eligibleBridgeResults = bridgeResults.filter((row) => Number(row.priority_observation_rank) >= 1 && Number(row.priority_observation_rank) <= 3);
+  const successfulBridgeCount = eligibleBridgeResults.filter((row) => row.result?.exitCode === 0).length;
   const bridgeAggregatePath = path.join(RECEIPT_DIR, `opening-report-0830-bridge-aggregate-${compact}.json`);
   const bridgeAggregate = {
-    contract: "opening-report-0830-positive-top3-bridge-aggregate-v1",
-    status: (applyBridge || isolatedBacktest) && successfulBridgeCount === displayTop3.length ? "BRIDGE_OK" : "BRIDGE_FAIL_CLOSED",
+    contract: "opening-report-0830-priority-observation-bridge-aggregate-v2",
+    status: (applyBridge || isolatedBacktest) && successfulBridgeCount === eligibleBridgeResults.length ? "BRIDGE_OK" : "BRIDGE_FAIL_CLOSED",
     run_id: runId,
     trade_date: tradeDate,
-    industry_count: displayTop3.length,
+    priority_observation_mode: priority.mode,
+    observation_count: displayTop3.length,
+    industry_count: eligibleBridgeResults.length,
     successful_industry_count: successfulBridgeCount,
     forbidden_publish_guard: true,
     formal_candidate_count: 0,
@@ -567,21 +657,24 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   const final = {
     contract: "opening-report-0830-production-v1",
     ok: overseasPreflight.ok && Boolean(reportPath) && lineDeliveryOk,
-    report_status: taiwanGate.ok ? "PASS" : "FAIL_CLOSED",
+    report_status: "REPORT_OBSERVATION_READY",
+    us_market: usMarket,
     overseas_sources_ok: overseasPreflight.ok,
     industry_bias_exported: true,
     mother_pool_bridge_attempted: applyBridge || isolatedBacktest,
-    mother_pool_bridge_ok: (applyBridge || isolatedBacktest) ? bridgeResults.filter((row) => Number(row.positive_return_rank) >= 1 && Number(row.positive_return_rank) <= 3).every((row) => row.result?.exitCode === 0) : null,
+    mother_pool_bridge_ok: (applyBridge || isolatedBacktest) ? eligibleBridgeResults.every((row) => row.result?.exitCode === 0) : null,
     line_push_attempted: sendLine,
     line_push_ok: lineDeliveryOk,
     delivery_content_hash: deliveryContentHash,
     line_receipt_reused: reuseLineReceipt,
-    display_contract: "opening_report_positive_return_top3_only_v1",
+    display_contract: "opening_report_priority_observation_top3_v2",
     expected_industry_count: OPENING_REPORT_0830_INDUSTRY_MAP.length,
     scanned_industry_count: items.length,
-    bridge_contract: "positive_overseas_return_top3_only",
+    bridge_contract: "us_open_positive_industry_or_us_closed_asia_positive_leader_top3_v2",
     bridge_delivery_invariant: "It must never change the 08:30 report delivery decision.",
-    display_top3: displayTop3.map((row) => ({ rank: row.positive_return_rank, industry: row.industry, display_name: row.display_name, average_percent: row.overseas_return_1d_pct })),
+    priority_observation_mode: priority.mode,
+    priority_observations: displayTop3,
+    display_top3: displayTop3,
     formal_candidates: 0,
     watchlist_only: true,
     run_id: runId,
@@ -589,9 +682,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     report_path: reportPath,
     overseas_preflight_receipt: overseasPath,
     line_push_receipt: lineReceiptPath,
-    bridge_results: bridgeResults.map((row) => ({ industry: row.industry, positive_return_rank: row.positive_return_rank ?? null, inputPath: row.inputPath, receiptPath: row.receiptPath, skipped: row.skipped === true, exitCode: row.result?.exitCode ?? null, reason_code: row.reason_code || "" })),
+    bridge_results: bridgeResults.map((row) => ({ industry: row.industry, priority_observation_rank: row.priority_observation_rank ?? null, priority_observation_basis: row.priority_observation_basis || "", inputPath: row.inputPath, receiptPath: row.receiptPath, skipped: row.skipped === true, exitCode: row.result?.exitCode ?? null, reason_code: row.reason_code || "" })),
     bridge_aggregate_receipt: bridgeAggregatePath,
-    taiwan_gate: taiwanGate,
     checked_at: timestamp()
   };
   writeJson(finalPath, final);
@@ -601,11 +693,17 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   terminalBriefingSnapshot.report_run_id = runId;
   terminalBriefingSnapshot.delivery_content_hash = deliveryContentHash;
   final.terminal_briefing_snapshot = terminalBriefingSnapshot;
-  final.complete = final.ok === true && final.expected_industry_count === 15 && final.scanned_industry_count === final.expected_industry_count && final.mother_pool_bridge_ok === true && final.line_push_ok === true && terminalBriefingSnapshot.ok === true && displayTop3.length === 3;
+  const priorityObservationContractOk = displayTop3.length >= 0 && displayTop3.length <= 3 && displayTop3.every((row) => Number(row.percent) > 0 && Number(row.rank) >= 1 && Number(row.rank) <= 3);
+  const positiveIndustryRows = positiveIndustryObservations(baseItems);
+  final.positive_top3_contract_ok = positiveIndustryRows.length >= 0 && positiveIndustryRows.length <= 3 && positiveIndustryRows.every((row) => Number(row.percent) > 0);
+  final.positive_industry_count = positiveIndustryRows.length;
+  final.priority_observation_contract_ok = priorityObservationContractOk;
+  final.priority_observation_count = displayTop3.length;
+  final.complete = final.ok === true && final.expected_industry_count === 15 && final.scanned_industry_count === final.expected_industry_count && final.mother_pool_bridge_ok === true && final.line_push_ok === true && terminalBriefingSnapshot.ok === true && final.positive_top3_contract_ok === true && priorityObservationContractOk;
   final.status = final.complete ? "complete" : "fail_closed";
   final.report_status = final.complete ? "COMPLETE" : "FAIL_CLOSED";
   final.exitCode = final.complete ? 0 : 1;
-  final.first_blocker = final.complete ? null : (!final.mother_pool_bridge_ok ? "mother_pool_bridge_not_complete" : !final.line_push_ok ? "line_delivery_not_complete" : terminalBriefingSnapshot.ok !== true ? "terminal_snapshot_not_complete" : displayTop3.length !== 3 ? "positive_top3_not_complete" : "opening_report_not_complete");
+  final.first_blocker = final.complete ? null : (!final.mother_pool_bridge_ok ? "mother_pool_bridge_not_complete" : !final.line_push_ok ? "line_delivery_not_complete" : terminalBriefingSnapshot.ok !== true ? "terminal_snapshot_not_complete" : !priorityObservationContractOk ? "priority_observation_top3_invalid" : "opening_report_not_complete");
   writeJson(finalPath, final);
   console.log(JSON.stringify({ ok: final.ok, final_receipt: finalPath, report_path: reportPath, run_id: runId, report_status: final.report_status, terminal_briefing_snapshot_ok: terminalBriefingSnapshot.ok === true }, null, 2));
   if (!final.complete) process.exitCode = 1;

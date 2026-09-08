@@ -77,7 +77,7 @@ async function main() {
   const frozenMarketSnapshot = readJson(frozenMarketSnapshotPath);
   const marketSnapshotOk = shouldRunDetector && marketSnapshotRunner.status === 0
     && String(frozenMarketSnapshot?.date || "").replace(/\D/g, "") === compact
-    && String(frozenMarketSnapshot?.cutoff || "").includes("08:20:00 Asia/Taipei")
+    && String(frozenMarketSnapshot?.cutoff || "").includes("08:20:59.999 Asia/Taipei")
     && Array.isArray(frozenMarketSnapshot?.items) && frozenMarketSnapshot.items.length >= 4;
   const receiptPath = path.join(RECEIPT_DIR, `opening-report-0820-preflight-receipt-${compact}.json`);
   const skippedForMarketClosed = !calendarAllowsPreflight;
@@ -96,7 +96,7 @@ async function main() {
     within_0820_preflight_window: withinPreflightWindow,
     calendar_allows_preflight: calendarAllowsPreflight,
     formal_publish_time: `${tradeDate} 08:30:00 Asia/Taipei`,
-    evidence_cutoff: `${tradeDate} 08:20:00 Asia/Taipei`,
+    evidence_cutoff: `${tradeDate} 08:20:59.999 Asia/Taipei`,
     industry_contract: CONTRACT,
     industry_count: OPENING_REPORT_0830_INDUSTRY_MAP.length,
     map_contract_ok: mapCheck.ok === true,
@@ -112,12 +112,18 @@ async function main() {
     overseas_detector_receipt: detectorPath,
     preserved_overseas_detector_receipt: preservedDetectorPath,
     overseas_detector_ok: shouldRunDetector && detectorReceipt?.ok === true && !detectorHasStalePromotion,
+    us_market: detectorReceipt?.us_market || null,
+    korea_source_contract: detectorReceipt?.korea_source_contract || "korea_direct_naver_change_percent_only_v1",
+    korea_direct_source: detectorReceipt?.korea_direct_source || "Naver Finance KRX basic",
+    korea_direct_valid_count: shouldRunDetector ? (detectorReceipt?.korea_direct_valid_count ?? 0) : 0,
+    overseas_source_counts: shouldRunDetector ? (detectorReceipt?.overseas_source_counts || {}) : {},
     overseas_source_gap_count: shouldRunDetector ? detectorFreshness.source_gap_count : 0,
     overseas_stale_promoted_count: shouldRunDetector ? detectorFreshness.stale_promoted_count : 0,
     overseas_stale_promoted: shouldRunDetector ? detectorFreshness.stale_promoted : [],
     valid_leaders: shouldRunDetector ? (detectorReceipt?.valid_leaders ?? 0) : 0,
     total_leaders: shouldRunDetector ? (detectorReceipt?.total_leaders ?? 0) : 0,
     reason_code: skippedForMarketClosed ? "market_calendar_non_trading_day" : (detectorHasStalePromotion ? "opening_report_0820_stale_asia_leader_promoted" : (ok ? (detectorFreshness.source_gap_count ? "opening_report_0820_preflight_ok_with_source_gaps" : "opening_report_0820_preflight_ok") : "opening_report_0820_preflight_fail_closed")),
+    report_status: ok ? (detectorFreshness.source_gap_count ? "REPORT_DEGRADED" : "REPORT_OK") : "FAIL_CLOSED",
     next_action: skippedForMarketClosed ? "skip_all_report_actions_until_next_trading_day" : "08:30 delivery must consume only this frozen 08:20 evidence and publish line_personal_plus_line_group_plus_terminal_plus_mother_pool",
   };
   writeJson(receiptPath, { ...receipt, receipt_path: receiptPath });
