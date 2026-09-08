@@ -150,6 +150,7 @@ function staticContractCheck() {
   const reader = readText(path.join(ROOT, "lib", "daytrade-canonical-water-reader.js"));
   const collector = readText(path.join(ROOT, "scripts", "fugle-websocket-collector.js"));
   const sharedSource = readText(path.join(ROOT, "ops", "public-slot", "Run-PublicSlotSharedSource.ps1"));
+  const writerWrapper = readText(path.join(ROOT, "ops", "public-slot", "Run-DaytradeSourceWriter.ps1"));
   const receiptSql = readText(path.join(ROOT, "ops", "public-slot", "DaytradeStarSideVolumeVerificationReceipts_20260908.sql"));
   const issues = [];
   for (const marker of [
@@ -181,6 +182,13 @@ function staticContractCheck() {
   if (!receiptSql.includes("v_fugle_daytrade_side_volume_verification_readback")) issues.push("cross_computer_receipt_view_missing");
   if (!receiptSql.includes("v_fugle_daytrade_side_volume_symbol_readback")) issues.push("cross_computer_symbol_result_view_missing");
   if (!receiptSql.includes("'complete','partial','failed','pending'")) issues.push("partial_receipt_status_contract_missing");
+  for (const marker of [
+    "Invoke-DaytradeSideVolumeCanonicalVerifier",
+    "--write-receipt",
+    "--publish-receipt",
+    "FUMAN_SIDE_VOLUME_VERIFY_INTERVAL_SECONDS",
+    "daytrade-side-volume-verifier-schedule.json",
+  ]) if (!writerWrapper.includes(marker)) issues.push(`writer_wrapper_verifier_wiring_missing:${marker}`);
 
   const fixtureDate = "2026-09-08";
   const exactThreshold = deriveDaytradeSideVolumeContract({
