@@ -12,6 +12,7 @@ const {
   normalizeFugleCandle,
   normalizeFugleCandles,
   normalizeFugleTrade,
+  mergeFugleQuoteState,
   readJson,
   writeJson,
 } = require("../lib/fugle-websocket-quotes");
@@ -1329,7 +1330,10 @@ function mergeStreamingQuotes(newQuotes, flush = false) {
     const code = normalizeCode(row.code);
     if (/^\d{4}$/.test(code) && Number.isFinite(seen) && seen >= cutoff) byCode.set(code, row);
   }
-  for (const quote of newQuotes) byCode.set(quote.code, quote);
+  for (const quote of newQuotes) {
+    const previous = byCode.get(quote.code) || {};
+    byCode.set(quote.code, mergeFugleQuoteState(previous, quote));
+  }
   const quotes = [...byCode.values()].sort((a, b) => String(a.code).localeCompare(String(b.code)));
   writeJson(FUGLE_WS_QUOTES_FILE, {
     source: "fugle-websocket-streaming",
