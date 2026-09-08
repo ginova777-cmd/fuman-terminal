@@ -19,6 +19,7 @@ const CONTRACT = "daytrade_side_volume_2000_canonical_verifier_v3";
 const CONTRACT_VERSION = "cross-computer-symbol-isolation-v3";
 const MOTHER_POOL_VIEW = "v_fugle_daytrade_mother_pool";
 const QUOTE_TABLE = "fugle_daytrade_quotes_live";
+const VIEWER_MAX_SOURCE_AGE_SECONDS = 120;
 const STATIC_ONLY = process.argv.includes("--static-only");
 const WRITE_RECEIPT = process.argv.includes("--write-receipt");
 const PUBLISH_RECEIPT = process.argv.includes("--publish-receipt");
@@ -183,6 +184,12 @@ function staticContractCheck() {
   if (!receiptSql.includes("v_fugle_daytrade_side_volume_symbol_readback")) issues.push("cross_computer_symbol_result_view_missing");
   if (!receiptSql.includes("'complete','partial','failed','pending'")) issues.push("partial_receipt_status_contract_missing");
   for (const marker of [
+    "symbol_result_rows", "mother_pool_rows", "diagnostic_extra_rows", "ready_rows",
+    "below_threshold_rows", "blocked_common_rows", "threshold_status",
+    "source_event_age_seconds_at_verification", "source_fresh_120s_at_verification",
+    "IMMUTABLE_VERIFICATION_RUN_ALREADY_FINAL", "IMMUTABLE_VERIFICATION_SYMBOL_RESULT",
+  ]) if (!receiptSql.includes(marker)) issues.push(`receipt_schema_marker_missing:${marker}`);
+  for (const marker of [
     "Invoke-DaytradeSideVolumeCanonicalVerifier",
     "--write-receipt",
     "--publish-receipt",
@@ -336,6 +343,13 @@ async function publishReceipt(receipt, symbolResults) {
     threshold_met_rows: receipt.threshold_met_rows,
     source_common_valid: receipt.source_common_valid,
     data_gap_rows: receipt.data_gap_rows,
+    symbol_result_rows: receipt.symbol_result_rows,
+    mother_pool_rows: receipt.mother_pool_rows,
+    diagnostic_extra_rows: receipt.diagnostic_extra_rows,
+    ready_rows: receipt.ready_rows,
+    below_threshold_rows: receipt.below_threshold_rows,
+    blocked_common_rows: receipt.blocked_common_rows,
+    symbol_result_view: receipt.symbol_result_view,
     source_identity: { canonical_run_id: receipt.canonical_run_id, side_volume_source: receipt.side_volume_source },
     diagnostic_summary: { sample_3030: receipt.sample_3030, sample_second_ge_2000_lots: receipt.sample_second_ge_2000_lots, invalid_samples: receipt.invalid_samples },
   };
@@ -431,15 +445,23 @@ async function liveCheck() {
     "SUPABASE_ANON_KEY_MISSING", "MOTHER_POOL_SAME_DAY_ROWS_MISSING", "MOTHER_POOL_DUPLICATE_SYMBOLS",
   ].includes(code) || staticCheck.issues.includes(code));
   const sourceCommonValid = commonFailureCodes.length === 0;
-  const uniqueFailures = [...new Set(failures)];
-  const hasSymbolGap = invalidRows.length > 0 || !sample3030?.ok || !thresholdSample;
-  const receiptStatus = !sourceCommonValid ? "failed" : hasSymbolGap ? "partial" : "complete";
   const verificationRunId = `${CONTRACT}:${compactDate(tradeDate)}:${checkedAt.replace(/\D/g, "")}`;
   const resultEvidence = [...poolEvidence];
   if (sample3030 && !resultEvidence.some((row) => row?.symbol === "3030")) resultEvidence.push(sample3030);
   const symbolResults = resultEvidence.filter(Boolean).map((row) => {
-    const rowFailures = sourceCommonValid ? [...new Set(row.failed_checks || [])] : commonFailureCodes;
+    const eventAtMs = Date.parse(row.side_volume_source_event_at || "");
+    const verifiedAtMs = Date.parse(checkedAt);
+    const sourceEventAgeSeconds = Number.isFinite(eventAtMs) && Number.isFinite(verifiedAtMs)
+      ? Math.max(0, (verifiedAtMs - eventAtMs) / 1000)
+      : null;
+    const sourceFresh120s = sourceEventAgeSeconds !== null && sourceEventAgeSeconds <= VIEWER_MAX_SOURCE_AGE_SECONDS;
+    const freshnessFailures = sourceFresh120s ? [] : ["SIDE_VOLUME_SOURCE_STALE_OVER_120S"];
+    const rowFailures = sourceCommonValid ? [...new Set([...(row.failed_checks || []), ...freshnessFailures])] : commonFailureCodes;
     const qualityStatus = !sourceCommonValid ? "BLOCKED_COMMON" : rowFailures.length ? "DATA_GAP" : "READY";
+    const thresholdStatus = qualityStatus === "BLOCKED_COMMON" ? "BLOCKED_COMMON"
+      : qualityStatus === "DATA_GAP" ? "DATA_GAP"
+      : row.side_volume_ge_2000_lots === true ? "READY_GE_2000_LOTS"
+      : "READY_BELOW_2000_LOTS";
     return {
       verification_run_id: verificationRunId,
       contract: CONTRACT,
@@ -467,9 +489,18 @@ async function liveCheck() {
       side_volume_trade_date: row.side_volume_trade_date || null,
       side_volume_canonical_run_id: row.side_volume_canonical_run_id || null,
       total_matches_inside_plus_outside: row.total_matches_inside_plus_outside === true,
+      threshold_status: thresholdStatus,
+      source_event_age_seconds_at_verification: sourceEventAgeSeconds,
+      source_fresh_120s_at_verification: sourceFresh120s,
       verified_at: checkedAt,
     };
   });
+  const hasSymbolGap = symbolResults.some((row) => row.quality_status !== "READY") || !thresholdSample;
+  if (symbolResults.some((row) => row.failed_checks.includes("SIDE_VOLUME_SOURCE_STALE_OVER_120S"))) {
+    failures.push("SIDE_VOLUME_SOURCE_STALE_OVER_120S");
+  }
+  const uniqueFailures = [...new Set(failures)];
+  const receiptStatus = !sourceCommonValid ? "failed" : hasSymbolGap ? "partial" : "complete";
   const receipt = {
     contract: CONTRACT,
     contract_version: CONTRACT_VERSION,
@@ -498,17 +529,29 @@ async function liveCheck() {
       unclassified_trades_included: false,
     },
     mother_pool_rows: poolRows.length,
-    contract_complete_rows: poolEvidence.length - invalidRows.length,
-    contract_incomplete_rows: invalidRows.length,
+    contract_complete_rows: symbolResults.filter((row) => row.in_mother_pool && row.quality_status === "READY").length,
+    contract_incomplete_rows: symbolResults.filter((row) => row.in_mother_pool && row.quality_status !== "READY").length,
     missing_field_rows: poolEvidence.filter((row) => row?.missing_fields).length,
     wrong_trade_date_rows: poolEvidence.filter((row) => row?.wrong_trade_date).length,
     wrong_run_rows: poolEvidence.filter((row) => row?.wrong_run).length,
-    stale_rows: poolEvidence.filter((row) => row?.stale).length,
-    threshold_met_rows: poolEvidence.filter((row) => row?.ok && row?.side_volume_ge_2000_lots === true).length,
+    stale_rows: symbolResults.filter((row) => row.in_mother_pool && Number(row.source_event_age_seconds_at_verification) > VIEWER_MAX_SOURCE_AGE_SECONDS).length,
+    threshold_met_rows: symbolResults.filter((row) => row.in_mother_pool && row.threshold_status === "READY_GE_2000_LOTS").length,
     source_common_valid: sourceCommonValid,
     common_failed_checks: commonFailureCodes,
     data_gap_rows: symbolResults.filter((row) => row.quality_status === "DATA_GAP").length,
     ready_rows: symbolResults.filter((row) => row.quality_status === "READY").length,
+    below_threshold_rows: symbolResults.filter((row) => row.threshold_status === "READY_BELOW_2000_LOTS").length,
+    blocked_common_rows: symbolResults.filter((row) => row.quality_status === "BLOCKED_COMMON").length,
+    symbol_result_rows: symbolResults.length,
+    diagnostic_extra_rows: symbolResults.filter((row) => row.in_mother_pool === false).length,
+    denominator_contract: "symbol_result_rows = mother_pool_rows + diagnostic_extra_rows; below_threshold_rows is READY/no-match, not DATA_GAP",
+    viewer_freshness_contract: {
+      max_source_age_seconds: VIEWER_MAX_SOURCE_AGE_SECONDS,
+      verifier_cadence_seconds: 300,
+      reusable_from_immutable_run: ["trade_date", "canonical_run_id", "unit", "definition", "threshold", "source_identity"],
+      must_be_current_at_viewer_decision: ["side_volume_source_event_at", "inside_volume", "outside_volume", "side_volume_total", "source_fresh_120s"],
+      rule: "A five-minute verifier proves one point-in-time batch only. Viewer must reject event age over 120 seconds and must not extend the age window.",
+    },
     symbol_result_view: "v_fugle_daytrade_side_volume_symbol_readback",
     sample_3030: sample3030,
     sample_second_ge_2000_lots: thresholdSample,

@@ -10,6 +10,7 @@ const URL_ROOT = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_U
 const CONTRACT = "star_preopen_slot_symbol_canonical_verifier_v1";
 const VERSION = "slot-symbol-isolation-v2";
 const VALID_SLOTS = ["0845", "0850", "0855", "0859"];
+const FUTURE_PATTERN_EVIDENCE_MODE = "natural_slot_snapshots_0845_through_current_slot";
 
 function readSecret(name) {
   for (const file of [path.join(RUNTIME, "secrets", name), path.join(ROOT, "secrets", name)]) {
@@ -72,6 +73,8 @@ function classifyEvidence(universeRow, evidence, context) {
   if (evidence && !validTime(evidence.future_preopen_range_start_at, tradeDate)) failures.push("FUTURE_PREOPEN_RANGE_START_INVALID");
   if (evidence && !validTime(evidence.future_preopen_range_end_at, tradeDate)) failures.push("FUTURE_PREOPEN_RANGE_END_INVALID");
   if (evidence && !validTime(evidence.future_0845_source_event_at, tradeDate)) failures.push("FUTURE_0845_SOURCE_EVENT_TIME_INVALID");
+  if (evidence && evidence.future_pattern_evidence_mode !== FUTURE_PATTERN_EVIDENCE_MODE) failures.push("FUTURE_PATTERN_EVIDENCE_MODE_INVALID");
+  if (evidence && evidence.recent_1m_three_sample_supported !== false) failures.push("RECENT_1M_THREE_SAMPLE_MODE_MUST_BE_FALSE");
   if (evidence && !validTime(evidence.future_source_event_at, tradeDate)) failures.push("FUTURE_SOURCE_EVENT_TIME_INVALID");
   if (evidence && !validTime(evidence.trial_event_at, tradeDate)) failures.push("TRIAL_EVENT_TIME_INVALID");
   if (evidence && !evidence.run_id) failures.push("RUN_ID_MISSING");
@@ -164,7 +167,7 @@ function buildReceipt(universeRows, evidenceRows, options) {
       strategy_evaluated_count: 0, strategy_match_count: null, strategy_no_match_count: null,
       data_gap_count: dataGapCount, failed_checks: commonFailures,
       first_blocker: commonFailures[0] || (dataGapCount ? "SYMBOL_DATA_GAP_PRESENT" : null),
-      source_identity: { trade_date: tradeDate, capture_slot: slot, bounded_retry_max: 3, batch_mixing_allowed: false },
+      source_identity: { trade_date: tradeDate, capture_slot: slot, bounded_retry_max: 3, batch_mixing_allowed: false, legal_future_pattern_evidence_modes: [FUTURE_PATTERN_EVIDENCE_MODE] },
       diagnostic_summary: {
         ready_symbols: results.filter((row) => row.quality_ok).map((row) => row.symbol),
         data_gap_symbols: results.filter((row) => !row.quality_ok).map((row) => row.symbol),
@@ -199,7 +202,7 @@ function fixture() {
 }
 
 async function publish(built, serviceKey) {
-  const initial = { ...built.receipt, status: "failed", complete: false, exit_code: 1, first_blocker: "PUBLISH_IN_PROGRESS" };
+  const initial = { ...built.receipt, status: "pending", complete: false, exit_code: 1, first_blocker: "PUBLISH_IN_PROGRESS" };
   await request("fugle_daytrade_star_slot_verification_receipts", { on_conflict: "verification_run_id" }, serviceKey, { method: "POST", body: initial, prefer: "resolution=merge-duplicates,return=minimal" });
   for (let offset = 0; offset < built.results.length; offset += 100) {
     await request("fugle_daytrade_star_slot_symbol_results", { on_conflict: "verification_run_id,symbol" }, serviceKey, { method: "POST", body: built.results.slice(offset, offset + 100), prefer: "resolution=merge-duplicates,return=minimal" });

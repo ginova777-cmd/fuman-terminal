@@ -65,6 +65,12 @@ create table if not exists public.fugle_daytrade_star_slot_symbol_results (
   primary key (verification_run_id, symbol)
 );
 
+alter table public.fugle_daytrade_star_slot_verification_receipts
+  drop constraint if exists fugle_daytrade_star_slot_verification_receipts_status_check;
+alter table public.fugle_daytrade_star_slot_verification_receipts
+  add constraint fugle_daytrade_star_slot_verification_receipts_status_check
+  check (status in ('complete','partial','failed','pending'));
+
 create index if not exists fugle_daytrade_star_slot_receipt_lookup
   on public.fugle_daytrade_star_slot_verification_receipts(trade_date desc,capture_slot,verified_at desc);
 create index if not exists fugle_daytrade_star_slot_symbol_lookup
@@ -145,6 +151,54 @@ select verification_run_id,contract,contract_version,trade_date,capture_slot,
        technical_data,strategy_evaluable,strategy_result,strategy_evaluation_owner,
        formal_candidate,formal_entry_allowed,order_allowed
 from public.fugle_daytrade_star_slot_symbol_results;
+
+-- Keep this migration independently applicable.  These shared guards are
+-- intentionally identical to the side-volume schema migration.
+create or replace function public.guard_fugle_daytrade_verification_receipt_immutable()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if tg_op = 'DELETE' then
+    raise exception 'IMMUTABLE_VERIFICATION_RUN_DELETE_FORBIDDEN';
+  end if;
+  if old.status <> 'pending' then
+    raise exception 'IMMUTABLE_VERIFICATION_RUN_ALREADY_FINAL';
+  end if;
+  if (to_jsonb(new) - array['status','complete','exit_code','first_blocker'])
+     is distinct from
+     (to_jsonb(old) - array['status','complete','exit_code','first_blocker']) then
+    raise exception 'IMMUTABLE_VERIFICATION_RUN_IDENTITY_OR_EVIDENCE_CHANGED';
+  end if;
+  if new.status = 'pending' then
+    raise exception 'IMMUTABLE_VERIFICATION_RUN_PENDING_REWRITE_FORBIDDEN';
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.guard_fugle_daytrade_verification_symbol_immutable()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  raise exception 'IMMUTABLE_VERIFICATION_SYMBOL_RESULT';
+end;
+$$;
+
+drop trigger if exists trg_star_slot_receipt_immutable on public.fugle_daytrade_star_slot_verification_receipts;
+create trigger trg_star_slot_receipt_immutable
+before update or delete on public.fugle_daytrade_star_slot_verification_receipts
+for each row execute function public.guard_fugle_daytrade_verification_receipt_immutable();
+
+drop trigger if exists trg_star_slot_symbol_immutable on public.fugle_daytrade_star_slot_symbol_results;
+create trigger trg_star_slot_symbol_immutable
+before update or delete on public.fugle_daytrade_star_slot_symbol_results
+for each row execute function public.guard_fugle_daytrade_verification_symbol_immutable();
 
 alter table public.fugle_daytrade_star_slot_verification_receipts enable row level security;
 alter table public.fugle_daytrade_star_slot_symbol_results enable row level security;
