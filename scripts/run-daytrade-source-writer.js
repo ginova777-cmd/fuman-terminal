@@ -1,6 +1,7 @@
 process.env.FUGLE_COLLECTOR_ROLE = process.env.FUGLE_COLLECTOR_ROLE || "daytrade";
 const fs = require("fs");
 const path = require("path");
+const { spawnSync } = require("child_process");
 const { runtimePath, cachePath, statePath, repoPath } = require("./runtime-paths");
 const {
   FUGLE_WS_STATUS_FILE,
@@ -29,6 +30,7 @@ const STATE_FILE = statePath("daytrade-source-writer-state.json");
 const ENRICHMENT_PENDING_STATE_FILE = statePath("daytrade-source-writer-enrichment-pending.json");
 const MOTHER_POOL_DELTA_STATE_FILE = statePath("daytrade-mother-pool-delta.json");
 const INTRADAY_BURST_TELEGRAM_OUTBOX_FILE = statePath("daytrade-intraday-burst-telegram-outbox.json");
+const STOCK_MASTER_RECEIPT_FILE = runtimePath("data", "scan-receipts", "stock-master-sync-wrapper.json");
 const INDUSTRY_SIGNAL_FAST_INJECT_FILE = statePath("daytrade-industry-signal-fast-inject.json");
 const RUNTIME_CONFIG_FILE = runtimePath("config", "daytrade-source-speed.json");
 const REPO_CONFIG_FILE = repoPath("ops", "public-slot", "daytrade-source-speed.config.example.json");
@@ -44,6 +46,40 @@ const STRATEGY_PRIORITY_BRIDGE_MAX_ROWS = Math.max(
 );
 let lastStrategyPriorityBridgeRefreshAt = 0;
 let strategyPriorityBridgeRefreshPromise = null;
+
+function ensureDailyStockMasterComplete() {
+  if (!APPLY) return { skipped: true, reason: "not_apply_mode" };
+  const current = readJson(STOCK_MASTER_RECEIPT_FILE, null);
+  const receiptDate = current?.checked_at ? taipeiDateFrom(current.checked_at) : "";
+  if (current?.complete === true
+    && current?.canonical_verifier_ok === true
+    && Number(current?.missing_stock_tickers_count) === 0
+    && Number(current?.missing_stock_universe_count) === 0
+    && receiptDate === taipeiDate()) {
+    return { skipped: true, reason: "same_day_canonical_receipt_complete", runId: current.run_id || "" };
+  }
+
+  const wrapper = repoPath("run-stock-master-sync.ps1");
+  if (!fs.existsSync(wrapper)) throw new Error(`stock_master_sync_wrapper_missing:${wrapper}`);
+  const shell = fs.existsSync("C:/Program Files/PowerShell/7/pwsh.exe")
+    ? "C:/Program Files/PowerShell/7/pwsh.exe"
+    : "pwsh.exe";
+  const result = spawnSync(shell, ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", wrapper, "-Mode", "Run"], {
+    cwd: repoPath(),
+    encoding: "utf8",
+    timeout: 120000,
+    windowsHide: true,
+  });
+  const verified = readJson(STOCK_MASTER_RECEIPT_FILE, null);
+  if (result.error || result.status !== 0 || verified?.complete !== true
+    || verified?.canonical_verifier_ok !== true
+    || Number(verified?.missing_stock_tickers_count) !== 0
+    || Number(verified?.missing_stock_universe_count) !== 0) {
+    const detail = String(result.error?.message || result.stderr || result.stdout || verified?.status || "missing_receipt").replace(/[\r\n]+/g, " ").slice(0, 500);
+    throw new Error(`stock_master_sync_incomplete:${detail}`);
+  }
+  return { skipped: false, reason: "runner_verifier_receipt_complete", runId: verified.run_id || "" };
+}
 
 const STRATEGY_PRIORITY_BRIDGE_SOURCES = [
   {
@@ -7392,6 +7428,9 @@ async function main() {
   if (!FETCH_ENABLED) {
     console.log("[daytrade-source-writer] REST quote fetch disabled; continuing with WebSocket/cache-only writer.");
   }
+
+  const stockMasterSync = ensureDailyStockMasterComplete();
+  console.log(JSON.stringify({ ok: true, stage: "stock_master_sync", ...stockMasterSync }, null, 2));
 
   const runStartedAt = Date.now();
   let maxRunReached = false;

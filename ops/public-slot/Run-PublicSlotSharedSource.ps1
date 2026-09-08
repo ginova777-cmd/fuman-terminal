@@ -3725,7 +3725,6 @@ function Convert-StocksSlimToTickerRows {
     foreach ($match in $matches) {
       $symbol = [string]$match.Groups[1].Value
       if ($seen.ContainsKey($symbol)) { continue }
-      if (Test-BuiltInBlacklistedStock -Symbol $symbol -Name ([string]$match.Groups[2].Value)) { continue }
       $seen[$symbol] = $true
       $market = Convert-Market ([string]$match.Groups[3].Value)
       $isEtf = $symbol.StartsWith("00")
@@ -3739,7 +3738,12 @@ function Convert-StocksSlimToTickerRows {
         is_etf = $isEtf
         is_suspended = $false
         updated_at = (Get-Date).ToUniversalTime().ToString("o")
-      payload = @{ source = "stocks-slim"; symbol = $symbol; blacklist_applied = $true }
+      payload = @{
+        source = "stocks-slim-fallback"
+        symbol = $symbol
+        master_blacklist_filter_applied = $false
+        scanner_eligibility_separate_from_master = $true
+      }
       })
     }
   } catch {
@@ -4401,11 +4405,21 @@ do {
       $lastMaintenanceAt = Get-Date
     }
     if (((Get-Date) - $lastStockTickerWriteAt).TotalMinutes -ge 30) {
-      $stockTickerRows = Convert-StocksSlimToTickerRows
-      if ($stockTickerRows.Count -gt 0) {
-        Write-PublicSlotStockTickers -Rows $stockTickerRows
-        $lastStockTickerWriteAt = Get-Date
+      $stockMasterWrapper = Join-Path $FumanRoot "run-stock-master-sync.ps1"
+      $stockMasterComplete = $false
+      if (Test-Path -LiteralPath $stockMasterWrapper) {
+        & "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -File $stockMasterWrapper -Mode Run | Out-Null
+        $stockMasterComplete = ($LASTEXITCODE -eq 0)
+        Write-Log "stock master canonical sync complete=$stockMasterComplete wrapper=$stockMasterWrapper"
       }
+      if (-not $stockMasterComplete) {
+        $stockTickerRows = Convert-StocksSlimToTickerRows
+        if ($stockTickerRows.Count -gt 0) {
+          Write-PublicSlotStockTickers -Rows $stockTickerRows
+          Write-Log "WARN stock master canonical sync unavailable; unfiltered stocks-slim fallback rows=$($stockTickerRows.Count)"
+        }
+      }
+      $lastStockTickerWriteAt = Get-Date
     }
 
     $latestQuotePayload = Read-JsonFile -Path $quotesFile -Default ([pscustomobject]@{})
