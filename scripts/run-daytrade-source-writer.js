@@ -1300,6 +1300,10 @@ function mergeWebSocketQuoteCache(quoteMap) {
       low_price: numeric(row.low ?? row.lowPrice, previous.low_price, true),
       previous_close: numeric(row.previousClose ?? row.previous_close ?? row.referencePrice, previous.previous_close, true),
       trial_price: numeric(row.trialPrice ?? row.trial_price, previous.trial_price, true),
+      trial_event_at: normalizeTimestamp(
+        row.trialEventAt || row.trial_event_at || row.payload?.trialEventAt || previous.trial_event_at || previous.payload?.trial_event_at,
+        "",
+      ),
       is_trial: row.isTrial === true || row.is_trial === true,
       is_limit_up_bid: row.isLimitUpBid === true || row.is_limit_up_bid === true,
       change_percent: numeric(changePercentValue, previous.change_percent),
@@ -1325,6 +1329,10 @@ function mergeWebSocketQuoteCache(quoteMap) {
         quote_seen_at: seenAt,
         received_at: receivedAt,
         aggregate_last_updated: aggregateLastUpdated,
+        trial_event_at: normalizeTimestamp(
+          row.trialEventAt || row.trial_event_at || row.payload?.trialEventAt || previous.trial_event_at || previous.payload?.trial_event_at,
+          "",
+        ),
       },
     };
     quoteMap.set(symbol, merged);
@@ -6625,7 +6633,8 @@ async function syncPreopenSnapshotHistory(activeSymbols, quoteMap) {
     const symbol = normalizeCode(rawSymbol || quote?.symbol);
     const active = activeBySymbol.get(symbol);
     if (!symbol || !active || !isWebSocketQuote(quote)) continue;
-    const observedAt = normalizeTimestamp(quote?.quote_seen_at || quote?.payload?.aggregate_last_updated, "");
+    const trialEventAt = normalizeTimestamp(quote?.trial_event_at || quote?.payload?.trial_event_at, "");
+    const observedAt = trialEventAt || normalizeTimestamp(quote?.quote_seen_at || quote?.payload?.aggregate_last_updated, "");
     if (!observedAt || taipeiDateFrom(observedAt) !== tradeDate) continue;
     const observedMinutes = taipeiClockMinutesFrom(observedAt);
     if (observedMinutes < PREOPEN_CAPTURE_START_MINUTES || observedMinutes >= PREOPEN_CAPTURE_END_MINUTES) continue;
@@ -6640,8 +6649,11 @@ async function syncPreopenSnapshotHistory(activeSymbols, quoteMap) {
     const payload = {
       source: "fugle_daytrade_source_writer:preopen_websocket",
       writer_contract: PREOPEN_WRITER_CONTRACT,
+      run_id: `${PREOPEN_WRITER_CONTRACT}:${tradeDate.replace(/-/g, "")}`,
+      generation_id: `${symbol}:${observedAt}`,
       trade_date: tradeDate,
       observed_at: observedAt,
+      trial_event_at: trialEventAt || observedAt,
       quote_received_at: quote.updated_at || null,
       trial_change_percent: ((trialPrice - referencePrice) / referencePrice) * 100,
       bid_ask_ratio: askVolume > 0 && bidVolume !== null ? bidVolume / askVolume : null,
