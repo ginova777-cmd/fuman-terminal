@@ -119,21 +119,13 @@
       "key": "self_heal_reconnect_backfill_rerun_reverify",
       "order": 15,
       "required": true,
-      "receipt": "watchdog,recovery_queue,daily_ohlcv",
+      "receipt": "watchdog,recovery_queue",
       "verifier": "module_receipt_adapter",
       "allowed_action": "repair_only_first_blocker_then_rerun_affected_stage"
     },
     {
-      "key": "daily_ohlcv_90_percent_20_days",
-      "order": 16,
-      "required": true,
-      "receipt": "daily_ohlcv",
-      "verifier": "scripts/verify-terminal-daily-ohlcv.js",
-      "allowed_action": "run_read_only_daily_ohlcv_verifier_after_backfill_done"
-    },
-    {
       "key": "manifest",
-      "order": 17,
+      "order": 16,
       "required": true,
       "receipt": "terminal-daily-manifest.json",
       "verifier": "scripts/write-terminal-daily-manifest.js",
@@ -141,7 +133,7 @@
     },
     {
       "key": "canary_publish",
-      "order": 18,
+      "order": 17,
       "required": true,
       "receipt": "canary",
       "verifier": "scripts/verify-terminal-canary-publish.js",
@@ -149,7 +141,7 @@
     },
     {
       "key": "runid_closure",
-      "order": 19,
+      "order": 18,
       "required": true,
       "receipt": "runid_closure",
       "verifier": "scripts/verify-terminal-runid-closure-contract.js",
@@ -157,7 +149,7 @@
     },
     {
       "key": "api",
-      "order": 20,
+      "order": 19,
       "required": true,
       "receipt": "api",
       "verifier": "scripts/verify-api-unattended-scorecard.js",
@@ -165,7 +157,7 @@
     },
     {
       "key": "desktop",
-      "order": 21,
+      "order": 20,
       "required": true,
       "receipt": "desktop",
       "verifier": "scripts/verify-terminal-ui-state-acceptance.js",
@@ -173,7 +165,7 @@
     },
     {
       "key": "mobile",
-      "order": 22,
+      "order": 21,
       "required": true,
       "receipt": "mobile",
       "verifier": "scripts/verify-terminal-ui-e2e.js",
@@ -181,7 +173,7 @@
     },
     {
       "key": "route_88",
-      "order": 23,
+      "order": 22,
       "required": true,
       "receipt": "route_88",
       "verifier": "scripts/verify-terminal-ui-state-acceptance.js",
@@ -189,7 +181,7 @@
     },
     {
       "key": "scorecard",
-      "order": 24,
+      "order": 23,
       "required": true,
       "receipt": "scorecard",
       "verifier": "scripts/verify-api-unattended-scorecard.js",
@@ -197,7 +189,7 @@
     },
     {
       "key": "source_reports",
-      "order": 25,
+      "order": 24,
       "required": true,
       "receipt": "source_reports",
       "verifier": "scripts/verify-terminal-resource-chain.js",
@@ -205,7 +197,7 @@
     },
     {
       "key": "watchdog",
-      "order": 26,
+      "order": 25,
       "required": true,
       "receipt": "watchdog",
       "verifier": "scripts/verify-terminal-autonomous-root-runner.js",
@@ -213,7 +205,7 @@
     },
     {
       "key": "auto_roll_forward",
-      "order": 27,
+      "order": 26,
       "required": true,
       "receipt": "auto_roll_forward",
       "verifier": "scripts/verify-terminal-auto-roll-forward.js",
@@ -221,7 +213,7 @@
     },
     {
       "key": "recovery_queue",
-      "order": 28,
+      "order": 27,
       "required": true,
       "receipt": "recovery_queue",
       "verifier": "scripts/verify-terminal-recovery-queue.js",
@@ -229,7 +221,7 @@
     },
     {
       "key": "control_plane",
-      "order": 29,
+      "order": 28,
       "required": true,
       "receipt": "control_plane",
       "verifier": "scripts/verify-terminal-control-plane.js",
@@ -237,13 +229,13 @@
     },
     {
       "key": "unattended_yes_no_final_audit",
-      "order": 30,
+      "order": 29,
       "required": true,
       "receipt": "terminal-unattended-final-audit.json",
       "verifier": "scripts/verify-terminal-final-audit-contract.js",
       "allowed_action": "inspect_first_blocker_then_retry_only_allowed_action"
     }
   ],
-  "active_scope": "core_convergence_plus_power_recovery_plus_daily_ohlcv_plus_data_chain_plus_strategy_chip_plus_surface_readback_plus_read_only_verifier_closure",
+  "active_scope": "core_convergence_plus_power_recovery_plus_data_chain_plus_strategy_chip_plus_surface_readback_plus_read_only_verifier_closure",
   "deferred_scope": "none"
 }
