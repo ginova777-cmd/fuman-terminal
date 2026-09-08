@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { OPENING_REPORT_0830_INDUSTRY_MAP, leaderPairs } = require("./opening-report-0830-industry-map-contract.js");
 const { applyLeaderFreshness, summarizeReceiptFreshness } = require("../lib/opening-report-asia-freshness");
+const { buildUsEquityMarketCalendar } = require("./us-equity-market-calendar.js");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const OUT_DIR = path.join(RUNTIME_DIR, "data", "opening-report-0830");
@@ -28,7 +29,16 @@ function writeJson(file, value) {
 }
 
 function cutoffMs(tradeDate) {
-  return Date.parse(`${tradeDate}T08:20:00+08:00`);
+  return Date.parse(`${tradeDate}T08:20:59.999+08:00`);
+}
+
+function classifyLeaderMarket(symbol) {
+  const value = String(symbol || "").trim().toUpperCase();
+  if (!value) return "unknown";
+  if (/\.T$/.test(value)) return "japan";
+  if (/\.(?:KS|KQ)$/.test(value)) return "korea";
+  if (/\.[A-Z]{1,4}$/.test(value)) return "other";
+  return "us";
 }
 
 function classifyPercent(percent) {
@@ -106,11 +116,12 @@ async function yahooChartSnapshot(leader, tradeDate) {
     const ms = timestamps[index] * 1000;
     if (ms <= cut && Number.isFinite(Number(closes[index])) && Number(closes[index]) > 0) selected = index;
   }
-  const usLeader = !/\.(?:T|KS)$/i.test(String(leader.yahoo || ""));
+  const market = classifyLeaderMarket(leader.yahoo);
+  const usLeader = market === "us";
   if (selected < 0) return { ok: false, source: "Yahoo Finance chart", source_url: url, reason_code: usLeader ? "us_overnight_bar_missing_before_0820" : "no_bar_at_or_before_0820_cutoff", attempts: fetched.attempts };
   const selectedMs = timestamps[selected] * 1000;
   const asiaWindowStart = Date.parse(`${tradeDate}T08:00:00+08:00`);
-  const asiaEarlySessionRequired = /\.(?:T|KS)$/i.test(String(leader.yahoo || ""));
+  const asiaEarlySessionRequired = market === "japan" || market === "korea";
   if (asiaEarlySessionRequired && (selectedMs < asiaWindowStart || selectedMs > cut)) {
     return {
       ok: false,
@@ -118,7 +129,7 @@ async function yahooChartSnapshot(leader, tradeDate) {
       source_url: url,
       ticker: leader.yahoo,
       selected_time: new Date(selectedMs).toISOString(),
-      cutoff: `${tradeDate} 08:20:00 Asia/Taipei`,
+      cutoff: `${tradeDate} 08:20:59 Asia/Taipei`,
       reason_code: "asia_no_bar_in_0800_0820_window",
       attempts: fetched.attempts,
     };
@@ -138,7 +149,7 @@ async function yahooChartSnapshot(leader, tradeDate) {
     source_url: url,
     ticker: leader.yahoo,
     selected_time: new Date(timestamps[selected] * 1000).toISOString(),
-    cutoff: `${tradeDate} 08:20:00 Asia/Taipei`,
+    cutoff: `${tradeDate} 08:20:59 Asia/Taipei`,
     close: Number(close.toFixed(4)),
     previous_close: Number.isFinite(previousClose) ? Number(previousClose.toFixed(4)) : null,
     percent: Number.isFinite(percent) ? Number(percent.toFixed(2)) : null,
@@ -150,29 +161,107 @@ async function yahooChartSnapshot(leader, tradeDate) {
   };
 }
 
+function koreanCode(symbol) {
+  const match = String(symbol || "").match(/^(\d{6})\.(?:KS|KQ)$/i);
+  return match ? match[1] : "";
+}
+
+function naverLocalTradedAtMs(value) {
+  const text = String(value || "").trim();
+  if (!text) return NaN;
+  if (/[zZ]$|[+-]\d\d:?\d\d$/.test(text)) return Date.parse(text);
+  return Date.parse(`${text}+09:00`);
+}
+
+function parseNaverKoreaBasic(json, leader, tradeDate, sourceUrl = "") {
+  const expectedCode = koreanCode(leader.yahoo);
+  const returnedCode = String(json?.itemCode || "").trim();
+  const sourceMs = naverLocalTradedAtMs(json?.localTradedAt);
+  const percent = Number(json?.fluctuationsRatio);
+  const windowStart = Date.parse(`${tradeDate}T08:00:00+08:00`);
+  const windowCutoff = cutoffMs(tradeDate);
+  const base = {
+    source: "Naver Finance KRX basic",
+    source_url: sourceUrl,
+    ticker: leader.yahoo,
+    selected_time: Number.isFinite(sourceMs) ? new Date(sourceMs).toISOString() : "",
+    cutoff: `${tradeDate} 08:20:59 Asia/Taipei`,
+    source_fields: ["fluctuationsRatio", "localTradedAt"],
+    session_contract: "08:00-08:20 Asia/Taipei",
+  };
+  if (!expectedCode || returnedCode !== expectedCode) return { ...base, ok: false, reason_code: "naver_korea_symbol_mismatch" };
+  if (!Number.isFinite(sourceMs)) return { ...base, ok: false, reason_code: "naver_korea_source_time_missing" };
+  if (sourceMs < windowStart || sourceMs > windowCutoff) return { ...base, ok: false, reason_code: "naver_korea_outside_0800_0820_window" };
+  if (!Number.isFinite(percent)) return { ...base, ok: false, reason_code: "naver_korea_percent_missing" };
+  const rounded = Number(percent.toFixed(2));
+  const classified = classifyPercent(rounded);
+  return {
+    ...base,
+    ok: true,
+    percent: rounded,
+    direction: classified.direction,
+    display: classified.display,
+    reason_code: "korea_naver_change_percent_primary",
+  };
+}
+
+const naverCache = new Map();
+async function naverKoreaSnapshot(leader, tradeDate) {
+  const code = koreanCode(leader.yahoo);
+  const url = `https://m.stock.naver.com/api/stock/${code}/basic`;
+  const cacheKey = `${tradeDate}:${code}`;
+  if (!naverCache.has(cacheKey)) naverCache.set(cacheKey, fetchJson(url));
+  const fetched = await naverCache.get(cacheKey);
+  if (!fetched.ok) return { ok: false, source: "Naver Finance KRX basic", source_url: url, source_fields: ["fluctuationsRatio", "localTradedAt"], reason_code: `naver_korea_http_${fetched.status || 0}`, attempts: fetched.attempts };
+  return { ...parseNaverKoreaBasic(fetched.json, leader, tradeDate, url), attempts: fetched.attempts };
+}
+
 const INDUSTRIES = OPENING_REPORT_0830_INDUSTRY_MAP.map((row) => ({
   industry: row.industry,
   display_name: row.display_name,
   leaders: leaderPairs(row),
 }));
 
-async function detectLeader(industry, leader, tradeDate) {
+async function detectLeader(industry, leader, tradeDate, usMarket) {
   const [name, yahoo, reason] = leader;
-  const y = await yahooChartSnapshot({ name, yahoo, reason_code: reason }, tradeDate);
+  const market = classifyLeaderMarket(yahoo);
+  const usLeader = market === "us";
+  const y = market === "korea"
+    ? await naverKoreaSnapshot({ name, yahoo, reason_code: reason }, tradeDate)
+    : market === "other"
+      ? {
+          ok: false,
+          source: "market_background_only",
+          source_url: "",
+          display: "非美／日／韓來源不計入排序",
+          direction: "unknown",
+          reason_code: "non_us_japan_korea_source_excluded",
+        }
+      : await yahooChartSnapshot({ name, yahoo, reason_code: reason }, tradeDate);
+  const noNewUsSession = usLeader && usMarket?.no_new_us_session === true;
   return applyLeaderFreshness({
     name,
     yahoo_symbol: yahoo || "",
     industry: industry.industry,
-    ok: y.ok === true,
+    ok: noNewUsSession ? false : y.ok === true,
     source: y.source,
     source_url: y.source_url,
     source_time: y.selected_time || "",
-    percent: y.percent ?? null,
-    display: y.display || "來源不足",
-    direction: y.direction || "unknown",
+    percent: noNewUsSession ? null : (y.percent ?? null),
+    display: noNewUsSession ? "美股休市／無新 session" : (y.display || "來源不足"),
+    direction: noNewUsSession ? "unknown" : (y.direction || "unknown"),
     close: y.close ?? null,
     previous_close: y.previous_close ?? null,
-    reason_code: y.reason_code,
+    source_fields: y.source_fields,
+    reason_code: noNewUsSession ? "us_market_closed_no_new_session" : y.reason_code,
+    source_gap: false,
+    us_market_status: usLeader ? usMarket?.us_market_status : undefined,
+    us_session_date: usLeader ? usMarket?.us_session_date : undefined,
+    us_holiday_name: usLeader ? usMarket?.us_holiday_name : undefined,
+    us_closed_reason: usLeader ? usMarket?.us_closed_reason : undefined,
+    no_new_us_session: usLeader ? usMarket?.no_new_us_session : undefined,
+    previous_official_session_date: usLeader ? usMarket?.previous_official_session_date : undefined,
+    session_contract: noNewUsSession ? "us_market_closed_previous_session_background_only" : y.session_contract,
   }, tradeDate);
 }
 
@@ -198,10 +287,11 @@ function industrySummary(industry, rows) {
 async function main() {
   const tradeDate = argValue("--date", process.env.FUMAN_TRADE_DATE || taipeiDateKey());
   const runId = argValue("--run-id", `overseas-leaders-0830-${tradeDate.replace(/\D/g, "")}-${Date.now()}`);
+  const usMarket = buildUsEquityMarketCalendar(tradeDate);
   const industries = [];
   for (const industry of INDUSTRIES) {
     const rows = [];
-    for (const leader of industry.leaders) rows.push(await detectLeader(industry, leader, tradeDate));
+    for (const leader of industry.leaders) rows.push(await detectLeader(industry, leader, tradeDate, usMarket));
     industries.push(industrySummary(industry, rows));
   }
   const allLeaders = industries.flatMap((row) => row.leaders);
@@ -212,14 +302,19 @@ async function main() {
     date: tradeDate,
     run_id: runId,
     checked_at: new Date().toISOString(),
-    cutoff: `${tradeDate} 08:20:00 Asia/Taipei`,
-    source_policy: "US uses the previous official close; Japan and Korea use the 08:00-08:20 Asia/Taipei early-session window. Later data must not be backfilled into the 08:30 report.",
+    cutoff: `${tradeDate} 08:20:59 Asia/Taipei`,
+    source_policy: "US market-closed sessions are labeled and excluded from ranking; fresh Japan/Korea 08:00-08:20 Asia/Taipei evidence remains eligible. Later data must not be backfilled.",
+    us_market: usMarket,
     total_leaders: allLeaders.length,
     valid_leaders: allLeaders.filter((row) => row.ok).length,
     unavailable_leaders: allLeaders.filter((row) => !row.ok).length,
     source_gap_leaders: freshness.source_gap_count,
     stale_promoted_leaders: freshness.stale_promoted_count,
     source_freshness_policy: "Japan and Korea leaders outside the same-day 08:00-08:20 Asia/Taipei window are source_gap and contribute no industry score. Other industries remain publishable.",
+    korea_source_contract: "korea_direct_naver_change_percent_only_v1",
+    korea_direct_source: "Naver Finance KRX basic",
+    korea_direct_valid_count: allLeaders.filter((row) => /\.(?:KS|KQ)$/i.test(row.yahoo_symbol || "") && row.ok === true && row.source === "Naver Finance KRX basic").length,
+    overseas_source_counts: allLeaders.reduce((out, row) => { const key = row.source || "unknown"; out[key] = (out[key] || 0) + 1; return out; }, {}),
     industries,
   };
   const file = path.join(OUT_DIR, `overseas-leaders-0830-${tradeDate.replace(/\D/g, "")}.json`);
@@ -228,7 +323,9 @@ async function main() {
   if (!receipt.ok) process.exitCode = 1;
 }
 
-main().catch((error) => {
+if (require.main === module) main().catch((error) => {
   console.error(error?.stack || error?.message || String(error));
   process.exit(1);
 });
+
+module.exports = { classifyLeaderMarket, classifyPercent, koreanCode, naverLocalTradedAtMs, parseNaverKoreaBasic, yahooChartSnapshot, industrySummary };

@@ -1,4 +1,7 @@
-param([switch]$IsolatedBacktest)
+param(
+  [switch]$IsolatedBacktest,
+  [switch]$ReuseLineReceipt
+)
 
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
@@ -19,6 +22,14 @@ $tradeDate = $nowTaipei.ToString("yyyy-MM-dd")
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $runId = "opening-report-0830-$today-$stamp"
 $wrapperReceipt = Join-Path $receiptDir "opening-report-0830-wrapper-receipt-$today.json"
+if ($ReuseLineReceipt) {
+  $existingLinePath = Join-Path $receiptDir "line-push-receipt-$today.json"
+  if (-not (Test-Path -LiteralPath $existingLinePath)) { throw "Cannot reuse missing LINE receipt: $existingLinePath" }
+  $existingLine = Get-Content -LiteralPath $existingLinePath -Raw | ConvertFrom-Json
+  $existingRunId = [string]($existingLine.report_run_id)
+  if ([string]::IsNullOrWhiteSpace($existingRunId) -or $existingLine.line_push_ok -ne $true) { throw "Cannot reuse incomplete LINE receipt: $existingLinePath" }
+  $runId = $existingRunId
+}
 
 # Every formal entry point owns its market-calendar guard. Do not rely on the
 # 08:20 preflight to protect the 08:30 runner, because Task Scheduler launches
@@ -94,6 +105,7 @@ function Invoke-NodeStep {
 # LINE personal/group, terminal output, and Mother Pool bridge remain runner-owned.
 $runnerArgs = @("scripts\run-opening-report-0830-production.js", "--apply-bridge", "--date=$tradeDate", "--run-id=$runId")
 if ($IsolatedBacktest) { $runnerArgs += "--isolated-backtest" }
+if ($ReuseLineReceipt) { $runnerArgs += "--reuse-line-receipt" }
 $run = Invoke-NodeStep -NodeArgs $runnerArgs -Label "runner"
 $verifierArgs = @("scripts\verify-opening-report-morning-contract.js", "--trade-date=$tradeDate")
 if (-not $IsolatedBacktest) { $verifierArgs += "--require-current" }
@@ -109,15 +121,19 @@ $linePersonalOk = ($null -ne $line -and $line.line_push_ok -eq $true -and $line.
 $lineGroupOk = ($null -ne $line -and $line.line_push_ok -eq $true -and $line.has_group_target -eq $true)
 $terminalOk = ($null -ne $final -and $final.terminal_briefing_snapshot.ok -eq $true)
 $bridgeOk = ($null -ne $final -and $final.mother_pool_bridge_attempted -eq $true -and $final.mother_pool_bridge_ok -eq $true)
+$fieldAckOk = ($null -ne $final -and $final.mother_pool_field_ack_ok -eq $true -and $final.mother_pool_field_ack.complete -eq $true)
 $expected = if ($null -ne $final -and $null -ne $final.expected_industry_count) { [int]$final.expected_industry_count } else { 0 }
 $scanned = if ($null -ne $final -and $null -ne $final.scanned_industry_count) { [int]$final.scanned_industry_count } else { 0 }
-$ok = ($runnerOk -and $verifierOk -and $linePersonalOk -and $lineGroupOk -and $terminalOk -and $bridgeOk -and $expected -eq 15 -and $scanned -eq 15)
-$reasonCode = if ($ok) { "complete" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } else { "industry_scan_incomplete" }
+$ok = ($runnerOk -and $verifierOk -and $linePersonalOk -and $lineGroupOk -and $terminalOk -and $bridgeOk -and $fieldAckOk -and $expected -eq 15 -and $scanned -eq 15)
+$reasonCode = if ($ok) { "complete" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } elseif (-not $fieldAckOk) { "mother_pool_field_ack_incomplete" } else { "industry_scan_incomplete" }
 
 $receipt = [ordered]@{
   contract = "opening-report-morning-wrapper-v1"
   status = if ($ok) { "complete" } else { "failed" }
+  complete = $ok
   ok = $ok
+  exitCode = if ($ok) { 0 } else { 1 }
+  first_blocker = if ($ok) { $null } else { $reasonCode }
   reason_code = $reasonCode
   mode = if ($IsolatedBacktest) { "isolated_backtest" } else { "production" }
   date = $today
@@ -128,8 +144,11 @@ $receipt = [ordered]@{
   scanned_industry_count = $scanned
   line_personal_ok = $linePersonalOk
   line_group_ok = $lineGroupOk
+  line_receipt_reused = $ReuseLineReceipt.IsPresent
   terminal_ok = $terminalOk
   mother_pool_bridge_ok = $bridgeOk
+  mother_pool_field_ack_ok = $fieldAckOk
+  mother_pool_field_ack_receipt = if ($null -ne $final) { $final.mother_pool_field_ack_receipt } else { $null }
   runner_ok = $runnerOk
   canonical_verifier_ok = $verifierOk
   steps = @($run, $verifier)
