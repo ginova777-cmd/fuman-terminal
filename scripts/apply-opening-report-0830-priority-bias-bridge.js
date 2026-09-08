@@ -95,8 +95,14 @@ function validate(payload, options = {}) {
   const confidence = Number(payload?.confidence);
   if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) issues.push("confidence_invalid");
   if (typeof payload?.evidence_summary !== "string" || !payload.evidence_summary.trim()) issues.push("evidence_summary_missing");
-  const positiveRank = Number(payload?.positive_return_rank);
-  if (!Number.isInteger(positiveRank) || positiveRank < 1 || positiveRank > 3) issues.push("industry_not_positive_return_top3");
+  const priorityRank = Number(payload?.priority_observation_rank);
+  const basis = String(payload?.priority_observation_basis || "");
+  if (!Number.isInteger(priorityRank) || priorityRank < 1 || priorityRank > 3) issues.push("industry_not_priority_observation_top3");
+  if (!["positive_industry_top3", "us_market_closed_asia_positive_leader_top3"].includes(basis)) issues.push("priority_observation_basis_invalid");
+  if (basis === "us_market_closed_asia_positive_leader_top3") {
+    const leaders = Array.isArray(payload?.priority_overseas_leaders) ? payload.priority_overseas_leaders : [];
+    if (!leaders.length || !leaders.every((row) => /\.(?:T|KS|KQ)$/i.test(String(row?.symbol || "")) && Number(row?.percent) > 0)) issues.push("asia_positive_leader_evidence_invalid");
+  }
   return { ok: issues.length === 0, issues, date, runId: String(payload?.run_id || "") };
 }
 
@@ -162,6 +168,9 @@ function buildReceipt({ inputPath, receiptPath, payload, validation, acceptedSym
     bias: payload?.bias ?? null,
     confidence: payload?.confidence ?? null,
     industry: payload?.industry || "",
+    priority_observation_basis: payload?.priority_observation_basis || "",
+    priority_observation_rank: payload?.priority_observation_rank ?? null,
+    priority_overseas_leaders: Array.isArray(payload?.priority_overseas_leaders) ? payload.priority_overseas_leaders : [],
     evidence_summary: payload?.evidence_summary || "",
     checked_at: new Date().toISOString(),
   };
@@ -266,7 +275,8 @@ async function main() {
       const alreadyBoostedToday = compactDate(previousEvidence.date) === validation.date && previousEvidence.boost_once === true;
       const nextRank = alreadyBoostedToday ? baseRank : Math.max(FORMAL_RANK_FLOOR, baseRank - BOOST_STEP);
       const linkedIndustries = [...new Set([...(Array.isArray(previousEvidence.linked_industries) ? previousEvidence.linked_industries : []), previousEvidence.industry, payload.industry].filter(Boolean))];
-      const biasEvidence = { date: payload.date, report_time: payload.report_time, run_id: payload.run_id, source: SOURCE, mode: MODE, industry: payload.industry, linked_industries: linkedIndustries, highest_industry_rank: Math.min(Number(previousEvidence.highest_industry_rank || Number.POSITIVE_INFINITY), Number(payload.positive_return_rank || Number.POSITIVE_INFINITY)), boost_once: true, bias: payload.bias, confidence: payload.confidence, evidence_summary: payload.evidence_summary, reason_code: REASON_CODE, status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true };
+      const observationRank = Number(payload.priority_observation_rank || payload.positive_return_rank || Number.POSITIVE_INFINITY);
+      const biasEvidence = { date: payload.date, report_time: payload.report_time, run_id: payload.run_id, source: SOURCE, mode: MODE, industry: payload.industry, linked_industries: linkedIndustries, highest_industry_rank: Math.min(Number(previousEvidence.highest_industry_rank || Number.POSITIVE_INFINITY), observationRank), priority_observation_basis: payload.priority_observation_basis, priority_observation_rank: observationRank, priority_overseas_leaders: payload.priority_overseas_leaders || [], boost_once: true, bias: payload.bias, confidence: payload.confidence, evidence_summary: payload.evidence_summary, reason_code: REASON_CODE, status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true };
       const appliedBoost = Math.max(0, baseRank - nextRank);
       appliedBoosts.push({ symbol, previous_priority_rank: oldRank, applied_priority_rank: nextRank, boost: appliedBoost, boost_once: true, duplicate_boost_skipped: alreadyBoostedToday, linked_industries: linkedIndustries, price, quote_age_seconds: quoteAge, status: "watchlist_boosted" });
       return { symbol, name: old.name || mappedEntryBySymbol.get(symbol)?.name || symbol, market: old.market || "", priority_rank: nextRank, hot_extension_rank: Number.isFinite(Number(old.hot_extension_rank)) ? Number(old.hot_extension_rank) : null, priority_reason: REASON_CODE, source: SOURCE, updated_at: now, payload: { ...oldPayload, openingReport0830IndustryBias: biasEvidence, priority_reason: REASON_CODE, priority_status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true } };

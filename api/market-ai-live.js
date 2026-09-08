@@ -1523,7 +1523,23 @@ function readOpeningMorningReport(clock = taipeiClock()) {
     source_time: row.source_time || "",
     reason_code: row.reason_code || "",
   }));
-  const topPriority = industryRows.slice(0, 3);
+  const receiptPriorityRows = normalizeArray(finalReceipt.priority_observations).map((row) => ({
+    rank: Number(row.rank || 0),
+    observation_type: row.observation_type || "",
+    industry: row.industry || "",
+    display_name: row.display_name || row.industry || "",
+    overseas_name: row.overseas_name || "",
+    overseas_symbol: row.overseas_symbol || "",
+    percent: Number(row.percent),
+    source_time: row.source_time || "",
+    linked_industries: normalizeArray(row.linked_industries),
+    a_symbols: normalizeArray(row.mapped_symbols_a),
+    b_symbols: normalizeArray(row.mapped_symbols_b),
+    allowed_action: "priority_scan_only",
+    forbidden_action: "publish_formal_candidate_without_taiwan_evidence",
+  })).filter((row) => row.rank >= 1 && row.rank <= 3 && row.percent > 0);
+  const hasPriorityObservationContract = finalReceipt.display_contract === "opening_report_priority_observation_top3_v2";
+  const topPriority = hasPriorityObservationContract ? receiptPriorityRows : industryRows.slice(0, 3);
   const recommended = topPriority.flatMap((row) => row.a_symbols.map((stock) => ({ ...stock, industry: row.display_name, bias: row.bias })));
   const bridgeStatus = finalReceipt.mother_pool_bridge_attempted
     ? (finalReceipt.mother_pool_bridge_ok ? "applied" : "fail_closed_optional")
@@ -1547,6 +1563,7 @@ function readOpeningMorningReport(clock = taipeiClock()) {
     allowed_action: "priority_scan_only",
     forbidden_action: "publish_formal_candidate_without_taiwan_evidence",
     bridge_status: bridgeStatus,
+    priority_observation_mode: finalReceipt.priority_observation_mode || "positive_industry_top3",
     line: {
       required: finalReceipt.line_required === true,
       ok: finalReceipt.line_delivery_ok === true || lineReceipt?.line_push_ok === true,
