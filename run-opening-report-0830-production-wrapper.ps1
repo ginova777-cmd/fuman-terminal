@@ -1,4 +1,7 @@
-param([switch]$IsolatedBacktest)
+param(
+  [switch]$IsolatedBacktest,
+  [switch]$ReuseLineReceipt
+)
 
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
@@ -19,6 +22,14 @@ $tradeDate = $nowTaipei.ToString("yyyy-MM-dd")
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $runId = "opening-report-0830-$today-$stamp"
 $wrapperReceipt = Join-Path $receiptDir "opening-report-0830-wrapper-receipt-$today.json"
+if ($ReuseLineReceipt) {
+  $existingLinePath = Join-Path $receiptDir "line-push-receipt-$today.json"
+  if (-not (Test-Path -LiteralPath $existingLinePath)) { throw "Cannot reuse missing LINE receipt: $existingLinePath" }
+  $existingLine = Get-Content -LiteralPath $existingLinePath -Raw | ConvertFrom-Json
+  $existingRunId = [string]($existingLine.report_run_id)
+  if ([string]::IsNullOrWhiteSpace($existingRunId) -or $existingLine.line_push_ok -ne $true) { throw "Cannot reuse incomplete LINE receipt: $existingLinePath" }
+  $runId = $existingRunId
+}
 
 # Every formal entry point owns its market-calendar guard. Do not rely on the
 # 08:20 preflight to protect the 08:30 runner, because Task Scheduler launches
@@ -94,6 +105,7 @@ function Invoke-NodeStep {
 # LINE personal/group, terminal output, and Mother Pool bridge remain runner-owned.
 $runnerArgs = @("scripts\run-opening-report-0830-production.js", "--apply-bridge", "--date=$tradeDate", "--run-id=$runId")
 if ($IsolatedBacktest) { $runnerArgs += "--isolated-backtest" }
+if ($ReuseLineReceipt) { $runnerArgs += "--reuse-line-receipt" }
 $run = Invoke-NodeStep -NodeArgs $runnerArgs -Label "runner"
 $verifierArgs = @("scripts\verify-opening-report-morning-contract.js", "--trade-date=$tradeDate")
 if (-not $IsolatedBacktest) { $verifierArgs += "--require-current" }
@@ -128,6 +140,7 @@ $receipt = [ordered]@{
   scanned_industry_count = $scanned
   line_personal_ok = $linePersonalOk
   line_group_ok = $lineGroupOk
+  line_receipt_reused = $ReuseLineReceipt.IsPresent
   terminal_ok = $terminalOk
   mother_pool_bridge_ok = $bridgeOk
   runner_ok = $runnerOk
