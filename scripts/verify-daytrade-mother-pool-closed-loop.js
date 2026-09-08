@@ -34,8 +34,8 @@ function ageSeconds(value) {
   return Number.isFinite(parsed) ? Math.max(0, Math.floor((Date.now() - parsed) / 1000)) : 999999;
 }
 
-function runStatic(relativePath) {
-  const result = spawnSync(process.execPath, [path.join(ROOT, relativePath)], {
+function runStatic(relativePath, args = []) {
+  const result = spawnSync(process.execPath, [path.join(ROOT, relativePath), ...args], {
     cwd: ROOT, encoding: "utf8", windowsHide: true,
   });
   return {
@@ -221,6 +221,7 @@ async function main() {
     skeleton: verifySkeletonStatic(),
     dailyIdentity: runStatic("scripts/verify-daytrade-priority-daily-rollover-contract.js"),
     futoptLockRetry: runStatic("scripts/verify-daytrade-futopt-lock-retry-contract.js"),
+    sideVolume2000: runStatic("scripts/verify-daytrade-side-volume-contract.js", ["--static-only"]),
     legacyVerifierRetired: {
       ok: !fs.existsSync(path.join(ROOT, "scripts", "verify-daytrade-mother-pool-contract.js"))
         && !fs.existsSync(path.join(ROOT, "scripts", "verify-daytrade-mother-pool-skeleton.js"))
@@ -233,6 +234,7 @@ async function main() {
   check("static_skeleton_contract", staticChecks.skeleton.ok, "static_skeleton_contract_failed");
   check("static_daily_identity_contract", staticChecks.dailyIdentity.ok, "static_daily_identity_contract_failed");
   check("static_futopt_lock_retry_contract", staticChecks.futoptLockRetry.ok, "static_futopt_lock_retry_contract_failed");
+  check("static_side_volume_2000_contract", staticChecks.sideVolume2000.ok, "static_side_volume_2000_contract_failed");
   check("legacy_mother_pool_verifier_retired", staticChecks.legacyVerifierRetired.ok, "legacy_mother_pool_verifier_still_present");
 
   const openingRequired = clock.minute >= 8 * 60 + 36;
