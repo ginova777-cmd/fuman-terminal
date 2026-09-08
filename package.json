@@ -294,7 +294,7 @@
     "daytrade-ps1-entry:publish": "node --use-system-ca scripts/publish-daytrade-ps1-entry.js --apply",
     "daytrade-ps1-entry:dry-run": "node --use-system-ca scripts/publish-daytrade-ps1-entry.js --dry-run",
     "verify:daytrade-ps1-entry-writer": "node scripts/verify-daytrade-ps1-entry-writer-contract.js",
-    "verify:scorecard-prewater-evidence": "npm run verify:scorecard-page-contract && npm run verify:scorecard-runtime-payload && npm run verify:scorecard-mutations && npm run verify:scorecard-daytrade-entry-sql && npm run verify:scorecard-daytrade-entry-contract && npm run verify:scorecard-collector-contract && npm run verify:daytrade-ps1-entry-writer && npm run verify:seven-strategy-daily-history-writer",
+    "verify:scorecard-prewater-evidence": "npm run verify:scorecard-page-contract && npm run verify:scorecard-runtime-payload && npm run verify:scorecard-mutations && npm run verify:scorecard-daytrade-entry-sql && npm run verify:scorecard-daytrade-entry-contract && npm run verify:scorecard-collector-contract && node scripts/verify-scorecard88-collection.js --contract-only && npm run verify:daytrade-ps1-entry-writer && npm run verify:seven-strategy-daily-history-writer",
     "verify:market-calendar-contract": "node scripts/verify-market-calendar-contract.js",
     "verify:market-closed-schedule": "node scripts/verify-market-closed-schedule-contract.js",
     "market-calendar:auto-update": "node --use-system-ca scripts/update-market-calendar-auto-override.js --apply",

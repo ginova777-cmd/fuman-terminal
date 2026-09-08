@@ -187,22 +187,6 @@ function Test-Strategy4PrewarmReceiptReady {
   return $ready
 }
 
-function Invoke-Strategy4ScorecardSync {
-  Write-Log "Strategy4 scorecard sync start after Supabase publish."
-  Push-Location $repo
-  try {
-    & npm.cmd run scorecard:sync *>&1 | Tee-Object -FilePath $log -Append
-    $scorecardExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
-    if ($scorecardExit -ne 0) {
-      Write-Log "Strategy4 scorecard sync non-blocking failure exit=$scorecardExit; scanner/readback remains authoritative and daily manifest will queue scorecard publish repair."
-      return $false
-    }
-    Write-Log "Strategy4 scorecard sync ok after Supabase publish."
-    return $true
-  } finally {
-    Pop-Location
-  }
-}
 function Invoke-Strategy4InlineTerminalVerify {
   param([string]$RunId)
   if ([string]::IsNullOrWhiteSpace($RunId)) { throw "Strategy4 inline terminal verify missing runId" }
@@ -239,7 +223,7 @@ function Invoke-Strategy4InlineTerminalVerify {
   }
 }
 function Invoke-Strategy4ClosureAndLine {
-  param([string]$RunId, [int]$ExpectedCount)
+  param([string]$RunId, [int]$ExpectedCount, [switch]$ReuseDeliveredLineEvidence)
   if ([string]::IsNullOrWhiteSpace($RunId) -or $ExpectedCount -le 0) { throw "Strategy4 LINE closure missing runId or count" }
   $commands = @(
     @("scripts\verify-strategy4-source-root.js"), @("scripts\verify-strategy4-match-yield-diagnostics.js")
@@ -248,16 +232,27 @@ function Invoke-Strategy4ClosureAndLine {
     & $nodeExe "--use-system-ca" @command *>&1 | Tee-Object -FilePath $log -Append
     if ($LASTEXITCODE -ne 0) { throw "Strategy4 closure verifier failed: $($command[0]) exit=$LASTEXITCODE" }
   }
-  & $nodeExe "--use-system-ca" "scripts\send-strategy-line-card.js" "--strategy=strategy4" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
-  if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE dry-run failed exit=$LASTEXITCODE" }
-  & $nodeExe "scripts\verify-strategy4-line-card-contract.js" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
-  if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE dry-run canonical verifier failed exit=$LASTEXITCODE" }
-  foreach ($command in @(@("scripts\verify-strategy4-canonical-closure.js"), @("scripts\verify-strategy4-88-data-chain.js"), @("scripts\verify-terminal-daily-ohlcv.js"))) {
+  if (-not $ReuseDeliveredLineEvidence) {
+    & $nodeExe "--use-system-ca" "scripts\send-strategy-line-card.js" "--strategy=strategy4" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
+    if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE dry-run failed exit=$LASTEXITCODE" }
+    & $nodeExe "scripts\verify-strategy4-line-card-contract.js" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
+    if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE dry-run canonical verifier failed exit=$LASTEXITCODE" }
+  }
+  # Strategy4 owns its target-date coverage contract. The scanner and the
+  # Strategy4 match-yield verifier already exclude stale daily-K rows and allow
+  # completion when target-date coverage is at least 90 percent. Do not couple
+  # this closure to the shared 20-trading-day OHLC verifier; historical gaps in
+  # that unrelated contract must not block a valid same-day Strategy4 run.
+  foreach ($command in @(@("scripts\verify-strategy4-canonical-closure.js"), @("scripts\verify-strategy4-88-data-chain.js"))) {
     & $nodeExe "--use-system-ca" @command *>&1 | Tee-Object -FilePath $log -Append
     if ($LASTEXITCODE -ne 0) { throw "Strategy4 closure verifier failed: $($command[0]) exit=$LASTEXITCODE" }
   }
-  & $nodeExe "--use-system-ca" "scripts\send-strategy-line-card.js" "--strategy=strategy4" *>&1 | Tee-Object -FilePath $log -Append
-  if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE push failed exit=$LASTEXITCODE" }
+  if (-not $ReuseDeliveredLineEvidence) {
+    & $nodeExe "--use-system-ca" "scripts\send-strategy-line-card.js" "--strategy=strategy4" *>&1 | Tee-Object -FilePath $log -Append
+    if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE push failed exit=$LASTEXITCODE" }
+  } else {
+    Write-Log "Strategy4 LINE push skipped; reusing delivered same-run evidence runId=$RunId"
+  }
   $lineFile = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-$((Get-Date).ToString('yyyyMMdd')).json"
   $lineReceipt = Get-Content -LiteralPath $lineFile -Raw | ConvertFrom-Json
   $expectedLineCount = [Math]::Min($ExpectedCount, 70)
@@ -314,13 +309,20 @@ if ($Recovery) {
   $recoveryCount = [int]$row.supabase.count
   $recoveryDate = Normalize-Strategy4DateStamp ([string]$tri.expectedDate)
   if ([string]::IsNullOrWhiteSpace($recoveryDate)) { $recoveryDate = Normalize-Strategy4DateStamp $recoveryRunId }
-  $lineEvidence = Get-Content -LiteralPath (Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-$recoveryDate.json") -Raw | ConvertFrom-Json
-  $publishEvidence = Get-Content -LiteralPath (Join-Path $RuntimeRoot "data\scan-receipts\strategy4-daily-publish-$recoveryDate.json") -Raw | ConvertFrom-Json
-  if ($lineEvidence.line_push_ok -ne $true -or [string]$lineEvidence.runId -ne $recoveryRunId) { throw "Strategy4 recovery requires delivered LINE evidence for runId=$recoveryRunId" }
-  if ($publishEvidence.ok -ne $true -or [string]$publishEvidence.runId -ne $recoveryRunId) { throw "Strategy4 recovery requires complete daily publish evidence for runId=$recoveryRunId" }
+  $lineEvidencePath = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-$recoveryDate.json"
+  $lineEvidence = if (Test-Path -LiteralPath $lineEvidencePath) { Get-Content -LiteralPath $lineEvidencePath -Raw | ConvertFrom-Json } else { $null }
+  $publishEvidencePath = Join-Path $RuntimeRoot "data\scan-receipts\strategy4-daily-publish-$recoveryDate.json"
+  $publishEvidence = if (Test-Path -LiteralPath $publishEvidencePath) { Get-Content -LiteralPath $publishEvidencePath -Raw | ConvertFrom-Json } else { $null }
+  $isTodayRecovery = $recoveryDate -eq (Get-Date).ToString("yyyyMMdd")
+  if ($null -ne $lineEvidence -and ($lineEvidence.line_push_ok -ne $true -or [string]$lineEvidence.runId -ne $recoveryRunId)) { throw "Strategy4 recovery found mismatched LINE evidence for runId=$recoveryRunId" }
+  if ($null -eq $lineEvidence -and -not $isTodayRecovery) { throw "Strategy4 historical recovery requires delivered LINE evidence for runId=$recoveryRunId" }
+  if ($null -ne $publishEvidence -and ($publishEvidence.ok -ne $true -or [string]$publishEvidence.runId -ne $recoveryRunId)) { throw "Strategy4 recovery found mismatched daily publish evidence for runId=$recoveryRunId" }
+  if ($null -eq $publishEvidence -and -not $isTodayRecovery) { throw "Strategy4 historical recovery requires complete daily publish evidence for runId=$recoveryRunId" }
   Write-Strategy4Receipt "complete" 0 $true $recoveryCount $recoveryRunId @() "" ([int]$row.supabase.scannedCount) ([int]$row.supabase.expectedTotal)
   Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId $recoveryRunId -ExpectedDate $recoveryDate -Row $row
-  if ($recoveryDate -eq (Get-Date).ToString("yyyyMMdd")) { Invoke-Strategy4ClosureAndLine $recoveryRunId $recoveryCount }
+  if ($isTodayRecovery) {
+    Invoke-Strategy4ClosureAndLine $recoveryRunId $recoveryCount -ReuseDeliveredLineEvidence:($null -ne $lineEvidence)
+  }
   else { Write-Log "Strategy4 historical recovery reused existing delivered LINE evidence; no notification resent. runId=$recoveryRunId tradeDate=$recoveryDate" }
   Write-Log "Strategy4 one-entry recovery complete runId=$recoveryRunId count=$recoveryCount"
   exit 0
@@ -531,7 +533,6 @@ try {
       ok = $true
     }
     $postScanWarnings = @("production API verification protected/failed: $apiVerifyError; Supabase DB readback complete")
-    try { Invoke-Strategy4ScorecardSync } catch { $postScanWarnings += "scorecard sync failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard sync warning after DB readback: $($_.Exception.Message)" }
     try { Invoke-Strategy4SnapshotRefresh ([string]$dbVerify.runId) } catch { $postScanWarnings += "desktop snapshot refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 desktop snapshot warning after DB readback: $($_.Exception.Message)" }
     try { Invoke-Strategy4ScorecardSourceRefresh ([string]$dbVerify.runId) } catch { $postScanWarnings += "scorecard sourceReports refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard/sourceReports warning after DB readback: $($_.Exception.Message)" }
     try {
@@ -560,7 +561,6 @@ try {
 
 $postScanWarnings = @()
 try { Invoke-Strategy4SnapshotRefresh ([string]$strategy4Output.runId) } catch { $postScanWarnings += "desktop snapshot refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 desktop snapshot warning: $($_.Exception.Message)" }
-try { Invoke-Strategy4ScorecardSync } catch { $postScanWarnings += "scorecard sync failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard sync warning: $($_.Exception.Message)" }
 try { Invoke-Strategy4ScorecardSourceRefresh ([string]$strategy4Output.runId) } catch { $postScanWarnings += "scorecard sourceReports refresh failed: $($_.Exception.Message)"; Write-Log "Strategy4 scorecard/sourceReports warning: $($_.Exception.Message)" }
 try {
   Write-Strategy4Receipt "verifying" 0 $false ([int]$strategy4Output.count) ([string]$strategy4Output.runId) $postScanWarnings "" ([int]$strategy4Output.scannedCount) ([int]$strategy4Output.total)

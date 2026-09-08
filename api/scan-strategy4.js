@@ -10,7 +10,6 @@ const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const FUGLE_API_KEY_FILE = process.env.FUGLE_API_KEY_FILE || path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt");
 const FINMIND_API_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE || path.join(RUNTIME_DIR, "secrets", "finmind-api-token.txt");
 const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join(RUNTIME_DIR, "cache", "fugle", "historical");
-const STRATEGY4_MIN_AVG_VOLUME_5 = 3000;
 const STRATEGY4_THREE_INSIDE_PRIOR_LOOKBACK = Number(process.env.STRATEGY4_THREE_INSIDE_PRIOR_LOOKBACK || 5);
 const STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT = Number(process.env.STRATEGY4_THREE_INSIDE_PRIOR_DROP_PCT || 5);
 const STRATEGY4_THREE_INSIDE_BODY_RATIO = Number(process.env.STRATEGY4_THREE_INSIDE_BODY_RATIO || 0.5);
@@ -133,7 +132,8 @@ function readFugleHistoryCache(code, from, to) {
   const payload = readJson(fugleHistoryCacheFile(code), null);
   if (
     payload?.code !== normalizeCode(code)
-    || payload?.from !== from
+    || !payload?.from
+    || String(payload.from).slice(0, 10) > String(from).slice(0, 10)
     || payload?.to !== to
     || !Array.isArray(payload?.rows)
     || payload.rows.length < STRATEGY4_MIN_HISTORY_BARS
@@ -1079,7 +1079,6 @@ function scanStrategy4(code, market, rows, priceSource = "") {
       c.close > b.close &&
       c.close > a.high;
   })();
-  if (daily.volMa5 < STRATEGY4_MIN_AVG_VOLUME_5 && !threeInside) return null;
   const deepFallFib = daily.deepFall && isRed;
 
   if (bullAttack) signals.push({ id: "bull_attack", short: "攻擊", icon: "🔥", reason: `站上MA20/EMA21，MACD多頭，量比 ${daily.volumeRatio.toFixed(2)}，日K多頭攻擊。` });
