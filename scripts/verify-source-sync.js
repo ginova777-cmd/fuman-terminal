@@ -207,7 +207,6 @@ const KEY_FILES = [
 
   "ops/public-slot/FinMindUnifiedQuoteViews.sql",
   "ops/public-slot/FugleSourceLiveRepairB6_Intraday1mCoverageStatsRpc_20260630.sql",
-  "ops/public-slot/Strategy3QuoteReadyFugleFirstFix.sql",
   "ops/public-slot/Strategy5RunIdCompleteGate.sql",
   "ops/public-slot/SupabaseCostGovernanceAuditPatch_20260630.sql",
   "ops/public-slot/InstitutionRunIdCompleteGate.sql",
@@ -221,6 +220,7 @@ const KEY_FILES = [
 
 const RETIRED_ARTIFACTS = [
   "run-open-buy-sync-retry.ps1",
+  "ops/public-slot/Strategy3QuoteReadyFugleFirstFix.sql",
 
   "data/strategy4-latest.json",
   "data/strategy4-backup.json",
