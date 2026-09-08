@@ -12,6 +12,7 @@ const runtimeRoot = process.env.FUMAN_RUNTIME_ROOT || "C:\\fuman-runtime";
 const receiptDir = path.join(runtimeRoot, "data", "scan-receipts");
 const baseUrl = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const slot = String(process.argv.find((arg) => arg.startsWith("--slot=")) || "").split("=")[1] || "";
+const onlyKey = String(process.argv.find((arg) => arg.startsWith("--only=")) || "").split("=")[1] || "";
 const slots = {
   "12:40": ["strategy2"],
   "13:15": ["strategy3"],
@@ -63,11 +64,13 @@ async function fetchResult(pathname, headers, json = false) {
 
 async function main() {
   if (!slots[slot]) throw new Error("invalid_surface_evidence_slot");
+  if (onlyKey && !slots[slot].includes(onlyKey)) throw new Error("invalid_surface_evidence_scope");
+  const selectedKeys = onlyKey ? [onlyKey] : slots[slot];
   const credential = await resolveProtectedReadbackCredential({ timeoutMs: 20000 });
   const headers = protectedReadbackHeaders(credential);
   const bundle = await fetchResult("/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=70", headers, true);
   const rows = [];
-  for (const key of slots[slot]) {
+  for (const key of selectedKeys) {
     const desktop = endpoint(bundle.payload, key);
     const mobile = await fetchResult(`/api/mobile-fragment?tab=${key}`, headers, false);
     const desktopRunId = String(desktop?.runId || desktop?.payload?.runId || desktop?.transport?.runId || "");
@@ -104,6 +107,7 @@ async function main() {
     status: rows.every((row) => row.ok) ? "PASS" : "BLOCKED",
     contract: "scorecard88-terminal-surface-evidence-v1",
     slot,
+    scope: onlyKey || "all",
     tradeDate: taipeiDate(),
     checkedAt: new Date().toISOString(),
     readOnly: true,

@@ -1061,6 +1061,41 @@ async function activateMobileRoute(cdp, route, timeoutMs = 18000) {
   throw new Error(`mobile route did not activate: ${route.fragment} (${JSON.stringify(last)})`);
 }
 
+async function waitForMobileRouteReady(cdp, route, timeoutMs = ROUTE_TIMEOUT_MS) {
+  return waitFor(cdp, (expected) => {
+    const content = document.querySelector("#content");
+    const root = content?.querySelector("[data-mobile-terminal-fragment]");
+    const rootKey = root?.dataset?.mobileFragmentKey || "";
+    const runId = root?.dataset?.runId || "";
+    const text = String(content?.textContent || "").replace(/\s+/g, " ").trim();
+    const membershipLocked = Boolean(content?.querySelector("[data-mobile-auth-lock], .mobile-terminal-locked"));
+    const loading = /正在載入此分頁資料|正在讀取目前分頁資料|正在載入/.test(text);
+    const rows = content?.querySelectorAll(".mobile-terminal-row,.market-ai-stock-row,.watch-row").length || 0;
+    const watchButtons = content?.querySelectorAll("[data-ai-watch-code]").length || 0;
+    const identityReady = membershipLocked
+      || expected.fragment === "watch"
+      || expected.fragment === "ai"
+      || expected.allowMissingRunId
+      || Boolean(runId);
+    const rowsReady = membershipLocked
+      || expected.allowEmpty
+      || expected.fragment === "ai"
+      || rows > 0;
+    const actionsReady = membershipLocked
+      || !expected.verifyWatchAdd
+      || watchButtons > 0;
+    return {
+      ok: rootKey === expected.fragment && !loading && identityReady && rowsReady && actionsReady,
+      rootKey,
+      runId,
+      loading,
+      rows,
+      watchButtons,
+      text: text.slice(0, 220),
+    };
+  }, route, timeoutMs, 300);
+}
+
 async function afterDesktopRouteActivate(cdp, route) {
   if (route.postClickSelector) {
     let active = null;
@@ -2207,8 +2242,10 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
         }
         await prepareMobileRoute(cdp, effectiveRoute);
         await activateMobileRoute(cdp, effectiveRoute);
+        await waitForMobileRouteReady(cdp, effectiveRoute);
         if (effectiveRoute.fragment !== "watch") {
           await verifyMobileRouteWatchAdd(cdp, effectiveRoute);
+          await waitForMobileRouteReady(cdp, effectiveRoute);
         } else {
           await verifyMobileLegacySuccessRescue(cdp);
           await verifyMobileDivergedStorageMerge(cdp);

@@ -9,12 +9,15 @@ const key = date.replace(/\D/g, "");
 const read = f => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
 const sourceFile = path.join(runtime, "data", "scan-receipts", "chip-source-sync.json");
 const scanFile = path.join(runtime, "data", "scan-receipts", "strategy5.json");
+const scorecardFile = path.join(runtime, "data", "scorecard-terminal-current.json");
 const source = read(sourceFile), scan = read(scanFile);
+const scorecard = read(scorecardFile);
 const readText = file => { try { return fs.readFileSync(file, "utf8"); } catch { return ""; } };
 const runnerSource = readText(path.join(root, "run-strategy5.ps1"));
 const publisherSource = readText(path.join(root, "scripts", "publish-strategy5-scorecard-source-report.js"));
 const watchdogSource = readText(path.join(root, "run-strategy5-watchdog.ps1"));
 const protectedReaderSource = readText(path.join(root, "scripts", "read-protected-production-api.js"));
+const packageSource = readText(path.join(root, "package.json"));
 const auditFile = scan?.runId ? path.join(runtime, "outputs", "post-scan-tri-surface", "strategy5", scan.runId, "terminal-resource-chain-audit.json") : "";
 const audit = auditFile ? read(auditFile) : null;
 const issues = [];
@@ -32,6 +35,7 @@ if (!watchdogSource.includes('"--summary-fields=runId,complete,count,updatedAt"'
 for (const retired of ["run-strategy5-battle-verify.ps1", "scripts/verify-strategy5-battle-state.js", "scripts/verify-strategy5-alert-path.js"]) {
   if (fs.existsSync(path.join(root, retired))) issues.push(`retired_verifier_returned:${retired}`);
 }
+if (packageSource.includes('"verify:strategy5-alert-path"')) issues.push("retired_verifier_package_reference_returned");
 if (source?.complete !== true || source?.status !== "complete" || Number(source?.exitCode) !== 0) issues.push("chip_source_sync_not_complete");
 if (source?.fallback === true) issues.push("chip_source_fallback_disallowed");
 if (Array.isArray(source?.warnings) && source.warnings.length > 0) issues.push("chip_source_warnings_not_empty");
@@ -49,6 +53,11 @@ for (const field of ["desktopRunId", "mobileRunId", "scorecardRunId"]) {
   if (String(scan?.[field] || "") !== String(scan?.runId || "")) issues.push(`strategy5_${field}_mismatch`);
 }
 if (audit?.ok !== true) issues.push("strategy5_tri_surface_not_complete");
+const scorecardReport = (Array.isArray(scorecard?.sourceReports) ? scorecard.sourceReports : [])
+  .find((row) => String(row?.key || "").toLowerCase() === "strategy5");
+if (scorecard?.contract !== "scorecard88-terminal-canonical-collector-v1") issues.push("strategy5_scorecard88_contract_not_canonical");
+if (String(scorecardReport?.runId || "") !== String(scan?.runId || "")) issues.push("strategy5_scorecard88_run_id_mismatch");
+if (scorecardReport?.ok !== true || Number(scorecardReport?.count || scorecardReport?.resultCount || 0) <= 0) issues.push("strategy5_scorecard88_report_not_complete");
 const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "strategy5", tradeDate: date,
   checkedAt: new Date().toISOString(), status: issues.length ? "failed" : "complete", complete: issues.length === 0,
   exitCode: issues.length ? 1 : 0, runId: scan?.runId || "", count: Number(scan?.matches || 0),

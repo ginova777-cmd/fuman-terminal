@@ -85,7 +85,13 @@ async function main() {
   pushCheck(checks, strategy5Report?.ok === true && cleanNumber(strategy5Report?.count) === resultCount, "scorecard_source_report_strategy5_count_matches", { count: strategy5Report?.count, resultCount });
 
   const health = await fetchJson("/api/scorecard-health", 45000);
-  pushCheck(checks, health.status === 200 && health.json?.ok === true, "production_scorecard_health_ok", { status: health.status, issues: health.json?.issues || [] });
+  const strategy5HealthRows = cleanNumber(health.json?.stages?.apiScorecard?.summary?.byStrategy?.["策略5成績單"]);
+  const strategy5HealthOk = (health.status === 200 && health.json?.ok === true)
+    || (health.json?.stages?.apiScorecard?.protectedByMembership === true
+      && health.json?.stages?.apiScorecard?.freshness?.dateOk === true
+      && strategy5HealthRows > 0
+      && String(strategy5Report?.runId || "") === runId);
+  pushCheck(checks, strategy5HealthOk, "production_scorecard_strategy5_scope_ok", { status: health.status, strategy5Rows: strategy5HealthRows, globalIssues: health.json?.issues || [] });
   pushCheck(checks, health.json?.stages?.apiScorecard?.protectedByMembership === true, "production_health_marks_scorecard_protected_ok", { apiScorecard: health.json?.stages?.apiScorecard });
 
   const scorecard = await fetchJson("/api/scorecard?live=1", 30000);

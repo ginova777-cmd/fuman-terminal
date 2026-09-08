@@ -2,6 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
+const { resolveProtectedReadbackCredential, protectedReadbackHeaders } = require("../lib/protected-readback-credential");
 
 const BASE_URL = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const EXPECTED_RUN_ID = String(process.env.EXPECTED_STRATEGY5_RUN_ID || "").trim();
@@ -41,10 +42,10 @@ function responseCapture(resolve) {
   };
 }
 
-function callInternal(modulePath, url, query = {}) {
+function callInternal(modulePath, url, query = {}, headers = {}) {
   return new Promise((resolve, reject) => {
     const handler = require(modulePath);
-    Promise.resolve(handler({ method: "GET", url, query, headers: { host: "localhost" }, fumanInternalVerify: true }, responseCapture(resolve))).catch(reject);
+    Promise.resolve(handler({ method: "GET", url, query, headers: { host: "localhost", ...headers }, fumanInternalVerify: true }, responseCapture(resolve))).catch(reject);
   });
 }
 
@@ -119,6 +120,8 @@ function addCheck(checks, ok, code, evidence = {}) {
 async function main() {
   const root = path.resolve(__dirname, "..");
   const terminalRoot = process.env.FUMAN_TERMINAL_ROOT || path.resolve(__dirname, "..");
+  const credential = await resolveProtectedReadbackCredential({ timeoutMs: 20000 });
+  const internalHeaders = protectedReadbackHeaders(credential);
   const modules = {
     strategy5Latest: path.join(terminalRoot, "api", "strategy5-latest.js"),
     terminalFastBundle: path.join(terminalRoot, "api", "terminal-fast-bundle.js"),
@@ -128,13 +131,13 @@ async function main() {
   };
 
   const [latest, bundle] = await Promise.all([
-    callInternal(modules.strategy5Latest, "/api/strategy5-latest?canvas=1&compact=1&shell=1&live=1&limit=70", { canvas: "1", compact: "1", shell: "1", live: "1", limit: "70" }),
-    callInternal(modules.terminalFastBundle, "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=80&live=1", { canvas: "1", compact: "1", shell: "1", limit: "80", live: "1" }),
+    callInternal(modules.strategy5Latest, "/api/strategy5-latest?canvas=1&compact=1&shell=1&live=1&limit=70", { canvas: "1", compact: "1", shell: "1", live: "1", limit: "70" }, internalHeaders),
+    callInternal(modules.terminalFastBundle, "/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=80&live=1", { canvas: "1", compact: "1", shell: "1", limit: "80", live: "1" }, internalHeaders),
   ]);
-  const mobile = await callInternal(modules.mobileFragment, "/api/mobile-fragment?tab=strategy5&live=1", { tab: "strategy5", live: "1" });
+  const mobile = await callInternal(modules.mobileFragment, "/api/mobile-fragment?tab=strategy5&live=1", { tab: "strategy5", live: "1" }, internalHeaders);
   const [scorecard, sourceReports] = await Promise.all([
-    callInternal(modules.scorecard, "/api/scorecard?t=1", { t: "1" }),
-    callInternal(modules.sourceReports, "/api/source-reports?live=1", { live: "1" }),
+    callInternal(modules.scorecard, "/api/scorecard?t=1", { t: "1" }, internalHeaders),
+    callInternal(modules.sourceReports, "/api/source-reports?live=1", { live: "1" }, internalHeaders),
   ]);
   const [prodBundle, prodLatest, prodMobile, prodScorecard, prodSourceReports, prod88] = await Promise.all([
     fetchText("/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&limit=80&live=1"),
@@ -179,6 +182,7 @@ async function main() {
 
   const page88Local = fs.readFileSync(path.join(root, "88.html"), "utf8");
   const checks = [];
+  addCheck(checks, credential.ok === true, "protected_readback_credential_available", { source: credential.source || "", reason: credential.reason || "" });
   addCheck(checks, /^strategy5-\d{8}-\d{14}$/.test(runId), "new_strategy5_run_id_present", { runId });
   addCheck(checks, !summaries.strategy5Latest.runId || summaries.strategy5Latest.runId === runId, "strategy5_latest_internal_run_id_or_blocked", summaries.strategy5Latest);
   addCheck(checks, summaries.strategy5Latest.expectedTotal > 0 || summaries.sourceReports.runId === runId, "strategy5_latest_or_source_report_expected_total", summaries.strategy5Latest);
