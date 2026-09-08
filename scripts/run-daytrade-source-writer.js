@@ -12,6 +12,10 @@ const {
   readFugleFutoptWebSocketQuotes,
 } = require("../lib/fugle-futopt-websocket");
 const { readSnapshot } = require("../lib/supabase-snapshots");
+const {
+  SIDE_VOLUME_THRESHOLD_LOTS,
+  deriveDaytradeSideVolumeContract,
+} = require("../lib/daytrade-side-volume-contract");
 
 const SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
 const SOURCE_HOST_ID = String(process.env.FUMAN_DAYTRADE_SOURCE_HOST_ID || process.env.FUMAN_SOURCE_HOST_ID || process.env.COMPUTERNAME || "unknown").trim();
@@ -1101,7 +1105,7 @@ async function fetchExistingDaytradeQuotes() {
   try {
     const rows = await supabaseGetPaged(
       "fugle_daytrade_quotes_live",
-      "select=symbol,name,market,quote_seen_at,updated_at,last_trade_time,price,open_price,high_price,low_price,previous_close,change_percent,total_volume,trade_value,bid_price,bid_volume,ask_price,ask_volume,cumulative_bid_volume,cumulative_ask_volume,cumulative_bid_ask_volume,limit_up_price,limit_down_price&order=symbol.asc",
+      "select=symbol,name,market,quote_seen_at,updated_at,last_trade_time,price,open_price,high_price,low_price,previous_close,change_percent,total_volume,trade_value,bid_price,bid_volume,ask_price,ask_volume,cumulative_bid_volume,cumulative_ask_volume,cumulative_bid_ask_volume,limit_up_price,limit_down_price,payload&order=symbol.asc",
       { service: true },
     );
     for (const row of rows) {
@@ -1300,6 +1304,10 @@ function mergeWebSocketQuoteCache(quoteMap) {
       low_price: numeric(row.low ?? row.lowPrice, previous.low_price, true),
       previous_close: numeric(row.previousClose ?? row.previous_close ?? row.referencePrice, previous.previous_close, true),
       trial_price: numeric(row.trialPrice ?? row.trial_price, previous.trial_price, true),
+      trial_event_at: normalizeTimestamp(
+        row.trialEventAt || row.trial_event_at || row.payload?.trialEventAt || previous.trial_event_at || previous.payload?.trial_event_at,
+        "",
+      ),
       is_trial: row.isTrial === true || row.is_trial === true,
       is_limit_up_bid: row.isLimitUpBid === true || row.is_limit_up_bid === true,
       change_percent: numeric(changePercentValue, previous.change_percent),
@@ -1325,6 +1333,10 @@ function mergeWebSocketQuoteCache(quoteMap) {
         quote_seen_at: seenAt,
         received_at: receivedAt,
         aggregate_last_updated: aggregateLastUpdated,
+        trial_event_at: normalizeTimestamp(
+          row.trialEventAt || row.trial_event_at || row.payload?.trialEventAt || previous.trial_event_at || previous.payload?.trial_event_at,
+          "",
+        ),
       },
     };
     quoteMap.set(symbol, merged);
@@ -1730,11 +1742,20 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const lowPrice = firstNumber(quote.low_price, payload.lowPrice, payload.low_price, price);
   const amplitudeFromOpen = openPrice > 0 && price > 0 ? ((price - openPrice) / openPrice) * 100 : 0;
   const limitUpPrice = firstNumber(quote.limit_up_price, payload.limitUpPrice, payload.limit_up_price, payload.limitUp, payload.limit_up, previousClose > 0 ? previousClose * 1.1 : 0);
-  const insideVolume = firstNumber(quote.cumulative_bid_volume, payload.cumulativeBidVolume, payload.cumulative_bid_volume);
-  const outsideVolume = firstNumber(quote.cumulative_ask_volume, payload.cumulativeAskVolume, payload.cumulative_ask_volume);
-  const sideTotal = firstNumber(quote.cumulative_bid_ask_volume, payload.cumulativeBidAskVolume, payload.cumulative_bid_ask_volume, insideVolume + outsideVolume);
+  const sideVolumeContract = deriveDaytradeSideVolumeContract({
+    quote,
+    payload,
+    expectedTradeDate: taipeiDate(),
+    sourceName: SOURCE_NAME,
+  });
+  const insideVolume = firstNumber(sideVolumeContract.insideVolume);
+  const outsideVolume = firstNumber(sideVolumeContract.outsideVolume);
+  const sideTotal = firstNumber(sideVolumeContract.sideVolumeTotal);
   const outsideInsideRatio = insideVolume > 0 ? outsideVolume / insideVolume : outsideVolume > 0 ? 99 : 0;
-  const outsideVolumeGtInsideTimes2 = outsideVolume > 0 && outsideVolume > insideVolume * 2;
+  const outsideVolumeGeInsideTimes2 = sideVolumeContract.sideVolumeAvailable === true
+    && outsideVolume > 0
+    && outsideVolume >= insideVolume * 2;
+  const outsideVolumeGtInsideTimes2 = outsideVolumeGeInsideTimes2;
   const bidVolume = firstNumber(quote.bid_volume, payload.bidVolume, payload.bid_volume);
   const askVolume = firstNumber(quote.ask_volume, payload.askVolume, payload.ask_volume);
   const bidAskRatio = askVolume > 0 ? bidVolume / askVolume : bidVolume > 0 ? 99 : 0;
@@ -1918,7 +1939,9 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     insideVolume,
     outsideVolume,
     sideTotal,
+    ...sideVolumeContract,
     outsideInsideRatio,
+    outsideVolumeGeInsideTimes2,
     outsideVolumeGtInsideTimes2,
     bidAskRatio,
     turnoverRate,
@@ -3671,7 +3694,29 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         turnoverRank,
         outsideVolume: Math.round(metrics.outsideVolume),
         insideVolume: Math.round(metrics.insideVolume),
+        sideVolumeTotal: metrics.sideVolumeTotal === null ? null : Math.round(metrics.sideVolumeTotal),
+        sideVolumeUnit: metrics.sideVolumeUnit,
+        sideVolumeUnitKnown: metrics.sideVolumeUnitKnown,
+        sideVolumePresent: metrics.sideVolumePresent,
+        sideVolumeAvailable: metrics.sideVolumeAvailable,
+        sideVolumeThresholdLots: SIDE_VOLUME_THRESHOLD_LOTS,
+        sideVolumeThresholdMet: metrics.sideVolumeThresholdMet,
+        sideVolumeGe2000Lots: metrics.sideVolumeGe2000Lots,
+        sideVolumeSource: metrics.sideVolumeSource,
+        sideVolumeSourceEventAt: metrics.sideVolumeSourceEventAt,
+        sideVolumeSourceEventAgeSeconds: metrics.sideVolumeSourceEventAgeSeconds,
+        sideVolumeTradeDate: metrics.sideVolumeTradeDate,
+        sideVolumeCanonicalRunId: metrics.sideVolumeCanonicalRunId,
+        sideVolumeSameTradeDate: metrics.sideVolumeSameTradeDate,
+        sideVolumeSameCanonicalRun: metrics.sideVolumeSameCanonicalRun,
+        sideVolumeDefinition: metrics.sideVolumeDefinition,
+        sideVolumeIncludesOddLot: metrics.sideVolumeIncludesOddLot,
+        sideVolumeIncludesOpeningAuctionFirstTrade: metrics.sideVolumeIncludesOpeningAuctionFirstTrade,
+        sideVolumeIncludesUnclassifiedTrades: metrics.sideVolumeIncludesUnclassifiedTrades,
+        sideVolumeDifferenceFromTotal: metrics.sideVolumeDifferenceFromTotal,
+        sideVolumeDifferenceExplanation: metrics.sideVolumeDifferenceExplanation,
         outsideInsideRatio: Number(metrics.outsideInsideRatio.toFixed(4)),
+        outsideVolumeGeInsideTimes2: metrics.outsideVolumeGeInsideTimes2,
         outsideVolumeGtInsideTimes2: metrics.outsideVolumeGtInsideTimes2,
         turnoverRate: Number(metrics.turnoverRate.toFixed(4)),
         turnoverRate3To5d: Number(metrics.turnoverRate3To5d.toFixed(4)),
@@ -3886,6 +3931,16 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
           : (numberValue(row.priorityMetrics?.avgVolume3) >= MOTHER_POOL_MIN_AVG_VOLUME3_LOTS ? "pass" : "below_3000_lots"),
         inside_volume: Math.round(numberValue(row.priorityMetrics?.insideVolume)),
         outside_volume: Math.round(numberValue(row.priorityMetrics?.outsideVolume)),
+        side_volume_total: row.priorityMetrics?.sideVolumeTotal === null ? null : Math.round(numberValue(row.priorityMetrics?.sideVolumeTotal)),
+        side_volume_unit: row.priorityMetrics?.sideVolumeUnit || "",
+        side_volume_available: row.priorityMetrics?.sideVolumeAvailable === true,
+        side_volume_threshold_lots: SIDE_VOLUME_THRESHOLD_LOTS,
+        side_volume_ge_2000_lots: row.priorityMetrics?.sideVolumeGe2000Lots === true,
+        side_volume_source: row.priorityMetrics?.sideVolumeSource || "",
+        side_volume_source_event_at: row.priorityMetrics?.sideVolumeSourceEventAt || "",
+        side_volume_trade_date: row.priorityMetrics?.sideVolumeTradeDate || "",
+        side_volume_canonical_run_id: row.priorityMetrics?.sideVolumeCanonicalRunId || "",
+        outside_volume_ge_inside_times_2: row.priorityMetrics?.outsideVolumeGeInsideTimes2 === true,
         outside_volume_gt_inside_times_2: row.priorityMetrics?.outsideVolumeGtInsideTimes2 === true,
         price_gate_status: MOTHER_POOL_MIN_PRICE > 0 ? (numberValue(row.metrics?.price) >= MOTHER_POOL_MIN_PRICE ? "pass" : "below_minimum") : "no_price_floor",
         score_components: {
@@ -6081,6 +6136,16 @@ function updateMotherPoolDelta(result) {
           : (numberValue(row.priority_metrics?.avgVolume3) >= MOTHER_POOL_MIN_AVG_VOLUME3_LOTS ? "pass" : "below_3000_lots")),
       inside_volume: row ? Math.round(numberValue(row.priority_metrics?.insideVolume)) : null,
       outside_volume: row ? Math.round(numberValue(row.priority_metrics?.outsideVolume)) : null,
+      side_volume_total: row?.priority_metrics?.sideVolumeTotal ?? null,
+      side_volume_unit: row?.priority_metrics?.sideVolumeUnit || "",
+      side_volume_available: row?.priority_metrics?.sideVolumeAvailable === true,
+      side_volume_threshold_lots: SIDE_VOLUME_THRESHOLD_LOTS,
+      side_volume_ge_2000_lots: row?.priority_metrics?.sideVolumeGe2000Lots === true,
+      side_volume_source: row?.priority_metrics?.sideVolumeSource || "",
+      side_volume_source_event_at: row?.priority_metrics?.sideVolumeSourceEventAt || "",
+      side_volume_trade_date: row?.priority_metrics?.sideVolumeTradeDate || "",
+      side_volume_canonical_run_id: row?.priority_metrics?.sideVolumeCanonicalRunId || "",
+      outside_volume_ge_inside_times_2: row?.priority_metrics?.outsideVolumeGeInsideTimes2 === true,
       outside_volume_gt_inside_times_2: row?.priority_metrics?.outsideVolumeGtInsideTimes2 === true,
       formal_gate_blocked: payload.formal_entry_allowed !== true,
       blocked_reason: payload.formal_entry_allowed === true ? "" : payload.reason_code || payload.gate_status || "formal_gate_not_ready",
@@ -6155,6 +6220,16 @@ function updateMotherPoolDelta(result) {
           : (numberValue(row.priority_metrics?.avgVolume3) >= MOTHER_POOL_MIN_AVG_VOLUME3_LOTS ? "pass" : "below_3000_lots"),
         inside_volume: Math.round(numberValue(row.priority_metrics?.insideVolume)),
         outside_volume: Math.round(numberValue(row.priority_metrics?.outsideVolume)),
+        side_volume_total: row.priority_metrics?.sideVolumeTotal ?? null,
+        side_volume_unit: row.priority_metrics?.sideVolumeUnit || "",
+        side_volume_available: row.priority_metrics?.sideVolumeAvailable === true,
+        side_volume_threshold_lots: SIDE_VOLUME_THRESHOLD_LOTS,
+        side_volume_ge_2000_lots: row.priority_metrics?.sideVolumeGe2000Lots === true,
+        side_volume_source: row.priority_metrics?.sideVolumeSource || "",
+        side_volume_source_event_at: row.priority_metrics?.sideVolumeSourceEventAt || "",
+        side_volume_trade_date: row.priority_metrics?.sideVolumeTradeDate || "",
+        side_volume_canonical_run_id: row.priority_metrics?.sideVolumeCanonicalRunId || "",
+        outside_volume_ge_inside_times_2: row.priority_metrics?.outsideVolumeGeInsideTimes2 === true,
         outside_volume_gt_inside_times_2: row.priority_metrics?.outsideVolumeGtInsideTimes2 === true,
         pool_reasons: row.pool_reasons || [],
         priority_reason: row.priority_reason || "",
@@ -6625,7 +6700,8 @@ async function syncPreopenSnapshotHistory(activeSymbols, quoteMap) {
     const symbol = normalizeCode(rawSymbol || quote?.symbol);
     const active = activeBySymbol.get(symbol);
     if (!symbol || !active || !isWebSocketQuote(quote)) continue;
-    const observedAt = normalizeTimestamp(quote?.quote_seen_at || quote?.payload?.aggregate_last_updated, "");
+    const trialEventAt = normalizeTimestamp(quote?.trial_event_at || quote?.payload?.trial_event_at, "");
+    const observedAt = trialEventAt || normalizeTimestamp(quote?.quote_seen_at || quote?.payload?.aggregate_last_updated, "");
     if (!observedAt || taipeiDateFrom(observedAt) !== tradeDate) continue;
     const observedMinutes = taipeiClockMinutesFrom(observedAt);
     if (observedMinutes < PREOPEN_CAPTURE_START_MINUTES || observedMinutes >= PREOPEN_CAPTURE_END_MINUTES) continue;
@@ -6640,8 +6716,11 @@ async function syncPreopenSnapshotHistory(activeSymbols, quoteMap) {
     const payload = {
       source: "fugle_daytrade_source_writer:preopen_websocket",
       writer_contract: PREOPEN_WRITER_CONTRACT,
+      run_id: `${PREOPEN_WRITER_CONTRACT}:${tradeDate.replace(/-/g, "")}`,
+      generation_id: `${symbol}:${observedAt}`,
       trade_date: tradeDate,
       observed_at: observedAt,
+      trial_event_at: trialEventAt || observedAt,
       quote_received_at: quote.updated_at || null,
       trial_change_percent: ((trialPrice - referencePrice) / referencePrice) * 100,
       bid_ask_ratio: askVolume > 0 && bidVolume !== null ? bidVolume / askVolume : null,
