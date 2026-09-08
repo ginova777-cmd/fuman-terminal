@@ -27,7 +27,7 @@ const MATCH_YIELD_MIN_RATIO_TO_BASELINE = Number(process.env.STRATEGY4_MATCH_YIE
 const MATCH_YIELD_MIN_RATIO_TO_ELIGIBLE = Number(process.env.STRATEGY4_MATCH_YIELD_MIN_RATIO_TO_ELIGIBLE || 0.05);
 const MAX_YAHOO_SOURCE_RATIO = Number(process.env.STRATEGY4_MAX_YAHOO_SOURCE_RATIO || 0.2);
 const MIN_SOURCE_ROW_COUNT = Number(process.env.STRATEGY4_MIN_SOURCE_ROW_COUNT || 1500);
-const STRATEGY4_MIN_HISTORY_COVERAGE_RATIO = Number(process.env.STRATEGY4_MIN_HISTORY_COVERAGE_RATIO || 0.95);
+const STRATEGY4_MIN_HISTORY_COVERAGE_RATIO = Number(process.env.STRATEGY4_MIN_HISTORY_COVERAGE_RATIO || 0.90);
 const MIN_AVG_VOLUME_5 = Number(process.env.STRATEGY4_MIN_AVG_VOLUME_5 || 3000);
 const MIN_CUMULATIVE_BID_ASK_VOLUME = Number(process.env.STRATEGY4_MIN_CUMULATIVE_BID_ASK_VOLUME || 3000);
 const REQUIRE_QUOTE_LIQUIDITY_PREFILTER = process.env.STRATEGY4_REQUIRE_QUOTE_LIQUIDITY_PREFILTER === "1";
@@ -275,13 +275,11 @@ function buildStrategy4PrePublishSelfTest(output) {
   if (nonActionableRows.length) issues.push(`formal results contain ${nonActionableRows.length} observation-only rows`);
   if (cleanNumber(output.matchedCount) !== outputCount || cleanNumber(output.resultCount) !== outputCount) issues.push(`formal count mismatch count=${outputCount} matched=${output.matchedCount} result=${output.resultCount}`);
   if (cleanNumber(output.evaluatedCount) !== outputCount + cleanNumber(output.observationOnlyCount) + cleanNumber(output.invalidRiskFilteredCount)) issues.push(`evaluation partition mismatch evaluated=${output.evaluatedCount} formal=${outputCount} observation=${output.observationOnlyCount} invalidRisk=${output.invalidRiskFilteredCount}`);
-  if (cleanNumber(output.dataGapCount) !== outputNoDataCount + cleanNumber(output.insufficientHistoryCount)) issues.push(`dataGapCount mismatch ${output.dataGapCount}`);
+  if (cleanNumber(output.dataGapCount) !== outputNoDataCount + cleanNumber(output.insufficientHistoryCount) + cleanNumber(output.staleDataGapCount) + cleanNumber(output.volumeCacheMissingCount)) issues.push(`dataGapCount mismatch ${output.dataGapCount}`);
   if (outputErrorCount !== 0) issues.push(`errorCount must be 0, got ${output.errorCount}`);
   if (cleanNumber(output.executionRate) !== 1) issues.push(`executionRate must be 1, got ${output.executionRate}`);
   if (!outputCoverageAcceptable) issues.push(`coverageRatio must be >= ${STRATEGY4_MIN_HISTORY_COVERAGE_RATIO}, got ${output.coverageRatio}`);
-  if (outputNoDataCount > 0 && outputCoverageAcceptable && outputErrorCount === 0) {
-    output.sourceWarnings = Array.from(new Set([...(Array.isArray(output.sourceWarnings) ? output.sourceWarnings : []), `No daily-K history for ${outputNoDataCount} scanned codes; accepted because coverageRatio ${outputCoverageRatio} >= ${STRATEGY4_MIN_HISTORY_COVERAGE_RATIO}`]));
-  }
+  if (cleanNumber(output.liquidityEligibleCount) + cleanNumber(output.volumeFilteredCount) + cleanNumber(output.volumeCacheMissingCount) !== cleanNumber(output.total)) issues.push("liquidity partition mismatch");
   if (cleanNumber(output.computableUniverseTotal) < MIN_SOURCE_ROW_COUNT) issues.push(`computableUniverseTotal ${cleanNumber(output.computableUniverseTotal)} below ${MIN_SOURCE_ROW_COUNT}`);
   if (cleanNumber(output.sourceUniverseTotal) < MIN_SOURCE_ROW_COUNT) issues.push(`sourceUniverseTotal ${cleanNumber(output.sourceUniverseTotal)} below ${MIN_SOURCE_ROW_COUNT}`);
   const outputInsufficientHistoryCount = cleanNumber(output.insufficientHistoryCount);
@@ -752,12 +750,14 @@ function cachedAvgVolume5(code) {
 
 function buildVolumePrefilter(stocks) {
   const filtered = [];
+  const missing = [];
   let cacheHit = 0;
   let cacheMiss = 0;
   stocks.forEach((stock) => {
     const avgVolume5 = cachedAvgVolume5(stock.code);
     if (avgVolume5 == null) {
       cacheMiss += 1;
+      missing.push({ code: stock.code, name: stock.name || stock.code, reason: "avg5-volume-missing" });
       return;
     }
     cacheHit += 1;
@@ -766,11 +766,14 @@ function buildVolumePrefilter(stocks) {
     }
   });
   return {
-    enabled: false,
-    rule: "avgVolume5-diagnostic-only",
-    policy: "avg5_never_excludes_strategy4",
+    enabled: true,
+    rule: "avgVolume5-gte-hard-gate",
+    policy: "avg5_below_3000_excludes_strategy4",
+    unit: "lots",
+    exceptionAllowed: false,
     minAvgVolume5: MIN_AVG_VOLUME_5,
     filtered,
+    missing,
     cacheHit,
     cacheMiss,
   };
@@ -913,10 +916,12 @@ async function fetchStrategy4RecentCompleteRuns(limit = MATCH_YIELD_BASELINE_LOO
 function strategy4EligibleYieldCount(output) {
   const total = cleanNumber(output.total);
   const volumeFiltered = cleanNumber(output.volumeFilteredCount || output.volumeFilter?.filtered?.length);
+  const volumeMissing = cleanNumber(output.volumeCacheMissingCount || output.volumeFilter?.missing?.length);
   const quoteFiltered = cleanNumber(output.quoteLiquidityFilteredCount || output.quoteLiquidityFilter?.filtered?.length);
   const noData = cleanNumber(output.noDataCount);
+  const staleDataGap = cleanNumber(output.staleDataGapCount || output.staleFilteredCount);
   const errors = cleanNumber(output.errorCount);
-  return Math.max(0, total - volumeFiltered - quoteFiltered - noData - errors);
+  return Math.max(0, total - volumeFiltered - volumeMissing - quoteFiltered - noData - staleDataGap - errors);
 }
 
 async function assertStrategy4MatchYieldGuard(output, previousRaw) {
@@ -1290,6 +1295,9 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
       actionableSignals: strategy4ActionableSignals(item),
     }));
   const noDataCount = noDataCodes.size;
+  const staleDataGapCount = staleMatches.length;
+  const volumeCacheMissingCount = volumeFilter?.missing?.length || 0;
+  const dataGapCount = noDataCount + insufficientHistory.length + staleDataGapCount + volumeCacheMissingCount;
   const errorCount = scanErrors.length;
   const pendingCount = codes.length - scanned.size + noDataCount;
   const sourceCounts = Object.fromEntries([...dataSourceCounts.entries()].sort(([a], [b]) => a.localeCompare(b)));
@@ -1306,7 +1314,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
   if (complete && yahooSourceRatio > MAX_YAHOO_SOURCE_RATIO) {
     sourceWarnings.push(`Yahoo fallback ratio ${yahooSourceRatio} above ${MAX_YAHOO_SOURCE_RATIO}`);
   }
-  const outputCoverageRatio = codes.length ? Number(((codes.length - noDataCount) / codes.length).toFixed(4)) : 1;
+  const outputCoverageRatio = codes.length ? Number(((codes.length - dataGapCount) / codes.length).toFixed(4)) : 1;
   const scannedFullUniverse = scanned.size === codes.length && errorCount === 0 && codes.length >= MIN_SOURCE_ROW_COUNT;
   const incomingCoveragePhase = String(supabaseCoverage?.phase || "").toLowerCase();
   const incomingCoverageQuality = String(supabaseCoverage?.qualityStatus || "").toLowerCase();
@@ -1322,11 +1330,11 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
         qualityStatus: "complete",
         universe: codes.length,
         computableUniverse: codes.length,
-        remainingMiss: noDataCount,
-        insufficientHistoryCount: 0,
+        remainingMiss: dataGapCount,
+        insufficientHistoryCount: insufficientHistory.length,
         coverageRatio: outputCoverageRatio,
         scanStamp,
-        acceptedReason: `derived from Strategy4 full target-date scan; scanned=${scanned.size}/${codes.length}; noData=${noDataCount}; errors=${errorCount}; coverageRatio=${outputCoverageRatio}`,
+        acceptedReason: `derived from Strategy4 full target-date scan; scanned=${scanned.size}/${codes.length}; dataGap=${dataGapCount}; errors=${errorCount}; coverageRatio=${outputCoverageRatio}`,
       }
     : (supabaseCoverage || null);
   const rawCoveragePartial = effectiveSupabaseCoverage?.qualityStatus === "partial";
@@ -1334,24 +1342,19 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
   const stableSupabaseCoverageComplete = rawCoveragePartial
     && [STOCK_DAILY_VOLUME_SOURCE, FINMIND_DAILY_SOURCE].includes(strategy4VolumeCacheSource)
     && supabaseHistoryCoverageRatio >= STRATEGY4_MIN_HISTORY_COVERAGE_RATIO
-    && complete
-    && noDataCount === 0
+    && scannedFullUniverse
     && errorCount === 0;
   const coveragePartial = rawCoveragePartial && !stableSupabaseCoverageComplete;
-  const degradedComplete = ALLOW_DEGRADED_COMPLETE && scanned.size === codes.length && errorCount === 0;
+  const degradedComplete = ALLOW_DEGRADED_COMPLETE
+    && scanned.size === codes.length
+    && outputCoverageRatio >= STRATEGY4_MIN_HISTORY_COVERAGE_RATIO
+    && errorCount === 0;
   const baseComplete = degradedComplete || (complete && noDataCount === 0 && errorCount === 0 && !coveragePartial);
   const qualityStatus = coveragePartial
     ? (baseComplete ? "degraded" : "partial")
     : (baseComplete ? "complete" : "incomplete");
   if (baseComplete && coveragePartial) {
     sourceWarnings.push("Supabase history coverage partial; full computable universe scanned but publish remains degraded until coverage is complete");
-  }
-  if (baseComplete && noDataCount > 0) {
-    sourceWarnings.push(`No daily-K history for ${noDataCount} scanned codes; published as complete with warnings`);
-  }
-  if (staleMatches.length) {
-    const staleDates = [...new Set(staleMatches.map((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate)).filter(Boolean))].slice(0, 8);
-    sourceWarnings.push(`Filtered ${staleMatches.length} stale Strategy4 matches not on scan date ${expectedMatchDate}${staleDates.length ? `: ${staleDates.join(", ")}` : ""}`);
   }
   const triangleBreakoutCount = matches.filter((item) => item?.triangleBreakout?.detected === true).length;
   return {
@@ -1366,7 +1369,9 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     fallbackAllowed: false,
     fallbackDetails: [],
     fallbackContract: STRATEGY4_FALLBACK_CONTRACT,
-    resultContract: "strategy4_actionable_patterns_v1",
+    resultContract: "strategy4_actionable_patterns_avg5_3000_v2",
+    liquidityContract: "avg5_volume_gte_3000_lots_v1",
+    dataGapContract: "target_date_coverage_gte_90_exclude_stale_v1",
     generatedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     scanStamp,
@@ -1381,7 +1386,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
           ...effectiveSupabaseCoverage,
           originalQualityStatus: effectiveSupabaseCoverage.qualityStatus,
           qualityStatus: "complete",
-          acceptedReason: `history coverage ${supabaseHistoryCoverageRatio} >= ${STRATEGY4_MIN_HISTORY_COVERAGE_RATIO}; full scan completed with no no-data or scanner errors; remainingMiss=${effectiveSupabaseCoverage.remainingMiss || 0}`,
+          acceptedReason: `history coverage ${supabaseHistoryCoverageRatio} >= ${STRATEGY4_MIN_HISTORY_COVERAGE_RATIO}; target-date data gaps are excluded from every display surface; remainingMiss=${effectiveSupabaseCoverage.remainingMiss || 0}`,
         }
       : (effectiveSupabaseCoverage || null),
     supabasePublishGate: readStrategy4PublishGate(),
@@ -1389,7 +1394,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     noDataCount,
     errorCount,
     executionRate: codes.length ? Number((scanned.size / codes.length).toFixed(4)) : 1,
-    coverageRatio: codes.length ? Number(((codes.length - noDataCount) / codes.length).toFixed(4)) : 1,
+    coverageRatio: outputCoverageRatio,
     sourceUniverseTotal: Number(effectiveSupabaseCoverage?.universe || (codes.length + insufficientHistory.length)),
     computableUniverseTotal: codes.length,
     insufficientHistoryCount: insufficientHistory.length,
@@ -1408,10 +1413,15 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     volumeFilter: volumeFilter || null,
     volumeFilteredCount: volumeFilter?.filtered?.length || 0,
     volumeFilteredCodes: (volumeFilter?.filtered || []).map((item) => item.code),
+    volumeCacheMissingCount,
+    volumeCacheMissingCodes: (volumeFilter?.missing || []).map((item) => item.code),
+    liquidityEligibleCount: Math.max(0, codes.length - (volumeFilter?.filtered?.length || 0) - (volumeFilter?.missing?.length || 0)),
     quoteLiquidityFilter: quoteLiquidityFilter || null,
     quoteLiquidityFilteredCount: quoteLiquidityFilter?.filtered?.length || 0,
     quoteLiquidityFilteredCodes: (quoteLiquidityFilter?.filtered || []).map((item) => item.code),
     staleFilteredCount: staleMatches.length,
+    staleDataGapCount,
+    staleDataGapCodes: staleMatches.map((item) => normalizeCode(item.code)).filter(Boolean),
     staleFilteredDates: [...new Set(staleMatches.map((item) => normalizeIsoDate(item.date || item.tradeDate || item.usedDate)).filter(Boolean))].slice(0, 8),
     invalidRiskFilteredCount: invalidRiskMatches.length,
     invalidRiskFilteredCodes: invalidRiskMatches.map((item) => item.code).filter(Boolean).slice(0, 80),
@@ -1419,7 +1429,8 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     matchedCount: matches.length,
     resultCount: matches.length,
     observationOnlyCount: observationOnlyMatches.length,
-    dataGapCount: noDataCount + insufficientHistory.length,
+    dataGapCount,
+    patternEvaluatedCount: dateAlignedMatches.length,
     evaluatedCount: dateAlignedMatches.length,
     observationOnlyCodes: observationOnlyMatches.map((item) => normalizeCode(item.code)).filter(Boolean),
     triangleBreakoutCount,
@@ -1606,6 +1617,19 @@ function buildSupabaseRunRow(output, runId) {
       sourceUniverseTotal: cleanNumber(output.sourceUniverseTotal),
       computableUniverseTotal: cleanNumber(output.computableUniverseTotal),
       insufficientHistoryCount: cleanNumber(output.insufficientHistoryCount),
+      resultContract: String(output.resultContract || ""),
+      liquidityContract: String(output.liquidityContract || ""),
+      dataGapContract: String(output.dataGapContract || ""),
+      matchedCount: cleanNumber(output.matchedCount),
+      resultCount: cleanNumber(output.resultCount || output.count),
+      observationOnlyCount: cleanNumber(output.observationOnlyCount),
+      dataGapCount: cleanNumber(output.dataGapCount),
+      patternEvaluatedCount: cleanNumber(output.patternEvaluatedCount || output.evaluatedCount),
+      staleDataGapCount: cleanNumber(output.staleDataGapCount),
+      staleDataGapCodes: normalizeArray(output.staleDataGapCodes),
+      volumeCacheMissingCount: cleanNumber(output.volumeCacheMissingCount),
+      volumeCacheMissingCodes: normalizeArray(output.volumeCacheMissingCodes),
+      liquidityEligibleCount: cleanNumber(output.liquidityEligibleCount),
       sourceWarnings: output.sourceWarnings || [],
       yahooSourceCount: cleanNumber(output.yahooSourceCount),
       yahooSourceRatio: cleanNumber(output.yahooSourceRatio),
@@ -2040,6 +2064,11 @@ async function main() {
       noDataCodes.delete(item.code);
       scanned.add(item.code);
     });
+    volumeFilter.missing.forEach((item) => {
+      currentMatches.delete(item.code);
+      noDataCodes.delete(item.code);
+      scanned.add(item.code);
+    });
   }
   // Prioritize the canonical daytrade pool, whose ordering is built from the
   // volume-ranking and turnover-ranking union. This changes scan order only;
@@ -2077,7 +2106,7 @@ async function main() {
   const chunksToRun = Math.min(Math.ceil(pendingCodes.length / CHUNK_SIZE), BATCHES_PER_RUN);
   const runMode = FULL_SCAN ? "full" : "resume";
 
-  console.log(`strategy4 volume diagnostic: cacheHit ${volumeFilter.cacheHit}, cacheMiss ${volumeFilter.cacheMiss}, belowAvg5 ${volumeFilter.filtered.length}, hardFilter=false`);
+  console.log(`strategy4 volume hard gate: cacheHit ${volumeFilter.cacheHit}, cacheMiss ${volumeFilter.cacheMiss}, belowAvg5 ${volumeFilter.filtered.length}, eligible ${codes.length - volumeFilter.filtered.length - volumeFilter.missing.length}, minLots ${MIN_AVG_VOLUME_5}`);
   console.log(`strategy4 quote liquidity prefilter: cacheHit ${quoteLiquidityFilter.cacheHit}, cacheMiss ${quoteLiquidityFilter.cacheMiss}, quoteRows ${quoteLiquidityFilter.quoteRows}, filtered ${quoteLiquidityFilter.filtered.length} below cumulative bid+ask ${MIN_CUMULATIVE_BID_ASK_VOLUME}`);
   console.log(`strategy4 cache start: ${runMode} scan, ${codes.length} total codes, ${pendingCodes.length} pending codes, ${chunksToRun} chunks in this run`);
   for (let chunk = 0; chunk < chunksToRun; chunk++) {

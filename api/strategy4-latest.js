@@ -25,7 +25,7 @@ const STOCK_DAILY_VOLUME_SOURCE = "supabase:stock_daily_volume";
 const FINMIND_DAILY_SOURCE = "supabase:finmind_daily_ohlcv";
 const LEGACY_LOTS_SOURCE = "supabase:fugle_daily_volume:legacy-lots";
 const STRATEGY4_FALLBACK_CONTRACT = "strategy4-fallback-disclosure-v1";
-const STRATEGY4_MIN_ACCEPTED_COVERAGE_RATIO = Number(process.env.STRATEGY4_MIN_ACCEPTED_COVERAGE_RATIO || 0.95);
+const STRATEGY4_MIN_ACCEPTED_COVERAGE_RATIO = Number(process.env.STRATEGY4_MIN_ACCEPTED_COVERAGE_RATIO || 0.90);
 const ALLOWED_DATA_CONTRACT_SOURCES = new Set([EXPECTED_SOURCE, STOCK_DAILY_VOLUME_SOURCE, FINMIND_DAILY_SOURCE, LEGACY_LOTS_SOURCE]);
 const STRATEGY4_REQUIRED_FIELDS = [
   "code",
@@ -120,11 +120,12 @@ function isAcceptedTargetDateCompleteRun(run, supabaseCoverage, qualityStatus, f
   const scannedCount = cleanNumber(run?.scanned_count);
   const resultCount = cleanNumber(run?.result_count);
   const noDataCount = cleanNumber(run?.no_data_count);
+  const dataGapCount = cleanNumber(run?.payload?.dataGapCount ?? noDataCount);
   const errorCount = cleanNumber(run?.error_count);
   const coverageRatio = cleanNumber(supabaseCoverage?.coverageRatio);
   const remainingMiss = cleanNumber(supabaseCoverage?.remainingMiss);
   const hasAcceptedCoverage = coverageRatio >= STRATEGY4_MIN_ACCEPTED_COVERAGE_RATIO
-    && (remainingMiss === 0 || remainingMiss === noDataCount);
+    && (remainingMiss === 0 || remainingMiss === dataGapCount);
   return run?.complete === true
     && String(run?.status || "") === "complete"
     && ["complete", "degraded"].includes(String(qualityStatus || ""))

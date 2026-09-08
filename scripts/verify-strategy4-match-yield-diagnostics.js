@@ -75,16 +75,22 @@ function volumeFilterContract(run) {
 function sameVolumeFilterContract(left, right) {
   const a = volumeFilterContract(left);
   const b = volumeFilterContract(right);
-  return a.enabled === b.enabled && (!a.enabled || a.threshold === b.threshold);
+  const leftResultContract = String(safeObject(left?.payload).resultContract || "");
+  const rightResultContract = String(safeObject(right?.payload).resultContract || "");
+  return leftResultContract === rightResultContract
+    && a.enabled === b.enabled
+    && (!a.enabled || a.threshold === b.threshold);
 }
 function eligibleCountFromRun(run) {
   const payload = safeObject(run?.payload);
   const total = cleanNumber(run?.expected_total || payload.total || payload.expectedTotal);
   const volumeFiltered = cleanNumber(payload.volumeFilteredCount || payload.volumeFilter?.filtered?.length);
+  const volumeMissing = cleanNumber(payload.volumeCacheMissingCount || payload.volumeFilter?.missing?.length);
   const quoteFiltered = cleanNumber(payload.quoteLiquidityFilteredCount || payload.quoteLiquidityFilter?.filtered?.length);
   const noData = cleanNumber(run?.no_data_count || payload.noDataCount);
+  const staleDataGap = cleanNumber(payload.staleDataGapCount || payload.staleFilteredCount);
   const errors = cleanNumber(run?.error_count || payload.errorCount);
-  return Math.max(0, total - volumeFiltered - quoteFiltered - noData - errors);
+  return Math.max(0, total - volumeFiltered - volumeMissing - quoteFiltered - noData - staleDataGap - errors);
 }
 function sourceHealthFromRun(run) {
   const payload = safeObject(run?.payload);
@@ -164,6 +170,9 @@ async function main() {
     noDataCount: cleanNumber(current.no_data_count),
     errorCount: cleanNumber(current.error_count),
     eligibleCount,
+    resultContract: String(safeObject(current.payload).resultContract || ""),
+    liquidityContract: String(safeObject(current.payload).liquidityContract || ""),
+    dataGapCount: cleanNumber(safeObject(current.payload).dataGapCount),
     baseline: { lookback: LOOKBACK, minNormalCount: MIN_NORMAL_COUNT, minBaselineSamples: MIN_BASELINE_SAMPLES, sampleCount: baselineCounts.length, counts: baselineCounts, median: baselineMedian, minByBaseline, minRatioToBaseline: MIN_RATIO_TO_BASELINE },
     eligibleFloor: { minRatioToEligible: MIN_RATIO_TO_ELIGIBLE, minByEligible },
     sourceHealth,

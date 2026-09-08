@@ -10,7 +10,7 @@ const wrapperSource = fs.readFileSync(path.join(root, "run-strategy4.ps1"), "utf
 const failures = [];
 
 if (/daily\.volMa5\s*<[^\n]+return\s+null/.test(apiSource)) {
-  failures.push("api/scan-strategy4.js still excludes stocks by five-day average volume");
+  failures.push("api/scan-strategy4.js duplicates the authoritative avg5 gate instead of using the runner's lots cache");
 }
 
 if (/payload\?\.from\s*!==\s*from/.test(apiSource)) {
@@ -21,8 +21,8 @@ if (!apiSource.includes('String(payload.from).slice(0, 10) > String(from).slice(
   failures.push("Fugle cache does not enforce that cached history starts no later than the required lookback");
 }
 
-if (!runnerSource.includes('policy: "avg5_never_excludes_strategy4"')) {
-  failures.push("runner does not declare the avg5_never_excludes_strategy4 policy");
+if (!runnerSource.includes('policy: "avg5_below_3000_excludes_strategy4"')) {
+  failures.push("runner does not declare the Strategy4 avg5 hard-gate policy");
 }
 
 for (const signalId of ["watch_trend", "base_setup", "full_scan_watch", "below_20d_high_8", "lower_half_60d"]) {
@@ -33,8 +33,12 @@ if (!runnerSource.includes('resultClass: "formal_actionable"') || !runnerSource.
   failures.push("runner does not split formal actionable results, observation-only evaluations, and data gaps");
 }
 
-if (!runnerSource.includes('enabled: false') || !runnerSource.includes('rule: "avgVolume5-diagnostic-only"')) {
-  failures.push("runner volume check is not diagnostic-only");
+if (!runnerSource.includes('enabled: true') || !runnerSource.includes('rule: "avgVolume5-gte-hard-gate"') || !runnerSource.includes('unit: "lots"') || !runnerSource.includes('exceptionAllowed: false')) {
+  failures.push("runner volume check is not a strict 3000-lot hard gate");
+}
+
+if (!runnerSource.includes('dataGapContract: "target_date_coverage_gte_90_exclude_stale_v1"') || !runnerSource.includes("staleDataGapCodes")) {
+  failures.push("runner does not exclude stale daily-K rows under the 90-percent data-gap contract");
 }
 
 if (!runnerSource.includes('pageSize = Math.min(1000, requestedLimit)') || !runnerSource.includes('pageParams.set("offset", String(offset))')) {
@@ -75,4 +79,4 @@ if (failures.length) {
   process.exit(1);
 }
 
-console.log("Strategy4 full-scan contract OK: avg5 is diagnostic-only, formal results are separated, and scorecard refresh is Strategy4-scoped.");
+console.log("Strategy4 full-scan contract OK: avg5>=3000 lots is authoritative, stale daily-K rows are excluded within 90% coverage tolerance, formal results are separated, and scorecard refresh is Strategy4-scoped.");
