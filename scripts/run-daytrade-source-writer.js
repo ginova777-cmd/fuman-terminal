@@ -25,6 +25,7 @@ const STATE_FILE = statePath("daytrade-source-writer-state.json");
 const ENRICHMENT_PENDING_STATE_FILE = statePath("daytrade-source-writer-enrichment-pending.json");
 const MOTHER_POOL_DELTA_STATE_FILE = statePath("daytrade-mother-pool-delta.json");
 const INTRADAY_BURST_TELEGRAM_OUTBOX_FILE = statePath("daytrade-intraday-burst-telegram-outbox.json");
+const INDUSTRY_SIGNAL_FAST_INJECT_FILE = statePath("daytrade-industry-signal-fast-inject.json");
 const RUNTIME_CONFIG_FILE = runtimePath("config", "daytrade-source-speed.json");
 const REPO_CONFIG_FILE = repoPath("ops", "public-slot", "daytrade-source-speed.config.example.json");
 const PRIORITY_SYMBOLS_FILE = process.env.FUGLE_DAYTRADE_PRIORITY_SYMBOLS_FILE || cachePath("intraday", "fugle-daytrade-ws-priority-symbols.json");
@@ -96,6 +97,8 @@ const HEATMAP_LATEST_FILES = [
   repoPath("data", "heatmap-latest.json"),
 ];
 const HEATMAP_API_FILE = repoPath("api", "heatmap.js");
+const MOPS_OFFICIAL_INDUSTRY_CACHE_FILE = cachePath("reference", "mops-official-industry.json");
+const MOPS_OFFICIAL_INDUSTRY_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 const APPLY = hasFlag("apply") || envFlag("FUMAN_DAYTRADE_WRITER_APPLY");
 const DRY_RUN = !APPLY;
@@ -2504,7 +2507,9 @@ function addGroupContractRow(map, row, source) {
     sector: row?.sector || row?.heatmapSector || row?.primaryIndustry || previous.sector || "",
     heatmapSector: row?.heatmapSector || row?.sector || previous.heatmapSector || "",
     primaryIndustry: row?.primaryIndustry || row?.sector || row?.heatmapSector || previous.primaryIndustry || "",
-    officialIndustry: row?.officialIndustry || row?.industry || previous.officialIndustry || "",
+    // Only an explicitly labelled official industry may enter the domestic
+    // taxonomy. `industry` in older views can contain code clusters or themes.
+    officialIndustry: row?.officialIndustry || row?.official_industry || previous.officialIndustry || "",
     group: row?.group || previous.group || "",
     themes: uniqueTexts([...(previous.themes || []), ...themes]),
     source: row?.source || source || previous.source || "unknown",
@@ -2584,6 +2589,84 @@ function readHeatmapStaticGroupMap() {
   return map;
 }
 
+const MOPS_INDUSTRY_NAMES = {
+  "01": "水泥工業", "02": "食品工業", "03": "塑膠工業", "04": "紡織纖維",
+  "05": "電機機械", "06": "電器電纜", "08": "玻璃陶瓷", "09": "造紙工業",
+  "10": "鋼鐵工業", "11": "橡膠工業", "12": "汽車工業", "14": "建材營造",
+  "15": "航運業", "16": "觀光餐旅", "17": "金融保險", "18": "貿易百貨",
+  "20": "其他", "21": "化學工業", "22": "生技醫療", "23": "油電燃氣",
+  "24": "半導體", "25": "電腦及週邊", "26": "光電", "27": "通信網路",
+  "28": "電子零組件", "29": "電子通路", "30": "資訊服務", "31": "其他電子",
+  "32": "文化創意", "33": "農業科技", "34": "電子商務", "35": "綠能環保",
+  "36": "數位雲端", "37": "運動休閒", "38": "居家生活",
+};
+
+function parseReferenceCsv(text) {
+  const rows = [];
+  let row = [], cell = "", quoted = false;
+  for (let index = 0; index < String(text || "").length; index += 1) {
+    const char = text[index], next = text[index + 1];
+    if (char === '"' && quoted && next === '"') { cell += '"'; index += 1; }
+    else if (char === '"') quoted = !quoted;
+    else if (char === "," && !quoted) { row.push(cell); cell = ""; }
+    else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && next === "\n") index += 1;
+      row.push(cell); if (row.some((value) => value.trim())) rows.push(row); row = []; cell = "";
+    } else cell += char;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  if (!rows.length) return [];
+  const fields = rows[0].map((value) => value.trim().replace(/^\uFEFF/, ""));
+  return rows.slice(1).map((values) => Object.fromEntries(fields.map((field, index) => [field, String(values[index] || "").trim()])));
+}
+
+async function fetchMopsOfficialIndustryMap() {
+  const map = new Map();
+  const cached = readJson(MOPS_OFFICIAL_INDUSTRY_CACHE_FILE, null);
+  const cacheAgeMs = cached?.updated_at ? Date.now() - Date.parse(cached.updated_at) : Infinity;
+  if (Array.isArray(cached?.rows) && cached.rows.length && cacheAgeMs >= 0 && cacheAgeMs <= MOPS_OFFICIAL_INDUSTRY_CACHE_MAX_AGE_MS) {
+    for (const row of cached.rows) addGroupContractRow(map, row, "mops_open_data_cache");
+    map.meta = { source: "mops_open_data_cache", rows: map.size, updatedAt: cached.updated_at };
+    return map;
+  }
+  const urls = [
+    "https://mopsfin.twse.com.tw/opendata/t187ap03_L.csv",
+    "https://mopsfin.twse.com.tw/opendata/t187ap03_O.csv",
+  ];
+  const results = await Promise.allSettled(urls.map(async (url) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 7000);
+    try {
+      const response = await fetch(url, { signal: controller.signal, headers: { "User-Agent": "Mozilla/5.0 (compatible; FumanTerminal/1.0)" } });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return parseReferenceCsv(await response.text());
+    } finally { clearTimeout(timer); }
+  }));
+  for (const result of results) {
+    if (result.status !== "fulfilled") continue;
+    for (const row of result.value) {
+      const symbol = normalizeCode(row["公司代號"]);
+      const rawIndustry = firstText(row["產業別"]);
+      const officialIndustry = MOPS_INDUSTRY_NAMES[rawIndustry] || rawIndustry;
+      if (symbol && officialIndustry) addGroupContractRow(map, { symbol, officialIndustry, source: "mops_open_data", confidence: "high", updatedAt: nowIso() }, "mops_open_data");
+    }
+  }
+  if (map.size && !DRY_RUN) writeJson(MOPS_OFFICIAL_INDUSTRY_CACHE_FILE, { contract: "mops_official_industry_reference_v1", updated_at: nowIso(), rows: [...map.values()] });
+  if (!map.size && Array.isArray(cached?.rows)) for (const row of cached.rows) addGroupContractRow(map, row, "mops_open_data_stale_cache");
+  map.meta = { source: map.size ? "mops_open_data" : "missing", rows: map.size };
+  return map;
+}
+
+function readMopsOfficialIndustryCacheMap() {
+  const map = new Map();
+  const cached = readJson(MOPS_OFFICIAL_INDUSTRY_CACHE_FILE, null);
+  for (const row of Array.isArray(cached?.rows) ? cached.rows : []) {
+    addGroupContractRow(map, row, "mops_open_data_cache");
+  }
+  map.meta = { source: map.size ? "mops_open_data_cache" : "missing", rows: map.size, updatedAt: cached?.updated_at || "" };
+  return map;
+}
+
 async function fetchStockGroupContractMap() {
   const map = new Map();
   const meta = { source: "missing", rows: 0 };
@@ -2608,12 +2691,17 @@ async function fetchStockGroupContractMap() {
         updated_at: row.updated_at,
       }, "v_daytrade_stock_group_contract");
     }
-    if (map.size) {
-      map.meta = { source: "v_daytrade_stock_group_contract", rows: map.size };
-      return map;
-    }
   } catch (error) {
     meta.error = error?.message || String(error);
+  }
+
+  try {
+    const officialMap = await fetchMopsOfficialIndustryMap();
+    for (const row of officialMap.values()) addGroupContractRow(map, row, officialMap.meta?.source || "mops_open_data");
+    meta.mopsOfficialIndustryRows = officialMap.size;
+    meta.mopsOfficialIndustrySource = officialMap.meta?.source || "missing";
+  } catch (error) {
+    meta.mopsOfficialIndustryError = error?.message || String(error);
   }
 
   try {
@@ -2624,10 +2712,7 @@ async function fetchStockGroupContractMap() {
     });
     const master = Array.isArray(snapshot?.payload?.industryMaster) ? snapshot.payload.industryMaster : [];
     for (const row of master) addGroupContractRow(map, row, "market_snapshots:heatmap_latest.industryMaster");
-    if (map.size) {
-      map.meta = { source: "market_snapshots:heatmap_latest.industryMaster", rows: map.size, updatedAt: snapshot.updatedAt || "" };
-      return map;
-    }
+    meta.snapshotUpdatedAt = snapshot.updatedAt || "";
   } catch (error) {
     meta.snapshotError = error?.message || String(error);
   }
@@ -2636,16 +2721,19 @@ async function fetchStockGroupContractMap() {
     const payload = readJson(file, null);
     const master = Array.isArray(payload?.industryMaster) ? payload.industryMaster : [];
     for (const row of master) addGroupContractRow(map, row, `file:${file}`);
-    if (map.size) {
-      map.meta = { source: `file:${file}`, rows: map.size, updatedAt: payload.updatedAt || "" };
-      return map;
-    }
+    if (payload?.updatedAt) meta.fileUpdatedAt = payload.updatedAt;
   }
 
   const staticMap = readHeatmapStaticGroupMap();
-  if (staticMap.size) return staticMap;
-
-  map.meta = meta;
+  for (const row of staticMap.values()) addGroupContractRow(map, row, "api/heatmap.js:BB_HEATMAP_GROUPS");
+  const officialRows = [...map.values()].filter((row) => Boolean(firstText(row.officialIndustry))).length;
+  map.meta = {
+    ...meta,
+    source: "mops_official_industry+v_daytrade_stock_group_contract+heatmap_industry_master+static_theme_fallback",
+    rows: map.size,
+    officialIndustryRows: officialRows,
+    domesticTaxonomyReady: officialRows > 0,
+  };
   return map;
 }
 
@@ -3104,6 +3192,10 @@ function readRuntimePrioritySeeds(activeSymbols) {
     counts[source] = accepted;
   };
 
+  const industryFastInject = readJson(INDUSTRY_SIGNAL_FAST_INJECT_FILE, {});
+  const industryFastInjectFresh = sameDayArtifact(industryFastInject, tradeDate)
+    && Date.parse(String(industryFastInject.expires_at || "")) >= Date.now();
+
   addMany("daytrade", payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, 120);
   // strategy1 is retained as historical source evidence only; it is not a mother-pool seed.
   addMany("terminal", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, 100);
@@ -3123,6 +3215,7 @@ function readRuntimePrioritySeeds(activeSymbols) {
   addMany("warrant", payload.warrant || payload.warrantSymbols || bridgeValues("warrant"), 70);
   addMany("cb", payload.cb || payload.cbSymbols || bridgeValues("cb"), 60);
   addMany("daytrade_hot", payload.hot || payload.daytradeHotSymbols || payload.priorityStrongSymbols, 75);
+  addMany("industry_signal_fast_inject", industryFastInjectFresh ? industryFastInject.symbols : [], 240);
   addMany("stock_future", payload.stockFutureSymbols || payload.futoptSymbols || payload.individualFuturesSymbols, 85);
   addMany("manual_watchlist", payload.manualWatchlist || payload.manual_watchlist || payload.watchlist || payload.userWatchlist || payload.user_watchlist, 120);
   const openingReport0830 = readOpeningReport0830PrioritySeeds(activeSymbols);
@@ -3388,6 +3481,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
 
     const seedEntry = sourceSeedBySymbol.get(row.symbol) || {};
     const seedSources = [...new Set((seedEntry.sources || []).filter((value) => value && value !== "symbols"))];
+    if (numberValue(seedEntry.score) > 0) entryScore += numberValue(seedEntry.score);
     const openingReport0830BiasOnly = seedEntry.openingReport0830BiasOnly === true;
     const sourceSignal = seedSources.length > 0 || metrics.stockFutureInitial0846Ok || metrics.trackedBuyPointActive;
     const openingPriceBreakout = metrics.openPrice > 0 && metrics.price > metrics.openPrice;
@@ -5244,13 +5338,43 @@ function buildIntradayBurstMetricsFromCandleCache(candles) {
   };
 }
 
-function intradayIndustryName(row, metrics, fallbackGroup = {}) {
-  const group = metrics?.stockGroupContract || metrics?.groupContract || row?.stockGroupContract || row?.priorityMetrics?.stockGroupContract || row?.payload?.stockGroupContract || fallbackGroup || {};
-  return firstText(
-    group.heatmapSector, group.sector, group.primaryIndustry, group.industry, group.officialIndustry,
-    row?.heatmapSector, row?.sector, row?.industry, row?.payload?.heatmapSector, row?.payload?.sector, row?.payload?.industry,
+function normalizeDomesticDetailedIndustry(value) {
+  const name = firstText(value);
+  const aliases = {
+    "IC生產製造": "IC代工",
+    "IC設計服務": "IC設計",
+    "CPU/ASIC/IP": "IC設計",
+  };
+  return aliases[name] || name;
+}
+
+function intradayIndustryClassification(row, metrics, fallbackGroup = {}) {
+  const embeddedGroup = metrics?.stockGroupContract || metrics?.groupContract || row?.stockGroupContract || row?.priorityMetrics?.stockGroupContract || row?.payload?.stockGroupContract || {};
+  const group = { ...(fallbackGroup || {}), ...embeddedGroup };
+  const officialIndustry = firstText(
+    group.officialIndustry, group.official_industry,
+    row?.officialIndustry, row?.official_industry,
+    row?.payload?.officialIndustry, row?.payload?.official_industry,
+  );
+  const detailedIndustry = normalizeDomesticDetailedIndustry(firstText(
+    group.primaryIndustry, group.heatmapSector, group.sector, group.industry,
+    row?.heatmapSector, row?.sector, row?.industry,
+    row?.payload?.heatmapSector, row?.payload?.sector, row?.payload?.industry,
     ...(Array.isArray(metrics?.groupKeys) ? metrics.groupKeys : []),
-  ) || "未分類";
+  )) || "未分類";
+  const detailedReady = detailedIndustry !== "未分類" && !/^code_cluster_/i.test(detailedIndustry);
+  return {
+    industry: detailedReady ? detailedIndustry : "未分類",
+    industryParent: officialIndustry || "未分類",
+    industrySubgroup: detailedReady ? detailedIndustry : "未分類",
+    taxonomy: "taiwan_domestic_detailed_industry_v1",
+    parentTaxonomy: "twse_tpex_mops_official_domestic",
+    classificationStatus: officialIndustry && detailedReady ? "ready" : "DATA_GAP_DOMESTIC_DETAILED_INDUSTRY",
+  };
+}
+
+function intradayIndustryName(row, metrics, fallbackGroup = {}) {
+  return intradayIndustryClassification(row, metrics, fallbackGroup).industry;
 }
 
 function finalizeIntradayIndustryHeatmap(accumulator, checkedAt) {
@@ -5260,6 +5384,16 @@ function finalizeIntradayIndustryHeatmap(accumulator, checkedAt) {
     const breadth = item.symbol_count > 0 ? ((item.advancers - item.decliners) / item.symbol_count) * 100 : 0;
     const flowShare = totalTradeValue > 0 ? (netFlowProxy / totalTradeValue) * 100 : 0;
     const direction = netFlowProxy > 0 && breadth > 0 ? "inflow" : netFlowProxy < 0 && breadth < 0 ? "outflow" : "neutral";
+    const averageChangePercent = item.symbol_count > 0 ? item.change_percent_sum / item.symbol_count : 0;
+    const advanceRatioPercent = item.symbol_count > 0 ? (item.advancers / item.symbol_count) * 100 : 0;
+    const volumeExpansionRatioPercent = item.symbol_count > 0 ? (item.volume_expansion_count / item.symbol_count) * 100 : 0;
+    const momentumScore = Math.max(0, Math.min(100,
+      50 + Math.max(-30, Math.min(30, averageChangePercent * 10))
+      + breadth * 0.15
+      + volumeExpansionRatioPercent * 0.05));
+    const momentumDirection = averageChangePercent > 0 && breadth > 0
+      ? "bullish"
+      : averageChangePercent < 0 && breadth < 0 ? "bearish" : "mixed";
     return {
       industry: item.industry,
       symbol_count: item.symbol_count,
@@ -5270,23 +5404,60 @@ function finalizeIntradayIndustryHeatmap(accumulator, checkedAt) {
       down_trade_value: Math.round(item.down_trade_value),
       total_trade_value: Math.round(totalTradeValue),
       net_flow_proxy: Math.round(netFlowProxy),
+      average_change_percent: Number(averageChangePercent.toFixed(2)),
+      advance_ratio_percent: Number(advanceRatioPercent.toFixed(2)),
+      volume_expansion_ratio_percent: Number(volumeExpansionRatioPercent.toFixed(2)),
+      volume_expansion_symbol_count: item.volume_expansion_count,
+      momentum_score: Number(momentumScore.toFixed(2)),
+      momentum_direction: momentumDirection,
+      momentum_label: momentumDirection === "bullish" ? "產業偏多" : momentumDirection === "bearish" ? "產業偏空" : "產業分歧",
       breadth_percent: Number(breadth.toFixed(2)),
       flow_share_percent: Number(flowShare.toFixed(2)),
       heat_score: Number((Math.abs(flowShare) * 0.7 + Math.abs(breadth) * 0.3).toFixed(2)),
       flow_direction: direction,
       flow_label: direction === "inflow" ? "資金流入" : direction === "outflow" ? "資金流出" : "資金中性",
-      source: "fugle_formal_quote_mother_pool_heatmap",
+      source: "fugle_formal_quote_full_market_domestic_industry_momentum",
       updated_at: checkedAt,
     };
-  }).sort((a, b) => b.net_flow_proxy - a.net_flow_proxy || b.heat_score - a.heat_score || a.industry.localeCompare(b.industry, "zh-Hant"));
+  }).sort((a, b) => b.net_flow_proxy - a.net_flow_proxy || b.momentum_score - a.momentum_score || a.industry.localeCompare(b.industry, "zh-Hant"));
   rows.forEach((row, index) => { row.flow_rank = index + 1; });
   return rows;
 }
 
-function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quoteMap = new Map()) {
+function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quoteMap = new Map(), heatmapUniverseRows = rows) {
   const inputRows = Array.isArray(rows) ? rows : [];
+  const heatmapRows = Array.isArray(heatmapUniverseRows) ? heatmapUniverseRows : inputRows;
+  const previousOutbox = readJson(INTRADAY_BURST_TELEGRAM_OUTBOX_FILE, null);
+  const domesticMarketMinutes = taipeiClockMinutesFrom(checkedAt);
+  if (domesticMarketMinutes < 540) {
+    const payload = {
+      contract: "daytrade_intraday_burst_telegram_outbox_v1",
+      source: "fugle_formal_1m",
+      alert_scope: "daytrade_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage_and_industry_heatmap",
+      trade_date: tradeDate,
+      updated_at: checkedAt,
+      run_id: runId,
+      candidate_count: inputRows.length,
+      strict_burst_event_count: 0,
+      industry_heatmap_status: "warmup_waiting_for_taiwan_open",
+      industry_heatmap_source: "twse_tpex_mops_official_domestic+fugle_formal_quote_mother_pool",
+      industry_taxonomy: "twse_tpex_mops_official_domestic",
+      overseas_priority_role: "mother_pool_priority_weight_only",
+      domestic_detection_window: "09:00-12:30 Asia/Taipei",
+      industry_heatmap: [],
+      technical_indicator_readback: [],
+      events: [],
+    };
+    if (!DRY_RUN) writeJson(INTRADAY_BURST_TELEGRAM_OUTBOX_FILE, payload);
+    return { path: INTRADAY_BURST_TELEGRAM_OUTBOX_FILE, event_count: 0, events: [], diagnostics: payload };
+  }
   const candleCacheBySymbol = buildIntradayBurstCandleCacheBySymbol(tradeDate);
   const staticIndustryMap = readHeatmapStaticGroupMap();
+  const officialIndustryMap = readMopsOfficialIndustryCacheMap();
+  const classificationFallback = (symbol) => ({
+    ...(staticIndustryMap.get(symbol) || {}),
+    ...(officialIndustryMap.get(symbol) || {}),
+  });
   const events = [];
   const technicalIndicatorReadback = [];
   const rejectedReasonCounts = {};
@@ -5311,30 +5482,120 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
   // Phase 1: rank capital concentration before any per-symbol burst scan.
   // This makes high-concentration industries the actual detection priority,
   // rather than merely changing the final Telegram delivery order.
-  for (const row of inputRows) {
+  for (const row of heatmapRows) {
     const symbol = normalizeCode(row?.symbol);
     const metrics = { ...(row?.metrics || {}), ...(row?.priorityMetrics || {}) };
     const quote = quoteMap instanceof Map ? (quoteMap.get(symbol) || {}) : {};
     const quotePayload = quote?.payload || {};
-    const industryName = intradayIndustryName(row, metrics, staticIndustryMap.get(symbol));
+    const classification = intradayIndustryClassification(row, metrics, classificationFallback(symbol));
+    const industryName = classification.industry;
     const price = firstPositiveValue(metrics.price, metrics.lastPrice, metrics.last_price, row?.price, row?.last_price, quote.price, quote.lastPrice, quote.last_price, quotePayload.price, quotePayload.lastPrice, quotePayload.last_price);
     const previousClose = firstPositiveValue(metrics.previousClose, metrics.previous_close, row?.previous_close, row?.payload?.previous_close, quote.previousClose, quote.previous_close, quotePayload.previousClose, quotePayload.previous_close);
     const totalVolume = firstPositiveValue(metrics.totalVolume, metrics.total_volume, row?.total_volume, row?.payload?.total_volume, quote.totalVolume, quote.total_volume, quote.volume, quotePayload.totalVolume, quotePayload.total_volume, quotePayload.volume);
     const tradeValue = firstPositiveValue(metrics.tradeValue, metrics.trade_value, row?.trade_value, row?.payload?.trade_value, quote.tradeValue, quote.trade_value, quotePayload.tradeValue, quotePayload.trade_value, price > 0 && totalVolume > 0 ? price * totalVolume * 1000 : 0);
     const reportedChangePercent = Number(metrics.changePercent ?? metrics.change_percent);
     const changePercent = Number.isFinite(reportedChangePercent) && reportedChangePercent !== 0 ? reportedChangePercent : (price > 0 && previousClose > 0 ? ((price - previousClose) / previousClose) * 100 : 0);
-    const industryFlow = industryFlowAccumulator.get(industryName) || { industry: industryName, symbol_count: 0, advancers: 0, decliners: 0, unchanged: 0, up_trade_value: 0, down_trade_value: 0, flat_trade_value: 0 };
+    if (classification.classificationStatus !== "ready" || !(tradeValue > 0)) continue;
+    const industryFlow = industryFlowAccumulator.get(industryName) || { industry: industryName, industry_parent: classification.industryParent, symbol_count: 0, advancers: 0, decliners: 0, unchanged: 0, up_trade_value: 0, down_trade_value: 0, flat_trade_value: 0, change_percent_sum: 0, volume_expansion_count: 0 };
     industryFlow.symbol_count += 1;
+    industryFlow.change_percent_sum += changePercent;
+    if (numberValue(metrics.volumeRatio5 ?? metrics.volume_ratio_5) >= 1.2) industryFlow.volume_expansion_count += 1;
     if (changePercent > 0) { industryFlow.advancers += 1; industryFlow.up_trade_value += tradeValue; }
     else if (changePercent < 0) { industryFlow.decliners += 1; industryFlow.down_trade_value += tradeValue; }
     else { industryFlow.unchanged += 1; industryFlow.flat_trade_value += tradeValue; }
     industryFlowAccumulator.set(industryName, industryFlow);
   }
   const industryHeatmap = finalizeIntradayIndustryHeatmap(industryFlowAccumulator, checkedAt);
+  const previousIndustryMap = new Map((Array.isArray(previousOutbox?.industry_heatmap) ? previousOutbox.industry_heatmap : []).map((row) => [String(row?.industry || ""), row]));
+  const previousAtMs = Date.parse(String(previousOutbox?.updated_at || ""));
+  const checkedAtMsForIndustry = Date.parse(String(checkedAt || ""));
+  const industryDeltaWindowSeconds = Number.isFinite(previousAtMs) && Number.isFinite(checkedAtMsForIndustry)
+    ? Math.max(0, (checkedAtMsForIndustry - previousAtMs) / 1000)
+    : null;
+  for (const row of industryHeatmap) {
+    const previous = previousIndustryMap.get(row.industry);
+    row.flow_delta_proxy = previous && industryDeltaWindowSeconds > 0 && industryDeltaWindowSeconds <= 300
+      ? Math.round(row.net_flow_proxy - numberValue(previous.net_flow_proxy))
+      : 0;
+    row.flow_delta_window_seconds = industryDeltaWindowSeconds;
+    row.previous_average_change_percent = previous && industryDeltaWindowSeconds > 0 && industryDeltaWindowSeconds <= 300
+      ? numberValue(previous.average_change_percent)
+      : null;
+    row.industry_volume_expansion_confirmed = Number(row.volume_expansion_symbol_count) > 0
+      && Number(row.volume_expansion_ratio_percent) > 0;
+    row.industry_price_rise_continuing = Boolean(previous)
+      && industryDeltaWindowSeconds > 0
+      && industryDeltaWindowSeconds <= 300
+      && Number(row.average_change_percent) > 0
+      && Number(row.breadth_percent) > 0
+      && Number(row.average_change_percent) >= numberValue(previous.average_change_percent);
+  }
+  const suddenRanked = industryHeatmap.slice().sort((a, b) => b.flow_delta_proxy - a.flow_delta_proxy || a.industry.localeCompare(b.industry, "zh-Hant"));
+  suddenRanked.forEach((row, index) => { row.sudden_inflow_rank = index + 1; });
+  const suddenRankByIndustry = new Map(suddenRanked.map((row) => [row.industry, row.sudden_inflow_rank]));
+  for (const row of industryHeatmap) {
+    row.sudden_inflow_rank = suddenRankByIndustry.get(row.industry) || null;
+    row.persistent_large_inflow = row.flow_rank <= 3 && row.flow_direction === "inflow"
+      && row.industry_volume_expansion_confirmed === true && row.industry_price_rise_continuing === true;
+    row.sudden_large_inflow = row.sudden_inflow_rank <= 3 && row.flow_delta_proxy >= 500000000 && row.flow_direction !== "outflow"
+      && row.industry_volume_expansion_confirmed === true && row.industry_price_rise_continuing === true;
+    row.industry_trigger_reason = row.persistent_large_inflow
+      ? "top3_persistent_large_inflow_volume_price_confirmed"
+      : row.sudden_large_inflow ? "sudden_large_inflow_volume_price_confirmed" : "not_qualified";
+  }
+  const qualifiedIndustryNames = new Set(industryHeatmap
+    .filter((row) => row.persistent_large_inflow === true || row.sudden_large_inflow === true)
+    .map((row) => row.industry));
+  const industryFastInjectCandidates = heatmapRows.map((row) => {
+    const symbol = normalizeCode(row?.symbol);
+    const metrics = { ...(row?.metrics || {}), ...(row?.priorityMetrics || {}) };
+    const classification = intradayIndustryClassification(row, metrics, classificationFallback(symbol));
+    return {
+      symbol,
+      name: row?.name || symbol,
+      industry: classification.industry,
+      price: numberValue(metrics.price ?? metrics.lastPrice ?? metrics.last_price),
+      change_percent: numberValue(metrics.changePercent ?? metrics.change_percent),
+      trade_value: numberValue(metrics.tradeValue ?? metrics.trade_value),
+      quote_fresh: metrics.quoteFresh === true,
+    };
+  }).filter((row) => qualifiedIndustryNames.has(row.industry)
+    && row.price >= MOTHER_POOL_MIN_PRICE
+    && row.change_percent > 0
+    && row.trade_value >= FORMAL_SIGNAL_MIN_TRADE_VALUE
+    && row.quote_fresh === true)
+    .sort((a, b) => b.trade_value - a.trade_value || b.change_percent - a.change_percent || a.symbol.localeCompare(b.symbol));
+  const industryFastInjectRows = [];
+  const industryFastInjectCounts = new Map();
+  for (const row of industryFastInjectCandidates) {
+    const count = industryFastInjectCounts.get(row.industry) || 0;
+    if (count >= 60 || industryFastInjectRows.some((item) => item.symbol === row.symbol)) continue;
+    const flow = industryHeatmap.find((item) => item.industry === row.industry) || {};
+    industryFastInjectRows.push({
+      ...row,
+      source: "industry_signal_fast_inject",
+      industry_flow_rank: flow.flow_rank || null,
+      industry_trigger_reason: flow.industry_trigger_reason || "not_qualified",
+      injected_at: checkedAt,
+    });
+    industryFastInjectCounts.set(row.industry, count + 1);
+  }
+  const industryFastInjectPayload = {
+    contract: "daytrade_industry_signal_fast_inject_v1",
+    trade_date: tradeDate,
+    updated_at: checkedAt,
+    expires_at: new Date(Date.parse(checkedAt) + 15 * 60 * 1000).toISOString(),
+    source: "taiwan_full_market_detailed_industry_signal",
+    industries: [...qualifiedIndustryNames],
+    symbols: industryFastInjectRows.map((row) => row.symbol),
+    rows: industryFastInjectRows,
+    injection_count: industryFastInjectRows.length,
+  };
+  if (!DRY_RUN) writeJson(INDUSTRY_SIGNAL_FAST_INJECT_FILE, industryFastInjectPayload);
   const detectionPriorityByIndustry = new Map(industryHeatmap.map((row) => [row.industry, row.flow_rank]));
   const orderedInputRows = inputRows.slice().sort((a, b) => {
-    const industryA = intradayIndustryName(a, { ...(a?.metrics || {}), ...(a?.priorityMetrics || {}) }, staticIndustryMap.get(normalizeCode(a?.symbol)));
-    const industryB = intradayIndustryName(b, { ...(b?.metrics || {}), ...(b?.priorityMetrics || {}) }, staticIndustryMap.get(normalizeCode(b?.symbol)));
+    const industryA = intradayIndustryName(a, { ...(a?.metrics || {}), ...(a?.priorityMetrics || {}) }, classificationFallback(normalizeCode(a?.symbol)));
+    const industryB = intradayIndustryName(b, { ...(b?.metrics || {}), ...(b?.priorityMetrics || {}) }, classificationFallback(normalizeCode(b?.symbol)));
     return numberValue(detectionPriorityByIndustry.get(industryA), 999999) - numberValue(detectionPriorityByIndustry.get(industryB), 999999)
       || String(a?.symbol || "").localeCompare(String(b?.symbol || ""));
   });
@@ -5346,7 +5607,8 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
     const quote = quoteMap instanceof Map ? (quoteMap.get(symbol) || {}) : {};
     const quotePayload = quote?.payload || {};
     const metrics = { ...rowMetrics, ...priorityMetrics };
-    const industryName = intradayIndustryName(row, metrics, staticIndustryMap.get(symbol));
+    const classification = intradayIndustryClassification(row, metrics, classificationFallback(symbol));
+    const industryName = classification.industry;
     const price = firstPositiveValue(priorityMetrics.price, priorityMetrics.lastPrice, priorityMetrics.last_price, priorityMetrics.close, rowMetrics.price, rowMetrics.lastPrice, rowMetrics.last_price, rowMetrics.close, row?.price, row?.last_price, row?.lastPrice, row?.close, row?.payload?.price, row?.payload?.last_price, row?.payload?.lastPrice, row?.payload?.close, quote.price, quote.lastPrice, quote.last_price, quote.close, quotePayload.price, quotePayload.lastPrice, quotePayload.last_price, quotePayload.close);
     const quoteAgeSeconds = minFiniteValue(priorityMetrics.quoteAgeSeconds, priorityMetrics.quote_age_seconds, rowMetrics.quoteAgeSeconds, rowMetrics.quote_age_seconds, row?.quote_age_seconds, row?.payload?.quote_age_seconds, quote.quoteAgeSeconds, quote.quote_age_seconds, quotePayload.quoteAgeSeconds, quotePayload.quote_age_seconds, ageSeconds(quoteFreshnessTime(quote)));
     const sampleCount = Math.max(
@@ -5394,6 +5656,11 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
       change_percent: changePercent,
       trade_value: Math.round(tradeValue),
       industry: industryName,
+      industry_parent: classification.industryParent,
+      industry_subgroup: classification.industrySubgroup,
+      industry_taxonomy: classification.taxonomy,
+      industry_parent_taxonomy: classification.parentTaxonomy,
+      industry_classification_status: classification.classificationStatus,
       pool_rank: rank,
       entry_score: numberValue(row?.entryScore ?? row?.score ?? row?.payload?.entry_score ?? row?.payload?.score),
       upgrade_score: numberValue(row?.upgradeScore ?? row?.payload?.upgrade_score),
@@ -5523,6 +5790,24 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
       industry_flow_priority: flow && (flow.flow_rank <= 5 || flow.heat_score >= 70) ? "high" : "normal",
       industry_net_flow_proxy: flow?.net_flow_proxy ?? null,
       industry_breadth_percent: flow?.breadth_percent ?? null,
+      industry_momentum_status: flow && row.industry !== "未分類" ? "ready" : "DATA_GAP_INDUSTRY_CLASSIFICATION",
+      industry_momentum_direction: flow?.momentum_direction || "unknown",
+      industry_momentum_label: flow?.momentum_label || "產業資料缺口",
+      industry_momentum_rank: flow?.flow_rank || null,
+      industry_momentum_score: flow?.momentum_score ?? null,
+      industry_average_change_percent: flow?.average_change_percent ?? null,
+      industry_advance_ratio_percent: flow?.advance_ratio_percent ?? null,
+      industry_volume_expansion_ratio_percent: flow?.volume_expansion_ratio_percent ?? null,
+      industry_volume_expansion_symbol_count: flow?.volume_expansion_symbol_count ?? 0,
+      industry_volume_expansion_confirmed: flow?.industry_volume_expansion_confirmed === true,
+      industry_price_rise_continuing: flow?.industry_price_rise_continuing === true,
+      industry_previous_average_change_percent: flow?.previous_average_change_percent ?? null,
+      industry_persistent_large_inflow: flow?.persistent_large_inflow === true,
+      industry_sudden_large_inflow: flow?.sudden_large_inflow === true,
+      industry_sudden_inflow_rank: flow?.sudden_inflow_rank || null,
+      industry_flow_delta_proxy: flow?.flow_delta_proxy ?? null,
+      industry_flow_delta_window_seconds: flow?.flow_delta_window_seconds ?? null,
+      industry_trigger_reason: flow?.industry_trigger_reason || "not_qualified",
       industry_flow_updated_at: flow?.updated_at || checkedAt,
       industry_flow_source: flow?.source || "",
     });
@@ -5531,8 +5816,9 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
   events.forEach(attachIndustryFlow);
   const rawStrictBurstEventCount = events.length;
   const industryScopedEvents = events.filter((event) => {
-    const eligible = event.industry_flow_status === "ready" && event.industry_flow_direction === "inflow";
-    if (!eligible) addReject(event.symbol, event.industry_flow_status === "ready" ? "industry_not_net_inflow" : "industry_heatmap_not_ready");
+    const eligible = event.industry_momentum_status === "ready"
+      && (event.industry_persistent_large_inflow === true || event.industry_sudden_large_inflow === true);
+    if (!eligible) addReject(event.symbol, event.industry_momentum_status === "ready" ? "industry_not_top3_or_sudden_inflow" : "industry_momentum_not_ready");
     return eligible;
   }).sort((a, b) =>
     numberValue(a.industry_flow_rank, 999999) - numberValue(b.industry_flow_rank, 999999)
@@ -5558,9 +5844,9 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
       min_price: MOTHER_POOL_MIN_PRICE,
       max_quote_age_seconds: WINDOW_SECONDS,
       max_1m_stale_seconds: MAX_INTRADAY_1M_STALE_SECONDS,
-      industry_heatmap: "first rank Mother Pool industries by same-tick Fugle formal quote trade-value flow proxy, then scan burst rules only inside net-inflow industries; never a standalone Telegram trigger",
-      telegram_delivery_order: "industry_flow_rank asc, industry_heat_score desc, symbol asc; highest capital concentration is sent first",
-      detection_order: "industry heatmap is finalized first; symbols are scanned by industry_flow_rank asc before burst evaluation",
+      industry_gate: "Taiwan full-market detailed-industry top 3 with continuing inflow OR any detailed industry with sudden top-3 positive flow delta >= TWD 500,000,000 within 5 minutes",
+      telegram_delivery_order: "persistent top-3 industries first, then sudden-inflow rank, then symbol",
+      detection_order: "full-market domestic detailed-industry ranking and round-over-round flow delta are finalized before Mother Pool symbol rules",
     },
     candidate_count: inputRows.length,
     candle_cache_symbol_count: candleCacheBySymbol.size,
@@ -5569,8 +5855,21 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
     strict_burst_event_count: strictBurstEventCount,
     hot_rank_fallback_event_count: hotRankFallbackEventCount,
     industry_heatmap_status: industryHeatmap.some((row) => row.industry !== "未分類") ? "ready" : "DATA_GAP_INDUSTRY_CLASSIFICATION",
-    industry_heatmap_source: "fugle_formal_quote_mother_pool_heatmap",
+    industry_heatmap_source: "taiwan_domestic_detailed_industry+twse_tpex_mops_parent+fugle_formal_quote_full_market",
+    industry_taxonomy: "taiwan_domestic_detailed_industry_v1",
+    industry_parent_taxonomy: "twse_tpex_mops_official_domestic",
+    industry_subgroup_role: "formal_domestic_industry_ranking",
+    industry_heatmap_universe: "full_market_active_ordinary_stock",
+    industry_heatmap_universe_rows: heatmapRows.length,
+    overseas_priority_role: "mother_pool_priority_weight_only",
     industry_heatmap_updated_at: checkedAt,
+    official_industry_reference_source: officialIndustryMap.meta?.source || "missing",
+    official_industry_reference_rows: officialIndustryMap.size,
+    official_industry_reference_updated_at: officialIndustryMap.meta?.updatedAt || "",
+    mother_pool_fast_inject_contract: "daytrade_industry_signal_fast_inject_v1",
+    mother_pool_fast_inject_path: INDUSTRY_SIGNAL_FAST_INJECT_FILE,
+    mother_pool_fast_inject_count: industryFastInjectRows.length,
+    mother_pool_fast_inject_industries: [...qualifiedIndustryNames],
     industry_heatmap: industryHeatmap,
     rejected_reason_counts: rejectedReasonCounts,
     sample_rejected: sampleRejected,
@@ -5821,7 +6120,7 @@ function updateMotherPoolDelta(result) {
   };
 
   const burstRows = priorityRows;
-  const intradayBurstTelegramOutbox = writeIntradayBurstTelegramOutbox(burstRows, tradeDate, checkedAt, runId, result?.quoteMap);
+  const intradayBurstTelegramOutbox = writeIntradayBurstTelegramOutbox(burstRows, tradeDate, checkedAt, runId, result?.quoteMap, result?.industryUniverseRows);
   roundSummary.intraday_burst_telegram_event_count = intradayBurstTelegramOutbox.event_count;
 
   if (!DRY_RUN) writeJson(MOTHER_POOL_DELTA_STATE_FILE, {
@@ -5857,6 +6156,10 @@ function updateMotherPoolDelta(result) {
         inside_volume: Math.round(numberValue(row.priority_metrics?.insideVolume)),
         outside_volume: Math.round(numberValue(row.priority_metrics?.outsideVolume)),
         outside_volume_gt_inside_times_2: row.priority_metrics?.outsideVolumeGtInsideTimes2 === true,
+        pool_reasons: row.pool_reasons || [],
+        priority_reason: row.priority_reason || "",
+        source_flags: row.source_flags || [],
+        industry_signal_fast_injected: (row.source_flags || []).includes("industry_signal_fast_inject"),
         score_history: history,
         first_seen_at: row.first_seen_at,
       };
@@ -6837,6 +7140,10 @@ async function tick() {
   });
   result.priorityRows = priorityRows;
   result.quoteMap = quoteMap;
+  result.industryUniverseRows = activeSymbols.map((row) => ({
+    ...row,
+    metrics: quoteMetrics(row.symbol, dailyVolumeMap, quoteMap, supplementalMaps),
+  }));
   result.payload.nonfatal_write_errors = fetchResult.errors || [];
   result.payload.websocket_quote_readthrough_written = websocketQuoteReadthroughSync.written || 0;
   result.payload.websocket_quote_readthrough_skipped = Boolean(websocketQuoteReadthroughSync.skipped);
