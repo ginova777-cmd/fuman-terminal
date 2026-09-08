@@ -63,7 +63,9 @@ const quoteReadBlock = canonicalWaterReader.match(/quoteRows\.push\(\.\.\.await 
 const formalTelegramVerifierFiles = (() => {
   try {
     return fs.readdirSync(path.join(ROOT, "scripts"))
-      .filter((name) => /^verify-.*daytrade.*telegram.*\.js$/i.test(name) || /^verify-.*telegram.*daytrade.*\.js$/i.test(name))
+      .filter((name) => /^verify-daytrade-intraday-burst-.*\.js$/i.test(name)
+        || /^verify-.*daytrade.*telegram.*\.js$/i.test(name)
+        || /^verify-.*telegram.*daytrade.*\.js$/i.test(name))
       .sort();
   } catch { return []; }
 })();
@@ -94,6 +96,13 @@ const checks = {
     "latest1mVolume >= volumeTriggerLevel",
     "trigger_type: \"volume_burst_rolling60_x2\"",
     "volume_trigger_level: volumeTriggerLevel",
+  ]),
+  missed_candle_replay_contract: includesAll(writer, [
+    "INTRADAY_BURST_REPLAY_MAX_AGE_SECONDS",
+    "for (let offset = 1; offset < cachedCandles.length; offset += 1)",
+    "replayed_missed_candle: true",
+    "replayMetrics.latest_1m_close >= replayPriceTriggerLevel",
+    "replayMetrics.latest_1m_volume >= replayVolumeTriggerLevel",
   ]),
   mother_pool_only_source: includesAll(writer, [
     "const burstRows = priorityRows;",
