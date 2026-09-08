@@ -2882,7 +2882,7 @@ function strategyPriorityRunValidation(run) {
     ok: !reason,
     reason,
     runId: String(run?.run_id || run?.runId || payload.run_id || payload.runId || ""),
-    scanDate: compactDateKey(run?.scan_date || run?.scanDate || payload.scan_date || payload.scanDate),
+    scanDate: compactDateKey(run?.scan_date || run?.scanDate || run?.trade_date || run?.tradeDate || payload.scan_date || payload.scanDate || payload.trade_date || payload.tradeDate),
     finishedAt: run?.finished_at || run?.finishedAt || payload.finished_at || payload.finishedAt || "",
     status,
     qualityStatus,
@@ -2955,7 +2955,7 @@ async function readStrategyPriorityBridgeSource(source) {
     "select=" + source.resultSelect,
     "run_id=eq." + encodeURIComponent(validation.runId),
     "limit=" + STRATEGY_PRIORITY_BRIDGE_MAX_ROWS,
-    source.key === "cb" ? "order=updated_at.desc" : "order=rank.asc",
+    "order=" + (source.resultOrder || (source.key === "cb" ? "updated_at.desc" : "rank.asc")),
   ].join("&");
   const rows = await supabaseGet(source.resultsResource, query);
   const symbols = [];
@@ -3061,6 +3061,11 @@ function mergeStrategyPriorityBridgeIntoRuntimeFile(bridge) {
       tradeDate,
     ),
   };
+  // Remove obsolete per-strategy probes. Strategy2/3 are downstream decision
+  // systems; Mother Pool consumes their stocks through the terminal canonical
+  // union and does not depend on private or stale strategy tables.
+  delete next.strategy2;
+  delete next.strategy3;
   for (const source of STRATEGY_PRIORITY_BRIDGE_SOURCES) {
     const group = bridge.groups[source.key];
     if (!group || group.status === "error") continue;

@@ -355,7 +355,7 @@ function isGateFailClosed(gate) {
 }
 
 function isPreopenWarmupReady(source) {
-  return ["preopen_prepare_0830_0844", "opening_boost_0845_0859"].includes(source.phase)
+  return ["warmup_0600_0829", "preopen_prepare_0830_0844", "opening_boost_0845_0859"].includes(source.phase)
     && source.status === "ok"
     && source.daytradeGateGrade === "A"
     && source.warmupGateReady === true
@@ -453,9 +453,11 @@ function writerCodeRegressionChecks() {
       && source.includes('strategy4_daily_ohlcv_view:prior_3_trading_days')
       && source.includes('market_not_twse_otc')
       && source.includes('price_below_'),
-    outsideVolumePriorityContract: source.includes('outsideVolume > insideVolume * 2')
+    outsideVolumePriorityContract: source.includes('outsideVolume >= insideVolume * 2')
       && source.includes('outside_volume_gt_inside_times_2_priority')
       && source.includes('outsideVolumeGtInsideTimes2')
+      && source.includes('SIDE_VOLUME_THRESHOLD_LOTS')
+      && source.includes('deriveDaytradeSideVolumeContract')
       && !source.includes('outsideVolume * 2 > insideVolume'),
     volumePolicyReceiptReadbackContract: source.includes('avg3_volume_gate_status')
       && source.includes('outside_volume_gt_inside_times_2: row.priority_metrics?.outsideVolumeGtInsideTimes2 === true')
