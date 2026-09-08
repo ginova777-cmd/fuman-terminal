@@ -191,11 +191,11 @@ select r.*,
   coalesce(r.future_pattern='開盤回測守住',false) as future_open_retest_ok,
   case when r.future_pattern='開盤回測守住' then '期貨0845開盤後，0859前回到開盤價附近並守住'
     else 'DATA_GAP_OR_FUTURE_OPEN_RETEST_NOT_MET' end as future_open_retest_reason,
-  sa.future_open_source_event_at as future_0845_source_event_at,
-  sa.future_last_source_event_at as future_0859_source_event_at,
-  sa.latest_payload->>'trial_event_at' as trial_event_at,
-  sa.latest_payload->>'run_id' as run_id,
-  sa.latest_payload->>'generation_id' as generation_id,
+  si.identity_future_open_source_event_at as future_0845_source_event_at,
+  si.identity_future_last_source_event_at as future_0859_source_event_at,
+  si.identity_latest_payload->>'trial_event_at' as trial_event_at,
+  si.identity_latest_payload->>'run_id' as run_id,
+  si.identity_latest_payload->>'generation_id' as generation_id,
   case
     when future_symbol is null or future_symbol='' or future_symbol like 'TXF%'
       or futopt_last_price is null or futopt_last_price<=0
@@ -216,7 +216,15 @@ select r.*,
     when future_pattern is null then 'FUTURE_OPEN_RETEST_NOT_MET'
     else null end as strategy_no_match_reason
 from rules r
-left join snapshot_agg sa on sa.trade_date=r.trade_date and sa.underlying_symbol=r.symbol;
+left join (
+  select
+    trade_date,
+    underlying_symbol,
+    future_open_source_event_at as identity_future_open_source_event_at,
+    future_last_source_event_at as identity_future_last_source_event_at,
+    latest_payload as identity_latest_payload
+  from snapshot_agg
+) si on si.trade_date=r.trade_date and si.underlying_symbol=r.symbol;
 
 grant select on public.v_fugle_daytrade_star_preopen_readback to anon, authenticated;
 grant select on public.v_fugle_daytrade_star_universe_readback to anon, authenticated;
