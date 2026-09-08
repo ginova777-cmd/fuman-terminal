@@ -4,7 +4,10 @@ const fs = require("fs");
 const path = require("path");
 
 const root = path.resolve(__dirname, "..");
-const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
+// Contract markers span lines in several PowerShell/JavaScript sources. Normalize
+// Windows checkouts so CRLF cannot turn a valid production marker into a false
+// negative when the same commit is verified on a different platform.
+const read = (file) => fs.readFileSync(path.join(root, file), "utf8").replace(/\r\n/g, "\n");
 const sql = read("ops/public-slot/DaytradeStarPreopenReadbackContract_20260908.sql");
 const producer = read("scripts/run-daytrade-near-one-source.js");
 const verifier = read("scripts/verify-daytrade-futopt-star-readback-readonly.js");
