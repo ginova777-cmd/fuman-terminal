@@ -65,7 +65,7 @@ function installFetch(tradeDate, options = {}) {
     if (target === "v_fugle_daytrade_mother_pool") return response(options.poolRows || [{ trade_date: tradeDate, symbol: "2330", name: "台積電", source_name: "fugle_daytrade_source", priority_rank: 1 }]);
     if (target === "fugle_daytrade_quotes_live") {
       calls.quoteQueries.push(url);
-      return response([{ symbol: "2330", name: "台積電", price: 100, quote_seen_at: new Date().toISOString(), last_trade_time: new Date().toISOString(), updated_at: new Date().toISOString(), ...options.quoteOverrides }]);
+      return response([{ symbol: "2330", trade_date: tradeDate, name: "台積電", price: 100, quote_seen_at: new Date().toISOString(), last_trade_time: new Date().toISOString(), updated_at: new Date().toISOString(), ...options.quoteOverrides }]);
     }
     if (target === "v_fugle_daytrade_intraday_1m_status") return response([{ symbol: "2330", latest_candle_time: new Date(Date.now() - 60000).toISOString(), today_candle_count: 61, updated_at: new Date().toISOString() }]);
     if (target === "get_fugle_daytrade_intraday_1m_latest_n") return response(candles(tradeDate, "2330"));
@@ -87,17 +87,18 @@ async function main() {
     && healthy.receipt?.mother_pool_read_rows === 1
     && healthy.receipt?.mother_pool_capacity_is_hard_gate === false
     && healthy.receipt?.quote_fresh_coverage_120s === 1
-    && healthy.receipt?.quote_trade_date_policy === "derive_asia_taipei_from_quote_seen_at_last_trade_time_updated_at"
+    && healthy.receipt?.quote_trade_date_policy === "require_explicit_fugle_daytrade_quotes_live_trade_date_v1"
     && healthy.receipt?.event_evidence?.[0]?.quote_trade_date_ok === true
     && healthy.receipt?.event_evidence?.[0]?.intraday_1m_sample_count === 61;
-  checks.quote_table_schema_without_trade_date_supported = healthyCalls.quoteQueries.length > 0
-    && healthyCalls.quoteQueries.every((url) => !String(url.searchParams.get("select") || "").split(",").includes("trade_date"))
-    && healthyCalls.quoteQueries.every((url) => !url.searchParams.has("trade_date"));
+  checks.quote_table_explicit_trade_date_required = healthyCalls.quoteQueries.length > 0
+    && healthyCalls.quoteQueries.every((url) => String(url.searchParams.get("select") || "").split(",").includes("trade_date"))
+    && healthyCalls.quoteQueries.every((url) => url.searchParams.get("trade_date") === `eq.${tradeDate}`);
 
-  installFetch(tradeDate, { quoteOverrides: { quote_seen_at: "invalid", last_trade_time: new Date().toISOString() } });
-  const fallbackQuoteTimestamp = await readCanonicalDaytradeWater({ tradeDate, symbols: ["2330"], barsPerSymbol: 61 });
-  checks.quote_trade_date_uses_first_valid_timestamp = fallbackQuoteTimestamp.ok === true
-    && fallbackQuoteTimestamp.receipt?.event_evidence?.[0]?.quote_trade_date_ok === true;
+  installFetch(tradeDate, { quoteOverrides: { trade_date: "2026-09-07", quote_seen_at: new Date().toISOString(), last_trade_time: new Date().toISOString() } });
+  const wrongExplicitDate = await readCanonicalDaytradeWater({ tradeDate, symbols: ["2330"], barsPerSymbol: 61 });
+  checks.wrong_explicit_quote_trade_date_fails_closed = wrongExplicitDate.ok === false
+    && wrongExplicitDate.failedChecks.includes("canonical_water_mother_pool_quote_coverage_below_095")
+    && wrongExplicitDate.failedChecks.includes("canonical_water_event_quote_not_ready:2330");
 
   checks.fixed_read_order = healthyCalls.indexOf("source_status") < healthyCalls.indexOf("v_fugle_daytrade_canonical_gate")
     && healthyCalls.indexOf("v_fugle_daytrade_canonical_gate") < healthyCalls.indexOf("v_fugle_daytrade_unattended_gate_status")

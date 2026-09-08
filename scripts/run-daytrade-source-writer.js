@@ -372,6 +372,31 @@ function taipeiDateFrom(value) {
   }).format(new Date(parsed));
 }
 
+function quoteTradeDateForWrite(row = {}) {
+  const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
+  const raw = payload?.raw && typeof payload.raw === "object" ? payload.raw : {};
+  const eventCandidates = [
+    row?.last_trade_time,
+    payload?.sideVolumeSourceEventAt,
+    payload?.side_volume_source_event_at,
+    payload?.aggregate_last_updated,
+    payload?.aggregateLastUpdated,
+    payload?.total?.time,
+    raw?.total?.time,
+    row?.quote_seen_at,
+    row?.updated_at,
+  ];
+  for (const value of eventCandidates) {
+    const normalized = normalizeTimestamp(value, "");
+    if (normalized) return taipeiDateFrom(normalized);
+  }
+  for (const value of [row?.trade_date, payload?.trade_date, payload?.tradeDate, payload?.date, raw?.date]) {
+    const text = String(value || "").slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  }
+  return "";
+}
+
 function taipeiMinutes() {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Taipei",
@@ -1097,7 +1122,7 @@ async function fetchExistingDaytradeQuotes() {
   try {
     const rows = await supabaseGetPaged(
       "fugle_daytrade_quotes_live",
-      "select=symbol,name,market,quote_seen_at,updated_at,last_trade_time,price,open_price,high_price,low_price,previous_close,change_percent,total_volume,trade_value,bid_price,bid_volume,ask_price,ask_volume,cumulative_bid_volume,cumulative_ask_volume,cumulative_bid_ask_volume,limit_up_price,limit_down_price,payload&order=symbol.asc",
+      "select=symbol,trade_date,name,market,quote_seen_at,updated_at,last_trade_time,price,open_price,high_price,low_price,previous_close,change_percent,total_volume,trade_value,bid_price,bid_volume,ask_price,ask_volume,cumulative_bid_volume,cumulative_ask_volume,cumulative_bid_ask_volume,limit_up_price,limit_down_price,payload&order=symbol.asc",
       { service: true },
     );
     for (const row of rows) {
@@ -4400,6 +4425,7 @@ function normalizeQuote(payload, symbol) {
   const lastTradeTime = normalizeTimestamp(payload?.lastTrade?.time || payload?.lastUpdated, quoteTime);
   return {
     symbol: code,
+    trade_date: taipeiDateFrom(lastTradeTime || quoteTime),
     name: payload?.name || code,
     market: payload?.market || payload?.exchange || "",
     updated_at: quoteTime,
@@ -6916,6 +6942,7 @@ async function tick() {
       .filter((quote) => quote && ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS)
       .map((quote) => ({
         symbol: normalizeCode(quote.symbol),
+        trade_date: quoteTradeDateForWrite(quote),
         name: quote.name || normalizeCode(quote.symbol),
         market: quote.market || '',
         quote_seen_at: normalizeTimestamp(quote.quote_seen_at || quote.updated_at, nowIso()),
@@ -6943,7 +6970,7 @@ async function tick() {
         source: quote.source || 'fugle_websocket_cache',
         payload: quote.payload || {},
       }))
-      .filter((quote) => quote.symbol);
+      .filter((quote) => quote.symbol && /^\d{4}-\d{2}-\d{2}$/.test(quote.trade_date));
     if (websocketQuoteRows.length) {
       try {
         await supabaseUpsert('fugle_daytrade_quotes_live', websocketQuoteRows, 'symbol', { batchSize: 40 });
@@ -7133,6 +7160,7 @@ async function tick() {
       .filter((quote) => quote && ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS)
       .map((quote) => ({
         symbol: normalizeCode(quote.symbol),
+        trade_date: quoteTradeDateForWrite(quote),
         name: quote.name || normalizeCode(quote.symbol),
         market: quote.market || '',
         quote_seen_at: normalizeTimestamp(quote.quote_seen_at || quote.updated_at, nowIso()),
@@ -7160,7 +7188,7 @@ async function tick() {
         source: quote.source || 'fugle_websocket_cache',
         payload: quote.payload || {},
       }))
-      .filter((quote) => quote.symbol);
+      .filter((quote) => quote.symbol && /^\d{4}-\d{2}-\d{2}$/.test(quote.trade_date));
     if (postFetchWebsocketQuoteRows.length) {
       try {
         await supabaseUpsert('fugle_daytrade_quotes_live', postFetchWebsocketQuoteRows, 'symbol', { batchSize: 40 });

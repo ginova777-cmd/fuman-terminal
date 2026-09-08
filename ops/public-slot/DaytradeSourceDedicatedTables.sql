@@ -23,6 +23,7 @@ create index if not exists idx_fugle_daytrade_priority_pool_updated_at
 
 create table if not exists public.fugle_daytrade_quotes_live (
   symbol text primary key,
+  trade_date date not null,
   name text,
   market text,
   updated_at timestamp with time zone,
@@ -51,6 +52,9 @@ create table if not exists public.fugle_daytrade_quotes_live (
 
 create index if not exists idx_fugle_daytrade_quotes_live_seen_at
   on public.fugle_daytrade_quotes_live(quote_seen_at desc);
+
+create index if not exists idx_fugle_daytrade_quotes_live_trade_date_symbol_seen
+  on public.fugle_daytrade_quotes_live(trade_date, symbol, quote_seen_at desc);
 
 create index if not exists idx_fugle_daytrade_quotes_live_updated_at
   on public.fugle_daytrade_quotes_live(updated_at desc);
