@@ -323,6 +323,7 @@ function trialFromSnapshot(row) {
     bid_volume: numberValue(row.bid_volume ?? row.bid1_volume ?? row.payload?.bidVolume),
     ask_volume: numberValue(row.ask_volume ?? row.ask1_volume ?? row.payload?.askVolume),
     is_limit_up_bid: row.is_limit_up_bid === true || row.payload?.isLimitUpBid === true,
+    trial_event_at: normalizeIso(row.trial_event_at || row.payload?.trial_event_at || row.payload?.trialEventAt, ""),
     payload: row.payload || {},
   };
 }
@@ -391,8 +392,11 @@ async function captureSlotRows(tradeDate, slot, canonicalRows, quoteRows, preope
       payload: {
         natural_schedule_evidence: true,
         natural_schedule_phase: slot,
+        run_id: `daytrade_futopt_preopen:${tradeDate.replace(/-/g, "")}`,
+        generation_id: `daytrade_futopt_preopen:${tradeDate.replace(/-/g, "")}:${slot}`,
         websocket_quote_seen_at: quote?.observed_at || null,
         preopen_snapshot_updated_at: preopenBySymbol.get(contract.symbol)?.updated_at || null,
+        trial_event_at: trial?.trial_event_at || null,
         reference_price: trial?.reference_price ?? null,
         bid_volume: trial?.bid_volume ?? null,
         ask_volume: trial?.ask_volume ?? null,
