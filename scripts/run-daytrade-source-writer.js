@@ -4181,6 +4181,19 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     }
     return out;
   };
+  const bridgeWarmupSymbols = Object.values(bridgeGroups).flatMap((group) => (
+    Array.isArray(group?.symbols) ? group.symbols : []
+  ));
+  // 06:00 warmup must cover every valid Taiwan stock currently exposed by
+  // the terminal (strategy chips, institution, warrants/CB underlyings and
+  // the Mother Pool), even when a symbol is not selected into today's pool.
+  const fullTerminalWarmupSymbols = prependUnique(
+    daytradeMotherPoolSymbols,
+    [
+      ...bridgeWarmupSymbols,
+      ...(currentExisting.terminalPrioritySymbols || currentExisting.terminalSymbols || currentExisting.terminalPriority || []),
+    ],
+  );
   const nextPriorityPayload = {
     ...currentExisting,
     ...bridgeFields,
@@ -4210,8 +4223,8 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     daytradePriceGateStatus: MOTHER_POOL_MIN_PRICE > 0 ? "minimum_price_enforced" : "no_price_floor",
     daytradePrioritySymbols,
     daytradePriorityCount: daytradePrioritySymbols.length,
-    daytradeCandlePrioritySymbols: [...new Set(daytradeCandlePrioritySymbols)],
-    daytradeCandlePriorityCount: new Set(daytradeCandlePrioritySymbols).size,
+    daytradeCandlePrioritySymbols: prependUnique(fullTerminalWarmupSymbols, daytradeCandlePrioritySymbols),
+    daytradeCandlePriorityCount: prependUnique(fullTerminalWarmupSymbols, daytradeCandlePrioritySymbols).length,
     userCaseSymbols: [...new Set(userCaseCandlePrioritySymbols)],
     userCaseCandlePrioritySymbols: [...new Set(userCaseCandlePrioritySymbols)],
     userCaseCandlePriorityCount: new Set(userCaseCandlePrioritySymbols).size,
@@ -4231,8 +4244,10 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     strategy2FormalWaterCount: strategy2FormalWaterSymbols.length,
     strategy2FormalWaterSource: "daytrade_deep_scan_pool",
     formalPriorityStrategyChip,
-    terminalPrioritySymbols: prependUnique(daytradeMotherPoolSymbols, currentExisting.terminalPrioritySymbols || currentExisting.terminalSymbols || currentExisting.terminalPriority),
-    openingPrioritySymbols: prependUnique(daytradeMotherPoolSymbols, currentExisting.openingPrioritySymbols || currentExisting.primaryPrioritySymbols),
+    terminalPrioritySymbols: fullTerminalWarmupSymbols,
+    terminalPriorityCount: fullTerminalWarmupSymbols.length,
+    terminalWarmupScope: "all_valid_taiwan_symbols_currently_exposed_by_terminal",
+    openingPrioritySymbols: prependUnique(fullTerminalWarmupSymbols, currentExisting.openingPrioritySymbols || currentExisting.primaryPrioritySymbols),
     // Keep the complete current active universe on the live quote radar; do not carry a smaller stale list forward.
     symbols: prependUnique(daytradeMotherPoolSymbols, activeUniverseSymbols),
     activeUniverseCount: activeUniverseSymbols.length,

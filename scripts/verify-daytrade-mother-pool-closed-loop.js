@@ -201,6 +201,13 @@ async function main() {
   check("priority_canonical", priorityIdentity.canonicalRunId === canonicalRunId, "priority_canonical_run_mismatch");
   check("priority_fresh", ageSeconds(priority?.updatedAt) <= 300, "priority_manifest_stale");
   check("priority_pool_nonempty_without_40_minimum", Array.isArray(priority?.daytradePrioritySymbols) && priority.daytradePrioritySymbols.length > 0, "priority_pool_empty");
+  const terminalWarmupSet = new Set(Array.isArray(priority?.terminalPrioritySymbols) ? priority.terminalPrioritySymbols.map(String) : []);
+  const terminalWarmupSources = ["strategy4", "strategy5", "institution", "warrant", "cb"];
+  const terminalWarmupMissing = terminalWarmupSources.flatMap((source) => (
+    Array.isArray(priority?.[source]) ? priority[source].map(String).filter((symbol) => !terminalWarmupSet.has(symbol)).map((symbol) => `${source}:${symbol}`) : []
+  ));
+  check("terminal_warmup_union_complete", terminalWarmupSet.size > 0 && terminalWarmupMissing.length === 0, `terminal_warmup_union_missing:${terminalWarmupMissing.slice(0, 12).join(",")}`);
+  check("terminal_warmup_scope_explicit", priority?.terminalWarmupScope === "all_valid_taiwan_symbols_currently_exposed_by_terminal", "terminal_warmup_scope_missing");
 
   const motherRows = Array.isArray(motherPool?.rows) ? motherPool.rows : [];
   const priceBySymbol = priority?.daytradePoolPriceBySymbol && typeof priority.daytradePoolPriceBySymbol === "object"
