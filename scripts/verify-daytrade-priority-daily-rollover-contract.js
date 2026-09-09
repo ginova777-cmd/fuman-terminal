@@ -21,8 +21,10 @@ check("writer_rejects_cross_day_bridge_cache", /sameDayArtifact\(cachedBridge, t
 check("writer_runtime_seeds_require_daily_identity", /function readRuntimePrioritySeeds[\s\S]*?sameDayArtifact\(rawPayload, tradeDate\)[\s\S]*?=== canonicalRunId/.test(writer));
 check("writer_opening_prewarm_uses_current_manifest", /currentExisting\.openingReport0830PrewarmTradeDate[\s\S]*?currentExisting\.openingReport0830PrewarmSymbols/.test(writer));
 check("writer_terminal_priority_uses_current_manifest", writer.includes("const fullTerminalWarmupSymbols = prependUnique(")
-  && writer.includes("...(currentExisting.terminalPrioritySymbols || currentExisting.terminalSymbols || currentExisting.terminalPriority || [])")
   && writer.includes("terminalPrioritySymbols: fullTerminalWarmupSymbols"));
+check("writer_does_not_carry_retired_terminal_sources", !writer.includes('addMany("warrant"')
+  && !writer.includes('addMany("cb"')
+  && !writer.includes("...(currentExisting.terminalPrioritySymbols || currentExisting.terminalSymbols || currentExisting.terminalPriority || [])"));
 check("writer_opening_priority_uses_current_manifest", writer.includes("openingPrioritySymbols: prependUnique(fullTerminalWarmupSymbols, currentExisting.openingPrioritySymbols || currentExisting.primaryPrioritySymbols)"));
 check("writer_forces_rewrite_on_daily_identity_change", /if \(!sameDailyIdentity \|\| !sameSymbols/.test(writer));
 check("mother_pool_uses_daily_canonical_run", /const runId = canonicalDaytradeRunId\(tradeDate\);[\s\S]*?const writerRunId =/.test(writer));

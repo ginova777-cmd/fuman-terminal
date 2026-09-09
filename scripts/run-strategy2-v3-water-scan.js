@@ -11,7 +11,7 @@ const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SOURCE_NAME = "fugle_daytrade_source";
 const CONTRACT = "strategy2-shared-water-v1";
-const ACCEPTED_MOTHER_POOL_CONTRACT_VERSIONS = new Set(["3.0.0"]);
+const ACCEPTED_MOTHER_POOL_CONTRACT_VERSIONS = new Set(["4.0.0"]);
 const MIN_CANDLES = 35;
 const MIN_FORMAL_WATER_COVERAGE_RATIO = 0.90;
 

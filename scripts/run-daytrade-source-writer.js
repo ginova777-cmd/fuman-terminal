@@ -106,22 +106,6 @@ const STRATEGY_PRIORITY_BRIDGE_SOURCES = [
     resultSelect: "code,rank,complete,quality_status,scan_date,run_id,payload",
     codeMode: "stock",
   },
-  {
-    key: "warrant",
-    latestResource: "v_warrant_flow_latest_complete_run",
-    latestQuery: "select=*&limit=1",
-    resultsResource: "warrant_flow_scan_results",
-    resultSelect: "code,underlying_code,rank,score,complete,quality_status,scan_date,run_id,payload",
-    codeMode: "underlying",
-  },
-  {
-    key: "cb",
-    latestResource: "cb_detect_scan_runs",
-    latestQuery: "select=*&status=eq.complete&complete=eq.true&order=finished_at.desc&limit=1",
-    resultsResource: "cb_detect_scan_results",
-    resultSelect: "symbol,payload,run_id,scan_date,updated_at",
-    codeMode: "underlying",
-  },
 ];
 const WARMUP_EVIDENCE_DIR = process.env.DAYTRADE_UNATTENDED_OUTPUT_DIR || "C:/Users/ginov/Documents/Codex/buy-sell-autonomy-main/outputs";
 const HEATMAP_LATEST_FILES = [
@@ -209,7 +193,7 @@ const REST_FALLBACK_INTERVAL_SECONDS = Math.max(60, positiveNumber(process.env.D
 const MOTHER_POOL_MIN_PRICE = Math.max(50, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_PRICE ?? CONFIG.motherPool?.minimumPrice, 50));
 const MOTHER_POOL_MIN_TURNOVER_RATE = Math.max(1, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_TURNOVER_RATE ?? CONFIG.motherPool?.minimumTurnoverRate, 1));
 const MOTHER_POOL_MIN_AVG_VOLUME3_LOTS = Math.max(3000, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_AVG_VOLUME3_LOTS, 3000));
-const MOTHER_POOL_CONTRACT_VERSION = "3.0.0";
+const MOTHER_POOL_CONTRACT_VERSION = "4.0.0";
 const MOTHER_POOL_RULE_VERSION = 'daytrade_mother_pool_target_300_600_nonblocking_avg3_3000_outside_ratio_20260904_v7';
 const PREOPEN_REFERENCE_PRICE_CACHE_MS = Math.max(60000, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_CACHE_MS || 15 * 60 * 1000));
 const PREOPEN_REFERENCE_PRICE_MIN_ROWS = Math.max(300, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_MIN_ROWS || 1000));
@@ -3296,8 +3280,6 @@ function readRuntimePrioritySeeds(activeSymbols) {
   addMany("recent_strong", payload.recentStrongSymbols || payload.recentStrengthSymbols || payload.recent_strong_symbols || payload.yesterdayStrongSymbols || payload.yesterday_strong_symbols, 85);
   addMany("yesterday_front", payload.yesterdayFrontSymbols || payload.yesterdayVolumeSymbols || payload.yesterdayTradeValueSymbols || payload.yesterday_top_symbols, 75);
   addMany("yesterday_gain_amplitude_spike", payload.yesterdayGainSymbols || payload.yesterdayAmplitudeSymbols || payload.yesterdayVolumeSpikeSymbols || payload.yesterday_gain_symbols || payload.yesterday_amplitude_symbols || payload.yesterday_volume_spike_symbols, 75);
-  addMany("warrant", payload.warrant || payload.warrantSymbols || bridgeValues("warrant"), 70);
-  addMany("cb", payload.cb || payload.cbSymbols || bridgeValues("cb"), 60);
   addMany("daytrade_hot", payload.hot || payload.daytradeHotSymbols || payload.priorityStrongSymbols, 75);
   addMany("industry_signal_fast_inject", industryFastInjectFresh ? industryFastInject.symbols : [], 240);
   addMany("stock_future", payload.stockFutureSymbols || payload.futoptSymbols || payload.individualFuturesSymbols, 85);
@@ -3889,8 +3871,9 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     poolReasons: [...new Set([...(Array.isArray(row.poolReasons) ? row.poolReasons : []), 'radar_rotation_fill'])],
   }));
   selectedCandidates.push(...rotationFillSelected);
+  selectedCandidates.push(...warmingPoolCandidates.filter((row) => row.terminalForcedAdmission === true
+    && !selectedCandidateSymbols.has(row.symbol)));
   for (const row of selectedCandidates) {
-    if (bySymbol.size >= MOTHER_POOL_MAX_SYMBOLS) break;
     // Mother pool is the warming/discovery layer; formal entry remains separately gated.
     bySymbol.set(row.symbol, {
       ...row,
@@ -3924,7 +3907,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   const rows = [
     ...rankedRows.filter((row) => row.openingReport0830BiasOnly !== true),
     ...rankedRows.filter((row) => row.openingReport0830BiasOnly === true),
-  ].slice(0, MOTHER_POOL_MAX_SYMBOLS);
+  ];
   const priorityUpdatedAt = nowIso();
   const output = rows.map((row, index) => {
     const hotExtensionRank = index + 1 >= 41 && index + 1 <= 80 ? index + 1 : null;
@@ -4103,10 +4086,12 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
   const bridgePayload = sameDayArtifact(existingBridge, tradeDate)
     ? existingBridge
     : (sameDayArtifact(cachedBridge, tradeDate) ? cachedBridge : {});
-  const bridgeGroups = objectPayload(bridgePayload?.groups);
+  const activeBridgeSourceKeys = new Set(STRATEGY_PRIORITY_BRIDGE_SOURCES.map((source) => source.key));
+  const bridgeGroups = Object.fromEntries(Object.entries(objectPayload(bridgePayload?.groups))
+    .filter(([key]) => activeBridgeSourceKeys.has(key)));
   const bridgeFields = {};
   if (Object.keys(bridgeGroups).length > 0) {
-    bridgeFields.priorityBridge = bridgePayload;
+    bridgeFields.priorityBridge = { ...bridgePayload, groups: bridgeGroups };
     for (const source of STRATEGY_PRIORITY_BRIDGE_SOURCES) {
       const group = objectPayload(bridgeGroups[source.key]);
       if (["ready", "blocked", "empty"].includes(String(group.status || "").toLowerCase())) {
@@ -4129,8 +4114,7 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     || row?.payload?.formal_pool_eligible === true);
   const daytradeMotherPoolSymbols = priceEligiblePriorityRows
     .map((row) => normalizeCode(row.symbol))
-    .filter((code) => /^\d{4}$/.test(code))
-    .slice(0, MOTHER_POOL_MAX_SYMBOLS);
+    .filter((code) => /^\d{4}$/.test(code));
   const daytradeHotPoolSymbols = formalPoolRows.map((row) => normalizeCode(row.symbol)).filter((code) => /^\d{4}$/.test(code)).slice(0, HOT_POOL_MAX_SYMBOLS);
   const daytradePrioritySymbols = formalPoolRows.map((row) => normalizeCode(row.symbol)).filter((code) => /^\d{4}$/.test(code)).slice(0, MOTHER_POOL_MAX_SYMBOLS);
   const daytradePriorityExtensionSymbols = daytradePrioritySymbols.slice(HOT_POOL_MAX_SYMBOLS, MOTHER_POOL_MAX_SYMBOLS);
@@ -4194,18 +4178,22 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     Array.isArray(group?.symbols) ? group.symbols : []
   ));
   // 06:00 warmup must cover every valid Taiwan stock currently exposed by
-  // the terminal (strategy chips, institution, warrants/CB underlyings and
-  // the Mother Pool), even when a symbol is not selected into today's pool.
+  // the active terminal (strategy chips, institution and the Mother Pool),
+  // even when a symbol is not selected into today's formal pool. Retired
+  // warrant and CB sources must never be carried forward from an old manifest.
   const fullTerminalWarmupSymbols = prependUnique(
     daytradeMotherPoolSymbols,
     [
       ...bridgeWarmupSymbols,
-      ...(currentExisting.terminalPrioritySymbols || currentExisting.terminalSymbols || currentExisting.terminalPriority || []),
     ],
   );
   const nextPriorityPayload = {
     ...currentExisting,
     ...bridgeFields,
+    warrant: undefined,
+    warrantSymbols: undefined,
+    cb: undefined,
+    cbSymbols: undefined,
     tradeDate,
     canonicalRunId,
     trade_date: tradeDate,
@@ -6059,6 +6047,18 @@ function updateMotherPoolDelta(result) {
     const rank = index + 1;
     const prior = previous.get(symbol);
     const priorityMetrics = row.priorityMetrics || row.priority_metrics || row.payload?.motherPoolMetrics || {};
+    const sourceFlags = [...new Set([
+      ...(Array.isArray(row.sourceFlags) ? row.sourceFlags : []),
+      ...(Array.isArray(row.source_flags) ? row.source_flags : []),
+      ...(Array.isArray(row.poolReasons) ? row.poolReasons
+        .filter((reason) => String(reason).startsWith("source_"))
+        .map((reason) => String(reason).slice("source_".length)) : []),
+    ])];
+    const priorityReasons = [...new Set([
+      ...(Array.isArray(row.priorityReasons) ? row.priorityReasons : []),
+      ...(Array.isArray(row.upgradeReasons) ? row.upgradeReasons : []),
+      ...(Array.isArray(row.poolReasons) ? row.poolReasons : []),
+    ])];
     return [
       symbol,
       {
@@ -6075,7 +6075,11 @@ function updateMotherPoolDelta(result) {
         pool_reasons: Array.isArray(row.poolReasons) ? row.poolReasons : [],
         priority_reason: row.priorityReason || "",
         priority_metrics: priorityMetrics,
-        source_flags: row.sourceFlags || [],
+        source_flags: sourceFlags,
+        source_run_ids: [runId],
+        priority_reasons: priorityReasons,
+        source_updated_at: checkedAt,
+        source_freshness: "same_trade_date_current",
       },
     ];
   }).filter(([symbol]) => symbol));
@@ -6329,6 +6333,10 @@ function updateMotherPoolDelta(result) {
         pool_reasons: row.pool_reasons || [],
         priority_reason: row.priority_reason || "",
         source_flags: row.source_flags || [],
+        source_run_ids: row.source_run_ids || [],
+        priority_reasons: row.priority_reasons || [],
+        source_updated_at: row.source_updated_at || checkedAt,
+        source_freshness: row.source_freshness || "same_trade_date_current",
         industry_signal_fast_injected: (row.source_flags || []).includes("industry_signal_fast_inject"),
         score_history: history,
         first_seen_at: row.first_seen_at,

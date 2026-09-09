@@ -12,7 +12,7 @@ const STATIC_ONLY = process.argv.includes("--static-only");
 const SKELETON_CONTRACT = "daytrade_mother_pool_skeleton_v1";
 const SKELETON_BASELINE = "public-terminal-fast-20260714-22";
 const SKELETON_BASELINE_COMMIT = "4d6ba88c19c5924093fcbe8afb0566df3c80a921";
-const EXPECTED_MOTHER_POOL_CONTRACT_VERSION = "3.0.0";
+const EXPECTED_MOTHER_POOL_CONTRACT_VERSION = "4.0.0";
 
 function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
@@ -202,17 +202,24 @@ async function main() {
   check("priority_fresh", ageSeconds(priority?.updatedAt) <= 300, "priority_manifest_stale");
   check("priority_pool_nonempty_without_40_minimum", Array.isArray(priority?.daytradePrioritySymbols) && priority.daytradePrioritySymbols.length > 0, "priority_pool_empty");
   const terminalWarmupSet = new Set(Array.isArray(priority?.terminalPrioritySymbols) ? priority.terminalPrioritySymbols.map(String) : []);
-  const terminalWarmupSources = ["strategy4", "strategy5", "institution", "warrant", "cb"];
+  const terminalWarmupSources = ["strategy4", "strategy5", "institution"];
   const terminalWarmupMissing = terminalWarmupSources.flatMap((source) => (
     Array.isArray(priority?.[source]) ? priority[source].map(String).filter((symbol) => !terminalWarmupSet.has(symbol)).map((symbol) => `${source}:${symbol}`) : []
   ));
   check("terminal_warmup_union_complete", terminalWarmupSet.size > 0 && terminalWarmupMissing.length === 0, `terminal_warmup_union_missing:${terminalWarmupMissing.slice(0, 12).join(",")}`);
   check("terminal_warmup_scope_explicit", priority?.terminalWarmupScope === "all_valid_taiwan_symbols_currently_exposed_by_terminal", "terminal_warmup_scope_missing");
+  check("retired_warrant_cb_sources_absent", !["warrant", "warrantSymbols", "cb", "cbSymbols"].some((key) => Object.prototype.hasOwnProperty.call(priority || {}, key)), "retired_warrant_cb_sources_present");
+  check("retired_warrant_cb_bridge_groups_absent", !["warrant", "cb"].some((key) => Object.prototype.hasOwnProperty.call(priority?.priorityBridge?.groups || {}, key)), "retired_warrant_cb_bridge_groups_present");
   const motherPoolSymbolSet = new Set(Array.isArray(priority?.daytradeMotherPoolSymbols) ? priority.daytradeMotherPoolSymbols.map(String) : []);
   const terminalMissingFromMotherPool = [...terminalWarmupSet].filter((symbol) => !motherPoolSymbolSet.has(symbol));
   check("terminal_union_admitted_to_mother_pool", terminalMissingFromMotherPool.length === 0, `terminal_symbols_not_in_mother_pool:${terminalMissingFromMotherPool.slice(0, 12).join(",")}`);
 
   const motherRows = Array.isArray(motherPool?.rows) ? motherPool.rows : [];
+  const motherRowsMissingSourceContract = motherRows.filter((row) => !Array.isArray(row?.source_flags) || row.source_flags.length === 0
+    || !Array.isArray(row?.source_run_ids) || row.source_run_ids.length === 0
+    || !Array.isArray(row?.priority_reasons) || row.priority_reasons.length === 0
+    || !row?.source_updated_at || row?.source_freshness !== "same_trade_date_current");
+  check("mother_pool_source_attribution_complete", motherRows.length > 0 && motherRowsMissingSourceContract.length === 0, `mother_pool_source_attribution_missing:${motherRowsMissingSourceContract.slice(0, 12).map((row) => row?.symbol).join(",")}`);
   const priceBySymbol = priority?.daytradePoolPriceBySymbol && typeof priority.daytradePoolPriceBySymbol === "object"
     ? priority.daytradePoolPriceBySymbol : {};
   const motherPrices = motherRows.map((row) => Number(row?.price ?? priceBySymbol[String(row?.symbol || "")])).filter(Number.isFinite);
