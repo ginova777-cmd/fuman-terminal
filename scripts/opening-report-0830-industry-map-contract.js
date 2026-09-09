@@ -181,8 +181,8 @@ const OPENING_REPORT_0830_INDUSTRY_MAP = [
     display_name: "面板",
     default_bias: "neutral_mixed",
     default_confidence: 0.50,
-    evidence_summary: "LG Display、BOE、Samsung Display proxy 作為面板 proxy；等台股量價。",
-    overseas_leaders: [["LG Display", "034220.KS"], ["BOE", "000725.SZ"], ["Samsung Display proxy", "005930.KS"]],
+    evidence_summary: "LG Display、Samsung Display proxy 作為面板 proxy；BOE／中國市場來源不列入正式晨報排序。",
+    overseas_leaders: [["LG Display", "034220.KS"], ["Samsung Display proxy", "005930.KS"]],
     a: [["2409", "友達"], ["3481", "群創"], ["6116", "彩晶"]],
     b: [["4935", "茂林-KY"], ["4960", "誠美材"], ["3592", "瑞鼎"]],
   },
@@ -298,6 +298,8 @@ function validateIndustryMapContract(rows = OPENING_REPORT_0830_INDUSTRY_MAP) {
       && passiveLeaders[0]?.yahoo_symbol === "6981.T";
     if (!murataOnly) issues.push("hard_anchor_invalid:PASSIVE_COMPONENTS:overseas_must_be_murata_6981T_only");
   }
+  const panel = byIndustry.get("PANEL");
+  if (panel && panel.overseas_leaders.some((leader) => leader.name === "BOE" || leader.yahoo_symbol === "000725.SZ")) issues.push("forbidden_panel_leader:BOE");
   const robotics = byIndustry.get("ROBOTICS_AUTOMATION");
   if (!robotics || !hasSymbol(robotics, "B", "2464")) issues.push("hard_anchor_missing:ROBOTICS_AUTOMATION:B:2464");
   return { ok: issues.length === 0, issues };

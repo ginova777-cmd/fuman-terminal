@@ -166,7 +166,7 @@ function symbolMapChecks(checks) {
   addCheck(checks, "industry_tier_a_b_classification_complete", classification.ok === true, JSON.stringify(classification.issues || []));
   addCheck(checks, "industry_mapping_contract_v2", contract.CONTRACT === "opening-report-0830-industry-map-v2", String(contract.CONTRACT || ""));
   addCheck(checks, "industry_mapping_evidence_complete", rows.every((row) => row.mapping_contract === "opening-report-0830-industry-map-v2" && /^\d{4}-\d{2}-\d{2}$/.test(String(row.mapping_reviewed_at || "")) && row.review_basis?.A && row.review_basis?.B && Array.isArray(row.mapping_evidence_authorities) && row.mapping_evidence_authorities.length >= 2 && [...(row.a || []), ...(row.b || [])].every((stock) => stock.mapping_status === "reviewed" && stock.mapping_grade === stock.tier && stock.mapping_industry === row.industry && stock.relationship_type && String(stock.mapping_reason || "").includes(stock.symbol) && Array.isArray(stock.evidence_authorities) && stock.evidence_authorities.length >= 2 && Array.isArray(stock.evidence_urls) && stock.evidence_urls.length >= 2)), "every A/B mapping requires an individual reason, relationship, official evidence URLs and review date");
-  addCheck(checks, "industry_mapping_c_observation_only", rows.every((row) => (row.c || []).every((stock) => stock.tier === "C" && stock.mapping_grade === "C" && stock.mapping_status === "observation_only" && stock.relationship_type === "theme_only_or_unverified" && !(row.a || []).some((item) => item.symbol === stock.symbol) && !(row.b || []).some((item) => item.symbol === stock.symbol))), "C mappings are retained for review but excluded from A/B priority output");
+  addCheck(checks, "industry_mapping_c_warmup_only", rows.every((row) => (row.c || []).every((stock) => stock.tier === "C" && stock.mapping_grade === "C" && stock.mapping_status === "observation_only" && stock.relationship_type === "theme_only_or_unverified" && !(row.a || []).some((item) => item.symbol === stock.symbol) && !(row.b || []).some((item) => item.symbol === stock.symbol))), "C mappings may enter Top 3 warmup but retain observation-only status");
 
   const pcb = getIndustryRow(contract, "PCB_CCL") || {};
   const iiiV = getIndustryRow(contract, "III_V_OPTICAL") || {};
@@ -183,6 +183,9 @@ function symbolMapChecks(checks) {
   const opticalLeaders = optical.overseas_leaders || optical.overseasLeaders || optical.leaders || [];
   const opticalRequired = ["COHR", "LITE", "CIEN", "AAOI", "GLW"];
   addCheck(checks, "optical_us_leaders_include_required", opticalRequired.every((symbol) => hasSymbol(opticalLeaders, symbol)), JSON.stringify(opticalLeaders));
+  const panel = getIndustryRow(contract, "PANEL") || {};
+  const panelLeaders = panel.overseas_leaders || panel.overseasLeaders || panel.leaders || [];
+  addCheck(checks, "panel_boe_excluded", !hasSymbol(panelLeaders, "000725.SZ") && !hasSymbol(panelLeaders, "BOE"), JSON.stringify(panelLeaders));
 
   const contractText = readText("scripts/opening-report-0830-industry-map-contract.js");
   const forbidden = ["6967.T", "WCI", "SCFI", "BDI"];
@@ -210,6 +213,7 @@ function staticContractChecks(checks) {
   addCheck(checks, "korea_naver_percent_only_primary_present", detector.includes("korea_naver_change_percent_primary") && detector.includes("fluctuationsRatio") && detector.includes("localTradedAt") && detector.includes("KQ"), "Korean .KS/.KQ rows must use Naver directly with same-day percent and source time");
   const detectorModule = require(path.join(ROOT, "scripts", "run-opening-report-0830-overseas-leader-detector.js"));
   addCheck(checks, "overseas_market_classifier_contract", detectorModule.classifyLeaderMarket("AAPL") === "us" && detectorModule.classifyLeaderMarket("6861.T") === "japan" && detectorModule.classifyLeaderMarket("005930.KS") === "korea" && detectorModule.classifyLeaderMarket("222800.KQ") === "korea" && detectorModule.classifyLeaderMarket("000725.SZ") === "other", "US, Japan, Korea and unsupported markets must not be conflated");
+  addCheck(checks, "japan_primary_alternative_route_present", detector.includes("japanYahooSnapshot") && detector.includes("query2.finance.yahoo.com") && detector.includes("japan_yahoo_primary_and_alternative_failed"), "Japan leaders use bounded query1 -> query2 fallback and still fail closed when both are unavailable");
   const naverFixture = detectorModule.parseNaverKoreaBasic({ itemCode: "005930", fluctuationsRatio: "1.11", localTradedAt: "2026-09-08T09:20:59+09:00" }, { yahoo: "005930.KS" }, "2026-09-08");
   const naverAfterCutoff = detectorModule.parseNaverKoreaBasic({ itemCode: "005930", fluctuationsRatio: "1.12", localTradedAt: "2026-09-08T09:21:00+09:00" }, { yahoo: "005930.KS" }, "2026-09-08");
   addCheck(checks, "korea_naver_percent_fixture", naverFixture.ok === true && naverFixture.percent === 1.11 && naverFixture.reason_code === "korea_naver_change_percent_primary", JSON.stringify(naverFixture));
@@ -226,6 +230,7 @@ function staticContractChecks(checks) {
   addCheck(checks, "runner_owns_non_trading_day_guard", runner.includes("isTwseTradingDay") && runner.includes("market_calendar_non_trading_day") && runner.includes("no_side_effects") && runner.includes("line_push_attempted: false") && runner.includes("mother_pool_bridge_attempted: false"), "direct runner invocation must skip before every side effect on market-closed days");
   addCheck(checks, "runner_consumes_frozen_snapshot_only", runner.includes("frozen 08:20 evidence only") || runner.includes("凍結"), "08:30 runner must not refetch overseas direction");
   addCheck(checks, "runner_observation_only", runner.includes("formal_candidates: 0") && runner.includes("watchlist_only: true") && runner.includes("industry_observation_only"), "morning report must never create formal candidates");
+  addCheck(checks, "runner_top3_abc_warmup", runner.includes("mapped_symbols_c: mapRow.c") && runner.includes("...mapRow.c") && runner.includes("mapped_symbols_c: row.mapped_symbols_c"), "Top 3 A/B/C mappings are handed to Mother Pool for warmup while formal authority remains false");
   addCheck(checks, "runner_does_not_read_or_grade_intraday_gate", !runner.includes("readTaiwanGate") && !runner.includes("daytrade-unattended-gate-watchdog"), "08:30 report must not read, calculate, or grade intraday Gate A-D");
   addCheck(checks, "runner_preserves_previous_good_on_incomplete_briefing", runner.includes("briefing?.ok !== true") && runner.includes("preserve_previous_good: true"), "an incomplete briefing must never overwrite the last complete terminal snapshot");
   addCheck(checks, "line_delivery_contract_present", runner.includes("line-push-receipt") && runner.includes("pushLine") && runner.includes("lineReportFlex"), "LINE Flex delivery remains canonical");

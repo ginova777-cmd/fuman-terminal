@@ -73,15 +73,18 @@ function validatePayload(payload, tradeDate, reportRunId) {
 
   const a = Array.isArray(payload.mapped_symbols_a) ? payload.mapped_symbols_a : [];
   const b = Array.isArray(payload.mapped_symbols_b) ? payload.mapped_symbols_b : [];
+  const c = Array.isArray(payload.mapped_symbols_c) ? payload.mapped_symbols_c : [];
   const mapped = Array.isArray(payload.mapped_symbols) ? payload.mapped_symbols : [];
   if (!a.length) issues.push("mapped_symbols_a_missing");
   if (!b.length) issues.push("mapped_symbols_b_missing");
   const validateTier = (row, tier) => Boolean(symbol(row) && String(row?.name || "").trim() && row?.tier === tier && row?.mapping_grade === tier && row?.mapping_status === "reviewed" && row?.mapping_industry === payload.industry && row?.relationship_type && String(row?.mapping_reason || "").includes(symbol(row)) && Array.isArray(row?.evidence_authorities) && row.evidence_authorities.length >= 2 && Array.isArray(row?.evidence_urls) && row.evidence_urls.length >= 2);
   if (!a.every((row) => validateTier(row, "A"))) issues.push("mapped_symbols_a_invalid");
   if (!b.every((row) => validateTier(row, "B"))) issues.push("mapped_symbols_b_invalid");
-  const expected = [...new Set([...a, ...b].map(symbol).filter(Boolean))];
+  const validateTierC = (row) => Boolean(symbol(row) && String(row?.name || "").trim() && row?.tier === "C" && row?.mapping_grade === "C" && row?.mapping_status === "observation_only" && row?.mapping_industry === payload.industry && row?.relationship_type === "theme_only_or_unverified" && String(row?.mapping_reason || "").includes(symbol(row)) && Array.isArray(row?.evidence_urls) && row.evidence_urls.length >= 2);
+  if (!c.every(validateTierC)) issues.push("mapped_symbols_c_invalid");
+  const expected = [...new Set([...a, ...b, ...c].map(symbol).filter(Boolean))];
   const actual = [...new Set(mapped.map(symbol).filter(Boolean))];
-  if (expected.length !== a.length + b.length) issues.push("mapped_symbols_a_b_duplicate");
+  if (expected.length !== a.length + b.length + c.length) issues.push("mapped_symbols_a_b_c_duplicate");
   if (JSON.stringify(actual) !== JSON.stringify(expected)) issues.push("mapped_symbols_union_mismatch");
 
   if (payload.priority_observation_basis === "us_market_closed_asia_positive_leader_top3") {

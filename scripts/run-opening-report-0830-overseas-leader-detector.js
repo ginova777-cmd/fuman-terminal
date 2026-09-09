@@ -87,7 +87,7 @@ async function fetchJson(url) {
   return { ok: false, status: attempts.at(-1)?.status || 0, attempts };
 }
 
-async function yahooChartSnapshot(leader, tradeDate) {
+async function yahooChartSnapshot(leader, tradeDate, options = {}) {
   if (!leader.yahoo) {
     return {
       ok: false,
@@ -104,9 +104,11 @@ async function yahooChartSnapshot(leader, tradeDate) {
   // available at the 08:20 Taipei freeze.  Japan/Korea are still constrained
   // below to their 08:00-08:20 Asia/Taipei window.
   const includePrePost = true;
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeYahooSymbol(leader.yahoo)}?period1=${period1}&period2=${period2}&interval=5m&includePrePost=${includePrePost}`;
+  const yahooHost = options.yahooHost || "query1.finance.yahoo.com";
+  const sourceName = options.sourceName || "Yahoo Finance chart";
+  const url = `https://${yahooHost}/v8/finance/chart/${encodeYahooSymbol(leader.yahoo)}?period1=${period1}&period2=${period2}&interval=5m&includePrePost=${includePrePost}`;
   const fetched = await fetchJson(url);
-  if (!fetched.ok) return { ok: false, source: "Yahoo Finance chart", source_url: url, reason_code: `yahoo_chart_http_${fetched.status || 0}`, attempts: fetched.attempts };
+  if (!fetched.ok) return { ok: false, source: sourceName, source_url: url, reason_code: `yahoo_chart_http_${fetched.status || 0}`, attempts: fetched.attempts };
   const result = fetched.json?.chart?.result?.[0];
   const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
   const quote = result?.indicators?.quote?.[0] || {};
@@ -118,14 +120,14 @@ async function yahooChartSnapshot(leader, tradeDate) {
   }
   const market = classifyLeaderMarket(leader.yahoo);
   const usLeader = market === "us";
-  if (selected < 0) return { ok: false, source: "Yahoo Finance chart", source_url: url, reason_code: usLeader ? "us_overnight_bar_missing_before_0820" : "no_bar_at_or_before_0820_cutoff", attempts: fetched.attempts };
+  if (selected < 0) return { ok: false, source: sourceName, source_url: url, reason_code: usLeader ? "us_overnight_bar_missing_before_0820" : "no_bar_at_or_before_0820_cutoff", attempts: fetched.attempts };
   const selectedMs = timestamps[selected] * 1000;
   const asiaWindowStart = Date.parse(`${tradeDate}T08:00:00+08:00`);
   const asiaEarlySessionRequired = market === "japan" || market === "korea";
   if (asiaEarlySessionRequired && (selectedMs < asiaWindowStart || selectedMs > cut)) {
     return {
       ok: false,
-      source: "Yahoo Finance chart",
+      source: sourceName,
       source_url: url,
       ticker: leader.yahoo,
       selected_time: new Date(selectedMs).toISOString(),
@@ -145,7 +147,7 @@ async function yahooChartSnapshot(leader, tradeDate) {
   const classified = classifyPercent(percent);
   return {
     ok: Number.isFinite(percent),
-    source: "Yahoo Finance chart",
+    source: sourceName,
     source_url: url,
     ticker: leader.yahoo,
     selected_time: new Date(timestamps[selected] * 1000).toISOString(),
@@ -158,6 +160,20 @@ async function yahooChartSnapshot(leader, tradeDate) {
     session_contract: usLeader ? "us_overnight_after_hours" : "08:00-08:20 Asia/Taipei",
     reason_code: Number.isFinite(percent) ? (usLeader ? "us_overnight_after_hours" : classified.reason_code) : "previous_close_missing",
     attempts: fetched.attempts,
+  };
+}
+
+async function japanYahooSnapshot(leader, tradeDate) {
+  const primary = await yahooChartSnapshot(leader, tradeDate);
+  if (primary.ok) return { ...primary, source_route: "japan_yahoo_query1_primary" };
+  const alternative = await yahooChartSnapshot(leader, tradeDate, {
+    yahooHost: "query2.finance.yahoo.com",
+    sourceName: "Yahoo Finance Japan alternative chart",
+  });
+  return {
+    ...alternative,
+    source_route: alternative.ok ? "japan_yahoo_query2_alternative" : "japan_yahoo_primary_and_alternative_failed",
+    fallback_from: { source: primary.source, source_url: primary.source_url, reason_code: primary.reason_code },
   };
 }
 
@@ -237,7 +253,9 @@ async function detectLeader(industry, leader, tradeDate, usMarket) {
           direction: "unknown",
           reason_code: "non_us_japan_korea_source_excluded",
         }
-      : await yahooChartSnapshot({ name, yahoo, reason_code: reason }, tradeDate);
+      : market === "japan"
+        ? await japanYahooSnapshot({ name, yahoo, reason_code: reason }, tradeDate)
+        : await yahooChartSnapshot({ name, yahoo, reason_code: reason }, tradeDate);
   const noNewUsSession = usLeader && usMarket?.no_new_us_session === true;
   return applyLeaderFreshness({
     name,
@@ -262,6 +280,8 @@ async function detectLeader(industry, leader, tradeDate, usMarket) {
     no_new_us_session: usLeader ? usMarket?.no_new_us_session : undefined,
     previous_official_session_date: usLeader ? usMarket?.previous_official_session_date : undefined,
     session_contract: noNewUsSession ? "us_market_closed_previous_session_background_only" : y.session_contract,
+    source_route: y.source_route,
+    fallback_from: y.fallback_from,
   }, tradeDate);
 }
 
@@ -328,4 +348,4 @@ if (require.main === module) main().catch((error) => {
   process.exit(1);
 });
 
-module.exports = { classifyLeaderMarket, classifyPercent, koreanCode, naverLocalTradedAtMs, parseNaverKoreaBasic, yahooChartSnapshot, industrySummary };
+module.exports = { classifyLeaderMarket, classifyPercent, koreanCode, naverLocalTradedAtMs, parseNaverKoreaBasic, yahooChartSnapshot, japanYahooSnapshot, industrySummary };
