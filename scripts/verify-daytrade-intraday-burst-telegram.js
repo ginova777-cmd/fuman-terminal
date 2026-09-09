@@ -72,6 +72,8 @@ const formalTelegramVerifierFiles = (() => {
 const requireLive = process.argv.includes("--require-live");
 const requireToday = process.argv.includes("--require-today");
 const liveTaskEvidenceFile = argValue("live-task-evidence");
+const releaseAuthority = readJson(path.join(ROOT, "data", "contracts", "release_root_authority_v1.json"));
+const expectedTaskRoot = path.resolve(String(releaseAuthority?.sourceRoot || ROOT));
 const liveTask = requireLive
   ? (liveTaskEvidenceFile ? { ...readJson(liveTaskEvidenceFile), evidence_file: liveTaskEvidenceFile } : readLiveTask())
   : { required: false };
@@ -388,7 +390,8 @@ const checks = {
 
 if (requireLive) {
   checks.live_task_exists_enabled = liveTask.exists === true && ["Ready", "Running", "Queued"].includes(String(liveTask.state || ""));
-  checks.live_task_fixed_release_root = /C:\\fuman-release-owner\\fuman-terminal\\run-daytrade-intraday-burst-telegram\.ps1/i.test(String(liveTask.arguments || "")) && String(liveTask.workingDirectory || "").toLowerCase() === ROOT.toLowerCase();
+  checks.live_task_fixed_release_root = String(liveTask.arguments || "").toLowerCase().includes(path.join(expectedTaskRoot, "run-daytrade-intraday-burst-telegram.ps1").toLowerCase())
+    && path.resolve(String(liveTask.workingDirectory || "")).toLowerCase() === expectedTaskRoot.toLowerCase();
   checks.live_task_exact_window = /T09:00:00/.test(String(liveTask.start || "")) && String(liveTask.interval || "") === "PT1M" && String(liveTask.duration || "") === "PT3H31M" && liveTask.stopAtDurationEnd === true;
   checks.live_task_ignore_new = String(liveTask.multipleInstances || "") === "IgnoreNew";
   checks.live_task_last_result_ok = Number(liveTask.lastResult) === 0;
