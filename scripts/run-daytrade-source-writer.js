@@ -6674,7 +6674,7 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
   const nextMirror = { tradeDate, symbols: { ...(priorMirror.symbols || {}) } };
   let seededSymbols = 0;
   let seedAttempts = 0;
-  const maxSeedSymbolsPerTick = Math.max(20, Math.min(200, Number(process.env.DAYTRADE_CANDLE_MAX_SEED_SYMBOLS_PER_TICK || 80)));
+  const maxSeedSymbolsPerTick = Math.max(5, Math.min(80, Number(process.env.DAYTRADE_CANDLE_MAX_SEED_SYMBOLS_PER_TICK || 10)));
   let incrementalRows = 0;
   let notReadySymbols = 0;
 
