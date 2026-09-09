@@ -11,6 +11,39 @@ const MAPPING_EVIDENCE_AUTHORITIES = [
 
 const FORBIDDEN_OVERSEAS_LEADERS = ["新光電工", "WCI", "SCFI", "BDI"];
 
+const INDUSTRY_REVIEW_BASIS = {
+  AI_GPU_CLOUD: { A: "AI伺服器、GPU伺服器或雲端運算系統為直接產品", B: "晶片、電源或散熱零組件供應AI伺服器產業鏈" },
+  AWS_AI_DATACENTER: { A: "CSP／AI資料中心運算板、伺服器或散熱為直接產品", B: "ASIC、電源或系統整合屬資料中心相鄰供應鏈" },
+  FOUNDRY_ADVANCED_PROCESS: { A: "晶圓代工、廠務、設備、載具或再生晶圓直接服務先進製程", B: "測試與封裝為晶圓製造後段相鄰供應鏈" },
+  IC_DESIGN: { A: "IC設計或ASIC設計服務為核心業務", B: "晶圓製造或封裝為IC設計的相鄰供應鏈" },
+  MEMORY: { A: "記憶體晶片、控制器、模組或儲存產品為核心業務", B: "記憶體相關產品明確但產品組合較分散" },
+  ABF_SUBSTRATE: { A: "ABF IC載板為直接產品", B: "高階CCL或PCB為ABF載板相鄰材料／板級供應鏈" },
+  PCB_CCL: { A: "PCB、CCL或銅箔為直接產品", B: "IC載板、玻纖布或FCCL為相鄰板材供應鏈" },
+  PASSIVE_COMPONENTS: { A: "電阻、電容或電感等被動元件為直接產品", B: "被動元件通路或產品組合中的相鄰供應" },
+  THERMAL_POWER: { A: "散熱、風扇、電源或熱管理為直接產品", B: "電源模組、機構件或熱管理材料為相鄰供應鏈" },
+  NETWORK_HIGH_SPEED: { A: "交換器、路由器、寬頻或網通設備為直接產品", B: "光通訊、連接或終端設備為高速網路相鄰供應鏈" },
+  OPTICAL_COMM: { A: "光纖元件、光模組、雷射或光通訊設備為直接產品", B: "光電材料、封裝或交換設備為光通訊相鄰供應鏈", C: "僅具半導體測試／封裝題材，未證明光通訊為直接或相鄰主要業務" },
+  III_V_OPTICAL: { A: "III-V晶圓、磊晶或化合物半導體製造為直接業務", B: "III-V材料、濾光片或磊晶基板為相鄰供應鏈" },
+  ROBOTICS_AUTOMATION: { A: "傳動、氣動、機器視覺或自動化設備為直接產品", B: "馬達、控制器、系統製造或自動化整合為相鄰供應鏈" },
+  PANEL: { A: "面板製造為核心業務", B: "背光、偏光片或顯示驅動IC為面板相鄰供應鏈" },
+  APPLE_CONSUMER: { A: "消費電子組裝、鏡頭、機構件或觸控模組為直接產品", B: "晶片、被動元件或代工組裝為消費電子相鄰供應鏈" },
+};
+
+function reviewedStock(row, symbol, name, grade, relationshipType, mappingStatus) {
+  const basis = INDUSTRY_REVIEW_BASIS[row.industry]?.[grade] || "產業關聯證據不足";
+  return {
+    symbol, name, tier: grade, mapping_grade: grade, relationship_type: relationshipType,
+    mapping_status: mappingStatus, mapping_industry: row.industry,
+    mapping_reason: `${name}（${symbol}）：${basis}`,
+    mapping_reviewed_at: MAPPING_REVIEWED_AT,
+    evidence_authorities: MAPPING_EVIDENCE_AUTHORITIES,
+    evidence_urls: [
+      `https://ic.tpex.org.tw/company_basic.php?stk_code=${symbol}`,
+      "https://mops.twse.com.tw/mops/web/t100sb01_1",
+    ],
+  };
+}
+
 const OPENING_REPORT_0830_INDUSTRY_MAP = [
   {
     industry: "AI_GPU_CLOUD",
@@ -170,9 +203,10 @@ const OPENING_REPORT_0830_INDUSTRY_MAP = [
   mapping_evidence_authorities: MAPPING_EVIDENCE_AUTHORITIES,
   priority_rank: index + 1,
   overseas_leaders: row.overseas_leaders.map(([name, yahoo_symbol]) => ({ name, yahoo_symbol })),
-  a: row.a.map(([symbol, name]) => ({ symbol, name, tier: "A", mapping_grade: "A", relationship_type: "direct_product_or_revenue_exposure", mapping_status: "reviewed", mapping_industry: row.industry, mapping_reviewed_at: MAPPING_REVIEWED_AT, evidence_authorities: MAPPING_EVIDENCE_AUTHORITIES })),
-  b: row.b.map(([symbol, name]) => ({ symbol, name, tier: "B", mapping_grade: "B", relationship_type: "adjacent_supply_chain_or_end_demand", mapping_status: "reviewed", mapping_industry: row.industry, mapping_reviewed_at: MAPPING_REVIEWED_AT, evidence_authorities: MAPPING_EVIDENCE_AUTHORITIES })),
-  c: (row.c || []).map(([symbol, name]) => ({ symbol, name, tier: "C", mapping_grade: "C", relationship_type: "theme_only_or_unverified", mapping_status: "observation_only", mapping_industry: row.industry, mapping_reviewed_at: MAPPING_REVIEWED_AT, evidence_authorities: MAPPING_EVIDENCE_AUTHORITIES })),
+  review_basis: INDUSTRY_REVIEW_BASIS[row.industry],
+  a: row.a.map(([symbol, name]) => reviewedStock(row, symbol, name, "A", "direct_product_or_revenue_exposure", "reviewed")),
+  b: row.b.map(([symbol, name]) => reviewedStock(row, symbol, name, "B", "adjacent_supply_chain_or_end_demand", "reviewed")),
+  c: (row.c || []).map(([symbol, name]) => reviewedStock(row, symbol, name, "C", "theme_only_or_unverified", "observation_only")),
 }));
 
 const EXPECTED_INDUSTRIES = OPENING_REPORT_0830_INDUSTRY_MAP.map((row) => ({
@@ -227,14 +261,17 @@ function validateIndustryMapContract(rows = OPENING_REPORT_0830_INDUSTRY_MAP) {
       if (!['A', 'B'].includes(stockRow.mapping_grade) || stockRow.mapping_grade !== stockRow.tier) issues.push(`mapping_grade_invalid:${row.industry}:${stockRow.symbol || "unknown"}`);
       if (stockRow.mapping_industry !== row.industry) issues.push(`mapping_industry_mismatch:${row.industry}:${stockRow.symbol || "unknown"}`);
       if (!stockRow.relationship_type) issues.push(`mapping_relationship_missing:${row.industry}:${stockRow.symbol || "unknown"}`);
+      if (!stockRow.mapping_reason || !stockRow.mapping_reason.includes(stockRow.name) || !stockRow.mapping_reason.includes(stockRow.symbol)) issues.push(`mapping_reason_missing:${row.industry}:${stockRow.symbol || "unknown"}`);
       if (stockRow.mapping_reviewed_at !== MAPPING_REVIEWED_AT) issues.push(`mapping_review_date_invalid:${row.industry}:${stockRow.symbol || "unknown"}`);
       if (!Array.isArray(stockRow.evidence_authorities) || stockRow.evidence_authorities.length < 2) issues.push(`mapping_evidence_authority_missing:${row.industry}:${stockRow.symbol || "unknown"}`);
+      if (!Array.isArray(stockRow.evidence_urls) || stockRow.evidence_urls.length < 2 || !stockRow.evidence_urls.every((url) => /^https:\/\//.test(url))) issues.push(`mapping_evidence_url_missing:${row.industry}:${stockRow.symbol || "unknown"}`);
     }
     for (const stockRow of row.c || []) {
       if (!/^\d{4}$/.test(String(stockRow.symbol || ""))) issues.push(`taiwan_symbol_invalid:${row.industry}:${stockRow.symbol || "unknown"}`);
       if (!stockRow.name) issues.push(`taiwan_symbol_name_missing:${row.industry}:${stockRow.symbol || "unknown"}`);
       if (stockRow.mapping_status !== "observation_only" || stockRow.mapping_grade !== "C" || stockRow.tier !== "C") issues.push(`tier_c_status_invalid:${row.industry}:${stockRow.symbol || "unknown"}`);
       if (stockRow.mapping_industry !== row.industry || stockRow.relationship_type !== "theme_only_or_unverified") issues.push(`tier_c_relationship_invalid:${row.industry}:${stockRow.symbol || "unknown"}`);
+      if (!stockRow.mapping_reason || !Array.isArray(stockRow.evidence_urls) || stockRow.evidence_urls.length < 2) issues.push(`tier_c_evidence_missing:${row.industry}:${stockRow.symbol || "unknown"}`);
     }
     const tierA = new Set((row.a || []).map((stockRow) => String(stockRow.symbol || "")));
     const prioritized = new Set([...(row.a || []), ...(row.b || [])].map((stockRow) => String(stockRow.symbol || "")));
