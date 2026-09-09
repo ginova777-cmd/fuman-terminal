@@ -62,7 +62,7 @@ function installFetch(tradeDate, options = {}) {
     if (target === "source_status") return response([{ ...gateRow(tradeDate, { status: "ok" }), payload: gateRow(tradeDate, options.sourceOverrides) }]);
     if (target === "v_fugle_daytrade_canonical_gate") return response([gateRow(tradeDate, options.canonicalOverrides)]);
     if (target === "v_fugle_daytrade_unattended_gate_status") return response([gateRow(tradeDate, options.unattendedOverrides)]);
-    if (target === "v_fugle_daytrade_mother_pool_v4_1") return response(options.poolRows || [{ trade_date: tradeDate, symbol: "2330", name: "台積電", market: "TSE", mother_pool_rank: 1, priority_reason: "test", pool_source: "terminal_union", pool_layer: "warmup", entry_score: 1, upgrade_score: 0, source_flags: [], source_run_ids: [canonicalRunId(tradeDate)], priority_reasons: ["test"], source_updated_at: new Date().toISOString(), source_freshness: "same_trade_date_current", price: 100, open_price: 99, previous_close: 98, change_percent: 2, total_volume: 1000, trade_value: 100000, quote_seen_at: new Date().toISOString(), quote_age_seconds: 1, last_trade_time: new Date().toISOString(), last_trade_age_seconds: 1, latest_candle_time: new Date().toISOString(), intraday_1m_stale_seconds: 1, ma5: 101, ma10: 100, ma20: 99, ma5_ma10_ma20_bullish: true, contract_version: "4.1.0", canonical_run_id: canonicalRunId(tradeDate), updated_at: new Date().toISOString() }]);
+    if (target === "v_fugle_daytrade_mother_pool_v4_1") return response(options.poolRows || [{ trade_date: tradeDate, symbol: "2330", name: "台積電", market: "TSE", mother_pool_rank: 1, priority_reason: "test", pool_source: "terminal_union", pool_layer: "warmup", entry_score: 1, upgrade_score: 0, source_flags: ["test_source"], source_run_ids: [canonicalRunId(tradeDate)], priority_reasons: ["test"], source_updated_at: new Date().toISOString(), source_freshness: "same_trade_date_current", price: 100, open_price: 99, previous_close: 98, change_percent: 2, total_volume: 1000, trade_value: 100000, quote_seen_at: new Date().toISOString(), quote_age_seconds: 1, last_trade_time: new Date().toISOString(), last_trade_age_seconds: 1, latest_candle_time: new Date().toISOString(), intraday_1m_stale_seconds: 1, ma5: 101, ma10: 100, ma20: 99, ma5_ma10_ma20_bullish: true, contract_version: "4.1.0", canonical_run_id: canonicalRunId(tradeDate), updated_at: new Date().toISOString() }]);
     if (target === "fugle_daytrade_quotes_live") {
       calls.quoteQueries.push(url);
       return response([{ symbol: "2330", trade_date: tradeDate, name: "台積電", price: 100, quote_seen_at: new Date().toISOString(), last_trade_time: new Date().toISOString(), updated_at: new Date().toISOString(), ...options.quoteOverrides }]);
@@ -87,14 +87,49 @@ async function main() {
     && healthy.receipt?.contract_version === "4.1.0"
     && healthy.receipt?.sources?.mother_pool === "v_fugle_daytrade_mother_pool_v4_1"
     && healthy.receipt?.mother_pool_read_rows === 1
+    && healthy.receipt?.mother_pool_symbols?.join(",") === "2330"
+    && healthy.receipt?.mother_pool_page_size === 200
+    && healthy.receipt?.mother_pool_page_count === 1
     && healthy.receipt?.mother_pool_capacity_is_hard_gate === false
     && healthy.receipt?.quote_fresh_coverage_120s === 1
     && healthy.receipt?.quote_trade_date_policy === "require_explicit_fugle_daytrade_quotes_live_trade_date_v1"
     && healthy.receipt?.event_evidence?.[0]?.quote_trade_date_ok === true
-    && healthy.receipt?.event_evidence?.[0]?.intraday_1m_sample_count === 61;
+    && healthy.receipt?.event_evidence?.[0]?.intraday_1m_sample_count === 61
+    && healthy.poolBySymbol.get("2330")?.source_flags?.includes("test_source")
+    && Boolean(healthy.poolBySymbol.get("2330")?.latest_candle_time);
   checks.quote_table_explicit_trade_date_required = healthyCalls.quoteQueries.length > 0
     && healthyCalls.quoteQueries.every((url) => String(url.searchParams.get("select") || "").split(",").includes("trade_date"))
     && healthyCalls.quoteQueries.every((url) => url.searchParams.get("trade_date") === `eq.${tradeDate}`);
+  const normalizedHealthyRow = healthy.poolBySymbol.get("2330") || {};
+  const requiredV41Fields = [
+    "contract_version", "trade_date", "canonical_run_id", "symbol", "name", "market",
+    "mother_pool_rank", "priority_reason", "pool_source", "pool_layer", "entry_score", "upgrade_score",
+    "source_flags", "source_run_ids", "priority_reasons", "source_updated_at", "source_freshness", "updated_at",
+    "price", "open_price", "previous_close", "change_percent", "total_volume", "trade_value",
+    "quote_seen_at", "quote_age_seconds", "last_trade_time", "last_trade_age_seconds",
+    "latest_candle_time", "intraday_1m_stale_seconds", "ma5", "ma10", "ma20", "ma5_ma10_ma20_bullish",
+  ];
+  checks.v4_1_required_fields_preserved = requiredV41Fields.every((field) => Object.prototype.hasOwnProperty.call(normalizedHealthyRow, field));
+
+  installFetch(tradeDate, { poolRows: [{ trade_date: tradeDate, symbol: "2330", source_updated_at: new Date().toISOString(), source_freshness: "same_trade_date_current", contract_version: "4.0.0", canonical_run_id: canonicalRunId(tradeDate) }] });
+  const wrongContract = await readCanonicalDaytradeWater({ tradeDate, symbols: [], telegramObservation: true });
+  checks.wrong_mother_pool_contract_fails_closed = wrongContract.ok === false
+    && wrongContract.failedChecks.includes("canonical_water_mother_pool_contract_version_mismatch");
+
+  installFetch(tradeDate, { poolRows: [{ trade_date: tradeDate, symbol: "2330", source_updated_at: new Date().toISOString(), source_freshness: "same_trade_date_current", contract_version: "4.1.0", canonical_run_id: "fugle_daytrade_source:20260908:canonical" }] });
+  const wrongRun = await readCanonicalDaytradeWater({ tradeDate, symbols: [], telegramObservation: true });
+  checks.wrong_mother_pool_run_fails_closed = wrongRun.ok === false
+    && wrongRun.failedChecks.includes("canonical_water_mother_pool_canonical_run_id_mismatch");
+
+  installFetch(tradeDate, { poolRows: [{ trade_date: tradeDate, symbol: "2330", source_updated_at: new Date().toISOString(), source_freshness: "stale", contract_version: "4.1.0", canonical_run_id: canonicalRunId(tradeDate) }] });
+  const staleSource = await readCanonicalDaytradeWater({ tradeDate, symbols: [], telegramObservation: true });
+  checks.stale_mother_pool_source_fails_closed = staleSource.ok === false
+    && staleSource.failedChecks.includes("canonical_water_mother_pool_source_freshness_invalid");
+
+  installFetch(tradeDate, { poolRows: [{ trade_date: tradeDate, symbol: "2330", source_updated_at: new Date().toISOString(), source_freshness: "same_trade_date_current", contract_version: "4.1.0", canonical_run_id: canonicalRunId(tradeDate), ma35: 1 }] });
+  const retiredMa = await readCanonicalDaytradeWater({ tradeDate, symbols: [], telegramObservation: true });
+  checks.retired_ma_field_fails_closed = retiredMa.ok === false
+    && retiredMa.failedChecks.includes("canonical_water_mother_pool_retired_ma_field_present");
 
   installFetch(tradeDate, { quoteOverrides: { trade_date: "2026-09-07", quote_seen_at: new Date().toISOString(), last_trade_time: new Date().toISOString() } });
   const wrongExplicitDate = await readCanonicalDaytradeWater({ tradeDate, symbols: ["2330"], barsPerSymbol: 61 });

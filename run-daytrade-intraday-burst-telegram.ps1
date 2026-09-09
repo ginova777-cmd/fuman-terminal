@@ -63,12 +63,28 @@ try {
 } finally {
   New-Item -ItemType Directory -Path $receiptDir -Force | Out-Null
   $finishedAt = [DateTimeOffset]::UtcNow.ToString("o")
+  $runnerSucceeded = ($exitCode -eq 0 -and $notifierReceiptVerified)
+  $failedChecks = @()
+  $firstBlocker = $null
+  if (-not $runnerSucceeded) {
+    if ($null -ne $notifierReceipt -and $null -ne $notifierReceipt.failed_checks) {
+      $failedChecks = @($notifierReceipt.failed_checks | ForEach-Object { [string]$_ } | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+    }
+    if ($null -ne $notifierReceipt -and -not [string]::IsNullOrWhiteSpace([string]$notifierReceipt.first_blocker)) {
+      $firstBlocker = [string]$notifierReceipt.first_blocker
+    } elseif (-not [string]::IsNullOrWhiteSpace($errorMessage)) {
+      $firstBlocker = "runner_exception"
+    } else {
+      $firstBlocker = "notifier_exit_nonzero"
+    }
+    if ($failedChecks.Count -eq 0) { $failedChecks = @($firstBlocker) }
+  }
   $receipt = [ordered]@{
     contract = "daytrade_intraday_burst_telegram_runner_v1"
     contract_version = $contractVersion
-    ok = ($exitCode -eq 0 -and $notifierReceiptVerified)
-    complete = ($exitCode -eq 0 -and $notifierReceiptVerified)
-    status = if ($exitCode -eq 0 -and $notifierReceiptVerified) { "complete" } else { "failed" }
+    ok = $runnerSucceeded
+    complete = $runnerSucceeded
+    status = if ($runnerSucceeded) { "complete" } else { "failed" }
     trade_date = $tradeDate
     canonical_run_id = $canonicalRunId
     accepted_mother_pool_symbols = if ($null -ne $notifierReceipt) { [int]$notifierReceipt.accepted_mother_pool_symbols } else { 0 }
@@ -84,6 +100,8 @@ try {
     notifier_receipt_status = if ($null -ne $notifierReceipt) { [string]$notifierReceipt.status } else { $null }
     notifier_receipt_complete = if ($null -ne $notifierReceipt) { [bool]$notifierReceipt.complete } else { $false }
     notifier_receipt_first_blocker = if ($null -ne $notifierReceipt) { [string]$notifierReceipt.first_blocker } else { $null }
+    failed_checks = $failedChecks
+    first_blocker = $firstBlocker
     error = $errorMessage
   }
   $temporaryFile = "$receiptFile.tmp-$PID"
