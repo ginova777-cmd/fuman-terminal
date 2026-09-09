@@ -169,7 +169,7 @@ async function main() {
     websocket: path.join(RUNTIME, "state", "fugle-daytrade-websocket-status-v2.json"),
     priority: path.join(RUNTIME, "cache", "intraday", "fugle-daytrade-ws-priority-symbols.json"),
     motherPool: path.join(RUNTIME, "state", "daytrade-mother-pool-delta.json"),
-    openingReport: path.join(RUNTIME, "data", "scan-receipts", "opening-report-0830-priority-bias-bridge-latest.json"),
+    openingReport: path.join(RUNTIME, "data", "opening-report-0830", `opening-report-0830-bridge-aggregate-${clock.compact}.json`),
     futopt0845: path.join(RUNTIME, "data", "scan-receipts", `daytrade-futopt-preopen-evidence-0845-${clock.compact}.json`),
     futopt0850: path.join(RUNTIME, "data", "scan-receipts", `daytrade-futopt-preopen-evidence-0850-${clock.compact}.json`),
   };
@@ -276,7 +276,7 @@ async function main() {
   const openingOk = !openingRequired || (
     identityOf(openingReport).tradeDate === clock.tradeDate
     && openingReport?.status === "BRIDGE_OK"
-    && Number(openingReport?.bridge_handoff_industry_count) === 3
+    && Number(openingReport?.bridge_handoff_industry_count ?? openingReport?.industry_count) === 3
     && openingReport?.forbidden_publish_guard === true
     && Number(openingReport?.formal_candidate_count) === 0
     && openingReport?.formal_candidate_allowed === false
@@ -285,7 +285,7 @@ async function main() {
 
   const futoptRequired = clock.minute >= 8 * 60 + 50;
   const futoptGuardsSafe = [futopt0845, futopt0850].every((receipt) => !receipt || (
-    receipt.formal_candidate_count === 0
+    Number(receipt.formal_candidate_count ?? 0) === 0
     && receipt.formal_candidate_allowed === false
     && receipt.publish_allowed === false
   ));

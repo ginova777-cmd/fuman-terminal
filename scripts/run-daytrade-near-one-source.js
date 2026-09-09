@@ -17,6 +17,9 @@ const path = require("path");
 const {
   readFugleFutoptWebSocketQuotes,
 } = require("../lib/fugle-futopt-websocket");
+const {
+  readFugleWebSocketQuotes,
+} = require("../lib/fugle-websocket-quotes");
 const { isTwseTradingDay } = require("./twse-trading-day");
 
 const SUPABASE_URL = (process.env.SUPABASE_URL
@@ -321,8 +324,31 @@ async function readPreopenRows(symbols) {
       { service: true, pageSize: 200 },
     ));
   }
+  // The natural-slot producer and the long Writer start concurrently. Read the
+  // authoritative local Fugle cache first so the slot does not race a later
+  // Supabase mirror write. Only explicit same-day trial events are admitted.
+  const wanted = new Set(symbols.map(normalizeCode));
+  const local = readFugleWebSocketQuotes({ maxAgeMs: 2 * 60 * 1000 });
+  const localRows = [];
+  for (const [rawSymbol, quote] of local.quotes.entries()) {
+    const symbol = normalizeCode(rawSymbol || quote?.symbol || quote?.code);
+    const trialEventAt = quote?.trialEventAt || quote?.trial_event_at || "";
+    if (!wanted.has(symbol) || quote?.isTrial !== true || !(numberValue(quote?.trialPrice ?? quote?.trial_price) > 0)) continue;
+    if (!trialEventAt || taipeiDate(trialEventAt) !== taipeiDate()) continue;
+    localRows.push({
+      symbol,
+      updated_at: trialEventAt,
+      reference_price: numberValue(quote?.referencePrice ?? quote?.previousClose),
+      trial_price: numberValue(quote?.trialPrice ?? quote?.trial_price),
+      best_bid_price: numberValue(quote?.bidPrice ?? quote?.bidLevels?.[0]?.price),
+      best_ask_price: numberValue(quote?.askPrice ?? quote?.askLevels?.[0]?.price),
+      bid_volume: numberValue(quote?.bidSize ?? quote?.bidVolume ?? quote?.bidLevels?.[0]?.size),
+      ask_volume: numberValue(quote?.askSize ?? quote?.askVolume ?? quote?.askLevels?.[0]?.size),
+      payload: { trialEventAt, source: "fugle-daytrade-ws:trial-cache" },
+    });
+  }
   // Trial-auction evidence only: never substitute regular/post-09:00 live quotes.
-  return rows;
+  return [...localRows, ...rows];
 }
 function latestBySymbol(rows, tradeDate) {
   const map = new Map();
@@ -511,7 +537,8 @@ async function main() {
   }
   try {
     if (ONCE) {
-      await runOnce();
+      const result = await runOnce();
+      if (!result.ok) process.exitCode = 1;
       return;
     }
     const maxSeconds = Number(argValue("max-seconds", "0")) || 0;
