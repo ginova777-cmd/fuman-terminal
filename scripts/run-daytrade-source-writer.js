@@ -6958,20 +6958,36 @@ async function captureFutoptPreopenBaseline(futoptRows) {
 }
 
 async function tick() {
+  const tickStage = (stage, extra = {}) => console.log(JSON.stringify({
+    ok: true,
+    stage: `daytrade_tick:${stage}`,
+    checkedAt: nowIso(),
+    ...extra,
+  }));
+  tickStage("writer_lease:start");
   await ensureWriterLease();
+  tickStage("writer_lease:complete");
   const state = readWriterState();
   const phase = phaseNow();
   const warmupDataFillActive = taipeiMinutes() >= PREOPEN_WARMUP_START_MINUTES;
   const fetchAllowedForPhase = warmupDataFillActive && quoteFetchAllowedForPhase(phase);
   const fetchPriorityOnlyForPhase = warmupDataFillActive && quoteFetchPriorityOnlyForPhase(phase);
   const restFallbackDueThisTick = fetchAllowedForPhase && restFallbackDue(state);
+  tickStage("active_symbols:start");
   const activeSymbols = await fetchActiveSymbols();
+  tickStage("active_symbols:complete", { rows: activeSymbols.length });
+  tickStage("strategy_priority_bridge:start");
   await refreshStrategyChipPriorityBridge();
+  tickStage("strategy_priority_bridge:complete");
+  tickStage("daily_volume:start");
   const dailyVolumeMap = await fetchDailyVolumeAvg();
+  tickStage("daily_volume:complete", { rows: dailyVolumeMap.size });
   const preopenReferencePriceMap = taipeiMinutes() < 9 * 60
     ? await fetchPreopenReferencePriceMap()
     : new Map();
+  tickStage("existing_quotes:start");
   const quoteMap = await fetchExistingDaytradeQuotes();
+  tickStage("existing_quotes:complete", { rows: quoteMap.size });
   // Seed pool ranking from the live WebSocket cache before any enrichment
   // reads, so the first formal readthrough of a tick is freshness-first too.
   mergeWebSocketQuoteCache(quoteMap);
@@ -7001,6 +7017,7 @@ async function tick() {
     state,
   });
   await writeFastWebSocketTransportHeartbeat({ priorityRows: provisionalPriorityRows, quoteMap });
+  tickStage("supplemental_maps:start");
   const [capitalMap, chipMap, marginChangeMap, stockFutureInitialMap, stockGroupContractMap] = await Promise.all([
     fetchCapitalMap(),
     fetchChipFlowMap(),
@@ -7008,9 +7025,12 @@ async function tick() {
     fetchStockFutureInitialMap(),
     fetchStockGroupContractMap(),
   ]);
+  tickStage("supplemental_maps:complete");
   const supplementalMaps = { capitalMap, chipMap, marginChangeMap, stockFutureInitialMap, stockGroupContractMap, preopenReferencePriceMap };
   let priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
+  tickStage("intraday_status:start");
   let intradayMap = await fetchIntradayStatus(activeSymbols);
+  tickStage("intraday_status:complete", { rows: intradayMap.size });
   supplementalMaps.intradayMap = intradayMap;
   intradayMap = mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows);
   priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
