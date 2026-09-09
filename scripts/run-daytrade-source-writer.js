@@ -219,7 +219,10 @@ const HOT_POOL_MIN_SYMBOLS = 40;
 const HOT_POOL_MAX_SYMBOLS = 80;
 // The canonical live tables are read by several pool layers. Keep their
 // writes bounded so one slow table cannot consume an entire writer tick.
-const SLOW_TABLE_BATCH_SIZE = 40;
+// JSONB-heavy Mother Pool rows are still comfortably below the REST payload
+// ceiling at 200 rows. A batch of 40 made one 720-row write consume ~46s and
+// caused the five-minute Writer task to time out before verifier publication.
+const SLOW_TABLE_BATCH_SIZE = Math.max(40, Math.min(200, Number(process.env.DAYTRADE_SLOW_TABLE_BATCH_SIZE || 200)));
 const PREOPEN_WARMUP_START_MINUTES = 7 * 60;
 const PREOPEN_CAPTURE_START_MINUTES = 8 * 60 + 45;
 const PREOPEN_CAPTURE_END_MINUTES = 9 * 60;
@@ -6670,6 +6673,8 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
     : { tradeDate, symbols: {} };
   const nextMirror = { tradeDate, symbols: { ...(priorMirror.symbols || {}) } };
   let seededSymbols = 0;
+  let seedAttempts = 0;
+  const maxSeedSymbolsPerTick = Math.max(20, Math.min(200, Number(process.env.DAYTRADE_CANDLE_MAX_SEED_SYMBOLS_PER_TICK || 80)));
   let incrementalRows = 0;
   let notReadySymbols = 0;
 
@@ -6679,6 +6684,11 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
     const prior = nextMirror.symbols[symbol] || {};
     const latestCandleTime = rows[0]?.candle_time || '';
     if (prior.seeded !== true) {
+      if (seedAttempts >= maxSeedSymbolsPerTick) {
+        nextMirror.symbols[symbol] = { seeded: false, lastCandleTime: latestCandleTime, availableCandleCount: rows.length };
+        continue;
+      }
+      seedAttempts += 1;
       for (const row of rows.slice(0, INTRADAY_MIRROR_BARS_PER_SYMBOL)) selectRow(row);
       const ready = rows.length >= INTRADAY_MIRROR_BARS_PER_SYMBOL;
       if (ready) seededSymbols += 1;
@@ -6695,7 +6705,12 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
 
   const rows = [...selected.values()];
   await supabaseUpsert('fugle_daytrade_intraday_1m', rows, 'symbol,candle_time', { batchSize: SLOW_TABLE_BATCH_SIZE, timeoutMs: 15000, retries: 1 });
-  if (state && !DRY_RUN) state.daytradeMotherPoolCandleMirror = nextMirror;
+  if (state && !DRY_RUN) {
+    state.daytradeMotherPoolCandleMirror = nextMirror;
+    // Persist the expensive seed checkpoint immediately. A later non-critical
+    // stage must not make the next task re-upload the entire candle history.
+    writeWriterState(state);
+  }
   return {
     written: rows.length,
     skipped: false,
@@ -6704,6 +6719,8 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
     latestRows: bySymbol.size,
     motherPoolSymbols: motherPoolSymbols.length,
     seededSymbols,
+    seedAttempts,
+    maxSeedSymbolsPerTick,
     incrementalRows,
     notReadySymbols,
   };
@@ -7008,7 +7025,9 @@ async function tick() {
       error: error?.message || String(error),
     };
   }
+  tickStage("priority_build_provisional:start");
   const provisionalPriorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, { preopenReferencePriceMap });
+  tickStage("priority_build_provisional:complete", { rows: provisionalPriorityRows.length });
   await writeEnrichmentPendingHeartbeat({
     activeSymbols,
     priorityRows: provisionalPriorityRows,
@@ -7027,13 +7046,17 @@ async function tick() {
   ]);
   tickStage("supplemental_maps:complete");
   const supplementalMaps = { capitalMap, chipMap, marginChangeMap, stockFutureInitialMap, stockGroupContractMap, preopenReferencePriceMap };
+  tickStage("priority_build_supplemental:start");
   let priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
+  tickStage("priority_build_supplemental:complete", { rows: priorityRows.length });
   tickStage("intraday_status:start");
   let intradayMap = await fetchIntradayStatus(activeSymbols);
   tickStage("intraday_status:complete", { rows: intradayMap.size });
   supplementalMaps.intradayMap = intradayMap;
   intradayMap = mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows);
+  tickStage("priority_build_intraday:start");
   priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
+  tickStage("priority_build_intraday:complete", { rows: priorityRows.length });
   const nonFatalWriteErrors = [];
   let websocketQuoteReadthroughSync = { written: 0, skipped: true, reason: 'no_fresh_mother_quotes', candidateRows: priorityRows.length, freshRows: 0 };
   if (priorityRows.length) {
@@ -7078,7 +7101,7 @@ async function tick() {
     if (websocketQuoteRows.length) {
       try {
         tickStage("websocket_quote_readthrough:start", { rows: websocketQuoteRows.length });
-        await supabaseUpsert('fugle_daytrade_quotes_live', websocketQuoteRows, 'symbol', { batchSize: 40 });
+        await supabaseUpsert('fugle_daytrade_quotes_live', websocketQuoteRows, 'symbol', { batchSize: SLOW_TABLE_BATCH_SIZE });
         tickStage("websocket_quote_readthrough:complete", { rows: websocketQuoteRows.length });
         websocketQuoteReadthroughSync = {
           written: websocketQuoteRows.length,
@@ -7311,7 +7334,7 @@ async function tick() {
       .filter((quote) => quote.symbol && /^\d{4}-\d{2}-\d{2}$/.test(quote.trade_date));
     if (postFetchWebsocketQuoteRows.length) {
       try {
-        await supabaseUpsert('fugle_daytrade_quotes_live', postFetchWebsocketQuoteRows, 'symbol', { batchSize: 40 });
+        await supabaseUpsert('fugle_daytrade_quotes_live', postFetchWebsocketQuoteRows, 'symbol', { batchSize: SLOW_TABLE_BATCH_SIZE });
         for (const quote of postFetchWebsocketQuoteRows) quoteMap.set(quote.symbol, quote);
         websocketQuoteReadthroughSync = {
           ...websocketQuoteReadthroughSync,
