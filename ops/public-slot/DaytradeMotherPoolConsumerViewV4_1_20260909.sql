@@ -24,18 +24,19 @@ select
   q.trade_value,
   q.quote_seen_at,
   extract(epoch from (now() - q.quote_seen_at))::integer as quote_age_seconds,
-  s.latest_candle_time,
-  s.latest_candle_age_seconds as intraday_1m_stale_seconds,
-  s.ma5,
-  s.ma10,
-  s.ma20,
-  (s.ma5 > s.ma10 and s.ma10 > s.ma20 and s.ma20 > 0) as ma5_ma10_ma20_bullish,
+  nullif(p.payload ->> 'last_candle_time', '')::timestamptz as latest_candle_time,
+  coalesce(nullif(p.payload ->> 'intraday_1m_stale_seconds', '')::integer, 999999) as intraday_1m_stale_seconds,
+  nullif(p.payload #>> '{motherPoolMetrics,ma5}', '')::numeric as ma5,
+  nullif(p.payload #>> '{motherPoolMetrics,ma10}', '')::numeric as ma10,
+  nullif(p.payload #>> '{motherPoolMetrics,ma20}', '')::numeric as ma20,
+  (nullif(p.payload #>> '{motherPoolMetrics,ma5}', '')::numeric > nullif(p.payload #>> '{motherPoolMetrics,ma10}', '')::numeric
+    and nullif(p.payload #>> '{motherPoolMetrics,ma10}', '')::numeric > nullif(p.payload #>> '{motherPoolMetrics,ma20}', '')::numeric
+    and nullif(p.payload #>> '{motherPoolMetrics,ma20}', '')::numeric > 0) as ma5_ma10_ma20_bullish,
   '4.1.0'::text as contract_version,
   p.payload ->> 'canonical_run_id' as canonical_run_id,
-  greatest(p.updated_at, coalesce(q.updated_at, p.updated_at), coalesce(s.updated_at, p.updated_at)) as updated_at
+  greatest(p.updated_at, coalesce(q.updated_at, p.updated_at)) as updated_at
 from public.fugle_daytrade_priority_pool p
 left join public.fugle_daytrade_quotes_live q on q.symbol = p.symbol
-left join public.v_fugle_daytrade_intraday_1m_status s on s.symbol = p.symbol
 where coalesce((p.payload ->> 'selected')::boolean, false)
   and p.payload ->> 'contract_version' = '4.1.0';
 

@@ -13,6 +13,7 @@
 - 即時報價底層：`public.fugle_daytrade_quotes_live`
 - 正式 1 分 K 狀態：`public.v_fugle_daytrade_intraday_1m_status`
 - Source Gate：`public.v_fugle_daytrade_canonical_gate`
+- 閉環 receipt：`public.v_fugle_daytrade_mother_pool_receipt_v4_1`
 
 Release Owner 本機可用的同內容證據：
 
@@ -95,7 +96,7 @@ ma5_ma10_ma20_bullish
 MA5 > MA10 > MA20 且 MA20 > 0
 ```
 
-`MA30`、`MA35`、`MA58` 及舊的 `ma5_ma10_ma35_bullish` 僅可能存在於歷史相容 view；接收端不得讀取、重算或用於 Gate、排序、加權及發布。
+`MA30`、`MA35`、`MA58` 及舊的 `ma5_ma10_ma35_bullish` 僅可能存在於歷史相容 view；它們在 Mother Pool 與 Mother Pool Gate 全面禁用。接收端自己的獨立策略可保留其原策略指標，但不得宣稱那些長均線來自 Mother Pool，也不得用它們改寫母池資格或母池 receipt。
 
 ## 4. 標準讀取方式
 
@@ -106,7 +107,7 @@ where trade_date = ((now() at time zone 'Asia/Taipei')::date)
 order by mother_pool_rank asc, symbol asc;
 ```
 
-讀取後以 `trade_date + symbol` 去重。不得只取固定 Top 40；程式可依自身策略縮小掃描範圍，但不可反向改寫 Mother Pool。
+REST 正式分頁大小為每頁 `200` 筆，依 `mother_pool_rank.asc,symbol.asc` 連續讀取，直到回傳少於 200 筆；720 檔應為 4 頁。讀取後以 `trade_date + symbol` 去重。不得只取固定 Top 40；程式可依自身策略縮小掃描範圍，但不可反向改寫 Mother Pool。
 
 ## 5. 接收端執行順序
 
@@ -144,5 +145,7 @@ closed_loop_ok=true
 failed_checks=[]
 receipt_written=true
 ```
+
+跨機 receipt 必須從 `public.v_fugle_daytrade_mother_pool_receipt_v4_1` 依同一 `trade_date + canonical_run_id` 讀取最新一筆，並要求 `complete=true`。
 
 所有舊 Mother Pool verifier 已退役且不得恢復或引用；接收端只能使用上述唯一正式閉環 verifier 契約。

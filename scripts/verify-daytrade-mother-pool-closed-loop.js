@@ -13,6 +13,34 @@ const SKELETON_CONTRACT = "daytrade_mother_pool_skeleton_v1";
 const SKELETON_BASELINE = "public-terminal-fast-20260714-22";
 const SKELETON_BASELINE_COMMIT = "4d6ba88c19c5924093fcbe8afb0566df3c80a921";
 const EXPECTED_MOTHER_POOL_CONTRACT_VERSION = "4.1.0";
+const SUPABASE_URL = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
+
+function readSecret(file) {
+  try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
+}
+
+async function publishReceipt(result) {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.FUMAN_SUPABASE_SERVICE_ROLE_KEY
+    || readSecret(path.join(RUNTIME, "secrets", "supabase-service-role-key.txt"));
+  if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY_MISSING_FOR_MOTHER_POOL_RECEIPT");
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/fugle_daytrade_mother_pool_verification_receipts?on_conflict=verification_run_id`, {
+    method: "POST",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify({
+      verification_run_id: result.verification_run_id,
+      contract_version: result.mother_pool_contract_version,
+      trade_date: result.trade_date,
+      canonical_run_id: result.canonical_run_id,
+      verified_at: result.checked_at,
+      complete: result.closed_loop_ok,
+      mother_pool_rows: result.components?.mother_pool?.rows || 0,
+      failed_checks: result.failed_checks || [],
+      first_blocker: result.first_blocker,
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!response.ok) throw new Error(`MOTHER_POOL_RECEIPT_HTTP_${response.status}:${(await response.text()).slice(0, 300)}`);
+}
 
 function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
@@ -346,12 +374,15 @@ async function main() {
     publish_allowed_by_observation_sources: false,
     read_only: !WRITE_RECEIPT,
   };
+  result.verification_run_id = `mother_pool_v4_1:${clock.compact}:${result.checked_at.replace(/\D/g, "")}`;
 
   if (WRITE_RECEIPT) {
     const receipt = path.join(RUNTIME, "data", "scan-receipts", `daytrade-mother-pool-closed-loop-${clock.compact}.json`);
     fs.mkdirSync(path.dirname(receipt), { recursive: true });
     fs.writeFileSync(receipt, JSON.stringify({ ...result, receipt_path: receipt }, null, 2) + "\n", "utf8");
     result.receipt_path = receipt;
+    await publishReceipt(result);
+    result.supabase_receipt_view = "public.v_fugle_daytrade_mother_pool_receipt_v4_1";
   }
   console.log(JSON.stringify(result, null, 2));
   if (!result.ok) process.exitCode = 1;
