@@ -43,9 +43,24 @@ function formatNumber(value, digits = 2) { return numberValue(value, 0).toLocale
 function eventLabel(type) {
   if (type === "price_breakout_1pct") return "瞬間拉抬";
   if (type === "volume_burst_rolling60_x2") return "瞬間巨量";
+  if (type === "outside_volume_gt_inside_x2") return "外盤強勢";
   return "盤中雷達";
 }
 function eventMessage(event) {
+  if (event.trigger_type === "outside_volume_gt_inside_x2") {
+    const technical = Array.isArray(event.technical_golden_cross_labels) && event.technical_golden_cross_labels.length
+      ? event.technical_golden_cross_labels.join("／")
+      : "無（加分項目，非必要條件）";
+    return [
+      "當沖盤中雷達｜外盤強勢",
+      (String(event.symbol || "") + " " + String(event.name || "")).trim(),
+      "現價：" + formatNumber(event.price),
+      "外盤：" + formatNumber(event.outside_volume, 0) + " 張",
+      "內盤：" + formatNumber(event.inside_volume, 0) + " 張",
+      "外內盤比：" + formatNumber(event.outside_inside_ratio, 2) + " 倍",
+      "技術狀態（加分項目）：" + technical,
+    ].join("\n");
+  }
   const fiveMinuteSuffix = event.five_minute_confirmation_status === "CONFIRMED_STRONG_5M" ? " (5分K強)" : "";
   const identity = (String(event.symbol || "") + " " + String(event.name || "")).trim() + fiveMinuteSuffix;
   const signalLabels = { kd_5_3_3: "KD(5,3,3)黃金交叉", rsi_4_cross_6: "RSI(4)突破RSI(6)", macd_7_12_20: "MACD(7,12,20)黃金交叉" };
@@ -138,6 +153,47 @@ async function readFiveMinuteConfirmations(events, tradeDate, nowMs = Date.now()
   }
 }
 function eventKey(event) { return String(event.trade_date) + ":" + event.symbol + ":" + event.trigger_type; }
+function sideVolumeEvents(canonicalWater, tradeDate, nowMs, outboxEvents = []) {
+  const technicalBySymbol = new Map((Array.isArray(outboxEvents) ? outboxEvents : []).map((event) => [String(event?.symbol || ""), event]));
+  const labels = { kd_5_3_3: "KD黃金交叉", rsi_4_cross_6: "RSI黃金交叉", macd_7_12_20: "MACD黃金交叉" };
+  return [...(canonicalWater?.poolBySymbol?.values?.() || [])].flatMap((row) => {
+    const inside = Number(row?.inside_volume);
+    const outside = Number(row?.outside_volume);
+    const ratio = inside > 0 ? outside / inside : (outside > 0 ? Infinity : null);
+    const sourceEventMs = Date.parse(String(row?.side_volume_source_event_at || ""));
+    const sourceFresh = Number.isFinite(sourceEventMs) && nowMs >= sourceEventMs && nowMs - sourceEventMs <= 120000;
+    const valid = row?.side_volume_available === true
+      && row?.side_volume_unit === "lots"
+      && Number.isFinite(inside) && inside >= 0
+      && Number.isFinite(outside) && outside > 0
+      && outside > inside * 2
+      && row?.outside_volume_gt_inside_times_2 === true
+      && row?.side_volume_trade_date === tradeDate
+      && row?.side_volume_canonical_run_id === canonicalRunId(tradeDate)
+      && row?.quote_age_seconds !== null && Number(row.quote_age_seconds) <= 120
+      && sourceFresh;
+    if (!valid) return [];
+    const source = technicalBySymbol.get(String(row.symbol)) || {};
+    const technicalSignals = Array.isArray(source.technical_golden_cross_signals) ? source.technical_golden_cross_signals : [];
+    return [{
+      trade_date: tradeDate,
+      canonical_run_id: canonicalRunId(tradeDate),
+      symbol: String(row.symbol),
+      name: String(row.name || ""),
+      price: Number(row.price),
+      trigger_type: "outside_volume_gt_inside_x2",
+      event_time: String(row.side_volume_source_event_at),
+      latest_1m_time: String(row.side_volume_source_event_at),
+      inside_volume: inside,
+      outside_volume: outside,
+      outside_inside_ratio: Number.isFinite(ratio) ? ratio : 999,
+      side_volume_unit: "lots",
+      side_volume_source: String(row.side_volume_source || ""),
+      technical_golden_cross_signals: technicalSignals,
+      technical_golden_cross_labels: technicalSignals.map((key) => labels[key] || key),
+    }];
+  });
+}
 function telegramIdempotencyKey(tradeDate, event) {
   return "daytrade-intraday-burst:" + compactDate(tradeDate) + ":" + event.symbol + ":" + event.trigger_type + ":" + String(event.latest_1m_time || event.event_time || "").replace(/\D/g, "");
 }
@@ -147,7 +203,7 @@ function canonicalSentEvent(event, tradeDate) {
   const sentAt = String(event?.sent_at || "");
   const symbol = String(event?.symbol || "");
   const triggerType = String(event?.trigger_type || "");
-  if (!eventTime || !sentAt || !/^\d{4}$/.test(symbol) || !["price_breakout_1pct", "volume_burst_rolling60_x2"].includes(triggerType)) return null;
+  if (!eventTime || !sentAt || !/^\d{4}$/.test(symbol) || !["price_breakout_1pct", "volume_burst_rolling60_x2", "outside_volume_gt_inside_x2"].includes(triggerType)) return null;
   const normalized = {
     event_key: String(event?.event_key || telegramIdempotencyKey(tradeDate, { symbol, trigger_type: triggerType, latest_1m_time: eventTime })),
     tradeDate,
@@ -171,6 +227,13 @@ function canonicalSentEvent(event, tradeDate) {
     five_minute_bar_end: String(event?.five_minute_bar_end || ""),
     five_minute_confirmation_signals: Array.isArray(event?.five_minute_confirmation_signals) ? event.five_minute_confirmation_signals : [],
   };
+  if (triggerType === "outside_volume_gt_inside_x2") {
+    normalized.price = Number.isFinite(Number(event?.price)) ? Number(event.price) : null;
+    normalized.inside_volume = Number.isFinite(Number(event?.inside_volume)) ? Number(event.inside_volume) : null;
+    normalized.outside_volume = Number.isFinite(Number(event?.outside_volume)) ? Number(event.outside_volume) : null;
+    normalized.outside_inside_ratio = Number.isFinite(Number(event?.outside_inside_ratio)) ? Number(event.outside_inside_ratio) : null;
+    normalized.technical_golden_cross_labels = Array.isArray(event?.technical_golden_cross_labels) ? event.technical_golden_cross_labels : [];
+  }
   if (Number.isFinite(Number(event?.telegram_target_count))) normalized.telegram_target_count = Number(event.telegram_target_count);
   return normalized;
 }
@@ -189,8 +252,9 @@ function sentEventsFromState(tradeDate) {
   if (state?.trade_date !== tradeDate || !state.sent || typeof state.sent !== "object") return [];
   return Object.entries(state.sent).flatMap(([key, value]) => {
     const [date, symbol, triggerType] = String(key).split(":");
-    if (date !== tradeDate || !["price_breakout_1pct", "volume_burst_rolling60_x2"].includes(triggerType)) return [];
+    if (date !== tradeDate || !["price_breakout_1pct", "volume_burst_rolling60_x2", "outside_volume_gt_inside_x2"].includes(triggerType)) return [];
     const event = canonicalSentEvent({
+      ...(value && typeof value === "object" ? value : {}),
       symbol,
       trigger_type: triggerType,
       latest_1m_time: value?.latest_1m_time || "",
@@ -272,6 +336,20 @@ function validEvent(event, tradeDate, nowMs) {
   if (!Number.isFinite(eventTime) || nowMs - eventTime > MAX_EVENT_AGE_SECONDS * 1000) failures.push("event_too_old");
   return failures;
 }
+function validSideVolumeEvent(event, tradeDate, nowMs) {
+  const failures = [];
+  const inside = Number(event?.inside_volume);
+  const outside = Number(event?.outside_volume);
+  const eventTime = Date.parse(String(event?.event_time || event?.latest_1m_time || ""));
+  if (String(event?.trade_date || "") !== tradeDate) failures.push("side_volume_trade_date_mismatch");
+  if (String(event?.canonical_run_id || "") !== canonicalRunId(tradeDate)) failures.push("side_volume_canonical_run_id_mismatch");
+  if (!/^\d{4}$/.test(String(event?.symbol || ""))) failures.push("symbol_invalid");
+  if (event?.side_volume_unit !== "lots") failures.push("side_volume_unit_not_lots");
+  if (!Number.isFinite(inside) || inside < 0 || !Number.isFinite(outside) || outside <= 0) failures.push("side_volume_not_available");
+  if (!(outside > inside * 2)) failures.push("outside_volume_not_gt_inside_times_2");
+  if (!Number.isFinite(eventTime) || nowMs < eventTime || nowMs - eventTime > 120000) failures.push("side_volume_not_fresh");
+  return failures;
+}
 async function notifyFromOutbox(options = {}) {
   const now = options.now instanceof Date ? options.now : new Date();
   const startedAt = now.toISOString();
@@ -290,7 +368,7 @@ async function notifyFromOutbox(options = {}) {
     writes_supabase: false,
     event_candidate_source: "local_writer_outbox_after_supabase_canonical_revalidation",
     source: "fugle_formal_1m", alert_scope: "daytrade_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage_and_industry_heatmap",
-    conditions: { price_breakout: "latest_1m_close >= prior_rolling60_high_close * 1.01", volume_burst: "latest_1m_volume >= prior_rolling60_average_volume * 2", min_rolling_samples: 60, technical_cross_any: ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"], five_minute_confirmation_required: true, five_minute_required_status: "CONFIRMED_STRONG_5M" },
+    conditions: { price_breakout: "latest_1m_close >= prior_rolling60_high_close * 1.01", volume_burst: "latest_1m_volume >= prior_rolling60_average_volume * 2", min_rolling_samples: 60, technical_cross_any: ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"], five_minute_confirmation_required: true, five_minute_required_status: "CONFIRMED_STRONG_5M", outside_volume_radar: "outside_volume > inside_volume * 2", outside_volume_source: "canonical Mother Pool v4.1 side-volume lots", outside_volume_technical_cross_role: "bonus_only" },
     source_status_at_run: null, canonical_gate_at_run: null, unattended_gate_at_run: null,
     canonical_run_id: canonicalRunId(tradeDate), mother_pool_read_rows: 0,
     accepted_mother_pool_symbols: 0,
@@ -354,14 +432,51 @@ async function notifyFromOutbox(options = {}) {
   }
   const state = readJson(STATE_FILE, { sent: {} });
   const sent = state && state.trade_date === tradeDate && state.sent && typeof state.sent === "object" ? state.sent : {};
-  receipt.detected_events = events.length;
+  const sideEvents = sideVolumeEvents(canonicalWater, tradeDate, nowMs, events);
+  const allEvents = [...events, ...sideEvents];
+  receipt.side_volume_detected_events = sideEvents.length;
+  receipt.detected_events = allEvents.length;
   const fiveMinute = await readFiveMinuteConfirmations(events, tradeDate, nowMs);
   receipt.five_minute_confirmation = { status: fiveMinute.status, view: fiveMinute.view, receipt_view: fiveMinute.receipt_view, receipt_contract: fiveMinute.receipt_contract, run_id: fiveMinute.run_id, strategy_version: FIVE_MINUTE_STRATEGY_VERSION, calculation_version: FIVE_MINUTE_CALCULATION_VERSION, classification_contract: FIVE_MINUTE_CLASSIFICATION_CONTRACT, macd_parameters: { fast: 3, slow: 9, signal: 3 }, rows: fiveMinute.rows, confirmed_strong: fiveMinute.confirmed_strong, reason: fiveMinute.reason };
   receipt.latest_complete_5m_bar_end = [...fiveMinute.bySymbol.values()].map((row) => String(row?.five_minute_bar_end || "")).filter(Boolean).sort().pop() || null;
   const oldBypass = process.env.FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM;
   process.env.FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM = "true";
   try {
-    for (const rawEvent of events) {
+    for (const rawEvent of allEvents) {
+      if (rawEvent?.trigger_type === "outside_volume_gt_inside_x2") {
+        const event = { ...rawEvent };
+        const failures = validSideVolumeEvent(event, tradeDate, nowMs);
+        const key = eventKey(event);
+        const sentAt = Date.parse(sent[key]?.sent_at || "");
+        if (Number.isFinite(sentAt) && nowMs - sentAt < COOLDOWN_SECONDS * 1000) {
+          receipt.skipped_events.push({ symbol: event.symbol, trigger_type: event.trigger_type, reason: "cooldown_active" }); continue;
+        }
+        if (failures.length) {
+          receipt.skipped_events.push({ symbol: event.symbol, trigger_type: event.trigger_type, reason: failures[0], failures }); continue;
+        }
+        try {
+          const results = await sendTelegramText(eventMessage(event), {
+            motherPoolIntradayBurstTelegram: true, dataConfirmed: true, eventTime: event.event_time,
+            maxEventAgeSec: 120,
+            idempotencyKey: telegramIdempotencyKey(tradeDate, event),
+            dedupeScope: "daytrade-outside-volume:" + compactDate(tradeDate),
+          });
+          const allSent = Array.isArray(results) && results.length > 0 && results.every((result) => result.sent === true);
+          if (allSent) {
+            sent[key] = {
+              sent_at: checkedAt, latest_1m_time: event.event_time, trigger_type: event.trigger_type,
+              name: event.name, price: event.price,
+              inside_volume: event.inside_volume, outside_volume: event.outside_volume,
+              outside_inside_ratio: event.outside_inside_ratio,
+              technical_golden_cross_labels: event.technical_golden_cross_labels,
+            };
+            receipt.sent_events.push(canonicalSentEvent({ ...event, sent_at: checkedAt, telegram_target_count: results.length }, tradeDate));
+          } else receipt.skipped_events.push({ symbol: event.symbol, trigger_type: event.trigger_type, reason: results?.[0]?.reason || "telegram_send_skipped" });
+        } catch (error) {
+          receipt.skipped_events.push({ symbol: event.symbol, trigger_type: event.trigger_type, reason: "telegram_send_failed", detail: error?.message || String(error) });
+        }
+        continue;
+      }
       const canonicalEvidence = canonicalWater.evidenceBySymbol.get(String(rawEvent?.symbol || "")) || {};
       const event = {
         ...rawEvent,
@@ -413,7 +528,7 @@ if (require.main === module) {
     process.exitCode = result.first_blocker && result.first_blocker !== "outside_trading_window" ? 1 : 0;
   }).catch((error) => { console.error(error.stack || error.message || String(error)); process.exitCode = 1; });
 }
-module.exports = { notifyFromOutbox, eventMessage, readFiveMinuteConfirmations };
+module.exports = { notifyFromOutbox, eventMessage, readFiveMinuteConfirmations, sideVolumeEvents, validSideVolumeEvent };
 
 
 
