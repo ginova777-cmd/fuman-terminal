@@ -83,8 +83,7 @@
       "MA3",
       "MA5",
       "MA10",
-      "MA30",
-      "MA58"
+      "MA20"
     ],
     "oscillators": [
       "KD",
@@ -166,7 +165,7 @@
         "preopen_snapshot",
         "priority_symbols",
         "daily_volume_ready",
-        "ma20_ma35_warmup_ready"
+        "ma20_warmup_ready"
       ]
     },
     {
@@ -193,7 +192,7 @@
       "expected": [
         "priority_fresh_quote_coverage_120s>=0.90",
         "intraday_1m_stale_seconds<=180",
-        "ready_ma35_continuous>=core_pool_required",
+        "ma30_ma35_ma58_not_required_for_warmup",
         "daily_volume_ready"
       ]
     }

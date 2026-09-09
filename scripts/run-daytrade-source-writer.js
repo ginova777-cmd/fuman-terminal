@@ -244,16 +244,14 @@ const WEBSOCKET_CANDLE_MAX_AGE_MS = positiveNumber(process.env.DAYTRADE_WEBSOCKE
 // to replay the full cache on every scheduler tick.
 const WEBSOCKET_CANDLE_HISTORY_MAX_AGE_MS = positiveNumber(process.env.DAYTRADE_WEBSOCKET_CANDLE_HISTORY_MAX_AGE_MS, 8 * 60 * 60 * 1000);
 
-const INTRADAY_MIRROR_BARS_PER_SYMBOL = Math.max(35, Math.min(120, positiveNumber(process.env.DAYTRADE_INTRADAY_MIRROR_BARS_PER_SYMBOL, 35)));
+const INTRADAY_MIRROR_BARS_PER_SYMBOL = Math.max(20, Math.min(120, positiveNumber(process.env.DAYTRADE_INTRADAY_MIRROR_BARS_PER_SYMBOL, 20)));
 const FUTOPT_WEBSOCKET_MAX_AGE_MS = positiveNumber(process.env.DAYTRADE_FUTOPT_WEBSOCKET_MAX_AGE_MS, 5 * 60 * 1000);
 const MIN_READY_MA20_CONTINUOUS = positiveNumber(process.env.DAYTRADE_MIN_READY_MA20_CONTINUOUS, 1500);
-const MIN_READY_MA35_CONTINUOUS = positiveNumber(process.env.DAYTRADE_MIN_READY_MA35_CONTINUOUS, 1500);
 const MIN_INTRADAY_1M_READY_COVERAGE = positiveNumber(process.env.DAYTRADE_MIN_INTRADAY_1M_READY_COVERAGE || CONFIG.intraday1m?.minReadyCoverageForA, 0.90);
 const MIN_PRIORITY_INTRADAY_1M_READY_COVERAGE = positiveNumber(process.env.DAYTRADE_MIN_PRIORITY_INTRADAY_1M_READY_COVERAGE || CONFIG.intraday1m?.minPriorityReadyCoverageForA, 0.90);
 // Indicator readiness follows the same scoped 90% tolerance as formal 1m
 // coverage; remaining rows retain per-symbol DATA_GAP instead of blocking all.
 const MIN_INDICATOR_WARMUP_COVERAGE = positiveNumber(process.env.DAYTRADE_MIN_INDICATOR_WARMUP_COVERAGE, 0.90);
-const REQUIRE_MA35_FOR_FORMAL_DAYTRADE = envFlag("DAYTRADE_REQUIRE_MA35_FOR_FORMAL_ENTRY");
 const REQUIRE_FUTOPT_FOR_FORMAL_DAYTRADE = envFlag("DAYTRADE_REQUIRE_FUTOPT_FOR_FORMAL_ENTRY");
 const MIN_FUTOPT_MAPPED = positiveNumber(process.env.DAYTRADE_MIN_FUTOPT_MAPPED, 1);
 const FUTOPT_PREOPEN_BASELINE_START_MINUTES = 8 * 60 + 45;
@@ -1513,17 +1511,13 @@ function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, 
     const ma5 = firstNumber(intraday.ma5, intraday.sma5);
     const ma10 = firstNumber(intraday.ma10, intraday.sma10);
     const ma20 = firstNumber(intraday.ma20, intraday.sma20);
-    const ma30 = firstNumber(intraday.ma30, intraday.sma30);
-    const ma35 = firstNumber(intraday.ma35, intraday.sma35);
-    const ma58 = firstNumber(intraday.ma58, intraday.sma58);
     const ma3Ma5Ma10Bullish = ma3 > 0 && ma5 > 0 && ma10 > 0 && ma3 > ma5 && ma5 > ma10;
-    const ma5Ma10Ma30Bullish = ma5 > 0 && ma10 > 0 && ma30 > 0 && ma5 > ma10 && ma10 > ma30;
-    const movingAverageTurnBullish = ma3Ma5Ma10Bullish || ma5Ma10Ma30Bullish;
-    const maValuesReady = ma5 > 0 && ma10 > 0 && ma35 > 0;
-    const maAlignment = maValuesReady && ma5 > ma10 && ma10 > ma35;
-    const reportedBullish = boolValue(intraday.ma5_ma10_ma35_bullish);
+    const ma5Ma10Ma20Bullish = ma5 > 0 && ma10 > 0 && ma20 > 0 && ma5 > ma10 && ma10 > ma20;
+    const movingAverageTurnBullish = ma3Ma5Ma10Bullish || ma5Ma10Ma20Bullish;
+    const maValuesReady = ma5 > 0 && ma10 > 0 && ma20 > 0;
+    const maAlignment = maValuesReady && ma5 > ma10 && ma10 > ma20;
     // Rising averages alone do not prove bullish alignment. Require actual values.
-    const bullish = maValuesReady && (reportedBullish || maAlignment);
+    const bullish = maValuesReady && maAlignment;
     const recent1mVolumeTrend = String(intraday.recent_1m_volume_trend || intraday.volume_trend || "").toLowerCase();
     const recent1mVolumeNotShrinking = ["expanding", "increasing", "up", "stable", "non_decreasing", "not_shrinking"].includes(recent1mVolumeTrend);
     const payload = quoteMap.get(symbol)?.payload || {};
@@ -1559,15 +1553,12 @@ function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, 
       ma5,
       ma10,
       ma20,
-      ma30,
-      ma35,
-      ma58,
       ma3Ma5Ma10Bullish,
-      ma5Ma10Ma30Bullish,
+      ma5Ma10Ma20Bullish,
       movingAverageTurnBullish,
       maValuesReady,
       maAlignment,
-      ma5Ma10Ma35Bullish: bullish,
+      ma5Ma10Ma20Bullish: bullish,
       volumeExpanding,
       gainAbove2: metrics.changePercent > 2,
     };
@@ -1575,7 +1566,7 @@ function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, 
   const volumeRanks = rankMap(rows, (row) => row.totalVolume, { minValue: 0 });
   for (const row of rows) row.volumeRank = volumeRanks.get(row.symbol)?.rank || 0;
   const fresh = rows.filter((row) => row.quoteAgeSeconds <= WINDOW_SECONDS);
-  const bullish = fresh.filter((row) => row.gainAbove2 && row.ma5Ma10Ma35Bullish && row.volumeExpanding && row.totalVolume > 0);
+  const bullish = fresh.filter((row) => row.gainAbove2 && row.ma5Ma10Ma20Bullish && row.volumeExpanding && row.totalVolume > 0);
   const volumeSurgeTop100 = fresh.filter((row) => row.totalVolume > 10000 && row.volumeRatio5 >= 2 && row.volumeExpanding && row.recent1mVolumeNotShrinking && row.volumeRank > 0 && row.volumeRank <= 100);
   const compact = (row) => ({
     symbol: row.symbol,
@@ -1592,13 +1583,9 @@ function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, 
     ma5: row.ma5,
     ma10: row.ma10,
     ma20: row.ma20,
-    ma30: row.ma30,
-    ma35: row.ma35,
-    ma58: row.ma58,
     ma3Ma5Ma10Bullish: row.ma3Ma5Ma10Bullish,
-    ma5Ma10Ma30Bullish: row.ma5Ma10Ma30Bullish,
+    ma5Ma10Ma20Bullish: row.ma5Ma10Ma20Bullish,
     movingAverageTurnBullish: row.movingAverageTurnBullish,
-    ma5Ma10Ma35Bullish: row.ma5Ma10Ma35Bullish,
     aboveOpenPrice: row.aboveOpenPrice,
     recent1mVolumeTrend: row.recent1mVolumeTrend,
     recent1mVolumeNotShrinking: row.recent1mVolumeNotShrinking,
@@ -1620,9 +1607,9 @@ function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, 
     evidenceCandidatesCap: 100,
     volumeSurgeTop100Candidates: volumeSurgeTop100.sort((a, b) => b.volumeRatio5 - a.volumeRatio5 || a.volumeRank - b.volumeRank).slice(0, 100).map(compact),
     rules: {
-      bullishGainVolume: "change_percent>2 AND ma5>ma10>ma35 AND volume_expanding",
+      bullishGainVolume: "change_percent>2 AND ma5>ma10>ma20 AND volume_expanding",
       volumeSurgeTop100: "total_volume>10000 AND total_volume/avg_volume5>=2 AND volume_expanding AND recent_2_3_1m_volume_not_shrinking AND volume_rank<=100",
-      movingAverageTurn: "MA3>MA5>MA10 OR MA5>MA10>MA30",
+      movingAverageTurn: "MA3>MA5>MA10 OR MA5>MA10>MA20",
       formalEntryScope: "mother_pool_complete_dynamic_scan",
       rotationScope: "mother_pool_300_600",
     },
@@ -1689,18 +1676,15 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const ma3 = firstNumber(intraday.ma3, intraday.sma3);
   const ma5 = firstNumber(intraday.ma5, intraday.sma5);
   const ma10 = firstNumber(intraday.ma10, intraday.sma10);
-  const ma30 = firstNumber(intraday.ma30, intraday.sma30);
-  const ma58 = firstNumber(intraday.ma58, intraday.sma58);
+  const ma20 = firstNumber(intraday.ma20, intraday.sma20);
   const ma3Rising = boolValue(intraday.ma3_rising ?? intraday.ma3Rising ?? payload.ma3Rising ?? payload.ma3_rising);
   const ma5Rising = boolValue(intraday.ma5_rising ?? intraday.ma5Rising ?? payload.ma5Rising ?? payload.ma5_rising);
   const ma10Rising = boolValue(intraday.ma10_rising ?? intraday.ma10Rising ?? payload.ma10Rising ?? payload.ma10_rising);
-  const ma30Rising = boolValue(intraday.ma30_rising ?? intraday.ma30Rising ?? payload.ma30Rising ?? payload.ma30_rising);
-  const ma58Rising = boolValue(intraday.ma58_rising ?? intraday.ma58Rising ?? payload.ma58Rising ?? payload.ma58_rising);
+  const ma20Rising = boolValue(intraday.ma20_rising ?? intraday.ma20Rising ?? payload.ma20Rising ?? payload.ma20_rising);
   const ma3Ma5Ma10Bullish = ma3 > 0 && ma5 > 0 && ma10 > 0 && ma3 > ma5 && ma5 > ma10;
-  const ma5Ma10Ma30Bullish = ma5 > 0 && ma10 > 0 && ma30 > 0 && ma5 > ma10 && ma10 > ma30;
-  const movingAverageTurnBullish = ma3Ma5Ma10Bullish || ma5Ma10Ma30Bullish;
-  const aboveMa30 = price > 0 && ma30 > 0 && price > ma30;
-  const aboveMa58 = price > 0 && ma58 > 0 && price > ma58;
+  const ma5Ma10Ma20Bullish = ma5 > 0 && ma10 > 0 && ma20 > 0 && ma5 > ma10 && ma10 > ma20;
+  const movingAverageTurnBullish = ma3Ma5Ma10Bullish || ma5Ma10Ma20Bullish;
+  const aboveMa20 = price > 0 && ma20 > 0 && price > ma20;
   const openingRangeBreak = boolValue(payload.openingRangeBreak || payload.opening_range_break || intraday.opening_range_break || intraday.openingRangeBreak);
   const trackedBuyPointActive = boolValue(payload.trackedBuyPointActive || payload.tracked_buy_point_active || payload.buyPointTriggered || payload.buy_point_triggered);
   const fibSupport = boolValue(payload.fibSupport || payload.fib_support || payload.fibonacciSupport || payload.fibonacci_support || intraday.fib_support || intraday.fibonacci_support);
@@ -1960,15 +1944,12 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     ma3,
     ma5,
     ma10,
-    ma30,
-    ma58,
+    ma20,
     ma3Rising,
     ma5Rising,
     ma10Rising,
-    ma30Rising,
-    ma58Rising,
-    aboveMa30,
-    aboveMa58,
+    ma20Rising,
+    aboveMa20,
     openingRangeBreak,
     middleGateBreak,
     threeBottomPattern,
@@ -1995,7 +1976,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     sectorName,
     sectorStrengthScore,
     ma3Ma5Ma10Bullish,
-    ma5Ma10Ma30Bullish,
+    ma5Ma10Ma20Bullish,
     movingAverageTurnBullish,
     highPrice,
     lowPrice,
@@ -2137,9 +2118,6 @@ async function fetchIntradayStatus(activeSymbols = []) {
       current.ready_ma5 = current.continuous_candle_count >= 5;
       current.ready_ma10 = current.continuous_candle_count >= 10;
       current.ready_ma20_continuous = current.continuous_candle_count >= 20;
-      current.ready_ma30 = current.continuous_candle_count >= 30;
-      current.ready_ma58 = current.continuous_candle_count >= 58;
-      current.ready_ma35_continuous = current.continuous_candle_count >= 35;
       grouped.set(symbol, current);
     }
     for (const current of grouped.values()) {
@@ -2152,22 +2130,16 @@ async function fetchIntradayStatus(activeSymbols = []) {
       current.ma5 = movingAverage(5);
       current.ma10 = movingAverage(10);
       current.ma20 = movingAverage(20);
-      current.ma30 = movingAverage(30);
-      current.ma35 = movingAverage(35);
-      current.ma58 = movingAverage(58);
-      current.ma5_ma10_ma35_bullish = Number.isFinite(current.ma5)
+      current.ma5_ma10_ma20_bullish = Number.isFinite(current.ma5)
         && Number.isFinite(current.ma10)
-        && Number.isFinite(current.ma35)
+        && Number.isFinite(current.ma20)
         && current.ma5 > current.ma10
-        && current.ma10 > current.ma35
-        && current.ma35 > 0;
-      current.ma_bullish_alignment = current.ma5_ma10_ma35_bullish;
+        && current.ma10 > current.ma20
+        && current.ma20 > 0;
+      current.ma_bullish_alignment = current.ma5_ma10_ma20_bullish;
       current.ma3_rising = closes.length >= 6 && movingAverage(3, 0) > movingAverage(3, 3);
       current.ma5_rising = closes.length >= 10 && movingAverage(5, 0) > movingAverage(5, 5);
       current.ma10_rising = closes.length >= 20 && movingAverage(10, 0) > movingAverage(10, 10);
-      current.ma30_rising = closes.length >= 60 && movingAverage(30, 0) > movingAverage(30, 30);
-      current.ma35_rising = closes.length >= 70 && movingAverage(35, 0) > movingAverage(35, 35);
-      current.ma58_rising = closes.length >= 116 && movingAverage(58, 0) > movingAverage(58, 58);
       const latestVolume = volumeSum(3, 0);
       const previousVolume = volumeSum(3, 3);
       current.recent_1m_volume_trend = previousVolume <= 0
@@ -2462,7 +2434,6 @@ function readWarmupNaturalEvidenceCounts() {
     return {
       source: file,
       readyMa20: numberValue(evidence.readyMa20Continuous ?? evidence.ready_ma20_continuous ?? evidence.ready_ma20_continuous_symbols),
-      readyMa35: numberValue(evidence.readyMa35Continuous ?? evidence.ready_ma35_continuous ?? evidence.ready_ma35_continuous_symbols),
       quoteAgeSeconds: numberValue(evidence.quoteAgeSeconds ?? evidence.quote_age_seconds, 999999),
       priorityCoverage: numberValue(evidence.priorityFreshQuoteCoverage120s ?? evidence.priority_fresh_quote_coverage_120s),
       scannerCanRunOpening: boolValue(evidence.scannerCanRunOpening ?? evidence.scanner_can_run_opening),
@@ -2475,47 +2446,6 @@ function mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows) {
   // Never manufacture candle_count/latest_candle_time/stale values from a quote.
   intradayMap.websocketQuoteDerivedStatusMerged = 0;
   intradayMap.quoteDerivedStatusPolicy = "discovery_only_not_1m_readiness";
-  return intradayMap;
-  const prioritySymbols = new Set((priorityRows || []).map((row) => normalizeCode(row.symbol)).filter(Boolean));
-  if (!prioritySymbols.size) return intradayMap;
-  const quoteCache = readFugleWebSocketQuotes({ maxAgeMs: WINDOW_SECONDS * 1000 });
-  let merged = 0;
-  for (const quote of quoteCache.quotes.values()) {
-    const symbol = normalizeCode(quote.symbol || quote.code);
-    if (!symbol || !prioritySymbols.has(symbol)) continue;
-    const seenAt = normalizeTimestamp(quote.quoteSeenAt || quote.updatedAt || quoteCache.payload?.updatedAt, "");
-    if (!seenAt || ageSeconds(seenAt) > WINDOW_SECONDS) continue;
-    const previous = intradayMap.get(symbol) || { symbol };
-    const previousContinuous = numberValue(previous.continuous_candle_count ?? previous.candle_count);
-    const previousToday = numberValue(previous.today_candle_count);
-    const readyMa3 = boolValue(previous.ready_ma3) || previousContinuous >= 3;
-    const readyMa5 = boolValue(previous.ready_ma5) || previousContinuous >= 5;
-    const readyMa10 = boolValue(previous.ready_ma10) || previousContinuous >= 10;
-    const readyMa20 = boolValue(previous.ready_ma20_continuous) || previousContinuous >= 20;
-    const readyMa30 = boolValue(previous.ready_ma30) || previousContinuous >= 30;
-    const readyMa35 = boolValue(previous.ready_ma35_continuous) || boolValue(previous.ready_ge_35) || previousContinuous >= 35;
-    const readyMa58 = boolValue(previous.ready_ma58) || previousContinuous >= 58;
-    intradayMap.set(symbol, {
-      ...previous,
-      symbol,
-      latest_candle_time: seenAt,
-      today_candle_count: Math.max(previousToday, 1),
-      warmup_candle_count: Math.max(numberValue(previous.warmup_candle_count), previousContinuous, readyMa35 ? 35 : readyMa20 ? 20 : 1),
-      continuous_candle_count: Math.max(previousContinuous, readyMa35 ? 35 : readyMa20 ? 20 : 1),
-      ready_ma5: readyMa5,
-      ready_ma10: readyMa10,
-      ready_ma3: readyMa3,
-      ready_ma20_continuous: readyMa20,
-      ready_ma30: readyMa30,
-      ready_ma35_continuous: readyMa35,
-      ready_ma58: readyMa58,
-      latest_candle_age_seconds: ageSeconds(seenAt),
-      source: previous.source || "fugle_daytrade_writer:websocket_quote_derived_status",
-    });
-    merged += 1;
-  }
-  intradayMap.websocketQuoteDerivedStatusMerged = merged;
-  intradayMap.readinessSource = `${intradayMap.readinessSource || "intraday_status"}+websocket_quote_derived_status`;
   return intradayMap;
 }
 async function fetchFutoptRows() {
@@ -3635,8 +3565,8 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       : [];
     const scoreDeclining = Number.isFinite(previousEntryScore) && entryScore < previousEntryScore;
     const consecutiveScoreDeclines = scoreDeclining ? Math.min(3, previousScoreHistory.length + 1) : 0;
-    const downgradeProtection = metrics.aboveMa30 === true && metrics.aboveMa58 === true && metrics.volumeRatio5 >= 0.8;
-    const fastRemove = metrics.quoteFresh !== true || (metrics.ma58 > 0 && metrics.aboveMa58 !== true);
+    const downgradeProtection = metrics.aboveMa20 === true && metrics.volumeRatio5 >= 0.8;
+    const fastRemove = metrics.quoteFresh !== true || (metrics.ma20 > 0 && metrics.aboveMa20 !== true);
     const upgradeReasons = [];
     let upgradeScore = 0;
     upgradeScore += topRankScore(changeRank, 120, 220);
@@ -3669,7 +3599,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     if (metrics.outsideVolumeGtInsideTimes2) upgradeReasons.push("outside_volume_gt_inside_times_2_priority");
     if (seedSources.length) upgradeReasons.push("source_seed_resonance");
     if (consecutiveScoreDeclines >= 2 && !downgradeProtection) upgradeReasons.push("consecutive_score_decline");
-    if (fastRemove) upgradeReasons.push("fast_remove_stale_or_below_ma58");
+    if (fastRemove) upgradeReasons.push("fast_remove_stale_or_below_ma20");
     const hotBurstTriggeredAt = hotBurstFastPath ? nowIso() : "";
     const isMotherPoolCandidate = sourceSignal || dynamicSignal;
     const strongResonance = metrics.volumeRatio5 >= 2 || metrics.tradeValue >= FORMAL_SIGNAL_MIN_TRADE_VALUE || metrics.movingAverageTurnBullish || seedSources.length >= 2;
@@ -3757,10 +3687,9 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         ma3: Number(metrics.ma3.toFixed(4)),
         ma5: Number(metrics.ma5.toFixed(4)),
         ma10: Number(metrics.ma10.toFixed(4)),
-        ma30: Number(metrics.ma30.toFixed(4)),
-        ma58: Number(metrics.ma58.toFixed(4)),
+        ma20: Number(metrics.ma20.toFixed(4)),
         ma3Ma5Ma10Bullish: metrics.ma3Ma5Ma10Bullish,
-        ma5Ma10Ma30Bullish: metrics.ma5Ma10Ma30Bullish,
+        ma5Ma10Ma20Bullish: metrics.ma5Ma10Ma20Bullish,
         movingAverageTurnBullish: metrics.movingAverageTurnBullish,
         formalLiquidityEligible,
         formalLiquidityRejectReason,
@@ -3831,12 +3760,10 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         ma3TurnUp: metrics.ma3Rising,
         ma5TurnUp: metrics.ma5Rising,
         ma10TurnUp: metrics.ma10Rising,
-        ma30TurnUp: metrics.ma30Rising,
-        ma58TurnUp: metrics.ma58Rising,
+        ma20TurnUp: metrics.ma20Rising,
         maBullStackShort: metrics.ma3Ma5Ma10Bullish,
-        maBullStackMid: metrics.ma5Ma10Ma30Bullish,
-        aboveMa30: metrics.aboveMa30,
-        aboveMa58: metrics.aboveMa58,
+        maBullStackMid: metrics.ma5Ma10Ma20Bullish,
+        aboveMa20: metrics.aboveMa20,
         openingRangeBreak: metrics.openingRangeBreak,
         surgeFlag: metrics.surgeFlag,
         volumeSpikeFlag: metrics.volumeSpikeFlag,
@@ -4698,8 +4625,6 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
 
   let readyMa3 = 0;
   let readyMa20 = 0;
-  let readyMa35 = 0;
-  let readyMa58 = 0;
   let today1mSymbols = 0;
   let today1mRows = 0;
   let intraday1mStaleSeconds = 999999;
@@ -4710,8 +4635,6 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     const continuousCount = numberValue(row.continuous_candle_count ?? row.candle_count);
     if (boolValue(row.ready_ma3) || continuousCount >= 3) readyMa3 += 1;
     if (boolValue(row.ready_ma20_continuous) || continuousCount >= 20) readyMa20 += 1;
-    if (boolValue(row.ready_ma35_continuous) || boolValue(row.ready_ge_35) || continuousCount >= 35) readyMa35 += 1;
-    if (boolValue(row.ready_ma58) || continuousCount >= 58) readyMa58 += 1;
     if (numberValue(row.today_candle_count) > 0) today1mSymbols += 1;
     if (continuousCount >= 20 && numberValue(row.latest_candle_age_seconds, 999999) <= MAX_INTRADAY_1M_STALE_SECONDS) intraday1mReadySet.add(symbol);
     today1mRows += numberValue(row.today_candle_count);
@@ -4721,8 +4644,6 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   if (intradayMap.aggregate) {
     readyMa3 = Math.max(readyMa3, numberValue(intradayMap.aggregate.readyMa3));
     readyMa20 = Math.max(readyMa20, numberValue(intradayMap.aggregate.readyMa20));
-    readyMa35 = Math.max(readyMa35, numberValue(intradayMap.aggregate.readyMa35));
-    readyMa58 = Math.max(readyMa58, numberValue(intradayMap.aggregate.readyMa58));
     today1mSymbols = Math.max(today1mSymbols, numberValue(intradayMap.aggregate.todaySymbols));
     today1mRows = Math.max(today1mRows, numberValue(intradayMap.aggregate.todayRows));
     const aggregateStaleSeconds = numberValue(intradayMap.aggregate.staleSeconds, 999999);
@@ -4771,7 +4692,6 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   }  const warmupEvidence = readWarmupNaturalEvidenceCounts();
   if (after0900 && warmupEvidence && warmupEvidence.scannerCanRunOpening && warmupEvidence.quoteAgeSeconds <= MAX_QUOTE_AGE_SECONDS && warmupEvidence.priorityCoverage >= MIN_PRIORITY_FRESH_COVERAGE) {
     readyMa20 = Math.max(readyMa20, warmupEvidence.readyMa20);
-    readyMa35 = Math.max(readyMa35, warmupEvidence.readyMa35);
     intradayMap.warmupEvidenceSource = warmupEvidence.source;
   }
   const opening0901HardRequired = opening0901Required;
@@ -4869,18 +4789,18 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     && rateLimitStatus === "ok";
   const scopedIndicatorRequired = Math.max(1, Math.ceil(formalScanPoolSymbols * MIN_INDICATOR_WARMUP_COVERAGE));
   const effectiveMa20Required = Math.min(MIN_READY_MA20_CONTINUOUS, scopedIndicatorRequired);
-  const effectiveMa35Required = Math.min(MIN_READY_MA35_CONTINUOUS, scopedIndicatorRequired);
+  const effectiveMa35Required = 0;
   // Before 09:00, a quiet stock has no new trade by design. Warmup health is
   // therefore a transport/data-base check, not an impossible per-symbol trade
   // freshness threshold. The strict quote and same-day 1m requirements resume
   // exactly at 09:00 for every formal decision.
   const warmupTransportHealthy = webSocketStatus.formalReady
     && numberValue(webSocketStatus.statusAgeSeconds, 999999) <= MAX_QUOTE_AGE_SECONDS;
-  // Historical MA20/35 warmup is tracked before the open, but it cannot
+  // Only MA20 remains a required historical warmup. MA30/35/58 may still be
+  // calculated for downstream strategies but never block Mother Pool readiness.
   // block source readiness: no same-day 1m evidence exists yet. After 09:00
   // strictScannerCanRunOpening keeps the formal MA coverage requirements.
-  const warmupIndicatorsAvailable = readyMa20 > 0
-    && (!REQUIRE_MA35_FOR_FORMAL_DAYTRADE || readyMa35 > 0);
+  const warmupIndicatorsAvailable = readyMa20 > 0;
   const warmupGateReady = !after0900
     && motherPoolSymbols > 0
     && formalScanPoolSymbols > 0
@@ -4890,7 +4810,6 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const strictScannerCanRunOpening = scannerCanRunQuoteOnly
     && dailyVolumeStatus === "ready"
     && readyMa20 >= effectiveMa20Required
-    && (!REQUIRE_MA35_FOR_FORMAL_DAYTRADE || readyMa35 >= effectiveMa35Required)
     && (!after0900 || formalScanIntraday1mReadyCoverage >= MIN_INTRADAY_1M_READY_COVERAGE)
     && opening0901GateOk;
   const scannerCanRunOpening = after0900 ? strictScannerCanRunOpening : warmupGateReady;
@@ -4915,11 +4834,9 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     ? "stale"
     : "empty";
   const ma20WarmupStatus = readyMa20 >= effectiveMa20Required ? "ready" : readyMa20 > 0 ? "degraded" : "empty";
-  const ma35WarmupStatus = readyMa35 >= effectiveMa35Required ? "ready" : readyMa35 > 0 ? "degraded" : "empty";
   const historical1mWarmupStatus = ma20WarmupStatus === "ready"
-    && (!REQUIRE_MA35_FOR_FORMAL_DAYTRADE || ma35WarmupStatus === "ready")
     ? "ready"
-    : readyMa20 > 0 || readyMa35 > 0
+    : readyMa20 > 0
     ? "degraded"
     : "empty";
   const today1mStatus = after0900
@@ -4941,7 +4858,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     last429AgeSeconds,
     dailyVolumeStatus,
     readyMa20,
-    readyMa35,
+    readyMa35: 0,
     effectiveMa20Required,
     effectiveMa35Required,
     futoptMapped,
@@ -5239,7 +5156,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     mother_pool_quote_pending_symbols: priorityRows.basePoolMeta?.quotePendingSymbols || [],
     mother_pool_quote_stale_symbols: priorityRows.basePoolMeta?.quoteStaleSymbols || [],
     mother_pool_avg5_policy: "classification_only_avg5_never_hard_excludes",
-    mother_pool_required_readback_fields: ["trade_date", "symbol", "name", "market", "price", "open_price", "previous_close", "change_percent", "total_volume", "trade_value", "avg3_volume", "avg3_volume_sample_days", "avg5_volume", "relative_volume_ratio", "inside_volume", "outside_volume", "outside_volume_gt_inside_times_2", "volume_rank", "trade_value_rank", "ma3_turn_up", "ma5_turn_up", "ma10_turn_up", "ma30_turn_up", "ma58_turn_up", "ma_bull_stack_short", "ma_bull_stack_mid", "above_ma30", "above_ma58", "opening_range_break", "surge_flag", "volume_spike_flag", "strategy_source_flags", "sector_name", "sector_strength_score", "liquidity_grade", "mother_pool_score", "entry_score", "upgrade_score", "matched_case_patterns", "upgrade_reasons", "hot_burst_valid_seconds", "hot_burst_cooldown_seconds", "hot_burst_triggered_at", "hot_extension_rank", "mother_pool_rank", "pool_reasons", "source_name", "updated_at"],
+    mother_pool_required_readback_fields: ["trade_date", "symbol", "name", "market", "price", "open_price", "previous_close", "change_percent", "total_volume", "trade_value", "avg3_volume", "avg3_volume_sample_days", "avg5_volume", "relative_volume_ratio", "inside_volume", "outside_volume", "outside_volume_gt_inside_times_2", "volume_rank", "trade_value_rank", "ma3_turn_up", "ma5_turn_up", "ma10_turn_up", "ma20_turn_up", "ma_bull_stack_short", "ma_bull_stack_mid", "above_ma20", "opening_range_break", "surge_flag", "volume_spike_flag", "strategy_source_flags", "sector_name", "sector_strength_score", "liquidity_grade", "mother_pool_score", "entry_score", "upgrade_score", "matched_case_patterns", "upgrade_reasons", "hot_burst_valid_seconds", "hot_burst_cooldown_seconds", "hot_burst_triggered_at", "hot_extension_rank", "mother_pool_rank", "pool_reasons", "source_name", "updated_at"],
     priority_source_injecting: prioritySourceInjecting,
     priority_min_injecting_quotes: MIN_PRIORITY_INJECTING_QUOTES,
     priority_fresh_quote_coverage_target_120s: MIN_PRIORITY_FRESH_COVERAGE,
@@ -5268,22 +5185,25 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     intraday_1m_status: today1mStatus,
     ma3_warmup_status: readyMa3 >= Math.max(1, Math.min(priorityPoolSymbols || 1, minFormalPrioritySymbols)) ? "ready" : readyMa3 > 0 ? "degraded" : "empty",
     ma20_warmup_status: ma20WarmupStatus,
-    ma35_warmup_status: ma35WarmupStatus,
-    ma58_warmup_status: readyMa58 >= Math.max(1, Math.min(priorityPoolSymbols || 1, minFormalPrioritySymbols)) ? "ready" : readyMa58 > 0 ? "degraded" : "empty",
+    required_indicator_warmup: ["MA3", "MA5", "MA10", "MA20", "KD", "MACD", "RSI"],
+    excluded_indicator_warmup: ["MA30", "MA35", "MA58"],
+    ma30_warmup_required: false,
+    ma35_warmup_required: false,
+    ma58_warmup_required: false,
     ready_ma3: readyMa3,
     ready_ma20_continuous: readyMa20,
-    ready_ma35_continuous: readyMa35,
-    ready_ma58: readyMa58,
+    ready_ma35_continuous: 0,
+    ready_ma58: 0,
     ready_ma20_required: effectiveMa20Required,
-    ready_ma35_required: effectiveMa35Required,
-    indicator_set: ["MA3", "MA5", "MA10", "MA20", "MA30", "MA35", "MA58", "KD", "MACD", "RSI"],
+    ready_ma35_required: 0,
+    indicator_set: ["MA3", "MA5", "MA10", "MA20", "KD", "MACD", "RSI"],
     preopen_today_1m_required_before_formal: false,
     intraday_1m_stale_seconds: intraday1mStaleSeconds,
     latest_candle_time: latestCandleTime,
     today_candle_count: today1mRows,
-    ready_ge_35_symbols: readyMa35,
-    ready_ge_35: readyMa35,
-    ready_ma35_continuous_symbols: readyMa35,
+    ready_ge_35_symbols: 0,
+    ready_ge_35: 0,
+    ready_ma35_continuous_symbols: 0,
     intraday_1m_ready_symbols: formalScanIntraday1mReadySymbols,
     deep_scan_pool_symbols: deepScanPoolSymbols,
     formal_scan_pool_symbols: formalScanPoolSymbols,
@@ -5372,7 +5292,6 @@ function sourceGateA(values) {
     && (!values.after0845 || values.scannerCanRunOpening)
     && (!values.after0845 || values.strategyChipCompleteLatestRun)
     && (!values.after0845 || values.readyMa20 >= (values.effectiveMa20Required || MIN_READY_MA20_CONTINUOUS))
-    && (!values.after0845 || !REQUIRE_MA35_FOR_FORMAL_DAYTRADE || values.readyMa35 >= (values.effectiveMa35Required || MIN_READY_MA35_CONTINUOUS))
     && (!values.after0900 || values.intraday1mReadyCoverage >= MIN_INTRADAY_1M_READY_COVERAGE)
     && (!values.after0900 || values.intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
 }
@@ -7503,7 +7422,7 @@ async function tick() {
     hotPoolSymbols: result.payload.hot_pool_symbols,
     indicatorSet: result.payload.indicator_set,
     readyMa3: result.payload.ready_ma3,
-    readyMa58: result.payload.ready_ma58,
+    excludedIndicatorWarmup: result.payload.excluded_indicator_warmup,
     ma3WarmupStatus: result.payload.ma3_warmup_status,
     ma58WarmupStatus: result.payload.ma58_warmup_status,
     stockGroupContractSource: result.payload.stock_group_contract_source,
@@ -7517,7 +7436,7 @@ async function tick() {
     actualQuoteSpeedPerSec: result.payload.actual_quote_speed_per_sec,
     dailyVolumeStatus: result.payload.daily_volume_status,
     readyMa20Continuous: result.payload.ready_ma20_continuous,
-    readyMa35Continuous: result.payload.ready_ma35_continuous,
+    shortMovingAverageDirection: "MA5>MA10>MA20",
     intraday1mReadinessSource: result.payload.intraday_1m_readiness_source,
     futoptStockMapped: result.payload.futopt_stock_mapped,
     futoptReadinessSource: result.payload.futopt_readiness_source,

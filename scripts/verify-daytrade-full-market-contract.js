@@ -41,7 +41,7 @@ async function main() {
   if (!Object.prototype.hasOwnProperty.call(evidence, "freshQuoteCoverage120s")) issues.push("missing_fresh_quote_coverage_120s");
   if (!Object.prototype.hasOwnProperty.call(evidence, "freshIntraday1mCoverage")) issues.push("missing_fresh_intraday_1m_coverage");
   if (!String(rules.bullishGainVolume || "").includes("change_percent>2")) issues.push("missing_gain_above_2_rule");
-  if (!String(rules.bullishGainVolume || "").includes("ma5>ma10>ma35")) issues.push("missing_ma5_ma10_ma35_rule");
+  if (!String(rules.bullishGainVolume || "").includes("ma5>ma10>ma20")) issues.push("missing_ma5_ma10_ma20_rule");
   if (!String(rules.bullishGainVolume || "").includes("volume_expanding")) issues.push("missing_bullish_volume_expanding_rule");
   if (!String(rules.volumeSurgeTop100 || "").includes("total_volume>10000")) issues.push("missing_volume_gt10000_rule");
   if (!String(rules.volumeSurgeTop100 || "").includes("total_volume/avg_volume5>=2")) issues.push("missing_volume_2x_avg5_rule");

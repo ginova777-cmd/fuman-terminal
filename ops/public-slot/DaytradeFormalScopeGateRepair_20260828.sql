@@ -435,7 +435,6 @@ scored as (
       and quote_age_seconds <= 90
       and intraday_1m_stale_seconds <= 120
       and ready_ma20_continuous_symbols > 0
-      and ready_ma35_continuous_symbols > 0
       and (formal_quote_source in ('fugle_daytrade_quotes_live', 'v_fugle_daytrade_priority_readiness') and quote_transport like 'websocket_%')
       and (formal_intraday_1m_source in ('fugle_daytrade_intraday_1m', 'v_fugle_daytrade_intraday_1m_status', 'v_strategy2_intraday_ready') or formal_intraday_1m_source like 'dedicated_daytrade_intraday_1m%')
       and rate_limit_status not in ('rate_limited', 'cooldown')
@@ -463,7 +462,6 @@ scored as (
       + (quote_age_seconds <= 90)::integer
       + (intraday_1m_stale_seconds <= 120)::integer
       + (ready_ma20_continuous_symbols > 0)::integer
-      + (ready_ma35_continuous_symbols > 0)::integer
       + ((formal_quote_source in ('fugle_daytrade_quotes_live', 'v_fugle_daytrade_priority_readiness') and quote_transport like 'websocket_%') and (formal_intraday_1m_source in ('fugle_daytrade_intraday_1m', 'v_fugle_daytrade_intraday_1m_status', 'v_strategy2_intraday_ready') or formal_intraday_1m_source like 'dedicated_daytrade_intraday_1m%'))::integer
       + (rate_limit_status not in ('rate_limited', 'cooldown'))::integer
       + (daily_volume_status = 'ready')::integer
