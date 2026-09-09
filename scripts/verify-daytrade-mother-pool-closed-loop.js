@@ -197,6 +197,7 @@ async function main() {
     websocket: path.join(RUNTIME, "state", "fugle-daytrade-websocket-status-v2.json"),
     priority: path.join(RUNTIME, "cache", "intraday", "fugle-daytrade-ws-priority-symbols.json"),
     motherPool: path.join(RUNTIME, "state", "daytrade-mother-pool-delta.json"),
+    fastSync: path.join(RUNTIME, "state", "daytrade-fast-supabase-sync.json"),
     openingReport: path.join(RUNTIME, "data", "opening-report-0830", `opening-report-0830-bridge-aggregate-${clock.compact}.json`),
     futopt0845: path.join(RUNTIME, "data", "scan-receipts", `daytrade-futopt-preopen-evidence-0845-${clock.compact}.json`),
     futopt0850: path.join(RUNTIME, "data", "scan-receipts", `daytrade-futopt-preopen-evidence-0850-${clock.compact}.json`),
@@ -204,6 +205,7 @@ async function main() {
   const websocket = readJson(paths.websocket);
   const priority = readJson(paths.priority);
   const motherPool = readJson(paths.motherPool);
+  const fastSync = readJson(paths.fastSync);
   const openingReport = readJson(paths.openingReport);
   const futopt0845 = readJson(paths.futopt0845);
   const futopt0850 = readJson(paths.futopt0850);
@@ -277,6 +279,11 @@ async function main() {
   check("mother_pool_price_readback_nonblocking_for_terminal_admission", motherPrices.length <= motherRows.length, "mother_pool_price_readback_invalid");
   check("mother_pool_avg3_receipt_fields_valid", avg3ReceiptRowsValid, "mother_pool_avg3_receipt_fields_invalid");
   check("mother_pool_avg3_receipt_not_all_pending", avg3PassRows.length > 0 && avg3PendingRows.length < motherRows.length, "mother_pool_avg3_receipt_all_history_pending");
+  check("fast_supabase_sync_readable", Boolean(fastSync), "fast_supabase_sync_receipt_missing");
+  check("fast_supabase_sync_same_day", fastSync?.trade_date === clock.tradeDate, "fast_supabase_sync_trade_date_mismatch");
+  check("fast_supabase_sync_fresh", ageSeconds(fastSync?.completed_at) <= 120, "fast_supabase_sync_stale");
+  check("fast_supabase_quote_write_nonempty", Number(fastSync?.quotes_written) > 0, "fast_supabase_quote_write_empty");
+  check("fast_supabase_1m_write_nonempty", Number(fastSync?.candles_written) > 0, "fast_supabase_1m_write_empty");
 
   const staticChecks = {
     skeleton: verifySkeletonStatic(),
@@ -364,6 +371,7 @@ async function main() {
         allowed_action: futoptClosed ? "apply_futopt_observation_weight" : "rank_without_futopt_trial_weight",
         paths: [paths.futopt0845, paths.futopt0850],
       },
+      fast_supabase_sync: { ok: checks.fast_supabase_sync_fresh && checks.fast_supabase_quote_write_nonempty && checks.fast_supabase_1m_write_nonempty, path: paths.fastSync, age_seconds: ageSeconds(fastSync?.completed_at), quotes_written: Number(fastSync?.quotes_written || 0), candles_written: Number(fastSync?.candles_written || 0) },
     },
     checks,
     static_checks: staticChecks,

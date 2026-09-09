@@ -360,6 +360,18 @@ if ($Fetch -and -not $Apply) {
 $EffectiveOnce = $args -contains "--once"
 Write-WrapperLog "START run_id=$RunId apply=$Apply fetch=$Fetch once=$Once continuous=$Continuous effectiveOnce=$EffectiveOnce localCheck=$LocalCheck"
 Invoke-DaytradeWebSocketCollectorSelfHeal
+if ($Apply) {
+  $fastSyncScript = Join-Path $RepoRoot "scripts\sync-daytrade-websocket-supabase-fast.js"
+  if (Test-Path -LiteralPath $fastSyncScript) {
+    $fastSyncOutput = & node --use-system-ca $fastSyncScript --apply 2>&1
+    $fastSyncExit = $LASTEXITCODE
+    $fastSyncText = (($fastSyncOutput | Out-String) -replace "[\r\n]+", " ").Trim()
+    if ($fastSyncText.Length -gt 700) { $fastSyncText = $fastSyncText.Substring(0, 700) }
+    Write-WrapperLog "FAST_SUPABASE_SYNC exit=$fastSyncExit output=$fastSyncText"
+  } else {
+    Write-WrapperLog "FAST_SUPABASE_SYNC skip=script_missing path=$fastSyncScript"
+  }
+}
 try {
   if (Test-Path -LiteralPath $CrossSessionLockPath) {
     $staleLockProbe = $null
