@@ -471,8 +471,33 @@ function isWebSocketQuote(quote) {
   return source.includes("websocket") || source.includes("fugle-ws");
 }
 
+function isFugleQuote(quote) {
+  const source = String(quote?.source || quote?.payload?.source || quote?.payload?.quoteSource || "").toLowerCase();
+  return source.includes("fugle");
+}
+
 function isFreshWebSocketQuote(quote, maxAgeSeconds = WINDOW_SECONDS) {
-  return isWebSocketQuote(quote) && ageSeconds(quoteFreshnessTime(quote)) <= maxAgeSeconds;
+  return isFugleQuote(quote) && effectiveQuoteAgeSeconds(quote) <= maxAgeSeconds;
+}
+
+let fugleTransportSnapshot = { checkedAt: 0, healthy: false };
+function fugleTransportHealthy() {
+  if (Date.now() - fugleTransportSnapshot.checkedAt > 2000) {
+    const status = readWebSocketStatusSummary();
+    fugleTransportSnapshot = { checkedAt: Date.now(), healthy: status.formalReady === true };
+  }
+  return fugleTransportSnapshot.healthy;
+}
+
+// Fugle trades is event-driven: an idle symbol legitimately has no new trade.
+// A same-day WebSocket cumulative quote remains current while the authenticated
+// trades/aggregates/candles transport is healthy (heartbeat or aggregate update).
+function effectiveQuoteAgeSeconds(quote, fallback = 999999) {
+  if (!quote || !isFugleQuote(quote)) return fallback;
+  const eventAge = ageSeconds(quoteFreshnessTime(quote), fallback);
+  if (isWebSocketQuote(quote) && eventAge <= WINDOW_SECONDS) return eventAge;
+  const quoteTradeDate = String(quote.trade_date || quote.payload?.tradeDate || quote.payload?.trade_date || quoteTradeDateForWrite(quote)).slice(0, 10);
+  return quoteTradeDate === taipeiDate() && fugleTransportHealthy() ? 0 : eventAge;
 }
 
 function ageSeconds(value, fallback = 999999) {
@@ -1652,7 +1677,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const avgVolume3SampleDays = numberValue(daily.avg_volume3_sample_days ?? dailyPayload.avgVolume3SampleDays ?? dailyPayload.avg_volume3_sample_days);
   const volumeRatio5 = avgVolume5 > 0 ? totalVolume / avgVolume5 : 0;
   const quotePresent = quoteMap?.has(symbol) === true;
-  const quoteFresh = ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS;
+  const quoteFresh = effectiveQuoteAgeSeconds(quote) <= WINDOW_SECONDS;
   const sessionElapsedMinutes = currentMinutes >= 540 && currentMinutes <= 810
     ? Math.max(1, Math.min(270, currentMinutes - 540 + 1))
     : 0;
@@ -4608,7 +4633,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   for (const symbol of activeSet) {
     const quote = quoteMap.get(symbol);
     const quoteTime = quoteFreshnessTime(quote);
-    const quoteAge = ageSeconds(quoteTime);
+    const quoteAge = effectiveQuoteAgeSeconds(quote);
     if (isWebSocketQuote(quote)) {
       quoteAges.push(quoteAge);
       if (quoteTime && (!lastQuoteAt || Date.parse(quoteTime) > Date.parse(lastQuoteAt))) lastQuoteAt = quoteTime;
@@ -4617,8 +4642,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   }
   for (const symbol of prioritySet) {
     const quote = quoteMap.get(symbol);
-    const quoteAge = ageSeconds(quoteFreshnessTime(quote));
-    priorityAges.push(isWebSocketQuote(quote) ? quoteAge : 999999);
+    const quoteAge = effectiveQuoteAgeSeconds(quote);
+    priorityAges.push(isFugleQuote(quote) ? quoteAge : 999999);
     if (isFreshWebSocketQuote(quote)) {
       freshPriority.push(symbol);
       freshPriorityAges.push(quoteAge);
@@ -4626,8 +4651,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   }
   for (const symbol of formalPrioritySet) {
     const quote = quoteMap.get(symbol);
-    const quoteAge = ageSeconds(quoteFreshnessTime(quote));
-    formalPriorityAges.push(isWebSocketQuote(quote) ? quoteAge : 999999);
+    const quoteAge = effectiveQuoteAgeSeconds(quote);
+    formalPriorityAges.push(isFugleQuote(quote) ? quoteAge : 999999);
     if (isFreshWebSocketQuote(quote)) freshFormalPriority.push(symbol);
   }
 
@@ -5086,6 +5111,15 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     websocket_quote_speed_per_sec: webSocketStatus.streamingQuoteSpeedPerSec,
     websocket_last_message_at: webSocketStatus.lastMessageAt,
     websocket_last_message_age_seconds: webSocketStatus.lastMessageAgeSeconds,
+    websocket_heartbeat_at: webSocketStatus.websocketHeartbeatAt,
+    websocket_heartbeat_age_seconds: webSocketStatus.websocketHeartbeatAgeSeconds,
+    websocket_heartbeat_ready: webSocketStatus.websocketHeartbeatReady,
+    aggregates_last_updated_at: webSocketStatus.aggregatesLastUpdatedAt,
+    aggregates_last_updated_age_seconds: webSocketStatus.aggregatesLastUpdatedAgeSeconds,
+    aggregates_pipeline_ready: webSocketStatus.aggregatesPipelineReady,
+    websocket_pipeline_healthy: webSocketStatus.pipelineHealthy,
+    pipeline_health_uses: webSocketStatus.pipelineHealthUses,
+    trades_silence_for_low_turnover_is_not_disconnect: webSocketStatus.tradesSilenceForLowTurnoverIsNotDisconnect,
     websocket_symbol_count: webSocketStatus.symbolCount,
     websocket_fresh_symbols_120s: webSocketStatus.freshSymbols120s,
     websocket_status_age_seconds: webSocketStatus.statusAgeSeconds,
@@ -6472,7 +6506,7 @@ async function writeEnrichmentPendingHeartbeat({ activeSymbols, priorityRows, qu
     latest_update_allowed: false,
     preserve_previous_good: true,
     priority_pool_symbols: priorityRows.length,
-    priority_fresh_quotes_120s: priorityRows.filter((row) => ageSeconds(quoteFreshnessTime(quoteMap.get(normalizeCode(row.symbol)))) <= WINDOW_SECONDS).length,
+    priority_fresh_quotes_120s: priorityRows.filter((row) => effectiveQuoteAgeSeconds(quoteMap.get(normalizeCode(row.symbol))) <= WINDOW_SECONDS).length,
     active_symbols: activeSymbols.length,
     daily_volume_rows: dailyVolumeMap.size,
     state_updated_at: state.updatedAt || "",
@@ -7066,7 +7100,7 @@ async function tick() {
     mergeWebSocketQuoteCache(writebackQuoteMap);
     const websocketQuoteRows = priorityRows
       .map((row) => writebackQuoteMap.get(normalizeCode(row.symbol)))
-      .filter((quote) => quote && ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS)
+      .filter((quote) => quote && effectiveQuoteAgeSeconds(quote) <= WINDOW_SECONDS)
       .map((quote) => ({
         symbol: normalizeCode(quote.symbol),
         trade_date: quoteTradeDateForWrite(quote),
@@ -7300,7 +7334,7 @@ async function tick() {
     const postFetchWebsocketQuoteRows = priorityRows
       .slice(0, DEEP_SCAN_POOL_MAX_SYMBOLS)
       .map((row) => postFetchQuoteMap.get(normalizeCode(row.symbol)))
-      .filter((quote) => quote && ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS)
+      .filter((quote) => quote && effectiveQuoteAgeSeconds(quote) <= WINDOW_SECONDS)
       .map((quote) => ({
         symbol: normalizeCode(quote.symbol),
         trade_date: quoteTradeDateForWrite(quote),

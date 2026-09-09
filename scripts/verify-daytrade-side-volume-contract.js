@@ -613,6 +613,8 @@ async function liveCheck() {
       receipt.first_blocker ||= receipt.failed_checks[0];
     }
   }
+  // Persist the post-publish truth as the canonical local latest receipt too.
+  if (WRITE_RECEIPT) receipt.receipt_files = writeReceipt(receipt);
   return receipt;
 }
 
