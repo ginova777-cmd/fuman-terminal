@@ -193,7 +193,7 @@ const REST_FALLBACK_INTERVAL_SECONDS = Math.max(60, positiveNumber(process.env.D
 const MOTHER_POOL_MIN_PRICE = Math.max(50, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_PRICE ?? CONFIG.motherPool?.minimumPrice, 50));
 const MOTHER_POOL_MIN_TURNOVER_RATE = Math.max(1, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_TURNOVER_RATE ?? CONFIG.motherPool?.minimumTurnoverRate, 1));
 const MOTHER_POOL_MIN_AVG_VOLUME3_LOTS = Math.max(3000, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_AVG_VOLUME3_LOTS, 3000));
-const MOTHER_POOL_CONTRACT_VERSION = "4.0.0";
+const MOTHER_POOL_CONTRACT_VERSION = "4.1.0";
 const MOTHER_POOL_RULE_VERSION = 'daytrade_mother_pool_target_300_600_nonblocking_avg3_3000_outside_ratio_20260904_v7';
 const PREOPEN_REFERENCE_PRICE_CACHE_MS = Math.max(60000, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_CACHE_MS || 15 * 60 * 1000));
 const PREOPEN_REFERENCE_PRICE_MIN_ROWS = Math.max(300, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_MIN_ROWS || 1000));
@@ -3402,7 +3402,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     }
     if (metrics.movingAverageTurnBullish) {
       entryScore += 125;
-      reasons.push("ma3_5_10_or_ma5_10_30_turn_bullish");
+      reasons.push("ma3_5_10_or_ma5_10_20_turn_bullish");
     }
     if (metrics.volumeRatio5 >= 2) {
       entryScore += 160;
@@ -4796,8 +4796,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   // exactly at 09:00 for every formal decision.
   const warmupTransportHealthy = webSocketStatus.formalReady
     && numberValue(webSocketStatus.statusAgeSeconds, 999999) <= MAX_QUOTE_AGE_SECONDS;
-  // Only MA20 remains a required historical warmup. MA30/35/58 may still be
-  // calculated for downstream strategies but never block Mother Pool readiness.
+  // Only MA20 remains a required historical warmup. MA30/35/58 are not
+  // calculated by Mother Pool and never participate in readiness.
   // block source readiness: no same-day 1m evidence exists yet. After 09:00
   // strictScannerCanRunOpening keeps the formal MA coverage requirements.
   const warmupIndicatorsAvailable = readyMa20 > 0;

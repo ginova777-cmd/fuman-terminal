@@ -31,7 +31,7 @@ const quoteCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytra
 const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles-v2.json");
 const motherPoolPath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-priority-symbols.json");
 const MIN_LOCAL_COVERAGE_RATIO = Math.max(0.9, Number(process.env.STRATEGY3_V2_MIN_LOCAL_COVERAGE_RATIO || 0.9));
-const ACCEPTED_MOTHER_POOL_CONTRACT_VERSIONS = new Set(["4.0.0"]);
+const ACCEPTED_MOTHER_POOL_CONTRACT_VERSIONS = new Set(["4.1.0"]);
 
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });

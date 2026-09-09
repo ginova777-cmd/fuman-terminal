@@ -12,7 +12,7 @@ const STATIC_ONLY = process.argv.includes("--static-only");
 const SKELETON_CONTRACT = "daytrade_mother_pool_skeleton_v1";
 const SKELETON_BASELINE = "public-terminal-fast-20260714-22";
 const SKELETON_BASELINE_COMMIT = "4d6ba88c19c5924093fcbe8afb0566df3c80a921";
-const EXPECTED_MOTHER_POOL_CONTRACT_VERSION = "4.0.0";
+const EXPECTED_MOTHER_POOL_CONTRACT_VERSION = "4.1.0";
 
 function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
