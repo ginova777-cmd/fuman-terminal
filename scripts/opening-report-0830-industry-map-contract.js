@@ -1,7 +1,13 @@
 "use strict";
 
 const SOURCE = "opening_report_0830_industry_map_contract";
-const CONTRACT = "opening-report-0830-industry-map-v1";
+const CONTRACT = "opening-report-0830-industry-map-v2";
+const MAPPING_REVIEWED_AT = "2026-09-09";
+const MAPPING_EVIDENCE_AUTHORITIES = [
+  "TWSE_MOPS_COMPANY_PROFILE_AND_ANNUAL_REPORT",
+  "TPEx_MOPS_COMPANY_PROFILE_AND_ANNUAL_REPORT",
+  "ISSUER_OFFICIAL_PRODUCT_AND_INVESTOR_RELATIONS",
+];
 
 const FORBIDDEN_OVERSEAS_LEADERS = ["新光電工", "WCI", "SCFI", "BDI"];
 
@@ -114,7 +120,8 @@ const OPENING_REPORT_0830_INDUSTRY_MAP = [
     evidence_summary: "COHR、LITE、CIEN、AAOI、GLW 作為美股光通訊 proxy；光通訊只看美股，4979 華星光固定列入 A。",
     overseas_leaders: [["COHR", "COHR"], ["LITE", "LITE"], ["CIEN", "CIEN"], ["AAOI", "AAOI"], ["GLW", "GLW"]],
     a: [["3363", "上詮"], ["6442", "光聖"], ["4979", "華星光"], ["3163", "波若威"], ["3081", "聯亞"], ["3450", "聯鈞"], ["4977", "眾達-KY"], ["4908", "前鼎"]],
-    b: [["4991", "環宇-KY"], ["2455", "全新"], ["3234", "光環"], ["6451", "訊芯-KY"], ["3711", "日月光投控"], ["6223", "旺矽"], ["6515", "穎崴"], ["2345", "智邦"]],
+    b: [["4991", "環宇-KY"], ["2455", "全新"], ["3234", "光環"], ["6451", "訊芯-KY"], ["2345", "智邦"]],
+    c: [["3711", "日月光投控"], ["6223", "旺矽"], ["6515", "穎崴"]],
   },
   {
     industry: "III_V_OPTICAL",
@@ -158,10 +165,14 @@ const OPENING_REPORT_0830_INDUSTRY_MAP = [
   },
 ].map((row, index) => ({
   ...row,
+  mapping_contract: CONTRACT,
+  mapping_reviewed_at: MAPPING_REVIEWED_AT,
+  mapping_evidence_authorities: MAPPING_EVIDENCE_AUTHORITIES,
   priority_rank: index + 1,
   overseas_leaders: row.overseas_leaders.map(([name, yahoo_symbol]) => ({ name, yahoo_symbol })),
-  a: row.a.map(([symbol, name]) => ({ symbol, name, tier: "A" })),
-  b: row.b.map(([symbol, name]) => ({ symbol, name, tier: "B" })),
+  a: row.a.map(([symbol, name]) => ({ symbol, name, tier: "A", mapping_grade: "A", relationship_type: "direct_product_or_revenue_exposure", mapping_status: "reviewed", mapping_industry: row.industry, mapping_reviewed_at: MAPPING_REVIEWED_AT, evidence_authorities: MAPPING_EVIDENCE_AUTHORITIES })),
+  b: row.b.map(([symbol, name]) => ({ symbol, name, tier: "B", mapping_grade: "B", relationship_type: "adjacent_supply_chain_or_end_demand", mapping_status: "reviewed", mapping_industry: row.industry, mapping_reviewed_at: MAPPING_REVIEWED_AT, evidence_authorities: MAPPING_EVIDENCE_AUTHORITIES })),
+  c: (row.c || []).map(([symbol, name]) => ({ symbol, name, tier: "C", mapping_grade: "C", relationship_type: "theme_only_or_unverified", mapping_status: "observation_only", mapping_industry: row.industry, mapping_reviewed_at: MAPPING_REVIEWED_AT, evidence_authorities: MAPPING_EVIDENCE_AUTHORITIES })),
 }));
 
 const EXPECTED_INDUSTRIES = OPENING_REPORT_0830_INDUSTRY_MAP.map((row) => ({
@@ -170,6 +181,7 @@ const EXPECTED_INDUSTRIES = OPENING_REPORT_0830_INDUSTRY_MAP.map((row) => ({
   overseas: row.overseas_leaders.map((leader) => leader.name),
   a: row.a.map((stock) => stock.symbol),
   b: row.b.map((stock) => stock.symbol),
+  c: row.c.map((stock) => stock.symbol),
 }));
 
 function pairs(rows) {
@@ -211,10 +223,26 @@ function validateIndustryMapContract(rows = OPENING_REPORT_0830_INDUSTRY_MAP) {
     for (const stockRow of [...(row.a || []), ...(row.b || [])]) {
       if (!/^\d{4}$/.test(String(stockRow.symbol || ""))) issues.push(`taiwan_symbol_invalid:${row.industry}:${stockRow.symbol || "unknown"}`);
       if (!stockRow.name) issues.push(`taiwan_symbol_name_missing:${row.industry}:${stockRow.symbol || "unknown"}`);
+      if (stockRow.mapping_status !== "reviewed") issues.push(`mapping_not_reviewed:${row.industry}:${stockRow.symbol || "unknown"}`);
+      if (!['A', 'B'].includes(stockRow.mapping_grade) || stockRow.mapping_grade !== stockRow.tier) issues.push(`mapping_grade_invalid:${row.industry}:${stockRow.symbol || "unknown"}`);
+      if (stockRow.mapping_industry !== row.industry) issues.push(`mapping_industry_mismatch:${row.industry}:${stockRow.symbol || "unknown"}`);
+      if (!stockRow.relationship_type) issues.push(`mapping_relationship_missing:${row.industry}:${stockRow.symbol || "unknown"}`);
+      if (stockRow.mapping_reviewed_at !== MAPPING_REVIEWED_AT) issues.push(`mapping_review_date_invalid:${row.industry}:${stockRow.symbol || "unknown"}`);
+      if (!Array.isArray(stockRow.evidence_authorities) || stockRow.evidence_authorities.length < 2) issues.push(`mapping_evidence_authority_missing:${row.industry}:${stockRow.symbol || "unknown"}`);
+    }
+    for (const stockRow of row.c || []) {
+      if (!/^\d{4}$/.test(String(stockRow.symbol || ""))) issues.push(`taiwan_symbol_invalid:${row.industry}:${stockRow.symbol || "unknown"}`);
+      if (!stockRow.name) issues.push(`taiwan_symbol_name_missing:${row.industry}:${stockRow.symbol || "unknown"}`);
+      if (stockRow.mapping_status !== "observation_only" || stockRow.mapping_grade !== "C" || stockRow.tier !== "C") issues.push(`tier_c_status_invalid:${row.industry}:${stockRow.symbol || "unknown"}`);
+      if (stockRow.mapping_industry !== row.industry || stockRow.relationship_type !== "theme_only_or_unverified") issues.push(`tier_c_relationship_invalid:${row.industry}:${stockRow.symbol || "unknown"}`);
     }
     const tierA = new Set((row.a || []).map((stockRow) => String(stockRow.symbol || "")));
+    const prioritized = new Set([...(row.a || []), ...(row.b || [])].map((stockRow) => String(stockRow.symbol || "")));
     for (const stockRow of row.b || []) {
       if (tierA.has(String(stockRow.symbol || ""))) issues.push(`tier_a_b_overlap:${row.industry}:${stockRow.symbol}`);
+    }
+    for (const stockRow of row.c || []) {
+      if (prioritized.has(String(stockRow.symbol || ""))) issues.push(`tier_c_priority_overlap:${row.industry}:${stockRow.symbol}`);
     }
   });
   const byIndustry = new Map(rows.map((row) => [row.industry, row]));
@@ -240,6 +268,8 @@ function validateIndustryMapContract(rows = OPENING_REPORT_0830_INDUSTRY_MAP) {
 
 module.exports = {
   CONTRACT,
+  MAPPING_REVIEWED_AT,
+  MAPPING_EVIDENCE_AUTHORITIES,
   SOURCE,
   FORBIDDEN_OVERSEAS_LEADERS,
   OPENING_REPORT_0830_INDUSTRY_MAP,

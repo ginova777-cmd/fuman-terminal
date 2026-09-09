@@ -53,7 +53,7 @@ function symbol(value) {
 
 function validatePayload(payload, tradeDate, reportRunId) {
   const issues = [];
-  const requiredText = ["run_id", "source", "mode", "industry", "display_name", "priority_observation_basis", "bias", "evidence_summary", "allowed_action", "forbidden_action"];
+  const requiredText = ["run_id", "source", "mode", "industry", "display_name", "priority_observation_basis", "bias", "evidence_summary", "mapping_contract", "mapping_reviewed_at", "allowed_action", "forbidden_action"];
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return ["payload_missing"];
   if (payload.date !== tradeDate) issues.push("date_mismatch");
   if (payload.report_time !== "08:30") issues.push("report_time_not_0830");
@@ -68,13 +68,15 @@ function validatePayload(payload, tradeDate, reportRunId) {
   if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) issues.push("confidence_invalid");
   if (payload.allowed_action !== "boost_scan_priority_only") issues.push("allowed_action_mismatch");
   if (payload.forbidden_action !== "publish_formal_candidate_without_taiwan_evidence") issues.push("forbidden_action_mismatch");
+  if (payload.mapping_contract !== "opening-report-0830-industry-map-v2") issues.push("mapping_contract_mismatch");
+  if (!Array.isArray(payload.mapping_evidence_authorities) || payload.mapping_evidence_authorities.length < 2) issues.push("mapping_evidence_authorities_missing");
 
   const a = Array.isArray(payload.mapped_symbols_a) ? payload.mapped_symbols_a : [];
   const b = Array.isArray(payload.mapped_symbols_b) ? payload.mapped_symbols_b : [];
   const mapped = Array.isArray(payload.mapped_symbols) ? payload.mapped_symbols : [];
   if (!a.length) issues.push("mapped_symbols_a_missing");
   if (!b.length) issues.push("mapped_symbols_b_missing");
-  const validateTier = (row, tier) => Boolean(symbol(row) && String(row?.name || "").trim() && row?.tier === tier);
+  const validateTier = (row, tier) => Boolean(symbol(row) && String(row?.name || "").trim() && row?.tier === tier && row?.mapping_grade === tier && row?.mapping_status === "reviewed" && row?.mapping_industry === payload.industry && row?.relationship_type && Array.isArray(row?.evidence_authorities) && row.evidence_authorities.length >= 2);
   if (!a.every((row) => validateTier(row, "A"))) issues.push("mapped_symbols_a_invalid");
   if (!b.every((row) => validateTier(row, "B"))) issues.push("mapped_symbols_b_invalid");
   const expected = [...new Set([...a, ...b].map(symbol).filter(Boolean))];
@@ -129,23 +131,19 @@ async function request(resource, key) {
   return text ? JSON.parse(text) : [];
 }
 
-function validateDbRow(row, expectedPayload) {
+function validateDbRow(row, expectedPayloads) {
   const issues = [];
+  const payloads = Array.isArray(expectedPayloads) ? expectedPayloads : [expectedPayloads].filter(Boolean);
   const evidence = row?.payload?.openingReport0830IndustryBias;
   if (!row) return ["db_row_missing"];
-  if (row.market !== "TW") issues.push("market_not_TW");
-  if (row.priority_reason !== REASON) issues.push("priority_reason_mismatch");
-  if (row.source !== SOURCE) issues.push("source_mismatch");
+  if (!["TW", "TWSE", "TPEx", "TPEX", "上市", "上櫃"].includes(String(row.market || ""))) issues.push("market_not_taiwan");
   if (!evidence) return [...issues, "opening_report_evidence_missing"];
+  const reportRunIds = [...new Set(payloads.map((payload) => String(payload.run_id || "").replace(/-[A-Z][A-Z0-9_]+$/, "")))];
   const requiredEqual = {
-    date: expectedPayload.date,
+    date: payloads[0]?.date,
     report_time: "08:30",
-    run_id: expectedPayload.run_id,
     source: SOURCE,
     mode: MODE,
-    industry: expectedPayload.industry,
-    priority_observation_basis: expectedPayload.priority_observation_basis,
-    priority_observation_rank: Number(expectedPayload.priority_observation_rank),
     boost_once: true,
     reason_code: REASON,
     status: "watchlist_boosted",
@@ -154,8 +152,19 @@ function validateDbRow(row, expectedPayload) {
     forbidden_publish_guard: true,
   };
   for (const [field, expected] of Object.entries(requiredEqual)) if (evidence[field] !== expected) issues.push(`payload_${field}_mismatch`);
-  if (!Array.isArray(evidence.linked_industries) || !evidence.linked_industries.includes(expectedPayload.industry)) issues.push("payload_linked_industries_mismatch");
-  if (!Array.isArray(evidence.priority_overseas_leaders)) issues.push("payload_priority_overseas_leaders_missing");
+  if (reportRunIds.length !== 1 || evidence.report_run_id !== reportRunIds[0] || evidence.run_id !== reportRunIds[0]) issues.push("payload_report_run_id_mismatch");
+  const linked = Array.isArray(evidence.linked_industries) ? evidence.linked_industries.map(String) : [];
+  const observations = Array.isArray(evidence.observations) ? evidence.observations : [];
+  for (const payload of payloads) {
+    if (!linked.includes(String(payload.industry))) issues.push(`payload_linked_industry_missing:${payload.industry}`);
+    const observation = observations.find((entry) => String(entry?.industry || "") === String(payload.industry));
+    if (!observation) { issues.push(`payload_observation_missing:${payload.industry}`); continue; }
+    if (String(observation.run_id || "") !== String(payload.run_id || "")) issues.push(`payload_observation_run_id_mismatch:${payload.industry}`);
+    if (Number(observation.priority_observation_rank) !== Number(payload.priority_observation_rank)) issues.push(`payload_observation_rank_mismatch:${payload.industry}`);
+    if (!Array.isArray(observation.priority_overseas_leaders)) issues.push(`payload_observation_leaders_missing:${payload.industry}`);
+  }
+  const expectedHighest = Math.min(...payloads.map((payload) => Number(payload.priority_observation_rank || Number.POSITIVE_INFINITY)));
+  if (Number(evidence.highest_industry_rank) !== expectedHighest) issues.push("payload_highest_industry_rank_mismatch");
   return issues;
 }
 
@@ -165,12 +174,12 @@ function fixture() {
     date: "2026-09-08", report_time: "08:30", run_id: `${reportRunId}-ROBOTICS_AUTOMATION`, source: SOURCE, mode: MODE,
     industry: "ROBOTICS_AUTOMATION", display_name: "機器人／自動化", priority_observation_basis: "us_market_closed_asia_positive_leader_top3", priority_observation_rank: 1,
     priority_overseas_leaders: [{ rank: 1, symbol: "6861.T", percent: 1.18, source_time: "2026-09-08T00:05:07Z" }],
-    mapped_symbols_a: [{ symbol: "2049", name: "上銀", tier: "A" }], mapped_symbols_b: [{ symbol: "2308", name: "台達電", tier: "B" }],
-    mapped_symbols: [{ symbol: "2049", name: "上銀", tier: "A" }, { symbol: "2308", name: "台達電", tier: "B" }],
-    bias: "positive", confidence: 0.8, evidence_summary: "fixture", allowed_action: "boost_scan_priority_only", forbidden_action: "publish_formal_candidate_without_taiwan_evidence",
+    mapped_symbols_a: [{ symbol: "2049", name: "上銀", tier: "A", mapping_grade: "A", mapping_status: "reviewed", mapping_industry: "ROBOTICS_AUTOMATION", relationship_type: "direct_product_or_revenue_exposure", evidence_authorities: ["MOPS", "ISSUER"] }], mapped_symbols_b: [{ symbol: "2308", name: "台達電", tier: "B", mapping_grade: "B", mapping_status: "reviewed", mapping_industry: "ROBOTICS_AUTOMATION", relationship_type: "adjacent_supply_chain_or_end_demand", evidence_authorities: ["MOPS", "ISSUER"] }],
+    mapped_symbols: [{ symbol: "2049", name: "上銀", tier: "A", mapping_grade: "A", mapping_status: "reviewed", mapping_industry: "ROBOTICS_AUTOMATION", relationship_type: "direct_product_or_revenue_exposure", evidence_authorities: ["MOPS", "ISSUER"] }, { symbol: "2308", name: "台達電", tier: "B", mapping_grade: "B", mapping_status: "reviewed", mapping_industry: "ROBOTICS_AUTOMATION", relationship_type: "adjacent_supply_chain_or_end_demand", evidence_authorities: ["MOPS", "ISSUER"] }],
+    bias: "positive", confidence: 0.8, evidence_summary: "fixture", mapping_contract: "opening-report-0830-industry-map-v2", mapping_reviewed_at: "2026-09-09", mapping_evidence_authorities: ["MOPS", "ISSUER"], allowed_action: "boost_scan_priority_only", forbidden_action: "publish_formal_candidate_without_taiwan_evidence",
   };
   const bridge = { contract: "opening-report-0830-priority-bias-bridge-v1", ok: true, received: true, source: SOURCE, mode: MODE, status: "priority_scan", reason_code: REASON, forbidden_publish_guard: true, formal_candidate_count: 0, formal_candidate_allowed: false, publish_allowed: false, opening_report_status_unchanged: true, run_id: payload.run_id, validation: { ok: true }, rejected_symbols: [] };
-  const db = { symbol: "2049", market: "TW", priority_reason: REASON, source: SOURCE, payload: { openingReport0830IndustryBias: { date: payload.date, report_time: "08:30", run_id: payload.run_id, source: SOURCE, mode: MODE, industry: payload.industry, linked_industries: [payload.industry], priority_observation_basis: payload.priority_observation_basis, priority_observation_rank: 1, priority_overseas_leaders: payload.priority_overseas_leaders, boost_once: true, reason_code: REASON, status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true } } };
+  const db = { symbol: "2049", market: "TWSE", priority_reason: "writer_priority", source: "fugle_daytrade_source", payload: { openingReport0830IndustryBias: { date: payload.date, report_time: "08:30", report_run_id: reportRunId, run_id: reportRunId, source: SOURCE, mode: MODE, industry: payload.industry, linked_industries: [payload.industry], observations: [{ industry: payload.industry, run_id: payload.run_id, priority_observation_rank: 1, priority_overseas_leaders: payload.priority_overseas_leaders }], highest_industry_rank: 1, boost_once: true, reason_code: REASON, status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true } } };
   const assertions = { payload: validatePayload(payload, payload.date, reportRunId).length === 0, bridge: validateBridge(bridge, payload).length === 0, db: validateDbRow(db, payload).length === 0, gap_isolated: validateDbRow(null, payload)[0] === "db_row_missing" };
   return { ok: Object.values(assertions).every(Boolean), contract: `${CONTRACT}-fixture`, fixture: true, writes_supabase: false, sends_line: false, assertions };
 }
@@ -208,7 +217,7 @@ async function main() {
     for (const value of Array.isArray(bridge?.rejected_symbols) ? bridge.rejected_symbols : []) rejected.push(value);
     for (const value of Array.isArray(payload.mapped_symbols) ? payload.mapped_symbols : []) {
       const code = symbol(value);
-      if (code) expectedBySymbol.set(code, payload);
+      if (code) expectedBySymbol.set(code, [...(expectedBySymbol.get(code) || []), payload]);
     }
   }
   if (payloads.length !== Number(aggregate?.industry_count || 0)) missingFields.push("received_industry_count_mismatch");
@@ -225,9 +234,9 @@ async function main() {
     missingFields.push(readbackError);
   }
   const rowBySymbol = new Map(rows.map((row) => [String(row.symbol), row]));
-  for (const [code, payload] of expectedBySymbol) {
+  for (const [code, payloads] of expectedBySymbol) {
     if (!accepted.has(code)) missingFields.push(`${code}:not_in_bridge_accepted_symbols`);
-    for (const issue of validateDbRow(rowBySymbol.get(code), payload)) missingFields.push(`${code}:${issue}`);
+    for (const issue of validateDbRow(rowBySymbol.get(code), payloads)) missingFields.push(`${code}:${issue}`);
   }
   const uniqueMissing = [...new Set(missingFields)];
   const complete = uniqueMissing.length === 0 && rejected.length === 0 && rows.length === expectedBySymbol.size;
