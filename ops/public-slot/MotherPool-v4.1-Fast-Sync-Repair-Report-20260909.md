@@ -110,7 +110,12 @@ unique symbols=720
 anon pagination=500+220
 HTTP status=200
 source_freshness same_trade_date_current=720
+quote_gap_count=0
+intraday_1m_gap_count=1
+quote_and_1m_available_count=719
 ```
+
+匿名角色以正式頁大小 500 完整讀取，共 2 頁（500 + 220）；兩頁皆為 HTTP 200。唯一一筆一分 K 缺口保留為真實 `DATA_GAP`，未以舊資料或偽造時間補值。
 
 Supabase 唯讀入口：
 
@@ -159,7 +164,18 @@ receipt_status=complete
 正式 commit：
 
 ```text
-54b35916bf070af6695e52de58c1f15021844cf2
+程式修復：54b35916bf070af6695e52de58c1f15021844cf2
+回報文件：9b88f03bf6d7e82d3c631220e97e06a7f2b4a908
+```
+
+最終 Supabase receipt：
+
+```text
+verification_run_id=mother_pool_v4_1:20260909:20260909035326677
+complete=true
+mother_pool_rows=720
+failed_checks=[]
+first_blocker=null
 ```
 
 結論：Supabase 即時報價與一分 K 已由完整 runner 解耦，並以既有工作日 Writer 排程每分鐘更新；修復已納入唯一正式 verifier 與 receipt 契約。
