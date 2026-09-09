@@ -37,9 +37,13 @@ select
     and nullif(p.payload #>> '{motherPoolMetrics,ma20}', '')::numeric > 0) as ma5_ma10_ma20_bullish,
   '4.1.0'::text as contract_version,
   p.payload ->> 'canonical_run_id' as canonical_run_id,
-  greatest(p.updated_at, coalesce(q.updated_at, p.updated_at)) as updated_at
+  greatest(p.updated_at, coalesce(q.updated_at, p.updated_at)) as updated_at,
+  q.last_trade_time,
+  extract(epoch from (now() - q.last_trade_time))::integer as last_trade_age_seconds
 from public.fugle_daytrade_priority_pool p
-left join public.fugle_daytrade_quotes_live q on q.symbol = p.symbol
+left join public.fugle_daytrade_quotes_live q
+  on q.symbol = p.symbol
+ and q.trade_date = nullif(p.payload ->> 'trade_date', '')::date
 left join lateral (
   select c.candle_time, c.updated_at
   from public.fugle_daytrade_intraday_1m c

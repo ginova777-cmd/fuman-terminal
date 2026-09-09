@@ -6,6 +6,8 @@ $notifier = Join-Path $root "scripts\notify-daytrade-intraday-burst-telegram.js"
 $startedAt = [DateTimeOffset]::UtcNow.ToString("o")
 $taipei = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, "Taipei Standard Time")
 $tradeDate = $taipei.ToString("yyyy-MM-dd")
+$contractVersion = "4.1.0"
+$canonicalRunId = "fugle_daytrade_source:{0}:canonical" -f $taipei.ToString("yyyyMMdd")
 $receiptFile = Join-Path $receiptDir ("daytrade-intraday-burst-telegram-runner-{0}.json" -f $taipei.ToString("yyyyMMdd"))
 $exitCode = 1
 $errorMessage = $null
@@ -39,7 +41,9 @@ try {
     )
     $notifierReceiptVerified = (
       [string]$notifierReceipt.contract -eq "daytrade_intraday_burst_telegram_v1" -and
+      [string]$notifierReceipt.contract_version -eq $contractVersion -and
       [string]$notifierReceipt.trade_date -eq $tradeDate -and
+      [string]$notifierReceipt.canonical_run_id -eq $canonicalRunId -and
       [bool]$notifierReceipt.ok -eq $true -and
       [bool]$notifierReceipt.complete -eq $true -and
       [string]$notifierReceipt.status -eq "complete" -and
@@ -61,10 +65,13 @@ try {
   $finishedAt = [DateTimeOffset]::UtcNow.ToString("o")
   $receipt = [ordered]@{
     contract = "daytrade_intraday_burst_telegram_runner_v1"
+    contract_version = $contractVersion
     ok = ($exitCode -eq 0 -and $notifierReceiptVerified)
     complete = ($exitCode -eq 0 -and $notifierReceiptVerified)
     status = if ($exitCode -eq 0 -and $notifierReceiptVerified) { "complete" } else { "failed" }
     trade_date = $tradeDate
+    canonical_run_id = $canonicalRunId
+    accepted_mother_pool_symbols = if ($null -ne $notifierReceipt) { [int]$notifierReceipt.accepted_mother_pool_symbols } else { 0 }
     started_at = $startedAt
     finished_at = $finishedAt
     exit_code = $exitCode

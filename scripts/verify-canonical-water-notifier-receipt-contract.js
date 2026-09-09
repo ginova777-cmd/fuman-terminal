@@ -36,6 +36,7 @@ async function main() {
   });
   const waterReceipt = {
     contract: "daytrade_canonical_water_reader_v1",
+    contract_version: "4.1.0",
     checked_at: new Date().toISOString(),
     trade_date: tradeDate,
     canonical_run_id: runId,
@@ -57,7 +58,7 @@ async function main() {
       source_status: "source_status",
       canonical_gate: "v_fugle_daytrade_canonical_gate",
       unattended_gate: "v_fugle_daytrade_unattended_gate_status",
-      mother_pool: "v_fugle_daytrade_mother_pool",
+      mother_pool: "v_fugle_daytrade_mother_pool_v4_1",
       quote: "fugle_daytrade_quotes_live",
       intraday_1m_rpc: "get_fugle_daytrade_intraday_1m_latest_n",
     },
@@ -80,6 +81,7 @@ async function main() {
   const outsideSaved = JSON.parse(fs.readFileSync(receiptFile, "utf8"));
   const checks = {
     complete_zero_result_is_success: result.ok === true && result.complete === true && result.status === "complete" && result.detected_events === 0,
+    v4_1_contract_preserved: saved?.contract_version === "4.1.0" && saved?.canonical_water?.contract_version === "4.1.0",
     canonical_water_receipt_saved: saved?.canonical_water?.contract === "daytrade_canonical_water_reader_v1" && saved?.canonical_water?.complete === true,
     handoff_evidence_saved: saved?.source_name === "fugle_daytrade_source"
       && saved?.canonical_run_id === runId

@@ -1289,8 +1289,12 @@ function selectStreamingSymbols(rotationCursor = 0) {
     return pool;
   };
   const candleRadarSymbols = selectPool(candleBudget, safeCursor, true);
-  const quoteRadarSymbols = selectPool(tradeBudget, (safeCursor + Math.max(1, candleRadarSymbols.length)) % Math.max(1, rotating.length), true);
-  const aggregateRadarSymbols = selectPool(aggregateBudget, safeCursor, true);
+  // A trade event is actionable only when the same symbol also has the candle
+  // channel needed to update formal 1m water. Keep channel cohorts aligned;
+  // disjoint rotations create false DATA_GAP rows by observing trades for
+  // symbols whose candles were never subscribed in that round.
+  const quoteRadarSymbols = candleRadarSymbols.slice(0, tradeBudget);
+  const aggregateRadarSymbols = candleRadarSymbols.slice(0, aggregateBudget);
   const selected = candleRadarSymbols;
   const subscriptionCount = candleRadarSymbols.length + quoteRadarSymbols.length + aggregateRadarSymbols.length;
   const rotationWindow = Math.max(candleRadarSymbols.length, quoteRadarSymbols.length, aggregateRadarSymbols.length);
@@ -1374,7 +1378,7 @@ function mergeStreamingCandles(newCandles, flush = false) {
   }
   const current = readJson(FUGLE_WS_CANDLES_FILE, {});
   const rows = Array.isArray(current.candles) ? current.candles : [];
-  // Keep the complete trading session so MA20/MA35/MA58 readiness can accumulate.
+  // Keep the complete trading session so active intraday indicators can accumulate.
   const cutoff = Date.now() - Math.max(QUOTE_TTL_MS, 8 * 60 * 60 * 1000);
   const byKey = new Map();
   for (const row of rows) {

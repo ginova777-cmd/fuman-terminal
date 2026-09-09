@@ -4536,7 +4536,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
       || row.userCaseLearningActive === true
       || row.hotBurstFastPath === true
       || row.priorityMetrics?.trackedBuyPointActive === true;
-  });
+  }).slice(0, MOTHER_POOL_MAX_SYMBOLS);
   const minFormalPrioritySymbols = 1;
   const quoteTransport = webSocketStatus.mode === "streaming"
     ? `websocket_${(webSocketStatus.streamingChannel || "streaming").replace(/[^a-z0-9]+/gi, "_").replace(/^_+|_+$/g, "")}`

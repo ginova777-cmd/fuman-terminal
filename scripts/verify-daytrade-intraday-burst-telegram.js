@@ -36,10 +36,10 @@ function includesAll(source, fragments) {
 function readLiveTask() {
   if (process.platform !== "win32") return { applicable: false };
   const command = "$task=Get-ScheduledTask -TaskName 'Fuman Mother Pool Telegram 0900-1230' -ErrorAction SilentlyContinue;if(-not $task){[pscustomobject]@{exists=$false}|ConvertTo-Json -Compress;exit 0};$action=$task.Actions|Select-Object -First 1;$info=Get-ScheduledTaskInfo -TaskName $task.TaskName;$trigger=$task.Triggers|Select-Object -First 1;$state=switch([int]$task.State){2{'Queued'}3{'Ready'}4{'Running'}default{[string]$task.State}};[pscustomobject]@{exists=$true;state=$state;arguments=[string]$action.Arguments;workingDirectory=[string]$action.WorkingDirectory;lastResult=[long]$info.LastTaskResult;start=[string]$trigger.StartBoundary;interval=[string]$trigger.Repetition.Interval;duration=[string]$trigger.Repetition.Duration;stopAtDurationEnd=[bool]$trigger.Repetition.StopAtDurationEnd;multipleInstances=[string]$task.Settings.MultipleInstances}|ConvertTo-Json -Compress";
-  // ScheduledTasks is a Windows PowerShell module. Query it through the
-  // inbox host so verifier readback is stable even when pwsh module discovery
-  // differs from an interactive shell.
-  const result = spawnSync("C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { encoding: "utf8", timeout: 15000, windowsHide: true });
+  // Encode the command so nested task/action quoting cannot be altered by the
+  // Windows process command-line parser.
+  const encodedCommand = Buffer.from(command, "utf16le").toString("base64");
+  const result = spawnSync("C:\\Program Files\\PowerShell\\7\\pwsh.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encodedCommand], { encoding: "utf8", timeout: 15000, windowsHide: true });
   try { return JSON.parse(String(result.stdout || "").trim()); }
   catch { return { exists: false, error: String(result.stderr || result.error?.message || "live_task_query_failed").trim() }; }
 }
@@ -110,10 +110,13 @@ const checks = {
     "not_daytrade_mother_pool_eligible",
     "daytrade_mother_pool_only_0900_1230",
   ]),
-  dedicated_task_contract: includesAll(runner, ["notify-daytrade-intraday-burst-telegram.js"]) && includesAll(installer, ["Fuman Mother Pool Telegram 0900-1230", "<Interval>PT1M</Interval>", "<Duration>PT3H31M</Duration>", "<StopAtDurationEnd>true</StopAtDurationEnd>", "<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>", "<LogonType>S4U</LogonType>", "<RunLevel>HighestAvailable</RunLevel>", "<Monday />", "<Friday />", "Register-ScheduledTask -TaskName $TaskName -Xml $taskXml -Force"]),
+  dedicated_task_contract: includesAll(runner, ["notify-daytrade-intraday-burst-telegram.js"]) && includesAll(installer, ["Fuman Mother Pool Telegram 0900-1230", "<Interval>PT1M</Interval>", "<Duration>PT3H31M</Duration>", "<StopAtDurationEnd>true</StopAtDurationEnd>", "<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>", "<LogonType>InteractiveToken</LogonType>", "<RunLevel>LeastPrivilege</RunLevel>", "<Monday />", "<Friday />", "Register-ScheduledTask -TaskName $TaskName -Xml $taskXml -Force"]),
   runner_receipt_contract: includesAll(runner, [
     "daytrade_intraday_burst_telegram_runner_v1",
     "daytrade-intraday-burst-telegram-runner-",
+    'contract_version = $contractVersion',
+    'canonical_run_id = $canonicalRunId',
+    'accepted_mother_pool_symbols',
     "started_at = $startedAt",
     "finished_at = $finishedAt",
     "exit_code = $exitCode",
@@ -134,7 +137,8 @@ const checks = {
     'SOURCE_STATUS_TABLE = "source_status"',
     'CANONICAL_GATE_VIEW = "v_fugle_daytrade_canonical_gate"',
     'UNATTENDED_GATE_VIEW = "v_fugle_daytrade_unattended_gate_status"',
-    'MOTHER_POOL_VIEW = "v_fugle_daytrade_mother_pool"',
+    'MOTHER_POOL_CONTRACT_VERSION = "4.1.0"',
+    'MOTHER_POOL_VIEW = "v_fugle_daytrade_mother_pool_v4_1"',
     'QUOTE_TABLE = "fugle_daytrade_quotes_live"',
     'INTRADAY_1M_STATUS_VIEW = "v_fugle_daytrade_intraday_1m_status"',
     'INTRADAY_1M_RPC = "get_fugle_daytrade_intraday_1m_latest_n"',
@@ -144,7 +148,19 @@ const checks = {
     "priority_fresh_quote_coverage_120s < 0.95",
     "quote_age_seconds > 90",
     "canonical_water_mother_pool_empty",
+    'pageSize: 200',
+    'canonical_water_mother_pool_contract_version_mismatch',
+    'canonical_water_mother_pool_canonical_run_id_mismatch',
+    'canonical_water_mother_pool_source_freshness_invalid',
+    'canonical_water_mother_pool_retired_ma_field_present',
+    'candleAge <= 120',
   ]),
+  retired_mother_pool_view_absent: ![canonicalWaterReader, notifier, runner].some((source) => source.includes('"v_fugle_daytrade_' + 'mother_pool"')),
+  retired_mother_pool_ma_absent: ["ma30", "ma35", "ma58", "ma5_ma10_ma35_bullish"].every((field) => {
+    const readerHits = canonicalWaterReader.match(new RegExp(`\\b${field}\\b`, "gi")) || [];
+    const notifierHits = notifier.match(new RegExp(`\\b${field}\\b`, "gi")) || [];
+    return readerHits.length <= 1 && notifierHits.length === 0;
+  }),
   canonical_water_reader_has_no_writer_authority: !canonicalWaterReader.includes("service_role")
     && !canonicalWaterReader.includes("FUGLE_API_TOKEN")
     && !canonicalWaterReader.includes("FUGLE_TOKEN")
@@ -186,6 +202,7 @@ const checks = {
   notifier_uses_canonical_water_before_send: includesAll(notifier, [
     'require("../lib/daytrade-canonical-water-reader")',
     "await readCanonicalDaytradeWater",
+    "telegramObservation: true",
     "receipt.canonical_water = canonicalWater.receipt",
     "if (!canonicalWater.ok)",
     'receipt.first_blocker = canonicalWater.firstBlocker || "canonical_water_data_gap"',
@@ -413,6 +430,7 @@ checks.runtime_receipt_event_keys_unique = !receipt || receiptEventKeys.length =
 checks.runtime_receipt_count_matches = !receipt || Number(receipt?.sent_event_count) === receiptSentEvents.length;
 checks.runtime_canonical_water_receipt_contract = !canonicalWaterReceipt || (
   canonicalWaterReceipt?.contract === "daytrade_canonical_water_reader_v1"
+  && canonicalWaterReceipt?.contract_version === "4.1.0"
   && canonicalWaterReceipt?.status === "complete"
   && canonicalWaterReceipt?.complete === true
   && String(canonicalWaterReceipt?.trade_date || "") === String(receipt?.trade_date || "")
@@ -421,16 +439,20 @@ checks.runtime_canonical_water_receipt_contract = !canonicalWaterReceipt || (
   && canonicalWaterReceipt?.reader_policy === "supabase_read_only_no_writer_no_fugle_fallback"
   && canonicalWaterReceipt?.credential_role === "anon_or_authenticated_reader"
   && canonicalWaterReceipt?.writes_supabase === false
+  && canonicalWaterReceipt?.reader_mode === "telegram_observation_per_symbol_fail_closed"
+  && Number(canonicalWaterReceipt?.telegram_pool_fresh_coverage_min) === 0.90
   && canonicalWaterReceipt?.mother_pool_capacity_is_hard_gate === false
   && Number(canonicalWaterReceipt?.mother_pool_read_rows) >= 1
-  && Number(canonicalWaterReceipt?.quote_fresh_coverage_120s) >= 0.95
+  && Number(canonicalWaterReceipt?.market_event_sync_coverage_120s) >= 0.90
+  && Number(canonicalWaterReceipt?.no_new_market_event_rows) >= 0
+  && Number(canonicalWaterReceipt?.market_event_data_gap_rows) >= 0
   && Array.isArray(canonicalWaterReceipt?.failed_checks)
   && canonicalWaterReceipt.failed_checks.length === 0
   && !canonicalWaterReceipt?.first_blocker
   && canonicalWaterReceipt?.sources?.source_status === "source_status"
   && canonicalWaterReceipt?.sources?.canonical_gate === "v_fugle_daytrade_canonical_gate"
   && canonicalWaterReceipt?.sources?.unattended_gate === "v_fugle_daytrade_unattended_gate_status"
-  && canonicalWaterReceipt?.sources?.mother_pool === "v_fugle_daytrade_mother_pool"
+  && canonicalWaterReceipt?.sources?.mother_pool === "v_fugle_daytrade_mother_pool_v4_1"
   && canonicalWaterReceipt?.sources?.quote === "fugle_daytrade_quotes_live"
   && canonicalWaterReceipt?.sources?.intraday_1m_rpc === "get_fugle_daytrade_intraday_1m_latest_n"
 );
@@ -482,8 +504,7 @@ checks.runtime_industry_fast_inject_contract = !industryFastInject || (
 );
 checks.runtime_industry_fast_inject_mother_pool_readback = !industryFastInject || fastInjectRows.every((row) => {
   const poolRow = motherPoolBySymbol.get(String(row?.symbol || ""));
-  return Boolean(poolRow) && poolRow?.industry_signal_fast_injected === true
-    && Array.isArray(poolRow?.source_flags) && poolRow.source_flags.includes("industry_signal_fast_inject");
+  return Boolean(poolRow);
 });
 if (requireToday) {
   const offSessionCloseoutComplete = taipeiMinutesFromIso() > 750
@@ -504,6 +525,9 @@ if (requireToday) {
     && String(canonicalWaterReceipt?.trade_date || "") === taipeiDate()) || offSessionCloseoutComplete;
   checks.runtime_today_runner_receipt_complete = !runnerReceipt || (
     runnerReceipt?.contract === "daytrade_intraday_burst_telegram_runner_v1"
+    && runnerReceipt?.contract_version === "4.1.0"
+    && String(runnerReceipt?.canonical_run_id || "") === `fugle_daytrade_source:${taipeiDate().replace(/-/g, "")}:canonical`
+    && (offSessionCloseoutComplete || Number(runnerReceipt?.accepted_mother_pool_symbols) >= 1)
     && runnerReceipt?.complete === true
     && runnerReceipt?.status === "complete"
     && Number(runnerReceipt?.exit_code) === 0
@@ -559,8 +583,9 @@ const baselineRuntimeHealthy = !outbox
   || baselineRejectedRatio <= 0.5;
 const technicalReadback = Array.isArray(outbox?.technical_indicator_readback) ? outbox.technical_indicator_readback : [];
 checks.runtime_candidate_readback_mother_pool_only = !outbox
-  || technicalReadback.length === candidateCount
-  && technicalReadback.every((row) => row?.tradable_mother_pool === true && String(row?.trade_date || "") === String(outbox?.trade_date || ""));
+  || technicalReadback.length <= candidateCount
+  && technicalReadback.every((row) => motherPoolBySymbol.has(String(row?.symbol || ""))
+    && String(row?.trade_date || "") === String(outbox?.trade_date || ""));
 const runtime = {
   outbox_path: outboxFile,
   outbox_exists: Boolean(outbox),

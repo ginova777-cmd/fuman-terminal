@@ -62,7 +62,7 @@ function installFetch(tradeDate, options = {}) {
     if (target === "source_status") return response([{ ...gateRow(tradeDate, { status: "ok" }), payload: gateRow(tradeDate, options.sourceOverrides) }]);
     if (target === "v_fugle_daytrade_canonical_gate") return response([gateRow(tradeDate, options.canonicalOverrides)]);
     if (target === "v_fugle_daytrade_unattended_gate_status") return response([gateRow(tradeDate, options.unattendedOverrides)]);
-    if (target === "v_fugle_daytrade_mother_pool") return response(options.poolRows || [{ trade_date: tradeDate, symbol: "2330", name: "台積電", source_name: "fugle_daytrade_source", priority_rank: 1 }]);
+    if (target === "v_fugle_daytrade_mother_pool_v4_1") return response(options.poolRows || [{ trade_date: tradeDate, symbol: "2330", name: "台積電", market: "TSE", mother_pool_rank: 1, priority_reason: "test", pool_source: "terminal_union", pool_layer: "warmup", entry_score: 1, upgrade_score: 0, source_flags: [], source_run_ids: [canonicalRunId(tradeDate)], priority_reasons: ["test"], source_updated_at: new Date().toISOString(), source_freshness: "same_trade_date_current", price: 100, open_price: 99, previous_close: 98, change_percent: 2, total_volume: 1000, trade_value: 100000, quote_seen_at: new Date().toISOString(), quote_age_seconds: 1, last_trade_time: new Date().toISOString(), last_trade_age_seconds: 1, latest_candle_time: new Date().toISOString(), intraday_1m_stale_seconds: 1, ma5: 101, ma10: 100, ma20: 99, ma5_ma10_ma20_bullish: true, contract_version: "4.1.0", canonical_run_id: canonicalRunId(tradeDate), updated_at: new Date().toISOString() }]);
     if (target === "fugle_daytrade_quotes_live") {
       calls.quoteQueries.push(url);
       return response([{ symbol: "2330", trade_date: tradeDate, name: "台積電", price: 100, quote_seen_at: new Date().toISOString(), last_trade_time: new Date().toISOString(), updated_at: new Date().toISOString(), ...options.quoteOverrides }]);
@@ -84,6 +84,8 @@ async function main() {
     && healthy.receipt?.complete === true
     && healthy.receipt?.status === "complete"
     && healthy.receipt?.canonical_run_id === canonicalRunId(tradeDate)
+    && healthy.receipt?.contract_version === "4.1.0"
+    && healthy.receipt?.sources?.mother_pool === "v_fugle_daytrade_mother_pool_v4_1"
     && healthy.receipt?.mother_pool_read_rows === 1
     && healthy.receipt?.mother_pool_capacity_is_hard_gate === false
     && healthy.receipt?.quote_fresh_coverage_120s === 1
@@ -102,19 +104,30 @@ async function main() {
 
   checks.fixed_read_order = healthyCalls.indexOf("source_status") < healthyCalls.indexOf("v_fugle_daytrade_canonical_gate")
     && healthyCalls.indexOf("v_fugle_daytrade_canonical_gate") < healthyCalls.indexOf("v_fugle_daytrade_unattended_gate_status")
-    && healthyCalls.indexOf("v_fugle_daytrade_unattended_gate_status") < healthyCalls.indexOf("v_fugle_daytrade_mother_pool")
-    && healthyCalls.indexOf("v_fugle_daytrade_mother_pool") < healthyCalls.indexOf("fugle_daytrade_quotes_live")
+    && healthyCalls.indexOf("v_fugle_daytrade_unattended_gate_status") < healthyCalls.indexOf("v_fugle_daytrade_mother_pool_v4_1")
+    && healthyCalls.indexOf("v_fugle_daytrade_mother_pool_v4_1") < healthyCalls.indexOf("fugle_daytrade_quotes_live")
     && healthyCalls.indexOf("fugle_daytrade_quotes_live") < healthyCalls.indexOf("get_fugle_daytrade_intraday_1m_latest_n");
 
   const blockedCalls = installFetch(tradeDate, { canonicalOverrides: { canonical_gate_grade: "D", canonical_gate_status: "not_ready", formal_entry_allowed: false, formal_entry_speed_verdict: "NO" } });
   const blocked = await readCanonicalDaytradeWater({ tradeDate, symbols: ["2330"] });
   checks.gate_failure_stops_before_pool = blocked.ok === false
     && blocked.firstBlocker === "canonical_water_canonical_gate_grade_not_A"
-    && !blockedCalls.includes("v_fugle_daytrade_mother_pool")
+    && !blockedCalls.includes("v_fugle_daytrade_mother_pool_v4_1")
     && !blockedCalls.includes("fugle_daytrade_quotes_live")
     && !blockedCalls.includes("get_fugle_daytrade_intraday_1m_latest_n");
 
-  installFetch(tradeDate, { poolRows: [{ trade_date: tradeDate, symbol: "2317", name: "鴻海", source_name: "fugle_daytrade_source", priority_rank: 1 }] });
+  installFetch(tradeDate, {
+    sourceOverrides: { status: "degraded", canonical_gate_grade: "B", canonical_gate_status: "not_ready", formal_entry_allowed: false, formal_entry_speed_verdict: "NO", priority_fresh_quote_coverage_120s: 0.75 },
+    canonicalOverrides: { canonical_gate_grade: "D", canonical_gate_status: "not_ready", formal_entry_allowed: false, formal_entry_speed_verdict: "NO", priority_fresh_quote_coverage_120s: 0.75 },
+    unattendedOverrides: { canonical_gate_grade: "D", canonical_gate_status: "not_ready", formal_entry_allowed: false, formal_entry_speed_verdict: "NO", priority_fresh_quote_coverage_120s: 0.75 },
+  });
+  const telegramObservation = await readCanonicalDaytradeWater({ tradeDate, symbols: [], telegramObservation: true });
+  checks.telegram_observation_uses_per_symbol_gate = telegramObservation.ok === true
+    && telegramObservation.receipt?.reader_mode === "telegram_observation_per_symbol_fail_closed"
+    && telegramObservation.receipt?.contract_version === "4.1.0"
+    && telegramObservation.receipt?.market_event_sync_coverage_120s === 1;
+
+  installFetch(tradeDate, { poolRows: [{ trade_date: tradeDate, symbol: "2317", name: "鴻海", market: "TSE", mother_pool_rank: 1, source_updated_at: new Date().toISOString(), source_freshness: "same_trade_date_current", contract_version: "4.1.0", canonical_run_id: canonicalRunId(tradeDate) }] });
   const missingMember = await readCanonicalDaytradeWater({ tradeDate, symbols: ["2330"] });
   checks.event_must_be_in_current_mother_pool = missingMember.ok === false
     && missingMember.failedChecks.includes("canonical_water_event_not_in_mother_pool:2330");

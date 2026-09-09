@@ -202,6 +202,7 @@ function sentEventsFromState(tradeDate) {
 function completeCanonicalWaterReceipt(value, tradeDate) {
   return value && typeof value === "object"
     && value.contract === "daytrade_canonical_water_reader_v1"
+    && value.contract_version === "4.1.0"
     && value.status === "complete"
     && value.complete === true
     && String(value.trade_date || "") === tradeDate
@@ -281,6 +282,7 @@ async function notifyFromOutbox(options = {}) {
   const events = Array.isArray(outbox.events) ? outbox.events : [];
   const receipt = {
     ok: false, complete: false, status: "running", contract: "daytrade_intraday_burst_telegram_v1", trade_date: tradeDate, checked_at: checkedAt, started_at: startedAt, finished_at: null,
+    contract_version: "4.1.0",
     strategy_name: "daytrade_intraday_burst_telegram",
     strategy_contract: "daytrade_intraday_burst_telegram_v1",
     run_id: canonicalRunId(tradeDate),
@@ -291,6 +293,7 @@ async function notifyFromOutbox(options = {}) {
     conditions: { price_breakout: "latest_1m_close >= prior_rolling60_high_close * 1.01", volume_burst: "latest_1m_volume >= prior_rolling60_average_volume * 2", min_rolling_samples: 60, technical_cross_any: ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"], five_minute_confirmation_required: true, five_minute_required_status: "CONFIRMED_STRONG_5M" },
     source_status_at_run: null, canonical_gate_at_run: null, unattended_gate_at_run: null,
     canonical_run_id: canonicalRunId(tradeDate), mother_pool_read_rows: 0,
+    accepted_mother_pool_symbols: 0,
     requested_symbols: 0, evaluated_symbols: 0, matched_symbols: 0,
     quote_source_table: "fugle_daytrade_quotes_live",
     intraday_1m_source_table: "get_fugle_daytrade_intraday_1m_latest_n",
@@ -308,6 +311,7 @@ async function notifyFromOutbox(options = {}) {
     tradeDate,
     symbols: events.map((event) => event?.symbol),
     barsPerSymbol: 61,
+    telegramObservation: true,
   });
   receipt.canonical_water = canonicalWater.receipt;
   receipt.source_status_at_run = canonicalWater.receipt?.source_status_at_run || null;
@@ -315,6 +319,7 @@ async function notifyFromOutbox(options = {}) {
   receipt.unattended_gate_at_run = canonicalWater.receipt?.unattended_gate_at_run || null;
   receipt.canonical_run_id = canonicalWater.receipt?.canonical_run_id || canonicalRunId(tradeDate);
   receipt.mother_pool_read_rows = numberValue(canonicalWater.receipt?.mother_pool_read_rows, 0);
+  receipt.accepted_mother_pool_symbols = receipt.mother_pool_read_rows;
   receipt.requested_symbols = receipt.mother_pool_read_rows;
   receipt.evaluated_symbols = events.length;
   receipt.source_updated_at = canonicalWater.receipt?.source_status_at_run?.updated_at || null;

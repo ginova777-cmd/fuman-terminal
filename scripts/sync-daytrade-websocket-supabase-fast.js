@@ -49,7 +49,8 @@ async function main() {
   const cutoff = Date.now() - 180000;
   const quotes = (quoteCache.quotes || []).filter((q) => Date.parse(q.quoteSeenAt || q.exchangeTime || q.receivedAt) >= cutoff).map((q) => ({
     symbol: String(q.code || q.symbol || ""), trade_date: date, name: q.name || String(q.code || ""), market: q.market || "",
-    quote_seen_at: iso(q.quoteSeenAt || q.exchangeTime || q.receivedAt), updated_at: iso(q.receivedAt || q.quoteSeenAt), last_trade_time: iso(q.exchangeTime || q.quoteSeenAt),
+    quote_seen_at: iso(q.quoteSeenAt || q.exchangeTime || q.receivedAt), updated_at: iso(q.receivedAt || q.quoteSeenAt),
+    last_trade_time: iso(q.lastTradeTime || (q.quoteSource === "fugle-ws-trades" ? q.exchangeTime : null)),
     price: num(q.formalLastPrice ?? q.close), open_price: num(q.open), high_price: num(q.high), low_price: num(q.low), previous_close: num(q.prevClose),
     change_percent: num(q.percent), total_volume: num(q.tradeVolume), trade_value: num(q.tradeValue), bid_price: num(q.bidPrice), bid_volume: num(q.bidSize),
     ask_price: num(q.askPrice), ask_volume: num(q.askSize), cumulative_bid_volume: num(q.cumulativeBidVolume), cumulative_ask_volume: num(q.cumulativeAskVolume),

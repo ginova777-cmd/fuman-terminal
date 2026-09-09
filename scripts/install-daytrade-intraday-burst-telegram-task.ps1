@@ -1,5 +1,5 @@
 param(
-  [string]$Root = "C:\fuman-terminal",
+  [string]$Root = "C:\fuman-release-owner\fuman-terminal",
   [string]$TaskName = "Fuman Mother Pool Telegram 0900-1230"
 )
 $ErrorActionPreference = "Stop"
@@ -27,8 +27,8 @@ $taskXml = @"
   <Principals>
     <Principal id="Author">
       <UserId>$escapedUserSid</UserId>
-      <LogonType>S4U</LogonType>
-      <RunLevel>HighestAvailable</RunLevel>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
     </Principal>
   </Principals>
   <Settings>
