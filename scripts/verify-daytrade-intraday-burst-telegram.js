@@ -493,8 +493,9 @@ checks.runtime_events_industry_concentration_ordered = !outbox || outboxEvents.e
   index === 0
   || Number(outboxEvents[index - 1]?.industry_flow_rank || 999999) <= Number(event?.industry_flow_rank || 999999)
 );
+let offSessionCloseoutComplete = false;
 if (requireToday) {
-  const offSessionCloseoutComplete = taipeiMinutesFromIso() > 750
+  offSessionCloseoutComplete = taipeiMinutesFromIso() > 750
     && receipt?.first_blocker === "outside_trading_window"
     && receipt?.ok === true
     && receipt?.complete === true
@@ -576,11 +577,12 @@ const canonicalMotherPoolSymbols = new Set(Array.isArray(canonicalWaterReceipt?.
   ? canonicalWaterReceipt.mother_pool_symbols.map((symbol) => String(symbol || ""))
   : []);
 checks.runtime_candidate_readback_mother_pool_only = !outbox
-  || canonicalMotherPoolSymbols.size === Number(canonicalWaterReceipt?.mother_pool_read_rows)
-  && technicalReadback.length === candidateCount
-  && technicalReadback.length === canonicalMotherPoolSymbols.size
-  && technicalReadback.every((row) => canonicalMotherPoolSymbols.has(String(row?.symbol || ""))
-    && String(row?.trade_date || "") === String(outbox?.trade_date || ""));
+  || offSessionCloseoutComplete
+  || (canonicalMotherPoolSymbols.size === Number(canonicalWaterReceipt?.mother_pool_read_rows)
+    && technicalReadback.length === candidateCount
+    && technicalReadback.length === canonicalMotherPoolSymbols.size
+    && technicalReadback.every((row) => canonicalMotherPoolSymbols.has(String(row?.symbol || ""))
+      && String(row?.trade_date || "") === String(outbox?.trade_date || "")));
 const runtime = {
   outbox_path: outboxFile,
   outbox_exists: Boolean(outbox),
@@ -622,6 +624,7 @@ const runtime = {
   runtime_status: outbox
     ? (sameDayBaselineWarmup ? "same_day_rolling60_warmup" : (baselineRuntimeHealthy ? "available" : "rolling_1m_baseline_not_ready"))
     : "awaiting_next_writer_tick",
+  off_session_closeout_complete: offSessionCloseoutComplete,
   live_task: liveTask,
 };
 
