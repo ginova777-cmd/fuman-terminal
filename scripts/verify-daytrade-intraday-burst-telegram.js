@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { eventMessage, sideVolumeEvents, validSideVolumeEvent } = require("./notify-daytrade-intraday-burst-telegram");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || process.env.FUMAN_RUNTIME_ROOT || (process.platform === "win32" ? "C:\\fuman-runtime" : ROOT);
@@ -75,6 +76,25 @@ const expectedTaskRoot = path.resolve(String(releaseAuthority?.sourceRoot || ROO
 const liveTask = requireLive
   ? (liveTaskEvidenceFile ? { ...readJson(liveTaskEvidenceFile), evidence_file: liveTaskEvidenceFile } : readLiveTask())
   : { required: false };
+const sideFixtureNow = new Date("2026-09-09T02:00:30.000Z").getTime();
+const sideFixtureDate = "2026-09-09";
+function sideFixture(overrides = {}) {
+  return {
+    symbol: "2303", name: "聯電", price: 43.5,
+    inside_volume: 500, outside_volume: 20000,
+    outside_inside_ratio: 40, side_volume_available: true,
+    side_volume_unit: "lots", outside_volume_gt_inside_times_2: true,
+    side_volume_source_event_at: "2026-09-09T02:00:00.000Z",
+    side_volume_trade_date: sideFixtureDate,
+    side_volume_canonical_run_id: "fugle_daytrade_source:20260909:canonical",
+    quote_age_seconds: 30,
+    ...overrides,
+  };
+}
+function derivedSideEvents(row) {
+  return sideVolumeEvents({ poolBySymbol: new Map([[String(row.symbol), row]]) }, sideFixtureDate, sideFixtureNow, []);
+}
+const validSideFixtureEvents = derivedSideEvents(sideFixture());
 const checks = {
   writer_readable: Boolean(writer),
   notifier_readable: Boolean(notifier),
@@ -301,6 +321,35 @@ const checks = {
     "瞬間拉抬",
     "瞬間巨量",
   ]),
+  outside_volume_radar_contract: includesAll(notifier, [
+    'trigger_type: "outside_volume_gt_inside_x2"',
+    '"當沖盤中雷達｜外盤強勢"',
+    '"外盤：" + formatNumber(event.outside_volume, 0) + " 張"',
+    '"內盤：" + formatNumber(event.inside_volume, 0) + " 張"',
+    '"外內盤比：" + formatNumber(event.outside_inside_ratio, 2) + " 倍"',
+    'outside > inside * 2',
+    'row?.side_volume_available === true',
+    'row?.side_volume_unit === "lots"',
+    'row?.side_volume_trade_date === tradeDate',
+    'row?.side_volume_canonical_run_id === canonicalRunId(tradeDate)',
+    'nowMs - sourceEventMs <= 120000',
+    'outside_volume_technical_cross_role: "bonus_only"',
+    'dedupeScope: "daytrade-outside-volume:"',
+    'maxEventAgeSec: 120',
+  ]),
+  outside_volume_reader_explicit_fields: includesAll(canonicalWaterReader, [
+    "inside_volume,outside_volume,side_volume_total,side_volume_unit",
+    "side_volume_source_event_at,side_volume_trade_date,side_volume_canonical_run_id",
+    "outside_inside_ratio,side_volume_available,outside_volume_ge_inside_times_2,outside_volume_gt_inside_times_2",
+  ]),
+  outside_volume_radar_fixture_contract: validSideFixtureEvents.length === 1
+    && validSideFixtureEvents[0].outside_inside_ratio === 40
+    && validSideVolumeEvent(validSideFixtureEvents[0], sideFixtureDate, sideFixtureNow).length === 0
+    && derivedSideEvents(sideFixture({ inside_volume: 500, outside_volume: 1000, outside_inside_ratio: 2, outside_volume_gt_inside_times_2: false })).length === 0
+    && derivedSideEvents(sideFixture({ side_volume_available: false })).length === 0
+    && derivedSideEvents(sideFixture({ side_volume_source_event_at: "2026-09-09T01:57:00.000Z" })).length === 0
+    && eventMessage(validSideFixtureEvents[0]).includes("外內盤比：40 倍")
+    && eventMessage(validSideFixtureEvents[0]).includes("技術狀態（加分項目）"),
   compact_notification_template_contract: includesAll(notifier, [
     '"入場價: " + formatNumber(event.latest_1m_close)',
     '"技術確認: " + technical',
