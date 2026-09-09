@@ -3,7 +3,8 @@
 const SOURCE = "opening_report_0830_industry_map_contract";
 const CONTRACT = "opening-report-0830-industry-map-v1";
 
-const FORBIDDEN_OVERSEAS_LEADERS = ["新光電工", "WCI", "SCFI", "BDI"];
+const FORBIDDEN_OVERSEAS_LEADERS = ["新光電工", "BOE", "WCI", "SCFI", "BDI"];
+const FORBIDDEN_OVERSEAS_SYMBOLS = ["000725.SZ"];
 
 const OPENING_REPORT_0830_INDUSTRY_MAP = [
   {
@@ -71,8 +72,8 @@ const OPENING_REPORT_0830_INDUSTRY_MAP = [
     display_name: "PCB／CCL",
     default_bias: "neutral_mixed",
     default_confidence: 0.78,
-    evidence_summary: "MEIKO、CMK、Daeduck、Simmtech、藤倉作為 PCB/CCL proxy；8358 金居固定列入 A。",
-    overseas_leaders: [["MEIKO", "6787.T"], ["CMK", "6958.T"], ["Daeduck", "353200.KS"], ["Simmtech", "222800.KQ"], ["藤倉", "5803.T"]],
+    evidence_summary: "MEIKO、CMK、Daeduck、Simmtech、藤倉作為 PCB/CCL proxy；藤倉固定讀取 Yahoo!日本股市東證即時漲幅；8358 金居固定列入 A。",
+    overseas_leaders: [["MEIKO", "6787.T"], ["CMK", "6958.T"], ["Daeduck", "353200.KS"], ["Simmtech", "222800.KQ"], ["藤倉", "5803.T", "yahoo_japan_quote"]],
     a: [["2383", "台光電"], ["6274", "台燿"], ["2368", "金像電"], ["3044", "健鼎"], ["4958", "臻鼎-KY"], ["2313", "華通"], ["8358", "金居"], ["6213", "聯茂"]],
     b: [["3037", "欣興"], ["8046", "南電"], ["3189", "景碩"], ["5469", "瀚宇博"], ["1815", "富喬"], ["8039", "台虹"]],
   },
@@ -141,8 +142,8 @@ const OPENING_REPORT_0830_INDUSTRY_MAP = [
     display_name: "面板",
     default_bias: "neutral_mixed",
     default_confidence: 0.50,
-    evidence_summary: "LG Display、BOE、Samsung Display proxy 作為面板 proxy；等台股量價。",
-    overseas_leaders: [["LG Display", "034220.KS"], ["BOE", "000725.SZ"], ["Samsung Display proxy", "005930.KS"]],
+    evidence_summary: "LG Display、Samsung Display proxy 作為面板 proxy；BOE（000725.SZ）已永久剔除；等台股量價。",
+    overseas_leaders: [["LG Display", "034220.KS"], ["Samsung Display proxy", "005930.KS"]],
     a: [["2409", "友達"], ["3481", "群創"], ["6116", "彩晶"]],
     b: [["4935", "茂林-KY"], ["4960", "誠美材"], ["3592", "瑞鼎"]],
   },
@@ -159,7 +160,7 @@ const OPENING_REPORT_0830_INDUSTRY_MAP = [
 ].map((row, index) => ({
   ...row,
   priority_rank: index + 1,
-  overseas_leaders: row.overseas_leaders.map(([name, yahoo_symbol]) => ({ name, yahoo_symbol })),
+  overseas_leaders: row.overseas_leaders.map(([name, yahoo_symbol, source_provider = ""]) => ({ name, yahoo_symbol, source_provider })),
   a: row.a.map(([symbol, name]) => ({ symbol, name, tier: "A" })),
   b: row.b.map(([symbol, name]) => ({ symbol, name, tier: "B" })),
 }));
@@ -177,7 +178,7 @@ function pairs(rows) {
 }
 
 function leaderPairs(row) {
-  return row.overseas_leaders.map((leader) => [leader.name, leader.yahoo_symbol]);
+  return row.overseas_leaders.map((leader) => [leader.name, leader.yahoo_symbol, leader.source_provider || ""]);
 }
 
 function hasSymbol(row, tier, symbol) {
@@ -207,6 +208,7 @@ function validateIndustryMapContract(rows = OPENING_REPORT_0830_INDUSTRY_MAP) {
     for (const leader of row.overseas_leaders || []) {
       if (!leader.name || !leader.yahoo_symbol) issues.push(`overseas_leader_identity_missing:${row.industry}:${leader.name || "unknown"}`);
       if (FORBIDDEN_OVERSEAS_LEADERS.includes(String(leader.name))) issues.push(`forbidden_overseas_leader:${row.industry}:${leader.name}`);
+      if (FORBIDDEN_OVERSEAS_SYMBOLS.includes(String(leader.yahoo_symbol))) issues.push(`forbidden_overseas_symbol:${row.industry}:${leader.yahoo_symbol}`);
     }
     for (const stockRow of [...(row.a || []), ...(row.b || [])]) {
       if (!/^\d{4}$/.test(String(stockRow.symbol || ""))) issues.push(`taiwan_symbol_invalid:${row.industry}:${stockRow.symbol || "unknown"}`);
@@ -235,6 +237,9 @@ function validateIndustryMapContract(rows = OPENING_REPORT_0830_INDUSTRY_MAP) {
   }
   const robotics = byIndustry.get("ROBOTICS_AUTOMATION");
   if (!robotics || !hasSymbol(robotics, "B", "2464")) issues.push("hard_anchor_missing:ROBOTICS_AUTOMATION:B:2464");
+  const pcbLeaders = Array.isArray(pcb?.overseas_leaders) ? pcb.overseas_leaders : [];
+  const fujikura = pcbLeaders.find((leader) => leader.name === "藤倉" && leader.yahoo_symbol === "5803.T");
+  if (!fujikura || fujikura.source_provider !== "yahoo_japan_quote") issues.push("hard_anchor_invalid:PCB_CCL:fujikura_5803T_must_use_yahoo_japan_quote");
   return { ok: issues.length === 0, issues };
 }
 
@@ -242,6 +247,7 @@ module.exports = {
   CONTRACT,
   SOURCE,
   FORBIDDEN_OVERSEAS_LEADERS,
+  FORBIDDEN_OVERSEAS_SYMBOLS,
   OPENING_REPORT_0830_INDUSTRY_MAP,
   EXPECTED_INDUSTRIES,
   pairs,

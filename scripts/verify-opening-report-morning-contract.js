@@ -15,6 +15,8 @@ const SINGLE_VERIFIER_CMD = "node --use-system-ca " + SINGLE_VERIFIER_SCRIPT;
 const RETIRED_TELEGRAM_SCRIPT = path.join(ROOT, "scripts", "verify-opening-report-0830-telegram-contract.js");
 const RETIRED_TELEGRAM_PACKAGE_KEY = "verify:opening-report-0830-telegram-contract";
 const KOREA_NAVER_ENFORCE_FROM = "2026-09-09";
+const FUJIKURA_JAPAN_SOURCE_ENFORCE_FROM = "2026-09-10";
+const BOE_RETIRE_ENFORCE_FROM = "2026-09-10";
 
 const RETIRED_ALIASES = [
   "verify:opening-report-0820-preflight",
@@ -171,6 +173,9 @@ function symbolMapChecks(checks) {
   addCheck(checks, "manual_mapping_8039_pcb_ccl_b", hasSymbol(pcb.tw_b || pcb.twB || pcb.b || pcb.mapped_symbols_b, "8039"), "8039 must be PCB/CCL B");
   addCheck(checks, "manual_mapping_4991_iii_v_related_b", hasSymbol(iiiV.tw_b || iiiV.twB || iiiV.b || iiiV.mapped_symbols_b, "4991"), "4991 must be III-V/optical related B");
   addCheck(checks, "manual_mapping_3105_iii_v_a", hasSymbol(iiiV.tw_a || iiiV.twA || iiiV.a || iiiV.mapped_symbols_a, "3105"), "3105 must be III-V/optical A");
+  const pcbLeaders = pcb.overseas_leaders || pcb.overseasLeaders || pcb.leaders || [];
+  const fujikura = pcbLeaders.find((leader) => String(leader?.yahoo_symbol || leader?.yahooSymbol || "") === "5803.T");
+  addCheck(checks, "fujikura_5803_uses_yahoo_japan_quote", fujikura?.name === "藤倉" && fujikura?.source_provider === "yahoo_japan_quote", JSON.stringify(fujikura || null));
 
   const passive = getIndustryRow(contract, "PASSIVE_COMPONENTS") || {};
   const passiveLeaders = passive.overseas_leaders || passive.overseasLeaders || passive.leaders || [];
@@ -180,6 +185,10 @@ function symbolMapChecks(checks) {
   const opticalLeaders = optical.overseas_leaders || optical.overseasLeaders || optical.leaders || [];
   const opticalRequired = ["COHR", "LITE", "CIEN", "AAOI", "GLW"];
   addCheck(checks, "optical_us_leaders_include_required", opticalRequired.every((symbol) => hasSymbol(opticalLeaders, symbol)), JSON.stringify(opticalLeaders));
+
+  const activeOverseasLeaders = rows.flatMap((row) => row.overseas_leaders || row.overseasLeaders || row.leaders || []);
+  const activeBoe = activeOverseasLeaders.filter((leader) => String(leader?.name || "").toUpperCase() === "BOE" || String(leader?.yahoo_symbol || leader?.yahooSymbol || "").toUpperCase() === "000725.SZ");
+  addCheck(checks, "boe_000725sz_absent_from_active_map", activeBoe.length === 0, JSON.stringify(activeBoe));
 
   const contractText = readText("scripts/opening-report-0830-industry-map-contract.js");
   const forbidden = ["6967.T", "WCI", "SCFI", "BDI"];
@@ -205,12 +214,22 @@ function staticContractChecks(checks) {
   addCheck(checks, "us_market_closed_excluded_japan_korea_remain", detector.includes("us_market_closed_no_new_session") && detector.includes("us_market_closed_previous_session_background_only") && detector.includes("Naver Finance KRX basic"), "US closed rows must be background-only while fresh Japan/Korea rows remain eligible");
   addCheck(checks, "japan_korea_freeze_window_0800_0820", detector.includes("08:00-08:20 Asia/Taipei") && detector.includes("T08:20:59.999+08:00"), "Japan/Korea must freeze by 08:20 minute end");
   addCheck(checks, "korea_naver_percent_only_primary_present", detector.includes("korea_naver_change_percent_primary") && detector.includes("fluctuationsRatio") && detector.includes("localTradedAt") && detector.includes("KQ"), "Korean .KS/.KQ rows must use Naver directly with same-day percent and source time");
+  addCheck(checks, "fujikura_yahoo_japan_primary_present", detector.includes("japan_yahoo_change_percent_primary") && detector.includes("Yahoo! Japan Finance TSE real-time") && detector.includes("japanUpdateTime") && detector.includes("priceChangeRate"), "Fujikura must use the Yahoo! Japan TSE real-time percent and source time");
   const detectorModule = require(path.join(ROOT, "scripts", "run-opening-report-0830-overseas-leader-detector.js"));
   addCheck(checks, "overseas_market_classifier_contract", detectorModule.classifyLeaderMarket("AAPL") === "us" && detectorModule.classifyLeaderMarket("6861.T") === "japan" && detectorModule.classifyLeaderMarket("005930.KS") === "korea" && detectorModule.classifyLeaderMarket("222800.KQ") === "korea" && detectorModule.classifyLeaderMarket("000725.SZ") === "other", "US, Japan, Korea and unsupported markets must not be conflated");
   const naverFixture = detectorModule.parseNaverKoreaBasic({ itemCode: "005930", fluctuationsRatio: "1.11", localTradedAt: "2026-09-08T09:20:59+09:00" }, { yahoo: "005930.KS" }, "2026-09-08");
   const naverAfterCutoff = detectorModule.parseNaverKoreaBasic({ itemCode: "005930", fluctuationsRatio: "1.12", localTradedAt: "2026-09-08T09:21:00+09:00" }, { yahoo: "005930.KS" }, "2026-09-08");
   addCheck(checks, "korea_naver_percent_fixture", naverFixture.ok === true && naverFixture.percent === 1.11 && naverFixture.reason_code === "korea_naver_change_percent_primary", JSON.stringify(naverFixture));
   addCheck(checks, "korea_naver_after_cutoff_rejected", naverAfterCutoff.ok === false && naverAfterCutoff.reason_code === "naver_korea_outside_0800_0820_window", JSON.stringify(naverAfterCutoff));
+  const yahooJapanFixture = '{"codeWithMarketExtension":"5803.T","label":"東証PRM","price":{"value":"5,534"},"priceChange":{"value":"451"},"priceChangeRate":{"value":"8.87"},"japanUpdateTime":"9:20","delayMinutes":0,"openPrice":{"name":"始値","value":"5,350","updateDate":"09:06","updateDateMeta":"2026-09-09T09:06:00+09:00"}}';
+  const yahooJapanAfterCutoffFixture = yahooJapanFixture.replace('"japanUpdateTime":"9:20"', '"japanUpdateTime":"9:21"');
+  const yahooJapanWrongDateFixture = yahooJapanFixture.replace("2026-09-09T09:06:00+09:00", "2026-09-08T09:06:00+09:00");
+  const yahooJapanParsed = detectorModule.parseYahooJapanQuotePage(yahooJapanFixture, { yahoo: "5803.T" }, "2026-09-09");
+  const yahooJapanAfterCutoff = detectorModule.parseYahooJapanQuotePage(yahooJapanAfterCutoffFixture, { yahoo: "5803.T" }, "2026-09-09");
+  const yahooJapanWrongDate = detectorModule.parseYahooJapanQuotePage(yahooJapanWrongDateFixture, { yahoo: "5803.T" }, "2026-09-09");
+  addCheck(checks, "fujikura_yahoo_japan_percent_fixture", yahooJapanParsed.ok === true && yahooJapanParsed.percent === 8.87 && yahooJapanParsed.reason_code === "japan_yahoo_change_percent_primary" && yahooJapanParsed.selected_time === "2026-09-09T00:20:00.000Z", JSON.stringify(yahooJapanParsed));
+  addCheck(checks, "fujikura_yahoo_japan_after_cutoff_rejected", yahooJapanAfterCutoff.ok === false && yahooJapanAfterCutoff.reason_code === "yahoo_japan_outside_0800_0820_window", JSON.stringify(yahooJapanAfterCutoff));
+  addCheck(checks, "fujikura_yahoo_japan_wrong_date_rejected", yahooJapanWrongDate.ok === false && yahooJapanWrongDate.reason_code === "yahoo_japan_trade_date_mismatch", JSON.stringify(yahooJapanWrongDate));
   const calendarModule = require(path.join(ROOT, "scripts", "us-equity-market-calendar.js"));
   const holidayFixture = calendarModule.buildUsEquityMarketCalendar("2026-09-08");
   addCheck(checks, "us_market_labor_day_runtime_switch", holidayFixture.us_market_status === "market_closed" && holidayFixture.no_new_us_session === true && holidayFixture.us_holiday_name === "Labor Day", JSON.stringify(holidayFixture));
@@ -329,6 +348,12 @@ function currentReceiptChecks(checks, tradeDate) {
   const naverRequired = tradeDate >= KOREA_NAVER_ENFORCE_FROM;
   addCheck(checks, "current_korea_uses_naver_primary", !naverRequired || koreaRows.every((row) => row.source === "Naver Finance KRX basic"), JSON.stringify({ enforce_from: KOREA_NAVER_ENFORCE_FROM, required: naverRequired, count: koreaRows.length, sources: [...new Set(koreaRows.map((row) => row.source))] }));
   addCheck(checks, "current_naver_korea_primary_valid", koreaRows.filter((row) => row.ok === true).every((row) => row.source === "Naver Finance KRX basic" && Array.isArray(row.source_fields) && row.source_fields.includes("fluctuationsRatio") && row.source_fields.includes("localTradedAt") && Number.isFinite(Number(row.percent))), JSON.stringify(koreaRows.filter((row) => row.ok === true).map((row) => ({ symbol: row.yahoo_symbol, percent: row.percent, source: row.source }))));
+  const fujikuraRows = rows.filter((row) => String(row.yahoo_symbol || "").toUpperCase() === "5803.T");
+  const fujikuraJapanRequired = tradeDate >= FUJIKURA_JAPAN_SOURCE_ENFORCE_FROM;
+  addCheck(checks, "current_fujikura_uses_yahoo_japan_primary", !fujikuraJapanRequired || (fujikuraRows.length === 1 && fujikuraRows.every((row) => row.source_provider === "yahoo_japan_quote" && row.source === "Yahoo! Japan Finance TSE real-time")), JSON.stringify({ enforce_from: FUJIKURA_JAPAN_SOURCE_ENFORCE_FROM, required: fujikuraJapanRequired, rows: fujikuraRows.map((row) => ({ source_provider: row.source_provider, source: row.source, reason_code: row.reason_code })) }));
+  addCheck(checks, "current_fujikura_yahoo_japan_valid_fields", !fujikuraJapanRequired || fujikuraRows.filter((row) => row.ok === true).every((row) => Array.isArray(row.source_fields) && ["codeWithMarketExtension", "price", "priceChangeRate", "japanUpdateTime", "delayMinutes"].every((field) => row.source_fields.includes(field)) && Number.isFinite(Number(row.percent))), JSON.stringify(fujikuraRows.filter((row) => row.ok === true).map((row) => ({ percent: row.percent, source_fields: row.source_fields }))));
+  const boeRows = rows.filter((row) => String(row.name || "").toUpperCase() === "BOE" || String(row.yahoo_symbol || "").toUpperCase() === "000725.SZ");
+  addCheck(checks, "current_boe_000725sz_retired", tradeDate < BOE_RETIRE_ENFORCE_FROM || boeRows.length === 0, JSON.stringify({ enforce_from: BOE_RETIRE_ENFORCE_FROM, rows: boeRows }));
 
   addCheck(checks, "current_snapshot_trade_date", snapshot.trade_date === tradeDate || snapshot.tradeDate === tradeDate || snapshot.date === tradeDate, JSON.stringify({ trade_date: snapshot.trade_date, tradeDate: snapshot.tradeDate, date: snapshot.date }));
   addCheck(checks, "current_report_status_is_report_only", ["REPORT_OK", "REPORT_DEGRADED", "COMPLETE", "complete"].includes(finalReceipt.report_status || finalReceipt.status), finalReceipt.report_status || finalReceipt.status);
