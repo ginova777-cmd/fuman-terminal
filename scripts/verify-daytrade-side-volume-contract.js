@@ -17,9 +17,12 @@ const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || process.env.FUMAN_RUNTIME_
 const SUPABASE_URL = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/+$/, "");
 const CONTRACT = "daytrade_side_volume_2000_canonical_verifier_v3";
 const CONTRACT_VERSION = "cross-computer-symbol-isolation-v3";
+const SOURCE_NAME = "fugle_daytrade_source";
 const MOTHER_POOL_VIEW = "v_fugle_daytrade_mother_pool";
 const QUOTE_TABLE = "fugle_daytrade_quotes_live";
+const SOURCE_STATUS_TABLE = "source_status";
 const VIEWER_MAX_SOURCE_AGE_SECONDS = 120;
+const TRANSPORT_MAX_AGE_SECONDS = 45;
 const STATIC_ONLY = process.argv.includes("--static-only");
 const WRITE_RECEIPT = process.argv.includes("--write-receipt");
 const PUBLISH_RECEIPT = process.argv.includes("--publish-receipt");
@@ -374,6 +377,7 @@ async function liveCheck() {
   let poolEvidence = [];
   let sample3030 = null;
   let thresholdSample = null;
+  let transportEvidence = { healthy: false, trade_date_ok: false, heartbeat_age_seconds: null, aggregates_age_seconds: null };
 
   if (key) {
     try {
@@ -389,6 +393,32 @@ async function liveCheck() {
         limit: 1,
       });
       quote3030 = quoteRows[0] || null;
+      const sourceRows = await readRows(key, SOURCE_STATUS_TABLE, {
+        select: "trade_date,status,updated_at,payload",
+        source_name: `eq.${SOURCE_NAME}`,
+        limit: 1,
+      });
+      const sourceRow = sourceRows[0] || {};
+      const sourcePayload = sourceRow?.payload && typeof sourceRow.payload === "object" ? sourceRow.payload : {};
+      const heartbeatAt = sourcePayload.websocket_heartbeat_at || sourcePayload.websocketHeartbeatAt || "";
+      const aggregatesAt = sourcePayload.aggregates_last_updated_at || sourcePayload.aggregatesLastUpdatedAt || "";
+      const heartbeatMs = Date.parse(heartbeatAt);
+      const aggregatesMs = Date.parse(aggregatesAt);
+      const checkedMs = Date.parse(checkedAt);
+      const heartbeatAge = Number.isFinite(heartbeatMs) ? Math.max(0, (checkedMs - heartbeatMs) / 1000) : null;
+      const aggregatesAge = Number.isFinite(aggregatesMs) ? Math.max(0, (checkedMs - aggregatesMs) / 1000) : null;
+      const tradeDateOk = String(sourceRow.trade_date || "") === tradeDate;
+      transportEvidence = {
+        healthy: tradeDateOk && ((heartbeatAge !== null && heartbeatAge <= TRANSPORT_MAX_AGE_SECONDS)
+          || (aggregatesAge !== null && aggregatesAge <= TRANSPORT_MAX_AGE_SECONDS)),
+        trade_date_ok: tradeDateOk,
+        heartbeat_at: heartbeatAt || null,
+        heartbeat_age_seconds: heartbeatAge,
+        aggregates_last_updated_at: aggregatesAt || null,
+        aggregates_age_seconds: aggregatesAge,
+        max_age_seconds: TRANSPORT_MAX_AGE_SECONDS,
+        rule: "Fugle trades event age is not a disconnect signal; healthy server heartbeat or aggregates lastUpdated preserves same-day cumulative side-volume validity for an idle symbol.",
+      };
     } catch (error) {
       failures.push(`ANON_READ_FAILED:${error.message || error}`);
     }
@@ -457,7 +487,9 @@ async function liveCheck() {
     const sourceEventAgeSeconds = Number.isFinite(eventAtMs) && Number.isFinite(verifiedAtMs)
       ? Math.max(0, (verifiedAtMs - eventAtMs) / 1000)
       : null;
-    const sourceFresh120s = sourceEventAgeSeconds !== null && sourceEventAgeSeconds <= VIEWER_MAX_SOURCE_AGE_SECONDS;
+    const eventFresh120s = sourceEventAgeSeconds !== null && sourceEventAgeSeconds <= VIEWER_MAX_SOURCE_AGE_SECONDS;
+    const sameDayCumulativeStillValid = row.side_volume_trade_date === tradeDate && transportEvidence.healthy === true;
+    const sourceFresh120s = eventFresh120s || sameDayCumulativeStillValid;
     const freshnessFailures = sourceFresh120s ? [] : ["SIDE_VOLUME_SOURCE_STALE_OVER_120S"];
     const rowFailures = sourceCommonValid ? [...new Set([...(row.failed_checks || []), ...freshnessFailures])] : commonFailureCodes;
     const qualityStatus = !sourceCommonValid ? "BLOCKED_COMMON" : rowFailures.length ? "DATA_GAP" : "READY";
@@ -553,8 +585,10 @@ async function liveCheck() {
       verifier_cadence_seconds: 300,
       reusable_from_immutable_run: ["trade_date", "canonical_run_id", "unit", "definition", "threshold", "source_identity"],
       must_be_current_at_viewer_decision: ["side_volume_source_event_at", "inside_volume", "outside_volume", "side_volume_total", "source_fresh_120s"],
-      rule: "A five-minute verifier proves one point-in-time batch only. Viewer must reject event age over 120 seconds and must not extend the age window.",
+      transport_max_age_seconds: TRANSPORT_MAX_AGE_SECONDS,
+      rule: "A trade event older than 120 seconds is not stale by itself for an idle symbol. Same-day cumulative side volume remains current when Fugle WebSocket heartbeat or aggregates lastUpdated proves transport health within 45 seconds; otherwise the symbol is DATA_GAP.",
     },
+    transport_evidence: transportEvidence,
     symbol_result_view: "v_fugle_daytrade_side_volume_symbol_readback",
     sample_3030: sample3030,
     sample_second_ge_2000_lots: thresholdSample,

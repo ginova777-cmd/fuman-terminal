@@ -7077,7 +7077,9 @@ async function tick() {
       .filter((quote) => quote.symbol && /^\d{4}-\d{2}-\d{2}$/.test(quote.trade_date));
     if (websocketQuoteRows.length) {
       try {
+        tickStage("websocket_quote_readthrough:start", { rows: websocketQuoteRows.length });
         await supabaseUpsert('fugle_daytrade_quotes_live', websocketQuoteRows, 'symbol', { batchSize: 40 });
+        tickStage("websocket_quote_readthrough:complete", { rows: websocketQuoteRows.length });
         websocketQuoteReadthroughSync = {
           written: websocketQuoteRows.length,
           skipped: false,
@@ -7100,7 +7102,9 @@ async function tick() {
   }
   let dailyVolumeMirrorSync = { written: 0, skipped: true, reason: 'not_attempted' };
   try {
+    tickStage("daily_volume_mirror:start");
     dailyVolumeMirrorSync = await syncDailyVolumeMirror(dailyVolumeMap, activeSymbols);
+    tickStage("daily_volume_mirror:complete", { written: dailyVolumeMirrorSync.written || 0 });
   } catch (error) {
     nonFatalWriteErrors.push({
       target: 'fugle_daytrade_daily_volume_avg',
@@ -7121,6 +7125,7 @@ async function tick() {
       });
     }
     try {
+      tickStage("priority_pool_write:start", { rows: priorityRows.length });
       await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
         batchSize: SLOW_TABLE_BATCH_SIZE,
         timeoutMs: 30000,
@@ -7131,6 +7136,7 @@ async function tick() {
         "fugle_daytrade_priority_pool",
         `updated_at=lt.${encodeURIComponent(priorityRows[0].updated_at)}`,
       );
+      tickStage("priority_pool_write:complete", { rows: priorityRows.length });
     } catch (error) {
       nonFatalWriteErrors.push({
         target: "fugle_daytrade_priority_pool",
@@ -7138,6 +7144,7 @@ async function tick() {
       });
     }
     try {
+      tickStage("intraday_candles_sync:start");
       websocketCandleSync = await syncWebSocketIntraday1mCandles(priorityRows, state);
       if (!websocketCandleSync.skipped && numberValue(websocketCandleSync.written) > 0) {
         // Gate/source_status must evaluate the latest Fugle candles, not the stale pre-sync map.
@@ -7161,6 +7168,7 @@ async function tick() {
           );
         }
       }
+      tickStage("intraday_candles_sync:complete", { written: websocketCandleSync.written || 0 });
     } catch (error) {
       nonFatalWriteErrors.push({
         target: "fugle_daytrade_intraday_1m",
@@ -7169,7 +7177,9 @@ async function tick() {
     }
   }
   try {
+    tickStage("futopt_sync:start");
     websocketFutoptSync = await syncWebSocketFutoptQuotes();
+    tickStage("futopt_sync:complete", { written: websocketFutoptSync.written || 0 });
   } catch (error) {
     nonFatalWriteErrors.push({
       target: "fugle_daytrade_futopt_quotes_live",
@@ -7184,14 +7194,18 @@ async function tick() {
       opening0901Evidence = { required: true, ready: false, source: "dedicated_daytrade_1m_0901_unhandled_error", rows: 0, symbols: [], missingSymbols: priorityRows.slice(0, DEEP_SCAN_POOL_MAX_SYMBOLS).map((row) => row.symbol), schema: [], error: error?.message || String(error) };
     }
   }
+  tickStage("intraday_status_cache:start");
   const intradayStatusCacheSync = await syncIntradayStatusCache(intradayMap, priorityRows);
+  tickStage("intraday_status_cache:complete", { written: intradayStatusCacheSync.written || 0 });
   if (intradayStatusCacheSync.error) {
     nonFatalWriteErrors.push({
       target: 'fugle_daytrade_intraday_1m_status_cache',
       message: intradayStatusCacheSync.error,
     });
   }
+  tickStage("futopt_rows:start");
   const futoptRows = await fetchFutoptRows();
+  tickStage("futopt_rows:complete", { rows: futoptRows.length });
   const futoptPreopenBaseline = await captureFutoptPreopenBaseline(futoptRows);
   let intradaySignalEvidence = buildFullMarketIntradaySignalEvidence({
     activeSymbols,
@@ -7205,9 +7219,11 @@ async function tick() {
   const selected = restFallbackActive
     ? selectFetchBatch(activeSymbols, priorityRows, quoteMap, state, { priorityOnly: fetchPriorityOnlyForPhase, batchLimit: REST_PRIORITY_BATCH_LIMIT })
     : { symbols: [], priorityOnly: true };
+  tickStage("rest_fallback:start", { active: restFallbackActive });
   const fetchResult = restFallbackActive
     ? await fetchQuoteBatch(selected.symbols)
     : { rows: [], attempted: 0, fetched: 0, rateLimited: false, errors: [], disabledReason: cooldownActive ? "rest_fallback_cooldown" : (fetchAllowedForPhase ? "rest_fallback_not_due" : `phase_${phase}_fetch_disabled`) };
+  tickStage("rest_fallback:complete", { attempted: fetchResult.attempted, fetched: fetchResult.fetched });
   fetchResult.restFallback = {
     enabled: REST_QUOTE_FETCH_ENABLED,
     active: restFallbackActive,
@@ -7399,7 +7415,9 @@ async function tick() {
   result.payload.full_market_volume_surge_top100_candidates = intradaySignalEvidence.volumeSurgeTop100Candidates;
   result.payload.full_market_bullish_gain_volume_candidate_count = intradaySignalEvidence.bullishGainVolumeCandidateCount;
   result.payload.full_market_volume_surge_top100_candidate_count = intradaySignalEvidence.volumeSurgeTop100CandidateCount;
+  tickStage("status_scorecard:start");
   await writeStatusAndScorecard(result);
+  tickStage("status_scorecard:complete");
   const offSession = Boolean(result.payload.off_session);
   return {
     ok: result.gateGrade === "A" || offSession,
