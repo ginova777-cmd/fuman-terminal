@@ -87,6 +87,112 @@ async function fetchJson(url) {
   return { ok: false, status: attempts.at(-1)?.status || 0, attempts };
 }
 
+async function fetchText(url) {
+  const attempts = [];
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        headers: { "user-agent": "Mozilla/5.0 FumanTerminal/1.0" },
+        signal: AbortSignal.timeout ? AbortSignal.timeout(9000) : undefined,
+      });
+      const text = await response.text();
+      attempts.push({ attempt, status: response.status });
+      if (response.ok) return { ok: true, status: response.status, text, attempts };
+      if (response.status !== 429 && response.status < 500) return { ok: false, status: response.status, text: text.slice(0, 300), attempts };
+    } catch (error) {
+      attempts.push({ attempt, status: 0, error: error?.message || String(error) });
+    }
+    if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, attempt * 1200));
+  }
+  return { ok: false, status: attempts.at(-1)?.status || 0, attempts };
+}
+
+function yahooJapanLocalTimeMs(value, tradeDate) {
+  const match = String(value || "").trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!match) return NaN;
+  const hour = match[1].padStart(2, "0");
+  const minute = match[2];
+  const second = (match[3] || "00").padStart(2, "0");
+  return Date.parse(`${tradeDate}T${hour}:${minute}:${second}+09:00`);
+}
+
+function numericQuoteValue(value) {
+  const normalized = String(value ?? "").replace(/[,％%+]/g, "").trim();
+  return normalized ? Number(normalized) : NaN;
+}
+
+function parseYahooJapanQuotePage(html, leader, tradeDate, sourceUrl = "") {
+  const expectedSymbol = String(leader?.yahoo || "").trim().toUpperCase();
+  const decoded = String(html || "").replace(/\\\"/g, "\"");
+  const marker = `"codeWithMarketExtension":"${expectedSymbol}"`;
+  const markerIndex = decoded.indexOf(marker);
+  const quoteSlice = markerIndex >= 0 ? decoded.slice(markerIndex, markerIndex + 2500) : "";
+  const fieldValue = (name) => {
+    const match = quoteSlice.match(new RegExp(`"${name}":\\{"value":"([^"]*)"\\}`));
+    return match ? match[1] : "";
+  };
+  const updateMatch = quoteSlice.match(/"japanUpdateTime":"([^"]+)"/);
+  const delayMatch = quoteSlice.match(/"delayMinutes":(\d+)/);
+  const openDateMatch = markerIndex >= 0
+    ? decoded.slice(markerIndex).match(/"openPrice":\{[\s\S]{0,600}?"updateDateMeta":"(\d{4}-\d{2}-\d{2})T/)
+    : null;
+  const sourceMs = yahooJapanLocalTimeMs(updateMatch?.[1], tradeDate);
+  const percent = numericQuoteValue(fieldValue("priceChangeRate"));
+  const close = numericQuoteValue(fieldValue("price"));
+  const delayMinutes = Number(delayMatch?.[1]);
+  const sourceFields = ["codeWithMarketExtension", "price", "priceChangeRate", "japanUpdateTime", "delayMinutes"];
+  const base = {
+    source: "Yahoo! Japan Finance TSE real-time",
+    source_url: sourceUrl,
+    ticker: expectedSymbol,
+    selected_time: Number.isFinite(sourceMs) ? new Date(sourceMs).toISOString() : "",
+    cutoff: `${tradeDate} 08:20:59 Asia/Taipei`,
+    source_fields: sourceFields,
+    session_contract: "08:00-08:20 Asia/Taipei",
+  };
+  if (!expectedSymbol || markerIndex < 0) return { ...base, ok: false, reason_code: "yahoo_japan_symbol_mismatch" };
+  if (!openDateMatch) return { ...base, ok: false, reason_code: "yahoo_japan_trade_date_missing" };
+  if (openDateMatch[1] !== tradeDate) return { ...base, ok: false, reason_code: "yahoo_japan_trade_date_mismatch" };
+  if (!Number.isFinite(delayMinutes) || delayMinutes !== 0) return { ...base, ok: false, reason_code: "yahoo_japan_not_realtime" };
+  if (!Number.isFinite(sourceMs)) return { ...base, ok: false, reason_code: "yahoo_japan_source_time_missing" };
+  const windowStart = Date.parse(`${tradeDate}T08:00:00+08:00`);
+  const windowCutoff = cutoffMs(tradeDate);
+  if (sourceMs < windowStart || sourceMs > windowCutoff) return { ...base, ok: false, reason_code: "yahoo_japan_outside_0800_0820_window" };
+  if (!Number.isFinite(percent)) return { ...base, ok: false, reason_code: "yahoo_japan_percent_missing" };
+  if (!Number.isFinite(close) || close <= 0) return { ...base, ok: false, reason_code: "yahoo_japan_price_missing" };
+  const rounded = Number(percent.toFixed(2));
+  const classified = classifyPercent(rounded);
+  return {
+    ...base,
+    ok: true,
+    close: Number(close.toFixed(4)),
+    percent: rounded,
+    direction: classified.direction,
+    display: classified.display,
+    reason_code: "japan_yahoo_change_percent_primary",
+  };
+}
+
+const yahooJapanCache = new Map();
+async function yahooJapanSnapshot(leader, tradeDate) {
+  const symbol = String(leader?.yahoo || "").trim().toUpperCase();
+  const url = `https://finance.yahoo.co.jp/quote/${encodeYahooSymbol(symbol)}`;
+  const cacheKey = `${tradeDate}:${symbol}`;
+  if (!yahooJapanCache.has(cacheKey)) yahooJapanCache.set(cacheKey, fetchText(url));
+  const fetched = await yahooJapanCache.get(cacheKey);
+  if (!fetched.ok) {
+    return {
+      ok: false,
+      source: "Yahoo! Japan Finance TSE real-time",
+      source_url: url,
+      source_fields: ["codeWithMarketExtension", "price", "priceChangeRate", "japanUpdateTime", "delayMinutes"],
+      reason_code: `yahoo_japan_http_${fetched.status || 0}`,
+      attempts: fetched.attempts,
+    };
+  }
+  return { ...parseYahooJapanQuotePage(fetched.text, leader, tradeDate, url), attempts: fetched.attempts };
+}
+
 async function yahooChartSnapshot(leader, tradeDate) {
   if (!leader.yahoo) {
     return {
@@ -223,11 +329,13 @@ const INDUSTRIES = OPENING_REPORT_0830_INDUSTRY_MAP.map((row) => ({
 }));
 
 async function detectLeader(industry, leader, tradeDate, usMarket) {
-  const [name, yahoo, reason] = leader;
+  const [name, yahoo, sourceProvider] = leader;
   const market = classifyLeaderMarket(yahoo);
   const usLeader = market === "us";
-  const y = market === "korea"
-    ? await naverKoreaSnapshot({ name, yahoo, reason_code: reason }, tradeDate)
+  const y = sourceProvider === "yahoo_japan_quote"
+    ? await yahooJapanSnapshot({ name, yahoo }, tradeDate)
+    : market === "korea"
+    ? await naverKoreaSnapshot({ name, yahoo }, tradeDate)
     : market === "other"
       ? {
           ok: false,
@@ -237,11 +345,12 @@ async function detectLeader(industry, leader, tradeDate, usMarket) {
           direction: "unknown",
           reason_code: "non_us_japan_korea_source_excluded",
         }
-      : await yahooChartSnapshot({ name, yahoo, reason_code: reason }, tradeDate);
+      : await yahooChartSnapshot({ name, yahoo }, tradeDate);
   const noNewUsSession = usLeader && usMarket?.no_new_us_session === true;
   return applyLeaderFreshness({
     name,
     yahoo_symbol: yahoo || "",
+    source_provider: sourceProvider || "",
     industry: industry.industry,
     ok: noNewUsSession ? false : y.ok === true,
     source: y.source,
@@ -314,6 +423,9 @@ async function main() {
     korea_source_contract: "korea_direct_naver_change_percent_only_v1",
     korea_direct_source: "Naver Finance KRX basic",
     korea_direct_valid_count: allLeaders.filter((row) => /\.(?:KS|KQ)$/i.test(row.yahoo_symbol || "") && row.ok === true && row.source === "Naver Finance KRX basic").length,
+    japan_source_contract: "fujikura_yahoo_japan_tse_realtime_percent_v1",
+    japan_direct_source: "Yahoo! Japan Finance TSE real-time",
+    japan_direct_valid_count: allLeaders.filter((row) => row.source_provider === "yahoo_japan_quote" && row.ok === true && row.source === "Yahoo! Japan Finance TSE real-time").length,
     overseas_source_counts: allLeaders.reduce((out, row) => { const key = row.source || "unknown"; out[key] = (out[key] || 0) + 1; return out; }, {}),
     industries,
   };
@@ -328,4 +440,4 @@ if (require.main === module) main().catch((error) => {
   process.exit(1);
 });
 
-module.exports = { classifyLeaderMarket, classifyPercent, koreanCode, naverLocalTradedAtMs, parseNaverKoreaBasic, yahooChartSnapshot, industrySummary };
+module.exports = { classifyLeaderMarket, classifyPercent, koreanCode, naverLocalTradedAtMs, parseNaverKoreaBasic, yahooJapanLocalTimeMs, parseYahooJapanQuotePage, yahooJapanSnapshot, yahooChartSnapshot, industrySummary };
