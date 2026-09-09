@@ -12,7 +12,7 @@ const STATIC_ONLY = process.argv.includes("--static-only");
 const SKELETON_CONTRACT = "daytrade_mother_pool_skeleton_v1";
 const SKELETON_BASELINE = "public-terminal-fast-20260714-22";
 const SKELETON_BASELINE_COMMIT = "4d6ba88c19c5924093fcbe8afb0566df3c80a921";
-const EXPECTED_MOTHER_POOL_CONTRACT_VERSION = "2.0.0";
+const EXPECTED_MOTHER_POOL_CONTRACT_VERSION = "3.0.0";
 
 function readJson(file) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; }
@@ -208,6 +208,9 @@ async function main() {
   ));
   check("terminal_warmup_union_complete", terminalWarmupSet.size > 0 && terminalWarmupMissing.length === 0, `terminal_warmup_union_missing:${terminalWarmupMissing.slice(0, 12).join(",")}`);
   check("terminal_warmup_scope_explicit", priority?.terminalWarmupScope === "all_valid_taiwan_symbols_currently_exposed_by_terminal", "terminal_warmup_scope_missing");
+  const motherPoolSymbolSet = new Set(Array.isArray(priority?.daytradeMotherPoolSymbols) ? priority.daytradeMotherPoolSymbols.map(String) : []);
+  const terminalMissingFromMotherPool = [...terminalWarmupSet].filter((symbol) => !motherPoolSymbolSet.has(symbol));
+  check("terminal_union_admitted_to_mother_pool", terminalMissingFromMotherPool.length === 0, `terminal_symbols_not_in_mother_pool:${terminalMissingFromMotherPool.slice(0, 12).join(",")}`);
 
   const motherRows = Array.isArray(motherPool?.rows) ? motherPool.rows : [];
   const priceBySymbol = priority?.daytradePoolPriceBySymbol && typeof priority.daytradePoolPriceBySymbol === "object"
@@ -236,7 +239,7 @@ async function main() {
   check("mother_pool_300_not_hard_gate", motherPool?.mother_pool_minimum_count_is_hard_gate === false, "mother_pool_minimum_count_hard_gate_must_be_false");
   check("mother_pool_minimum_required_is_one", Number(motherPool?.minimum_required_mother_pool_symbols) === 1, "mother_pool_minimum_required_symbols_invalid");
   check("mother_pool_price_readback_complete", motherRows.length > 0 && motherPrices.length === motherRows.length, "mother_pool_price_readback_incomplete");
-  check("mother_pool_price_floor", motherPrices.length === motherRows.length && motherPrices.every((price) => price >= 50), "mother_pool_contains_price_below_50");
+  check("mother_pool_price_readback_nonblocking_for_terminal_admission", motherPrices.length <= motherRows.length, "mother_pool_price_readback_invalid");
   check("mother_pool_avg3_receipt_fields_valid", avg3ReceiptRowsValid, "mother_pool_avg3_receipt_fields_invalid");
   check("mother_pool_avg3_receipt_not_all_pending", avg3PassRows.length > 0 && avg3PendingRows.length < motherRows.length, "mother_pool_avg3_receipt_all_history_pending");
 

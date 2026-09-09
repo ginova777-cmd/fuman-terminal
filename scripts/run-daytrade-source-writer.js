@@ -209,7 +209,7 @@ const REST_FALLBACK_INTERVAL_SECONDS = Math.max(60, positiveNumber(process.env.D
 const MOTHER_POOL_MIN_PRICE = Math.max(50, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_PRICE ?? CONFIG.motherPool?.minimumPrice, 50));
 const MOTHER_POOL_MIN_TURNOVER_RATE = Math.max(1, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_TURNOVER_RATE ?? CONFIG.motherPool?.minimumTurnoverRate, 1));
 const MOTHER_POOL_MIN_AVG_VOLUME3_LOTS = Math.max(3000, positiveNumber(process.env.DAYTRADE_MOTHER_POOL_MIN_AVG_VOLUME3_LOTS, 3000));
-const MOTHER_POOL_CONTRACT_VERSION = "2.0.0";
+const MOTHER_POOL_CONTRACT_VERSION = "3.0.0";
 const MOTHER_POOL_RULE_VERSION = 'daytrade_mother_pool_target_300_600_nonblocking_avg3_3000_outside_ratio_20260904_v7';
 const PREOPEN_REFERENCE_PRICE_CACHE_MS = Math.max(60000, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_CACHE_MS || 15 * 60 * 1000));
 const PREOPEN_REFERENCE_PRICE_MIN_ROWS = Math.max(300, Number(process.env.DAYTRADE_PREOPEN_REFERENCE_PRICE_MIN_ROWS || 1000));
@@ -3342,6 +3342,10 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     ...row,
     basePool: evaluateMotherPoolBasePool(row, row.metrics),
   }));
+  for (const candidate of candidates) {
+    const seedSources = sourceSeedBySymbol.get(candidate.symbol)?.sources || [];
+    candidate.terminalForcedAdmission = seedSources.includes("terminal");
+  }
   // After 09:10, low turnover normally downgrades a symbol. It must not erase
   // a live burst, stock-future, or already-known strategy/watchlist candidate.
   // This is a Mother Pool retention rule only; quote freshness and all trading
@@ -3385,9 +3389,10 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   const warmingPendingCandidates = pendingCandidates.filter((row) =>
     Number(row.metrics?.price) >= MOTHER_POOL_MIN_PRICE
     && !(row.basePool.pendingChecks || []).includes("price_pending"));
-  const rankingCandidates = warmingPhase
-    ? [...qualifiedCandidates, ...warmingPendingCandidates]
-    : qualifiedCandidates;
+  const rankingCandidates = [...new Map([
+    ...(warmingPhase ? [...qualifiedCandidates, ...warmingPendingCandidates] : qualifiedCandidates),
+    ...candidates.filter((row) => row.terminalForcedAdmission === true),
+  ].map((row) => [row.symbol, row])).values()];
   const changeRanks = rankMap(rankingCandidates, (row) => row.metrics.changePercent, { minValue: 0 });
   const volumeSurgeRanks = rankMap(rankingCandidates, (row) => row.metrics.volumeRatio5, { minValue: 0 });
   const estimatedVolumeRanks = rankMap(rankingCandidates, (row) => row.metrics.estimatedVolumeRatio, { minValue: 0 });
@@ -3698,7 +3703,8 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       downgradeProtection,
       fastRemove,
       isMotherPoolCandidate,
-      warmingPending: row.basePool.pending === true,
+      warmingPending: row.basePool.pending === true || row.terminalForcedAdmission === true,
+      terminalForcedAdmission: row.terminalForcedAdmission === true,
       liquidityGrade,
       sourceFlags: seedSources,
       openingReport0830BiasOnly,
@@ -3859,7 +3865,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   }).sort((a, b) => Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true) || b.entryScore - a.entryScore || a.symbol.localeCompare(b.symbol));
 
   const warmingPoolCandidates = rankedCandidates.filter((row) =>
-    row.basePool.eligible === true || (warmingPhase && row.warmingPending === true));
+    row.basePool.eligible === true || row.terminalForcedAdmission === true || (warmingPhase && row.warmingPending === true));
   const rankedBySymbol = new Map(warmingPoolCandidates.map((row) => [row.symbol, row]));
   const signalCandidates = warmingPoolCandidates.filter((row) => row.isMotherPoolCandidate);
   // Quote Radar evaluates the full formal universe, but only rows matching at
@@ -3910,8 +3916,10 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   }
 
   const rankedRows = [...bySymbol.values()]
-    .filter((row) => (row.basePool?.eligible === true || (warmingPhase && row.warmingPending === true))
-      && Number(row.metrics?.price) >= MOTHER_POOL_MIN_PRICE)
+    .filter((row) => row.terminalForcedAdmission === true || (
+      (row.basePool?.eligible === true || (warmingPhase && row.warmingPending === true))
+      && Number(row.metrics?.price) > 0
+    ))
     .sort((a, b) => Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true) || b.upgradeScore - a.upgradeScore || b.entryScore - a.entryScore || a.symbol.localeCompare(b.symbol));
   const rows = [
     ...rankedRows.filter((row) => row.openingReport0830BiasOnly !== true),
@@ -3987,6 +3995,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         is_daytrade_allowed: row.basePool?.eligible === true,
         warming_pending: warmingPending,
         formal_pool_eligible: row.basePool?.eligible === true,
+        terminal_forced_admission: row.terminalForcedAdmission === true,
         avg3_volume: Math.round(numberValue(row.priorityMetrics?.avgVolume3)),
         avg3_volume_sample_days: numberValue(row.priorityMetrics?.avgVolume3SampleDays),
         avg3_volume_gate_status: numberValue(row.priorityMetrics?.avgVolume3SampleDays) < 3
@@ -4112,8 +4121,8 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
       || row?.payload?.formal_pool_eligible === true
       || row?.payload?.is_daytrade_allowed === true;
     const warmingPending = row?.warmingPending === true || row?.payload?.warming_pending === true;
-    return (formalEligible || warmingPending)
-      && Number(metrics.price) >= MOTHER_POOL_MIN_PRICE;
+    const terminalForcedAdmission = row?.terminalForcedAdmission === true || row?.payload?.terminal_forced_admission === true;
+    return terminalForcedAdmission || ((formalEligible || warmingPending) && Number(metrics.price) > 0);
   });
   const formalPoolRows = priceEligiblePriorityRows.filter((row) => row?.basePool?.eligible === true
     || row?.payload?.basePoolEligible === true
