@@ -16,8 +16,6 @@ const masterControlFile = path.join(ROOT, "run-terminal-master-control.ps1");
 const outboxFile = path.join(RUNTIME_ROOT, "state", "daytrade-intraday-burst-telegram-outbox.json");
 const receiptFile = path.join(RUNTIME_ROOT, "data", "scan-receipts", "daytrade-intraday-burst-telegram-" + taipeiDate().replace(/-/g, "") + ".json");
 const runnerReceiptFile = path.join(RUNTIME_ROOT, "data", "scan-receipts", "daytrade-intraday-burst-telegram-runner-" + taipeiDate().replace(/-/g, "") + ".json");
-const industryFastInjectFile = path.join(RUNTIME_ROOT, "state", "daytrade-industry-signal-fast-inject.json");
-const motherPoolFile = path.join(RUNTIME_ROOT, "state", "daytrade-mother-pool-delta.json");
 
 function read(file) {
   try { return fs.readFileSync(file, "utf8"); } catch { return ""; }
@@ -124,13 +122,16 @@ const checks = {
     "exit_code = $exitCode",
     "notifier_receipt_path",
     "notifier_receipt_verified = $notifierReceiptVerified",
+    "failed_checks = $failedChecks",
+    "first_blocker = $firstBlocker",
     "$notifierReceiptRaw = Get-Content -LiteralPath $notifierReceiptFile -Raw",
     "[regex]::Match($notifierReceiptRaw",
     "notifier_receipt_started_at_missing",
     "[Globalization.DateTimeStyles]::RoundtripKind",
     "$notifierStartedAt -ge $runnerStartedAt",
     "notifier_receipt_not_complete_or_stale",
-    "complete = ($exitCode -eq 0 -and $notifierReceiptVerified)",
+    "$runnerSucceeded = ($exitCode -eq 0 -and $notifierReceiptVerified)",
+    "complete = $runnerSucceeded",
     "Move-Item -LiteralPath $temporaryFile -Destination $receiptFile -Force",
     "exit $exitCode",
   ]),
@@ -400,8 +401,6 @@ if (requireLive) {
 const outbox = readJson(outboxFile);
 const receipt = readJson(receiptFile);
 const runnerReceipt = readJson(runnerReceiptFile);
-const industryFastInject = readJson(industryFastInjectFile);
-const motherPool = readJson(motherPoolFile);
 const receiptSentEvents = Array.isArray(receipt?.sent_events) ? receipt.sent_events : [];
 const currentCanonicalWaterReceipt = receipt?.canonical_water && typeof receipt.canonical_water === "object" ? receipt.canonical_water : null;
 const lastCompleteCanonicalWaterReceipt = receipt?.last_complete_canonical_water && typeof receipt.last_complete_canonical_water === "object"
@@ -494,21 +493,6 @@ checks.runtime_events_industry_concentration_ordered = !outbox || outboxEvents.e
   index === 0
   || Number(outboxEvents[index - 1]?.industry_flow_rank || 999999) <= Number(event?.industry_flow_rank || 999999)
 );
-const fastInjectRows = Array.isArray(industryFastInject?.rows) ? industryFastInject.rows : [];
-const motherPoolRows = Array.isArray(motherPool?.rows) ? motherPool.rows : [];
-const motherPoolBySymbol = new Map(motherPoolRows.map((row) => [String(row?.symbol || ""), row]));
-checks.runtime_industry_fast_inject_contract = !industryFastInject || (
-  industryFastInject?.contract === "daytrade_industry_signal_fast_inject_v1"
-  && String(industryFastInject?.trade_date || "") === String(outbox?.trade_date || "")
-  && Array.isArray(industryFastInject?.industries)
-  && Array.isArray(industryFastInject?.symbols)
-  && Number(industryFastInject?.injection_count) === fastInjectRows.length
-  && fastInjectRows.every((row) => row?.source === "industry_signal_fast_inject" && Number(row?.price) >= 50 && Number(row?.change_percent) > 0)
-);
-checks.runtime_industry_fast_inject_mother_pool_readback = !industryFastInject || fastInjectRows.every((row) => {
-  const poolRow = motherPoolBySymbol.get(String(row?.symbol || ""));
-  return Boolean(poolRow);
-});
 if (requireToday) {
   const offSessionCloseoutComplete = taipeiMinutesFromIso() > 750
     && receipt?.first_blocker === "outside_trading_window"
@@ -534,6 +518,9 @@ if (requireToday) {
     && runnerReceipt?.complete === true
     && runnerReceipt?.status === "complete"
     && Number(runnerReceipt?.exit_code) === 0
+    && Array.isArray(runnerReceipt?.failed_checks)
+    && runnerReceipt.failed_checks.length === 0
+    && !runnerReceipt?.first_blocker
     && Boolean(runnerReceipt?.started_at)
     && Boolean(runnerReceipt?.finished_at)
     && String(runnerReceipt?.notifier_receipt_path || "").toLowerCase() === receiptFile.toLowerCase()
@@ -585,9 +572,14 @@ const baselineRuntimeHealthy = !outbox
   || sameDayBaselineWarmup
   || baselineRejectedRatio <= 0.5;
 const technicalReadback = Array.isArray(outbox?.technical_indicator_readback) ? outbox.technical_indicator_readback : [];
+const canonicalMotherPoolSymbols = new Set(Array.isArray(canonicalWaterReceipt?.mother_pool_symbols)
+  ? canonicalWaterReceipt.mother_pool_symbols.map((symbol) => String(symbol || ""))
+  : []);
 checks.runtime_candidate_readback_mother_pool_only = !outbox
-  || technicalReadback.length <= candidateCount
-  && technicalReadback.every((row) => motherPoolBySymbol.has(String(row?.symbol || ""))
+  || canonicalMotherPoolSymbols.size === Number(canonicalWaterReceipt?.mother_pool_read_rows)
+  && technicalReadback.length === candidateCount
+  && technicalReadback.length === canonicalMotherPoolSymbols.size
+  && technicalReadback.every((row) => canonicalMotherPoolSymbols.has(String(row?.symbol || ""))
     && String(row?.trade_date || "") === String(outbox?.trade_date || ""));
 const runtime = {
   outbox_path: outboxFile,
@@ -609,6 +601,7 @@ const runtime = {
   canonical_water_trade_date: canonicalWaterReceipt?.trade_date || null,
   canonical_water_canonical_run_id: canonicalWaterReceipt?.canonical_run_id || null,
   canonical_water_mother_pool_read_rows: Number.isFinite(Number(canonicalWaterReceipt?.mother_pool_read_rows)) ? Number(canonicalWaterReceipt.mother_pool_read_rows) : null,
+  canonical_water_mother_pool_page_count: Number.isFinite(Number(canonicalWaterReceipt?.mother_pool_page_count)) ? Number(canonicalWaterReceipt.mother_pool_page_count) : null,
   canonical_water_quote_fresh_coverage_120s: Number.isFinite(Number(canonicalWaterReceipt?.quote_fresh_coverage_120s)) ? Number(canonicalWaterReceipt.quote_fresh_coverage_120s) : null,
   canonical_water_failed_checks: canonicalWaterReceipt?.failed_checks || null,
   runner_receipt_path: runnerReceiptFile,
