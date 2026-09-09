@@ -3169,7 +3169,7 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
       const previous = bySymbol.get(symbol) || { symbol, sources: [], score: 0, openingReport0830: true, reports: [] };
       previous.sources.push("opening_report_0830");
       previous.score += 50;
-      previous.reports.push({ industry: payload.industry, bias: payload.bias, confidence, runId, evidenceSummary: payload.evidence_summary, bridgeReceiptPath: receiptPath });
+      previous.reports.push({ industry: payload.industry, bias: payload.bias, confidence, runId, priorityObservationRank: Number(payload.priority_observation_rank), evidenceSummary: payload.evidence_summary, bridgeReceiptPath: receiptPath });
       bySymbol.set(symbol, previous);
     }
   }
@@ -3852,6 +3852,28 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     prev.upgradeScore += Math.min(120, Number(seed.score || 0));
     prev.prioritySource = `${prev.prioritySource},${seed.sources.join(",")}`;
     prev.priorityReason = `${prev.priorityReason}+runtime_priority`;
+    if (seed.openingReport0830 === true && Array.isArray(seed.reports) && seed.reports.length) {
+      const observations = seed.reports.map((report) => ({
+        industry: report.industry,
+        run_id: report.runId,
+        priority_observation_rank: Number(report.priorityObservationRank || 0) || null,
+        bias: report.bias,
+        confidence: report.confidence,
+        evidence_summary: report.evidenceSummary,
+        bridge_receipt_path: report.bridgeReceiptPath,
+      }));
+      const reportRunIds = [...new Set(observations.map((entry) => String(entry.run_id || "").replace(/-[A-Z][A-Z0-9_]+$/, "")).filter(Boolean))];
+      prev.openingReport0830IndustryBias = {
+        date: taipeiDate(), report_time: "08:30", report_run_id: reportRunIds[0] || "",
+        run_id: reportRunIds[0] || "", source: "opening_report_0830", mode: "priority_bias_only",
+        industry: observations.slice().sort((a, b) => Number(a.priority_observation_rank || 999) - Number(b.priority_observation_rank || 999))[0]?.industry || "",
+        linked_industries: [...new Set(observations.map((entry) => entry.industry).filter(Boolean))],
+        observations,
+        highest_industry_rank: Math.min(...observations.map((entry) => Number(entry.priority_observation_rank || Number.POSITIVE_INFINITY))),
+        boost_once: true, reason_code: "opening_report_0830_industry_bias", status: "watchlist_boosted",
+        formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true,
+      };
+    }
   }
 
   const rankedRows = [...bySymbol.values()]
@@ -3939,6 +3961,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         warming_pending: warmingPending,
         formal_pool_eligible: row.basePool?.eligible === true,
         terminal_forced_admission: row.terminalForcedAdmission === true,
+        ...(row.openingReport0830IndustryBias ? { openingReport0830IndustryBias: row.openingReport0830IndustryBias } : {}),
         avg3_volume: Math.round(numberValue(row.priorityMetrics?.avgVolume3)),
         avg3_volume_sample_days: numberValue(row.priorityMetrics?.avgVolume3SampleDays),
         avg3_volume_gate_status: numberValue(row.priorityMetrics?.avgVolume3SampleDays) < 3

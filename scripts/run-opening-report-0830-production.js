@@ -116,11 +116,15 @@ function baseIndustryItems(tradeDate, runId, leaders = frozenLeadersReceipt(trad
       bias: `${direction}_mixed`,
       confidence: Number(mapRow.default_confidence || 0),
       evidence_summary: Number.isFinite(average) ? `海外族群平均漲幅 ${average.toFixed(2)}%` : mapRow.evidence_summary,
+      mapping_contract: mapRow.mapping_contract,
+      mapping_reviewed_at: mapRow.mapping_reviewed_at,
+      mapping_evidence_authorities: mapRow.mapping_evidence_authorities,
       overseas_return_1d_pct: Number.isFinite(average) ? average : null,
       overseas_leader_detection: row,
       mapped_symbols_a: mapRow.a,
       mapped_symbols_b: mapRow.b,
-      mapped_symbols: [...mapRow.a, ...mapRow.b],
+      mapped_symbols_c: mapRow.c,
+      mapped_symbols: [...mapRow.a, ...mapRow.b, ...mapRow.c],
     };
   });
   const positive = rows.filter((row) => row.bias.startsWith("positive")).sort((a, b) => Number(b.overseas_return_1d_pct) - Number(a.overseas_return_1d_pct));
@@ -136,11 +140,15 @@ function baseIndustryItems(tradeDate, runId, leaders = frozenLeadersReceipt(trad
     bias: item.bias,
     confidence: item.confidence,
     evidence_summary: item.evidence_summary,
+    mapping_contract: item.mapping_contract,
+    mapping_reviewed_at: item.mapping_reviewed_at,
+    mapping_evidence_authorities: item.mapping_evidence_authorities,
     overseas_return_1d_pct: item.overseas_return_1d_pct,
     positive_return_rank: positiveRank.get(item.industry) || null,
     overseas_leader_detection: item.overseas_leader_detection,
     mapped_symbols_a: item.mapped_symbols_a,
     mapped_symbols_b: item.mapped_symbols_b,
+    mapped_symbols_c: item.mapped_symbols_c,
     mapped_symbols: item.mapped_symbols,
     allowed_action: ALLOWED_ACTION,
     forbidden_action: FORBIDDEN_ACTION
@@ -174,11 +182,13 @@ function asiaPositiveLeaderObservations(items) {
         linked_industries: [],
         mapped_symbols_a: [],
         mapped_symbols_b: [],
+        mapped_symbols_c: [],
       };
       if (!entry.linked_industries.some((row) => row.industry === item.industry)) {
         entry.linked_industries.push({ industry: item.industry, display_name: item.display_name });
         entry.mapped_symbols_a.push(...item.mapped_symbols_a);
         entry.mapped_symbols_b.push(...item.mapped_symbols_b);
+        entry.mapped_symbols_c.push(...item.mapped_symbols_c);
       }
       bySymbol.set(symbol, entry);
     }
@@ -193,6 +203,7 @@ function asiaPositiveLeaderObservations(items) {
       display_name: row.linked_industries.map((item) => item.display_name).join("／"),
       mapped_symbols_a: uniqueMappedSymbols(row.mapped_symbols_a),
       mapped_symbols_b: uniqueMappedSymbols(row.mapped_symbols_b),
+      mapped_symbols_c: uniqueMappedSymbols(row.mapped_symbols_c),
     }));
 }
 
@@ -209,6 +220,7 @@ function positiveIndustryObservations(items) {
       linked_industries: [{ industry: row.industry, display_name: row.display_name }],
       mapped_symbols_a: row.mapped_symbols_a,
       mapped_symbols_b: row.mapped_symbols_b,
+      mapped_symbols_c: row.mapped_symbols_c,
     }));
 }
 
@@ -272,13 +284,13 @@ function markdownReport({ tradeDate, runId, overseasPreflight, priority }) {
   lines.push("");
   lines.push(priority.mode === "us_market_closed_asia_positive_leader_top3" ? "## 日韓正漲幅個股優先觀察" : "## 海外正報酬產業優先觀察");
   lines.push("");
-  lines.push("| 排名 | 海外觀察 | 產業 | 漲幅 | 台股 A | 台股 B |");
-  lines.push("|---:|---|---|---:|---|---|");
+  lines.push("| 排名 | 海外觀察 | 產業 | 漲幅 | 台股 A | 台股 B | 台股 C |");
+  lines.push("|---:|---|---|---:|---|---|---|");
   for (const row of priority.observations) {
     const overseas = row.observation_type === "asia_positive_leader" ? `${row.overseas_name}（${row.overseas_symbol}）` : row.display_name;
-    lines.push(`| ${row.rank} | ${overseas} | ${row.display_name} | +${Number(row.percent).toFixed(2)}% | ${lineStockNames(row.mapped_symbols_a) || "無"} | ${lineStockNames(row.mapped_symbols_b) || "無"} |`);
+    lines.push(`| ${row.rank} | ${overseas} | ${row.display_name} | +${Number(row.percent).toFixed(2)}% | ${lineStockNames(row.mapped_symbols_a) || "無"} | ${lineStockNames(row.mapped_symbols_b) || "無"} | ${lineStockNames(row.mapped_symbols_c) || "無"} |`);
   }
-  if (!priority.observations.length) lines.push("| - | 今日無正漲幅觀察 | - | - | - | - |");
+  if (!priority.observations.length) lines.push("| - | 今日無正漲幅觀察 | - | - | - | - | - |");
   lines.push("");
   lines.push("## Mother Pool 交接邊界");
   lines.push("");
@@ -364,6 +376,7 @@ function lineReportText(tradeDate, observations, usMarket) {
     lineObservationPercent(item),
     `台股 A：${lineStockNames(item.mapped_symbols_a) || "無"}`,
     `台股 B：${lineStockNames(item.mapped_symbols_b) || "無"}`,
+    `台股 C：${lineStockNames(item.mapped_symbols_c) || "無"}`,
   ].join("\n"));
   return [
     "📈 08:30 漲幅族群晨報",
@@ -382,6 +395,7 @@ function lineReportFlex(tradeDate, observations, usMarket) {
     body.push({ type: "text", text: lineObservationPercent(item), size: "sm", color: "#169B62", wrap: true });
     body.push({ type: "text", text: `台股 A：${lineStockNames(item.mapped_symbols_a) || "無"}`, size: "sm", wrap: true });
     body.push({ type: "text", text: `台股 B：${lineStockNames(item.mapped_symbols_b) || "無"}`, size: "sm", wrap: true });
+    body.push({ type: "text", text: `台股 C：${lineStockNames(item.mapped_symbols_c) || "無"}`, size: "sm", wrap: true });
   });
   if (!body.length) body.push({ type: "text", text: "今日無正漲幅優先觀察標的", size: "sm", color: "#777777", wrap: true });
   return {
