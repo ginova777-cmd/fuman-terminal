@@ -2,6 +2,10 @@
 
 const fs = require("fs");
 const path = require("path");
+const {
+  isTaiwanMarket,
+  mergeOpeningReportEvidence,
+} = require("../lib/opening-report-0830-mother-pool-evidence");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
@@ -262,12 +266,35 @@ async function main() {
       const previousEvidence = oldPayload.openingReport0830IndustryBias && typeof oldPayload.openingReport0830IndustryBias === "object" ? oldPayload.openingReport0830IndustryBias : {};
       const alreadyBoostedToday = compactDate(previousEvidence.date) === validation.date && previousEvidence.boost_once === true;
       const nextRank = alreadyBoostedToday ? baseRank : Math.max(FORMAL_RANK_FLOOR, baseRank - BOOST_STEP);
-      const linkedIndustries = [...new Set([...(Array.isArray(previousEvidence.linked_industries) ? previousEvidence.linked_industries : []), previousEvidence.industry, payload.industry].filter(Boolean))];
-      const observationRank = Number(payload.priority_observation_rank || payload.positive_return_rank || Number.POSITIVE_INFINITY);
-      const biasEvidence = { date: payload.date, report_time: payload.report_time, run_id: payload.run_id, source: SOURCE, mode: MODE, industry: payload.industry, linked_industries: linkedIndustries, highest_industry_rank: Math.min(Number(previousEvidence.highest_industry_rank || Number.POSITIVE_INFINITY), observationRank), priority_observation_basis: payload.priority_observation_basis, priority_observation_rank: observationRank, priority_overseas_leaders: payload.priority_overseas_leaders || [], boost_once: true, bias: payload.bias, confidence: payload.confidence, evidence_summary: payload.evidence_summary, reason_code: REASON_CODE, status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true };
+      const biasEvidence = mergeOpeningReportEvidence(previousEvidence, payload);
+      const linkedIndustries = biasEvidence?.linked_industries || [payload.industry];
+      const sourceFlags = [...new Set([...(Array.isArray(oldPayload.source_flags) ? oldPayload.source_flags : []), SOURCE])];
+      const priorityReasons = [...new Set([...(Array.isArray(oldPayload.priority_reasons) ? oldPayload.priority_reasons : []), REASON_CODE])];
       const appliedBoost = Math.max(0, baseRank - nextRank);
       appliedBoosts.push({ symbol, previous_priority_rank: oldRank, applied_priority_rank: nextRank, boost: appliedBoost, boost_once: true, duplicate_boost_skipped: alreadyBoostedToday, linked_industries: linkedIndustries, price: price || null, quote_age_seconds: Number.isFinite(quoteAge) ? quoteAge : null, quote_validation: "delegated_to_mother_pool", existed_before_handoff: Boolean(bySymbol.get(symbol)), status: "watchlist_boosted" });
-      return { symbol, name: old.name || mappedEntryBySymbol.get(symbol)?.name || symbol, market: "TW", priority_rank: nextRank, hot_extension_rank: Number.isFinite(Number(old.hot_extension_rank)) ? Number(old.hot_extension_rank) : null, priority_reason: REASON_CODE, source: SOURCE, updated_at: now, payload: { ...oldPayload, openingReport0830IndustryBias: biasEvidence, priority_reason: REASON_CODE, priority_status: "watchlist_boosted", quote_validation: "delegated_to_mother_pool", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true } };
+      return {
+        symbol,
+        name: old.name || mappedEntryBySymbol.get(symbol)?.name || symbol,
+        market: isTaiwanMarket(old.market) ? String(old.market).toUpperCase() : "TW",
+        priority_rank: nextRank,
+        hot_extension_rank: Number.isFinite(Number(old.hot_extension_rank)) ? Number(old.hot_extension_rank) : null,
+        priority_reason: old.priority_reason || REASON_CODE,
+        source: old.source || SOURCE,
+        updated_at: now,
+        payload: {
+          ...oldPayload,
+          openingReport0830IndustryBias: biasEvidence,
+          opening_report_0830_source: SOURCE,
+          opening_report_0830_priority_reason: REASON_CODE,
+          source_flags: sourceFlags,
+          priority_reasons: priorityReasons,
+          priority_status: "watchlist_boosted",
+          quote_validation: "delegated_to_mother_pool",
+          formal_candidate: false,
+          formal_candidate_allowed: false,
+          forbidden_publish_guard: true,
+        },
+      };
     });
     await restRequest(key, "fugle_daytrade_priority_pool", { method: "POST", body: rows });
     const receipt = buildReceipt({ inputPath, receiptPath, payload, validation, acceptedSymbols, rejectedSymbols, appliedBoosts });
