@@ -430,11 +430,14 @@ async function liveCheck() {
     if (!sample3030.ok) sample3030.failed_checks.push("SYMBOL_3030_SAME_DAY_SIDE_VOLUME_EVIDENCE_MISSING");
   }
   if (!sample3030) failures.push("SYMBOL_3030_ANON_READBACK_MISSING");
-  else if (!sample3030.ok) failures.push(...sample3030.failed_checks);
+  // 3030 is an explicit diagnostic extra when it is not in Mother Pool. Keep its
+  // per-symbol DATA_GAP evidence, but do not let an out-of-pool diagnostic row
+  // downgrade an otherwise complete Mother Pool batch.
+  else if (!sample3030.ok && row3030) failures.push(...sample3030.failed_checks);
 
   thresholdSample = poolEvidence.find((row) => row?.symbol !== "3030" && row?.ok && row?.side_volume_ge_2000_lots === true) || null;
   if (!thresholdSample) failures.push("SECOND_SAME_DAY_2000_LOTS_SAMPLE_MISSING");
-  if (sample3030 && thresholdSample) {
+  if (sample3030 && thresholdSample && row3030) {
     if (sample3030.side_volume_trade_date !== thresholdSample.side_volume_trade_date) failures.push("SAMPLE_TRADE_DATE_NOT_SAME_BATCH");
     if (sample3030.side_volume_canonical_run_id !== thresholdSample.side_volume_canonical_run_id) failures.push("SAMPLE_CANONICAL_RUN_NOT_SAME_BATCH");
   }
@@ -495,8 +498,8 @@ async function liveCheck() {
       verified_at: checkedAt,
     };
   });
-  const hasSymbolGap = symbolResults.some((row) => row.quality_status !== "READY") || !thresholdSample;
-  if (symbolResults.some((row) => row.failed_checks.includes("SIDE_VOLUME_SOURCE_STALE_OVER_120S"))) {
+  const hasSymbolGap = symbolResults.some((row) => row.in_mother_pool && row.quality_status !== "READY") || !thresholdSample;
+  if (symbolResults.some((row) => row.in_mother_pool && row.failed_checks.includes("SIDE_VOLUME_SOURCE_STALE_OVER_120S"))) {
     failures.push("SIDE_VOLUME_SOURCE_STALE_OVER_120S");
   }
   const uniqueFailures = [...new Set(failures)];
