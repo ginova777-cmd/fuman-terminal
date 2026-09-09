@@ -74,6 +74,19 @@ function verifySkeletonStatic() {
   includes("terminal-core.js", "window.FUMAN_FORMAL_SKELETON_CONTRACT");
   includes("terminal-core.js", "window.FUMAN_FORMAL_SKELETON_BASELINE");
   includes("api/market-ai-live.js", "old_supabase_market_snapshots_fallback_disabled_by_daytrade_mother_pool_skeleton_v1");
+  includes("scripts/run-daytrade-source-writer.js", "openingReportSeedBySymbol");
+  includes("scripts/run-daytrade-source-writer.js", "mergeOpeningReportEvidence");
+  includes("scripts/run-daytrade-source-writer.js", "openingReport0830IndustryBias");
+  includes("scripts/run-daytrade-source-writer.js", "opening_report_0830_source");
+  includes("scripts/verify-opening-report-0830-mother-pool-field-ack.js", "market_not_TW_TWSE_TPEX");
+  includes("scripts/verify-opening-report-0830-mother-pool-field-ack.js", "overlapping_industries_preserved");
+  const openingEvidenceFixture = runStatic("scripts/verify-opening-report-0830-mother-pool-field-ack.js", ["--fixture"]);
+  if (!openingEvidenceFixture.ok
+    || !openingEvidenceFixture.output.includes('"db_twse": true')
+    || !openingEvidenceFixture.output.includes('"db_tpex": true')
+    || !openingEvidenceFixture.output.includes('"overlapping_industries_preserved": true')) {
+    issues.push(`opening report Mother Pool evidence fixture failed: ${openingEvidenceFixture.output}`);
+  }
   excludes("api/market-ai-live.js", "allowLatestFallback: !requireTodayLiveSource && (fastCachedPayload || !isMarketAiPostClose(clock))");
   excludes("api/market-ai-live.js", "function snapshotResponsePayload");
   excludes("api/market-ai-live.js", "readSnapshot(\"market_ai_live\"");

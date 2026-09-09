@@ -3,6 +3,12 @@
 
 const fs = require("fs");
 const path = require("path");
+const {
+  CONTRACT: EVIDENCE_CONTRACT,
+  isTaiwanMarket,
+  mergeOpeningReportEvidence,
+  validateEvidenceForPayload,
+} = require("../lib/opening-report-0830-mother-pool-evidence");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
@@ -129,34 +135,23 @@ async function request(resource, key) {
   return text ? JSON.parse(text) : [];
 }
 
-function validateDbRow(row, expectedPayload) {
+function validateDbRow(row, expectedPayloads, reportRunId = "") {
   const issues = [];
+  const expectations = Array.isArray(expectedPayloads) ? expectedPayloads : [expectedPayloads];
   const evidence = row?.payload?.openingReport0830IndustryBias;
   if (!row) return ["db_row_missing"];
-  if (row.market !== "TW") issues.push("market_not_TW");
-  if (row.priority_reason !== REASON) issues.push("priority_reason_mismatch");
-  if (row.source !== SOURCE) issues.push("source_mismatch");
+  if (!isTaiwanMarket(row.market)) issues.push("market_not_TW_TWSE_TPEX");
+  const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
+  const sourceFlags = Array.isArray(payload.source_flags) ? payload.source_flags : [];
+  if (payload.opening_report_0830_source !== SOURCE && !sourceFlags.includes(SOURCE)) issues.push("opening_report_source_evidence_missing");
+  if (payload.opening_report_0830_priority_reason !== REASON && evidence?.reason_code !== REASON) issues.push("opening_report_priority_reason_evidence_missing");
   if (!evidence) return [...issues, "opening_report_evidence_missing"];
-  const requiredEqual = {
-    date: expectedPayload.date,
-    report_time: "08:30",
-    run_id: expectedPayload.run_id,
-    source: SOURCE,
-    mode: MODE,
-    industry: expectedPayload.industry,
-    priority_observation_basis: expectedPayload.priority_observation_basis,
-    priority_observation_rank: Number(expectedPayload.priority_observation_rank),
-    boost_once: true,
-    reason_code: REASON,
-    status: "watchlist_boosted",
-    formal_candidate: false,
-    formal_candidate_allowed: false,
-    forbidden_publish_guard: true,
-  };
-  for (const [field, expected] of Object.entries(requiredEqual)) if (evidence[field] !== expected) issues.push(`payload_${field}_mismatch`);
-  if (!Array.isArray(evidence.linked_industries) || !evidence.linked_industries.includes(expectedPayload.industry)) issues.push("payload_linked_industries_mismatch");
-  if (!Array.isArray(evidence.priority_overseas_leaders)) issues.push("payload_priority_overseas_leaders_missing");
-  return issues;
+  for (const expected of expectations) {
+    for (const issue of validateEvidenceForPayload(evidence, expected, reportRunId)) {
+      issues.push(expectations.length > 1 ? `${expected.industry}:${issue}` : issue);
+    }
+  }
+  return [...new Set(issues)];
 }
 
 function fixture() {
@@ -170,8 +165,31 @@ function fixture() {
     bias: "positive", confidence: 0.8, evidence_summary: "fixture", allowed_action: "boost_scan_priority_only", forbidden_action: "publish_formal_candidate_without_taiwan_evidence",
   };
   const bridge = { contract: "opening-report-0830-priority-bias-bridge-v1", ok: true, received: true, source: SOURCE, mode: MODE, status: "priority_scan", reason_code: REASON, forbidden_publish_guard: true, formal_candidate_count: 0, formal_candidate_allowed: false, publish_allowed: false, opening_report_status_unchanged: true, run_id: payload.run_id, validation: { ok: true }, rejected_symbols: [] };
-  const db = { symbol: "2049", market: "TW", priority_reason: REASON, source: SOURCE, payload: { openingReport0830IndustryBias: { date: payload.date, report_time: "08:30", run_id: payload.run_id, source: SOURCE, mode: MODE, industry: payload.industry, linked_industries: [payload.industry], priority_observation_basis: payload.priority_observation_basis, priority_observation_rank: 1, priority_overseas_leaders: payload.priority_overseas_leaders, boost_once: true, reason_code: REASON, status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true } } };
-  const assertions = { payload: validatePayload(payload, payload.date, reportRunId).length === 0, bridge: validateBridge(bridge, payload).length === 0, db: validateDbRow(db, payload).length === 0, gap_isolated: validateDbRow(null, payload)[0] === "db_row_missing" };
+  const secondPayload = { ...payload, run_id: `${reportRunId}-OPTICAL_COMM`, industry: "OPTICAL_COMM", display_name: "光通訊／CPO／矽光子", priority_observation_rank: 2 };
+  const firstEvidence = mergeOpeningReportEvidence(null, payload);
+  const mergedEvidence = mergeOpeningReportEvidence(firstEvidence, secondPayload);
+  const db = {
+    symbol: "2049",
+    market: "TWSE",
+    priority_reason: "canonical_mother_pool_reason",
+    source: "daytrade,terminal,opening_report_0830",
+    payload: {
+      source_flags: ["daytrade", "terminal", SOURCE],
+      opening_report_0830_source: SOURCE,
+      opening_report_0830_priority_reason: REASON,
+      openingReport0830IndustryBias: mergedEvidence,
+    },
+  };
+  const tpexDb = { ...db, market: "TPEX" };
+  const assertions = {
+    payload: validatePayload(payload, payload.date, reportRunId).length === 0,
+    bridge: validateBridge(bridge, payload).length === 0,
+    db_twse: validateDbRow(db, [payload, secondPayload], reportRunId).length === 0,
+    db_tpex: validateDbRow(tpexDb, [payload, secondPayload], reportRunId).length === 0,
+    overlapping_industries_preserved: mergedEvidence?.industry_observations?.length === 2 && mergedEvidence?.linked_industries?.includes(payload.industry) && mergedEvidence?.linked_industries?.includes(secondPayload.industry),
+    invalid_market_rejected: validateDbRow({ ...db, market: "SZ" }, [payload], reportRunId).includes("market_not_TW_TWSE_TPEX"),
+    gap_isolated: validateDbRow(null, [payload], reportRunId)[0] === "db_row_missing",
+  };
   return { ok: Object.values(assertions).every(Boolean), contract: `${CONTRACT}-fixture`, fixture: true, writes_supabase: false, sends_line: false, assertions };
 }
 
@@ -208,7 +226,10 @@ async function main() {
     for (const value of Array.isArray(bridge?.rejected_symbols) ? bridge.rejected_symbols : []) rejected.push(value);
     for (const value of Array.isArray(payload.mapped_symbols) ? payload.mapped_symbols : []) {
       const code = symbol(value);
-      if (code) expectedBySymbol.set(code, payload);
+      if (!code) continue;
+      const expectations = expectedBySymbol.get(code) || [];
+      if (!expectations.some((row) => row.industry === payload.industry)) expectations.push(payload);
+      expectedBySymbol.set(code, expectations);
     }
   }
   if (payloads.length !== Number(aggregate?.industry_count || 0)) missingFields.push("received_industry_count_mismatch");
@@ -225,9 +246,9 @@ async function main() {
     missingFields.push(readbackError);
   }
   const rowBySymbol = new Map(rows.map((row) => [String(row.symbol), row]));
-  for (const [code, payload] of expectedBySymbol) {
+  for (const [code, payloads] of expectedBySymbol) {
     if (!accepted.has(code)) missingFields.push(`${code}:not_in_bridge_accepted_symbols`);
-    for (const issue of validateDbRow(rowBySymbol.get(code), payload)) missingFields.push(`${code}:${issue}`);
+    for (const issue of validateDbRow(rowBySymbol.get(code), payloads, reportRunId)) missingFields.push(`${code}:${issue}`);
   }
   const uniqueMissing = [...new Set(missingFields)];
   const complete = uniqueMissing.length === 0 && rejected.length === 0 && rows.length === expectedBySymbol.size;
@@ -252,6 +273,7 @@ async function main() {
     first_blocker: complete ? null : (uniqueMissing[0] || "rejected_symbols_present"),
     exitCode: complete ? 0 : 1,
     credential_role: "anon_read_only",
+    evidence_contract: EVIDENCE_CONTRACT,
     checked_at: new Date().toISOString(),
     receipt_path: output,
   };

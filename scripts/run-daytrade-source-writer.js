@@ -17,6 +17,9 @@ const {
   SIDE_VOLUME_THRESHOLD_LOTS,
   deriveDaytradeSideVolumeContract,
 } = require("../lib/daytrade-side-volume-contract");
+const {
+  mergeOpeningReportEvidence,
+} = require("../lib/opening-report-0830-mother-pool-evidence");
 
 const SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
 const SOURCE_HOST_ID = String(process.env.FUMAN_DAYTRADE_SOURCE_HOST_ID || process.env.FUMAN_SOURCE_HOST_ID || process.env.COMPUTERNAME || "unknown").trim();
@@ -3210,7 +3213,22 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
       const previous = bySymbol.get(symbol) || { symbol, sources: [], score: 0, openingReport0830: true, reports: [] };
       previous.sources.push("opening_report_0830");
       previous.score += 50;
-      previous.reports.push({ industry: payload.industry, bias: payload.bias, confidence, runId, evidenceSummary: payload.evidence_summary, bridgeReceiptPath: receiptPath });
+      previous.reports.push({
+        date: payload.date,
+        report_time: payload.report_time,
+        run_id: runId,
+        source: payload.source,
+        mode: payload.mode,
+        industry: payload.industry,
+        display_name: payload.display_name,
+        priority_observation_basis: payload.priority_observation_basis,
+        priority_observation_rank: payload.priority_observation_rank,
+        priority_overseas_leaders: payload.priority_overseas_leaders || [],
+        bias: payload.bias,
+        confidence,
+        evidence_summary: payload.evidence_summary,
+        bridgeReceiptPath: receiptPath,
+      });
       bySymbol.set(symbol, previous);
     }
   }
@@ -3317,6 +3335,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   const seeds = readRuntimePrioritySeeds(activeSymbols);
   const bySymbol = new Map();
   const sourceSeedBySymbol = new Map(seeds.symbols.map((entry) => [entry.symbol, entry]));
+  const openingReportSeedBySymbol = new Map((seeds.openingReport0830?.symbols || []).map((entry) => [entry.symbol, entry]));
   const candidates = activeSymbols.map((row) => ({
     ...row,
     metrics: quoteMetrics(row.symbol, dailyVolumeMap, quoteMap, supplementalMaps),
@@ -3911,7 +3930,12 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   const priorityUpdatedAt = nowIso();
   const output = rows.map((row, index) => {
     const hotExtensionRank = index + 1 >= 41 && index + 1 <= 80 ? index + 1 : null;
-    const sourceFlags = Array.isArray(row.sourceFlags) ? row.sourceFlags : [];
+    const openingReportSeed = openingReportSeedBySymbol.get(row.symbol);
+    const sourceFlags = [...new Set([
+      ...(Array.isArray(row.sourceFlags) ? row.sourceFlags : []),
+      ...(Array.isArray(openingReportSeed?.sources) ? openingReportSeed.sources : []),
+    ])];
+    const openingReportEvidence = mergeOpeningReportEvidence(null, openingReportSeed?.reports || []);
     const userTracked = sourceFlags.some((source) => /manual_watchlist|user_watchlist/i.test(String(source)));
     const intradayBurst = row.hotBurstFastPath === true || row.priorityMetrics?.surgeFlag === true || row.priorityMetrics?.volumeSpikeFlag === true;
     const warmingPending = row.warmingPending === true;
@@ -3946,9 +3970,14 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       priority_rank: row.openingReport0830BiasOnly === true ? Math.max(DEEP_SCAN_POOL_MAX_SYMBOLS + 1, index + 1) : index + 1,
       hot_extension_rank: hotExtensionRank,
       priority_reason: row.priorityReason || (row.isMotherPoolCandidate ? "mother_pool_signal" : "radar_rotation_fill"),
-      source: row.sourceFlags?.length ? row.sourceFlags.join(",") : row.prioritySource || "unknown",
+      source: sourceFlags.length ? sourceFlags.join(",") : row.prioritySource || "unknown",
       updated_at: priorityUpdatedAt,
       payload: {
+        ...(openingReportEvidence ? {
+          openingReport0830IndustryBias: openingReportEvidence,
+          opening_report_0830_source: "opening_report_0830",
+          opening_report_0830_priority_reason: "opening_report_0830_industry_bias",
+        } : {}),
         score: numberValue(row.entryScore ?? row.score),
         entry_score: numberValue(row.entryScore ?? row.score),
         upgrade_score: numberValue(row.upgradeScore),
@@ -3974,7 +4003,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         priority_rank: row.openingReport0830BiasOnly === true
           ? Math.max(DEEP_SCAN_POOL_MAX_SYMBOLS + 1, index + 1)
           : index + 1,
-        source_flags: row.sourceFlags || [],
+        source_flags: sourceFlags,
         is_daytrade_allowed: row.basePool?.eligible === true,
         warming_pending: warmingPending,
         formal_pool_eligible: row.basePool?.eligible === true,
@@ -4006,7 +4035,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
           volume_rank: numberValue(row.priorityMetrics?.volumeRank),
           trade_value_rank: numberValue(row.priorityMetrics?.tradeValueRank ?? row.priorityMetrics?.valueRank),
           ma_turn_bullish: row.priorityMetrics?.movingAverageTurnBullish === true,
-          source_count: Array.isArray(row.sourceFlags) ? row.sourceFlags.length : 0,
+          source_count: sourceFlags.length,
         },
         data_gap_reason: row.priorityMetrics?.dataGap?.data_gap_reason || row.priorityMetrics?.dataGap?.status || "OK",
         candle_count: numberValue(row.priorityMetrics?.dataGap?.candle_count),
@@ -4026,7 +4055,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         motherPoolMetrics: row.priorityMetrics || {},
         motherPoolRuleHits: row.priorityMetrics?.ruleHits || [],
         poolReasons: Array.isArray(row.poolReasons) && row.poolReasons.length ? [...new Set(row.poolReasons)] : ["radar_rotation_fill"],
-        strategySourceFlags: row.sourceFlags || [],
+        strategySourceFlags: sourceFlags,
         liquidityGrade: row.liquidityGrade || "watch_only",
         motherPoolCandidate: row.isMotherPoolCandidate === true,
         dataGap: row.priorityMetrics?.dataGap || { status: "OK", candle_count: 0, first_candle_time: "", last_candle_time: "", missing_window: "", data_gap_reason: "", intraday_1m_stale_seconds: 999999, has_required_1m_window: true },

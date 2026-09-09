@@ -239,6 +239,8 @@ function staticContractChecks(checks) {
 
   const runner = readText("scripts/run-opening-report-0830-production.js");
   const fieldAck = readText("scripts/verify-opening-report-0830-mother-pool-field-ack.js");
+  const motherPoolWriter = readText("scripts/run-daytrade-source-writer.js");
+  const motherPoolEvidence = readText("lib/opening-report-0830-mother-pool-evidence.js");
   addCheck(checks, "runner_owns_non_trading_day_guard", runner.includes("isTwseTradingDay") && runner.includes("market_calendar_non_trading_day") && runner.includes("no_side_effects") && runner.includes("line_push_attempted: false") && runner.includes("mother_pool_bridge_attempted: false"), "direct runner invocation must skip before every side effect on market-closed days");
   addCheck(checks, "runner_consumes_frozen_snapshot_only", runner.includes("frozen 08:20 evidence only") || runner.includes("凍結"), "08:30 runner must not refetch overseas direction");
   addCheck(checks, "runner_observation_only", runner.includes("formal_candidates: 0") && runner.includes("watchlist_only: true") && runner.includes("industry_observation_only"), "morning report must never create formal candidates");
@@ -254,6 +256,11 @@ function staticContractChecks(checks) {
   addCheck(checks, "runner_requires_mother_pool_field_ack", runner.includes("runMotherPoolFieldAck") && runner.includes("mother_pool_field_ack_ok") && runner.includes("mother_pool_field_ack_not_complete"), "final complete must require Mother Pool anon readback field acknowledgement");
   addCheck(checks, "mother_pool_field_ack_contract_present", fieldAck.includes("opening-report-0830-mother-pool-field-ack-v1") && fieldAck.includes("credential_role: \"anon_read_only\"") && fieldAck.includes("db_readback_ok"), "Mother Pool must publish its own canonical field acknowledgement receipt");
   addCheck(checks, "mother_pool_field_ack_checks_observation_only", ["formal_candidate_count", "formal_candidate_allowed", "forbidden_publish_guard", "market_not_TW"].every((token) => fieldAck.includes(token)), "field acknowledgement must preserve observation-only and canonical TW market fields");
+  addCheck(checks, "mother_pool_accepts_canonical_twse_tpex_markets", motherPoolEvidence.includes('["TW", "TWSE", "TPEX"]') && fieldAck.includes("market_not_TW_TWSE_TPEX"), "TWSE and TPEX are canonical Taiwan markets and must not be rejected as non-Taiwan");
+  addCheck(checks, "mother_pool_writer_preserves_morning_evidence", motherPoolWriter.includes("openingReportSeedBySymbol") && motherPoolWriter.includes("mergeOpeningReportEvidence") && motherPoolWriter.includes("openingReport0830IndustryBias") && motherPoolWriter.includes("opening_report_0830_source") && motherPoolWriter.includes("opening_report_0830_priority_reason"), "canonical Mother Pool rewrites must reconstruct verified morning evidence from per-symbol reports instead of erasing it");
+  addCheck(checks, "mother_pool_overlap_evidence_contract_present", motherPoolEvidence.includes("industry_observations") && motherPoolEvidence.includes("linked_industries") && fieldAck.includes("overlapping_industries_preserved"), "one stock must retain every linked Top-3 industry observation");
+  const fieldAckFixture = run("node", ["scripts/verify-opening-report-0830-mother-pool-field-ack.js", "--fixture"]);
+  addCheck(checks, "mother_pool_field_ack_multi_industry_fixture", fieldAckFixture.ok && fieldAckFixture.text.includes('"overlapping_industries_preserved": true') && fieldAckFixture.text.includes('"db_twse": true') && fieldAckFixture.text.includes('"db_tpex": true'), fieldAckFixture.text.trim());
 
   const wrapper = readText("run-opening-report-0830-production-wrapper.ps1");
   addCheck(checks, "wrapper_owns_non_trading_day_guard", wrapper.includes("check-market-calendar-action.js") && wrapper.includes("market_calendar_non_trading_day") && wrapper.includes("line_push_attempted = $false") && wrapper.includes("mother_pool_bridge_attempted = $false"), "Task Scheduler wrapper must guard independently before invoking the runner");
