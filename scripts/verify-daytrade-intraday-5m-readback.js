@@ -16,7 +16,7 @@ function fixtureChecks(){return[
 ].map(([name,actual,expected])=>({name,actual,expected,ok:actual===expected}))}
 async function main(){
  const key=process.env.SUPABASE_ANON_KEY||secret("supabase-anon-key.txt");if(!key)throw new Error("SUPABASE_ANON_KEY is required");if(!symbols.length)throw new Error("--symbols= is required");
- const dp=await get(key,"fugle_daytrade_intraday_1m?select=trade_date&synthetic=is.false&order=trade_date.desc,candle_time.desc&limit=1"),tradeDate=arg("trade-date")||dp.rows?.[0]?.trade_date||"",runId=arg("run-id");
+ const requestedTradeDate=arg("trade-date"),dp=requestedTradeDate?{ok:true,http:null,ms:0,rows:[{trade_date:requestedTradeDate}],explicit:true}:await get(key,"fugle_daytrade_intraday_1m?select=trade_date&synthetic=is.false&order=trade_date.desc,candle_time.desc&limit=1"),tradeDate=requestedTradeDate||dp.rows?.[0]?.trade_date||"",runId=arg("run-id");
  const fields=["symbol","trade_date","candle_time","bar_end","updated_at","run_id","bar_complete","data_gap_5m","source_status","trend_5m_status","trend_5m_reason","trend_5m_strategy_version","golden_cross_any_5m","rsi3_5m","rsi6_5m","rsi3_cross_rsi6_up_5m","kd_k_5m","kd_d_5m","kd_5_3_golden_cross_5m","kd_period","kd_k_smoothing","kd_d_smoothing","kd_seed","ma5_cross_ma10_up_5m","ma10_cross_ma20_up_5m","ma5_cross_ma20_up_5m"],runFilter=runId?`&run_id=eq.${encodeURIComponent(runId)}`:"";
  const q=`v_fugle_intraday_5m_readback?select=${fields.join(",")}&trade_date=eq.${tradeDate}&symbol=in.(${symbols.join(",")})${runFilter}&order=candle_time.desc&limit=600`,read=await get(key,q),rows=read.rows||[],latest={};
  for(const r of rows)if(!latest[r.symbol])latest[r.symbol]=r;

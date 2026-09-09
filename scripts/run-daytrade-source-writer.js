@@ -17,6 +17,7 @@ const {
   SIDE_VOLUME_THRESHOLD_LOTS,
   deriveDaytradeSideVolumeContract,
 } = require("../lib/daytrade-side-volume-contract");
+const { isTwseTradingDay } = require("./twse-trading-day");
 
 const SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
 const SOURCE_HOST_ID = String(process.env.FUMAN_DAYTRADE_SOURCE_HOST_ID || process.env.FUMAN_SOURCE_HOST_ID || process.env.COMPUTERNAME || "unknown").trim();
@@ -6833,7 +6834,7 @@ async function syncPreopenSnapshotHistory(activeSymbols, quoteMap) {
     historyRows.push({ ...common, observed_at: observedAt });
   }
   if (!historyRows.length) return { ...base, status: "degraded", firstBlocker: "preopen_source_rows_missing" };
-  await supabaseUpsert("fugle_preopen_snapshot", snapshotRows, "trade_date,symbol", { batchSize: 100 });
+  await supabaseUpsert("fugle_preopen_snapshot", snapshotRows, "symbol", { batchSize: 100 });
   await supabaseUpsert("fugle_preopen_snapshot_history", historyRows, "trade_date,symbol,observed_at", { batchSize: 100 });
   return {
     ...base,
@@ -6931,6 +6932,30 @@ async function captureFutoptPreopenBaseline(futoptRows) {
   }
 }
 
+async function syncMarketCalendarEvidence() {
+  const checkedAt = nowIso();
+  const calendar = await isTwseTradingDay(new Date(), { stateDir: runtimePath("state") });
+  const minutes = taipeiMinutes();
+  const session = minutes < 9 * 60 ? "preopen" : minutes <= 13 * 60 + 30 ? "regular" : "closed";
+  const row = {
+    trade_date: calendar.date || taipeiDate(),
+    market: "TW",
+    is_open: calendar.isTradingDay === true,
+    session,
+    note: calendar.isTradingDay === true ? "TWSE trading day verified by authoritative daytrade writer" : String(calendar.reason || "market_closed"),
+    updated_at: checkedAt,
+    payload: {
+      source: "daytrade-source-writer:twse-trading-day",
+      checked_at: checkedAt,
+      calendar_contract: "market-calendar-contract-v1",
+      override: calendar.override === true,
+      reason: calendar.reason || null,
+    },
+  };
+  await supabaseUpsert("market_calendar", [row], "trade_date,market");
+  return row;
+}
+
 async function tick() {
   const tickStage = (stage, extra = {}) => console.log(JSON.stringify({
     ok: true,
@@ -6941,6 +6966,9 @@ async function tick() {
   tickStage("writer_lease:start");
   await ensureWriterLease();
   tickStage("writer_lease:complete");
+  tickStage("market_calendar:start");
+  const marketCalendarEvidence = await syncMarketCalendarEvidence();
+  tickStage("market_calendar:complete", { trade_date: marketCalendarEvidence.trade_date, is_open: marketCalendarEvidence.is_open, session: marketCalendarEvidence.session });
   const state = readWriterState();
   const phase = phaseNow();
   const warmupDataFillActive = taipeiMinutes() >= PREOPEN_WARMUP_START_MINUTES;
