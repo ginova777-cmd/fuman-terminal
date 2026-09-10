@@ -289,9 +289,14 @@ function Invoke-DaytradeSideVolumeCanonicalVerifier {
   for ($receiptReadAttempt = 1; $receiptReadAttempt -le 5 -and $null -eq $verifierPayload; $receiptReadAttempt++) {
     try {
       if (Test-Path -LiteralPath $canonicalReceiptPath) {
-        $candidate = Get-Content -LiteralPath $canonicalReceiptPath -Raw | ConvertFrom-Json
-        $candidateTime = [DateTimeOffset]::Parse([string]$candidate.checked_at)
-        $startedTime = [DateTimeOffset]::Parse([string]$state.started_at)
+        $candidate = Get-Content -LiteralPath $canonicalReceiptPath -Raw | ConvertFrom-Json -DateKind String
+        # Force both ISO-8601 values to UTC. On a Taiwan host the one-argument
+        # Parse overload can reinterpret a trailing Z as local +08:00 and make
+        # a newly written receipt appear eight hours older than this attempt.
+        $utcStyle = [Globalization.DateTimeStyles]::RoundtripKind
+        $invariantCulture = [Globalization.CultureInfo]::InvariantCulture
+        $candidateTime = [DateTimeOffset]::Parse([string]$candidate.checked_at, $invariantCulture, $utcStyle)
+        $startedTime = [DateTimeOffset]::Parse([string]$state.started_at, $invariantCulture, $utcStyle)
         if ([string]$candidate.trade_date -eq $TradeDate -and $candidateTime -ge $startedTime) {
           $verifierPayload = $candidate
         } else {
