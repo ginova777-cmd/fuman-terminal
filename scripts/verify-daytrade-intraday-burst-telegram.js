@@ -38,9 +38,21 @@ function readLiveTask() {
   // Encode the command so nested task/action quoting cannot be altered by the
   // Windows process command-line parser.
   const encodedCommand = Buffer.from(command, "utf16le").toString("base64");
-  const result = spawnSync("C:\\Program Files\\PowerShell\\7\\pwsh.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", encodedCommand], { encoding: "utf8", timeout: 15000, windowsHide: true });
-  try { return JSON.parse(String(result.stdout || "").trim()); }
-  catch { return { exists: false, error: String(result.stderr || result.error?.message || "live_task_query_failed").trim() }; }
+  let lastFailure = { exists: false, error: "live_task_query_failed" };
+  // Task Scheduler can briefly return an empty result while a one-minute S4U
+  // invocation transitions between Running and Ready. Bound the readback retry
+  // instead of publishing a false task-missing verdict.
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const result = spawnSync("C:\\Program Files\\PowerShell\\7\\pwsh.exe", ["-NoProfile", "-NonInteractive", "-OutputFormat", "Text", "-EncodedCommand", encodedCommand], { encoding: "utf8", timeout: 15000, windowsHide: true });
+    try {
+      const parsed = JSON.parse(String(result.stdout || "").replace(/^\uFEFF/, "").trim());
+      if (parsed?.exists === true) return parsed;
+      lastFailure = parsed;
+    } catch {
+      lastFailure = { exists: false, error: String(result.stderr || result.error?.message || "live_task_query_failed").trim(), exit_code: result.status, stdout_sample: String(result.stdout || "").slice(0, 500) };
+    }
+  }
+  return lastFailure;
 }
 
 function argValue(name, fallback = "") {

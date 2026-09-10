@@ -285,16 +285,28 @@ function Invoke-DaytradeSideVolumeCanonicalVerifier {
   # non-ASCII stock names. The verifier's UTF-8 canonical receipt is the
   # parsing authority; stdout remains diagnostic-only.
   $canonicalReceiptPath = Join-Path $RuntimeDir "data\scan-receipts\daytrade-side-volume-2000-canonical-receipt-latest.json"
-  try {
-    if (Test-Path -LiteralPath $canonicalReceiptPath) {
-      $candidate = Get-Content -LiteralPath $canonicalReceiptPath -Raw | ConvertFrom-Json
-      $candidateTime = [DateTimeOffset]::Parse([string]$candidate.checked_at)
-      $startedTime = [DateTimeOffset]::Parse([string]$state.started_at)
-      if ([string]$candidate.trade_date -eq $TradeDate -and $candidateTime -ge $startedTime) {
-        $verifierPayload = $candidate
+  $receiptReadError = ""
+  for ($receiptReadAttempt = 1; $receiptReadAttempt -le 5 -and $null -eq $verifierPayload; $receiptReadAttempt++) {
+    try {
+      if (Test-Path -LiteralPath $canonicalReceiptPath) {
+        $candidate = Get-Content -LiteralPath $canonicalReceiptPath -Raw | ConvertFrom-Json
+        $candidateTime = [DateTimeOffset]::Parse([string]$candidate.checked_at)
+        $startedTime = [DateTimeOffset]::Parse([string]$state.started_at)
+        if ([string]$candidate.trade_date -eq $TradeDate -and $candidateTime -ge $startedTime) {
+          $verifierPayload = $candidate
+        } else {
+          $receiptReadError = "canonical_receipt_not_from_current_attempt"
+        }
+      } else {
+        $receiptReadError = "canonical_receipt_missing"
       }
+    } catch {
+      $receiptReadError = $_.Exception.Message
     }
-  } catch {}
+    if ($null -eq $verifierPayload -and $receiptReadAttempt -lt 5) {
+      Start-Sleep -Milliseconds 200
+    }
+  }
   $state.completed_at = [DateTimeOffset]::UtcNow.ToString("o")
   $state.exit_code = $verifierExit
   $state.receipt_status = if ($null -ne $verifierPayload) { [string]$verifierPayload.status } else { "unparseable" }
@@ -302,6 +314,7 @@ function Invoke-DaytradeSideVolumeCanonicalVerifier {
   $state.status = if ($verifierExit -eq 0) { "complete" } elseif ($null -ne $verifierPayload -and [string]$verifierPayload.status -eq "partial") { "partial" } else { "failed" }
   $state.verification_run_id = if ($null -ne $verifierPayload) { [string]$verifierPayload.verification_run_id } else { "" }
   $state.first_blocker = if ($null -ne $verifierPayload) { [string]$verifierPayload.first_blocker } else { "verifier_output_unparseable" }
+  $state.receipt_read_error = if ($null -ne $verifierPayload) { $null } else { $receiptReadError }
   $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $scheduleStatePath -Encoding utf8
   Write-WrapperLog "SIDE_VOLUME_VERIFIER_DONE status=$($state.status) receipt_status=$($state.receipt_status) complete=$($state.receipt_complete) exit=$verifierExit verification_run_id=$($state.verification_run_id)"
 }
