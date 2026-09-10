@@ -375,7 +375,7 @@ const checks = {
     'row?.side_volume_trade_date === tradeDate',
     'row?.side_volume_canonical_run_id === canonicalRunId(tradeDate)',
     'nowMs - sourceEventMs <= 120000',
-    'outside_volume_technical_cross_role: "bonus_only"',
+    'outside_volume_technical_cross_role: "required"',
     'dedupeScope: "daytrade-outside-volume:"',
     'maxEventAgeSec: 120',
   ]),
