@@ -38,6 +38,8 @@ const attemptPhase = process.argv.find((arg) => arg.startsWith("--attempt-phase=
 
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
+const MIN_CHANGE_PERCENT = 5;
+const MAX_CHANGE_PERCENT = 7;
 
 async function supabaseRequest(method, table, query, body) {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("supabase_credentials_missing");
@@ -189,6 +191,8 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
   const candidates = [];
   let ready20Count = 0;
   let entryWindowCount = 0;
+  let belowChangeRangeCount = 0;
+  let aboveChangeRangeOrLimitUpCount = 0;
   if (!water.ok || water.skipped) {
     return {
       water,
@@ -242,7 +246,17 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
       })
       .reduce((sum, candle) => sum + Number(candle.volume || 0), 0);
     const entryTrendPct = entryPrice > 0 ? ((closePrice - entryPrice) / entryPrice) * 100 : 0;
-    if (!(changePercent >= 2 && closePrice >= entryPrice && totalVolume > 0)) continue;
+    if (changePercent < MIN_CHANGE_PERCENT) {
+      belowChangeRangeCount += 1;
+      continue;
+    }
+    // The 7% inclusive ceiling explicitly excludes every limit-up stock from
+    // Strategy3, without relying on a separately inferred limit-price field.
+    if (changePercent > MAX_CHANGE_PERCENT) {
+      aboveChangeRangeOrLimitUpCount += 1;
+      continue;
+    }
+    if (!(closePrice >= entryPrice && totalVolume > 0)) continue;
 
     const tailShare = totalVolume > 0 ? (tailVolume / totalVolume) * 100 : 0;
     const fullSessionBonus = count >= 200 ? 8 : count >= 100 ? 4 : 0;
@@ -281,7 +295,8 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
         "strategy3_v2_same_day_1m_ready",
         "strategy3_v2_1300_entry_window_present",
         "strategy3_v2_close_above_entry",
-        "strategy3_v2_positive_quote_change",
+        "strategy3_v2_change_percent_5_to_7_inclusive",
+        "strategy3_v2_limit_up_exclusion_passed",
       ],
       formal_source: `${MOTHER_POOL_VIEW}+${QUOTE_TABLE}+rpc:${INTRADAY_1M_RPC}`,
       universe_source: MOTHER_POOL_VIEW,
@@ -360,6 +375,14 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
     same_day_candle_symbols: water.candleRowsBySymbol.size,
     ready_20_candle_symbols: ready20Count,
     entry_window_symbols: entryWindowCount,
+    change_percent_gate: {
+      min_inclusive: MIN_CHANGE_PERCENT,
+      max_inclusive: MAX_CHANGE_PERCENT,
+      limit_up_excluded: true,
+      policy: "strategy3_v2_change_percent_5_to_7_inclusive_exclude_limit_up",
+      below_range_count: belowChangeRangeCount,
+      above_range_or_limit_up_count: aboveChangeRangeOrLimitUpCount,
+    },
     symbol_data_gap_rows: water.symbolDataGaps.size,
     results: candidates,
   };
@@ -454,6 +477,7 @@ async function main() {
           same_day_candle_symbols: scanner.same_day_candle_symbols,
           ready_20_candle_symbols: scanner.ready_20_candle_symbols,
           entry_window_symbols: scanner.entry_window_symbols,
+          change_percent_gate: scanner.change_percent_gate,
           formal_ready_target: formalReadyTarget,
           mother_pool_coverage_ratio: round(motherPoolCoverageRatio, 4),
           minimum_mother_pool_coverage_ratio: MIN_MOTHER_POOL_COVERAGE_RATIO,
@@ -486,6 +510,7 @@ async function main() {
           same_day_candle_symbols: scanner.same_day_candle_symbols,
           ready_20_candle_symbols: scanner.ready_20_candle_symbols,
           entry_window_symbols: scanner.entry_window_symbols,
+          change_percent_gate: scanner.change_percent_gate,
           formal_ready_target: formalReadyTarget,
           mother_pool_coverage_ratio: round(motherPoolCoverageRatio, 4),
           minimum_mother_pool_coverage_ratio: MIN_MOTHER_POOL_COVERAGE_RATIO,
@@ -549,4 +574,4 @@ async function main() {
 
 if (require.main === module) main().catch((error) => { console.error(error); process.exit(1); });
 
-module.exports = { buildScannerCoreResults };
+module.exports = { buildScannerCoreResults, MIN_CHANGE_PERCENT, MAX_CHANGE_PERCENT };
