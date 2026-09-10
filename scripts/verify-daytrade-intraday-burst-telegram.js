@@ -72,7 +72,7 @@ const requireLive = process.argv.includes("--require-live");
 const requireToday = process.argv.includes("--require-today");
 const liveTaskEvidenceFile = argValue("live-task-evidence");
 const releaseAuthority = readJson(path.join(ROOT, "data", "contracts", "release_root_authority_v1.json"));
-const expectedTaskRoot = path.resolve(String(releaseAuthority?.sourceRoot || ROOT));
+const expectedTaskRoot = path.resolve(String(releaseAuthority?.productionRoot || ROOT));
 const liveTask = requireLive
   ? (liveTaskEvidenceFile ? { ...readJson(liveTaskEvidenceFile), evidence_file: liveTaskEvidenceFile } : readLiveTask())
   : { required: false };
@@ -133,7 +133,9 @@ const checks = {
     "not_daytrade_mother_pool_eligible",
     "daytrade_mother_pool_only_0900_1230",
   ]),
-  dedicated_task_contract: includesAll(runner, ["notify-daytrade-intraday-burst-telegram.js"]) && includesAll(installer, ["Fuman Mother Pool Telegram 0900-1230", "<Interval>PT1M</Interval>", "<Duration>PT3H31M</Duration>", "<StopAtDurationEnd>true</StopAtDurationEnd>", "<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>", "<LogonType>S4U</LogonType>", "<RunLevel>HighestAvailable</RunLevel>", "<Monday />", "<Friday />", "Register-ScheduledTask -TaskName $TaskName -Xml $taskXml -Force", "expected=S4U"]),
+  dedicated_task_contract: includesAll(runner, ["notify-daytrade-intraday-burst-telegram.js"]) && includesAll(installer, ["Fuman Mother Pool Telegram 0900-1230", 'C:\\fuman-release-owner\\prod81', "<Interval>PT1M</Interval>", "<Duration>PT3H31M</Duration>", "<StopAtDurationEnd>true</StopAtDurationEnd>", "<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>", "<LogonType>S4U</LogonType>", "<RunLevel>HighestAvailable</RunLevel>", "<Monday />", "<Friday />", "Register-ScheduledTask -TaskName $TaskName -Xml $taskXml -Force", "expected=S4U"])
+    && canonicalWaterReader.length > 0
+    && String(releaseAuthority?.productionRoot || "").length > 0,
   runner_receipt_contract: includesAll(runner, [
     "daytrade_intraday_burst_telegram_runner_v1",
     "daytrade-intraday-burst-telegram-runner-",
