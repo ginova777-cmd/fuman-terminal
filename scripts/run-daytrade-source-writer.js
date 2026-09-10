@@ -1806,7 +1806,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const outsideVolumeGeInsideTimes2 = sideVolumeContract.sideVolumeAvailable === true
     && outsideVolume > 0
     && outsideVolume >= insideVolume * 2;
-  const outsideVolumeGtInsideTimes2 = outsideVolumeGeInsideTimes2;
+  const outsideVolumeGtInsideTimes2 = sideVolumeAvailable && outsideVolume > 0 && outsideVolume > insideVolume * 2;
   const bidVolume = firstNumber(quote.bid_volume, payload.bidVolume, payload.bid_volume);
   const askVolume = firstNumber(quote.ask_volume, payload.askVolume, payload.ask_volume);
   const bidAskRatio = askVolume > 0 ? bidVolume / askVolume : bidVolume > 0 ? 99 : 0;

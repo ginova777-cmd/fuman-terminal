@@ -27,8 +27,8 @@ $taskXml = @"
   <Principals>
     <Principal id="Author">
       <UserId>$escapedUserSid</UserId>
-      <LogonType>InteractiveToken</LogonType>
-      <RunLevel>LeastPrivilege</RunLevel>
+      <LogonType>S4U</LogonType>
+      <RunLevel>HighestAvailable</RunLevel>
     </Principal>
   </Principals>
   <Settings>
@@ -69,4 +69,6 @@ $taskXml = @"
 </Task>
 "@
 Register-ScheduledTask -TaskName $TaskName -Xml $taskXml -Force | Out-Null
-Get-ScheduledTask -TaskName $TaskName | Select-Object TaskName, State
+$installed = Get-ScheduledTask -TaskName $TaskName
+if ([string]$installed.Principal.LogonType -ne "S4U") { throw "Telegram task postcondition failed: LogonType=$($installed.Principal.LogonType) expected=S4U" }
+$installed | Select-Object TaskName, State, @{n="LogonType";e={$_.Principal.LogonType}}, @{n="RunLevel";e={$_.Principal.RunLevel}}

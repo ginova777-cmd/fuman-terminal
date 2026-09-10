@@ -63,6 +63,8 @@ function installFetch(tradeDate, options = {}) {
     if (target === "v_fugle_daytrade_canonical_gate") return response([gateRow(tradeDate, options.canonicalOverrides)]);
     if (target === "v_fugle_daytrade_unattended_gate_status") return response([gateRow(tradeDate, options.unattendedOverrides)]);
     if (target === "v_fugle_daytrade_mother_pool_v4_1") return response(options.poolRows || [{ trade_date: tradeDate, symbol: "2330", name: "台積電", market: "TSE", mother_pool_rank: 1, priority_reason: "test", pool_source: "terminal_union", pool_layer: "warmup", entry_score: 1, upgrade_score: 0, source_flags: ["test_source"], source_run_ids: [canonicalRunId(tradeDate)], priority_reasons: ["test"], source_updated_at: new Date().toISOString(), source_freshness: "same_trade_date_current", price: 100, open_price: 99, previous_close: 98, change_percent: 2, total_volume: 1000, trade_value: 100000, quote_seen_at: new Date().toISOString(), quote_age_seconds: 1, last_trade_time: new Date().toISOString(), last_trade_age_seconds: 1, latest_candle_time: new Date().toISOString(), intraday_1m_stale_seconds: 1, ma5: 101, ma10: 100, ma20: 99, ma5_ma10_ma20_bullish: true, contract_version: "4.1.0", canonical_run_id: canonicalRunId(tradeDate), updated_at: new Date().toISOString() }]);
+    if (target === "v_fugle_daytrade_side_volume_verification_readback") return response(options.sideReceiptRows || []);
+    if (target === "v_fugle_daytrade_side_volume_symbol_readback") return response(options.sideSymbolRows || []);
     if (target === "fugle_daytrade_quotes_live") {
       calls.quoteQueries.push(url);
       return response([{ symbol: "2330", trade_date: tradeDate, name: "台積電", price: 100, quote_seen_at: new Date().toISOString(), last_trade_time: new Date().toISOString(), updated_at: new Date().toISOString(), ...options.quoteOverrides }]);
@@ -110,6 +112,20 @@ async function main() {
     "latest_candle_time", "intraday_1m_stale_seconds", "ma5", "ma10", "ma20", "ma5_ma10_ma20_bullish",
   ];
   checks.v4_1_required_fields_preserved = requiredV41Fields.every((field) => Object.prototype.hasOwnProperty.call(normalizedHealthyRow, field));
+
+  const sideVerificationRunId = `daytrade-side-volume-${tradeDate.replace(/-/g, "")}-fixture`;
+  installFetch(tradeDate, {
+    quoteOverrides: { cumulative_bid_volume: 500, cumulative_ask_volume: 1501, cumulative_bid_ask_volume: 2001, total_volume: 2001, payload: { date: tradeDate, total: { time: Date.now() * 1000, tradeVolumeAtBid: 500, tradeVolumeAtAsk: 1501, tradeVolume: 2001 } } },
+    sideReceiptRows: [{ verification_run_id: sideVerificationRunId, trade_date: tradeDate, canonical_run_id: canonicalRunId(tradeDate), status: "partial", complete: false, verified_at: new Date().toISOString(), source_common_valid: true }],
+    sideSymbolRows: [{ verification_run_id: sideVerificationRunId, trade_date: tradeDate, canonical_run_id: canonicalRunId(tradeDate), symbol: "2330", in_mother_pool: true, source_common_valid: true, quality_ok: true, quality_status: "READY_ABOVE_2000_LOTS", inside_volume: 500, outside_volume: 1501, side_volume_total: 2001, side_volume_unit: "lots", side_volume_available: true, side_volume_threshold_lots: 2000, side_volume_ge_2000_lots: true, side_volume_source: "fugle_websocket_trades_tick_type_cumulative_regular_lot_v1", side_volume_source_event_at: new Date().toISOString(), side_volume_trade_date: tradeDate, side_volume_canonical_run_id: canonicalRunId(tradeDate), total_matches_inside_plus_outside: true, source_fresh_120s_at_verification: true }],
+  });
+  const sideOverlay = await readCanonicalDaytradeWater({ tradeDate, symbols: [], telegramObservation: true });
+  checks.side_volume_immutable_readback_overlay = sideOverlay.ok === true
+    && sideOverlay.receipt?.side_volume_readback?.verification_run_id === sideVerificationRunId
+    && sideOverlay.receipt?.side_volume_readback?.applied_rows === 1
+    && sideOverlay.poolBySymbol.get("2330")?.outside_volume === 1501
+    && sideOverlay.poolBySymbol.get("2330")?.outside_volume_gt_inside_times_2 === true
+    && sideOverlay.poolBySymbol.get("2330")?.side_volume_ge_2000_lots === true;
 
   installFetch(tradeDate, { poolRows: [{ trade_date: tradeDate, symbol: "2330", source_updated_at: new Date().toISOString(), source_freshness: "same_trade_date_current", contract_version: "4.0.0", canonical_run_id: canonicalRunId(tradeDate) }] });
   const wrongContract = await readCanonicalDaytradeWater({ tradeDate, symbols: [], telegramObservation: true });

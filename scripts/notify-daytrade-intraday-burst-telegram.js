@@ -159,6 +159,7 @@ function sideVolumeEvents(canonicalWater, tradeDate, nowMs, outboxEvents = []) {
   return [...(canonicalWater?.poolBySymbol?.values?.() || [])].flatMap((row) => {
     const inside = Number(row?.inside_volume);
     const outside = Number(row?.outside_volume);
+    const total = Number(row?.side_volume_total);
     const ratio = inside > 0 ? outside / inside : (outside > 0 ? Infinity : null);
     const sourceEventMs = Date.parse(String(row?.side_volume_source_event_at || ""));
     const sourceFresh = Number.isFinite(sourceEventMs) && nowMs >= sourceEventMs && nowMs - sourceEventMs <= 120000;
@@ -166,6 +167,8 @@ function sideVolumeEvents(canonicalWater, tradeDate, nowMs, outboxEvents = []) {
       && row?.side_volume_unit === "lots"
       && Number.isFinite(inside) && inside >= 0
       && Number.isFinite(outside) && outside > 0
+      && Number.isFinite(total) && total >= 2000
+      && row?.side_volume_ge_2000_lots === true
       && outside > inside * 2
       && row?.outside_volume_gt_inside_times_2 === true
       && row?.side_volume_trade_date === tradeDate
@@ -186,6 +189,7 @@ function sideVolumeEvents(canonicalWater, tradeDate, nowMs, outboxEvents = []) {
       latest_1m_time: String(row.side_volume_source_event_at),
       inside_volume: inside,
       outside_volume: outside,
+      side_volume_total: total,
       outside_inside_ratio: Number.isFinite(ratio) ? ratio : 999,
       side_volume_unit: "lots",
       side_volume_source: String(row.side_volume_source || ""),
@@ -274,6 +278,11 @@ function completeCanonicalWaterReceipt(value, tradeDate) {
     && Array.isArray(value.failed_checks)
     && value.failed_checks.length === 0;
 }
+function finalizeReceiptStatus(receipt) {
+  receipt.complete = receipt.ok === true;
+  receipt.status = receipt.complete ? "complete" : "failed";
+  return receipt;
+}
 function writeReceiptWithHistory(receipt) {
   const file = receiptPath(receipt.trade_date);
   const previous = readJson(file, {});
@@ -299,8 +308,8 @@ function writeReceiptWithHistory(receipt) {
   };
   // A later out-of-window pass is informational; it cannot erase a proven same-day send.
   if (receipt.sent_events.length > 0 && receipt.first_blocker === "outside_trading_window") receipt.first_blocker = null;
-  receipt.complete = true;
-  receipt.status = receipt.ok === true ? "complete" : "failed";
+  // A failed readback/send attempt must never publish a green receipt.
+  finalizeReceiptStatus(receipt);
   receipt.finished_at = new Date().toISOString();
   writeJson(file, receipt);
 }
@@ -340,12 +349,14 @@ function validSideVolumeEvent(event, tradeDate, nowMs) {
   const failures = [];
   const inside = Number(event?.inside_volume);
   const outside = Number(event?.outside_volume);
+  const total = Number(event?.side_volume_total);
   const eventTime = Date.parse(String(event?.event_time || event?.latest_1m_time || ""));
   if (String(event?.trade_date || "") !== tradeDate) failures.push("side_volume_trade_date_mismatch");
   if (String(event?.canonical_run_id || "") !== canonicalRunId(tradeDate)) failures.push("side_volume_canonical_run_id_mismatch");
   if (!/^\d{4}$/.test(String(event?.symbol || ""))) failures.push("symbol_invalid");
   if (event?.side_volume_unit !== "lots") failures.push("side_volume_unit_not_lots");
   if (!Number.isFinite(inside) || inside < 0 || !Number.isFinite(outside) || outside <= 0) failures.push("side_volume_not_available");
+  if (!Number.isFinite(total) || total < 2000) failures.push("side_volume_total_below_2000_lots");
   if (!(outside > inside * 2)) failures.push("outside_volume_not_gt_inside_times_2");
   if (!Number.isFinite(eventTime) || nowMs < eventTime || nowMs - eventTime > 120000) failures.push("side_volume_not_fresh");
   return failures;
@@ -368,7 +379,7 @@ async function notifyFromOutbox(options = {}) {
     writes_supabase: false,
     event_candidate_source: "local_writer_outbox_after_supabase_canonical_revalidation",
     source: "fugle_formal_1m", alert_scope: "daytrade_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage_and_industry_heatmap",
-    conditions: { price_breakout: "latest_1m_close >= prior_rolling60_high_close * 1.01", volume_burst: "latest_1m_volume >= prior_rolling60_average_volume * 2", min_rolling_samples: 60, technical_cross_any: ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"], five_minute_confirmation_required: true, five_minute_required_status: "CONFIRMED_STRONG_5M", outside_volume_radar: "outside_volume > inside_volume * 2", outside_volume_source: "canonical Mother Pool v4.1 side-volume lots", outside_volume_technical_cross_role: "bonus_only" },
+    conditions: { price_breakout: "latest_1m_close >= prior_rolling60_high_close * 1.01", volume_burst: "latest_1m_volume >= prior_rolling60_average_volume * 2", min_rolling_samples: 60, technical_cross_any: ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"], five_minute_confirmation_required: true, five_minute_required_status: "CONFIRMED_STRONG_5M", outside_volume_radar: "side_volume_total >= 2000 lots AND outside_volume > inside_volume * 2", outside_volume_source: "canonical Mother Pool v4.1 side-volume lots", outside_volume_technical_cross_role: "bonus_only" },
     source_status_at_run: null, canonical_gate_at_run: null, unattended_gate_at_run: null,
     canonical_run_id: canonicalRunId(tradeDate), mother_pool_read_rows: 0,
     accepted_mother_pool_symbols: 0,
@@ -528,7 +539,7 @@ if (require.main === module) {
     process.exitCode = result.first_blocker && result.first_blocker !== "outside_trading_window" ? 1 : 0;
   }).catch((error) => { console.error(error.stack || error.message || String(error)); process.exitCode = 1; });
 }
-module.exports = { notifyFromOutbox, eventMessage, readFiveMinuteConfirmations, sideVolumeEvents, validSideVolumeEvent };
+module.exports = { notifyFromOutbox, eventMessage, readFiveMinuteConfirmations, sideVolumeEvents, validSideVolumeEvent, finalizeReceiptStatus };
 
 
 
