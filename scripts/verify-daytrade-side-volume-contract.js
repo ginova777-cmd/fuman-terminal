@@ -164,9 +164,8 @@ function staticContractCheck() {
     "sideVolumeTradeDate",
     "sideVolumeCanonicalRunId",
     "sideVolumeGe2000Lots",
-    "outsideVolume >= insideVolume * 2",
+    "outsideVolume > insideVolume * 2",
   ]) if (!writer.includes(marker)) issues.push(`writer_marker_missing:${marker}`);
-  if (writer.includes("outsideVolume > insideVolume * 2")) issues.push("strict_greater_than_two_times_rule_still_present");
   for (const forbidden of [
     "volumeToLots(payload?.total?.tradeVolumeAtBid)",
     "volumeToLots(payload?.total?.tradeVolumeAtAsk)",
@@ -241,7 +240,7 @@ function staticContractCheck() {
   if (exactThreshold.sideVolumeTotal !== 2000) issues.push("inside_plus_outside_total_failed");
   if (staleRewrapped.sideVolumeAvailable !== false) issues.push("stale_side_volume_rewrap_guard_failed");
   if (staleRewrapped.sideVolumeCanonicalRunId === canonicalRunId(fixtureDate)) issues.push("stale_side_volume_run_id_guard_failed");
-  if (!(ratioBoundary.outsideVolume >= ratioBoundary.insideVolume * 2)) issues.push("outside_inside_two_times_boundary_failed");
+  if (!(ratioBoundary.outsideVolume === ratioBoundary.insideVolume * 2)) issues.push("outside_inside_two_times_boundary_fixture_invalid");
   if (totalVolumeOnly.sideVolumeAvailable !== false || totalVolumeOnly.sideVolumeGe2000Lots !== false) issues.push("total_volume_substitution_guard_failed");
   return {
     ok: issues.length === 0,

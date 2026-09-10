@@ -281,7 +281,20 @@ function Invoke-DaytradeSideVolumeCanonicalVerifier {
   $verifierText = ($verifierOutput | Out-String).Trim()
   $verifierText | Set-Content -LiteralPath $verifierLog -Encoding utf8
   $verifierPayload = $null
-  try { $verifierPayload = $verifierText | ConvertFrom-Json } catch {}
+  # Native stdout can be transcoded by a scheduled PowerShell host and corrupt
+  # non-ASCII stock names. The verifier's UTF-8 canonical receipt is the
+  # parsing authority; stdout remains diagnostic-only.
+  $canonicalReceiptPath = Join-Path $RuntimeDir "data\scan-receipts\daytrade-side-volume-2000-canonical-receipt-latest.json"
+  try {
+    if (Test-Path -LiteralPath $canonicalReceiptPath) {
+      $candidate = Get-Content -LiteralPath $canonicalReceiptPath -Raw | ConvertFrom-Json
+      $candidateTime = [DateTimeOffset]::Parse([string]$candidate.checked_at)
+      $startedTime = [DateTimeOffset]::Parse([string]$state.started_at)
+      if ([string]$candidate.trade_date -eq $TradeDate -and $candidateTime -ge $startedTime) {
+        $verifierPayload = $candidate
+      }
+    }
+  } catch {}
   $state.completed_at = [DateTimeOffset]::UtcNow.ToString("o")
   $state.exit_code = $verifierExit
   $state.receipt_status = if ($null -ne $verifierPayload) { [string]$verifierPayload.status } else { "unparseable" }

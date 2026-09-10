@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const { eventMessage, sideVolumeEvents, validSideVolumeEvent } = require("./notify-daytrade-intraday-burst-telegram");
+const { eventMessage, sideVolumeEvents, validSideVolumeEvent, finalizeReceiptStatus } = require("./notify-daytrade-intraday-burst-telegram");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_ROOT = process.env.FUMAN_RUNTIME_DIR || process.env.FUMAN_RUNTIME_ROOT || (process.platform === "win32" ? "C:\\fuman-runtime" : ROOT);
@@ -82,6 +82,7 @@ function sideFixture(overrides = {}) {
   return {
     symbol: "2303", name: "聯電", price: 43.5,
     inside_volume: 500, outside_volume: 20000,
+    side_volume_total: 20500, side_volume_ge_2000_lots: true,
     outside_inside_ratio: 40, side_volume_available: true,
     side_volume_unit: "lots", outside_volume_gt_inside_times_2: true,
     side_volume_source_event_at: "2026-09-09T02:00:00.000Z",
@@ -95,6 +96,8 @@ function derivedSideEvents(row) {
   return sideVolumeEvents({ poolBySymbol: new Map([[String(row.symbol), row]]) }, sideFixtureDate, sideFixtureNow, []);
 }
 const validSideFixtureEvents = derivedSideEvents(sideFixture());
+const failedReceiptFixture = finalizeReceiptStatus({ ok: false, complete: true, status: "complete" });
+const completeReceiptFixture = finalizeReceiptStatus({ ok: true, complete: false, status: "running" });
 const checks = {
   writer_readable: Boolean(writer),
   notifier_readable: Boolean(notifier),
@@ -130,7 +133,7 @@ const checks = {
     "not_daytrade_mother_pool_eligible",
     "daytrade_mother_pool_only_0900_1230",
   ]),
-  dedicated_task_contract: includesAll(runner, ["notify-daytrade-intraday-burst-telegram.js"]) && includesAll(installer, ["Fuman Mother Pool Telegram 0900-1230", "<Interval>PT1M</Interval>", "<Duration>PT3H31M</Duration>", "<StopAtDurationEnd>true</StopAtDurationEnd>", "<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>", "<LogonType>InteractiveToken</LogonType>", "<RunLevel>LeastPrivilege</RunLevel>", "<Monday />", "<Friday />", "Register-ScheduledTask -TaskName $TaskName -Xml $taskXml -Force"]),
+  dedicated_task_contract: includesAll(runner, ["notify-daytrade-intraday-burst-telegram.js"]) && includesAll(installer, ["Fuman Mother Pool Telegram 0900-1230", "<Interval>PT1M</Interval>", "<Duration>PT3H31M</Duration>", "<StopAtDurationEnd>true</StopAtDurationEnd>", "<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>", "<LogonType>S4U</LogonType>", "<RunLevel>HighestAvailable</RunLevel>", "<Monday />", "<Friday />", "Register-ScheduledTask -TaskName $TaskName -Xml $taskXml -Force", "expected=S4U"]),
   runner_receipt_contract: includesAll(runner, [
     "daytrade_intraday_burst_telegram_runner_v1",
     "daytrade-intraday-burst-telegram-runner-",
@@ -328,6 +331,8 @@ const checks = {
     '"內盤：" + formatNumber(event.inside_volume, 0) + " 張"',
     '"外內盤比：" + formatNumber(event.outside_inside_ratio, 2) + " 倍"',
     'outside > inside * 2',
+    'total >= 2000',
+    'row?.side_volume_ge_2000_lots === true',
     'row?.side_volume_available === true',
     'row?.side_volume_unit === "lots"',
     'row?.side_volume_trade_date === tradeDate',
@@ -338,13 +343,17 @@ const checks = {
     'maxEventAgeSec: 120',
   ]),
   outside_volume_reader_explicit_fields: includesAll(canonicalWaterReader, [
-    "inside_volume,outside_volume,side_volume_total,side_volume_unit",
+    'SIDE_VOLUME_RECEIPT_VIEW = "v_fugle_daytrade_side_volume_verification_readback"',
+    'SIDE_VOLUME_SYMBOL_VIEW = "v_fugle_daytrade_side_volume_symbol_readback"',
+    "inside_volume,outside_volume,side_volume_total,side_volume_unit,side_volume_available",
     "side_volume_source_event_at,side_volume_trade_date,side_volume_canonical_run_id",
-    "outside_inside_ratio,side_volume_available,outside_volume_ge_inside_times_2,outside_volume_gt_inside_times_2",
+    "source_fresh_120s_at_verification",
+    "outside_volume_gt_inside_times_2: inside !== null && outside !== null && outside > inside * 2",
   ]),
   outside_volume_radar_fixture_contract: validSideFixtureEvents.length === 1
     && validSideFixtureEvents[0].outside_inside_ratio === 40
     && validSideVolumeEvent(validSideFixtureEvents[0], sideFixtureDate, sideFixtureNow).length === 0
+    && derivedSideEvents(sideFixture({ side_volume_total: 1999, side_volume_ge_2000_lots: false })).length === 0
     && derivedSideEvents(sideFixture({ inside_volume: 500, outside_volume: 1000, outside_inside_ratio: 2, outside_volume_gt_inside_times_2: false })).length === 0
     && derivedSideEvents(sideFixture({ side_volume_available: false })).length === 0
     && derivedSideEvents(sideFixture({ side_volume_source_event_at: "2026-09-09T01:57:00.000Z" })).length === 0
@@ -419,6 +428,10 @@ const checks = {
     "sentEventsFromState",
     "cannot erase a proven same-day send",
   ]),
+  receipt_failure_never_complete: failedReceiptFixture.complete === false
+    && failedReceiptFixture.status === "failed"
+    && completeReceiptFixture.complete === true
+    && completeReceiptFixture.status === "complete",
   canonical_sent_receipt_contract: includesAll(notifier, [
     "canonicalSentEvent",
     "telegramIdempotencyKey",
@@ -430,8 +443,9 @@ const checks = {
     "sent_events: attemptSentCount",
     "complete: false",
     'status: "running"',
-    "receipt.complete = true",
-    'receipt.status = receipt.ok === true ? "complete" : "failed"',
+    "function finalizeReceiptStatus",
+    "receipt.complete = receipt.ok === true",
+    'receipt.status = receipt.complete ? "complete" : "failed"',
     "receipt.finished_at = new Date().toISOString()",
     "min_rolling_samples: 60",
     "technical_cross_any",
@@ -494,7 +508,9 @@ checks.runtime_canonical_water_receipt_contract = !canonicalWaterReceipt || (
   && Number(canonicalWaterReceipt?.telegram_pool_fresh_coverage_min) === 0.90
   && canonicalWaterReceipt?.mother_pool_capacity_is_hard_gate === false
   && Number(canonicalWaterReceipt?.mother_pool_read_rows) >= 1
-  && Number(canonicalWaterReceipt?.market_event_sync_coverage_120s) >= 0.90
+  && ((!requireLive && !canonicalWaterReceipt?.telegram_branch_readiness)
+    || (canonicalWaterReceipt?.telegram_branch_readiness?.general_radar?.ready === (Number(canonicalWaterReceipt?.market_event_sync_coverage_120s) >= 0.90)
+      && typeof canonicalWaterReceipt?.telegram_branch_readiness?.side_volume_radar?.ready === "boolean"))
   && Number(canonicalWaterReceipt?.no_new_market_event_rows) >= 0
   && Number(canonicalWaterReceipt?.market_event_data_gap_rows) >= 0
   && Array.isArray(canonicalWaterReceipt?.failed_checks)
