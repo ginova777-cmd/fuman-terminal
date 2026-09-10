@@ -19,6 +19,23 @@ function readSecret(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
 }
 
+function anonKey() {
+  return process.env.SUPABASE_ANON_KEY || process.env.FUMAN_SUPABASE_ANON_KEY
+    || readSecret(path.join(RUNTIME, "secrets", "supabase-anon-key.txt"));
+}
+
+async function readSupabaseRows(resource, query, key = anonKey()) {
+  if (!key) return { ok: false, rows: [], status: 0, error: "SUPABASE_ANON_KEY_MISSING" };
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${resource}?${query}`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" },
+    signal: AbortSignal.timeout(30000),
+  });
+  const text = await response.text();
+  let rows = [];
+  try { rows = text ? JSON.parse(text) : []; } catch {}
+  return { ok: response.ok, rows: Array.isArray(rows) ? rows : [], status: response.status, error: response.ok ? "" : text.slice(0, 300) };
+}
+
 async function publishReceipt(result) {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.FUMAN_SUPABASE_SERVICE_ROLE_KEY
     || readSecret(path.join(RUNTIME, "secrets", "supabase-service-role-key.txt"));
@@ -323,7 +340,23 @@ async function main() {
     ...(Array.isArray(openingReportFieldAck?.accepted_symbols) ? openingReportFieldAck.accepted_symbols : []),
     ...(Array.isArray(openingReportFieldAck?.db_readback_symbols) ? openingReportFieldAck.db_readback_symbols : []),
   ].map(String).filter((symbol) => /^\d{4}$/.test(symbol)))];
-  const openingAckMissingFromMotherPool = openingAckSymbols.filter((symbol) => !motherPoolSymbolSet.has(symbol));
+  const prioritySymbolSet = new Set(Array.isArray(priority?.symbols) ? priority.symbols.map(String) : []);
+  const openingAckMissingFromWriterManifest = openingAckSymbols.filter((symbol) => !prioritySymbolSet.has(symbol));
+  const openingQuoteReadback = openingAckSymbols.length
+    ? await readSupabaseRows(
+      "fugle_daytrade_quotes_live",
+      `select=${encodeURIComponent("symbol,price,updated_at,quote_seen_at")}&symbol=in.(${openingAckSymbols.join(",")})`,
+    )
+    : { ok: true, rows: [], status: 200, error: "" };
+  const openingQuoteFreshBySymbol = new Map(openingQuoteReadback.rows.map((row) => [
+    String(row.symbol),
+    Math.min(ageSeconds(row.quote_seen_at), ageSeconds(row.updated_at)) <= 120 && Number(row.price) > 0,
+  ]));
+  const openingAckLiveAdmissibleSymbols = openingAckSymbols.filter((symbol) =>
+    motherPoolSymbolSet.has(symbol) || openingQuoteFreshBySymbol.get(symbol) === true);
+  const openingAckMissingFromMotherPool = openingAckLiveAdmissibleSymbols.filter((symbol) => !motherPoolSymbolSet.has(symbol));
+  const openingAckSkippedStaleQuote = openingAckSymbols.filter((symbol) =>
+    !motherPoolSymbolSet.has(symbol) && openingQuoteFreshBySymbol.get(symbol) !== true);
   const openingFieldAckOk = !openingRequired || (
     identityOf(openingReportFieldAck).tradeDate === clock.tradeDate
     && openingReportFieldAck?.contract === "opening-report-0830-mother-pool-field-ack-v1"
@@ -334,6 +367,16 @@ async function main() {
     && openingAckSymbols.length > 0
   );
   check("opening_report_field_ack_complete", openingFieldAckOk, "opening_report_field_ack_not_complete");
+  check(
+    "opening_report_ack_symbols_received_by_writer_manifest",
+    !openingRequired || openingAckMissingFromWriterManifest.length === 0,
+    `opening_report_ack_symbols_not_in_writer_manifest:${openingAckMissingFromWriterManifest.slice(0, 12).join(",")}`,
+  );
+  check(
+    "opening_report_ack_quote_readback",
+    !openingRequired || openingQuoteReadback.ok === true,
+    `opening_report_ack_quote_readback_failed:${openingQuoteReadback.status}:${openingQuoteReadback.error}`,
+  );
   check(
     "opening_report_ack_symbols_admitted_to_mother_pool",
     !openingRequired || openingAckMissingFromMotherPool.length === 0,
@@ -383,12 +426,16 @@ async function main() {
         avg3_history_pending_rows: avg3PendingRows.length,
       },
       opening_report: {
-        ok: openingOk && openingFieldAckOk && openingAckMissingFromMotherPool.length === 0,
+        ok: openingOk && openingFieldAckOk && openingAckMissingFromWriterManifest.length === 0
+          && openingQuoteReadback.ok === true && openingAckMissingFromMotherPool.length === 0,
         required: openingRequired,
         path: paths.openingReport,
         field_ack_path: paths.openingReportFieldAck,
         field_ack_symbols: openingAckSymbols.length,
+        field_ack_missing_from_writer_manifest: openingAckMissingFromWriterManifest,
+        field_ack_live_admissible_symbols: openingAckLiveAdmissibleSymbols,
         field_ack_missing_from_mother_pool: openingAckMissingFromMotherPool,
+        field_ack_skipped_stale_quote_symbols: openingAckSkippedStaleQuote,
       },
       futopt_preopen: {
         ok: futoptClosed || futoptGuardsSafe,

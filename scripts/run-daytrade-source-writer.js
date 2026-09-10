@@ -3161,21 +3161,68 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
       if (!fileUpdatedAt || Date.parse(inputUpdatedAt) > Date.parse(fileUpdatedAt)) fileUpdatedAt = inputUpdatedAt;
     } catch {}
     if (!latestUpdatedAt || Date.parse(fileUpdatedAt) > Date.parse(latestUpdatedAt)) latestUpdatedAt = fileUpdatedAt;
+    const boostBySymbol = new Map((Array.isArray(receipt.applied_boosts) ? receipt.applied_boosts : [])
+      .map((boost) => [normalizeCode(boost?.symbol || boost?.code), boost])
+      .filter(([symbol]) => symbol));
     for (const value of payload.mapped_symbols) {
       const symbol = normalizeCode(value?.symbol || value?.code || value);
-      if (!symbol || !activeSet.has(symbol)) continue;
-      const inputPrice = numberValue(value?.price ?? value?.last_price ?? value?.lastPrice ?? value?.close);
+      if (!symbol) continue;
+      const activeMasterAvailable = activeSet.has(symbol);
+      const boost = boostBySymbol.get(symbol) || {};
+      const inputPrice = numberValue(value?.price ?? value?.last_price ?? value?.lastPrice ?? value?.close ?? boost.price);
       if (inputPrice > 0 && inputPrice < MOTHER_POOL_MIN_PRICE) continue;
       const previous = bySymbol.get(symbol) || { symbol, sources: [], score: 0, openingReport0830: true, reports: [] };
+      previous.name = String(value?.name || value?.stock_name || boost.name || previous.name || symbol).trim();
+      previous.price = inputPrice > 0 ? inputPrice : numberValue(previous.price);
+      previous.activeMasterAvailable = previous.activeMasterAvailable === true || activeMasterAvailable;
+      previous.openingReport0830MasterFallback = previous.openingReport0830MasterFallback === true || !activeMasterAvailable;
       previous.sources.push("opening_report_0830");
       previous.score += 50;
       previous.reports.push({ industry: payload.industry, bias: payload.bias, confidence, runId, priorityObservationRank: Number(payload.priority_observation_rank), evidenceSummary: payload.evidence_summary, bridgeReceiptPath: receiptPath });
       bySymbol.set(symbol, previous);
     }
   }
+  const fieldAckPath = path.join(receiptDir, "opening-report-0830-mother-pool-field-ack-" + todayKey + ".json");
+  const fieldAck = readJson(fieldAckPath);
+  const fieldAckSymbols = [...new Set([
+    ...(Array.isArray(fieldAck?.accepted_symbols) ? fieldAck.accepted_symbols : []),
+    ...(Array.isArray(fieldAck?.db_readback_symbols) ? fieldAck.db_readback_symbols : []),
+  ].map((value) => normalizeCode(value)).filter(Boolean))];
+  const fieldAckValid = fieldAck
+    && fieldAck.contract === "opening-report-0830-mother-pool-field-ack-v1"
+    && compactDateKey(fieldAck.trade_date) === todayKey
+    && fieldAck.complete === true
+    && fieldAck.ok === true
+    && fieldAck.db_readback_ok === true
+    && fieldAck.formal_candidate_allowed === false
+    && fieldAck.forbidden_publish_guard === true
+    && fieldAckSymbols.length > 0;
+  if (fieldAckValid) {
+    bridgeReceiptsAccepted += 1;
+    for (const symbol of fieldAckSymbols) {
+      const activeMasterAvailable = activeSet.has(symbol);
+      const previous = bySymbol.get(symbol) || { symbol, sources: [], score: 0, openingReport0830: true, reports: [] };
+      previous.activeMasterAvailable = previous.activeMasterAvailable === true || activeMasterAvailable;
+      previous.openingReport0830MasterFallback = previous.openingReport0830MasterFallback === true || !activeMasterAvailable;
+      previous.sources.push("opening_report_0830");
+      previous.score += 50;
+      previous.reports.push({
+        industry: "field_ack",
+        bias: "priority_observation",
+        confidence: 1,
+        runId: fieldAck.report_run_id || "opening-report-0830-field-ack-" + todayKey,
+        priorityObservationRank: null,
+        evidenceSummary: "canonical opening-report 08:30 Mother Pool field-ack receipt",
+        bridgeReceiptPath: fieldAckPath,
+      });
+      bySymbol.set(symbol, previous);
+    }
+  } else if (fieldAckSymbols.length) {
+    bridgeReceiptsRejected += 1;
+  }
   return {
     symbols: [...bySymbol.values()],
-    counts: { filesAccepted: acceptedFiles, filesRejected: rejectedFiles, inputFilesValid, bridgeReceiptsAccepted, bridgeReceiptsRejected, symbols: bySymbol.size },
+    counts: { filesAccepted: acceptedFiles, filesRejected: rejectedFiles, inputFilesValid, bridgeReceiptsAccepted, bridgeReceiptsRejected, fieldAckAccepted: fieldAckValid, fieldAckSymbols: fieldAckValid ? fieldAckSymbols.length : 0, symbols: bySymbol.size },
     updatedAt: latestUpdatedAt,
     source: "opening_report_0830_industry_bias_bridge_verified",
     status: acceptedFiles > 0 ? "ready" : "missing",
@@ -3208,9 +3255,18 @@ function readRuntimePrioritySeeds(activeSymbols) {
     let accepted = 0;
     for (const value of list) {
       const symbol = normalizeCode(value?.symbol || value?.code || value);
-      if (!symbol || !universe.has(symbol)) continue;
+      if (!symbol) continue;
+      const universeMatched = universe.has(symbol);
+      if (!universeMatched && source !== "opening_report_0830") continue;
       accepted += 1;
       const prev = bySymbol.get(symbol) || { symbol, sources: [], score: 0 };
+      if (value?.name || value?.stock_name) prev.name = String(value.name || value.stock_name || "").trim();
+      if (numberValue(value?.price) > 0) prev.price = numberValue(value.price);
+      if (source === "opening_report_0830") {
+        prev.openingReport0830MasterFallback = prev.openingReport0830MasterFallback === true || !universeMatched || value?.openingReport0830MasterFallback === true;
+        prev.activeMasterAvailable = prev.activeMasterAvailable === true || universeMatched || value?.activeMasterAvailable === true;
+        if (Array.isArray(value?.reports)) prev.reports = [...(prev.reports || []), ...value.reports];
+      }
       prev.sources.push(source);
       prev.score += weight;
       if (source === "opening_report_0830") prev.openingReport0830 = true;
@@ -3283,6 +3339,24 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     ...row,
     basePool: evaluateMotherPoolBasePool(row, row.metrics),
   }));
+  const openingReportMasterFallbackCandidates = seeds.symbols
+    .filter((seed) => seed.openingReport0830 === true && !activeBySymbol.has(seed.symbol))
+    .map((seed) => {
+      const fallbackRow = {
+        symbol: seed.symbol,
+        name: seed.name || seed.symbol,
+        market: "",
+        openingReport0830MasterFallback: true,
+      };
+      const metrics = quoteMetrics(seed.symbol, dailyVolumeMap, quoteMap, supplementalMaps);
+      const basePool = evaluateMotherPoolBasePool(fallbackRow, metrics);
+      return {
+        ...fallbackRow,
+        metrics,
+        basePool,
+      };
+    });
+  candidates.push(...openingReportMasterFallbackCandidates);
   for (const candidate of candidates) {
     const seedSources = sourceSeedBySymbol.get(candidate.symbol)?.sources || [];
     candidate.terminalForcedAdmission = seedSources.includes("terminal");
