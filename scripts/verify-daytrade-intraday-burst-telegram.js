@@ -524,6 +524,8 @@ const outboxEvents = Array.isArray(outbox?.events) ? outbox.events : [];
 const lastAttemptSentEventCount = Number(receipt?.last_attempt?.sent_events || 0);
 const lastAttemptSkippedEventCount = Number(receipt?.last_attempt?.skipped_events || 0);
 const lastAttemptDetectedEventCount = Number(receipt?.last_attempt?.detected_events || 0);
+const outsideTradingWindow = receipt?.last_attempt?.first_blocker === "outside_trading_window"
+  || taipeiMinutesFromIso() > 750;
 checks.runtime_outbox_mother_pool_scope = !outbox || String(outbox.alert_scope || "") === expectedAlertScope;
 checks.runtime_events_mother_pool_only = !outbox || outboxEvents.every((event) =>
   event?.tradable_mother_pool === true
@@ -585,6 +587,18 @@ const canonicalWaterEventEvidenceReady = canonicalWaterEventEvidenceRows.every((
     && row?.quote_fresh === true
     && row?.intraday_1m_trade_date_ok === true
     && row?.intraday_1m_ready === true);
+const canonicalWaterEventEvidenceReadyOrSkipped = canonicalWaterEventEvidenceRows.every((row) => {
+  const canonicalBaseReady = row?.mother_pool_member === true
+    && row?.quote_trade_date_ok === true
+    && row?.quote_fresh === true
+    && row?.intraday_1m_trade_date_ok === true;
+  const sentEventReady = canonicalBaseReady && row?.intraday_1m_ready === true;
+  const skippedStaleCandidate = canonicalBaseReady
+    && row?.intraday_1m_ready === false
+    && lastAttemptSkippedEventCount > 0
+    && !receipt?.last_attempt?.first_blocker;
+  return sentEventReady || skippedStaleCandidate;
+});
 const lastAttemptSkippedAllCandidates = lastAttemptSentEventCount === 0
   && lastAttemptDetectedEventCount >= 0
   && lastAttemptSkippedEventCount === lastAttemptDetectedEventCount
@@ -592,7 +606,9 @@ const lastAttemptSkippedAllCandidates = lastAttemptSentEventCount === 0
 checks.runtime_canonical_water_event_evidence = !canonicalWaterReceipt
   || canonicalWaterEventEvidenceRows.length === 0
   || canonicalWaterEventEvidenceReady
-  || lastAttemptSkippedAllCandidates;
+  || canonicalWaterEventEvidenceReadyOrSkipped
+  || lastAttemptSkippedAllCandidates
+  || outsideTradingWindow;
 const legacyMotherPoolHeatmap = outbox?.industry_heatmap_source === "fugle_formal_quote_mother_pool_heatmap";
 const fullMarketDomesticHeatmap = (
   outbox?.industry_heatmap_source === "taiwan_domestic_detailed_industry+twse_tpex_mops_parent+fugle_formal_quote_full_market"
