@@ -15,6 +15,11 @@ const FIVE_MINUTE_RECEIPT_CONTRACT = "daytrade_intraday_5m_runner_verifier_recei
 const FIVE_MINUTE_CLASSIFICATION_CONTRACT = "daytrade_intraday_5m_branch_independent_strict_wait_v1";
 const FIVE_MINUTE_STRATEGY_VERSION = "golden-cross-any-macd-3-9-3-v4";
 const FIVE_MINUTE_CALCULATION_VERSION = "five-minute-indicators-macd-3-9-3-v4";
+const FORMAL_NOTIFICATION_TYPES = Object.freeze({
+  volume_burst_rolling60_x2: "瞬間巨量",
+  outside_volume_gt_inside_x2: "外盤強勢",
+  price_breakout_1pct: "瞬間拉抬",
+});
 
 function readJson(file, fallback = {}) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return fallback; }
@@ -41,18 +46,22 @@ function numberValue(value, fallback = 0) { const number = Number(value); return
 function isTradingWindow(value = new Date()) { const minutes = taipeiMinutes(value); return minutes >= 540 && minutes <= 750; }
 function formatNumber(value, digits = 2) { return numberValue(value, 0).toLocaleString("zh-TW", { maximumFractionDigits: digits, minimumFractionDigits: 0 }); }
 function eventLabel(type) {
-  if (type === "price_breakout_1pct") return "瞬間拉抬";
-  if (type === "volume_burst_rolling60_x2") return "瞬間巨量";
-  if (type === "outside_volume_gt_inside_x2") return "外盤強勢";
-  return "盤中雷達";
+  return FORMAL_NOTIFICATION_TYPES[type] || "";
+}
+function normalizeNotificationType(type) {
+  return eventLabel(String(type || ""));
+}
+function allowedNotificationType(type) {
+  return Boolean(normalizeNotificationType(type));
 }
 function eventMessage(event) {
+  const notificationType = normalizeNotificationType(event.trigger_type);
   if (event.trigger_type === "outside_volume_gt_inside_x2") {
     const technical = Array.isArray(event.technical_golden_cross_labels) && event.technical_golden_cross_labels.length
       ? event.technical_golden_cross_labels.join("／")
       : "無（加分項目，非必要條件）";
     return [
-      "當沖盤中雷達｜外盤強勢",
+      "當沖盤中雷達｜" + notificationType,
       (String(event.symbol || "") + " " + String(event.name || "")).trim(),
       "現價：" + formatNumber(event.price),
       "外盤：" + formatNumber(event.outside_volume, 0) + " 張",
@@ -65,12 +74,15 @@ function eventMessage(event) {
   const identity = (String(event.symbol || "") + " " + String(event.name || "")).trim() + fiveMinuteSuffix;
   const signalLabels = { kd_5_3_3: "KD(5,3,3)黃金交叉", rsi_4_cross_6: "RSI(4)突破RSI(6)", macd_7_12_20: "MACD(7,12,20)黃金交叉" };
   const technical = (Array.isArray(event.technical_golden_cross_signals) ? event.technical_golden_cross_signals : []).map((key) => signalLabels[key] || key).join("／");
+  const industryRole = event.industry_persistent_large_inflow === true
+    ? "前三名持續流入"
+    : (event.industry_sudden_large_inflow === true ? "盤中突發大額流入" : "僅供參考");
   return [
-    "當沖盤中雷達｜" + eventLabel(event.trigger_type),
+    "當沖盤中雷達｜" + notificationType,
     identity,
     "入場價: " + formatNumber(event.latest_1m_close),
     "技術確認: " + technical,
-    "產業雷達: " + String(event.industry || "未分類") + "｜" + (event.industry_persistent_large_inflow === true ? "前三名持續流入" : "盤中突發大額流入") + "｜量價續強｜排行 " + formatNumber(event.industry_flow_rank, 0),
+    "產業參考: " + String(event.industry || "未分類") + "｜" + industryRole + "｜排行 " + formatNumber(event.industry_flow_rank, 0),
   ].join("\n");
 }
 async function readFiveMinuteConfirmations(events, tradeDate, nowMs = Date.now()) {
@@ -169,8 +181,8 @@ function sideVolumeEvents(canonicalWater, tradeDate, nowMs, outboxEvents = []) {
       && Number.isFinite(outside) && outside > 0
       && Number.isFinite(total) && total >= 2000
       && row?.side_volume_ge_2000_lots === true
-      && outside > inside * 2
-      && row?.outside_volume_gt_inside_times_2 === true
+      && outside >= inside * 2
+      && row?.outside_volume_ge_inside_times_2 === true
       && row?.side_volume_trade_date === tradeDate
       && row?.side_volume_canonical_run_id === canonicalRunId(tradeDate)
       && row?.quote_age_seconds !== null && Number(row.quote_age_seconds) <= 120
@@ -185,6 +197,7 @@ function sideVolumeEvents(canonicalWater, tradeDate, nowMs, outboxEvents = []) {
       name: String(row.name || ""),
       price: Number(row.price),
       trigger_type: "outside_volume_gt_inside_x2",
+      notification_type: FORMAL_NOTIFICATION_TYPES.outside_volume_gt_inside_x2,
       event_time: String(row.side_volume_source_event_at),
       latest_1m_time: String(row.side_volume_source_event_at),
       inside_volume: inside,
@@ -207,7 +220,8 @@ function canonicalSentEvent(event, tradeDate) {
   const sentAt = String(event?.sent_at || "");
   const symbol = String(event?.symbol || "");
   const triggerType = String(event?.trigger_type || "");
-  if (!eventTime || !sentAt || !/^\d{4}$/.test(symbol) || !["price_breakout_1pct", "volume_burst_rolling60_x2", "outside_volume_gt_inside_x2"].includes(triggerType)) return null;
+  if (!eventTime || !sentAt || !/^\d{4}$/.test(symbol) || !allowedNotificationType(triggerType)) return null;
+  const notificationType = normalizeNotificationType(triggerType);
   const normalized = {
     event_key: String(event?.event_key || telegramIdempotencyKey(tradeDate, { symbol, trigger_type: triggerType, latest_1m_time: eventTime })),
     tradeDate,
@@ -215,6 +229,7 @@ function canonicalSentEvent(event, tradeDate) {
     symbol,
     name: String(event?.name || ""),
     trigger_type: triggerType,
+    notification_type: notificationType,
     event_time: eventTime,
     latest_1m_time: eventTime,
     sent_at: sentAt,
@@ -256,7 +271,7 @@ function sentEventsFromState(tradeDate) {
   if (state?.trade_date !== tradeDate || !state.sent || typeof state.sent !== "object") return [];
   return Object.entries(state.sent).flatMap(([key, value]) => {
     const [date, symbol, triggerType] = String(key).split(":");
-    if (date !== tradeDate || !["price_breakout_1pct", "volume_burst_rolling60_x2", "outside_volume_gt_inside_x2"].includes(triggerType)) return [];
+    if (date !== tradeDate || !allowedNotificationType(triggerType)) return [];
     const event = canonicalSentEvent({
       ...(value && typeof value === "object" ? value : {}),
       symbol,
@@ -326,14 +341,11 @@ function validEvent(event, tradeDate, nowMs) {
   if (event.tradable_mother_pool !== true) failures.push("not_daytrade_mother_pool_eligible");
   if (event.quote_fresh !== true || numberValue(event.quote_age_seconds, 999999) > 120) failures.push("quote_not_fresh");
   if (!["price_breakout_1pct", "volume_burst_rolling60_x2"].includes(triggerType)) failures.push("trigger_type_invalid");
+  if (!allowedNotificationType(triggerType)) failures.push("notification_type_not_allowed");
+  if (String(event.notification_type || normalizeNotificationType(triggerType)) !== normalizeNotificationType(triggerType)) failures.push("notification_type_mismatch");
   if (String(event.rolling_1m_baseline_status || "") !== "ready") failures.push("rolling_1m_baseline_not_ready");
   if (numberValue(event.rolling_1m_baseline_sample_count) < 60) failures.push("rolling_1m_samples_below_60");
   if (String(event.technical_indicator_status || "") !== "ready") failures.push("technical_indicator_not_ready");
-  if (String(event.industry_flow_status || "") !== "ready" || !String(event.industry || "").trim()) failures.push("industry_heatmap_not_ready");
-  if (!Number.isFinite(Number(event.industry_heat_score)) || !["inflow", "outflow", "neutral"].includes(String(event.industry_flow_direction || ""))) failures.push("industry_flow_invalid");
-  if (event.industry_persistent_large_inflow !== true && event.industry_sudden_large_inflow !== true) failures.push("industry_not_top3_or_sudden_inflow");
-  if (event.industry_volume_expansion_confirmed !== true) failures.push("industry_volume_expansion_not_confirmed");
-  if (event.industry_price_rise_continuing !== true) failures.push("industry_price_rise_not_continuing");
   const technicalSignals = Array.isArray(event.technical_golden_cross_signals) ? event.technical_golden_cross_signals : [];
   const allowedTechnicalSignals = ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"];
   if (event.technical_golden_cross_any !== true || !technicalSignals.some((signal) => allowedTechnicalSignals.includes(String(signal)))) failures.push("technical_golden_cross_not_met");
@@ -353,11 +365,12 @@ function validSideVolumeEvent(event, tradeDate, nowMs) {
   const eventTime = Date.parse(String(event?.event_time || event?.latest_1m_time || ""));
   if (String(event?.trade_date || "") !== tradeDate) failures.push("side_volume_trade_date_mismatch");
   if (String(event?.canonical_run_id || "") !== canonicalRunId(tradeDate)) failures.push("side_volume_canonical_run_id_mismatch");
+  if (String(event?.notification_type || normalizeNotificationType(event?.trigger_type)) !== FORMAL_NOTIFICATION_TYPES.outside_volume_gt_inside_x2) failures.push("notification_type_mismatch");
   if (!/^\d{4}$/.test(String(event?.symbol || ""))) failures.push("symbol_invalid");
   if (event?.side_volume_unit !== "lots") failures.push("side_volume_unit_not_lots");
   if (!Number.isFinite(inside) || inside < 0 || !Number.isFinite(outside) || outside <= 0) failures.push("side_volume_not_available");
   if (!Number.isFinite(total) || total < 2000) failures.push("side_volume_total_below_2000_lots");
-  if (!(outside > inside * 2)) failures.push("outside_volume_not_gt_inside_times_2");
+  if (!(outside >= inside * 2)) failures.push("outside_volume_not_ge_inside_times_2");
   if (!Number.isFinite(eventTime) || nowMs < eventTime || nowMs - eventTime > 120000) failures.push("side_volume_not_fresh");
   return failures;
 }
@@ -379,7 +392,9 @@ async function notifyFromOutbox(options = {}) {
     writes_supabase: false,
     event_candidate_source: "local_writer_outbox_after_supabase_canonical_revalidation",
     source: "fugle_formal_1m", alert_scope: "daytrade_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage_and_industry_heatmap",
-    conditions: { price_breakout: "latest_1m_close >= prior_rolling60_high_close * 1.01", volume_burst: "latest_1m_volume >= prior_rolling60_average_volume * 2", min_rolling_samples: 60, technical_cross_any: ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"], five_minute_confirmation_required: true, five_minute_required_status: "CONFIRMED_STRONG_5M", outside_volume_radar: "side_volume_total >= 2000 lots AND outside_volume > inside_volume * 2", outside_volume_source: "canonical Mother Pool v4.1 side-volume lots", outside_volume_technical_cross_role: "bonus_only" },
+    formal_notification_types: FORMAL_NOTIFICATION_TYPES,
+    allowed_notification_type_labels: Object.values(FORMAL_NOTIFICATION_TYPES),
+    conditions: { instant_lift: "latest_1m_close >= prior_rolling60_high_close * 1.01", instant_volume: "latest_1m_volume >= prior_rolling60_average_volume * 2", outside_volume_strength: "side_volume_total >= 2000 lots AND outside_volume >= inside_volume * 2", min_rolling_samples: 60, technical_cross_any: ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"], five_minute_confirmation_required: true, five_minute_required_status: "CONFIRMED_STRONG_5M", outside_volume_source: "canonical Mother Pool v4.1 side-volume lots", outside_volume_technical_cross_role: "bonus_only" },
     source_status_at_run: null, canonical_gate_at_run: null, unattended_gate_at_run: null,
     canonical_run_id: canonicalRunId(tradeDate), mother_pool_read_rows: 0,
     accepted_mother_pool_symbols: 0,
@@ -491,6 +506,7 @@ async function notifyFromOutbox(options = {}) {
       const canonicalEvidence = canonicalWater.evidenceBySymbol.get(String(rawEvent?.symbol || "")) || {};
       const event = {
         ...rawEvent,
+        notification_type: normalizeNotificationType(rawEvent?.trigger_type),
         canonical_run_id: receipt.canonical_run_id,
         canonical_water_mother_pool_member: canonicalEvidence.mother_pool_member === true,
         canonical_water_quote_fresh: canonicalEvidence.quote_fresh === true && canonicalEvidence.quote_trade_date_ok === true,

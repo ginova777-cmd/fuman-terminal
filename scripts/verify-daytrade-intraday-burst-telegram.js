@@ -96,7 +96,7 @@ function sideFixture(overrides = {}) {
     inside_volume: 500, outside_volume: 20000,
     side_volume_total: 20500, side_volume_ge_2000_lots: true,
     outside_inside_ratio: 40, side_volume_available: true,
-    side_volume_unit: "lots", outside_volume_gt_inside_times_2: true,
+    side_volume_unit: "lots", outside_volume_ge_inside_times_2: true, outside_volume_gt_inside_times_2: true,
     side_volume_source_event_at: "2026-09-09T02:00:00.000Z",
     side_volume_trade_date: sideFixtureDate,
     side_volume_canonical_run_id: "fugle_daytrade_source:20260909:canonical",
@@ -110,6 +110,15 @@ function derivedSideEvents(row) {
 const validSideFixtureEvents = derivedSideEvents(sideFixture());
 const failedReceiptFixture = finalizeReceiptStatus({ ok: false, complete: true, status: "complete" });
 const completeReceiptFixture = finalizeReceiptStatus({ ok: true, complete: false, status: "running" });
+function receiptNotificationLabel(event) {
+  if (event?.notification_type) return String(event.notification_type);
+  const triggerType = String(event?.trigger_type || "");
+  if (triggerType === "volume_burst_rolling60_x2") return "瞬間巨量";
+  if (triggerType === "outside_volume_gt_inside_x2") return "外盤強勢";
+  if (triggerType === "price_breakout_1pct") return "瞬間拉抬";
+  return "";
+}
+const formalNotificationLabels = new Set(["瞬間巨量", "外盤強勢", "瞬間拉抬"]);
 const checks = {
   writer_readable: Boolean(writer),
   notifier_readable: Boolean(notifier),
@@ -311,7 +320,6 @@ const checks = {
     "industry_net_flow_proxy",
     "top3_persistent_large_inflow_volume_price_confirmed",
     "sudden_large_inflow_volume_price_confirmed",
-    "industry_not_top3_or_sudden_inflow",
     "flow_delta_proxy >= 500000000",
     "industry_volume_expansion_confirmed",
     "industry_price_rise_continuing",
@@ -321,11 +329,14 @@ const checks = {
     "industry_signal_fast_inject",
     "mother_pool_fast_inject_count",
     "expires_at",
+    "industry_reference: \"display only; not a hard notification gate for instant volume or instant lift\"",
+    "retired_industry_gate: \"removed: top-3 persistent inflow or 5-minute sudden top-3 TWD 500,000,000 delta is no longer required\"",
   ]) && includesAll(notifier, [
-    '"產業雷達: "',
+    '"產業參考: "',
     '"前三名持續流入"',
     '"盤中突發大額流入"',
-    '"｜量價續強｜排行 "',
+    '"僅供參考"',
+  ]) && !includesAll(notifier, [
     "industry_heatmap_not_ready",
     "industry_flow_invalid",
     "industry_not_top3_or_sudden_inflow",
@@ -338,13 +349,25 @@ const checks = {
     "瞬間拉抬",
     "瞬間巨量",
   ]),
+  formal_three_notification_contract: includesAll(notifier, [
+    "const FORMAL_NOTIFICATION_TYPES = Object.freeze({",
+    'volume_burst_rolling60_x2: "瞬間巨量"',
+    'outside_volume_gt_inside_x2: "外盤強勢"',
+    'price_breakout_1pct: "瞬間拉抬"',
+    "function normalizeNotificationType",
+    "function allowedNotificationType",
+    "formal_notification_types: FORMAL_NOTIFICATION_TYPES",
+    "allowed_notification_type_labels: Object.values(FORMAL_NOTIFICATION_TYPES)",
+    "notification_type_not_allowed",
+    "notification_type_mismatch",
+  ]),
   outside_volume_radar_contract: includesAll(notifier, [
     'trigger_type: "outside_volume_gt_inside_x2"',
-    '"當沖盤中雷達｜外盤強勢"',
+    '"當沖盤中雷達｜" + notificationType',
     '"外盤：" + formatNumber(event.outside_volume, 0) + " 張"',
     '"內盤：" + formatNumber(event.inside_volume, 0) + " 張"',
     '"外內盤比：" + formatNumber(event.outside_inside_ratio, 2) + " 倍"',
-    'outside > inside * 2',
+    'outside >= inside * 2',
     'total >= 2000',
     'row?.side_volume_ge_2000_lots === true',
     'row?.side_volume_available === true',
@@ -362,13 +385,14 @@ const checks = {
     "inside_volume,outside_volume,side_volume_total,side_volume_unit,side_volume_available",
     "side_volume_source_event_at,side_volume_trade_date,side_volume_canonical_run_id",
     "source_fresh_120s_at_verification",
-    "outside_volume_gt_inside_times_2: inside !== null && outside !== null && outside > inside * 2",
+    "outside_volume_ge_inside_times_2: inside !== null && outside !== null && outside >= inside * 2",
   ]),
   outside_volume_radar_fixture_contract: validSideFixtureEvents.length === 1
     && validSideFixtureEvents[0].outside_inside_ratio === 40
     && validSideVolumeEvent(validSideFixtureEvents[0], sideFixtureDate, sideFixtureNow).length === 0
     && derivedSideEvents(sideFixture({ side_volume_total: 1999, side_volume_ge_2000_lots: false })).length === 0
-    && derivedSideEvents(sideFixture({ inside_volume: 500, outside_volume: 1000, outside_inside_ratio: 2, outside_volume_gt_inside_times_2: false })).length === 0
+    && derivedSideEvents(sideFixture({ inside_volume: 500, outside_volume: 1000, outside_inside_ratio: 2, outside_volume_ge_inside_times_2: true })).length === 1
+    && derivedSideEvents(sideFixture({ inside_volume: 500, outside_volume: 999, outside_inside_ratio: 1.998, outside_volume_ge_inside_times_2: false, outside_volume_gt_inside_times_2: false })).length === 0
     && derivedSideEvents(sideFixture({ side_volume_available: false })).length === 0
     && derivedSideEvents(sideFixture({ side_volume_source_event_at: "2026-09-09T01:57:00.000Z" })).length === 0
     && eventMessage(validSideFixtureEvents[0]).includes("外內盤比：40 倍")
@@ -376,7 +400,7 @@ const checks = {
   compact_notification_template_contract: includesAll(notifier, [
     '"入場價: " + formatNumber(event.latest_1m_close)',
     '"技術確認: " + technical',
-    '"當沖盤中雷達｜" + eventLabel(event.trigger_type)',
+    '"當沖盤中雷達｜" + notificationType',
   ]) && !includesAll(notifier, ["最新 1分K 收 ", "前置樣本 ", "僅為 Mother Pool 雷達提醒"]),
   five_minute_strong_hard_gate_contract: includesAll(notifier, [
     "v_fugle_intraday_5m_readback",
@@ -500,10 +524,15 @@ checks.runtime_receipt_canonical_fields = !receipt || receiptSentEvents.every((e
   && String(event?.tradeDate || "") === String(receipt?.trade_date || "")
   && String(event?.trade_date || "") === String(receipt?.trade_date || "")
   && /^\d{4}$/.test(String(event?.symbol || ""))
+  && formalNotificationLabels.has(receiptNotificationLabel(event))
   && Boolean(event?.event_time)
   && Boolean(event?.sent_at)
   && event?.sent === true
   && String(event?.send_result || "") === "sent"
+);
+checks.runtime_receipt_only_three_notifications = !receipt || receiptSentEvents.every((event) =>
+  formalNotificationLabels.has(receiptNotificationLabel(event))
+  && ["price_breakout_1pct", "volume_burst_rolling60_x2", "outside_volume_gt_inside_x2"].includes(String(event?.trigger_type || ""))
 );
 checks.runtime_receipt_event_keys_unique = !receipt || receiptEventKeys.length === new Set(receiptEventKeys).size;
 checks.runtime_receipt_count_matches = !receipt || Number(receipt?.sent_event_count) === receiptSentEvents.length;
@@ -561,12 +590,8 @@ checks.runtime_industry_heatmap_ready = !outbox || (
     && outbox.industry_heatmap.length > 0)
 );
 checks.runtime_events_have_industry_flow = !outbox || outboxEvents.every((event) =>
-  event?.industry_flow_status === "ready"
-  && Boolean(String(event?.industry || "").trim())
-  && (event?.industry_persistent_large_inflow === true || event?.industry_sudden_large_inflow === true)
-  && event?.industry_volume_expansion_confirmed === true
-  && event?.industry_price_rise_continuing === true
-  && Number.isFinite(Number(event?.industry_heat_score))
+  Boolean(String(event?.industry || "").trim())
+  && typeof event?.industry_flow_status === "string"
 );
 checks.runtime_events_industry_concentration_ordered = !outbox || outboxEvents.every((event, index) =>
   index === 0
