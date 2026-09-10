@@ -229,7 +229,9 @@ function Invoke-Strategy4ClosureAndLine {
   param([string]$RunId, [int]$ExpectedCount, [switch]$ReuseDeliveredLineEvidence)
   if ([string]::IsNullOrWhiteSpace($RunId) -or $ExpectedCount -le 0) { throw "Strategy4 LINE closure missing runId or count" }
   $commands = @(
-    @("scripts\verify-strategy4-source-root.js"), @("scripts\verify-strategy4-match-yield-diagnostics.js")
+    @("scripts\verify-strategy4-full-scan-volume-contract.js"),
+    @("scripts\verify-strategy4-source-root.js"),
+    @("scripts\verify-strategy4-match-yield-diagnostics.js")
   )
   foreach ($command in $commands) {
     & $nodeExe "--use-system-ca" @command *>&1 | Tee-Object -FilePath $log -Append
