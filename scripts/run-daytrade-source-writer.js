@@ -3803,9 +3803,13 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   }).sort((a, b) => Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true) || b.entryScore - a.entryScore || a.symbol.localeCompare(b.symbol));
 
   const warmingPoolCandidates = rankedCandidates.filter((row) =>
-    row.basePool.eligible === true || row.terminalForcedAdmission === true || (warmingPhase && row.warmingPending === true));
+    row.basePool.eligible === true
+    || row.terminalForcedAdmission === true
+    || row.openingReport0830BiasOnly === true
+    || (warmingPhase && row.warmingPending === true));
   const rankedBySymbol = new Map(warmingPoolCandidates.map((row) => [row.symbol, row]));
-  const signalCandidates = warmingPoolCandidates.filter((row) => row.isMotherPoolCandidate);
+  const signalCandidates = warmingPoolCandidates.filter((row) =>
+    row.isMotherPoolCandidate || row.openingReport0830BiasOnly === true);
   // Quote Radar evaluates the full formal universe, but only rows matching at
   // least one dynamic or evidence-backed source condition may enter Mother Pool.
   const nonOpeningCandidates = signalCandidates.filter((row) => row.openingReport0830BiasOnly !== true);
@@ -3878,7 +3882,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
 
   const rankedRows = [...bySymbol.values()]
     .filter((row) => row.terminalForcedAdmission === true || (
-      (row.basePool?.eligible === true || (warmingPhase && row.warmingPending === true))
+      (row.basePool?.eligible === true || row.openingReport0830BiasOnly === true || (warmingPhase && row.warmingPending === true))
       && Number(row.metrics?.price) > 0
     ))
     .sort((a, b) => Number(b.metrics?.quoteFresh === true) - Number(a.metrics?.quoteFresh === true) || b.upgradeScore - a.upgradeScore || b.entryScore - a.entryScore || a.symbol.localeCompare(b.symbol));

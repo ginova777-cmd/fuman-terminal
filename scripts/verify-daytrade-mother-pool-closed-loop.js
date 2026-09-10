@@ -199,6 +199,7 @@ async function main() {
     motherPool: path.join(RUNTIME, "state", "daytrade-mother-pool-delta.json"),
     fastSync: path.join(RUNTIME, "state", "daytrade-fast-supabase-sync.json"),
     openingReport: path.join(RUNTIME, "data", "opening-report-0830", `opening-report-0830-bridge-aggregate-${clock.compact}.json`),
+    openingReportFieldAck: path.join(RUNTIME, "data", "scan-receipts", `opening-report-0830-mother-pool-field-ack-${clock.compact}.json`),
     futopt0845: path.join(RUNTIME, "data", "scan-receipts", `daytrade-futopt-preopen-evidence-0845-${clock.compact}.json`),
     futopt0850: path.join(RUNTIME, "data", "scan-receipts", `daytrade-futopt-preopen-evidence-0850-${clock.compact}.json`),
   };
@@ -207,6 +208,7 @@ async function main() {
   const motherPool = readJson(paths.motherPool);
   const fastSync = readJson(paths.fastSync);
   const openingReport = readJson(paths.openingReport);
+  const openingReportFieldAck = readJson(paths.openingReportFieldAck);
   const futopt0845 = readJson(paths.futopt0845);
   const futopt0850 = readJson(paths.futopt0850);
   const failures = [];
@@ -317,6 +319,26 @@ async function main() {
     && openingReport?.formal_candidate_allowed === false
   );
   check("opening_report_bridge_closed", openingOk, "opening_report_bridge_not_closed");
+  const openingAckSymbols = [...new Set([
+    ...(Array.isArray(openingReportFieldAck?.accepted_symbols) ? openingReportFieldAck.accepted_symbols : []),
+    ...(Array.isArray(openingReportFieldAck?.db_readback_symbols) ? openingReportFieldAck.db_readback_symbols : []),
+  ].map(String).filter((symbol) => /^\d{4}$/.test(symbol)))];
+  const openingAckMissingFromMotherPool = openingAckSymbols.filter((symbol) => !motherPoolSymbolSet.has(symbol));
+  const openingFieldAckOk = !openingRequired || (
+    identityOf(openingReportFieldAck).tradeDate === clock.tradeDate
+    && openingReportFieldAck?.contract === "opening-report-0830-mother-pool-field-ack-v1"
+    && openingReportFieldAck?.complete === true
+    && openingReportFieldAck?.db_readback_ok === true
+    && openingReportFieldAck?.formal_candidate_allowed === false
+    && openingReportFieldAck?.forbidden_publish_guard === true
+    && openingAckSymbols.length > 0
+  );
+  check("opening_report_field_ack_complete", openingFieldAckOk, "opening_report_field_ack_not_complete");
+  check(
+    "opening_report_ack_symbols_admitted_to_mother_pool",
+    !openingRequired || openingAckMissingFromMotherPool.length === 0,
+    `opening_report_ack_symbols_not_in_mother_pool:${openingAckMissingFromMotherPool.slice(0, 12).join(",")}`,
+  );
 
   const futoptRequired = clock.minute >= 8 * 60 + 50;
   const futoptGuardsSafe = [futopt0845, futopt0850].every((receipt) => !receipt || (
@@ -360,7 +382,14 @@ async function main() {
         avg3_pass_rows: avg3PassRows.length,
         avg3_history_pending_rows: avg3PendingRows.length,
       },
-      opening_report: { ok: openingOk, required: openingRequired, path: paths.openingReport },
+      opening_report: {
+        ok: openingOk && openingFieldAckOk && openingAckMissingFromMotherPool.length === 0,
+        required: openingRequired,
+        path: paths.openingReport,
+        field_ack_path: paths.openingReportFieldAck,
+        field_ack_symbols: openingAckSymbols.length,
+        field_ack_missing_from_mother_pool: openingAckMissingFromMotherPool,
+      },
       futopt_preopen: {
         ok: futoptClosed || futoptGuardsSafe,
         natural_evidence_ok: futoptClosed,
