@@ -394,7 +394,7 @@ async function notifyFromOutbox(options = {}) {
     source: "fugle_formal_1m", alert_scope: "daytrade_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage_and_industry_heatmap",
     formal_notification_types: FORMAL_NOTIFICATION_TYPES,
     allowed_notification_type_labels: Object.values(FORMAL_NOTIFICATION_TYPES),
-    conditions: { instant_lift: "latest_1m_close >= prior_rolling60_high_close * 1.01", instant_volume: "latest_1m_volume >= prior_rolling60_average_volume * 2", outside_volume_strength: "side_volume_total >= 2000 lots AND outside_volume >= inside_volume * 2", min_rolling_samples: 60, technical_cross_any: ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"], five_minute_confirmation_required: true, five_minute_required_status: "CONFIRMED_STRONG_5M", outside_volume_source: "canonical Mother Pool v4.1 side-volume lots", outside_volume_technical_cross_role: "bonus_only" },
+    conditions: { instant_lift: "latest_1m_close >= prior_rolling60_high_close * 1.01", instant_volume: "latest_1m_volume >= prior_rolling60_average_volume * 2", outside_volume_strength: "side_volume_total >= 2000 lots AND outside_volume >= inside_volume * 2", min_rolling_samples: 60, technical_cross_any: ["kd_5_3_3", "rsi_4_cross_6", "macd_7_12_20"], five_minute_confirmation_required: true, five_minute_required_status: "CONFIRMED_STRONG_5M", outside_volume_source: "canonical Mother Pool v4.1 side-volume lots", outside_volume_technical_cross_role: "required" },
     source_status_at_run: null, canonical_gate_at_run: null, unattended_gate_at_run: null,
     canonical_run_id: canonicalRunId(tradeDate), mother_pool_read_rows: 0,
     accepted_mother_pool_symbols: 0,
