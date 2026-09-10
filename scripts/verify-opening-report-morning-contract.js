@@ -34,6 +34,11 @@ const RETIRED_VERIFIER_FILES = [
   "scripts/verify-terminal-opening-report-0830-standalone-renderer.js",
 ];
 
+const ALLOWED_OPENING_REPORT_VERIFIERS = new Set([
+  "verify-opening-report-morning-contract.js",
+  "verify-opening-report-0830-mother-pool-field-ack.js",
+]);
+
 const REQUIRED_INDUSTRIES = [
   "AI_GPU_CLOUD",
   "AWS_AI_DATACENTER",
@@ -201,6 +206,10 @@ function staticContractChecks(checks) {
   addCheck(checks, "retired_telegram_package_entry_absent", !(pkg.scripts && pkg.scripts[RETIRED_TELEGRAM_PACKAGE_KEY]), RETIRED_TELEGRAM_PACKAGE_KEY);
   addCheck(checks, "retired_telegram_contract_file_absent", !exists(RETIRED_TELEGRAM_SCRIPT), RETIRED_TELEGRAM_SCRIPT);
   for (const relPath of RETIRED_VERIFIER_FILES) addCheck(checks, "retired_verifier_file_absent:" + path.basename(relPath), !exists(path.join(ROOT, relPath)), path.join(ROOT, relPath));
+  const verifierFiles = fs.readdirSync(path.join(ROOT, "scripts"))
+    .filter((name) => /^verify-.*opening-report.*\.js$/i.test(name));
+  const unauthorizedVerifierFiles = verifierFiles.filter((name) => !ALLOWED_OPENING_REPORT_VERIFIERS.has(name));
+  addCheck(checks, "opening_report_verifier_allowlist_enforced", unauthorizedVerifierFiles.length === 0, unauthorizedVerifierFiles.join(","));
 
   const selfCheck = run("node", ["--check", SINGLE_VERIFIER_SCRIPT]);
   addCheck(checks, "single_verifier_syntax_check", selfCheck.ok, selfCheck.text.trim());
