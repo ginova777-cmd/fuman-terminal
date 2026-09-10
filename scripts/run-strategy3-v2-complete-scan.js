@@ -1,6 +1,5 @@
 "use strict";
 
-const fs = require("fs");
 const { spawnSync } = require("child_process");
 const path = require("path");
 const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supabase-key");
@@ -13,25 +12,29 @@ const {
   RUNS_TABLE,
   LATEST_VIEW,
   ENTRY_WINDOW,
+  MOTHER_POOL_CONTRACT_VERSION,
+  MOTHER_POOL_VIEW,
+  MOTHER_POOL_RECEIPT_VIEW,
+  QUOTE_TABLE,
+  INTRADAY_1M_RPC,
+  MIN_MOTHER_POOL_COVERAGE_RATIO,
   taipeiDate,
   nowTaipeiIso,
   newRunId,
-  readJson,
   writeJson,
   scanReceiptPath,
   failClosed,
 } = require("./strategy3-v2-contract");
+const { readCanonicalDaytradeWater } = require("../lib/daytrade-canonical-water-reader");
 
 const tradeDate = process.argv.find((arg) => arg.startsWith("--trade-date="))?.slice("--trade-date=".length) || taipeiDate();
 const compactDate = tradeDate.replace(/\D/g, "");
-const runId = newRunId(compactDate);
+const recoveryReplay = process.argv.includes("--recovery-replay");
+const runId = recoveryReplay
+  ? `strategy3v2-recovery-replay-${compactDate}-${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}`
+  : newRunId(compactDate);
 const apply = process.argv.includes("--apply");
 const attemptPhase = process.argv.find((arg) => arg.startsWith("--attempt-phase="))?.slice("--attempt-phase=".length) || "";
-const quoteCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-quotes-v2.json");
-const candleCachePath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-candles-v2.json");
-const motherPoolPath = path.join(RUNTIME_DIR, "cache", "intraday", "fugle-daytrade-ws-priority-symbols.json");
-const MIN_LOCAL_COVERAGE_RATIO = Math.max(0.9, Number(process.env.STRATEGY3_V2_MIN_LOCAL_COVERAGE_RATIO || 0.9));
-const ACCEPTED_MOTHER_POOL_CONTRACT_VERSIONS = new Set(["4.1.0"]);
 
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
@@ -64,13 +67,14 @@ async function applySupabaseRun(receipt) {
     contract: CONTRACT_VERSION,
     status: "complete",
     complete: true,
-    formal_allowed: true,
+    formal_allowed: receipt.recovery_replay !== true,
     publish_allowed: true,
     line_allowed: true,
     source_chain: {
       scanner_source: receipt.scanner_source,
       entry_window: receipt.entry_window,
-      apply_source: "strategy3_v2_scanner_apply",
+      apply_source: receipt.recovery_replay === true ? "strategy3_v2_recovery_replay_apply" : "strategy3_v2_scanner_apply",
+      recovery_replay: receipt.recovery_replay === true,
     },
     readiness: receipt.readiness?.payload || receipt.readiness || {},
     coverage: receipt.scanner_summary || {},
@@ -93,9 +97,9 @@ async function applySupabaseRun(receipt) {
     change_percent: row.change_percent,
     volume_ratio: row.volume_ratio || null,
     score: row.score,
-    quality_status: "complete",
+    quality_status: receipt.recovery_replay === true ? "recovery_replay_complete" : "complete",
     complete: true,
-    formal_allowed: true,
+    formal_allowed: receipt.recovery_replay !== true,
     payload: row,
   }));
   if (rows.length) await supabaseRequest("POST", RESULTS_TABLE, "", rows);
@@ -143,20 +147,8 @@ function runReadiness() {
   };
 }
 
-function readCacheArray(file, key) {
-  const payload = readJson(file, null);
-  const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.[key]) ? payload[key] : [];
-  return {
-    ok: Array.isArray(rows),
-    file,
-    updated_at: payload?.updatedAt || "",
-    count: rows.length,
-    rows,
-  };
-}
-
 function candleMinute(candle) {
-  const parsed = Date.parse(candle?.candleTime || candle?.date || "");
+  const parsed = Date.parse(candle?.candle_time || candle?.candleTime || candle?.date || "");
   if (!Number.isFinite(parsed)) return null;
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Taipei",
@@ -176,41 +168,52 @@ function round(value, digits = 2) {
   return Math.round(number * factor) / factor;
 }
 
-function buildScannerCoreResults() {
-  const motherPool = readJson(motherPoolPath, {});
-  const motherPoolTradeDate = String(motherPool.tradeDate || motherPool.trade_date || "").slice(0, 10);
-  const motherPoolContractVersion = String(motherPool.contract_version || motherPool.motherPoolContractVersion || "");
-  const motherPoolSymbols = [...new Set((motherPool.daytradeMotherPoolSymbols || [])
-    .map((value) => String(value?.symbol || value?.code || value || "").replace(/\D/g, "").slice(0, 4))
-    .filter((code) => /^\d{4}$/.test(code)))];
-  if (motherPoolTradeDate !== tradeDate) throw new Error(`strategy3_v2_mother_pool_trade_date_mismatch:${motherPoolTradeDate || "missing"}`);
-  if (!ACCEPTED_MOTHER_POOL_CONTRACT_VERSIONS.has(motherPoolContractVersion)) throw new Error(`strategy3_v2_mother_pool_contract_version_unsupported:${motherPoolContractVersion || "missing"}`);
-  if (!motherPoolSymbols.length) throw new Error("strategy3_v2_mother_pool_empty");
-  const motherPoolSet = new Set(motherPoolSymbols);
-  const quoteCache = readCacheArray(quoteCachePath, "quotes");
-  const candleCache = readCacheArray(candleCachePath, "candles");
-  const quoteByCode = new Map();
-  for (const quote of quoteCache.rows) {
-    const code = String(quote.code || quote.symbol || "").replace(/\D/g, "").slice(0, 4);
-    if (/^\d{4}$/.test(code)) quoteByCode.set(code, quote);
-  }
-
-  const candlesByCode = new Map();
-  for (const candle of candleCache.rows) {
-    if (String(candle.tradeDate || "").slice(0, 10) !== tradeDate) continue;
-    const code = String(candle.code || candle.symbol || "").replace(/\D/g, "").slice(0, 4);
-    if (!/^\d{4}$/.test(code)) continue;
-    if (!motherPoolSet.has(code)) continue;
-    if (!candlesByCode.has(code)) candlesByCode.set(code, []);
-    candlesByCode.get(code).push(candle);
-  }
-
+async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
+  const water = await readWater({
+    tradeDate,
+    consumerName: STRATEGY,
+    strategy3Consumer: true,
+    requireMarketCalendar: true,
+    // Natural 13:00 runs require the live producer receipt. A post-close
+    // recovery validates the persisted v4.1 identities and 1m rows directly;
+    // the latest live receipt is expected to become stale after the session.
+    requireMotherPoolReceipt: !recoveryReplay,
+    hydrateMotherPoolCandles: true,
+    minimumCandlesPerSymbol: 20,
+    // At the 13:00 natural slot, 20 bars cover readiness and the entry minute.
+    // A post-close recovery needs 40 bars to include 12:59-13:02 through 13:30.
+    barsPerSymbol: recoveryReplay ? 40 : 20,
+    historicalRecoveryReplay: recoveryReplay,
+  });
+  const poolSymbols = [...water.poolBySymbol.keys()];
   const candidates = [];
   let ready20Count = 0;
   let entryWindowCount = 0;
+  if (!water.ok || water.skipped) {
+    return {
+      water,
+      mother_pool: {
+        source: MOTHER_POOL_VIEW,
+        receipt_source: MOTHER_POOL_RECEIPT_VIEW,
+        trade_date: tradeDate,
+        contract_version: MOTHER_POOL_CONTRACT_VERSION,
+        canonical_run_id: water.receipt?.canonical_run_id || "",
+        symbol_count: poolSymbols.length,
+      },
+      same_day_candle_symbols: water.candleRowsBySymbol.size,
+      ready_20_candle_symbols: 0,
+      entry_window_symbols: 0,
+      symbol_data_gap_rows: water.symbolDataGaps.size,
+      results: [],
+    };
+  }
 
-  for (const [code, candles] of candlesByCode.entries()) {
-    candles.sort((a, b) => Date.parse(a.candleTime || "") - Date.parse(b.candleTime || ""));
+  for (const code of poolSymbols) {
+    if (water.symbolDataGaps.has(code)) continue;
+    const pool = water.poolBySymbol.get(code) || {};
+    const quote = water.quoteBySymbol.get(code) || {};
+    const candles = [...(water.candleRowsBySymbol.get(code) || [])];
+    candles.sort((a, b) => Date.parse(a.candle_time || "") - Date.parse(b.candle_time || ""));
     const count = candles.length;
     if (count >= 20) ready20Count += 1;
     const entryCandles = candles.filter((candle) => {
@@ -220,14 +223,14 @@ function buildScannerCoreResults() {
     if (entryCandles.length) entryWindowCount += 1;
     if (count < 20 || !entryCandles.length) continue;
 
-    const quote = quoteByCode.get(code) || {};
     const entry = entryCandles[0];
     const last = candles[candles.length - 1] || {};
-    const entryPrice = Number(entry.close || entry.average || 0);
-    const closePrice = Number(quote.close || last.close || 0);
-    const prevClose = Number(quote.prevClose || 0);
-    const changePercent = Number.isFinite(Number(quote.percent))
-      ? Number(quote.percent)
+    const entryAverage = [entry.open, entry.high, entry.low, entry.close].map(Number).filter((value) => Number.isFinite(value) && value > 0);
+    const entryPrice = Number(entry.close || (entryAverage.length ? entryAverage.reduce((sum, value) => sum + value, 0) / entryAverage.length : 0));
+    const closePrice = Number(quote.price || last.close || 0);
+    const prevClose = Number(quote.previous_close || 0);
+    const changePercent = Number.isFinite(Number(quote.change_percent))
+      ? Number(quote.change_percent)
       : prevClose > 0 && closePrice > 0
         ? ((closePrice - prevClose) / prevClose) * 100
         : 0;
@@ -255,18 +258,18 @@ function buildScannerCoreResults() {
       rank: 0,
       code,
       symbol: code,
-      name: quote.name || "",
+      name: pool.name || quote.name || "",
       strategy: STRATEGY,
       signal_type: "overnight_chip_reference_v2",
       entry_price: round(entryPrice, 2),
-      entry_price_source: "local_fugle_daytrade_ws_candles_1259_1302",
-      entry_candle_time: entry.candleTime || "",
+      entry_price_source: `${INTRADAY_1M_RPC}:first_close_1259_1302`,
+      entry_candle_time: entry.candle_time || "",
       close_price: round(closePrice, 2),
       change_percent: round(changePercent, 2),
       score,
       candle_count: count,
-      first_candle_time: candles[0]?.candleTime || "",
-      last_candle_time: last.candleTime || "",
+      first_candle_time: candles[0]?.candle_time || "",
+      last_candle_time: last.candle_time || "",
       tail_volume: round(tailVolume, 0),
       total_1m_volume: round(totalVolume, 0),
       tail_volume_share_pct: round(tailShare, 2),
@@ -280,21 +283,84 @@ function buildScannerCoreResults() {
         "strategy3_v2_close_above_entry",
         "strategy3_v2_positive_quote_change",
       ],
-      formal_source: "local_fugle_daytrade_ws_candles+local_fugle_daytrade_ws_quotes",
-      universe_source: "daytradeMotherPoolSymbols",
+      formal_source: `${MOTHER_POOL_VIEW}+${QUOTE_TABLE}+rpc:${INTRADAY_1M_RPC}`,
+      universe_source: MOTHER_POOL_VIEW,
       in_daytrade_mother_pool: true,
+      contract_version: pool.contract_version,
+      trade_date: pool.trade_date,
+      canonical_run_id: pool.canonical_run_id,
+      writer_run_id: pool.writer_run_id,
+      generation_id: pool.generation_id,
+      market: pool.market,
+      source_name: pool.source_name,
+      source_trade_date: pool.source_trade_date,
+      source_updated_at: pool.source_updated_at,
+      source_freshness: pool.source_freshness,
+      updated_at: pool.updated_at,
+      mother_pool_rank: pool.mother_pool_rank,
+      priority_rank: pool.priority_rank,
+      mother_pool_score: pool.mother_pool_score,
+      priority_score: pool.priority_score,
+      entry_score: pool.entry_score,
+      upgrade_score: pool.upgrade_score,
+      priority_reason: pool.priority_reason,
+      priority_reasons: pool.priority_reasons,
+      mother_reason: pool.mother_reason,
+      mother_source: pool.mother_source,
+      pool_source: pool.pool_source,
+      pool_layer: pool.pool_layer,
+      source_flags: pool.source_flags,
+      source_run_ids: pool.source_run_ids,
+      mother_readiness_status: pool.mother_readiness_status,
+      is_formal_entry_eligible: pool.is_formal_entry_eligible,
+      price: pool.price,
+      open_price: pool.open_price,
+      previous_close: pool.previous_close,
+      high_price: pool.high_price,
+      low_price: pool.low_price,
+      total_volume: pool.total_volume,
+      trade_value: pool.trade_value,
+      avg_volume5: pool.avg_volume5,
+      quote_trade_date: quote.trade_date,
+      quote_seen_at: quote.quote_seen_at || quote.canonical_quote_time || "",
+      quote_age_seconds: pool.quote_age_seconds,
+      last_trade_time: quote.last_trade_time || "",
+      last_trade_age_seconds: pool.last_trade_age_seconds,
+      latest_candle_time: pool.latest_candle_time,
+      intraday_1m_stale_seconds: pool.intraday_1m_stale_seconds,
+      mother_updated_at: pool.mother_updated_at,
+      pool_updated_trade_date: pool.pool_updated_trade_date,
+      sector_name: pool.sector_name,
+      sector_strength_score: pool.sector_strength_score,
+      sector_member_active_count: pool.sector_member_active_count,
+      industry_signal_fast_injected: pool.industry_signal_fast_injected,
+      industry_signal_fast_inject_industries: pool.industry_signal_fast_inject_industries,
+      ma5: pool.ma5,
+      ma10: pool.ma10,
+      ma20: pool.ma20,
+      ma5_ma10_ma20_bullish: pool.ma5_ma10_ma20_bullish,
     });
   }
 
   candidates.sort((a, b) => b.score - a.score || b.change_percent - a.change_percent || b.tail_volume_share_pct - a.tail_volume_share_pct);
   candidates.forEach((item, index) => { item.rank = index + 1; });
   return {
-    mother_pool: { file: motherPoolPath, trade_date: motherPoolTradeDate, contract_version: motherPoolContractVersion, accepted_contract_versions: [...ACCEPTED_MOTHER_POOL_CONTRACT_VERSIONS], symbol_count: motherPoolSymbols.length },
-    quote_cache: { file: quoteCache.file, updated_at: quoteCache.updated_at, count: quoteCache.count },
-    candle_cache: { file: candleCache.file, updated_at: candleCache.updated_at, count: candleCache.count },
-    same_day_candle_symbols: candlesByCode.size,
-    local_ready_20_candle_symbols: ready20Count,
-    local_entry_window_symbols: entryWindowCount,
+    water,
+    mother_pool: {
+      source: MOTHER_POOL_VIEW,
+      receipt_source: MOTHER_POOL_RECEIPT_VIEW,
+      trade_date: tradeDate,
+      contract_version: MOTHER_POOL_CONTRACT_VERSION,
+      canonical_run_id: water.receipt?.canonical_run_id || "",
+      symbol_count: poolSymbols.length,
+      pages: water.receipt?.mother_pool_pages || 0,
+    },
+    quote_source: { table: QUOTE_TABLE, valid_symbols: water.receipt?.quote_valid_rows || 0 },
+    candle_source: { rpc: INTRADAY_1M_RPC, valid_symbols: water.receipt?.intraday_1m_valid_rows || 0 },
+    same_day_candle_symbols: water.candleRowsBySymbol.size,
+    ready_20_candle_symbols: ready20Count,
+    entry_window_symbols: entryWindowCount,
+    symbol_data_gap_rows: water.symbolDataGaps.size,
     results: candidates,
   };
 }
@@ -359,19 +425,19 @@ async function main() {
     return;
   }
   const issues = [];
-  const scanner = buildScannerCoreResults();
+  const scanner = await buildScannerCoreResults();
   // The 300-symbol Mother Pool size is a discovery target, not a hard scan
   // gate. Measure Strategy3 against the actual same-day Mother Pool instead.
   const formalReadyTarget = Number(scanner.mother_pool?.symbol_count || 0);
-  const localCoverageRatio = formalReadyTarget > 0 ? Math.min(1, scanner.local_ready_20_candle_symbols / formalReadyTarget) : 0;
-  const localCoverageOk = localCoverageRatio >= MIN_LOCAL_COVERAGE_RATIO;
-  const scannerCoreReady = scanner.results.length > 0 && localCoverageOk;
+  const motherPoolCoverageRatio = formalReadyTarget > 0 ? Math.min(1, scanner.ready_20_candle_symbols / formalReadyTarget) : 0;
+  const motherPoolCoverageOk = motherPoolCoverageRatio >= MIN_MOTHER_POOL_COVERAGE_RATIO;
+  const scannerCoreReady = scanner.water.ok === true && scanner.water.skipped !== true && motherPoolCoverageOk;
   const readinessOk = readiness.ok && readiness.payload?.ok === true;
   if (!readinessOk && !scannerCoreReady) {
     issues.push("readiness_not_ready");
   }
-  if (!localCoverageOk) issues.push("strategy3_v2_local_1m_coverage_below_90_percent");
-  if (!scanner.results.length) issues.push("strategy3_v2_no_candidates_from_local_formal_cache");
+  if (!scanner.water.ok) issues.push(...(scanner.water.failedChecks || [scanner.water.firstBlocker || "strategy3_v2_mother_pool_v4_1_not_ready"]));
+  if (!motherPoolCoverageOk) issues.push("strategy3_v2_mother_pool_v4_1_usable_1m_coverage_below_90_percent");
 
   const receipt = issues.length
     ? failClosed("strategy3_v2_core_not_ready", {
@@ -381,58 +447,64 @@ async function main() {
         apply,
         readiness,
         scanner_core_ready: scannerCoreReady,
-        scanner_source: "local_fugle_daytrade_ws_candles+local_fugle_daytrade_ws_quotes",
+        scanner_source: `${MOTHER_POOL_VIEW}+${QUOTE_TABLE}+rpc:${INTRADAY_1M_RPC}`,
         scanner_summary: {
           universe_scope: "daytrade_mother_pool_only",
           mother_pool: scanner.mother_pool,
           same_day_candle_symbols: scanner.same_day_candle_symbols,
-          local_ready_20_candle_symbols: scanner.local_ready_20_candle_symbols,
-          local_entry_window_symbols: scanner.local_entry_window_symbols,
+          ready_20_candle_symbols: scanner.ready_20_candle_symbols,
+          entry_window_symbols: scanner.entry_window_symbols,
           formal_ready_target: formalReadyTarget,
-          local_coverage_ratio: round(localCoverageRatio, 4),
-          min_local_coverage_ratio: MIN_LOCAL_COVERAGE_RATIO,
-          tolerance_policy: "overnight_strategy3_v2_allows_90_percent_local_1m_backtest_coverage",
+          mother_pool_coverage_ratio: round(motherPoolCoverageRatio, 4),
+          minimum_mother_pool_coverage_ratio: MIN_MOTHER_POOL_COVERAGE_RATIO,
+          symbol_data_gap_rows: scanner.symbol_data_gap_rows,
+          tolerance_policy: "strategy3_v2_isolates_symbol_data_gap_and_requires_90_percent_v4_1_usable_1m_coverage",
           result_count: scanner.results.length,
-          quote_cache: scanner.quote_cache,
-          candle_cache: scanner.candle_cache,
+          quote_source: scanner.quote_source,
+          candle_source: scanner.candle_source,
+          consumer_receipt: scanner.water.receipt,
         },
         result_tables: { results: RESULTS_TABLE, runs: RUNS_TABLE, latestView: LATEST_VIEW },
         entry_window: ENTRY_WINDOW,
         issues,
-        allowed_action: "inspect_local_fugle_formal_cache_then_rerun_strategy3_v2_scan",
+        allowed_action: "repair_first_v4_1_blocker_then_rerun_strategy3_v2_scan",
       })
     : {
         ok: true,
         strategy: STRATEGY,
         contract: CONTRACT_VERSION,
-        status: "COMPLETE",
+        status: recoveryReplay ? "RECOVERY_REPLAY_COMPLETE" : "COMPLETE",
         checked_at: nowTaipeiIso(),
         trade_date: tradeDate,
         run_id: runId,
         apply,
         scanner_core_ready: true,
-        scanner_source: "local_fugle_daytrade_ws_candles+local_fugle_daytrade_ws_quotes",
+        scanner_source: `${MOTHER_POOL_VIEW}+${QUOTE_TABLE}+rpc:${INTRADAY_1M_RPC}`,
         scanner_summary: {
           universe_scope: "daytrade_mother_pool_only",
           mother_pool: scanner.mother_pool,
           same_day_candle_symbols: scanner.same_day_candle_symbols,
-          local_ready_20_candle_symbols: scanner.local_ready_20_candle_symbols,
-          local_entry_window_symbols: scanner.local_entry_window_symbols,
+          ready_20_candle_symbols: scanner.ready_20_candle_symbols,
+          entry_window_symbols: scanner.entry_window_symbols,
           formal_ready_target: formalReadyTarget,
-          local_coverage_ratio: round(localCoverageRatio, 4),
-          min_local_coverage_ratio: MIN_LOCAL_COVERAGE_RATIO,
-          tolerance_policy: "overnight_strategy3_v2_allows_90_percent_local_1m_backtest_coverage",
+          mother_pool_coverage_ratio: round(motherPoolCoverageRatio, 4),
+          minimum_mother_pool_coverage_ratio: MIN_MOTHER_POOL_COVERAGE_RATIO,
+          symbol_data_gap_rows: scanner.symbol_data_gap_rows,
+          tolerance_policy: "strategy3_v2_isolates_symbol_data_gap_and_requires_90_percent_v4_1_usable_1m_coverage",
           result_count: scanner.results.length,
-          quote_cache: scanner.quote_cache,
-          candle_cache: scanner.candle_cache,
+          quote_source: scanner.quote_source,
+          candle_source: scanner.candle_source,
+          consumer_receipt: scanner.water.receipt,
         },
         readiness,
         entry_window: ENTRY_WINDOW,
         result_count: scanner.results.length,
         results: scanner.results,
         line_allowed: true,
-        formal_allowed: true,
+        formal_allowed: !recoveryReplay,
         publish_allowed: true,
+        recovery_replay: recoveryReplay,
+        natural_slot_complete: !recoveryReplay,
       };
 
   if (apply && receipt.ok) {
@@ -448,9 +520,33 @@ async function main() {
       receipt.supabase_apply = { ok: false, error: String(error?.message || error).slice(0, 600) };
     }
   }
-  const file = writeJson(scanReceiptPath(compactDate), receipt);
+  receipt.consumer_name = STRATEGY;
+  receipt.consumer_commit = scanner.water.receipt?.consumer_commit || "unknown";
+  receipt.contract_version = MOTHER_POOL_CONTRACT_VERSION;
+  receipt.source_contract_version = MOTHER_POOL_CONTRACT_VERSION;
+  receipt.canonical_run_id = scanner.water.receipt?.canonical_run_id || null;
+  receipt.mother_pool_http_status = scanner.water.receipt?.mother_pool_http_status || null;
+  receipt.mother_pool_rows = scanner.water.receipt?.mother_pool_rows || 0;
+  receipt.mother_pool_pages = scanner.water.receipt?.mother_pool_pages || 0;
+  receipt.unique_symbols = scanner.water.receipt?.unique_symbols || 0;
+  receipt.quote_valid_rows = scanner.water.receipt?.quote_valid_rows || 0;
+  receipt.intraday_1m_valid_rows = scanner.water.receipt?.intraday_1m_valid_rows || 0;
+  receipt.symbol_data_gap_rows = scanner.water.receipt?.symbol_data_gap_rows || 0;
+  receipt.global_formal_gate_blocked = scanner.water.receipt?.global_formal_gate_blocked === true;
+  receipt.receipt_incomplete = scanner.water.receipt?.receipt_incomplete === true;
+  receipt.runner_status = receipt.ok ? "COMPLETE" : "FAILED";
+  receipt.verifier_ok = null;
+  receipt.receipt_written = true;
+  receipt.failed_checks = receipt.ok ? [] : [...new Set([...(issues || []), receipt.reason_code || "strategy3_v2_failed"])];
+  receipt.first_blocker = receipt.failed_checks[0] || null;
+  const outputPath = recoveryReplay
+    ? path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-v2-recovery-replay-${compactDate}.json`)
+    : scanReceiptPath(compactDate);
+  const file = writeJson(outputPath, receipt);
   console.log(JSON.stringify({ ...receipt, receipt_path: file }, null, 2));
   process.exitCode = receipt.ok ? 0 : 1;
 }
 
-main().catch((error) => { console.error(error); process.exit(1); });
+if (require.main === module) main().catch((error) => { console.error(error); process.exit(1); });
+
+module.exports = { buildScannerCoreResults };

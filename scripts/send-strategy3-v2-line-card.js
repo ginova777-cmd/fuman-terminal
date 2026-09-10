@@ -8,6 +8,7 @@ const date = process.argv.find((x) => x.startsWith("--trade-date="))?.split("=")
 const compact = date.replace(/\D/g, "");
 const dryRun = process.argv.includes("--dry-run");
 const retryTarget = process.argv.find((x) => x.startsWith("--retry-target="))?.split("=")[1] || "";
+const recoveryReplay = process.argv.includes("--recovery-replay");
 
 function reg(name) {
   try { return execFileSync("reg.exe", ["query", "HKCU\\Environment", "/v", name], { encoding: "utf8", windowsHide: true }).trim().split(/\s{2,}/).pop().trim(); }
@@ -35,26 +36,32 @@ function priorSent(target, runId) {
   } catch { return false; }
 }
 function card(scan) {
+  const resultBoxes = (scan.results || []).slice(0, 7).map((r) => ({
+    type: "box", layout: "vertical", paddingAll: "9px", backgroundColor: "#FFF3F7", cornerRadius: "8px", contents: [
+      { type: "text", text: `${r.rank}. ${r.code} ${r.name || ""}`, weight: "bold", color: "#AD1457" },
+      { type: "text", text: `進場 ${r.entry_price}｜停損 ${r.stop_price}｜目標 ${r.conservative_target_price}`, size: "sm", wrap: true },
+      { type: "text", text: `分數 ${r.score}｜漲幅 ${r.change_percent}%`, size: "xs", color: "#666666" }] }));
+  if (!resultBoxes.length) resultBoxes.push({ type: "text", text: "今日正式掃描完成，符合條件 0 檔。", wrap: true, color: "#666666" });
   return { type: "bubble",
     header: { type: "box", layout: "vertical", backgroundColor: "#EC407A", contents: [
-      { type: "text", text: "隔日沖參考", color: "#FFFFFF", weight: "bold", size: "lg" },
+      { type: "text", text: recoveryReplay ? "策略3 修復重播結果" : "隔日沖參考", color: "#FFFFFF", weight: "bold", size: "lg" },
       { type: "text", text: `${scan.trade_date}｜${scan.result_count} 檔`, color: "#FFFFFF", size: "sm" }] },
-    body: { type: "box", layout: "vertical", spacing: "md", contents: (scan.results || []).slice(0, 7).map((r) => ({
-      type: "box", layout: "vertical", paddingAll: "9px", backgroundColor: "#FFF3F7", cornerRadius: "8px", contents: [
-        { type: "text", text: `${r.rank}. ${r.code} ${r.name || ""}`, weight: "bold", color: "#AD1457" },
-        { type: "text", text: `進場 ${r.entry_price}｜停損 ${r.stop_price}｜目標 ${r.conservative_target_price}`, size: "sm", wrap: true },
-        { type: "text", text: `分數 ${r.score}｜漲幅 ${r.change_percent}%`, size: "xs", color: "#666666" }] })) },
-    footer: { type: "box", layout: "vertical", contents: [{ type: "text", text: "3～7 個交易日參考，非自動下單", size: "xs", color: "#888888" }] } };
+    body: { type: "box", layout: "vertical", spacing: "md", contents: resultBoxes },
+    footer: { type: "box", layout: "vertical", contents: [{ type: "text", text: recoveryReplay ? "水源修復後隔離重播；非自然時槽，非自動下單" : "3～7 個交易日參考，非自動下單", size: "xs", color: "#888888", wrap: true }] } };
 }
 async function main() {
-  const scan = c.readJson(c.scanReceiptPath(compact), null);
-  if (!scan || scan.ok !== true || scan.status !== "COMPLETE" || scan.apply !== true || !String(scan.run_id || "").startsWith(`strategy3v2-${compact}-`)) {
+  const scanPath = recoveryReplay ? path.join(runtime, "data", "scan-receipts", `strategy3-v2-recovery-replay-${compact}.json`) : c.scanReceiptPath(compact);
+  const scan = c.readJson(scanPath, null);
+  const acceptedStatus = recoveryReplay ? "RECOVERY_REPLAY_COMPLETE" : "COMPLETE";
+  const acceptedRunPrefix = recoveryReplay ? `strategy3v2-recovery-replay-${compact}-` : `strategy3v2-${compact}-`;
+  if (!scan || scan.ok !== true || scan.status !== acceptedStatus || scan.apply !== true || !String(scan.run_id || "").startsWith(acceptedRunPrefix)) {
     throw new Error("strategy3_v2_scan_not_publishable");
   }
   const cfg = config();
   const types = new Set(cfg.targets.map(type));
   const receipt = { ok: true, strategy: c.STRATEGY, contract: c.CONTRACT_VERSION, checked_at: c.nowTaipeiIso(), date: compact,
-    dry_run: dryRun, status: dryRun ? "DRY_RUN_READY" : "PUSHED", run_id: scan.run_id, count: scan.result_count || 0,
+    dry_run: dryRun, recovery_replay: recoveryReplay, natural_slot_complete: !recoveryReplay,
+    status: dryRun ? "DRY_RUN_READY" : (recoveryReplay ? "RECOVERY_REPLAY_PUSHED" : "PUSHED"), run_id: scan.run_id, count: scan.result_count || 0,
     message_type: "flex", line_push_ok: false, line_push_personal_ok: false, line_push_group_ok: false,
     token_logged: false, target_logged: false, target_count: cfg.targets.length,
     line_card_design_contract: { version: "strategy3-v2-line-card-overnight-reference-v1", title: "隔日沖參考",
@@ -67,8 +74,8 @@ async function main() {
     process.env.LINE_CHANNEL_ACCESS_TOKEN = cfg.token; process.env.LINE_TO = targetsToSend.join(",");
     process.env.LINE_PUSH_RETRIES = process.env.LINE_PUSH_RETRIES || "3"; process.env.LINE_PUSH_TIMEOUT_MS = process.env.LINE_PUSH_TIMEOUT_MS || "4500";
     process.env.NOTIFY_GUARD_DISABLED = "1";
-    const deliveries = await require("./line-push").sendLineFlex(`隔日沖參考 ${scan.trade_date}`, card(scan), {
-      idempotencyKey: `strategy3-v2:${scan.run_id}`,
+    const deliveries = await require("./line-push").sendLineFlex(recoveryReplay ? `策略3 修復重播結果 ${scan.trade_date}` : `隔日沖參考 ${scan.trade_date}`, card(scan), {
+      idempotencyKey: `${recoveryReplay ? "strategy3-v2-recovery-replay" : "strategy3-v2"}:${scan.run_id}`,
       strategy3V2Line: true,
       dataConfirmed: true,
     });
@@ -85,7 +92,8 @@ async function main() {
     receipt.ok = receipt.line_push_personal_ok && receipt.line_push_group_ok;
     if (!receipt.ok) receipt.status = "PARTIAL_TARGETS";
   }
-  const file = c.writeJson(c.lineReceiptPath(compact, dryRun ? ".dry-run" : ""), receipt);
+  const suffix = recoveryReplay ? `.recovery-replay${dryRun ? ".dry-run" : ""}` : (dryRun ? ".dry-run" : "");
+  const file = c.writeJson(c.lineReceiptPath(compact, suffix), receipt);
   console.log(JSON.stringify({ ...receipt, receipt_path: file }, null, 2)); process.exitCode = receipt.ok ? 0 : 1;
 }
 main().catch((error) => {

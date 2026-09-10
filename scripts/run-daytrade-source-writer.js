@@ -470,6 +470,19 @@ function isWebSocketQuote(quote) {
   return source.includes("websocket") || source.includes("fugle-ws");
 }
 
+function daytradeTotalVolumeUnit(row = {}, fallback = {}) {
+  const explicit = String(
+    row.totalVolumeUnit || row.total_volume_unit || row.volumeUnit || row.volume_unit
+    || row.payload?.total_volume_unit || row.payload?.volume_unit
+    || fallback.payload?.total_volume_unit || fallback.payload?.volume_unit || "",
+  ).trim().toLowerCase();
+  if (["lots", "shares"].includes(explicit)) return explicit;
+  const market = String(row.market || fallback.market || "").trim().toUpperCase();
+  if (row.intradayOddLot === true || market === "ESB") return "shares";
+  if (row.intradayOddLot === false || ["TSE", "OTC", "TIB"].includes(market)) return "lots";
+  return "";
+}
+
 function isFugleQuote(quote) {
   const source = String(quote?.source || quote?.payload?.source || quote?.payload?.quoteSource || "").toLowerCase();
   return source.includes("fugle");
@@ -1352,6 +1365,20 @@ function mergeWebSocketQuoteCache(quoteMap) {
       row.aggregateLastUpdated || previous.payload?.aggregate_last_updated,
       '',
     );
+    const totalVolumeRaw = currentValue(row.tradeVolume, row.total_volume);
+    const totalVolumeUnit = daytradeTotalVolumeUnit(row, previous);
+    const totalVolumeSourceEventAt = normalizeTimestamp(
+      row.totalVolumeSourceEventAt || row.total_volume_source_event_at || row.exchangeTime || row.quoteSeenAt,
+      "",
+    );
+    const totalVolumeNumber = Number(totalVolumeRaw);
+    const totalVolumeAvailable = totalVolumeRaw !== undefined
+      && totalVolumeRaw !== null
+      && totalVolumeRaw !== ""
+      && Number.isFinite(totalVolumeNumber)
+      && totalVolumeNumber >= 0
+      && Boolean(totalVolumeUnit)
+      && Boolean(totalVolumeSourceEventAt);
     const changePercentValue = currentValue(row.changePercent, row.change_percent, row.percent);
     const merged = {
       ...previous,
@@ -1376,7 +1403,7 @@ function mergeWebSocketQuoteCache(quoteMap) {
       is_trial: row.isTrial === true || row.is_trial === true,
       is_limit_up_bid: row.isLimitUpBid === true || row.is_limit_up_bid === true,
       change_percent: numeric(changePercentValue, previous.change_percent),
-      total_volume: numeric(row.tradeVolume ?? row.total_volume, previous.total_volume, true),
+      total_volume: numeric(totalVolumeRaw, previous.total_volume),
       trade_value: numeric(row.tradeValue ?? row.trade_value, previous.trade_value, true),
       bid_price: numeric(row.bidPrice ?? row.bid_price, previous.bid_price, true),
       ask_price: numeric(row.askPrice ?? row.ask_price, previous.ask_price, true),
@@ -1398,6 +1425,12 @@ function mergeWebSocketQuoteCache(quoteMap) {
         quote_seen_at: seenAt,
         received_at: receivedAt,
         aggregate_last_updated: aggregateLastUpdated,
+        total_volume_unit: totalVolumeUnit || null,
+        volume_unit: totalVolumeUnit || null,
+        total_volume_raw_unit: totalVolumeUnit || null,
+        total_volume_source_event_at: totalVolumeSourceEventAt || null,
+        total_volume_available: totalVolumeAvailable,
+        is_synthetic: row.isSynthetic === true || row.is_synthetic === true,
         trial_event_at: normalizeTimestamp(
           row.trialEventAt || row.trial_event_at || row.payload?.trialEventAt || previous.trial_event_at || previous.payload?.trial_event_at,
           "",
@@ -2090,9 +2123,6 @@ async function fetchIntradayStatus(activeSymbols = []) {
         ready_ma5: false,
         ready_ma10: false,
         ready_ma20_continuous: false,
-        ready_ma30: false,
-        ready_ma58: false,
-        ready_ma35_continuous: false,
         latest_candle_age_seconds: 999999,
         _closes: [],
         _volumes: [],
@@ -2253,7 +2283,7 @@ async function fetchIntradayStatus(activeSymbols = []) {
   try {
     const rows = await supabaseGetPaged(
       "v_fugle_daytrade_intraday_1m_status",
-      "select=symbol,latest_candle_time,today_candle_count,warmup_candle_count,continuous_candle_count,ready_ma3,ready_ma5,ready_ma10,ready_ma20_continuous,ready_ma30,ready_ma58,ready_ma35_continuous,latest_candle_age_seconds,ma3,ma5,ma10,ma20,ma30,ma35,ma58,ma3_rising,ma5_rising,ma10_rising,ma30_rising,ma35_rising,ma58_rising,ma5_ma10_ma35_bullish,ma_bullish_alignment",
+      "select=symbol,latest_candle_time,today_candle_count,warmup_candle_count,continuous_candle_count,ready_ma3,ready_ma5,ready_ma10,ready_ma20_continuous,latest_candle_age_seconds,ma3,ma5,ma10,ma20,ma3_rising,ma5_rising,ma10_rising,ma_bullish_alignment",
       { service: true, pageSize: 1000 },
     );
     if (rows.length) {
@@ -2333,7 +2363,18 @@ function priorityPoolDbRows(rows) {
       ...(row.payload || {}),
       trade_date: String(row.payload?.trade_date || taipeiDate()),
       canonical_run_id: String(row.payload?.canonical_run_id || `${SOURCE_NAME}:${compactDateKey(taipeiDate())}:canonical`),
+      writer_run_id: String(row.payload?.writer_run_id || WRITER_INSTANCE_ID),
+      generation_id: String(row.payload?.generation_id || row.payload?.writer_run_id || WRITER_INSTANCE_ID),
+      source_name: String(row.payload?.source_name || SOURCE_NAME),
+      source_trade_date: String(row.payload?.source_trade_date || row.payload?.trade_date || taipeiDate()),
       canonical_pool_layer: String(row.payload?.canonical_pool_layer || row.payload?.pool_layer || poolLayerForRank(Number(row.priority_rank))),
+      industry: row.industry || row.industry_subgroup || row.sector || row.heatmapSector || row.primaryIndustry || row.payload?.industry || "",
+      sector: row.sector || row.heatmapSector || row.primaryIndustry || row.industry || row.payload?.sector || "",
+      heatmapSector: row.heatmapSector || row.sector || row.primaryIndustry || row.payload?.heatmapSector || "",
+      primaryIndustry: row.primaryIndustry || row.industry_subgroup || row.sector || row.payload?.primaryIndustry || "",
+      officialIndustry: row.officialIndustry || row.official_industry || row.industry_parent || row.payload?.officialIndustry || "",
+      industry_subgroup: row.industry_subgroup || row.industry || row.sector || "",
+      industry_parent: row.industry_parent || row.officialIndustry || row.official_industry || "",
       pool_reasons: Array.isArray(row.poolReasons) ? row.poolReasons : [],
     },
   }));
@@ -2353,27 +2394,17 @@ function intradayStatusCacheRows(intradayMap) {
         continuous_candle_count: Math.max(0, Math.floor(numberValue(row.continuous_candle_count))),
         ready_ma3: boolValue(row.ready_ma3),
         ready_ma20_continuous: boolValue(row.ready_ma20_continuous),
-        ready_ma35_continuous: boolValue(row.ready_ma35_continuous),
         latest_candle_age_seconds: Math.max(0, Math.floor(numberValue(row.latest_candle_age_seconds, 999999))),
-        ready_ma58: boolValue(row.ready_ma58),
         ready_ma5: boolValue(row.ready_ma5),
         ready_ma10: boolValue(row.ready_ma10),
-        ready_ma30: boolValue(row.ready_ma30),
-        ma35: Number.isFinite(Number(row.ma35)) ? Number(row.ma35) : null,
         ma3: Number.isFinite(Number(row.ma3)) ? Number(row.ma3) : null,
         ma5: Number.isFinite(Number(row.ma5)) ? Number(row.ma5) : null,
         ma10: Number.isFinite(Number(row.ma10)) ? Number(row.ma10) : null,
         ma20: Number.isFinite(Number(row.ma20)) ? Number(row.ma20) : null,
-        ma30: Number.isFinite(Number(row.ma30)) ? Number(row.ma30) : null,
-        ma58: Number.isFinite(Number(row.ma58)) ? Number(row.ma58) : null,
-        ma5_ma10_ma35_bullish: boolValue(row.ma5_ma10_ma35_bullish),
         ma_bullish_alignment: boolValue(row.ma_bullish_alignment),
         ma3_rising: boolValue(row.ma3_rising),
         ma5_rising: boolValue(row.ma5_rising),
         ma10_rising: boolValue(row.ma10_rising),
-        ma30_rising: boolValue(row.ma30_rising),
-        ma35_rising: boolValue(row.ma35_rising),
-        ma58_rising: boolValue(row.ma58_rising),
         relative_volume_5m: Number.isFinite(Number(row.relative_volume_5m)) ? Number(row.relative_volume_5m) : 0,
         recent_1m_volume_trend: String(row.recent_1m_volume_trend || 'unknown'),
         macd_line: Number.isFinite(Number(row.macd_line)) ? Number(row.macd_line) : null,
@@ -4684,7 +4715,6 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
             latest_candle_time: previous.latest_candle_time || intradayMap.aggregate.latestCandleTime || "",
             latest_candle_age_seconds: Math.min(numberValue(previous.latest_candle_age_seconds, 999999), aggregateStaleSeconds),
             ready_ma20_continuous: true,
-            ready_ma35_continuous: true,
             ready_ge_35: true,
             continuous_candle_count: Math.max(numberValue(previous.continuous_candle_count), 35),
             today_candle_count: Math.max(numberValue(previous.today_candle_count), 35),
@@ -4794,15 +4824,13 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     && rateLimitStatus === "ok";
   const scopedIndicatorRequired = Math.max(1, Math.ceil(formalScanPoolSymbols * MIN_INDICATOR_WARMUP_COVERAGE));
   const effectiveMa20Required = Math.min(MIN_READY_MA20_CONTINUOUS, scopedIndicatorRequired);
-  const effectiveMa35Required = 0;
   // Before 09:00, a quiet stock has no new trade by design. Warmup health is
   // therefore a transport/data-base check, not an impossible per-symbol trade
   // freshness threshold. The strict quote and same-day 1m requirements resume
   // exactly at 09:00 for every formal decision.
   const warmupTransportHealthy = webSocketStatus.formalReady
     && numberValue(webSocketStatus.statusAgeSeconds, 999999) <= MAX_QUOTE_AGE_SECONDS;
-  // Only MA20 remains a required historical warmup. MA30/35/58 are not
-  // calculated by Mother Pool and never participate in readiness.
+  // MA20 is the longest moving average required by Mother Pool readiness.
   // block source readiness: no same-day 1m evidence exists yet. After 09:00
   // strictScannerCanRunOpening keeps the formal MA coverage requirements.
   const warmupIndicatorsAvailable = readyMa20 > 0;
@@ -4863,9 +4891,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     last429AgeSeconds,
     dailyVolumeStatus,
     readyMa20,
-    readyMa35: 0,
     effectiveMa20Required,
-    effectiveMa35Required,
     futoptMapped,
     futoptGateReady,
     intraday1mStaleSeconds,
@@ -5191,16 +5217,9 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     ma3_warmup_status: readyMa3 >= Math.max(1, Math.min(priorityPoolSymbols || 1, minFormalPrioritySymbols)) ? "ready" : readyMa3 > 0 ? "degraded" : "empty",
     ma20_warmup_status: ma20WarmupStatus,
     required_indicator_warmup: ["MA3", "MA5", "MA10", "MA20", "KD", "MACD", "RSI"],
-    excluded_indicator_warmup: ["MA30", "MA35", "MA58"],
-    ma30_warmup_required: false,
-    ma35_warmup_required: false,
-    ma58_warmup_required: false,
     ready_ma3: readyMa3,
     ready_ma20_continuous: readyMa20,
-    ready_ma35_continuous: 0,
-    ready_ma58: 0,
     ready_ma20_required: effectiveMa20Required,
-    ready_ma35_required: 0,
     indicator_set: ["MA3", "MA5", "MA10", "MA20", "KD", "MACD", "RSI"],
     preopen_today_1m_required_before_formal: false,
     intraday_1m_stale_seconds: intraday1mStaleSeconds,
@@ -5208,8 +5227,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     today_candle_count: today1mRows,
     ready_ge_35_symbols: 0,
     ready_ge_35: 0,
-    ready_ma35_continuous_symbols: 0,
-    intraday_1m_ready_symbols: formalScanIntraday1mReadySymbols,
+    intraday_1m_ready_symbols: intraday1mReadySymbols,
     deep_scan_pool_symbols: deepScanPoolSymbols,
     formal_scan_pool_symbols: formalScanPoolSymbols,
     formal_scan_intraday_1m_ready_symbols: formalScanIntraday1mReadySymbols,
@@ -6334,6 +6352,11 @@ function updateMotherPoolDelta(result) {
   const motherPoolDelta = updateMotherPoolDelta(result);
   const tradeDate = taipeiDate();
   const canonicalRunId = canonicalDaytradeRunId(tradeDate);
+  let previousGate = null;
+  try {
+    const previousRows = await supabaseGetPaged("source_status", "select=status,updated_at,payload&source_name=eq." + encodeURIComponent(SOURCE_NAME) + "&limit=1", { service: true, pageSize: 1 });
+    previousGate = previousRows?.[0] || null;
+  } catch {}
   result.payload.trade_date = tradeDate;
   result.payload.tradeDate = tradeDate;
   result.payload.canonical_run_id = canonicalRunId;
@@ -6385,7 +6408,6 @@ function updateMotherPoolDelta(result) {
     daily_volume_status: result.payload.daily_volume_status,
     avg_volume5_eligible: result.payload.avg_volume5_eligible,
     ready_ma20_continuous: result.payload.ready_ma20_continuous,
-    ready_ma35_continuous: result.payload.ready_ma35_continuous,
     intraday_1m_stale_seconds: result.payload.intraday_1m_stale_seconds,
     today_1m_symbols: result.payload.today_1m_symbols,
     today_1m_rows: result.payload.today_1m_rows,
@@ -6409,6 +6431,42 @@ function updateMotherPoolDelta(result) {
   }
 
   await supabaseUpsert("source_status", [sourceRow], "source_name");
+  const previousPayload = previousGate?.payload && typeof previousGate.payload === "object" ? previousGate.payload : {};
+  const gateChanged = !previousGate
+    || String(previousGate.status || "") !== String(result.status || "")
+    || String(previousPayload.gate_grade || "") !== String(result.payload.gate_grade || result.gateGrade || "")
+    || String(previousPayload.gate_status || "") !== String(result.payload.gate_status || "")
+    || Boolean(previousPayload.formal_entry_allowed) !== Boolean(result.payload.formal_entry_allowed);
+  if (gateChanged) {
+    try {
+      await supabaseInsert("fugle_daytrade_gate_transition_receipts", [{
+        trade_date: tradeDate,
+        canonical_run_id: canonicalRunId,
+        writer_run_id: result.payload.writer_run_id || result.payload.mother_pool_round_summary?.writer_run_id || WRITER_INSTANCE_ID,
+        observed_at: sourceRow.updated_at,
+        previous_source_status: previousGate?.status || null,
+        source_status: result.status,
+        previous_gate_grade: previousPayload.gate_grade || null,
+        gate_grade: result.payload.gate_grade || result.gateGrade || null,
+        previous_gate_status: previousPayload.gate_status || null,
+        gate_status: result.payload.gate_status || null,
+        previous_formal_entry_allowed: previousGate ? Boolean(previousPayload.formal_entry_allowed) : null,
+        formal_entry_allowed: Boolean(result.payload.formal_entry_allowed),
+        first_blocker: result.payload.failed_checks?.[0] || result.payload.reason_code || null,
+        source_updated_at: sourceRow.updated_at,
+        transition_payload: {
+          contract: "fugle_daytrade_gate_transition_receipt_v1",
+          source_view: "v_fugle_daytrade_source_status_contract",
+          canonical_view: "v_fugle_daytrade_canonical_gate",
+          unattended_view: "v_fugle_daytrade_unattended_gate_status",
+          canonical_gate_reason: result.payload.canonical_gate_reason || null,
+          evidence_status: result.payload.evidence_status || null,
+        },
+      }]);
+    } catch (error) {
+      nonFatalWriteErrors.push({ target: "fugle_daytrade_gate_transition_receipts", message: error?.message || String(error) });
+    }
+  }
 }
 
 async function writeEnrichmentPendingHeartbeat({ activeSymbols, priorityRows, quoteMap, dailyVolumeMap, state, errors = [] }) {
@@ -6632,7 +6690,12 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
   const nextMirror = { tradeDate, symbols: { ...(priorMirror.symbols || {}) } };
   let seededSymbols = 0;
   let seedAttempts = 0;
-  const maxSeedSymbolsPerTick = Math.max(5, Math.min(80, Number(process.env.DAYTRADE_CANDLE_MAX_SEED_SYMBOLS_PER_TICK || 10)));
+  // Keep the high-frequency Source Writer inside the scheduler budget.  The
+  // writer always mirrors the latest candle for every Mother Pool symbol; the
+  // historical warmup seed is deliberately slower so Supabase upsert latency
+  // cannot kill the run before Mother Pool delta/source_status receipts are
+  // written.  Full 5m/history coverage is handled by the dedicated 5m runner.
+  const maxSeedSymbolsPerTick = Math.max(1, Math.min(80, Number(process.env.DAYTRADE_CANDLE_MAX_SEED_SYMBOLS_PER_TICK || 3)));
   let incrementalRows = 0;
   let notReadySymbols = 0;
 
@@ -7454,9 +7517,7 @@ async function tick() {
     hotPoolSymbols: result.payload.hot_pool_symbols,
     indicatorSet: result.payload.indicator_set,
     readyMa3: result.payload.ready_ma3,
-    excludedIndicatorWarmup: result.payload.excluded_indicator_warmup,
     ma3WarmupStatus: result.payload.ma3_warmup_status,
-    ma58WarmupStatus: result.payload.ma58_warmup_status,
     stockGroupContractSource: result.payload.stock_group_contract_source,
     stockGroupContractRows: result.payload.stock_group_contract_rows,
     stockFutureInitial0846Rows: result.payload.stock_future_initial_0846_rows,
