@@ -22,7 +22,7 @@ check("closed_loop_order", JSON.stringify(contract.closedLoop) === JSON.stringif
 check("all_consumers_have_adapter", contract.acceptedConsumers.every((name) => Object.prototype.hasOwnProperty.call(CONSUMERS, name)));
 check("all_adapters_resolve", Object.keys(CONSUMERS).every((name) => adapterFor(name).consumerName === name));
 check("strategy5_uses_post_close_snapshot", adapterFor("strategy5").postCloseSnapshotRead === true);
-check("strategy4_mother_pool_is_supplemental_not_daily_k_gate", adapterFor("strategy4").requireMotherPoolReceipt === false);
+check("strategy4_is_not_a_mother_pool_consumer", !Object.prototype.hasOwnProperty.call(CONSUMERS, "strategy4"));
 check("strategy5_does_not_require_intraday_candles", adapterFor("strategy5").hydrateMotherPoolCandles === false);
 check("healthy_identity_passes", validateIdentity({ receipt: {
   mother_pool_contract_version: ACCEPTED_CONTRACT_VERSION,
@@ -49,7 +49,6 @@ check("stale_source_fails_closed", validateIdentity({ receipt: {
 
 const runnerWiring = {
   strategy2: ["scripts/run-strategy2-v3-live-scan.js", 'readMotherPoolForStrategy("strategy2"'],
-  strategy4: ["run-strategy4.ps1", 'Invoke-MotherPoolV41ConsumerGate -Consumer "strategy4"'],
   strategy5: ["run-strategy5.ps1", 'Invoke-MotherPoolV41ConsumerGate -Consumer "strategy5"'],
   institution: ["run-institution.ps1", 'Invoke-MotherPoolV41ConsumerGate -Consumer "institution"'],
   buy_sell: ["run-buy-sell-complete.ps1", 'Invoke-Required "chip source sync"'],
@@ -61,17 +60,20 @@ for (const [consumer, [file, marker]] of Object.entries(runnerWiring)) {
 }
 const buySellRunner = fs.readFileSync(path.join(ROOT, "run-buy-sell-complete.ps1"), "utf8");
 const institutionRunner = fs.readFileSync(path.join(ROOT, "run-institution.ps1"), "utf8");
+const strategy4Runner = fs.readFileSync(path.join(ROOT, "run-strategy4.ps1"), "utf8");
+const strategy4Scanner = fs.readFileSync(path.join(ROOT, "scripts", "scan-strategy4-cache.js"), "utf8");
 check("buy_sell_official_chip_source_precedes_optional_enrichment", !buySellRunner.includes('Invoke-MotherPoolV41ConsumerGate -Consumer "buy_sell"'));
 check("institution_mother_pool_enrichment_non_blocking", institutionRunner.includes("optional Mother Pool v4.1 enrichment unavailable; official TWSE/TPEx institution scan continues"));
+check("strategy4_runner_has_zero_mother_pool_references", !/MotherPool|mother.?pool/i.test(strategy4Runner));
+check("strategy4_scanner_has_zero_mother_pool_reads", !/STRATEGY4_PRIORITY_FILE|daytradeMotherPoolSymbols|strategy4MotherPoolSource/i.test(strategy4Scanner));
 const receiptMarkers = [
   ["scripts/run-strategy2-v3-live-scan.js", "accepted_symbol_count"],
-  ["run-strategy4.ps1", "accepted_symbol_count"],
   ["run-strategy5.ps1", "accepted_symbol_count"],
   ["run-institution.ps1", "accepted_symbol_count"],
   ["scripts/verify-buy-sell-complete.js", "accepted_symbol_count"],
   ["scripts/run-scanner-with-mother-pool-v4-1.js", "accepted_symbol_count"],
 ];
-check("all_six_runner_receipts_include_v4_1_identity", receiptMarkers.every(([file, marker]) => {
+check("all_mother_pool_consumer_receipts_include_v4_1_identity", receiptMarkers.every(([file, marker]) => {
   const body = fs.readFileSync(path.join(ROOT, file), "utf8");
   return body.includes(marker) && body.includes("contract_version") && body.includes("canonical_run_id");
 }));

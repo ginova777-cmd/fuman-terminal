@@ -1,0 +1,24 @@
+{
+  "contract": "daytrade_mother_pool_v4_1",
+  "contractVersion": "4.1.0",
+  "effectiveDate": "2026-09-09",
+  "timeZone": "Asia/Taipei",
+  "authoritativeView": "public.v_fugle_daytrade_mother_pool_v4_1",
+  "reader": "lib/daytrade-canonical-water-reader.js",
+  "adapter": "lib/daytrade-mother-pool-strategy-adapters.js",
+  "verifier": "scripts/verify-daytrade-mother-pool-consumer-adapters.js",
+  "closedLoop": ["runner", "canonical_readback", "verifier", "receipt"],
+  "acceptedConsumers": ["strategy2", "strategy3_v2", "strategy5", "institution", "buy_sell", "scanner", "telegram"],
+  "formalMovingAverages": ["MA3", "MA5", "MA10", "MA20"],
+  "shortMovingAverageDirection": "MA5 > MA10 > MA20",
+  "rules": {
+    "sameTradeDateRequired": true,
+    "sameCanonicalRunRequired": true,
+    "sameContractVersionRequired": true,
+    "sourceFreshnessRequired": "same_trade_date_current",
+    "retiredViewFallbackDisabled": true,
+    "previousGoodCannotBecomeToday": true,
+    "dataGapMustNotDisplayAsNoSignal": true,
+    "consumerCannotWriteMotherPool": true
+  }
+}

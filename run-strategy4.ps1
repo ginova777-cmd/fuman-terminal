@@ -36,8 +36,6 @@ $strategy4Stamp = Normalize-Strategy4DateStamp $env:FUMAN_SCANNER_TARGET_DATE
 if ([string]::IsNullOrWhiteSpace($strategy4Stamp)) { $strategy4Stamp = Normalize-Strategy4DateStamp $env:FUMAN_SCANNER_TARGET_TRADE_DATE }
 if ([string]::IsNullOrWhiteSpace($strategy4Stamp)) { $strategy4Stamp = Normalize-Strategy4DateStamp $env:FUMAN_EXPECTED_DATE }
 if ([string]::IsNullOrWhiteSpace($strategy4Stamp)) { $strategy4Stamp = Get-Date -Format yyyyMMdd }
-. (Join-Path $PSScriptRoot "mother-pool-v4-1-consumer-gate.ps1")
-$script:MotherPoolV41 = [pscustomobject]@{ contract_version="4.1.0"; trade_date=""; canonical_run_id=""; source_freshness="not_checked"; accepted_symbol_count=0; verifier_ok=$false }
 
 function Write-Log($message) {
   $message | Tee-Object -FilePath $log -Append | Out-Null
@@ -67,12 +65,6 @@ function Write-Strategy4Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     warnings = @($Warnings)
     blockingReason = $BlockingReason
     log = $log
-    mother_pool_contract_version = $script:MotherPoolV41.contract_version
-    mother_pool_trade_date = $script:MotherPoolV41.trade_date
-    mother_pool_canonical_run_id = $script:MotherPoolV41.canonical_run_id
-    mother_pool_source_freshness = $script:MotherPoolV41.source_freshness
-    accepted_symbol_count = [int]($script:MotherPoolV41.accepted_symbol_count ?? 0)
-    mother_pool_verifier_ok = ($script:MotherPoolV41.verifier_ok -eq $true)
   }
   $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $receiptDir "strategy4.json") -Encoding utf8
   try {
@@ -357,13 +349,6 @@ if ($datePreflightExit -ne 0) {
   exit $datePreflightExit
 }
 
-try {
-  $script:MotherPoolV41 = Invoke-MotherPoolV41ConsumerGate -Consumer "strategy4" -TradeDate $strategy4Stamp -RuntimeRoot $runtime
-} catch {
-  $reason = "strategy4 Mother Pool v4.1 gate failed: $($_.Exception.Message)"
-  Write-Strategy4Receipt "failed" 1 $false 0 "" @($reason) $reason
-  exit 1
-}
 Write-Strategy4Receipt "running" 0 $false 0 "" @("formal runner entered; awaiting source gate and tri-surface closure") "strategy4_runner_started"
 Write-Log "Strategy4 formal runner entered after market-calendar gate; receipt status=running."
 
