@@ -5935,12 +5935,7 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
   technicalIndicatorReadback.forEach(attachIndustryFlow);
   events.forEach(attachIndustryFlow);
   const rawStrictBurstEventCount = events.length;
-  const industryScopedEvents = events.filter((event) => {
-    const eligible = event.industry_momentum_status === "ready"
-      && (event.industry_persistent_large_inflow === true || event.industry_sudden_large_inflow === true);
-    if (!eligible) addReject(event.symbol, event.industry_momentum_status === "ready" ? "industry_not_top3_or_sudden_inflow" : "industry_momentum_not_ready");
-    return eligible;
-  }).sort((a, b) =>
+  const industryScopedEvents = events.sort((a, b) =>
     numberValue(a.industry_flow_rank, 999999) - numberValue(b.industry_flow_rank, 999999)
     || numberValue(b.industry_heat_score) - numberValue(a.industry_heat_score)
     || String(a.symbol).localeCompare(String(b.symbol))
@@ -5964,8 +5959,9 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
       min_price: MOTHER_POOL_MIN_PRICE,
       max_quote_age_seconds: WINDOW_SECONDS,
       max_1m_stale_seconds: MAX_INTRADAY_1M_STALE_SECONDS,
-      industry_gate: "Taiwan full-market detailed-industry top 3 with continuing inflow OR any detailed industry with sudden top-3 positive flow delta >= TWD 500,000,000 within 5 minutes",
-      telegram_delivery_order: "persistent top-3 industries first, then sudden-inflow rank, then symbol",
+      industry_reference: "display only; not a hard notification gate for instant volume or instant lift",
+      retired_industry_gate: "removed: top-3 persistent inflow or 5-minute sudden top-3 TWD 500,000,000 delta is no longer required",
+      telegram_delivery_order: "industry-ranked events first when available, then symbol",
       detection_order: "full-market domestic detailed-industry ranking and round-over-round flow delta are finalized before Mother Pool symbol rules",
     },
     candidate_count: inputRows.length,
