@@ -8,8 +8,32 @@ const closureSource = fs.readFileSync(path.join(root, "scripts", "verify-strateg
 const wrapperSource = fs.readFileSync(path.join(root, "run-strategy4.ps1"), "utf8");
 const dailyPublishSource = fs.readFileSync(path.join(root, "scripts", "verify-strategy4-daily-publish.js"), "utf8");
 const dbVerifierSource = fs.readFileSync(path.join(root, "scripts", "verify-strategy4-db-latest-run.js"), "utf8");
+const packageSource = fs.readFileSync(path.join(root, "package.json"), "utf8");
+const prewarmSource = fs.readFileSync(path.join(root, "run-strategy4-source-prewarm.ps1"), "utf8");
 
 const failures = [];
+
+// Strategy4 owns its verifier chain. These legacy verifier entry points are
+// permanently retired and may only appear in this anti-revival blacklist.
+const retiredStrategy4Verifiers = [
+  "verify-strategy4-daily-ohlcv-scan-closure-readonly.js",
+];
+const executableStrategy4Surfaces = [
+  ["package.json", packageSource],
+  ["run-strategy4.ps1", wrapperSource],
+  ["run-strategy4-source-prewarm.ps1", prewarmSource],
+];
+
+for (const retiredVerifier of retiredStrategy4Verifiers) {
+  if (fs.existsSync(path.join(root, "scripts", retiredVerifier))) {
+    failures.push(`retired Strategy4 verifier file was restored: scripts/${retiredVerifier}`);
+  }
+  for (const [surface, source] of executableStrategy4Surfaces) {
+    if (source.includes(retiredVerifier)) {
+      failures.push(`retired Strategy4 verifier is executable again via ${surface}: ${retiredVerifier}`);
+    }
+  }
+}
 
 if (/daily\.volMa5\s*<[^\n]+return\s+null/.test(apiSource)) {
   failures.push("api/scan-strategy4.js duplicates the authoritative avg5 gate instead of using the runner's lots cache");
