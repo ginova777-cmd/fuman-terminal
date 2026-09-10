@@ -84,6 +84,11 @@ function ensureDailyStockMasterComplete() {
 
 const STRATEGY_PRIORITY_BRIDGE_SOURCES = [
   {
+    key: "strategy3",
+    protectedApi: true,
+    codeMode: "stock",
+  },
+  {
     key: "strategy4",
     latestResource: "strategy4_scan_runs",
     latestQuery: "select=*&status=eq.complete&complete=eq.true&order=finished_at.desc&limit=1",
@@ -2867,6 +2872,61 @@ function strategyPriorityStockCode(row, codeMode) {
 }
 
 async function readStrategyPriorityBridgeSource(source) {
+  if (source.protectedApi === true && source.key === "strategy3") {
+    const helper = repoPath("scripts", "read-protected-production-api.js");
+    let lastReason = "strategy3_protected_api_no_complete_run";
+    for (let daysBack = 1; daysBack <= 7; daysBack += 1) {
+      const candidateDate = taipeiDateDaysAgo(daysBack);
+      const endpoint = `/api/strategy3-latest?date=${compactDateKey(candidateDate)}&canvas=1&compact=1&shell=1&limit=1200&live=1&verify=1&noSnapshot=1`;
+      const result = spawnSync(process.execPath, ["--use-system-ca", helper, `--endpoint=${endpoint}`], {
+        cwd: repoPath(),
+        encoding: "utf8",
+        timeout: 30000,
+        windowsHide: true,
+      });
+      if (result.error || result.status !== 0) {
+        lastReason = String(result.error?.message || result.stderr || `protected_api_exit_${result.status}`).trim().slice(0, 300);
+        continue;
+      }
+      let envelope = null;
+      try { envelope = JSON.parse(String(result.stdout || "").trim()); } catch {}
+      const payload = objectPayload(envelope?.payload);
+      const rows = Array.isArray(payload.rows) ? payload.rows : (Array.isArray(payload.matches) ? payload.matches : []);
+      const publishable = envelope?.ok === true
+        && payload.ok === true
+        && payload.complete === true
+        && String(payload.status || "").toLowerCase() === "complete"
+        && payload.publishAllowed === true
+        && String(payload.evidenceStatus || "").toLowerCase() === "complete"
+        && String(payload.unattendedStatus || "").toUpperCase() === "YES"
+        && payload.fallbackUsed !== true
+        && String(payload.runId || payload.run_id || "").length > 0;
+      if (!publishable) {
+        lastReason = String(payload.reason_code || payload.reason || payload.status || "strategy3_api_not_publishable");
+        continue;
+      }
+      const symbols = [...new Set(rows.map((row) => strategyPriorityStockCode(row, "stock")).filter(Boolean))];
+      if (!symbols.length) {
+        lastReason = "strategy3_api_complete_run_empty";
+        continue;
+      }
+      return {
+        key: source.key,
+        status: "ready",
+        symbols,
+        reason: "",
+        runId: String(payload.runId || payload.run_id),
+        scanDate: compactDateKey(payload.tradeDate || payload.trade_date || candidateDate),
+        finishedAt: payload.updatedAt || payload.checkedAt || "",
+        qualityStatus: "complete",
+        publishAllowed: true,
+        resultRows: rows.length,
+        symbolCount: symbols.length,
+        source: "protected_canonical_api:/api/strategy3-latest",
+      };
+    }
+    return { key: source.key, status: "blocked", symbols: [], reason: lastReason, runId: "", scanDate: "", qualityStatus: "", resultRows: 0 };
+  }
   const latestRows = await supabaseGet(source.latestResource, source.latestQuery);
   const run = Array.isArray(latestRows) ? latestRows[0] : null;
   if (!run) {
@@ -3007,9 +3067,8 @@ function mergeStrategyPriorityBridgeIntoRuntimeFile(bridge) {
       tradeDate,
     ),
   };
-  // Remove obsolete per-strategy probes. Strategy2/3 are downstream decision
-  // systems; Mother Pool consumes their stocks through the terminal canonical
-  // union and does not depend on private or stale strategy tables.
+  // Remove obsolete embedded probes before rebuilding the current complete-run
+  // bridge. Each retained group below is sourced from its formal canonical view.
   delete next.strategy2;
   delete next.strategy3;
   for (const source of STRATEGY_PRIORITY_BRIDGE_SOURCES) {
@@ -3228,7 +3287,7 @@ function readRuntimePrioritySeeds(activeSymbols) {
   addMany("terminal", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, 100);
   addMany("opening", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, 100);
 
-  counts.strategy3 = 0; // Strategy3 detects the Strategy2 Mother Pool; it cannot seed or reprioritize its own water.
+  addMany("strategy3", payload.strategy3 || payload.strategy3Symbols || bridgeValues("strategy3"), 80);
   addMany("strategy6", payload.strategy6 || payload.strategy6Symbols || bridgeValues("strategy6"), 80);
   addMany("strategy7", payload.strategy7 || payload.strategy7Symbols || bridgeValues("strategy7"), 80);
   addMany("slash88", payload.slash88 || payload.eightyEight || payload.strategy88 || payload.strategy88Symbols, 90);
