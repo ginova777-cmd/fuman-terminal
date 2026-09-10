@@ -80,6 +80,12 @@ const formalTelegramVerifierFiles = (() => {
       .sort();
   } catch { return []; }
 })();
+const retiredTelegramVerifierFiles = [
+  path.join(ROOT, "scripts", "verify-canonical-water-notifier-receipt-contract.js"),
+];
+const retiredTelegramPackageKeys = [
+  '"verify:canonical-water-notifier-receipt"',
+];
 const requireLive = process.argv.includes("--require-live");
 const requireToday = process.argv.includes("--require-today");
 const liveTaskEvidenceFile = argValue("live-task-evidence");
@@ -128,7 +134,9 @@ const checks = {
   no_retired_verifier_reference: includesAll(packageSource, [
     '"verify:daytrade-burst-telegram": "node scripts/verify-daytrade-intraday-burst-telegram.js"',
   ]) && !/verify:daytrade[^"\r\n]*telegram[^"\r\n]*":(?!\s*"node scripts\/verify-daytrade-intraday-burst-telegram\.js")/i.test(packageSource)
-    && includesAll(masterControl, ["scripts\\verify-daytrade-intraday-burst-telegram.js"]),
+    && includesAll(masterControl, ["scripts\\verify-daytrade-intraday-burst-telegram.js"])
+    && retiredTelegramVerifierFiles.every((file) => !fs.existsSync(file))
+    && retiredTelegramPackageKeys.every((key) => !packageSource.includes(key)),
   writer_never_invokes_notifier: !writer.includes("notifyFromOutbox")
     && !writer.includes("notify-daytrade-intraday-burst-telegram"),
   exact_price_rule: includesAll(writer, [
@@ -513,6 +521,9 @@ const canonicalWaterReceipt = currentCanonicalWaterReceipt?.status === "complete
 const receiptEventKeys = receiptSentEvents.map((event) => String(event?.event_key || ""));
 const expectedAlertScope = "daytrade_mother_pool_only_0900_1230_with_same_day_fugle_1m_coverage_and_industry_heatmap";
 const outboxEvents = Array.isArray(outbox?.events) ? outbox.events : [];
+const lastAttemptSentEventCount = Number(receipt?.last_attempt?.sent_events || 0);
+const lastAttemptSkippedEventCount = Number(receipt?.last_attempt?.skipped_events || 0);
+const lastAttemptDetectedEventCount = Number(receipt?.last_attempt?.detected_events || 0);
 checks.runtime_outbox_mother_pool_scope = !outbox || String(outbox.alert_scope || "") === expectedAlertScope;
 checks.runtime_events_mother_pool_only = !outbox || outboxEvents.every((event) =>
   event?.tradable_mother_pool === true
@@ -566,12 +577,22 @@ checks.runtime_canonical_water_receipt_contract = !canonicalWaterReceipt || (
   && canonicalWaterReceipt?.sources?.quote === "fugle_daytrade_quotes_live"
   && canonicalWaterReceipt?.sources?.intraday_1m_rpc === "get_fugle_daytrade_intraday_1m_latest_n"
 );
-checks.runtime_canonical_water_event_evidence = !canonicalWaterReceipt || !Array.isArray(canonicalWaterReceipt?.event_evidence)
-  || canonicalWaterReceipt.event_evidence.every((row) => row?.mother_pool_member === true
+const canonicalWaterEventEvidenceRows = Array.isArray(canonicalWaterReceipt?.event_evidence)
+  ? canonicalWaterReceipt.event_evidence
+  : [];
+const canonicalWaterEventEvidenceReady = canonicalWaterEventEvidenceRows.every((row) => row?.mother_pool_member === true
     && row?.quote_trade_date_ok === true
     && row?.quote_fresh === true
     && row?.intraday_1m_trade_date_ok === true
     && row?.intraday_1m_ready === true);
+const lastAttemptSkippedAllCandidates = lastAttemptSentEventCount === 0
+  && lastAttemptDetectedEventCount >= 0
+  && lastAttemptSkippedEventCount === lastAttemptDetectedEventCount
+  && !receipt?.last_attempt?.first_blocker;
+checks.runtime_canonical_water_event_evidence = !canonicalWaterReceipt
+  || canonicalWaterEventEvidenceRows.length === 0
+  || canonicalWaterEventEvidenceReady
+  || lastAttemptSkippedAllCandidates;
 const legacyMotherPoolHeatmap = outbox?.industry_heatmap_source === "fugle_formal_quote_mother_pool_heatmap";
 const fullMarketDomesticHeatmap = (
   outbox?.industry_heatmap_source === "taiwan_domestic_detailed_industry+twse_tpex_mops_parent+fugle_formal_quote_full_market"
@@ -701,7 +722,8 @@ const runtime = {
   receipt_sent_event_count: receiptSentEvents.length,
   receipt_event_keys_unique: checks.runtime_receipt_event_keys_unique,
   receipt_canonical_fields: checks.runtime_receipt_canonical_fields,
-  receipt_last_attempt_sent_events: Number(receipt?.last_attempt?.sent_events || 0),
+  receipt_last_attempt_sent_events: lastAttemptSentEventCount,
+  receipt_last_attempt_skipped_events: lastAttemptSkippedEventCount,
   canonical_water_receipt_present: Boolean(canonicalWaterReceipt),
   canonical_water_receipt_status: canonicalWaterReceipt?.status || null,
   canonical_water_trade_date: canonicalWaterReceipt?.trade_date || null,
