@@ -107,6 +107,8 @@ $runnerArgs = @("scripts\run-opening-report-0830-production.js", "--apply-bridge
 if ($IsolatedBacktest) { $runnerArgs += "--isolated-backtest" }
 if ($ReuseLineReceipt) { $runnerArgs += "--reuse-line-receipt" }
 $run = Invoke-NodeStep -NodeArgs $runnerArgs -Label "runner"
+$persistenceArgs = @("scripts\verify-daytrade-mother-pool-closed-loop.js", "--write-receipt")
+$persistence = if ($run.exitCode -eq 0) { Invoke-NodeStep -NodeArgs $persistenceArgs -Label "mother-pool-persistence-verifier" } else { [pscustomobject]@{ label = "mother-pool-persistence-verifier"; exitCode = -1; stdout = ""; stderr = "" } }
 $verifierArgs = @("scripts\verify-opening-report-morning-contract.js", "--trade-date=$tradeDate")
 if (-not $IsolatedBacktest) { $verifierArgs += "--require-current" }
 $verifier = if ($run.exitCode -eq 0) { Invoke-NodeStep -NodeArgs $verifierArgs -Label "canonical-verifier" } else { [pscustomobject]@{ label = "canonical-verifier"; exitCode = -1; stdout = ""; stderr = "" } }
@@ -122,10 +124,11 @@ $lineGroupOk = ($null -ne $line -and $line.line_push_ok -eq $true -and $line.has
 $terminalOk = ($null -ne $final -and $final.terminal_briefing_snapshot.ok -eq $true)
 $bridgeOk = ($null -ne $final -and $final.mother_pool_bridge_attempted -eq $true -and $final.mother_pool_bridge_ok -eq $true)
 $fieldAckOk = ($null -ne $final -and $final.mother_pool_field_ack_ok -eq $true -and $final.mother_pool_field_ack.complete -eq $true)
+$persistenceAckOk = ($persistence.exitCode -eq 0)
 $expected = if ($null -ne $final -and $null -ne $final.expected_industry_count) { [int]$final.expected_industry_count } else { 0 }
 $scanned = if ($null -ne $final -and $null -ne $final.scanned_industry_count) { [int]$final.scanned_industry_count } else { 0 }
-$ok = ($runnerOk -and $verifierOk -and $linePersonalOk -and $lineGroupOk -and $terminalOk -and $bridgeOk -and $fieldAckOk -and $expected -eq 15 -and $scanned -eq 15)
-$reasonCode = if ($ok) { "complete" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } elseif (-not $fieldAckOk) { "mother_pool_field_ack_incomplete" } else { "industry_scan_incomplete" }
+$ok = ($runnerOk -and $verifierOk -and $linePersonalOk -and $lineGroupOk -and $terminalOk -and $bridgeOk -and $fieldAckOk -and $persistenceAckOk -and $expected -eq 15 -and $scanned -eq 15)
+$reasonCode = if ($ok) { "complete" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } elseif (-not $fieldAckOk) { "mother_pool_field_ack_incomplete" } elseif (-not $persistenceAckOk) { "mother_pool_persistence_ack_incomplete" } else { "industry_scan_incomplete" }
 
 $receipt = [ordered]@{
   contract = "opening-report-morning-wrapper-v1"
@@ -149,10 +152,13 @@ $receipt = [ordered]@{
   mother_pool_bridge_ok = $bridgeOk
   mother_pool_field_ack_ok = $fieldAckOk
   mother_pool_field_ack_receipt = if ($null -ne $final) { $final.mother_pool_field_ack_receipt } else { $null }
+  mother_pool_persistence_ack_ok = $persistenceAckOk
+  mother_pool_persistence_ack_receipt = Join-Path $RuntimeDir "data\scan-receipts\daytrade-mother-pool-closed-loop-$today.json"
   runner_ok = $runnerOk
   canonical_verifier_ok = $verifierOk
-  steps = @($run, $verifier)
+  steps = @($run, $persistence, $verifier)
   canonical_verifier = "scripts/verify-opening-report-morning-contract.js"
+  persistence_verifier = "scripts/verify-daytrade-mother-pool-closed-loop.js"
   telegram_enabled = $false
 }
 $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8

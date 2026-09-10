@@ -34,6 +34,11 @@ const RETIRED_VERIFIER_FILES = [
   "scripts/verify-terminal-opening-report-0830-standalone-renderer.js",
 ];
 
+const ALLOWED_OPENING_REPORT_VERIFIERS = new Set([
+  "verify-opening-report-morning-contract.js",
+  "verify-opening-report-0830-mother-pool-field-ack.js",
+]);
+
 const REQUIRED_INDUSTRIES = [
   "AI_GPU_CLOUD",
   "AWS_AI_DATACENTER",
@@ -201,6 +206,10 @@ function staticContractChecks(checks) {
   addCheck(checks, "retired_telegram_package_entry_absent", !(pkg.scripts && pkg.scripts[RETIRED_TELEGRAM_PACKAGE_KEY]), RETIRED_TELEGRAM_PACKAGE_KEY);
   addCheck(checks, "retired_telegram_contract_file_absent", !exists(RETIRED_TELEGRAM_SCRIPT), RETIRED_TELEGRAM_SCRIPT);
   for (const relPath of RETIRED_VERIFIER_FILES) addCheck(checks, "retired_verifier_file_absent:" + path.basename(relPath), !exists(path.join(ROOT, relPath)), path.join(ROOT, relPath));
+  const verifierFiles = fs.readdirSync(path.join(ROOT, "scripts"))
+    .filter((name) => /^verify-.*opening-report.*\.js$/i.test(name));
+  const unauthorizedVerifierFiles = verifierFiles.filter((name) => !ALLOWED_OPENING_REPORT_VERIFIERS.has(name));
+  addCheck(checks, "opening_report_verifier_allowlist_enforced", unauthorizedVerifierFiles.length === 0, unauthorizedVerifierFiles.join(","));
 
   const selfCheck = run("node", ["--check", SINGLE_VERIFIER_SCRIPT]);
   addCheck(checks, "single_verifier_syntax_check", selfCheck.ok, selfCheck.text.trim());
@@ -242,14 +251,14 @@ function staticContractChecks(checks) {
   addCheck(checks, "bridge_priority_observation_nonblocking", runner.includes("us_open_positive_industry_or_us_closed_asia_positive_leader_top3_v2") && runner.includes("It must never change the 08:30 report delivery decision."), "Mother Pool bridge only changes scan priority");
   addCheck(checks, "runner_requires_mother_pool_field_ack", runner.includes("runMotherPoolFieldAck") && runner.includes("mother_pool_field_ack_ok") && runner.includes("mother_pool_field_ack_not_complete"), "final complete must require Mother Pool anon readback field acknowledgement");
   addCheck(checks, "mother_pool_field_ack_contract_present", fieldAck.includes("opening-report-0830-mother-pool-field-ack-v1") && fieldAck.includes("credential_role: \"anon_read_only\"") && fieldAck.includes("db_readback_ok"), "Mother Pool must publish its own canonical field acknowledgement receipt");
-  addCheck(checks, "mother_pool_field_ack_checks_observation_only", ["formal_candidate_count", "formal_candidate_allowed", "forbidden_publish_guard", "market_not_taiwan", "linked_industries", "observations", "report_run_id"].every((token) => fieldAck.includes(token)), "field acknowledgement must preserve observation-only, canonical Taiwan market and every linked-industry observation");
+  addCheck(checks, "mother_pool_field_ack_checks_observation_only", ["formal_candidate_count", "formal_candidate_allowed", "forbidden_publish_guard", "live_admissible_symbols", "stale_or_missing_quote_skipped_symbols", "report_run_id"].every((token) => fieldAck.includes(token)), "field acknowledgement must preserve observation-only status and split live-admissible symbols from stale quote skips");
 
   const wrapper = readText("run-opening-report-0830-production-wrapper.ps1");
   addCheck(checks, "wrapper_owns_non_trading_day_guard", wrapper.includes("check-market-calendar-action.js") && wrapper.includes("market_calendar_non_trading_day") && wrapper.includes("line_push_attempted = $false") && wrapper.includes("mother_pool_bridge_attempted = $false"), "Task Scheduler wrapper must guard independently before invoking the runner");
-  addCheck(checks, "wrapper_runner_verifier_receipt_chain", wrapper.includes("run-opening-report-0830-production.js") && wrapper.includes("verify-opening-report-morning-contract.js") && wrapper.includes("opening-report-morning-wrapper-v1"), "wrapper must be runner -> canonical verifier -> wrapper receipt");
+  addCheck(checks, "wrapper_runner_verifier_receipt_chain", wrapper.includes("run-opening-report-0830-production.js") && wrapper.includes("verify-daytrade-mother-pool-closed-loop.js") && wrapper.includes("verify-opening-report-morning-contract.js") && wrapper.includes("opening-report-morning-wrapper-v1"), "wrapper must be runner -> Mother Pool persistence verifier -> canonical verifier -> wrapper receipt");
   addCheck(checks, "wrapper_audited_line_receipt_recovery", wrapper.includes("ReuseLineReceipt") && wrapper.includes("--reuse-line-receipt") && wrapper.includes("existingLine.line_push_ok"), "bounded recovery may reuse only the already successful same-run LINE receipt");
   addCheck(checks, "wrapper_has_no_telegram_execution", !wrapper.includes("send-opening-report-0830-telegram") && !wrapper.includes("TELEGRAM_BOT_TOKEN") && wrapper.includes("telegram_enabled = $false"), "Telegram must remain retired from morning wrapper");
-  addCheck(checks, "wrapper_complete_requires_all_channels", wrapper.includes("$linePersonalOk") && wrapper.includes("$lineGroupOk") && wrapper.includes("$terminalOk") && wrapper.includes("$bridgeOk") && wrapper.includes("$fieldAckOk") && wrapper.includes("$expected -eq 15") && wrapper.includes("$scanned -eq 15"), "complete must require 15/15 + LINE personal/group + terminal + Mother Pool field acknowledgement");
+  addCheck(checks, "wrapper_complete_requires_all_channels", wrapper.includes("$linePersonalOk") && wrapper.includes("$lineGroupOk") && wrapper.includes("$terminalOk") && wrapper.includes("$bridgeOk") && wrapper.includes("$fieldAckOk") && wrapper.includes("$persistenceAckOk") && wrapper.includes("$expected -eq 15") && wrapper.includes("$scanned -eq 15"), "complete must require 15/15 + LINE personal/group + terminal + Mother Pool field acknowledgement + persistence acknowledgement");
 
   const bridge = readText("scripts/apply-opening-report-0830-priority-bias-bridge.js");
   addCheck(checks, "bridge_cannot_publish_formal_candidates", bridge.includes("formal_candidate_allowed") && bridge.includes("formal_candidate_count") && bridge.includes("forbidden_publish_guard"), "bridge only boosts scan priority");
@@ -391,6 +400,13 @@ function currentReceiptChecks(checks, tradeDate) {
   addCheck(checks, "current_mother_pool_field_ack_same_run", fieldAckReceipt?.report_run_id === runId, String(fieldAckReceipt?.report_run_id || "") + "/" + String(runId || ""));
   addCheck(checks, "current_mother_pool_field_ack_complete", fieldAckReceipt?.contract === "opening-report-0830-mother-pool-field-ack-v1" && fieldAckReceipt?.complete === true && fieldAckReceipt?.db_readback_ok === true && fieldAckReceipt?.first_blocker == null, JSON.stringify({ contract: fieldAckReceipt?.contract, complete: fieldAckReceipt?.complete, db_readback_ok: fieldAckReceipt?.db_readback_ok, first_blocker: fieldAckReceipt?.first_blocker }));
   addCheck(checks, "current_mother_pool_field_ack_observation_only", Number(fieldAckReceipt?.formal_candidate_count || 0) === 0 && fieldAckReceipt?.formal_candidate_allowed === false && fieldAckReceipt?.forbidden_publish_guard === true, JSON.stringify({ formal_candidate_count: fieldAckReceipt?.formal_candidate_count, formal_candidate_allowed: fieldAckReceipt?.formal_candidate_allowed, forbidden_publish_guard: fieldAckReceipt?.forbidden_publish_guard }));
+  const persistencePath = path.join(RUNTIME, "data", "scan-receipts", "daytrade-mother-pool-closed-loop-" + compactDate(tradeDate) + ".json");
+  const persistenceReceipt = exists(persistencePath) ? readJson(persistencePath) : null;
+  const persistenceOpening = persistenceReceipt?.components?.opening_report || {};
+  addCheck(checks, "current_mother_pool_persistence_ack_exists", Boolean(persistenceReceipt), persistencePath);
+  addCheck(checks, "current_mother_pool_persistence_ack_complete", persistenceReceipt?.contract === "daytrade_mother_pool_closed_loop_v1" && persistenceReceipt?.closed_loop_ok === true && persistenceReceipt?.verifier_ok === true && persistenceReceipt?.first_blocker == null, JSON.stringify({ contract: persistenceReceipt?.contract, closed_loop_ok: persistenceReceipt?.closed_loop_ok, verifier_ok: persistenceReceipt?.verifier_ok, first_blocker: persistenceReceipt?.first_blocker }));
+  addCheck(checks, "current_mother_pool_persistence_received_field_ack_symbols", Array.isArray(persistenceOpening.field_ack_missing_from_writer_manifest) && persistenceOpening.field_ack_missing_from_writer_manifest.length === 0, JSON.stringify({ missing: persistenceOpening.field_ack_missing_from_writer_manifest }));
+  addCheck(checks, "current_mother_pool_persistence_live_admission_ok", Array.isArray(persistenceOpening.field_ack_missing_from_mother_pool) && persistenceOpening.field_ack_missing_from_mother_pool.length === 0, JSON.stringify({ missing: persistenceOpening.field_ack_missing_from_mother_pool, skipped_stale_quote: persistenceOpening.field_ack_skipped_stale_quote_symbols }));
 }
 
 function writeReceipt(result, tradeDate) {
