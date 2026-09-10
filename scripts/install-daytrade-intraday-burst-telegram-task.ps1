@@ -1,5 +1,5 @@
 param(
-  [string]$Root = "C:\fuman-release-owner\fuman-terminal",
+  [string]$Root = "C:\fuman-release-owner\prod81",
   [string]$TaskName = "Fuman Mother Pool Telegram 0900-1230"
 )
 $ErrorActionPreference = "Stop"
