@@ -416,6 +416,7 @@ async function notifyFromOutbox(options = {}) {
     symbols: events.map((event) => event?.symbol),
     barsPerSymbol: 61,
     telegramObservation: true,
+    eventReadinessHardGate: false,
   });
   receipt.canonical_water = canonicalWater.receipt;
   receipt.source_status_at_run = canonicalWater.receipt?.source_status_at_run || null;
