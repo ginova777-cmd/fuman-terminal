@@ -481,6 +481,11 @@ async function notifyFromOutbox(options = {}) {
     receipt.first_blocker = "mother_pool_snapshot_not_ready";
     writeReceiptWithHistory(receipt); return receipt;
   }
+  if (canonicalWater.receipt?.mother_pool_run_id !== motherPoolSnapshot.runId || canonicalWater.receipt?.snapshot_sequence !== snapshot.snapshot_sequence) {
+    receipt.failed_checks.push("mother_pool_snapshot_changed_during_readback");
+    receipt.first_blocker = "mother_pool_snapshot_changed_during_readback";
+    writeReceiptWithHistory(receipt); return receipt;
+  }
   if (String(outbox.trade_date || "") !== tradeDate) {
     receipt.first_blocker = "outbox_trade_date_mismatch_or_missing";
     writeReceiptWithHistory(receipt); return receipt;
