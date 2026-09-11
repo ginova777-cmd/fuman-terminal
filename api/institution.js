@@ -102,7 +102,7 @@ function rowRecord(fields, row) {
 function getValue(record, patterns) {
   const keys = Object.keys(record || {});
   for (const pattern of patterns) {
-    const key = keys.find((item) => item.includes(pattern));
+    const key = keys.find((item) => item === pattern) || keys.find((item) => item.includes(pattern));
     if (key && record[key] !== undefined && record[key] !== "") return record[key];
   }
   return "";

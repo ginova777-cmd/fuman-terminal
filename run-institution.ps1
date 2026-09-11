@@ -22,18 +22,20 @@ New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
 $blockedReceiptPath = Join-Path $receiptDir "institution-blocked-latest.json"
 $scanStartedAt = (Get-Date).ToString("o")
 $script:institutionDiagnosticWarnings = New-Object System.Collections.Generic.List[string]
+$script:InstitutionSourceUniverseCount = 0
 
 function New-InstitutionReceiptSourceStatus($Status, $Complete, $Matches, $BlockingReason = "") {
   $publishAllowed = $Complete -and [string]::IsNullOrWhiteSpace($BlockingReason)
+  $sourceUniverseCount = if ($script:InstitutionSourceUniverseCount -gt 0) { [int]$script:InstitutionSourceUniverseCount } else { [int]$Matches }
   [ordered]@{
     ok = [bool]$publishAllowed
     status = if ($publishAllowed) { "ready" } else { "blocked" }
     coverageStatus = if ($publishAllowed) { "ready" } else { "blocked" }
     latestTradeDate = ""
     usedDate = ""
-    institutionalRows = [int]$Matches
-    validAfterExclusionRows = [int]$Matches
-    sourceRows = [int]$Matches
+    institutionalRows = $sourceUniverseCount
+    validAfterExclusionRows = $sourceUniverseCount
+    sourceRows = $sourceUniverseCount
     resultRows = [int]$Matches
     sources = @("TWSE T86", "TPEx 3itrade")
     reason = $BlockingReason
@@ -56,7 +58,21 @@ function New-InstitutionReceiptWriteBudget($Allowed, $Reason = "") {
 
 function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "", $PreservePreviousGood = $false) {
   $publishAllowed = $Complete -and -not $PreservePreviousGood
+  $authoritative = $null
+  if ($publishAllowed) {
+    $metadataLines = @(Get-Content -LiteralPath $log | Where-Object { $_ -like 'institution authoritative readback metadata: *' })
+    if ($metadataLines.Count -eq 0) { throw "institution authoritative readback metadata missing" }
+    $authoritative = ($metadataLines[-1] -replace '^institution authoritative readback metadata: ', '') | ConvertFrom-Json
+    if ($authoritative.runId -ne $RunId -or [int]$authoritative.resultCount -ne [int]$Matches -or [int]$authoritative.blankTotal -ne 0) { throw "institution authoritative readback metadata mismatch" }
+    $script:InstitutionSourceUniverseCount = [int]$authoritative.sourceRows
+  }
   $sourceStatusAtRun = New-InstitutionReceiptSourceStatus $Status $publishAllowed $Matches $BlockingReason
+  if ($null -ne $authoritative) {
+    $sourceStatusAtRun.latestTradeDate = [string]$authoritative.usedDate
+    $sourceStatusAtRun.usedDate = [string]$authoritative.usedDate
+    $sourceStatusAtRun.validAfterExclusionRows = [int]$authoritative.resultCount
+    $Warnings = @($Warnings) + @($authoritative.warnings)
+  }
   $writeBudget = New-InstitutionReceiptWriteBudget $publishAllowed $BlockingReason
   $evidenceStatus = if ($publishAllowed) { "complete" } else { "insufficient" }
   $unattendedStatus = if ($publishAllowed) { "YES" } else { "NO" }
@@ -67,7 +83,7 @@ function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunI
     startedAt = $scanStartedAt
     marketDate = (Get-Date).ToString("yyyyMMdd")
     finishedAt = (Get-Date).ToString("o")
-    source_snapshot_captured_at = $scanStartedAt
+    source_snapshot_captured_at = if ($null -ne $authoritative) { [string]$authoritative.sourceSnapshotCapturedAt } else { $scanStartedAt }
     institution_source_status_at_run = $sourceStatusAtRun
     chip_source_status_at_run = $sourceStatusAtRun
     sourceCoverage = [ordered]@{
@@ -80,8 +96,8 @@ function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunI
     }
     status = $Status
     exitCode = $ExitCode
-    scanned = 0
-    total = 0
+    scanned = [int]$sourceStatusAtRun.sourceRows
+    total = [int]$sourceStatusAtRun.sourceRows
     matches = $Matches
     complete = $Complete
     qualityStatus = if ($Complete) { "complete" } else { "" }
@@ -340,6 +356,11 @@ if ($chipReceiptExit -ne 0) {
   exit 3
 }
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "institution" -LogPath $log
+$resourceGateRecord = @($resourceGate) | Where-Object { $null -ne $_ -and $null -ne $_.PSObject.Properties["rowCount"] } | Select-Object -Last 1
+$resourceGateRowCountProperty = if ($null -ne $resourceGateRecord) { $resourceGateRecord.PSObject.Properties["rowCount"] } else { $null }
+if ($null -ne $resourceGateRowCountProperty -and [int]$resourceGateRowCountProperty.Value -gt 0) {
+  $script:InstitutionSourceUniverseCount = [int]$resourceGateRowCountProperty.Value
+}
 if (Test-InstitutionTransientResourceHealthFailure $resourceGate) {
   $diagnostic = "resource health diagnostic unavailable: $($resourceGate.Reason)"
   "Institution resource health preflight was transiently unavailable; continuing to scanner/readback gates. $diagnostic" >> $log

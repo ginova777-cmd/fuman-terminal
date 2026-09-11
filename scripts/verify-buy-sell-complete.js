@@ -65,13 +65,29 @@ const snapshotSummary = snapshot?.summary?.[snapshotEndpoint] || {};
 if (snapshot?.ok !== true || snapshot?.partial === true) issues.push("institution_desktop_snapshot_not_complete");
 if (String(snapshotSummary.runId || "") !== effectiveRunId) issues.push("institution_desktop_snapshot_runid_mismatch");
 if (Number(snapshotSummary.count || 0) <= 0 || Number(snapshotSummary.count || 0) > effectiveCount) issues.push("institution_desktop_snapshot_count_invalid");
+const liveFile = path.join(root, "outputs/institution-live-acceptance/readback.json");
+const renderedFile = path.join(root, "outputs/institution-live-acceptance/rendered/terminal-ui-e2e-report.json");
+const live = readJson(liveFile), rendered = readJson(renderedFile);
+if (!live?.ok || live.runId !== effectiveRunId || live.resultCount !== effectiveCount || live.readbackCount !== effectiveCount || live.blankTotal !== 0) issues.push("institution_live_readback_not_complete");
+if (!rendered?.ok || Date.parse(rendered.generatedAt || "") < Date.parse(live?.checkedAt || "")) issues.push("institution_rendered_evidence_not_complete");
+for (const kind of ["desktop", "mobile", "scorecard"]) {
+  const entries = (rendered?.results || []).filter(row => row.kind === kind && row.routeKey === "institution");
+  if (!entries.length || entries.some(row => row.ok !== true || (kind === "scorecard" ? row.contentAcceptance?.actualRun : row.identity?.runId) !== effectiveRunId || (kind !== "scorecard" && row.identity?.ok !== true))) issues.push("institution_rendered_" + kind + "_identity_mismatch");
+}
 const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "institution", label: "買賣超",
   checkedAt: new Date().toISOString(), tradeDate: effectiveDateKey ? `${effectiveDateKey.slice(0, 4)}-${effectiveDateKey.slice(4, 6)}-${effectiveDateKey.slice(6, 8)}` : today,
   marketMode: marketClosedWeekend ? "weekend_previous_good" : "trading_day_current_run", status: issues.length ? "failed" : "complete",
   complete: issues.length === 0, exitCode: issues.length ? 1 : 0, runId: effectiveRunId,
+  triSurfaceStatus: issues.length ? "incomplete" : "complete", blockingReason: issues.join("; "),
+  desktopRunId: rendered?.results?.find(r => r.kind === "desktop" && r.routeKey === "institution")?.identity?.runId || "",
+  mobileRunId: rendered?.results?.find(r => r.kind === "mobile" && r.routeKey === "institution")?.identity?.runId || "",
+  scorecardRunId: rendered?.results?.find(r => r.kind === "scorecard" && r.routeKey === "institution")?.contentAcceptance?.actualRun || "",
+  liveReadbackReceipt: liveFile, renderedReceipt: renderedFile, scannedCount: live?.scannedCount || 0, resultCount: live?.resultCount || 0, readbackCount: live?.readbackCount || 0,
   count: effectiveCount, sourceReceipt: sourceFile, institutionReceipt: marketClosedWeekend ? null : institutionFile,
   e2eReceipt: e2eFile, snapshotReceipt: snapshotFile, snapshotRunId: String(snapshotSummary.runId || ""), snapshotCount: Number(snapshotSummary.count || 0),
   displayContract: "scheduled-complete-scan -> route-snapshot -> click-snapshot-first -> background-api-refresh",
+  sourceAuthority: "TWSE T86 + TPEx 3itrade",
+  sourceDependency: "independent_no_mother_pool",
   verifier: "scripts/verify-buy-sell-complete.js", issues };
 if (process.argv.includes("--write-receipt")) { fs.mkdirSync(path.dirname(out), { recursive: true }); fs.writeFileSync(out, JSON.stringify(payload, null, 2), "utf8"); }
 console.log(JSON.stringify({ ...payload, receiptPath: out, readOnly: !process.argv.includes("--write-receipt") }, null, 2));

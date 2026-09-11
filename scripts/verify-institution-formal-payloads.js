@@ -11,7 +11,7 @@ const {
   battleOutputPayload,
   verifyCanonical,
   negativeCases,
-} = require("./verify-institution-prewater-strict");
+} = require("./institution-canonical-verifier-contract");
 
 const ROOT = path.resolve(__dirname, "..");
 

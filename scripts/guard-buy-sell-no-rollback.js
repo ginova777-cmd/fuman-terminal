@@ -172,7 +172,13 @@ if (/institution-latest\.json/.test(read("run-flow-watchdog.ps1"))) {
   fail("run-flow-watchdog.ps1 must not use runtime institution-latest.json as a buy-sell freshness fallback");
 }
 
-for (const retired of ["run-institution-battle-verify.ps1", "scripts/verify-institution-battle-state.js"]) {
+for (const retired of [
+  "run-institution-battle-verify.ps1",
+  "scripts/verify-institution-battle-state.js",
+  "scripts/verify-institution-prewater-strict.js",
+  "scripts/verify-institution-filter-counts.js",
+  "scripts/verify-strategy5-institution-unattended-contract.js",
+]) {
   if (fs.existsSync(path.join(ROOT, retired))) fail(`${retired} retired verifier must stay absent`);
 }
 requireIncludes("run-buy-sell-complete.ps1", ["verify-buy-sell-complete.js", "run-chip-source-sync.ps1", "run-institution.ps1"]);

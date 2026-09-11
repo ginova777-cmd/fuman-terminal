@@ -9,7 +9,7 @@ const {
   blockedReceiptPayload,
   verifyCanonical,
   negativeCases,
-} = require("./verify-institution-prewater-strict");
+} = require("./institution-canonical-verifier-contract");
 
 const ROOT = path.resolve(__dirname, "..");
 const ALLOWED_ACTIONS = new Set(["block scan", "block publish", "preserve previous good", "write blocked receipt", "display degraded", "fail closed"]);

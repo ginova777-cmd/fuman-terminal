@@ -196,7 +196,8 @@ if (!slots[slot]) {
   process.exit(2);
 }
 const collectionWindow = fixedCollectionWindow(slot);
-const recoveryKey = /^strategy5-\d{8}-\d{14}$/.test(expectedRunId) ? "strategy5"
+const recoveryKey = /^institution-\d{8}-\d{14}$/.test(expectedRunId) ? "institution"
+  : /^strategy5-\d{8}-\d{14}$/.test(expectedRunId) ? "strategy5"
   : /^strategy4-\d{8}-\d{14}$/.test(expectedRunId) ? "strategy4"
     : /^strategy3v2-(?:recovery-replay-)?\d{8}-\d{14}$/.test(expectedRunId) ? "strategy3"
       : "";

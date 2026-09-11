@@ -543,7 +543,7 @@ function main() {
   console.log(JSON.stringify({
     ok: true,
     checkedAt: new Date().toISOString(),
-    contract: "institution-prewater-strict-formal-payload-v1",
+    contract: "institution-canonical-formal-payload-v1",
     supabaseRead: false,
     supabaseWrite: false,
     deploy: false,

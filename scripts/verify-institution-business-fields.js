@@ -9,7 +9,7 @@ const {
   scanReceiptPayload,
   blockedReceiptPayload,
   sampleOutput,
-} = require("./verify-institution-prewater-strict");
+} = require("./institution-canonical-verifier-contract");
 const {
   buildInstitutionRunRow,
   buildInstitutionResultRows,
