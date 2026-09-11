@@ -4,7 +4,7 @@ param(
     [ValidateRange(1, 1000)]
     [int]$Top = 30,
     [ValidateRange(1, 5)]
-    [int]$MinAppearances = 2,
+    [int]$MinAppearances = 1,
     [string]$Token = $env:FUMAN_TERMINAL_TOKEN,
     [string]$FinMindToken = $env:FINMIND_API_TOKEN,
     [System.Management.Automation.PSCredential]$Credential,
@@ -18,6 +18,8 @@ param(
     [string]$OpeningReportDirectory = "C:\fuman-runtime\data\opening-report-0830",
     [string]$OpeningTPreviewPath = "",
     [string]$OpeningStrategyInspectionPath = "",
+    [string]$OpeningUniverseCacheDirectory = "",
+    [switch]$RefreshOpeningStrategies,
     [switch]$Once,
     [switch]$IncludeRawJson,
     [switch]$Logout
@@ -496,6 +498,7 @@ foreach ($source in $sourceDefinitions) {
     })
 }
 
+$terminalUniverse = @($stocks.Keys | Sort-Object)
 $sourceTradeDate = @($sourceSummary | ForEach-Object { ConvertTo-DateKey $_.TradeDate } |
     Where-Object { $_ } | Sort-Object -Descending | Select-Object -First 1)[0]
 $taipeiToday = (Get-TaipeiNow).ToString("yyyyMMdd")
@@ -678,16 +681,16 @@ $strategyInspection = $null
 $inspectionByCode = @{}
 $temporaryInspectionPath = ""
 if (-not $OpeningStrategyInspectionPath) {
-    $OpeningStrategyInspectionPath = Join-Path $PSScriptRoot "opening-strategy-inspection-$targetTradeDate.json"
-    $strategyBuilder = Join-Path (Split-Path $PSScriptRoot -Parent) "scripts\build-opening-strategy-inspection.js"
-    if (-not (Test-Path -LiteralPath $strategyBuilder)) { $strategyBuilder = "C:\fuman-release-owner\fuman-terminal\scripts\build-opening-strategy-inspection.js" }
-    $strategySourcePath = Join-Path $OpeningLimitOrderDirectory "opening-limit-order-0855-candidates-$targetTradeDate.json"
-    if ((Test-Path -LiteralPath $strategySourcePath) -and (Test-Path -LiteralPath $strategyBuilder)) {
-        $temporaryInspectionPath = [IO.Path]::GetTempFileName()
-        & node $strategyBuilder "--input=$strategySourcePath" "--output=$temporaryInspectionPath" 2>$null | Out-Null
-        if ($LASTEXITCODE -eq 0) { $OpeningStrategyInspectionPath = $temporaryInspectionPath }
-        else { Write-Warning "當日候選策略檢查失敗，改查同日獨立報告或T-1底稿。" }
-    }
+    if (-not $OpeningUniverseCacheDirectory) { $OpeningUniverseCacheDirectory = Join-Path $PSScriptRoot "opening-universe-cache" }
+    $scanner = Join-Path (Split-Path $PSScriptRoot -Parent) "scripts\scan-opening-terminal-universe.js"
+    if (-not (Test-Path -LiteralPath $scanner)) { $scanner = "C:\fuman-release-owner\fuman-terminal\scripts\scan-opening-terminal-universe.js" }
+    Write-Host ("十大策略：偵測完整終端聯集 {0} 檔，不受前{1}名顯示限制。" -f $terminalUniverse.Count, $Top) -ForegroundColor Cyan
+    $scanArguments = @("--trade-date=$targetTradeDate", "--symbols=$($terminalUniverse -join ',')", "--cache-dir=$OpeningUniverseCacheDirectory", "--source-cache=$(Join-Path $OpeningLimitOrderDirectory "opening-limit-order-0850-static-sources-$targetTradeDate.json")")
+    if ($RefreshOpeningStrategies) { $scanArguments += "--force=true" }
+    $scanSummary = & node --use-system-ca $scanner @scanArguments
+    if ($LASTEXITCODE -ne 0) { throw "完整終端十大策略偵測失敗，未以舊名單代替。請見上方原因。" }
+    $scanResult = ($scanSummary -join "") | ConvertFrom-Json
+    $OpeningStrategyInspectionPath = $scanResult.path
 }
 if (Test-Path -LiteralPath $OpeningStrategyInspectionPath -PathType Leaf) {
     try {
@@ -702,6 +705,8 @@ if (Test-Path -LiteralPath $OpeningStrategyInspectionPath -PathType Leaf) {
             if (-not $code -or $inspectionByCode.ContainsKey($code) -or @($item.strategies).Count -ne 10) { throw "策略檢查股票重複或項目不足" }
             $inspectionByCode[$code] = $item
         }
+        $missingCoverage = @($terminalUniverse | Where-Object { -not $inspectionByCode.ContainsKey($_) })
+        if ($missingCoverage.Count) { throw "十大策略尚未覆蓋全部終端標的：$($missingCoverage -join ',')" }
         $strategyInspection = $candidateInspection
     } catch {
         $inspectionByCode = @{}
@@ -776,8 +781,9 @@ $openingStageSummary.Add([pscustomobject]@{
     狀態 = "使用者結算"
 })
 
-$ranked = @($stocks.Values | ForEach-Object {
-    $sourceKeys = @($_.Sources.Keys)
+$ranked = @($stocks.Values | Where-Object { $_.Code -in $terminalUniverse } | ForEach-Object {
+    $sourceKeys = @($_.Sources.Keys | Where-Object { $_ -in @('strategy3','strategy4','strategy5','institution') })
+    $detectedCount = if ($inspectionByCode.ContainsKey($_.Code)) { @($inspectionByCode[$_.Code].matched_strategy_numbers | Sort-Object -Unique).Count } else { 0 }
     [pscustomobject]@{
         Rank = 0
         Code = $_.Code
@@ -789,7 +795,7 @@ $ranked = @($stocks.Values | ForEach-Object {
         Institution = if ($_.Sources.Contains("institution")) { "Y" } else { "" }
         Opening0855 = $_.Opening0855
         OpeningRank = $_.OpeningRank
-        OpeningStrategyCount = $_.OpeningStrategyCount
+        OpeningStrategyCount = $detectedCount
         OpeningStrategies = $_.OpeningStrategies
         OpeningTStrategies = $_.OpeningTStrategies
         FuturesGain = $_.FuturesGain
@@ -804,11 +810,8 @@ $ranked = @($stocks.Values | ForEach-Object {
         SourceList = (@($sourceDefinitions | Where-Object { $sourceKeys -contains $_.Key } | ForEach-Object { $_.Label }) + $(if ($sourceKeys -contains "opening") { "開盤入" } else { @() }) -join ", ")
     }
 } | Where-Object { $_.Opening0855 -eq "Y" -or $_.Appearances -ge $MinAppearances } |
-    Sort-Object @{ Expression = { if ($_.Opening0855 -eq "Y") { 1 } else { 0 } }; Descending = $true },
-                @{ Expression = { if ($null -eq $_.OpeningRank) { [int]::MaxValue } else { [int]$_.OpeningRank } }; Descending = $false },
+    Sort-Object @{ Expression = "OpeningStrategyCount"; Descending = $true },
                 @{ Expression = "Appearances"; Descending = $true },
-                @{ Expression = "OpeningStrategyCount"; Descending = $true },
-                @{ Expression = { if ($null -eq $_.InstitutionNet) { [double]::NegativeInfinity } else { [math]::Abs([double]$_.InstitutionNet) } }; Descending = $true },
                 @{ Expression = "Code"; Descending = $false } |
     Select-Object -First $Top)
 
@@ -873,7 +876,7 @@ if ($strategyInspection) {
     } | Format-Table -AutoSize | Out-Host
 } else { Write-Warning "十大策略檢查資料 MISSING" }
 
-Write-Host ("共同出現排名（至少 {0} 個來源，前 {1} 名）" -f $MinAppearances, $Top) -ForegroundColor Yellow
+Write-Host ("十大策略命中數排名（由多至少；同分按來源出現數；前 {0} 名／全池 {1} 檔）" -f $Top, $terminalUniverse.Count) -ForegroundColor Yellow
 if ($ranked.Count -eq 0) {
     Write-Warning "沒有股票符合條件。可改用 -MinAppearances 1。"
 } else {
@@ -883,6 +886,7 @@ if ($ranked.Count -eq 0) {
         @{ Name = "代號"; Expression = { $_.Code } },
         @{ Name = "名稱"; Expression = { $_.Name } },
         @{ Name = "出現數"; Expression = { $_.Appearances } },
+        @{ Name = "命中數"; Expression = { $_.OpeningStrategyCount } },
         @{ Name = "終端3"; Expression = { $_.Terminal3 } },
         @{ Name = "終端4"; Expression = { $_.Terminal4 } },
         @{ Name = "終端5"; Expression = { $_.Terminal5 } },
@@ -895,8 +899,9 @@ if ($ranked.Count -eq 0) {
         @{ Name = "開盤入策略"; Expression = {
             if ($inspectionByCode.ContainsKey($_.Code)) {
                 $matches = @($inspectionByCode[$_.Code].matched_strategy_numbers)
-                if ($matches.Count) { (($matches | ForEach-Object { "策略$_" }) -join "、") + "（獨立檢查）" }
-                else { "未命中／見資料缺口" }
+                if ($matches.Count) { ($matches | ForEach-Object { "策略$_" }) -join "、" }
+                elseif (@($inspectionByCode[$_.Code].pending_strategy_numbers).Count) { "0命中；部分待確認" }
+                else { "十大策略未命中" }
             }
             elseif ($_.Opening0855 -eq "Y" -and $_.OpeningStrategies) {
                 ConvertTo-OpeningStrategyText $_.OpeningStrategies
@@ -922,7 +927,7 @@ if ($ranked.Count -eq 0) {
             elseif (-not $_.Direction) { $prefix + "等待08:50有效凍結結果，或未列入本次預言" }
             else { $prefix + "-" }
         } } |
-        Format-Table -AutoSize | Out-Host
+        Format-Table -AutoSize | Out-String -Width 400 | Write-Host
 }
 
 if ($OutputCsv) {

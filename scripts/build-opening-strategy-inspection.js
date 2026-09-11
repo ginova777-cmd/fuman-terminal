@@ -23,8 +23,23 @@ function inspect(raw) {
    if([5,6,10].includes(no)&&!hasTrial)missing.push('天然試撮／股期缺口');
    if(no===8&&e.overnight_trader_style?.available!==true)missing.push('隔日沖分點缺口');
    if(no===9&&!finite(e.main_force_cost_top10)&&!finite(e.ma60))missing.push('關鍵價位缺口');
+   // A proven false prerequisite rejects a conjunction even if another input is absent.
+   // Missing inputs must not mask already evaluated local chart conditions.
+   const rejected=[];
+   if(hasDaily){
+    if(no===1&&e.limit_down_reopened===false)rejected.push('未符合跌停打開');
+    if(no===2&&e.daily_history_count>=3&&(e.two_day_up===false||e.rebound_from_low===false))rejected.push('未符合低點反彈及連漲2日');
+    if(no===2&&!g.includes('institutional_two_day_history_missing')&&e.institution_same_buy_2d===false)rejected.push('法人未連續2日同買');
+    if(no===3&&finite(e.ma60)&&e.ma60_support_retest===false)rejected.push('未回測MA60有撐');
+    if(no===4&&e.daily_history_count>=241&&finite(e.ma240)&&e.ma240_breakout===false)rejected.push('未突破MA240');
+    if(no===8&&e.daily_history_count>=9&&e.w_neckline?.two_day_hold===false)rejected.push('W底頸線未站穩2日');
+    if(no===9&&e.key_level_two_day_hold===false&&(finite(e.main_force_cost_top10)||finite(e.ma60)))rejected.push('關鍵價位未守住2日');
+    if(no===10&&e.previous_limit_up===false)rejected.push('昨日未漲停');
+   }
+   if(hasIndustry&&[3,4,5,9].includes(no)&&e.opening_report_sector_up_1d===false)rejected.push('對應海外族群未上漲');
+   if(hasIndustry&&no===7&&e.opening_report_sector_up_2d===false)rejected.push('對應海外族群未連續2日轉強');
    const matched=(row.matched_strategy_numbers||[]).map(Number).includes(no);
-   return {no,label,status:missing.length?'DATA_GAP':matched?'MATCHED':'NOT_MATCHED',reason:missing.join('；')||(matched?'策略前置條件命中':'策略前置條件未命中')};
+   return {no,label,status:rejected.length?'NOT_MATCHED':missing.length?'DATA_GAP':matched?'MATCHED':'NOT_MATCHED',reason:rejected.join('；')||missing.join('；')||(matched?'策略前置條件命中':'策略前置條件未命中'),unavailable_inputs:missing};
   });
   return {symbol:String(row.symbol),strategies,matched_strategy_numbers:strategies.filter(s=>s.status==='MATCHED').map(s=>s.no),pending_strategy_numbers:strategies.filter(s=>s.status==='DATA_GAP').map(s=>s.no),prediction_qualification:row.status,prediction_reason:row.tomorrow_prediction_reason||row.first_blocker||''};
  });
