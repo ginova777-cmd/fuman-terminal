@@ -511,9 +511,9 @@ function signedChange(sign, value) {
 }
 
 function collectTradingMetric(bucket, code, close, change, volume) {
-  if (!/^\d{4}$/.test(code) || close <= 0 || volume <= 0) return;
+  if (!/^\d{4}$/.test(code) || volume <= 0) return;
   const prevClose = close - change;
-  const pct = prevClose > 0 ? (change / prevClose) * 100 : 0;
+  const pct = close > 0 && prevClose > 0 ? (change / prevClose) * 100 : null;
   const list = bucket.get(code) || [];
   list.push({ pct, volume });
   bucket.set(code, list);
@@ -569,18 +569,25 @@ async function fetchHistoricalTradingMetrics() {
       warnings.push(`tpex 5-day metrics failed: ${formatTpexDate(date)} :: ${error.message}`);
     }
   }
+  return { map: summarizeTradingMetrics(bucket), warnings };
+}
+
+function summarizeTradingMetrics(bucket) {
   const map = new Map();
   bucket.forEach((values, code) => {
     const usable = values.slice(0, 5);
     if (!usable.length) return;
-    const fiveDayPctSum = usable.reduce((sum, item) => sum + item.pct, 0);
-    const fiveDayAvgVolume = usable.reduce((sum, item) => sum + item.volume, 0) / usable.length;
-    map.set(code, {
-      fiveDayPctSum: Number(fiveDayPctSum.toFixed(2)),
-      fiveDayAvgVolume: Math.round(fiveDayAvgVolume),
-    });
+    const prices = usable.filter(item => Number.isFinite(item.pct));
+    const fiveDayPctSum = prices.length === 5 ? Number(prices.reduce((sum, item) => sum + item.pct, 0).toFixed(2)) : null;
+    map.set(code, { fiveDayPctSum, fiveDayAvgVolume: Math.round(usable.reduce((sum, item) => sum + item.volume, 0) / usable.length), fiveDayVolumeCount: usable.length, fiveDayPriceCount: prices.length });
   });
-  return { map, warnings };
+  return map;
+}
+
+function assertCandidateTradingMetrics(row, metrics) {
+  if (!(row.close > 0 && row.tradeVolume > 0 && metrics?.fiveDayAvgVolume > 0 && metrics.fiveDayVolumeCount === 5 && metrics.fiveDayPriceCount === 5)) {
+    throw new Error("institution candidate trading metrics incomplete: " + row.code + "; preserve previous complete run");
+  }
 }
 
 function buildQuoteMap(payload) {
@@ -708,6 +715,7 @@ async function main() {
       for (const reason of exclusion.reasons) excludedCounts[reason] = (excludedCounts[reason] || 0) + 1;
       continue;
     }
+    assertCandidateTradingMetrics(row, tradingMetricResult.map.get(code));
     data[code] = row;
   }
   const count = Object.keys(data).length;
@@ -788,6 +796,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  collectTradingMetric, summarizeTradingMetrics, assertCandidateTradingMetrics,
   institutionSourceDateIssues,
   buildInstitutionRunRow,
   buildInstitutionResultRows,

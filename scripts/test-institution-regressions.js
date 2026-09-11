@@ -17,3 +17,10 @@ console.log('PASS both markets same-day and complete official history gate');
 
 assert(scanner.institutionSourceDateIssues({...todaySource,sourceHealth:{warnings:["tpex 5-day metrics failed"]}},"2026-09-11").includes("five_day_metric_history_incomplete"));
 console.log("PASS missing metric history blocks publication");
+
+const volumes=new Map();for(let day=0;day<5;day++)scanner.collectTradingMetric(volumes,'6195',0,0,1038);
+const volumeMetric=scanner.summarizeTradingMetrics(volumes).get('6195');assert.equal(volumeMetric.fiveDayAvgVolume,1038);assert.equal(volumeMetric.fiveDayPctSum,null);
+const exclusion=require(path.join(root,'lib/chip-trade-exclusions')).chipTradeExclusion({code:'6195',name:'詩肯',fiveDayAvgVolume:volumeMetric.fiveDayAvgVolume});assert(exclusion.excluded&&exclusion.reasons.includes('近5日均量<3000張'));
+assert.throws(()=>scanner.assertCandidateTradingMetrics({code:'6195',close:0,tradeVolume:1038},volumeMetric),/trading metrics incomplete/);
+scanner.assertCandidateTradingMetrics({code:'2330',close:100,tradeVolume:4000000},{fiveDayAvgVolume:4000000,fiveDayVolumeCount:5,fiveDayPriceCount:5});
+console.log('PASS official odd-lot volume retained despite missing close, low-volume exclusion and required candidate metrics');
