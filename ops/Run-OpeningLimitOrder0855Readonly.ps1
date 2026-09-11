@@ -307,7 +307,7 @@ try {
         matched_strategy_numbers = $_.matched_strategy_numbers
         tomorrow_prediction = $_.tomorrow_prediction
         tomorrow_prediction_label = $_.tomorrow_prediction_label
-        tomorrow_prediction_reason = $_.tomorrow_prediction_reason
+        tomorrow_prediction_reason = $(if ($_.tomorrow_prediction_reason) { $_.tomorrow_prediction_reason } elseif ($_.first_blocker) { $_.first_blocker } else { @($_.data_gaps) -join '；' })
         tomorrow_prediction_initial = $_.tomorrow_prediction_initial
         tomorrow_prediction_pattern = $_.tomorrow_prediction_pattern
         preopen_confirmation_label = $_.preopen_confirmation_label

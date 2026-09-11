@@ -30,13 +30,15 @@ test('KD uses OHLC range, Wilder RSI and rejects insufficient warmup',()=>{
  assert.equal(i.k,50);assert.equal(i.d,50);assert.equal(i.rsi,50);assert.equal(i.kd_rsi_up,false);
  assert.equal(indicators(Array(30).fill({high:null,low:8,close:10})).available,false);
 });
-test('hour aggregation excludes partial, synthetic, post-signal and 13h tail',()=>{
+test('hour aggregation rejects partial/synthetic bars and accepts completed session tail',()=>{
  const rows=Array.from({length:60},(_,m)=>({candle_time:`2026-09-10T01:${String(m).padStart(2,'0')}:00Z`,open:10,high:12,low:9,close:11}));
  assert.equal(completeHours(rows,'2026-09-10').length,1);
  assert.equal(completeHours(rows.slice(1),'2026-09-10').length,0);
  assert.equal(completeHours(rows.map(x=>({...x,synthetic:true})),'2026-09-10').length,0);
  assert.equal(completeHours(rows,'2026-09-09').length,0);
- assert.equal(completeHours(rows.map(x=>({...x,candle_time:x.candle_time.replace('T01','T05')})),'2026-09-10').length,0);
+ const tail=rows.slice(0,31).map(x=>({...x,candle_time:x.candle_time.replace('T01','T05')}));
+ assert.equal(completeHours(tail,'2026-09-10')[0].source_minutes,26);
+ assert.equal(completeHours(tail.slice(0,30),'2026-09-10').length,0);
 });
 test('independent canonical verifier rejects tampering, late freeze and false up flags',()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'opening-prediction-'));const file=path.join(dir,'freeze.json');

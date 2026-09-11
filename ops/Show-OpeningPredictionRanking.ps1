@@ -808,7 +808,7 @@ if ($ranked.Count -eq 0) {
         @{ Name = "原因"; Expression = {
             if ($_.DirectionReason) { $_.DirectionReason }
             elseif ($_.CancelReasons) { $_.CancelReasons }
-            elseif (-not $_.Direction) { "等待今日收盤後封存明日預測" }
+            elseif (-not $_.Direction) { "等待08:50有效凍結結果，或未列入本次預言" }
             else { "-" }
         } } |
         Format-Table -AutoSize | Out-Host
