@@ -3,7 +3,7 @@
   [int]$Limit = 1600,
   [string]$RunId = "",
   [switch]$WaitUntil0840,
-  [string]$TerminalDir = "C:\fuman-terminal",
+  [string]$TerminalDir = "C:\fuman-release-owner\fuman-terminal",
   [string]$RuntimeDir = "C:\fuman-runtime"
 )
 
@@ -61,6 +61,7 @@ $rankedPath = Join-Path $outDir ("opening-limit-order-0855-ranked-watchlist-{0}.
 $preflightPath = Join-Path $outDir ("opening-limit-order-0850-preflight-{0}.json" -f $compactDate)
 $watchlistPath = Join-Path $outDir ("opening-limit-order-0855-watchlist-{0}.json" -f $compactDate)
 $summaryPath = Join-Path $outDir ("opening-limit-order-0855-summary-{0}.json" -f $compactDate)
+$predictionPath = Join-Path $outDir ("opening-limit-order-0850-predictions-{0}.json" -f $compactDate)
 $preflightScript = Join-Path $TerminalDir "ops\Run-OpeningLimitOrder0850PreflightReadonly.ps1"
 $observeScript = Join-Path $TerminalDir "ops\Run-OpeningLimitOrder0855Readonly.ps1"
 $verifierScript = Join-Path $TerminalDir "ops\Run-OpeningLimitOrder0900Verifier.ps1"
@@ -68,6 +69,12 @@ $morningReceiptPath = Join-Path $outDir ("opening-limit-order-morning-readonly-{
 $verifierReceiptPath = Join-Path $outDir ("opening-limit-order-0900-verifier-{0}.json" -f $compactDate)
 
 if (!(Test-Path -LiteralPath $TerminalDir)) { throw "terminal_dir_missing:$TerminalDir" }
+if (Test-Path -LiteralPath $predictionPath) {
+  $existingFreeze = Read-JsonFile -Path $predictionPath
+  if ($existingFreeze.ok -eq $true) { Write-Host "08:50預言已凍結；不重新計算。"; exit 0 }
+}
+$freezeNow = Get-TaipeiNow
+if ($freezeNow.ToString("yyyy-MM-dd") -ne $TradeDate -or $freezeNow.ToString("HH:mm") -gt "08:50") { throw "prediction_freeze_slot_missed_no_backfill" }
 if (!(Test-Path -LiteralPath $preflightScript)) { throw "opening_limit_order_0850_script_missing:$preflightScript" }
 if (!(Test-Path -LiteralPath $observeScript)) { throw "opening_limit_order_0855_script_missing:$observeScript" }
 if (!(Test-Path -LiteralPath $verifierScript)) { throw "opening_limit_order_0900_verifier_script_missing:$verifierScript" }
@@ -150,11 +157,18 @@ try {
     Wait-UntilTaipeiTime -HHmmss $slotTime
     $slotPath = $futoptSlotPaths[$slot]
     $slotReceipt = Read-JsonFile -Path $slotPath
-    $slotOk = ($slotReceipt -and $slotReceipt.ok -eq $true)
+    $slotVerification = if ($slotReceipt -and $slotReceipt.verifier_receipt) { $slotReceipt.verifier_receipt } else { $slotReceipt }
+    $slotComplete = ($slotReceipt -and $slotReceipt.ok -eq $true)
+    $slotUsable = ($slotVerification -and $slotVerification.source_common_valid -eq $true -and [int]$slotVerification.source_valid_count -gt 0)
     $futoptSlots[$slot] = [ordered]@{
       path = $slotPath
       readable = [bool]$slotReceipt
-      ok = [bool]$slotOk
+      ok = [bool]$slotComplete
+      usable = [bool]$slotUsable
+      source_common_valid = if ($slotVerification) { [bool]$slotVerification.source_common_valid } else { $false }
+      source_valid_count = if ($slotVerification) { [int]$slotVerification.source_valid_count } else { 0 }
+      universe_count = if ($slotVerification) { [int]$slotVerification.universe_count } else { 0 }
+      data_gap_count = if ($slotVerification) { [int]$slotVerification.data_gap_count } else { 0 }
       first_blocker = if ($slotReceipt -and $slotReceipt.first_blocker) { $slotReceipt.first_blocker } elseif (!$slotReceipt) { "slot_receipt_missing" } else { $null }
       reason_code = if ($slotReceipt -and $slotReceipt.reason_code) { $slotReceipt.reason_code } elseif (!$slotReceipt) { "slot_receipt_missing" } else { $null }
       checked_at = if ($slotReceipt) { $slotReceipt.checked_at } else { $null }
@@ -164,7 +178,8 @@ try {
     }
   }
   $futoptEvidenceOk = ($futoptSlots["0845"].ok -eq $true -and $futoptSlots["0850"].ok -eq $true)
-  $futoptBlockers = @($futoptSlots.GetEnumerator() | Where-Object { $_.Value.ok -ne $true } | ForEach-Object {
+  $futoptEvidenceUsable = @($futoptSlots.GetEnumerator() | Where-Object { $_.Value.usable -eq $true }).Count -gt 0
+  $futoptBlockers = @($futoptSlots.GetEnumerator() | Where-Object { $_.Value.usable -ne $true } | ForEach-Object {
     "{0}:{1}" -f $_.Key, $(if ($_.Value.first_blocker) { $_.Value.first_blocker } else { "futopt_slot_not_ok" })
   })
   $futoptReceipt = [ordered]@{
@@ -177,13 +192,14 @@ try {
     phase = "0845_0850_futopt_trial_readback"
     futopt_detection_window = "08:45-08:50"
     uses_0900_data = $false
-    status = if ($futoptEvidenceOk) { "READY_FOR_0855_RANKING" } else { "FUTOPT_PREOPEN_EVIDENCE_DEGRADED" }
-    allowed_action = if ($futoptEvidenceOk) { "apply_futopt_trial_weight" } else { "rank_without_futopt_trial_weight" }
+    usable_for_partial_ranking = $futoptEvidenceUsable
+    status = if ($futoptEvidenceOk) { "READY_FOR_0855_RANKING" } elseif ($futoptEvidenceUsable) { "PARTIAL_USABLE_FOR_0855_RANKING" } else { "FUTOPT_PREOPEN_EVIDENCE_DEGRADED" }
+    allowed_action = if ($futoptEvidenceOk) { "apply_futopt_trial_weight" } elseif ($futoptEvidenceUsable) { "apply_futopt_trial_weight_per_symbol_and_isolate_gaps" } else { "rank_without_futopt_trial_weight" }
     readback_source = "daytrade_futopt_preopen_natural_receipts"
     slot_receipts = $futoptSlots
     slot_paths = $futoptSlotPaths
     first_blocker = if ($futoptEvidenceOk) { $null } elseif ($futoptBlockers.Count -gt 0) { $futoptBlockers[0] } else { "futopt_preopen_evidence_missing" }
-    reason_code = if ($futoptEvidenceOk) { "futopt_preopen_evidence_ready" } else { "futopt_preopen_evidence_degraded" }
+    reason_code = if ($futoptEvidenceOk) { "futopt_preopen_evidence_ready" } elseif ($futoptEvidenceUsable) { "futopt_preopen_evidence_partial_usable" } else { "futopt_preopen_evidence_degraded" }
     action_guard = [ordered]@{ creates_order = $false; creates_formal_candidate = $false; publish_allowed = $false; requires_second_confirm_before_action = $true }
     formal_candidate_count = 0
     formal_candidate_allowed = $false
@@ -191,11 +207,39 @@ try {
   }
   Write-JsonFile -Path $futoptReadbackPath -Payload $futoptReceipt
 
-  Wait-UntilTaipeiTime -HHmmss "08:55:00"
-  Write-Host ("[0855] progressive final ranked watchlist trade_date={0}" -f $TradeDate)
+  # 08:50 is the immutable prediction deadline. The legacy 0855 runner name is
+  # retained for compatibility, but it is invoked here at 08:50 to freeze direction.
+  Write-Host ("[0850] freeze and publish predictor direction trade_date={0}" -f $TradeDate)
   & "C:\Program Files\PowerShell\7\pwsh.exe" -NoProfile -ExecutionPolicy Bypass -File $observeScript -TradeDate $TradeDate -Limit $Limit -RunId $RunId -TerminalDir $TerminalDir -RuntimeDir $RuntimeDir
   $observeExit = $LASTEXITCODE
   $summary = Read-JsonFile -Path $summaryPath
+  $predictionReceipt = [ordered]@{
+    ok = ($observeExit -eq 0 -and $summary -and $summary.ok -eq $true)
+    contract = "opening_limit_order_0850_prediction_freeze_v1"
+    trade_date = $TradeDate
+    run_id = $RunId
+    frozen_at = (Get-Date).ToUniversalTime().ToString("o")
+    publish_deadline = "08:50 Asia/Taipei"
+    immutable_after_publish = $true
+    source_summary = $summaryPath
+    prediction_count = if ($summary) { [int]$summary.prediction_count } else { 0 }
+    predictions = if ($summary) { @($summary.predictions) } else { @() }
+    first_blocker = if (!$summary) { "0850_prediction_summary_missing" } elseif ($summary.first_blocker) { $summary.first_blocker } else { $null }
+    allowed_after_0850 = "monitor_and_rank_only"
+  }
+  # A frozen day is immutable across retries and different run IDs.
+  if (Test-Path -LiteralPath $predictionPath) {
+    $priorFreeze = Read-JsonFile -Path $predictionPath
+    if ($priorFreeze.ok -eq $true) { throw "prediction_day_already_frozen" }
+  }
+  Write-JsonFile -Path $predictionPath -Payload $predictionReceipt
+  if ($predictionReceipt.ok -ne $true) { $predictionReceipt | ConvertTo-Json -Depth 80; exit 1 }
+
+  $freezeVerifierPath = Join-Path $outDir ("opening-limit-order-0850-verifier-{0}.json" -f $compactDate)
+  & $nodeExe "scripts\verify-opening-prediction.js" "--freeze=$predictionPath" "--trade-date=$TradeDate" "--run-id=$RunId" "--receipt=$freezeVerifierPath" | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "prediction_freeze_verifier_failed:$freezeVerifierPath" }
+  Wait-UntilTaipeiTime -HHmmss "08:55:00"
+  Write-Host ("[0855] monitor frozen 08:50 predictions and build ranking trade_date={0}" -f $TradeDate)
   $rankedRows = @()
   if ($summary -and $summary.candidates) {
     $rankedRows = @($summary.candidates | ForEach-Object {
@@ -203,6 +247,12 @@ try {
         rank = $_.rank
         symbol = $_.symbol
         final_score = $_.final_score
+        tomorrow_prediction = $_.tomorrow_prediction
+        tomorrow_prediction_label = $_.tomorrow_prediction_label
+        tomorrow_prediction_reason = $_.tomorrow_prediction_reason
+        tomorrow_prediction_initial = $_.tomorrow_prediction_initial
+        tomorrow_prediction_pattern = $_.tomorrow_prediction_pattern
+        preopen_confirmation_label = $_.preopen_confirmation_label
         entry_score = $_.entry_score
         matched_rule_count = $_.matched_rule_count
         matched_strategy_numbers = $_.matched_strategy_numbers
@@ -233,6 +283,11 @@ try {
     source_paths = [ordered]@{ pre_candidates = $preCandidatesPath; futopt_readback = $futoptReadbackPath; summary = $summaryPath }
     candidate_count = $rankedRows.Count
     candidates = $rankedRows
+    prediction_count = [int]$predictionReceipt.prediction_count
+    predictions = @($predictionReceipt.predictions)
+    prediction_freeze_path = $predictionPath
+    prediction_frozen_at = $predictionReceipt.frozen_at
+    prediction_immutable_after_publish = $true
     action_guard = if ($summary) { $summary.action_guard } else { [ordered]@{ creates_order = $false; creates_formal_candidate = $false; publish_allowed = $false; requires_second_confirm_before_action = $true } }
     formal_candidate_count = 0
     formal_candidate_allowed = $false
