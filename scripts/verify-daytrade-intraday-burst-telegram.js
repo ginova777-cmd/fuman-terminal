@@ -411,7 +411,7 @@ const checks = {
     '"技術確認: " + technical',
     '"當沖盤中雷達｜" + notificationType',
   ]) && !includesAll(notifier, ["最新 1分K 收 ", "前置樣本 ", "僅為 Mother Pool 雷達提醒"]),
-  five_minute_strong_hard_gate_contract: includesAll(notifier, [
+  five_minute_bonus_contract: includesAll(notifier, [
     "v_fugle_intraday_5m_readback",
     "v_fugle_intraday_5m_verification_readback",
     "daytrade_intraday_5m_runner_verifier_receipt_v4",
@@ -426,9 +426,9 @@ const checks = {
     "anyBranchTrue",
     "CONFIRMED_STRONG_5M",
     '" (5分K強)"',
-    "five_minute_confirmation_required: true",
-    'five_minute_required_status: "CONFIRMED_STRONG_5M"',
-    "five_minute_not_confirmed_strong",
+    "five_minute_confirmation_required: false",
+    'five_minute_bonus_status: "CONFIRMED_STRONG_5M"',
+    "five_minute_bonus_awarded",
     "row?.bar_complete === true",
     "row?.data_gap_5m !== true",
     "FIVE_MINUTE_MAX_STALE_SECONDS",
@@ -776,10 +776,10 @@ const fiveRunner=read(path.join(ROOT,'run-daytrade-intraday-5m-current-candidate
 checks.v4_candidate_snapshot_first = fiveRunner.includes("snapshot.symbols") && fiveRunner.includes("daytradeMotherPoolSymbols") && fiveRunner.indexOf("snapshot.symbols")<fiveRunner.indexOf("daytradeMotherPoolSymbols");
 if (requireToday) {
  checks.v4_current_snapshot_valid = snapshotEvidence.ok;
- checks.v4_five_minute_batch_health = receipt?.five_minute_confirmation?.snapshot_aligned===true && receipt?.five_minute_confirmation?.status==='ready' && !receipt?.five_minute_confirmation?.reason;
+ checks.v4_five_minute_bonus_role = receipt?.five_minute_role==='diagnostic_bonus_not_hard_gate' && receipt?.conditions?.five_minute_confirmation_required===false;
  checks.v4_current_notifier_identity = receipt?.v4_contract_validated===true && receipt?.mother_pool_run_id===snapshotEvidence.runId && receipt?.snapshot_sequence===snapshotEvidence.snapshot.snapshot_sequence;
  checks.v4_current_runner_identity = runnerReceipt?.v4_contract_validated===true && runnerReceipt?.mother_pool_run_id===receipt?.mother_pool_run_id && runnerReceipt?.snapshot_sequence===receipt?.snapshot_sequence;
- checks.v4_event_batch_readback = (receipt?.event_diagnostics||[]).filter(e=>e.trigger_type!=="outside_volume_gt_inside_x2" && !e.skip_reason).every(e=>e.membership_status==='ACTIVE' && e.five_minute_snapshot_aligned===true && e.five_minute_requested===true && e.five_minute_readback_found===true);
+ checks.v4_event_batch_readback = (receipt?.event_diagnostics||[]).filter(e=>e.trigger_type!=="outside_volume_gt_inside_x2" && !e.skip_reason).every(e=>e.membership_status==='ACTIVE' && e.five_minute_role==='diagnostic_bonus_not_hard_gate' && (e.five_minute_bonus_awarded!==true || (e.five_minute_snapshot_aligned===true && e.five_minute_requested===true && e.five_minute_readback_found===true && e.five_minute_confirmation_status==='CONFIRMED_STRONG_5M')));
 }
 runtime.industry_diagnostics = {role: "display_sort_diagnostic_only", ...industryDiagnostics};
 runtime.v4_in_session_acceptance = requireToday ? checks.v4_current_notifier_identity===true && checks.v4_current_runner_identity===true : null;
