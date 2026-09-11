@@ -119,7 +119,7 @@ async function main() {
   let writtenReal = 0; let writtenSynthetic = 0; let repairedSymbols = 0; let failedSymbols = 0;
   try {
     const universe = (await supabaseGet("stock_universe", "select=symbol,market&is_active=eq.true&is_blacklisted=eq.false&is_daytrade_unsuitable=eq.false&limit=2000", serviceKey)).filter((row) => !REQUESTED_SYMBOLS.size || REQUESTED_SYMBOLS.has(String(row.symbol))).slice(0, MAX_SYMBOLS);
-    const existing = await supabaseGet("fugle_daytrade_intraday_1m", `select=symbol,market,candle_time,trade_date,open,high,low,close,volume,source,source_channel,candle_origin,synthetic,volume_strategy_usable,websocket_row,rest_repair_row,payload&trade_date=eq.${encodeURIComponent(tradeDate)}&limit=1000000`, serviceKey);
+    const existing = await supabaseGet("fugle_daytrade_intraday_1m", `select=symbol,market,candle_time,trade_date,open,high,low,close,volume,source,source_channel,candle_origin,synthetic,volume_strategy_usable,websocket_row,rest_repair_row,payload&trade_date=eq.${encodeURIComponent(tradeDate)}${REQUESTED_SYMBOLS.size ? `&symbol=in.(${[...REQUESTED_SYMBOLS].join(",")})` : ""}&limit=1000000`, serviceKey);
     const bySymbol = new Map();
     for (const row of existing) { const symbol = normalizeSymbol(row.symbol); if (!symbol) continue; if (!bySymbol.has(symbol)) bySymbol.set(symbol, []); bySymbol.get(symbol).push(row); }
     for (const item of universe) {
