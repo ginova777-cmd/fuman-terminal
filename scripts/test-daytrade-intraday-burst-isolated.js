@@ -21,8 +21,6 @@ for(const [name,change,reason] of [
  ['under price',{trigger_type:'price_breakout_1pct',latest_1m_close:100.99},'price_rule_not_met'],
  ['warmup',{membership_status:'PENDING_DOWNSTREAM_WARMUP'},'PENDING_DOWNSTREAM_WARMUP'],
  ['removed',{mother_pool_removed:true},'mother_pool_snapshot_symbol_removed'],
- ['5m wrong batch',{five_minute_snapshot_aligned:false},'five_minute_batch_not_aligned_with_mother_pool_snapshot'],
- ['5m missing row',{five_minute_readback_found:false},'five_minute_readback_missing'],
  ['short baseline',{rolling_1m_baseline_sample_count:59},'rolling_1m_samples_below_60'],
  ['no cross',{technical_golden_cross_any:false,technical_golden_cross_signals:[]},'technical_golden_cross_not_met'],
  ['stale quote',{quote_age_seconds:121},'quote_not_fresh'],
@@ -30,3 +28,14 @@ for(const [name,change,reason] of [
  ['invalid candle evidence',{canonical_water_intraday_1m_ready:false},'canonical_water_intraday_1m_not_ready']
 ])test(name+' rejected',()=>assert.ok(validEvent({...event(),...change},date,now).includes(reason)));
 test('outside strength does not require technical or 1m/5m signals',()=>{const e={...event(),notification_type:'外盤強勢',trigger_type:'outside_volume_gt_inside_x2',side_volume_unit:'lots',inside_volume:1000,outside_volume:2000,side_volume_total:3000,event_time:'2026-09-11T03:00:00Z',technical_golden_cross_any:false,canonical_water_intraday_1m_ready:false,five_minute_confirmation_status:'DATA_GAP_5M'};assert.deepEqual(validSideVolumeEvent(e,date,now),[]);e.membership_status='PENDING_DOWNSTREAM_WARMUP';assert.ok(validSideVolumeEvent(e,date,now).includes('mother_pool_membership_not_active'))});
+
+for (const type of ['volume_burst_rolling60_x2','price_breakout_1pct']) {
+ for (const [name,change] of [
+  ['missing row',{five_minute_readback_found:false}],
+  ['wrong batch',{five_minute_snapshot_aligned:false}],
+  ['not requested',{five_minute_requested:false}],
+  ['waiting',{five_minute_confirmation_status:'WAIT_5M_CONFIRMATION',five_minute_confirmation_signals:[]}],
+  ['data gap',{five_minute_confirmation_status:'DATA_GAP_5M',five_minute_confirmation_signals:[]}]
+ ]) test(type+' still eligible without 5m bonus: '+name,()=>{const e={...event(type),...change};assert.deepEqual(validEvent(e,date,now),[]);assert.equal(require('./notify-daytrade-intraday-burst-telegram').fiveMinuteBonus(e),false)});
+ test(type+' earns bonus only with valid strong evidence',()=>assert.equal(require('./notify-daytrade-intraday-burst-telegram').fiveMinuteBonus(event(type)),true));
+}
