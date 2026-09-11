@@ -18,7 +18,8 @@ if (-not (Test-Path -LiteralPath $verifier)) { throw "canonical_verifier_missing
 $surfaceArgs = @("--slot=$Slot")
 $recoveryKey = ''
 if ($Recovery) {
-  if ($ExpectedRunId -match '^strategy5-\d{8}-\d{14}$') { $recoveryKey = 'strategy5' }
+  if ($ExpectedRunId -match '^institution-\d{8}-\d{14}$') { $recoveryKey = 'institution' }
+  elseif ($ExpectedRunId -match '^strategy5-\d{8}-\d{14}$') { $recoveryKey = 'strategy5' }
   elseif ($ExpectedRunId -match '^strategy4-\d{8}-\d{14}$') { $recoveryKey = 'strategy4' }
   elseif ($ExpectedRunId -match '^strategy3v2-(?:recovery-replay-)?\d{8}-\d{14}$') { $recoveryKey = 'strategy3' }
   if ($recoveryKey) { $surfaceArgs += "--only=$recoveryKey" }

@@ -30,6 +30,11 @@ try {
   Invoke-Required "strategy requirements" { & $nodeExe "scripts\verify-institution-strategy-requirements.js" }
   Invoke-Required "formal payloads" { & $nodeExe "scripts\verify-institution-formal-payloads.js" }
   Invoke-Required "UI display" { & $nodeExe "scripts\verify-institution-ui-display.js" }
+  Invoke-Required "institution audited scorecard publication" {
+    $institutionEvidence = Get-Content -LiteralPath (Join-Path $runtime "data\scan-receipts\institution.json") -Raw | ConvertFrom-Json
+    if ($institutionEvidence.complete -ne $true -or $institutionEvidence.status -ne "complete") { throw "institution_not_complete_for_scorecard_publication" }
+    & $pwshExe -NoProfile -File ".\scripts\run-scorecard88-terminal-collector.ps1" -Slot "21:40" -ProjectRoot $PSScriptRoot -RuntimeRoot $runtime -Recovery -ExpectedRunId ([string]$institutionEvidence.runId) -RecoveryReason "Institution complete runner: publish independently verified desktop/mobile run to scorecard before rendered acceptance"
+  }
   Invoke-Required "live database and rendered three-surface acceptance" { & $nodeExe "--use-system-ca" "scripts\verify-institution-live-readback.js" "--render" }
   Invoke-Required "buy-sell canonical receipt" { & $nodeExe "--use-system-ca" "scripts\verify-buy-sell-complete.js" "--write-receipt" }
   exit 0
