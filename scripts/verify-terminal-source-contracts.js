@@ -92,9 +92,9 @@ const CONTRACTS = [
         { resultCountPath: "coverage.result_count" }
       ),
       resultTable("strategy3_v2_scan_results", ["run_id", "trade_date", "code", "name", "rank", "score", "complete", "quality_status", "payload", "created_at"], "created_at.desc"),
-      sourceTable("v_fugle_daytrade_mother_pool", [
-        "symbol", "name", "trade_date", "priority_rank", "mother_pool_rule_version", "mother_updated_at"
-      ], { order: "priority_rank.asc", requireToday: true, minRows: 1, purpose: "Strategy3 V2 direct Mother Pool membership" }),
+      sourceTable("v_fugle_daytrade_mother_pool_v4_1", [
+        "symbol", "name", "trade_date", "mother_pool_rank", "contract_version", "canonical_run_id", "source_updated_at"
+      ], { order: "mother_pool_rank.asc", requireToday: true, minRows: 1, purpose: "Strategy3 V2 authoritative Mother Pool v4.1 membership" }),
       sourceTable("fugle_daytrade_intraday_1m", [
         "symbol", "trade_date", "candle_time", "open", "high", "low", "close", "volume", "updated_at"
       ], { order: "candle_time.desc", requireToday: true, minRows: 1, purpose: "Strategy3 V2 direct one-minute candle water" }),

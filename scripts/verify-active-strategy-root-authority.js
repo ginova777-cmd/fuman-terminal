@@ -9,7 +9,7 @@ const ACTIVE_FILES = [
   "run-buy-sell-complete.ps1",
   "run-strategy3-v2-complete-scan.ps1",
   "run-strategy3-v2-1255-first-attempt.ps1",
-  "run-strategy3-ready-snapshot.ps1",
+  "run-strategy3-v2-readiness-guard.ps1",
   "run-strategy5-complete.ps1",
   "ops/run-strategy2-v3-water-gate.ps1",
   "run-strategy4-partial-sync.ps1",
@@ -50,3 +50,4 @@ const report = {
   issues,
 };
 console.log(JSON.stringify(report, null, 2));
+process.exitCode = report.ok ? 0 : 1;
