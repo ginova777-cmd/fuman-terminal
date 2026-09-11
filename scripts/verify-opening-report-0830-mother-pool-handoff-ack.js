@@ -16,7 +16,7 @@ const STATE_DIR = path.join(RUNTIME, "state");
 const RECEIPT_DIR = path.join(RUNTIME, "data", "scan-receipts");
 const REPORT_DIR = path.join(RUNTIME, "data", "opening-report-0830");
 const PROJECT_URL = String(process.env.SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/$/, "");
-const CONTRACT = "opening-report-0830-mother-pool-field-ack-v1";
+const CONTRACT = "opening-report-0830-mother-pool-handoff-ack-v2";
 const SOURCE = "opening_report_0830";
 const MODE = "priority_bias_only";
 const REASON = "opening_report_0830_industry_bias";
@@ -203,7 +203,7 @@ async function main() {
   const tradeDate = arg("trade-date", taipeiDate());
   const reportRunId = arg("report-run-id");
   const ymd = compact(tradeDate);
-  const output = path.resolve(arg("output", path.join(RECEIPT_DIR, `opening-report-0830-mother-pool-field-ack-${ymd}.json`)));
+  const output = path.resolve(arg("output", path.join(RECEIPT_DIR, `opening-report-0830-mother-pool-handoff-ack-${ymd}.json`)));
   const aggregatePath = path.resolve(arg("bridge-aggregate", path.join(REPORT_DIR, `opening-report-0830-bridge-aggregate-${ymd}.json`)));
   const aggregate = readJson(aggregatePath);
   const missingFields = [];
@@ -282,9 +282,11 @@ async function main() {
   if (!complete) process.exitCode = 1;
 }
 
-main().catch((error) => {
-  console.error(error.stack || error.message || String(error));
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.stack || error.message || String(error));
+    process.exitCode = 1;
+  });
+}
 
-module.exports = { validatePayload, validateBridge, validateDbRow, fixture };
+module.exports = { CONTRACT, validatePayload, validateBridge, validateDbRow, fixture };

@@ -106,9 +106,12 @@ function verifySkeletonStatic() {
   includes("scripts/run-daytrade-source-writer.js", "mergeOpeningReportEvidence");
   includes("scripts/run-daytrade-source-writer.js", "openingReport0830IndustryBias");
   includes("scripts/run-daytrade-source-writer.js", "opening_report_0830_source");
-  includes("scripts/verify-opening-report-0830-mother-pool-field-ack.js", "market_not_TW_TWSE_TPEX");
-  includes("scripts/verify-opening-report-0830-mother-pool-field-ack.js", "overlapping_industries_preserved");
-  const openingEvidenceFixture = runStatic("scripts/verify-opening-report-0830-mother-pool-field-ack.js", ["--fixture"]);
+  excludes("package.json", "verify:opening-report-mother-pool-field-ack");
+  includes("scripts/verify-opening-report-0830-mother-pool-handoff-ack.js", "market_not_TW_TWSE_TPEX");
+  includes("scripts/verify-opening-report-0830-mother-pool-handoff-ack.js", "overlapping_industries_preserved");
+  includes("scripts/verify-opening-report-0830-mother-pool-persistence-ack.js", "writer_refreshes_observed");
+  includes("scripts/verify-opening-report-0830-mother-pool-persistence-ack.js", "required_writer_refreshes");
+  const openingEvidenceFixture = runStatic("scripts/verify-opening-report-0830-mother-pool-handoff-ack.js", ["--fixture"]);
   if (!openingEvidenceFixture.ok
     || !openingEvidenceFixture.output.includes('"db_twse": true')
     || !openingEvidenceFixture.output.includes('"db_tpex": true')

@@ -107,25 +107,28 @@ $runnerArgs = @("scripts\run-opening-report-0830-production.js", "--apply-bridge
 if ($IsolatedBacktest) { $runnerArgs += "--isolated-backtest" }
 if ($ReuseLineReceipt) { $runnerArgs += "--reuse-line-receipt" }
 $run = Invoke-NodeStep -NodeArgs $runnerArgs -Label "runner"
+$persistenceArgs = @("scripts\verify-opening-report-0830-mother-pool-persistence-ack.js", "--trade-date=$tradeDate", "--report-run-id=$runId")
+$persistence = if ($run.exitCode -eq 0 -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $persistenceArgs -Label "mother-pool-persistence-ack" } elseif ($run.exitCode -eq 0) { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = 0; stdout = ""; stderr = ""; simulated = $true } } else { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = -1; stdout = ""; stderr = "" } }
 $verifierArgs = @("scripts\verify-opening-report-morning-contract.js", "--trade-date=$tradeDate")
 if (-not $IsolatedBacktest) { $verifierArgs += "--require-current" }
-$verifier = if ($run.exitCode -eq 0) { Invoke-NodeStep -NodeArgs $verifierArgs -Label "canonical-verifier" } else { [pscustomobject]@{ label = "canonical-verifier"; exitCode = -1; stdout = ""; stderr = "" } }
+$verifier = if ($run.exitCode -eq 0 -and $persistence.exitCode -eq 0) { Invoke-NodeStep -NodeArgs $verifierArgs -Label "canonical-verifier" } else { [pscustomobject]@{ label = "canonical-verifier"; exitCode = -1; stdout = ""; stderr = "" } }
 
 $finalFile = Join-Path $receiptDir "opening-report-0830-final-receipt-$today.json"
 $final = if (Test-Path -LiteralPath $finalFile) { Get-Content -LiteralPath $finalFile -Raw | ConvertFrom-Json } else { $null }
 $lineFile = Join-Path $receiptDir "line-push-receipt-$today.json"
 $line = if (Test-Path -LiteralPath $lineFile) { Get-Content -LiteralPath $lineFile -Raw | ConvertFrom-Json } else { $null }
-$runnerOk = ($run.exitCode -eq 0 -and $null -ne $final -and $final.ok -eq $true)
+$runnerOk = ($run.exitCode -eq 0 -and $null -ne $final -and $final.runner_complete -eq $true)
 $verifierOk = ($verifier.exitCode -eq 0)
 $linePersonalOk = ($null -ne $line -and $line.line_push_ok -eq $true -and $line.has_user_target -eq $true)
 $lineGroupOk = ($null -ne $line -and $line.line_push_ok -eq $true -and $line.has_group_target -eq $true)
 $terminalOk = ($null -ne $final -and $final.terminal_briefing_snapshot.ok -eq $true)
 $bridgeOk = ($null -ne $final -and $final.mother_pool_bridge_attempted -eq $true -and $final.mother_pool_bridge_ok -eq $true)
-$fieldAckOk = ($null -ne $final -and $final.mother_pool_field_ack_ok -eq $true -and $final.mother_pool_field_ack.complete -eq $true)
+$handoffAckOk = ($null -ne $final -and $final.mother_pool_handoff_ack_ok -eq $true -and $final.mother_pool_handoff_ack.complete -eq $true)
+$persistenceAckOk = if ($IsolatedBacktest) { $true } else { ($persistence.exitCode -eq 0 -and $null -ne $final -and $final.mother_pool_persistence_ack_ok -eq $true -and $final.mother_pool_persistence_ack.complete -eq $true) }
 $expected = if ($null -ne $final -and $null -ne $final.expected_industry_count) { [int]$final.expected_industry_count } else { 0 }
 $scanned = if ($null -ne $final -and $null -ne $final.scanned_industry_count) { [int]$final.scanned_industry_count } else { 0 }
-$ok = ($runnerOk -and $verifierOk -and $linePersonalOk -and $lineGroupOk -and $terminalOk -and $bridgeOk -and $fieldAckOk -and $expected -eq 15 -and $scanned -eq 15)
-$reasonCode = if ($ok) { "complete" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } elseif (-not $fieldAckOk) { "mother_pool_field_ack_incomplete" } else { "industry_scan_incomplete" }
+$ok = ($runnerOk -and $persistenceAckOk -and $verifierOk -and $linePersonalOk -and $lineGroupOk -and $terminalOk -and $bridgeOk -and $handoffAckOk -and $expected -eq 15 -and $scanned -eq 15)
+$reasonCode = if ($ok) { "complete" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $handoffAckOk) { "mother_pool_handoff_ack_incomplete" } elseif (-not $persistenceAckOk) { "mother_pool_persistence_ack_incomplete" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } else { "industry_scan_incomplete" }
 
 $receipt = [ordered]@{
   contract = "opening-report-morning-wrapper-v1"
@@ -147,11 +150,13 @@ $receipt = [ordered]@{
   line_receipt_reused = $ReuseLineReceipt.IsPresent
   terminal_ok = $terminalOk
   mother_pool_bridge_ok = $bridgeOk
-  mother_pool_field_ack_ok = $fieldAckOk
-  mother_pool_field_ack_receipt = if ($null -ne $final) { $final.mother_pool_field_ack_receipt } else { $null }
+  mother_pool_handoff_ack_ok = $handoffAckOk
+  mother_pool_handoff_ack_receipt = if ($null -ne $final) { $final.mother_pool_handoff_ack_receipt } else { $null }
+  mother_pool_persistence_ack_ok = $persistenceAckOk
+  mother_pool_persistence_ack_receipt = if ($null -ne $final) { $final.mother_pool_persistence_ack_receipt } else { $null }
   runner_ok = $runnerOk
   canonical_verifier_ok = $verifierOk
-  steps = @($run, $verifier)
+  steps = @($run, $persistence, $verifier)
   canonical_verifier = "scripts/verify-opening-report-morning-contract.js"
   telegram_enabled = $false
 }
