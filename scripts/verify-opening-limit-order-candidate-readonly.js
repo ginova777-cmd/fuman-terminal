@@ -1,10 +1,11 @@
 "use strict";
 
 /*
- * 08:50 warms static, completed-day evidence. 08:55 only adds natural
- * 08:45-08:55 futures/trial evidence. Neither phase can create an order.
+ * T-1 evidence is combined with natural 08:45/08:50 futures/trial evidence.
+ * The prediction is frozen at 08:50. No phase can create an order.
  */
 const fs = require("fs");
+const predictionEngine = require("../lib/opening-prediction");
 const path = require("path");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -18,6 +19,12 @@ const READ_TIMEOUT_MS = Math.max(3000, Number(process.env.DAYTRADE_SUPABASE_READ
 const STATIC_CONCURRENCY = Math.min(12, Math.max(2, Number(process.env.OPENING_LIMIT_ORDER_STATIC_CONCURRENCY || 8)));
 const FUTOPT_NEAR_PREV_CLOSE_PCT = 1.0;
 const TRIAL_LIMIT_DOWN_PCT = -9.5;
+const LIMIT_UP_NEXT_DAY_TRIAL_SHORT_MIN_PCT = 3.0;
+const LIMIT_UP_NEXT_DAY_TRIAL_SHORT_MAX_PCT = 5.0;
+const LIMIT_UP_NEXT_DAY_TRIAL_LONG_FLAT_MIN_PCT = -0.99;
+const LIMIT_UP_NEXT_DAY_TRIAL_LONG_FLAT_MAX_PCT = 0.99;
+const LIMIT_UP_NEXT_DAY_TRIAL_LONG_DOWN_MIN_PCT = -3.0;
+const LIMIT_UP_NEXT_DAY_TRIAL_LONG_DOWN_MAX_PCT = -1.0;
 const FUTOPT_STRONG_CHANGE_PCT = 2.0;
 const FUTOPT_RELATIVE_TO_TXF_PCT = 1.0;
 const FUTOPT_MIN_VOLUME = 50;
@@ -67,7 +74,7 @@ function arg(name, fallback = "") {
   const prefix = `--${name}=`;
   return process.argv.find((value) => value.startsWith(prefix))?.slice(prefix.length) || fallback;
 }
-function n(value, fallback = NaN) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : fallback; }
+function n(value, fallback = NaN) { if (value === null || value === undefined || value === "") return fallback; const parsed = Number(value); return Number.isFinite(parsed) ? parsed : fallback; }
 function round(value, digits = 4) { return Number.isFinite(value) ? Number(value.toFixed(digits)) : null; }
 function unique(values) { return [...new Set((values || []).filter(Boolean).map(String))]; }
 function maxFinite(values) { const finite = (values || []).map((value) => n(value)).filter(Number.isFinite); return finite.length ? Math.max(...finite) : null; }
@@ -145,6 +152,7 @@ async function loadPreopenRowsBySymbols(view, tradeDate, symbols, key, symbolCol
         select,
         trade_date: `eq.${tradeDate}`,
         [symbolColumn]: `in.(${batch.join(",")})`,
+        ...(view.includes("preopen") && symbolColumn === "underlying_symbol" ? { capture_slot: "in.(0845,0850)" } : {}),
         limit: String(Math.max(60, batch.length * 2)),
       }, key);
       rows.push(...batchRows);
@@ -154,7 +162,7 @@ async function loadPreopenRowsBySymbols(view, tradeDate, symbols, key, symbolCol
   }
   if (rows.length === 0 && failures.length > 0) {
     try {
-      const allRows = await supabaseSelect(view, { select, trade_date: `eq.${tradeDate}`, limit: "5000" }, key);
+      const allRows = await supabaseSelect(view, { select, trade_date: `eq.${tradeDate}`, ...(view.includes("preopen") && symbolColumn === "underlying_symbol" ? {capture_slot:"in.(0845,0850)"} : {}), limit: "5000" }, key);
       const wanted = new Set(symbols.map(String));
       rows.push(...allRows.filter((row) => wanted.has(String(row[symbolColumn] || ""))));
     } catch (error) {
@@ -196,6 +204,75 @@ async function loadStockFutureStrengthRows(tradeDate, symbols, key) {
 }
 function priceRowsByDate(rows) { return [...(rows || [])].sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))); }
 function lastCompletedSignalDate(priceRows, tradeDate) { return [...priceRowsByDate(priceRows)].reverse().find((row) => String(row.date || "") < tradeDate)?.date || ""; }
+function dailyVolume(row) { return n(row?.Trading_Volume ?? row?.trading_volume ?? row?.volume ?? row?.TradeVolume); }
+function closePosition(row) {
+  const high = n(row?.max ?? row?.high); const low = n(row?.min ?? row?.low); const close = n(row?.close);
+  return Number.isFinite(high) && Number.isFinite(low) && Number.isFinite(close) && high > low ? (close - low) / (high - low) : NaN;
+}
+function predictorPattern(rows, index) {
+  if (index < 1) return { direction: "", label: "不交易", reason: "歷史日K不足", pattern: "NO_TRADE" };
+  const day = rows[index]; const prev = rows[index - 1];
+  const open = n(day.open); const high = n(day.max ?? day.high); const low = n(day.min ?? day.low); const close = n(day.close); const prevClose = n(prev.close);
+  const volume = dailyVolume(day); const prevVolume = dailyVolume(prev);
+  const changePct = Number.isFinite(close) && Number.isFinite(prevClose) && prevClose > 0 ? ((close - prevClose) / prevClose) * 100 : NaN;
+  const priorFive = rows.slice(Math.max(0, index - 5), index);
+  const avg5Volume = priorFive.length ? priorFive.map(dailyVolume).filter(Number.isFinite).reduce((sum, value) => sum + value, 0) / priorFive.map(dailyVolume).filter(Number.isFinite).length : NaN;
+  const priorFiveHigh = priorFive.map((row) => n(row.max ?? row.high)).filter(Number.isFinite);
+  const recentStrongBefore = rows.slice(Math.max(1, index - 5), index).some((row, offset) => {
+    const actualIndex = Math.max(1, index - 5) + offset; const priorRow = rows[actualIndex - 1];
+    const rowClose = n(row.close); const priorRowClose = n(priorRow?.close);
+    const pct = Number.isFinite(rowClose) && Number.isFinite(priorRowClose) && priorRowClose > 0 ? ((rowClose - priorRowClose) / priorRowClose) * 100 : NaN;
+    return pct >= 8 && closePosition(row) >= 0.8;
+  });
+  const highTurnover = recentStrongBefore && Number.isFinite(volume) && Number.isFinite(prevVolume) && volume >= prevVolume * 3 && priorFiveHigh.length > 0 && high >= Math.max(...priorFiveHigh) && high > 0 && close < high && ((high - close) / high) >= 0.02;
+  const prevPrior = rows[index - 2];
+  const prevPriorFive = rows.slice(Math.max(0, index - 6), index - 1);
+  const prevPriorHighs = prevPriorFive.map((row) => n(row.max ?? row.high)).filter(Number.isFinite);
+  const prevWasReversal = Boolean(prevPrior && prevPriorHighs.length && dailyVolume(prev) >= dailyVolume(prevPrior) * 3 && n(prev.max ?? prev.high) >= Math.max(...prevPriorHighs) && n(prev.max ?? prev.high) > 0 && ((n(prev.max ?? prev.high) - n(prev.close)) / n(prev.max ?? prev.high)) >= 0.02);
+  const weakContinuation = prevWasReversal && high < n(prev.max ?? prev.high) && close < n(prev.close) && close < open;
+  const strongAttack = changePct >= 8 && closePosition(day) >= 0.8 && Number.isFinite(volume) && Number.isFinite(avg5Volume) && avg5Volume > 0 && volume < avg5Volume * 2.5;
+  if (highTurnover) return { direction: "空", label: "高檔反轉空", reason: `爆量創近期新高但收盤回落至少2%；量比前一日${round(volume / prevVolume, 2)}倍`, pattern: "HIGH_TURNOVER_REVERSAL_SHORT" };
+  if (weakContinuation) return { direction: "空", label: "弱勢延續空", reason: "前日高檔反轉後，高點降低、收盤降低且收黑", pattern: "WEAK_CONTINUATION_SHORT" };
+  if (strongAttack) return { direction: "多", label: "強勢延續多", reason: `T-1漲幅${round(changePct, 2)}%、收盤位置${round(closePosition(day) * 100, 1)}%，成交量未達5日均量2.5倍`, pattern: "STRONG_ATTACK_LONG" };
+  return { direction: "", label: "不交易", reason: "未符合高檔反轉空、弱勢延續空或強勢延續多", pattern: "NO_TRADE" };
+}
+const openingShortReceiptCache = new Map();
+function openingShortSignal(signalDate, symbol) {
+  if (!signalDate) return null;
+  if (!openingShortReceiptCache.has(signalDate)) {
+    const file = path.join(CACHE_DIR, `opening-short-postclose-${compactDate(signalDate)}.json`);
+    const payload = readJson(file);
+    openingShortReceiptCache.set(signalDate, payload?.ok === true && payload?.contract === "opening_short_postclose_readonly_v1" && payload?.trade_date === signalDate ? payload : null);
+  }
+  const payload = openingShortReceiptCache.get(signalDate);
+  const row = Array.isArray(payload?.rows) ? payload.rows.find((item) => String(item.symbol || "") === String(symbol || "")) : null;
+  return row?.matched === true ? row : null;
+}
+function tomorrowPrediction(source, preopen) {
+  const rows = priceRowsByDate(source?.price_rows); const index = rows.findIndex((row) => String(row.date || "") === source?.signal_date);
+  const initial = predictorPattern(rows, index);
+  const openingShort = openingShortSignal(source?.signal_date, source?.symbol);
+  const signalDay = rows[index]; const priorDay = rows[index - 1];
+  const priorLimitUp = index >= 1 && limitUpClosed(signalDay, priorDay);
+  const slot0850 = Array.isArray(preopen?.slots) ? preopen.slots.find((slot) => slot.capture_slot === "0850" && slot.present === true && slot.natural_schedule_evidence === true && slot.has_trial_price === true && n(slot.trial_price) > 0 && Number.isFinite(n(slot.trial_change_pct))) : null;
+  const trialPct0850 = slot0850 ? n(slot0850.trial_change_pct) : NaN;
+  if (openingShort && Number.isFinite(trialPct0850) && trialPct0850 >= LIMIT_UP_NEXT_DAY_TRIAL_SHORT_MIN_PCT && trialPct0850 <= LIMIT_UP_NEXT_DAY_TRIAL_SHORT_MAX_PCT) {
+    return { direction: "空", label: "開盤空", reason: `T-1漲停且60分K KD過熱或黏線，08:50天然試撮上漲${round(trialPct0850, 2)}%落在+3%～+5%；凱基－城中${openingShort.checks?.kgi_chengzhong_present ? "加分" : "未加分"}`, pattern: "LIMIT_UP_KD_PREOPEN_HIGH_SHORT", initial_direction: initial.direction, confirmation: "08:50凍結" };
+  }
+  const limitUpFlatLong = Number.isFinite(trialPct0850) && trialPct0850 >= LIMIT_UP_NEXT_DAY_TRIAL_LONG_FLAT_MIN_PCT && trialPct0850 <= LIMIT_UP_NEXT_DAY_TRIAL_LONG_FLAT_MAX_PCT;
+  const limitUpDownLong = Number.isFinite(trialPct0850) && trialPct0850 >= LIMIT_UP_NEXT_DAY_TRIAL_LONG_DOWN_MIN_PCT && trialPct0850 <= LIMIT_UP_NEXT_DAY_TRIAL_LONG_DOWN_MAX_PCT;
+  if (openingShort && (limitUpFlatLong || limitUpDownLong)) {
+    return { direction: "多", label: "漲停隔日平低開轉強多", reason: `T-1漲停且60分K KD過熱或黏線，08:50天然試撮${trialPct0850 >= 0 ? "+" : ""}${round(trialPct0850, 2)}%落在近平盤或-1%～-3%；凱基－城中${openingShort.checks?.kgi_chengzhong_present ? "加分" : "未加分"}`, pattern: "LIMIT_UP_KD_PREOPEN_FLAT_DOWN_LONG", initial_direction: initial.direction, confirmation: "08:50凍結" };
+  }
+  if (openingShort && Number.isFinite(trialPct0850)) {
+    return { direction: "", label: "不交易", reason: `T-1漲停，但08:50天然試撮${trialPct0850 >= 0 ? "+" : ""}${round(trialPct0850, 2)}%未落入+3%～+5%偏空、近平盤或-1%～-3%偏多區間`, pattern: "LIMIT_UP_NEXT_DAY_TRIAL_OUTSIDE_RANGE_NO_TRADE", initial_direction: initial.direction, confirmation: "08:50漲停隔日劇本區間外" };
+  }
+  if (openingShort) return { direction: "", label: "不交易", reason: "T-1漲停且60分K KD過熱或黏線，但08:50天然試撮缺失，禁止使用收盤價替代", pattern: "LIMIT_UP_KD_PREOPEN_TRIAL_DATA_GAP", initial_direction: initial.direction, confirmation: "DATA_GAP_TRIAL" };
+  if (!initial.direction) return { ...initial, initial_direction: "", confirmation: "不交易" };
+  if (initial.direction === "多" && preopen?.trial_match_limit_down === true) return { direction: "", label: "不交易", reason: `${initial.reason}；盤前試撮出現跌停型態，取消多方`, pattern: initial.pattern, initial_direction: initial.direction, confirmation: "盤前取消" };
+  const hasNaturalEvidence = Array.isArray(preopen?.slots) && preopen.slots.some((slot) => slot.present && slot.natural_schedule_evidence === true);
+  return { ...initial, initial_direction: initial.direction, confirmation: hasNaturalEvidence ? "盤前確認" : "盤前證據不足，保留T-1初判" };
+}
 function ma(rows, index, length) { if (index < length - 1) return NaN; const part = rows.slice(index - length + 1, index + 1); return part.length === length ? part.reduce((sum, row) => sum + n(row.close, 0), 0) / length : NaN; }
 function limitDownReopened(today, prev) { const base = n(prev?.close); const low = n(today?.min); const close = n(today?.close); return Number.isFinite(base) && Number.isFinite(low) && Number.isFinite(close) && low <= base * 0.9 * 1.012 && close > base * 0.9 * 1.025; }
 function limitUpClosed(today, prev) { return Number.isFinite(n(today?.close)) && Number.isFinite(n(prev?.close)) && n(today.close) >= n(prev.close) * 1.095; }
@@ -296,7 +373,9 @@ function preferredTopNetBuyBrokerEvidence(rows) {
 function validateReport(payload, tradeDate) {
   const date = dashDate(payload?.trade_date || payload?.date);
   const confidence = n(payload?.confidence);
-  return date === tradeDate && /^08:30(?:$|[:+T\s])/.test(String(payload?.report_time || "")) && Boolean(payload?.run_id) && payload?.source === "opening_report_0830" && payload?.mode === "priority_bias_only" && Boolean(String(payload?.industry || "").trim()) && Boolean(String(payload?.bias || "").trim()) && Boolean(String(payload?.evidence_summary || "").trim()) && Array.isArray(payload?.mapped_symbols) && payload.mapped_symbols.length > 0 && Number.isFinite(confidence) && confidence >= 0 && confidence <= 1 && payload?.allowed_action === "boost_scan_priority_only" && payload?.forbidden_action === "publish_formal_candidate_without_taiwan_evidence" && payload?.overseas_strength_contract === "opening_report_0830_overseas_strength_v1" && String(payload?.overseas_evidence_cutoff || "").includes("08:20:00 Asia/Taipei");
+  const explicitFrozenContract = payload?.overseas_strength_contract === "opening_report_0830_overseas_strength_v1" && String(payload?.overseas_evidence_cutoff || "").includes("08:20:00 Asia/Taipei");
+  const canonicalLegacyFrozenPayload = payload?.overseas_leader_detection && Array.isArray(payload?.mapped_symbols_a) && Array.isArray(payload?.mapped_symbols_b);
+  return date === tradeDate && /^08:30(?:$|[:+T\s])/.test(String(payload?.report_time || "")) && Boolean(payload?.run_id) && payload?.source === "opening_report_0830" && payload?.mode === "priority_bias_only" && Boolean(String(payload?.industry || "").trim()) && Boolean(String(payload?.bias || "").trim()) && Boolean(String(payload?.evidence_summary || "").trim()) && Array.isArray(payload?.mapped_symbols) && payload.mapped_symbols.length > 0 && Number.isFinite(confidence) && confidence >= 0 && confidence <= 1 && payload?.allowed_action === "boost_scan_priority_only" && payload?.forbidden_action === "publish_formal_candidate_without_taiwan_evidence" && (explicitFrozenContract || canonicalLegacyFrozenPayload);
 }
 function loadOpeningReport(tradeDate) {
   const stateDir = path.join(RUNTIME_DIR, "state");
@@ -316,7 +395,7 @@ function loadOpeningReport(tradeDate) {
     const overseasReturn1d = n(payload.overseas_return_1d_pct);
     const sectorReturn1d = maxFinite([usReturn1d, overseasReturn1d]);
     const sectorReturn2d = maxFinite([payload.us_return_2d_pct, payload.overseas_return_2d_pct]);
-    accepted.push({ payload, sectorReturn1d, sectorReturn2d, strongSectorReturn1d: payload.bias === "positive_detected" });
+    accepted.push({ payload, sectorReturn1d, sectorReturn2d, strongSectorReturn1d: String(payload.bias || "").startsWith("positive") });
   }
   const rankedPositive = accepted.filter((item) => item.strongSectorReturn1d).sort((a, b) => n(b.sectorReturn1d, -Infinity) - n(a.sectorReturn1d, -Infinity));
   const positiveRankByIndustry = new Map();
@@ -372,9 +451,29 @@ function loadOpeningReport(tradeDate) {
   return result;
 }
 
-function classifyPreopenSlot(row, strength) {
+function classifyPreopenSlot(row, strength, captureSlot, tradeDate) {
   const fut = n(row?.fut_price);
-  const trial = n(row?.trial_price);
+  const payload = row?.payload || {};
+  const trialEventAt = String(row?.trial_event_at || payload.trial_event_at || "");
+  const event = trialEventAt ? new Date(trialEventAt) : null;
+  const parts = event && !Number.isNaN(event.getTime()) ? new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(event) : [];
+  const part = (type) => parts.find((item) => item.type === type)?.value || "";
+  const eventDate = `${part("year")}-${part("month")}-${part("day")}`;
+  const eventSlot = `${part("hour")}${part("minute")}`;
+  const expectedRunId = `daytrade_futopt_preopen:${tradeDate.replace(/-/g, "")}`;
+  const nativeTrialEvidence = payload.is_trial === true
+    && n(row?.trial_price) > 0
+    && payload.trial_price_source === "fugle_native_trial"
+    && trialEventAt
+    && eventDate === tradeDate
+    && eventSlot === captureSlot
+    && row?.natural_schedule_evidence === true
+    && payload.natural_schedule_evidence === true
+    && payload.run_id === expectedRunId
+    && payload.close_fallback_used !== true
+    && payload.bid_ask_fallback_used !== true
+    && payload.post_0900_backfill_used !== true;
+  const trial = nativeTrialEvidence ? n(row?.trial_price) : NaN;
   const futChangePct = n(row?.fut_change_pct);
   const futVolume = n(row?.fut_volume);
   const relToTxf = n(strength?.relative_to_txf_percent);
@@ -384,8 +483,8 @@ function classifyPreopenSlot(row, strength) {
   const futStrong = Number.isFinite(effectiveFutChange) && effectiveFutChange >= FUTOPT_STRONG_CHANGE_PCT
     && relativeReady
     && Number.isFinite(effectiveVolume) && effectiveVolume >= FUTOPT_MIN_VOLUME;
-  const hasFut = Number.isFinite(fut);
-  const hasTrial = Number.isFinite(trial);
+  const hasFut = Number.isFinite(fut) && fut > 0;
+  const hasTrial = Number.isFinite(trial) && trial > 0;
   const basis = hasFut && hasTrial ? fut - trial : NaN;
   const basisPct = hasFut && hasTrial && trial !== 0 ? (basis / trial) * 100 : NaN;
   let status = "資料不足";
@@ -403,6 +502,11 @@ function classifyPreopenSlot(row, strength) {
   return {
     has_fut_price: hasFut,
     has_trial_price: hasTrial,
+    is_trial: nativeTrialEvidence,
+    trial_price_source: nativeTrialEvidence ? payload.trial_price_source : null,
+    trial_event_at: nativeTrialEvidence ? trialEventAt : null,
+    natural_schedule_evidence: nativeTrialEvidence,
+    data_gap_reason: nativeTrialEvidence ? null : "DATA_GAP_TRIAL",
     fut_price: round(fut),
     fut_change_pct: round(effectiveFutChange),
     fut_volume: round(effectiveVolume, 0),
@@ -445,7 +549,7 @@ async function loadPreopenEvidence(tradeDate, symbols) {
     // Read the heavy stock-future view in bounded chunks. If that view times out,
     // keep the 08:45/08:50 natural near-month snapshots available for scoring fallback.
     const nearSelect = "trade_date,symbol,fut_contract,expiry_date,is_near_one,source";
-    const snapshotSelect = "trade_date,capture_slot,underlying_symbol,fut_contract,expiry_date,captured_at,fut_price,fut_change_pct,fut_volume,trial_price,trial_change_pct,best_bid,best_ask,bid_ask_ratio,natural_schedule_evidence,source";
+    const snapshotSelect = "trade_date,capture_slot,underlying_symbol,fut_contract,expiry_date,captured_at,fut_price,fut_change_pct,fut_volume,trial_price,trial_change_pct,best_bid,best_ask,bid_ask_ratio,natural_schedule_evidence,source,payload";
     const [nearReadback, snapshotReadback, strengthReadback] = await Promise.all([
       loadPreopenRowsBySymbols(output.views.near_one, tradeDate, symbols, key, "symbol", nearSelect),
       loadPreopenRowsBySymbols(output.views.preopen_snapshot, tradeDate, symbols, key, "underlying_symbol", snapshotSelect),
@@ -471,7 +575,7 @@ async function loadPreopenEvidence(tradeDate, symbols) {
       const slotMap = snapshotsBySymbol.get(symbol) || new Map();
       const nearRow = near.get(symbol) || null;
       let futStrength = strength.get(symbol) || null;
-      const slots = REQUIRED_PREOPEN_SLOTS.map((capture_slot) => { const row = slotMap.get(capture_slot) || null; const classified = classifyPreopenSlot(row, futStrength); return { capture_slot, present: Boolean(row), natural_schedule_evidence: row?.natural_schedule_evidence === true, best_bid: round(n(row?.best_bid)), best_ask: round(n(row?.best_ask)), bid_ask_ratio: round(n(row?.bid_ask_ratio)), ...classified }; });
+      const slots = REQUIRED_PREOPEN_SLOTS.map((capture_slot) => { const row = slotMap.get(capture_slot) || null; const classified = classifyPreopenSlot(row, futStrength, capture_slot, tradeDate); return { capture_slot, present: Boolean(row), best_bid: round(n(row?.best_bid)), best_ask: round(n(row?.best_ask)), bid_ask_ratio: round(n(row?.bid_ask_ratio)), ...classified }; });
       const nearOneReady = Boolean(nearRow?.is_near_one === true && nearRow?.fut_contract && nearRow?.expiry_date);
       if (!futStrength && nearOneReady && slots.some((slot) => slot.present && slot.natural_schedule_evidence && (slot.has_fut_price || slot.has_trial_price))) {
         futStrength = { source_status: "fallback_preopen_near_snapshot", source: "0845_0850_natural_evidence", symbol };
@@ -501,19 +605,42 @@ async function loadOvernightStyle(signalDate, symbol, key) {
   } catch (error) { return { available: false, matched: false, reason: `overnight_style_read_failed:${error?.message || String(error)}` }; }
 }
 
+function indicatorTrend(closes, period = 14) {
+  const values = closes.map(Number).filter(Number.isFinite);
+  if (values.length < period + 2) return { available: false, kd_up: false, rsi_up: false };
+  const rsi = (end) => { const part = values.slice(Math.max(0, end - period + 1), end + 1); if (part.length < period) return NaN; let gain = 0, loss = 0; for (let i = 1; i < part.length; i++) { const d = part[i] - part[i - 1]; if (d >= 0) gain += d; else loss -= d; } return loss === 0 ? 100 : 100 - 100 / (1 + gain / loss); };
+  const kd = (end) => { const part = values.slice(Math.max(0, end - 4), end + 1); if (part.length < 5) return NaN; const hi = Math.max(...part), lo = Math.min(...part); return hi === lo ? 50 : 100 * (part.at(-1) - lo) / (hi - lo); };
+  const last = values.length - 1, prev = last - 1;
+  return { available: true, kd: round(kd(last)), previous_kd: round(kd(prev)), rsi: round(rsi(last)), previous_rsi: round(rsi(prev)), kd_up: kd(last) > kd(prev), rsi_up: rsi(last) > rsi(prev), kd_rsi_up: kd(last) > kd(prev) && rsi(last) > rsi(prev) };
+}
+function hourlyCloses(rows) { const byHour = new Map(); for (const row of rows || []) { const t = String(row.candle_time || row.timestamp || row.time || ""); const hour = t.slice(0, 13); const close = n(row.close); if (!/^\d{4}-\d{2}-\d{2}T\d{2}/.test(hour) || !Number.isFinite(close)) continue; byHour.set(hour, close); } return [...byHour.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([, close]) => close); }
+
+async function loadIndicatorMinutes(symbol, signalDate, key) {
+  const rows=[];
+  for(let offset=0;offset<6000;offset+=1000){
+    const part=await supabaseSelect("fugle_daytrade_intraday_1m", {select:"symbol,trade_date,candle_time,open,high,low,close,synthetic",trade_date:`gte.${addDays(signalDate,-20)}`,and:`(trade_date.lte.${signalDate})`,symbol:`eq.${symbol}`,order:"candle_time.desc",limit:"1000",offset:String(offset)},key);
+    rows.push(...part);if(part.length<1000)break;
+  }
+  return rows;
+}
 async function staticSourceForSymbol(symbol, tradeDate, token, key, existing) {
-  if (existing?.trade_date === tradeDate && existing.symbol === symbol && existing.signal_date && Array.isArray(existing.price_rows) && Array.isArray(existing.institutional_rows) && Array.isArray(existing.branch_rows)) return existing;
+  if (existing?.trade_date === tradeDate && existing.symbol === symbol && existing.signal_date && Array.isArray(existing.price_rows) && Array.isArray(existing.institutional_rows) && Array.isArray(existing.branch_rows) && existing.daily_kd_rsi_up !== undefined && existing.hourly_kd_rsi_up !== undefined && existing.indicator_version === predictionEngine.VERSION) return existing;
   const [priceRows, institutionalRows] = await Promise.all([
     finmind("TaiwanStockPrice", { data_id: symbol, start_date: addDays(tradeDate, -430), end_date: tradeDate }, token),
     finmind("TaiwanStockInstitutionalInvestorsBuySell", { data_id: symbol, start_date: addDays(tradeDate, -12), end_date: tradeDate }, token),
   ]);
   const signalDate = lastCompletedSignalDate(priceRows, tradeDate); if (!signalDate) throw new Error("previous_completed_daily_price_missing");
   // FinMind's trading daily report is a one-day, per-symbol endpoint. It rejects end_date.
-  const [branchRows, overnight] = await Promise.all([
+  const [branchRows, overnight, intradayRows] = await Promise.all([
     finmind("TaiwanStockTradingDailyReport", { data_id: symbol, start_date: signalDate }, token),
     loadOvernightStyle(signalDate, symbol, key),
+    loadIndicatorMinutes(symbol, signalDate, key).catch(() => []),
   ]);
-  return { symbol, trade_date: tradeDate, signal_date: signalDate, fetched_at: new Date().toISOString(), price_rows: priceRows, institutional_rows: institutionalRows, branch_rows: branchRows, overnight };
+  const dailyCloses = priceRows.filter((row) => String(row.date || "") <= signalDate).sort((a, b) => String(a.date).localeCompare(String(b.date))).map((row) => n(row.close));
+  const dailyIndicators = predictionEngine.indicators(priceRows.filter(row => String(row.date || "") <= signalDate).sort((a,b)=>String(a.date).localeCompare(String(b.date))));
+  const fullHours = predictionEngine.completeHours(intradayRows, signalDate);
+  const hourlyIndicators = fullHours.at(-1)?.timestamp === `${signalDate}T12` ? predictionEngine.indicators(fullHours) : { available: false, version: predictionEngine.VERSION };
+  return { symbol, trade_date: tradeDate, signal_date: signalDate, fetched_at: new Date().toISOString(), price_rows: priceRows, institutional_rows: institutionalRows, branch_rows: branchRows, overnight, indicator_version: predictionEngine.VERSION, daily_indicators: dailyIndicators, hourly_indicators: hourlyIndicators, daily_kd_rsi_up: dailyIndicators.kd_rsi_up === true, hourly_kd_rsi_up: hourlyIndicators.kd_rsi_up === true };
 }
 
 async function mapConcurrent(values, limit, callback) { const out = new Array(values.length); let cursor = 0; await Promise.all(Array.from({ length: Math.min(limit, values.length) }, async () => { while (cursor < values.length) { const index = cursor++; out[index] = await callback(values[index]); } })); return out; }
@@ -524,11 +651,12 @@ function summarizeEvidence(source, openingReport, preopenCase) {
   const today = price[idx]; const prev = price[idx - 1]; const prev2 = price[idx - 2]; const dataGaps = []; const failures = []; const reasons = [];
   const branches = mergeBranchCosts(source.branch_rows); const positive = branches.filter((row) => n(row.net_buy, 0) > 0); const top5 = positive.slice(0, 5); const top10 = positive.slice(0, 10); const preferredTopBroker = preferredTopNetBuyBrokerEvidence(positive); const cost10 = weightedNetCost(top10); const close = n(today.close); const preopenPriceEligible = Number.isFinite(close) && close >= 50;
   if (!Number.isFinite(close)) dataGaps.push("preopen_price_unknown"); else if (!preopenPriceEligible) dataGaps.push("preopen_price_below_50");
-  const highCost = Number.isFinite(cost10) && Number.isFinite(close) && cost10 >= close * 0.99;
+  const highCost = Number.isFinite(cost10) && Number.isFinite(close) && cost10 > close;
   if (!source.branch_rows?.length) dataGaps.push("main_force_branch_cost_missing");
   const institutions = institutionalByDate(source.institutional_rows); const instIdx = institutions.findIndex((row) => row.date === source.signal_date); const instToday = institutions[instIdx]; const instPrev = institutions[instIdx - 1]; const institutionSameBuy = Boolean(instToday && instPrev && n(instToday.total_net, 0) > 0 && n(instPrev.total_net, 0) > 0); if (!instToday || !instPrev) dataGaps.push("institutional_two_day_history_missing");
   const report = openingReport.by_symbol.get(symbol) || null; const us1 = report?.us_sector_up_1d === true; const us2 = report?.us_sector_up_2d === true; const overseas1 = report?.overseas_sector_up_1d === true; const overseas2 = report?.overseas_sector_up_2d === true; const sector1 = openingReportSectorPositive(report); const sector2 = us2 || overseas2 || n(report?.sector_return_2d_pct) > 0; if (!sector1) dataGaps.push("opening_report_sector_1d_strength_missing_or_not_positive"); if (!sector2) dataGaps.push("opening_report_sector_2d_strength_missing_or_not_positive");
   const preopen = preopenCase || null; if (!preopen) dataGaps.push("futopt_preopen_evidence_missing");
+  let prediction;
   const positiveBasis = preopen?.positive_basis === true; const negativeBasis = preopen?.negative_basis === true; const flatBasis = preopen?.flat_basis === true; const basisPending = preopen?.basis_pending === true; const inverse = preopen?.inverse_convergence === true; const trialReady = preopen?.trial_match_ready === true; const nearPrevCloseUp = preopen?.futopt_near_prev_close_and_up === true; const trialLimitDown = preopen?.trial_match_limit_down === true; const basisOrInverse = positiveBasis || negativeBasis || inverse;
   if (!basisOrInverse) dataGaps.push(basisPending ? "futopt_strong_basis_pending_trial_price" : "futopt_basis_or_inverse_convergence_missing"); if (!trialReady) dataGaps.push("trial_match_0845_0850_missing");
   const overnight = source.overnight || { available: false, matched: false, reason: "overnight_style_missing" }; if (!overnight.available) dataGaps.push("overnight_trader_style_missing");
@@ -546,15 +674,25 @@ function summarizeEvidence(source, openingReport, preopenCase) {
     [RULES[9], limitUpClosed(today, prev) && positiveBasis],
   ];
   for (const [rule, passed] of ruleMap) if (passed) reasons.push(rule);
-  const ok = preopenPriceEligible && reasons.length >= 1; const status = !preopenPriceEligible ? "OPEN_LIMIT_ORDER_REJECTED" : ok ? "OPEN_LIMIT_ORDER_CANDIDATE" : dataGaps.length ? "OPEN_LIMIT_ORDER_DATA_GAP" : "OPEN_LIMIT_ORDER_REJECTED";
+  prediction = predictionEngine.predict(source, preopen, openingShortSignal(source.signal_date, source.symbol), reasons);
+  // Common LONG gate: every original opening-entry strategy must also have
+  // a complete 60-minute KD/RSI upward confirmation. Missing evidence fails
+  // closed and never upgrades a multi candidate.
+  const longDirection = prediction.direction === "多";
+  const dailyKdRsiUp = source.daily_kd_rsi_up === true;
+  const hourlyKdRsiUp = source.hourly_kd_rsi_up === true;
+  dataGaps.push(...prediction.data_gaps);
+  failures.push(...prediction.rejections);
+  const ok = prediction.direction === "空" || (prediction.direction === "多" && preopenPriceEligible && reasons.length >= 1 && dailyKdRsiUp && hourlyKdRsiUp); const status = !preopenPriceEligible ? "OPEN_LIMIT_ORDER_REJECTED" : ok ? "OPEN_LIMIT_ORDER_CANDIDATE" : dataGaps.length ? "OPEN_LIMIT_ORDER_DATA_GAP" : "OPEN_LIMIT_ORDER_REJECTED";
+  if (!ok && prediction.direction) prediction = { ...prediction, direction: "", reason: prediction.reason + "；候選資格未通過" };
   const reportBoost = ok ? openingReportRankBoost(report) : 0;
   const futScore = ok ? futuresScore(preopen) : 0;
   const industryFuturesScore = ok ? industryFuturesComboScore(report, preopen) : 0;
   const brokerScore = ok && preferredTopBroker.matched === true ? 6 : 0;
   const baseScore = reasons.length * 14 + (highCost ? 8 : 0) + (institutionSameBuy ? 8 : 0);
   const entryScore = Math.min(100, baseScore + reportBoost + futScore + industryFuturesScore + brokerScore);
-  return { symbol, ok, status, qualified_label: ok ? "符合開盤入標的" : status === "OPEN_LIMIT_ORDER_DATA_GAP" ? "資料缺口，未列入符合標的" : "未符合開盤入", matched_strategy_numbers: ruleNos(reasons), matched_strategy_labels: ruleDisplays(reasons), entry_score: entryScore, opening_report_rank_boost: reportBoost, entry_score_base: baseScore, matched_rule_count: reasons.length, candidate_min_matched_rules: 1, risk_score: reasons.includes(RULES[9]) ? 45 : 30, reasons, data_gaps: unique(dataGaps), failures: unique(failures), evidence: {
-    daily_signal_date: source.signal_date, preopen_price_eligible: preopenPriceEligible, close, open: n(today.open), high: n(today.max), low: n(today.min), previous_close: n(prev?.close), ma60: round(ma60), ma240: round(ma240), limit_down_reopened: limitDownReopened(today, prev), previous_limit_up: limitUpClosed(today, prev), two_day_up: twoDayUp(price, idx), rebound_from_low: reboundFromLow(price, idx), ma60_support_retest: supportedByMa(today, ma60), ma240_breakout: brokeAboveMa(today, prev, ma240, ma240Prev), institution_same_buy_2d: institutionSameBuy, institution_signal_date_total_net: round(n(instToday?.total_net, 0), 0), main_force_cost_top10: cost10, main_force_cost_high: highCost, w_neckline: wNeckline, overnight_trader_style: overnight, preferred_broker_top_net_buy: preferredTopBroker.matched === true, preferred_broker_top_net_buy_detail: preferredTopBroker, top_branches: top10, opening_report_priority_observation: report?.priority_observation === true, opening_report_strong_sector_return_1d: report?.strong_sector_return_1d === true, opening_report_industries: report?.industries || [], opening_report_display_names: report?.display_names || [], opening_report_run_ids: report?.run_ids || [], opening_report_priority_ranks: report?.priority_ranks || [], opening_report_positive_return_ranks: report?.positive_return_ranks || [], opening_report_score_ranks: report?.opening_report_score_ranks || [], opening_report_score_rank: report?.opening_report_score_rank ?? null, opening_report_biases: report?.biases || [], opening_report_tiers: report?.tiers || [], opening_report_sector_return_1d_pct: report?.sector_return_1d_pct ?? null, opening_report_sector_return_2d_pct: report?.sector_return_2d_pct ?? null, opening_report_sector_up_1d: sector1, opening_report_sector_up_2d: sector2, overseas_sector_up_1d: overseas1, overseas_sector_up_2d: overseas2, opening_report_rank_boost: reportBoost, futures_score: futScore, industry_futures_combo_score: industryFuturesScore, broker_score: brokerScore, score_components: { base_score: baseScore, opening_report_score: reportBoost, futures_score: futScore, industry_futures_combo_score: industryFuturesScore, broker_score: brokerScore }, opening_report_score_policy: "strategy_first_then_positive_overseas_return_rank_tier_futures_weighted_ranking_no_formal_by_report", score_weight_contract: { base: "matched_strategy_first", opening_report_score_cap: OPENING_REPORT_SCORE_CAP, opening_report_score_tiers: OPENING_REPORT_SCORE_TIERS, futures_score_cap: FUTURES_SCORE_CAP, industry_futures_combo_score: INDUSTRY_FUTURES_COMBO_SCORE, formal_candidate_by_report_allowed: false }, us_sector_up_1d: us1, us_sector_up_2d: us2, futopt_positive_basis: positiveBasis, futopt_negative_basis: negativeBasis, futopt_flat_basis: flatBasis, futopt_basis_pending: basisPending, futopt_inverse_convergence: inverse, futopt_near_prev_close_and_up: nearPrevCloseUp, trial_match_ready: trialReady, trial_match_limit_down: trialLimitDown, preopen_required_slots: REQUIRED_PREOPEN_SLOTS, preopen_slots: preopen?.slots || [] } };
+  return { symbol, ok, status, qualified_label: ok ? "符合開盤入標的" : status === "OPEN_LIMIT_ORDER_DATA_GAP" ? "資料缺口，未列入符合標的" : "未符合開盤入", prediction: prediction.direction || "不交易", prediction_version: prediction.version, tomorrow_prediction: prediction.direction, tomorrow_prediction_label: prediction.direction, tomorrow_prediction_reason: prediction.reason, tomorrow_prediction_initial: prediction.initial_direction, tomorrow_prediction_pattern: prediction.pattern, preopen_confirmation_label: prediction.confirmation, matched_strategy_numbers: ruleNos(reasons), matched_strategy_labels: ruleDisplays(reasons), entry_score: entryScore, opening_report_rank_boost: reportBoost, entry_score_base: baseScore, matched_rule_count: reasons.length, candidate_min_matched_rules: 1, risk_score: reasons.includes(RULES[9]) ? 45 : 30, reasons, data_gaps: unique(dataGaps), failures: unique(failures), evidence: {
+    opening_short_signal: openingShortSignal(source.signal_date, source.symbol), daily_signal_date: source.signal_date, preopen_price_eligible: preopenPriceEligible, daily_indicators: source.daily_indicators, hourly_indicators: source.hourly_indicators, common_long_gate: { required: longDirection, passed: !longDirection || (dailyKdRsiUp && hourlyKdRsiUp), rule: "日K及完整60分K之KD向上且RSI向上", source_field: "daily_kd_rsi_up,hourly_kd_rsi_up" }, close, open: n(today.open), high: n(today.max), low: n(today.min), previous_close: n(prev?.close), ma60: round(ma60), ma240: round(ma240), limit_down_reopened: limitDownReopened(today, prev), previous_limit_up: limitUpClosed(today, prev), two_day_up: twoDayUp(price, idx), rebound_from_low: reboundFromLow(price, idx), ma60_support_retest: supportedByMa(today, ma60), ma240_breakout: brokeAboveMa(today, prev, ma240, ma240Prev), institution_same_buy_2d: institutionSameBuy, institution_signal_date_total_net: round(n(instToday?.total_net, 0), 0), main_force_cost_top10: cost10, main_force_cost_high: highCost, w_neckline: wNeckline, overnight_trader_style: overnight, preferred_broker_top_net_buy: preferredTopBroker.matched === true, preferred_broker_top_net_buy_detail: preferredTopBroker, top_branches: top10, opening_report_priority_observation: report?.priority_observation === true, opening_report_strong_sector_return_1d: report?.strong_sector_return_1d === true, opening_report_industries: report?.industries || [], opening_report_display_names: report?.display_names || [], opening_report_run_ids: report?.run_ids || [], opening_report_priority_ranks: report?.priority_ranks || [], opening_report_positive_return_ranks: report?.positive_return_ranks || [], opening_report_score_ranks: report?.opening_report_score_ranks || [], opening_report_score_rank: report?.opening_report_score_rank ?? null, opening_report_biases: report?.biases || [], opening_report_tiers: report?.tiers || [], opening_report_sector_return_1d_pct: report?.sector_return_1d_pct ?? null, opening_report_sector_return_2d_pct: report?.sector_return_2d_pct ?? null, opening_report_sector_up_1d: sector1, opening_report_sector_up_2d: sector2, overseas_sector_up_1d: overseas1, overseas_sector_up_2d: overseas2, opening_report_rank_boost: reportBoost, futures_score: futScore, industry_futures_combo_score: industryFuturesScore, broker_score: brokerScore, score_components: { base_score: baseScore, opening_report_score: reportBoost, futures_score: futScore, industry_futures_combo_score: industryFuturesScore, broker_score: brokerScore }, opening_report_score_policy: "strategy_first_then_positive_overseas_return_rank_tier_futures_weighted_ranking_no_formal_by_report", score_weight_contract: { base: "matched_strategy_first", opening_report_score_cap: OPENING_REPORT_SCORE_CAP, opening_report_score_tiers: OPENING_REPORT_SCORE_TIERS, futures_score_cap: FUTURES_SCORE_CAP, industry_futures_combo_score: INDUSTRY_FUTURES_COMBO_SCORE, formal_candidate_by_report_allowed: false }, us_sector_up_1d: us1, us_sector_up_2d: us2, futopt_positive_basis: positiveBasis, futopt_negative_basis: negativeBasis, futopt_flat_basis: flatBasis, futopt_basis_pending: basisPending, futopt_inverse_convergence: inverse, futopt_near_prev_close_and_up: nearPrevCloseUp, trial_match_ready: trialReady, trial_match_limit_down: trialLimitDown, preopen_required_slots: REQUIRED_PREOPEN_SLOTS, preopen_slots: preopen?.slots || [] } };
 }
 
 async function main() {
@@ -581,7 +719,8 @@ async function main() {
     console.log(JSON.stringify({ ok: failedChecks.length === 0, contract: CONTRACT, phase: "0850_static_source_warmup", trade_date: tradeDate, checked_at: new Date().toISOString(), source_cache_path: staticPath, source_cache: cache.source_counts, action_guard: { creates_order: false, creates_formal_candidate: false, publish_allowed: false, requires_second_confirm_before_action: true }, rule_display_contract: "opening_limit_order_strategy_display_v1", rule_definitions: RULE_DEFINITIONS, implemented_rules: RULES, rows: fetched.map((item) => ({ symbol: item.symbol, status: item.error ? "OPEN_LIMIT_ORDER_DATA_GAP" : "OPEN_LIMIT_ORDER_WARMUP_READY", data_gaps: item.error ? ["static_source_fetch_failed"] : [], first_blocker: item.error || null })), failed_checks: failedChecks, first_blocker: failedChecks[0] || null }, null, 2)); return;
   }
   const openingReport = loadOpeningReport(tradeDate); const preopen = await loadPreopenEvidence(tradeDate, symbols); const rows = fetched.map((source) => source.error ? { symbol: source.symbol, ok: false, status: "OPEN_LIMIT_ORDER_DATA_GAP", first_blocker: source.error, reasons: [], data_gaps: ["static_source_fetch_failed"], evidence: {} } : summarizeEvidence(source, openingReport, preopen.cases[source.symbol])); const candidates = rows.filter((row) => row.ok);
-  const output = { ok: failedChecks.length === 0, contract: CONTRACT, trade_date: tradeDate, checked_at: new Date().toISOString(), require_readonly: true, test_override_mode: false, test_override_policy: "allow-test-overrides=false", source_cache_path: staticPath, static_source_contract: STATIC_CACHE_CONTRACT, action_guard: { creates_order: false, creates_formal_candidate: false, publish_allowed: false, requires_second_confirm_before_action: true }, rule_display_contract: "opening_limit_order_strategy_display_v1", rule_definitions: RULE_DEFINITIONS, implemented_rules: RULES, phase_readiness: { static_source_ready_count: cache.source_counts.ready, static_source_failed_count: cache.source_counts.failed, preopen_evidence_ready: preopen.ok, opening_gate_ready: candidates.length > 0 }, opening_report_readback: { industry_bias_files_seen: openingReport.files_seen, overseas_strength_files_accepted: openingReport.files_accepted, mapped_symbol_count: openingReport.by_symbol.size, priority_observation_symbol_count: [...openingReport.by_symbol.values()].filter((row) => row.priority_observation === true).length, strong_sector_symbol_count: [...openingReport.by_symbol.values()].filter((row) => row.strong_sector_return_1d === true).length, run_ids: openingReport.run_ids, industries: openingReport.industries, strong_industries: openingReport.strong_industries }, preopen_evidence_readback: preopen, symbols_requested: symbols, candidate_count: candidates.length, candidates: candidates.map((row) => ({ ok: row.ok === true, symbol: row.symbol, status: row.status, qualified_label: row.qualified_label, entry_score: row.entry_score, entry_score_base: row.entry_score_base, opening_report_rank_boost: row.opening_report_rank_boost, futures_score: row.evidence?.futures_score ?? 0, industry_futures_combo_score: row.evidence?.industry_futures_combo_score ?? 0, broker_score: row.evidence?.broker_score ?? 0, score_components: row.evidence?.score_components || null, risk_score: row.risk_score, matched_strategy_numbers: row.matched_strategy_numbers, matched_strategy_labels: row.matched_strategy_labels, reasons: row.reasons, evidence: row.evidence })), rows, failed_checks: failedChecks, first_blocker: failedChecks[0] || preopen.failures[0] || null };
+  const output = { ok: failedChecks.length === 0, contract: CONTRACT, trade_date: tradeDate, checked_at: new Date().toISOString(), require_readonly: true, test_override_mode: false, test_override_policy: "allow-test-overrides=false", source_cache_path: staticPath, static_source_contract: STATIC_CACHE_CONTRACT, action_guard: { creates_order: false, creates_formal_candidate: false, publish_allowed: false, requires_second_confirm_before_action: true }, rule_display_contract: "opening_limit_order_strategy_display_v1", rule_definitions: RULE_DEFINITIONS, implemented_rules: RULES, phase_readiness: { static_source_ready_count: cache.source_counts.ready, static_source_failed_count: cache.source_counts.failed, preopen_evidence_ready: preopen.ok, opening_gate_ready: candidates.length > 0 }, opening_report_readback: { industry_bias_files_seen: openingReport.files_seen, overseas_strength_files_accepted: openingReport.files_accepted, mapped_symbol_count: openingReport.by_symbol.size, priority_observation_symbol_count: [...openingReport.by_symbol.values()].filter((row) => row.priority_observation === true).length, strong_sector_symbol_count: [...openingReport.by_symbol.values()].filter((row) => row.strong_sector_return_1d === true).length, run_ids: openingReport.run_ids, industries: openingReport.industries, strong_industries: openingReport.strong_industries }, preopen_evidence_readback: preopen, symbols_requested: symbols, candidate_count: candidates.length, candidates: candidates.map((row) => ({ ok: row.ok === true, symbol: row.symbol, status: row.status, qualified_label: row.qualified_label, tomorrow_prediction: row.tomorrow_prediction, tomorrow_prediction_label: row.tomorrow_prediction_label, tomorrow_prediction_reason: row.tomorrow_prediction_reason, tomorrow_prediction_initial: row.tomorrow_prediction_initial, tomorrow_prediction_pattern: row.tomorrow_prediction_pattern, preopen_confirmation_label: row.preopen_confirmation_label, entry_score: row.entry_score, entry_score_base: row.entry_score_base, opening_report_rank_boost: row.opening_report_rank_boost, futures_score: row.evidence?.futures_score ?? 0, industry_futures_combo_score: row.evidence?.industry_futures_combo_score ?? 0, broker_score: row.evidence?.broker_score ?? 0, score_components: row.evidence?.score_components || null, risk_score: row.risk_score, matched_strategy_numbers: row.matched_strategy_numbers, matched_strategy_labels: row.matched_strategy_labels, reasons: row.reasons, evidence: row.evidence })), rows, failed_checks: failedChecks, first_blocker: failedChecks[0] || preopen.failures[0] || null };
+  if (arg("output")) writeJson(arg("output"), output);
   console.log(JSON.stringify(output, null, 2)); process.exitCode = output.ok ? 0 : 1;
 }
 
@@ -640,6 +779,5 @@ main().catch((error) => {
     failed_checks: [firstBlocker],
     first_blocker: firstBlocker,
   }, null, 2));
-  process.exit(1);
+  process.exitCode = 1;
 });
-

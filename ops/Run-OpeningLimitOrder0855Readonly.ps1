@@ -3,7 +3,7 @@
   [int]$Limit = 1600,
   [string]$RunId = "",
   [switch]$WaitUntil0855,
-  [string]$TerminalDir = "C:\fuman-terminal",
+  [string]$TerminalDir = "C:\fuman-release-owner\fuman-terminal",
   [string]$RuntimeDir = "C:\fuman-runtime"
 )
 
@@ -79,10 +79,23 @@ $watchlistPath = Join-Path $outDir ("opening-limit-order-0855-watchlist-{0}.json
 $preflightPath = Join-Path $outDir ("opening-limit-order-0850-preflight-{0}.json" -f $compactDate)
 $candidatePath = Join-Path $outDir ("opening-limit-order-0855-candidates-{0}.json" -f $compactDate)
 $summaryPath = Join-Path $outDir ("opening-limit-order-0855-summary-{0}.json" -f $compactDate)
+$predictionFreezePath = Join-Path $outDir ("opening-limit-order-0850-predictions-{0}.json" -f $compactDate)
 $sourceCachePath = Join-Path $outDir ("opening-limit-order-0850-static-sources-{0}.json" -f $compactDate)
 
 if (!(Test-Path -LiteralPath $TerminalDir)) {
   throw "terminal_dir_missing:$TerminalDir"
+}
+
+# Once 08:50 predictions are frozen, later 08:55 monitoring must never
+# recalculate or overwrite their direction.
+if (Test-Path -LiteralPath $predictionFreezePath) {
+  $frozenPrediction = Get-Content -LiteralPath $predictionFreezePath -Raw | ConvertFrom-Json
+  $sameFrozenRun = (!$RunId -or $frozenPrediction.run_id -eq $RunId)
+  if ($frozenPrediction.ok -eq $true -and $frozenPrediction.trade_date -eq $TradeDate -and $sameFrozenRun -and $frozenPrediction.immutable_after_publish -eq $true) {
+    Write-Host ("[0855] reuse immutable 08:50 predictor publication trade_date={0} prediction_count={1}" -f $TradeDate, $frozenPrediction.prediction_count)
+    if (Test-Path -LiteralPath $summaryPath) { Get-Content -LiteralPath $summaryPath -Raw }
+    exit 0
+  }
 }
 
 Push-Location $TerminalDir
@@ -156,10 +169,13 @@ try {
 
   Write-Host ("[0855] verify opening-limit-order rules symbols={0}" -f $symbols.Count)
   $symbolArg = ($symbols -join ",")
-  $candidateRaw = & $nodeExe "scripts\verify-opening-limit-order-candidate-readonly.js" "--trade-date=$TradeDate" "--symbols=$symbolArg" "--source-cache=$sourceCachePath"
-  $candidateText = ($candidateRaw | Out-String).Trim()
-  if (!$candidateText) { throw "candidate_verifier_no_output" }
-  $candidate = $candidateText | ConvertFrom-Json
+  $candidateTransport = Join-Path $outDir ("candidate-transport-{0}.json" -f [guid]::NewGuid().ToString("N"))
+  & $nodeExe "scripts\verify-opening-limit-order-candidate-readonly.js" "--trade-date=$TradeDate" "--symbols=$symbolArg" "--source-cache=$sourceCachePath" "--output=$candidateTransport" | Out-Null
+  $candidateExit = $LASTEXITCODE
+  if (!(Test-Path -LiteralPath $candidateTransport)) { throw "candidate_verifier_output_missing:exit=$candidateExit" }
+  $candidate = Get-Content -LiteralPath $candidateTransport -Raw -Encoding UTF8 | ConvertFrom-Json
+  Remove-Item -LiteralPath $candidateTransport
+  if ($candidateExit -ne 0 -or $candidate.ok -ne $true) { throw "candidate_verifier_failed:$($candidate.first_blocker)" }
   $candidate | Add-Member -NotePropertyName run_id -NotePropertyValue $RunId -Force
   $candidate | Add-Member -NotePropertyName chain_run_id -NotePropertyValue $RunId -Force
   Write-JsonFile -Path $candidatePath -Payload $candidate
@@ -234,6 +250,12 @@ try {
         preferred_broker_top_net_buy_reason = $evidence.preferred_broker_top_net_buy_detail.reason
         risk_score = $row.risk_score
         qualified_label = $row.qualified_label
+        tomorrow_prediction = $row.tomorrow_prediction
+        tomorrow_prediction_label = $row.tomorrow_prediction_label
+        tomorrow_prediction_reason = $row.tomorrow_prediction_reason
+        tomorrow_prediction_initial = $row.tomorrow_prediction_initial
+        tomorrow_prediction_pattern = $row.tomorrow_prediction_pattern
+        preopen_confirmation_label = $row.preopen_confirmation_label
         matched_rule_count = $row.matched_rule_count
         candidate_min_matched_rules = $row.candidate_min_matched_rules
         reasons = $row.reasons
@@ -272,9 +294,25 @@ try {
     watchlist_source = $watchlistSource
     watchlist_symbol_count = $watchlist.symbol_count
     watchlist_full_symbol_count = $watchlist.full_symbol_count
-    opening_report_files_accepted = $watchlist.sources.opening_report.files_accepted
-    opening_report_run_ids = $watchlist.sources.opening_report.run_ids
+    opening_report_files_accepted = $candidate.opening_report_readback.overseas_strength_files_accepted
+    opening_report_run_ids = $candidate.opening_report_readback.run_ids
     candidate_count = $candidateRows.Count
+    prediction_count = @($rows).Count
+    predictions = @($rows | ForEach-Object {
+      [ordered]@{
+        symbol = $_.symbol
+        prediction = $(if ($_.prediction) { $_.prediction } else { "不交易" })
+        prediction_version = $_.prediction_version
+        evidence = $_.evidence
+        matched_strategy_numbers = $_.matched_strategy_numbers
+        tomorrow_prediction = $_.tomorrow_prediction
+        tomorrow_prediction_label = $_.tomorrow_prediction_label
+        tomorrow_prediction_reason = $_.tomorrow_prediction_reason
+        tomorrow_prediction_initial = $_.tomorrow_prediction_initial
+        tomorrow_prediction_pattern = $_.tomorrow_prediction_pattern
+        preopen_confirmation_label = $_.preopen_confirmation_label
+      }
+    })
     preferred_broker_top_net_buy_candidate_count = @($summaryRows | Where-Object { $_.preferred_broker_top_net_buy -eq $true }).Count
     data_gap_count = $dataGapRows.Count
     rejected_count = $rejectedRows.Count
@@ -296,6 +334,33 @@ try {
   if ($LASTEXITCODE -ne 0 -or $preferredBrokerVerifier.ok -ne $true) { throw ("preferred_broker_verifier_failed:{0}" -f $preferredBrokerVerifier.first_blocker) }
   Write-OpeningLimitOrderCandidateSummary -Rows $summaryRows
   $summary | ConvertTo-Json -Depth 80
+} catch {
+  $firstBlocker = if ($_.Exception.Message) { $_.Exception.Message } else { "opening_limit_order_0855_unhandled_failure" }
+  $failureSummary = [ordered]@{
+    ok = $false
+    contract = "opening_limit_order_0855_readonly_runner_v1"
+    trade_date = $TradeDate
+    run_id = $RunId
+    checked_at = (Get-Date).ToUniversalTime().ToString("o")
+    phase = "0855_preopen_candidate_list"
+    watchlist_path = $watchlistPath
+    preflight_path = $preflightPath
+    candidate_path = $candidatePath
+    summary_path = $summaryPath
+    first_blocker = $firstBlocker
+    action_guard = [ordered]@{
+      creates_order = $false
+      creates_formal_candidate = $false
+      publish_allowed = $false
+      requires_second_confirm_before_action = $true
+    }
+    formal_candidate_count = 0
+    formal_candidate_allowed = $false
+    publish_allowed = $false
+  }
+  Write-JsonFile -Path $summaryPath -Payload $failureSummary
+  $failureSummary | ConvertTo-Json -Depth 80
+  exit 1
 } finally {
   Pop-Location
 }
