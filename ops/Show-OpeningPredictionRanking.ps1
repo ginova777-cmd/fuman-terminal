@@ -13,6 +13,7 @@ param(
     [string]$OpeningLimitOrderDirectory = "C:\fuman-runtime\data\opening-limit-order",
     [string]$OpeningReportDirectory = "C:\fuman-runtime\data\opening-report-0830",
     [string]$OpeningTPreviewPath = "",
+    [string]$OpeningStrategyInspectionPath = "",
     [switch]$Once,
     [switch]$IncludeRawJson,
     [switch]$Logout
@@ -501,16 +502,15 @@ if ($targetTradeDate -and (Test-Path -LiteralPath $OpeningLimitOrderDirectory -P
     $staticPath = Join-Path $OpeningLimitOrderDirectory "opening-limit-order-0850-static-prefilter-$targetTradeDate.json"
     if (-not (Test-Path -LiteralPath $staticPath -PathType Leaf) -and $OpeningTPreviewPath -and (Test-Path -LiteralPath $OpeningTPreviewPath -PathType Leaf)) {
         $previewPayload = Get-Content -LiteralPath $OpeningTPreviewPath -Raw -Encoding UTF8 | ConvertFrom-Json
-        $previewSignalDate = ConvertTo-DateKey @($previewPayload.rows | Select-Object -First 1).signal_date
+        $previewSignalDate = ConvertTo-DateKey (Get-PropertyValue $previewPayload @("trade_date", "tradeDate"))
         if ($previewPayload.ok -eq $true -and $previewSignalDate -eq $targetTradeDate) {
             $staticPath = $OpeningTPreviewPath
         }
     }
     if (Test-Path -LiteralPath $staticPath -PathType Leaf) {
         $staticPayload = Get-Content -LiteralPath $staticPath -Raw -Encoding UTF8 | ConvertFrom-Json
-        $openingStaticDate = ConvertTo-DateKey @($staticPayload.rows | Select-Object -First 1).signal_date
-        if (-not $openingStaticDate) { $openingStaticDate = ConvertTo-DateKey (Get-PropertyValue $staticPayload @("trade_date", "tradeDate")) }
-        if ($openingStaticDate -eq $targetTradeDate) {
+        $openingStaticDate = ConvertTo-DateKey (Get-PropertyValue $staticPayload @("trade_date", "tradeDate"))
+        if ($staticPayload.ok -eq $true -and $openingStaticDate -eq $targetTradeDate) {
             foreach ($row in @($staticPayload.rows)) {
                 $code = ConvertTo-StockCode (Get-PropertyValue $row @("symbol", "code"))
                 if ($code) { $openingStaticByCode[$code] = $row }
@@ -637,7 +637,7 @@ foreach ($code in @($stocks.Keys)) {
     $stock = $stocks[$code]
     $row = $openingStaticByCode[$code]
     $staticStrategies = @(Get-PropertyValue $row @("static_matched_strategy_numbers"))
-    $tStrategies = @($staticStrategies | Where-Object { $_ -in @(1, 2, 8, "1", "2", "8") } | Sort-Object -Unique)
+    $tStrategies = @($staticStrategies | Where-Object { [int]$_ -ge 1 -and [int]$_ -le 10 } | Sort-Object -Unique)
     if ($tStrategies.Count) {
         $stock.OpeningTStrategies = ($tStrategies -join ",")
         if ($stock.OpeningStrategyCount -lt $tStrategies.Count) { $stock.OpeningStrategyCount = $tStrategies.Count }
@@ -649,6 +649,43 @@ foreach ($code in @($stocks.Keys)) {
         if ((Get-PropertyValue $evidence @("preferred_broker_top_net_buy")) -eq $true) { $stock.PreferredBroker = "Y" }
     }
 }
+
+# Strategy inspection is independent of the immutable prediction receipt.
+$strategyInspection = $null
+$inspectionByCode = @{}
+$temporaryInspectionPath = ""
+if (-not $OpeningStrategyInspectionPath) {
+    $OpeningStrategyInspectionPath = Join-Path $PSScriptRoot "opening-strategy-inspection-$targetTradeDate.json"
+    $strategyBuilder = Join-Path (Split-Path $PSScriptRoot -Parent) "scripts\build-opening-strategy-inspection.js"
+    if (-not (Test-Path -LiteralPath $strategyBuilder)) { $strategyBuilder = "C:\fuman-release-owner\fuman-terminal\scripts\build-opening-strategy-inspection.js" }
+    $strategySourcePath = Join-Path $OpeningLimitOrderDirectory "opening-limit-order-0855-candidates-$targetTradeDate.json"
+    if ((Test-Path -LiteralPath $strategySourcePath) -and (Test-Path -LiteralPath $strategyBuilder)) {
+        $temporaryInspectionPath = [IO.Path]::GetTempFileName()
+        & node $strategyBuilder "--input=$strategySourcePath" "--output=$temporaryInspectionPath" 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { $OpeningStrategyInspectionPath = $temporaryInspectionPath }
+        else { Write-Warning "當日候選策略檢查失敗，改查同日獨立報告或T-1底稿。" }
+    }
+}
+if (Test-Path -LiteralPath $OpeningStrategyInspectionPath -PathType Leaf) {
+    try {
+        $candidateInspection = Get-Content -LiteralPath $OpeningStrategyInspectionPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($candidateInspection.ok -ne $true -or $candidateInspection.contract -ne "opening_strategy_inspection_v1" -or
+            $candidateInspection.inspection_only -ne $true -or
+            (ConvertTo-DateKey $candidateInspection.trade_date) -ne $targetTradeDate -or
+            @($candidateInspection.summary).Count -ne 10 -or
+            @($candidateInspection.rows).Count -ne $candidateInspection.symbol_count) { throw "策略檢查日期或契約不符" }
+        foreach ($item in $candidateInspection.rows) {
+            $code = ConvertTo-StockCode $item.symbol
+            if (-not $code -or $inspectionByCode.ContainsKey($code) -or @($item.strategies).Count -ne 10) { throw "策略檢查股票重複或項目不足" }
+            $inspectionByCode[$code] = $item
+        }
+        $strategyInspection = $candidateInspection
+    } catch {
+        $inspectionByCode = @{}
+        Write-Warning ("獨立策略檢查無法使用：{0}" -f $_.Exception.Message)
+    }
+}
+if ($temporaryInspectionPath) { Remove-Item -LiteralPath $temporaryInspectionPath -Force }
 
 $sourceSummary.Add([pscustomobject]@{
     Source = "開盤入"
@@ -799,6 +836,20 @@ if ($predictionBlocker) {
 }
 $openingStageSummary | Format-Table -AutoSize | Out-Host
 
+Write-Host "開盤入十大策略偵測（前置條件命中不等於多方資格通過）" -ForegroundColor Yellow
+if ($strategyInspection) {
+    Write-Host ("獨立檢查／非08:50預言：{0} 檔；檢查時間 {1}" -f $strategyInspection.symbol_count, ([DateTimeOffset]$strategyInspection.checked_at).ToOffset([TimeSpan]::FromHours(8)).ToString("yyyy-MM-dd HH:mm:ss zzz"))
+    $strategyInspection.summary | Select-Object @{n="策略";e={$_.strategy}}, @{n="檢查檔數";e={$_.checked}}, @{n="命中";e={$_.matched}}, @{n="未命中";e={$_.not_matched}}, @{n="資料缺口";e={$_.data_gap}} | Format-Table -AutoSize | Out-Host
+} elseif ($openingStaticByCode.Count) {
+    Write-Host "T-1靜態底稿；盤前條件仍待確認。"
+    1..10 | ForEach-Object {
+        $no = $_
+        [pscustomobject]@{策略=$no; 檢查檔數=$openingStaticByCode.Count;
+            靜態命中=@($openingStaticByCode.Values | Where-Object { $no -in $_.static_matched_strategy_numbers }).Count;
+            待確認=@($openingStaticByCode.Values | Where-Object { $no -in $_.pending_strategy_numbers }).Count}
+    } | Format-Table -AutoSize | Out-Host
+} else { Write-Warning "十大策略檢查資料 MISSING" }
+
 Write-Host ("共同出現排名（至少 {0} 個來源，前 {1} 名）" -f $MinAppearances, $Top) -ForegroundColor Yellow
 if ($ranked.Count -eq 0) {
     Write-Warning "沒有股票符合條件。可改用 -MinAppearances 1。"
@@ -819,26 +870,44 @@ if ($ranked.Count -eq 0) {
             } else { $_.TopBuyBranch }
         } },
         @{ Name = "開盤入策略"; Expression = {
-            if ($_.Opening0855 -eq "Y" -and $_.OpeningStrategies) {
+            if ($inspectionByCode.ContainsKey($_.Code)) {
+                $matches = @($inspectionByCode[$_.Code].matched_strategy_numbers)
+                if ($matches.Count) { (($matches | ForEach-Object { "策略$_" }) -join "、") + "（獨立檢查）" }
+                else { "未命中／見資料缺口" }
+            }
+            elseif ($_.Opening0855 -eq "Y" -and $_.OpeningStrategies) {
                 ConvertTo-OpeningStrategyText $_.OpeningStrategies
             }
             elseif ($_.OpeningTStrategies) {
                 ConvertTo-OpeningStrategyText $_.OpeningTStrategies
+            }
+            elseif ($openingStaticByCode.ContainsKey($_.Code) -and @($openingStaticByCode[$_.Code].pending_strategy_numbers).Count) {
+                "待確認策略" + ($openingStaticByCode[$_.Code].pending_strategy_numbers -join ",")
             }
             elseif (-not $openingStaticDate) { "T-1底稿缺失" }
             else { "-" }
         } },
         @{ Name = "預言家"; Expression = { $_.Direction } },
         @{ Name = "原因"; Expression = {
-            if ($_.DirectionReason) { $_.DirectionReason }
-            elseif ($_.CancelReasons) { $_.CancelReasons }
-            elseif (-not $_.Direction) { "等待08:50有效凍結結果，或未列入本次預言" }
-            else { "-" }
+            $prefix = ""
+            if ($inspectionByCode.ContainsKey($_.Code)) {
+                $pending = @($inspectionByCode[$_.Code].pending_strategy_numbers)
+                if ($pending.Count) { $prefix = "策略資料缺口：" + ($pending -join ",") + "；" }
+            }
+            if ($_.DirectionReason) { $prefix + $_.DirectionReason }
+            elseif ($_.CancelReasons) { $prefix + $_.CancelReasons }
+            elseif (-not $_.Direction) { $prefix + "等待08:50有效凍結結果，或未列入本次預言" }
+            else { $prefix + "-" }
         } } |
         Format-Table -AutoSize | Out-Host
 }
 
 if ($OutputCsv) {
+    foreach ($stock in $ranked) {
+        $inspection = $inspectionByCode[$stock.Code]
+        $stock | Add-Member -NotePropertyName InspectionMatchedStrategies -NotePropertyValue $(if ($inspection) { $inspection.matched_strategy_numbers -join "," } else { "" })
+        $stock | Add-Member -NotePropertyName InspectionDataGapStrategies -NotePropertyValue $(if ($inspection) { $inspection.pending_strategy_numbers -join "," } else { "" })
+    }
     $csvPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputCsv)
     $parent = Split-Path -Parent $csvPath
     if ($parent -and -not (Test-Path -LiteralPath $parent)) { New-Item -ItemType Directory -Path $parent -Force | Out-Null }
