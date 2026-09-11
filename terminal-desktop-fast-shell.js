@@ -1396,7 +1396,7 @@
       applyCanvasFilter();
       return renderUnifiedListShell(key, meta, panel);
     };
-    const availableRows = (canvasState.filtered?.length ? canvasState.filtered : canvasState.rows || []).filter((row) => row && (row.code || row.title || row.line));
+    const availableRows = (isChipTradeRoute(key) ? canvasState.rows || [] : canvasState.filtered?.length ? canvasState.filtered : canvasState.rows || []).filter((row) => row && (row.code || row.title || row.line));
     if (availableRows.length) return renderRows(availableRows, source || "api-cache");
     const keepInstitutionLoadingShell = isChipTradeRoute(key);
     if (!keepInstitutionLoadingShell) restoreNativeFixedDomRoute(key, panel);
