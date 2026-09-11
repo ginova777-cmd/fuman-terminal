@@ -563,7 +563,7 @@ async function notifyFromOutbox(options = {}) {
               technical_golden_cross_labels: event.technical_golden_cross_labels,
             };
             receipt.sent_events.push(canonicalSentEvent({ ...event, sent_at: checkedAt, telegram_target_count: results.length }, tradeDate));
-          } else { if (results?.some(r=>r.sent!==true && !/dedup|already|claim/.test(r.reason||""))) receipt.failed_checks.push("telegram_send_not_confirmed"); receipt.skipped_events.push({ symbol: event.symbol, trigger_type: event.trigger_type, reason: results?.[0]?.reason || "telegram_send_skipped" }); }
+          } else { if (!results?.length || results.some(r=>r.sent!==true && !/dedup|already|claim/.test(r.reason||""))) receipt.failed_checks.push("telegram_send_not_confirmed"); receipt.skipped_events.push({ symbol: event.symbol, trigger_type: event.trigger_type, reason: results?.[0]?.reason || "telegram_send_skipped" }); }
         } catch (error) {
           receipt.skipped_events.push({ symbol: event.symbol, trigger_type: event.trigger_type, reason: "telegram_send_failed", detail: error?.message || String(error) });
           receipt.failed_checks.push("telegram_send_failed");

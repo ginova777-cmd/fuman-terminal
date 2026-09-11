@@ -617,7 +617,8 @@ const fullMarketDomesticHeatmap = (
   && outbox?.industry_heatmap_universe === "full_market_active_ordinary_stock"
   && Number(outbox?.industry_heatmap_universe_rows) > 0
 );
-checks.runtime_industry_heatmap_ready = !outbox || (
+const industryDiagnostics = {};
+industryDiagnostics.runtime_industry_heatmap_ready = !outbox || (
   (outbox?.industry_heatmap_status === "warmup_waiting_for_taiwan_open"
     && taipeiMinutesFromIso(outbox?.updated_at) < 540
     && Array.isArray(outbox?.industry_heatmap)
@@ -627,11 +628,11 @@ checks.runtime_industry_heatmap_ready = !outbox || (
     && Array.isArray(outbox?.industry_heatmap)
     && outbox.industry_heatmap.length > 0)
 );
-checks.runtime_events_have_industry_flow = !outbox || outboxEvents.every((event) =>
+industryDiagnostics.runtime_events_have_industry_flow = !outbox || outboxEvents.every((event) =>
   Boolean(String(event?.industry || "").trim())
   && typeof event?.industry_flow_status === "string"
 );
-checks.runtime_events_industry_concentration_ordered = !outbox || outboxEvents.every((event, index) =>
+industryDiagnostics.runtime_events_industry_concentration_ordered = !outbox || outboxEvents.every((event, index) =>
   index === 0
   || Number(outboxEvents[index - 1]?.industry_flow_rank || 999999) <= Number(event?.industry_flow_rank || 999999)
 );
@@ -779,6 +780,7 @@ if (requireToday) {
  checks.v4_current_runner_identity = runnerReceipt?.v4_contract_validated===true && runnerReceipt?.mother_pool_run_id===receipt?.mother_pool_run_id && runnerReceipt?.snapshot_sequence===receipt?.snapshot_sequence;
  checks.v4_event_batch_readback = (receipt?.event_diagnostics||[]).filter(e=>e.trigger_type!=="outside_volume_gt_inside_x2" && !e.skip_reason).every(e=>e.membership_status==='ACTIVE' && e.five_minute_snapshot_aligned===true && e.five_minute_requested===true && e.five_minute_readback_found===true);
 }
+runtime.industry_diagnostics = {role: "display_sort_diagnostic_only", ...industryDiagnostics};
 runtime.v4_in_session_acceptance = requireToday ? checks.v4_current_notifier_identity===true && checks.v4_current_runner_identity===true : null;
 const failedChecks = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name);
 console.log(JSON.stringify({
