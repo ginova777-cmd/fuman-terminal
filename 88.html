@@ -1111,7 +1111,8 @@ function sourceReportForStrategy(strategy) {
       || (normalized.includes("策略2") && keys.some((key) => key.includes("strategy2")))
       || (normalized.includes("策略3") && keys.some((key) => key.includes("strategy3")))
       || (normalized.includes("策略4") && keys.some((key) => key.includes("strategy4")))
-      || (normalized.includes("策略5") && keys.some((key) => key.includes("strategy5")));
+      || (normalized.includes("策略5") && keys.some((key) => key.includes("strategy5")))
+      || (normalized.includes("買賣超") && keys.some((key) => key === "institution"));
   }) || null;
 }
 

@@ -582,7 +582,7 @@ async function enrichWithQuoteHighs(records) {
   const quoteMap = await fetchQuoteHighMap(records);
   if (!quoteMap.size) return records;
   return records.map((row) => {
-    if (cleanText(row.strategy) === "策略3隔日沖成績單") return row;
+    if (["策略3隔日沖成績單", "買賣超成績單"].includes(cleanText(row.strategy))) return row;
     const quote = quoteMap.get(cleanText(row.ticker));
     if (!quote) return row;
     const entryPrice = cleanNumber(row.entry_price);
@@ -765,7 +765,9 @@ function normalizeRecord(task, payload, row, index) {
   const recordDate = scorecardRecordDate(task, payload, row);
   const code = codeOf(row, `${task.key}-${index + 1}`);
   const entryPrice = priceOf(row);
-  const highPrice = highOf(row, entryPrice);
+  // Institution is selected after the close: pre-entry intraday highs are not forward returns.
+  const highPrice = task.key === "institution" ? entryPrice : highOf(row, entryPrice);
+  if (task.key === "institution" && (!payload.runId || row.runId !== payload.runId)) throw new Error("institution scorecard source run mismatch");
   const sourceDate = normalizeDate(row._strategy3ScorecardSourceDate || row._strategy5ScorecardSourceDate || row.source_date || row.scan_date || payload.sourceDate || payload.usedDate || "");
   const source = "terminal-complete-run-scorecard";
   const reason = reasonOf(row, task);
@@ -783,6 +785,7 @@ function normalizeRecord(task, payload, row, index) {
     sourceRow,
     payload,
     record: {
+    ...(task.key === "institution" ? { sourceRunId: payload.runId, runId: row.runId, forward_observation_status: "not_started", high_price_source: "entry_reference_no_forward_observation" } : {}),
     record_id: `${recordDate}-${task.key}-${code}-${index + 1}`,
     record_date: recordDate,
     source_date: sourceDate || recordDate,
@@ -1331,7 +1334,7 @@ async function main() {
   if (!activeFiltered.length) process.exit(2);
 }
 
-main().catch((error) => {
+if (require.main === module) main().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: error?.message || String(error) }, null, 2));
   process.exit(1);
 });
@@ -1348,3 +1351,5 @@ main().catch((error) => {
 
 
 
+
+module.exports = { normalizeRecord, enrichWithQuoteHighs };

@@ -41,6 +41,17 @@ try {
   Invoke-Required "institution audited scorecard publication" {
     $institutionEvidence = Get-Content -LiteralPath (Join-Path $runtime "data\scan-receipts\institution.json") -Raw | ConvertFrom-Json
     if ($institutionEvidence.complete -ne $true -or $institutionEvidence.status -ne "complete") { throw "institution_not_complete_for_scorecard_publication" }
+    $priorKey = $env:FUMAN_SCORECARD_REFRESH_KEY
+    $priorRun = $env:FUMAN_SCORECARD_REFRESH_RUN_ID
+    try {
+      $env:FUMAN_SCORECARD_REFRESH_KEY = "institution"
+      $env:FUMAN_SCORECARD_REFRESH_RUN_ID = [string]$institutionEvidence.runId
+      & $nodeExe "--use-system-ca" "scripts\generate-terminal-scorecard-source.js"
+      if ($LASTEXITCODE -ne 0) { throw "institution_scorecard_records_refresh_failed" }
+    } finally {
+      $env:FUMAN_SCORECARD_REFRESH_KEY = $priorKey
+      $env:FUMAN_SCORECARD_REFRESH_RUN_ID = $priorRun
+    }
     & $pwshExe -NoProfile -File ".\scripts\run-scorecard88-terminal-collector.ps1" -Slot "21:40" -ProjectRoot $PSScriptRoot -RuntimeRoot $runtime -Recovery -ExpectedRunId ([string]$institutionEvidence.runId) -RecoveryReason "Institution complete runner: publish independently verified desktop/mobile run to scorecard before rendered acceptance"
   }
   Invoke-Required "live database and rendered three-surface acceptance" { & $nodeExe "--use-system-ca" "scripts\verify-institution-live-readback.js" "--render" }
