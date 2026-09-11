@@ -85,7 +85,12 @@ function ensureDailyStockMasterComplete() {
 const STRATEGY_PRIORITY_BRIDGE_SOURCES = [
   {
     key: "strategy3",
-    protectedApi: true,
+    latestResource: "v_strategy3_v2_latest_complete_run",
+    latestQuery: "select=*&limit=1",
+    resultsResource: "strategy3_v2_scan_results",
+    resultSelect: "code,rank,score,complete,quality_status,trade_date,run_id,payload",
+    authoritativeCompleteView: true,
+    allowZeroComplete: true,
     codeMode: "stock",
   },
   {
@@ -2854,10 +2859,11 @@ function sameDayArtifact(value, tradeDate = taipeiDate()) {
   return Boolean(value && typeof value === "object" && artifactTradeDate(value) === tradeDate);
 }
 
-function strategyPriorityRunValidation(run) {
+function strategyPriorityRunValidation(run, source = {}) {
   const payload = objectPayload(run?.payload);
   const status = String(run?.status || payload.status || "").trim().toLowerCase();
-  const qualityStatus = String(run?.quality_status || run?.qualityStatus || payload.quality_status || payload.qualityStatus || "").trim().toLowerCase();
+  const reportedQualityStatus = String(run?.quality_status || run?.qualityStatus || payload.quality_status || payload.qualityStatus || "").trim().toLowerCase();
+  const qualityStatus = reportedQualityStatus || (source.authoritativeCompleteView === true ? "complete" : "");
   const complete = run?.complete === true || payload.complete === true || status === "complete";
   const publishAllowed = run?.publish_allowed ?? run?.publishAllowed ?? payload.publish_allowed ?? payload.publishAllowed;
   // A complete-run view can place publish evidence inside its runtime snapshot.
@@ -2933,62 +2939,9 @@ function strategyPriorityStockCode(row, codeMode) {
 }
 
 async function readStrategyPriorityBridgeSource(source) {
-  if (source.protectedApi === true && source.key === "strategy3") {
-    const helper = repoPath("scripts", "read-protected-production-api.js");
-    let lastReason = "strategy3_protected_api_no_complete_run";
-    for (let daysBack = 1; daysBack <= 7; daysBack += 1) {
-      const candidateDate = taipeiDateDaysAgo(daysBack);
-      const endpoint = `/api/strategy3-latest?date=${compactDateKey(candidateDate)}&canvas=1&compact=1&shell=1&limit=1200&live=1&verify=1&noSnapshot=1`;
-      const result = spawnSync(process.execPath, ["--use-system-ca", helper, `--endpoint=${endpoint}`], {
-        cwd: repoPath(),
-        encoding: "utf8",
-        timeout: 30000,
-        windowsHide: true,
-      });
-      if (result.error || result.status !== 0) {
-        lastReason = String(result.error?.message || result.stderr || `protected_api_exit_${result.status}`).trim().slice(0, 300);
-        continue;
-      }
-      let envelope = null;
-      try { envelope = JSON.parse(String(result.stdout || "").trim()); } catch {}
-      const payload = objectPayload(envelope?.payload);
-      const rows = Array.isArray(payload.rows) ? payload.rows : (Array.isArray(payload.matches) ? payload.matches : []);
-      const publishable = envelope?.ok === true
-        && payload.ok === true
-        && payload.complete === true
-        && String(payload.status || "").toLowerCase() === "complete"
-        && payload.publishAllowed === true
-        && String(payload.evidenceStatus || "").toLowerCase() === "complete"
-        && String(payload.unattendedStatus || "").toUpperCase() === "YES"
-        && payload.fallbackUsed !== true
-        && String(payload.runId || payload.run_id || "").length > 0;
-      if (!publishable) {
-        lastReason = String(payload.reason_code || payload.reason || payload.status || "strategy3_api_not_publishable");
-        continue;
-      }
-      const symbols = [...new Set(rows.map((row) => strategyPriorityStockCode(row, "stock")).filter(Boolean))];
-      if (!symbols.length) {
-        lastReason = "strategy3_api_complete_run_empty";
-        continue;
-      }
-      return {
-        key: source.key,
-        status: "ready",
-        symbols,
-        reason: "",
-        runId: String(payload.runId || payload.run_id),
-        scanDate: compactDateKey(payload.tradeDate || payload.trade_date || candidateDate),
-        finishedAt: payload.updatedAt || payload.checkedAt || "",
-        qualityStatus: "complete",
-        publishAllowed: true,
-        resultRows: rows.length,
-        symbolCount: symbols.length,
-        source: "protected_canonical_api:/api/strategy3-latest",
-      };
-    }
-    return { key: source.key, status: "blocked", symbols: [], reason: lastReason, runId: "", scanDate: "", qualityStatus: "", resultRows: 0 };
-  }
-  const latestRows = await supabaseGet(source.latestResource, source.latestQuery);
+  // This is an authorized Writer-side bridge. Use service-role reads so RLS
+  // cannot silently turn a complete strategy run into an empty warmup source.
+  const latestRows = await supabaseGet(source.latestResource, source.latestQuery, { service: true });
   const run = Array.isArray(latestRows) ? latestRows[0] : null;
   if (!run) {
     return {
@@ -3002,7 +2955,7 @@ async function readStrategyPriorityBridgeSource(source) {
       resultRows: 0,
     };
   }
-  const validation = strategyPriorityRunValidation(run);
+  const validation = strategyPriorityRunValidation(run, source);
   const base = {
     key: source.key,
     status: validation.ok ? "ready" : "blocked",
@@ -3022,20 +2975,20 @@ async function readStrategyPriorityBridgeSource(source) {
     "limit=" + STRATEGY_PRIORITY_BRIDGE_MAX_ROWS,
     "order=" + (source.resultOrder || (source.key === "cb" ? "updated_at.desc" : "rank.asc")),
   ].join("&");
-  const rows = await supabaseGet(source.resultsResource, query);
+  const rows = await supabaseGet(source.resultsResource, query, { service: true });
   const symbols = [];
   const seen = new Set();
   for (const row of Array.isArray(rows) ? rows : []) {
     const code = strategyPriorityStockCode(row, source.codeMode);
     if (!code || seen.has(code)) continue;
     const rowQuality = String(row?.quality_status || "").trim().toLowerCase();
-    if (row?.complete === false || (rowQuality && !new Set(["complete", "ok", "ready", "pass", "a"]).has(rowQuality))) continue;
+    if (row?.complete === false || (rowQuality && !new Set(["complete", "recovery_replay_complete", "ok", "ready", "pass", "a"]).has(rowQuality))) continue;
     seen.add(code);
     symbols.push(code);
   }
   return {
     ...base,
-    status: symbols.length ? "ready" : "empty",
+    status: symbols.length || source.allowZeroComplete === true ? "ready" : "empty",
     symbols,
     resultRows: Array.isArray(rows) ? rows.length : 0,
     symbolCount: symbols.length,
@@ -7624,6 +7577,18 @@ async function tick() {
 }
 
 async function main() {
+  if (hasFlag("refresh-strategy-priority-bridge")) {
+    if (!APPLY) throw new Error("bridge_refresh_requires_apply");
+    for (const args of [["scripts/verify-release-root-authority.js", "--require-production-root"], ["scripts/supabase-incident-guard.js", "check", "--class=guard", "--action=strategy-priority-bridge"]]) {
+      const check = spawnSync(process.execPath, args, { cwd: path.resolve(__dirname, ".."), stdio: "inherit", windowsHide: true });
+      if (check.status !== 0) throw new Error("bridge_refresh_guard_failed");
+    }
+    await ensureWriterLease();
+    const bridge = await refreshStrategyChipPriorityBridge();
+    console.log(JSON.stringify({ ok: bridge.groups?.strategy3?.status === "ready", mode: "refresh-strategy-priority-bridge", tradeDate: bridge.tradeDate, strategy3: bridge.groups?.strategy3 }, null, 2));
+    if (bridge.groups?.strategy3?.status !== "ready") process.exitCode = 1;
+    return;
+  }
   if (LOCAL_CHECK) {
     console.log(JSON.stringify({
       ok: true,

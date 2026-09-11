@@ -36,7 +36,7 @@ const apiFiles = [
 
 const scannerMarkers = [
   ["scripts/scan-intraday-signals.js", "STRATEGY2_API_ONLY = true"],
-  ["scripts/run-strategy3-v2-complete-scan.js", "local_fugle_daytrade_ws_candles+local_fugle_daytrade_ws_quotes"],
+  ["scripts/run-strategy3-v2-complete-scan.js", "readCanonicalDaytradeWater"],
   ["scripts/scan-strategy4-cache.js", "STRATEGY4_API_ONLY = true"],
   ["scripts/scan-strategy5-cache.js", "STRATEGY5_API_ONLY = true"],
   ["scripts/scan-institution-cache.js", "INSTITUTION_API_ONLY = true"],

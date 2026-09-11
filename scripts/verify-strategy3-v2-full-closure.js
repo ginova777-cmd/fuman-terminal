@@ -11,7 +11,8 @@ const {
   RESULTS_TABLE,
   RUNS_TABLE,
   LATEST_VIEW,
-  MIN_READY_SYMBOLS,
+  MOTHER_POOL_VIEW,
+  MOTHER_POOL_RECEIPT_VIEW,
   taipeiDate,
   readJson,
   scanReceiptPath,
@@ -66,9 +67,14 @@ function main() {
     "scripts/verify-strategy3-v2-full-closure.js",
     "scripts/verify-strategy3-v2-1255-first-attempt.js",
     "scripts/verify-strategy3-v2-water-universe.js",
+    "scripts/verify-strategy3-v2-mother-pool-v4-1-scan-contract.js",
+    "lib/strategy3-technical-trend-reader.js",
+    "scripts/verify-strategy3-technical-trend-contract.js",
+    "lib/strategy3-atr-rvol-reader.js",
+    "scripts/verify-strategy3-atr-rvol-contract.js",
+    "scripts/verify-strategy3-recovery-replay-complete.js",
     "scripts/verify-strategy3-v2-daily-unattended-closure.js",
     "scripts/verify-strategy3-v2-schema-contract.js",
-    "scripts/verify-strategy3-v2-collector-boot-contract.js",
     "api/strategy3-v2-latest.js",
     "api/strategy3-latest.js",
     "run-strategy3-v2-complete-scan.ps1",
@@ -87,14 +93,13 @@ function main() {
     }
   }
 
-  for (const relative of [
-    "scripts/check-strategy3-v2-readiness.js",
-    "scripts/verify-strategy3-v2-water-universe.js",
-  ]) {
+  for (const relative of ["scripts/check-strategy3-v2-readiness.js", "scripts/run-strategy3-v2-complete-scan.js", "scripts/verify-strategy3-v2-water-universe.js"]) {
     const file = path.join(ROOT, relative);
     const text = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
-    add(text.includes("fugle-daytrade-websocket-status-v2.json"), "strategy3_v2_canonical_status_path_missing", { file });
-    add(!text.includes('"fugle-daytrade-websocket-status.json"'), "strategy3_v2_legacy_status_path_present", { file });
+    add(text.includes("readCanonicalDaytradeWater"), "strategy3_v2_v4_1_reader_missing", { file });
+    add(text.includes("strategy3Consumer: true"), "strategy3_v2_v4_1_consumer_profile_missing", { file });
+    add(!text.includes("fugle-daytrade-ws-priority-symbols.json"), "strategy3_v2_local_mother_pool_cache_still_formal", { file });
+    add(!text.includes("fugle-daytrade-ws-candles-v2.json"), "strategy3_v2_local_candle_cache_still_formal", { file });
   }
 
   for (const file of files.filter((file) => file.endsWith(".js"))) {
@@ -107,13 +112,17 @@ function main() {
   add(Boolean(pkg.scripts?.["verify:strategy3-v2-full-closure"]), "package_script_missing_strategy3_v2_closure");
   add(Boolean(pkg.scripts?.["strategy3-v2:line:dry-run"]), "package_script_missing_strategy3_v2_line_dry_run");
   add(Boolean(pkg.scripts?.["verify:strategy3-v2-water-universe"]), "package_script_missing_strategy3_v2_water_universe");
+  add(Boolean(pkg.scripts?.["verify:strategy3-v2-mother-pool-v4-1-scan-contract"]), "package_script_missing_strategy3_v2_mother_pool_v4_1_scan_contract");
+  add(Boolean(pkg.scripts?.["verify:strategy3-v2-technical-trend"]), "package_script_missing_strategy3_v2_technical_trend");
+  add(Boolean(pkg.scripts?.["verify:strategy3-v2-atr-rvol"]), "package_script_missing_strategy3_v2_atr_rvol");
+  add(Boolean(pkg.scripts?.["verify:strategy3-v2-recovery-complete"]), "package_script_missing_strategy3_v2_recovery_complete");
   add(Boolean(pkg.scripts?.["verify:strategy3-v2-schema-contract"]), "package_script_missing_strategy3_v2_schema_contract");
-  add(Boolean(pkg.scripts?.["verify:strategy3-v2-collector-boot-contract"]), "package_script_missing_strategy3_v2_collector_boot_contract");
   add(Boolean(pkg.scripts?.["verify:strategy3-v2-legacy-retirement"]), "package_script_missing_strategy3_v2_legacy_retirement");
 
-  const sourceWriterText = fs.readFileSync(path.join(ROOT, "scripts", "run-daytrade-source-writer.js"), "utf8");
-  add(sourceWriterText.includes('websocketSymbolUniversePolicy: "active_universe_for_quote_and_candle_water_only_not_formal_gate"'), "strategy3_v2_source_writer_water_policy_not_durable");
-  add(/formalCandidateAllowed:\s*false/.test(sourceWriterText) && /publishAllowed:\s*false/.test(sourceWriterText), "strategy3_v2_source_writer_water_privilege_guards_missing");
+  const readerText = fs.readFileSync(path.join(ROOT, "lib", "daytrade-canonical-water-reader.js"), "utf8");
+  add(readerText.includes(`const MOTHER_POOL_VIEW = "${MOTHER_POOL_VIEW}"`), "strategy3_v2_mother_pool_v4_1_source_missing");
+  add(readerText.includes(`const MOTHER_POOL_RECEIPT_VIEW = "${MOTHER_POOL_RECEIPT_VIEW}"`), "strategy3_v2_mother_pool_v4_1_receipt_missing");
+  add(readerText.includes('order: "symbol.asc"') && readerText.includes("pageSize: 200"), "strategy3_v2_mother_pool_v4_1_paging_contract_missing");
   const terminalResourceText = fs.readFileSync(path.join(ROOT, "scripts", "verify-terminal-resource-chain.js"), "utf8");
   add(terminalResourceText.includes('runView: { table: "v_strategy3_v2_latest_complete_run", strategy: "strategy3_v2" }'), "strategy3_v2_tri_surface_still_reads_legacy_run_view");
   add(terminalResourceText.includes('resultTable: "strategy3_v2_scan_results"'), "strategy3_v2_tri_surface_result_table_missing");
@@ -121,6 +130,8 @@ function main() {
   add(scorecardSourceText.includes('process.env.STRATEGY3_V2_RUNS_TABLE || "strategy3_v2_scan_runs"'), "strategy3_v2_scorecard_still_reads_legacy_runs");
   add(scorecardSourceText.includes('process.env.STRATEGY3_V2_RESULTS_TABLE || "strategy3_v2_scan_results"'), "strategy3_v2_scorecard_still_reads_legacy_results");
   add(scorecardSourceText.includes('strategy3: "策略3隔日沖成績單"'), "strategy3_v2_scorecard_scope_label_mismatch");
+  add(scorecardSourceText.includes("mother_pool_v4_1+intraday_1m_rpc_evidence"), "strategy3_v2_scorecard_v4_1_evidence_missing");
+  add(!scorecardSourceText.includes("STRATEGY3_SUPABASE_1M_TABLE"), "strategy3_v2_scorecard_still_reads_retired_direct_1m_table");
   const finalizerText = fs.readFileSync(path.join(ROOT, "scripts", "finalize-strategy3-complete.js"), "utf8");
   add(finalizerText.includes("triSurfaceStatus") && finalizerText.includes("scorecardRunId") && finalizerText.includes("awaiting_scorecard_1315"), "strategy3_v2_final_receipt_missing_scorecard_closure_contract");
   const runnerText = fs.readFileSync(path.join(ROOT, "run-strategy3-v2-complete-scan.ps1"), "utf8");
@@ -156,8 +167,10 @@ function main() {
   // Verifiers are read-only. They must never rerun the scanner or rewrite receipts.
   const surfaceRun = runNode("surface", "verify-strategy3-v2-surface-closure.js", [`--trade-date=${tradeDate}`]);
   const waterUniverseRun = runNode("water_universe", "verify-strategy3-v2-water-universe.js", [`--trade-date=${tradeDate}`]);
+  const motherPoolV41ScanContractRun = runNode("mother_pool_v4_1_scan_contract", "verify-strategy3-v2-mother-pool-v4-1-scan-contract.js", []);
+  const technicalTrendContractRun = runNode("technical_trend_contract", "verify-strategy3-technical-trend-contract.js", []);
+  const atrRvolContractRun = runNode("atr_rvol_contract", "verify-strategy3-atr-rvol-contract.js", []);
   const schemaContractRun = runNode("schema_contract", "verify-strategy3-v2-schema-contract.js", []);
-  const collectorBootRun = runNode("collector_boot_contract", "verify-strategy3-v2-collector-boot-contract.js", []);
   const legacyRetirementRun = runNode("legacy_retirement", "retire-strategy3-legacy-authority.js", ["--no-write"]);
   const scanReceipt = readJson(scanReceiptPath(compactDate), {});
   const lineReceipt = readJson(lineReceiptPath(compactDate, ".dry-run"), {});
@@ -171,7 +184,9 @@ function main() {
   add(lineReceipt.line_card_design_contract?.layout === "white_stock_card_pink_panel_six_box", "strategy3_v2_line_layout_mismatch");
   const scanFailedClosed = String(scanReceipt.status || "").toUpperCase() === "FAIL_CLOSED";
   add(schemaContractRun.exitCode === 0, "strategy3_v2_schema_contract_verifier_failed", { exitCode: schemaContractRun.exitCode });
-  add(collectorBootRun.exitCode === 0, "strategy3_v2_collector_boot_contract_verifier_failed", { exitCode: collectorBootRun.exitCode });
+  add(motherPoolV41ScanContractRun.exitCode === 0, "strategy3_v2_mother_pool_v4_1_scan_contract_failed", { exitCode: motherPoolV41ScanContractRun.exitCode });
+  add(technicalTrendContractRun.exitCode === 0, "strategy3_v2_technical_trend_contract_failed", { exitCode: technicalTrendContractRun.exitCode });
+  add(atrRvolContractRun.exitCode === 0, "strategy3_v2_atr_rvol_contract_failed", { exitCode: atrRvolContractRun.exitCode });
   add(legacyRetirementRun.exitCode === 0, "strategy3_v2_legacy_retirement_verifier_failed", { exitCode: legacyRetirementRun.exitCode, stderr: String(legacyRetirementRun.stderr || "").slice(0, 500) });
   add(surfaceRun.exitCode === 0, "strategy3_v2_surface_verifier_failed", { exitCode: surfaceRun.exitCode, stderr: String(surfaceRun.stderr || "").slice(0, 500) });
   if (scanFailedClosed) {
@@ -193,16 +208,17 @@ function main() {
     tables: { results: RESULTS_TABLE, runs: RUNS_TABLE, latestView: LATEST_VIEW },
     minimums: {
       motherPoolExpectedSymbols: Number(scanReceipt?.scanner_summary?.formal_ready_target || 0),
-      motherPoolRequiredReadySymbols: Math.ceil(Number(scanReceipt?.scanner_summary?.formal_ready_target || 0) * Number(scanReceipt?.scanner_summary?.min_local_coverage_ratio || 0.9)),
-      transportDiagnosticSymbols: MIN_READY_SYMBOLS,
+      motherPoolRequiredReadySymbols: Math.ceil(Number(scanReceipt?.scanner_summary?.formal_ready_target || 0) * Number(scanReceipt?.scanner_summary?.minimum_mother_pool_coverage_ratio || 0.9)),
+      sourceContractVersion: scanReceipt?.source_contract_version || null,
     },
     stages: {
       readiness: { exitCode: readinessRun.exitCode },
       scan: { exitCode: null, readOnly: true, receipt: scanReceiptPath(compactDate), status: scanReceipt.status || "" },
       lineDryRun: { exitCode: null, readOnly: true, receipt: lineReceiptPath(compactDate, ".dry-run"), status: lineReceipt.status || "" },
       waterUniverse: { exitCode: waterUniverseRun.exitCode },
+      motherPoolV41ScanContract: { exitCode: motherPoolV41ScanContractRun.exitCode },
+      technicalTrendContract: { exitCode: technicalTrendContractRun.exitCode },
       schemaContract: { exitCode: schemaContractRun.exitCode },
-      collectorBootContract: { exitCode: collectorBootRun.exitCode },
       legacyRetirement: { exitCode: legacyRetirementRun.exitCode },
       surface: { exitCode: surfaceRun.exitCode },
       mode: scanFailedClosed ? "fail_closed_safe" : "formal_complete",

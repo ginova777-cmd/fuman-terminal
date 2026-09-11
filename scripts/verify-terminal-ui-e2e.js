@@ -12,8 +12,10 @@ const BASE_URL = optionValue("--base-url") || process.env.FUMAN_UI_E2E_BASE_URL 
 const BASE_ORIGIN = new URL(BASE_URL).origin;
 const FUMAN_AUTH_URL = process.env.FUMAN_AUTH_URL || "https://jxnqyqnigsppqsxinlrq.supabase.co";
 const FUMAN_AUTH_KEY = process.env.FUMAN_AUTH_KEY || "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
-const FUMAN_TEST_MEMBER_EMAIL = String(process.env.FUMAN_TEST_MEMBER_EMAIL || "").trim();
-const FUMAN_TEST_MEMBER_PASSWORD = String(process.env.FUMAN_TEST_MEMBER_PASSWORD || "");
+let configuredMember = {};
+try { configuredMember = JSON.parse(require("fs").readFileSync(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "protected-readback-credential.json"), "utf8").replace(/^\uFEFF/, "")); } catch {}
+const FUMAN_TEST_MEMBER_EMAIL = String(process.env.FUMAN_TEST_MEMBER_EMAIL || configuredMember.email || configuredMember.FUMAN_TEST_MEMBER_EMAIL || "").trim();
+const FUMAN_TEST_MEMBER_PASSWORD = String(process.env.FUMAN_TEST_MEMBER_PASSWORD || configuredMember.password || configuredMember.FUMAN_TEST_MEMBER_PASSWORD || "");
 let fumanUiE2eMemberSessionPromise = null;
 const OUT_DIR = path.resolve(optionValue("--out") || process.env.FUMAN_UI_E2E_OUT || path.join(ROOT, "outputs", "terminal-ui-e2e"));
 const SCREENSHOT_DIR = path.join(OUT_DIR, "screenshots");
@@ -510,7 +512,7 @@ async function setViewport(cdp, mode) {
   }
 }
 
-async function navigate(cdp, url) {
+async function navigate(cdp, url, { stopLoading = true } = {}) {
   cdp.events = cdp.events.filter((event) => !["Runtime.executionContextCreated"].includes(event.method));
   const contextReady = cdp.waitForEvent("Runtime.executionContextCreated", 45000).catch(() => null);
   await cdp.send("Page.navigate", { url }, 45000);
@@ -519,7 +521,7 @@ async function navigate(cdp, url) {
     ok: document.readyState === "interactive" || document.readyState === "complete",
     state: document.readyState,
   }), null, 45000, 500).catch(() => null);
-  await cdp.send("Page.stopLoading").catch(() => null);
+  if (stopLoading) await cdp.send("Page.stopLoading").catch(() => null);
   await sleep(1000);
   await cdp.send("Page.bringToFront").catch(() => null);
 }
@@ -1672,6 +1674,8 @@ function collectDesktopStats(route) {
     canvasPixelDiversity,
     canvasSize,
     sampleRows: domRows.slice(0, 3),
+    candidateTexts: route.key === "strategy3" ? domRows.map(row => row.text) : [],
+    contentRunId: route.key === "strategy3" ? (String(activePanel.textContent || "").match(/strategy3v2-(?:recovery-replay-)?\d{8}-\d{14}/) || [""])[0] : "",
     filterCounts,
     unifiedFilterContract,
     freshnessText,
@@ -1856,6 +1860,7 @@ function collectMobileStats(route) {
     runId,
     rowsVisible: rows.length,
     sampleRows: rows.slice(0, 3),
+    candidateTexts: route.key === "strategy3" ? rows : [],
     statusText,
     dateSignals,
     layout,
@@ -2440,6 +2445,48 @@ function isCdpStartupError(error) {
     .test(String(error?.stack || error?.message || error || ""));
 }
 
+async function runStrategy3Scorecard(browser) {
+  const cdp = await createTab(browser);
+  try {
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(() => { const original = window.fetch.bind(window); window.__scorecardFetchErrors = []; window.fetch = async (...args) => { try { return await original(...args); } catch (error) { window.__scorecardFetchErrors.push({ path: new URL(typeof args[0] === 'string' ? args[0] : args[0].url, location.href).pathname, error: error.message, stack: error.stack }); throw error; } }; })();` });
+    await setViewport(cdp, { width: 1440, height: 1000, mobile: false });
+    await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/88`), { stopLoading: false });
+    const selector = '#tabs button[data-strategy="策略3隔日沖成績單"]';
+    await waitForSelector(cdp, selector, ROUTE_TIMEOUT_MS);
+    await clickSelectorByDom(cdp, selector);
+    const expectedRun = optionValue("--expected-run-id");
+    const expectedSymbols = optionValue("--expected-symbols").split(",").filter(Boolean).sort();
+    const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+    let stats;
+    const deadline = Date.now() + ROUTE_TIMEOUT_MS;
+    do {
+      stats = await evaluate(cdp, ({ date }) => {
+        const rows = [...document.querySelectorAll('#rows tr[data-strategy="策略3隔日沖成績單"]')]
+          .filter(row => row.getBoundingClientRect().height > 0 && row.cells[0]?.innerText.trim() === date)
+          .map(row => ({ symbol: row.cells[2]?.innerText.trim(), runId: row.dataset.runId, sourceRunId: row.dataset.sourceReportRunId, text: row.innerText }));
+        return { rows, emptyText: document.querySelector('#rows .empty')?.innerText || "", sourceText: document.querySelector('#scorecardSourceReports')?.innerText || "" };
+      }, { date });
+      stats.actualSymbols = stats.rows.map(row => row.symbol).sort();
+      stats.ok = Boolean(expectedRun) && JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols)
+        && stats.rows.every(row => row.runId === expectedRun && row.sourceRunId === expectedRun)
+        && (expectedSymbols.length > 0 || (/沒有符合/.test(stats.emptyText) && stats.sourceText.includes(expectedRun)));
+      if (stats.ok) break;
+      await sleep(750);
+    } while (Date.now() < deadline);
+    return { kind: "scorecard", routeKey: "strategy3", theme: "night", ...stats,
+      contentAcceptance: { expectedRun, actualRun: stats.ok ? expectedRun : null, expectedSymbols, actualSymbols: stats.actualSymbols, sameSymbols: JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols) },
+      screenshot: await screenshot(cdp, "scorecard-strategy3.png") };
+  } catch (error) {
+    return { kind: "scorecard", routeKey: "strategy3", theme: "night", ok: false,
+      blockerMatches: [error.message], pageText: await evaluate(cdp, () => document.body.innerText.slice(0, 4000)).catch(() => ""),
+      networkErrors: cdp.events.filter(event => event.method === "Network.loadingFailed").map(event => ({ error: event.params?.errorText, blockedReason: event.params?.blockedReason, corsError: event.params?.corsErrorStatus })),
+      networkResponses: cdp.events.filter(event => event.method === "Network.responseReceived").map(event => ({ path: new URL(event.params.response.url).pathname, status: event.params.response.status })),
+      browserErrors: cdp.events.filter(event => event.method === "Log.entryAdded").map(event => event.params?.entry?.text),
+      fetchErrors: await evaluate(cdp, () => window.__scorecardFetchErrors || []).catch(() => []),
+      screenshot: await screenshot(cdp, "scorecard-strategy3-failed.png").catch(() => null) };
+  } finally { cdp.close(); }
+}
+
 async function runE2eOnce(options = {}) {
   const browser = await launchBrowser(options);
   const results = [];
@@ -2447,6 +2494,7 @@ async function runE2eOnce(options = {}) {
     if (RUN_ONLY.has("desktop-night")) results.push(...await runDesktopMode(browser, "night"));
     if (RUN_ONLY.has("desktop-sun")) results.push(...await runDesktopMode(browser, "sun"));
     const mobileExecuted = new Set();
+    if (process.argv.includes("--include-scorecard")) results.push(await runStrategy3Scorecard(browser));
     for (const spec of MOBILE_RUNS) {
       if (!RUN_ONLY.has(spec.flag)) continue;
       const key = `${spec.viewport.key}:${spec.theme}`;
@@ -2481,6 +2529,22 @@ async function main() {
     }
   }
   if (!results) throw lastError || new Error("terminal-ui-e2e did not produce results");
+  if (process.argv.includes("--require-content")) {
+    const expectedRun = optionValue("--expected-run-id");
+    const expectedSymbols = optionValue("--expected-symbols").split(",").filter(Boolean).sort();
+    for (const item of results.filter(x => x.routeKey === "strategy3" && x.kind !== "scorecard")) {
+      const text = (item.candidateTexts || []).join(" ");
+      const actualSymbols = [...new Set((item.candidateTexts || []).map(row => (String(row).match(/#\d+\s+(?:[^\d]*?\s)?(\d{4,6})\b/) || [])[1]).filter(Boolean))].sort();
+      const actualRun = item.kind === "mobile" ? item.runId : item.contentRunId;
+      const sameSymbols = JSON.stringify(actualSymbols) === JSON.stringify(expectedSymbols);
+      const zeroOk = expectedSymbols.length === 0 && /無符合|0 檔|0筆|沒有符合/.test(item.emptyStateText || text);
+      item.contentAcceptance = { expectedRun, actualRun, expectedSymbols, actualSymbols, sameSymbols };
+      if (!expectedRun || actualRun !== expectedRun || item.accessState === "membership_locked" || !sameSymbols || (!expectedSymbols.length && !zeroOk)) {
+        item.ok = false;
+        item.blockerMatches = [...(item.blockerMatches || []), "strategy3_rendered_content_identity_or_symbols_mismatch"];
+      }
+    }
+  }
   const report = {
     ok: results.every((item) => item.ok),
     baseUrl: BASE_URL.replace(/\/+$/, ""),

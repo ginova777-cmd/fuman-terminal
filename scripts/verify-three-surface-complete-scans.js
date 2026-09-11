@@ -1,5 +1,7 @@
 "use strict";
 
+const fs = require("fs");
+const path = require("path");
 const { resolveProtectedReadbackCredential, protectedReadbackHeaders } = require("../lib/protected-readback-credential");
 
 const BASE_URL = (process.env.FUMAN_TERMINAL_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
@@ -13,6 +15,9 @@ const ALL_TABS = [
   { key: "institution", route: "institution", api: "/api/institution-latest", fragment: "chip" },
 ];
 const STRATEGY3_ONLY = process.argv.includes("--strategy3-only");
+const WRITE_RECEIPT = process.argv.includes("--write-receipt");
+const TRADE_DATE = process.argv.find((arg) => arg.startsWith("--trade-date="))?.slice("--trade-date=".length)
+  || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
 const TABS = STRATEGY3_ONLY ? ALL_TABS.filter((tab) => tab.key === "strategy3") : ALL_TABS;
 
 const issues = [];
@@ -110,7 +115,16 @@ async function main() {
     if (strategy2Count <= 0 && !isExplicitWaiting(strategy2.payload)) fail("strategy2_zero_without_explicit_waiting_state", { status: strategy2.payload?.status, reason: strategy2.payload?.reason });
   }
 
-  const result = { ok: issues.length === 0, checkedAt: new Date().toISOString(), contract: CONTRACT, baseline: BASELINE, baselineCommit: BASELINE_COMMIT, summary, issues };
+  const result = { ok: issues.length === 0, checkedAt: new Date().toISOString(), tradeDate: TRADE_DATE, contract: CONTRACT, baseline: BASELINE, baselineCommit: BASELINE_COMMIT, summary, issues };
+  if (WRITE_RECEIPT && STRATEGY3_ONLY) {
+    const compact = TRADE_DATE.replace(/\D/g, "");
+    const runtime = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+    const receiptPath = path.join(runtime, "data", "scan-receipts", `strategy3-v2-three-surface-recovery-replay-${compact}.json`);
+    fs.mkdirSync(path.dirname(receiptPath), { recursive: true });
+    fs.writeFileSync(receiptPath, `${JSON.stringify({ ...result, receiptWritten: true, receiptPath }, null, 2)}\n`, "utf8");
+    result.receiptWritten = true;
+    result.receiptPath = receiptPath;
+  }
   console.log(JSON.stringify(result, null, 2));
   if (!result.ok) process.exitCode = 1;
 }

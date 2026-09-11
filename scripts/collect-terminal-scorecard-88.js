@@ -94,7 +94,7 @@ function canonicalReceipt(key) {
   const todayKey = compactDate(taipeiDate());
   const files = {
     strategy2: ["strategy2-v3-live.json"],
-    strategy3: [`strategy3-v2-daily-unattended-closure-${todayKey}.json`, `strategy3-v2-complete-scan-${todayKey}.json`],
+    strategy3: recovery && expectedRunId.startsWith("strategy3v2-recovery-replay-") ? [`strategy3-v2-recovery-closure-${todayKey}.json`] : [`strategy3-v2-daily-unattended-closure-${todayKey}.json`, `strategy3-v2-complete-scan-${todayKey}.json`],
     strategy4: recovery ? ["strategy4-recovery-evidence.json"] : ["strategy4-canonical-closure-latest.json"],
     strategy5: ["strategy5.json"],
     institution: ["institution.json"],
@@ -121,7 +121,8 @@ function canonicalFromDesktop(key, desktop) {
   const receiptRunId = detail.runId || detail.run_id || scan.runId || scan.run_id || "";
   const runId = String(summary.runId || receiptRunId || "");
   const strategy4PublishReady = key === "strategy4" && detail.status === "verifying" && Number(detail.exitCode || 0) === 0 && Boolean(receiptRunId) && num(detail.matches, detail.resultCount, detail.count) > 0 && detail.fallback !== true;
-  const receiptComplete = strategy4PublishReady || detail.ok === true || detail.complete === true || detail.status === "complete" || detail.status === "PASS" || detail.status === "STRATEGY3_V2_DAILY_UNATTENDED_YES";
+  const strictRecovery = key !== "strategy3" || !recovery || !expectedRunId.startsWith("strategy3v2-recovery-replay-") || (detail.ok === true && detail.complete === true && detail.verifier_ok === true && detail.run_id === expectedRunId && detail.trade_date === taipeiDate() && Array.isArray(detail.failed_checks) && detail.failed_checks.length === 0);
+  const receiptComplete = strictRecovery && (strategy4PublishReady || detail.ok === true || detail.complete === true || detail.status === "complete" || detail.status === "PASS" || detail.status === "STRATEGY3_V2_DAILY_UNATTENDED_YES");
   const fullScannedCount = num(detail.scannedCount, detail.scanned_count, detail.scanned, scan.scannedCount, scan.scanned_count, summary.scannedCount, summary.count);
   const fullResultCount = num(detail.resultCount, detail.result_count, detail.matches, detail.count, scan.resultCount, scan.result_count, scan.count, summary.resultCount, summary.count);
   const surface = surfaceEvidence(key);
@@ -197,7 +198,7 @@ if (!slots[slot]) {
 const collectionWindow = fixedCollectionWindow(slot);
 const recoveryKey = /^strategy5-\d{8}-\d{14}$/.test(expectedRunId) ? "strategy5"
   : /^strategy4-\d{8}-\d{14}$/.test(expectedRunId) ? "strategy4"
-    : /^strategy3v2-\d{8}-\d{14}$/.test(expectedRunId) ? "strategy3"
+    : /^strategy3v2-(?:recovery-replay-)?\d{8}-\d{14}$/.test(expectedRunId) ? "strategy3"
       : "";
 const recoveryRunAllowed = Boolean(recoveryKey && slots[slot].includes(recoveryKey));
 const recoveryAuthorized = recovery && recoveryRunAllowed && runDate(expectedRunId) === compactDate(taipeiDate()) && recoveryReason.length >= 8;
