@@ -18,6 +18,8 @@ function main(){
  const e={scan,daily:read(path.join(root,`data/scan-receipts/strategy4-daily-publish-${day}.json`)),canonical:read(path.join(root,`data/scan-receipts/strategy4-canonical-closure-${day}.json`)),line:read(path.join(root,`data/line-cards/strategy4-line-card-${day}.json`)),wrapper:read(path.join(root,`data/line-cards/strategy4-line-card-wrapper-receipt-${day}.json`)),verifier:read(path.join(root,`data/line-cards/strategy4-line-card-canonical-verifier-receipt-${day}.json`))};
  const issues=validate(e,run);if(issues.length)throw Error(issues.join(';'));
  const final={...scan,status:'complete',complete:true,qualityStatus:'complete',finishedAt:new Date().toISOString(),completionContract:'strategy4_delivery_before_complete_v1',deliveryVerifiedRunId:run};
- const tmp=scanPath+'.finalizing';fs.writeFileSync(tmp,JSON.stringify(final,null,2)+'\n');fs.renameSync(tmp,scanPath);console.log(JSON.stringify({ok:true,runId:run,status:'complete'}));
+ const tmp=scanPath+'.finalizing';fs.writeFileSync(tmp,JSON.stringify(final,null,2)+'\n');fs.renameSync(tmp,scanPath);
+ try { require('child_process').execFileSync(process.execPath,['--use-system-ca',path.join(__dirname,'publish-scorecard-scan-audit.js')],{cwd:path.resolve(__dirname,'..'),stdio:'pipe',windowsHide:true,timeout:90000}); } catch(error) { fs.writeFileSync(scanPath,JSON.stringify({...scan,status:'failed',complete:false,exitCode:1,blockingReason:'final_scan_audit_publish_failed'},null,2)+'\n'); throw error; }
+ console.log(JSON.stringify({ok:true,runId:run,status:'complete'}));
 }
 module.exports={scanReady,validate};if(require.main===module)main();
