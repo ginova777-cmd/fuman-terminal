@@ -14,3 +14,6 @@ assert(scanner.institutionSourceDateIssues({...todaySource,sourceDates:{twse:'20
 assert(scanner.institutionSourceDateIssues({...todaySource,sourceDates:{}},'2026-09-11').includes('twse_source_date_not_today'));
 assert(scanner.institutionSourceDateIssues({...todaySource,errors:['terminated']},'2026-09-11').includes('official_source_history_incomplete'));
 console.log('PASS both markets same-day and complete official history gate');
+
+assert(scanner.institutionSourceDateIssues({...todaySource,sourceHealth:{warnings:["tpex 5-day metrics failed"]}},"2026-09-11").includes("five_day_metric_history_incomplete"));
+console.log("PASS missing metric history blocks publication");
