@@ -14,6 +14,7 @@ const SYNTHESIZE = args.has("--synthesize");
 const FINAL = args.has("--final");
 const TRADE_DATE = valueArg("--trade-date", "");
 const MAX_SYMBOLS = Math.max(1, Number(valueArg("--max-symbols", "2000")) || 2000);
+const REQUESTED_SYMBOLS = new Set(valueArg("--symbols", "").split(",").filter((symbol) => /^\d{4}$/.test(symbol)));
 const PAGE_SIZE = 1000;
 const REQUEST_TIMEOUT_MS = 45000;
 const REST_DELAY_MS = Math.max(250, Number(valueArg("--delay-ms", process.env.FUGLE_INTRADAY_REPAIR_DELAY_MS || "1000")) || 1000);
@@ -117,11 +118,12 @@ async function main() {
   if (APPLY) await acquireLease(serviceKey, ownerId);
   let writtenReal = 0; let writtenSynthetic = 0; let repairedSymbols = 0; let failedSymbols = 0;
   try {
-    const universe = (await supabaseGet("stock_universe", "select=symbol,market&is_active=eq.true&is_blacklisted=eq.false&is_daytrade_unsuitable=eq.false&limit=2000", serviceKey)).slice(0, MAX_SYMBOLS);
-    const existing = await supabaseGet("fugle_daytrade_intraday_1m", `select=symbol,market,candle_time,trade_date,open,high,low,close,volume,source,source_channel,candle_origin,synthetic,volume_strategy_usable,websocket_row,rest_repair_row,payload&trade_date=eq.${encodeURIComponent(tradeDate)}&limit=1000000`, serviceKey);
+    const universe = (await supabaseGet("stock_universe", "select=symbol,market&is_active=eq.true&is_blacklisted=eq.false&is_daytrade_unsuitable=eq.false&limit=2000", serviceKey)).filter((row) => !REQUESTED_SYMBOLS.size || REQUESTED_SYMBOLS.has(String(row.symbol))).slice(0, MAX_SYMBOLS);
+    const existing = await supabaseGet("fugle_daytrade_intraday_1m", `select=symbol,market,candle_time,trade_date,open,high,low,close,volume,source,source_channel,candle_origin,synthetic,volume_strategy_usable,websocket_row,rest_repair_row,payload&trade_date=eq.${encodeURIComponent(tradeDate)}${REQUESTED_SYMBOLS.size ? `&symbol=in.(${[...REQUESTED_SYMBOLS].join(",")})` : ""}&limit=1000000`, serviceKey);
     const bySymbol = new Map();
     for (const row of existing) { const symbol = normalizeSymbol(row.symbol); if (!symbol) continue; if (!bySymbol.has(symbol)) bySymbol.set(symbol, []); bySymbol.get(symbol).push(row); }
     for (const item of universe) {
+      if (APPLY) await acquireLease(serviceKey, ownerId);
       const symbol = normalizeSymbol(item.symbol); if (!symbol) continue;
       const localRows = bySymbol.get(symbol) || [];
       const auditBefore = buildTimelineAudit({ symbol, tradeDate, rows: localRows, expectedMinutes });
@@ -138,7 +140,7 @@ async function main() {
       let fetched = [];
       try { fetched = (await fugleCandles(symbol, fugleKey)).map((raw) => normalizeRestCandle(symbol, raw, tradeDate)).filter(Boolean); } catch (error) { failedSymbols += 1; console.error(`[gap-repair] ${symbol} REST failed: ${error.message}`); }
       await sleep(REST_DELAY_MS);
-      const realRows = fetched.filter((row) => expectedMinutes.includes(rowMinute(row.candle_time)) && !have.has(rowMinute(row)));
+      const realRows = fetched.filter((row) => expectedMinutes.includes(rowMinute(row.candle_time)) && !have.has(rowMinute(row.candle_time)));
       if (APPLY) writtenReal += await supabaseUpsert("fugle_daytrade_intraday_1m", realRows.map((row) => makeRealRow(row, item.market || "")), "symbol,candle_time", serviceKey);
       localRows.push(...realRows.map((row) => makeRealRow(row, item.market || "")));
       if (SYNTHESIZE) {
