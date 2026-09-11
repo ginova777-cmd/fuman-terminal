@@ -429,11 +429,13 @@ if (-not $InputDirectory -and -not $LiveSources) {
     $completeScanReader = Join-Path (Split-Path $PSScriptRoot -Parent) "scripts\read-opening-complete-scan.js"
     if (-not (Test-Path -LiteralPath $completeScanReader)) { $completeScanReader = "C:\fuman-release-owner\fuman-terminal\scripts\read-opening-complete-scan.js" }
     if (-not (Test-Path -LiteralPath $completeScanReader)) { throw "完整掃描讀取程式 MISSING：$completeScanReader" }
-    & node --use-system-ca $completeScanReader "--receipt=$CompleteScanReceiptPath" "--cache-dir=$CompleteScanCacheDirectory" | Out-Host
+    $syncSummary = & node --use-system-ca $completeScanReader "--receipt=$CompleteScanReceiptPath" "--cache-dir=$CompleteScanCacheDirectory"
     if ($LASTEXITCODE -ne 0) { throw "完整掃描結果尚未就緒或驗證失敗；未呼叫終端3／4／5／買賣超API。" }
     $completeScanPayload = Get-Content -LiteralPath (Join-Path $CompleteScanCacheDirectory "sources.json") -Raw -Encoding UTF8 | ConvertFrom-Json
     if ($completeScanPayload.ok -ne $true -or $completeScanPayload.contract -ne "opening_complete_scan_readback_v1") { throw "完整掃描資料契約不符" }
-    Write-Host ("來源：終端完整掃描共用結果；發布時間 {0}；同版本刷新只讀本機。" -f $completeScanPayload.source_updated_at) -ForegroundColor Cyan
+    $syncState = ($syncSummary -join "") | ConvertFrom-Json
+    $syncLabel = if ($syncState.cache_hit) { "本機快取；四來源網路請求0次" } else { "已同步完整掃描結果" }
+    Write-Host ("來源：終端完整掃描共用結果；發布時間 {0}；{1}。" -f ([DateTimeOffset]$completeScanPayload.source_updated_at).ToOffset([TimeSpan]::FromHours(8)).ToString("yyyy-MM-dd HH:mm:ss zzz"), $syncLabel) -ForegroundColor Cyan
 }
 
 foreach ($source in $sourceDefinitions) {
