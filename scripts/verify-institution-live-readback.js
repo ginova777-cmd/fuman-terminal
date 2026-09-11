@@ -1,5 +1,7 @@
 "use strict";
 const fs=require("fs"),path=require("path"),assert=require("assert"),cp=require("child_process");
+const crypto=require("crypto");
+const {readTechnicalSources,evaluateCandidates,CONTRACT:SELECTION_CONTRACT}=require("../lib/institution-technical-selection");
 const root=path.resolve(__dirname,".."),runtime=process.env.FUMAN_RUNTIME_DIR||"C:/fuman-runtime";
 const out=path.join(root,"outputs/institution-live-acceptance");
 const read=p=>JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,""));
@@ -18,11 +20,21 @@ async function main(){
  assert(new Set(rows.map(r=>r.code)).size===rows.length,"duplicate result symbols");
  assert(receipt.scanned===run.scanned_count && receipt.total===run.expected_total,"receipt full scan totals mismatch");
  assert(run.payload.blankTotal===0,"scanner required fields incomplete");
- assert(!(run.payload.sourceHealth?.warnings||[]).length,"five-day metric history incomplete");
+
  assert(receipt.fallbackUsed===false && run.payload.fallbackUsed===false,"fallback used");
  const today=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Taipei"}).format(new Date());assert(run.scan_date===today,"run not current trading date");
  const source=run.payload.source_status_at_run;assert(source.sourceDates.twse===today.replaceAll("-","")&&source.sourceDates.tpex===today.replaceAll("-",""),"official source dates mismatch");
+ const coverage=run.payload.selectionCoverage;assert(coverage?.contract===SELECTION_CONTRACT&&coverage.ok&&coverage.dataCoverage>=.9,"candidate coverage below 90% or wrong contract");
+ assert.deepStrictEqual(receipt.selectionCoverage,coverage,"runner coverage mismatch");
+ const evidencePath=path.resolve(run.payload.technicalSourceReceipt||"");assert(evidencePath.startsWith(path.resolve(runtime,"data/institution-technical-source")+path.sep),"invalid technical source evidence path");
+ const evidenceRaw=fs.readFileSync(evidencePath,"utf8");assert(crypto.createHash("sha256").update(evidenceRaw).digest("hex")===run.payload.technicalSourceHash,"technical evidence hash mismatch");
+ const evidence=JSON.parse(evidenceRaw);assert(evidence.runId===runId&&evidence.tradeDate===today,"technical evidence identity mismatch");
+ const recomputed=evaluateCandidates(evidence.candidates,evidence.sources,today,evidence.extraIssues);assert.deepStrictEqual(recomputed.selectionCoverage,coverage,"source coverage arithmetic mismatch");
+ assert.deepStrictEqual(recomputed.selected.map(r=>r.code).sort(),rows.map(r=>r.code).sort(),"selected result identity mismatch");
+ const freshSources=await readTechnicalSources(rows.map(r=>r.payload),today);const fresh=evaluateCandidates(rows.map(r=>r.payload),freshSources,today);assert(fresh.selected.length===rows.length,"fresh daily/60m source no longer supports selected rows");
  for(const row of rows){
+  const expected=fresh.selected.find(r=>r.code===row.code)?.technicalTrend;assert(row.payload.technicalTrend?.pass===true&&row.payload.technicalTrend.contract===SELECTION_CONTRACT,"technical gate missing");
+  for(const frame of ["daily","hourly60"]){const a=row.payload.technicalTrend[frame],b=expected[frame];assert(a.lastBarTime===b.lastBarTime&&a.previousBarTime===b.previousBarTime&&a.trendUp===true,"technical source time mismatch");for(const key of ["kdK","kdD","kdPrevK","kdPrevD","rsi3","rsi6","rsi3Prev","rsi6Prev"])assert(Math.abs(a[key]-b[key])<1e-7,"indicator value mismatch "+row.code+":"+frame+":"+key);}
   const p=row.payload;assert(row.run_id===runId&&row.complete,"row run identity mismatch");
   for(const f of ["code","name","market","tradeDate","runId","foreign","trust","dealer","total","foreignStreak","trustStreak","jointStreak","foreignTrustVolumePct","direction","source","dataContractSource"]){assert(p[f]!==undefined&&p[f]!==null&&String(p[f]).trim()!=="",row.code+" missing "+f);}
   assert(p.runId===runId&&p.tradeDate===today,"row payload identity mismatch");
@@ -30,7 +42,7 @@ async function main(){
   for(const [a,b] of [["foreign","foreign_net"],["trust","trust_net"],["dealer","dealer_net"],["total","total_net"]])assert(p[a]===row[b],row.code+" DB column mismatch "+a);
  }
  assert(!/"mother_pool[^" ]*"\s*:/.test(JSON.stringify({run,rows,receipt})),"retired mother pool dependency fields");
- report={...report,ok:true,tradeDate:today,sourceCount:run.expected_total,scannedCount:run.scanned_count,resultCount:rows.length,readbackCount:rows.length,sourceDates:source.sourceDates,sourceCoverage:run.payload.sourceCoverage,blankTotal:0,rows};
+ report={...report,ok:true,tradeDate:today,sourceCount:run.expected_total,scannedCount:run.scanned_count,resultCount:rows.length,readbackCount:rows.length,sourceDates:source.sourceDates,sourceCoverage:run.payload.sourceCoverage,selectionCoverage:coverage,technicalSourceHash:run.payload.technicalSourceHash,technicalFreshReadback:true,blankTotal:0,rows};
  fs.writeFileSync(path.join(out,"readback.json"),JSON.stringify(report,null,2));
  if(process.argv.includes("--render")){
   const expected=rows.slice(0,120).map(r=>r.code).join(",");

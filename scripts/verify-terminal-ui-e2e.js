@@ -2186,7 +2186,7 @@ async function verifyInstitutionRenderedIdentity(cdp, kind) {
   const input = optionValue("--institution-readback");
   if (!input) return { ok: false, reason: "authoritative readback file required" };
   const evidence = JSON.parse(await fs.readFile(input, "utf8"));
-  if (!evidence.ok || !evidence.rows?.length) return { ok: false, reason: "readback incomplete" };
+  if (!evidence.ok || !Array.isArray(evidence.rows)) return { ok: false, reason: "readback incomplete" };
   const expectedRows = evidence.rows.slice(0, kind === "desktop" ? 60 : 20);
   const read = () => evaluate(cdp, (kind) => {
     const root = document.querySelector(kind === "desktop" ? "#chip-trade-view" : '#content [data-mobile-fragment-key="chip"]');

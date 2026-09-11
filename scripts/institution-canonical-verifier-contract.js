@@ -148,10 +148,13 @@ function verifyCanonical(name, payload, type) {
   const issues = [];
   const rows = rowsFrom(payload);
   const sourceUnavailable = /timeout|522|error|blocked|degraded/.test(`${c.source.coverageStatus} ${c.source.raw?.status || ""} ${c.source.raw?.httpStatus || ""}`);
+  const selection = payload.selectionCoverage || payload.payload?.selectionCoverage;
+  const selectedContract = selection?.contract === "institution-candidate90-daily-last60-up-v1";
   const shouldBlock = sourceUnavailable
     || c.source.institutionalRows < MIN_ROWS
-    || c.source.validAfterExclusionRows < MIN_ROWS
-    || c.resultCount <= 0
+    || (!selectedContract && c.source.validAfterExclusionRows < MIN_ROWS)
+    || (selectedContract && (selection.ok !== true || selection.dataCoverage < 0.9))
+    || (selectedContract ? c.resultCount < 0 : c.resultCount <= 0)
     || c.readbackCount !== c.resultCount
     || c.fallbackUsed;
 
@@ -179,8 +182,8 @@ function verifyCanonical(name, payload, type) {
   push(Boolean(c.fallbackContract), "fallbackContract_missing");
 
   if (c.source.institutionalRows < MIN_ROWS) push(!c.publishAllowed, "institutionalRows_below_1500_but_publishAllowed_true");
-  if (c.source.validAfterExclusionRows < MIN_ROWS) push(c.unattendedStatus !== "YES", "validAfterExclusionRows_below_1500_but_unattendedStatus_yes");
-  if (c.resultCount <= 0) push(!c.latestPointerUpdated, "empty_result_updated_latest_pointer");
+  if (!selectedContract && c.source.validAfterExclusionRows < MIN_ROWS) push(c.unattendedStatus !== "YES", "validAfterExclusionRows_below_1500_but_unattendedStatus_yes");
+  if (!selectedContract && c.resultCount <= 0) push(!c.latestPointerUpdated, "empty_result_updated_latest_pointer");
   if (/522|timeout|error/.test(`${c.source.coverageStatus} ${c.source.raw?.status || ""} ${c.source.raw?.httpStatus || ""}`)) {
     push(c.evidenceStatus !== "complete", "supabase_522_or_timeout_evidenceStatus_complete");
   }

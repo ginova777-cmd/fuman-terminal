@@ -1077,7 +1077,7 @@ function renderScanAudit(payload) {
         <thead><tr><th>模組</th><th>應掃時間</th><th>實際掃描</th><th>資料日</th><th>runId</th><th>筆數</th><th>三端驗收</th><th>狀態 / 原因</th></tr></thead>
         <tbody>${modules.map((row) => {
           const actual = row.actualStartedAt ? `${scanAuditTime(row.actualStartedAt)}${row.actualFinishedAt ? ` - ${scanAuditTime(row.actualFinishedAt)}` : ""}` : "--";
-          const count = row.verifiedCount ? `${esc(String(row.count || 0))} / ${esc(String(row.verifiedCount))}` : esc(String(row.count || 0));
+          const count = (row.verifiedCount || (row.key === "institution" && row.triSurfaceStatus === "complete")) ? `${esc(String(row.count || 0))} / ${esc(String(row.verifiedCount))}` : esc(String(row.count || 0));
           const verified = ["complete", "late_complete"].includes(row.status) ? `電腦 / 88 / 手機一致${row.status === "late_complete" ? "（逾時）" : ""}` : (row.triSurfaceStatus || "未完成");
           const runId = row.runId || (row.previousGoodRunId ? `保留 ${row.previousGoodRunId}` : "--");
           return `<tr><td>${esc(row.label || row.key || "--")}</td><td>${esc(row.scheduledAt || "--")}</td><td>${esc(actual)}</td><td>${esc(row.receiptDate || audit.marketDate || "--")}</td><td>${esc(runId)}</td><td>${count}</td><td>${esc(verified)}</td><td class="scan-audit-detail">${esc(scanAuditStatus(row.status))}｜${esc(row.reason || "--")}</td></tr>`;
