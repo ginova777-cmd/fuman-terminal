@@ -46,8 +46,9 @@ async function request(url, options = {}) {
 }
 async function supabaseGet(resource, query, key) {
   const rows = [];
+  const queryWithoutPagination = query.split("&").filter((part) => !/^(limit|offset)=/.test(part)).join("&");
   for (let offset = 0; offset < 1000000; offset += PAGE_SIZE) {
-    const page = await request(`${SUPABASE_URL}/rest/v1/${resource}?${query}`, { headers: { ...headers(key), Range: `${offset}-${offset + PAGE_SIZE - 1}` } });
+    const page = await request(`${SUPABASE_URL}/rest/v1/${resource}?${queryWithoutPagination}&limit=${PAGE_SIZE}&offset=${offset}`, { headers: headers(key) });
     if (!Array.isArray(page) || !page.length) break;
     rows.push(...page);
     if (page.length < PAGE_SIZE) break;
