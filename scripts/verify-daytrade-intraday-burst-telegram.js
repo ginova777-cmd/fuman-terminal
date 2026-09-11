@@ -634,17 +634,12 @@ checks.runtime_events_industry_concentration_ordered = !outbox || outboxEvents.e
   index === 0
   || Number(outboxEvents[index - 1]?.industry_flow_rank || 999999) <= Number(event?.industry_flow_rank || 999999)
 );
-let offSessionCloseoutComplete = false;
+// A preserved successful receipt stores its latest closeout reason in last_attempt.
+// Apply the same dated closeout proof in deployment and --require-today modes.
+const offSessionCloseoutComplete = require("../lib/daytrade-offsession-closeout").verifiedOffSessionCloseout({
+  receipt, runner: runnerReceipt, outbox, tradeDate: taipeiDate(), minute: taipeiMinutesFromIso(),
+});
 if (requireToday) {
-  offSessionCloseoutComplete = taipeiMinutesFromIso() > 750
-    && receipt?.first_blocker === "outside_trading_window"
-    && receipt?.ok === true
-    && receipt?.complete === true
-    && receipt?.status === "complete"
-    && runnerReceipt?.ok === true
-    && runnerReceipt?.complete === true
-    && runnerReceipt?.status === "complete"
-    && Number(runnerReceipt?.exit_code) === 0;
   checks.runtime_today_outbox_present = Boolean(outbox) && String(outbox?.trade_date || "") === taipeiDate();
   checks.runtime_today_receipt_present = Boolean(receipt) && String(receipt?.trade_date || "") === taipeiDate();
   checks.runtime_today_runner_receipt_present = Boolean(runnerReceipt) && String(runnerReceipt?.trade_date || "") === taipeiDate();
