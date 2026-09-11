@@ -98,6 +98,7 @@ const sideFixtureNow = new Date("2026-09-09T02:00:30.000Z").getTime();
 const sideFixtureDate = "2026-09-09";
 function sideFixture(overrides = {}) {
   return {
+    membership_status: "ACTIVE",
     symbol: "2303", name: "聯電", price: 43.5,
     inside_volume: 500, outside_volume: 20000,
     side_volume_total: 20500, side_volume_ge_2000_lots: true,
@@ -383,7 +384,7 @@ const checks = {
     'row?.side_volume_trade_date === tradeDate',
     'row?.side_volume_canonical_run_id === canonicalRunId(tradeDate)',
     'nowMs - sourceEventMs <= 120000',
-    'outside_volume_technical_cross_role: "required"',
+    'outside_volume_technical_cross_role: "diagnostic_bonus_not_hard_gate"',
     'dedupeScope: "daytrade-outside-volume:"',
     'maxEventAgeSec: 120',
   ]),
@@ -765,7 +766,21 @@ const runtime = {
   live_task: liveTask,
 };
 
-checks.runtime_rolling_1m_baseline_available = baselineRuntimeHealthy;const failedChecks = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name);
+checks.runtime_rolling_1m_baseline_available = baselineRuntimeHealthy;const snapshotModule = require("../lib/daytrade-mother-pool-snapshot");
+const snapshotEvidence = snapshotModule.readMotherPoolSnapshot(taipeiDate());
+checks.v4_snapshot_identity_wiring = canonicalWaterReader.includes('readMotherPoolSnapshot') && notifier.includes('fiveMinuteAligned(receipt, motherPoolSnapshot)') && notifier.includes('five_minute_snapshot_aligned') && notifier.includes('membership_status');
+checks.v4_industry_not_hard_gate = !notifier.includes('receipt.first_blocker = "industry_heatmap_not_ready"');
+checks.v4_isolated_test_present = fs.existsSync(path.join(ROOT,'scripts/test-daytrade-intraday-burst-isolated.js'));
+const fiveRunner=read(path.join(ROOT,'run-daytrade-intraday-5m-current-candidates.ps1'));
+checks.v4_candidate_snapshot_first = fiveRunner.includes("snapshot.symbols") && fiveRunner.includes("daytradeMotherPoolSymbols") && fiveRunner.indexOf("snapshot.symbols")<fiveRunner.indexOf("daytradeMotherPoolSymbols");
+if (requireToday) {
+ checks.v4_current_snapshot_valid = snapshotEvidence.ok;
+ checks.v4_current_notifier_identity = receipt?.v4_contract_validated===true && receipt?.mother_pool_run_id===snapshotEvidence.runId && receipt?.snapshot_sequence===snapshotEvidence.snapshot.snapshot_sequence;
+ checks.v4_current_runner_identity = runnerReceipt?.v4_contract_validated===true && runnerReceipt?.mother_pool_run_id===receipt?.mother_pool_run_id && runnerReceipt?.snapshot_sequence===receipt?.snapshot_sequence;
+ checks.v4_event_batch_readback = (receipt?.event_diagnostics||[]).filter(e=>e.trigger_type!=="outside_volume_gt_inside_x2" && !e.skip_reason).every(e=>e.membership_status==='ACTIVE' && e.five_minute_snapshot_aligned===true && e.five_minute_requested===true && e.five_minute_readback_found===true);
+}
+runtime.v4_in_session_acceptance = requireToday ? checks.v4_current_notifier_identity===true && checks.v4_current_runner_identity===true : null;
+const failedChecks = Object.entries(checks).filter(([, ok]) => !ok).map(([name]) => name);
 console.log(JSON.stringify({
   ok: failedChecks.length === 0,
   contract: "daytrade_intraday_burst_telegram_verifier_v1",

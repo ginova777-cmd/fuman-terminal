@@ -87,6 +87,9 @@ try {
     status = if ($runnerSucceeded) { "complete" } else { "failed" }
     trade_date = $tradeDate
     canonical_run_id = $canonicalRunId
+    mother_pool_run_id = $notifierReceipt.mother_pool_run_id
+    snapshot_sequence = $notifierReceipt.snapshot_sequence
+    v4_contract_validated = $notifierReceipt.v4_contract_validated
     accepted_mother_pool_symbols = if ($null -ne $notifierReceipt) { [int]$notifierReceipt.accepted_mother_pool_symbols } else { 0 }
     started_at = $startedAt
     finished_at = $finishedAt
