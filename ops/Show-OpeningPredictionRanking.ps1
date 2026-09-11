@@ -10,6 +10,10 @@ param(
     [System.Management.Automation.PSCredential]$Credential,
     [string]$OutputCsv = "",
     [string]$InputDirectory = "",
+    [string]$CompleteScanCacheDirectory = "",
+    [string]$CompleteScanReceiptPath = "C:\fuman-runtime\data\scan-receipts\desktop-route-snapshot.json",
+    [switch]$LiveSources,
+    [switch]$SkipFinMind,
     [string]$OpeningLimitOrderDirectory = "C:\fuman-runtime\data\opening-limit-order",
     [string]$OpeningReportDirectory = "C:\fuman-runtime\data\opening-report-0830",
     [string]$OpeningTPreviewPath = "",
@@ -165,7 +169,7 @@ if ($Logout) {
 $ResolvedToken = ""
 if ($Token) {
     $ResolvedToken = $Token
-} elseif (-not $InputDirectory) {
+} elseif (-not $InputDirectory -and $LiveSources) {
     $ResolvedToken = Get-TokenFromCache
     if (-not $ResolvedToken) {
         if ($null -eq $Credential) {
@@ -389,6 +393,10 @@ function Read-SourcePayload {
         return Get-Content -LiteralPath $path -Raw -Encoding UTF8 | ConvertFrom-Json
     }
 
+    if (-not $LiveSources) {
+        return Get-PropertyValue $completeScanPayload.sources @($Key)
+    }
+
     $headers = @{ Accept = "application/json" }
     if ($ResolvedToken) { $headers.Authorization = "Bearer $ResolvedToken" }
     $uri = "{0}{1}{2}" -f $BaseUrl.TrimEnd('/'), $Endpoint, [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
@@ -414,6 +422,19 @@ $sourceDefinitions = @(
 $stocks = @{}
 $sourceSummary = [System.Collections.Generic.List[object]]::new()
 $rawPayloads = [ordered]@{}
+
+$completeScanPayload = $null
+if (-not $InputDirectory -and -not $LiveSources) {
+    if (-not $CompleteScanCacheDirectory) { $CompleteScanCacheDirectory = Join-Path $PSScriptRoot "complete-scan-cache" }
+    $completeScanReader = Join-Path (Split-Path $PSScriptRoot -Parent) "scripts\read-opening-complete-scan.js"
+    if (-not (Test-Path -LiteralPath $completeScanReader)) { $completeScanReader = "C:\fuman-release-owner\fuman-terminal\scripts\read-opening-complete-scan.js" }
+    if (-not (Test-Path -LiteralPath $completeScanReader)) { throw "完整掃描讀取程式 MISSING：$completeScanReader" }
+    & node --use-system-ca $completeScanReader "--receipt=$CompleteScanReceiptPath" "--cache-dir=$CompleteScanCacheDirectory" | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "完整掃描結果尚未就緒或驗證失敗；未呼叫終端3／4／5／買賣超API。" }
+    $completeScanPayload = Get-Content -LiteralPath (Join-Path $CompleteScanCacheDirectory "sources.json") -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($completeScanPayload.ok -ne $true -or $completeScanPayload.contract -ne "opening_complete_scan_readback_v1") { throw "完整掃描資料契約不符" }
+    Write-Host ("來源：終端完整掃描共用結果；發布時間 {0}；同版本刷新只讀本機。" -f $completeScanPayload.source_updated_at) -ForegroundColor Cyan
+}
 
 foreach ($source in $sourceDefinitions) {
     Write-Host ("讀取 {0}..." -f $source.Label) -ForegroundColor Cyan
@@ -792,7 +813,7 @@ $ranked = @($stocks.Values | ForEach-Object {
 for ($index = 0; $index -lt $ranked.Count; $index++) { $ranked[$index].Rank = $index + 1 }
 
 $resolvedFinMindToken = Get-FinMindToken
-if (-not $InputDirectory -and $resolvedFinMindToken) {
+if (-not $InputDirectory -and -not $SkipFinMind -and $resolvedFinMindToken) {
     Write-Host "讀取 FinMind 券商分點買賣超..." -ForegroundColor Cyan
     foreach ($stock in $ranked) {
         try {
@@ -812,7 +833,7 @@ if (-not $InputDirectory -and $resolvedFinMindToken) {
     }
 } else {
     foreach ($stock in $ranked) {
-        $stock | Add-Member -NotePropertyName TopBuyBranch -NotePropertyValue "未設定 FinMind Token"
+        $stock | Add-Member -NotePropertyName TopBuyBranch -NotePropertyValue $(if ($SkipFinMind) { "分點API已停用" } else { "未設定 FinMind Token" })
         $stock | Add-Member -NotePropertyName TopBuyBranchNet -NotePropertyValue $null
         $stock | Add-Member -NotePropertyName TopBuyBranchCost -NotePropertyValue $null
         $stock | Add-Member -NotePropertyName BranchTradeDate -NotePropertyValue ""
@@ -845,8 +866,8 @@ if ($strategyInspection) {
     1..10 | ForEach-Object {
         $no = $_
         [pscustomobject]@{策略=$no; 檢查檔數=$openingStaticByCode.Count;
-            靜態命中=@($openingStaticByCode.Values | Where-Object { $no -in $_.static_matched_strategy_numbers }).Count;
-            待確認=@($openingStaticByCode.Values | Where-Object { $no -in $_.pending_strategy_numbers }).Count}
+            靜態命中=@($openingStaticByCode.Values | Where-Object { $no -in @(Get-PropertyValue $_ @("static_matched_strategy_numbers")) }).Count;
+            待確認=@($openingStaticByCode.Values | Where-Object { $no -in @(Get-PropertyValue $_ @("pending_strategy_numbers")) }).Count}
     } | Format-Table -AutoSize | Out-Host
 } else { Write-Warning "十大策略檢查資料 MISSING" }
 
@@ -881,8 +902,8 @@ if ($ranked.Count -eq 0) {
             elseif ($_.OpeningTStrategies) {
                 ConvertTo-OpeningStrategyText $_.OpeningTStrategies
             }
-            elseif ($openingStaticByCode.ContainsKey($_.Code) -and @($openingStaticByCode[$_.Code].pending_strategy_numbers).Count) {
-                "待確認策略" + ($openingStaticByCode[$_.Code].pending_strategy_numbers -join ",")
+            elseif ($openingStaticByCode.ContainsKey($_.Code) -and @(Get-PropertyValue $openingStaticByCode[$_.Code] @("pending_strategy_numbers")).Count) {
+                "待確認策略" + (@(Get-PropertyValue $openingStaticByCode[$_.Code] @("pending_strategy_numbers")) -join ",")
             }
             elseif (-not $openingStaticDate) { "T-1底稿缺失" }
             else { "-" }
