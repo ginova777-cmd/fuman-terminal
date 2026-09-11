@@ -776,6 +776,7 @@ const fiveRunner=read(path.join(ROOT,'run-daytrade-intraday-5m-current-candidate
 checks.v4_candidate_snapshot_first = fiveRunner.includes("snapshot.symbols") && fiveRunner.includes("daytradeMotherPoolSymbols") && fiveRunner.indexOf("snapshot.symbols")<fiveRunner.indexOf("daytradeMotherPoolSymbols");
 if (requireToday) {
  checks.v4_current_snapshot_valid = snapshotEvidence.ok;
+ checks.v4_five_minute_batch_health = receipt?.five_minute_confirmation?.snapshot_aligned===true && receipt?.five_minute_confirmation?.status==='ready' && !receipt?.five_minute_confirmation?.reason;
  checks.v4_current_notifier_identity = receipt?.v4_contract_validated===true && receipt?.mother_pool_run_id===snapshotEvidence.runId && receipt?.snapshot_sequence===snapshotEvidence.snapshot.snapshot_sequence;
  checks.v4_current_runner_identity = runnerReceipt?.v4_contract_validated===true && runnerReceipt?.mother_pool_run_id===receipt?.mother_pool_run_id && runnerReceipt?.snapshot_sequence===receipt?.snapshot_sequence;
  checks.v4_event_batch_readback = (receipt?.event_diagnostics||[]).filter(e=>e.trigger_type!=="outside_volume_gt_inside_x2" && !e.skip_reason).every(e=>e.membership_status==='ACTIVE' && e.five_minute_snapshot_aligned===true && e.five_minute_requested===true && e.five_minute_readback_found===true);

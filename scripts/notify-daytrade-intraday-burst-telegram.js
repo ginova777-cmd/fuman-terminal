@@ -90,7 +90,6 @@ function eventMessage(event) {
 async function readFiveMinuteConfirmations(events, tradeDate, nowMs = Date.now(), motherPoolSnapshot = readMotherPoolSnapshot(tradeDate)) {
   const symbols = [...new Set((Array.isArray(events) ? events : []).map((event) => String(event?.symbol || "")).filter((symbol) => /^\d{4}$/.test(symbol)))];
   const result = { status: symbols.length ? "DATA_GAP_5M" : "not_required", view: "v_fugle_intraday_5m_readback", receipt_view: "v_fugle_intraday_5m_verification_readback", receipt_contract: FIVE_MINUTE_RECEIPT_CONTRACT, run_id: "", requestedSymbols: new Set(), snapshotAligned: false, rows: 0, confirmed_strong: 0, bySymbol: new Map(), reason: null };
-  if (!symbols.length) return result;
   const key = process.env.SUPABASE_ANON_KEY || readSecret("supabase-anon-key.txt");
   if (!key) { result.reason = "anon_key_missing"; return result; }
   try {
@@ -122,6 +121,12 @@ async function readFiveMinuteConfirmations(events, tradeDate, nowMs = Date.now()
     result.mother_pool_snapshot = receipt.diagnostic_summary?.mother_pool_snapshot || null;
     if (!result.snapshotAligned) { result.reason = "five_minute_batch_not_aligned_with_mother_pool_snapshot"; return result; }
     result.requestedSymbols = new Set(Array.isArray(receipt?.requested_symbols) ? receipt.requested_symbols.map(String) : []);
+    if (!symbols.length) {
+      const latestBar = Date.parse(receipt.latest_complete_bar_end || "");
+      if (!Number.isFinite(latestBar) || latestBar > nowMs || nowMs - latestBar > FIVE_MINUTE_MAX_STALE_SECONDS * 1000) result.reason = "five_minute_zero_event_readback_stale";
+      else result.status = "ready";
+      return result;
+    }
 
     const fields = ["symbol", "trade_date", "run_id", "bar_end", "bar_complete", "bar_kind", "confirmation_eligible", "data_gap_5m", "source_status", "trend_5m_status", "golden_cross_any_5m", "trend_5m_strategy_version", "calculation_version", "classification_contract", "macd_fast_period", "macd_slow_period", "macd_signal_period", "rsi3_cross_rsi6_up_5m", "kd_5_3_golden_cross_5m", "macd_3_9_3_dif_5m", "macd_3_9_3_dea_5m", "macd_3_9_3_histogram_5m", "previous_macd_3_9_3_dif_5m", "previous_macd_3_9_3_dea_5m", "macd_3_9_3_golden_cross_5m", "macd_3_9_3_zero_cross_up_5m", "ma5_cross_ma10_up_5m", "ma10_cross_ma20_up_5m", "ma5_cross_ma20_up_5m"];
     const url = `${SUPABASE_URL}/rest/v1/v_fugle_intraday_5m_readback?select=${fields.join(",")}&trade_date=eq.${tradeDate}&run_id=eq.${encodeURIComponent(result.run_id)}&symbol=in.(${symbols.join(",")})`;
@@ -526,7 +531,7 @@ async function notifyFromOutbox(options = {}) {
   receipt.detected_events = allEvents.length;
   const currentEvents = events.filter(e => { const t=Date.parse(e.latest_1m_time || e.event_time || ""); return Number.isFinite(t) && t<=nowMs && nowMs-t<=120000; });
   const fiveMinute = await readFiveMinuteConfirmations(currentEvents, tradeDate, nowMs, motherPoolSnapshot);
-  if (currentEvents.length && fiveMinute.reason) { receipt.failed_checks.push(fiveMinute.reason); receipt.first_blocker ||= fiveMinute.reason; }
+  if (fiveMinute.reason) { receipt.failed_checks.push(fiveMinute.reason); receipt.first_blocker ||= fiveMinute.reason; }
   receipt.five_minute_confirmation = { status: fiveMinute.status, view: fiveMinute.view, receipt_view: fiveMinute.receipt_view, receipt_contract: fiveMinute.receipt_contract, run_id: fiveMinute.run_id, requested_symbol_count: fiveMinute.requestedSymbols.size, snapshot_aligned: fiveMinute.snapshotAligned, mother_pool_snapshot: fiveMinute.mother_pool_snapshot, strategy_version: FIVE_MINUTE_STRATEGY_VERSION, calculation_version: FIVE_MINUTE_CALCULATION_VERSION, classification_contract: FIVE_MINUTE_CLASSIFICATION_CONTRACT, macd_parameters: { fast: 3, slow: 9, signal: 3 }, rows: fiveMinute.rows, confirmed_strong: fiveMinute.confirmed_strong, reason: fiveMinute.reason };
   receipt.latest_complete_5m_bar_end = [...fiveMinute.bySymbol.values()].map((row) => String(row?.five_minute_bar_end || "")).filter(Boolean).sort().pop() || null;
   const oldBypass = process.env.FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM;
