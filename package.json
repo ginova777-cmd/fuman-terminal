@@ -80,6 +80,8 @@
     "verify:daytrade-mother-pool-closed-loop:receipt": "node scripts/verify-daytrade-mother-pool-closed-loop.js --write-receipt",
     "verify:daytrade-strategy3-attribution": "node scripts/verify-daytrade-strategy3-independent-attribution.js",
     "verify:daytrade-strategy3-attribution:receipt": "node scripts/verify-daytrade-strategy3-independent-attribution.js --write-receipt",
+    "verify:daytrade-ma20-preopen-warmup": "node scripts/verify-daytrade-ma20-preopen-warmup.js",
+    "verify:daytrade-ma20-preopen-warmup:receipt": "node scripts/verify-daytrade-ma20-preopen-warmup.js --write-receipt",
     "verify:daytrade-side-volume-contract": "node --use-system-ca scripts/verify-daytrade-side-volume-contract.js",
     "verify:daytrade-side-volume-contract:receipt": "node --use-system-ca scripts/verify-daytrade-side-volume-contract.js --write-receipt",
     "verify:daytrade-side-volume-contract:publish": "node --use-system-ca scripts/verify-daytrade-side-volume-contract.js --write-receipt --publish-receipt",
