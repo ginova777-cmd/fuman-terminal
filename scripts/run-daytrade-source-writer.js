@@ -2255,6 +2255,67 @@ async function fetchIntradayStatus(activeSymbols = []) {
     // Continue to persisted formal sources when the local cache is unavailable.
   }
 
+  if (taipeiMinutes() < 9 * 60) {
+    try {
+      const symbols = [...new Set((activeSymbols || []).map((row) => normalizeCode(row.symbol || row)).filter(Boolean))];
+      const rows = [];
+      for (let index = 0; index < symbols.length; index += 40) {
+        const page = await supabaseRpc(
+          "get_fugle_daytrade_intraday_1m_latest_n",
+          { symbols: symbols.slice(index, index + 40), bars_per_symbol: 25 },
+          { service: true },
+        );
+        rows.push(...(Array.isArray(page) ? page : []).filter((row) => row.synthetic !== true && row.is_synthetic !== true));
+      }
+      const grouped = buildGrouped(rows, tradeDate);
+      const naturalWarmupRows = [...grouped.values()].filter((row) =>
+        numberValue(row.continuous_candle_count) >= 20
+        && numberValue(row.latest_candle_age_seconds, 999999) <= 7 * 24 * 60 * 60
+      );
+      if (naturalWarmupRows.length) {
+        return finalizeIntradayMap(naturalWarmupRows, "dedicated_daytrade_intraday_1m_latest_25_batched_natural_warmup");
+      }
+    } catch {
+      // Fall through to persisted status-cache warmup without weakening quality checks.
+    }
+  }
+
+  // Before the market opens there cannot be a natural current-day 1m candle.
+  // Reuse only the most recent prior trading session's persisted natural
+  // readiness for indicator warmup; never expose its candle count as today's.
+  if (taipeiMinutes() < 9 * 60) {
+    try {
+      const scope = new Set((activeSymbols || []).map((row) => normalizeCode(row.symbol || row)).filter(Boolean));
+      const rows = await supabaseGetPaged(
+        "fugle_daytrade_intraday_1m_status_cache",
+        "select=symbol,market,trade_date,latest_candle_time,warmup_candle_count,continuous_candle_count,ready_ma3,ready_ma5,ready_ma10,ready_ma20_continuous,ready_ma30,ready_ma58,ready_ma35_continuous,ma3,ma5,ma10,ma20,ma30,ma35,ma58,ma3_rising,ma5_rising,ma10_rising,ma30_rising,ma35_rising,ma58_rising,ma5_ma10_ma35_bullish,ma_bullish_alignment,relative_volume_5m,recent_1m_volume_trend,macd_line,macd_signal,macd_histogram,kd_k,kd_d,rsi14",
+        { service: true, pageSize: 1000 },
+      );
+      const scopedRows = rows.filter((row) => !scope.size || scope.has(normalizeCode(row.symbol)));
+      const latestPriorTradeDate = scopedRows
+        .map((row) => taipeiDateFrom(row.latest_candle_time || ""))
+        .filter((value) => value && value < tradeDate)
+        .sort()
+        .at(-1) || "";
+      const ageDays = latestPriorTradeDate
+        ? Math.floor((Date.parse(`${tradeDate}T00:00:00+08:00`) - Date.parse(`${latestPriorTradeDate}T00:00:00+08:00`)) / 86400000)
+        : 999;
+      const warmupRows = scopedRows
+        .filter((row) => taipeiDateFrom(row.latest_candle_time || "") === latestPriorTradeDate)
+        .map((row) => ({
+          ...row,
+          trade_date: latestPriorTradeDate,
+          today_candle_count: 0,
+          latest_candle_age_seconds: ageSeconds(row.latest_candle_time),
+        }));
+      if (latestPriorTradeDate && ageDays >= 1 && ageDays <= 7 && warmupRows.length) {
+        return finalizeIntradayMap(warmupRows, "dedicated_daytrade_intraday_1m_status_cache_previous_trading_day_warmup");
+      }
+    } catch {
+      // Continue to the canonical view/RPC/direct reads when cache warmup is unavailable.
+    }
+  }
+
   try {
     const rows = await supabaseGetPaged(
       "v_fugle_daytrade_intraday_1m_status",
@@ -7117,7 +7178,7 @@ async function tick() {
   let priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
   tickStage("priority_build_supplemental:complete", { rows: priorityRows.length });
   tickStage("intraday_status:start");
-  let intradayMap = await fetchIntradayStatus(activeSymbols);
+  let intradayMap = await fetchIntradayStatus(priorityRows);
   tickStage("intraday_status:complete", { rows: intradayMap.size });
   supplementalMaps.intradayMap = intradayMap;
   intradayMap = mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows);
@@ -7238,7 +7299,7 @@ async function tick() {
       websocketCandleSync = await syncWebSocketIntraday1mCandles(priorityRows, state);
       if (!websocketCandleSync.skipped && numberValue(websocketCandleSync.written) > 0) {
         // Gate/source_status must evaluate the latest Fugle candles, not the stale pre-sync map.
-        intradayMap = await fetchIntradayStatus(activeSymbols);
+        intradayMap = await fetchIntradayStatus(priorityRows);
         supplementalMaps.intradayMap = intradayMap;
         intradayMap = mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows);
         supplementalMaps.intradayMap = intradayMap;
