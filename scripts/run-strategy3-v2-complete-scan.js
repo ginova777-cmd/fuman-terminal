@@ -26,6 +26,8 @@ const {
   failClosed,
 } = require("./strategy3-v2-contract");
 const { readCanonicalDaytradeWater } = require("../lib/daytrade-canonical-water-reader");
+const { readStrategy3TechnicalTrends } = require("../lib/strategy3-technical-trend-reader");
+const { readStrategy3AtrRvol } = require("../lib/strategy3-atr-rvol-reader");
 
 const tradeDate = process.argv.find((arg) => arg.startsWith("--trade-date="))?.slice("--trade-date=".length) || taipeiDate();
 const compactDate = tradeDate.replace(/\D/g, "");
@@ -39,7 +41,7 @@ const attemptPhase = process.argv.find((arg) => arg.startsWith("--attempt-phase=
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 const MIN_CHANGE_PERCENT = 5;
-const MAX_CHANGE_PERCENT = 7;
+const MAX_CHANGE_PERCENT = 8;
 
 async function supabaseRequest(method, table, query, body) {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("supabase_credentials_missing");
@@ -170,7 +172,7 @@ function round(value, digits = 2) {
   return Math.round(number * factor) / factor;
 }
 
-async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
+async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, readTechnicalTrends = readStrategy3TechnicalTrends, readAtrRvol = readStrategy3AtrRvol) {
   const water = await readWater({
     tradeDate,
     consumerName: STRATEGY,
@@ -232,6 +234,7 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
     const entryAverage = [entry.open, entry.high, entry.low, entry.close].map(Number).filter((value) => Number.isFinite(value) && value > 0);
     const entryPrice = Number(entry.close || (entryAverage.length ? entryAverage.reduce((sum, value) => sum + value, 0) / entryAverage.length : 0));
     const closePrice = Number(quote.price || last.close || 0);
+    const limitUpPrice = Number(quote.limit_up_price || quote.payload?.limitUpPrice || quote.payload?.limit_up_price || 0);
     const prevClose = Number(quote.previous_close || 0);
     const changePercent = Number.isFinite(Number(quote.change_percent))
       ? Number(quote.change_percent)
@@ -250,8 +253,11 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
       belowChangeRangeCount += 1;
       continue;
     }
-    // The 7% inclusive ceiling explicitly excludes every limit-up stock from
-    // Strategy3, without relying on a separately inferred limit-price field.
+    const isLimitUp = limitUpPrice > 0 ? closePrice >= limitUpPrice * 0.9999 : changePercent >= 9.7;
+    if (isLimitUp) {
+      aboveChangeRangeOrLimitUpCount += 1;
+      continue;
+    }
     if (changePercent > MAX_CHANGE_PERCENT) {
       aboveChangeRangeOrLimitUpCount += 1;
       continue;
@@ -295,7 +301,7 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
         "strategy3_v2_same_day_1m_ready",
         "strategy3_v2_1300_entry_window_present",
         "strategy3_v2_close_above_entry",
-        "strategy3_v2_change_percent_5_to_7_inclusive",
+        "strategy3_v2_change_percent_5_to_8_inclusive",
         "strategy3_v2_limit_up_exclusion_passed",
       ],
       formal_source: `${MOTHER_POOL_VIEW}+${QUOTE_TABLE}+rpc:${INTRADAY_1M_RPC}`,
@@ -331,6 +337,7 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
       price: pool.price,
       open_price: pool.open_price,
       previous_close: pool.previous_close,
+      limit_up_price: limitUpPrice || null,
       high_price: pool.high_price,
       low_price: pool.low_price,
       total_volume: pool.total_volume,
@@ -357,8 +364,47 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
     });
   }
 
-  candidates.sort((a, b) => b.score - a.score || b.change_percent - a.change_percent || b.tail_volume_share_pct - a.tail_volume_share_pct);
-  candidates.forEach((item, index) => { item.rank = index + 1; });
+  const candidateSymbols = candidates.map((item) => item.code);
+  const [technicalBySymbol, atrRvolBySymbol] = candidates.length
+    ? await Promise.all([
+      readTechnicalTrends({ symbols: candidateSymbols, tradeDate, poolBySymbol: water.poolBySymbol }),
+      readAtrRvol({ symbols: candidateSymbols, tradeDate, poolBySymbol: water.poolBySymbol }),
+    ])
+    : [new Map(), new Map()];
+  let technicalSourceGapCount = 0;
+  let technicalTrendRejectedCount = 0;
+  let atrRvolSourceGapCount = 0;
+  let atrRvolRejectedCount = 0;
+  const confirmedCandidates = candidates.filter((item) => {
+    const technical = technicalBySymbol.get(item.code);
+    if (!technical?.source_ready) {
+      technicalSourceGapCount += 1;
+      return false;
+    }
+    if (technical.ok !== true) {
+      technicalTrendRejectedCount += 1;
+      return false;
+    }
+    const atrRvol = atrRvolBySymbol.get(item.code);
+    if (!atrRvol?.source_ready) {
+      atrRvolSourceGapCount += 1;
+      return false;
+    }
+    if (atrRvol.ok !== true) {
+      atrRvolRejectedCount += 1;
+      return false;
+    }
+    item.technical_trend_confirmation = technical;
+    item.atr_rvol_confirmation = atrRvol;
+    item.reason_codes.push(
+      "strategy3_v2_60m_rsi3_over_rsi6_trend_up",
+      "strategy3_v2_daily_k_over_d_rsi3_over_rsi6_trend_up",
+      "strategy3_v2_atr_rvol_tail_momentum_confirmed",
+    );
+    return true;
+  });
+  confirmedCandidates.sort((a, b) => b.score - a.score || b.change_percent - a.change_percent || b.tail_volume_share_pct - a.tail_volume_share_pct);
+  confirmedCandidates.forEach((item, index) => { item.rank = index + 1; });
   return {
     water,
     mother_pool: {
@@ -371,7 +417,15 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
       pages: water.receipt?.mother_pool_pages || 0,
     },
     quote_source: { table: QUOTE_TABLE, valid_symbols: water.receipt?.quote_valid_rows || 0 },
-    candle_source: { rpc: INTRADAY_1M_RPC, valid_symbols: water.receipt?.intraday_1m_valid_rows || 0 },
+    candle_source: {
+      ownership: "shared_with_daytrade_canonical_source",
+      writer: "fugle_daytrade_source",
+      table: "fugle_daytrade_intraday_1m",
+      rpc: INTRADAY_1M_RPC,
+      trade_date_policy: "same_trade_date_only",
+      independent_strategy3_writer: false,
+      valid_symbols: water.receipt?.intraday_1m_valid_rows || 0,
+    },
     same_day_candle_symbols: water.candleRowsBySymbol.size,
     ready_20_candle_symbols: ready20Count,
     entry_window_symbols: entryWindowCount,
@@ -379,12 +433,33 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
       min_inclusive: MIN_CHANGE_PERCENT,
       max_inclusive: MAX_CHANGE_PERCENT,
       limit_up_excluded: true,
-      policy: "strategy3_v2_change_percent_5_to_7_inclusive_exclude_limit_up",
+      policy: "strategy3_v2_change_percent_5_to_8_inclusive_exclude_actual_limit_up",
       below_range_count: belowChangeRangeCount,
       above_range_or_limit_up_count: aboveChangeRangeOrLimitUpCount,
     },
+    technical_trend_gate: {
+      required: true,
+      policy: "completed_60m_rsi3_over_rsi6_both_up_and_live_daily_kd_rsi_full_trend",
+      hourly60_rule: "RSI3>RSI6 AND RSI3>previous_RSI3 AND RSI6>previous_RSI6;KD_is_evidence_not_hard_gate",
+      daily_rule: "K>D AND K>previous_K AND D>previous_D AND RSI3>RSI6 AND RSI3>previous_RSI3 AND RSI6>previous_RSI6",
+      evaluated_symbols: candidates.length,
+      source_gap_count: technicalSourceGapCount,
+      trend_rejected_count: technicalTrendRejectedCount,
+      confirmed_count: confirmedCandidates.length,
+      symbol_evidence: [...technicalBySymbol.entries()].map(([symbol, evidence]) => ({ symbol, ...evidence })),
+    },
+    atr_rvol_gate: {
+      required: true,
+      policy: "1560_style_tail_continuation_v1",
+      rule: "close_location>=0.75;session_RVOL_baseline>=1.5;tail_RVOL_baseline>=1.5;0.8<=TR/ATR14<=2.2;minimum_two_comparable_sessions;two_to_four_low_sample_confidence",
+      evaluated_symbols: candidates.length,
+      source_gap_count: atrRvolSourceGapCount,
+      rejected_count: atrRvolRejectedCount,
+      confirmed_count: confirmedCandidates.length,
+      symbol_evidence: [...atrRvolBySymbol.entries()].map(([symbol, evidence]) => ({ symbol, ...evidence })),
+    },
     symbol_data_gap_rows: water.symbolDataGaps.size,
-    results: candidates,
+    results: confirmedCandidates,
   };
 }
 
@@ -478,6 +553,8 @@ async function main() {
           ready_20_candle_symbols: scanner.ready_20_candle_symbols,
           entry_window_symbols: scanner.entry_window_symbols,
           change_percent_gate: scanner.change_percent_gate,
+          technical_trend_gate: scanner.technical_trend_gate,
+          atr_rvol_gate: scanner.atr_rvol_gate,
           formal_ready_target: formalReadyTarget,
           mother_pool_coverage_ratio: round(motherPoolCoverageRatio, 4),
           minimum_mother_pool_coverage_ratio: MIN_MOTHER_POOL_COVERAGE_RATIO,
@@ -511,6 +588,8 @@ async function main() {
           ready_20_candle_symbols: scanner.ready_20_candle_symbols,
           entry_window_symbols: scanner.entry_window_symbols,
           change_percent_gate: scanner.change_percent_gate,
+          technical_trend_gate: scanner.technical_trend_gate,
+          atr_rvol_gate: scanner.atr_rvol_gate,
           formal_ready_target: formalReadyTarget,
           mother_pool_coverage_ratio: round(motherPoolCoverageRatio, 4),
           minimum_mother_pool_coverage_ratio: MIN_MOTHER_POOL_COVERAGE_RATIO,

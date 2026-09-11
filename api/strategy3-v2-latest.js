@@ -137,10 +137,10 @@ async function readSupabasePayload(dateDash, options = {}) {
   };
 }
 
-function payloadFromComplete({ source, runId, tradeDate, status, count, rows, scannerSummary, latestReadOnly = false }) {
+function payloadFromComplete({ source, runId, tradeDate, status, count, rows, scannerSummary, latestReadOnly = false, recoveryReplay = false }) {
   const readonlyHistory = latestReadOnly === true;
-  const displayMode = readonlyHistory ? "latest_readonly_history" : "strategy3_v2_complete_run";
-  const formalDisplayAllowed = !readonlyHistory;
+  const displayMode = readonlyHistory ? "latest_readonly_history" : recoveryReplay ? "recovery_replay_complete" : "strategy3_v2_complete_run";
+  const formalDisplayAllowed = !readonlyHistory && !recoveryReplay;
   const publishAllowed = !readonlyHistory;
   const unattendedStatus = readonlyHistory ? "HISTORY_ONLY" : "YES";
   const evidenceStatus = readonlyHistory ? "historical_readonly" : "complete";
@@ -159,7 +159,9 @@ function payloadFromComplete({ source, runId, tradeDate, status, count, rows, sc
     usedDate: tradeDate,
     dataDate: tradeDate,
     expectedTradeDate: tradeDate,
-    status: readonlyHistory ? "READONLY_HISTORY" : "complete",
+    status: readonlyHistory ? "READONLY_HISTORY" : recoveryReplay ? "RECOVERY_REPLAY_COMPLETE" : "complete",
+    recoveryReplay,
+    naturalSlotComplete: !recoveryReplay && !readonlyHistory,
     rawStatus: readonlyHistory ? "READONLY_HISTORY" : (status || "COMPLETE"),
     qualityStatus: readonlyHistory ? "historical_readonly" : "complete",
     evidenceStatus,
@@ -189,7 +191,7 @@ function payloadFromComplete({ source, runId, tradeDate, status, count, rows, sc
       runId,
       tradeDate,
       sourceDate: tradeDate,
-      moduleStatus: readonlyHistory ? "historical_readonly" : "complete",
+      moduleStatus: readonlyHistory ? "historical_readonly" : recoveryReplay ? "recovery_replay_complete" : "complete",
       todayAuthoritative: !latestReadOnly,
       formalDisplayAllowed,
       displayMode,
@@ -228,6 +230,7 @@ module.exports = async function strategy3V2Latest(request, response) {
       rows: supabase.rows,
       scannerSummary: supabase.run.coverage || {},
       latestReadOnly: supabase.latestReadOnly === true,
+      recoveryReplay: supabase.run?.source_chain?.recovery_replay === true || supabase.run?.formal_allowed === false,
     })));
   }
 

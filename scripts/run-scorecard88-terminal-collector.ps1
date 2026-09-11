@@ -20,7 +20,7 @@ $recoveryKey = ''
 if ($Recovery) {
   if ($ExpectedRunId -match '^strategy5-\d{8}-\d{14}$') { $recoveryKey = 'strategy5' }
   elseif ($ExpectedRunId -match '^strategy4-\d{8}-\d{14}$') { $recoveryKey = 'strategy4' }
-  elseif ($ExpectedRunId -match '^strategy3v2-\d{8}-\d{14}$') { $recoveryKey = 'strategy3' }
+  elseif ($ExpectedRunId -match '^strategy3v2-(?:recovery-replay-)?\d{8}-\d{14}$') { $recoveryKey = 'strategy3' }
   if ($recoveryKey) { $surfaceArgs += "--only=$recoveryKey" }
 }
 & node $surfaceEvidence @surfaceArgs
@@ -35,7 +35,7 @@ if ($surfaceEvidenceExit -notin @(0,3)) { exit $surfaceEvidenceExit }
 $verifierExit = $LASTEXITCODE
 if ($verifierExit -ne 0) { exit $verifierExit }
 if ($collectorExit -eq 3 -or $surfaceEvidenceExit -eq 3) { exit 3 }
-if ($Slot -eq '13:15') {
+if ($Slot -eq '13:15' -and $ExpectedRunId -notmatch '^strategy3v2-recovery-replay-') {
   $todayKey = Get-Date -Format 'yyyyMMdd'
   $collectionReceiptPath = Join-Path $RuntimeRoot "data\scan-receipts\scorecard88-collection-$todayKey-1315.json"
   $collectionReceipt = Get-Content -LiteralPath $collectionReceiptPath -Raw | ConvertFrom-Json
@@ -48,6 +48,8 @@ if ($Slot -eq '13:15') {
   . (Join-Path $ProjectRoot 'verify-post-scan-tri-surface.ps1')
   Assert-PostScanTriSurfaceClosure -Route 'strategy3' -RunId $strategy3RunId -LogPath $logPath -SkipPublication | Out-Null
   & node (Join-Path $ProjectRoot 'scripts\verify-strategy3-v2-daily-unattended-closure.js') "--trade-date=$((Get-Date).ToString('yyyy-MM-dd'))"
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  & node (Join-Path $ProjectRoot 'scripts\verify-strategy3-delivery.js')
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   & node (Join-Path $ProjectRoot 'scripts\finalize-strategy3-complete.js')
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
