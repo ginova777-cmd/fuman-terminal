@@ -512,7 +512,7 @@ async function setViewport(cdp, mode) {
   }
 }
 
-async function navigate(cdp, url) {
+async function navigate(cdp, url, { stopLoading = true } = {}) {
   cdp.events = cdp.events.filter((event) => !["Runtime.executionContextCreated"].includes(event.method));
   const contextReady = cdp.waitForEvent("Runtime.executionContextCreated", 45000).catch(() => null);
   await cdp.send("Page.navigate", { url }, 45000);
@@ -521,7 +521,7 @@ async function navigate(cdp, url) {
     ok: document.readyState === "interactive" || document.readyState === "complete",
     state: document.readyState,
   }), null, 45000, 500).catch(() => null);
-  await cdp.send("Page.stopLoading").catch(() => null);
+  if (stopLoading) await cdp.send("Page.stopLoading").catch(() => null);
   await sleep(1000);
   await cdp.send("Page.bringToFront").catch(() => null);
 }
@@ -2448,8 +2448,9 @@ function isCdpStartupError(error) {
 async function runStrategy3Scorecard(browser) {
   const cdp = await createTab(browser);
   try {
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(() => { const original = window.fetch.bind(window); window.__scorecardFetchErrors = []; window.fetch = async (...args) => { try { return await original(...args); } catch (error) { window.__scorecardFetchErrors.push({ path: new URL(typeof args[0] === 'string' ? args[0] : args[0].url, location.href).pathname, error: error.message, stack: error.stack }); throw error; } }; })();` });
     await setViewport(cdp, { width: 1440, height: 1000, mobile: false });
-    await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/88`));
+    await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/88`), { stopLoading: false });
     const selector = '#tabs button[data-strategy="策略3隔日沖成績單"]';
     await waitForSelector(cdp, selector, ROUTE_TIMEOUT_MS);
     await clickSelectorByDom(cdp, selector);
@@ -2478,6 +2479,10 @@ async function runStrategy3Scorecard(browser) {
   } catch (error) {
     return { kind: "scorecard", routeKey: "strategy3", theme: "night", ok: false,
       blockerMatches: [error.message], pageText: await evaluate(cdp, () => document.body.innerText.slice(0, 4000)).catch(() => ""),
+      networkErrors: cdp.events.filter(event => event.method === "Network.loadingFailed").map(event => ({ error: event.params?.errorText, blockedReason: event.params?.blockedReason, corsError: event.params?.corsErrorStatus })),
+      networkResponses: cdp.events.filter(event => event.method === "Network.responseReceived").map(event => ({ path: new URL(event.params.response.url).pathname, status: event.params.response.status })),
+      browserErrors: cdp.events.filter(event => event.method === "Log.entryAdded").map(event => event.params?.entry?.text),
+      fetchErrors: await evaluate(cdp, () => window.__scorecardFetchErrors || []).catch(() => []),
       screenshot: await screenshot(cdp, "scorecard-strategy3-failed.png").catch(() => null) };
   } finally { cdp.close(); }
 }

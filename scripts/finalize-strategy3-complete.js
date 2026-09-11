@@ -49,11 +49,11 @@ if (deliveryVerifier?.ok !== true || deliveryVerifier?.runId !== scan?.run_id ||
 const failureReason = process.argv.find(x => x.startsWith("--failure-reason="))?.slice(17) || "";
 const complete = !recordFailure && delivery.ok && (recoveryReplay ? recoveryComplete : (baseComplete && triComplete));
 const awaitingScorecard = !recordFailure && requestedAwaitingScorecard && baseComplete && !triComplete;
-const status = complete ? (recoveryReplay ? "recovery_replay_complete" : "complete") : awaitingScorecard ? "awaiting_scorecard_1315" : "failed";
+const status = complete ? "complete" : awaitingScorecard ? "awaiting_scorecard_1315" : "failed";
 const blockingReason = complete ? "" : failureReason || delivery.firstBlocker || (recoveryReplay ? "strategy3_recovery_replay_closure_not_complete" : awaitingScorecard ? "scorecard_collection_pending_1315" : !baseComplete ? "strategy3_base_closure_not_complete" : "strategy3_tri_surface_scorecard_not_complete");
 const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "strategy3", tradeDate: date,
   checkedAt: new Date().toISOString(), status, complete, exitCode: complete || awaitingScorecard ? 0 : 1,
-  blockingReason, fallback: false, recoveryReplay, naturalSlotComplete: !recoveryReplay && complete, warnings: [], triSurfaceStatus: triComplete && delivery.ok ? "complete" : "pending", failed_checks: delivery.issues, first_blocker: blockingReason || null,
+  blockingReason, fallback: false, recoveryReplay, completionKind: recoveryReplay ? "recovery_replay" : "natural_slot", naturalSlotComplete: !recoveryReplay && complete, warnings: [], triSurfaceStatus: triComplete && delivery.ok ? "complete" : "pending", failed_checks: delivery.issues, first_blocker: blockingReason || null,
   desktopRunId: tri?.desktopRunId || null, mobileRunId: tri?.mobileRunId || null, scorecardRunId: tri?.scorecardRunId || null,
   runId: scan?.run_id || null, count: Number(scan?.result_count || 0), matches: Number(scan?.result_count || 0), resultCount: Number(scan?.result_count || 0),
   scannedCount: Number(scan?.scanner_summary?.ready_20_candle_symbols || 0), expectedTotal: Number(scan?.scanner_summary?.formal_ready_target || 0), runner: "run-strategy3-v2-complete-scan.ps1",
@@ -66,9 +66,9 @@ const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "st
     scan: scan ? { ok: scan.ok, status: scan.status, apply: scan.apply, runId: scan.run_id, count: scan.result_count } : null,
     water: water ? { ok: water.ok, status: water.status, runId: water.run_id, canonicalRunId: water.canonical_run_id, source: water?.sources?.motherPool, motherPoolRows: water.mother_pool_rows, quoteValidRows: water.quote_valid_rows, intraday1mValidRows: water.intraday_1m_valid_rows, symbolDataGapRows: water.symbol_data_gap_rows, verifierOk: water.verifier_ok, firstBlocker: water.first_blocker } : null,
     triSurface: recoveryReplay ? (recoverySurface ? { ok: recoverySurface.ok, runId: recoveryRunId, terminalRunId: recoverySurface?.summary?.tabs?.strategy3?.terminal?.runId, mobileRunId: recoverySurface?.summary?.tabs?.strategy3?.mobileFragment?.runId, issues: recoverySurface.issues } : null) : (tri ? { complete: tri.complete, status: tri.status, runId: tri.runId, desktopRunId: tri.desktopRunId, mobileRunId: tri.mobileRunId, scorecardRunId: tri.scorecardRunId, expectedDate: tri.expectedDate, reason: tri.reason } : null),
-    surface: surface ? { ok: surface.ok, status: surface.status, runId: surface?.canonical_api?.runId } : null,
+    surface: recoveryReplay ? { ok: recoverySurface?.ok === true, runId: recoveryRunId } : surface ? { ok: surface.ok, status: surface.status, runId: surface?.canonical_api?.runId } : null,
     line: line ? { ok: line.ok, status: line.status, personal: line.line_push_personal_ok, group: line.line_push_group_ok, runId: line.run_id } : null,
-    daily: daily ? { ok: daily.ok, status: daily.status, firstBlocker: daily.first_blocker, runId: daily.run_id } : null } };
+    daily: !recoveryReplay && daily ? { ok: daily.ok, status: daily.status, firstBlocker: daily.first_blocker, runId: daily.run_id } : null } };
 if (!process.argv.includes("--status-only")) {
   fs.mkdirSync(receipts, { recursive: true });
   const prior = read(target);

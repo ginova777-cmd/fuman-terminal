@@ -71,7 +71,7 @@ function normalizeRow(source = {}, index = 0) {
     entry_price: entry,
     pct,
     change: pct,
-    percent: pct,
+    percent: cleanNumber(row.change_percent ?? row.changePercent ?? row.pct ?? row.percent),
     changePercent: row.change_percent ?? row.changePercent,
     stopPrice: row.stop_price ?? row.stopPrice,
     targetPrice: row.conservative_target_price ?? row.targetPrice,

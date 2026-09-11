@@ -66,6 +66,11 @@ try {
     Invoke-Required "desktop refresh" { & $pwshExe -NoProfile -File .\refresh-desktop-route-snapshot.ps1 -Source strategy3 }
     Invoke-Required "mobile refresh" { & $nodeExe --use-system-ca scripts\publish-mobile-fragment-snapshots.js --tabs=strategy3 }
     Invoke-Required "surface readback" { & $nodeExe --use-system-ca scripts\verify-strategy3-v2-surface-closure.js --write-receipt }
+    $priorSourceRole = $env:FUMAN_DAYTRADE_SOURCE_ROLE
+    try {
+      $env:FUMAN_DAYTRADE_SOURCE_ROLE = 'writer'
+      Invoke-Required "writer refreshes strategy priority bridge" { & $nodeExe --use-system-ca scripts\run-daytrade-source-writer.js --apply --refresh-strategy-priority-bridge }
+    } finally { $env:FUMAN_DAYTRADE_SOURCE_ROLE = $priorSourceRole }
     Invoke-Required "bridge authority" { & $nodeExe --use-system-ca scripts\verify-strategy3-mother-pool-warmup-authority.js }
     Invoke-Required "recovery authoritative DB verifier" { & $nodeExe --use-system-ca scripts\verify-strategy3-recovery-replay-complete.js }
     Invoke-Strategy3ScorecardPrepare -RunId $scan.run_id -ExpectedCount $scan.result_count
@@ -98,6 +103,7 @@ try {
     . "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
     Invoke-Required "strict API/desktop/mobile/scorecard closure" { Assert-PostScanTriSurfaceClosure -Route "strategy3" -RunId ([string]$scanReceipt.run_id) -LogPath $log | Out-Null }
     Invoke-Required "daily unattended verifier" { & $nodeExe "--use-system-ca" "scripts\verify-strategy3-v2-daily-unattended-closure.js" }
+    Invoke-Required "rendered desktop mobile and 88 UI" { & $nodeExe --use-system-ca scripts\verify-terminal-ui-e2e.js --only=desktop-night,mobile-phone-portrait-night --routes=strategy3 --skip-watchlist --require-content --include-scorecard "--out=$runtime\data\strategy3-ui" "--expected-run-id=$($scanReceipt.run_id)" "--expected-symbols=$((@($scanReceipt.results | ForEach-Object {$_.code}) -join ','))" --route-timeout=120000 --eval-timeout=60000 }
     Invoke-Required "complete delivery verifier" { & $nodeExe --use-system-ca scripts\verify-strategy3-delivery.js }
     Invoke-Required "canonical final receipt" { & $nodeExe "--use-system-ca" "scripts\finalize-strategy3-complete.js" }
     exit 0

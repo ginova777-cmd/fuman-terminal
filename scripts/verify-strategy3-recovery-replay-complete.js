@@ -80,6 +80,8 @@ async function main() {
     verifier_ok: failed.length === 0,
     receipt_written: true,
     mother_pool_rows: runner?.mother_pool_rows || 0,
+    universeCount: runner?.mother_pool_rows || 0,
+    scannedCount: runner?.scanner_summary?.ready_20_candle_symbols || 0,
     accepted_symbol_count: runner?.scanner_summary?.ready_20_candle_symbols || 0,
     coverage_ratio: runner?.scanner_summary?.mother_pool_coverage_ratio || 0,
     result_count: runner?.result_count || 0,

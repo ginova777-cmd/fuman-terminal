@@ -254,7 +254,7 @@ for (const file of writerFiles) {
   } else if (file === "scripts/run-strategy3-v2-complete-scan.js") {
     requireMarkers(file, [
       "strategy3_v2_same_day_1m_ready",
-      "local_fugle_daytrade_ws_candles+local_fugle_daytrade_ws_quotes",
+      "readCanonicalDaytradeWater",
       "publish_allowed",
     ]);
   } else {
