@@ -30,6 +30,7 @@ try {
   Invoke-Required "strategy requirements" { & $nodeExe "scripts\verify-institution-strategy-requirements.js" }
   Invoke-Required "formal payloads" { & $nodeExe "scripts\verify-institution-formal-payloads.js" }
   Invoke-Required "UI display" { & $nodeExe "scripts\verify-institution-ui-display.js" }
+  Invoke-Required "institution live data before scorecard publication" { & $nodeExe "--use-system-ca" "scripts\verify-institution-live-readback.js" }
   Invoke-Required "institution audited scorecard publication" {
     $institutionEvidence = Get-Content -LiteralPath (Join-Path $runtime "data\scan-receipts\institution.json") -Raw | ConvertFrom-Json
     if ($institutionEvidence.complete -ne $true -or $institutionEvidence.status -ne "complete") { throw "institution_not_complete_for_scorecard_publication" }

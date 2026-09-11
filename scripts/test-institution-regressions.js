@@ -8,3 +8,9 @@ const scanner=require(path.join(root,'scripts/scan-institution-cache'));assert.e
 const row={code:'2330',name:'台積電',foreign:100,trust:20,dealer:-30,total:90,foreignStreak:3,trustStreak:0,jointStreak:0,foreignTrustVolumePct:2,fiveDayAvgVolume:6000,runId:'institution-test',tradeDate:'2026-09-11',source:'TWSE T86',direction:'buy',dataContractSource:'institution-cache'};
 const shaped=require(path.join(root,'api/_http-cache')).shapeTopPayload({query:{compact:'1',limit:'60'}},{rows:[row]});for(const key of Object.keys(row))assert.deepEqual(shaped.rows[0][key],row[key],key+' lost in compact bundle');
 console.log('PASS official dealer exact header, source field quality incl zero/missing, all Institution bundle fields');
+const todaySource={sourceDates:{twse:'20260911',tpex:'20260911'},usedDate:'2026-09-11',errors:[]};
+assert.deepEqual(scanner.institutionSourceDateIssues(todaySource,'2026-09-11'),[]);
+assert(scanner.institutionSourceDateIssues({...todaySource,sourceDates:{twse:'20260911',tpex:'20260910'}},'2026-09-11').includes('tpex_source_date_not_today'));
+assert(scanner.institutionSourceDateIssues({...todaySource,sourceDates:{}},'2026-09-11').includes('twse_source_date_not_today'));
+assert(scanner.institutionSourceDateIssues({...todaySource,errors:['terminated']},'2026-09-11').includes('official_source_history_incomplete'));
+console.log('PASS both markets same-day and complete official history gate');
