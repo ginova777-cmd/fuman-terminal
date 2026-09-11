@@ -263,7 +263,7 @@ function rowBox(row, index, strategy) {
 function strategy4CompactTextBlocks(rows) {
   const selectedRows = [...rows]
     .sort((a, b) => cleanNumber(b.score) - cleanNumber(a.score) || cleanNumber(a.rank) - cleanNumber(b.rank))
-    .slice(0, 10);
+    .slice(0, 70);
   const grouped = new Map();
   for (const row of selectedRows) {
     const label = rowStrategyLabel(row, "strategy4").replace(/\+/g, "＋") || "其他策略";
@@ -287,6 +287,10 @@ function strategy4CompactTextBlocks(rows) {
       displayRank += 1;
       const zone = text(row.zone || row.zoneLabel, "-").slice(0, 1).toUpperCase();
       const accent = zone === "A" ? "#119b86" : zone === "B" ? "#c99d45" : "#668da3";
+      if (selectedRows.length > 26) {
+        output.push(boxText(`${rowCode(row)} ${rowName(row)}｜進場 ${rowEntryPrice(row)}\n目標 ${rowTargetPrice(row)}／停損 ${signedPrice(row.stopPrice ?? row.mutakiV17?.stopPrice ?? row.payload?.stopPrice)}｜${zone}區／score ${rowScore(row)}`, { size: "xs", color: "#173750", wrap: true }));
+        continue;
+      }
       output.push({
         type: "box",
         layout: "horizontal",
@@ -557,7 +561,7 @@ async function main() {
       visual_style: "cream-rounded-strategy-groups",
       grouping: "strategyLabel",
       ordering: "score_desc_then_source_rank_asc",
-      display_limit: 10,
+      display_limit: 70,
       hidden_sections: ["selected_count_metric", "highest_score_metric", "sorting_caption"],
       single_card: true,
     }),
@@ -575,6 +579,21 @@ async function main() {
   }
 
   const card = buildCard(strategy, payload, scanReceipt);
+  if (strategy === "strategy4") {
+    const texts = [];
+    const visit = (value) => {
+      if (!value || typeof value !== "object") return;
+      if (value.type === "text" && typeof value.text === "string") texts.push(value.text);
+      for (const child of Object.values(value)) {
+        if (Array.isArray(child)) child.forEach(visit);
+        else if (child && typeof child === "object") visit(child);
+      }
+    };
+    visit(card);
+    receipt.rendered_symbols = [...new Set(texts.map(value => value.match(/^(\d{4,6})\s/)?.[1]).filter(Boolean))];
+    receipt.rendered_count = receipt.rendered_symbols.length;
+    if (JSON.stringify([...receipt.rendered_symbols].sort()) !== JSON.stringify([...receipt.accepted_symbols].sort())) throw new Error("Strategy4 actual LINE card rows do not match accepted rows");
+  }
   if (!dryRun) {
     if (!lineEnv.token || invalidLineTarget(lineEnv.to)) throw new Error("Missing valid LINE token or target userId");
     const { sendLineFlex } = require(path.join(ROOT, "scripts", "line-push.js"));
