@@ -1,0 +1,9 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const {validate,scanReady}=require('./finalize-strategy4-receipt');
+function fixture(){const run='strategy4-20260911-test';return {run,e:{scan:{runId:run,scanComplete:true,status:'delivering',complete:false,exitCode:0,fallback:false,total:1605,scanned:1605,matches:2,triSurfaceStatus:'complete',desktopRunId:run,mobileRunId:run,scorecardRunId:run},daily:{ok:true,runId:run,count:2,scan:{complete:true},issues:[]},canonical:{ok:true,runId:run,issues:[]},line:{ok:true,runId:run,dry_run:false,line_push_ok:true,count:2,rendered_count:2,accepted_symbols:['1234','5678'],rendered_symbols:['5678','1234']},wrapper:{ok:true,run_id:run,status:'complete',first_blocker:null},verifier:{ok:true,run_id:run,status:'complete'}}};}
+test('verified delivery allows final transition',()=>{const {run,e}=fixture();assert.deepEqual(validate(e,run),[]);assert.equal(e.scan.complete,false)});
+for(const key of ['daily','canonical','line','wrapper','verifier'])test('interrupted before '+key+' cannot complete',()=>{const {run,e}=fixture();delete e[key];assert.ok(validate(e,run).length)});
+for(const key of ['daily','canonical','line','wrapper','verifier'])test('previous-run '+key+' cannot complete',()=>{const {run,e}=fixture();e[key][['wrapper','verifier'].includes(key)?'run_id':'runId']='previous';assert.ok(validate(e,run).length)});
+test('truncated LINE cannot complete',()=>{const {run,e}=fixture();e.line.rendered_symbols=['1234'];assert.ok(validate(e,run).length)});
+test('partial scan and incomplete surface cannot enter finalization',()=>{const {run,e}=fixture();e.scan.scanned=1500;assert.equal(scanReady(e.scan,run),false);e.scan.scanned=1605;e.scan.mobileRunId='previous';assert.equal(scanReady(e.scan,run),false)});
+test('already-complete flag cannot replace staged scan evidence',()=>{const {run,e}=fixture();e.scan.status='complete';e.scan.complete=true;assert.equal(scanReady(e.scan,run),false)});

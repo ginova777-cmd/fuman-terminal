@@ -4,6 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
+const { scanReady } = require("./finalize-strategy4-receipt");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -74,7 +75,8 @@ function main() {
   if (expectedRunId && runId !== expectedRunId) issues.push(`expected_run_id_mismatch:${runId || "missing"}:${expectedRunId}`);
   if (expectedCount > 0 && count !== expectedCount) issues.push(`expected_count_mismatch:${count}:${expectedCount}`);
 
-  if (scan.complete !== true || String(scan.status || "") !== "complete") issues.push(`scan_receipt_not_complete:${scan.status || "missing"}`);
+  const finalizing = process.argv.includes("--finalizing-scan") && !!expectedRunId && scanReady(scan, expectedRunId);
+  if (!finalizing && (scan.complete !== true || String(scan.status || "") !== "complete")) issues.push(`scan_receipt_not_complete:${scan.status || "missing"}`);
   if (String(scan.runId || "") !== runId) issues.push(`scan_receipt_run_id_mismatch:${scan.runId || "missing"}:${runId || "missing"}`);
   if (number(closure.expectedTotal) <= 1500 || number(closure.scannedCount) !== number(closure.expectedTotal)) issues.push(`scan_not_full_universe:${closure.scannedCount || 0}/${closure.expectedTotal || 0}`);
   if (number(scan.matches) !== count) issues.push(`scan_match_count_mismatch:${scan.matches || 0}:${count}`);
@@ -101,7 +103,7 @@ function main() {
     runId,
     count,
     source: "fugle_snapshot",
-    scan: { runId: scan.runId || "", scanned: number(closure.scannedCount), total: number(closure.expectedTotal), matches: number(scan.matches), complete: scan.complete === true },
+    scan: { runId: scan.runId || "", scanned: number(closure.scannedCount), total: number(closure.expectedTotal), matches: number(scan.matches), complete: scan.complete === true || finalizing },
     formalLine: { runId: line.runId || "", count: number(line.count), dataDate: line.dataDate || "", line_push_ok: line.line_push_ok === true, dry_run: line.dry_run === true, layoutContract: line.layout_contract || "", singleCard: line.single_card === true, grouping: line.grouping || "", ordering: line.ordering || "", hiddenSections },
     files: { closureFile, scanFile, lineFile },
     issues,
