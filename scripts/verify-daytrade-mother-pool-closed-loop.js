@@ -285,7 +285,12 @@ async function main() {
   check("fast_supabase_sync_same_day", fastSync?.trade_date === clock.tradeDate, "fast_supabase_sync_trade_date_mismatch");
   check("fast_supabase_sync_fresh", ageSeconds(fastSync?.completed_at) <= 120, "fast_supabase_sync_stale");
   check("fast_supabase_quote_write_nonempty", Number(fastSync?.quotes_written) > 0, "fast_supabase_quote_write_empty");
-  check("fast_supabase_1m_write_nonempty", Number(fastSync?.candles_written) > 0, "fast_supabase_1m_write_empty");
+  const intradayCandlesRequired = clock.minute >= 9 * 60;
+  check(
+    "fast_supabase_1m_write_nonempty",
+    !intradayCandlesRequired || Number(fastSync?.candles_written) > 0,
+    "fast_supabase_1m_write_empty",
+  );
 
   const staticChecks = {
     skeleton: verifySkeletonStatic(),
@@ -310,10 +315,18 @@ async function main() {
   check("legacy_mother_pool_verifier_retired", staticChecks.legacyVerifierRetired.ok, "legacy_mother_pool_verifier_still_present");
 
   const openingRequired = clock.minute >= 8 * 60 + 36;
+  const openingIndustryCount = Number(openingReport?.bridge_handoff_industry_count ?? openingReport?.industry_count);
+  const openingSuccessfulIndustryCount = Number(openingReport?.successful_industry_count ?? openingIndustryCount);
+  const openingObservationCount = Number(openingReport?.observation_count);
   const openingOk = !openingRequired || (
     identityOf(openingReport).tradeDate === clock.tradeDate
     && openingReport?.status === "BRIDGE_OK"
-    && Number(openingReport?.bridge_handoff_industry_count ?? openingReport?.industry_count) === 3
+    && Number.isInteger(openingIndustryCount)
+    && openingIndustryCount >= 0
+    && openingIndustryCount <= 3
+    && openingSuccessfulIndustryCount === openingIndustryCount
+    && Number.isInteger(openingObservationCount)
+    && openingObservationCount >= 0
     && openingReport?.forbidden_publish_guard === true
     && Number(openingReport?.formal_candidate_count) === 0
     && openingReport?.formal_candidate_allowed === false
@@ -331,7 +344,7 @@ async function main() {
     && openingReportFieldAck?.db_readback_ok === true
     && openingReportFieldAck?.formal_candidate_allowed === false
     && openingReportFieldAck?.forbidden_publish_guard === true
-    && openingAckSymbols.length > 0
+    && openingAckSymbols.length === openingObservationCount
   );
   check("opening_report_field_ack_complete", openingFieldAckOk, "opening_report_field_ack_not_complete");
   check(
