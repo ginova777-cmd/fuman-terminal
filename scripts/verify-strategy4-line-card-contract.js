@@ -30,6 +30,9 @@ function main() {
     ["same_day", runner.dateAligned === true && String(runner.dataDate) === date],
     ["run_id", Boolean(runner.runId)],
     ["count_matches_rows", Number(runner.count) > 0 && Number(runner.count) === rows.length],
+    ["rendered_card_matches_rows", Number(runner.rendered_count) === rows.length
+      && Array.isArray(runner.rendered_symbols)
+      && JSON.stringify([...runner.rendered_symbols].sort()) === JSON.stringify(rows.map(row => String(row.code)).sort())],
     ["all_rows_identified", rows.every((row) => row.code && row.name && row.strategyLabel)],
     ["all_rows_grouped", rows.every((row) => /^[ABC]/i.test(String(row.zone || row.zoneLabel || "")))],
     ["zone_counts_match", ["A", "B", "C"].every((key) => Number(runner.zone_counts?.[key]) === computedZones[key])],
