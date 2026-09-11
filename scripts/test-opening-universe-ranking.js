@@ -17,5 +17,6 @@ report.symbol_count=3;fs.writeFileSync(path.join(root,'inspection.json'),JSON.st
 const csv=path.join(root,'ranking.csv');
 const r=spawnSync('pwsh',['-NoProfile','-File',path.join(__dirname,'../ops/Show-OpeningPredictionRanking.ps1'),'-Once','-InputDirectory',root,'-OpeningLimitOrderDirectory',root,'-OpeningReportDirectory',root,'-OpeningStrategyInspectionPath',path.join(root,'inspection.json'),'-OutputCsv',csv,'-Top','3'],{encoding:'utf8',windowsHide:true});
 fs.writeFileSync(path.join(root,'console.log'),r.stdout+r.stderr);assert.equal(r.status,0,r.stderr);
+assert(r.stdout.includes('開盤入策略')&&r.stdout.includes('策略2、策略3、策略8'),'Rendered strategy column must remain visible');
 const check=spawnSync('pwsh',['-NoProfile','-Command',`$r=Import-Csv -LiteralPath '${csv.replace(/'/g,"''")}'; if($r.Count -ne 3 -or $r[0].Code -ne '2481' -or $r[0].OpeningStrategyCount -ne '3' -or $r[1].Code -ne '2330'){throw 'Ranking incorrect'}; if($r | Where-Object Direction){throw 'Diagnostic published direction'}`],{encoding:'utf8',windowsHide:true});
 assert.equal(check.status,0,check.stderr);console.log('PASS: single-source inclusion, strategy-first ranking, missing versus false prerequisites, no prediction');

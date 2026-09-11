@@ -927,7 +927,7 @@ if ($ranked.Count -eq 0) {
             elseif (-not $_.Direction) { $prefix + "等待08:50有效凍結結果，或未列入本次預言" }
             else { $prefix + "-" }
         } } |
-        Format-Table -AutoSize | Out-String -Width 400 | Write-Host
+        Format-Table -Property * -AutoSize | Out-String -Width 400 | Write-Host
 }
 
 if ($OutputCsv) {
