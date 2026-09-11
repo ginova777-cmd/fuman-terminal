@@ -25,7 +25,8 @@ function number(value) { const parsed = Number(value); return Number.isFinite(pa
 
 function main() {
   const expectedDate = compactDate(parseOption("date")) || taipeiDateKey();
-  const expectedRunId = parseOption("expect-run-id");
+  const expectedRunId = parseOption("expect-run-id") || String(process.env.EXPECTED_STRATEGY4_RUN_ID || "").trim();
+  if (expectedRunId) process.env.EXPECTED_STRATEGY4_RUN_ID = expectedRunId;
   const expectedCount = number(parseOption("expect-count"));
   const issues = [];
 

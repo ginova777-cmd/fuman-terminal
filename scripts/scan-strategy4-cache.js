@@ -121,6 +121,18 @@ const REQUIRED_MUTAKI_FIELDS = [
   "fibRatio",
   "bias20",
   "rsi14",
+  "rsi14Prev",
+  "kdK",
+  "kdD",
+  "kdPrevK",
+  "kdPrevD",
+  "kdTrendUp",
+  "kdGoldenCross",
+  "rsi4",
+  "rsi6",
+  "rsiTrendUp",
+  "rsiGoldenCross",
+  "dailyTechnicalGateOk",
   "atr14",
   "entryPrice",
   "stopPrice",
@@ -1265,14 +1277,21 @@ const STRATEGY4_OBSERVATION_ONLY_SIGNAL_IDS = new Set([
   "full_scan_watch",
   "below_20d_high_8",
   "lower_half_60d",
+  "daily_kd_rsi_trend_up",
 ]);
 
 function strategy4ActionableSignals(item = {}) {
   return strategy4Signals(item).filter((signal) => !STRATEGY4_OBSERVATION_ONLY_SIGNAL_IDS.has(String(signal?.id || "").trim()));
 }
 
+function strategy4DailyTechnicalGateOk(item = {}) {
+  const gate = item.dailyTechnicalGate && typeof item.dailyTechnicalGate === "object" ? item.dailyTechnicalGate : {};
+  const mutaki = item.mutakiV17 && typeof item.mutakiV17 === "object" ? item.mutakiV17 : {};
+  return require("../lib/strategy4-v3-evidence").dailyTechnicalGateValid(item);
+}
+
 function strategy4IsActionable(item = {}) {
-  return strategy4ActionableSignals(item).length > 0;
+  return strategy4DailyTechnicalGateOk(item) && strategy4ActionableSignals(item).length > 0;
 }
 
 function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, dataSourceCounts, complete, runMode, scanStamp, volumeFilter, quoteLiquidityFilter, supabaseCoverage, insufficientHistory = [] }) {
@@ -1369,7 +1388,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     fallbackAllowed: false,
     fallbackDetails: [],
     fallbackContract: STRATEGY4_FALLBACK_CONTRACT,
-    resultContract: "strategy4_actionable_patterns_avg5_3000_v2",
+    resultContract: "strategy4_actionable_patterns_avg5_3000_daily_kd_rsi_trend_gate_v3",
     liquidityContract: "avg5_volume_gte_3000_lots_v1",
     dataGapContract: "target_date_coverage_gte_90_exclude_stale_v1",
     generatedAt: new Date().toISOString(),

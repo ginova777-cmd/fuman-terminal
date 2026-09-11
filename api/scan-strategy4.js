@@ -507,7 +507,7 @@ function emaSeries(values, length) {
 
 function kdSnapshot(rows, period = 5, smooth = 3) {
   if (!Array.isArray(rows) || rows.length < period + 1) {
-    return { k: 50, d: 50, prevK: 50, prevD: 50, goldenCross: false };
+    return { k: 50, d: 50, prevK: 50, prevD: 50, goldenCross: false, trendUp: false };
   }
   let k = 50;
   let d = 50;
@@ -532,6 +532,23 @@ function kdSnapshot(rows, period = 5, smooth = 3) {
     prevK,
     prevD,
     goldenCross: prevK <= prevD && k > d,
+    trendUp: k > prevK && d >= prevD,
+  };
+}
+
+function rsiCrossSnapshot(values, fastLength = 4, slowLength = 6) {
+  const fast = rsi(values, fastLength);
+  const slow = rsi(values, slowLength);
+  const prevValues = values.slice(0, -1);
+  const prevFast = rsi(prevValues, fastLength);
+  const prevSlow = rsi(prevValues, slowLength);
+  return {
+    fast,
+    slow,
+    prevFast,
+    prevSlow,
+    trendUp: fast > prevFast && slow >= prevSlow,
+    goldenCross: prevFast <= prevSlow && fast > slow,
   };
 }
 function rsi(values, length = 14) {
@@ -903,6 +920,27 @@ function analyzeRows(rows) {
   const volMa20 = sma(volumes, 20);
   const macd = macdSnapshot(closes);
   const rsi14 = rsi(closes, 14);
+  const rsi14Prev = rsi(closes.slice(0, -1), 14);
+  const kd5 = kdSnapshot(normalizedRows, 5, 3);
+  const rsi46 = rsiCrossSnapshot(closes, 4, 6);
+  const dailyTechnicalGate = {
+    contract: "strategy4_daily_kd_rsi_trend_gate_v1",
+    ok: kd5.trendUp === true && rsi14 > rsi14Prev,
+    kdTrendUp: kd5.trendUp === true,
+    rsiTrendUp: rsi14 > rsi14Prev,
+    kdGoldenCross: kd5.goldenCross === true,
+    rsiGoldenCross: rsi46.goldenCross === true,
+    kdK: Number(kd5.k.toFixed(2)),
+    kdD: Number(kd5.d.toFixed(2)),
+    kdPrevK: Number(kd5.prevK.toFixed(2)),
+    kdPrevD: Number(kd5.prevD.toFixed(2)),
+    rsi14: Number(rsi14.toFixed(2)),
+    rsi14Prev: Number(rsi14Prev.toFixed(2)),
+    rsi4: Number(rsi46.fast.toFixed(2)),
+    rsi6: Number(rsi46.slow.toFixed(2)),
+    rsi4Prev: Number(rsi46.prevFast.toFixed(2)),
+    rsi6Prev: Number(rsi46.prevSlow.toFixed(2)),
+  };
   const atr14 = atr(rows, 14);
   const wallet = walletSnapshot(normalizedRows);
   const lookback = normalizedRows.slice(-40);
@@ -955,6 +993,10 @@ function analyzeRows(rows) {
     volumeRatio,
     macd,
     rsi14,
+    rsi14Prev,
+    kd5,
+    rsi46,
+    dailyTechnicalGate,
     atr14,
     wallet,
     stage,
@@ -1026,6 +1068,7 @@ function calcBuyStreak(rows, ma20, volMa20) {
 function scanStrategy4(code, market, rows, priceSource = "") {
   const daily = analyzeRows(rows);
   if (!daily) return null;
+  if (daily.dailyTechnicalGate?.ok !== true) return null;
   const last = daily.last;
   const prev = daily.prev;
   const isRed = last.close > last.open;
@@ -1132,6 +1175,12 @@ function scanStrategy4(code, market, rows, priceSource = "") {
       reason: `主力爸爸錢包量能紅K交叉${daily.wallet.volumeCrossDate ? `（${daily.wallet.volumeCrossDate}）` : ""}：5日資金量均線 ${Math.round(daily.wallet.volumeMa5).toLocaleString("zh-TW")} 上穿 60日 ${Math.round(daily.wallet.volumeMa60).toLocaleString("zh-TW")}。`,
     });
   }
+  signals.push({
+    id: "daily_kd_rsi_trend_up",
+    short: "日KD/RSI",
+    icon: daily.dailyTechnicalGate.kdGoldenCross || daily.dailyTechnicalGate.rsiGoldenCross ? "✦" : "↑",
+    reason: `日K KD(5,3)與RSI趨勢向上；KD K/D ${daily.dailyTechnicalGate.kdK}/${daily.dailyTechnicalGate.kdD}，RSI14 ${daily.dailyTechnicalGate.rsi14Prev}→${daily.dailyTechnicalGate.rsi14}。`,
+  });
 
   const aboveMa20 = last.close > daily.ma20;
   const nearMa20 = daily.ma20 ? Math.abs((last.close - daily.ma20) / daily.ma20) <= 0.06 : false;
@@ -1259,9 +1308,13 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     signals,
     triangleBreakout,
     elliottWave,
+    dailyTechnicalGate: daily.dailyTechnicalGate,
     patternTags: [
       ...(triangleBreakout.detected ? ["triangle_breakout"] : []),
       ...(["confirmed", "probable"].includes(elliottWave.status) ? ["elliott_wave"] : []),
+      "daily_kd_rsi_trend_up",
+      ...(daily.dailyTechnicalGate.kdGoldenCross ? ["daily_kd_golden_cross"] : []),
+      ...(daily.dailyTechnicalGate.rsiGoldenCross ? ["daily_rsi_4_6_golden_cross"] : []),
     ],
     wallet: {
       mf: Math.round(daily.wallet.mf),
@@ -1297,6 +1350,18 @@ function scanStrategy4(code, market, rows, priceSource = "") {
       fibRatio: currentFibRatio,
       bias20: Number(daily.bias20.toFixed(2)),
       rsi14: Number(daily.rsi14.toFixed(2)),
+      rsi14Prev: Number(daily.rsi14Prev.toFixed(2)),
+      kdK: daily.dailyTechnicalGate.kdK,
+      kdD: daily.dailyTechnicalGate.kdD,
+      kdPrevK: daily.dailyTechnicalGate.kdPrevK,
+      kdPrevD: daily.dailyTechnicalGate.kdPrevD,
+      kdTrendUp: daily.dailyTechnicalGate.kdTrendUp,
+      kdGoldenCross: daily.dailyTechnicalGate.kdGoldenCross,
+      rsi4: daily.dailyTechnicalGate.rsi4,
+      rsi6: daily.dailyTechnicalGate.rsi6,
+      rsiTrendUp: daily.dailyTechnicalGate.rsiTrendUp,
+      rsiGoldenCross: daily.dailyTechnicalGate.rsiGoldenCross,
+      dailyTechnicalGateOk: daily.dailyTechnicalGate.ok,
       atr14: Number(daily.atr14.toFixed(2)),
       entryPrice: Number(entryPrice.toFixed(2)),
       stopPrice: Number(stopPrice.toFixed(2)),
