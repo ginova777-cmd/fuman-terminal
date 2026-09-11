@@ -93,11 +93,23 @@ const CONTRACTS = [
       ),
       resultTable("strategy3_v2_scan_results", ["run_id", "trade_date", "code", "name", "rank", "score", "complete", "quality_status", "payload", "created_at"], "created_at.desc"),
       sourceTable("v_fugle_daytrade_mother_pool_v4_1", [
-        "symbol", "name", "trade_date", "mother_pool_rank", "contract_version", "canonical_run_id", "source_updated_at"
-      ], { order: "mother_pool_rank.asc", requireToday: true, minRows: 1, purpose: "Strategy3 V2 authoritative Mother Pool v4.1 membership" }),
-      sourceTable("fugle_daytrade_intraday_1m", [
-        "symbol", "trade_date", "candle_time", "open", "high", "low", "close", "volume", "updated_at"
-      ], { order: "candle_time.desc", requireToday: true, minRows: 1, purpose: "Strategy3 V2 direct one-minute candle water" }),
+        "contract_version", "trade_date", "canonical_run_id", "writer_run_id", "generation_id", "symbol", "name", "market",
+        "source_name", "source_trade_date", "source_updated_at", "source_freshness", "mother_pool_rank", "priority_rank",
+        "mother_pool_score", "priority_score", "entry_score", "upgrade_score", "priority_reason", "priority_reasons",
+        "mother_reason", "mother_source", "pool_source", "pool_layer", "source_flags", "source_run_ids",
+        "mother_readiness_status", "is_formal_entry_eligible", "price", "open_price", "previous_close", "high_price", "low_price",
+        "change_percent", "total_volume", "trade_value", "avg_volume5", "quote_trade_date", "quote_seen_at", "quote_age_seconds",
+        "last_trade_time", "last_trade_age_seconds", "latest_candle_time", "intraday_1m_stale_seconds", "mother_updated_at",
+        "pool_updated_trade_date", "sector_name", "sector_strength_score", "sector_member_active_count",
+        "industry_signal_fast_injected", "industry_signal_fast_inject_industries", "ma5", "ma10", "ma20", "ma5_ma10_ma20_bullish", "updated_at"
+      ], { order: "symbol.asc", requireToday: true, minRows: 1, purpose: "Strategy3 V2 Mother Pool v4.1 membership and lineage" }),
+      sourceTable("v_fugle_daytrade_mother_pool_receipt_v4_1", [
+        "verification_run_id", "contract_version", "trade_date", "canonical_run_id", "verified_at", "complete", "mother_pool_rows", "failed_checks", "first_blocker"
+      ], { order: "verified_at.desc", requireToday: true, minRows: 1, purpose: "Strategy3 V2 Mother Pool v4.1 producer receipt" }),
+      sourceTable("fugle_daytrade_quotes_live", [
+        "symbol", "trade_date", "name", "market", "price", "open_price", "previous_close", "high_price", "low_price",
+        "change_percent", "total_volume", "trade_value", "quote_seen_at", "last_trade_time", "updated_at"
+      ], { order: "symbol.asc", requireToday: true, minRows: 1, purpose: "Strategy3 V2 same-day quote evidence" }),
     ],
   },
   {
