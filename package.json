@@ -78,6 +78,7 @@
     "verify:stock-master-sync": "node --use-system-ca scripts/verify-stock-master-sync.js",
     "verify:daytrade-mother-pool-closed-loop": "node scripts/verify-daytrade-mother-pool-closed-loop.js",
     "verify:daytrade-mother-pool-closed-loop:receipt": "node scripts/verify-daytrade-mother-pool-closed-loop.js --write-receipt",
+    "verify:daytrade-mother-pool-snapshot": "node scripts/verify-daytrade-mother-pool-snapshot-contract.js",
     "verify:daytrade-strategy3-attribution": "node scripts/verify-daytrade-strategy3-independent-attribution.js",
     "verify:daytrade-strategy3-attribution:receipt": "node scripts/verify-daytrade-strategy3-independent-attribution.js --write-receipt",
     "verify:daytrade-ma20-preopen-warmup": "node scripts/verify-daytrade-ma20-preopen-warmup.js",

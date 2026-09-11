@@ -30,6 +30,8 @@ const SUPABASE_URL = (process.env.SUPABASE_URL || process.env.FUMAN_SUPABASE_URL
 const STATE_FILE = statePath("daytrade-source-writer-state.json");
 const ENRICHMENT_PENDING_STATE_FILE = statePath("daytrade-source-writer-enrichment-pending.json");
 const MOTHER_POOL_DELTA_STATE_FILE = statePath("daytrade-mother-pool-delta.json");
+const MOTHER_POOL_SNAPSHOT_FILE = statePath("daytrade-mother-pool-snapshot-latest.json");
+const MOTHER_POOL_SNAPSHOT_RECEIPT_DIR = runtimePath("data", "scan-receipts");
 const INTRADAY_BURST_TELEGRAM_OUTBOX_FILE = statePath("daytrade-intraday-burst-telegram-outbox.json");
 const STOCK_MASTER_RECEIPT_FILE = runtimePath("data", "scan-receipts", "stock-master-sync-wrapper.json");
 const INDUSTRY_SIGNAL_FAST_INJECT_FILE = statePath("daytrade-industry-signal-fast-inject.json");
@@ -2851,6 +2853,122 @@ function canonicalDaytradeRunId(tradeDate = taipeiDate()) {
   return `fugle_daytrade_source:${compactDateKey(tradeDate)}:canonical`;
 }
 
+function motherPoolSnapshotType(sequence, effectiveAt) {
+  const minutes = taipeiClockMinutesFrom(effectiveAt || nowIso());
+  if (minutes >= 13 * 60 + 30) return "CLOSEOUT_SNAPSHOT";
+  if (sequence <= 1 || minutes < 9 * 60) return "OPENING_SNAPSHOT";
+  return "INTRADAY_FULL_SNAPSHOT";
+}
+
+function buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunId, generatedAt) {
+  const cleanSymbols = [...new Set((symbols || [])
+    .map((symbol) => normalizeCode(symbol))
+    .filter((symbol) => /^\d{4}$/.test(symbol)))].sort();
+  const previous = readJson(MOTHER_POOL_SNAPSHOT_FILE, {});
+  const previousSameDay = String(previous.trade_date || previous.tradeDate || "").slice(0, 10) === tradeDate
+    && String(previous.canonical_run_id || previous.canonicalRunId || "") === canonicalRunId;
+  const previousSymbols = previousSameDay && Array.isArray(previous.symbols)
+    ? [...new Set(previous.symbols.map((symbol) => normalizeCode(symbol)).filter(Boolean))].sort()
+    : [];
+  const previousSet = new Set(previousSymbols);
+  const nextSet = new Set(cleanSymbols);
+  const addedSymbols = cleanSymbols.filter((symbol) => !previousSet.has(symbol));
+  const removedSymbols = previousSymbols.filter((symbol) => !nextSet.has(symbol));
+  const changed = !previousSameDay
+    || addedSymbols.length > 0
+    || removedSymbols.length > 0
+    || Number(previous.symbol_count || previous.symbolCount || 0) !== cleanSymbols.length;
+  const previousSequence = previousSameDay ? Number(previous.snapshot_sequence || previous.snapshotSequence || 0) : 0;
+  const snapshotSequence = changed ? previousSequence + 1 : Math.max(1, previousSequence);
+  const motherPoolRunId = changed
+    ? `${canonicalRunId}:mother_pool_snapshot:${String(snapshotSequence).padStart(4, "0")}`
+    : String(previous.run_id || previous.mother_pool_run_id || `${canonicalRunId}:mother_pool_snapshot:${String(snapshotSequence).padStart(4, "0")}`);
+  const effectiveAt = changed ? generatedAt : String(previous.effective_at || previous.effectiveAt || generatedAt);
+  const priorMembership = new Map();
+  if (Array.isArray(previous.symbol_membership)) {
+    for (const item of previous.symbol_membership) {
+      const symbol = normalizeCode(item?.symbol);
+      if (symbol) priorMembership.set(symbol, item);
+    }
+  }
+  const rowBySymbol = new Map((priorityRows || []).map((row) => [normalizeCode(row?.symbol), row]));
+  const minutes = taipeiClockMinutesFrom(effectiveAt);
+  const intradayAdded = minutes >= 9 * 60 && minutes < 13 * 60 + 30;
+  const symbolMembership = cleanSymbols.map((symbol) => {
+    const row = rowBySymbol.get(symbol) || {};
+    const previousItem = priorMembership.get(symbol) || {};
+    const newlyAdded = addedSymbols.includes(symbol) || !previousSameDay;
+    const membershipStatus = newlyAdded && intradayAdded ? "PENDING_DOWNSTREAM_WARMUP" : "ACTIVE";
+    return {
+      symbol,
+      trade_date: tradeDate,
+      mother_pool_run_id: motherPoolRunId,
+      mother_pool_snapshot_sequence: snapshotSequence,
+      membership_status: membershipStatus,
+      membership_effective_at: newlyAdded ? effectiveAt : String(previousItem.membership_effective_at || previousItem.added_at || effectiveAt),
+      added_at: newlyAdded ? effectiveAt : String(previousItem.added_at || previousItem.membership_effective_at || effectiveAt),
+      removed_at: null,
+      source_reason: Array.isArray(row.poolReasons) ? row.poolReasons.join("|") : String(row.poolReason || row.priorityReason || row.payload?.priorityReason || ""),
+      source_updated_at: String(row.updated_at || row.payload?.updated_at || generatedAt),
+    };
+  });
+  const removedMembership = removedSymbols.map((symbol) => {
+    const previousItem = priorMembership.get(symbol) || {};
+    return {
+      symbol,
+      trade_date: tradeDate,
+      mother_pool_run_id: motherPoolRunId,
+      mother_pool_snapshot_sequence: snapshotSequence,
+      membership_status: "REMOVED",
+      membership_effective_at: String(previousItem.membership_effective_at || previousItem.added_at || effectiveAt),
+      added_at: String(previousItem.added_at || previousItem.membership_effective_at || ""),
+      removed_at: effectiveAt,
+      source_reason: String(previousItem.source_reason || "removed_from_current_mother_pool"),
+      source_updated_at: generatedAt,
+    };
+  });
+  return {
+    contract: "daytrade_mother_pool_snapshot_v1",
+    contract_version: MOTHER_POOL_CONTRACT_VERSION,
+    trade_date: tradeDate,
+    canonical_run_id: canonicalRunId,
+    run_id: motherPoolRunId,
+    mother_pool_run_id: motherPoolRunId,
+    generated_at: generatedAt,
+    effective_at: effectiveAt,
+    snapshot_sequence: snapshotSequence,
+    snapshot_type: motherPoolSnapshotType(snapshotSequence, effectiveAt),
+    status: "complete",
+    complete: true,
+    symbol_count: cleanSymbols.length,
+    symbols: cleanSymbols,
+    added_symbols: addedSymbols,
+    removed_symbols: removedSymbols,
+    previous_run_id: previousSameDay ? String(previous.run_id || previous.mother_pool_run_id || "") : "",
+    source_max_updated_at: (priorityRows || []).map((row) => String(row.updated_at || row.payload?.updated_at || "")).filter(Boolean).sort().at(-1) || generatedAt,
+    first_blocker: null,
+    exit_code: 0,
+    symbol_membership: [...symbolMembership, ...removedMembership],
+    downstream_warmup_pending_symbols: symbolMembership.filter((item) => item.membership_status === "PENDING_DOWNSTREAM_WARMUP").map((item) => item.symbol),
+    downstream_warmup_policy: "intraday_added_symbols_are_pending_until_1m_and_5m_batches_observe_the_same_mother_pool_run_id_or_later_snapshot",
+    read_interface: {
+      latest_complete_snapshot: MOTHER_POOL_SNAPSHOT_FILE,
+      fixed_snapshot_by_run_id: "read receipt where run_id equals mother_pool_run_id",
+      delta_fields: ["added_symbols", "removed_symbols"],
+      per_symbol_effective_time: "symbol_membership[].membership_effective_at",
+    },
+  };
+}
+
+function publishMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunId) {
+  const generatedAt = nowIso();
+  const snapshot = buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunId, generatedAt);
+  const receiptPath = path.join(MOTHER_POOL_SNAPSHOT_RECEIPT_DIR, `daytrade-mother-pool-snapshot-${compactDateKey(tradeDate)}-${String(snapshot.snapshot_sequence).padStart(4, "0")}.json`);
+  writeJson(MOTHER_POOL_SNAPSHOT_FILE, snapshot);
+  writeJson(receiptPath, { ...snapshot, receipt_path: receiptPath });
+  return snapshot;
+}
+
 function artifactTradeDate(value) {
   return String(value?.tradeDate || value?.trade_date || value?.date || "").slice(0, 10);
 }
@@ -4247,6 +4365,12 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
       ...bridgeWarmupSymbols,
     ],
   );
+  const motherPoolSnapshot = publishMotherPoolSnapshot(
+    priceEligiblePriorityRows,
+    daytradeMotherPoolSymbols,
+    tradeDate,
+    canonicalRunId,
+  );
   const nextPriorityPayload = {
     ...currentExisting,
     ...bridgeFields,
@@ -4260,6 +4384,23 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     canonical_run_id: canonicalRunId,
     contract_version: MOTHER_POOL_CONTRACT_VERSION,
     motherPoolContractVersion: MOTHER_POOL_CONTRACT_VERSION,
+    motherPoolSnapshotContract: motherPoolSnapshot.contract,
+    motherPoolSnapshotRunId: motherPoolSnapshot.run_id,
+    mother_pool_run_id: motherPoolSnapshot.run_id,
+    motherPoolSnapshotSequence: motherPoolSnapshot.snapshot_sequence,
+    mother_pool_snapshot_sequence: motherPoolSnapshot.snapshot_sequence,
+    motherPoolSnapshotType: motherPoolSnapshot.snapshot_type,
+    mother_pool_snapshot_type: motherPoolSnapshot.snapshot_type,
+    motherPoolGeneratedAt: motherPoolSnapshot.generated_at,
+    motherPoolEffectiveAt: motherPoolSnapshot.effective_at,
+    mother_pool_effective_at: motherPoolSnapshot.effective_at,
+    motherPoolAddedSymbols: motherPoolSnapshot.added_symbols,
+    motherPoolRemovedSymbols: motherPoolSnapshot.removed_symbols,
+    motherPoolPreviousRunId: motherPoolSnapshot.previous_run_id,
+    motherPoolSourceMaxUpdatedAt: motherPoolSnapshot.source_max_updated_at,
+    motherPoolMembership: motherPoolSnapshot.symbol_membership,
+    motherPoolDownstreamWarmupPendingSymbols: motherPoolSnapshot.downstream_warmup_pending_symbols,
+    motherPoolDownstreamWarmupPendingCount: motherPoolSnapshot.downstream_warmup_pending_symbols.length,
     updatedAt: nowIso(),
     source: "daytrade-dedicated-priority-bridge",
     // Keep the complete mother pool on the WebSocket/data-rotation path.
@@ -4331,6 +4472,13 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
       prioritySource: "daytrade-dedicated-priority-bridge",
       tradeDate,
       canonicalRunId,
+      motherPoolSnapshotRunId: motherPoolSnapshot.run_id,
+      motherPoolSnapshotSequence: motherPoolSnapshot.snapshot_sequence,
+      motherPoolSnapshotType: motherPoolSnapshot.snapshot_type,
+      motherPoolEffectiveAt: motherPoolSnapshot.effective_at,
+      motherPoolAddedSymbols: motherPoolSnapshot.added_symbols,
+      motherPoolRemovedSymbols: motherPoolSnapshot.removed_symbols,
+      motherPoolDownstreamWarmupPendingSymbols: motherPoolSnapshot.downstream_warmup_pending_symbols,
       daytradePriorityCount: daytradePrioritySymbols.length,
       daytradeMotherPoolCount: daytradeMotherPoolSymbols.length,
       daytradeMotherPoolWarmingPendingSymbols: priceEligiblePriorityRows
@@ -5055,6 +5203,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     || (today1mStatus === "ready" && intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
   const formalSourceAlignmentOk = quoteSourceDaytradeOk && intraday1mSourceDaytradeOk && opening0901GateOk;
   const formalPrioritySpeedOk = formalScopeQuoteFreshOk;
+  const motherPoolSnapshot = readJson(MOTHER_POOL_SNAPSHOT_FILE, {});
   const payload = {
     source_name: SOURCE_NAME,
     writer_version: "daytrade-source-writer-20260702-03",
@@ -5210,6 +5359,17 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     mother_pool_fresh_coverage_120s: Number(motherFreshCoverage.toFixed(4)),
     mother_pool_fresh_quotes_120s: freshMother.length,
     mother_pool_source: "dynamic_daytrade_mother_pool",
+    mother_pool_snapshot_contract: motherPoolSnapshot.contract || "",
+    mother_pool_run_id: motherPoolSnapshot.run_id || motherPoolSnapshot.mother_pool_run_id || "",
+    mother_pool_snapshot_sequence: Number(motherPoolSnapshot.snapshot_sequence || 0),
+    mother_pool_snapshot_type: motherPoolSnapshot.snapshot_type || "",
+    mother_pool_generated_at: motherPoolSnapshot.generated_at || "",
+    mother_pool_effective_at: motherPoolSnapshot.effective_at || "",
+    mother_pool_added_symbols: motherPoolSnapshot.added_symbols || [],
+    mother_pool_removed_symbols: motherPoolSnapshot.removed_symbols || [],
+    mother_pool_downstream_warmup_pending_symbols: motherPoolSnapshot.downstream_warmup_pending_symbols || [],
+    mother_pool_downstream_warmup_pending_count: Array.isArray(motherPoolSnapshot.downstream_warmup_pending_symbols) ? motherPoolSnapshot.downstream_warmup_pending_symbols.length : 0,
+    mother_pool_snapshot_read_interface: motherPoolSnapshot.read_interface || {},
     mother_pool_source_seed_counts: priorityRows.sourceSeedCounts || {},
     mother_pool_source_seed_union: priorityRows.sourceSeedUnion || [],
     mother_pool_source_seed_updated_at: priorityRows.sourceSeedUpdatedAt || "",

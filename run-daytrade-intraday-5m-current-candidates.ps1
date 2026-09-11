@@ -1,5 +1,6 @@
 param(
-  [string]$PoolPath = "C:\fuman-runtime\cache\intraday\fugle-daytrade-ws-priority-symbols.json"
+  [string]$PoolPath = "C:\fuman-runtime\cache\intraday\fugle-daytrade-ws-priority-symbols.json",
+  [string]$SnapshotPath = "C:\fuman-runtime\state\daytrade-mother-pool-snapshot-latest.json"
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
