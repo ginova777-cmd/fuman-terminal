@@ -298,7 +298,7 @@ function buildStrategy4GateContract(rows, run, matches) {
   const fallbackDetails = Array.isArray(runPayload.fallbackDetails) ? runPayload.fallbackDetails : [];
   const acceptedTargetDateCompleteRun = isAcceptedTargetDateCompleteRun(run, supabaseCoverage, qualityStatus, fallbackUsed);
   const retentionOk = acceptedTargetDateCompleteRun;
-  const gateIssues = Array.isArray(gate?.issues) ? gate.issues : [];
+  const gateIssues = [...(Array.isArray(gate?.issues) ? gate.issues : []), ...require("../lib/strategy4-v3-evidence").strategy4V3Issues(runPayload, rows)];
   const gateWarnings = Array.isArray(gate?.warnings) ? gate.warnings : [];
   const dailyVolumeFreshness = supabaseCoverage?.coverageRatio ?? (supabaseCoverage?.qualityStatus === "complete" ? 1 : null);
   const sourceCoverageBase = gate?.sourceCoverage || {
@@ -429,6 +429,7 @@ function buildPayload(rows, total, run = null, options = {}) {
   return {
     ok: true,
     status: gateContract.status,
+    resultContract: runPayload.resultContract || "",
     source: "supabase:strategy4_scan_results",
     cacheSource: "supabase-api",
     ...runTimeSourceSnapshotResponseFields(run?.payload || {}),
