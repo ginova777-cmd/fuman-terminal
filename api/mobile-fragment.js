@@ -237,7 +237,10 @@ function attachTerminalAuthority(tab, payload = {}) {
   if (String(tab || "").toLowerCase() === "strategy4") {
     const { strategy4MobileAuthority } = require("../lib/strategy4-mobile-authority");
     const ownAuthority = strategy4MobileAuthority(payload, taipeiDateKey());
-    if (ownAuthority) terminalAuthority = ownAuthority;
+    if (ownAuthority) {
+      terminalAuthority = ownAuthority;
+      payload = { ...payload, preservePreviousGood: ownAuthority.preservePreviousGood };
+    }
   }
   if (!terminalAuthority) return payload;
   return {
