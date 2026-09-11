@@ -17,6 +17,12 @@ const LATEST_VIEW = process.env.STRATEGY3_V2_LATEST_VIEW || "v_strategy3_v2_late
 const MIN_READY_SYMBOLS = Math.max(300, Number(process.env.STRATEGY3_V2_MIN_READY_SYMBOLS || 300));
 const MIN_CANDLES_PER_SYMBOL = Math.max(20, Number(process.env.STRATEGY3_V2_MIN_CANDLES_PER_SYMBOL || 20));
 const ENTRY_WINDOW = "12:59-13:02";
+const MOTHER_POOL_CONTRACT_VERSION = "4.1.0";
+const MOTHER_POOL_VIEW = "v_fugle_daytrade_mother_pool_v4_1";
+const MOTHER_POOL_RECEIPT_VIEW = "v_fugle_daytrade_mother_pool_receipt_v4_1";
+const QUOTE_TABLE = "fugle_daytrade_quotes_live";
+const INTRADAY_1M_RPC = "get_fugle_daytrade_intraday_1m_latest_n";
+const MIN_MOTHER_POOL_COVERAGE_RATIO = Math.max(0.9, Number(process.env.STRATEGY3_V2_MIN_MOTHER_POOL_COVERAGE_RATIO || 0.9));
 
 function taipeiDate(date = new Date(), compact = false) {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -83,6 +89,12 @@ module.exports = {
   MIN_READY_SYMBOLS,
   MIN_CANDLES_PER_SYMBOL,
   ENTRY_WINDOW,
+  MOTHER_POOL_CONTRACT_VERSION,
+  MOTHER_POOL_VIEW,
+  MOTHER_POOL_RECEIPT_VIEW,
+  QUOTE_TABLE,
+  INTRADAY_1M_RPC,
+  MIN_MOTHER_POOL_COVERAGE_RATIO,
   taipeiDate,
   nowTaipeiIso,
   newRunId,

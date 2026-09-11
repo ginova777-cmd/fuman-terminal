@@ -164,7 +164,7 @@ issue(issues, guard1250?.legacy_strategy3_touched === false, "readiness_guard_12
 issue(issues, guard1230?.line_push_allowed === false && guard1250?.line_push_allowed === false, "readiness_guard_line_push_not_forbidden");
 issue(issues, scan?.ok === true && String(scan?.status || "").toUpperCase() === "COMPLETE", "complete_scan_not_complete", { path: receipts.scan, status: scan?.status, ok: scan?.ok });
 issue(issues, String(scan?.run_id || "").startsWith("strategy3v2-"), "complete_scan_runid_not_v2", { run_id: scan?.run_id });
-issue(issues, Number(scan?.result_count || 0) > 0 || (Array.isArray(scan?.results) && scan.results.length > 0), "complete_scan_results_empty", { result_count: scan?.result_count });
+issue(issues, Array.isArray(scan?.results) && scan.results.length === Number(scan?.result_count || 0), "complete_scan_result_count_mismatch", { result_count: scan?.result_count, rows: scan?.results?.length });
 issue(issues, line?.ok === true && line?.status === "PUSHED", "line_not_pushed", { path: receipts.line, status: line?.status, ok: line?.ok });
 issue(issues, line?.line_push_personal_ok === true, "line_personal_push_failed", { value: line?.line_push_personal_ok });
 issue(issues, line?.line_push_group_ok === true, "line_group_push_failed", { value: line?.line_push_group_ok });
