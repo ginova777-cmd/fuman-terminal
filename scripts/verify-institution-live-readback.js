@@ -18,6 +18,7 @@ async function main(){
  assert(new Set(rows.map(r=>r.code)).size===rows.length,"duplicate result symbols");
  assert(receipt.scanned===run.scanned_count && receipt.total===run.expected_total,"receipt full scan totals mismatch");
  assert(run.payload.blankTotal===0,"scanner required fields incomplete");
+ assert(!(run.payload.sourceHealth?.warnings||[]).length,"five-day metric history incomplete");
  assert(receipt.fallbackUsed===false && run.payload.fallbackUsed===false,"fallback used");
  const today=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Taipei"}).format(new Date());assert(run.scan_date===today,"run not current trading date");
  const source=run.payload.source_status_at_run;assert(source.sourceDates.twse===today.replaceAll("-","")&&source.sourceDates.tpex===today.replaceAll("-",""),"official source dates mismatch");

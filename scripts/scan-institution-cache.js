@@ -164,6 +164,7 @@ function institutionSourceDateIssues(output, expectedDate = new Intl.DateTimeFor
   for (const market of ["twse", "tpex"]) if (normalizeDateKey(output.sourceDates?.[market]) !== expected) issues.push(market + "_source_date_not_today");
   if (normalizeDateKey(output.usedDate) !== expected) issues.push("used_date_not_today");
   if ((output.errors || []).length) issues.push("official_source_history_incomplete");
+  if ((output.sourceHealth?.warnings || []).length) issues.push("five_day_metric_history_incomplete");
   return issues;
 }
 
