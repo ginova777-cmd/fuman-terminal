@@ -15,7 +15,9 @@ for(const key of ['strategy3','strategy4','strategy5','institution']){
 report.rows=['2330','2481','3374'].map((symbol,i)=>({symbol,matched_strategy_numbers:[[2],[2,3,8],[]][i],pending_strategy_numbers:[],strategies:Array.from({length:10},(_,j)=>({no:j+1,status:[[2],[2,3,8],[]][i].includes(j+1)?'MATCHED':'NOT_MATCHED'}))}));
 report.symbol_count=3;fs.writeFileSync(path.join(root,'inspection.json'),JSON.stringify(report));
 const csv=path.join(root,'ranking.csv');
-const r=spawnSync('pwsh',['-NoProfile','-File',path.join(__dirname,'../ops/Show-OpeningPredictionRanking.ps1'),'-Once','-InputDirectory',root,'-OpeningLimitOrderDirectory',root,'-OpeningReportDirectory',root,'-OpeningStrategyInspectionPath',path.join(root,'inspection.json'),'-OutputCsv',csv,'-Top','3'],{encoding:'utf8',windowsHide:true});
+const q=s=>"'"+s.replace(/'/g,"''")+"'";
+const command=`[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); & ${q(path.join(__dirname,'../ops/Show-OpeningPredictionRanking.ps1'))} -Once -InputDirectory ${q(root)} -OpeningLimitOrderDirectory ${q(root)} -OpeningReportDirectory ${q(root)} -OpeningStrategyInspectionPath ${q(path.join(root,'inspection.json'))} -OutputCsv ${q(csv)} -Top 3`;
+const r=spawnSync('pwsh',['-NoProfile','-Command',command],{encoding:'utf8',windowsHide:true});
 fs.writeFileSync(path.join(root,'console.log'),r.stdout+r.stderr);assert.equal(r.status,0,r.stderr);
 assert(r.stdout.includes('開盤入策略')&&r.stdout.includes('策略2、策略3、策略8'),'Rendered strategy column must remain visible');
 const check=spawnSync('pwsh',['-NoProfile','-Command',`$r=Import-Csv -LiteralPath '${csv.replace(/'/g,"''")}'; if($r.Count -ne 3 -or $r[0].Code -ne '2481' -or $r[0].OpeningStrategyCount -ne '3' -or $r[1].Code -ne '2330'){throw 'Ranking incorrect'}; if($r | Where-Object Direction){throw 'Diagnostic published direction'}`],{encoding:'utf8',windowsHide:true});
