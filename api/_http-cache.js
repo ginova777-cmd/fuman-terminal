@@ -75,7 +75,7 @@ function compactRow(row) {
     "dealer",
     "total",
     "market", "tradeDate", "runId", "source", "dataContractSource", "direction",
-    "foreignStreak", "trustStreak", "jointStreak", "dealerStreak",
+    "technicalTrend", "foreignStreak", "trustStreak", "jointStreak", "dealerStreak",
     "foreignTrustVolumePct", "foreignTrustBuyVolumePct", "fiveDayAvgVolume",
     "foreignLots", "ratioIncrease", "ratio1", "ratio2", "ratio3",
     "foreign_net",

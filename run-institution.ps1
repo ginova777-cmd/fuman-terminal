@@ -98,6 +98,9 @@ function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunI
     exitCode = $ExitCode
     scanned = [int]$sourceStatusAtRun.sourceRows
     total = [int]$sourceStatusAtRun.sourceRows
+    selectionCoverage = if ($null -ne $authoritative) { $authoritative.selectionCoverage } else { $null }
+    technicalSourceReceipt = if ($null -ne $authoritative) { $authoritative.technicalSourceReceipt } else { $null }
+    technicalSourceHash = if ($null -ne $authoritative) { $authoritative.technicalSourceHash } else { $null }
     matches = $Matches
     complete = $Complete
     qualityStatus = if ($Complete) { "complete" } else { "" }
@@ -252,7 +255,7 @@ function Get-InstitutionReadbackFromLog {
   if (-not $match.Success) { return $null }
   $runId = [string]$match.Groups[1].Value
   $count = [int]$match.Groups[2].Value
-  if ([string]::IsNullOrWhiteSpace($runId) -or $count -le 0) { return $null }
+  if ([string]::IsNullOrWhiteSpace($runId) -or $count -lt 0) { return $null }
   return [pscustomobject]@{
     ok = $true
     runId = $runId
@@ -289,7 +292,7 @@ function Assert-InstitutionApi {
   if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or -not $payload.runId) {
     throw "Institution API verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId)"
   }
-  if ([int]$payload.count -le 0) { throw "Institution API empty count=$($payload.count)" }
+  if ([int]$payload.count -lt 0) { throw "Institution API empty count=$($payload.count)" }
   $apiUpdatedAtText = [string]($payload.updatedAt ?? $payload.generatedAt)
   if ([string]::IsNullOrWhiteSpace($apiUpdatedAtText)) { throw "Institution API missing updatedAt" }
   $apiUpdatedAt = [DateTimeOffset]::Parse($apiUpdatedAtText)

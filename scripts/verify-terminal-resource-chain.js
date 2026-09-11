@@ -140,6 +140,7 @@ const STRATEGIES = [
   },
   {
     key: "institution",
+    allowZeroTerminal: true,
     label: "買賣超",
     policy: "latest complete scan",
     unattendedDueTime: "21:00",
