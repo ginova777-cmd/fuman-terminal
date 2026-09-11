@@ -23,6 +23,7 @@ if ($Mode -eq "Status") {
 . "$PSScriptRoot\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Buy/sell complete" -LogPath $log -AllowAfterFormalSourceWindow
 try {
+  Invoke-Required "release root authority" { & $nodeExe "scripts\verify-release-root-authority.js" "--require-production-root" }
   if ($Mode -eq "Recovery") {
     $existing = Get-Content -LiteralPath (Join-Path $runtime "data\scan-receipts\institution.json") -Raw | ConvertFrom-Json
     if (-not $ExpectedRunId -or $existing.runId -ne $ExpectedRunId -or $existing.complete -ne $true -or $existing.status -ne "complete" -or $existing.fallbackUsed -eq $true) { throw "recovery_requires_exact_complete_nonfallback_run" }
