@@ -27,6 +27,8 @@ const endpointByKey = {
   institution: "/api/institution-latest",
 };
 
+function mobileTabForKey(key) { return key === "institution" ? "chip" : key; }
+
 function taipeiDate() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
@@ -72,7 +74,7 @@ async function main() {
   const rows = [];
   for (const key of selectedKeys) {
     const desktop = endpoint(bundle.payload, key);
-    const mobile = await fetchResult(`/api/mobile-fragment?tab=${key}`, headers, false);
+    const mobile = await fetchResult(`/api/mobile-fragment?tab=${mobileTabForKey(key)}`, headers, false);
     const desktopRunId = String(desktop?.runId || desktop?.payload?.runId || desktop?.transport?.runId || "");
     const mobileRunId = attr(mobile.text, "run-id");
     const desktopCount = number(desktop?.resultCount ?? desktop?.count ?? desktop?.payload?.resultCount ?? desktop?.payload?.count);
@@ -123,7 +125,9 @@ async function main() {
   process.exitCode = report.ok ? 0 : 3;
 }
 
-main().catch((error) => {
+if (require.main === module) main().catch((error) => {
   console.error(JSON.stringify({ ok: false, status: "FAIL_CLOSED", reason: error?.message || String(error), querySupabase: false, scanAllowed: false, recalculated: false, generatedRunId: false }));
   process.exitCode = 4;
 });
+
+module.exports = { mobileTabForKey, attr };

@@ -1,4 +1,4 @@
-param([ValidateSet("Complete", "Status")][string]$Mode = "Complete")
+param([ValidateSet("Complete", "Status", "Recovery")][string]$Mode = "Complete", [string]$ExpectedRunId = "")
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 Set-Location -LiteralPath $PSScriptRoot
@@ -23,8 +23,14 @@ if ($Mode -eq "Status") {
 . "$PSScriptRoot\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Buy/sell complete" -LogPath $log -AllowAfterFormalSourceWindow
 try {
+  if ($Mode -eq "Recovery") {
+    $existing = Get-Content -LiteralPath (Join-Path $runtime "data\scan-receipts\institution.json") -Raw | ConvertFrom-Json
+    if (-not $ExpectedRunId -or $existing.runId -ne $ExpectedRunId -or $existing.complete -ne $true -or $existing.status -ne "complete" -or $existing.fallbackUsed -eq $true) { throw "recovery_requires_exact_complete_nonfallback_run" }
+    Invoke-Required "recovery authoritative live readback" { & $nodeExe "--use-system-ca" "scripts\verify-institution-live-readback.js" }
+  } else {
   Invoke-Required "chip source sync" { & $pwshExe -NoProfile -File ".\run-chip-source-sync.ps1" }
   Invoke-Required "institution formal scan" { & $pwshExe -NoProfile -File ".\run-institution.ps1" }
+  }
   Invoke-Required "institution E2E closure" { & $nodeExe "--use-system-ca" "scripts\verify-institution-e2e-closure.js" }
   Invoke-Required "business fields" { & $nodeExe "scripts\verify-institution-business-fields.js" }
   Invoke-Required "strategy requirements" { & $nodeExe "scripts\verify-institution-strategy-requirements.js" }
