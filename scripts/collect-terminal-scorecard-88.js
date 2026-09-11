@@ -265,6 +265,7 @@ const payloadBlocker = !currentTradingDatePresent ? "scorecard_current_month_tra
 
 const payload = {
   ...previous,
+  scanAudit: require('../lib/scorecard-scan-audit').buildScanAudit({ runtimeDir: runtimeRoot }),
   ok: receipts.every((row) => row.ok) && currentTradingDatePresent,
   source: "terminal-canonical-fixed-slot-collector",
   cacheSource: "terminal-canonical-json",
