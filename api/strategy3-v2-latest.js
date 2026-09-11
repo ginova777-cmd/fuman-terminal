@@ -28,7 +28,7 @@ function compactReason(row) {
   const candles = row.candle_count ?? row.candleCount ?? "--";
   const instant = new Date(row.entry_candle_time || row.entryCandleTime || "");
   const entryTime = Number.isFinite(instant.getTime()) ? new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false }).format(instant) : "13:00";
-  return `Strategy3 V2 隔日沖參考；${entryTime} 進場價=${entry}；收盤=${close}；當日 1m=${candles} 根；同日 Fugle candles/quotes 完整掃。`;
+  return `Strategy3 V2 隔日沖參考；13:00 參考進場價=${entry}（${entryTime} K）；收盤=${close}；當日 1m=${candles} 根；同日 Fugle candles/quotes 完整掃。`;
 }
 
 function pctText(value) {
