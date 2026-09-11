@@ -2198,12 +2198,12 @@ async function fetchIntradayStatus(activeSymbols = []) {
       }
       const chronologicalHighs = (current._highs || []).slice().reverse();
       const chronologicalLows = (current._lows || []).slice().reverse();
-      if (chronologicalCloses.length >= 9 && chronologicalHighs.length >= 9 && chronologicalLows.length >= 9) {
+      if (chronologicalCloses.length >= 5 && chronologicalHighs.length >= 5 && chronologicalLows.length >= 5) {
         let k = 50;
         let d = 50;
-        for (let i = 8; i < chronologicalCloses.length; i += 1) {
-          const high = Math.max(...chronologicalHighs.slice(i - 8, i + 1));
-          const low = Math.min(...chronologicalLows.slice(i - 8, i + 1));
+        for (let i = 4; i < chronologicalCloses.length; i += 1) {
+          const high = Math.max(...chronologicalHighs.slice(i - 4, i + 1));
+          const low = Math.min(...chronologicalLows.slice(i - 4, i + 1));
           const rsv = high > low ? ((chronologicalCloses[i] - low) / (high - low)) * 100 : 50;
           k = ((2 * k) + rsv) / 3;
           d = ((2 * d) + k) / 3;
@@ -2214,6 +2214,7 @@ async function fetchIntradayStatus(activeSymbols = []) {
         current.kd_k = null;
         current.kd_d = null;
       }
+      // Legacy RSI14 cache column is retained for schema compatibility only; strategy gates calculate shared RSI3/6 from OHLCV.
       if (chronologicalCloses.length >= 15) {
         const recent = chronologicalCloses.slice(-15);
         let gains = 0;

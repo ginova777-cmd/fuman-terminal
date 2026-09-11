@@ -66,7 +66,7 @@ function hasTriangleChartLines(item) {
 function hasDailyTechnicalGate(item = {}) {
   const gate = item.dailyTechnicalGate && typeof item.dailyTechnicalGate === "object" ? item.dailyTechnicalGate : {};
   const mutaki = item.mutakiV17 && typeof item.mutakiV17 === "object" ? item.mutakiV17 : {};
-  return gate.contract === "strategy4_daily_kd_rsi_trend_gate_v1"
+  return gate.contract === "strategy4_daily_kd_rsi_trend_gate_v2"
     && gate.ok === true
     && gate.kdTrendUp === true
     && gate.rsiTrendUp === true
@@ -75,8 +75,8 @@ function hasDailyTechnicalGate(item = {}) {
     && mutaki.rsiTrendUp === true
     && Number.isFinite(Number(mutaki.kdK))
     && Number.isFinite(Number(mutaki.kdD))
-    && Number.isFinite(Number(mutaki.rsi14))
-    && Number.isFinite(Number(mutaki.rsi14Prev));
+    && Number.isFinite(Number(mutaki.rsi6))
+    && Number.isFinite(Number(mutaki.rsi6Prev));
 }
 
 function verifyStaticContracts() {
@@ -86,7 +86,7 @@ function verifyStaticContracts() {
   if (!cacheSource.includes("strategy4_actionable_patterns_avg5_3000_daily_kd_rsi_trend_gate_v3")) {
     fail("Strategy4 cache runner is not using daily KD/RSI v3 result contract");
   }
-  if (!apiSource.includes("strategy4_daily_kd_rsi_trend_gate_v1") || !apiSource.includes("dailyTechnicalGate")) {
+  if (!apiSource.includes("strategy4_daily_kd_rsi_trend_gate_v2") || !apiSource.includes("dailyTechnicalGate")) {
     fail("Strategy4 API missing daily KD/RSI technical gate");
   }
 }

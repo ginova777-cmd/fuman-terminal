@@ -33,7 +33,7 @@ function main() {
   const aggregated = aggregateCompleted60m(oneMinute, "2026-09-11", new Date("2026-09-11T10:15:00+08:00"));
   const daily = dailyBars(risingBars(20).map((bar, index) => ({ ...bar, trade_date: `2026-08-${String(index + 1).padStart(2, "0")}` })), "2026-09-11", { open_price: 125, high_price: 128, low_price: 124, price: 127 });
   const checks = {
-    periods_are_fixed: KD_PERIOD === 9 && RSI_FAST_PERIOD === 3 && RSI_SLOW_PERIOD === 6,
+    periods_are_fixed: KD_PERIOD === 5 && RSI_FAST_PERIOD === 3 && RSI_SLOW_PERIOD === 6,
     rising_k_over_d_and_rsi3_over_rsi6_pass: rising.ok === true && rising.kd_over_d === true && rising.kd_trend_up === true && rising.rsi3_over_rsi6 === true && rising.rsi_trend_up === true && rising.signal_pass === true,
     falling_kd_or_rsi_fails: falling.ok === true && falling.signal_pass === false,
     insufficient_history_is_data_gap: short.ok === false && short.reason === `indicator_history_below_${MIN_INDICATOR_BARS}_bars`,
