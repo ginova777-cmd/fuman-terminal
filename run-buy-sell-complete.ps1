@@ -30,6 +30,7 @@ try {
   Invoke-Required "strategy requirements" { & $nodeExe "scripts\verify-institution-strategy-requirements.js" }
   Invoke-Required "formal payloads" { & $nodeExe "scripts\verify-institution-formal-payloads.js" }
   Invoke-Required "UI display" { & $nodeExe "scripts\verify-institution-ui-display.js" }
+  Invoke-Required "live database and rendered three-surface acceptance" { & $nodeExe "--use-system-ca" "scripts\verify-institution-live-readback.js" "--render" }
   Invoke-Required "buy-sell canonical receipt" { & $nodeExe "--use-system-ca" "scripts\verify-buy-sell-complete.js" "--write-receipt" }
   exit 0
 } catch {

@@ -31,15 +31,7 @@ const INSTITUTION_RUNS_TABLE = process.env.INSTITUTION_SUPABASE_RUNS_TABLE || "i
 const INSTITUTION_RESULTS_TABLE = process.env.INSTITUTION_SUPABASE_RESULTS_TABLE || "institution_scan_results";
 const INSTITUTION_API_ONLY = true;
 const INSTITUTION_RAW_KEEP_DAYS = Number(process.env.INSTITUTION_RAW_KEEP_DAYS || 14);
-const INSTITUTION_REQUIRED_FIELDS = [
-  "code",
-  "name",
-  "foreignNet",
-  "trustNet",
-  "dealerNet",
-  "totalNet",
-  "institutionTotalNet",
-];
+const INSTITUTION_REQUIRED_FIELDS = ["code", "name", "foreign", "trust", "dealer", "total"];
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -417,7 +409,7 @@ function buildInstitutionResultRows(output, runId) {
       total_net: cleanNumber(row.total),
       rank: index + 1,
       reason: "",
-      payload: { ...row, rank: index + 1, dataContractSource: output.dataContractSource || "institution-cache" },
+      payload: { ...row, rank: index + 1, runId, tradeDate: scanDate, source: row.market === "上市" ? "TWSE T86" : "TPEx 3itrade", direction: row.total > 0 ? "buy" : row.total < 0 ? "sell" : "flat", foreignTrustVolumePct: row.fiveDayAvgVolume > 0 ? ((row.foreign + row.trust) / row.fiveDayAvgVolume) * 100 : null, dataContractSource: output.dataContractSource || "institution-cache" },
       complete: true,
       quality_status: "complete",
       schema_version: output.schemaVersion || "institution-run-id-complete-v1",
@@ -734,6 +726,7 @@ async function main() {
   };
   output.fieldCompleteness = buildFieldCompleteness(Object.values(data));
   output.requiredFields = output.fieldCompleteness.requiredFields;
+  if (output.fieldCompleteness.blankTotal > 0) throw new Error("institution required source fields missing; preserve previous complete run");
   output.rowsChecked = output.fieldCompleteness.rowsChecked;
   output.blankCounts = output.fieldCompleteness.blankCounts;
   output.blankTotal = output.fieldCompleteness.blankTotal;
@@ -762,6 +755,7 @@ async function main() {
 
   await publishInstitutionCompleteRunToSupabase(output);
   await publishInstitutionSnapshot(output);
+  console.log("institution authoritative readback metadata: " + JSON.stringify({ runId: output.runId, sourceRows: sourceCount, resultCount: count, usedDate: output.usedDate, sourceSnapshotCapturedAt: output.updatedAt, warnings: output.sourceHealth.warnings, blankTotal: output.blankTotal }));
 
   if (INSTITUTION_API_ONLY) {
     console.log(`institution API-only: skipped static institution*.json output, rows ${count}, usedDate ${output.usedDate || "--"}`);
