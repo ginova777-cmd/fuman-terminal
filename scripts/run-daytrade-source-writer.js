@@ -84,6 +84,11 @@ function ensureDailyStockMasterComplete() {
 
 const STRATEGY_PRIORITY_BRIDGE_SOURCES = [
   {
+    key: "strategy3",
+    protectedApi: true,
+    codeMode: "stock",
+  },
+  {
     key: "strategy4",
     latestResource: "strategy4_scan_runs",
     latestQuery: "select=*&status=eq.complete&complete=eq.true&order=finished_at.desc&limit=1",
@@ -2250,6 +2255,67 @@ async function fetchIntradayStatus(activeSymbols = []) {
     // Continue to persisted formal sources when the local cache is unavailable.
   }
 
+  if (taipeiMinutes() < 9 * 60) {
+    try {
+      const symbols = [...new Set((activeSymbols || []).map((row) => normalizeCode(row.symbol || row)).filter(Boolean))];
+      const rows = [];
+      for (let index = 0; index < symbols.length; index += 40) {
+        const page = await supabaseRpc(
+          "get_fugle_daytrade_intraday_1m_latest_n",
+          { symbols: symbols.slice(index, index + 40), bars_per_symbol: 25 },
+          { service: true },
+        );
+        rows.push(...(Array.isArray(page) ? page : []).filter((row) => row.synthetic !== true && row.is_synthetic !== true));
+      }
+      const grouped = buildGrouped(rows, tradeDate);
+      const naturalWarmupRows = [...grouped.values()].filter((row) =>
+        numberValue(row.continuous_candle_count) >= 20
+        && numberValue(row.latest_candle_age_seconds, 999999) <= 7 * 24 * 60 * 60
+      );
+      if (naturalWarmupRows.length) {
+        return finalizeIntradayMap(naturalWarmupRows, "dedicated_daytrade_intraday_1m_latest_25_batched_natural_warmup");
+      }
+    } catch {
+      // Fall through to persisted status-cache warmup without weakening quality checks.
+    }
+  }
+
+  // Before the market opens there cannot be a natural current-day 1m candle.
+  // Reuse only the most recent prior trading session's persisted natural
+  // readiness for indicator warmup; never expose its candle count as today's.
+  if (taipeiMinutes() < 9 * 60) {
+    try {
+      const scope = new Set((activeSymbols || []).map((row) => normalizeCode(row.symbol || row)).filter(Boolean));
+      const rows = await supabaseGetPaged(
+        "fugle_daytrade_intraday_1m_status_cache",
+        "select=symbol,market,trade_date,latest_candle_time,warmup_candle_count,continuous_candle_count,ready_ma3,ready_ma5,ready_ma10,ready_ma20_continuous,ready_ma30,ready_ma58,ready_ma35_continuous,ma3,ma5,ma10,ma20,ma30,ma35,ma58,ma3_rising,ma5_rising,ma10_rising,ma30_rising,ma35_rising,ma58_rising,ma5_ma10_ma35_bullish,ma_bullish_alignment,relative_volume_5m,recent_1m_volume_trend,macd_line,macd_signal,macd_histogram,kd_k,kd_d,rsi14",
+        { service: true, pageSize: 1000 },
+      );
+      const scopedRows = rows.filter((row) => !scope.size || scope.has(normalizeCode(row.symbol)));
+      const latestPriorTradeDate = scopedRows
+        .map((row) => taipeiDateFrom(row.latest_candle_time || ""))
+        .filter((value) => value && value < tradeDate)
+        .sort()
+        .at(-1) || "";
+      const ageDays = latestPriorTradeDate
+        ? Math.floor((Date.parse(`${tradeDate}T00:00:00+08:00`) - Date.parse(`${latestPriorTradeDate}T00:00:00+08:00`)) / 86400000)
+        : 999;
+      const warmupRows = scopedRows
+        .filter((row) => taipeiDateFrom(row.latest_candle_time || "") === latestPriorTradeDate)
+        .map((row) => ({
+          ...row,
+          trade_date: latestPriorTradeDate,
+          today_candle_count: 0,
+          latest_candle_age_seconds: ageSeconds(row.latest_candle_time),
+        }));
+      if (latestPriorTradeDate && ageDays >= 1 && ageDays <= 7 && warmupRows.length) {
+        return finalizeIntradayMap(warmupRows, "dedicated_daytrade_intraday_1m_status_cache_previous_trading_day_warmup");
+      }
+    } catch {
+      // Continue to the canonical view/RPC/direct reads when cache warmup is unavailable.
+    }
+  }
+
   try {
     const rows = await supabaseGetPaged(
       "v_fugle_daytrade_intraday_1m_status",
@@ -2867,6 +2933,61 @@ function strategyPriorityStockCode(row, codeMode) {
 }
 
 async function readStrategyPriorityBridgeSource(source) {
+  if (source.protectedApi === true && source.key === "strategy3") {
+    const helper = repoPath("scripts", "read-protected-production-api.js");
+    let lastReason = "strategy3_protected_api_no_complete_run";
+    for (let daysBack = 1; daysBack <= 7; daysBack += 1) {
+      const candidateDate = taipeiDateDaysAgo(daysBack);
+      const endpoint = `/api/strategy3-latest?date=${compactDateKey(candidateDate)}&canvas=1&compact=1&shell=1&limit=1200&live=1&verify=1&noSnapshot=1`;
+      const result = spawnSync(process.execPath, ["--use-system-ca", helper, `--endpoint=${endpoint}`], {
+        cwd: repoPath(),
+        encoding: "utf8",
+        timeout: 30000,
+        windowsHide: true,
+      });
+      if (result.error || result.status !== 0) {
+        lastReason = String(result.error?.message || result.stderr || `protected_api_exit_${result.status}`).trim().slice(0, 300);
+        continue;
+      }
+      let envelope = null;
+      try { envelope = JSON.parse(String(result.stdout || "").trim()); } catch {}
+      const payload = objectPayload(envelope?.payload);
+      const rows = Array.isArray(payload.rows) ? payload.rows : (Array.isArray(payload.matches) ? payload.matches : []);
+      const publishable = envelope?.ok === true
+        && payload.ok === true
+        && payload.complete === true
+        && String(payload.status || "").toLowerCase() === "complete"
+        && payload.publishAllowed === true
+        && String(payload.evidenceStatus || "").toLowerCase() === "complete"
+        && String(payload.unattendedStatus || "").toUpperCase() === "YES"
+        && payload.fallbackUsed !== true
+        && String(payload.runId || payload.run_id || "").length > 0;
+      if (!publishable) {
+        lastReason = String(payload.reason_code || payload.reason || payload.status || "strategy3_api_not_publishable");
+        continue;
+      }
+      const symbols = [...new Set(rows.map((row) => strategyPriorityStockCode(row, "stock")).filter(Boolean))];
+      if (!symbols.length) {
+        lastReason = "strategy3_api_complete_run_empty";
+        continue;
+      }
+      return {
+        key: source.key,
+        status: "ready",
+        symbols,
+        reason: "",
+        runId: String(payload.runId || payload.run_id),
+        scanDate: compactDateKey(payload.tradeDate || payload.trade_date || candidateDate),
+        finishedAt: payload.updatedAt || payload.checkedAt || "",
+        qualityStatus: "complete",
+        publishAllowed: true,
+        resultRows: rows.length,
+        symbolCount: symbols.length,
+        source: "protected_canonical_api:/api/strategy3-latest",
+      };
+    }
+    return { key: source.key, status: "blocked", symbols: [], reason: lastReason, runId: "", scanDate: "", qualityStatus: "", resultRows: 0 };
+  }
   const latestRows = await supabaseGet(source.latestResource, source.latestQuery);
   const run = Array.isArray(latestRows) ? latestRows[0] : null;
   if (!run) {
@@ -3007,9 +3128,8 @@ function mergeStrategyPriorityBridgeIntoRuntimeFile(bridge) {
       tradeDate,
     ),
   };
-  // Remove obsolete per-strategy probes. Strategy2/3 are downstream decision
-  // systems; Mother Pool consumes their stocks through the terminal canonical
-  // union and does not depend on private or stale strategy tables.
+  // Remove obsolete embedded probes before rebuilding the current complete-run
+  // bridge. Each retained group below is sourced from its formal canonical view.
   delete next.strategy2;
   delete next.strategy3;
   for (const source of STRATEGY_PRIORITY_BRIDGE_SOURCES) {
@@ -3228,7 +3348,7 @@ function readRuntimePrioritySeeds(activeSymbols) {
   addMany("terminal", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, 100);
   addMany("opening", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, 100);
 
-  counts.strategy3 = 0; // Strategy3 detects the Strategy2 Mother Pool; it cannot seed or reprioritize its own water.
+  addMany("strategy3", payload.strategy3 || payload.strategy3Symbols || bridgeValues("strategy3"), 80);
   addMany("strategy6", payload.strategy6 || payload.strategy6Symbols || bridgeValues("strategy6"), 80);
   addMany("strategy7", payload.strategy7 || payload.strategy7Symbols || bridgeValues("strategy7"), 80);
   addMany("slash88", payload.slash88 || payload.eightyEight || payload.strategy88 || payload.strategy88Symbols, 90);
@@ -7058,7 +7178,7 @@ async function tick() {
   let priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
   tickStage("priority_build_supplemental:complete", { rows: priorityRows.length });
   tickStage("intraday_status:start");
-  let intradayMap = await fetchIntradayStatus(activeSymbols);
+  let intradayMap = await fetchIntradayStatus(priorityRows);
   tickStage("intraday_status:complete", { rows: intradayMap.size });
   supplementalMaps.intradayMap = intradayMap;
   intradayMap = mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows);
@@ -7179,7 +7299,7 @@ async function tick() {
       websocketCandleSync = await syncWebSocketIntraday1mCandles(priorityRows, state);
       if (!websocketCandleSync.skipped && numberValue(websocketCandleSync.written) > 0) {
         // Gate/source_status must evaluate the latest Fugle candles, not the stale pre-sync map.
-        intradayMap = await fetchIntradayStatus(activeSymbols);
+        intradayMap = await fetchIntradayStatus(priorityRows);
         supplementalMaps.intradayMap = intradayMap;
         intradayMap = mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows);
         supplementalMaps.intradayMap = intradayMap;
