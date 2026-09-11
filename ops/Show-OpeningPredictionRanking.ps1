@@ -582,7 +582,22 @@ try {
     if (-not $predictionBlocker) { $predictionBlocker = "MISSING_0850_VERIFIER" }
   }
 } catch { $predictionBlocker = "INVALID_0850_FREEZE_OR_VERIFIER" }
-if ($predictionBlocker) { $openingRows = @(); $openingStatus = $predictionBlocker }
+# Failure metadata is still valid audit metadata; it is never a direction.
+if ($predictionReadback -and (ConvertTo-DateKey (Get-PropertyValue $predictionReadback @("trade_date"))) -eq $targetTradeDate) {
+    $openingRunId = [string](Get-PropertyValue $predictionReadback @("run_id"))
+}
+$predictionMessage = $predictionBlocker
+if ($predictionBlocker) {
+    $openingRows = @()
+    $openingStatus = if ($predictionBlocker -eq "WAITING_SLOT") { "WAITING_SLOT" }
+        elseif ($predictionReadback -and (Get-PropertyValue $predictionReadback @("ok")) -eq $false) { "FAILED" }
+        elseif ($predictionBlocker -match "^(FAILED|INVALID)") { "FAILED" }
+        elseif ($predictionBlocker -match "^MISSING") { "MISSING" }
+        else { "DEGRADED" }
+    if ($predictionBlocker -match "Conversion from JSON failed") {
+        $predictionMessage = "08:50預言產生失敗：上游JSON解析錯誤；目前讀取的是該時槽既有失敗收據"
+    }
+}
 
 foreach ($row in $openingRows) {
     $code = ConvertTo-StockCode (Get-PropertyValue $row @("symbol", "code", "stock_id"))
@@ -617,7 +632,7 @@ foreach ($row in $openingRows) {
 }
 
 foreach ($code in @($stocks.Keys)) {
-    if ($predictionBlocker) { $stocks[$code].Direction = ""; $stocks[$code].DirectionReason = $predictionBlocker }
+    if ($predictionBlocker) { $stocks[$code].Direction = ""; $stocks[$code].DirectionReason = $predictionMessage }
     if (-not $openingStaticByCode.ContainsKey($code)) { continue }
     $stock = $stocks[$code]
     $row = $openingStaticByCode[$code]
@@ -640,7 +655,7 @@ $sourceSummary.Add([pscustomobject]@{
     Rows = $openingRows.Count
     UniqueStocks = @($openingRows | ForEach-Object { ConvertTo-StockCode (Get-PropertyValue $_ @("symbol", "code")) } | Where-Object { $_ } | Sort-Object -Unique).Count
     TradeDate = $targetTradeDate
-    RunId = if ($openingRunId) { $openingRunId } else { $openingStatus }
+    RunId = $openingRunId
 })
 
 $openingStageSummary = [System.Collections.Generic.List[object]]::new()
@@ -772,7 +787,16 @@ Write-Host "各來源資料摘要" -ForegroundColor Yellow
 $sourceSummary | Format-Table -AutoSize | Out-Host
 
 Write-Host "開盤入／預言家 T-1／T 偵測進度" -ForegroundColor Yellow
-if ($predictionBlocker) { Write-Warning ("預言家未發布：{0}" -f $predictionBlocker) }
+if ($predictionBlocker) {
+    Write-Host ("開盤入狀態：{0}" -f $openingStatus) -ForegroundColor Yellow
+    Write-Warning ("預言家未發布：{0}" -f $predictionMessage)
+    if ($predictionReadback) {
+        Write-Host ("收據時間：{0}" -f ([DateTimeOffset](Get-PropertyValue $predictionReadback @("frozen_at"))).ToOffset([TimeSpan]::FromHours(8)).ToString("yyyy-MM-dd HH:mm:ss zzz"))
+    }
+    Write-Host ("收據檔案：{0}" -f $predictionFreezePath)
+    Write-Host "完整原因：" -ForegroundColor Yellow
+    Write-Host $predictionBlocker
+}
 $openingStageSummary | Format-Table -AutoSize | Out-Host
 
 Write-Host ("共同出現排名（至少 {0} 個來源，前 {1} 名）" -f $MinAppearances, $Top) -ForegroundColor Yellow
