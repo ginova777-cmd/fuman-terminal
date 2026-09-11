@@ -5,7 +5,7 @@ const path = require("path");
 
 const SLOW_SCAN = ["1", "true", "yes"].includes(String(process.env.INSTITUTION_SLOW_SCAN || "").toLowerCase());
 const REQUEST_DELAY_MS = Number(process.env.INSTITUTION_REQUEST_DELAY_MS || (SLOW_SCAN ? 15000 : 1200));
-const FETCH_RETRIES = Number(process.env.INSTITUTION_FETCH_RETRIES || (SLOW_SCAN ? 4 : 1));
+const FETCH_RETRIES = Number(process.env.INSTITUTION_FETCH_RETRIES || (SLOW_SCAN ? 4 : 3));
 const SOURCE_ERROR_LIMIT = Number(process.env.INSTITUTION_SOURCE_ERROR_LIMIT || (SLOW_SCAN ? 3 : 8));
 const SOURCE_PROVIDER = String(process.env.INSTITUTION_SOURCE_PROVIDER || "").toLowerCase();
 const FINMIND_TOKEN_FILE = process.env.FINMIND_API_TOKEN_FILE
@@ -23,7 +23,7 @@ function sleep(ms) {
 
 function isRetriableFetchError(error) {
   const message = String(error?.message || "");
-  return /HTTP (403|429|500|502|503|504)|aborted|fetch failed/i.test(message);
+  return /HTTP (403|429|500|502|503|504)|aborted|terminated|ECONNRESET|fetch failed/i.test(message);
 }
 
 function cleanNumber(value) {
@@ -191,7 +191,7 @@ async function recentRows(fetcher, limit = 8) {
       if (result.rows.length) groups.push(result);
       consecutiveRetriableErrors = 0;
     } catch (error) {
-      errors.push(error.message);
+      errors.push(`${fetcher.name} ${formatYmd(date)}: ${error.message}`);
       if (isRetriableFetchError(error)) consecutiveRetriableErrors += 1;
       else consecutiveRetriableErrors = 0;
       if (consecutiveRetriableErrors >= SOURCE_ERROR_LIMIT) {

@@ -14,7 +14,7 @@ const SUMMARY_FILE = dataPath("institution-summary.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const SLOW_SCAN = ["1", "true", "yes"].includes(String(process.env.INSTITUTION_SLOW_SCAN || "").toLowerCase());
 const REQUEST_DELAY_MS = Number(process.env.INSTITUTION_REQUEST_DELAY_MS || (SLOW_SCAN ? 15000 : 1200));
-const FETCH_RETRIES = Number(process.env.INSTITUTION_FETCH_RETRIES || (SLOW_SCAN ? 4 : 1));
+const FETCH_RETRIES = Number(process.env.INSTITUTION_FETCH_RETRIES || (SLOW_SCAN ? 4 : 3));
 const MIN_SOURCE_ROWS = Number(process.env.INSTITUTION_MIN_SOURCE_ROWS || 1000);
 const MIN_OUTPUT_ROWS = Number(process.env.INSTITUTION_MIN_OUTPUT_ROWS || 100);
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -43,7 +43,7 @@ function sleep(ms) {
 
 function isRetriableFetchError(error) {
   const message = String(error?.message || "");
-  return /HTTP (403|429|500|502|503|504)|aborted|fetch failed/i.test(message);
+  return /HTTP (403|429|500|502|503|504)|aborted|terminated|ECONNRESET|fetch failed/i.test(message);
 }
 
 function readJson(file, fallback) {
@@ -159,13 +159,22 @@ function notRequiredReadiness(reason) {
   };
 }
 
+function institutionSourceDateIssues(output, expectedDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date())) {
+  const expected = normalizeDateKey(expectedDate), issues = [];
+  for (const market of ["twse", "tpex"]) if (normalizeDateKey(output.sourceDates?.[market]) !== expected) issues.push(market + "_source_date_not_today");
+  if (normalizeDateKey(output.usedDate) !== expected) issues.push("used_date_not_today");
+  if ((output.errors || []).length) issues.push("official_source_history_incomplete");
+  return issues;
+}
+
 function buildInstitutionSourceStatusAtRun(output, { sourceCount = 0, resultCount = 0, dataAge = 0 } = {}) {
   const sourceDates = output.sourceDates && typeof output.sourceDates === "object" ? output.sourceDates : {};
   const errors = Array.isArray(output.errors) ? output.errors : [];
   const ready = (
     sourceCount >= MIN_SOURCE_ROWS
     && resultCount >= MIN_OUTPUT_ROWS
-    && dataAge <= 3
+    && dataAge === 0
+    && institutionSourceDateIssues(output).length === 0
     && Boolean(output.usedDate)
   );
   return {
@@ -753,6 +762,8 @@ async function main() {
     process.exit(2);
   }
 
+  const sourceDateIssues = institutionSourceDateIssues(output);
+  if (sourceDateIssues.length) throw new Error("institution source freshness: " + sourceDateIssues.join(",") + "; preserve previous complete run");
   await publishInstitutionCompleteRunToSupabase(output);
   await publishInstitutionSnapshot(output);
   console.log("institution authoritative readback metadata: " + JSON.stringify({ runId: output.runId, sourceRows: sourceCount, resultCount: count, usedDate: output.usedDate, sourceSnapshotCapturedAt: output.updatedAt, warnings: output.sourceHealth.warnings, blankTotal: output.blankTotal }));
@@ -776,6 +787,7 @@ if (require.main === module) {
 }
 
 module.exports = {
+  institutionSourceDateIssues,
   buildInstitutionRunRow,
   buildInstitutionResultRows,
   buildInstitutionSourceStatusAtRun,
