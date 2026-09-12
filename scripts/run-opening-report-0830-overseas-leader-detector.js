@@ -1,6 +1,7 @@
 "use strict";
 
 const fs = require("fs");
+const japanRealtime = require("../lib/opening-report-japan-realtime");
 const path = require("path");
 const { OPENING_REPORT_0830_INDUSTRY_MAP, leaderPairs } = require("./opening-report-0830-industry-map-contract.js");
 const { applyLeaderFreshness, summarizeReceiptFreshness } = require("../lib/opening-report-asia-freshness");
@@ -254,12 +255,15 @@ async function detectLeader(industry, leader, tradeDate, usMarket) {
           direction: "unknown",
           reason_code: "non_us_japan_korea_source_excluded",
         }
-      : market === "japan" ? await japanYahooSnapshot({name,yahoo},tradeDate) : await yahooChartSnapshot({ name, yahoo }, tradeDate);
+      : market === "japan" ? (japanRealtime.SYMBOLS.includes(yahoo) ? await japanRealtime.snapshot({name,yahoo},tradeDate) : await japanYahooSnapshot({name,yahoo},tradeDate)) : await yahooChartSnapshot({ name, yahoo }, tradeDate);
   const noNewUsSession = usLeader && usMarket?.no_new_us_session === true;
   return applyLeaderFreshness({
     name,
     yahoo_symbol: yahoo || "",
-    source_provider: sourceProvider || "",
+    source_provider: y.source_provider || sourceProvider || "",
+    source_evidence: y.source_evidence,
+    source_failure_reason: y.ok ? null : y.reason_code,
+    source_attempts: y.attempts,
     industry: industry.industry,
     ok: noNewUsSession ? false : y.ok === true,
     source: y.source,
@@ -306,6 +310,8 @@ async function main() {
   const tradeDate = argValue("--date", process.env.FUMAN_TRADE_DATE || taipeiDateKey());
   const runId = argValue("--run-id", `overseas-leaders-0830-${tradeDate.replace(/\D/g, "")}-${Date.now()}`);
   const usMarket = buildUsEquityMarketCalendar(tradeDate);
+  // Capture the five real-time Japan quotes before slower overseas chart reads.
+  await Promise.all(japanRealtime.SYMBOLS.map(yahoo => japanRealtime.snapshot({yahoo}, tradeDate)));
   const industries = [];
   for (const industry of INDUSTRIES) {
     const rows = [];
@@ -329,6 +335,9 @@ async function main() {
     source_gap_leaders: freshness.source_gap_count,
     stale_promoted_leaders: freshness.stale_promoted_count,
     source_freshness_policy: "Japan and Korea leaders outside the same-day 08:00-08:20 Asia/Taipei window are source_gap and contribute no industry score. Other industries remain publishable.",
+    japan_realtime_source_contract: japanRealtime.PROVIDER,
+    japan_realtime_symbols: [...japanRealtime.SYMBOLS],
+    japan_realtime_valid_count: allLeaders.filter(row => japanRealtime.SYMBOLS.includes(row.yahoo_symbol) && row.ok && japanRealtime.receiptValid(row,tradeDate)).length,
     korea_source_contract: "korea_direct_naver_change_percent_only_v1",
     korea_direct_source: "Naver Finance KRX basic",
     korea_direct_valid_count: allLeaders.filter((row) => /\.(?:KS|KQ)$/i.test(row.yahoo_symbol || "") && row.ok === true && row.source === "Naver Finance KRX basic").length,

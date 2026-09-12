@@ -217,6 +217,12 @@ function staticContractChecks(checks) {
   addCheck(checks, "japan_korea_freeze_window_0800_0820", detector.includes("08:00-08:20 Asia/Taipei") && detector.includes("T08:20:59.999+08:00"), "Japan/Korea must freeze by 08:20 minute end");
   addCheck(checks, "korea_naver_percent_only_primary_present", detector.includes("korea_naver_change_percent_primary") && detector.includes("fluctuationsRatio") && detector.includes("localTradedAt") && detector.includes("KQ"), "Korean .KS/.KQ rows must use Naver directly with same-day percent and source time");
   addCheck(checks, "retired_sources_have_no_fetch_route", !detector.includes("finance.yahoo.co.jp/quote/") && detector.includes("retired_morning_source"), "retired sources must be rejected before network access");
+  const japanRealtime = require(path.join(ROOT, "lib/opening-report-japan-realtime"));
+  const japanTests = run("node", [path.join(ROOT, "scripts/test-opening-report-japan-realtime.js")]);
+  addCheck(checks, "japan_realtime_strict_source_tests", japanTests.ok, japanTests.text.trim());
+  const japanMap = loadIndustryContract().OPENING_REPORT_0830_INDUSTRY_MAP.flatMap(row => row.overseas_leaders);
+  addCheck(checks, "japan_realtime_five_source_mappings", japanRealtime.SYMBOLS.every(symbol => japanMap.some(row => row.yahoo_symbol === symbol && row.source_provider === japanRealtime.PROVIDER)), "five approved TSE symbols must use real-time primary");
+  addCheck(checks, "japan_realtime_runner_wiring", detector.includes("await Promise.all(japanRealtime.SYMBOLS.map") && detector.includes("await japanRealtime.snapshot({name,yahoo},tradeDate)"), "fetch before sequential chart sources");
   const detectorModule = require(path.join(ROOT, "scripts", "run-opening-report-0830-overseas-leader-detector.js"));
   addCheck(checks, "overseas_market_classifier_contract", detectorModule.classifyLeaderMarket("AAPL") === "us" && detectorModule.classifyLeaderMarket("6861.T") === "japan" && detectorModule.classifyLeaderMarket("005930.KS") === "korea" && detectorModule.classifyLeaderMarket("222800.KQ") === "korea" && detectorModule.classifyLeaderMarket("000725.SZ") === "other", "US, Japan, Korea and unsupported markets must not be conflated");
   const naverFixture = detectorModule.parseNaverKoreaBasic({ itemCode: "005930", fluctuationsRatio: "1.11", localTradedAt: "2026-09-08T09:20:59+09:00" }, { yahoo: "005930.KS" }, "2026-09-08");
@@ -343,6 +349,11 @@ function currentReceiptChecks(checks, tradeDate) {
   });
   addCheck(checks, "current_no_source_after_0820", allSourcesWithinCutoff, "cutoff=" + tradeDate + "T08:20:00+08:00");
 
+  const japanRealtime = require(path.join(ROOT, "lib/opening-report-japan-realtime"));
+  const japanRows = rows.filter(row => japanRealtime.SYMBOLS.includes(row.yahoo_symbol));
+  const japanRequired = tradeDate >= "2026-09-14";
+  addCheck(checks, "current_japan_realtime_primary", !japanRequired || (japanRows.length === japanRealtime.SYMBOLS.length && japanRows.every(row => row.source_provider === japanRealtime.PROVIDER && row.source === japanRealtime.SOURCE)), "five approved TSE sources required from 2026-09-14");
+  addCheck(checks, "current_japan_realtime_evidence", !japanRequired || japanRows.filter(row => row.ok === true).every(row => japanRealtime.receiptValid(row,tradeDate)), "validate symbol, quote/capture times, zero delay, numeric consistency and source evidence");
   const usMarket = leaders.us_market || {};
   addCheck(checks, "current_us_market_status_contract", ["regular", "early_close", "market_closed"].includes(usMarket.us_market_status) && typeof usMarket.no_new_us_session === "boolean" && usMarket.calendar_timezone === "America/New_York", JSON.stringify(usMarket));
   const currentDetectorModule = require(path.join(ROOT, "scripts", "run-opening-report-0830-overseas-leader-detector.js"));
