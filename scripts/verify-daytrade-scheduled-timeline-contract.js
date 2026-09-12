@@ -6,7 +6,6 @@ const checks = [
   { name: "Fuman Fugle Daytrade WebSocket Collector 0600-1330", contains: "Run-DaytradeWebSocketCollector.ps1" },
   { name: "Fuman Daytrade Source Writer 0600-1330", contains: "Run-DaytradeSourceWriter.ps1" },
   { name: "Fuman Daytrade Source Gate 0700", contains: "-Phase 0700" },
-  { name: "Fuman Opening Report 0820 Preflight", contains: "run-opening-report-0820-preflight.js" },
   { name: "Fuman Morning Report 0830 Complete", contains: "run-opening-report-0830-production-wrapper.ps1" },
   { name: "Fuman Opening Limit Order Morning Readonly 0840", contains: "Run-OpeningLimitOrderMorningReadonly.ps1" },
   { name: "Fuman Strategy3 V2 Readiness Guard 1230", contains: "run-strategy3-v2-readiness-guard.ps1" },
@@ -63,8 +62,7 @@ console.log(JSON.stringify({
   canonical_timeline: [
     "06:00 collector + writer",
     "07:00 natural warmup gate",
-    "08:20 overseas preflight",
-    "08:30 morning report",
+    "08:30 unified source freeze -> morning report -> delivery -> acceptance",
     "08:40 opening-entry readonly runner",
     "12:30 Strategy3 readiness guard",
     "12:50 Strategy3 readiness guard",

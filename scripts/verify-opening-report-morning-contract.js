@@ -97,9 +97,9 @@ function parseArgs() {
 function currentPreflightReceiptChecks(checks, tradeDate) {
   const ymd = compactDate(tradeDate);
   const paths = {
-    preflight: path.join(REPORT_DIR, "opening-report-0820-preflight-receipt-" + ymd + ".json"),
-    leaders: path.join(REPORT_DIR, "opening-report-0820-overseas-leaders-" + ymd + ".json"),
-    snapshot: path.join(REPORT_DIR, "opening-report-0820-market-snapshot-" + ymd + ".json"),
+    preflight: path.join(REPORT_DIR, "opening-report-0830-preflight-receipt-" + ymd + ".json"),
+    leaders: path.join(REPORT_DIR, "opening-report-0830-overseas-leaders-" + ymd + ".json"),
+    snapshot: path.join(REPORT_DIR, "opening-report-0830-market-snapshot-" + ymd + ".json"),
   };
   for (const [key, filePath] of Object.entries(paths)) {
     addCheck(checks, "current_preflight_receipt_exists:" + key, exists(filePath), filePath);
@@ -214,7 +214,7 @@ function staticContractChecks(checks) {
   const usCalendar = readText("scripts/us-equity-market-calendar.js");
   addCheck(checks, "us_market_calendar_contract_present", usCalendar.includes("NYSE_NASDAQ_2026") && usCalendar.includes("2026-09-07") && usCalendar.includes("Labor Day") && usCalendar.includes("early_close"), "NYSE/Nasdaq 2026 closure and early-close contract required");
   addCheck(checks, "us_market_closed_excluded_japan_korea_remain", detector.includes("us_market_closed_no_new_session") && detector.includes("us_market_closed_previous_session_background_only") && detector.includes("Naver Finance KRX basic"), "US closed rows must be background-only while fresh Japan/Korea rows remain eligible");
-  addCheck(checks, "japan_korea_freeze_window_0800_0820", detector.includes("08:00-08:20 Asia/Taipei") && detector.includes("T08:20:59.999+08:00"), "Japan/Korea must freeze by 08:20 minute end");
+  addCheck(checks, "japan_korea_freeze_window_0800_0830", detector.includes("08:00-08:30 Asia/Taipei") && detector.includes("T08:30:59.999+08:00"), "Japan/Korea must freeze by 08:30 minute end");
   addCheck(checks, "korea_naver_percent_only_primary_present", detector.includes("korea_naver_change_percent_primary") && detector.includes("fluctuationsRatio") && detector.includes("localTradedAt") && detector.includes("KQ"), "Korean .KS/.KQ rows must use Naver directly with same-day percent and source time");
   addCheck(checks, "retired_sources_have_no_fetch_route", !detector.includes("finance.yahoo.co.jp/quote/") && detector.includes("retired_morning_source"), "retired sources must be rejected before network access");
   const japanRealtime = require(path.join(ROOT, "lib/opening-report-japan-realtime"));
@@ -225,16 +225,16 @@ function staticContractChecks(checks) {
   addCheck(checks, "japan_realtime_runner_wiring", detector.includes("await Promise.all(japanRealtime.SYMBOLS.map") && detector.includes("await japanRealtime.snapshot({name,yahoo},tradeDate)"), "fetch before sequential chart sources");
   const detectorModule = require(path.join(ROOT, "scripts", "run-opening-report-0830-overseas-leader-detector.js"));
   addCheck(checks, "overseas_market_classifier_contract", detectorModule.classifyLeaderMarket("AAPL") === "us" && detectorModule.classifyLeaderMarket("6861.T") === "japan" && detectorModule.classifyLeaderMarket("005930.KS") === "korea" && detectorModule.classifyLeaderMarket("222800.KQ") === "korea" && detectorModule.classifyLeaderMarket("000725.SZ") === "other", "US, Japan, Korea and unsupported markets must not be conflated");
-  const naverFixture = detectorModule.parseNaverKoreaBasic({ itemCode: "005930", fluctuationsRatio: "1.11", localTradedAt: "2026-09-08T09:20:59+09:00" }, { yahoo: "005930.KS" }, "2026-09-08");
-  const naverAfterCutoff = detectorModule.parseNaverKoreaBasic({ itemCode: "005930", fluctuationsRatio: "1.12", localTradedAt: "2026-09-08T09:21:00+09:00" }, { yahoo: "005930.KS" }, "2026-09-08");
+  const naverFixture = detectorModule.parseNaverKoreaBasic({ itemCode: "005930", fluctuationsRatio: "1.11", localTradedAt: "2026-09-08T09:30:59+09:00" }, { yahoo: "005930.KS" }, "2026-09-08");
+  const naverAfterCutoff = detectorModule.parseNaverKoreaBasic({ itemCode: "005930", fluctuationsRatio: "1.12", localTradedAt: "2026-09-08T09:31:00+09:00" }, { yahoo: "005930.KS" }, "2026-09-08");
   addCheck(checks, "korea_naver_percent_fixture", naverFixture.ok === true && naverFixture.percent === 1.11 && naverFixture.reason_code === "korea_naver_change_percent_primary", JSON.stringify(naverFixture));
-  addCheck(checks, "korea_naver_after_cutoff_rejected", naverAfterCutoff.ok === false && naverAfterCutoff.reason_code === "naver_korea_outside_0800_0820_window", JSON.stringify(naverAfterCutoff));
+  addCheck(checks, "korea_naver_after_cutoff_rejected", naverAfterCutoff.ok === false && naverAfterCutoff.reason_code === "naver_korea_outside_0800_0830_window", JSON.stringify(naverAfterCutoff));
   const calendarModule = require(path.join(ROOT, "scripts", "us-equity-market-calendar.js"));
   const holidayFixture = calendarModule.buildUsEquityMarketCalendar("2026-09-08");
   addCheck(checks, "us_market_labor_day_runtime_switch", holidayFixture.us_market_status === "market_closed" && holidayFixture.no_new_us_session === true && holidayFixture.us_holiday_name === "Labor Day", JSON.stringify(holidayFixture));
 
-  const preflight = readText("scripts/run-opening-report-0820-preflight.js");
-  addCheck(checks, "preflight_freezes_at_0820", preflight.includes("08:20:59.999 Asia/Taipei"), "08:20 minute-end freeze must be explicit");
+  const preflight = readText("scripts/run-opening-report-0830-preflight.js");
+  addCheck(checks, "preflight_freezes_at_0830", preflight.includes("08:30:59.999 Asia/Taipei"), "08:30 minute-end freeze must be explicit");
 
   const runner = readText("scripts/run-opening-report-0830-production.js");
   const handoffAck = readText("scripts/verify-opening-report-0830-mother-pool-handoff-ack.js");
@@ -242,14 +242,14 @@ function staticContractChecks(checks) {
   const motherPoolWriter = readText("scripts/run-daytrade-source-writer.js");
   const motherPoolEvidence = readText("lib/opening-report-0830-mother-pool-evidence.js");
   addCheck(checks, "runner_owns_non_trading_day_guard", runner.includes("isTwseTradingDay") && runner.includes("market_calendar_non_trading_day") && runner.includes("no_side_effects") && runner.includes("line_push_attempted: false") && runner.includes("mother_pool_bridge_attempted: false"), "direct runner invocation must skip before every side effect on market-closed days");
-  addCheck(checks, "runner_consumes_frozen_snapshot_only", runner.includes("frozen 08:20 evidence only") || runner.includes("凍結"), "08:30 runner must not refetch overseas direction");
+  addCheck(checks, "runner_consumes_frozen_snapshot_only", runner.includes("frozen 08:30 evidence only") || runner.includes("凍結"), "08:30 runner must not refetch overseas direction");
   addCheck(checks, "runner_observation_only", runner.includes("formal_candidates: 0") && runner.includes("watchlist_only: true") && runner.includes("industry_observation_only"), "morning report must never create formal candidates");
   addCheck(checks, "runner_does_not_read_or_grade_intraday_gate", !runner.includes("readTaiwanGate") && !runner.includes("daytrade-unattended-gate-watchdog"), "08:30 report must not read, calculate, or grade intraday Gate A-D");
   addCheck(checks, "runner_preserves_previous_good_on_incomplete_briefing", runner.includes("briefing?.ok !== true") && runner.includes("preserve_previous_good: true"), "an incomplete briefing must never overwrite the last complete terminal snapshot");
   addCheck(checks, "line_delivery_contract_present", runner.includes("line-push-receipt") && runner.includes("pushLine") && runner.includes("lineReportFlex"), "LINE Flex delivery remains canonical");
   addCheck(checks, "line_customer_layout_fixed", ["📈 08:30 漲幅族群晨報", "15 個產業掃描完成", "海外平均漲幅", "日韓早盤漲幅", "台股 A：", "台股 B："].every((token) => runner.includes(token)), "LINE customer layout must support regular and US-closed fallback cards");
   const lineLayoutSource = (runner.match(/function lineReportText[\s\S]*?function invalidLineTarget/) || [""])[0];
-  addCheck(checks, "line_customer_layout_hides_internal_status", ["掃描：15／15", "資料截點：08:20", "Mother Pool：", "台股 Gate：", "狀態：", "FAIL_CLOSED", "僅供觀察，不是自動下單訊號"].every((token) => !lineLayoutSource.includes(token)), "LINE customer card must not expose internal operations");
+  addCheck(checks, "line_customer_layout_hides_internal_status", ["掃描：15／15", "資料截點：08:30", "Mother Pool：", "台股 Gate：", "狀態：", "FAIL_CLOSED", "僅供觀察，不是自動下單訊號"].every((token) => !lineLayoutSource.includes(token)), "LINE customer card must not expose internal operations");
   addCheck(checks, "us_closed_asia_positive_leader_top3_handoff", runner.includes("us_market_closed_asia_positive_leader_top3") && runner.includes("asiaPositiveLeaderObservations") && runner.includes("priority_overseas_leaders"), "US-closed days must hand positive Japan/Korea leader Top 3 mappings to Mother Pool");
   addCheck(checks, "positive_top3_zero_to_three_is_valid", runner.includes("displayTop3.length <= 3") && !runner.includes("displayTop3.length === 3"), "Zero to three positive observations is a valid completed report");
   addCheck(checks, "bridge_priority_observation_nonblocking", runner.includes("us_open_positive_industry_or_us_closed_asia_positive_leader_top3_v2") && runner.includes("It must never change the 08:30 report delivery decision."), "Mother Pool bridge only changes scan priority");
@@ -267,6 +267,8 @@ function staticContractChecks(checks) {
   addCheck(checks, "mother_pool_persistence_ack_fixture", persistenceAckFixture.ok && persistenceAckFixture.text.includes('"writer_refreshes_observed": 2') && persistenceAckFixture.text.includes('"db_readback_ok": true'), persistenceAckFixture.text.trim());
 
   const wrapper = readText("run-opening-report-0830-production-wrapper.ps1");
+  const clockTests = run("node", ["scripts/test-opening-report-unified-0830.js"]);
+  addCheck(checks,"unified_0830_clock_and_source_chain",clockTests.ok,clockTests.text.trim());
   addCheck(checks, "wrapper_owns_non_trading_day_guard", wrapper.includes("check-market-calendar-action.js") && wrapper.includes("market_calendar_non_trading_day") && wrapper.includes("line_push_attempted = $false") && wrapper.includes("mother_pool_bridge_attempted = $false"), "Task Scheduler wrapper must guard independently before invoking the runner");
   addCheck(checks, "wrapper_runner_verifier_receipt_chain", wrapper.includes("run-opening-report-0830-production.js") && wrapper.includes("verify-opening-report-0830-mother-pool-persistence-ack.js") && wrapper.includes("verify-opening-report-morning-contract.js") && wrapper.includes("opening-report-morning-wrapper-v1"), "wrapper must be runner -> PERSISTENCE_ACK -> canonical verifier -> wrapper receipt");
   addCheck(checks, "wrapper_audited_line_receipt_recovery", wrapper.includes("ReuseLineReceipt") && wrapper.includes("--reuse-line-receipt") && wrapper.includes("existingLine.line_push_ok"), "bounded recovery may reuse only the already successful same-run LINE receipt");
@@ -316,9 +318,9 @@ function expectedAsiaPositiveLeaderTop3(leaders) {
 function currentReceiptChecks(checks, tradeDate) {
   const ymd = compactDate(tradeDate);
   const paths = {
-    preflight: path.join(REPORT_DIR, "opening-report-0820-preflight-receipt-" + ymd + ".json"),
-    leaders: path.join(REPORT_DIR, "opening-report-0820-overseas-leaders-" + ymd + ".json"),
-    snapshot: path.join(REPORT_DIR, "opening-report-0820-market-snapshot-" + ymd + ".json"),
+    preflight: path.join(REPORT_DIR, "opening-report-0830-preflight-receipt-" + ymd + ".json"),
+    leaders: path.join(REPORT_DIR, "opening-report-0830-overseas-leaders-" + ymd + ".json"),
+    snapshot: path.join(REPORT_DIR, "opening-report-0830-market-snapshot-" + ymd + ".json"),
     final: path.join(REPORT_DIR, "opening-report-0830-final-receipt-" + ymd + ".json"),
     line: path.join(REPORT_DIR, "line-push-receipt-" + ymd + ".json"),
   };
@@ -334,8 +336,9 @@ function currentReceiptChecks(checks, tradeDate) {
   const snapshot = readJson(paths.snapshot);
   const finalReceipt = readJson(paths.final);
   const line = readJson(paths.line);
+  addCheck(checks, "current_unified_source_run_identity", !!finalReceipt.run_id && [preflight,leaders,snapshot].every(row => row.run_id === finalReceipt.run_id), "source freeze, snapshot and final must share the unified run");
   const windowStartMs = Date.parse(tradeDate + "T08:00:00+08:00");
-  const cutoffMs = Date.parse(tradeDate + "T08:20:59.999+08:00");
+  const cutoffMs = Date.parse(tradeDate + "T08:30:59.999+08:00");
 
   addCheck(checks, "current_preflight_ok", preflight.ok === true || preflight.status === "OK" || preflight.report_status === "REPORT_OK" || preflight.report_status === "REPORT_DEGRADED", JSON.stringify({ ok: preflight.ok, status: preflight.status, report_status: preflight.report_status }));
 
@@ -347,7 +350,7 @@ function currentReceiptChecks(checks, tradeDate) {
     const sourceMs = Date.parse(String(row.source_time || ""));
     return Number.isFinite(sourceMs) && sourceMs >= windowStartMs && sourceMs <= cutoffMs;
   });
-  addCheck(checks, "current_no_source_after_0820", allSourcesWithinCutoff, "cutoff=" + tradeDate + "T08:20:00+08:00");
+  addCheck(checks, "current_no_source_after_0830", allSourcesWithinCutoff, "cutoff=" + tradeDate + "T08:30:00+08:00");
 
   const japanRealtime = require(path.join(ROOT, "lib/opening-report-japan-realtime"));
   const japanRows = rows.filter(row => japanRealtime.SYMBOLS.includes(row.yahoo_symbol));
