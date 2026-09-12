@@ -430,7 +430,8 @@ function currentReceiptChecks(checks, tradeDate) {
 
 function renderedDeliveryChecks(checks, tradeDate, final) {
   const file=path.join(REPORT_DIR,"rendered",compactDate(tradeDate),"opening-report-rendered.json");
-  const receipt=readJson(file);
+  let receipt=null;
+  try { receipt=readJson(file); } catch { /* Missing or invalid evidence remains a failed check. */ }
   addCheck(checks,"current_rendered_receipt",receipt?.contract==="opening-report-rendered-v1" && receipt.complete===true && receipt.diagnostic===false && receipt.run_id===final.run_id && receipt.trade_date===tradeDate && receipt.delivery_content_hash===final.delivery_content_hash && receipt.full_content_hash_ok===true,"same-run live desktop/mobile required");
   const age=Date.now()-Date.parse(receipt?.checked_at||"");
   addCheck(checks,"current_rendered_receipt_fresh",age>=0 && age<30*60*1000,"rendered evidence within 30 minutes");

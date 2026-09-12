@@ -52,5 +52,9 @@ console.log(JSON.stringify({ok:true,morning_ui_states:["empty","blocked","degrad
   const checks=[],ctx={path,REPORT_DIR:"fixture",compactDate:x=>x.replace(/-/g,""),readJson:()=>({run_id:"fixture",display_top3:[],delivery_content_hash:"fixture"}),renderedDeliveryChecks:items=>{renderedCalled=true;items.push({name:"missing_rendered_receipt",ok:false});},addCheck:(items,name,ok)=>items.push({name,ok}),require:name=>name.includes("delivery-contract")?{contentHash:()=>"fixture"}:{readSnapshot:async()=>null}};
   vm.createContext(ctx);vm.runInContext(code+"\nthis.verifyLive=liveDeliveryChecks",ctx);await ctx.verifyLive(checks,"2026-09-14");
   assert.equal(renderedCalled,true);assert.ok(checks.some(x=>x.name==="missing_rendered_receipt"&&!x.ok));
+  const renderedCode=source.slice(source.indexOf("function renderedDeliveryChecks("),source.indexOf("async function liveDeliveryChecks("));
+  const missing=[],negative={path,REPORT_DIR:"fixture",compactDate:x=>x.replace(/-/g,""),readJson:()=>{throw Error("ENOENT");},addCheck:(items,name,ok)=>items.push({name,ok}),require:()=>({expectedRows:()=>[]})};
+  vm.createContext(negative);vm.runInContext(renderedCode+"\nthis.verifyRendered=renderedDeliveryChecks",negative);negative.verifyRendered(missing,"2099-01-01",{run_id:"missing",display_top3:[]});
+  assert.equal(missing.length,5);assert.ok(missing.every(x=>!x.ok));
   console.log(JSON.stringify({ok:true,canonical_requires_rendered_evidence:true}));
 })().catch(error=>{console.error(error);process.exitCode=1;});
