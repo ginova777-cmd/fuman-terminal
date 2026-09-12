@@ -16,3 +16,15 @@ result=evaluate(rows,Object.fromEntries(rows.map(r=>[r.code,{daily:flat,hourly60
 assert.equal(result.selected.length,0);assert.equal(result.selectionCoverage.dataCoverage,1);
 assert.equal(evaluate(rows,sources,'2000-01-21').selectionCoverage.dataCoverage,0);
 console.log('PASS Strategy5 daily up required, optional 60m, unchanged base strategies, 90% boundary, missing/stale and flat trend');
+
+{
+ const proof = require('../lib/strategy5-technical-selection');
+ const assert = require('assert');
+ const bars = Array.from({length:12},(_,i)=>({date:'2026-01-'+String(i+9).padStart(2,'0'),open:10+i,high:12+i,low:9+i,close:11+i}));
+ const candidate={code:'2330',name:'test',market:'TWSE',close:22,matches:[{id:'volume_turnover_breakout'}]};
+ const evaluate=rows=>proof.evaluate([candidate],{'2330':{daily:rows,hourly60:[]}},'2026-01-20');
+ assert.equal(evaluate([...bars,{date:'2026-01-03',open:null,high:null,low:null,close:null}]).selectionCoverage.dataCoverage,1,'weekend null placeholder is not a daily candle');
+ assert.equal(evaluate([...bars,{date:'2026-01-02',open:null,high:null,low:null,close:null}]).selectionCoverage.dataCoverage,0,'weekday missing candle must remain blocking');
+ assert.equal(evaluate([...bars,{date:'2026-01-03',open:12,high:null,low:11,close:12}]).selectionCoverage.dataCoverage,0,'partially malformed weekend row must not be silently removed');
+ console.log('PASS Strategy5 excludes only empty weekend placeholders, retains missing trading bars');
+}
