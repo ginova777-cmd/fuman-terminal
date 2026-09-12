@@ -217,11 +217,17 @@ async function fetchRunRows(config, limit = 5000, includeStrategy = true) {
   const filters = [
     `select=${encodeURIComponent(select)}`,
     includeStrategy && config.strategy ? `strategy=eq.${encodeURIComponent(config.strategy)}` : "",
-    `order=${encodeURIComponent(`${config.dateColumn}.desc`)}`,
+    `order=${encodeURIComponent(`${config.dateColumn}.desc,run_id.desc`)}`,
     `limit=${limit}`,
   ].filter(Boolean).join("&");
-  const result = await supabaseFetch(`${config.runsTable}?${filters}`);
-  return result.rows.filter((row) => row && row.run_id);
+  const rows=[];const ids=new Set();
+  for(let page=0;page<100;page++){
+    const result=await supabaseFetch(`${config.runsTable}?${filters}&offset=${rows.length}`);
+    for(const row of result.rows){if(!row?.run_id||ids.has(row.run_id))throw Error(config.key+': run_pagination_duplicate');ids.add(row.run_id);rows.push(row);}
+    if(rows.length>=result.count)return rows;
+    if(!result.rows.length)throw Error(config.key+': run_pagination_not_advancing');
+  }
+  throw Error(config.key+': run_pagination_bound_reached');
 }
 
 function rowTime(row, config) {
@@ -307,6 +313,8 @@ function quoteCmdArg(arg) {
 }
 
 function runVercelCli(args, timeout = 30000) {
+  const nativeCli=path.join(process.env.APPDATA || '', 'npm/node_modules/vercel/dist/vc.js');
+  if(process.platform==='win32' && fs.existsSync(nativeCli)) return spawnSync(process.execPath,[nativeCli,...args],{cwd:ROOT,encoding:'utf8',timeout,windowsHide:true,maxBuffer:32*1024*1024});
   const command = process.platform === "win32" ? "cmd.exe" : "vercel";
   const commandArgs = process.platform === "win32"
     ? ["/d", "/s", "/c", `vercel ${args.map(quoteCmdArg).join(" ")}`]
@@ -320,8 +328,8 @@ function runVercelCli(args, timeout = 30000) {
   return result;
 }
 
-function vercelListDeployments(projectName) {
-  const result = runVercelCli(["list", projectName, "--format=json"], 60000);
+function vercelListDeployments(projectName, cursor) {
+  const result = runVercelCli(["list", projectName, "--format=json", ...(cursor === undefined ? [] : ["--next",String(cursor)])], 60000);
   if (result.error) throw new Error(`vercel list ${projectName} failed: ${result.error.message}`);
   if (result.status !== 0) {
     throw new Error(`vercel list ${projectName} failed: ${(result.stderr || result.stdout || "").trim().slice(0, 500)}`);
@@ -382,16 +390,18 @@ async function cleanupVercelDeployments(args) {
     return { ok: true, skipped: true, reason: "vercel_cli_disabled_without_token", project, dryRun: !args.apply };
   }
   const authMode = token ? "token" : "vercel-cli";
-  let deployments = [];
-  if (token) {
-    const query = new URLSearchParams({ projectId: project.projectId, limit: "100" });
-    if (project.orgId) query.set("teamId", project.orgId);
-    const payload = await vercelRequest(`/v6/deployments?${query.toString()}`, token);
-    deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
-  } else {
-    const payload = vercelListDeployments(project.projectName || "fuman-terminal");
-    deployments = Array.isArray(payload.deployments) ? payload.deployments : [];
-  }
+  const {allCursorPages}=require('./cleanup-history-pagination');
+  const inventory=await allCursorPages(async cursor=>{
+    const query=new URLSearchParams({projectId:project.projectId,limit:'100'});
+    if(project.orgId)query.set('teamId',project.orgId);
+    if(cursor!==undefined)query.set('until',String(cursor));
+    const endpoint='/v6/deployments?'+query.toString();
+    if(token)return vercelRequest(endpoint,token);
+    const result=runVercelCli(['api',endpoint,'--method','GET','--raw'],60000);
+    if(result.error||result.status!==0)throw Error('vercel inventory page failed: '+(result.error?.message||result.stderr||result.stdout).slice(0,300));
+    return parseVercelJson(result.stdout);
+  });
+  const deployments=inventory.rows.map(item=>({...item,target:item.target===null ? "preview" : item.target}));
   const cutoffMs = Date.now() - args.vercelRetentionDays * 86400000;
   const byTarget = new Map();
   for (const item of deployments) {
@@ -407,7 +417,7 @@ async function cleanupVercelDeployments(args) {
       .forEach((item) => keep.add(item.uid || item.id));
   }
   const productionHost = "fuman-terminal.vercel.app";
-  const candidates = deployments.filter((item) => {
+  const possibleCandidates = deployments.filter((item) => {
     const id = item.uid || item.id || item.url;
     const aliases = Array.isArray(item.alias) ? item.alias : [];
     const createdAt = Number(item.createdAt || 0);
@@ -420,6 +430,23 @@ async function cleanupVercelDeployments(args) {
       && aliases.length === 0
       && !aliases.includes(productionHost);
   });
+  const candidates=[], protectedAliases=[];
+  for(const item of possibleCandidates){
+    let detail;
+    if(token){
+      const query=project.orgId?'?teamId='+encodeURIComponent(project.orgId):'';
+      detail=await vercelRequest('/v13/deployments/'+encodeURIComponent(item.uid||item.id||item.url)+query,token);
+      if(!Array.isArray(detail.alias))throw Error('deployment_alias_readback_missing');
+      detail={...detail,target:detail.target===null?'preview':detail.target,aliases:detail.alias};
+    }else{
+      const result=runVercelCli(['inspect',item.url||item.uid||item.id,'--format=json'],60000);
+      if(result.error||result.status!==0)throw Error('deployment_detail_readback_failed');
+      detail=parseVercelJson(result.stdout);
+    }
+    if(!Array.isArray(detail.aliases))throw Error('deployment_alias_readback_missing');
+    if(detail.target!=='preview'||detail.aliases.length){protectedAliases.push({id:item.uid||item.id||item.url,target:detail.target,aliases:detail.aliases});continue;}
+    candidates.push({...item,alias:detail.aliases});
+  }
   const deleted = [];
   for (const item of candidates) {
     const id = item.uid || item.id || item.url;
@@ -433,6 +460,10 @@ async function cleanupVercelDeployments(args) {
     ok: true,
     project,
     scannedDeployments: deployments.length,
+    inventoryComplete: inventory.complete,
+    inventoryPages: inventory.pageCount,
+    protectedAliasDeployments: protectedAliases.length,
+    targetCounts: deployments.reduce((counts,item)=>{counts[item.target || "unknown"]=(counts[item.target || "unknown"]||0)+1;return counts;},{}),
     authMode,
     retentionDays: args.vercelRetentionDays,
     keepPerTarget: args.vercelKeepPerTarget,
