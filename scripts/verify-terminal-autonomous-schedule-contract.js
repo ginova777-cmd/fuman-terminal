@@ -11,7 +11,16 @@ const taskName = "Fuman Terminal Autonomous Root Monitor";
 const legacyTaskName = "Fuman Terminal Autonomous Ops 5m";
 const REQUIRE_LIVE = process.argv.includes("--require-live");
 const issues = [];
-const expectedCheckpoints = ["06:05","07:08","08:00","08:20","08:36","12:40","13:15","16:10","17:00","21:40","22:00","23:10"];
+const expectedCheckpoints = (() => {
+  try {
+    const registry = JSON.parse(fs.readFileSync(registryFile, 'utf8'));
+    const row = registry.tasks?.find(item => item.displayName === taskName);
+    const times = row?.expectedTriggers;
+    if (!Array.isArray(times) || !times.length || new Set(times).size !== times.length || times.some(t => !/^([01]\d|2[0-3]):[0-5]\d$/.test(t))) throw Error('invalid checkpoint registry');
+    for (const required of ['17:10','17:40','18:10','18:40','19:10','21:15','23:10']) if (!times.includes(required)) throw Error('missing cleanup checkpoint '+required);
+    return times;
+  } catch (error) { issues.push('checkpoint_registry_invalid:'+error.message); return []; }
+})();
 
 function read(file) {
   try { return fs.readFileSync(file, "utf8"); } catch { return ""; }
@@ -33,18 +42,7 @@ if (!installer) issues.push("autonomous_schedule_installer_missing");
 for (const marker of [
   "run-terminal-master-control.ps1",
   "Fuman Terminal Autonomous Root Monitor",
-  "06:05",
-  "07:08",
-  "08:00",
-  "08:20",
-  "08:36",
-  "12:40",
-  "13:15",
-  "16:10",
-  "17:00",
-  "21:40",
-  "22:00",
-  "23:10",
+  ...expectedCheckpoints,
   "MultipleInstances IgnoreNew",
   "StartWhenAvailable",
   "LogonType S4U",
