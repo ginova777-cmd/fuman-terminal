@@ -95,7 +95,7 @@ const FILES = [
   "lib/terminal-final-audit-contract.js",
   "lib/terminal-full-module-contract.js",
   "scripts/collect-terminal-module-receipts.js",
-  "scripts/install-terminal-full-unattended-final-audit-task.ps1",
+  "scripts/verify-verifier-retirement.js",
   "scripts/register-terminal-unattended-tasks.ps1",
   "scripts/run-terminal-unattended-final-audit.js",
   "scripts/terminal-active-module-registry.json",

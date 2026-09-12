@@ -7,7 +7,8 @@ param(
 $ErrorActionPreference = "Stop"
 if (-not $ReceiptPath) { $ReceiptPath = Join-Path $RuntimeRoot "state\power-recovery-task-registration.json" }
 $RequiredArtifacts = @(
-  "scripts\run-terminal-unattended-final-audit.js",
+  "run-terminal-master-control.ps1",
+  "scripts\verify-verifier-retirement.js",
   "scripts\collect-terminal-module-receipts.js",
   "scripts\write-terminal-active-module-registry.js",
   "scripts\write-terminal-daily-manifest.js",
@@ -15,10 +16,10 @@ $RequiredArtifacts = @(
   "scripts\verify-terminal-power-recovery.js"
 )
 $TaskNames = @(
-  "Fuman Terminal Autonomous Root Monitor",
-  "Fuman Terminal Full Unattended Final Audit"
+  "Fuman Terminal Autonomous Root Monitor"
 )
 $LegacyConflictTaskNames = @(
+  "Fuman Terminal Full Unattended Final Audit",
   "Fuman Terminal Autonomous Ops 5m",
   "Fuman Terminal Autonomous Ops User 5m"
 )
@@ -60,10 +61,6 @@ if ($missingArtifacts.Count -or -not $result.elevated) {
 }
 
 try {
-  & (Join-Path $PSScriptRoot "install-terminal-full-unattended-final-audit-task.ps1") -ProjectRoot $ProjectRoot -RuntimeRoot $RuntimeRoot
-  if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "final audit task installer exited with code $LASTEXITCODE" }
-  $result.actions += "final_audit_task_registered"
-
   & (Join-Path $PSScriptRoot "install-terminal-autonomous-root-task.ps1") -ProjectRoot $ProjectRoot -RuntimeRoot $RuntimeRoot -RequireProtectedReadback
   if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw "autonomous root task installer exited with code $LASTEXITCODE" }
   $result.actions += "autonomous_root_task_registered"
@@ -101,6 +98,8 @@ try {
       $result.failures += "task_not_s4u_highest:$taskName"
     }
   }
+  & node (Join-Path $PSScriptRoot "verify-verifier-retirement.js") --require-live
+  if ($LASTEXITCODE -ne 0) { throw "VERIFIER_AUTHORITY_DRIFT" }
   $result.ok = @($result.failures).Count -eq 0
 } catch {
   $result.failures += ("registration_exception:" + $_.Exception.Message)

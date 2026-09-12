@@ -62,6 +62,7 @@ function main() {
   const requiredRootStages = [];
   const node = process.execPath;
   const checks = [
+    ["verifier_retirement", node, ["scripts/verify-verifier-retirement.js"]],
     ["release_root_authority", node, ["scripts/verify-release-root-authority.js", "--require-production-root"]],
     ["release_handoff_freeze", node, ["scripts/verify-release-handoff-freeze.js"]],
     ["desktop_api_only", node, ["scripts/verify-desktop-api-only.js"]],
