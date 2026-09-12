@@ -68,3 +68,9 @@ console.log(JSON.stringify({ok:true,morning_waits_for_matching_rendered_batch:tr
   assert.equal(missing.length,5);assert.ok(missing.every(x=>!x.ok));
   console.log(JSON.stringify({ok:true,canonical_requires_rendered_evidence:true}));
 })().catch(error=>{console.error(error);process.exitCode=1;});
+
+const markdownSource=fs.readFileSync(path.join(__dirname,"run-opening-report-0830-production.js"),"utf8");
+const markdownFn=vm.runInNewContext("("+markdownSource.match(/function markdownReport[\s\S]*?\n}\r?\n/)[0]+")");
+const markdown=markdownFn({tradeDate:date,runId:run,overseasPreflight:{ok:true},priority:{mode:"positive_industry_top3",observations:[{rank:1,display_name:"測試",percent:1,mapped_symbols_a:[{symbol:"2330",name:"台積電"}],mapped_symbols_b:[{symbol:"2308",name:"台達電"}]}]}});
+assert.ok(markdown.includes("台積電（2330）")&&markdown.includes("台達電（2308）"));
+console.log(JSON.stringify({ok:true,markdown_full_names_and_symbols:true}));

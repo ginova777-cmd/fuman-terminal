@@ -289,7 +289,7 @@ function markdownReport({ tradeDate, runId, overseasPreflight, priority }) {
   lines.push("|---:|---|---|---:|---|---|");
   for (const row of priority.observations) {
     const overseas = row.observation_type === "asia_positive_leader" ? `${row.overseas_name}（${row.overseas_symbol}）` : row.display_name;
-    lines.push(`| ${row.rank} | ${overseas} | ${row.display_name} | +${Number(row.percent).toFixed(2)}% | ${lineStockNames(row.mapped_symbols_a) || "無"} | ${lineStockNames(row.mapped_symbols_b) || "無"} |`);
+    lines.push(`| ${row.rank} | ${overseas} | ${row.display_name} | +${Number(row.percent).toFixed(2)}% | ${(row.mapped_symbols_a || []).map(stock => stock.name + "（" + stock.symbol + "）").join("、") || "無"} | ${(row.mapped_symbols_b || []).map(stock => stock.name + "（" + stock.symbol + "）").join("、") || "無"} |`);
   }
   if (!priority.observations.length) lines.push("| - | 今日無正漲幅觀察 | - | - | - | - |");
   lines.push("");
