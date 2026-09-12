@@ -320,6 +320,13 @@ function writeJson(file, payload) {
   fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
 }
 
+function writeJsonAtomic(file, payload) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temporary = `${file}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(temporary, `${JSON.stringify(payload, null, 2)}\n`, { flag: "w" });
+  fs.renameSync(temporary, file);
+}
+
 function mergeConfig(...configs) {
   const out = {};
   for (const config of configs) mergeObject(out, config || {});
@@ -2964,8 +2971,10 @@ function publishMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRu
   const generatedAt = nowIso();
   const snapshot = buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunId, generatedAt);
   const receiptPath = path.join(MOTHER_POOL_SNAPSHOT_RECEIPT_DIR, `daytrade-mother-pool-snapshot-${compactDateKey(tradeDate)}-${String(snapshot.snapshot_sequence).padStart(4, "0")}.json`);
-  writeJson(MOTHER_POOL_SNAPSHOT_FILE, snapshot);
-  writeJson(receiptPath, { ...snapshot, receipt_path: receiptPath });
+  // Publish the immutable receipt first, then atomically replace the latest pointer.
+  // Readers never observe a partially written snapshot or a receipt for another generation.
+  writeJsonAtomic(receiptPath, { ...snapshot, receipt_path: receiptPath });
+  writeJsonAtomic(MOTHER_POOL_SNAPSHOT_FILE, snapshot);
   return snapshot;
 }
 

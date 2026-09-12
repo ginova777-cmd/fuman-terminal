@@ -20,6 +20,7 @@ function taipeiDate() {
   const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
   return `${values.year}-${values.month}-${values.day}`;
 }
+const expectedTradeDate = String(process.env.MOTHER_POOL_EXPECTED_TRADE_DATE || taipeiDate()).slice(0, 10);
 function compact(value) {
   return String(value || "").replace(/\D/g, "").slice(0, 8);
 }
@@ -77,12 +78,8 @@ const checks = {
   five_minute_runner_uses_snapshot_first: includesAll(current5m, [
     "$SnapshotPath",
     "daytrade-mother-pool-snapshot-latest.json",
-    "$snapshotSymbols",
-    "$motherPoolSymbols",
-    "$terminalSymbols",
-    "$candidateSymbols = @($snapshotSymbols + $motherPoolSymbols + $terminalSymbols | Select-Object -Unique)",
-    "snapshotRunId",
-    "sequence",
+    "candidateSource = 'snapshot.symbols'",
+    "$candidateSymbols = @($snapshot.symbols)",
   ]),
   package_verifier_script_present: !packageSource || packageSource.includes("verify:daytrade-mother-pool-snapshot"),
 };
@@ -93,8 +90,8 @@ if (snapshot) {
   const activeMembership = membership.filter((row) => row?.membership_status !== "REMOVED");
   const membershipSymbols = uniqueSymbols(activeMembership.map((row) => row.symbol));
   const pending = uniqueSymbols(snapshot.downstream_warmup_pending_symbols);
-  checks.runtime_snapshot_today = String(snapshot.trade_date || "").slice(0, 10) === taipeiDate();
-  checks.runtime_snapshot_canonical_run_id = String(snapshot.canonical_run_id || "") === `fugle_daytrade_source:${compact(taipeiDate())}:canonical`;
+  checks.runtime_snapshot_today = String(snapshot.trade_date || "").slice(0, 10) === expectedTradeDate;
+  checks.runtime_snapshot_canonical_run_id = String(snapshot.canonical_run_id || "") === `fugle_daytrade_source:${compact(expectedTradeDate)}:canonical`;
   checks.runtime_snapshot_complete = snapshot.complete === true
     && snapshot.status === "complete"
     && Number(snapshot.exit_code) === 0
@@ -103,7 +100,7 @@ if (snapshot) {
   checks.runtime_membership_matches_symbols = JSON.stringify(symbols) === JSON.stringify(membershipSymbols);
   checks.runtime_delta_fields_arrays = Array.isArray(snapshot.added_symbols) && Array.isArray(snapshot.removed_symbols);
   checks.runtime_run_id_sequence_fixed = String(snapshot.run_id || "") === String(snapshot.mother_pool_run_id || "")
-    && String(snapshot.run_id || "").includes(`fugle_daytrade_source:${compact(taipeiDate())}:canonical:mother_pool_snapshot:`)
+    && String(snapshot.run_id || "").includes(`fugle_daytrade_source:${compact(expectedTradeDate)}:canonical:mother_pool_snapshot:`)
     && Number(snapshot.snapshot_sequence) >= 1;
   checks.runtime_per_symbol_membership_contract = activeMembership.every((row) =>
     /^\d{4}$/.test(String(row?.symbol || ""))
