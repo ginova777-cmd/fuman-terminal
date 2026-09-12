@@ -43,6 +43,16 @@ const ab={...ready,display_top3:[{rank:1,display_name:"test",percent:2,mapped_sy
 assert.match(renderMorning(ab),/data-morning-group="B"/);assert.match(renderMorning(ab),/2317 鴻海/);
 assert.ok(!renderMorning({...ab,display_top3:[{...ab.display_top3[0],display_name:"<script>"}]}).includes("<script>"));
 console.log(JSON.stringify({ok:true,morning_ui_states:["empty","blocked","degraded","zero","full_A_B","escaped_text"]}));
+const renderedSource=fs.readFileSync(path.join(__dirname,"verify-opening-report-rendered.js"),"utf8");
+const readinessCode=renderedSource.slice(renderedSource.indexOf("function readyForReport("),renderedSource.indexOf("async function main()"));
+let renderedNode=null;
+const readinessContext={document:{querySelector:()=>renderedNode}};
+vm.createContext(readinessContext);vm.runInContext(readinessCode+"\nthis.ready=readyForReport",readinessContext);
+assert.equal(readinessContext.ready(run).ok,false);
+renderedNode={dataset:{runId:run,openingReportState:"empty"}};assert.equal(readinessContext.ready(run).ok,false);
+renderedNode.dataset.openingReportState="zero";assert.equal(readinessContext.ready(run).ok,true);
+renderedNode.dataset.runId="other-run";assert.equal(readinessContext.ready(run).ok,false);
+console.log(JSON.stringify({ok:true,morning_waits_for_matching_rendered_batch:true}));
 
 // Exercise the live canonical path: defining a checker without calling it must fail.
 (async()=>{
