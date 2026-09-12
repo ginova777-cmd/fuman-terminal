@@ -20,6 +20,10 @@ function collect() {
   const rows=[...n.querySelectorAll('[data-morning-rank]')].map(row=>({rank:Number(row.dataset.morningRank),name:row.querySelector('[data-morning-title]')?.innerText,percent:Number(row.querySelector('[data-morning-percent]')?.innerText.replace('%','')),a:group(row,"A"),b:group(row,"B")}));
   return {ok:visible(n),run_id:n.dataset.runId,date:n.dataset.tradeDate,hash:n.dataset.contentHash,state:n.dataset.openingReportState,industryCount:Number(n.querySelector('[data-morning-industry-count]')?.innerText),rows,zero:!!n.querySelector('[data-morning-zero]'),text:n.innerText,overflow:Math.max(0,document.documentElement.scrollWidth-innerWidth),url:location.href};
 }
+function readyForReport(runId) {
+  const node=document.querySelector('[data-opening-report-0830-briefing]');
+  return {ok:!!node && node.dataset.runId===runId && ["ready","zero","degraded"].includes(node.dataset.openingReportState)};
+}
 async function main(){
   fs.mkdirSync(out,{recursive:true});
   const final=read(path.join(runtime,"data","opening-report-0830",`opening-report-0830-final-receipt-${compact}.json`));
@@ -40,7 +44,8 @@ async function main(){
           await ui.waitForSelector(cdp,'aside.sidebar a[data-view="market"]',45000);
           await ui.activateDesktopRoute(cdp,{key:"market-ai",selector:'aside.sidebar a[data-view="market"]',postClickSelector:'#market-view .market-mode-tabs [data-market-mode="ai"]',expectedPanelId:"market-view",expectedRouteKey:"market|市場總覽"});
         }
-        actual=await ui.waitFor(cdp,collect,null,60000);
+        await ui.waitFor(cdp,readyForReport,final.run_id,60000);
+        actual=await ui.evaluate(cdp,collect);
         const rows=actual.rows.map(r=>({...r,a:r.a.map(({symbol,name})=>({symbol,name})),b:r.b.map(({symbol,name})=>({symbol,name}))}));
         const expectedRounded=expected.map(r=>({...r,percent:Number(r.percent.toFixed(2))}));
         const symbolsVisible=actual.rows.every(r=>[...r.a,...r.b].every(x=>x.visible&&x.text.includes(x.symbol)&&x.text.includes(x.name)));
