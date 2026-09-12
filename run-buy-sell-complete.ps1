@@ -1,12 +1,22 @@
-param([ValidateSet("Complete", "Status", "Recovery")][string]$Mode = "Complete", [string]$ExpectedRunId = "")
+param([ValidateSet("Complete", "Status", "Recovery")][string]$Mode = "Complete", [string]$ExpectedRunId = "", [string]$ReplayTradeDate = "")
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 Set-Location -LiteralPath $PSScriptRoot
 $runtime = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
 $env:FUMAN_RUNTIME_DIR = $runtime
+$env:FUMAN_REPLAY_TRADE_DATE = $ReplayTradeDate
+$env:FUMAN_ALLOW_REPLAY_CLOSED_DAY = [string](-not [string]::IsNullOrWhiteSpace($ReplayTradeDate))
+$env:FUMAN_INSTITUTION_REPLAY_VALIDATED = "0"
 $env:NODE_OPTIONS = "--use-system-ca"
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 if (-not (Test-Path -LiteralPath $nodeExe)) { $nodeExe = "node.exe" }
+if ($ReplayTradeDate) {
+  & $nodeExe "--use-system-ca" "scripts/verify-institution-replay-date.js" $ReplayTradeDate
+  if ($LASTEXITCODE -ne 0) { throw "institution_replay_date_invalid" }
+  $env:FUMAN_INSTITUTION_REPLAY_VALIDATED = "1"
+  $env:FUMAN_SCANNER_TARGET_TRADE_DATE = $ReplayTradeDate
+  $env:FUMAN_TERMINAL_TARGET_TRADE_DATE = $ReplayTradeDate
+}
 $pwshExe = (Get-Process -Id $PID).Path
 $logDir = Join-Path $runtime "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null

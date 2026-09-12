@@ -97,8 +97,8 @@ function Invoke-PostScanSurfacePublication {
   $previousRefreshKey = $env:FUMAN_SCORECARD_REFRESH_KEY
   $previousRefreshRunId = $env:FUMAN_SCORECARD_REFRESH_RUN_ID
   try {
-    if ($Route -eq "strategy3") {
-      $env:FUMAN_SCORECARD_REFRESH_KEY = "strategy3"
+    if ($Route -in @("strategy3", "institution")) {
+      $env:FUMAN_SCORECARD_REFRESH_KEY = $Route
       $env:FUMAN_SCORECARD_REFRESH_RUN_ID = $RunId
     }
     & npm.cmd run scorecard:terminal-source *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null

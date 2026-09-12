@@ -15,3 +15,11 @@ assert.equal(timeframeEvidence([...hourly.slice(0,-2),hourly.at(-1)],date,true).
 assert.equal(timeframeEvidence([...hourly, hourly.at(-1)],date,true).available,false);
 assert.equal(timeframeEvidence(hourly,date,true).previousBarTime,hourly.at(-2).date);
 console.log("PASS last two completed T-day native 60m bars, missing predecessor and duplicate bars rejected");
+for(const hourly60 of [[],flatHourly,hourly]) {
+ const optional=Object.fromEntries(candidates.map(r=>[r.code,{daily:bars,hourly60,errors:hourly60.length?[]:['hourly60_HTTP_503']}]));
+ const result=evaluateCandidates(candidates,optional,date);
+ assert.equal(result.selected.length,10,'60m may not exclude daily bullish candidates');
+ assert.equal(result.selectionCoverage.dataCoverage,1,'optional 60m may not reduce completeness');
+ assert(result.selected.every(r=>r.technicalTrend.hourly60Bonus===Boolean(hourly60===hourly)));
+}
+console.log('PASS missing/flat/bullish 60m is bonus only');

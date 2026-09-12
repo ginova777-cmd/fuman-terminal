@@ -22,7 +22,7 @@ async function main(){
  assert(run.payload.blankTotal===0,"scanner required fields incomplete");
 
  assert(receipt.fallbackUsed===false && run.payload.fallbackUsed===false,"fallback used");
- const today=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Taipei"}).format(new Date());assert(run.scan_date===today,"run not current trading date");
+ const today=process.env.FUMAN_REPLAY_TRADE_DATE||new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Taipei"}).format(new Date());assert(run.scan_date===today,"run not current trading date");
  const source=run.payload.source_status_at_run;assert(source.sourceDates.twse===today.replaceAll("-","")&&source.sourceDates.tpex===today.replaceAll("-",""),"official source dates mismatch");
  const coverage=run.payload.selectionCoverage;assert(coverage?.contract===SELECTION_CONTRACT&&coverage.ok&&coverage.dataCoverage>=.9,"candidate coverage below 90% or wrong contract");
  assert.deepStrictEqual(receipt.selectionCoverage,coverage,"runner coverage mismatch");
@@ -31,10 +31,11 @@ async function main(){
  const evidence=JSON.parse(evidenceRaw);assert(evidence.runId===runId&&evidence.tradeDate===today,"technical evidence identity mismatch");
  const recomputed=evaluateCandidates(evidence.candidates,evidence.sources,today,evidence.extraIssues);assert.deepStrictEqual(recomputed.selectionCoverage,coverage,"source coverage arithmetic mismatch");
  assert.deepStrictEqual(recomputed.selected.map(r=>r.code).sort(),rows.map(r=>r.code).sort(),"selected result identity mismatch");
+ for(const row of rows)assert.deepStrictEqual(row.payload.technicalTrend,recomputed.selected.find(r=>r.code===row.code)?.technicalTrend,'stored daily/60m bonus differs from raw evidence:'+row.code);
  const freshSources=await readTechnicalSources(rows.map(r=>r.payload),today);const fresh=evaluateCandidates(rows.map(r=>r.payload),freshSources,today);assert(fresh.selected.length===rows.length,"fresh daily/60m source no longer supports selected rows");
  for(const row of rows){
   const expected=fresh.selected.find(r=>r.code===row.code)?.technicalTrend;assert(row.payload.technicalTrend?.pass===true&&row.payload.technicalTrend.contract===SELECTION_CONTRACT,"technical gate missing");
-  for(const frame of ["daily","hourly60"]){const a=row.payload.technicalTrend[frame],b=expected[frame];assert(a.lastBarTime===b.lastBarTime&&a.previousBarTime===b.previousBarTime&&a.trendUp===true,"technical source time mismatch");for(const key of ["kdK","kdD","kdPrevK","kdPrevD","rsi3","rsi6","rsi3Prev","rsi6Prev"])assert(Math.abs(a[key]-b[key])<1e-7,"indicator value mismatch "+row.code+":"+frame+":"+key);}
+  for(const frame of ["daily","hourly60"]){const a=row.payload.technicalTrend[frame],b=expected[frame];if(frame==='daily')assert(a.lastBarTime===b.lastBarTime&&a.previousBarTime===b.previousBarTime&&a.trendUp===true,"daily technical source mismatch");if(a&&b&&a.available&&b.available){for(const key of ["kdK","kdD","kdPrevK","kdPrevD","rsi3","rsi6","rsi3Prev","rsi6Prev"])assert(Math.abs(a[key]-b[key])<1e-7,"indicator value mismatch "+row.code+":"+frame+":"+key);}}
   const p=row.payload;assert(row.run_id===runId&&row.complete,"row run identity mismatch");
   for(const f of ["code","name","market","tradeDate","runId","foreign","trust","dealer","total","foreignStreak","trustStreak","jointStreak","foreignTrustVolumePct","direction","source","dataContractSource"]){assert(p[f]!==undefined&&p[f]!==null&&String(p[f]).trim()!=="",row.code+" missing "+f);}
   assert(p.runId===runId&&p.tradeDate===today,"row payload identity mismatch");

@@ -3,10 +3,10 @@ const fs = require("fs");
 const path = require("path");
 const runtime = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const root = path.resolve(__dirname, "..");
-const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const today = process.env.FUMAN_REPLAY_TRADE_DATE || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 const key = today.replace(/\D/g, "");
 const taipeiWeekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", weekday: "short" }).format(new Date());
-const marketClosedWeekend = taipeiWeekday === "Sat" || taipeiWeekday === "Sun";
+const marketClosedWeekend = !process.env.FUMAN_REPLAY_TRADE_DATE && (taipeiWeekday === "Sat" || taipeiWeekday === "Sun");
 const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } };
 const readText = (file) => { try { return fs.readFileSync(file, "utf8"); } catch { return ""; } };
 const institutionFile = path.join(runtime, "data", "scan-receipts", "institution.json");
@@ -68,7 +68,7 @@ if (Number(snapshotSummary.count || 0) !== effectiveCount) issues.push("institut
 const liveFile = path.join(root, "outputs/institution-live-acceptance/readback.json");
 const renderedFile = path.join(root, "outputs/institution-live-acceptance/rendered/terminal-ui-e2e-report.json");
 const live = readJson(liveFile), rendered = readJson(renderedFile);
-if (live?.selectionCoverage?.contract !== "institution-candidate90-daily-last60-up-v1" || live?.selectionCoverage?.ok !== true || live?.selectionCoverage?.dataCoverage < 0.9 || live?.technicalFreshReadback !== true) issues.push("institution_90pct_dual_trend_not_verified");
+if (live?.selectionCoverage?.contract !== "institution-candidate90-daily-up-hourly60-bonus-v1" || live?.selectionCoverage?.ok !== true || live?.selectionCoverage?.dataCoverage < 0.9 || live?.technicalFreshReadback !== true) issues.push("institution_90pct_daily_trend_not_verified");
 if (!live?.ok || live.runId !== effectiveRunId || live.resultCount !== effectiveCount || live.readbackCount !== effectiveCount || live.blankTotal !== 0) issues.push("institution_live_readback_not_complete");
 if (!rendered?.ok || Date.parse(rendered.generatedAt || "") < Date.parse(live?.checkedAt || "")) issues.push("institution_rendered_evidence_not_complete");
 for (const kind of ["desktop", "mobile", "scorecard"]) {
@@ -77,8 +77,9 @@ for (const kind of ["desktop", "mobile", "scorecard"]) {
 }
 const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "institution", label: "買賣超",
   checkedAt: new Date().toISOString(), tradeDate: effectiveDateKey ? `${effectiveDateKey.slice(0, 4)}-${effectiveDateKey.slice(4, 6)}-${effectiveDateKey.slice(6, 8)}` : today,
-  marketMode: marketClosedWeekend ? "weekend_previous_good" : "trading_day_current_run", status: issues.length ? "failed" : "complete",
+  marketMode: process.env.FUMAN_REPLAY_TRADE_DATE ? "strategy_revision_replay" : marketClosedWeekend ? "weekend_previous_good" : "trading_day_current_run", status: issues.length ? "failed" : "complete",
   complete: issues.length === 0, exitCode: issues.length ? 1 : 0, runId: effectiveRunId,
+  notificationRequirement: 'not_required',
   selectionCoverage: live?.selectionCoverage || null, indicatorContract: "technical-kd5-3-rsi3-6-v1",
   triSurfaceStatus: issues.length ? "incomplete" : "complete", blockingReason: issues.join("; "),
   desktopRunId: rendered?.results?.find(r => r.kind === "desktop" && r.routeKey === "institution")?.identity?.runId || "",

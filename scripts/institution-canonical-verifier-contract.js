@@ -20,7 +20,7 @@ function clone(value) {
 
 function sampleDates() {
   const now = new Date();
-  const isoDate = now.toISOString().slice(0, 10);
+  const isoDate = process.env.FUMAN_REPLAY_TRADE_DATE || new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(now);
   return {
     compactDate: isoDate.replace(/-/g, ""),
     isoDate,
@@ -149,7 +149,7 @@ function verifyCanonical(name, payload, type) {
   const rows = rowsFrom(payload);
   const sourceUnavailable = /timeout|522|error|blocked|degraded/.test(`${c.source.coverageStatus} ${c.source.raw?.status || ""} ${c.source.raw?.httpStatus || ""}`);
   const selection = payload.selectionCoverage || payload.payload?.selectionCoverage;
-  const selectedContract = selection?.contract === "institution-candidate90-daily-last60-up-v1";
+  const selectedContract = selection?.contract === "institution-candidate90-daily-up-hourly60-bonus-v1";
   const shouldBlock = sourceUnavailable
     || c.source.institutionalRows < MIN_ROWS
     || (!selectedContract && c.source.validAfterExclusionRows < MIN_ROWS)

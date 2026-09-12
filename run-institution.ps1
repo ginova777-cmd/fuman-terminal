@@ -439,7 +439,7 @@ try {
   exit 1
 }
 Write-InstitutionReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
-Update-PostScanReceiptEvidence -RuntimeRoot $env:FUMAN_RUNTIME_DIR -Route "institution" -RunId ([string]$verifiedPayload.runId) -ExpectedDate ((Get-Date).ToString("yyyyMMdd")) -Row $triSurfaceRow
+Update-PostScanReceiptEvidence -RuntimeRoot $env:FUMAN_RUNTIME_DIR -Route "institution" -RunId ([string]$verifiedPayload.runId) -ExpectedDate (Get-PostScanExpectedDateKey) -Row $triSurfaceRow
 Write-FumanFlowHealth -Scope institution -Status ok -Message "Institution scan completed through API-only terminal pipeline" -Detail @{ log = $log; runId = [string]$verifiedPayload.runId }
 "Institution API-only: slim generation, local mirror, and cache sync are disabled; terminal reads Supabase/API plus desktop snapshot." >> $log
 "=== Institution scan end $(Get-Date) ===" >> $log

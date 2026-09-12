@@ -2534,7 +2534,7 @@ async function runInstitutionScorecard(browser) {
     const expectedRun = optionValue("--expected-run-id");
     const expectedSymbols = optionValue("--expected-scorecard-symbols").split(",").filter(Boolean).sort();
     const expectedTotal = Number(optionValue("--expected-total"));
-    const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+    const date = process.env.FUMAN_REPLAY_TRADE_DATE || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
     const readback = JSON.parse(await fs.readFile(optionValue("--institution-readback"), "utf8"));
     if (!readback.ok || readback.runId !== expectedRun) throw new Error("institution scorecard readback evidence missing");
     let stats;

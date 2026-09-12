@@ -159,15 +159,15 @@ async function main() {
     issues.push(`institution API transport gate mismatch; expected complete-run-readback actual=${payload.transport.gate}`);
   }
   const selection = payload?.selectionCoverage;
-  const dualTrend = selection?.contract === "institution-candidate90-daily-last60-up-v1";
+  const dualTrend = selection?.contract === "institution-candidate90-daily-up-hourly60-bonus-v1";
   if (dualTrend) {
     const candidate = Number(selection.candidateCount), ready = Number(selection.dataReadyCount), total = Number(payload.resultCount ?? payload.count);
     const coverage = candidate ? ready / candidate : 1;
     if (!Number.isInteger(candidate) || candidate < 0 || !Number.isInteger(ready) || ready < 0 || ready > candidate || selection.ok !== true || coverage < .9 || Math.abs(coverage - selection.dataCoverage) > 1e-12) issues.push("institution candidate completeness invalid");
     if (!Number.isInteger(total) || total < 0 || total > ready || total !== selection.resultCount || rows.length !== Math.min(60, total)) issues.push("institution selected result count mismatch");
-    for (const row of rows) for (const frame of ["daily", "hourly60"]) {
+    for (const row of rows) for (const frame of ["daily"]) {
       const t = row.technicalTrend?.[frame];
-      if (row.technicalTrend?.pass !== true || !t || ![["kdK","kdPrevK"],["kdD","kdPrevD"],["rsi3","rsi3Prev"],["rsi6","rsi6Prev"]].every(([a,b]) => Number.isFinite(t[a]) && Number.isFinite(t[b]) && t[a] > t[b])) issues.push("institution dual trend missing:" + row.code + ":" + frame);
+      if (row.technicalTrend?.pass !== true || !t || ![["kdK","kdPrevK"],["kdD","kdPrevD"],["rsi3","rsi3Prev"],["rsi6","rsi6Prev"]].every(([a,b]) => Number.isFinite(t[a]) && Number.isFinite(t[b]) && t[a] > t[b])) issues.push("institution daily trend missing:" + row.code + ":" + frame);
     }
   } else if (rows.length < MIN_ROWS) {
     issues.push(`institution API must return at least ${MIN_ROWS} rows for field contract verification; rows=${rows.length}`);

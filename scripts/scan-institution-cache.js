@@ -161,7 +161,7 @@ function notRequiredReadiness(reason) {
   };
 }
 
-function institutionSourceDateIssues(output, expectedDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date())) {
+function institutionSourceDateIssues(output, expectedDate = process.env.FUMAN_REPLAY_TRADE_DATE || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date())) {
   const expected = normalizeDateKey(expectedDate), issues = [];
   for (const market of ["twse", "tpex"]) if (normalizeDateKey(output.sourceDates?.[market]) !== expected) issues.push(market + "_source_date_not_today");
   if (normalizeDateKey(output.usedDate) !== expected) issues.push("used_date_not_today");
@@ -177,7 +177,7 @@ function buildInstitutionSourceStatusAtRun(output, { sourceCount = 0, resultCoun
   const ready = (
     sourceCount >= MIN_SOURCE_ROWS
     && resultCount >= MIN_OUTPUT_ROWS
-    && dataAge === 0
+    && (process.env.FUMAN_REPLAY_TRADE_DATE ? normalizeDateKey(output.usedDate) === normalizeDateKey(process.env.FUMAN_REPLAY_TRADE_DATE) : dataAge === 0)
     && institutionSourceDateIssues(output).length === 0
     && Boolean(output.usedDate)
   );
@@ -793,7 +793,7 @@ async function main() {
     process.exit(2);
   }
 
-  const sourceDateIssues = institutionSourceDateIssues(output);
+  const sourceDateIssues = institutionSourceDateIssues(output, process.env.FUMAN_REPLAY_TRADE_DATE || undefined);
   if (sourceDateIssues.length) throw new Error("institution source freshness: " + sourceDateIssues.join(",") + "; preserve previous complete run");
   await publishInstitutionCompleteRunToSupabase(output);
   await publishInstitutionSnapshot(output);
@@ -827,4 +827,3 @@ module.exports = {
   buildFieldCompleteness,
   institutionRunIdFromOutput,
 };
-
