@@ -430,7 +430,8 @@ function currentReceiptChecks(checks, tradeDate) {
 
 function renderedDeliveryChecks(checks, tradeDate, final) {
   const file=path.join(REPORT_DIR,"rendered",compactDate(tradeDate),"opening-report-rendered.json");
-  const receipt=readJson(file);
+  let receipt=null;
+  try { receipt=readJson(file); } catch { /* Missing or invalid evidence remains a failed check. */ }
   addCheck(checks,"current_rendered_receipt",receipt?.contract==="opening-report-rendered-v1" && receipt.complete===true && receipt.diagnostic===false && receipt.run_id===final.run_id && receipt.trade_date===tradeDate && receipt.delivery_content_hash===final.delivery_content_hash && receipt.full_content_hash_ok===true,"same-run live desktop/mobile required");
   const age=Date.now()-Date.parse(receipt?.checked_at||"");
   addCheck(checks,"current_rendered_receipt_fresh",age>=0 && age<30*60*1000,"rendered evidence within 30 minutes");
@@ -446,6 +447,7 @@ async function liveDeliveryChecks(checks, tradeDate) {
   const finalPath = path.join(REPORT_DIR, "opening-report-0830-final-receipt-" + compactDate(tradeDate) + ".json");
   const final = readJson(finalPath);
   if (!final) return;
+  renderedDeliveryChecks(checks, tradeDate, final);
   const {contentHash} = require("../lib/opening-report-delivery-contract");
   const expectedHash = contentHash(final.priority_observation_mode, final.display_top3 || []);
   addCheck(checks,"current_full_content_hash",final.delivery_content_hash === expectedHash,"hash includes full Top3 and A/B mappings");
