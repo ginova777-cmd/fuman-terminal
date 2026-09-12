@@ -43,3 +43,14 @@ const ab={...ready,display_top3:[{rank:1,display_name:"test",percent:2,mapped_sy
 assert.match(renderMorning(ab),/data-morning-group="B"/);assert.match(renderMorning(ab),/2317 鴻海/);
 assert.ok(!renderMorning({...ab,display_top3:[{...ab.display_top3[0],display_name:"<script>"}]}).includes("<script>"));
 console.log(JSON.stringify({ok:true,morning_ui_states:["empty","blocked","degraded","zero","full_A_B","escaped_text"]}));
+
+// Exercise the live canonical path: defining a checker without calling it must fail.
+(async()=>{
+  const source=fs.readFileSync(path.join(__dirname,"verify-opening-report-morning-contract.js"),"utf8");
+  const code=source.slice(source.indexOf("async function liveDeliveryChecks("),source.indexOf("function writeReceipt("));
+  let renderedCalled=false;
+  const checks=[],ctx={path,REPORT_DIR:"fixture",compactDate:x=>x.replace(/-/g,""),readJson:()=>({run_id:"fixture",display_top3:[],delivery_content_hash:"fixture"}),renderedDeliveryChecks:items=>{renderedCalled=true;items.push({name:"missing_rendered_receipt",ok:false});},addCheck:(items,name,ok)=>items.push({name,ok}),require:name=>name.includes("delivery-contract")?{contentHash:()=>"fixture"}:{readSnapshot:async()=>null}};
+  vm.createContext(ctx);vm.runInContext(code+"\nthis.verifyLive=liveDeliveryChecks",ctx);await ctx.verifyLive(checks,"2026-09-14");
+  assert.equal(renderedCalled,true);assert.ok(checks.some(x=>x.name==="missing_rendered_receipt"&&!x.ok));
+  console.log(JSON.stringify({ok:true,canonical_requires_rendered_evidence:true}));
+})().catch(error=>{console.error(error);process.exitCode=1;});

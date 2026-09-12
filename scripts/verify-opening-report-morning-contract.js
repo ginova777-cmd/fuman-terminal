@@ -446,6 +446,7 @@ async function liveDeliveryChecks(checks, tradeDate) {
   const finalPath = path.join(REPORT_DIR, "opening-report-0830-final-receipt-" + compactDate(tradeDate) + ".json");
   const final = readJson(finalPath);
   if (!final) return;
+  renderedDeliveryChecks(checks, tradeDate, final);
   const {contentHash} = require("../lib/opening-report-delivery-contract");
   const expectedHash = contentHash(final.priority_observation_mode, final.display_top3 || []);
   addCheck(checks,"current_full_content_hash",final.delivery_content_hash === expectedHash,"hash includes full Top3 and A/B mappings");

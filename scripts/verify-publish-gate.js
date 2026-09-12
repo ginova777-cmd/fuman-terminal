@@ -62,6 +62,7 @@ function main() {
   const requiredRootStages = [];
   const node = process.execPath;
   const checks = [
+    ["morning_rendered_skeleton", node, ["scripts/verify-terminal-desktop-skeleton.js"]],
     ["morning_contract", node, ["scripts/verify-opening-report-morning-contract.js", "--output=" + path.join(OUTPUT_DIR, "morning-static.json")]],
     ["morning_regressions", node, ["scripts/test-opening-report-complete.js"]],
     ["verifier_retirement", node, ["scripts/verify-verifier-retirement.js"]],
