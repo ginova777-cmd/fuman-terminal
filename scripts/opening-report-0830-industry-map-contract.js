@@ -9,7 +9,7 @@ const MAPPING_EVIDENCE_AUTHORITIES = [
   "ISSUER_OFFICIAL_PRODUCT_AND_INVESTOR_RELATIONS",
 ];
 
-const FORBIDDEN_OVERSEAS_LEADERS = ["新光電工", "WCI", "SCFI", "BDI"];
+const FORBIDDEN_OVERSEAS_LEADERS = ["新光電工", "藤倉", "Fujikura", "BOE", "WCI", "SCFI", "BDI"];
 
 const INDUSTRY_REVIEW_BASIS = {
   AI_GPU_CLOUD: { A: "AI伺服器、GPU伺服器或雲端運算系統為直接產品", B: "晶片、電源或散熱零組件供應AI伺服器產業鏈" },
@@ -110,8 +110,8 @@ const OPENING_REPORT_0830_INDUSTRY_MAP = [
     display_name: "PCB／CCL",
     default_bias: "neutral_mixed",
     default_confidence: 0.78,
-    evidence_summary: "MEIKO、CMK、Daeduck、Simmtech、藤倉作為 PCB/CCL proxy；8358 金居固定列入 A。",
-    overseas_leaders: [["MEIKO", "6787.T"], ["CMK", "6958.T"], ["Daeduck", "353200.KS"], ["Simmtech", "222800.KQ"], ["藤倉", "5803.T", "yahoo_japan_quote"]],
+    evidence_summary: "MEIKO、CMK、Daeduck、Simmtech 作為 PCB/CCL proxy；8358 金居固定列入 A。",
+    overseas_leaders: [["MEIKO", "6787.T"], ["CMK", "6958.T"], ["Daeduck", "353200.KS"], ["Simmtech", "222800.KQ"]],
     a: [["2383", "台光電"], ["6274", "台燿"], ["2368", "金像電"], ["3044", "健鼎"], ["4958", "臻鼎-KY"], ["2313", "華通"], ["8358", "金居"], ["6213", "聯茂"]],
     b: [["3037", "欣興"], ["8046", "南電"], ["3189", "景碩"], ["5469", "瀚宇博"], ["1815", "富喬"], ["8039", "台虹"]],
   },
@@ -251,6 +251,7 @@ function validateIndustryMapContract(rows = OPENING_REPORT_0830_INDUSTRY_MAP) {
     if (!Array.isArray(row.a) || row.a.length === 0) issues.push(`tier_a_missing:${row.industry}`);
     if (!Array.isArray(row.b) || row.b.length === 0) issues.push(`tier_b_missing:${row.industry}`);
     for (const leader of row.overseas_leaders || []) {
+      if (["5803.T", "000725.SZ"].includes(String(leader.yahoo_symbol).toUpperCase())) issues.push(`retired_overseas_symbol:${leader.yahoo_symbol}`);
       if (!leader.name || !leader.yahoo_symbol) issues.push(`overseas_leader_identity_missing:${row.industry}:${leader.name || "unknown"}`);
       if (FORBIDDEN_OVERSEAS_LEADERS.includes(String(leader.name))) issues.push(`forbidden_overseas_leader:${row.industry}:${leader.name}`);
     }
