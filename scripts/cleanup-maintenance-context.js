@@ -2,7 +2,7 @@
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const RUNTIME = 'C:\\fuman-runtime';
 const ROOT = 'C:\\fuman-release-owner\\fuman-terminal';
-const steps = ['retired','history','intraday','runtime','priority','observability','cost','janitor'];
+const steps = ['retired','history','intraday','runtime','priority','observability','extended','cost','janitor'];
 const date = () => new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 function authorization(file) {
@@ -12,7 +12,7 @@ function authorization(file) {
 }
 function receipts() {
   const d=date().replaceAll('-',''), s=path.join(RUNTIME,'status');
-  return {retired:[path.join(s,'api-only-retired-cleanup-status.json')],history:[path.join(s,'supabase-vercel-history-cleanup-status.json')],intraday:[path.join(s,`daytrade-intraday-retention-${d}.json`)],runtime:[path.join(s,`runtime-retention-${d}.json`)],priority:[path.join(s,`daytrade-stale-priority-cache-cleanup-${d}.json`)],observability:[path.join(s,`source-observability-retention-${d}.json`)],cost:[path.join(RUNTIME,'state','vercel-cost-health-status.json')],janitor:[path.join(s,'global-cost-janitor-scorecard.json')]};
+  return {retired:[path.join(s,'api-only-retired-cleanup-status.json')],history:[path.join(s,'supabase-vercel-history-cleanup-status.json')],intraday:[path.join(s,`daytrade-intraday-retention-${d}.json`)],runtime:[path.join(s,`runtime-retention-${d}.json`)],priority:[path.join(s,`daytrade-stale-priority-cache-cleanup-${d}.json`)],observability:[path.join(s,`source-observability-retention-${d}.json`)],extended:[path.join(s,`cleanup-extended-${d}.json`)],cost:[path.join(RUNTIME,'state','vercel-cost-health-status.json')],janitor:[path.join(s,'global-cost-janitor-scorecard.json')]};
 }
 function verifyJournal(auth) {
   const j=JSON.parse(fs.readFileSync(auth.journalFile,'utf8'));

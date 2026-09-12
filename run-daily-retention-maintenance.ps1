@@ -18,6 +18,9 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & $node '--use-system-ca' (Join-Path $root 'scripts\cleanup-source-observability-retention.js') @suffix
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+& $node '--use-system-ca' (Join-Path $root 'scripts\cleanup-extended-retention.js') @suffix
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 # Produce the daily readback only after both cleanup receipts are safely written.
 & $node '--use-system-ca' (Join-Path $root 'scripts\verify-daily-retention-maintenance.js')
 exit $LASTEXITCODE

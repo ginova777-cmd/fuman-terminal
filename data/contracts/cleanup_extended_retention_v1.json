@@ -1,0 +1,24 @@
+{
+  "contract": "cleanup-extended-retention-v1",
+  "runner": "scripts/cleanup-extended-retention.js --apply",
+  "verifier": "scripts/cleanup-extended-retention.js --verify",
+  "receipt": "C:\\fuman-runtime\\status\\cleanup-extended-YYYYMMDD.json",
+  "rootAcceptance": "scripts/verify-daily-retention-maintenance.js",
+  "scheduledStage": "existing daily retention maintenance; trading days only",
+  "maintenance": "dated explicit user authorization required on non-trading days; DB apply after 16:15 Taipei",
+  "categories": {
+    "failedRuns": {"keepDays":15,"terminalStatuses":["failed","error","aborted","cancelled"],"protectLatestComplete":true,"protectRecentRuns":20,"strategy2ProtectRecentRuns":60,"protectRecoveryAndReferences":true},
+    "orphanResults": {"keepDays":45,"requireMissingParent":true,"requireNoReferences":true},
+    "duplicateSnapshots": {"keepDays":15,"equality":"entire row including source, run, timestamps and payload except surrogate id","keepOne":true,"protectReferences":true,"primaryKeyProtectedSources":["market_snapshots","finmind_chip_raw"]},
+    "notificationBodies": {"keepDays":30,"only":"sent claim bodies","preserve":["idempotencyKey","payloadHash","channel","target","status","recordedAt","pending/failed claims","active outbox","canonical receipts"]},
+    "cloudAssets": {"keepDays":30,"manifest":"C:\\fuman-runtime\\config\\cleanup-retired-assets.json","allowPrefixes":["tests/","test-exports/","temporary-exports/"],"requireRetirementAndReferenceAudit":true,"protectPrefixes":["scorecard88/"]},
+    "previewDeployments": {"runner":"scripts/cleanup-supabase-vercel-history.js","inventory":"all cursor pages plus live deployment detail","protect":["production","active aliases","rollback versions"],"aliasRetirement":"requires explicit retirement and no-use evidence; age alone never authorizes alias removal"},
+    "repeatedExecution": {"audit":"enabled Windows action/trigger duplicates and Vercel cron configuration","disableWithoutVerifiedCanonicalReplacement":false},
+    "space": {"rpc":"fuman_cleanup_space_readback_v1","requireAutovacuum":"on","readback":["databaseBytes","tableBytes","estimatedLiveRows","estimatedDeadRows","lastAutovacuum"],"vacuumFullAutomatic":false,"claimSavingsWithoutBilling":false}
+  },
+  "dbMaxCandidatesPerSection":5000,
+  "dbStatementTimeoutSeconds":45,
+  "dbLockTimeoutSeconds":2,
+  "protectedSources":["daily OHLCV and volume","1m/5m/60m indicator source history","latest complete runs/results","desktop/mobile/88 references","trade_records","fuman_scorecard_ledger"],
+  "completion":"fresh applied receipt, zero remaining eligible candidates, no issues, independent live verifier, unchanged protected data; pending protected objects are reported separately"
+}
