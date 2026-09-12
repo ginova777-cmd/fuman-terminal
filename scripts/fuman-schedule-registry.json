@@ -247,11 +247,6 @@
         0,
         267011
       ],
-      "Fuman Terminal Full Unattended Final Audit": [
-        0,
-        267009,
-        267011
-      ],
       "Fuman Terminal Autonomous Ops 5m": [
         0,
         1,
@@ -1040,19 +1035,6 @@
       ]
     },
     {
-      "taskName": "\\Fuman Terminal Full Unattended Final Audit",
-      "displayName": "Fuman Terminal Full Unattended Final Audit",
-      "description": "Full unattended final audit task. Produces final YES/NO receipt after daily closures.",
-      "time": "07:00,09:00,16:00,22:30",
-      "expectedState": "Ready",
-      "expectedTriggers": [
-        "07:00",
-        "09:00",
-        "16:00",
-        "22:30"
-      ]
-    },
-    {
       "taskName": "\\Fuman Chip Source Sync 2005 Official Retry 1530",
       "displayName": "Fuman Chip Source Sync 2005 Official Retry 1530",
       "description": "Observed production Windows Task Scheduler entry.",
@@ -1252,7 +1234,9 @@
       "description": "Retired legacy task name; the same wrapper must be registered only as Fuman Morning Report 0830 Complete.",
       "time": "08:30",
       "expectedState": "Disabled",
-      "expectedTriggers": ["08:30"],
+      "expectedTriggers": [
+        "08:30"
+      ],
       "retiredReason": "replaced_by_canonical_morning_complete_task"
     },
     {
@@ -1384,7 +1368,9 @@
       "description": "Retired legacy Strategy2 task name; the formal runner closes at 12:30.",
       "time": "08:45",
       "expectedState": "Disabled",
-      "expectedTriggers": ["08:45"],
+      "expectedTriggers": [
+        "08:45"
+      ],
       "retiredReason": "replaced_by_strategy2_0845_1230_contract"
     },
     {
@@ -1413,7 +1399,9 @@
       "description": "Retired orphan task; referenced runner no longer exists and is outside the formal unattended flow.",
       "time": "17:40",
       "expectedState": "Disabled",
-      "expectedTriggers": ["17:40"],
+      "expectedTriggers": [
+        "17:40"
+      ],
       "retiredReason": "runner_missing_and_outside_formal_scope"
     },
     {
@@ -1422,7 +1410,9 @@
       "description": "Retired orphan task; referenced runner no longer exists and is outside the formal unattended flow.",
       "time": "20:10",
       "expectedState": "Disabled",
-      "expectedTriggers": ["20:10"],
+      "expectedTriggers": [
+        "20:10"
+      ],
       "retiredReason": "runner_missing_and_outside_formal_scope"
     },
     {
@@ -1431,7 +1421,9 @@
       "description": "Retired orphan task; referenced runner no longer exists and is outside the formal unattended flow.",
       "time": "21:40",
       "expectedState": "Disabled",
-      "expectedTriggers": ["21:40"],
+      "expectedTriggers": [
+        "21:40"
+      ],
       "retiredReason": "runner_missing_and_outside_formal_scope"
     },
     {

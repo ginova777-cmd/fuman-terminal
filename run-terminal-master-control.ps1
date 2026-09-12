@@ -37,6 +37,8 @@ try {
     exit 0
   }
   Set-Location $ProjectRoot
+  & node (Join-Path $ProjectRoot "scripts\verify-verifier-retirement.js") --require-live
+  if ($LASTEXITCODE -ne 0) { throw "VERIFIER_AUTHORITY_DRIFT" }
   if ($effectiveMode -eq "CleanupMaintenance") {
     if (-not $MaintenanceAuthorizationFile) { throw "CleanupMaintenance requires explicit authorization file" }
     & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-release-root-authority.js") --require-production-root

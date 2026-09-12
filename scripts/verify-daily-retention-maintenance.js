@@ -64,6 +64,8 @@ function receiptCheck(name, expectedContract, file, options = {}) {
   return { name, ok: payload?.ok === true && appliedOk && identityOk && sectionsOk && current, file, exists: !!payload, contract: payload?.contract || null, applied: payload?.applied === true, checkedAt: checkedAt || null, current, reasonCode: payload?.reasonCode || null, readError: receipt.error || null };
 }
 async function main() {
+  const retirement = run(process.execPath, ["scripts/verify-verifier-retirement.js", "--require-live"]);
+  if (!retirement.ok) throw Error("verifier_authority_drift:" + retirement.stdout + retirement.stderr);
   const date = taipeiParts(); const issues = []; const warnings = [];
   const maintenanceArg = process.argv.find(x=>x.startsWith('--maintenance-authorization='));
   const maintenanceContext = require('./cleanup-maintenance-context');
