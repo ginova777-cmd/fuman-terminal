@@ -1,0 +1,11 @@
+'use strict';
+const assert=require('assert/strict');
+const {compactNotification,eligibleAsset}=require('./cleanup-extended-retention');
+const now=Date.parse('2026-09-12T08:30:00Z');
+const old={status:'sent',recordedAt:'2026-07-01T00:00:00Z',idempotencyKey:'delivery-key',payloadHash:'original-hash',target:'destination',channel:'telegram',payload:{text:'large body'}};
+const compacted=compactNotification(old,now);assert(compacted);assert.equal(compacted.payload,undefined);for(const k of ['idempotencyKey','payloadHash','target','channel','recordedAt','status'])assert.equal(compacted[k],old[k]);
+assert.equal(compactNotification({...old,status:'pending'},now),null);assert.equal(compactNotification({...old,status:'failed'},now),null);assert.equal(compactNotification({...old,recordedAt:'2026-09-11'},now),null);assert.equal(compactNotification({...old,idempotencyKey:''},now),null);assert.equal(compactNotification(compacted,now),null);
+const asset={pathname:'tests/obsolete.png',url:'https://example.invalid/obsolete',size:12,uploadedAt:'2026-07-01T00:00:00Z'};
+const retired={...asset,owner:'cleanup-managed-test-assets',status:'retired',formalEvidence:false,rollbackRequired:false,referenceAuditComplete:true,retiredAt:'2026-07-15T00:00:00Z'};
+assert.equal(eligibleAsset(asset,retired,{text:''},now),true);assert.equal(eligibleAsset(asset,retired,{text:asset.pathname},now),false);assert.equal(eligibleAsset(asset,undefined,{text:''},now),false);assert.equal(eligibleAsset(asset,{...retired,size:13},{text:''},now),false);assert.equal(eligibleAsset(asset,{...retired,formalEvidence:true},{text:''},now),false);assert.equal(eligibleAsset({...asset,pathname:'scorecard88/current.json'},{...retired,pathname:'scorecard88/current.json'},{text:''},now),false);
+console.log('PASS: pending/failed/recent/dedup and referenced/current/formal asset protection; idempotent body compaction');

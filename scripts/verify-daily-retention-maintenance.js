@@ -117,12 +117,14 @@ async function main() {
     receiptCheck("daytrade_stale_priority_cache", "daytrade-stale-priority-cache-cleanup-v1", path.join(STATUS, `daytrade-stale-priority-cache-cleanup-${date.id}.json`)),
     receiptCheck("source_observability", "source-observability-retention-15d-v1", path.join(STATUS, `source-observability-retention-${date.id}.json`)),
   ];
+  receipts.push(receiptCheck('extended_cleanup','extended-cleanup-v1',path.join(STATUS,`cleanup-extended-${date.id}.json`)));
   const cost = readJson(path.join(RUNTIME,"state/vercel-cost-health-status.json")).value;
   const currentMinutes = Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date()).split(':').reduce((n,v,i)=>n+Number(v)*(i===0?60:1),0));
   if (!maintenance && currentMinutes < 21*60+15) warnings.push('cost_health_today_not_due');
   else if (cost?.ok !== true || !Number.isFinite(Date.parse(cost?.checkedAt)) || taipeiParts(new Date(cost.checkedAt)).iso !== date.iso || (cost.issues || []).length) issues.push('cost_health_today_not_complete');
   for (const receipt of receipts) if (!receipt.ok) issues.push(`receipt_invalid:${receipt.name}`);
   const liveChecks = {
+    extended: run(process.execPath, ['--use-system-ca','scripts/cleanup-extended-retention.js','--verify'],10*60*1000),
     intraday: run(process.execPath, ["--use-system-ca", "scripts/verify-daytrade-intraday-retention.js"]),
     sourceObservability: run(process.execPath, ["--use-system-ca", "scripts/verify-source-observability-retention.js"]),
   };
@@ -154,4 +156,5 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, contract: "daily-retention-maintenance-v1", error: error?.message || String(error) }, null, 2));
   process.exitCode = 1;
 });
+
 
