@@ -30,7 +30,7 @@ function writeJson(file, value) {
 }
 
 function cutoffMs(tradeDate) {
-  return Date.parse(`${tradeDate}T08:20:59.999+08:00`);
+  return Date.parse(`${tradeDate}T08:30:59.999+08:00`);
 }
 
 function classifyLeaderMarket(symbol) {
@@ -102,8 +102,8 @@ async function yahooChartSnapshot(leader, tradeDate, options = {}) {
   const period1 = Math.floor((cut - 8 * 24 * 3600 * 1000) / 1000);
   const period2 = Math.floor((cut + 60 * 1000) / 1000);
   // US leaders must include the overnight after-hours/pre-market session that is
-  // available at the 08:20 Taipei freeze.  Japan/Korea are still constrained
-  // below to their 08:00-08:20 Asia/Taipei window.
+  // available at the 08:30 Taipei freeze.  Japan/Korea are still constrained
+  // below to their 08:00-08:30 Asia/Taipei window.
   const includePrePost = true;
   const yahooHost = options.yahooHost || "query1.finance.yahoo.com";
   const sourceName = options.sourceName || "Yahoo Finance chart";
@@ -121,7 +121,7 @@ async function yahooChartSnapshot(leader, tradeDate, options = {}) {
   }
   const market = classifyLeaderMarket(leader.yahoo);
   const usLeader = market === "us";
-  if (selected < 0) return { ok: false, source: sourceName, source_url: url, reason_code: usLeader ? "us_overnight_bar_missing_before_0820" : "no_bar_at_or_before_0820_cutoff", attempts: fetched.attempts };
+  if (selected < 0) return { ok: false, source: sourceName, source_url: url, reason_code: usLeader ? "us_overnight_bar_missing_before_0830" : "no_bar_at_or_before_0830_cutoff", attempts: fetched.attempts };
   const selectedMs = timestamps[selected] * 1000;
   const asiaWindowStart = Date.parse(`${tradeDate}T08:00:00+08:00`);
   const asiaEarlySessionRequired = market === "japan" || market === "korea";
@@ -132,8 +132,8 @@ async function yahooChartSnapshot(leader, tradeDate, options = {}) {
       source_url: url,
       ticker: leader.yahoo,
       selected_time: new Date(selectedMs).toISOString(),
-      cutoff: `${tradeDate} 08:20:59 Asia/Taipei`,
-      reason_code: "asia_no_bar_in_0800_0820_window",
+      cutoff: `${tradeDate} 08:30:59 Asia/Taipei`,
+      reason_code: "asia_no_bar_in_0800_0830_window",
       attempts: fetched.attempts,
     };
   }
@@ -152,13 +152,13 @@ async function yahooChartSnapshot(leader, tradeDate, options = {}) {
     source_url: url,
     ticker: leader.yahoo,
     selected_time: new Date(timestamps[selected] * 1000).toISOString(),
-    cutoff: `${tradeDate} 08:20:59 Asia/Taipei`,
+    cutoff: `${tradeDate} 08:30:59 Asia/Taipei`,
     close: Number(close.toFixed(4)),
     previous_close: Number.isFinite(previousClose) ? Number(previousClose.toFixed(4)) : null,
     percent: Number.isFinite(percent) ? Number(percent.toFixed(2)) : null,
     direction: classified.direction,
     display: classified.display,
-    session_contract: usLeader ? "us_overnight_after_hours" : "08:00-08:20 Asia/Taipei",
+    session_contract: usLeader ? "us_overnight_after_hours" : "08:00-08:30 Asia/Taipei",
     reason_code: Number.isFinite(percent) ? (usLeader ? "us_overnight_after_hours" : classified.reason_code) : "previous_close_missing",
     attempts: fetched.attempts,
   };
@@ -202,13 +202,13 @@ function parseNaverKoreaBasic(json, leader, tradeDate, sourceUrl = "") {
     source_url: sourceUrl,
     ticker: leader.yahoo,
     selected_time: Number.isFinite(sourceMs) ? new Date(sourceMs).toISOString() : "",
-    cutoff: `${tradeDate} 08:20:59 Asia/Taipei`,
+    cutoff: `${tradeDate} 08:30:59 Asia/Taipei`,
     source_fields: ["fluctuationsRatio", "localTradedAt"],
-    session_contract: "08:00-08:20 Asia/Taipei",
+    session_contract: "08:00-08:30 Asia/Taipei",
   };
   if (!expectedCode || returnedCode !== expectedCode) return { ...base, ok: false, reason_code: "naver_korea_symbol_mismatch" };
   if (!Number.isFinite(sourceMs)) return { ...base, ok: false, reason_code: "naver_korea_source_time_missing" };
-  if (sourceMs < windowStart || sourceMs > windowCutoff) return { ...base, ok: false, reason_code: "naver_korea_outside_0800_0820_window" };
+  if (sourceMs < windowStart || sourceMs > windowCutoff) return { ...base, ok: false, reason_code: "naver_korea_outside_0800_0830_window" };
   if (!Number.isFinite(percent)) return { ...base, ok: false, reason_code: "naver_korea_percent_missing" };
   const rounded = Number(percent.toFixed(2));
   const classified = classifyPercent(rounded);
@@ -326,15 +326,15 @@ async function main() {
     date: tradeDate,
     run_id: runId,
     checked_at: new Date().toISOString(),
-    cutoff: `${tradeDate} 08:20:59 Asia/Taipei`,
-    source_policy: "US market-closed sessions are labeled and excluded from ranking; fresh Japan/Korea 08:00-08:20 Asia/Taipei evidence remains eligible. Later data must not be backfilled.",
+    cutoff: `${tradeDate} 08:30:59 Asia/Taipei`,
+    source_policy: "US market-closed sessions are labeled and excluded from ranking; fresh Japan/Korea 08:00-08:30 Asia/Taipei evidence remains eligible. Later data must not be backfilled.",
     us_market: usMarket,
     total_leaders: allLeaders.length,
     valid_leaders: allLeaders.filter((row) => row.ok).length,
     unavailable_leaders: allLeaders.filter((row) => !row.ok).length,
     source_gap_leaders: freshness.source_gap_count,
     stale_promoted_leaders: freshness.stale_promoted_count,
-    source_freshness_policy: "Japan and Korea leaders outside the same-day 08:00-08:20 Asia/Taipei window are source_gap and contribute no industry score. Other industries remain publishable.",
+    source_freshness_policy: "Japan and Korea leaders outside the same-day 08:00-08:30 Asia/Taipei window are source_gap and contribute no industry score. Other industries remain publishable.",
     japan_realtime_source_contract: japanRealtime.PROVIDER,
     japan_realtime_symbols: [...japanRealtime.SYMBOLS],
     japan_realtime_valid_count: allLeaders.filter(row => japanRealtime.SYMBOLS.includes(row.yahoo_symbol) && row.ok && japanRealtime.receiptValid(row,tradeDate)).length,

@@ -13,7 +13,6 @@ const expected = [
   ["Fuman Daytrade Source Writer 0600-1330", "Run-DaytradeSourceWriter", ["06:00"], { allowRuntimeAction: true }],
   ["Fuman Fugle Daytrade WebSocket Collector 0600-1330", "Run-DaytradeWebSocketCollector.ps1", ["06:00"]],
   ["Fuman Daytrade Source Gate 0700", "Run-DaytradeUnattendedGate.ps1", ["07:00"], { allowRuntimeAction: true }],
-  ["Fuman Opening Report 0820 Preflight", "run-opening-report-0820-preflight.js", ["08:20"]],
   ["Fuman Morning Report 0830 Complete", "run-opening-report-0830-production-wrapper.ps1", ["08:30"]],
   ["Fuman Opening Limit Order Morning Readonly 0840", "ops\\Run-OpeningLimitOrderMorningReadonly.ps1", ["08:40"]],
   ["Fuman Daytrade Futopt Collector Recovery 0835", "Ensure-DaytradeFutoptCollector0835.ps1", ["08:35"], { allowRuntimeAction: true }],

@@ -100,11 +100,11 @@ function approxBiasText(item) {
 
 function frozenLeadersReceipt(tradeDate) {
   const compact = tradeDate.replace(/\D/g, "");
-  return readJson(path.join(RECEIPT_DIR, `opening-report-0820-overseas-leaders-${compact}.json`));
+  return readJson(path.join(RECEIPT_DIR, `opening-report-0830-overseas-leaders-${compact}.json`));
 }
 
 function baseIndustryItems(tradeDate, runId, leaders = frozenLeadersReceipt(tradeDate)) {
-  // 08:30 consumes frozen 08:20 evidence only. It never refetches or
+  // 08:30 consumes frozen 08:30 evidence only. It never refetches or
   // recalculates overseas prices after the evidence cutoff.
   const detected = new Map((leaders?.industries || []).map((row) => [row.industry, row]));
   const rows = OPENING_REPORT_0830_INDUSTRY_MAP.map((mapRow) => {
@@ -141,7 +141,7 @@ function baseIndustryItems(tradeDate, runId, leaders = frozenLeadersReceipt(trad
     confidence: item.confidence,
     evidence_summary: item.evidence_summary,
     overseas_strength_contract: OVERSEAS_STRENGTH_CONTRACT,
-    overseas_evidence_cutoff: `${tradeDate} 08:20:00 Asia/Taipei`,
+    overseas_evidence_cutoff: `${tradeDate} 08:30:00 Asia/Taipei`,
     overseas_return_1d_pct: item.overseas_return_1d_pct,
     overseas_sector_up_1d: Number.isFinite(Number(item.overseas_return_1d_pct)) ? Number(item.overseas_return_1d_pct) > 0 : null,
     overseas_sector_up_2d: null,
@@ -256,7 +256,7 @@ function attachPriorityObservation(items, priority) {
 
 async function buildOverseasPreflight(tradeDate, runId, frozenLeaders) {
   const industries = Array.isArray(frozenLeaders?.industries) ? frozenLeaders.industries : [];
-  const ok = frozenLeaders?.ok === true && frozenLeaders?.date === tradeDate && industries.length === 15;
+  const ok = frozenLeaders?.ok === true && frozenLeaders?.date === tradeDate && frozenLeaders?.run_id === runId && String(frozenLeaders?.cutoff || "").includes("08:30:59") && industries.length === 15;
   return {
     contract: "opening-report-0830-overseas-preflight-v1",
     ok,
@@ -264,12 +264,12 @@ async function buildOverseasPreflight(tradeDate, runId, frozenLeaders) {
     date: tradeDate,
     run_id: runId,
     checked_at: timestamp(),
-    mode: "consume_frozen_0820_only",
+    mode: "consume_frozen_0830_only",
     source_receipt_run_id: frozenLeaders?.run_id || "",
     source_cutoff: frozenLeaders?.cutoff || "",
     industry_count: industries.length,
     us_market: frozenLeaders?.us_market || null,
-    reason_code: ok ? "frozen_0820_overseas_evidence_valid" : "frozen_0820_overseas_evidence_invalid"
+    reason_code: ok ? "frozen_0830_overseas_evidence_valid" : "frozen_0830_overseas_evidence_invalid"
   };
 }
 
@@ -279,7 +279,7 @@ function markdownReport({ tradeDate, runId, overseasPreflight, priority }) {
   lines.push("");
   lines.push(`日期：${tradeDate}`);
   lines.push(`run_id：${runId}`);
-  lines.push(`資料截點：${tradeDate} 08:20:59 Asia/Taipei`);
+  lines.push(`資料截點：${tradeDate} 08:30:59 Asia/Taipei`);
   lines.push("");
   lines.push("結論：晨報 15 產業觀察已完成；優先觀察名單已提供 Mother Pool priority_scan。晨報不判定盤中 Gate，也不產生正式候選。");
   lines.push("");
@@ -587,17 +587,17 @@ async function main() {
     }
   }
   if (hasFlag("--freeze-market-snapshot")) {
-    const frozenLeadersPath = path.join(RECEIPT_DIR, `opening-report-0820-overseas-leaders-${compact}.json`);
+    const frozenLeadersPath = path.join(RECEIPT_DIR, `opening-report-0830-overseas-leaders-${compact}.json`);
     const frozenLeaders = readJson(frozenLeadersPath);
     const frozenItems = Array.isArray(frozenLeaders?.industries) ? frozenLeaders.industries : [];
-    const snapshotPath = path.join(RECEIPT_DIR, `opening-report-0820-market-snapshot-${compact}.json`);
+    const snapshotPath = path.join(RECEIPT_DIR, `opening-report-0830-market-snapshot-${compact}.json`);
     const snapshot = {
-      contract: "opening-report-0820-frozen-market-snapshot-v1",
+      contract: "opening-report-0830-frozen-market-snapshot-v1",
       ok: frozenLeaders?.ok === true && frozenItems.length === 15,
       date: tradeDate,
       trade_date: tradeDate,
       run_id: runId,
-      cutoff: `${tradeDate} 08:20:59.999 Asia/Taipei`,
+      cutoff: `${tradeDate} 08:30:59.999 Asia/Taipei`,
       source_receipt: frozenLeadersPath,
       industry_count: frozenItems.length,
       items: frozenItems,
@@ -607,8 +607,8 @@ async function main() {
       mother_pool_bridge_attempted: false,
       checked_at: timestamp(),
       reason_code: frozenLeaders?.ok === true && frozenItems.length === 15
-        ? "opening_report_0820_market_snapshot_frozen"
-        : "opening_report_0820_market_snapshot_source_incomplete",
+        ? "opening_report_0830_market_snapshot_frozen"
+        : "opening_report_0830_market_snapshot_source_incomplete",
     };
     writeJson(snapshotPath, snapshot);
     console.log(JSON.stringify({ ok: snapshot.ok, snapshot_path: snapshotPath, run_id: runId, industry_count: frozenItems.length, no_delivery: true }, null, 2));
@@ -625,6 +625,7 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
 
   const frozenLeaders = frozenLeadersReceipt(tradeDate);
   const overseasPreflight = await buildOverseasPreflight(tradeDate, runId, frozenLeaders);
+  if (!mock && !overseasPreflight.ok) throw new Error("unified_0830_frozen_source_run_mismatch_or_missing");
   const baseItems = baseIndustryItems(tradeDate, runId, frozenLeaders);
   const usMarket = frozenLeaders?.us_market || {};
   const priority = buildPriorityObservations(baseItems, usMarket);

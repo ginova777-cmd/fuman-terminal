@@ -34,8 +34,7 @@ if ($ReuseLineReceipt) {
 }
 
 # Every formal entry point owns its market-calendar guard. Do not rely on the
-# 08:20 preflight to protect the 08:30 runner, because Task Scheduler launches
-# them independently.
+# unified source freeze to protect direct entry points.
 if (-not $IsolatedBacktest) {
   $calendarOutput = & "C:\Program Files\nodejs\node.exe" "scripts\check-market-calendar-action.js" "--date=$tradeDate" "--label=Opening-report-0830-wrapper" 2>&1
   $calendarExit = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
@@ -112,10 +111,11 @@ function Invoke-NodeStep {
 
 # Formal contract: runner -> one canonical verifier -> wrapper receipt.
 # LINE personal/group, terminal output, and Mother Pool bridge remain runner-owned.
+$sourceFreeze = if ($IsolatedBacktest -or $ReuseLineReceipt) { [pscustomobject]@{label="source-freeze-existing-or-isolated";exitCode=0;stdout="";stderr="";evidenceOnly=$true} } else { Invoke-NodeStep -NodeArgs @("scripts\run-opening-report-0830-preflight.js", "--wrapper-owned", "--date=$tradeDate", "--run-id=$runId") -Label "source-freeze-0830" }
 $runnerArgs = @("scripts\run-opening-report-0830-production.js", "--apply-bridge", "--date=$tradeDate", "--run-id=$runId")
 if ($IsolatedBacktest) { $runnerArgs += "--isolated-backtest" }
 if ($ReuseLineReceipt) { $runnerArgs += "--reuse-line-receipt" }
-$run = if ($FinalizeExisting) { [pscustomobject]@{ label="runner-existing-evidence"; exitCode=0; stdout=""; stderr=""; evidenceOnly=$true } } else { Invoke-NodeStep -NodeArgs $runnerArgs -Label "runner" }
+$run = if ($sourceFreeze.exitCode -ne 0) { [pscustomobject]@{label="runner-skipped-source-freeze-failed";exitCode=$sourceFreeze.exitCode;stdout="";stderr=""} } elseif ($FinalizeExisting) { [pscustomobject]@{ label="runner-existing-evidence"; exitCode=0; stdout=""; stderr=""; evidenceOnly=$true } } else { Invoke-NodeStep -NodeArgs $runnerArgs -Label "runner" }
 $persistenceArgs = @("scripts\verify-opening-report-0830-mother-pool-persistence-ack.js", "--trade-date=$tradeDate", "--report-run-id=$runId")
 $persistence = if ($FinalizeExisting) { [pscustomobject]@{label="persistence-existing-evidence";exitCode=0;stdout="";stderr="";evidenceOnly=$true} } elseif ($run.exitCode -eq 0 -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $persistenceArgs -Label "mother-pool-persistence-ack" } elseif ($run.exitCode -eq 0) { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = 0; stdout = ""; stderr = ""; simulated = $true } } else { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = -1; stdout = ""; stderr = "" } }
 $renderedArgs = @("scripts\verify-opening-report-rendered.js", "--trade-date=$tradeDate")
@@ -139,7 +139,7 @@ $persistenceAckOk = if ($IsolatedBacktest) { $true } else { ($persistence.exitCo
 $expected = if ($null -ne $final -and $null -ne $final.expected_industry_count) { [int]$final.expected_industry_count } else { 0 }
 $scanned = if ($null -ne $final -and $null -ne $final.scanned_industry_count) { [int]$final.scanned_industry_count } else { 0 }
 $ok = ($runnerOk -and $persistenceAckOk -and $verifierOk -and $linePersonalOk -and $lineGroupOk -and $terminalOk -and $bridgeOk -and $handoffAckOk -and $expected -eq 15 -and $scanned -eq 15)
-$reasonCode = if ($ok) { "complete" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $handoffAckOk) { "mother_pool_handoff_ack_incomplete" } elseif (-not $persistenceAckOk) { "mother_pool_persistence_ack_incomplete" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } else { "industry_scan_incomplete" }
+$reasonCode = if ($ok) { "complete" } elseif ($sourceFreeze.exitCode -ne 0) { "source_freeze_0830_failed" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $handoffAckOk) { "mother_pool_handoff_ack_incomplete" } elseif (-not $persistenceAckOk) { "mother_pool_persistence_ack_incomplete" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } else { "industry_scan_incomplete" }
 
 $receipt = [ordered]@{
   contract = "opening-report-morning-wrapper-v1"
@@ -169,7 +169,7 @@ $receipt = [ordered]@{
   runner_ok = $runnerOk
   canonical_verifier_ok = $verifierOk
   rendered_delivery_ok = ($rendered.exitCode -eq 0)
-  steps = @($run, $persistence, $rendered, $verifier)
+  steps = @($sourceFreeze, $run, $persistence, $rendered, $verifier)
   canonical_verifier = "scripts/verify-opening-report-morning-contract.js"
   telegram_enabled = $false
 }
