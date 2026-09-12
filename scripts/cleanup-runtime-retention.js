@@ -6,6 +6,7 @@ const path = require("path");
 const RUNTIME = "C:\\fuman-runtime";
 const TERMINAL = "C:\\fuman-terminal";
 const PUBLISH_SYNC = "C:\\fuman-terminal-publish-sync";
+const { assertTree, treeExpired } = require('./cleanup-path-protection');
 const DAY = 86400000;
 const apply = process.argv.includes("--apply");
 const json = process.argv.includes("--json");
@@ -21,6 +22,7 @@ function dirBytes(root) {
   if (!fs.existsSync(root)) return bytes;
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     const full = path.join(root, entry.name);
+    assertTree(root, full);
     bytes += entry.isDirectory() ? dirBytes(full) : fs.statSync(full).size;
   }
   return bytes;
@@ -29,6 +31,7 @@ function findFiles(root, allow, days, list) {
   if (!fs.existsSync(root)) return;
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     const full = path.join(root, entry.name);
+    assertTree(root,full);
     if (entry.isDirectory()) findFiles(full, allow, days, list);
     else {
       const stat = fs.statSync(full);
@@ -42,7 +45,7 @@ function findDirs(root, allow, days, list) {
     if (!entry.isDirectory() || !allow(entry.name)) continue;
     const full = path.join(root, entry.name);
     const stat = fs.statSync(full);
-    if (expired(stat, days)) list.push({ path: full, bytes: dirBytes(full), kind: "directory" });
+    if (treeExpired(full, Date.now() - days * DAY)) list.push({ path: full, bytes: dirBytes(full), kind: "directory" });
   }
 }
 function listCandidates() {
@@ -59,7 +62,7 @@ const candidates = listCandidates();
 const deleted = [];
 const failures = [];
 if (apply) for (const item of candidates) {
-  try { fs.rmSync(item.path, { recursive: item.kind === "directory", force: true }); deleted.push(item); }
+  try { const allowedRoot = [RUNTIME, TERMINAL, PUBLISH_SYNC].find(root => item.path.toLowerCase().startsWith(root.toLowerCase() + path.sep)); if (!allowedRoot) throw Error("cleanup_root_not_allowed"); assertTree(allowedRoot,item.path); fs.rmSync(item.path, { recursive: item.kind === "directory", force: true }); deleted.push(item); }
   catch (error) { failures.push({ path: item.path, error: error.message }); }
 }
 const payload = {
@@ -67,11 +70,12 @@ const payload = {
   retention: { watchdogEvidenceDays: 15, datedLogsDays: 30, fugleCacheDays: 7, testOutputsDays: 7, finalAuditDays: 30 },
   protected: ["cache/intraday/fugle-daytrade-ws-candles.json", "daily OHLCV and volume", "Strategy3/4 results", "/88, mobile and latest scorecard", "newest 15 days of formal evidence", "production-health.jsonl"],
   candidates: candidates.length, candidateBytes: candidates.reduce((n, item) => n + item.bytes, 0),
+  candidateItems: process.argv.includes("--list") ? candidates : undefined,
   deleted: deleted.length, deletedBytes: deleted.reduce((n, item) => n + item.bytes, 0), failures,
 };
 const status = path.join(RUNTIME, "status");
 fs.mkdirSync(status, { recursive: true });
 payload.receiptFile = path.join(status, `runtime-retention-${taipeiDate()}.json`);
-fs.writeFileSync(payload.receiptFile, `${JSON.stringify(payload, null, 2)}\n`);
+if (!process.argv.includes("--no-status")) fs.writeFileSync(payload.receiptFile, `${JSON.stringify(payload, null, 2)}\n`);
 console.log(json ? JSON.stringify(payload, null, 2) : `runtime retention: ${payload.deleted}/${payload.candidates}`);
 if (!payload.ok) process.exitCode = 1;

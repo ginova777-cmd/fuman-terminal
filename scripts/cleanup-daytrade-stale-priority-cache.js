@@ -100,6 +100,9 @@ function main() {
   const date = taipeiDateParts();
   const tradeDate = arg("trade-date", date.iso);
   const tradeDateId = compactDate(tradeDate) || date.id;
+  const referenceTradeDate = arg("reference-trade-date",tradeDate);
+  const referenceTradeDateId = compactDate(referenceTradeDate);
+  if (!referenceTradeDateId || referenceTradeDateId > tradeDateId) throw Error("invalid_reference_trade_date");
   const cache = readJson(CACHE_PATH, null);
   const failures = [];
   const rejected = [];
@@ -109,7 +112,7 @@ function main() {
 
   if (cache && typeof cache === "object") {
     cacheDate = compactDate(cache.tradeDate || cache.trade_date || cache.priorityBridge?.tradeDate || cache.updatedAt);
-    const staleWholeCache = !cacheDate || cacheDate !== tradeDateId;
+    const staleWholeCache = !cacheDate || cacheDate !== referenceTradeDateId;
     const priceBySymbol = { ...(cache.daytradePoolPriceBySymbol || cache.priceBySymbol || {}), ...quotePriceBySymbol() };
 
     for (const key of (staleWholeCache ? STALE_CACHE_KEYS : PRIORITY_KEYS)) {
@@ -128,7 +131,8 @@ function main() {
             key,
             symbol,
             price: Number.isFinite(price) ? price : null,
-            cache_trade_date: cacheDate || null,
+            reference_trade_date: referenceTradeDate,
+    cache_trade_date: cacheDate || null,
             trade_date: tradeDate,
             reason: staleWholeCache ? (cacheDate ? "stale_cache_trade_date_mismatch" : "stale_cache_trade_date_missing") : "low_price_priority_cache_rejected",
           });
