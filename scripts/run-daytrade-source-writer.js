@@ -4263,7 +4263,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   return output;
 }
 
-function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
+async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
   const existing = readJson(PRIORITY_SYMBOLS_FILE, {});
   const tradeDate = taipeiDate();
   const canonicalRunId = canonicalDaytradeRunId(tradeDate);
@@ -4386,6 +4386,7 @@ function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
     tradeDate,
     canonicalRunId,
   );
+  await publishMotherPoolSnapshotSupabase(motherPoolSnapshot);
   const nextPriorityPayload = {
     ...currentExisting,
     ...bridgeFields,
@@ -7396,7 +7397,7 @@ async function tick() {
 
   if (priorityRows.length) {
     try {
-      publishDaytradePrioritySymbols(priorityRows, activeSymbols);
+      await publishDaytradePrioritySymbols(priorityRows, activeSymbols);
     } catch (error) {
       nonFatalWriteErrors.push({
         target: "fugle-ws-priority-symbols.json",
@@ -7434,7 +7435,7 @@ async function tick() {
         const candleSyncedPriorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
         if (candleSyncedPriorityRows.length) {
           priorityRows = candleSyncedPriorityRows;
-          publishDaytradePrioritySymbols(priorityRows, activeSymbols);
+          await publishDaytradePrioritySymbols(priorityRows, activeSymbols);
           await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
             batchSize: SLOW_TABLE_BATCH_SIZE,
             timeoutMs: 30000,
@@ -7530,7 +7531,7 @@ async function tick() {
       try {
         // Persist the post-fetch rebuild so the canonical mother-pool view sees
         // the same fresh quote timestamps used by source_status.payload.
-        publishDaytradePrioritySymbols(priorityRows, activeSymbols);
+        await publishDaytradePrioritySymbols(priorityRows, activeSymbols);
         await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
         batchSize: SLOW_TABLE_BATCH_SIZE,
         timeoutMs: 30000,
