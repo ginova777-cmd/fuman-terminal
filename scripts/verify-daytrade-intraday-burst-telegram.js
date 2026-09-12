@@ -714,7 +714,15 @@ const technicalReadback = Array.isArray(outbox?.technical_indicator_readback) ? 
 const canonicalMotherPoolSymbols = new Set(Array.isArray(canonicalWaterReceipt?.mother_pool_symbols)
   ? canonicalWaterReceipt.mother_pool_symbols.map((symbol) => String(symbol || ""))
   : []);
+const historicalOutboxDate = String(outbox?.trade_date || "").replace(/-/g, "");
+const historicalCloseoutComplete = !requireToday && /^\d{8}$/.test(historicalOutboxDate)
+  && require("../lib/daytrade-offsession-closeout").verifiedHistoricalCloseout({
+    receipt: readJson(path.join(RUNTIME_ROOT, "data", "scan-receipts", "daytrade-intraday-burst-telegram-" + historicalOutboxDate + ".json")),
+    runner: readJson(path.join(RUNTIME_ROOT, "data", "scan-receipts", "daytrade-intraday-burst-telegram-runner-" + historicalOutboxDate + ".json")),
+    outbox, currentDate: taipeiDate(),
+  });
 checks.runtime_candidate_readback_mother_pool_only = !outbox
+  || historicalCloseoutComplete
   || offSessionCloseoutComplete
   || (canonicalMotherPoolSymbols.size === Number(canonicalWaterReceipt?.mother_pool_read_rows)
     && technicalReadback.length === candidateCount
