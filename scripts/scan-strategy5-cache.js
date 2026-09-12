@@ -2845,6 +2845,10 @@ async function main() {
   const technicalTradeDate = `${runMarketDate.slice(0,4)}-${runMarketDate.slice(4,6)}-${runMarketDate.slice(6,8)}`;
   const technicalSources = await strategy5Technical.readSources(technicalCandidates, technicalTradeDate);
   const technicalSelection = strategy5Technical.evaluate(technicalCandidates, technicalSources, technicalTradeDate);
+  const selectionEvidenceDir = path.join(process.env.FUMAN_RUNTIME_DIR || 'C:/fuman-runtime', 'data', 'strategy5-technical-source');
+  fs.mkdirSync(selectionEvidenceDir, { recursive: true });
+  fs.writeFileSync(path.join(selectionEvidenceDir, 'selection-attempt-' + now.toISOString().replace(/[:.]/g,'-') + '.json'), JSON.stringify({tradeDate:technicalTradeDate,selectionCoverage:technicalSelection.selectionCoverage,candidates:technicalCandidates,sources:technicalSources},null,2));
+  console.log('strategy5 selection coverage '+JSON.stringify(technicalSelection.selectionCoverage));
   if (!technicalSelection.selectionCoverage.ok) throw new Error('strategy5 complete run blocked: daily technical candidate coverage below 90%');
   const matches = technicalSelection.selected;
   const output = {
