@@ -28,3 +28,13 @@ console.log('PASS Strategy5 daily up required, optional 60m, unchanged base stra
  assert.equal(evaluate([...bars,{date:'2026-01-03',open:12,high:null,low:11,close:12}]).selectionCoverage.dataCoverage,0,'partially malformed weekend row must not be silently removed');
  console.log('PASS Strategy5 excludes only empty weekend placeholders, retains missing trading bars');
 }
+
+{
+ const assert=require('assert');
+ const scanner=require('./scan-strategy5-cache');
+ const evidence={contract:'strategy5-candidate90-daily-up-hourly60-bonus-v1',dataCoverage:.99,ok:true};
+ const payload=scanner.buildStrategy5RunRow({selectionCoverage:evidence,technicalSourceHash:'a'.repeat(64),technicalSourcePath:'evidence/run.json'},'strategy5-20260911-20260912000000').payload;
+ assert.deepStrictEqual(payload.selectionCoverage,evidence);
+ assert.equal(payload.technicalSourceHash,'a'.repeat(64));assert.equal(payload.technicalSourcePath,'evidence/run.json');
+ console.log('PASS Strategy5 database run payload preserves technical evidence contract');
+}

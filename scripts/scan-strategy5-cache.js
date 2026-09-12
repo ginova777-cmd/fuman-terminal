@@ -421,6 +421,9 @@ function buildStrategy5RunRow(output, runId, status = "complete") {
       schedule: output.schedule || "",
       sourceHealth: output.sourceHealth || {},
       strategy5CompositeRules: output.strategy5CompositeRules || {},
+      selectionCoverage: output.selectionCoverage || null,
+      technicalSourceHash: output.technicalSourceHash || null,
+      technicalSourcePath: output.technicalSourcePath || null,
     },
   };
 }
