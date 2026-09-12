@@ -21,6 +21,18 @@ const RESERVED_ROUTE_ARTIFACTS = new Set(RESERVED_PRODUCTION_ROUTES.flatMap((rou
 }));
 
 const FILES = [
+  "run-opening-report-0830-production-wrapper.ps1",
+  "scripts/run-opening-report-0830-production.js",
+  "scripts/run-opening-report-0820-preflight.js",
+  "scripts/run-opening-report-0830-overseas-leader-detector.js",
+  "scripts/opening-report-0830-industry-map-contract.js",
+  "scripts/apply-opening-report-0830-priority-bias-bridge.js",
+  "scripts/verify-opening-report-morning-contract.js",
+  "scripts/verify-opening-report-0830-mother-pool-handoff-ack.js",
+  "scripts/verify-opening-report-0830-mother-pool-persistence-ack.js",
+  "lib/opening-report-0830-mother-pool-evidence.js",
+  "lib/opening-report-delivery-contract.js",
+  "lib/opening-report-writer-preservation.js",
   "index.html",
   "index.github.html",
   "88.html",

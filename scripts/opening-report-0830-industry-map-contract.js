@@ -111,7 +111,7 @@ const OPENING_REPORT_0830_INDUSTRY_MAP = [
     default_bias: "neutral_mixed",
     default_confidence: 0.78,
     evidence_summary: "MEIKO、CMK、Daeduck、Simmtech、藤倉作為 PCB/CCL proxy；8358 金居固定列入 A。",
-    overseas_leaders: [["MEIKO", "6787.T"], ["CMK", "6958.T"], ["Daeduck", "353200.KS"], ["Simmtech", "222800.KQ"], ["藤倉", "5803.T"]],
+    overseas_leaders: [["MEIKO", "6787.T"], ["CMK", "6958.T"], ["Daeduck", "353200.KS"], ["Simmtech", "222800.KQ"], ["藤倉", "5803.T", "yahoo_japan_quote"]],
     a: [["2383", "台光電"], ["6274", "台燿"], ["2368", "金像電"], ["3044", "健鼎"], ["4958", "臻鼎-KY"], ["2313", "華通"], ["8358", "金居"], ["6213", "聯茂"]],
     b: [["3037", "欣興"], ["8046", "南電"], ["3189", "景碩"], ["5469", "瀚宇博"], ["1815", "富喬"], ["8039", "台虹"]],
   },
@@ -202,7 +202,7 @@ const OPENING_REPORT_0830_INDUSTRY_MAP = [
   mapping_reviewed_at: MAPPING_REVIEWED_AT,
   mapping_evidence_authorities: MAPPING_EVIDENCE_AUTHORITIES,
   priority_rank: index + 1,
-  overseas_leaders: row.overseas_leaders.map(([name, yahoo_symbol]) => ({ name, yahoo_symbol })),
+  overseas_leaders: row.overseas_leaders.map(([name, yahoo_symbol, source_provider = ""]) => ({ name, yahoo_symbol, source_provider })),
   review_basis: INDUSTRY_REVIEW_BASIS[row.industry],
   a: row.a.map(([symbol, name]) => reviewedStock(row, symbol, name, "A", "direct_product_or_revenue_exposure", "reviewed")),
   b: row.b.map(([symbol, name]) => reviewedStock(row, symbol, name, "B", "adjacent_supply_chain_or_end_demand", "reviewed")),
@@ -223,7 +223,7 @@ function pairs(rows) {
 }
 
 function leaderPairs(row) {
-  return row.overseas_leaders.map((leader) => [leader.name, leader.yahoo_symbol]);
+  return row.overseas_leaders.map((leader) => [leader.name, leader.yahoo_symbol, leader.source_provider || ""]);
 }
 
 function hasSymbol(row, tier, symbol) {

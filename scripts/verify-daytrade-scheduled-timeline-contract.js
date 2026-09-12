@@ -7,7 +7,7 @@ const checks = [
   { name: "Fuman Daytrade Source Writer 0600-1330", contains: "Run-DaytradeSourceWriter.ps1" },
   { name: "Fuman Daytrade Source Gate 0700", contains: "-Phase 0700" },
   { name: "Fuman Opening Report 0820 Preflight", contains: "run-opening-report-0820-preflight.js" },
-  { name: "Fuman Opening Report 0830 LINE", contains: "run-opening-report-0830-production-wrapper.ps1" },
+  { name: "Fuman Morning Report 0830 Complete", contains: "run-opening-report-0830-production-wrapper.ps1" },
   { name: "Fuman Opening Limit Order Morning Readonly 0840", contains: "Run-OpeningLimitOrderMorningReadonly.ps1" },
   { name: "Fuman Strategy3 V2 Readiness Guard 1230", contains: "run-strategy3-v2-readiness-guard.ps1" },
   { name: "Fuman Strategy3 V2 Readiness Guard 1250", contains: "run-strategy3-v2-readiness-guard.ps1" },

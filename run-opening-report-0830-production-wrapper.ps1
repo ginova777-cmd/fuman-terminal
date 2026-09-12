@@ -1,6 +1,7 @@
 param(
   [switch]$IsolatedBacktest,
-  [switch]$ReuseLineReceipt
+  [switch]$ReuseLineReceipt,
+  [switch]$FinalizeExisting
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,6 +23,7 @@ $tradeDate = $nowTaipei.ToString("yyyy-MM-dd")
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $runId = "opening-report-0830-$today-$stamp"
 $wrapperReceipt = Join-Path $receiptDir "opening-report-0830-wrapper-receipt-$today.json"
+if ($FinalizeExisting) { $ReuseLineReceipt = [switch]$true }
 if ($ReuseLineReceipt) {
   $existingLinePath = Join-Path $receiptDir "line-push-receipt-$today.json"
   if (-not (Test-Path -LiteralPath $existingLinePath)) { throw "Cannot reuse missing LINE receipt: $existingLinePath" }
@@ -92,6 +94,13 @@ if (-not $IsolatedBacktest) {
   }
 }
 
+if (-not $IsolatedBacktest) {
+  & "C:\Program Files\nodejs\node.exe" "scripts\verify-release-root-authority.js" "--require-production-root"
+  if ($LASTEXITCODE -ne 0) { throw "RELEASE_ROOT_DRIFT" }
+  & "C:\Program Files\nodejs\node.exe" "scripts\supabase-incident-guard.js" check "--class=guard" "--action=opening-report-complete"
+  if ($LASTEXITCODE -ne 0) { throw "morning_source_incident_blocked" }
+}
+
 function Invoke-NodeStep {
   param([string[]]$NodeArgs, [string]$Label)
   $stdout = Join-Path $logDir "opening-report-0830-$today-$stamp.$Label.stdout.log"
@@ -106,26 +115,29 @@ function Invoke-NodeStep {
 $runnerArgs = @("scripts\run-opening-report-0830-production.js", "--apply-bridge", "--date=$tradeDate", "--run-id=$runId")
 if ($IsolatedBacktest) { $runnerArgs += "--isolated-backtest" }
 if ($ReuseLineReceipt) { $runnerArgs += "--reuse-line-receipt" }
-$run = Invoke-NodeStep -NodeArgs $runnerArgs -Label "runner"
+$run = if ($FinalizeExisting) { [pscustomobject]@{ label="runner-existing-evidence"; exitCode=0; stdout=""; stderr=""; evidenceOnly=$true } } else { Invoke-NodeStep -NodeArgs $runnerArgs -Label "runner" }
+$persistenceArgs = @("scripts\verify-opening-report-0830-mother-pool-persistence-ack.js", "--trade-date=$tradeDate", "--report-run-id=$runId")
+$persistence = if ($FinalizeExisting) { [pscustomobject]@{label="persistence-existing-evidence";exitCode=0;stdout="";stderr="";evidenceOnly=$true} } elseif ($run.exitCode -eq 0 -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $persistenceArgs -Label "mother-pool-persistence-ack" } elseif ($run.exitCode -eq 0) { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = 0; stdout = ""; stderr = ""; simulated = $true } } else { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = -1; stdout = ""; stderr = "" } }
 $verifierArgs = @("scripts\verify-opening-report-morning-contract.js", "--trade-date=$tradeDate")
 if (-not $IsolatedBacktest) { $verifierArgs += "--require-current" }
-$verifier = if ($run.exitCode -eq 0) { Invoke-NodeStep -NodeArgs $verifierArgs -Label "canonical-verifier" } else { [pscustomobject]@{ label = "canonical-verifier"; exitCode = -1; stdout = ""; stderr = "" } }
+$verifier = if ($run.exitCode -eq 0 -and $persistence.exitCode -eq 0) { Invoke-NodeStep -NodeArgs $verifierArgs -Label "canonical-verifier" } else { [pscustomobject]@{ label = "canonical-verifier"; exitCode = -1; stdout = ""; stderr = "" } }
 
 $finalFile = Join-Path $receiptDir "opening-report-0830-final-receipt-$today.json"
 $final = if (Test-Path -LiteralPath $finalFile) { Get-Content -LiteralPath $finalFile -Raw | ConvertFrom-Json } else { $null }
 $lineFile = Join-Path $receiptDir "line-push-receipt-$today.json"
 $line = if (Test-Path -LiteralPath $lineFile) { Get-Content -LiteralPath $lineFile -Raw | ConvertFrom-Json } else { $null }
-$runnerOk = ($run.exitCode -eq 0 -and $null -ne $final -and $final.ok -eq $true)
+$runnerOk = ($run.exitCode -eq 0 -and $null -ne $final -and $final.runner_complete -eq $true -and $final.run_id -eq $runId -and $final.date -eq $tradeDate)
 $verifierOk = ($verifier.exitCode -eq 0)
 $linePersonalOk = ($null -ne $line -and $line.line_push_ok -eq $true -and $line.has_user_target -eq $true)
 $lineGroupOk = ($null -ne $line -and $line.line_push_ok -eq $true -and $line.has_group_target -eq $true)
 $terminalOk = ($null -ne $final -and $final.terminal_briefing_snapshot.ok -eq $true)
 $bridgeOk = ($null -ne $final -and $final.mother_pool_bridge_attempted -eq $true -and $final.mother_pool_bridge_ok -eq $true)
-$fieldAckOk = ($null -ne $final -and $final.mother_pool_field_ack_ok -eq $true -and $final.mother_pool_field_ack.complete -eq $true)
+$handoffAckOk = ($null -ne $final -and $final.mother_pool_handoff_ack_ok -eq $true -and $final.mother_pool_handoff_ack.complete -eq $true)
+$persistenceAckOk = if ($IsolatedBacktest) { $true } else { ($persistence.exitCode -eq 0 -and $null -ne $final -and $final.mother_pool_persistence_ack_ok -eq $true -and $final.mother_pool_persistence_ack.complete -eq $true) }
 $expected = if ($null -ne $final -and $null -ne $final.expected_industry_count) { [int]$final.expected_industry_count } else { 0 }
 $scanned = if ($null -ne $final -and $null -ne $final.scanned_industry_count) { [int]$final.scanned_industry_count } else { 0 }
-$ok = ($runnerOk -and $verifierOk -and $linePersonalOk -and $lineGroupOk -and $terminalOk -and $bridgeOk -and $fieldAckOk -and $expected -eq 15 -and $scanned -eq 15)
-$reasonCode = if ($ok) { "complete" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } elseif (-not $fieldAckOk) { "mother_pool_field_ack_incomplete" } else { "industry_scan_incomplete" }
+$ok = ($runnerOk -and $persistenceAckOk -and $verifierOk -and $linePersonalOk -and $lineGroupOk -and $terminalOk -and $bridgeOk -and $handoffAckOk -and $expected -eq 15 -and $scanned -eq 15)
+$reasonCode = if ($ok) { "complete" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $handoffAckOk) { "mother_pool_handoff_ack_incomplete" } elseif (-not $persistenceAckOk) { "mother_pool_persistence_ack_incomplete" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } else { "industry_scan_incomplete" }
 
 $receipt = [ordered]@{
   contract = "opening-report-morning-wrapper-v1"
@@ -145,16 +157,34 @@ $receipt = [ordered]@{
   line_personal_ok = $linePersonalOk
   line_group_ok = $lineGroupOk
   line_receipt_reused = $ReuseLineReceipt.IsPresent
+  recovery = $FinalizeExisting.IsPresent
   terminal_ok = $terminalOk
   mother_pool_bridge_ok = $bridgeOk
-  mother_pool_field_ack_ok = $fieldAckOk
-  mother_pool_field_ack_receipt = if ($null -ne $final) { $final.mother_pool_field_ack_receipt } else { $null }
+  mother_pool_handoff_ack_ok = $handoffAckOk
+  mother_pool_handoff_ack_receipt = if ($null -ne $final) { $final.mother_pool_handoff_ack_receipt } else { $null }
+  mother_pool_persistence_ack_ok = $persistenceAckOk
+  mother_pool_persistence_ack_receipt = if ($null -ne $final) { $final.mother_pool_persistence_ack_receipt } else { $null }
   runner_ok = $runnerOk
   canonical_verifier_ok = $verifierOk
-  steps = @($run, $verifier)
+  steps = @($run, $persistence, $verifier)
   canonical_verifier = "scripts/verify-opening-report-morning-contract.js"
   telegram_enabled = $false
 }
+if (Test-Path -LiteralPath $wrapperReceipt) {
+  $archiveDir = Join-Path $receiptDir "history"
+  New-Item -ItemType Directory -Force -Path $archiveDir | Out-Null
+  Copy-Item -LiteralPath $wrapperReceipt -Destination (Join-Path $archiveDir "wrapper-$today-$stamp-$([guid]::NewGuid()).json")
+}
+if ($null -ne $final -and $final.run_id -eq $runId) {
+  $final.complete = $ok -and -not $IsolatedBacktest
+  $final.status = if ($final.complete) { "complete" } else { "failed" }
+  $final.report_status = if ($final.complete) { "COMPLETE" } else { "FAIL_CLOSED" }
+  $final.exitCode = if ($final.complete) { 0 } else { 1 }
+  $final.first_blocker = if ($final.complete) { $null } else { $reasonCode }
+  $final | Add-Member -Force -NotePropertyName canonical_verifier_ok -NotePropertyValue $verifierOk
+  $final | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $finalFile -Encoding UTF8
+}
+if ($IsolatedBacktest) { $receipt.complete = $false; $receipt.status = "isolated_backtest" }
 $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8
 if (-not $ok) { exit 1 }
 exit 0
