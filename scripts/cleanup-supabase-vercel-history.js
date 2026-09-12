@@ -328,6 +328,17 @@ function runVercelCli(args, timeout = 30000) {
   return result;
 }
 
+function inspectVercelAsync(ref) {
+  const nativeCli=path.join(process.env.APPDATA || '', 'npm/node_modules/vercel/dist/vc.js');
+  if(!fs.existsSync(nativeCli))return Promise.resolve(runVercelCli(['inspect',ref,'--format=json'],60000));
+  return new Promise(resolve=>{
+    const child=require('child_process').spawn(process.execPath,[nativeCli,'inspect',ref,'--format=json'],{cwd:ROOT,windowsHide:true});
+    let stdout='',stderr='';let timer=setTimeout(()=>child.kill(),60000);
+    child.stdout.on('data',data=>{stdout+=data;});child.stderr.on('data',data=>{stderr+=data;});
+    child.on('error',error=>{clearTimeout(timer);resolve({status:1,error,stdout,stderr});});
+    child.on('exit',status=>{clearTimeout(timer);resolve({status:status??1,stdout,stderr});});
+  });
+}
 function vercelListDeployments(projectName, cursor) {
   const result = runVercelCli(["list", projectName, "--format=json", ...(cursor === undefined ? [] : ["--next",String(cursor)])], 60000);
   if (result.error) throw new Error(`vercel list ${projectName} failed: ${result.error.message}`);
@@ -431,7 +442,7 @@ async function cleanupVercelDeployments(args) {
       && !aliases.includes(productionHost);
   });
   const candidates=[], protectedAliases=[];
-  for(const item of possibleCandidates){
+  async function inspectCandidate(item){
     let detail;
     if(token){
       const query=project.orgId?'?teamId='+encodeURIComponent(project.orgId):'';
@@ -439,14 +450,15 @@ async function cleanupVercelDeployments(args) {
       if(!Array.isArray(detail.alias))throw Error('deployment_alias_readback_missing');
       detail={...detail,target:detail.target===null?'preview':detail.target,aliases:detail.alias};
     }else{
-      const result=runVercelCli(['inspect',item.url||item.uid||item.id,'--format=json'],60000);
+      const result=await inspectVercelAsync(item.url||item.uid||item.id);
       if(result.error||result.status!==0)throw Error('deployment_detail_readback_failed');
       detail=parseVercelJson(result.stdout);
     }
     if(!Array.isArray(detail.aliases))throw Error('deployment_alias_readback_missing');
-    if(detail.target!=='preview'||detail.aliases.length){protectedAliases.push({id:item.uid||item.id||item.url,target:detail.target,aliases:detail.aliases});continue;}
+    if(detail.target!=='preview'||detail.aliases.length){protectedAliases.push({id:item.uid||item.id||item.url,target:detail.target,aliases:detail.aliases});return;}
     candidates.push({...item,alias:detail.aliases});
   }
+  for(const batch of chunks(possibleCandidates,4))await Promise.all(batch.map(inspectCandidate));
   const deleted = [];
   for (const item of candidates) {
     const id = item.uid || item.id || item.url;
