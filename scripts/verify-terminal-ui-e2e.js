@@ -2224,7 +2224,7 @@ async function verifyStrategy5RenderedIdentity(cdp, kind) {
   const read = () => evaluate(cdp, kind => {
     const root = document.querySelector(kind === 'desktop' ? '#strategy-view' : '#content [data-mobile-fragment-key="strategy5"]');
     const nodes = [...(root?.querySelectorAll(kind === 'desktop' ? '.fuman-unified-list-card .strategy3-card-stock span' : '.mobile-terminal-row h4') || [])];
-    return {runId:(root?.textContent?.match(/strategy5-\d{8}-\d{14}/)||[])[0] || root?.dataset?.runId || '', codes:nodes.map(n=>(n.textContent.trim().match(/^\d{4}/)||[])[0]).filter(Boolean), zero:!!root?.querySelector('[data-zero-result="1"]')};
+    return {runId:(root?.textContent?.match(/strategy5-\d{8}-\d{14}/)||[])[0] || root?.dataset?.runId || root?.querySelector('[data-run-id]')?.dataset?.runId || '', codes:nodes.map(n=>(n.textContent.trim().match(/^\d{4}/)||[])[0]).filter(Boolean), zero:!!root?.querySelector('[data-zero-result="1"]')};
   }, kind);
   const toggle = key => evaluate(cdp, key => {
     const root = document.querySelector('#strategy-view');
@@ -2240,8 +2240,12 @@ async function verifyStrategy5RenderedIdentity(cdp, kind) {
   };
   await check('all',expected);
   if(kind==='desktop') {
-    const filters=await evaluate(cdp,()=>[...document.querySelectorAll('#strategy-view [data-unified-strategy-filter]')].map(n=>n.dataset.unifiedStrategyFilter).filter(x=>x&&x!=='multi_strategy_confluence'));
-    for(const filter of filters){await toggle(filter);await sleep(250);await check(filter,expected.filter(r=>(r.matches||[]).some(m=>m.id===filter)));}
+    const filters=await evaluate(cdp,()=>[...document.querySelectorAll('#strategy-view [data-unified-strategy-filter]')].map(n=>({key:n.dataset.unifiedStrategyFilter,disabled:n.disabled,count:Number(n.querySelector('strong')?.textContent.replace(/[^0-9]/g,''))})).filter(x=>x.key&&x.key!=='multi_strategy_confluence'));
+    for(const filter of filters){
+      const rows=expected.filter(r=>(r.matches||[]).some(m=>m.id===filter.key));
+      if(filter.disabled){checks.push({filter:filter.key,disabled:true,expectedCount:rows.length,displayedCount:filter.count,ok:rows.length===0&&filter.count===0});continue;}
+      await toggle(filter.key);await sleep(250);await check(filter.key,rows);
+    }
     await toggle('');
   }
   return {ok:checks.every(c=>c.ok),runId:evidence.runId,checks};

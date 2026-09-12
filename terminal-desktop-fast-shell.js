@@ -1159,7 +1159,7 @@
         const rawId = signal.id || signal.key || signal.type || signal.name || signal.label || "";
         const rawLabel = signal.label || signal.short || signal.title || signal.name || signal.id || signal.key || "";
         const rawReason = signal.reason || signal.message || signal.note || "";
-        const id = compactText(rawId, 48);
+        const id = isStrategy5Route(route) ? String(rawId).trim() : compactText(rawId, 48);
         const label = compactText((translateStrategy4 && (strategy4SignalLabel(rawId) || strategy4SignalLabel(rawLabel))) || rawLabel || rawId, 40);
         const reason = compactText((translateStrategy4 && strategy4SignalLabel(rawReason)) || rawReason, 96);
         if (!id && !label && !reason) return null;
@@ -1702,10 +1702,8 @@
       strategyNameLabel(rawSubStrategy) || (isStrategy4Route(route) && strategy4SignalLabel(rawSubStrategy)) || rawSubStrategy,
       42
     );
-    const subStrategyId = compactText(
-      merged.subStrategyId || merged.strategyId || merged.signalId || merged.setupId || active.id || active.key || active.type || primarySignal?.id || subStrategy,
-      48
-    );
+    const rawSubStrategyId = merged.subStrategyId || merged.strategyId || merged.signalId || merged.setupId || active.id || active.key || active.type || primarySignal?.id || subStrategy;
+    const subStrategyId = isStrategy5Route(route) ? String(rawSubStrategyId).trim() : compactText(rawSubStrategyId, 48);
     const signalLine = signalSummary(signals);
     const strategyDisplay = compactText(
       strategyNameLabel(subStrategyId) || strategyNameLabel(rawSubStrategy) || subStrategy || signalLine,
