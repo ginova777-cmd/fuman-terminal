@@ -64,6 +64,7 @@ try {
     }
     & $pwshExe -NoProfile -File ".\scripts\run-scorecard88-terminal-collector.ps1" -Slot "21:40" -ProjectRoot $PSScriptRoot -RuntimeRoot $runtime -Recovery -ExpectedRunId ([string]$institutionEvidence.runId) -RecoveryReason "Institution complete runner: publish independently verified desktop/mobile run to scorecard before rendered acceptance"
   }
+  Invoke-Required "institution scan audit publication" { & $nodeExe "--use-system-ca" "scripts\publish-scorecard-scan-audit.js" }
   Invoke-Required "live database and rendered three-surface acceptance" { & $nodeExe "--use-system-ca" "scripts\verify-institution-live-readback.js" "--render" }
   Invoke-Required "buy-sell canonical receipt" { & $nodeExe "--use-system-ca" "scripts\verify-buy-sell-complete.js" "--write-receipt" }
   exit 0

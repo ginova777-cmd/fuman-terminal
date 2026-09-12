@@ -2545,12 +2545,12 @@ async function runInstitutionScorecard(browser) {
           .filter(row => row.getBoundingClientRect().height > 0 && row.cells[0]?.innerText.trim() === date)
           .map(row => ({ symbol: row.cells[2]?.innerText.trim(), runId: row.dataset.runId, sourceRunId: row.dataset.sourceReportRunId, entryPrice: Number(row.cells[5]?.innerText.replaceAll(",", "")), highPrice: Number(row.cells[6]?.innerText.replaceAll(",", "")), text: row.innerText }));
         const auditRow = [...document.querySelectorAll('#scanAudit tr')].find(row => row.cells[0]?.innerText.trim() === '買賣超');
-        const audit = auditRow ? { runId:auditRow.cells[4]?.innerText.trim(), count:Number(auditRow.cells[5]?.innerText.split("/")[0].trim()), verifiedCount:Number(auditRow.cells[5]?.innerText.split("/")[1]?.trim()), surfaces:auditRow.cells[6]?.innerText, status:auditRow.cells[7]?.innerText } : null;
+        const audit = auditRow ? { tradeDate:auditRow.cells[3]?.innerText.trim(), runId:auditRow.cells[4]?.innerText.trim(), count:Number(auditRow.cells[5]?.innerText.split("/")[0].trim()), verifiedCount:Number(auditRow.cells[5]?.innerText.split("/")[1]?.trim()), surfaces:auditRow.cells[6]?.innerText, status:auditRow.cells[7]?.innerText } : null;
         return { rows, audit, emptyText: document.querySelector('#rows .empty')?.innerText || "", sourceText: document.querySelector('#scorecardSourceReports')?.innerText || "" };
       }, { date });
       stats.actualSymbols = stats.rows.map(row => row.symbol).sort();
       stats.ok = Boolean(expectedRun) && JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols)
-        && stats.audit?.runId === expectedRun && stats.audit?.count === expectedTotal && stats.audit?.verifiedCount === expectedTotal && stats.audit?.surfaces.includes('一致')
+        && stats.audit?.tradeDate === date && stats.audit?.runId === expectedRun && stats.audit?.count === expectedTotal && stats.audit?.verifiedCount === expectedTotal && stats.audit?.surfaces.includes('一致')
         && stats.rows.every(row => row.runId === expectedRun && row.sourceRunId === expectedRun && Math.abs(row.entryPrice - Number(readback.rows.find(r => r.code === row.symbol)?.payload?.close)) < .011 && Math.abs(row.highPrice - row.entryPrice) < .011)
         && (expectedSymbols.length > 0 || (/沒有符合/.test(stats.emptyText) && stats.sourceText.includes(expectedRun)));
       if (stats.ok) break;
