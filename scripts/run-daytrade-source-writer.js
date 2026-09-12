@@ -2978,6 +2978,12 @@ function publishMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRu
   return snapshot;
 }
 
+async function publishMotherPoolSnapshotSupabase(snapshot) {
+  if (DRY_RUN || !snapshot?.run_id) return { skipped: true, reason: DRY_RUN ? "dry_run" : "missing_snapshot" };
+  const result = await supabaseRpc("publish_fugle_daytrade_mother_pool_snapshot_v4_1", { p_snapshot: snapshot }, { service: true });
+  return Array.isArray(result) ? (result[0] || {}) : (result || {});
+}
+
 function artifactTradeDate(value) {
   return String(value?.tradeDate || value?.trade_date || value?.date || "").slice(0, 10);
 }

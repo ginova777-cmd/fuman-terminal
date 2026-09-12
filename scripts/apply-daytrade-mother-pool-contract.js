@@ -6,6 +6,7 @@ const ROOT = path.join(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const PROJECT_URL = process.env.SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co";
 const SQL_FILES = [
+  path.join(ROOT, "ops", "public-slot", "DaytradeMotherPoolSnapshotSupabaseV4_1.sql"),
   path.join(ROOT, "ops", "public-slot", "DaytradeMotherPoolContractViews_20260709.sql"),
   path.join(ROOT, "ops", "public-slot", "DaytradeMotherPoolContractHealthDynamicMetadataPatch_20260809.sql"),
   path.join(ROOT, "ops", "public-slot", "DaytradeMotherPoolDynamicDiscoveryReadback_20260808.sql"),
