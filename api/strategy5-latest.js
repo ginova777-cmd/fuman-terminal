@@ -823,6 +823,8 @@ function buildPayload(rows, run, options = {}) {
     ...runTimeEvidence,
     runId: String(first.run_id || run?.run_id || ""),
     updatedAt: String(run?.finished_at || first.updated_at || new Date().toISOString()),
+    selectionCoverage: run?.payload?.selectionCoverage || null,
+    technicalSourceHash: run?.payload?.technicalSourceHash || null,
     generatedDate: scanDate,
     scanDate,
     tradeDate: scanDate,

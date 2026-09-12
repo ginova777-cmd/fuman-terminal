@@ -135,7 +135,7 @@ function canonicalFromDesktop(key, desktop) {
   const surfaceMatches = surface?.ok === true && desktopStatus === "PASS" && mobileStatus === "PASS" && desktopRunId === runId && mobileRunId === runId;
   return {
     key, strategy: key, runId, tradeDate: collectionDate, date: collectionDate,
-    sourceDate: key === 'institution' ? compactDate(detail.institution_source_status_at_run?.usedDate || detail.institution_source_status_at_run?.latestTradeDate).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : text(detail.sourceDate, detail.source_date, detail.scanDate, detail.scan_date, taipeiDate()),
+    sourceDate: key === 'strategy5' ? compactDate(detail.marketDate).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : key === 'institution' ? compactDate(detail.institution_source_status_at_run?.usedDate || detail.institution_source_status_at_run?.latestTradeDate).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : text(detail.sourceDate, detail.source_date, detail.scanDate, detail.scan_date, taipeiDate()),
     startedAt: text(detail.startedAt, detail.started_at, scan.startedAt, scan.started_at),
     finishedAt: text(detail.finishedAt, detail.finished_at, detail.checkedAt, detail.checked_at, summary.updatedAt, desktop.updatedAt),
     universeCount: num(detail.universeCount, detail.universe_count, detail.expectedTotal, detail.expected_total, scan.universeCount, scan.expectedTotal, key === 'institution' ? detail.total : undefined),

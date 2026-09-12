@@ -9,6 +9,9 @@ param(
 $ErrorActionPreference = 'Stop'
 $env:FUMAN_RUNTIME_ROOT = $RuntimeRoot
 $env:FUMAN_RUNTIME_DIR = $RuntimeRoot
+if ($Recovery -and $ExpectedRunId -match '^strategy5-\d{8}-\d{14}$' -and $env:FUMAN_STRATEGY5_REPLAY_VALIDATED -eq '1') {
+  $env:FUMAN_SCORECARD_TRADE_DATE = $env:FUMAN_REPLAY_TRADE_DATE
+}
 if ($Recovery -and $ExpectedRunId -match '^institution-\d{8}-\d{14}$' -and $env:FUMAN_INSTITUTION_REPLAY_VALIDATED -eq '1') {
   $env:FUMAN_SCORECARD_TRADE_DATE = $env:FUMAN_REPLAY_TRADE_DATE
 }

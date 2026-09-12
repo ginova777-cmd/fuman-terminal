@@ -1,5 +1,7 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
+const strategy5Technical = require("../lib/strategy5-technical-selection");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 const { overlayFugleWebSocketQuotes } = require("../lib/fugle-quote-overlay");
 const { publishStrategyCacheStatus } = require("../lib/strategy-cache-status");
@@ -49,8 +51,9 @@ const STRATEGY5_MAX_LOCAL_STOCKS_CACHE_AGE_DAYS = Number(process.env.STRATEGY5_M
 const STRATEGY5_BOLLINGER_NARROW_PCT = Number(process.env.STRATEGY5_BOLLINGER_NARROW_PCT || 5);
 const STRATEGY5_BOLLINGER_NORMAL_PCT = Number(process.env.STRATEGY5_BOLLINGER_NORMAL_PCT || 10);
 const STRATEGY5_BOLLINGER_WIDE_PCT = Number(process.env.STRATEGY5_BOLLINGER_WIDE_PCT || 20);
-const STRATEGY5_KD_RSV_PERIOD = Number(process.env.STRATEGY5_KD_RSV_PERIOD || 5);
-const STRATEGY5_KD_SMOOTHING = Number(process.env.STRATEGY5_KD_SMOOTHING || 3);
+const { PARAMETERS: TECHNICAL_PARAMETERS } = require("../lib/technical-indicators");
+const STRATEGY5_KD_RSV_PERIOD = TECHNICAL_PARAMETERS.kdPeriod;
+const STRATEGY5_KD_SMOOTHING = TECHNICAL_PARAMETERS.kSmoothing;
 const STRATEGY5_CHIP_HISTORY_LIMIT = Number(process.env.STRATEGY5_CHIP_HISTORY_LIMIT || 16000);
 const STRATEGY5_MIN_CHIP_HISTORY_COVERAGE = Number(process.env.STRATEGY5_MIN_CHIP_HISTORY_COVERAGE || 1500);
 const STRATEGY5_INSTITUTION_BUY_DAYS = Number(process.env.STRATEGY5_INSTITUTION_BUY_DAYS || 2);
@@ -2829,7 +2832,7 @@ async function main() {
     const marginDates = (row.marginRows || []).slice(-2).map((item) => compactDateKey(item.tradeDate));
     return institutionDates.length === 2 && institutionDates.join(",") === marginDates.join(",") && institutionDates.at(-1) === runMarketDate;
   }).length;
-  const matches = await buildMatches(
+  const technicalCandidates = await buildMatches(
     stocks,
     institutionData,
     issuedSharesResult.map,
@@ -2838,6 +2841,12 @@ async function main() {
     runMarketDate,
     chipHistoryByCode
   );
+  if (process.env.FUMAN_REPLAY_TRADE_DATE && compactDateKey(process.env.FUMAN_REPLAY_TRADE_DATE) !== runMarketDate) throw new Error('strategy5 complete run blocked: replay source date mismatch');
+  const technicalTradeDate = `${runMarketDate.slice(0,4)}-${runMarketDate.slice(4,6)}-${runMarketDate.slice(6,8)}`;
+  const technicalSources = await strategy5Technical.readSources(technicalCandidates, technicalTradeDate);
+  const technicalSelection = strategy5Technical.evaluate(technicalCandidates, technicalSources, technicalTradeDate);
+  if (!technicalSelection.selectionCoverage.ok) throw new Error('strategy5 complete run blocked: daily technical candidate coverage below 90%');
+  const matches = technicalSelection.selected;
   const output = {
     ok: true,
     source: USE_MIS_QUOTES ? "github-actions-mis-realtime" : "github-actions-official-daily",
@@ -2907,10 +2916,18 @@ async function main() {
         institutionalBuyDays: 2,
       },
     },
+    selectionCoverage: technicalSelection.selectionCoverage,
     count: matches.length,
     matches,
   };
 
+  output.runId = strategy5RunIdFromOutput(output);
+  const evidence = { contract: strategy5Technical.CONTRACT, runId: output.runId, tradeDate: technicalTradeDate, candidates: technicalCandidates, sources: technicalSources };
+  const evidenceText = JSON.stringify(evidence);
+  output.technicalSourceHash = crypto.createHash('sha256').update(evidenceText).digest('hex');
+  output.technicalSourcePath = path.join(process.env.FUMAN_RUNTIME_DIR || 'C:/fuman-runtime', 'data', 'strategy5-technical-source', output.runId + '.json');
+  fs.mkdirSync(path.dirname(output.technicalSourcePath), { recursive: true });
+  fs.writeFileSync(output.technicalSourcePath, evidenceText);
   await publishStrategy5CompleteRunToSupabase(output);
   await publishStrategyCacheStatus("strategy5", "策略5-量價籌碼", output, {
     used_date: output.sourceDate || output.generatedDate || output.usedDate || output.date,

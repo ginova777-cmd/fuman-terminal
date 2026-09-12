@@ -46,6 +46,10 @@ function Invoke-FumanWeekdayGuard {
     return
   }
 
+  if ($env:FUMAN_STRATEGY5_REPLAY_VALIDATED -eq "1" -and $env:FUMAN_REPLAY_TRADE_DATE -and $Label -in @("Strategy5 complete", "Strategy5", "Strategy5 scan", "Chip source sync")) {
+    if ($LogPath) { "Validated Strategy5 revision replay: tradeDate=$env:FUMAN_REPLAY_TRADE_DATE; label=$Label" >> $LogPath }
+    return
+  }
   if ($env:FUMAN_INSTITUTION_REPLAY_VALIDATED -eq "1" -and $env:FUMAN_REPLAY_TRADE_DATE -and $Label -in @("Buy/sell complete", "Institution scan", "Chip source sync")) {
     if ($LogPath) { "Validated Institution strategy revision replay: tradeDate=$env:FUMAN_REPLAY_TRADE_DATE; label=$Label" >> $LogPath }
     return

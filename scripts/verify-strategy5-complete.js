@@ -21,6 +21,11 @@ const packageSource = readText(path.join(root, "package.json"));
 const auditFile = scan?.runId ? path.join(runtime, "outputs", "post-scan-tri-surface", "strategy5", scan.runId, "terminal-resource-chain-audit.json") : "";
 const audit = auditFile ? read(auditFile) : null;
 const issues = [];
+const liveFile = path.join(root, 'outputs/strategy5-live-acceptance/readback.json');
+const renderedFile = path.join(root, 'outputs/strategy5-live-acceptance/rendered/terminal-ui-e2e-report.json');
+const live = read(liveFile), rendered = read(renderedFile);
+if (!live?.ok || live.runId !== scan?.runId || live.tradeDate !== date || live.readbackCount !== Number(scan?.matches) || !live.technicalFreshReadback || live.selectionCoverage?.contract !== 'strategy5-candidate90-daily-up-hourly60-bonus-v1' || live.selectionCoverage?.ok !== true) issues.push('strategy5_daily_trend_full_readback_not_verified');
+if (!rendered?.ok || Date.parse(rendered.generatedAt) < Date.parse(live?.checkedAt || '') || !Array.isArray(rendered.results) || rendered.results.filter(r => r.routeKey === 'strategy5').length < 5 || rendered.results.some(r => r.routeKey === 'strategy5' && (!r.ok || (r.kind === 'scorecard' ? r.audit?.runId !== scan?.runId || r.audit?.tradeDate !== date : !r.identity?.ok || r.identity.runId !== scan?.runId)))) issues.push('strategy5_actual_three_surface_not_verified');
 if (!runnerSource.includes('"--expected-run-id=$([string]$verifiedPayload.runId)"')
   || !runnerSource.includes('"--expected-date=$strategy5ExpectedDate"')) issues.push("strategy5_scorecard_publisher_args_missing");
 if (!publisherSource.includes('argValue("expected-run-id"')
@@ -32,10 +37,23 @@ if (!publisherSource.includes("const sourceRecords = Array.isArray(source.record
   || publisherSource.includes("if (currentDate !== EXPECTED_DATE)")) issues.push("strategy5_scorecard_date_advance_contract_missing");
 if (!watchdogSource.includes('"--summary-fields=runId,complete,count,updatedAt"')
   || !protectedReaderSource.includes('arg("summary-fields")')) issues.push("strategy5_watchdog_compact_json_contract_missing");
-for (const retired of ["run-strategy5-battle-verify.ps1", "scripts/verify-strategy5-battle-state.js", "scripts/verify-strategy5-alert-path.js"]) {
+const retiredVerifiers = [
+  "run-strategy5-battle-verify.ps1",
+  "scripts/verify-strategy5-battle-state.js",
+  "scripts/verify-strategy5-alert-path.js",
+  "scripts/verify-strategy5-prewater-static-fields.js",
+  "scripts/verify-strategy5-prewater-fixtures.js",
+  "scripts/verify-strategy5-prewater-formal-payloads.js",
+  "scripts/verify-strategy5-business-fields.js",
+  "scripts/verify-strategy5-post-restore-readonly.js",
+  "scripts/strategy5-live-bad-source-drill.js",
+];
+for (const retired of retiredVerifiers) {
   if (fs.existsSync(path.join(root, retired))) issues.push(`retired_verifier_returned:${retired}`);
 }
-if (packageSource.includes('"verify:strategy5-alert-path"')) issues.push("retired_verifier_package_reference_returned");
+for (const retiredScript of ["verify:strategy5-alert-path", "verify:strategy5-prewater", "verify:strategy5-business-fields", "verify:strategy5-formal-payloads", "verify:strategy5-live-bad-source-drill", "verify:strategy5-post-restore-readonly"]) {
+  if (packageSource.includes(`"${retiredScript}"`)) issues.push(`retired_verifier_package_reference_returned:${retiredScript}`);
+}
 if (source?.complete !== true || source?.status !== "complete" || Number(source?.exitCode) !== 0) issues.push("chip_source_sync_not_complete");
 if (source?.fallback === true) issues.push("chip_source_fallback_disallowed");
 if (Array.isArray(source?.warnings) && source.warnings.length > 0) issues.push("chip_source_warnings_not_empty");
@@ -59,7 +77,7 @@ if (scorecard?.contract !== "scorecard88-terminal-canonical-collector-v1") issue
 if (String(scorecardReport?.runId || "") !== String(scan?.runId || "")) issues.push("strategy5_scorecard88_run_id_mismatch");
 if (scorecardReport?.ok !== true || Number(scorecardReport?.count || scorecardReport?.resultCount || 0) <= 0) issues.push("strategy5_scorecard88_report_not_complete");
 const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "strategy5", tradeDate: date,
-  checkedAt: new Date().toISOString(), status: issues.length ? "failed" : "complete", complete: issues.length === 0,
+  checkedAt: new Date().toISOString(), selectionCoverage: live?.selectionCoverage || null, liveReadbackReceipt: liveFile, renderedReceipt: renderedFile, marketMode: process.env.FUMAN_REPLAY_TRADE_DATE ? 'strategy_revision_replay' : 'scheduled', status: issues.length ? "failed" : "complete", complete: issues.length === 0,
   exitCode: issues.length ? 1 : 0, runId: scan?.runId || "", count: Number(scan?.matches || 0),
   scanned: Number(scan?.scanned || 0), total: Number(scan?.total || 0), triSurfaceStatus: scan?.triSurfaceStatus || "",
   desktopRunId: scan?.desktopRunId || "", mobileRunId: scan?.mobileRunId || "", scorecardRunId: scan?.scorecardRunId || "",

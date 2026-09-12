@@ -2215,6 +2215,38 @@ async function verifyInstitutionRenderedIdentity(cdp, kind) {
   return {ok:checks.every(c=>c.ok),runId:evidence.runId,checks};
 }
 
+
+async function verifyStrategy5RenderedIdentity(cdp, kind) {
+  const evidence = JSON.parse(await fs.readFile(optionValue('--strategy5-readback'), 'utf8'));
+  if (!evidence.ok) return {ok:false,reason:'DB readback incomplete'};
+  const expected = evidence.visibleRows.slice(0, kind === 'desktop' ? 140 : 20);
+  const checks = [];
+  const read = () => evaluate(cdp, kind => {
+    const root = document.querySelector(kind === 'desktop' ? '#strategy-view' : '#content [data-mobile-fragment-key="strategy5"]');
+    const nodes = [...(root?.querySelectorAll(kind === 'desktop' ? '.fuman-unified-list-card .strategy3-card-stock span' : '.mobile-terminal-row h4') || [])];
+    return {runId:(root?.textContent?.match(/strategy5-\d{8}-\d{14}/)||[])[0] || root?.dataset?.runId || '', codes:nodes.map(n=>(n.textContent.trim().match(/^\d{4}/)||[])[0]).filter(Boolean), zero:!!root?.querySelector('[data-zero-result="1"]')};
+  }, kind);
+  const toggle = key => evaluate(cdp, key => {
+    const root = document.querySelector('#strategy-view');
+    root?.querySelector('[data-unified-strategy-filter].active')?.click();
+    if(key) root?.querySelector('[data-unified-strategy-filter="'+key+'"]')?.click();
+  },key);
+  if(kind==='desktop') await toggle('');
+  await sleep(300);
+  const check = async (filter, rows) => {
+    const actual = await read();
+    const codes = rows.map(r=>r.code);
+    checks.push({filter,expected:codes,actual:actual.codes,runId:actual.runId,ok:actual.runId===evidence.runId && JSON.stringify(actual.codes.slice().sort())===JSON.stringify(codes.slice().sort())});
+  };
+  await check('all',expected);
+  if(kind==='desktop') {
+    const filters=await evaluate(cdp,()=>[...document.querySelectorAll('#strategy-view [data-unified-strategy-filter]')].map(n=>n.dataset.unifiedStrategyFilter).filter(x=>x&&x!=='multi_strategy_confluence'));
+    for(const filter of filters){await toggle(filter);await sleep(250);await check(filter,expected.filter(r=>(r.matches||[]).some(m=>m.id===filter)));}
+    await toggle('');
+  }
+  return {ok:checks.every(c=>c.ok),runId:evidence.runId,checks};
+}
+
 async function runDesktopMode(browser, theme) {
   debug(`desktop mode start theme=${theme}`);
   const cdp = await createTab(browser);
@@ -2244,6 +2276,7 @@ async function runDesktopMode(browser, theme) {
     }
 
     }    if (route.key === "institution" && optionValue("--institution-readback")) { stats.identity = await verifyInstitutionRenderedIdentity(cdp, "desktop"); stats.ok = stats.ok && stats.identity.ok; }
+    if (route.key === "strategy5" && optionValue("--strategy5-readback")) { stats.identity = await verifyStrategy5RenderedIdentity(cdp, "desktop"); stats.ok = stats.ok && stats.identity.ok; }
     stats.theme = theme;
     stats.screenshot = await withTimeout(
       screenshot(cdp, `desktop-${theme}-${route.key}.png`),
@@ -2435,6 +2468,7 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
     }
     stats.theme = theme;
     if (effectiveRoute.key === "institution" && optionValue("--institution-readback")) { stats.identity = await verifyInstitutionRenderedIdentity(cdp, "mobile"); stats.ok = stats.ok && stats.identity.ok; }
+    if (effectiveRoute.key === "strategy5" && optionValue("--strategy5-readback")) { stats.identity = await verifyStrategy5RenderedIdentity(cdp, "mobile"); stats.ok = stats.ok && stats.identity.ok; }
     stats.viewportKey = viewport.key;
     stats.viewportLabel = viewport.label;
     stats.screenshot = await withTimeout(
@@ -2571,6 +2605,55 @@ async function runInstitutionScorecard(browser) {
 }
 
 
+async function runStrategy5Scorecard(browser) {
+  const cdp = await createTab(browser);
+  try {
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(() => { const original = window.fetch.bind(window); window.__scorecardFetchErrors = []; window.fetch = async (...args) => { try { return await original(...args); } catch (error) { window.__scorecardFetchErrors.push({ path: new URL(typeof args[0] === 'string' ? args[0] : args[0].url, location.href).pathname, error: error.message, stack: error.stack }); throw error; } }; })();` });
+    await setViewport(cdp, { width: 1440, height: 1000, mobile: false });
+    await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/88`), { stopLoading: false });
+    const selector = '#tabs button[data-strategy="策略5成績單"]';
+    await waitForSelector(cdp, selector, ROUTE_TIMEOUT_MS);
+    await clickSelectorByDom(cdp, selector);
+    const expectedRun = optionValue("--expected-run-id");
+    const expectedSymbols = optionValue("--expected-scorecard-symbols").split(",").filter(Boolean).sort();
+    const expectedTotal = Number(optionValue("--expected-total"));
+    const date = process.env.FUMAN_REPLAY_TRADE_DATE || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+    const readback = JSON.parse(await fs.readFile(optionValue("--strategy5-readback"), "utf8"));
+    if (!readback.ok || readback.runId !== expectedRun) throw new Error("strategy5 scorecard readback evidence missing");
+    let stats;
+    const deadline = Date.now() + ROUTE_TIMEOUT_MS;
+    do {
+      stats = await evaluate(cdp, ({ date }) => {
+        const rows = [...document.querySelectorAll('#rows tr[data-strategy="策略5成績單"]')]
+          .filter(row => row.getBoundingClientRect().height > 0 && row.cells[0]?.innerText.trim() === date)
+          .map(row => ({ symbol: row.cells[2]?.innerText.trim(), runId: row.dataset.runId, sourceRunId: row.dataset.sourceReportRunId, entryPrice: Number(row.cells[5]?.innerText.replaceAll(",", "")), highPrice: Number(row.cells[6]?.innerText.replaceAll(",", "")), text: row.innerText }));
+        const auditRow = [...document.querySelectorAll('#scanAudit tr')].find(row => row.cells[0]?.innerText.trim() === '策略5');
+        const audit = auditRow ? { tradeDate:auditRow.cells[3]?.innerText.trim(), runId:auditRow.cells[4]?.innerText.trim(), count:Number(auditRow.cells[5]?.innerText.split("/")[0].trim()), verifiedCount:Number(auditRow.cells[5]?.innerText.split("/")[1]?.trim()), surfaces:auditRow.cells[6]?.innerText, status:auditRow.cells[7]?.innerText } : null;
+        return { rows, audit, emptyText: document.querySelector('#rows .empty')?.innerText || "", sourceText: document.querySelector('#scorecardSourceReports')?.innerText || "" };
+      }, { date });
+      stats.actualSymbols = stats.rows.map(row => row.symbol).sort();
+      stats.ok = Boolean(expectedRun) && JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols)
+        && stats.audit?.tradeDate === date && stats.audit?.runId === expectedRun && stats.audit?.count === expectedTotal && stats.audit?.verifiedCount === expectedTotal && stats.audit?.surfaces.includes('一致')
+        && stats.rows.every(row => row.runId === expectedRun && row.sourceRunId === expectedRun && Math.abs(row.entryPrice - Number(readback.rows.find(r => r.code === row.symbol)?.payload?.close)) < .011 && Math.abs(row.highPrice - row.entryPrice) < .011)
+        && (expectedSymbols.length > 0 || (/沒有符合/.test(stats.emptyText) && stats.sourceText.includes(expectedRun)));
+      if (stats.ok) break;
+      await sleep(750);
+    } while (Date.now() < deadline);
+    return { kind: "scorecard", routeKey: "strategy5", theme: "night", ...stats,
+      contentAcceptance: { expectedRun, actualRun: stats.ok ? expectedRun : null, expectedSymbols, actualSymbols: stats.actualSymbols, sameSymbols: JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols) },
+      screenshot: await screenshot(cdp, "scorecard-strategy5.png") };
+  } catch (error) {
+    return { kind: "scorecard", routeKey: "strategy5", theme: "night", ok: false,
+      blockerMatches: [error.message], pageText: await evaluate(cdp, () => document.body.innerText.slice(0, 4000)).catch(() => ""),
+      networkErrors: cdp.events.filter(event => event.method === "Network.loadingFailed").map(event => ({ error: event.params?.errorText, blockedReason: event.params?.blockedReason, corsError: event.params?.corsErrorStatus })),
+      networkResponses: cdp.events.filter(event => event.method === "Network.responseReceived").map(event => ({ path: new URL(event.params.response.url).pathname, status: event.params.response.status })),
+      browserErrors: cdp.events.filter(event => event.method === "Log.entryAdded").map(event => event.params?.entry?.text),
+      fetchErrors: await evaluate(cdp, () => window.__scorecardFetchErrors || []).catch(() => []),
+      screenshot: await screenshot(cdp, "scorecard-strategy5-failed.png").catch(() => null) };
+  } finally { cdp.close(); }
+}
+
+
 async function runE2eOnce(options = {}) {
   const browser = await launchBrowser(options);
   const results = [];
@@ -2579,6 +2662,7 @@ async function runE2eOnce(options = {}) {
     if (RUN_ONLY.has("desktop-sun")) results.push(...await runDesktopMode(browser, "sun"));
     const mobileExecuted = new Set();
     if (process.argv.includes("--include-institution-scorecard")) results.push(await runInstitutionScorecard(browser));
+    if (process.argv.includes("--include-strategy5-scorecard")) results.push(await runStrategy5Scorecard(browser));
     if (process.argv.includes("--include-scorecard")) results.push(await runStrategy3Scorecard(browser));
     for (const spec of MOBILE_RUNS) {
       if (!RUN_ONLY.has(spec.flag)) continue;
