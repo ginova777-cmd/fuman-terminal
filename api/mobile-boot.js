@@ -367,6 +367,7 @@ async function buildBoot(request) {
   }));
   const fragments = {};
   const runs = {};
+  fragments.morning = {url:"/api/mobile-fragment?tab=morning",hash:new Date().toISOString(),api:"/api/market-ai-live?briefingOnly=1"};
   for (const [tab, payload] of results) {
     const hash = signature(tab, payload);
     fragments[tab] = {

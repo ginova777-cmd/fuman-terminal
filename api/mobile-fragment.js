@@ -22,6 +22,7 @@ const MOBILE_FRAGMENT_HTML_SNAPSHOT_READ_TIMEOUT_MS = Number(process.env.FUMAN_M
 const MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS || 72 * 60 * 60 * 1000);
 
 const TAB_CONFIG = {
+  morning: {title:"晨報",subtitle:"08:30 漲幅族群晨報",endpoint:"/api/market-ai-live?briefingOnly=1",points:[]},
   ai: {
     title: "AI 判讀",
     subtitle: "市場總覽 AI dashboard",
@@ -889,6 +890,7 @@ function rowHtml(row, index, tab = "") {
 }
 
 async function renderFragment(tab, config, payload) {
+  if (tab === "morning") { const report=payload?.openingMorningReport; return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="morning" data-run-id="${esc(report?.run_id || "")}">${require("../terminal-opening-report-view").render(report)}</section>`; }
   if (tab === "ai") return renderAiFragment(tab, config, payload);
   payload = attachTerminalAuthority(tab, payload);
   const diagnosticReplay = payload?.status === "diagnostic_replay" && payload?.diagnosticReplay === true;
@@ -1116,7 +1118,7 @@ module.exports = async function handler(request, response) {
       return;
     }
     const bypassHtmlSnapshot = requestedLiveFragment;
-    const htmlSnapshot = (bypassHtmlSnapshot || tab === "strategy2") ? null : await readMobileFragmentHtmlSnapshot(
+    const htmlSnapshot = (bypassHtmlSnapshot || tab === "strategy2" || tab === "morning") ? null : await readMobileFragmentHtmlSnapshot(
       tab);
     if (htmlSnapshot?.html) {
       response.setHeader("ETag", `"${crypto.createHash("sha1").update(htmlSnapshot.html).digest("hex").slice(0, 16)}"`);
@@ -1139,7 +1141,7 @@ module.exports = async function handler(request, response) {
       timeoutMs: MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS,
       allowStale: tab !== "strategy2",
     }).catch(() => null);
-    const snapshotPayload = tab === "ai" ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
+    const snapshotPayload = ["ai","morning"].includes(tab) ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
     // Formal strategy/chip tabs must never paint an older HTML snapshot as current.
     // They all read the same protected latest API path as the desktop terminal.
     const forceLivePayload = ["strategy2", "strategy3", "strategy4", "strategy5", "chip"].includes(tab)
@@ -1162,7 +1164,7 @@ module.exports = async function handler(request, response) {
               : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, ["ai", "chip"].includes(tab) ? 30000 : 12000, authHeadersFrom(request)))
       : snapshotPayload;
     const html = await renderFragment(tab, config, payload);
-    if (tab !== "ai" && tab !== "strategy2") writeMobileFragmentHtmlSnapshot(tab, html, payload);
+    if (tab !== "ai" && tab !== "strategy2" && tab !== "morning") writeMobileFragmentHtmlSnapshot(tab, html, payload);
     response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);
     sendHtml(request, response, 200, html, { tab });
   } catch (error) {

@@ -6948,57 +6948,13 @@
   function renderOpeningReport0830DesktopBriefing(aiPayload = {}) {
     const incoming = aiPayload?.openingMorningReport;
     if (incoming?.ok === true) window.__fumanOpeningReport0830 = incoming;
-    const data = incoming?.ok === true ? incoming : window.__fumanOpeningReport0830;
+    const data = incoming !== undefined ? incoming : window.__fumanOpeningReport0830;
     const panel = ensureMarketDesktopShell().ai || document.querySelector("#market-view [data-market-api-ai], #market-view #market-ai-panel, #market-view .market-ai-panel");
     document.getElementById("terminal-opening-report-0830-root")?.remove();
-    if (!panel || !data) return Boolean(panel?.querySelector?.("[data-opening-report-0830-briefing]"));
-    const hasToday = data.ok === true || String(data.reason_code || "") !== "opening_report_0830_final_receipt_missing";
-    if (!hasToday) return Boolean(panel.querySelector?.("[data-opening-report-0830-briefing]"));
-    const esc = (value) => escapeHtml(String(value ?? ""));
-    const arr = (value) => Array.isArray(value) ? value : [];
-    const pct = (value) => {
-      const n = Number(value);
-      return Number.isFinite(n) ? `${n > 0 ? "+" : ""}${n.toFixed(2)}%` : "--";
-    };
-    const toneClass = (value) => {
-      const text = String(value || "").toLowerCase();
-      if (text.includes("negative") || text.includes("偏弱")) return "opening-report-0830-down";
-      if (text.includes("neutral") || text.includes("分歧") || text.includes("中性")) return "opening-report-0830-flat";
-      return "opening-report-0830-up";
-    };
-    const names = (rows, max = 4) => {
-      const list = arr(rows).map((row) => row.name || row.symbol).filter(Boolean);
-      return list.length ? `${list.slice(0, max).join("、")}${list.length > max ? " +" + (list.length - max) : ""}` : "--";
-    };
-    const rows = arr(data.market_snapshot?.items).slice(0, 4);
-    const priorities = arr(data.priority_industries).slice(0,3);
-    const recommended = (arr(data.recommended_symbols).length
-      ? arr(data.recommended_symbols)
-      : priorities.flatMap((item) => arr(item.a_symbols).map((stock) => ({ ...stock, industry: item.display_name || item.industry })))
-    ).slice(0,18);
-    const node = document.createElement("section");
-    node.className = "opening-report-0830-briefing";
-    node.setAttribute("data-opening-report-0830-briefing", "1");
-    node.setAttribute("data-opening-report-state", "mounted");
-    node.innerHTML = `
-      <header class="opening-report-0830-head">
-        <div class="opening-report-0830-title">
-          <b>${esc(data.date || "")} 晨報｜${esc(rows[1]?.label || "全球盤面")} ${pct(rows[1]?.percent)}｜${esc(priorities[0]?.display_name || "今日推薦")}</b>
-          <span>資料截點 08:20（日本／韓國早盤凍結；美股以前一交易日收盤）｜顯示窗 ${esc(data?.visible_window?.label || "08:30-08:59")}｜僅供觀察排序，不構成正式進場訊號</span>
-        </div>
-        <div class="opening-report-0830-run"><span>${esc(data.report_status || "WATCH")}</span><span>${esc("僅供觀察排序")}</span></div>
-      </header>
-      <div class="opening-report-0830-grid">
-        <article class="opening-report-0830-card"><h4>大盤紅綠燈</h4><div class="opening-report-0830-bias ${toneClass(priorities[0]?.bias)}">${esc(priorities[0]?.bias?.includes?.("negative") ? "偏弱" : priorities[0]?.bias?.includes?.("neutral") ? "分歧" : "偏多")}</div><p>${esc(priorities[0]?.evidence_summary || data.reason_code || "等待 08:30 晨報來源")}</p></article>
-        <article class="opening-report-0830-card"><h4>全球速覽</h4>${rows.length ? rows.map((row) => `<div class="opening-report-0830-minirow"><span>${esc(row.label)}</span><b class="${toneClass(row.direction || row.display)}">${pct(row.percent)}</b></div>`).join("") : `<p class="opening-report-0830-gap">${esc(data.reason_code || "market_snapshot_missing")}</p>`}</article>
-        <article class="opening-report-0830-card"><h4>台股前線</h4><p>三大法人：${esc(data.institutional?.reason_code || data.institutional?.status || "等待來源寫入")}</p><p>短波訊號：${esc(data.shortwave?.reason_code || data.shortwave?.status || "等待來源寫入")}；僅讀 Strategy5 昨日收盤已閉環結果。</p></article>
-      </div>
-      <section class="opening-report-0830-priority">${priorities.length ? priorities.map((item, index) => `<article><b>${index + 1}. ${esc(item.display_name || item.industry)}</b><strong class="${toneClass(item.bias)}">${esc(item.bias || "觀察")}</strong><span>${esc(names(item.a_symbols,8))}</span></article>`).join("") : `<article><b>今日推薦</b><strong class="opening-report-0830-gap">等待 08:30</strong><span>${esc(data.reason_code || "opening_report_missing")}</span></article>`}</section>
-      <div class="opening-report-0830-bottom">
-        <article class="opening-report-0830-card"><h4>短波訊號關注</h4><p>${esc(data.shortwave?.status || "source_gap")}；Strategy5 共振策略可列入，但只讀前日閉環 runId。</p></article>
-        <article class="opening-report-0830-card"><h4>大事紀要</h4><p>${esc(data.event_digest?.reason_code || data.event_digest?.status || "等待 08:30 前新聞來源寫入")}</p></article>
-        <article class="opening-report-0830-card"><h4>今日觀察</h4><p>開盤後確認量價與族群承接。</p><div class="opening-report-0830-symbols">${recommended.length ? recommended.map((stock) => `<span>${esc(stock.name || stock.symbol)}</span>`).join("") : `<span>${esc("觀察名單尚待晨報來源")}</span>`}</div></article>
-      </div>`;
+    if (!panel) return false;
+    const container = document.createElement("div");
+    container.innerHTML = window.FUMAN_OPENING_REPORT_VIEW.render(data);
+    const node = container.firstElementChild;
     panel.querySelector?.("[data-opening-report-0830-briefing]")?.remove();
     const anchor = panel.querySelector?.(".market-ai-summary");
     if (anchor) anchor.insertAdjacentElement("afterend", node);
@@ -7028,10 +6984,12 @@
           document.documentElement.dataset.fumanOpeningReport0830 = "mounted";
           return;
         }
+        renderOpeningReport0830DesktopBriefing({openingMorningReport:payload?.openingMorningReport || null});
         throw new Error(payload?.openingMorningReport?.reason_code || "opening_report_not_ready");
       } catch (error) {
         if (attempt >= 3) {
-          document.documentElement.dataset.fumanOpeningReport0830 = "retrying";
+          document.documentElement.dataset.fumanOpeningReport0830 = "blocked";
+          renderOpeningReport0830DesktopBriefing({openingMorningReport:{ok:false,reason_code:error?.message || "晨報連線失敗"}});
           window.setTimeout(() => load(0), 15000);
           return;
         }

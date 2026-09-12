@@ -33,6 +33,8 @@ const FILES = [
   "lib/opening-report-0830-mother-pool-evidence.js",
   "lib/opening-report-delivery-contract.js",
   "lib/opening-report-writer-preservation.js",
+  "terminal-opening-report-view.js",
+  "scripts/verify-opening-report-rendered.js",
   "index.html",
   "index.github.html",
   "88.html",
