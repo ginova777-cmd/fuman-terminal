@@ -15,3 +15,5 @@
 9. 產生 extended-cleanup-v1 applied receipt，重新預覽證明沒有剩餘可刪項目，最新 complete 結果雜湊需相同。Root Monitor 再執行 --verify 獨立讀回，與原有五段、1分K、來源觀測、成本回執共同驗收。
 
 所有零候選、受保護、缺證據與實際刪除量分開記錄。測試、程式部署、已啟用規則不能代替 actual apply 與 canonical COMPLETE。原有完整清理的失敗 journal 永久保留於本次交付證據，不修改成成功。
+
+成本補充：已接入 Vercel CLI usage 的正式當期專案計費讀回，保留 effectiveCost 與 billedCost 的差別；清理的實際節費 realizedSavings 仍為 null，須跨期核對。Supabase 的容量讀回不當作帳單。
