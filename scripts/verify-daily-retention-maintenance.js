@@ -46,18 +46,22 @@ function scheduledTasks() {
     "  $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue",
     "  if ($null -eq $task) { [pscustomobject]@{ name=$name; missing=$true }; continue }",
     "  $info = Get-ScheduledTaskInfo -TaskName $name",
-    "  [pscustomobject]@{ name=$name; missing=$false; state=[string]$task.State; lastResult=[int]$info.LastTaskResult; lastRun=[string]$info.LastRunTime; nextRun=[string]$info.NextRunTime; action=(($task.Actions | ForEach-Object { ([string]$_.Execute) + ' ' + ([string]$_.Arguments) }) -join ' | '); batteryStartBlocked=[bool]$task.Settings.DisallowStartIfOnBatteries; batteryStop=[bool]$task.Settings.StopIfGoingOnBatteries }",
+    "  [pscustomobject]@{ name=$name; missing=$false; state=[string]$task.State; lastResult=[int]$info.LastTaskResult; lastRun=$info.LastRunTime.ToString('o'); nextRun=$info.NextRunTime.ToString('o'); enabled=[bool]$task.Settings.Enabled; triggerTimes=@($task.Triggers | ForEach-Object { ([datetime]$_.StartBoundary).ToString('HH:mm') }); logonType=[string]$task.Principal.LogonType; runLevel=[string]$task.Principal.RunLevel; startWhenAvailable=[bool]$task.Settings.StartWhenAvailable; multipleInstances=[string]$task.Settings.MultipleInstances; executionTimeLimit=[string]$task.Settings.ExecutionTimeLimit; restartCount=[int]$task.Settings.RestartCount; action=(($task.Actions | ForEach-Object { ([string]$_.Execute) + ' ' + ([string]$_.Arguments) }) -join ' | '); batteryStartBlocked=[bool]$task.Settings.DisallowStartIfOnBatteries; batteryStop=[bool]$task.Settings.StopIfGoingOnBatteries }",
     "}", "$rows | ConvertTo-Json -Compress",
   ].join("; ");
   const result = run("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command]);
   const rows = parseJson(result.stdout);
   return { ...result, rows: Array.isArray(rows) ? rows : rows ? [rows] : [] };
 }
-function receiptCheck(name, expectedContract, file) {
+function receiptCheck(name, expectedContract, file, options = {}) {
   const receipt = readJson(file); const payload = receipt.value;
-  const checked = payload?.checkedAt ? Date.parse(payload.checkedAt) : NaN;
-  const current = Number.isFinite(checked) && Date.now() - checked < DAY_MS;
-  return { name, ok: payload?.ok === true && payload?.applied === true && payload?.contract === expectedContract && current, file, exists: !!payload, contract: payload?.contract || null, applied: payload?.applied === true, checkedAt: payload?.checkedAt || null, current, reasonCode: payload?.reasonCode || null, readError: receipt.error || null };
+  const checkedAt = payload?.checkedAt || payload?.finishedAt;
+  const checked = checkedAt ? Date.parse(checkedAt) : NaN;
+  const current = Number.isFinite(checked) && checked <= Date.now() && taipeiParts(new Date(checked)).iso === taipeiParts().iso;
+  const identityOk = options.source ? payload?.source === options.source : payload?.contract === expectedContract;
+  const appliedOk = options.readOnly || (options.legacyDryRun ? payload?.dryRun === false : payload?.applied === true);
+  const sectionsOk = !options.history || (payload?.supabase?.ok === true && payload?.supabase?.skipped !== true && payload?.vercel?.ok === true && payload?.vercel?.skipped !== true);
+  return { name, ok: payload?.ok === true && appliedOk && identityOk && sectionsOk && current, file, exists: !!payload, contract: payload?.contract || null, applied: payload?.applied === true, checkedAt: checkedAt || null, current, reasonCode: payload?.reasonCode || null, readError: receipt.error || null };
 }
 async function main() {
   const date = taipeiParts(); const issues = []; const warnings = [];
@@ -94,18 +98,25 @@ async function main() {
   if (!tasks.ok) issues.push("scheduled_task_query_failed");
   const schedule = TASKS.map((expected) => {
     const row = tasks.rows.find((item) => item.name === expected.name);
-    const valid = !!row && !row.missing && ["Ready", "Running"].includes(row.state) && row.action.includes(expected.script) && !row.batteryStartBlocked && !row.batteryStop;
+    const valid = !!row && !row.missing && ["Ready", "Running"].includes(row.state) && row.enabled === true && row.action.includes(path.join(ROOT, expected.script)) && row.triggerTimes?.includes(expected.time) && row.logonType === "S4U" && row.runLevel === "Highest" && row.startWhenAvailable === true && row.multipleInstances === "IgnoreNew" && row.executionTimeLimit === "PT20M" && row.restartCount === 0 && !row.batteryStartBlocked && !row.batteryStop;
     if (!valid) issues.push(`task_invalid:${expected.name}`);
-    const naturalRunConfirmed = Number(row?.lastResult) === 0 && !String(row?.lastRun || "").startsWith("1999-");
+    const naturalRunConfirmed = Number(row?.lastResult) === 0 && Number.isFinite(Date.parse(row?.lastRun)) && taipeiParts(new Date(row.lastRun)).iso === date.iso;
     if (valid && !naturalRunConfirmed) warnings.push(`task_pending_first_natural_run:${expected.name}`);
     return { ...expected, ...row, valid, naturalRunConfirmed };
   });
   const receipts = [
+    receiptCheck("stage1_retired_artifacts", "", path.join(STATUS,"api-only-retired-cleanup-status.json"), {source:"api-only-retired-artifact-cleanup",legacyDryRun:true}),
+    receiptCheck("stage2_history", "", path.join(STATUS,"supabase-vercel-history-cleanup-status.json"), {source:"supabase-vercel-history-cleanup",history:true}),
+    receiptCheck("stage3_cost_janitor", "global-cost-janitor-scorecard-v1", path.join(STATUS,"global-cost-janitor-scorecard.json"), {readOnly:true}),
     receiptCheck("formal_intraday_1m", "daytrade-intraday-retention-15d-v1", path.join(STATUS, `daytrade-intraday-retention-${date.id}.json`)),
     receiptCheck("runtime_artifacts", "runtime-retention-v1", path.join(STATUS, `runtime-retention-${date.id}.json`)),
     receiptCheck("daytrade_stale_priority_cache", "daytrade-stale-priority-cache-cleanup-v1", path.join(STATUS, `daytrade-stale-priority-cache-cleanup-${date.id}.json`)),
     receiptCheck("source_observability", "source-observability-retention-15d-v1", path.join(STATUS, `source-observability-retention-${date.id}.json`)),
   ];
+  const cost = readJson(path.join(RUNTIME,"state/vercel-cost-health-status.json")).value;
+  const currentMinutes = Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date()).split(':').reduce((n,v,i)=>n+Number(v)*(i===0?60:1),0));
+  if (currentMinutes < 21*60+15) warnings.push('cost_health_today_not_due');
+  else if (cost?.ok !== true || !Number.isFinite(Date.parse(cost?.checkedAt)) || taipeiParts(new Date(cost.checkedAt)).iso !== date.iso || (cost.issues || []).length) issues.push('cost_health_today_not_complete');
   for (const receipt of receipts) if (!receipt.ok) issues.push(`receipt_invalid:${receipt.name}`);
   const liveChecks = {
     intraday: run(process.execPath, ["--use-system-ca", "scripts/verify-daytrade-intraday-retention.js"]),
