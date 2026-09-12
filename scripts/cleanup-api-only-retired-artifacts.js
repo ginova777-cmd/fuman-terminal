@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
+const { assertTree } = require('./cleanup-path-protection');
 const REPO_ROOT = path.resolve(__dirname, "..");
 const DEFAULT_ROOTS = [
   process.env.FUMAN_TERMINAL_ROOT || "C:\\fuman-terminal",
@@ -308,6 +309,7 @@ function rmDirectory(root, rel, result, dryRun) {
     result.skipped.push({ path: target, reason: "not-directory" });
     return;
   }
+  assertTree(root,target);
   if (!dryRun) fs.rmSync(target, { recursive: true, force: true });
   result.deleted.push(target);
 }
@@ -419,6 +421,7 @@ function pruneMatchingDirectories(parentDir, predicate, result, dryRun) {
   for (const entry of fs.readdirSync(parentDir, { withFileTypes: true })) {
     if (!entry.isDirectory() || !predicate(entry.name)) continue;
     const target = path.join(parentDir, entry.name);
+    assertTree(parentDir,target);
     if (!dryRun) fs.rmSync(target, { recursive: true, force: true });
     result.deleted.push(target);
   }
@@ -429,6 +432,8 @@ function pruneOldFiles(dir, maxAgeDays, result, dryRun) {
   const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const target = path.join(dir, entry.name);
+    if (entry.name.toLowerCase() === "production-health.jsonl") continue;
+    assertTree(dir,target);
     if (entry.isDirectory()) {
       pruneOldFiles(target, maxAgeDays, result, dryRun);
       try {
@@ -449,6 +454,8 @@ function pruneOldFilesWhere(dir, maxAgeDays, predicate, result, dryRun) {
   const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const target = path.join(dir, entry.name);
+    if (entry.name.toLowerCase() === "production-health.jsonl") continue;
+    assertTree(dir,target);
     if (entry.isDirectory()) {
       pruneOldFilesWhere(target, maxAgeDays, predicate, result, dryRun);
       try {
@@ -494,6 +501,8 @@ function pruneRetiredDataFiles(dir, maxAgeDays, result, dryRun) {
   const cutoffMs = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const target = path.join(dir, entry.name);
+    if (entry.name.toLowerCase() === "production-health.jsonl") continue;
+    assertTree(dir,target);
     if (entry.isDirectory()) {
       pruneRetiredDataFiles(target, maxAgeDays, result, dryRun);
       try {
@@ -513,7 +522,7 @@ function pruneRetiredDataFiles(dir, maxAgeDays, result, dryRun) {
 
 function isPrunableScanReceipt(file, name) {
   const base = String(name || "").toLowerCase();
-  if (base.includes("latest")) return false;
+  if (base.includes("latest") || !/20\d{2}[-]?\d{2}[-]?\d{2}/.test(base)) return false;
   return base.endsWith(".json") || base.endsWith(".jsonl") || base.endsWith(".log");
 }
 

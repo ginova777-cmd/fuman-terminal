@@ -28,7 +28,7 @@ function readJson(file) {
   catch (error) { return { file, error: error.message, value: null }; }
 }
 function run(command, args) {
-  const result = spawnSync(command, args, { cwd: ROOT, encoding: "utf8", shell: false, timeout: 120000, env: process.env });
+  const result = spawnSync(command, args, { cwd: ROOT, encoding: "utf8", shell: false, maxBuffer: 32 * 1024 * 1024, timeout: 120000, env: process.env });
   return { ok: result.status === 0, status: result.status, stdout: String(result.stdout || "").trim(), stderr: String(result.stderr || "").trim(), error: result.error?.message || null };
 }
 function parseJson(text) {
@@ -65,8 +65,12 @@ function receiptCheck(name, expectedContract, file, options = {}) {
 }
 async function main() {
   const date = taipeiParts(); const issues = []; const warnings = [];
+  const maintenanceArg = process.argv.find(x=>x.startsWith('--maintenance-authorization='));
+  const maintenanceContext = require('./cleanup-maintenance-context');
+  const maintenance = maintenanceArg ? maintenanceContext.authorization(maintenanceArg.slice('--maintenance-authorization='.length)) : null;
+  const execution = maintenance ? maintenanceContext.verifyJournal(maintenance) : null;
   const tradingDay = await isTwseTradingDay(new Date(`${date.iso}T04:00:00.000Z`), { stateDir: path.join(RUNTIME, "state") });
-  if (!tradingDay.isTradingDay) {
+  if (!tradingDay.isTradingDay && !maintenance) {
     const payload = {
       ok: true,
       status: "skipped",
@@ -101,7 +105,7 @@ async function main() {
     const valid = !!row && !row.missing && ["Ready", "Running"].includes(row.state) && row.enabled === true && row.action.includes(path.join(ROOT, expected.script)) && row.triggerTimes?.includes(expected.time) && row.logonType === "S4U" && row.runLevel === "Highest" && row.startWhenAvailable === true && row.multipleInstances === "IgnoreNew" && row.executionTimeLimit === "PT20M" && row.restartCount === 0 && !row.batteryStartBlocked && !row.batteryStop;
     if (!valid) issues.push(`task_invalid:${expected.name}`);
     const naturalRunConfirmed = Number(row?.lastResult) === 0 && Number.isFinite(Date.parse(row?.lastRun)) && taipeiParts(new Date(row.lastRun)).iso === date.iso;
-    if (valid && !naturalRunConfirmed) warnings.push(`task_pending_first_natural_run:${expected.name}`);
+    if (valid && !naturalRunConfirmed && !maintenance) warnings.push(`task_pending_first_natural_run:${expected.name}`);
     return { ...expected, ...row, valid, naturalRunConfirmed };
   });
   const receipts = [
@@ -115,13 +119,14 @@ async function main() {
   ];
   const cost = readJson(path.join(RUNTIME,"state/vercel-cost-health-status.json")).value;
   const currentMinutes = Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date()).split(':').reduce((n,v,i)=>n+Number(v)*(i===0?60:1),0));
-  if (currentMinutes < 21*60+15) warnings.push('cost_health_today_not_due');
+  if (!maintenance && currentMinutes < 21*60+15) warnings.push('cost_health_today_not_due');
   else if (cost?.ok !== true || !Number.isFinite(Date.parse(cost?.checkedAt)) || taipeiParts(new Date(cost.checkedAt)).iso !== date.iso || (cost.issues || []).length) issues.push('cost_health_today_not_complete');
   for (const receipt of receipts) if (!receipt.ok) issues.push(`receipt_invalid:${receipt.name}`);
   const liveChecks = {
     intraday: run(process.execPath, ["--use-system-ca", "scripts/verify-daytrade-intraday-retention.js"]),
     sourceObservability: run(process.execPath, ["--use-system-ca", "scripts/verify-source-observability-retention.js"]),
   };
+  if (maintenance) liveChecks.remainingCleanup = run(process.execPath, ['--use-system-ca','scripts/verify-cleanup-maintenance-readback.js']);
   for (const [name, result] of Object.entries(liveChecks)) if (!result.ok) issues.push(`live_verifier_failed:${name}`);
   const complete = issues.length === 0 && warnings.length === 0;
   const payload = {
@@ -129,14 +134,18 @@ async function main() {
     status: complete ? "complete" : (issues.length ? "failed" : "degraded"),
     complete,
     exitCode: issues.length === 0 ? 0 : 1,
-    unattendedReady: complete,
+    unattendedReady: complete && !maintenance,
+    executionMode: maintenance ? "authorized_maintenance" : "scheduled_workday",
+    maintenanceRunId: maintenance?.runId || null,
+    executionJournal: maintenance?.journalFile || null,
+    protectedFileReadback: execution?.protection || null,
     checkedAt: new Date().toISOString(), tradeDate: date.iso, contract: "daily-retention-maintenance-v1", schedule, receipts,
     liveChecks: Object.fromEntries(Object.entries(liveChecks).map(([name, result]) => [name, { ok: result.ok, status: result.status, output: result.stdout.slice(0, 2000), error: result.stderr.slice(0, 500) || result.error }])),
     protected: ["daily OHLCV and daily volume", "Strategy3 and Strategy4 canonical results", "/88, desktop, mobile, and latest scorecard", "latest 15 days of formal evidence", "production-health.jsonl", "formal candidates"],
     issues, warnings, reasonCode: issues[0] || warnings[0] || "ok",
-    allowedAction: issues.length ? "fail_closed_investigate" : (warnings.length ? "wait_for_next_natural_schedule_then_reverify" : "daily_retention_unattended_yes"),
+    allowedAction: issues.length ? "fail_closed_investigate" : (warnings.length ? "wait_for_next_natural_schedule_then_reverify" : (maintenance ? "authorized_maintenance_complete" : "daily_retention_unattended_yes")),
   };
-  const output = path.join(STATUS, `daily-retention-maintenance-verifier-${date.id}.json`);
+  const output = path.join(STATUS, maintenance ? `cleanup-maintenance-complete-${maintenance.runId}.json` : `daily-retention-maintenance-verifier-${date.id}.json`);
   fs.mkdirSync(STATUS, { recursive: true }); fs.writeFileSync(output, `${JSON.stringify(payload, null, 2)}\n`);
   payload.receiptFile = output; console.log(JSON.stringify(payload, null, 2));
   if (!payload.ok) process.exitCode = 1;
