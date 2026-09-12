@@ -2737,7 +2737,9 @@ async function main() {
   console.log(`[terminal-ui-e2e] ok ${results.length}/${results.length}`);
 }
 
-main().catch((error) => {
+module.exports = {launchBrowser,createTab,setViewport,navigate,evaluate,waitFor,waitForSelector,clickSelectorByDom,activateDesktopRoute};
+
+if (require.main === module) main().catch((error) => {
   console.error(`[terminal-ui-e2e] failed: ${error?.stack || error}`);
   process.exit(1);
 });

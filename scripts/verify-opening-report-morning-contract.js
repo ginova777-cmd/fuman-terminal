@@ -275,7 +275,8 @@ function staticContractChecks(checks) {
   const terminalApp = readText("terminal-app.js");
   const terminalShell = readText("terminal-desktop-fast-shell.js");
   const marketApi = readText("api/market-ai-live.js");
-  addCheck(checks, "terminal_displays_0830_window_observation_only", (terminalApp + terminalShell).includes("08:30-08:59") && (terminalApp + terminalShell).includes("僅供觀察排序"), "terminal must show morning report as observation-only");
+  const sharedMorningView = fs.readFileSync(path.join(ROOT,"terminal-opening-report-view.js"),"utf8");
+  addCheck(checks, "terminal_displays_0830_window_observation_only", sharedMorningView.includes("08:30-08:59") && sharedMorningView.includes("僅供觀察排序") && terminalShell.includes("FUMAN_OPENING_REPORT_VIEW.render"), "shared desktop/mobile morning view must remain observation-only");
   addCheck(checks, "terminal_weekend_uses_last_complete_morning_report", marketApi.includes("const allowPreviousTradingDay = isWeekend(clock)") && marketApi.includes("allowLatestFallback: allowPreviousTradingDay") && marketApi.includes("previousTradingDay: payloadDate !== clock.ymd"), "weekends must retain the last completed trading-day morning report");
   addCheck(checks, "terminal_morning_report_uses_canonical_15_industries", marketApi.includes("OPENING_REPORT_0830_REQUIRED_INDUSTRIES = OPENING_REPORT_0830_INDUSTRY_MAP.length") && marketApi.includes("frozenIndustryRows.length >= OPENING_REPORT_0830_REQUIRED_INDUSTRIES") && !marketApi.includes("industryRows.length < 19"), "terminal reconstruction must follow the canonical 15-industry contract");
 }
@@ -425,6 +426,20 @@ function currentReceiptChecks(checks, tradeDate) {
   const readback = persistenceAckReceipt?.persistence_readback_receipt ? readJson(persistenceAckReceipt.persistence_readback_receipt) : null;
   addCheck(checks, "current_persistence_live_readback_link", readback?.complete === true && readback?.db_readback_ok === true && readback?.report_run_id === runId && readback?.trade_date === tradeDate && Date.parse(readback.checked_at) >= Math.max(...refreshTimes.map(Date.parse)) && JSON.stringify(readback.db_readback_symbols || []) === JSON.stringify(persistenceAckReceipt.db_readback_symbols || []), persistenceAckReceipt?.persistence_readback_receipt || "missing");
   addCheck(checks, "current_final_links_persistence_ack", finalReceipt.mother_pool_handoff_ack_ok === true && finalReceipt.mother_pool_persistence_ack_ok === true, JSON.stringify({ handoff: finalReceipt.mother_pool_handoff_ack_ok, persistence: finalReceipt.mother_pool_persistence_ack_ok }));
+}
+
+function renderedDeliveryChecks(checks, tradeDate, final) {
+  const file=path.join(REPORT_DIR,"rendered",compactDate(tradeDate),"opening-report-rendered.json");
+  const receipt=readJson(file);
+  addCheck(checks,"current_rendered_receipt",receipt?.contract==="opening-report-rendered-v1" && receipt.complete===true && receipt.diagnostic===false && receipt.run_id===final.run_id && receipt.trade_date===tradeDate && receipt.delivery_content_hash===final.delivery_content_hash && receipt.full_content_hash_ok===true,"same-run live desktop/mobile required");
+  const age=Date.now()-Date.parse(receipt?.checked_at||"");
+  addCheck(checks,"current_rendered_receipt_fresh",age>=0 && age<30*60*1000,"rendered evidence within 30 minutes");
+  const rows=receipt?.results||[];
+  addCheck(checks,"current_rendered_surfaces",["desktop","mobile-portrait","mobile-landscape"].every(surface=>rows.some(row=>row.surface===surface && row.ok===true && row.run_id===final.run_id && row.hash===final.delivery_content_hash && row.screenshot && exists(row.screenshot) && require("crypto").createHash("sha256").update(fs.readFileSync(row.screenshot)).digest("hex")===row.screenshot_sha256)),"actual rendered surfaces and original screenshots");
+  const expected=require("./verify-opening-report-rendered").expectedRows(final).map(row=>({...row,percent:Number(row.percent.toFixed(2))}));
+  const actualRows=row=>(row.rows||[]).map(item=>({...item,a:(item.a||[]).map(({symbol,name})=>({symbol,name})),b:(item.b||[]).map(({symbol,name})=>({symbol,name}))}));
+  addCheck(checks,"current_rendered_full_A_B",rows.length===3 && rows.every(row=>JSON.stringify(actualRows(row))===JSON.stringify(expected) && row.industryCount===15 && (expected.length>0||row.zero===true)),"independent full A/B comparison against runner");
+  addCheck(checks,"current_rendered_production_origin",receipt?.base_url==="https://fuman-terminal.vercel.app" && /^[a-f0-9]{40}$/.test(receipt?.git_sha||""),"production origin and release identity required");
 }
 
 async function liveDeliveryChecks(checks, tradeDate) {

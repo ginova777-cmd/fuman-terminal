@@ -78,7 +78,8 @@ function main() {
   const mobile = read("api/mobile-fragment.js");
   const mobileBlock = extractBlock(mobile, /const\s+TAB_CONFIG\s*=\s*\{/, /\n\};/);
   const mobileTabs = [...mobileBlock.matchAll(/^\s{2}([a-z0-9_]+):\s*\{/gm)].map((m) => m[1]);
-  assertSameSet("mobile TAB_CONFIG official tabs", mobileTabs, ["ai", "strategy2", "strategy3", "strategy4", "strategy5", "chip"]);
+  assertSameSet("mobile TAB_CONFIG official tabs", mobileTabs, ["morning", "ai", "strategy2", "strategy3", "strategy4", "strategy5", "chip"]);
+  if (!read("mobile.html").includes('data-fragment="morning"') || !mobile.includes('require("../terminal-opening-report-view").render(report)')) issues.push("morning mobile entry or shared renderer missing");
   assertNoRetired("mobile TAB_CONFIG", mobileBlock, retired);
 
   const resource = read("scripts/verify-terminal-resource-chain.js");

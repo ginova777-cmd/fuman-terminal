@@ -32,3 +32,14 @@ vm.createContext(ctx);vm.runInContext(func+"\nresult=readOpeningReport0830Priori
 console.log(JSON.stringify({ok:true,tests:["overlapping_industries","two_writer_rebuilds","morning_only_protection","next_day_expiry","missing_observation_rejected","ab_hash_change","line_reuse_identity","dry_run_not_delivery","real_writer_missing_master_no_quote"]}));
 
 (async()=>{ const detector=require("./run-opening-report-0830-overseas-leader-detector"); const map=require("./opening-report-0830-industry-map-contract"); for(const symbol of ["5803.T","000725.SZ"]) { assert.ok(!map.OPENING_REPORT_0830_INDUSTRY_MAP.some(row=>row.overseas_leaders.some(leader=>leader.yahoo_symbol===symbol))); await assert.rejects(detector.detectLeader({industry:"test"},["retired",symbol],date,{}),/retired_morning_source/); } assert.equal(map.OPENING_REPORT_0830_INDUSTRY_MAP.length,15); console.log(JSON.stringify({ok:true,retired_source_network_guard:true,industry_count:15})); })().catch(error=>{console.error(error);process.exitCode=1;});
+
+const {render:renderMorning}=require("../terminal-opening-report-view");
+const ready={ok:true,date,run_id:run,industry_bias:{count:15},display_top3:[]};
+assert.match(renderMorning(null),/data-opening-report-state="empty"/);
+assert.match(renderMorning({...ready,ok:false,reason_code:"source_gap"}),/data-opening-report-state="blocked"/);
+assert.match(renderMorning({...ready,previousTradingDay:true}),/data-opening-report-state="degraded"/);
+assert.match(renderMorning(ready),/data-morning-zero/);
+const ab={...ready,display_top3:[{rank:1,display_name:"test",percent:2,mapped_symbols_a:[{symbol:"2330",name:"台積電"}],mapped_symbols_b:[{symbol:"2317",name:"鴻海"}]}]};
+assert.match(renderMorning(ab),/data-morning-group="B"/);assert.match(renderMorning(ab),/2317 鴻海/);
+assert.ok(!renderMorning({...ab,display_top3:[{...ab.display_top3[0],display_name:"<script>"}]}).includes("<script>"));
+console.log(JSON.stringify({ok:true,morning_ui_states:["empty","blocked","degraded","zero","full_A_B","escaped_text"]}));

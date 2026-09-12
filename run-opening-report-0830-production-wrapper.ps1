@@ -118,9 +118,11 @@ if ($ReuseLineReceipt) { $runnerArgs += "--reuse-line-receipt" }
 $run = if ($FinalizeExisting) { [pscustomobject]@{ label="runner-existing-evidence"; exitCode=0; stdout=""; stderr=""; evidenceOnly=$true } } else { Invoke-NodeStep -NodeArgs $runnerArgs -Label "runner" }
 $persistenceArgs = @("scripts\verify-opening-report-0830-mother-pool-persistence-ack.js", "--trade-date=$tradeDate", "--report-run-id=$runId")
 $persistence = if ($FinalizeExisting) { [pscustomobject]@{label="persistence-existing-evidence";exitCode=0;stdout="";stderr="";evidenceOnly=$true} } elseif ($run.exitCode -eq 0 -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $persistenceArgs -Label "mother-pool-persistence-ack" } elseif ($run.exitCode -eq 0) { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = 0; stdout = ""; stderr = ""; simulated = $true } } else { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = -1; stdout = ""; stderr = "" } }
+$renderedArgs = @("scripts\verify-opening-report-rendered.js", "--trade-date=$tradeDate")
+$rendered = if ($run.exitCode -eq 0 -and $persistence.exitCode -eq 0 -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $renderedArgs -Label "rendered-delivery" } else { [pscustomobject]@{label="rendered-delivery";exitCode=-1;stdout="";stderr=""} }
 $verifierArgs = @("scripts\verify-opening-report-morning-contract.js", "--trade-date=$tradeDate")
 if (-not $IsolatedBacktest) { $verifierArgs += "--require-current" }
-$verifier = if ($run.exitCode -eq 0 -and $persistence.exitCode -eq 0) { Invoke-NodeStep -NodeArgs $verifierArgs -Label "canonical-verifier" } else { [pscustomobject]@{ label = "canonical-verifier"; exitCode = -1; stdout = ""; stderr = "" } }
+$verifier = if ($run.exitCode -eq 0 -and $persistence.exitCode -eq 0 -and ($IsolatedBacktest -or $rendered.exitCode -eq 0)) { Invoke-NodeStep -NodeArgs $verifierArgs -Label "canonical-verifier" } else { [pscustomobject]@{ label = "canonical-verifier"; exitCode = -1; stdout = ""; stderr = "" } }
 
 $finalFile = Join-Path $receiptDir "opening-report-0830-final-receipt-$today.json"
 $final = if (Test-Path -LiteralPath $finalFile) { Get-Content -LiteralPath $finalFile -Raw | ConvertFrom-Json } else { $null }
@@ -166,7 +168,8 @@ $receipt = [ordered]@{
   mother_pool_persistence_ack_receipt = if ($null -ne $final) { $final.mother_pool_persistence_ack_receipt } else { $null }
   runner_ok = $runnerOk
   canonical_verifier_ok = $verifierOk
-  steps = @($run, $persistence, $verifier)
+  rendered_delivery_ok = ($rendered.exitCode -eq 0)
+  steps = @($run, $persistence, $rendered, $verifier)
   canonical_verifier = "scripts/verify-opening-report-morning-contract.js"
   telegram_enabled = $false
 }
