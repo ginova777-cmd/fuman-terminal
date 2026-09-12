@@ -17,6 +17,8 @@ const {
   SIDE_VOLUME_THRESHOLD_LOTS,
   deriveDaytradeSideVolumeContract,
 } = require("../lib/daytrade-side-volume-contract");
+const { mergeOpeningReportEvidence } = require("../lib/opening-report-0830-mother-pool-evidence");
+const { preserveMorningWatchRows } = require("../lib/opening-report-writer-preservation");
 const { isTwseTradingDay } = require("./twse-trading-day");
 
 const SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
@@ -3326,10 +3328,8 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
     return receipt.applied_boosts.every((boost) => (
       Number(boost?.applied_priority_rank) >= 41
       && boost?.status === "watchlist_boosted"
-      && Number.isFinite(Number(boost?.price))
-      && Number(boost.price) >= MOTHER_POOL_MIN_PRICE
-      && Number.isFinite(Number(boost?.quote_age_seconds))
-      && Number(boost.quote_age_seconds) <= 120
+      && receipt.accepted_symbols.includes(String(boost.symbol))
+      && (boost.quote_validation === "delegated_to_mother_pool" || Number(boost.quote_age_seconds) <= 120)
     ));
   };
   for (const file of files.sort()) {
@@ -3369,10 +3369,12 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
     if (!latestUpdatedAt || Date.parse(fileUpdatedAt) > Date.parse(latestUpdatedAt)) latestUpdatedAt = fileUpdatedAt;
     for (const value of payload.mapped_symbols) {
       const symbol = normalizeCode(value?.symbol || value?.code || value);
-      if (!symbol || !activeSet.has(symbol)) continue;
+      if (!symbol || !receipt.accepted_symbols.includes(symbol)) continue;
       const inputPrice = numberValue(value?.price ?? value?.last_price ?? value?.lastPrice ?? value?.close);
-      if (inputPrice > 0 && inputPrice < MOTHER_POOL_MIN_PRICE) continue;
       const previous = bySymbol.get(symbol) || { symbol, sources: [], score: 0, openingReport0830: true, reports: [] };
+      previous.name = value.name || symbol;
+      previous.market = value.market || "TW";
+      previous.openingReport0830IndustryBias = mergeOpeningReportEvidence(previous.openingReport0830IndustryBias, payload);
       previous.sources.push("opening_report_0830");
       previous.score += 50;
       previous.reports.push({ industry: payload.industry, bias: payload.bias, confidence, runId, priorityObservationRank: Number(payload.priority_observation_rank), evidenceSummary: payload.evidence_summary, bridgeReceiptPath: receiptPath });
@@ -4231,6 +4233,9 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       },
     });
   });
+  // Reconstruct independently of admission/quote gates; morning-only rows cannot enter deep scan.
+  const openingReportSeedBySymbol = readOpeningReport0830PrioritySeeds(activeSymbols);
+  preserveMorningWatchRows(output, openingReportSeedBySymbol.symbols, taipeiDate(), priorityUpdatedAt, DEEP_SCAN_POOL_MAX_SYMBOLS);
   output.sourceSeedCounts = seeds.counts;
   output.sourceSeedUpdatedAt = seeds.updatedAt;
   output.sourceSeedUnion = [...new Set(seeds.symbols.flatMap((entry) => entry.sources || []))];

@@ -10,7 +10,7 @@ const STATE_DIR = path.join(RUNTIME, "state");
 const RECEIPT_DIR = path.join(RUNTIME, "data", "scan-receipts");
 const REPORT_DIR = path.join(RUNTIME, "data", "opening-report-0830");
 const PROJECT_URL = String(process.env.SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.supabase.co").replace(/\/$/, "");
-const CONTRACT = "opening-report-0830-mother-pool-field-ack-v1";
+const CONTRACT = "opening-report-0830-mother-pool-handoff-ack-v2";
 const SOURCE = "opening_report_0830";
 const MODE = "priority_bias_only";
 const REASON = "opening_report_0830_industry_bias";
@@ -139,7 +139,7 @@ function validateDbRow(row, expectedPayloads) {
   const payloads = Array.isArray(expectedPayloads) ? expectedPayloads : [expectedPayloads].filter(Boolean);
   const evidence = row?.payload?.openingReport0830IndustryBias;
   if (!row) return ["db_row_missing"];
-  if (!["TW", "TWSE", "TPEx", "TPEX", "上市", "上櫃"].includes(String(row.market || ""))) issues.push("market_not_taiwan");
+  if (!["TW", "TWSE", "TPEx", "TPEX", "上市", "上櫃"].includes(String(row.market || ""))) issues.push("market_not_TW_TWSE_TPEX");
   if (!evidence) return [...issues, "opening_report_evidence_missing"];
   const reportRunIds = [...new Set(payloads.map((payload) => String(payload.run_id || "").replace(/-[A-Z][A-Z0-9_]+$/, "")))];
   const requiredEqual = {
@@ -182,9 +182,16 @@ function fixture() {
     bias: "positive", confidence: 0.8, evidence_summary: "fixture", mapping_contract: "opening-report-0830-industry-map-v2", mapping_reviewed_at: "2026-09-09", mapping_evidence_authorities: ["MOPS", "ISSUER"], allowed_action: "boost_scan_priority_only", forbidden_action: "publish_formal_candidate_without_taiwan_evidence",
   };
   const bridge = { contract: "opening-report-0830-priority-bias-bridge-v1", ok: true, received: true, source: SOURCE, mode: MODE, status: "priority_scan", reason_code: REASON, forbidden_publish_guard: true, formal_candidate_count: 0, formal_candidate_allowed: false, publish_allowed: false, opening_report_status_unchanged: true, run_id: payload.run_id, validation: { ok: true }, rejected_symbols: [] };
-  const db = { symbol: "2049", market: "TWSE", priority_reason: "writer_priority", source: "fugle_daytrade_source", payload: { openingReport0830IndustryBias: { date: payload.date, report_time: "08:30", report_run_id: reportRunId, run_id: reportRunId, source: SOURCE, mode: MODE, industry: payload.industry, linked_industries: [payload.industry], observations: [{ industry: payload.industry, run_id: payload.run_id, priority_observation_rank: 1, priority_overseas_leaders: payload.priority_overseas_leaders }], highest_industry_rank: 1, boost_once: true, reason_code: REASON, status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true } } };
-  const assertions = { payload: validatePayload(payload, payload.date, reportRunId).length === 0, bridge: validateBridge(bridge, payload).length === 0, db: validateDbRow(db, payload).length === 0, gap_isolated: validateDbRow(null, payload)[0] === "db_row_missing" };
-  return { ok: Object.values(assertions).every(Boolean), contract: `${CONTRACT}-fixture`, fixture: true, writes_supabase: false, sends_line: false, assertions };
+  const secondPayload = { ...payload, run_id: `${reportRunId}-OPTICAL_COMM`, industry: "OPTICAL_COMM", priority_observation_rank: 2 };
+  const observations = [
+    { industry: payload.industry, run_id: payload.run_id, priority_observation_rank: 1, priority_overseas_leaders: payload.priority_overseas_leaders },
+    { industry: secondPayload.industry, run_id: secondPayload.run_id, priority_observation_rank: 2, priority_overseas_leaders: secondPayload.priority_overseas_leaders },
+  ];
+  const db = { symbol: "2049", market: "TWSE", priority_reason: "writer_priority", source: "fugle_daytrade_source", payload: { openingReport0830IndustryBias: { date: payload.date, report_time: "08:30", report_run_id: reportRunId, run_id: reportRunId, source: SOURCE, mode: MODE, industry: payload.industry, linked_industries: [payload.industry, secondPayload.industry], observations, highest_industry_rank: 1, boost_once: true, reason_code: REASON, status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true } } };
+  const tpexDb = { ...db, market: "TPEX" };
+  const assertions = { payload: validatePayload(payload, payload.date, reportRunId).length === 0, bridge: validateBridge(bridge, payload).length === 0, db_twse: validateDbRow(db, [payload, secondPayload]).length === 0, db_tpex: validateDbRow(tpexDb, [payload, secondPayload]).length === 0, overlapping_industries_preserved: db.payload.openingReport0830IndustryBias.linked_industries.length === 2 && db.payload.openingReport0830IndustryBias.observations.length === 2, invalid_market_rejected: validateDbRow({ ...db, market: "SZ" }, [payload]).includes("market_not_TW_TWSE_TPEX"), gap_isolated: validateDbRow(null, payload)[0] === "db_row_missing" };
+  const complete = Object.values(assertions).every(Boolean);
+  return { ok: complete, complete, contract: `${CONTRACT}-fixture`, fixture: true, writes_supabase: false, sends_line: false, assertions };
 }
 
 async function main() {
@@ -197,7 +204,7 @@ async function main() {
   const tradeDate = arg("trade-date", taipeiDate());
   const reportRunId = arg("report-run-id");
   const ymd = compact(tradeDate);
-  const output = path.resolve(arg("output", path.join(RECEIPT_DIR, `opening-report-0830-mother-pool-field-ack-${ymd}.json`)));
+  const output = path.resolve(arg("output", path.join(RECEIPT_DIR, `opening-report-0830-mother-pool-handoff-ack-${ymd}.json`)));
   const aggregatePath = path.resolve(arg("bridge-aggregate", path.join(REPORT_DIR, `opening-report-0830-bridge-aggregate-${ymd}.json`)));
   const aggregate = readJson(aggregatePath);
   const missingFields = [];
@@ -272,9 +279,11 @@ async function main() {
   if (!complete) process.exitCode = 1;
 }
 
-main().catch((error) => {
-  console.error(error.stack || error.message || String(error));
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error.stack || error.message || String(error));
+    process.exitCode = 1;
+  });
+}
 
-module.exports = { validatePayload, validateBridge, validateDbRow, fixture };
+module.exports = { CONTRACT, validatePayload, validateBridge, validateDbRow, fixture };

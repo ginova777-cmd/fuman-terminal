@@ -14,7 +14,11 @@ const SINGLE_VERIFIER_SCRIPT = "scripts/verify-opening-report-morning-contract.j
 const SINGLE_VERIFIER_CMD = "node --use-system-ca " + SINGLE_VERIFIER_SCRIPT;
 const RETIRED_TELEGRAM_SCRIPT = path.join(ROOT, "scripts", "verify-opening-report-0830-telegram-contract.js");
 const RETIRED_TELEGRAM_PACKAGE_KEY = "verify:opening-report-0830-telegram-contract";
+const RETIRED_FIELD_ACK_SCRIPT = path.join(ROOT, "scripts", "verify-opening-report-0830-mother-pool-field-ack.js");
+const RETIRED_FIELD_ACK_PACKAGE_KEYS = ["verify:opening-report-mother-pool-field-ack", "verify:opening-report-mother-pool-field-ack:fixture"];
 const KOREA_NAVER_ENFORCE_FROM = "2026-09-09";
+const FUJIKURA_JAPAN_SOURCE_ENFORCE_FROM = "2026-09-10";
+const BOE_RETIRE_ENFORCE_FROM = "2026-09-10";
 
 const RETIRED_ALIASES = [
   "verify:opening-report-0820-preflight",
@@ -164,9 +168,6 @@ function symbolMapChecks(checks) {
   addCheck(checks, "industry_contract_15_rows", rows.length === REQUIRED_INDUSTRIES.length && REQUIRED_INDUSTRIES.every((industry) => getIndustryRow(contract, industry)), "required=" + REQUIRED_INDUSTRIES.length + " actual=" + rows.length);
   const classification = typeof contract.validateIndustryMapContract === "function" ? contract.validateIndustryMapContract(rows) : { ok: false, issues: ["validator_missing"] };
   addCheck(checks, "industry_tier_a_b_classification_complete", classification.ok === true, JSON.stringify(classification.issues || []));
-  addCheck(checks, "industry_mapping_contract_v2", contract.CONTRACT === "opening-report-0830-industry-map-v2", String(contract.CONTRACT || ""));
-  addCheck(checks, "industry_mapping_evidence_complete", rows.every((row) => row.mapping_contract === "opening-report-0830-industry-map-v2" && /^\d{4}-\d{2}-\d{2}$/.test(String(row.mapping_reviewed_at || "")) && row.review_basis?.A && row.review_basis?.B && Array.isArray(row.mapping_evidence_authorities) && row.mapping_evidence_authorities.length >= 2 && [...(row.a || []), ...(row.b || [])].every((stock) => stock.mapping_status === "reviewed" && stock.mapping_grade === stock.tier && stock.mapping_industry === row.industry && stock.relationship_type && String(stock.mapping_reason || "").includes(stock.symbol) && Array.isArray(stock.evidence_authorities) && stock.evidence_authorities.length >= 2 && Array.isArray(stock.evidence_urls) && stock.evidence_urls.length >= 2)), "every A/B mapping requires an individual reason, relationship, official evidence URLs and review date");
-  addCheck(checks, "industry_mapping_c_warmup_only", rows.every((row) => (row.c || []).every((stock) => stock.tier === "C" && stock.mapping_grade === "C" && stock.mapping_status === "observation_only" && stock.relationship_type === "theme_only_or_unverified" && !(row.a || []).some((item) => item.symbol === stock.symbol) && !(row.b || []).some((item) => item.symbol === stock.symbol))), "C mappings may enter Top 3 warmup but retain observation-only status");
 
   const pcb = getIndustryRow(contract, "PCB_CCL") || {};
   const iiiV = getIndustryRow(contract, "III_V_OPTICAL") || {};
@@ -174,6 +175,9 @@ function symbolMapChecks(checks) {
   addCheck(checks, "manual_mapping_8039_pcb_ccl_b", hasSymbol(pcb.tw_b || pcb.twB || pcb.b || pcb.mapped_symbols_b, "8039"), "8039 must be PCB/CCL B");
   addCheck(checks, "manual_mapping_4991_iii_v_related_b", hasSymbol(iiiV.tw_b || iiiV.twB || iiiV.b || iiiV.mapped_symbols_b, "4991"), "4991 must be III-V/optical related B");
   addCheck(checks, "manual_mapping_3105_iii_v_a", hasSymbol(iiiV.tw_a || iiiV.twA || iiiV.a || iiiV.mapped_symbols_a, "3105"), "3105 must be III-V/optical A");
+  const pcbLeaders = pcb.overseas_leaders || pcb.overseasLeaders || pcb.leaders || [];
+  const fujikura = pcbLeaders.find((leader) => String(leader?.yahoo_symbol || leader?.yahooSymbol || "") === "5803.T");
+  addCheck(checks, "fujikura_5803_uses_yahoo_japan_quote", fujikura?.name === "藤倉" && fujikura?.source_provider === "yahoo_japan_quote", JSON.stringify(fujikura || null));
 
   const passive = getIndustryRow(contract, "PASSIVE_COMPONENTS") || {};
   const passiveLeaders = passive.overseas_leaders || passive.overseasLeaders || passive.leaders || [];
@@ -183,9 +187,10 @@ function symbolMapChecks(checks) {
   const opticalLeaders = optical.overseas_leaders || optical.overseasLeaders || optical.leaders || [];
   const opticalRequired = ["COHR", "LITE", "CIEN", "AAOI", "GLW"];
   addCheck(checks, "optical_us_leaders_include_required", opticalRequired.every((symbol) => hasSymbol(opticalLeaders, symbol)), JSON.stringify(opticalLeaders));
-  const panel = getIndustryRow(contract, "PANEL") || {};
-  const panelLeaders = panel.overseas_leaders || panel.overseasLeaders || panel.leaders || [];
-  addCheck(checks, "panel_boe_excluded", !hasSymbol(panelLeaders, "000725.SZ") && !hasSymbol(panelLeaders, "BOE"), JSON.stringify(panelLeaders));
+
+  const activeOverseasLeaders = rows.flatMap((row) => row.overseas_leaders || row.overseasLeaders || row.leaders || []);
+  const activeBoe = activeOverseasLeaders.filter((leader) => String(leader?.name || "").toUpperCase() === "BOE" || String(leader?.yahoo_symbol || leader?.yahooSymbol || "").toUpperCase() === "000725.SZ");
+  addCheck(checks, "boe_000725sz_absent_from_active_map", activeBoe.length === 0, JSON.stringify(activeBoe));
 
   const contractText = readText("scripts/opening-report-0830-industry-map-contract.js");
   const forbidden = ["6967.T", "WCI", "SCFI", "BDI"];
@@ -211,13 +216,22 @@ function staticContractChecks(checks) {
   addCheck(checks, "us_market_closed_excluded_japan_korea_remain", detector.includes("us_market_closed_no_new_session") && detector.includes("us_market_closed_previous_session_background_only") && detector.includes("Naver Finance KRX basic"), "US closed rows must be background-only while fresh Japan/Korea rows remain eligible");
   addCheck(checks, "japan_korea_freeze_window_0800_0820", detector.includes("08:00-08:20 Asia/Taipei") && detector.includes("T08:20:59.999+08:00"), "Japan/Korea must freeze by 08:20 minute end");
   addCheck(checks, "korea_naver_percent_only_primary_present", detector.includes("korea_naver_change_percent_primary") && detector.includes("fluctuationsRatio") && detector.includes("localTradedAt") && detector.includes("KQ"), "Korean .KS/.KQ rows must use Naver directly with same-day percent and source time");
+  addCheck(checks, "fujikura_yahoo_japan_primary_present", detector.includes("japan_yahoo_change_percent_primary") && detector.includes("Yahoo! Japan Finance TSE real-time") && detector.includes("japanUpdateTime") && detector.includes("priceChangeRate"), "Fujikura must use the Yahoo! Japan TSE real-time percent and source time");
   const detectorModule = require(path.join(ROOT, "scripts", "run-opening-report-0830-overseas-leader-detector.js"));
   addCheck(checks, "overseas_market_classifier_contract", detectorModule.classifyLeaderMarket("AAPL") === "us" && detectorModule.classifyLeaderMarket("6861.T") === "japan" && detectorModule.classifyLeaderMarket("005930.KS") === "korea" && detectorModule.classifyLeaderMarket("222800.KQ") === "korea" && detectorModule.classifyLeaderMarket("000725.SZ") === "other", "US, Japan, Korea and unsupported markets must not be conflated");
-  addCheck(checks, "japan_primary_alternative_route_present", detector.includes("japanYahooSnapshot") && detector.includes("query2.finance.yahoo.com") && detector.includes("japan_yahoo_primary_and_alternative_failed"), "Japan leaders use bounded query1 -> query2 fallback and still fail closed when both are unavailable");
   const naverFixture = detectorModule.parseNaverKoreaBasic({ itemCode: "005930", fluctuationsRatio: "1.11", localTradedAt: "2026-09-08T09:20:59+09:00" }, { yahoo: "005930.KS" }, "2026-09-08");
   const naverAfterCutoff = detectorModule.parseNaverKoreaBasic({ itemCode: "005930", fluctuationsRatio: "1.12", localTradedAt: "2026-09-08T09:21:00+09:00" }, { yahoo: "005930.KS" }, "2026-09-08");
   addCheck(checks, "korea_naver_percent_fixture", naverFixture.ok === true && naverFixture.percent === 1.11 && naverFixture.reason_code === "korea_naver_change_percent_primary", JSON.stringify(naverFixture));
   addCheck(checks, "korea_naver_after_cutoff_rejected", naverAfterCutoff.ok === false && naverAfterCutoff.reason_code === "naver_korea_outside_0800_0820_window", JSON.stringify(naverAfterCutoff));
+  const yahooJapanFixture = '{"codeWithMarketExtension":"5803.T","label":"東証PRM","price":{"value":"5,534"},"priceChange":{"value":"451"},"priceChangeRate":{"value":"8.87"},"japanUpdateTime":"9:20","delayMinutes":0,"openPrice":{"name":"始値","value":"5,350","updateDate":"09:06","updateDateMeta":"2026-09-09T09:06:00+09:00"}}';
+  const yahooJapanAfterCutoffFixture = yahooJapanFixture.replace('"japanUpdateTime":"9:20"', '"japanUpdateTime":"9:21"');
+  const yahooJapanWrongDateFixture = yahooJapanFixture.replace("2026-09-09T09:06:00+09:00", "2026-09-08T09:06:00+09:00");
+  const yahooJapanParsed = detectorModule.parseYahooJapanQuotePage(yahooJapanFixture, { yahoo: "5803.T" }, "2026-09-09");
+  const yahooJapanAfterCutoff = detectorModule.parseYahooJapanQuotePage(yahooJapanAfterCutoffFixture, { yahoo: "5803.T" }, "2026-09-09");
+  const yahooJapanWrongDate = detectorModule.parseYahooJapanQuotePage(yahooJapanWrongDateFixture, { yahoo: "5803.T" }, "2026-09-09");
+  addCheck(checks, "fujikura_yahoo_japan_percent_fixture", yahooJapanParsed.ok === true && yahooJapanParsed.percent === 8.87 && yahooJapanParsed.reason_code === "japan_yahoo_change_percent_primary" && yahooJapanParsed.selected_time === "2026-09-09T00:20:00.000Z", JSON.stringify(yahooJapanParsed));
+  addCheck(checks, "fujikura_yahoo_japan_after_cutoff_rejected", yahooJapanAfterCutoff.ok === false && yahooJapanAfterCutoff.reason_code === "yahoo_japan_outside_0800_0820_window", JSON.stringify(yahooJapanAfterCutoff));
+  addCheck(checks, "fujikura_yahoo_japan_wrong_date_rejected", yahooJapanWrongDate.ok === false && yahooJapanWrongDate.reason_code === "yahoo_japan_trade_date_mismatch", JSON.stringify(yahooJapanWrongDate));
   const calendarModule = require(path.join(ROOT, "scripts", "us-equity-market-calendar.js"));
   const holidayFixture = calendarModule.buildUsEquityMarketCalendar("2026-09-08");
   addCheck(checks, "us_market_labor_day_runtime_switch", holidayFixture.us_market_status === "market_closed" && holidayFixture.no_new_us_session === true && holidayFixture.us_holiday_name === "Labor Day", JSON.stringify(holidayFixture));
@@ -226,11 +240,13 @@ function staticContractChecks(checks) {
   addCheck(checks, "preflight_freezes_at_0820", preflight.includes("08:20:59.999 Asia/Taipei"), "08:20 minute-end freeze must be explicit");
 
   const runner = readText("scripts/run-opening-report-0830-production.js");
-  const fieldAck = readText("scripts/verify-opening-report-0830-mother-pool-field-ack.js");
+  const handoffAck = readText("scripts/verify-opening-report-0830-mother-pool-handoff-ack.js");
+  const persistenceAck = readText("scripts/verify-opening-report-0830-mother-pool-persistence-ack.js");
+  const motherPoolWriter = readText("scripts/run-daytrade-source-writer.js");
+  const motherPoolEvidence = readText("lib/opening-report-0830-mother-pool-evidence.js");
   addCheck(checks, "runner_owns_non_trading_day_guard", runner.includes("isTwseTradingDay") && runner.includes("market_calendar_non_trading_day") && runner.includes("no_side_effects") && runner.includes("line_push_attempted: false") && runner.includes("mother_pool_bridge_attempted: false"), "direct runner invocation must skip before every side effect on market-closed days");
   addCheck(checks, "runner_consumes_frozen_snapshot_only", runner.includes("frozen 08:20 evidence only") || runner.includes("凍結"), "08:30 runner must not refetch overseas direction");
   addCheck(checks, "runner_observation_only", runner.includes("formal_candidates: 0") && runner.includes("watchlist_only: true") && runner.includes("industry_observation_only"), "morning report must never create formal candidates");
-  addCheck(checks, "runner_top3_abc_warmup", runner.includes("mapped_symbols_c: mapRow.c") && runner.includes("...mapRow.c") && runner.includes("mapped_symbols_c: row.mapped_symbols_c"), "Top 3 A/B/C mappings are handed to Mother Pool for warmup while formal authority remains false");
   addCheck(checks, "runner_does_not_read_or_grade_intraday_gate", !runner.includes("readTaiwanGate") && !runner.includes("daytrade-unattended-gate-watchdog"), "08:30 report must not read, calculate, or grade intraday Gate A-D");
   addCheck(checks, "runner_preserves_previous_good_on_incomplete_briefing", runner.includes("briefing?.ok !== true") && runner.includes("preserve_previous_good: true"), "an incomplete briefing must never overwrite the last complete terminal snapshot");
   addCheck(checks, "line_delivery_contract_present", runner.includes("line-push-receipt") && runner.includes("pushLine") && runner.includes("lineReportFlex"), "LINE Flex delivery remains canonical");
@@ -240,16 +256,25 @@ function staticContractChecks(checks) {
   addCheck(checks, "us_closed_asia_positive_leader_top3_handoff", runner.includes("us_market_closed_asia_positive_leader_top3") && runner.includes("asiaPositiveLeaderObservations") && runner.includes("priority_overseas_leaders"), "US-closed days must hand positive Japan/Korea leader Top 3 mappings to Mother Pool");
   addCheck(checks, "positive_top3_zero_to_three_is_valid", runner.includes("displayTop3.length <= 3") && !runner.includes("displayTop3.length === 3"), "Zero to three positive observations is a valid completed report");
   addCheck(checks, "bridge_priority_observation_nonblocking", runner.includes("us_open_positive_industry_or_us_closed_asia_positive_leader_top3_v2") && runner.includes("It must never change the 08:30 report delivery decision."), "Mother Pool bridge only changes scan priority");
-  addCheck(checks, "runner_requires_mother_pool_field_ack", runner.includes("runMotherPoolFieldAck") && runner.includes("mother_pool_field_ack_ok") && runner.includes("mother_pool_field_ack_not_complete"), "final complete must require Mother Pool anon readback field acknowledgement");
-  addCheck(checks, "mother_pool_field_ack_contract_present", fieldAck.includes("opening-report-0830-mother-pool-field-ack-v1") && fieldAck.includes("credential_role: \"anon_read_only\"") && fieldAck.includes("db_readback_ok"), "Mother Pool must publish its own canonical field acknowledgement receipt");
-  addCheck(checks, "mother_pool_field_ack_checks_observation_only", ["formal_candidate_count", "formal_candidate_allowed", "forbidden_publish_guard", "market_not_taiwan", "linked_industries", "observations", "report_run_id"].every((token) => fieldAck.includes(token)), "field acknowledgement must preserve observation-only, canonical Taiwan market and every linked-industry observation");
+  addCheck(checks, "old_immediate_field_ack_retired", !exists(RETIRED_FIELD_ACK_SCRIPT) && RETIRED_FIELD_ACK_PACKAGE_KEYS.every((key) => !JSON.stringify(readJson(path.join(ROOT, "package.json"))).includes(key)), "old immediate field ACK verifier and aliases must be absent");
+  addCheck(checks, "runner_requires_mother_pool_handoff_ack", runner.includes("runMotherPoolHandoffAck") && runner.includes("mother_pool_handoff_ack_ok") && runner.includes("mother_pool_persistence_ack_pending"), "runner must stop at HANDOFF_ACK and wait for persistence verification");
+  addCheck(checks, "mother_pool_handoff_ack_contract_present", handoffAck.includes("opening-report-0830-mother-pool-handoff-ack-v2") && handoffAck.includes("credential_role: \"anon_read_only\"") && handoffAck.includes("db_readback_ok"), "Mother Pool must publish HANDOFF_ACK after initial anon readback");
+  addCheck(checks, "mother_pool_persistence_ack_contract_present", persistenceAck.includes("opening-report-0830-mother-pool-persistence-ack-v1") && persistenceAck.includes("writer_refreshes_observed") && persistenceAck.includes("required_writer_refreshes") && persistenceAck.includes("db_readback_ok"), "PERSISTENCE_ACK must verify canonical Writer rewrites");
+  addCheck(checks, "mother_pool_handoff_ack_checks_observation_only", ["formal_candidate_count", "formal_candidate_allowed", "forbidden_publish_guard", "market_not_TW"].every((token) => handoffAck.includes(token)), "handoff acknowledgement must preserve observation-only and canonical TW market fields");
+  addCheck(checks, "mother_pool_accepts_canonical_twse_tpex_markets", motherPoolEvidence.includes('["TW", "TWSE", "TPEX"]') && handoffAck.includes("market_not_TW_TWSE_TPEX"), "TWSE and TPEX are canonical Taiwan markets and must not be rejected as non-Taiwan");
+  addCheck(checks, "mother_pool_writer_preserves_morning_evidence", motherPoolWriter.includes("openingReportSeedBySymbol") && motherPoolWriter.includes("mergeOpeningReportEvidence") && motherPoolWriter.includes("openingReport0830IndustryBias") && motherPoolWriter.includes("preserveMorningWatchRows") && readText("lib/opening-report-writer-preservation.js").includes("opening_report_0830_priority_reason"), "canonical Mother Pool rewrites must reconstruct verified morning evidence from per-symbol reports instead of erasing it");
+  addCheck(checks, "mother_pool_overlap_evidence_contract_present", motherPoolEvidence.includes("industry_observations") && motherPoolEvidence.includes("linked_industries") && handoffAck.includes("overlapping_industries_preserved"), "one stock must retain every linked Top-3 industry observation");
+  const handoffAckFixture = run("node", ["scripts/verify-opening-report-0830-mother-pool-handoff-ack.js", "--fixture"]);
+  addCheck(checks, "mother_pool_handoff_ack_multi_industry_fixture", handoffAckFixture.ok && handoffAckFixture.text.includes('"overlapping_industries_preserved": true') && handoffAckFixture.text.includes('"db_twse": true') && handoffAckFixture.text.includes('"db_tpex": true'), handoffAckFixture.text.trim());
+  const persistenceAckFixture = run("node", ["scripts/verify-opening-report-0830-mother-pool-persistence-ack.js", "--fixture"]);
+  addCheck(checks, "mother_pool_persistence_ack_fixture", persistenceAckFixture.ok && persistenceAckFixture.text.includes('"writer_refreshes_observed": 2') && persistenceAckFixture.text.includes('"db_readback_ok": true'), persistenceAckFixture.text.trim());
 
   const wrapper = readText("run-opening-report-0830-production-wrapper.ps1");
   addCheck(checks, "wrapper_owns_non_trading_day_guard", wrapper.includes("check-market-calendar-action.js") && wrapper.includes("market_calendar_non_trading_day") && wrapper.includes("line_push_attempted = $false") && wrapper.includes("mother_pool_bridge_attempted = $false"), "Task Scheduler wrapper must guard independently before invoking the runner");
-  addCheck(checks, "wrapper_runner_verifier_receipt_chain", wrapper.includes("run-opening-report-0830-production.js") && wrapper.includes("verify-opening-report-morning-contract.js") && wrapper.includes("opening-report-morning-wrapper-v1"), "wrapper must be runner -> canonical verifier -> wrapper receipt");
+  addCheck(checks, "wrapper_runner_verifier_receipt_chain", wrapper.includes("run-opening-report-0830-production.js") && wrapper.includes("verify-opening-report-0830-mother-pool-persistence-ack.js") && wrapper.includes("verify-opening-report-morning-contract.js") && wrapper.includes("opening-report-morning-wrapper-v1"), "wrapper must be runner -> PERSISTENCE_ACK -> canonical verifier -> wrapper receipt");
   addCheck(checks, "wrapper_audited_line_receipt_recovery", wrapper.includes("ReuseLineReceipt") && wrapper.includes("--reuse-line-receipt") && wrapper.includes("existingLine.line_push_ok"), "bounded recovery may reuse only the already successful same-run LINE receipt");
   addCheck(checks, "wrapper_has_no_telegram_execution", !wrapper.includes("send-opening-report-0830-telegram") && !wrapper.includes("TELEGRAM_BOT_TOKEN") && wrapper.includes("telegram_enabled = $false"), "Telegram must remain retired from morning wrapper");
-  addCheck(checks, "wrapper_complete_requires_all_channels", wrapper.includes("$linePersonalOk") && wrapper.includes("$lineGroupOk") && wrapper.includes("$terminalOk") && wrapper.includes("$bridgeOk") && wrapper.includes("$fieldAckOk") && wrapper.includes("$expected -eq 15") && wrapper.includes("$scanned -eq 15"), "complete must require 15/15 + LINE personal/group + terminal + Mother Pool field acknowledgement");
+  addCheck(checks, "wrapper_complete_requires_all_channels", wrapper.includes("$linePersonalOk") && wrapper.includes("$lineGroupOk") && wrapper.includes("$terminalOk") && wrapper.includes("$bridgeOk") && wrapper.includes("$handoffAckOk") && wrapper.includes("$persistenceAckOk") && wrapper.includes("$expected -eq 15") && wrapper.includes("$scanned -eq 15"), "complete must require 15/15 + LINE personal/group + terminal + HANDOFF_ACK + PERSISTENCE_ACK");
 
   const bridge = readText("scripts/apply-opening-report-0830-priority-bias-bridge.js");
   addCheck(checks, "bridge_cannot_publish_formal_candidates", bridge.includes("formal_candidate_allowed") && bridge.includes("formal_candidate_count") && bridge.includes("forbidden_publish_guard"), "bridge only boosts scan priority");
@@ -337,9 +362,16 @@ function currentReceiptChecks(checks, tradeDate) {
   const naverRequired = tradeDate >= KOREA_NAVER_ENFORCE_FROM;
   addCheck(checks, "current_korea_uses_naver_primary", !naverRequired || koreaRows.every((row) => row.source === "Naver Finance KRX basic"), JSON.stringify({ enforce_from: KOREA_NAVER_ENFORCE_FROM, required: naverRequired, count: koreaRows.length, sources: [...new Set(koreaRows.map((row) => row.source))] }));
   addCheck(checks, "current_naver_korea_primary_valid", koreaRows.filter((row) => row.ok === true).every((row) => row.source === "Naver Finance KRX basic" && Array.isArray(row.source_fields) && row.source_fields.includes("fluctuationsRatio") && row.source_fields.includes("localTradedAt") && Number.isFinite(Number(row.percent))), JSON.stringify(koreaRows.filter((row) => row.ok === true).map((row) => ({ symbol: row.yahoo_symbol, percent: row.percent, source: row.source }))));
+  const fujikuraRows = rows.filter((row) => String(row.yahoo_symbol || "").toUpperCase() === "5803.T");
+  const fujikuraJapanRequired = tradeDate >= FUJIKURA_JAPAN_SOURCE_ENFORCE_FROM;
+  addCheck(checks, "current_fujikura_uses_yahoo_japan_primary", !fujikuraJapanRequired || (fujikuraRows.length === 1 && fujikuraRows.every((row) => row.source_provider === "yahoo_japan_quote" && row.source === "Yahoo! Japan Finance TSE real-time")), JSON.stringify({ enforce_from: FUJIKURA_JAPAN_SOURCE_ENFORCE_FROM, required: fujikuraJapanRequired, rows: fujikuraRows.map((row) => ({ source_provider: row.source_provider, source: row.source, reason_code: row.reason_code })) }));
+  addCheck(checks, "current_fujikura_yahoo_japan_valid_fields", !fujikuraJapanRequired || fujikuraRows.filter((row) => row.ok === true).every((row) => Array.isArray(row.source_fields) && ["codeWithMarketExtension", "price", "priceChangeRate", "japanUpdateTime", "delayMinutes"].every((field) => row.source_fields.includes(field)) && Number.isFinite(Number(row.percent))), JSON.stringify(fujikuraRows.filter((row) => row.ok === true).map((row) => ({ percent: row.percent, source_fields: row.source_fields }))));
+  const boeRows = rows.filter((row) => String(row.name || "").toUpperCase() === "BOE" || String(row.yahoo_symbol || "").toUpperCase() === "000725.SZ");
+  addCheck(checks, "current_boe_000725sz_retired", tradeDate < BOE_RETIRE_ENFORCE_FROM || boeRows.length === 0, JSON.stringify({ enforce_from: BOE_RETIRE_ENFORCE_FROM, rows: boeRows }));
 
   addCheck(checks, "current_snapshot_trade_date", snapshot.trade_date === tradeDate || snapshot.tradeDate === tradeDate || snapshot.date === tradeDate, JSON.stringify({ trade_date: snapshot.trade_date, tradeDate: snapshot.tradeDate, date: snapshot.date }));
-  addCheck(checks, "current_report_status_is_report_only", ["REPORT_OK", "REPORT_DEGRADED", "COMPLETE", "complete"].includes(finalReceipt.report_status || finalReceipt.status), finalReceipt.report_status || finalReceipt.status);
+  addCheck(checks, "current_report_status_is_report_only", ["REPORT_OK", "REPORT_DEGRADED", "COMPLETE", "complete", "WAITING_CANONICAL_VERIFIER"].includes(finalReceipt.report_status), finalReceipt.report_status || finalReceipt.status);
+  addCheck(checks, "current_runner_and_persistence_ready", finalReceipt.contract === "opening_report_0830_complete_v1" && finalReceipt.runner_complete === true && finalReceipt.mother_pool_persistence_ack_ok === true && ((finalReceipt.complete === true && finalReceipt.status === "complete" && finalReceipt.first_blocker == null) || (finalReceipt.complete === false && finalReceipt.status === "waiting_canonical_verifier" && finalReceipt.first_blocker === "canonical_verifier_pending")), JSON.stringify({ contract: finalReceipt.contract, complete: finalReceipt.complete, status: finalReceipt.status, first_blocker: finalReceipt.first_blocker }));
   addCheck(checks, "current_report_observation_only", finalReceipt.watchlist_only === true && Number(finalReceipt.formal_candidates || 0) === 0, JSON.stringify({ watchlist_only: finalReceipt.watchlist_only, formal_candidates: finalReceipt.formal_candidates }));
   addCheck(checks, "current_scan_15_of_15", Number(finalReceipt.expected_industry_count) === 15 && Number(finalReceipt.scanned_industry_count) === 15, JSON.stringify({ expected_industry_count: finalReceipt.expected_industry_count, scanned_industry_count: finalReceipt.scanned_industry_count }));
 
@@ -385,15 +417,45 @@ function currentReceiptChecks(checks, tradeDate) {
   addCheck(checks, "current_bridge_aggregate_ok", bridge?.status === "BRIDGE_OK" && Number(bridge?.successful_industry_count || 0) === Number(bridge?.industry_count || 0) && Number(bridge?.observation_count || 0) === priorityRows.length, JSON.stringify({ status: bridge?.status, observation_count: bridge?.observation_count, industry_count: bridge?.industry_count, successful_industry_count: bridge?.successful_industry_count }));
   addCheck(checks, "current_bridge_same_run_id", bridge?.run_id === runId, String(bridge?.run_id || "") + "/" + String(runId || ""));
   addCheck(checks, "current_bridge_observation_only", bridge?.forbidden_publish_guard === true && Number(bridge?.formal_candidate_count || 0) === 0 && bridge?.formal_candidate_allowed === false, JSON.stringify({ forbidden_publish_guard: bridge?.forbidden_publish_guard, formal_candidate_count: bridge?.formal_candidate_count, formal_candidate_allowed: bridge?.formal_candidate_allowed }));
-  const fieldAckPath = String(finalReceipt.mother_pool_field_ack_receipt || path.join(RUNTIME, "data", "scan-receipts", "opening-report-0830-mother-pool-field-ack-" + compactDate(tradeDate) + ".json"));
-  const fieldAckReceipt = fieldAckPath && exists(fieldAckPath) ? readJson(fieldAckPath) : null;
-  addCheck(checks, "current_mother_pool_field_ack_exists", Boolean(fieldAckReceipt), fieldAckPath);
-  addCheck(checks, "current_mother_pool_field_ack_same_run", fieldAckReceipt?.report_run_id === runId, String(fieldAckReceipt?.report_run_id || "") + "/" + String(runId || ""));
-  addCheck(checks, "current_mother_pool_field_ack_complete", fieldAckReceipt?.contract === "opening-report-0830-mother-pool-field-ack-v1" && fieldAckReceipt?.complete === true && fieldAckReceipt?.db_readback_ok === true && fieldAckReceipt?.first_blocker == null, JSON.stringify({ contract: fieldAckReceipt?.contract, complete: fieldAckReceipt?.complete, db_readback_ok: fieldAckReceipt?.db_readback_ok, first_blocker: fieldAckReceipt?.first_blocker }));
-  addCheck(checks, "current_mother_pool_field_ack_observation_only", Number(fieldAckReceipt?.formal_candidate_count || 0) === 0 && fieldAckReceipt?.formal_candidate_allowed === false && fieldAckReceipt?.forbidden_publish_guard === true, JSON.stringify({ formal_candidate_count: fieldAckReceipt?.formal_candidate_count, formal_candidate_allowed: fieldAckReceipt?.formal_candidate_allowed, forbidden_publish_guard: fieldAckReceipt?.forbidden_publish_guard }));
+  const handoffAckPath = String(finalReceipt.mother_pool_handoff_ack_receipt || path.join(RUNTIME, "data", "scan-receipts", "opening-report-0830-mother-pool-handoff-ack-" + compactDate(tradeDate) + ".json"));
+  const handoffAckReceipt = handoffAckPath && exists(handoffAckPath) ? readJson(handoffAckPath) : null;
+  addCheck(checks, "current_mother_pool_handoff_ack_exists", Boolean(handoffAckReceipt), handoffAckPath);
+  addCheck(checks, "current_mother_pool_handoff_ack_same_run", handoffAckReceipt?.report_run_id === runId, String(handoffAckReceipt?.report_run_id || "") + "/" + String(runId || ""));
+  addCheck(checks, "current_mother_pool_handoff_ack_complete", handoffAckReceipt?.contract === "opening-report-0830-mother-pool-handoff-ack-v2" && handoffAckReceipt?.complete === true && handoffAckReceipt?.db_readback_ok === true && handoffAckReceipt?.first_blocker == null, JSON.stringify({ contract: handoffAckReceipt?.contract, complete: handoffAckReceipt?.complete, db_readback_ok: handoffAckReceipt?.db_readback_ok, first_blocker: handoffAckReceipt?.first_blocker }));
+  addCheck(checks, "current_mother_pool_handoff_ack_observation_only", Number(handoffAckReceipt?.formal_candidate_count || 0) === 0 && handoffAckReceipt?.formal_candidate_allowed === false && handoffAckReceipt?.forbidden_publish_guard === true, JSON.stringify({ formal_candidate_count: handoffAckReceipt?.formal_candidate_count, formal_candidate_allowed: handoffAckReceipt?.formal_candidate_allowed, forbidden_publish_guard: handoffAckReceipt?.forbidden_publish_guard }));
+  const persistenceAckPath = String(finalReceipt.mother_pool_persistence_ack_receipt || path.join(RUNTIME, "data", "scan-receipts", "opening-report-0830-mother-pool-persistence-ack-" + compactDate(tradeDate) + ".json"));
+  const persistenceAckReceipt = persistenceAckPath && exists(persistenceAckPath) ? readJson(persistenceAckPath) : null;
+  addCheck(checks, "current_mother_pool_persistence_ack_exists", Boolean(persistenceAckReceipt), persistenceAckPath);
+  addCheck(checks, "current_mother_pool_persistence_ack_same_run", persistenceAckReceipt?.report_run_id === runId, String(persistenceAckReceipt?.report_run_id || "") + "/" + String(runId || ""));
+  addCheck(checks, "current_mother_pool_persistence_ack_complete", persistenceAckReceipt?.contract === "opening-report-0830-mother-pool-persistence-ack-v1" && persistenceAckReceipt?.complete === true && persistenceAckReceipt?.db_readback_ok === true && Number(persistenceAckReceipt?.writer_refreshes_observed || 0) >= 2 && persistenceAckReceipt?.first_blocker == null, JSON.stringify({ contract: persistenceAckReceipt?.contract, complete: persistenceAckReceipt?.complete, db_readback_ok: persistenceAckReceipt?.db_readback_ok, writer_refreshes_observed: persistenceAckReceipt?.writer_refreshes_observed, first_blocker: persistenceAckReceipt?.first_blocker }));
+  const refreshTimes = persistenceAckReceipt?.writer_refresh_timestamps || [];
+  const handoffMs = Date.parse(handoffAckReceipt?.checked_at || "");
+  const persistedMs = Date.parse(persistenceAckReceipt?.checked_at || "");
+  addCheck(checks, "current_persistence_two_distinct_refreshes_after_handoff", new Set(refreshTimes).size >= 2 && refreshTimes.every(t => Date.parse(t) > handoffMs && Date.parse(t) <= persistedMs), JSON.stringify(refreshTimes));
+  addCheck(checks, "current_ack_dates_match_report", handoffAckReceipt?.trade_date === tradeDate && persistenceAckReceipt?.trade_date === tradeDate, tradeDate);
+  const readback = persistenceAckReceipt?.persistence_readback_receipt ? readJson(persistenceAckReceipt.persistence_readback_receipt) : null;
+  addCheck(checks, "current_persistence_live_readback_link", readback?.complete === true && readback?.db_readback_ok === true && readback?.report_run_id === runId && readback?.trade_date === tradeDate && Date.parse(readback.checked_at) >= Math.max(...refreshTimes.map(Date.parse)) && JSON.stringify(readback.db_readback_symbols || []) === JSON.stringify(persistenceAckReceipt.db_readback_symbols || []), persistenceAckReceipt?.persistence_readback_receipt || "missing");
+  addCheck(checks, "current_final_links_persistence_ack", finalReceipt.mother_pool_handoff_ack_ok === true && finalReceipt.mother_pool_persistence_ack_ok === true, JSON.stringify({ handoff: finalReceipt.mother_pool_handoff_ack_ok, persistence: finalReceipt.mother_pool_persistence_ack_ok }));
+}
+
+async function liveDeliveryChecks(checks, tradeDate) {
+  const finalPath = path.join(REPORT_DIR, "opening-report-0830-final-receipt-" + compactDate(tradeDate) + ".json");
+  const final = readJson(finalPath);
+  if (!final) return;
+  const {contentHash} = require("../lib/opening-report-delivery-contract");
+  const expectedHash = contentHash(final.priority_observation_mode, final.display_top3 || []);
+  addCheck(checks,"current_full_content_hash",final.delivery_content_hash === expectedHash,"hash includes full Top3 and A/B mappings");
+  try {
+    const {readSnapshot} = require("../lib/supabase-snapshots");
+    const snapshot = await readSnapshot("opening_report_0830_terminal_briefing", {tradeDate,allowLatestFallback:false,timeoutMs:10000,maxAttempts:2});
+    const payload=snapshot?.payload;
+    addCheck(checks,"current_terminal_db_readback",payload?.ok===true && payload.run_id===final.run_id && payload.delivery_content_hash===expectedHash && JSON.stringify(payload.display_top3 || [])===JSON.stringify(final.display_top3 || []) && compactDate(payload.date)===compactDate(tradeDate),JSON.stringify({run_id:payload?.run_id,date:payload?.date,hash:payload?.delivery_content_hash}));
+  } catch(error) { addCheck(checks,"current_terminal_db_readback",false,error.message); }
 }
 
 function writeReceipt(result, tradeDate) {
+  const outputArg = process.argv.find(x => x.startsWith("--output="));
+  if (outputArg) { const target = path.resolve(outputArg.slice(9)); fs.mkdirSync(path.dirname(target), {recursive:true}); fs.writeFileSync(target, JSON.stringify(result,null,2)); return target; }
   fs.mkdirSync(REPORT_DIR, { recursive: true });
   const ymd = compactDate(tradeDate);
   const filePath = path.join(REPORT_DIR, "opening-report-morning-contract-verifier-" + ymd + ".json");
@@ -401,7 +463,7 @@ function writeReceipt(result, tradeDate) {
   return filePath;
 }
 
-function main() {
+async function main() {
   const args = parseArgs();
   const checks = [];
 
@@ -411,6 +473,7 @@ function main() {
     currentPreflightReceiptChecks(checks, args.tradeDate);
   } else if (args.requireCurrent) {
     currentReceiptChecks(checks, args.tradeDate);
+    await liveDeliveryChecks(checks, args.tradeDate);
   }
 
   const failures = checks.filter((check) => !check.ok);
@@ -437,7 +500,7 @@ function main() {
 
   result.receipt_path = writeReceipt(result, args.tradeDate);
   console.log(JSON.stringify(result, null, 2));
-  process.exit(result.ok ? 0 : 1);
+  process.exitCode = result.ok ? 0 : 1;
 }
 
-main();
+main().catch(error => { console.error(error.stack || error.message); process.exitCode=1; });

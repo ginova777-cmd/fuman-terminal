@@ -2,7 +2,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const crypto = require("crypto");
+const { contentHash, validateReuse } = require("../lib/opening-report-delivery-contract");
 const { spawnSync } = require("child_process");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
 const { OPENING_REPORT_0830_INDUSTRY_MAP } = require("./opening-report-0830-industry-map-contract.js");
@@ -12,11 +12,12 @@ const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
 const RECEIPT_DIR = path.join(RUNTIME_DIR, "data", "opening-report-0830");
 const BRIDGE_SCRIPT = path.resolve(__dirname, "apply-opening-report-0830-priority-bias-bridge.js");
-const FIELD_ACK_SCRIPT = path.resolve(__dirname, "verify-opening-report-0830-mother-pool-field-ack.js");
+const HANDOFF_ACK_SCRIPT = path.resolve(__dirname, "verify-opening-report-0830-mother-pool-handoff-ack.js");
 const SOURCE = "opening_report_0830";
 const MODE = "priority_bias_only";
 const ALLOWED_ACTION = "boost_scan_priority_only";
 const FORBIDDEN_ACTION = "publish_formal_candidate_without_taiwan_evidence";
+const OVERSEAS_STRENGTH_CONTRACT = "opening_report_0830_overseas_strength_v1";
 
 function argValue(name, fallback = "") {
   const prefix = `${name}=`;
@@ -116,15 +117,14 @@ function baseIndustryItems(tradeDate, runId, leaders = frozenLeadersReceipt(trad
       bias: `${direction}_mixed`,
       confidence: Number(mapRow.default_confidence || 0),
       evidence_summary: Number.isFinite(average) ? `海外族群平均漲幅 ${average.toFixed(2)}%` : mapRow.evidence_summary,
+      overseas_return_1d_pct: Number.isFinite(average) ? average : null,
+      overseas_leader_detection: row,
       mapping_contract: mapRow.mapping_contract,
       mapping_reviewed_at: mapRow.mapping_reviewed_at,
       mapping_evidence_authorities: mapRow.mapping_evidence_authorities,
-      overseas_return_1d_pct: Number.isFinite(average) ? average : null,
-      overseas_leader_detection: row,
       mapped_symbols_a: mapRow.a,
       mapped_symbols_b: mapRow.b,
-      mapped_symbols_c: mapRow.c,
-      mapped_symbols: [...mapRow.a, ...mapRow.b, ...mapRow.c],
+      mapped_symbols: [...mapRow.a, ...mapRow.b],
     };
   });
   const positive = rows.filter((row) => row.bias.startsWith("positive")).sort((a, b) => Number(b.overseas_return_1d_pct) - Number(a.overseas_return_1d_pct));
@@ -140,15 +140,20 @@ function baseIndustryItems(tradeDate, runId, leaders = frozenLeadersReceipt(trad
     bias: item.bias,
     confidence: item.confidence,
     evidence_summary: item.evidence_summary,
+    overseas_strength_contract: OVERSEAS_STRENGTH_CONTRACT,
+    overseas_evidence_cutoff: `${tradeDate} 08:20:00 Asia/Taipei`,
+    overseas_return_1d_pct: item.overseas_return_1d_pct,
+    overseas_sector_up_1d: Number.isFinite(Number(item.overseas_return_1d_pct)) ? Number(item.overseas_return_1d_pct) > 0 : null,
+    overseas_sector_up_2d: null,
+    us_sector_up_1d: null,
+    us_sector_up_2d: null,
+    positive_return_rank: positiveRank.get(item.industry) || null,
+    overseas_leader_detection: item.overseas_leader_detection,
     mapping_contract: item.mapping_contract,
     mapping_reviewed_at: item.mapping_reviewed_at,
     mapping_evidence_authorities: item.mapping_evidence_authorities,
-    overseas_return_1d_pct: item.overseas_return_1d_pct,
-    positive_return_rank: positiveRank.get(item.industry) || null,
-    overseas_leader_detection: item.overseas_leader_detection,
     mapped_symbols_a: item.mapped_symbols_a,
     mapped_symbols_b: item.mapped_symbols_b,
-    mapped_symbols_c: item.mapped_symbols_c,
     mapped_symbols: item.mapped_symbols,
     allowed_action: ALLOWED_ACTION,
     forbidden_action: FORBIDDEN_ACTION
@@ -182,13 +187,11 @@ function asiaPositiveLeaderObservations(items) {
         linked_industries: [],
         mapped_symbols_a: [],
         mapped_symbols_b: [],
-        mapped_symbols_c: [],
       };
       if (!entry.linked_industries.some((row) => row.industry === item.industry)) {
         entry.linked_industries.push({ industry: item.industry, display_name: item.display_name });
         entry.mapped_symbols_a.push(...item.mapped_symbols_a);
         entry.mapped_symbols_b.push(...item.mapped_symbols_b);
-        entry.mapped_symbols_c.push(...item.mapped_symbols_c);
       }
       bySymbol.set(symbol, entry);
     }
@@ -203,7 +206,6 @@ function asiaPositiveLeaderObservations(items) {
       display_name: row.linked_industries.map((item) => item.display_name).join("／"),
       mapped_symbols_a: uniqueMappedSymbols(row.mapped_symbols_a),
       mapped_symbols_b: uniqueMappedSymbols(row.mapped_symbols_b),
-      mapped_symbols_c: uniqueMappedSymbols(row.mapped_symbols_c),
     }));
 }
 
@@ -220,7 +222,6 @@ function positiveIndustryObservations(items) {
       linked_industries: [{ industry: row.industry, display_name: row.display_name }],
       mapped_symbols_a: row.mapped_symbols_a,
       mapped_symbols_b: row.mapped_symbols_b,
-      mapped_symbols_c: row.mapped_symbols_c,
     }));
 }
 
@@ -284,13 +285,13 @@ function markdownReport({ tradeDate, runId, overseasPreflight, priority }) {
   lines.push("");
   lines.push(priority.mode === "us_market_closed_asia_positive_leader_top3" ? "## 日韓正漲幅個股優先觀察" : "## 海外正報酬產業優先觀察");
   lines.push("");
-  lines.push("| 排名 | 海外觀察 | 產業 | 漲幅 | 台股 A | 台股 B | 台股 C |");
-  lines.push("|---:|---|---|---:|---|---|---|");
+  lines.push("| 排名 | 海外觀察 | 產業 | 漲幅 | 台股 A | 台股 B |");
+  lines.push("|---:|---|---|---:|---|---|");
   for (const row of priority.observations) {
     const overseas = row.observation_type === "asia_positive_leader" ? `${row.overseas_name}（${row.overseas_symbol}）` : row.display_name;
-    lines.push(`| ${row.rank} | ${overseas} | ${row.display_name} | +${Number(row.percent).toFixed(2)}% | ${lineStockNames(row.mapped_symbols_a) || "無"} | ${lineStockNames(row.mapped_symbols_b) || "無"} | ${lineStockNames(row.mapped_symbols_c) || "無"} |`);
+    lines.push(`| ${row.rank} | ${overseas} | ${row.display_name} | +${Number(row.percent).toFixed(2)}% | ${lineStockNames(row.mapped_symbols_a) || "無"} | ${lineStockNames(row.mapped_symbols_b) || "無"} |`);
   }
-  if (!priority.observations.length) lines.push("| - | 今日無正漲幅觀察 | - | - | - | - | - |");
+  if (!priority.observations.length) lines.push("| - | 今日無正漲幅觀察 | - | - | - | - |");
   lines.push("");
   lines.push("## Mother Pool 交接邊界");
   lines.push("");
@@ -321,10 +322,10 @@ function runBridge(inputPath, receiptPath, tradeDate) {
   return { exitCode: result.status, stdout: result.stdout, stderr: result.stderr };
 }
 
-function runMotherPoolFieldAck(tradeDate, runId, bridgeAggregatePath, isolatedBacktest) {
+function runMotherPoolHandoffAck(tradeDate, runId, bridgeAggregatePath, isolatedBacktest) {
   const args = isolatedBacktest
-    ? [FIELD_ACK_SCRIPT, "--fixture"]
-    : [FIELD_ACK_SCRIPT, `--trade-date=${tradeDate}`, `--report-run-id=${runId}`, `--bridge-aggregate=${bridgeAggregatePath}`];
+    ? [HANDOFF_ACK_SCRIPT, "--fixture"]
+    : [HANDOFF_ACK_SCRIPT, `--trade-date=${tradeDate}`, `--report-run-id=${runId}`, `--bridge-aggregate=${bridgeAggregatePath}`];
   const result = spawnSync(process.execPath, args, { encoding: "utf8", windowsHide: true, cwd: path.resolve(__dirname, "..") });
   let receipt = null;
   try { receipt = JSON.parse(String(result.stdout || "").trim()); } catch {}
@@ -376,7 +377,6 @@ function lineReportText(tradeDate, observations, usMarket) {
     lineObservationPercent(item),
     `台股 A：${lineStockNames(item.mapped_symbols_a) || "無"}`,
     `台股 B：${lineStockNames(item.mapped_symbols_b) || "無"}`,
-    `台股 C：${lineStockNames(item.mapped_symbols_c) || "無"}`,
   ].join("\n"));
   return [
     "📈 08:30 漲幅族群晨報",
@@ -395,7 +395,6 @@ function lineReportFlex(tradeDate, observations, usMarket) {
     body.push({ type: "text", text: lineObservationPercent(item), size: "sm", color: "#169B62", wrap: true });
     body.push({ type: "text", text: `台股 A：${lineStockNames(item.mapped_symbols_a) || "無"}`, size: "sm", wrap: true });
     body.push({ type: "text", text: `台股 B：${lineStockNames(item.mapped_symbols_b) || "無"}`, size: "sm", wrap: true });
-    body.push({ type: "text", text: `台股 C：${lineStockNames(item.mapped_symbols_c) || "無"}`, size: "sm", wrap: true });
   });
   if (!body.length) body.push({ type: "text", text: "今日無正漲幅優先觀察標的", size: "sm", color: "#777777", wrap: true });
   return {
@@ -529,6 +528,8 @@ async function syncTerminalBriefingSnapshot(tradeDate, runId) {
     }
     const payload = {
       ...briefing,
+      delivery_content_hash: readJson(path.join(RECEIPT_DIR, `opening-report-0830-final-receipt-${compact}.json`))?.delivery_content_hash,
+      display_top3: readJson(path.join(RECEIPT_DIR, `opening-report-0830-final-receipt-${compact}.json`))?.display_top3,
       source: "opening_report_0830_terminal_briefing",
       updatedAt: timestamp(),
     };
@@ -629,7 +630,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   const priority = buildPriorityObservations(baseItems, usMarket);
   const items = attachPriorityObservation(baseItems, priority);
   const displayTop3 = priority.observations;
-  const deliveryContentHash = crypto.createHash("sha256").update(JSON.stringify({ mode: priority.mode, observations: displayTop3.map((row) => ({ rank: row.rank, industry: row.industry, overseas_symbol: row.overseas_symbol || null, percent: row.percent })) })).digest("hex");
+  const deliveryContentHash = contentHash(priority.mode, displayTop3);
+  if (reuseLineReceipt && !validateReuse(readJson(path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`)), runId, deliveryContentHash)) throw new Error("line_reuse_run_or_content_mismatch");
   const reportPath = path.join(RECEIPT_DIR, `opening-report-0830-${compact}.md`);
   const overseasPath = path.join(RECEIPT_DIR, `overseas-preflight-${compact}.json`);
   const finalPath = path.join(RECEIPT_DIR, `opening-report-0830-final-receipt-${compact}.json`);
@@ -637,6 +639,20 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   fs.writeFileSync(reportPath, markdownReport({ tradeDate, runId, overseasPreflight, priority }), "utf8");
   writeJson(overseasPath, overseasPreflight);
   const bridgeResults = [];
+  const lineReceiptPath = path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`);
+  const lineReceipt = isolatedBacktest
+    ? { line_push_attempted: false, line_push_ok: true, simulated: true, reason_code: "isolated_line_flex_payload_pass", target_count: 2, delivered_count: 2, has_user_target: true, has_group_target: true, token_logged: false, target_logged: false }
+    : reuseLineReceipt
+    ? readJson(lineReceiptPath)
+    : await pushLine({ cardText: lineReportText(tradeDate, displayTop3, usMarket), flexCard: lineReportFlex(tradeDate, displayTop3, usMarket), runId, dryRun: dryRunLine });
+  if (!reuseLineReceipt) Object.assign(lineReceipt, {
+    ok: lineReceipt?.line_push_ok === true,
+    run_id: runId,
+    report_run_id: runId,
+    delivery_content_hash: deliveryContentHash,
+  });
+  if (!reuseLineReceipt) writeJson(lineReceiptPath, lineReceipt);
+  const lineDeliveryOk = lineReceipt?.line_push_ok === true && (!reuseLineReceipt || String(lineReceipt?.report_run_id || lineReceipt?.run_id || "") === runId);
   if (applyBridge && !mock) await waitUntilTaipeiMinute(8 * 60 + 35);
   for (const item of items) {
     const inputPath = path.join(STATE_DIR, `opening_report_0830.industry_bias.${item.industry}.json`);
@@ -647,20 +663,6 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     else if (applyBridge && top3) bridgeResults.push({ industry: item.industry, priority_observation_rank: item.priority_observation_rank, priority_observation_basis: item.priority_observation_basis, inputPath, receiptPath, result: runBridge(inputPath, receiptPath, tradeDate) });
     else bridgeResults.push({ industry: item.industry, priority_observation_rank: item.priority_observation_rank, priority_observation_basis: item.priority_observation_basis, inputPath, receiptPath, skipped: true, reason_code: top3 ? "bridge_apply_not_requested" : "not_priority_observation_top3_bridge_skip" });
   }
-  const lineReceiptPath = path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`);
-  const lineReceipt = isolatedBacktest
-    ? { line_push_attempted: false, line_push_ok: true, simulated: true, reason_code: "isolated_line_flex_payload_pass", target_count: 2, delivered_count: 2, has_user_target: true, has_group_target: true, token_logged: false, target_logged: false }
-    : reuseLineReceipt
-    ? readJson(lineReceiptPath)
-    : await pushLine({ cardText: lineReportText(tradeDate, displayTop3, usMarket), flexCard: lineReportFlex(tradeDate, displayTop3, usMarket), runId, dryRun: dryRunLine });
-  Object.assign(lineReceipt, {
-    ok: lineReceipt?.line_push_ok === true,
-    run_id: runId,
-    report_run_id: runId,
-    delivery_content_hash: deliveryContentHash,
-  });
-  writeJson(lineReceiptPath, lineReceipt);
-  const lineDeliveryOk = lineReceipt?.line_push_ok === true && (!reuseLineReceipt || String(lineReceipt?.report_run_id || lineReceipt?.run_id || "") === runId);
   const eligibleBridgeResults = bridgeResults.filter((row) => Number(row.priority_observation_rank) >= 1 && Number(row.priority_observation_rank) <= 3);
   const successfulBridgeCount = eligibleBridgeResults.filter((row) => row.result?.exitCode === 0).length;
   const bridgeAggregatePath = path.join(RECEIPT_DIR, `opening-report-0830-bridge-aggregate-${compact}.json`);
@@ -679,8 +681,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     checked_at: timestamp(),
   };
   writeJson(bridgeAggregatePath, bridgeAggregate);
-  const motherPoolFieldAckRun = runMotherPoolFieldAck(tradeDate, runId, bridgeAggregatePath, isolatedBacktest);
-  const motherPoolFieldAck = motherPoolFieldAckRun.receipt || { ok: false, complete: false, first_blocker: "mother_pool_field_ack_output_invalid" };
+  const motherPoolHandoffAckRun = runMotherPoolHandoffAck(tradeDate, runId, bridgeAggregatePath, isolatedBacktest);
+  const motherPoolHandoffAck = motherPoolHandoffAckRun.receipt || { ok: false, complete: false, first_blocker: "mother_pool_handoff_ack_output_invalid" };
   const final = {
     contract: "opening-report-0830-production-v1",
     ok: overseasPreflight.ok && Boolean(reportPath) && lineDeliveryOk,
@@ -711,9 +713,11 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     line_push_receipt: lineReceiptPath,
     bridge_results: bridgeResults.map((row) => ({ industry: row.industry, priority_observation_rank: row.priority_observation_rank ?? null, priority_observation_basis: row.priority_observation_basis || "", inputPath: row.inputPath, receiptPath: row.receiptPath, skipped: row.skipped === true, exitCode: row.result?.exitCode ?? null, reason_code: row.reason_code || "" })),
     bridge_aggregate_receipt: bridgeAggregatePath,
-    mother_pool_field_ack_receipt: motherPoolFieldAck.receipt_path || null,
-    mother_pool_field_ack: motherPoolFieldAck,
-    mother_pool_field_ack_ok: motherPoolFieldAckRun.exitCode === 0 && motherPoolFieldAck.ok === true,
+    mother_pool_handoff_ack_receipt: motherPoolHandoffAck.receipt_path || null,
+    mother_pool_handoff_ack: motherPoolHandoffAck,
+    mother_pool_handoff_ack_ok: motherPoolHandoffAckRun.exitCode === 0 && motherPoolHandoffAck.ok === true,
+    mother_pool_persistence_ack_receipt: null,
+    mother_pool_persistence_ack_ok: false,
     checked_at: timestamp()
   };
   writeJson(finalPath, final);
@@ -729,14 +733,16 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   final.positive_industry_count = positiveIndustryRows.length;
   final.priority_observation_contract_ok = priorityObservationContractOk;
   final.priority_observation_count = displayTop3.length;
-  final.complete = final.ok === true && final.expected_industry_count === 15 && final.scanned_industry_count === final.expected_industry_count && final.mother_pool_bridge_ok === true && final.mother_pool_field_ack_ok === true && final.line_push_ok === true && terminalBriefingSnapshot.ok === true && final.positive_top3_contract_ok === true && priorityObservationContractOk;
-  final.status = final.complete ? "complete" : "fail_closed";
-  final.report_status = final.complete ? "COMPLETE" : "FAIL_CLOSED";
-  final.exitCode = final.complete ? 0 : 1;
-  final.first_blocker = final.complete ? null : (!final.mother_pool_bridge_ok ? "mother_pool_bridge_not_complete" : !final.mother_pool_field_ack_ok ? (motherPoolFieldAck.first_blocker || "mother_pool_field_ack_not_complete") : !final.line_push_ok ? "line_delivery_not_complete" : terminalBriefingSnapshot.ok !== true ? "terminal_snapshot_not_complete" : !priorityObservationContractOk ? "priority_observation_top3_invalid" : "opening_report_not_complete");
+  const runnerComplete = final.ok === true && final.expected_industry_count === 15 && final.scanned_industry_count === final.expected_industry_count && final.mother_pool_bridge_ok === true && final.mother_pool_handoff_ack_ok === true && final.line_push_ok === true && terminalBriefingSnapshot.ok === true && final.positive_top3_contract_ok === true && priorityObservationContractOk;
+  final.runner_complete = runnerComplete;
+  final.complete = false;
+  final.status = runnerComplete ? "waiting_persistence_ack" : "fail_closed";
+  final.report_status = runnerComplete ? "WAITING_PERSISTENCE_ACK" : "FAIL_CLOSED";
+  final.exitCode = runnerComplete ? 0 : 1;
+  final.first_blocker = runnerComplete ? "mother_pool_persistence_ack_pending" : (!final.mother_pool_bridge_ok ? "mother_pool_bridge_not_complete" : !final.mother_pool_handoff_ack_ok ? (motherPoolHandoffAck.first_blocker || "mother_pool_handoff_ack_not_complete") : !final.line_push_ok ? "line_delivery_not_complete" : terminalBriefingSnapshot.ok !== true ? "terminal_snapshot_not_complete" : !priorityObservationContractOk ? "priority_observation_top3_invalid" : "opening_report_not_complete");
   writeJson(finalPath, final);
   console.log(JSON.stringify({ ok: final.ok, final_receipt: finalPath, report_path: reportPath, run_id: runId, report_status: final.report_status, terminal_briefing_snapshot_ok: terminalBriefingSnapshot.ok === true }, null, 2));
-  if (!final.complete) process.exitCode = 1;
+  if (!runnerComplete) process.exitCode = 1;
 }
 
 main().catch((error) => {
