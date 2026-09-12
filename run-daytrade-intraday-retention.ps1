@@ -19,7 +19,7 @@ $nodeCandidates = @(@(
 
 if ($Apply) {
   . (Join-Path $root "schedule-guard.ps1")
-  Invoke-FumanWeekdayGuard -Label "Daytrade intraday retention"
+  Invoke-FumanWeekdayGuard -Label "Daytrade intraday retention" -AllowAfterFormalSourceWindow
 }
 
 try {

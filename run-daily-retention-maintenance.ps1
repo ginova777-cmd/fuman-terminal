@@ -6,7 +6,7 @@ $node = (Get-Command node -ErrorAction Stop).Source
 $suffix = if ($Apply) { @('--apply', '--json') } else { @('--json') }
 if ($Apply) {
   . (Join-Path $root 'schedule-guard.ps1')
-  Invoke-FumanWeekdayGuard -Label "Daily retention maintenance"
+  Invoke-FumanWeekdayGuard -Label "Daily retention maintenance" -AllowAfterFormalSourceWindow
 }
 
 & $node (Join-Path $root 'scripts\cleanup-runtime-retention.js') @suffix

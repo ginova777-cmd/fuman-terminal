@@ -14,9 +14,11 @@ if (-not (Test-Path -LiteralPath $script)) {
 }
 if ($Apply) {
   . (Join-Path $root "schedule-guard.ps1")
-  Invoke-FumanWeekdayGuard -Label "Supabase Vercel history cleanup"
+  Invoke-FumanWeekdayGuard -Label "Supabase Vercel history cleanup" -AllowAfterFormalSourceWindow
 }
 
+# The formal cleanup includes preview deployment retention through the installed authenticated CLI.
+$env:FUMAN_HISTORY_CLEANUP_ENABLE_VERCEL_CLI = "1"
 $argsList = @("--use-system-ca", $script)
 if ($Apply) { $argsList += "--apply" } else { $argsList += "--dry-run" }
 if ($SkipSupabase) { $argsList += "--skip-supabase" }

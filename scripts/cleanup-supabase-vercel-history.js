@@ -213,7 +213,7 @@ async function cleanupSnapshotTable(config, args) {
 }
 
 async function fetchRunRows(config, limit = 5000, includeStrategy = true) {
-  const select = `run_id,strategy,status,complete,${config.dateColumn},updated_at,finished_at,started_at`;
+  const select = `run_id,strategy,status,complete,${config.dateColumn}`;
   const filters = [
     `select=${encodeURIComponent(select)}`,
     includeStrategy && config.strategy ? `strategy=eq.${encodeURIComponent(config.strategy)}` : "",
@@ -240,6 +240,9 @@ async function cleanupRunPair(config, args) {
     rows = await fetchRunRows(config, 5000, false);
   }
   const keepIds = new Set(rows.slice(0, keepRuns).map((row) => row.run_id));
+  const latestComplete = rows.find(row => row.complete === true && row.status === "complete");
+  if (latestComplete) keepIds.add(latestComplete.run_id);
+  if (rows.length && !latestComplete) throw new Error(config.key + ": latest_complete_protection_unproven");
   const candidates = rows
     .filter((row) => !keepIds.has(row.run_id))
     .filter((row) => {
@@ -413,6 +416,8 @@ async function cleanupVercelDeployments(args) {
       && createdAt > 0
       && createdAt < cutoffMs
       && item.state !== "BUILDING"
+      && item.target === "preview"
+      && aliases.length === 0
       && !aliases.includes(productionHost);
   });
   const deleted = [];
