@@ -13,6 +13,9 @@ const receiptDir = path.join(runtimeRoot, "data", "scan-receipts");
 const baseUrl = (process.env.FUMAN_AUDIT_BASE_URL || "https://fuman-terminal.vercel.app").replace(/\/+$/, "");
 const slot = String(process.argv.find((arg) => arg.startsWith("--slot=")) || "").split("=")[1] || "";
 const onlyKey = String(process.argv.find((arg) => arg.startsWith("--only=")) || "").split("=")[1] || "";
+const targetTradeDate = String(process.argv.find((arg) => arg.startsWith("--trade-date=")) || "").split("=")[1]
+  || process.env.FUMAN_SCORECARD_TRADE_DATE
+  || "";
 const slots = {
   "12:40": ["strategy2"],
   "13:15": ["strategy3"],
@@ -79,7 +82,7 @@ async function main() {
     const mobileRunId = attr(mobile.text, "run-id");
     const desktopCount = number(desktop?.resultCount ?? desktop?.count ?? desktop?.payload?.resultCount ?? desktop?.payload?.count);
     const mobileCount = number(attr(mobile.text, "result-count"));
-    const expectedDate = compact(taipeiDate());
+    const expectedDate = compact(targetTradeDate || taipeiDate());
     const desktopDate = compact(desktop?.tradeDate || desktop?.dataDate || desktop?.date || "") || runDate(desktopRunId);
     const mobileDate = compact(attr(mobile.text, "trade-date") || attr(mobile.text, "data-date") || "") || runDate(mobileRunId);
     const sameRunId = Boolean(desktopRunId) && desktopRunId === mobileRunId;
@@ -90,7 +93,7 @@ async function main() {
       key,
       ok,
       status: ok ? "PASS" : "BLOCKED",
-      tradeDate: taipeiDate(),
+      tradeDate: targetTradeDate || taipeiDate(),
       desktopStatus: bundle.status === 200 && desktopRunId ? "PASS" : "BLOCKED",
       mobileStatus: mobile.status === 200 && mobileRunId ? "PASS" : "BLOCKED",
       desktopRunId,
@@ -102,7 +105,7 @@ async function main() {
       firstBlocker: ok ? "" : !credential.ok ? credential.reason : !desktopRunId ? "desktop_run_id_missing" : !mobileRunId ? "authenticated_mobile_run_id_missing" : !sameRunId ? "desktop_mobile_run_id_mismatch" : !sameCount ? "desktop_mobile_result_count_mismatch" : "desktop_mobile_trade_date_not_today",
     });
   }
-  const todayKey = compact(taipeiDate());
+  const todayKey = compact(targetTradeDate || taipeiDate());
   const output = path.join(receiptDir, `scorecard88-surface-evidence-${todayKey}-${slot.replace(":", "")}.json`);
   const report = {
     ok: rows.every((row) => row.ok),
@@ -110,7 +113,7 @@ async function main() {
     contract: "scorecard88-terminal-surface-evidence-v1",
     slot,
     scope: onlyKey || "all",
-    tradeDate: taipeiDate(),
+    tradeDate: targetTradeDate || taipeiDate(),
     checkedAt: new Date().toISOString(),
     readOnly: true,
     querySupabase: false,

@@ -10,6 +10,9 @@ const CURRENT_FILE = path.join(RUNTIME_ROOT, "data", "scorecard-terminal-current
 const CONTRACT_ONLY = process.argv.includes("--contract-only");
 const slotArg = process.argv.find((value) => value.startsWith("--slot="));
 const slot = String(slotArg || "").slice("--slot=".length);
+const targetTradeDate = String(process.argv.find((value) => value.startsWith("--trade-date=")) || "").slice("--trade-date=".length)
+  || process.env.FUMAN_SCORECARD_TRADE_DATE
+  || "";
 const allowedSlots = new Set(["12:40", "13:15", "17:00", "21:40"]);
 
 function taipeiDate() {
@@ -19,6 +22,7 @@ function taipeiDate() {
 }
 
 function compactDate(value) { return String(value || "").replace(/\D/g, ""); }
+const expectedTradeDate = targetTradeDate || taipeiDate();
 function readJson(file) { return JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, "")); }
 function exists(relative) { return fs.existsSync(path.join(ROOT, relative)); }
 
@@ -42,7 +46,7 @@ let current = null;
 let receiptFile = "";
 if (!CONTRACT_ONLY) {
   if (!allowedSlots.has(slot)) issues.push(`invalid_slot:${slot || "missing"}`);
-  receiptFile = path.join(RECEIPT_DIR, `scorecard88-collection-${compactDate(taipeiDate())}-${slot.replace(":", "")}.json`);
+  receiptFile = path.join(RECEIPT_DIR, `scorecard88-collection-${compactDate(expectedTradeDate)}-${slot.replace(":", "")}.json`);
   try { receipt = readJson(receiptFile); } catch { issues.push("collection_receipt_missing_or_unreadable"); }
   try { current = readJson(CURRENT_FILE); } catch { issues.push("scorecard_current_missing_or_unreadable"); }
   if (receipt) {
@@ -55,7 +59,7 @@ if (!CONTRACT_ONLY) {
     if (reports.some((row) => row.desktopRunId !== row.runId || row.mobileRunId !== row.runId)) issues.push("collection_report_run_id_mismatch");
   }
   if (receipt && current) {
-    if (String(current.latestDate || current.tradeDate || current.trade_date || "") !== taipeiDate()) issues.push("scorecard_current_trade_date_mismatch");
+    if (String(current.latestDate || current.tradeDate || current.trade_date || "") !== expectedTradeDate) issues.push("scorecard_current_trade_date_mismatch");
     if (current.ok !== true) issues.push("scorecard_current_not_complete");
   }
 }
@@ -66,7 +70,7 @@ const verifierReceipt = {
   ok,
   status: ok ? "PASS" : "BLOCKED",
   checkedAt: new Date().toISOString(),
-  tradeDate: taipeiDate(),
+  tradeDate: expectedTradeDate,
   slot: slot || null,
   contractOnly: CONTRACT_ONLY,
   collectionReceipt: receiptFile || null,
@@ -77,7 +81,7 @@ const verifierReceipt = {
 
 if (!CONTRACT_ONLY && allowedSlots.has(slot)) {
   fs.mkdirSync(RECEIPT_DIR, { recursive: true });
-  fs.writeFileSync(path.join(RECEIPT_DIR, `scorecard88-verifier-${compactDate(taipeiDate())}-${slot.replace(":", "")}.json`), `${JSON.stringify(verifierReceipt, null, 2)}\n`, "utf8");
+  fs.writeFileSync(path.join(RECEIPT_DIR, `scorecard88-verifier-${compactDate(expectedTradeDate)}-${slot.replace(":", "")}.json`), `${JSON.stringify(verifierReceipt, null, 2)}\n`, "utf8");
 }
 console.log(JSON.stringify(verifierReceipt, null, 2));
 process.exit(ok ? 0 : 3);

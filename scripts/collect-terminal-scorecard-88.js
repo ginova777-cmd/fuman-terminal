@@ -14,6 +14,7 @@ const slot = String(process.argv.find((arg) => arg.startsWith("--slot=")) || "")
 const recovery = process.argv.includes("--recovery");
 const expectedRunId = String(process.argv.find((arg) => arg.startsWith("--expected-run-id=")) || "").split("=")[1] || "";
 const recoveryReason = String(process.argv.find((arg) => arg.startsWith("--recovery-reason=")) || "").split("=")[1] || "";
+const requestedTradeDate = process.env.FUMAN_SCORECARD_TRADE_DATE || '';
 const slots = {
   "12:40": ["strategy2"],
   "13:15": ["strategy3"],
@@ -72,6 +73,7 @@ function taipeiDate() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 function compactDate(value) { return String(value || "").replace(/\D/g, "").slice(0, 8); }
+const collectionDate = requestedTradeDate || taipeiDate();
 function runDate(runId) { return (String(runId || "").match(/20\d{6}/) || [""])[0]; }
 function num(...values) {
   for (const value of values) if (Number.isFinite(Number(value))) return Number(value);
@@ -85,9 +87,9 @@ function boolean(value, fallback = false) {
   return typeof value === "boolean" ? value : fallback;
 }
 function surfaceEvidence(key) {
-  const file = path.join(receiptDir, `scorecard88-surface-evidence-${compactDate(taipeiDate())}-${slot.replace(":", "")}.json`);
+  const file = path.join(receiptDir, `scorecard88-surface-evidence-${compactDate(collectionDate)}-${slot.replace(":", "")}.json`);
   const report = readJson(file);
-  if (!report || report.contract !== "scorecard88-terminal-surface-evidence-v1" || report.slot !== slot || compactDate(report.tradeDate) !== compactDate(taipeiDate())) return null;
+  if (!report || report.contract !== "scorecard88-terminal-surface-evidence-v1" || report.slot !== slot || compactDate(report.tradeDate) !== compactDate(collectionDate)) return null;
   return Array.isArray(report.rows) ? report.rows.find((row) => row?.key === key) || null : null;
 }
 function canonicalReceipt(key) {
@@ -132,11 +134,11 @@ function canonicalFromDesktop(key, desktop) {
   const mobileRunId = text(surface?.mobileRunId);
   const surfaceMatches = surface?.ok === true && desktopStatus === "PASS" && mobileStatus === "PASS" && desktopRunId === runId && mobileRunId === runId;
   return {
-    key, strategy: key, runId, tradeDate: taipeiDate(), date: taipeiDate(),
-    sourceDate: text(detail.sourceDate, detail.source_date, detail.scanDate, detail.scan_date, taipeiDate()),
+    key, strategy: key, runId, tradeDate: collectionDate, date: collectionDate,
+    sourceDate: key === 'institution' ? compactDate(detail.institution_source_status_at_run?.usedDate || detail.institution_source_status_at_run?.latestTradeDate).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : text(detail.sourceDate, detail.source_date, detail.scanDate, detail.scan_date, taipeiDate()),
     startedAt: text(detail.startedAt, detail.started_at, scan.startedAt, scan.started_at),
     finishedAt: text(detail.finishedAt, detail.finished_at, detail.checkedAt, detail.checked_at, summary.updatedAt, desktop.updatedAt),
-    universeCount: num(detail.universeCount, detail.universe_count, detail.expectedTotal, detail.expected_total, scan.universeCount, scan.expectedTotal),
+    universeCount: num(detail.universeCount, detail.universe_count, detail.expectedTotal, detail.expected_total, scan.universeCount, scan.expectedTotal, key === 'institution' ? detail.total : undefined),
     scannedCount: fullScannedCount, resultCount: fullResultCount, count: fullResultCount,
     qualityStatus: text(detail.qualityStatus, detail.quality_status, detail.published?.qualityStatus) || (receiptComplete ? "complete" : "blocked"),
     evidenceStatus: text(detail.evidenceStatus, detail.evidence_status) || (receiptComplete ? "complete" : "blocked"),
@@ -202,13 +204,13 @@ const recoveryKey = /^institution-\d{8}-\d{14}$/.test(expectedRunId) ? "institut
     : /^strategy3v2-(?:recovery-replay-)?\d{8}-\d{14}$/.test(expectedRunId) ? "strategy3"
       : "";
 const recoveryRunAllowed = Boolean(recoveryKey && slots[slot].includes(recoveryKey));
-const recoveryAuthorized = recovery && recoveryRunAllowed && runDate(expectedRunId) === compactDate(taipeiDate()) && recoveryReason.length >= 8;
+const recoveryAuthorized = recovery && recoveryRunAllowed && runDate(expectedRunId) === compactDate(collectionDate) && recoveryReason.length >= 8;
 if (!collectionWindow.allowed && !recoveryAuthorized) {
   console.error(JSON.stringify({ ok: false, status: "FAIL_CLOSED", reason: "outside_fixed_collection_window", slot, writeAllowed: false, blobPublishAllowed: false, collectionWindow }));
   process.exit(6);
 }
 
-const today = taipeiDate();
+const today = collectionDate;
 const todayKey = compactDate(today);
 const desktopFile = path.join(receiptDir, "desktop-route-snapshot.json");
 const desktop = readJson(desktopFile);
