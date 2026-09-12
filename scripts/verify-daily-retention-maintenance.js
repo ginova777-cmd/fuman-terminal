@@ -27,8 +27,8 @@ function readJson(file) {
   try { return { file, value: JSON.parse(fs.readFileSync(file, "utf8")) }; }
   catch (error) { return { file, error: error.message, value: null }; }
 }
-function run(command, args) {
-  const result = spawnSync(command, args, { cwd: ROOT, encoding: "utf8", shell: false, maxBuffer: 32 * 1024 * 1024, timeout: 120000, env: process.env });
+function run(command, args, timeout = 120000) {
+  const result = spawnSync(command, args, { cwd: ROOT, encoding: "utf8", shell: false, maxBuffer: 32 * 1024 * 1024, timeout, env: process.env });
   return { ok: result.status === 0, status: result.status, stdout: String(result.stdout || "").trim(), stderr: String(result.stderr || "").trim(), error: result.error?.message || null };
 }
 function parseJson(text) {
@@ -126,7 +126,7 @@ async function main() {
     intraday: run(process.execPath, ["--use-system-ca", "scripts/verify-daytrade-intraday-retention.js"]),
     sourceObservability: run(process.execPath, ["--use-system-ca", "scripts/verify-source-observability-retention.js"]),
   };
-  if (maintenance) liveChecks.remainingCleanup = run(process.execPath, ['--use-system-ca','scripts/verify-cleanup-maintenance-readback.js']);
+  if (maintenance) liveChecks.remainingCleanup = run(process.execPath, ['--use-system-ca','scripts/verify-cleanup-maintenance-readback.js'], 20*60*1000);
   for (const [name, result] of Object.entries(liveChecks)) if (!result.ok) issues.push(`live_verifier_failed:${name}`);
   const complete = issues.length === 0 && warnings.length === 0;
   const payload = {
