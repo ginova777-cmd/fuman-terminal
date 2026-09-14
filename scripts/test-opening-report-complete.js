@@ -59,18 +59,18 @@ console.log(JSON.stringify({ok:true,morning_waits_for_matching_rendered_batch:tr
   const source=fs.readFileSync(path.join(__dirname,"verify-opening-report-morning-contract.js"),"utf8");
   const code=source.slice(source.indexOf("async function liveDeliveryChecks("),source.indexOf("function writeReceipt("));
   let renderedCalled=false;
-  const checks=[],ctx={path,REPORT_DIR:"fixture",compactDate:x=>x.replace(/-/g,""),readJson:()=>({run_id:"fixture",display_top3:[],delivery_content_hash:"fixture"}),renderedDeliveryChecks:items=>{renderedCalled=true;items.push({name:"missing_rendered_receipt",ok:false});},addCheck:(items,name,ok)=>items.push({name,ok}),require:name=>name.includes("delivery-contract")?{contentHash:()=>"fixture"}:{readSnapshot:async()=>null}};
+  const checks=[],ctx={morningRecovery:require("../lib/opening-report-recovery"),path,REPORT_DIR:"fixture",compactDate:x=>x.replace(/-/g,""),readJson:()=>({run_id:"fixture",display_top3:[],delivery_content_hash:"fixture"}),renderedDeliveryChecks:items=>{renderedCalled=true;items.push({name:"missing_rendered_receipt",ok:false});},addCheck:(items,name,ok)=>items.push({name,ok}),require:name=>name.includes("night-futures")?require("../lib/opening-report-night-futures"):name==="util"?require("util"):name.includes("delivery-contract")?{contentHash:()=>"fixture"}:{readSnapshot:async()=>null}};
   vm.createContext(ctx);vm.runInContext(code+"\nthis.verifyLive=liveDeliveryChecks",ctx);await ctx.verifyLive(checks,"2026-09-14");
   assert.equal(renderedCalled,true);assert.ok(checks.some(x=>x.name==="missing_rendered_receipt"&&!x.ok));
   const renderedCode=source.slice(source.indexOf("function renderedDeliveryChecks("),source.indexOf("async function liveDeliveryChecks("));
   const missing=[],negative={path,REPORT_DIR:"fixture",compactDate:x=>x.replace(/-/g,""),readJson:()=>{throw Error("ENOENT");},addCheck:(items,name,ok)=>items.push({name,ok}),require:()=>({expectedRows:()=>[]})};
   vm.createContext(negative);vm.runInContext(renderedCode+"\nthis.verifyRendered=renderedDeliveryChecks",negative);negative.verifyRendered(missing,"2099-01-01",{run_id:"missing",display_top3:[]});
-  assert.equal(missing.length,5);assert.ok(missing.every(x=>!x.ok));
+  assert.equal(missing.length,6);assert.ok(missing.every(x=>!x.ok));
   console.log(JSON.stringify({ok:true,canonical_requires_rendered_evidence:true}));
 })().catch(error=>{console.error(error);process.exitCode=1;});
 
 const markdownSource=fs.readFileSync(path.join(__dirname,"run-opening-report-0830-production.js"),"utf8");
-const markdownFn=vm.runInNewContext("("+markdownSource.match(/function markdownReport[\s\S]*?\n}\r?\n/)[0]+")", {morningRecovery:require("../lib/opening-report-recovery")});
+const markdownFn=vm.runInNewContext("("+markdownSource.match(/function markdownReport[\s\S]*?\n}\r?\n/)[0]+")", {morningRecovery:require("../lib/opening-report-recovery"),nightSource:require("../lib/opening-report-night-futures")});
 const markdown=markdownFn({tradeDate:date,runId:run,overseasPreflight:{ok:true},priority:{mode:"positive_industry_top3",observations:[{rank:1,display_name:"測試",percent:1,mapped_symbols_a:[{symbol:"2330",name:"台積電"}],mapped_symbols_b:[{symbol:"2308",name:"台達電"}]}]}});
 assert.ok(markdown.includes("台積電（2330）")&&markdown.includes("台達電（2308）"));
 console.log(JSON.stringify({ok:true,markdown_full_names_and_symbols:true}));

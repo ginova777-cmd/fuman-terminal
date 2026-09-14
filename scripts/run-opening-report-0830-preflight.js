@@ -77,7 +77,8 @@ async function main() {
     : { status: 2, stdout: "", stderr: calendarAllowsPreflight ? "outside_0830_preflight_window" : "market_calendar_non_trading_day" };
   const frozenMarketSnapshotPath = path.join(RECEIPT_DIR, `opening-report-0830-market-snapshot-${compact}.json`);
   const frozenMarketSnapshot = readJson(frozenMarketSnapshotPath);
-  const marketSnapshotOk = shouldRunDetector && marketSnapshotRunner.status === 0
+  const nightIssues = require("../lib/opening-report-night-futures").verify(frozenMarketSnapshot?.night_futures,{date:tradeDate,runId,cutoff:morningRecovery.cutoff(tradeDate)});
+  const marketSnapshotOk = shouldRunDetector && marketSnapshotRunner.status === 0 && nightIssues.length === 0
     && String(frozenMarketSnapshot?.date || "").replace(/\D/g, "") === compact
     && String(frozenMarketSnapshot?.cutoff || "") === morningRecovery.label(tradeDate)
     && Array.isArray(frozenMarketSnapshot?.items) && frozenMarketSnapshot.items.length >= 4;
@@ -111,6 +112,8 @@ async function main() {
     market_snapshot_stderr_tail: String(marketSnapshotRunner.stderr || "").slice(-2000),
     frozen_market_snapshot_receipt: frozenMarketSnapshotPath,
     frozen_market_snapshot_ok: marketSnapshotOk,
+    night_futures_ok: nightIssues.length === 0,
+    night_futures_issues: nightIssues,
     overseas_detector_receipt: detectorPath,
     preserved_overseas_detector_receipt: preservedDetectorPath,
     overseas_detector_ok: shouldRunDetector && detectorReceipt?.ok === true && !detectorHasStalePromotion,

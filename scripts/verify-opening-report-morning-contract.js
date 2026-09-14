@@ -199,6 +199,9 @@ function symbolMapChecks(checks) {
 }
 
 function staticContractChecks(checks) {
+  const nightTests=run("node",["scripts/test-opening-report-night-futures.js"]);
+  addCheck(checks,"night_futures_source_contract_tests",nightTests.ok,nightTests.text.trim());
+  addCheck(checks,"night_futures_runner_gate_wired",readText("scripts/run-opening-report-0830-production.js").includes("night_futures_required:") && readText("scripts/run-opening-report-0830-preflight.js").includes("nightIssues.length === 0"),"night source mandatory before delivery");
   const pkg = readJson(path.join(ROOT, "package.json"));
   addCheck(checks, "single_morning_verifier_package_entry", pkg.scripts && pkg.scripts["verify:opening-report-morning-contract"] === SINGLE_VERIFIER_CMD, pkg.scripts && pkg.scripts["verify:opening-report-morning-contract"]);
   for (const alias of RETIRED_ALIASES) {
@@ -454,6 +457,7 @@ function renderedDeliveryChecks(checks, tradeDate, final) {
   addCheck(checks,"current_rendered_receipt_fresh",age>=0 && age<30*60*1000,"rendered evidence within 30 minutes");
   const rows=receipt?.results||[];
   addCheck(checks,"current_rendered_surfaces",["desktop","mobile-portrait","mobile-landscape"].every(surface=>rows.some(row=>row.surface===surface && row.ok===true && row.run_id===final.run_id && row.hash===final.delivery_content_hash && row.screenshot && exists(row.screenshot) && require("crypto").createHash("sha256").update(fs.readFileSync(row.screenshot)).digest("hex")===row.screenshot_sha256)),"actual rendered surfaces and original screenshots");
+  addCheck(checks,"current_rendered_night_futures",rows.length===3 && rows.every(row=>row.night_text===require("../lib/opening-report-night-futures").summary(final.night_futures) && row.night_visible===true),"night futures visible on all three layouts");
   const expected=require("./verify-opening-report-rendered").expectedRows(final).map(row=>({...row,percent:Number(row.percent.toFixed(2))}));
   const actualRows=row=>(row.rows||[]).map(item=>({...item,a:(item.a||[]).map(({symbol,name})=>({symbol,name})),b:(item.b||[]).map(({symbol,name})=>({symbol,name}))}));
   addCheck(checks,"current_rendered_full_A_B",rows.length===3 && rows.every(row=>JSON.stringify(actualRows(row))===JSON.stringify(expected) && row.industryCount===15 && (expected.length>0||row.zero===true)),"independent full A/B comparison against runner");
@@ -465,14 +469,20 @@ async function liveDeliveryChecks(checks, tradeDate) {
   const final = readJson(finalPath);
   if (!final) return;
   renderedDeliveryChecks(checks, tradeDate, final);
+  const nightModule=require("../lib/opening-report-night-futures");
+  const nightIssues=nightModule.verify(final.night_futures,{date:tradeDate,runId:final.run_id,cutoff:morningRecovery.cutoff(tradeDate)});
+  addCheck(checks,"current_night_futures_source",nightIssues.length===0,JSON.stringify(nightIssues));
+  const frozen=readJson(path.join(REPORT_DIR,"opening-report-0830-market-snapshot-"+compactDate(tradeDate)+".json"));
+  const line=readJson(path.join(REPORT_DIR,"line-push-receipt-"+compactDate(tradeDate)+".json"));
+  addCheck(checks,"current_night_futures_frozen_line_identity", require("util").isDeepStrictEqual(frozen?.night_futures,final.night_futures) && require("util").isDeepStrictEqual(line?.night_futures,final.night_futures) && line?.night_futures_summary===nightModule.summary(final.night_futures),"same frozen evidence and actual LINE content hash");
   const {contentHash} = require("../lib/opening-report-delivery-contract");
-  const expectedHash = contentHash(final.priority_observation_mode, final.display_top3 || []);
+  const expectedHash = contentHash(final.priority_observation_mode, final.display_top3 || [], final.night_futures);
   addCheck(checks,"current_full_content_hash",final.delivery_content_hash === expectedHash,"hash includes full Top3 and A/B mappings");
   try {
     const {readSnapshot} = require("../lib/supabase-snapshots");
     const snapshot = await readSnapshot("opening_report_0830_terminal_briefing", {tradeDate,allowLatestFallback:false,timeoutMs:10000,maxAttempts:2});
     const payload=snapshot?.payload;
-    addCheck(checks,"current_terminal_db_readback",payload?.ok===true && payload.run_id===final.run_id && payload.delivery_content_hash===expectedHash && require("util").isDeepStrictEqual(payload.display_top3 || [], final.display_top3 || []) && compactDate(payload.date)===compactDate(tradeDate),JSON.stringify({run_id:payload?.run_id,date:payload?.date,hash:payload?.delivery_content_hash}));
+    addCheck(checks,"current_terminal_db_readback",payload?.ok===true && payload.run_id===final.run_id && payload.delivery_content_hash===expectedHash && require("util").isDeepStrictEqual(payload.night_futures,final.night_futures) && payload.night_futures_summary===nightModule.summary(final.night_futures) && require("util").isDeepStrictEqual(payload.display_top3 || [], final.display_top3 || []) && compactDate(payload.date)===compactDate(tradeDate),JSON.stringify({run_id:payload?.run_id,date:payload?.date,hash:payload?.delivery_content_hash}));
   } catch(error) { addCheck(checks,"current_terminal_db_readback",false,error.message); }
 }
 

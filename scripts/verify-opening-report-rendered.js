@@ -18,7 +18,7 @@ function collect() {
   const visible=el=>{const r=el.getBoundingClientRect(),s=getComputedStyle(el);return r.width>0&&r.height>0&&s.display!=="none"&&s.visibility!=="hidden";};
   const group=(row,key)=>[...row.querySelectorAll(`[data-morning-group="${key}"] [data-morning-symbol]`)].map(x=>({symbol:x.dataset.morningSymbol,name:x.dataset.morningName,visible:visible(x),text:x.innerText}));
   const rows=[...n.querySelectorAll('[data-morning-rank]')].map(row=>({rank:Number(row.dataset.morningRank),name:row.querySelector('[data-morning-title]')?.innerText,percent:Number(row.querySelector('[data-morning-percent]')?.innerText.replace('%','')),a:group(row,"A"),b:group(row,"B")}));
-  return {ok:visible(n),run_id:n.dataset.runId,date:n.dataset.tradeDate,hash:n.dataset.contentHash,state:n.dataset.openingReportState,industryCount:Number(n.querySelector('[data-morning-industry-count]')?.innerText),rows,zero:!!n.querySelector('[data-morning-zero]'),text:n.innerText,overflow:Math.max(0,document.documentElement.scrollWidth-innerWidth),url:location.href};
+  return {night_text:n.querySelector("[data-morning-night]")?.innerText,night_visible:!!n.querySelector("[data-morning-night]") && visible(n.querySelector("[data-morning-night]")),ok:visible(n),run_id:n.dataset.runId,date:n.dataset.tradeDate,hash:n.dataset.contentHash,state:n.dataset.openingReportState,industryCount:Number(n.querySelector('[data-morning-industry-count]')?.innerText),rows,zero:!!n.querySelector('[data-morning-zero]'),cutoff:n.querySelector("[data-morning-cutoff]")?.innerText,text:n.innerText,overflow:Math.max(0,document.documentElement.scrollWidth-innerWidth),url:location.href};
 }
 function readyForReport(runId) {
   const node=document.querySelector('[data-opening-report-0830-briefing]');
@@ -27,7 +27,7 @@ function readyForReport(runId) {
 async function main(){
   fs.mkdirSync(out,{recursive:true});
   const final=read(path.join(runtime,"data","opening-report-0830",`opening-report-0830-final-receipt-${compact}.json`));
-  const expected=expectedRows(final),fullHash=require("../lib/opening-report-delivery-contract").contentHash(final.priority_observation_mode,final.display_top3||[]);
+  const expected=expectedRows(final),fullHash=require("../lib/opening-report-delivery-contract").contentHash(final.priority_observation_mode,final.display_top3||[],final.night_futures);
   const results=[];let browser;
   const manifest=await fetch(base+"/api/release-manifest",{signal:AbortSignal.timeout(15000)}).then(r=>r.json());
   try{
@@ -49,7 +49,7 @@ async function main(){
         const rows=actual.rows.map(r=>({...r,a:r.a.map(({symbol,name})=>({symbol,name})),b:r.b.map(({symbol,name})=>({symbol,name}))}));
         const expectedRounded=expected.map(r=>({...r,percent:Number(r.percent.toFixed(2))}));
         const symbolsVisible=actual.rows.every(r=>[...r.a,...r.b].every(x=>x.visible&&x.text.includes(x.symbol)&&x.text.includes(x.name)));
-        const checks={rendered:actual.ok,run:actual.run_id===final.run_id,date:actual.date===date,hash:actual.hash===final.delivery_content_hash,rows:JSON.stringify(rows)===JSON.stringify(expectedRounded),allSymbolsVisible:symbolsVisible,industries:actual.industryCount===15,zero:expected.length>0||actual.zero,layout:actual.overflow<=8,state:["ready","zero","degraded"].includes(actual.state)};
+        const checks={night:actual.night_visible===true && actual.night_text===require("../lib/opening-report-night-futures").summary(final.night_futures),cutoff:actual.cutoff===require("../lib/opening-report-recovery").label(date),rendered:actual.ok,run:actual.run_id===final.run_id,date:actual.date===date,hash:actual.hash===final.delivery_content_hash,rows:JSON.stringify(rows)===JSON.stringify(expectedRounded),allSymbolsVisible:symbolsVisible,industries:actual.industryCount===15,zero:expected.length>0||actual.zero,layout:actual.overflow<=8,state:["ready","zero","degraded"].includes(actual.state)};
         actual={...actual,checks,ok:Object.values(checks).every(Boolean)};
       }catch(error){actual={ok:false,error:error.message,...(await ui.evaluate(cdp,collect).catch(()=>({})))};actual.ok=false;}
       const shot=await cdp.send("Page.captureScreenshot",{format:"png",fromSurface:true,captureBeyondViewport:true},30000).catch(()=>null);
