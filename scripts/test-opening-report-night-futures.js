@@ -10,6 +10,6 @@ const evidence={contract:m.CONTRACT,ok:true,source:m.SOURCE,source_url:m.urlFor(
 const context={date,runId,cutoff:date+'T08:50:59.999+08:00'};assert.deepEqual(m.verify(evidence,context),[]);
 for(const patch of [{close:103},{trade_date:'2026-09-11'},{session:'regular'},{run_id:'old'},{fetched_at:date+'T08:51:00+08:00'},{response_sha256:'0'.repeat(64)},{raw_receipt:raw+'.missing'},{source_url:'https://example.invalid'}])assert.ok(m.verify({...evidence,...patch},context).length);
 assert.notEqual(contentHash('mode',[],evidence),contentHash('mode',[],{...evidence,close:103}));
-assert.match(m.summary(evidence),/台指夜盤.*202609.*102.*\+2.*42/);
+assert.equal(m.summary(evidence),"台指期夜盤：+2.00%");
 fs.writeFileSync(raw,html+'tampered');assert.ok(m.verify(evidence,context).includes('night_futures_raw_hash_mismatch'));
 console.log(JSON.stringify({ok:true,night_source_contract:true,weekend_attribution:true,wrong_session_rejected:true,raw_hash_readback:true,late_capture_rejected:true,notification_hash_covers_night:true}));
