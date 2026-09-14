@@ -1,3 +1,4 @@
+const nightSource = require("../lib/opening-report-night-futures");
 const morningRecovery = require("../lib/opening-report-recovery");
 "use strict";
 
@@ -274,13 +275,14 @@ async function buildOverseasPreflight(tradeDate, runId, frozenLeaders) {
   };
 }
 
-function markdownReport({ tradeDate, runId, overseasPreflight, priority }) {
+function markdownReport({ tradeDate, runId, overseasPreflight, priority, night }) {
   const lines = [];
   lines.push(morningRecovery.context(tradeDate) ? `# Fuman 當日晨報補跑｜實際啟動 ${morningRecovery.context(tradeDate).started_at}` : `# Fuman 台股 08:50 開盤前日報`);
   lines.push("");
   lines.push(`日期：${tradeDate}`);
   lines.push(`run_id：${runId}`);
   lines.push(`資料截點：${morningRecovery.label(tradeDate)}`);
+  lines.push(nightSource.summary(night));
   lines.push("");
   lines.push("結論：晨報 15 產業觀察已完成；優先觀察名單已提供 Mother Pool priority_scan。晨報不判定盤中 Gate，也不產生正式候選。");
   lines.push("");
@@ -371,7 +373,7 @@ function lineObservationPercent(item) {
   return `${label}：+${Number(item.percent).toFixed(2)}%`;
 }
 
-function lineReportText(tradeDate, observations, usMarket) {
+function lineReportText(tradeDate, observations, usMarket, night) {
   const medals = ["🥇", "🥈", "🥉"];
   const sections = observations.map((item, index) => [
     lineObservationTitle(item, medals[index] || `${item.rank}.`),
@@ -383,12 +385,13 @@ function lineReportText(tradeDate, observations, usMarket) {
     morningRecovery.title(tradeDate),
     `${tradeDate}｜15 個產業掃描完成`,
     usMarketDisplayText(usMarket),
+    nightSource.summary(night),
     "",
     sections.length ? sections.join("\n\n") : "今日無正漲幅優先觀察標的",
   ].join("\n");
 }
 
-function lineReportFlex(tradeDate, observations, usMarket) {
+function lineReportFlex(tradeDate, observations, usMarket, night) {
   const medals = ["🥇", "🥈", "🥉"];
   const body = [];
   observations.forEach((item, index) => {
@@ -397,7 +400,8 @@ function lineReportFlex(tradeDate, observations, usMarket) {
     body.push({ type: "text", text: `台股 A：${lineStockNames(item.mapped_symbols_a) || "無"}`, size: "sm", wrap: true });
     body.push({ type: "text", text: `台股 B：${lineStockNames(item.mapped_symbols_b) || "無"}`, size: "sm", wrap: true });
   });
-  if (!body.length) body.push({ type: "text", text: "今日無正漲幅優先觀察標的", size: "sm", color: "#777777", wrap: true });
+  body.unshift({type:"text",text:nightSource.summary(night),size:"sm",wrap:true});
+  if (observations.length === 0) body.push({ type: "text", text: "今日無正漲幅優先觀察標的", size: "sm", color: "#777777", wrap: true });
   return {
     type: "bubble",
     header: { type: "box", layout: "vertical", contents: [{ type: "text", text: morningRecovery.title(tradeDate), weight: "bold", wrap: true }, { type: "text", text: `${tradeDate}｜15 個產業掃描完成`, size: "xs", color: "#777777", margin: "sm", wrap: true }, { type: "text", text: usMarketDisplayText(usMarket), size: "xs", color: "#777777", margin: "sm", wrap: true }] },
@@ -516,7 +520,7 @@ async function syncTerminalBriefingSnapshot(tradeDate, runId) {
     const briefing = marketAiLive.__test.readOpeningMorningReport({
       date: compact ? compact.slice(0, 4) + "-" + compact.slice(4, 6) + "-" + compact.slice(6, 8) : tradeDate,
       ymd: compact,
-      seconds: 8 * 60 * 60 + 30 * 60,
+      seconds: 8 * 60 * 60 + 50 * 60,
       time: "08:50:00",
     });
     if (briefing?.ok !== true) {
@@ -531,6 +535,8 @@ async function syncTerminalBriefingSnapshot(tradeDate, runId) {
       ...briefing,
       delivery_content_hash: readJson(path.join(RECEIPT_DIR, `opening-report-0830-final-receipt-${compact}.json`))?.delivery_content_hash,
       display_top3: readJson(path.join(RECEIPT_DIR, `opening-report-0830-final-receipt-${compact}.json`))?.display_top3,
+      night_futures: readJson(path.join(RECEIPT_DIR, `opening-report-0830-final-receipt-${compact}.json`))?.night_futures,
+      night_futures_summary: nightSource.summary(readJson(path.join(RECEIPT_DIR, `opening-report-0830-final-receipt-${compact}.json`))?.night_futures),
       source_cutoff: morningRecovery.label(tradeDate),
       recovery: morningRecovery.context(tradeDate),
       source: "opening_report_0830_terminal_briefing",
@@ -564,6 +570,8 @@ async function main() {
       const finalPath = path.join(RECEIPT_DIR, `opening-report-0830-final-receipt-${compact}.json`);
       const skipped = {
         contract: "opening-report-0830-production-v1",
+    source_cutoff: morningRecovery.label(tradeDate),
+    recovery: morningRecovery.context(tradeDate),
         ok: true,
         complete: false,
         status: "skipped",
@@ -590,12 +598,14 @@ async function main() {
     }
   }
   if (hasFlag("--freeze-market-snapshot")) {
+    const night = await nightSource.capture({date:tradeDate,runId,cutoff:morningRecovery.cutoff(tradeDate),directory:RECEIPT_DIR});
     const frozenLeadersPath = path.join(RECEIPT_DIR, `opening-report-0830-overseas-leaders-${compact}.json`);
     const frozenLeaders = readJson(frozenLeadersPath);
     const frozenItems = Array.isArray(frozenLeaders?.industries) ? frozenLeaders.industries : [];
     const snapshotPath = path.join(RECEIPT_DIR, `opening-report-0830-market-snapshot-${compact}.json`);
     const snapshot = {
       contract: "opening-report-0830-frozen-market-snapshot-v1",
+      night_futures: night,
       ok: frozenLeaders?.ok === true && frozenItems.length === 15,
       date: tradeDate,
       trade_date: tradeDate,
@@ -629,18 +639,22 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   const frozenLeaders = frozenLeadersReceipt(tradeDate);
   const overseasPreflight = await buildOverseasPreflight(tradeDate, runId, frozenLeaders);
   if (!mock && !overseasPreflight.ok) throw new Error("unified_0830_frozen_source_run_mismatch_or_missing");
+  const frozenMarket = readJson(path.join(RECEIPT_DIR, `opening-report-0830-market-snapshot-${compact}.json`));
+  const night = frozenMarket?.night_futures;
+  const nightIssues = nightSource.verify(night,{date:tradeDate,runId,cutoff:morningRecovery.cutoff(tradeDate)});
+  if (!mock && (frozenMarket?.run_id !== runId || nightIssues.length)) throw new Error("night_futures_required:"+nightIssues.join(";"));
   const baseItems = baseIndustryItems(tradeDate, runId, frozenLeaders);
   const usMarket = frozenLeaders?.us_market || {};
   const priority = buildPriorityObservations(baseItems, usMarket);
   const items = attachPriorityObservation(baseItems, priority);
   const displayTop3 = priority.observations;
-  const deliveryContentHash = contentHash(priority.mode, displayTop3);
+  const deliveryContentHash = contentHash(priority.mode, displayTop3, night);
   if (reuseLineReceipt && !validateReuse(readJson(path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`)), runId, deliveryContentHash)) throw new Error("line_reuse_run_or_content_mismatch");
   const reportPath = path.join(RECEIPT_DIR, `opening-report-0830-${compact}.md`);
   const overseasPath = path.join(RECEIPT_DIR, `overseas-preflight-${compact}.json`);
   const finalPath = path.join(RECEIPT_DIR, `opening-report-0830-final-receipt-${compact}.json`);
   ensureDir(reportPath);
-  fs.writeFileSync(reportPath, markdownReport({ tradeDate, runId, overseasPreflight, priority }), "utf8");
+  fs.writeFileSync(reportPath, markdownReport({ tradeDate, runId, overseasPreflight, priority, night }), "utf8");
   writeJson(overseasPath, overseasPreflight);
   const bridgeResults = [];
   const lineReceiptPath = path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`);
@@ -648,12 +662,14 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     ? { line_push_attempted: false, line_push_ok: true, simulated: true, reason_code: "isolated_line_flex_payload_pass", target_count: 2, delivered_count: 2, has_user_target: true, has_group_target: true, token_logged: false, target_logged: false }
     : reuseLineReceipt
     ? readJson(lineReceiptPath)
-    : await pushLine({ cardText: lineReportText(tradeDate, displayTop3, usMarket), flexCard: lineReportFlex(tradeDate, displayTop3, usMarket), runId, dryRun: dryRunLine });
+    : await pushLine({ cardText: lineReportText(tradeDate, displayTop3, usMarket, night), flexCard: lineReportFlex(tradeDate, displayTop3, usMarket, night), runId, dryRun: dryRunLine });
   if (!reuseLineReceipt) Object.assign(lineReceipt, {
     ok: lineReceipt?.line_push_ok === true,
     run_id: runId,
     report_run_id: runId,
     delivery_content_hash: deliveryContentHash,
+    night_futures: night,
+    night_futures_summary: nightSource.summary(night),
   });
   if (!reuseLineReceipt) writeJson(lineReceiptPath, lineReceipt);
   const lineDeliveryOk = lineReceipt?.line_push_ok === true && (!reuseLineReceipt || String(lineReceipt?.report_run_id || lineReceipt?.run_id || "") === runId);
@@ -699,6 +715,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     line_push_attempted: sendLine,
     line_push_ok: lineDeliveryOk,
     delivery_content_hash: deliveryContentHash,
+    night_futures: night,
+    night_futures_summary: nightSource.summary(night),
     line_receipt_reused: reuseLineReceipt,
     display_contract: "opening_report_priority_observation_top3_v2",
     expected_industry_count: OPENING_REPORT_0830_INDUSTRY_MAP.length,
@@ -749,7 +767,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   if (!runnerComplete) process.exitCode = 1;
 }
 
-main().catch((error) => {
+module.exports={lineReportText,lineReportFlex,markdownReport};
+if(require.main===module) main().catch((error) => {
   console.error(JSON.stringify({ ok: false, reason_code: "opening_report_0830_runner_error", error: error?.stack || error?.message || String(error) }, null, 2));
   process.exitCode = 1;
 });

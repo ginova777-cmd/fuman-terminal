@@ -1,0 +1,15 @@
+"use strict";
+const assert=require('assert/strict'),fs=require('fs'),os=require('os'),path=require('path'),crypto=require('crypto');
+const m=require('../lib/opening-report-night-futures'),{contentHash}=require('../lib/opening-report-delivery-contract');
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),'fuman-night-')),date='2026-09-14',runId='test-night';
+const html='<!--dataStart--><p>日期：2026/09/14</p>2026/09/11&nbsp;&nbsp;15:00~次日05:00 盤後交易時段行情表<table class="table_f table-sticky"><tr>'+['TX','202609','100','103','99','102','▲2','▲2.00%','42'].map(v=>'<td>'+v+'</td>').join('')+'</tr></table>';
+const parsed=m.parse(html,date);assert.equal(parsed.session_end,'2026-09-12T05:00:00+08:00');assert.equal(parsed.trade_date,date);assert.equal(parsed.close,102);
+for(const [from,to]of [['日期：2026/09/14','日期：2026/09/11'],['盤後交易時段行情表','一般交易時段行情表'],['202609','202608'],['<td>42</td>','<td>-</td>'],['<td>102</td>','<td>200</td>'],['▲2.00%','▲9.00%']])assert.throws(()=>m.parse(html.replace(from,to),date));
+const raw=path.join(dir,'raw.html');fs.writeFileSync(raw,html);
+const evidence={contract:m.CONTRACT,ok:true,source:m.SOURCE,source_url:m.urlFor(date),run_id:runId,...parsed,fetched_at:date+'T08:50:20+08:00',response_sha256:crypto.createHash('sha256').update(html).digest('hex'),raw_receipt:raw};
+const context={date,runId,cutoff:date+'T08:50:59.999+08:00'};assert.deepEqual(m.verify(evidence,context),[]);
+for(const patch of [{close:103},{trade_date:'2026-09-11'},{session:'regular'},{run_id:'old'},{fetched_at:date+'T08:51:00+08:00'},{response_sha256:'0'.repeat(64)},{raw_receipt:raw+'.missing'},{source_url:'https://example.invalid'}])assert.ok(m.verify({...evidence,...patch},context).length);
+assert.notEqual(contentHash('mode',[],evidence),contentHash('mode',[],{...evidence,close:103}));
+assert.match(m.summary(evidence),/台指夜盤.*202609.*102.*\+2.*42/);
+fs.writeFileSync(raw,html+'tampered');assert.ok(m.verify(evidence,context).includes('night_futures_raw_hash_mismatch'));
+console.log(JSON.stringify({ok:true,night_source_contract:true,weekend_attribution:true,wrong_session_rejected:true,raw_hash_readback:true,late_capture_rejected:true,notification_hash_covers_night:true}));
