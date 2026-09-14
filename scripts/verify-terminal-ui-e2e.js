@@ -1443,6 +1443,10 @@ function collectDesktopStats(route) {
     const activeButtons = currentButtons.filter((button) => button.classList.contains("active"));
     const activeKey = activeButtons[0]?.dataset?.unifiedStrategyFilter || "";
     const afterRows = rowCount();
+    if (route.key === "strategy4") {
+      const allDaily = currentButtons.find(b => /日KD\/RSI/.test(text(b)));
+      allDaily?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    }
     return {
       buttonCount: buttons.length,
       checked: true,
@@ -1674,8 +1678,8 @@ function collectDesktopStats(route) {
     canvasPixelDiversity,
     canvasSize,
     sampleRows: domRows.slice(0, 3),
-    candidateTexts: route.key === "strategy3" ? domRows.map(row => row.text) : [],
-    contentRunId: route.key === "institution" ? (String(activePanel.textContent || "").match(/institution-\d{8}-\d{14}/) || [""])[0] : route.key === "strategy3" ? (String(activePanel.textContent || "").match(/strategy3v2-(?:recovery-replay-)?\d{8}-\d{14}/) || [""])[0] : "",
+    candidateTexts: ["strategy3", "strategy4"].includes(route.key) ? domRows.map(row => row.text) : [],
+    contentRunId: route.key === "strategy4" ? (typeof strategy4ApiRunId !== "undefined" ? String(strategy4ApiRunId) : (String(activePanel.textContent || "").match(/strategy4-\d{8}-\d{14}/) || [""])[0]) : route.key === "institution" ? (String(activePanel.textContent || "").match(/institution-\d{8}-\d{14}/) || [""])[0] : route.key === "strategy3" ? (String(activePanel.textContent || "").match(/strategy3v2-(?:recovery-replay-)?\d{8}-\d{14}/) || [""])[0] : "",
     filterCounts,
     unifiedFilterContract,
     freshnessText,
@@ -1860,7 +1864,7 @@ function collectMobileStats(route) {
     runId,
     rowsVisible: rows.length,
     sampleRows: rows.slice(0, 3),
-    candidateTexts: route.key === "strategy3" ? rows : [],
+    candidateTexts: ["strategy3", "strategy4"].includes(route.key) ? rows : [],
     statusText,
     dateSignals,
     layout,
@@ -2560,6 +2564,48 @@ async function runStrategy3Scorecard(browser) {
   } finally { cdp.close(); }
 }
 
+async function runStrategy4Scorecard(browser) {
+  const cdp = await createTab(browser);
+  try {
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(() => { const original = window.fetch.bind(window); window.__scorecardFetchErrors = []; window.fetch = async (...args) => { try { return await original(...args); } catch (error) { window.__scorecardFetchErrors.push({ path: new URL(typeof args[0] === 'string' ? args[0] : args[0].url, location.href).pathname, error: error.message, stack: error.stack }); throw error; } }; })();` });
+    await setViewport(cdp, { width: 1440, height: 1000, mobile: false });
+    await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/88`), { stopLoading: false });
+    const selector = '#tabs button[data-strategy="策略4成績單"]';
+    await waitForSelector(cdp, selector, ROUTE_TIMEOUT_MS);
+    await clickSelectorByDom(cdp, selector);
+    const expectedRun = optionValue("--expected-run-id");
+    const expectedSymbols = optionValue("--expected-symbols").split(",").filter(Boolean).sort();
+    const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+    let stats;
+    const deadline = Date.now() + ROUTE_TIMEOUT_MS;
+    do {
+      stats = await evaluate(cdp, ({ date }) => {
+        const rows = [...document.querySelectorAll('#rows tr[data-strategy="策略4成績單"]')]
+          .filter(row => row.getBoundingClientRect().height > 0 && row.cells[0]?.innerText.trim() === date)
+          .map(row => ({ symbol: row.cells[2]?.innerText.trim(), runId: row.dataset.runId, sourceRunId: row.dataset.sourceReportRunId, text: row.innerText }));
+        return { rows, emptyText: document.querySelector('#rows .empty')?.innerText || "", sourceText: document.querySelector('#scorecardSourceReports')?.innerText || "" };
+      }, { date });
+      stats.actualSymbols = stats.rows.map(row => row.symbol).sort();
+      stats.ok = Boolean(expectedRun) && JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols)
+        && stats.rows.every(row => row.runId === expectedRun && row.sourceRunId === expectedRun)
+        && (expectedSymbols.length > 0 || (/沒有符合/.test(stats.emptyText) && stats.sourceText.includes(expectedRun)));
+      if (stats.ok) break;
+      await sleep(750);
+    } while (Date.now() < deadline);
+    return { kind: "scorecard", routeKey: "strategy4", theme: "night", ...stats,
+      contentAcceptance: { expectedRun, actualRun: stats.ok ? expectedRun : null, expectedSymbols, actualSymbols: stats.actualSymbols, sameSymbols: JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols) },
+      screenshot: await screenshot(cdp, "scorecard-strategy4.png") };
+  } catch (error) {
+    return { kind: "scorecard", routeKey: "strategy4", theme: "night", ok: false,
+      blockerMatches: [error.message], pageText: await evaluate(cdp, () => document.body.innerText.slice(0, 4000)).catch(() => ""),
+      networkErrors: cdp.events.filter(event => event.method === "Network.loadingFailed").map(event => ({ error: event.params?.errorText, blockedReason: event.params?.blockedReason, corsError: event.params?.corsErrorStatus })),
+      networkResponses: cdp.events.filter(event => event.method === "Network.responseReceived").map(event => ({ path: new URL(event.params.response.url).pathname, status: event.params.response.status })),
+      browserErrors: cdp.events.filter(event => event.method === "Log.entryAdded").map(event => event.params?.entry?.text),
+      fetchErrors: await evaluate(cdp, () => window.__scorecardFetchErrors || []).catch(() => []),
+      screenshot: await screenshot(cdp, "scorecard-strategy4-failed.png").catch(() => null) };
+  } finally { cdp.close(); }
+}
+
 async function runInstitutionScorecard(browser) {
   const cdp = await createTab(browser);
   try {
@@ -2667,6 +2713,7 @@ async function runE2eOnce(options = {}) {
     const mobileExecuted = new Set();
     if (process.argv.includes("--include-institution-scorecard")) results.push(await runInstitutionScorecard(browser));
     if (process.argv.includes("--include-strategy5-scorecard")) results.push(await runStrategy5Scorecard(browser));
+    if (process.argv.includes("--include-strategy4-scorecard")) results.push(await runStrategy4Scorecard(browser));
     if (process.argv.includes("--include-scorecard")) results.push(await runStrategy3Scorecard(browser));
     for (const spec of MOBILE_RUNS) {
       if (!RUN_ONLY.has(spec.flag)) continue;
@@ -2705,7 +2752,7 @@ async function main() {
   if (process.argv.includes("--require-content")) {
     const expectedRun = optionValue("--expected-run-id");
     const expectedSymbols = optionValue("--expected-symbols").split(",").filter(Boolean).sort();
-    for (const item of results.filter(x => x.routeKey === "strategy3" && x.kind !== "scorecard")) {
+    for (const item of results.filter(x => ["strategy3", "strategy4"].includes(x.routeKey) && x.kind !== "scorecard")) {
       const text = (item.candidateTexts || []).join(" ");
       const actualSymbols = [...new Set((item.candidateTexts || []).map(row => (String(row).match(/#\d+\s+(?:[^\d]*?\s)?(\d{4,6})\b/) || [])[1]).filter(Boolean))].sort();
       const actualRun = item.kind === "mobile" ? item.runId : item.contentRunId;
@@ -2714,7 +2761,7 @@ async function main() {
       item.contentAcceptance = { expectedRun, actualRun, expectedSymbols, actualSymbols, sameSymbols };
       if (!expectedRun || actualRun !== expectedRun || item.accessState === "membership_locked" || !sameSymbols || (!expectedSymbols.length && !zeroOk)) {
         item.ok = false;
-        item.blockerMatches = [...(item.blockerMatches || []), "strategy3_rendered_content_identity_or_symbols_mismatch"];
+        item.blockerMatches = [...(item.blockerMatches || []), `${item.routeKey}_rendered_content_identity_or_symbols_mismatch`];
       }
     }
   }
