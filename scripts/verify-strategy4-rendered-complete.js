@@ -25,11 +25,11 @@ async function capture(run){
  async function get(table,q){const res=await fetch(base+'/rest/v1/'+table+'?'+new URLSearchParams(q),{headers:{apikey:key,Authorization:'Bearer '+key},signal:AbortSignal.timeout(60000)});if(!res.ok)throw Error('Strategy4 DB HTTP '+res.status);return res.json();}
  const runs=await get('strategy4_scan_runs',{select:'*',run_id:'eq.'+run,limit:1});const db=runs[0];
  if(!db||db.complete!==true||db.result_count!==scan.matches||db.scanned_count!==scan.scanned||db.expected_total!==scan.total)throw Error('DB run mismatch');
- const rows=[];for(let offset=0;offset<db.result_count;offset+=1000){const page=await get('strategy4_scan_results',{select:'code,payload',run_id:'eq.'+run,order:'rank.asc',offset,limit:1000});if(!page.length)break;rows.push(...page);}
+ const rows=[];for(let offset=0;offset<db.result_count;offset+=1000){const page=await get('strategy4_scan_results',{select:'code,run_id,scan_date,payload',run_id:'eq.'+run,order:'rank.asc',offset,limit:1000});if(!page.length)break;rows.push(...page);}
  const issues=require('../lib/strategy4-v3-evidence').strategy4V3Issues(db.payload||{},rows);
  const symbols=rows.map(x=>String(x.code)).sort();
  if(rows.length!==scan.matches||new Set(symbols).size!==symbols.length||issues.length)throw Error('DB full readback invalid '+issues.join(';'));
- const day=run.split('-')[1];if(String(scan.tradeDate).replace(/-/g,'')!==day||rows.some(x=>String(x.payload?.runId)!==run||String(x.payload?.scanDate).replace(/-/g,'')!==day))throw Error('DB row date/run mismatch');
+ const day=run.split('-')[1];if(String(scan.tradeDate).replace(/-/g,'')!==day||rows.some(x=>String(x.run_id)!==run||String(x.scan_date).replace(/-/g,'')!==day))throw Error('DB row date/run mismatch');
  cp.execFileSync(process.execPath,['--use-system-ca',path.join(__dirname,'verify-terminal-ui-e2e.js'),'--base-url=https://fuman-terminal.vercel.app','--only=desktop-night,mobile-phone-portrait-night','--routes=strategy4','--skip-watchlist','--include-strategy4-scorecard','--require-content','--expected-run-id='+run,'--expected-symbols='+symbols.join(','),'--out='+dir,'--route-timeout=120000','--eval-timeout=60000'],{cwd:ROOT,stdio:'inherit',windowsHide:true,timeout:540000});
  const reportPath=path.join(dir,'terminal-ui-e2e-report.json'),report=read(reportPath);
  if(report.ok!==true||report.baseUrl!=='https://fuman-terminal.vercel.app')throw Error('formal rendered report failed');
@@ -40,3 +40,4 @@ async function capture(run){
 }
 module.exports={runRendered};
 if(require.main===module){const run=(process.argv.find(x=>x.startsWith('--expect-run-id='))||'').slice(16);capture(run).catch(e=>{console.error(JSON.stringify({ok:false,reason:e.message}));process.exitCode=1;});}
+
