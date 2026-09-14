@@ -1008,10 +1008,10 @@
       "taskName": "\\Fuman Morning Report 0830 Complete",
       "displayName": "Fuman Morning Report 0830 Complete",
       "description": "Canonical 15-industry morning report, LINE, terminal and Mother Pool bridge closure.",
-      "time": "08:30",
+      "time": "08:50",
       "expectedState": "Ready",
       "expectedTriggers": [
-        "08:30"
+        "08:50"
       ]
     },
     {

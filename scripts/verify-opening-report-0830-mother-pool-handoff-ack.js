@@ -56,7 +56,7 @@ function validatePayload(payload, tradeDate, reportRunId) {
   const requiredText = ["run_id", "source", "mode", "industry", "display_name", "priority_observation_basis", "bias", "evidence_summary", "mapping_contract", "mapping_reviewed_at", "allowed_action", "forbidden_action"];
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return ["payload_missing"];
   if (payload.date !== tradeDate) issues.push("date_mismatch");
-  if (payload.report_time !== "08:30") issues.push("report_time_not_0830");
+  if (payload.report_time !== "08:50") issues.push("report_time_not_0830");
   for (const field of requiredText) if (!String(payload[field] ?? "").trim()) issues.push(`missing_field:${field}`);
   if (!String(payload.run_id || "").startsWith(`${reportRunId}-`)) issues.push("run_id_not_bound_to_report");
   if (payload.source !== SOURCE) issues.push("source_mismatch");
@@ -144,7 +144,7 @@ function validateDbRow(row, expectedPayloads) {
   const reportRunIds = [...new Set(payloads.map((payload) => String(payload.run_id || "").replace(/-[A-Z][A-Z0-9_]+$/, "")))];
   const requiredEqual = {
     date: payloads[0]?.date,
-    report_time: "08:30",
+    report_time: "08:50",
     source: SOURCE,
     mode: MODE,
     boost_once: true,
@@ -174,7 +174,7 @@ function validateDbRow(row, expectedPayloads) {
 function fixture() {
   const reportRunId = "opening-report-0830-20260908-fixture";
   const payload = {
-    date: "2026-09-08", report_time: "08:30", run_id: `${reportRunId}-ROBOTICS_AUTOMATION`, source: SOURCE, mode: MODE,
+    date: "2026-09-08", report_time: "08:50", run_id: `${reportRunId}-ROBOTICS_AUTOMATION`, source: SOURCE, mode: MODE,
     industry: "ROBOTICS_AUTOMATION", display_name: "機器人／自動化", priority_observation_basis: "us_market_closed_asia_positive_leader_top3", priority_observation_rank: 1,
     priority_overseas_leaders: [{ rank: 1, symbol: "6861.T", percent: 1.18, source_time: "2026-09-08T00:05:07Z" }],
     mapped_symbols_a: [{ symbol: "2049", name: "上銀", tier: "A", mapping_grade: "A", mapping_status: "reviewed", mapping_industry: "ROBOTICS_AUTOMATION", relationship_type: "direct_product_or_revenue_exposure", mapping_reason: "上銀（2049）：傳動元件為直接產品", evidence_authorities: ["MOPS", "ISSUER"], evidence_urls: ["https://example.test/mops/2049", "https://example.test/issuer/2049"] }], mapped_symbols_b: [{ symbol: "2308", name: "台達電", tier: "B", mapping_grade: "B", mapping_status: "reviewed", mapping_industry: "ROBOTICS_AUTOMATION", relationship_type: "adjacent_supply_chain_or_end_demand", mapping_reason: "台達電（2308）：控制器為相鄰供應鏈", evidence_authorities: ["MOPS", "ISSUER"], evidence_urls: ["https://example.test/mops/2308", "https://example.test/issuer/2308"] }],
@@ -187,7 +187,7 @@ function fixture() {
     { industry: payload.industry, run_id: payload.run_id, priority_observation_rank: 1, priority_overseas_leaders: payload.priority_overseas_leaders },
     { industry: secondPayload.industry, run_id: secondPayload.run_id, priority_observation_rank: 2, priority_overseas_leaders: secondPayload.priority_overseas_leaders },
   ];
-  const db = { symbol: "2049", market: "TWSE", priority_reason: "writer_priority", source: "fugle_daytrade_source", payload: { openingReport0830IndustryBias: { date: payload.date, report_time: "08:30", report_run_id: reportRunId, run_id: reportRunId, source: SOURCE, mode: MODE, industry: payload.industry, linked_industries: [payload.industry, secondPayload.industry], observations, highest_industry_rank: 1, boost_once: true, reason_code: REASON, status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true } } };
+  const db = { symbol: "2049", market: "TWSE", priority_reason: "writer_priority", source: "fugle_daytrade_source", payload: { openingReport0830IndustryBias: { date: payload.date, report_time: "08:50", report_run_id: reportRunId, run_id: reportRunId, source: SOURCE, mode: MODE, industry: payload.industry, linked_industries: [payload.industry, secondPayload.industry], observations, highest_industry_rank: 1, boost_once: true, reason_code: REASON, status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true } } };
   const tpexDb = { ...db, market: "TPEX" };
   const assertions = { payload: validatePayload(payload, payload.date, reportRunId).length === 0, bridge: validateBridge(bridge, payload).length === 0, db_twse: validateDbRow(db, [payload, secondPayload]).length === 0, db_tpex: validateDbRow(tpexDb, [payload, secondPayload]).length === 0, overlapping_industries_preserved: db.payload.openingReport0830IndustryBias.linked_industries.length === 2 && db.payload.openingReport0830IndustryBias.observations.length === 2, invalid_market_rejected: validateDbRow({ ...db, market: "SZ" }, [payload]).includes("market_not_TW_TWSE_TPEX"), gap_isolated: validateDbRow(null, payload)[0] === "db_row_missing" };
   const complete = Object.values(assertions).every(Boolean);

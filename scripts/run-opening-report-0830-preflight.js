@@ -1,3 +1,4 @@
+const morningRecovery = require("../lib/opening-report-recovery");
 "use strict";
 
 const fs = require("fs");
@@ -33,7 +34,7 @@ function readJson(file) {
 }
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  fs.writeFileSync(file, `${JSON.stringify({...value, ...(morningRecovery.context(value.date || value.trade_date) ? {recovery:morningRecovery.context(value.date || value.trade_date),execution_mode:"authorized_same_day_recovery"} : {})}, null, 2)}\n`, "utf8");
 }
 function calendarDateAt(value, time) {
   const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
@@ -48,9 +49,9 @@ async function main() {
   const selfTest = false; // Formal source freeze cannot bypass the clock with --self-test.
   if (!process.argv.includes("--wrapper-owned")) throw new Error("morning_freeze_requires_unified_wrapper");
   const taipeiTime = taipeiHm();
-  const marketCalendar = await buildMarketCalendarContract({ now: calendarDateAt(tradeDate, "08:30"), stateDir: path.join(RUNTIME_DIR, "state") });
+  const marketCalendar = await buildMarketCalendarContract({ now: calendarDateAt(tradeDate, "08:50"), stateDir: path.join(RUNTIME_DIR, "state") });
   const calendarAllowsPreflight = marketCalendar.tradingDayOpen === true;
-  const withinPreflightWindow = selfTest || (tradeDate === taipeiDateKey() && taipeiTime >= "08:30" && taipeiTime < "08:31");
+  const withinPreflightWindow = (morningRecovery.context(tradeDate) && Date.now() >= Date.parse(morningRecovery.context(tradeDate).started_at) && Date.now() <= Date.parse(morningRecovery.cutoff(tradeDate))) || (tradeDate === taipeiDateKey() && taipeiTime >= "08:50" && taipeiTime < "08:51");
   const shouldRunDetector = calendarAllowsPreflight && withinPreflightWindow;
   const mapCheck = validateIndustryMapContract(OPENING_REPORT_0830_INDUSTRY_MAP);
   const detector = shouldRunDetector
@@ -78,7 +79,7 @@ async function main() {
   const frozenMarketSnapshot = readJson(frozenMarketSnapshotPath);
   const marketSnapshotOk = shouldRunDetector && marketSnapshotRunner.status === 0
     && String(frozenMarketSnapshot?.date || "").replace(/\D/g, "") === compact
-    && String(frozenMarketSnapshot?.cutoff || "").includes("08:30:59.999 Asia/Taipei")
+    && String(frozenMarketSnapshot?.cutoff || "") === morningRecovery.label(tradeDate)
     && Array.isArray(frozenMarketSnapshot?.items) && frozenMarketSnapshot.items.length >= 4;
   const receiptPath = path.join(RECEIPT_DIR, `opening-report-0830-preflight-receipt-${compact}.json`);
   const skippedForMarketClosed = !calendarAllowsPreflight;
@@ -96,8 +97,8 @@ async function main() {
     taipei_time: taipeiTime,
     within_0830_preflight_window: withinPreflightWindow,
     calendar_allows_preflight: calendarAllowsPreflight,
-    scheduled_start_time: `${tradeDate} 08:30:00 Asia/Taipei`,
-    evidence_cutoff: `${tradeDate} 08:30:59.999 Asia/Taipei`,
+    scheduled_start_time: `${tradeDate} 08:50:00 Asia/Taipei`,
+    evidence_cutoff: morningRecovery.label(tradeDate),
     industry_contract: CONTRACT,
     industry_count: OPENING_REPORT_0830_INDUSTRY_MAP.length,
     map_contract_ok: mapCheck.ok === true,
@@ -125,7 +126,7 @@ async function main() {
     total_leaders: shouldRunDetector ? (detectorReceipt?.total_leaders ?? 0) : 0,
     reason_code: skippedForMarketClosed ? "market_calendar_non_trading_day" : (detectorHasStalePromotion ? "opening_report_0830_stale_asia_leader_promoted" : (ok ? (detectorFreshness.source_gap_count ? "opening_report_0830_preflight_ok_with_source_gaps" : "opening_report_0830_preflight_ok") : "opening_report_0830_preflight_fail_closed")),
     report_status: ok ? (detectorFreshness.source_gap_count ? "REPORT_DEGRADED" : "REPORT_OK") : "FAIL_CLOSED",
-    next_action: skippedForMarketClosed ? "skip_all_report_actions_until_next_trading_day" : "08:30 delivery must consume only this frozen 08:30 evidence and publish line_personal_plus_line_group_plus_terminal_plus_mother_pool",
+    next_action: skippedForMarketClosed ? "skip_all_report_actions_until_next_trading_day" : "08:50 delivery must consume only this frozen 08:50 evidence and publish line_personal_plus_line_group_plus_terminal_plus_mother_pool",
   };
   writeJson(receiptPath, { ...receipt, receipt_path: receiptPath });
   console.log(JSON.stringify({ ok, receipt_path: receiptPath, run_id: runId, phase: receipt.phase, reason_code: receipt.reason_code, valid_leaders: receipt.valid_leaders, total_leaders: receipt.total_leaders }, null, 2));

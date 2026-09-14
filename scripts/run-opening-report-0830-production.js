@@ -1,3 +1,4 @@
+const morningRecovery = require("../lib/opening-report-recovery");
 "use strict";
 
 const fs = require("fs");
@@ -50,7 +51,7 @@ function ensureDir(file) {
 
 function writeJson(file, value) {
   ensureDir(file);
-  fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  fs.writeFileSync(file, `${JSON.stringify({...value, ...(morningRecovery.context(value.date || value.trade_date) ? {recovery:morningRecovery.context(value.date || value.trade_date),execution_mode:"authorized_same_day_recovery"} : {})}, null, 2)}\n`, "utf8");
 }
 
 function readJson(file) {
@@ -104,7 +105,7 @@ function frozenLeadersReceipt(tradeDate) {
 }
 
 function baseIndustryItems(tradeDate, runId, leaders = frozenLeadersReceipt(tradeDate)) {
-  // 08:30 consumes frozen 08:30 evidence only. It never refetches or
+  // 08:50 consumes frozen 08:50 evidence only. It never refetches or
   // recalculates overseas prices after the evidence cutoff.
   const detected = new Map((leaders?.industries || []).map((row) => [row.industry, row]));
   const rows = OPENING_REPORT_0830_INDUSTRY_MAP.map((mapRow) => {
@@ -131,7 +132,7 @@ function baseIndustryItems(tradeDate, runId, leaders = frozenLeadersReceipt(trad
   const positiveRank = new Map(positive.map((row, index) => [row.industry, index + 1]));
   return rows.map((item) => ({
     date: tradeDate,
-    report_time: "08:30",
+    report_time: "08:50",
     run_id: `${runId}-${item.industry}`,
     source: SOURCE,
     mode: MODE,
@@ -141,7 +142,7 @@ function baseIndustryItems(tradeDate, runId, leaders = frozenLeadersReceipt(trad
     confidence: item.confidence,
     evidence_summary: item.evidence_summary,
     overseas_strength_contract: OVERSEAS_STRENGTH_CONTRACT,
-    overseas_evidence_cutoff: `${tradeDate} 08:30:00 Asia/Taipei`,
+    overseas_evidence_cutoff: morningRecovery.label(tradeDate),
     overseas_return_1d_pct: item.overseas_return_1d_pct,
     overseas_sector_up_1d: Number.isFinite(Number(item.overseas_return_1d_pct)) ? Number(item.overseas_return_1d_pct) > 0 : null,
     overseas_sector_up_2d: null,
@@ -256,7 +257,7 @@ function attachPriorityObservation(items, priority) {
 
 async function buildOverseasPreflight(tradeDate, runId, frozenLeaders) {
   const industries = Array.isArray(frozenLeaders?.industries) ? frozenLeaders.industries : [];
-  const ok = frozenLeaders?.ok === true && frozenLeaders?.date === tradeDate && frozenLeaders?.run_id === runId && String(frozenLeaders?.cutoff || "").includes("08:30:59") && industries.length === 15;
+  const ok = frozenLeaders?.ok === true && frozenLeaders?.date === tradeDate && frozenLeaders?.run_id === runId && (morningRecovery.context(tradeDate) ? frozenLeaders?.recovery?.run_id === runId : String(frozenLeaders?.cutoff || "").includes("08:50:59")) && industries.length === 15;
   return {
     contract: "opening-report-0830-overseas-preflight-v1",
     ok,
@@ -264,7 +265,7 @@ async function buildOverseasPreflight(tradeDate, runId, frozenLeaders) {
     date: tradeDate,
     run_id: runId,
     checked_at: timestamp(),
-    mode: "consume_frozen_0830_only",
+    mode: morningRecovery.context(tradeDate) ? "consume_authorized_recovery_freeze" : "consume_frozen_0830_only",
     source_receipt_run_id: frozenLeaders?.run_id || "",
     source_cutoff: frozenLeaders?.cutoff || "",
     industry_count: industries.length,
@@ -275,11 +276,11 @@ async function buildOverseasPreflight(tradeDate, runId, frozenLeaders) {
 
 function markdownReport({ tradeDate, runId, overseasPreflight, priority }) {
   const lines = [];
-  lines.push(`# Fuman 台股 08:30 開盤前日報`);
+  lines.push(morningRecovery.context(tradeDate) ? `# Fuman 當日晨報補跑｜實際啟動 ${morningRecovery.context(tradeDate).started_at}` : `# Fuman 台股 08:50 開盤前日報`);
   lines.push("");
   lines.push(`日期：${tradeDate}`);
   lines.push(`run_id：${runId}`);
-  lines.push(`資料截點：${tradeDate} 08:30:59 Asia/Taipei`);
+  lines.push(`資料截點：${morningRecovery.label(tradeDate)}`);
   lines.push("");
   lines.push("結論：晨報 15 產業觀察已完成；優先觀察名單已提供 Mother Pool priority_scan。晨報不判定盤中 Gate，也不產生正式候選。");
   lines.push("");
@@ -379,7 +380,7 @@ function lineReportText(tradeDate, observations, usMarket) {
     `台股 B：${lineStockNames(item.mapped_symbols_b) || "無"}`,
   ].join("\n"));
   return [
-    "📈 08:30 漲幅族群晨報",
+    morningRecovery.title(tradeDate),
     `${tradeDate}｜15 個產業掃描完成`,
     usMarketDisplayText(usMarket),
     "",
@@ -399,7 +400,7 @@ function lineReportFlex(tradeDate, observations, usMarket) {
   if (!body.length) body.push({ type: "text", text: "今日無正漲幅優先觀察標的", size: "sm", color: "#777777", wrap: true });
   return {
     type: "bubble",
-    header: { type: "box", layout: "vertical", contents: [{ type: "text", text: "📈 08:30 漲幅族群晨報", weight: "bold", wrap: true }, { type: "text", text: `${tradeDate}｜15 個產業掃描完成`, size: "xs", color: "#777777", margin: "sm", wrap: true }, { type: "text", text: usMarketDisplayText(usMarket), size: "xs", color: "#777777", margin: "sm", wrap: true }] },
+    header: { type: "box", layout: "vertical", contents: [{ type: "text", text: morningRecovery.title(tradeDate), weight: "bold", wrap: true }, { type: "text", text: `${tradeDate}｜15 個產業掃描完成`, size: "xs", color: "#777777", margin: "sm", wrap: true }, { type: "text", text: usMarketDisplayText(usMarket), size: "xs", color: "#777777", margin: "sm", wrap: true }] },
     body: { type: "box", layout: "vertical", spacing: "sm", contents: body },
   };
 }
@@ -459,7 +460,7 @@ async function pushLine({ cardText, flexCard, runId, dryRun }) {
     return { ...base, reason_code: "line_target_invalid", missing_env: invalidTargets.map((row) => row.env_name), target_count: targets.length, target_types: targets.map((row) => row.target_type) };
   }
   const messages = flexCard
-    ? [{ type: "flex", altText: String(cardText || "Fuman 08:30 開盤前日報").slice(0, 400), contents: flexCard }]
+    ? [{ type: "flex", altText: String(cardText || "Fuman 08:50 開盤前日報").slice(0, 400), contents: flexCard }]
     : [{ type: "text", text: String(cardText || "").slice(0, 4500) }];
   if (dryRun) {
     return {
@@ -516,7 +517,7 @@ async function syncTerminalBriefingSnapshot(tradeDate, runId) {
       date: compact ? compact.slice(0, 4) + "-" + compact.slice(4, 6) + "-" + compact.slice(6, 8) : tradeDate,
       ymd: compact,
       seconds: 8 * 60 * 60 + 30 * 60,
-      time: "08:30:00",
+      time: "08:50:00",
     });
     if (briefing?.ok !== true) {
       return {
@@ -530,6 +531,8 @@ async function syncTerminalBriefingSnapshot(tradeDate, runId) {
       ...briefing,
       delivery_content_hash: readJson(path.join(RECEIPT_DIR, `opening-report-0830-final-receipt-${compact}.json`))?.delivery_content_hash,
       display_top3: readJson(path.join(RECEIPT_DIR, `opening-report-0830-final-receipt-${compact}.json`))?.display_top3,
+      source_cutoff: morningRecovery.label(tradeDate),
+      recovery: morningRecovery.context(tradeDate),
       source: "opening_report_0830_terminal_briefing",
       updatedAt: timestamp(),
     };
@@ -597,7 +600,7 @@ async function main() {
       date: tradeDate,
       trade_date: tradeDate,
       run_id: runId,
-      cutoff: `${tradeDate} 08:30:59.999 Asia/Taipei`,
+      cutoff: morningRecovery.label(tradeDate),
       source_receipt: frozenLeadersPath,
       industry_count: frozenItems.length,
       items: frozenItems,
@@ -701,7 +704,7 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     expected_industry_count: OPENING_REPORT_0830_INDUSTRY_MAP.length,
     scanned_industry_count: items.length,
     bridge_contract: "us_open_positive_industry_or_us_closed_asia_positive_leader_top3_v2",
-    bridge_delivery_invariant: "It must never change the 08:30 report delivery decision.",
+    bridge_delivery_invariant: "It must never change the 08:50 report delivery decision.",
     priority_observation_mode: priority.mode,
     priority_observations: displayTop3,
     display_top3: displayTop3,
@@ -750,4 +753,6 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, reason_code: "opening_report_0830_runner_error", error: error?.stack || error?.message || String(error) }, null, 2));
   process.exitCode = 1;
 });
+
+
 

@@ -3340,7 +3340,7 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
     const confidence = Number(payload?.confidence);
     const valid = payload
       && compactDateKey(payload.date) === todayKey
-      && String(payload.report_time || "") === "08:30"
+      && String(payload.report_time || "") === "08:50"
       && (runId.startsWith("opening-report-0830-" + todayKey + "-") || isAuthorizedMorningRecovery(payload, readJson(runtimePath("data", "opening-report-0830", "opening-report-0830-preflight-receipt-" + todayKey + ".json"))))
       && payload.source === "opening_report_0830"
       && payload.mode === "priority_bias_only"
@@ -4077,7 +4077,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       }));
       const reportRunIds = [...new Set(observations.map((entry) => String(entry.run_id || "").replace(/-[A-Z][A-Z0-9_]+$/, "")).filter(Boolean))];
       prev.openingReport0830IndustryBias = {
-        date: taipeiDate(), report_time: "08:30", report_run_id: reportRunIds[0] || "",
+        date: taipeiDate(), report_time: "08:50", report_run_id: reportRunIds[0] || "",
         run_id: reportRunIds[0] || "", source: "opening_report_0830", mode: "priority_bias_only",
         industry: observations.slice().sort((a, b) => Number(a.priority_observation_rank || 999) - Number(b.priority_observation_rank || 999))[0]?.industry || "",
         linked_industries: [...new Set(observations.map((entry) => entry.industry).filter(Boolean))],

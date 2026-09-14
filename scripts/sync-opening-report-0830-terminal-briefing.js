@@ -17,7 +17,7 @@ async function main() {
     date,
     ymd: compact,
     seconds: 8 * 60 * 60 + 30 * 60,
-    time: "08:30:00",
+    time: "08:50:00",
   });
   if (report?.ok !== true) {
     console.log(JSON.stringify({ ok: false, trade_date: date, reason_code: report?.reason_code || "opening_report_0830_not_ready" }, null, 2));
