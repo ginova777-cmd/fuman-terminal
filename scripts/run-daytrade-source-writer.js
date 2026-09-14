@@ -1,3 +1,4 @@
+const { isAuthorizedMorningRecovery } = require("../lib/opening-report-recovery-seed");
 process.env.FUGLE_COLLECTOR_ROLE = process.env.FUGLE_COLLECTOR_ROLE || "daytrade";
 const fs = require("fs");
 const path = require("path");
@@ -3340,7 +3341,7 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
     const valid = payload
       && compactDateKey(payload.date) === todayKey
       && String(payload.report_time || "") === "08:30"
-      && runId.startsWith("opening-report-0830-" + todayKey + "-")
+      && (runId.startsWith("opening-report-0830-" + todayKey + "-") || isAuthorizedMorningRecovery(payload, readJson(runtimePath("data", "opening-report-0830", "opening-report-0830-preflight-receipt-" + todayKey + ".json"))))
       && payload.source === "opening_report_0830"
       && payload.mode === "priority_bias_only"
       && payload.allowed_action === "boost_scan_priority_only"
