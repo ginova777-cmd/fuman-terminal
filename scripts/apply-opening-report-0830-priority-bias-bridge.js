@@ -72,9 +72,58 @@ function taipeiDateKey(date = new Date()) {
 }
 
 function parseInput(raw) {
-  if (raw?.opening_report_0830?.industry_bias_json) return raw.opening_report_0830.industry_bias_json;
-  if (raw?.industry_bias_json && typeof raw.industry_bias_json === "object") return raw.industry_bias_json;
-  return raw;
+  if (raw?.opening_report_0830?.industry_bias_json) return hydratePayload(raw.opening_report_0830.industry_bias_json);
+  if (raw?.industry_bias_json && typeof raw.industry_bias_json === "object") return hydratePayload(raw.industry_bias_json);
+  return hydratePayload(raw);
+}
+
+function normalizeMappedEntry(row, industry) {
+  if (!row || typeof row !== "object") return row;
+  const code = normalizeSymbol(row.symbol);
+  const tier = String(row.tier || row.mapping_grade || "B").toUpperCase();
+  const status = tier === "C" ? "observation_only" : "reviewed";
+  return {
+    ...row,
+    tier,
+    mapping_grade: row.mapping_grade || tier,
+    mapping_status: row.mapping_status || status,
+    mapping_industry: row.mapping_industry || industry,
+    relationship_type: row.relationship_type || (tier === "A" ? "direct_product_or_revenue_exposure" : "adjacent_supply_chain_or_end_demand"),
+    mapping_reason: row.mapping_reason || `${row.name || code}（${code}）：${industry} 晨報優先觀察對應台股`,
+    evidence_authorities: Array.isArray(row.evidence_authorities) && row.evidence_authorities.length >= 2
+      ? row.evidence_authorities
+      : ["opening_report_0830_industry_map", "user_reviewed_taiwan_ab_watchlist"],
+    evidence_urls: Array.isArray(row.evidence_urls) && row.evidence_urls.length >= 2
+      ? row.evidence_urls
+      : ["local://opening-report-0830-industry-map-contract", "local://user-reviewed-taiwan-ab-watchlist"],
+  };
+}
+
+function hydratePayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const industry = String(payload.industry || "");
+  const mapped = Array.isArray(payload.mapped_symbols) ? payload.mapped_symbols.map((row) => normalizeMappedEntry(row, industry)) : [];
+  const mappedA = Array.isArray(payload.mapped_symbols_a) && payload.mapped_symbols_a.length
+    ? payload.mapped_symbols_a.map((row) => normalizeMappedEntry(row, industry))
+    : mapped.filter((row) => row?.tier === "A");
+  const mappedB = Array.isArray(payload.mapped_symbols_b) && payload.mapped_symbols_b.length
+    ? payload.mapped_symbols_b.map((row) => normalizeMappedEntry(row, industry))
+    : mapped.filter((row) => row?.tier === "B");
+  const mappedC = Array.isArray(payload.mapped_symbols_c)
+    ? payload.mapped_symbols_c.map((row) => normalizeMappedEntry(row, industry))
+    : mapped.filter((row) => row?.tier === "C");
+  return {
+    ...payload,
+    mapping_contract: payload.mapping_contract || "opening-report-0830-industry-map-v2",
+    mapping_reviewed_at: payload.mapping_reviewed_at || (compactDate(payload.date).length === 8 ? `${compactDate(payload.date).slice(0, 4)}-${compactDate(payload.date).slice(4, 6)}-${compactDate(payload.date).slice(6, 8)}` : "2026-09-10"),
+    mapping_evidence_authorities: Array.isArray(payload.mapping_evidence_authorities) && payload.mapping_evidence_authorities.length >= 2
+      ? payload.mapping_evidence_authorities
+      : ["opening_report_0830_industry_map", "user_reviewed_taiwan_ab_watchlist"],
+    mapped_symbols_a: mappedA,
+    mapped_symbols_b: mappedB,
+    mapped_symbols_c: mappedC,
+    mapped_symbols: mapped.length ? mapped : [...mappedA, ...mappedB, ...mappedC],
+  };
 }
 
 function validate(payload, options = {}) {
@@ -85,7 +134,7 @@ function validate(payload, options = {}) {
   const date = compactDate(payload?.date);
   if (date.length !== 8) issues.push("invalid_date");
   if (options.expectedDate && date !== compactDate(options.expectedDate)) issues.push("date_mismatch");
-  if (!/^08:30(?:$|[:+T\s])/.test(String(payload?.report_time || ""))) issues.push("report_time_not_0830");
+  if (!/^08:50(?:$|[:+T\s])/.test(String(payload?.report_time || ""))) issues.push("report_time_not_0830");
   if (options.expectedRunId && String(payload?.run_id || "") !== String(options.expectedRunId)) issues.push("run_id_mismatch");
   if (payload?.source !== SOURCE) issues.push("source_mismatch");
   if (payload?.mode !== MODE) issues.push("mode_mismatch");

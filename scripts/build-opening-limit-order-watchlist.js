@@ -129,7 +129,7 @@ function validateIndustryBias(payload, tradeDate) {
   const expectedCompact = compactDate(tradeDate);
   const payloadDate = compactDate(payload?.trade_date || payload?.date);
   if (payloadDate !== expectedCompact) failures.push("industry_bias_json_date_mismatch");
-  if (!/^08:30(?:$|[:+T\s])/.test(String(payload?.report_time || ""))) failures.push("report_time_not_0830");
+  if (!/^08:50(?:$|[:+T\s])/.test(String(payload?.report_time || ""))) failures.push("report_time_not_0830");
   if (payload?.source !== "opening_report_0830") failures.push("source_mismatch");
   if (payload?.mode !== "priority_bias_only") failures.push("mode_mismatch");
   if (!payload?.run_id) failures.push("run_id_missing");
