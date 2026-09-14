@@ -767,10 +767,19 @@ async function fetchUniverse() {
   const localHealth = describeStocksPayload(localPayload || {}, "local:stocks-slim.json");
   let remotePayload = null;
   let remoteError = "";
-  try {
-    remotePayload = await fetchJson(STOCK_URL);
-  } catch (error) {
-    remoteError = error.message;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      console.log('strategy5 stock universe source attempt ' + attempt + '/3');
+      remotePayload = await fetchJson(STOCK_URL, 45000);
+      if (!payloadHasUsableStocks(remotePayload)) throw new Error('stock_universe_payload_incomplete');
+      console.log('strategy5 stock universe ready ' + payloadTradeDate(remotePayload) + ' rows=' + remotePayload.stocks.length);
+      break;
+    } catch (error) {
+      remotePayload = null;
+      remoteError = error.message;
+      console.warn('strategy5 stock universe attempt ' + attempt + ' failed: ' + remoteError);
+      if (attempt < 3) await new Promise(resolve => setTimeout(resolve, 1500));
+    }
   }
   const remoteHealth = describeStocksPayload(remotePayload || {}, STOCK_URL);
   const remoteUsable = payloadHasUsableStocks(remotePayload);
