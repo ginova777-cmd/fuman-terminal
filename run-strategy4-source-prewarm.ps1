@@ -152,7 +152,7 @@ function Invoke-Strategy4SourceRepair {
     return $false
   }
   Write-Log "Strategy4 Fugle source repair start. reason=$Reason tradeDate=$tradeDate"
-  & $nodeExe "--use-system-ca" $snapshotScript "--date=$tradeDate" *>&1 | Tee-Object -FilePath $log -Append
+  & $nodeExe "--use-system-ca" $snapshotScript "--date=$tradeDate" *>&1 | Tee-Object -FilePath $log -Append | Out-Host
   if ($LASTEXITCODE -ne 0) {
     Write-Log "Strategy4 Fugle snapshot repair failed with exit code $LASTEXITCODE"
     return $false
@@ -173,7 +173,10 @@ try {
   Push-Location $repo
   try {
     . "${PSScriptRoot}\schedule-guard.ps1"
-    Invoke-FumanWeekdayGuard -Label "Strategy4 source prewarm" -LogPath $log
+    # Strategy4 owns an after-close daily-K source. 15:35 is intentionally
+    # outside the daytrade live-source window, so only the TW trading-day
+    # decision applies here; the daily-K verifier below remains fail-closed.
+    Invoke-FumanWeekdayGuard -Label "Strategy4 source prewarm" -LogPath $log -AllowAfterFormalSourceWindow
 
     & $nodeExe "scripts\check-full-scan-date-preflight.js" "--label=strategy4-source-prewarm" "--after-close-profile=1" "--receipt" *>&1 | Tee-Object -FilePath $log -Append
     $dateExit = $LASTEXITCODE

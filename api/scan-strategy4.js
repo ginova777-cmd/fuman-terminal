@@ -1,3 +1,4 @@
+const { indicatorTrend: sharedTrend } = require("../lib/technical-indicators");
 const cache = new Map();
 const CACHE_MS = 30 * 60 * 1000;
 let tpexDailyCache = null;
@@ -536,7 +537,7 @@ function kdSnapshot(rows, period = 5, smooth = 3) {
   };
 }
 
-function rsiCrossSnapshot(values, fastLength = 4, slowLength = 6) {
+function rsiCrossSnapshot(values, fastLength = 3, slowLength = 6) {
   const fast = rsi(values, fastLength);
   const slow = rsi(values, slowLength);
   const prevValues = values.slice(0, -1);
@@ -551,7 +552,7 @@ function rsiCrossSnapshot(values, fastLength = 4, slowLength = 6) {
     goldenCross: prevFast <= prevSlow && fast > slow,
   };
 }
-function rsi(values, length = 14) {
+function rsi(values, length = 6) {
   if (values.length <= length) return 50;
   let gains = 0;
   let losses = 0;
@@ -919,28 +920,12 @@ function analyzeRows(rows) {
   const volMa5 = sma(volumes, 5);
   const volMa20 = sma(volumes, 20);
   const macd = macdSnapshot(closes);
-  const rsi14 = rsi(closes, 14);
-  const rsi14Prev = rsi(closes.slice(0, -1), 14);
+  const rsi6 = rsi(closes, 6);
+  const rsi6Prev = rsi(closes.slice(0, -1), 6);
   const kd5 = kdSnapshot(normalizedRows, 5, 3);
-  const rsi46 = rsiCrossSnapshot(closes, 4, 6);
-  const dailyTechnicalGate = {
-    contract: "strategy4_daily_kd_rsi_trend_gate_v1",
-    ok: kd5.trendUp === true && rsi14 > rsi14Prev,
-    kdTrendUp: kd5.trendUp === true,
-    rsiTrendUp: rsi14 > rsi14Prev,
-    kdGoldenCross: kd5.goldenCross === true,
-    rsiGoldenCross: rsi46.goldenCross === true,
-    kdK: Number(kd5.k.toFixed(2)),
-    kdD: Number(kd5.d.toFixed(2)),
-    kdPrevK: Number(kd5.prevK.toFixed(2)),
-    kdPrevD: Number(kd5.prevD.toFixed(2)),
-    rsi14: Number(rsi14.toFixed(2)),
-    rsi14Prev: Number(rsi14Prev.toFixed(2)),
-    rsi4: Number(rsi46.fast.toFixed(2)),
-    rsi6: Number(rsi46.slow.toFixed(2)),
-    rsi4Prev: Number(rsi46.prevFast.toFixed(2)),
-    rsi6Prev: Number(rsi46.prevSlow.toFixed(2)),
-  };
+  const rsi36 = rsiCrossSnapshot(closes, 3, 6);
+  const sharedTechnical = sharedTrend(normalizedRows);
+  const dailyTechnicalGate = {...sharedTechnical, contract: "strategy4_daily_kd_rsi_trend_gate_v2", indicatorContract: sharedTechnical.contract, ok: sharedTechnical.available && sharedTechnical.trendUp};
   const atr14 = atr(rows, 14);
   const wallet = walletSnapshot(normalizedRows);
   const lookback = normalizedRows.slice(-40);
@@ -992,10 +977,10 @@ function analyzeRows(rows) {
     volMa20,
     volumeRatio,
     macd,
-    rsi14,
-    rsi14Prev,
+    rsi6,
+    rsi6Prev,
     kd5,
-    rsi46,
+    rsi36,
     dailyTechnicalGate,
     atr14,
     wallet,
@@ -1090,14 +1075,14 @@ function scanStrategy4(code, market, rows, priceSource = "") {
   const nState = detectNBase(daily.rows, daily.volMa20);
   const nBase = nState.triggered && daily.realBody && isRed;
   const roc3 = daily.closes.length > 3 ? ((last.close - daily.closes.at(-4)) / daily.closes.at(-4)) * 100 : 0;
-  const vFast = roc3 < -10 && daily.volumeRatio >= 1.5 && isRed && prev && daily.prev2 && crossedOver(last.close, prev.close, prev.high, daily.prev2.high) && daily.rsi14 < 50;
+  const vFast = roc3 < -10 && daily.volumeRatio >= 1.5 && isRed && prev && daily.prev2 && crossedOver(last.close, prev.close, prev.high, daily.prev2.high) && daily.rsi6 < 50;
   const buyStreak = calcBuyStreak(daily.rows, daily.ma20, daily.volMa20);
   const vReversal = daily.deepFall && isRed && (
     (roc3 < -5 ? 35 : 0) +
     (prev && last.close > prev.high ? 25 : 0) +
     (buyStreak >= 1 ? 20 : 0) +
     (runawayGap ? 20 : 0) +
-    (daily.rsi14 < 40 ? 10 : 0)
+    (daily.rsi6 < 40 ? 10 : 0)
   ) >= 60;
   const threeInsideKd = kdSnapshot(daily.rows, 5, 3);
   const threeInside = daily.rows.length >= 3 && (() => {
@@ -1142,7 +1127,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
   });
   if (breakawayGap) signals.push({ id: "breakaway_gap", short: "突破缺口", icon: "◆", reason: "跳空突破近20日整理高點，偏突破缺口。" });
   if (runawayGap) signals.push({ id: "runaway_gap", short: "逃逸缺口", icon: "🚀", reason: "跳空且站上MA20，多頭段延續，偏逃逸缺口。" });
-  if (vFast) signals.push({ id: "v_fast", short: "V快殺", icon: "V", reason: `3日急跌後放量翻紅，RSI ${daily.rsi14.toFixed(1)}，偏V型快殺反彈。` });
+  if (vFast) signals.push({ id: "v_fast", short: "V快殺", icon: "V", reason: `3日急跌後放量翻紅，RSI ${daily.rsi6.toFixed(1)}，偏V型快殺反彈。` });
   if (vReversal) signals.push({
     id: runawayGap ? "v_reversal_runaway" : "v_reversal",
     short: runawayGap ? "V轉逃逸" : "V轉",
@@ -1179,15 +1164,15 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     id: "daily_kd_rsi_trend_up",
     short: "日KD/RSI",
     icon: daily.dailyTechnicalGate.kdGoldenCross || daily.dailyTechnicalGate.rsiGoldenCross ? "✦" : "↑",
-    reason: `日K KD(5,3)與RSI趨勢向上；KD K/D ${daily.dailyTechnicalGate.kdK}/${daily.dailyTechnicalGate.kdD}，RSI14 ${daily.dailyTechnicalGate.rsi14Prev}→${daily.dailyTechnicalGate.rsi14}。`,
+    reason: `日K KD(5,3)與RSI趨勢向上；KD K/D ${daily.dailyTechnicalGate.kdK}/${daily.dailyTechnicalGate.kdD}，RSI6 ${daily.dailyTechnicalGate.rsi6Prev}→${daily.dailyTechnicalGate.rsi6}。`,
   });
 
   const aboveMa20 = last.close > daily.ma20;
   const nearMa20 = daily.ma20 ? Math.abs((last.close - daily.ma20) / daily.ma20) <= 0.06 : false;
   const ma5TurningUp = daily.ma5 > sma(daily.closes, 5, 1);
   const macdImproving = daily.macd.rising || daily.macd.macd > daily.macd.signal;
-  const healthyRsi = daily.rsi14 >= 45 && daily.rsi14 <= 72;
-  const setupRsi = daily.rsi14 >= 38 && daily.rsi14 <= 62;
+  const healthyRsi = daily.rsi6 >= 45 && daily.rsi6 <= 72;
+  const setupRsi = daily.rsi6 >= 38 && daily.rsi6 <= 62;
   const stageNotHot = daily.stage.tone !== "hot";
   const trendScore = [
     aboveMa20,
@@ -1228,7 +1213,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
       id: "base_setup",
       short: "C準備",
       icon: "C",
-      reason: `低/中位階整理接近發動；準備分 ${prepScore}/7，RSI ${daily.rsi14.toFixed(1)}，量比 ${daily.volumeRatio.toFixed(2)}。`,
+      reason: `低/中位階整理接近發動；準備分 ${prepScore}/7，RSI ${daily.rsi6.toFixed(1)}，量比 ${daily.volumeRatio.toFixed(2)}。`,
     });
   }
 
@@ -1349,15 +1334,15 @@ function scanStrategy4(code, market, rows, priceSource = "") {
       fib618: Number(daily.fib618.toFixed(2)),
       fibRatio: currentFibRatio,
       bias20: Number(daily.bias20.toFixed(2)),
-      rsi14: Number(daily.rsi14.toFixed(2)),
-      rsi14Prev: Number(daily.rsi14Prev.toFixed(2)),
       kdK: daily.dailyTechnicalGate.kdK,
       kdD: daily.dailyTechnicalGate.kdD,
       kdPrevK: daily.dailyTechnicalGate.kdPrevK,
       kdPrevD: daily.dailyTechnicalGate.kdPrevD,
       kdTrendUp: daily.dailyTechnicalGate.kdTrendUp,
       kdGoldenCross: daily.dailyTechnicalGate.kdGoldenCross,
-      rsi4: daily.dailyTechnicalGate.rsi4,
+      rsi3Prev: daily.dailyTechnicalGate.rsi3Prev,
+      rsi6Prev: daily.dailyTechnicalGate.rsi6Prev,
+      rsi3: daily.dailyTechnicalGate.rsi3,
       rsi6: daily.dailyTechnicalGate.rsi6,
       rsiTrendUp: daily.dailyTechnicalGate.rsiTrendUp,
       rsiGoldenCross: daily.dailyTechnicalGate.rsiGoldenCross,
