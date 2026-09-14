@@ -930,7 +930,8 @@ async function renderFragment(tab, config, payload) {
 
   const displayResultCount = Number(payload.resultCount ?? payload.result_count ?? payload.count ?? payload.total ?? rows.length);
   const points = config.points.map((point, index) => `<p><b>${index + 1}</b>${esc(point)}</p>`).join("");
-  const list = rows.length ? rows.map((row, index) => rowHtml(row, index, tab)).join("") : `<div class="empty-state">等待最新 complete run。</div>`;
+  const completeZero = tab === 'strategy3' && payload?.ok === true && payload?.complete === true && quality === 'complete' && Boolean(runId) && displayResultCount === 0 && rows.length === 0;
+  const list = rows.length ? rows.map((row, index) => rowHtml(row, index, tab)).join("") : completeZero ? '<div class="empty-state" data-scan-state="complete-zero">今日掃描完成，符合條件 0 檔。</div>' : '<div class="empty-state">等待最新 complete run。</div>';
   return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}" data-trade-date="${esc(tradeDate)}" data-result-count="${displayResultCount}" data-observation-count="${rows.length}" data-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-today-authoritative="${todayAuthoritative === true ? "1" : "0"}" data-display-mode="${esc(displayMode)}">
       <article class="mobile-terminal-head">
         <small>${validationDisplayAllowed || diagnosticReplay ? "V3 回測驗證 / 不發布、不寫入 /88" : "API-only complete run"}</small>
