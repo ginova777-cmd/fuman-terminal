@@ -16,7 +16,7 @@ async function main() {
   const report = marketAiLive.__test.readOpeningMorningReport({
     date,
     ymd: compact,
-    seconds: 8 * 60 * 60 + 30 * 60,
+    seconds: 8 * 60 * 60 + 50 * 60,
     time: "08:50:00",
   });
   if (report?.ok !== true) {
@@ -24,8 +24,14 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  const fs=require("fs"),path=require("path"),night=require("../lib/opening-report-night-futures");
+  const final=JSON.parse(fs.readFileSync(path.join(process.env.FUMAN_RUNTIME_DIR||"C:/fuman-runtime","data","opening-report-0830","opening-report-0830-final-receipt-"+compact+".json"),"utf8").replace(/^\uFEFF/,""));
+  const issues=night.verify(final.night_futures,{date,runId:report.run_id,cutoff:final.recovery?.cutoff_at||require("../lib/opening-report-recovery").cutoff(date)});
+  if(issues.length||final.run_id!==report.run_id)throw Error("night_futures_snapshot_repair_blocked:"+issues.join(";"));
   const result = await upsertSnapshot("opening_report_0830_terminal_briefing", {
     ...report,
+    delivery_content_hash:final.delivery_content_hash,display_top3:final.display_top3,source_cutoff:final.source_cutoff,recovery:final.recovery,
+    night_futures:final.night_futures,night_futures_summary:night.summary(final.night_futures),
     source: "opening_report_0830_terminal_briefing",
     updatedAt: new Date().toISOString(),
   }, {
