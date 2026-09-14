@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 const { execFileSync } = require("child_process");
-const { scanReady } = require("./finalize-strategy4-receipt");
+const { scanReady } = require("./verify-strategy4-complete");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
@@ -115,5 +115,6 @@ function main() {
 }
 
 main();
+
 
 
