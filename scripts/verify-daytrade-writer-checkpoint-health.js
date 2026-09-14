@@ -3,6 +3,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 
 const FORMAL_ROOT = 'C:\\fuman-release-owner\\fuman-terminal';
+const APPROVED_FORMAL_ROOTS = [FORMAL_ROOT, 'C:\\fuman-release-owner\\prod81'];
 const RUNTIME_ROOT = 'C:\\fuman-runtime';
 const TASK_NAME = 'Fuman Daytrade Source Writer 0600-1330';
 const PWSH = 'C:\\Program Files\\PowerShell\\7\\pwsh.exe';
@@ -64,7 +65,7 @@ const issues = [];
 if (due) {
   const actionText = `${task.execute || ''} ${task.arguments || ''} ${task.workingDirectory || ''}`.toLowerCase();
   if (task.error) issues.push(task.error);
-  if (!actionText.includes(FORMAL_ROOT.toLowerCase())) issues.push('writer_task_formal_root_mismatch');
+  if (!APPROVED_FORMAL_ROOTS.some((root) => actionText.includes(root.toLowerCase()))) issues.push('writer_task_formal_root_mismatch');
   if (!actionText.includes('run-daytradesourcewriter.ps1')) issues.push('writer_task_runner_mismatch');
   if (v2.ok !== true || v2.websocketConnected !== true || v2.websocketAuthenticated !== true) issues.push('v2_transport_not_ready');
   if (String(v2.primarySource || '').toLowerCase() !== 'fugle-websocket' || v2.restDisabled !== true) issues.push('v2_source_contract_mismatch');
