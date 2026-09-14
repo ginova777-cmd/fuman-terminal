@@ -1,7 +1,8 @@
 param(
   [switch]$IsolatedBacktest,
   [switch]$ReuseLineReceipt,
-  [switch]$FinalizeExisting
+  [switch]$FinalizeExisting,
+  [string]$RecoveryContext
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,7 +23,21 @@ $today = $nowTaipei.ToString("yyyyMMdd")
 $tradeDate = $nowTaipei.ToString("yyyy-MM-dd")
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $runId = "opening-report-0830-$today-$stamp"
+if ($RecoveryContext) {
+  $recovery = Get-Content -LiteralPath $RecoveryContext -Raw | ConvertFrom-Json
+  if ($recovery.trade_date -ne $tradeDate) { throw "Recovery date mismatch" }
+  $env:FUMAN_MORNING_RECOVERY_CONTEXT = $RecoveryContext
+  $runId = $recovery.run_id
+}
 $wrapperReceipt = Join-Path $receiptDir "opening-report-0830-wrapper-receipt-$today.json"
+
+trap {
+  if ($wrapperReceipt) {
+    [ordered]@{contract="opening-report-morning-wrapper-v1"; status="failed"; complete=$false; exitCode=1; first_blocker=$_.Exception.Message; trade_date=$tradeDate; run_id=$runId; checked_at=(Get-Date).ToString("o"); execution_mode=if($RecoveryContext){"authorized_same_day_recovery"}else{"scheduled"}} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8
+  }
+  Write-Error $_ -ErrorAction Continue
+  exit 1
+}
 if ($FinalizeExisting) { $ReuseLineReceipt = [switch]$true }
 if ($ReuseLineReceipt) {
   $existingLinePath = Join-Path $receiptDir "line-push-receipt-$today.json"
@@ -117,7 +132,7 @@ if ($IsolatedBacktest) { $runnerArgs += "--isolated-backtest" }
 if ($ReuseLineReceipt) { $runnerArgs += "--reuse-line-receipt" }
 $run = if ($sourceFreeze.exitCode -ne 0) { [pscustomobject]@{label="runner-skipped-source-freeze-failed";exitCode=$sourceFreeze.exitCode;stdout="";stderr=""} } elseif ($FinalizeExisting) { [pscustomobject]@{ label="runner-existing-evidence"; exitCode=0; stdout=""; stderr=""; evidenceOnly=$true } } else { Invoke-NodeStep -NodeArgs $runnerArgs -Label "runner" }
 $persistenceArgs = @("scripts\verify-opening-report-0830-mother-pool-persistence-ack.js", "--trade-date=$tradeDate", "--report-run-id=$runId")
-$persistence = if ($FinalizeExisting) { [pscustomobject]@{label="persistence-existing-evidence";exitCode=0;stdout="";stderr="";evidenceOnly=$true} } elseif ($run.exitCode -eq 0 -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $persistenceArgs -Label "mother-pool-persistence-ack" } elseif ($run.exitCode -eq 0) { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = 0; stdout = ""; stderr = ""; simulated = $true } } else { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = -1; stdout = ""; stderr = "" } }
+$persistence = if ($run.exitCode -eq 0 -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $persistenceArgs -Label "mother-pool-persistence-ack" } elseif ($run.exitCode -eq 0) { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = 0; stdout = ""; stderr = ""; simulated = $true } } else { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = -1; stdout = ""; stderr = "" } }
 $renderedArgs = @("scripts\verify-opening-report-rendered.js", "--trade-date=$tradeDate")
 $rendered = if ($run.exitCode -eq 0 -and $persistence.exitCode -eq 0 -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $renderedArgs -Label "rendered-delivery" } else { [pscustomobject]@{label="rendered-delivery";exitCode=-1;stdout="";stderr=""} }
 $verifierArgs = @("scripts\verify-opening-report-morning-contract.js", "--trade-date=$tradeDate")
@@ -185,7 +200,10 @@ if ($null -ne $final -and $final.run_id -eq $runId) {
   $final.exitCode = if ($final.complete) { 0 } else { 1 }
   $final.first_blocker = if ($final.complete) { $null } else { $reasonCode }
   $final | Add-Member -Force -NotePropertyName canonical_verifier_ok -NotePropertyValue $verifierOk
-  $final | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $finalFile -Encoding UTF8
+  # Preserve hashed source timestamps exactly; PowerShell JSON date conversion changes their bytes.
+  $finalPatch = [ordered]@{complete=$final.complete;status=$final.status;report_status=$final.report_status;exitCode=$final.exitCode;first_blocker=$final.first_blocker;canonical_verifier_ok=$verifierOk} | ConvertTo-Json -Compress
+  & "C:\Program Files\nodejs\node.exe" -e 'const fs=require("fs");const p=process.argv[1];const v=JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,""));Object.assign(v,JSON.parse(process.argv[2]));fs.writeFileSync(p,JSON.stringify(v,null,2));' $finalFile $finalPatch
+  if ($LASTEXITCODE -ne 0) { throw "final_receipt_serialization_failed" }
 }
 if ($IsolatedBacktest) { $receipt.complete = $false; $receipt.status = "isolated_backtest" }
 $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8

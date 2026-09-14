@@ -5,7 +5,7 @@ const {preserveMorningWatchRows}=require("../lib/opening-report-writer-preservat
 const {contentHash,validateReuse}=require("../lib/opening-report-delivery-contract");
 const {validateDbRow}=require("./verify-opening-report-0830-mother-pool-handoff-ack");
 const date="2026-09-14",run="opening-report-0830-20260914-test";
-const payload=(industry,rank)=>({date,report_time:"08:30",source:"opening_report_0830",mode:"priority_bias_only",run_id:`${run}-${industry}`,industry,priority_observation_rank:rank,priority_overseas_leaders:[],bias:"positive",confidence:0.8,evidence_summary:"test"});
+const payload=(industry,rank)=>({date,report_time:"08:50",source:"opening_report_0830",mode:"priority_bias_only",run_id:`${run}-${industry}`,industry,priority_observation_rank:rank,priority_overseas_leaders:[],bias:"positive",confidence:0.8,evidence_summary:"test"});
 const one=payload("IC_DESIGN",1),two=payload("OPTICAL_COMM",2);
 const evidence=mergeOpeningReportEvidence(mergeOpeningReportEvidence(null,one),two);
 assert.deepEqual(evidence.linked_industries,["IC_DESIGN","OPTICAL_COMM"]);
@@ -70,7 +70,7 @@ console.log(JSON.stringify({ok:true,morning_waits_for_matching_rendered_batch:tr
 })().catch(error=>{console.error(error);process.exitCode=1;});
 
 const markdownSource=fs.readFileSync(path.join(__dirname,"run-opening-report-0830-production.js"),"utf8");
-const markdownFn=vm.runInNewContext("("+markdownSource.match(/function markdownReport[\s\S]*?\n}\r?\n/)[0]+")");
+const markdownFn=vm.runInNewContext("("+markdownSource.match(/function markdownReport[\s\S]*?\n}\r?\n/)[0]+")", {morningRecovery:require("../lib/opening-report-recovery")});
 const markdown=markdownFn({tradeDate:date,runId:run,overseasPreflight:{ok:true},priority:{mode:"positive_industry_top3",observations:[{rank:1,display_name:"測試",percent:1,mapped_symbols_a:[{symbol:"2330",name:"台積電"}],mapped_symbols_b:[{symbol:"2308",name:"台達電"}]}]}});
 assert.ok(markdown.includes("台積電（2330）")&&markdown.includes("台達電（2308）"));
 console.log(JSON.stringify({ok:true,markdown_full_names_and_symbols:true}));
