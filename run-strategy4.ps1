@@ -293,7 +293,7 @@ function Invoke-Strategy4ClosureAndLine {
     line_push_ok = [bool]$lineReceipt.line_push_ok
     first_blocker = $null
   } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $lineWrapperFile -Encoding utf8
-  & $nodeExe "scripts\finalize-strategy4-receipt.js" "--expect-run-id=$RunId"
+  & $nodeExe "scripts\verify-strategy4-complete.js" "--expect-run-id=$RunId"
   if ($LASTEXITCODE -ne 0) { throw "Strategy4 final receipt evidence rejected" }
   Write-Log "Strategy4 LINE closure complete runId=$RunId count=$ExpectedCount"
 }
@@ -333,7 +333,7 @@ if ($Recovery) {
   }
   else { Write-Log "Strategy4 historical recovery reused existing delivered LINE evidence; no notification resent. runId=$recoveryRunId tradeDate=$recoveryDate" }
   if (-not $isTodayRecovery) {
-    & $nodeExe "scripts\finalize-strategy4-receipt.js" "--expect-run-id=$recoveryRunId"
+    & $nodeExe "scripts\verify-strategy4-complete.js" "--expect-run-id=$recoveryRunId"
     if ($LASTEXITCODE -ne 0) { throw "Strategy4 historical final receipt evidence rejected" }
   }
   Write-Log "Strategy4 one-entry recovery complete runId=$recoveryRunId count=$recoveryCount"
