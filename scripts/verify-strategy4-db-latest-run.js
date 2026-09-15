@@ -89,7 +89,7 @@ async function main() {
     if (!Array.isArray(page.json) || !page.json.length) break;
     resultRows.push(...page.json);
   }
-  const v3Issues = require("../lib/strategy4-v3-evidence").strategy4V3Issues(row.payload || {}, resultRows);
+  const v3Issues = require("../lib/strategy4-v4-evidence").strategy4V4Issues(row.payload || {}, resultRows);
   if (resultRows.length !== resultCount) v3Issues.push("strategy4_full_row_readback_incomplete");
   const volumeWindow=require("../lib/strategy4-volume-window");
   const expectedDates=await volumeWindow.recentTradingDates(String(row.scan_date).slice(0,10),path.join(RUNTIME_DIR,"state"));

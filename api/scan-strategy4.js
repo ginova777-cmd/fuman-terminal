@@ -925,7 +925,7 @@ function analyzeRows(rows) {
   const kd5 = kdSnapshot(normalizedRows, 5, 3);
   const rsi36 = rsiCrossSnapshot(closes, 3, 6);
   const sharedTechnical = sharedTrend(normalizedRows);
-  const dailyTechnicalGate = {...sharedTechnical, contract: "strategy4_daily_kd_rsi_trend_gate_v2", indicatorContract: sharedTechnical.contract, ok: sharedTechnical.available && sharedTechnical.trendUp};
+  const dailyTechnicalGate = {...sharedTechnical, contract: "strategy4_daily_kd_rsi_bonus_v1", indicatorContract: sharedTechnical.contract, mode: "bonus_only", ok: true};
   const atr14 = atr(rows, 14);
   const wallet = walletSnapshot(normalizedRows);
   const lookback = normalizedRows.slice(-40);
@@ -1053,7 +1053,7 @@ function calcBuyStreak(rows, ma20, volMa20) {
 function scanStrategy4(code, market, rows, priceSource = "") {
   const daily = analyzeRows(rows);
   if (!daily) return null;
-  if (daily.dailyTechnicalGate?.ok !== true) return null;
+  // Daily KD/RSI affect bonus points only; pattern eligibility is independent.
   const last = daily.last;
   const prev = daily.prev;
   const isRed = last.close > last.open;
@@ -1160,7 +1160,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
       reason: `主力爸爸錢包量能紅K交叉${daily.wallet.volumeCrossDate ? `（${daily.wallet.volumeCrossDate}）` : ""}：5日資金量均線 ${Math.round(daily.wallet.volumeMa5).toLocaleString("zh-TW")} 上穿 60日 ${Math.round(daily.wallet.volumeMa60).toLocaleString("zh-TW")}。`,
     });
   }
-  signals.push({
+  if (daily.dailyTechnicalGate.trendUp) signals.push({
     id: "daily_kd_rsi_trend_up",
     short: "日KD/RSI",
     icon: daily.dailyTechnicalGate.kdGoldenCross || daily.dailyTechnicalGate.rsiGoldenCross ? "✦" : "↑",
@@ -1257,9 +1257,9 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     ? (entryPrice < daily.fib382 ? daily.fib382 : (entryPrice < daily.fib500 ? daily.fib500 : daily.fib618))
     : entryPrice + (entryPrice - stopPrice) * 1.2;
   const currentFibRatio = daily.swDiff ? Number(((entryPrice - daily.swLow) / daily.swDiff).toFixed(4)) : 0;
-  const score = Math.min(100, Math.round(
+  const rawBaseScore = Math.round(
     zoneBase +
-    signals.length * 7 +
+    signals.filter(s => s.id !== "daily_kd_rsi_trend_up").length * 7 +
     trendScore * 3 +
     prepScore * 2 +
     Math.min(daily.volumeRatio * 8, 18) +
@@ -1268,9 +1268,13 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     (daily.wallet.volumeCrossUp ? 6 : 0) +
     (triangleBreakout.detected ? 10 : 0) +
     (daily.stage.tone === "low" ? 8 : daily.stage.tone === "mid" ? 5 : daily.stage.tone === "high" ? 2 : -8)
-  ));
+  );
+  const technicalBonus = require("../lib/strategy4-v4-evidence").technicalBonus(daily.dailyTechnicalGate);
+  const baseScore = Math.min(100, rawBaseScore);
+  const score = Math.min(100, baseScore + technicalBonus.total);
 
   return {
+    baseScore, rawBaseScore, technicalBonus,
     code,
     market,
     priceSource,
@@ -1297,7 +1301,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     patternTags: [
       ...(triangleBreakout.detected ? ["triangle_breakout"] : []),
       ...(["confirmed", "probable"].includes(elliottWave.status) ? ["elliott_wave"] : []),
-      "daily_kd_rsi_trend_up",
+      ...(daily.dailyTechnicalGate.trendUp ? ["daily_kd_rsi_trend_up"] : []),
       ...(daily.dailyTechnicalGate.kdGoldenCross ? ["daily_kd_golden_cross"] : []),
       ...(daily.dailyTechnicalGate.rsiGoldenCross ? ["daily_rsi_4_6_golden_cross"] : []),
     ],

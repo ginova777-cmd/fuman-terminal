@@ -1,0 +1,34 @@
+{
+  "contract": "strategy4-selection-bonus-v4",
+  "effectiveTradeDate": "2026-09-15",
+  "runner": "run-strategy4.ps1",
+  "canonicalVerifier": "scripts/verify-strategy4-complete.js",
+  "evidenceVerifier": "lib/strategy4-v4-evidence.js",
+  "resultContract": "strategy4_actionable_patterns_avg5_3000_daily_kd_rsi_bonus_v4",
+  "dailyTrendMode": "bonus_only",
+  "kd": {
+    "period": 5,
+    "smoothing": 3,
+    "points": 5,
+    "condition": "K > previous K AND D > previous D"
+  },
+  "rsi": {
+    "periods": [
+      3,
+      6
+    ],
+    "points": 5,
+    "condition": "RSI3 > previous RSI3 AND RSI6 > previous RSI6"
+  },
+  "missingOrFallingTrend": "zero_bonus_not_exclusion",
+  "required": "exact latest five trading dates average volume >= 3000 lots; actionable pattern and valid risk fields",
+  "ranking": [
+    "total score descending (cap 100)",
+    "technical bonus descending",
+    "raw base score descending",
+    "percent descending",
+    "code ascending"
+  ],
+  "retired": "lib/strategy4-v3-evidence.js fails closed",
+  "receipt": "complete only after canonical DB, three surfaces and configured delivery evidence pass"
+}
