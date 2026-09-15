@@ -1445,8 +1445,8 @@ function collectDesktopStats(route) {
     const activeKey = activeButtons[0]?.dataset?.unifiedStrategyFilter || "";
     const afterRows = rowCount();
     if (route.key === "strategy4") {
-      const allDaily = currentButtons.find(b => /日KD\/RSI/.test(text(b)));
-      allDaily?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      const activeFilter = currentButtons.find(b => b.classList.contains("active"));
+      activeFilter?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     }
     return {
       buttonCount: buttons.length,
