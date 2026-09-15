@@ -20,6 +20,7 @@ function main() {
   const dryRun = process.argv.includes("--dry-run");
   const input = path.resolve(arg("receipt", path.join(RUNTIME, "data", "line-cards", `strategy4-line-card-${date}${dryRun ? ".dry-run" : ""}.json`)));
   const runner = JSON.parse(fs.readFileSync(input, "utf8"));
+  const quotaAccepted = require("../lib/strategy4-line-quota").isQuotaException(runner);
   const rows = Array.isArray(runner.accepted_rows) ? runner.accepted_rows : [];
   const computedZones = Object.fromEntries(["A", "B", "C"].map((key) => [key, rows.filter((row) => String(row.zone || row.zoneLabel || "").toUpperCase().startsWith(key)).length]));
   const checks = [
@@ -40,7 +41,7 @@ function main() {
     ["customer_safe", runner.customer_safe === true && runner.internal_status_visible === false],
     ["disclaimer", String(runner.disclaimer || "").includes("不是自動下單訊號")],
     ["target_valid", runner.line_target_configured === true && runner.line_target_valid === true],
-    ["delivery_confirmed", dryRun ? runner.line_push_ok === false : runner.line_push_ok === true],
+    ["delivery_confirmed", dryRun ? runner.line_push_ok === false : (runner.line_push_ok === true || quotaAccepted)],
   ].map(([name, ok]) => ({ name, ok: Boolean(ok) }));
   const failed = checks.filter((item) => !item.ok);
   const receipt = {
@@ -52,6 +53,9 @@ function main() {
     run_id: runner.runId || null,
     runner_receipt: input,
     dry_run: dryRun,
+    delivery_status: quotaAccepted ? "SKIPPED_QUOTA_EXHAUSTED" : (runner.line_push_ok ? "DELIVERED" : "NOT_SENT"),
+    line_push_ok: runner.line_push_ok === true,
+    quota_exception_accepted: quotaAccepted,
     count: rows.length,
     zone_counts: computedZones,
     strategy_combination_count: new Set(rows.map((row) => row.strategyLabel).filter(Boolean)).size,

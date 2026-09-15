@@ -1,0 +1,10 @@
+'use strict';
+const test=require('node:test'),a=require('node:assert/strict');
+const q=require('../lib/strategy4-line-quota');
+const date='20260915',e={source:'line_quota_api',checked_at:'2026-09-15T12:20:00Z',quota:{type:'limited',value:200},consumption:{totalUsage:200}};
+const receipt=()=>q.applyQuotaException({ok:true,strategy:'strategy4',dry_run:false,line_push_ok:false,runId:'strategy4-20260915-test',dataDate:date,dateAligned:true},structuredClone(e));
+test('monthly quota full allows honest exception',()=>{const r=receipt();a.equal(q.isQuotaException(r),true);a.equal(r.line_push_ok,false);a.equal(r.delivery_count,0);});
+for(const [name,change] of Object.entries({otherStrategy:r=>r.strategy='strategy3',oldRun:r=>r.runId='strategy4-20260914-test',oldEvidence:r=>r.quota_evidence.checked_at='2026-09-14T12:20:00Z',dryRun:r=>r.dry_run=true,missingProof:r=>delete r.quota_evidence,remaining:r=>r.quota_evidence.consumption.totalUsage=199,unlimited:r=>r.quota_evidence.quota.type='none',badNumbers:r=>r.quota_evidence.quota.value='200',claimedDelivery:r=>r.line_push_ok=true,wrongContract:r=>r.delivery_exception_contract='old'}))test(name+' cannot qualify',()=>{const r=receipt();change(r);a.equal(q.isQuotaException(r),false);});
+test('only exact monthly-limit 429 qualifies',()=>{a.ok(q.evidenceFromError(Error('LINE push failed 429: {"message":"You have reached your monthly limit."}')));for(const s of ['LINE push failed 429: {"message":"Too many requests"}','LINE push failed 401: {"message":"You have reached your monthly limit."}','timeout','Missing valid LINE token'])a.equal(q.evidenceFromError(Error(s)),null);});
+test('quota probe is read-only and returns exhaustion evidence',async()=>{const calls=[];const result=await q.probeQuota('test',async url=>{calls.push(url);return {ok:true,json:async()=>url.endsWith('/consumption')?{totalUsage:200}:{type:'limited',value:200}};});a.equal(result.source,'line_quota_api');a.equal(calls.length,2);});
+test('quota API failure never becomes an exception',async()=>{await a.rejects(q.probeQuota('test',async()=>({ok:false,status:401})));});
