@@ -3,7 +3,8 @@
 
   const VERSION = "public-terminal-fast-20260623-09";
   const LIVE_ROUTES = new Set(["strategy|策略2"]);
-  const SNAPSHOT_ROUTES = new Set(["strategy|策略1", "strategy|策略3", "strategy|策略4", "strategy|策略5"]);
+  // 策略 1 已正式退役；保留歷史資料但不再建立 active route。
+  const SNAPSHOT_ROUTES = new Set(["strategy|策略3", "strategy|策略4", "strategy|策略5"]);
   let installedEvents = false;
 
   function install(context = {}) {
@@ -54,7 +55,6 @@
   function routeFromTarget(target) {
     const text = String(target?.textContent || "");
     if (text.includes("策略2") || text.includes("當沖")) return "strategy|策略2";
-    if (text.includes("策略1")) return "strategy|策略1";
     if (text.includes("策略3")) return "strategy|策略3";
     if (text.includes("策略4") || text.includes("波段")) return "strategy|策略4";
     if (text.includes("策略5")) return "strategy|策略5";

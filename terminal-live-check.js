@@ -6890,12 +6890,12 @@ async function loadInstitution() {
 
 function applyStrategyPresetFromLink(link) {
   const text = link?.textContent || "";
+  // 策略 1 已退役：不再建立開盤入頁面或觸發其 API/快取讀取。
+  if (text.includes("策略1") || text.includes("明日開盤") || text.includes("開盤入")) return;
   const isRadarNav = text.includes("雷達");
-  if (!isRadarNav && !text.includes("策略1") && !text.includes("策略2") && !text.includes("策略3") && !text.includes("策略4") && !text.includes("策略5")) return;
+  if (!isRadarNav && !text.includes("策略2") && !text.includes("策略3") && !text.includes("策略4") && !text.includes("策略5")) return;
   strategyPresetMode = text.includes("策略5") ? "strategy5" : text.includes("策略3") ? "strategy3" : "";
-  selectedStrategyIds = text.includes("策略1")
-    ? new Set(["open_buy"])
-    : text.includes("策略3")
+  selectedStrategyIds = text.includes("策略3")
     ? new Set(["overnight_chip"])
     : text.includes("策略5")
     ? new Set(["foreign_trust_breakout"])
@@ -6904,7 +6904,6 @@ function applyStrategyPresetFromLink(link) {
   if (text.includes("策略3")) strategy5ActiveId = "overnight_chip";
   if (text.includes("策略4")) swingSignalFilter = "all";
   if (text.includes("策略2")) intradaySignalFilter = "all";
-  if (text.includes("策略1")) openBuyPage = 1;
   if (text.includes("策略3")) strategy3Page = 1;
   if (text.includes("策略4")) swingPage = 1;
   if (text.includes("策略5")) strategy5Page = 1;
@@ -6927,9 +6926,6 @@ function applyStrategyPresetFromLink(link) {
       await ensureStrategyStocksLoaded();
       await refreshStrategyRealtimeScan("force");
     }, 80);
-  }
-  if (text.includes("策略1")) {
-    deferUiWork(() => loadOpenBuyCache(true), 60);
   }
   if (text.includes("策略4")) {
     deferUiWork(() => loadStrategy4Cache(true), 60);
