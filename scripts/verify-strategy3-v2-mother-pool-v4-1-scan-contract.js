@@ -104,8 +104,8 @@ async function main() {
     hourly60: { ok: true, current_k: 55, previous_k: 50, current_d: 57, previous_d: 58, current_rsi3: 64, previous_rsi3: 60, current_rsi6: 58, previous_rsi6: 55, kd_over_d: false, kd_trend_up: false, rsi3_over_rsi6: true, rsi_trend_up: true, signal_pass: false },
     hourly_strategy3_pass: true,
   }), readAtrRvol);
-  const hourlyRsiRejected = await buildScannerCoreResults(async () => water(), async () => technicalEvidence({
-    ok: false,
+  const hourlyRsiAccepted = await buildScannerCoreResults(async () => water(), async () => technicalEvidence({
+    ok: true,
     hourly60: { ok: true, current_k: 55, previous_k: 60, current_d: 57, previous_d: 58, current_rsi3: 56, previous_rsi3: 58, current_rsi6: 57, previous_rsi6: 59, kd_over_d: false, kd_trend_up: false, rsi3_over_rsi6: false, rsi_trend_up: false, signal_pass: false },
     hourly_strategy3_pass: false,
     reason: "hourly60_rsi3_over_rsi6_trend_not_up",
@@ -130,7 +130,7 @@ async function main() {
     above_8_percent_is_excluded: aboveRange.results.length === 0 && aboveRange.change_percent_gate?.above_range_or_limit_up_count === 1,
     limit_up_is_explicitly_excluded: limitUp.results.length === 0 && limitUp.change_percent_gate?.limit_up_excluded === true,
     candidate_reason_declares_new_gate: first.reason_codes?.includes("strategy3_v2_change_percent_5_to_8_inclusive") && first.reason_codes?.includes("strategy3_v2_limit_up_exclusion_passed"),
-    technical_gate_requires_hourly_rsi_and_daily_full_trend: eligible.technical_trend_gate?.required === true && eligible.technical_trend_gate?.confirmed_count === 1,
+    technical_gate_requires_daily_with_hourly_bonus: eligible.technical_trend_gate?.required === true && eligible.technical_trend_gate?.confirmed_count === 1,
     atr_rvol_gate_is_required: eligible.atr_rvol_gate?.required === true && eligible.atr_rvol_gate?.confirmed_count === 1,
     intraday_1m_is_shared_with_daytrade_source: eligible.candle_source?.ownership === "shared_with_daytrade_canonical_source"
       && eligible.candle_source?.writer === "fugle_daytrade_source"
@@ -140,9 +140,9 @@ async function main() {
     technical_evidence_is_preserved: first.technical_trend_confirmation?.hourly_strategy3_pass === true && first.technical_trend_confirmation?.daily_strategy3_pass === true,
     atr_rvol_evidence_is_preserved: first.atr_rvol_confirmation?.checks?.tail_rvol_ge_15 === true,
     hourly_kd_lag_is_not_a_hard_blocker: hourlyKdLagAccepted.results.length === 1,
-    hourly_rsi_not_up_is_excluded: hourlyRsiRejected.results.length === 0 && hourlyRsiRejected.technical_trend_gate?.trend_rejected_count === 1,
+    hourly_rsi_not_up_is_accepted_without_bonus: hourlyRsiAccepted.results.length === 1 && hourlyRsiAccepted.results[0].hourly60_bonus_points === 0 && hourlyRsiAccepted.technical_trend_gate?.hourly60_required === false,
     daily_indicator_gap_is_excluded_per_symbol: dailyGap.results.length === 0 && dailyGap.technical_trend_gate?.source_gap_count === 1,
-    candidate_reason_declares_technical_gates: first.reason_codes?.includes("strategy3_v2_60m_rsi3_over_rsi6_trend_up") && first.reason_codes?.includes("strategy3_v2_daily_k_over_d_rsi3_over_rsi6_trend_up") && first.reason_codes?.includes("strategy3_v2_atr_rvol_tail_momentum_confirmed"),
+    candidate_reason_declares_technical_gates: first.reason_codes?.includes("strategy3_v2_60m_rsi_bonus_awarded") && first.hourly60_bonus_points === 5 && first.reason_codes?.includes("strategy3_v2_daily_k_over_d_rsi3_over_rsi6_trend_up") && first.reason_codes?.includes("strategy3_v2_atr_rvol_tail_momentum_confirmed"),
     atr_rvol_history_gap_isolated: atrRvolGap.results.length === 0 && atrRvolGap.atr_rvol_gate?.source_gap_count === 1,
     symbol_data_gap_isolated: isolated.results.length === 0 && isolated.symbol_data_gap_rows === 1,
   };
