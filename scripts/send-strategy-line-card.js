@@ -483,6 +483,8 @@ async function main() {
     apiError = error?.message || String(error);
     payload = { ok: false, error: `${strategy}_latest_api_read_failed`, detail: apiError, matches: [] };
   }
+  const fullResultCount = cleanNumber(payload.resultCount || payload.count || payload.matches?.length);
+  if (Array.isArray(payload.matches)) payload = {...payload, matches: payload.matches.slice(0,70), count: Math.min(70,payload.matches.length)};
   const altText = "FUMAN 16:00 策略4完整掃描";
   const count = cleanNumber(payload.count || payload.resultCount || (Array.isArray(payload.matches) ? payload.matches.length : 0) || scanReceipt.matches);
   const baseBlockedReason = text(payload.blockedReason || payload.scanner_block_reason || payload.error || (payload.recoveredFrom ? "" : scanReceipt.blockingReason) || apiError, "");
@@ -517,6 +519,7 @@ async function main() {
     line_push_ok: false,
     line_target_configured: Boolean(lineEnv.token && lineEnv.to),
     line_target_valid: !invalidLineTarget(lineEnv.to),
+    full_result_count: fullResultCount,
     count: publicCount,
     runId: publicRunId,
     previous_good_runId: readyForLine ? "" : runId,
