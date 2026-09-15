@@ -1,4 +1,6 @@
 "use strict";
+const TREND_CONTRACT = require("../data/contracts/strategy3_technical_trend_v2.json");
+const { verifyBonusRow } = require("../lib/strategy3-score-bonuses");
 
 const fs = require("fs");
 const path = require("path");
@@ -162,6 +164,8 @@ issue(issues, guard1250?.contract === "strategy3-v2-readiness-guard-wrapper-v1",
 issue(issues, guard1230?.legacy_strategy3_touched === false, "readiness_guard_1230_touched_legacy", { value: guard1230?.legacy_strategy3_touched });
 issue(issues, guard1250?.legacy_strategy3_touched === false, "readiness_guard_1250_touched_legacy", { value: guard1250?.legacy_strategy3_touched });
 issue(issues, guard1230?.line_push_allowed === false && guard1250?.line_push_allowed === false, "readiness_guard_line_push_not_forbidden");
+issue(issues, scan?.scanner_summary?.technical_trend_gate?.required === false && scan?.scanner_summary?.atr_rvol_gate?.required === false && scan?.scanner_summary?.technical_trend_gate?.contract === TREND_CONTRACT.contract && scan?.scanner_summary?.technical_trend_gate?.hourly60_required === false && scan?.scanner_summary?.technical_trend_gate?.hourly60_bonus_max_points === TREND_CONTRACT.hourly60BonusPoints, "technical_trend_policy_mismatch");
+issue(issues, Array.isArray(scan?.results) && scan.results.every(row => verifyBonusRow(row).length === 0), "optional_bonus_evidence_or_score_mismatch");
 issue(issues, scan?.ok === true && String(scan?.status || "").toUpperCase() === "COMPLETE", "complete_scan_not_complete", { path: receipts.scan, status: scan?.status, ok: scan?.ok });
 issue(issues, String(scan?.run_id || "").startsWith("strategy3v2-"), "complete_scan_runid_not_v2", { run_id: scan?.run_id });
 issue(issues, Array.isArray(scan?.results) && scan.results.length === Number(scan?.result_count || 0), "complete_scan_result_count_mismatch", { result_count: scan?.result_count, rows: scan?.results?.length });
@@ -172,8 +176,11 @@ issue(issues, line?.token_logged === false && line?.target_logged === false, "li
 issue(issues, waterUniverseRun.exitCode === 0 && waterUniverse.ok === true && waterUniverse.status === "STRATEGY3_V2_WATER_UNIVERSE_READY", "water_universe_contract_not_ready", { exitCode: waterUniverseRun.exitCode, status: waterUniverse.status, firstBlocker: waterUniverse.first_blocker, stderrTail: waterUniverseRun.stderrTail });
 issue(issues, surfaceRun.exitCode === 0 && surface.ok === true, "surface_closure_not_ready", { exitCode: surfaceRun.exitCode, status: surface.status, issues: surface.issues, stderrTail: surfaceRun.stderrTail });
 
-const runId = surface?.canonical_api?.runId || "";
-const count = Number(surface?.canonical_api?.count || 0);
+// The current scan owns identity; a stale API may never select the expected batch.
+const runId = scan?.trade_date === tradeDate ? String(scan?.run_id || "") : "";
+const count = Number(scan?.result_count || 0);
+issue(issues, Boolean(runId) && surface?.canonical_api?.runId === runId, "canonical_api_runid_mismatch", { actual: surface?.canonical_api?.runId, expected: runId });
+issue(issues, Number(surface?.canonical_api?.count || 0) === count, "canonical_api_count_mismatch", { actual: surface?.canonical_api?.count, expected: count });
 issue(issues, scan?.run_id === runId, "complete_scan_runid_mismatch", { scan_run_id: scan?.run_id, expected: runId });
 issue(issues, waterUniverse.run_id === runId, "water_universe_runid_mismatch", { water_run_id: waterUniverse.run_id, expected: runId });
 issue(issues, Number(scan?.result_count || 0) === count, "complete_scan_count_mismatch", { scan_count: scan?.result_count, expected: count });
