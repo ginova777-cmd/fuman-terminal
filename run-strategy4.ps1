@@ -322,6 +322,7 @@ if ($Recovery) {
   $publishEvidencePath = Join-Path $RuntimeRoot "data\scan-receipts\strategy4-daily-publish-$recoveryDate.json"
   $publishEvidence = if (Test-Path -LiteralPath $publishEvidencePath) { Get-Content -LiteralPath $publishEvidencePath -Raw | ConvertFrom-Json } else { $null }
   $isTodayRecovery = $recoveryDate -eq (Get-Date).ToString("yyyyMMdd")
+  if ($isTodayRecovery -and $null -ne $lineEvidence -and $lineEvidence.line_push_ok -ne $true) { $lineEvidence = $null }
   if ($null -ne $lineEvidence -and ($lineEvidence.line_push_ok -ne $true -or [string]$lineEvidence.runId -ne $recoveryRunId)) { throw "Strategy4 recovery found mismatched LINE evidence for runId=$recoveryRunId" }
   if ($null -eq $lineEvidence -and -not $isTodayRecovery) { throw "Strategy4 historical recovery requires delivered LINE evidence for runId=$recoveryRunId" }
   if ($null -ne $publishEvidence -and ($publishEvidence.ok -ne $true -or [string]$publishEvidence.runId -ne $recoveryRunId)) { throw "Strategy4 recovery found mismatched daily publish evidence for runId=$recoveryRunId" }
@@ -329,7 +330,9 @@ if ($Recovery) {
   Write-Strategy4Receipt "delivering" 0 $false $recoveryCount $recoveryRunId @() "" ([int]$row.supabase.scannedCount) ([int]$row.supabase.expectedTotal)
   Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId $recoveryRunId -ExpectedDate $recoveryDate -Row $row
   if ($isTodayRecovery) {
+    try {
     Invoke-Strategy4ClosureAndLine $recoveryRunId $recoveryCount -ReuseDeliveredLineEvidence:($null -ne $lineEvidence)
+    } catch { Write-Strategy4Receipt "failed" 1 $false $recoveryCount $recoveryRunId @() $_.Exception.Message ([int]$row.supabase.scannedCount) ([int]$row.supabase.expectedTotal); exit 1 }
   }
   else { Write-Log "Strategy4 historical recovery reused existing delivered LINE evidence; no notification resent. runId=$recoveryRunId tradeDate=$recoveryDate" }
   if (-not $isTodayRecovery) {
