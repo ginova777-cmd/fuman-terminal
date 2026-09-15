@@ -91,6 +91,7 @@
     "apply:daytrade-intraday-5m-readback": "node --use-system-ca scripts/apply-daytrade-intraday-5m-readback.js",
     "apply:daytrade-intraday-5m-latest-closed-view": "node --use-system-ca scripts/apply-daytrade-intraday-5m-latest-closed-view.js",
     "test:daytrade-intraday-5m-source-lineage": "node scripts/test-daytrade-intraday-5m-source-lineage.js",
+    "test:daytrade-intraday-5m-coverage-contract": "node scripts/test-daytrade-intraday-5m-coverage-contract.js",
     "verify:daytrade-intraday-5m-readback": "node --use-system-ca scripts/verify-daytrade-intraday-5m-readback.js",
     "run:daytrade-intraday-5m-writer": "node --use-system-ca scripts/run-daytrade-intraday-5m-writer.js",
     "run:daytrade-intraday-5m-complete": "node --use-system-ca scripts/run-daytrade-intraday-5m-complete.js",
