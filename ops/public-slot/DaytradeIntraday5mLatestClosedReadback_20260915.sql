@@ -1,9 +1,10 @@
 begin;
 
 -- Preserve the current consumer contract: this view only exposes the newest
--- v4 run whose receipt has already passed. Within that accepted run, select
--- each symbol's newest fully closed natural regular-session bar. Excluding
--- in-progress buckets prevents them from masking the prior closed bar.
+-- v4 run whose receipt passed the current exact 90% effective-coverage rule.
+-- Older v4 receipts created under the former 70% policy remain in history but
+-- cannot become the current latest view. Within the accepted run, select each
+-- symbol's newest fully closed natural regular-session bar.
 create or replace view public.v_fugle_intraday_5m_readback as
 with latest_verified_run as (
   select r.trade_date, r.run_id
@@ -12,6 +13,12 @@ with latest_verified_run as (
     and r.status = 'complete'
     and r.exit_code = 0
     and r.contract = 'daytrade_intraday_5m_runner_verifier_receipt_v4'
+    and coalesce((r.diagnostic_summary->'latest_view_quality'->>'effective_threshold')::numeric, 0) >= 0.9
+    and coalesce((r.diagnostic_summary->'latest_view_quality'->>'effective_count')::integer, 0) > 0
+    and coalesce((r.diagnostic_summary->'latest_view_quality'->>'total')::integer, 0) > 0
+    and coalesce((r.diagnostic_summary->'latest_view_quality'->>'effective_count')::integer, 0) * 10
+        >= coalesce((r.diagnostic_summary->'latest_view_quality'->>'total')::integer, 0) * 9
+    and coalesce((r.diagnostic_summary->'latest_view_quality'->>'meets_effective_coverage')::boolean, false) is true
   order by r.trade_date desc, r.verified_at desc, r.run_id desc
   limit 1
 )
@@ -34,6 +41,6 @@ where latest_rank = 1;
 
 grant select on public.v_fugle_intraday_5m_readback to anon, authenticated, service_role;
 comment on view public.v_fugle_intraday_5m_readback is
-  'Newest regular-session 5m bar that is naturally sourced and fully closed for each symbol, restricted to the newest v4 run with a passed receipt. In-progress and DATA_GAP rows remain available in the versioned history view.';
+  'Newest regular-session 5m bar naturally sourced and fully closed for each symbol, restricted to newest v4 receipt meeting exact >=90% effective coverage. Legacy 70% receipts remain in history but are not exposed as current latest. In-progress and DATA_GAP rows remain available in versioned history.';
 notify pgrst, 'reload schema';
 commit;
