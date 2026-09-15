@@ -25,6 +25,19 @@ if (Test-Path -LiteralPath $snapshotPath) {
 $candidateSymbols = @($candidateSymbols | Where-Object { $_ -match '^\d{4}$' } | Select-Object -Unique)
 if ($candidateSymbols.Count -eq 0) { throw "5m candidate pool contains zero symbols" }
 Write-Output "5m candidates source=$candidateSource count=$($candidateSymbols.Count)"
+# The task fires exactly on each 5-minute boundary. Fugle 1m rows for the
+# just-closed interval can arrive a few seconds later; wait a bounded 45s
+# after that boundary before taking the source snapshot. Never backfill bars.
+$now = Get-Date
+$minuteOfDay = ($now.Hour * 60) + $now.Minute
+$lastClosedBoundaryMinute = [math]::Floor($minuteOfDay / 5) * 5
+$lastClosedBoundary = $now.Date.AddMinutes($lastClosedBoundaryMinute)
+$sourceSnapshotReadyAt = $lastClosedBoundary.AddSeconds(45)
+$stabilizationSeconds = [math]::Ceiling(($sourceSnapshotReadyAt - (Get-Date)).TotalSeconds)
+if ($stabilizationSeconds -gt 0) {
+  Write-Output "5m source stabilization wait=${stabilizationSeconds}s boundary=$($lastClosedBoundary.ToString('o'))"
+  Start-Sleep -Seconds $stabilizationSeconds
+}
 & (Join-Path $root "run-daytrade-intraday-5m-complete.ps1") -Symbols ($candidateSymbols -join ',')
 if ($LASTEXITCODE -ne 0) { throw "5m current-candidate closure failed (exit=$LASTEXITCODE)" }
 } finally { $mutex.ReleaseMutex(); $mutex.Dispose() }
