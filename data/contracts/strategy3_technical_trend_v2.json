@@ -1,1 +1,19 @@
-{"contract":"strategy3-daily-required-hourly-bonus-v2","effectiveDate":"2026-09-14","dailyRequired":true,"dailyRule":"K>D AND K>previous_K AND D>previous_D AND RSI3>RSI6 AND RSI3>previous_RSI3 AND RSI6>previous_RSI6","hourly60Required":false,"hourly60BonusPoints":5,"hourly60Rule":"RSI3>RSI6 AND RSI3>previous_RSI3 AND RSI6>previous_RSI6","hourly60UnavailablePolicy":"zero_bonus_no_exclusion","scoreCap":100}
+{
+  "contract": "strategy3-four-bonus-groups-v3",
+  "effectiveDate": "2026-09-15",
+  "dailyRequired": false,
+  "dailyBonusPoints": 5,
+  "dailyRule": "K>D AND K>previous_K AND D>previous_D AND RSI3>RSI6 AND RSI3>previous_RSI3 AND RSI6>previous_RSI6",
+  "hourly60Required": false,
+  "hourly60BonusPoints": 5,
+  "hourly60Rule": "RSI3>RSI6 AND RSI3>previous_RSI3 AND RSI6>previous_RSI6",
+  "entryContinuationRequired": false,
+  "entryContinuationBonusPoints": 5,
+  "entryContinuationRule": "close_price>=entry_price AND total_1m_volume>0",
+  "atrRvolRequired": false,
+  "atrRvolBonusPoints": 5,
+  "atrRvolRule": "close_location>=0.75 AND session_RVOL>=1.5 AND tail_RVOL>=1.5 AND 0.8<=TR/ATR14<=2.2 AND comparable_sessions>=2",
+  "unavailablePolicy": "zero_bonus_no_exclusion",
+  "hourly60UnavailablePolicy": "zero_bonus_no_exclusion",
+  "scoreCap": 100
+}

@@ -35,12 +35,12 @@ function main() {
   const daily = dailyBars(risingBars(20).map((bar, index) => ({ ...bar, trade_date: `2026-08-${String(index + 1).padStart(2, "0")}` })), "2026-09-11", { open_price: 125, high_price: 128, low_price: 124, price: 127 });
   const goodDaily = {ok:true,signal_pass:true};
   const checks = {
-    daily_pass_with_hourly_missing_is_eligible: evaluateStrategy3Trend({ok:false},goodDaily).ok === true,
+    daily_signal_preserved_with_hourly_missing: evaluateStrategy3Trend({ok:false},goodDaily).ok === true,
     hourly_missing_awards_zero: evaluateStrategy3Trend({ok:false},goodDaily).hourly60_bonus_points === 0,
-    flat_hourly_does_not_exclude: evaluateStrategy3Trend({ok:true,rsi3_over_rsi6:false,rsi_trend_up:false},goodDaily).ok === true,
+    flat_hourly_does_not_erase_daily_signal: evaluateStrategy3Trend({ok:true,rsi3_over_rsi6:false,rsi_trend_up:false},goodDaily).ok === true,
     hourly_up_awards_five: evaluateStrategy3Trend({ok:true,rsi3_over_rsi6:true,rsi_trend_up:true},goodDaily).hourly60_bonus_points === 5,
-    daily_down_still_excluded: evaluateStrategy3Trend(rising,{ok:true,signal_pass:false}).ok === false,
-    daily_missing_still_blocks: evaluateStrategy3Trend(rising,{ok:false}).source_ready === false,
+    daily_down_signal_not_awarded: evaluateStrategy3Trend(rising,{ok:true,signal_pass:false}).ok === false,
+    daily_missing_is_unavailable_evidence: evaluateStrategy3Trend(rising,{ok:false}).source_ready === false,
     periods_are_fixed: KD_PERIOD === 5 && RSI_FAST_PERIOD === 3 && RSI_SLOW_PERIOD === 6,
     rising_k_over_d_and_rsi3_over_rsi6_pass: rising.ok === true && rising.kd_over_d === true && rising.kd_trend_up === true && rising.rsi3_over_rsi6 === true && rising.rsi_trend_up === true && rising.signal_pass === true,
     falling_kd_or_rsi_fails: falling.ok === true && falling.signal_pass === false,
@@ -49,7 +49,7 @@ function main() {
     live_daily_bar_replaces_or_appends_trade_date: daily[daily.length - 1]?.key === "2026-09-11" && daily[daily.length - 1]?.close === 127,
   };
   const failedChecks = Object.entries(checks).filter(([, ok]) => ok !== true).map(([name]) => name);
-  console.log(JSON.stringify({ ok: failedChecks.length === 0, contract: "strategy3-daily-required-hourly-bonus-v2", checks, failed_checks: failedChecks, first_blocker: failedChecks[0] || null }, null, 2));
+  console.log(JSON.stringify({ ok: failedChecks.length === 0, contract: require("../data/contracts/strategy3_technical_trend_v2.json").contract, checks, failed_checks: failedChecks, first_blocker: failedChecks[0] || null }, null, 2));
   process.exitCode = failedChecks.length ? 1 : 0;
 }
 

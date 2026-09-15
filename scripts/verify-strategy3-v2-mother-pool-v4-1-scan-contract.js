@@ -117,8 +117,21 @@ async function main() {
     reason: "daily_indicator_history_below_10_bars",
   }), readAtrRvol);
   const atrRvolGap = await buildScannerCoreResults(async () => water(), readTechnical, async () => atrRvolEvidence({ ok: false, source_ready: false, reason: "atr_rvol_history_data_gap" }));
+  const lowerCloseWater = water();
+  lowerCloseWater.quoteBySymbol.get(symbol).price = 1;
+  const lowerClose = await buildScannerCoreResults(async()=>lowerCloseWater,readTechnical,readAtrRvol);
+  const dailyDown = await buildScannerCoreResults(async()=>water(),async()=>technicalEvidence({ok:false,daily_strategy3_pass:false,daily:{ok:true,current_k:40,previous_k:50,current_d:45,previous_d:48,current_rsi3:30,previous_rsi3:40,current_rsi6:35,previous_rsi6:42}}),readAtrRvol);
+  const lowLocation = await buildScannerCoreResults(async()=>water(),readTechnical,async()=>atrRvolEvidence({ok:false,close_location:0.5}));
   const first = eligible.results[0] || {};
+  const verifyBonusRow = require('../lib/strategy3-score-bonuses').verifyBonusRow;
   const checks = {
+    below_entry_price_keeps_candidate_without_bonus: lowerClose.results.length===1 && lowerClose.results[0].entry_continuation_bonus_points===0,
+    daily_down_keeps_candidate_without_bonus: dailyDown.results.length===1 && dailyDown.results[0].daily_bonus_points===0,
+    low_close_location_keeps_candidate_without_bonus: lowLocation.results.length===1 && lowLocation.results[0].atr_rvol_bonus_points===0,
+    bonus_fields_all_five_and_total_capped: ['entry_continuation_bonus_points','daily_bonus_points','atr_rvol_bonus_points','hourly60_bonus_points'].every(k=>first[k]===5) && first.score===Math.min(100,first.base_score+20),
+    bonus_verifier_accepts_real_evidence: verifyBonusRow(first).length===0,
+    bonus_verifier_rejects_unearned_daily_points: verifyBonusRow({...dailyDown.results[0],daily_bonus_points:5}).length>0,
+    bonus_verifier_rejects_tampered_total: verifyBonusRow({...first,score:first.score-1}).length>0,
     v4_1_candidate_created: eligible.results.length === 1,
     v4_1_membership_source_preserved: first.universe_source === MOTHER_POOL_VIEW && first.contract_version === MOTHER_POOL_CONTRACT_VERSION && first.canonical_run_id === canonicalRunId,
     rpc_entry_source_preserved: first.entry_price_source === `${INTRADAY_1M_RPC}:first_close_1259_1302`,
@@ -130,8 +143,8 @@ async function main() {
     above_8_percent_is_excluded: aboveRange.results.length === 0 && aboveRange.change_percent_gate?.above_range_or_limit_up_count === 1,
     limit_up_is_explicitly_excluded: limitUp.results.length === 0 && limitUp.change_percent_gate?.limit_up_excluded === true,
     candidate_reason_declares_new_gate: first.reason_codes?.includes("strategy3_v2_change_percent_5_to_8_inclusive") && first.reason_codes?.includes("strategy3_v2_limit_up_exclusion_passed"),
-    technical_gate_requires_daily_with_hourly_bonus: eligible.technical_trend_gate?.required === true && eligible.technical_trend_gate?.confirmed_count === 1,
-    atr_rvol_gate_is_required: eligible.atr_rvol_gate?.required === true && eligible.atr_rvol_gate?.confirmed_count === 1,
+    daily_and_hourly_are_bonus_only: eligible.technical_trend_gate?.required === false && eligible.technical_trend_gate?.confirmed_count === 1,
+    atr_rvol_gate_is_bonus_only: eligible.atr_rvol_gate?.required === false && eligible.atr_rvol_gate?.confirmed_count === 1,
     intraday_1m_is_shared_with_daytrade_source: eligible.candle_source?.ownership === "shared_with_daytrade_canonical_source"
       && eligible.candle_source?.writer === "fugle_daytrade_source"
       && eligible.candle_source?.table === "fugle_daytrade_intraday_1m"
@@ -141,9 +154,9 @@ async function main() {
     atr_rvol_evidence_is_preserved: first.atr_rvol_confirmation?.checks?.tail_rvol_ge_15 === true,
     hourly_kd_lag_is_not_a_hard_blocker: hourlyKdLagAccepted.results.length === 1,
     hourly_rsi_not_up_is_accepted_without_bonus: hourlyRsiAccepted.results.length === 1 && hourlyRsiAccepted.results[0].hourly60_bonus_points === 0 && hourlyRsiAccepted.technical_trend_gate?.hourly60_required === false,
-    daily_indicator_gap_is_excluded_per_symbol: dailyGap.results.length === 0 && dailyGap.technical_trend_gate?.source_gap_count === 1,
+    daily_indicator_gap_keeps_candidate_without_daily_bonus: dailyGap.results.length === 1 && dailyGap.results[0].daily_bonus_points === 0 && dailyGap.technical_trend_gate?.source_gap_count === 1,
     candidate_reason_declares_technical_gates: first.reason_codes?.includes("strategy3_v2_60m_rsi_bonus_awarded") && first.hourly60_bonus_points === 5 && first.reason_codes?.includes("strategy3_v2_daily_k_over_d_rsi3_over_rsi6_trend_up") && first.reason_codes?.includes("strategy3_v2_atr_rvol_tail_momentum_confirmed"),
-    atr_rvol_history_gap_isolated: atrRvolGap.results.length === 0 && atrRvolGap.atr_rvol_gate?.source_gap_count === 1,
+    atr_rvol_history_gap_keeps_candidate_without_bonus: atrRvolGap.results.length === 1 && atrRvolGap.results[0].atr_rvol_bonus_points === 0 && atrRvolGap.atr_rvol_gate?.source_gap_count === 1,
     symbol_data_gap_isolated: isolated.results.length === 0 && isolated.symbol_data_gap_rows === 1,
   };
   const failedChecks = Object.entries(checks).filter(([, ok]) => ok !== true).map(([name]) => name);

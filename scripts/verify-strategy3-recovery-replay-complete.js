@@ -1,4 +1,6 @@
 "use strict";
+const TREND_CONTRACT = require("../data/contracts/strategy3_technical_trend_v2.json");
+const { verifyBonusRow } = require("../lib/strategy3-score-bonuses");
 
 const fs = require("fs");
 const path = require("path");
@@ -37,11 +39,12 @@ async function main() {
   add(failed, runner?.trade_date === tradeDate, "runner_trade_date_mismatch");
   add(failed, runner?.canonical_run_id === `fugle_daytrade_source:${compact}:canonical`, "canonical_run_id_mismatch");
   add(failed, Number(runner?.scanner_summary?.mother_pool_coverage_ratio || 0) >= 0.9, "mother_pool_1m_coverage_below_090");
-  add(failed, runner?.scanner_summary?.technical_trend_gate?.required === true, "technical_trend_gate_missing");
-  add(failed, Number(runner?.scanner_summary?.technical_trend_gate?.source_gap_count || 0) === 0, "technical_trend_source_gap");
-  add(failed, runner?.scanner_summary?.atr_rvol_gate?.required === true, "atr_rvol_gate_missing");
+  add(failed, runner?.scanner_summary?.technical_trend_gate?.required === false, "technical_trend_gate_missing");
+  add(failed, runner?.scanner_summary?.atr_rvol_gate?.required === false, "atr_rvol_gate_missing");
   add(failed, String(runner?.scanner_summary?.atr_rvol_gate?.rule || "").includes("minimum_two_comparable_sessions"), "atr_rvol_minimum_history_policy_mismatch");
-  add(failed, Array.isArray(runner?.results) && runner.results.every((row) => row?.atr_rvol_confirmation?.ok === true), "result_missing_atr_rvol_confirmation");
+  add(failed, Array.isArray(runner?.results) && runner.results.every((row) => row?.atr_rvol_confirmation && row?.bonus_evidence), "result_missing_atr_rvol_confirmation");
+  add(failed, runner?.scanner_summary?.technical_trend_gate?.contract === TREND_CONTRACT.contract && runner?.scanner_summary?.technical_trend_gate?.hourly60_required === false && runner?.scanner_summary?.technical_trend_gate?.hourly60_bonus_max_points === TREND_CONTRACT.hourly60BonusPoints, "technical_trend_policy_mismatch");
+  add(failed, Array.isArray(runner?.results) && runner.results.every(row => verifyBonusRow(row).length === 0), "optional_bonus_evidence_or_score_mismatch");
   const surfaceTab = surface?.summary?.tabs?.strategy3 || {};
   add(failed, surface?.ok === true && Array.isArray(surface?.issues) && surface.issues.length === 0, "three_surface_verifier_not_complete");
   add(failed, surfaceTab?.api?.runId === runner?.run_id && Number(surfaceTab?.api?.count || 0) === Number(runner?.result_count || 0), "canonical_api_run_or_count_mismatch");
@@ -58,7 +61,7 @@ async function main() {
     try {
       [runRows, resultRows] = await Promise.all([
         rest(url, key, "strategy3_v2_scan_runs", { select: "run_id,trade_date,status,complete,publish_allowed,finished_at,coverage", run_id: `eq.${runner.run_id}`, limit: 1 }),
-        rest(url, key, "strategy3_v2_scan_results", { select: "run_id,trade_date,code,complete,quality_status", run_id: `eq.${runner.run_id}`, limit: 1200 }),
+        rest(url, key, "strategy3_v2_scan_results", { select: "run_id,trade_date,code,complete,quality_status,payload", run_id: `eq.${runner.run_id}`, limit: 1200 }),
       ]);
     } catch (error) { failed.push(`supabase_readback_failed:${String(error?.message || error)}`); }
   }
@@ -67,6 +70,8 @@ async function main() {
   add(failed, run?.status === "complete" && run?.complete === true && run?.publish_allowed === true, "database_run_not_complete");
   add(failed, resultRows.length === Number(runner?.result_count || 0), "database_result_count_mismatch");
   add(failed, resultRows.every((row) => row.run_id === runner.run_id && row.trade_date === tradeDate && row.complete === true), "database_result_identity_mismatch");
+  add(failed, resultRows.every(row => verifyBonusRow(row.payload || {}).length === 0
+    && require("util").isDeepStrictEqual(row.payload?.bonus_evidence, runner.results.find(x=>x.code===row.code)?.bonus_evidence)), "database_bonus_evidence_mismatch");
   const payload = {
     ok: failed.length === 0,
     status: failed.length === 0 ? "complete" : "failed",
