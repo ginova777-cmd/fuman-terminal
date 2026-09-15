@@ -478,6 +478,7 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
 }
 
 async function main() {
+  const scanStartedAt = new Date().toISOString();
   const market = runMarketGuard();
   if (market.closed) {
     const receipt = {
@@ -638,6 +639,8 @@ async function main() {
       receipt.supabase_apply = { ok: false, error: String(error?.message || error).slice(0, 600) };
     }
   }
+  receipt.started_at = scanStartedAt;
+  receipt.finished_at = new Date().toISOString();
   receipt.consumer_name = STRATEGY;
   receipt.consumer_commit = scanner.water.receipt?.consumer_commit || "unknown";
   receipt.contract_version = MOTHER_POOL_CONTRACT_VERSION;
