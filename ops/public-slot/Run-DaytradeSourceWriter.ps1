@@ -39,6 +39,48 @@ function Write-WrapperLog {
   Add-Content -LiteralPath $WrapperLog -Value $line -Encoding utf8
 }
 
+function Invoke-MotherPoolReceiptRollover {
+  param([int]$FastSyncExitCode)
+  if (-not $Apply -or $FastSyncExitCode -ne 0) { return }
+
+  $receiptPath = Join-Path $RuntimeDir "data\scan-receipts\daytrade-mother-pool-closed-loop-$($TradeDate.Replace('-','')).json"
+  $receiptComplete = $false
+  try {
+    if (Test-Path -LiteralPath $receiptPath) {
+      $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+      $receiptComplete = (
+        $receipt.closed_loop_ok -eq $true -and
+        [string]$receipt.trade_date -eq $TradeDate -and
+        [string]$receipt.canonical_run_id -eq "fugle_daytrade_source:$($TradeDate.Replace('-','')):canonical"
+      )
+    }
+  } catch {
+    Write-WrapperLog "MOTHER_POOL_RECEIPT_ROLLOVER existing_receipt_unreadable path=$receiptPath error=$($_.Exception.Message)"
+  }
+  # A complete receipt for an earlier pool size must be refreshed after membership changes.
+  if ($receiptComplete) {
+    try {
+      $delta = Get-Content -LiteralPath (Join-Path $RuntimeDir "state\daytrade-mother-pool-delta.json") -Raw | ConvertFrom-Json
+      $receiptComplete = ([string]$delta.trade_date -eq $TradeDate -and [string]$delta.canonical_run_id -eq [string]$receipt.canonical_run_id -and @($delta.rows).Count -eq [int]$receipt.components.mother_pool.rows)
+    } catch { $receiptComplete = $false }
+  }
+  if ($receiptComplete) {
+    Write-WrapperLog "MOTHER_POOL_RECEIPT_ROLLOVER skip=today_complete path=$receiptPath"
+    return
+  }
+
+  $verifierScript = Join-Path $RepoRoot "scripts\verify-daytrade-mother-pool-closed-loop.js"
+  if (-not (Test-Path -LiteralPath $verifierScript)) {
+    Write-WrapperLog "MOTHER_POOL_RECEIPT_ROLLOVER skip=verifier_missing path=$verifierScript"
+    return
+  }
+  $verifyOutput = & node --use-system-ca $verifierScript --write-receipt 2>&1
+  $verifyExit = $LASTEXITCODE
+  $verifyText = (($verifyOutput | Out-String) -replace "[\r\n]+", " ").Trim()
+  if ($verifyText.Length -gt 700) { $verifyText = $verifyText.Substring(0, 700) }
+  Write-WrapperLog "MOTHER_POOL_RECEIPT_ROLLOVER exit=$verifyExit output=$verifyText"
+}
+
 function Get-IsoAgeSeconds {
   param([object]$Value)
   try {
@@ -403,6 +445,7 @@ if ($Apply) {
     Write-WrapperLog "FAST_SUPABASE_SYNC skip=script_missing path=$fastSyncScript"
   }
 }
+if ($Apply) { Invoke-MotherPoolReceiptRollover -FastSyncExitCode $fastSyncExit }
 try {
   if (Test-Path -LiteralPath $CrossSessionLockPath) {
     $staleLockProbe = $null
