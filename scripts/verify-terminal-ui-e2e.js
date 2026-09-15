@@ -1445,8 +1445,8 @@ function collectDesktopStats(route) {
     const activeKey = activeButtons[0]?.dataset?.unifiedStrategyFilter || "";
     const afterRows = rowCount();
     if (route.key === "strategy4") {
-      const allDaily = currentButtons.find(b => /日KD\/RSI/.test(text(b)));
-      allDaily?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      const activeFilter = currentButtons.find(b => b.classList.contains("active"));
+      activeFilter?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     }
     return {
       buttonCount: buttons.length,
@@ -2002,7 +2002,12 @@ async function collectDesktopStatsWhenReady(cdp, route, timeoutMs = 22000) {
   while (Date.now() - start < timeoutMs) {
     last = await evaluate(cdp, collectDesktopStats, route)
       .catch((error) => fallbackDesktopStats(cdp, route, error));
-    if (last?.ok && !(last.blockerMatches || []).length) {
+    // Strategy4 may paint an initial subset before the full ranked list arrives.
+    // Wait within the existing deadline for exact identity; never waive missing rows.
+    const expectedS4 = optionValue("--expected-symbols").split(",").filter(Boolean).sort();
+    const actualS4 = [...new Set((last?.candidateTexts || []).map(t => (String(t).match(/#\d+\s+(?:[^\d]*?\s)?(\d{4,6})\b/) || [])[1]).filter(Boolean))].sort();
+    const s4IdentityReady = route.key !== "strategy4" || !process.argv.includes("--require-content") || (last?.contentRunId === optionValue("--expected-run-id") && JSON.stringify(actualS4) === JSON.stringify(expectedS4));
+    if (last?.ok && !(last.blockerMatches || []).length && s4IdentityReady) {
       if (route.key === "market-ai") {
         const stability = await collectMarketAiLayoutStability(cdp).catch((error) => ({
           ok: false,
