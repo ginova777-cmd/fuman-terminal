@@ -1,5 +1,6 @@
 "use strict";
 const TREND_CONTRACT = require("../data/contracts/strategy3_technical_trend_v2.json");
+const { scoreBonuses } = require("../lib/strategy3-score-bonuses");
 
 const { spawnSync } = require("child_process");
 const path = require("path");
@@ -263,7 +264,7 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
       aboveChangeRangeOrLimitUpCount += 1;
       continue;
     }
-    if (!(closePrice >= entryPrice && totalVolume > 0)) continue;
+    // Entry continuation and positive volume award a bonus; they do not exclude candidates.
 
     const tailShare = totalVolume > 0 ? (tailVolume / totalVolume) * 100 : 0;
     const fullSessionBonus = count >= 200 ? 8 : count >= 100 ? 4 : 0;
@@ -301,7 +302,6 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
       reason_codes: [
         "strategy3_v2_same_day_1m_ready",
         "strategy3_v2_1300_entry_window_present",
-        "strategy3_v2_close_above_entry",
         "strategy3_v2_change_percent_5_to_8_inclusive",
         "strategy3_v2_limit_up_exclusion_passed",
       ],
@@ -382,37 +382,30 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
   let technicalTrendRejectedCount = 0;
   let atrRvolSourceGapCount = 0;
   let atrRvolRejectedCount = 0;
-  const confirmedCandidates = candidates.filter((item) => {
-    const technical = technicalBySymbol.get(item.code);
-    if (!technical?.source_ready) {
-      technicalSourceGapCount += 1;
-      return false;
-    }
-    if (technical.ok !== true) {
-      technicalTrendRejectedCount += 1;
-      return false;
-    }
-    const atrRvol = atrRvolBySymbol.get(item.code);
-    if (!atrRvol?.source_ready) {
-      atrRvolSourceGapCount += 1;
-      return false;
-    }
-    if (atrRvol.ok !== true) {
-      atrRvolRejectedCount += 1;
-      return false;
-    }
-    const hourlyBonus = technical.hourly_strategy3_pass === true ? TREND_CONTRACT.hourly60BonusPoints : 0;
-    item.base_score = item.score;
-    item.hourly60_bonus_points = hourlyBonus;
-    item.score = Math.min(TREND_CONTRACT.scoreCap, item.score + hourlyBonus);
-    if (hourlyBonus) item.reason_codes.push("strategy3_v2_60m_rsi_bonus_awarded");
+  const confirmedCandidates = candidates.map((item) => {
+    const technical = technicalBySymbol.get(item.code) || {ok:false,source_ready:false,reason:'technical_evidence_unavailable'};
+    const atrRvol = atrRvolBySymbol.get(item.code) || {ok:false,source_ready:false,reason:'atr_rvol_evidence_unavailable'};
+    if (!technical.source_ready) technicalSourceGapCount += 1;
+    if (technical.source_ready && !technical.daily_strategy3_pass) technicalTrendRejectedCount += 1;
+    if (!atrRvol.source_ready) atrRvolSourceGapCount += 1;
+    if (atrRvol.source_ready && !atrRvol.ok) atrRvolRejectedCount += 1;
     item.technical_trend_confirmation = technical;
     item.atr_rvol_confirmation = atrRvol;
-    item.reason_codes.push(
-      "strategy3_v2_daily_k_over_d_rsi3_over_rsi6_trend_up",
-      "strategy3_v2_atr_rvol_tail_momentum_confirmed",
-    );
-    return true;
+    const bonuses = scoreBonuses(item);
+    item.base_score = item.score;
+    item.score_contract = TREND_CONTRACT.contract;
+    item.bonus_evidence = bonuses;
+    item.entry_continuation_bonus_points = bonuses.entryContinuation.points;
+    item.daily_bonus_points = bonuses.daily.points;
+    item.atr_rvol_bonus_points = bonuses.atrRvol.points;
+    item.hourly60_bonus_points = bonuses.hourly60.points;
+    item.score = Math.min(TREND_CONTRACT.scoreCap, item.base_score + Object.values(bonuses).reduce((sum,x)=>sum+x.points,0));
+    if (bonuses.entryContinuation.points) item.reason_codes.push('strategy3_v2_close_above_entry');
+    if (bonuses.daily.points) item.reason_codes.push('strategy3_v2_daily_k_over_d_rsi3_over_rsi6_trend_up');
+    if (bonuses.atrRvol.points) item.reason_codes.push('strategy3_v2_atr_rvol_tail_momentum_confirmed');
+    if (bonuses.hourly60.points) item.reason_codes.push('strategy3_v2_60m_rsi_bonus_awarded');
+    item.reason_codes.push('strategy3_v2_optional_bonus_groups_no_exclusion');
+    return item;
   });
   confirmedCandidates.sort((a, b) => b.score - a.score || b.change_percent - a.change_percent || b.tail_volume_share_pct - a.tail_volume_share_pct);
   confirmedCandidates.forEach((item, index) => { item.rank = index + 1; });
@@ -449,8 +442,9 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
       above_range_or_limit_up_count: aboveChangeRangeOrLimitUpCount,
     },
     technical_trend_gate: {
-      required: true,
-      policy: "live_daily_kd_rsi_full_trend_required_completed_60m_rsi_bonus_v2",
+      required: false,
+      daily_bonus_max_points: TREND_CONTRACT.dailyBonusPoints,
+      policy: "daily_and_completed_60m_optional_bonus_v3",
       hourly60_required: TREND_CONTRACT.hourly60Required,
       hourly60_bonus_max_points: TREND_CONTRACT.hourly60BonusPoints,
       contract: TREND_CONTRACT.contract,
@@ -458,18 +452,21 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
       daily_rule: "K>D AND K>previous_K AND D>previous_D AND RSI3>RSI6 AND RSI3>previous_RSI3 AND RSI6>previous_RSI6",
       evaluated_symbols: candidates.length,
       source_gap_count: technicalSourceGapCount,
-      trend_rejected_count: technicalTrendRejectedCount,
-      confirmed_count: confirmedCandidates.length,
+      trend_rejected_count: 0,
+      daily_not_awarded_count: technicalTrendRejectedCount,
+      confirmed_count: confirmedCandidates.filter(row => row.daily_bonus_points > 0).length,
       symbol_evidence: [...technicalBySymbol.entries()].map(([symbol, evidence]) => ({ symbol, ...evidence })),
     },
     atr_rvol_gate: {
-      required: true,
-      policy: "1560_style_tail_continuation_v1",
+      required: false,
+      bonus_max_points: TREND_CONTRACT.atrRvolBonusPoints,
+      policy: "1560_style_tail_continuation_bonus_v3",
       rule: "close_location>=0.75;session_RVOL_baseline>=1.5;tail_RVOL_baseline>=1.5;0.8<=TR/ATR14<=2.2;minimum_two_comparable_sessions;two_to_four_low_sample_confidence",
       evaluated_symbols: candidates.length,
       source_gap_count: atrRvolSourceGapCount,
-      rejected_count: atrRvolRejectedCount,
-      confirmed_count: confirmedCandidates.length,
+      rejected_count: 0,
+      not_awarded_count: atrRvolRejectedCount,
+      confirmed_count: confirmedCandidates.filter(row => row.atr_rvol_bonus_points > 0).length,
       symbol_evidence: [...atrRvolBySymbol.entries()].map(([symbol, evidence]) => ({ symbol, ...evidence })),
     },
     symbol_data_gap_rows: water.symbolDataGaps.size,
