@@ -1312,7 +1312,9 @@ function render() {
     metric("總損益", pnlText(summary.totalPnl), (summary.totalPnl || 0) >= 0 ? "good" : "bad", "scorecard-metric-pnl"),
   ].join("");
 
-  const strategies = uniqueStrategies(rows);
+  const zeroReports = (payload.sourceReports || []).filter(r => r.key === 'strategy3' && r.ok === true && r.publishAllowed === true && r.evidenceStatus === 'complete' && r.fallbackUsed === false && Number(r.resultCount ?? r.count) === 0 && (r.tradeDate || r.date || r.sourceDate) === latestDate && r.runId);
+  const strategies = [...new Set([...uniqueStrategies(rows), ...zeroReports.map(() => '策略3隔日沖成績單')])];
+  reportsNode.hidden = zeroReports.length === 0;
   const supplementalTabs = [
     ["當沖 PS1", "daytradeEntryPanel", "scorecard-daytrade-ps1-tab"],
     ["七策略每日紀錄", "sevenStrategyDailyHistoryPanel", "scorecard-seven-strategy-daily-history-tab"],
