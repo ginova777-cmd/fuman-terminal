@@ -601,13 +601,14 @@ async function main() {
     if (!lineEnv.token || invalidLineTarget(lineEnv.to)) throw new Error("Missing valid LINE token or target userId");
     const { sendLineFlex } = require(path.join(ROOT, "scripts", "line-push.js"));
     const quotaPolicy = strategy === "strategy4" ? require("../lib/strategy4-line-quota") : null;
-    let quotaEvidence = null;
-    if (quotaPolicy) {
+    const history = quotaPolicy?.readDeliveryHistory({targets:require('./line-push').lineTargets(),runId:receipt.runId,date:receipt.date,messages:[{type:'flex',altText,contents:card}]});
+    let quotaEvidence = history?.quotaEvidence || null;
+    if (quotaPolicy && !history) {
       try { quotaEvidence = await quotaPolicy.probeQuota(process.env.LINE_CHANNEL_ACCESS_TOKEN); }
       catch (error) { console.warn("Strategy4 quota probe unavailable; normal delivery remains required: " + error.message); }
     }
-    let deliveries = [];
-    if (!quotaEvidence) {
+    let deliveries = history ? history.deliveries.map(r=>({sent:r.status==='DELIVERED'})) : [];
+    if (!quotaEvidence && !history) {
       try { deliveries = await sendLineFlex(altText, card, { idempotencyKey: `strategy-line-card:${strategy}:${receipt.date}:${receipt.runId || "no-run"}:${receipt.status}${deliveryId ? `:${deliveryId}` : ""}` });
       } catch (error) {
         quotaEvidence = quotaPolicy?.evidenceFromError(error);
@@ -616,6 +617,7 @@ async function main() {
     }
     if (quotaEvidence) {
       quotaPolicy.applyQuotaException(receipt, quotaEvidence);
+      if (history) { receipt.delivery_count=history.deliveryCount; receipt.deliveries=history.deliveries; receipt.delivery_history_reused=true; }
     } else {
     const attempted = Array.isArray(deliveries) ? deliveries : [];
     const failed = attempted.filter((item) => item?.sent !== true);
