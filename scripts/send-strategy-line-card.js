@@ -601,7 +601,7 @@ async function main() {
     if (!lineEnv.token || invalidLineTarget(lineEnv.to)) throw new Error("Missing valid LINE token or target userId");
     const { sendLineFlex } = require(path.join(ROOT, "scripts", "line-push.js"));
     const quotaPolicy = strategy === "strategy4" ? require("../lib/strategy4-line-quota") : null;
-    const history = quotaPolicy?.readDeliveryHistory({targets:require('./line-push').lineTargets(),runId:receipt.runId,date:receipt.date,messages:[{type:'flex',altText,contents:card}]});
+    let history = quotaPolicy?.readDeliveryHistory({targets:require('./line-push').lineTargets(),runId:receipt.runId,date:receipt.date,messages:[{type:'flex',altText,contents:card}]});
     let quotaEvidence = history?.quotaEvidence || null;
     if (quotaPolicy && !history) {
       try { quotaEvidence = await quotaPolicy.probeQuota(process.env.LINE_CHANNEL_ACCESS_TOKEN); }
@@ -613,6 +613,7 @@ async function main() {
       } catch (error) {
         quotaEvidence = quotaPolicy?.evidenceFromError(error);
         if (!quotaEvidence) throw error;
+        history = quotaPolicy.readDeliveryHistory({targets:require('./line-push').lineTargets(),runId:receipt.runId,date:receipt.date,messages:[{type:'flex',altText,contents:card}]});
       }
     }
     if (quotaEvidence) {
@@ -650,6 +651,7 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, strategy, error: receipt.error, receipt_path: file }, null, 2));
   process.exit(1);
 });
+
 
 
 
