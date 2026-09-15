@@ -603,7 +603,7 @@ async function main() {
     const quotaPolicy = strategy === "strategy4" ? require("../lib/strategy4-line-quota") : null;
     let quotaEvidence = null;
     if (quotaPolicy) {
-      try { quotaEvidence = await quotaPolicy.probeQuota(lineEnv.token); }
+      try { quotaEvidence = await quotaPolicy.probeQuota(process.env.LINE_CHANNEL_ACCESS_TOKEN); }
       catch (error) { console.warn("Strategy4 quota probe unavailable; normal delivery remains required: " + error.message); }
     }
     let deliveries = [];
@@ -648,6 +648,7 @@ main().catch((error) => {
   console.error(JSON.stringify({ ok: false, strategy, error: receipt.error, receipt_path: file }, null, 2));
   process.exit(1);
 });
+
 
 
 
