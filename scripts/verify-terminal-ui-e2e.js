@@ -2546,12 +2546,14 @@ async function runStrategy3Scorecard(browser) {
         const rows = [...document.querySelectorAll('#rows tr[data-strategy="策略3隔日沖成績單"]')]
           .filter(row => row.getBoundingClientRect().height > 0 && row.cells[0]?.innerText.trim() === date)
           .map(row => ({ symbol: row.cells[2]?.innerText.trim(), runId: row.dataset.runId, sourceRunId: row.dataset.sourceReportRunId, text: row.innerText }));
-        return { rows, emptyText: document.querySelector('#rows .empty')?.innerText || "", sourceText: document.querySelector('#scorecardSourceReports')?.innerText || "" };
+        const auditRow = [...document.querySelectorAll('#scanAudit tbody tr')].find(row => row.cells[0]?.innerText.trim() === '策略3');
+        return { rows, auditText: auditRow?.innerText || '', emptyText: document.querySelector('#rows .empty')?.innerText || "", sourceText: document.querySelector('#scorecardSourceReports')?.innerText || "" };
       }, { date });
       stats.actualSymbols = stats.rows.map(row => row.symbol).sort();
       stats.ok = Boolean(expectedRun) && JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols)
         && stats.rows.every(row => row.runId === expectedRun && row.sourceRunId === expectedRun)
         && (expectedSymbols.length > 0 || (/沒有符合/.test(stats.emptyText) && stats.sourceText.includes(expectedRun)));
+      if (process.argv.includes('--require-strategy3-audit')) stats.ok = stats.ok && stats.auditText.includes(expectedRun) && stats.auditText.includes(date) && /電腦 \/ 88 \/ 手機一致/.test(stats.auditText) && !/未完成|未收到/.test(stats.auditText);
       if (stats.ok) break;
       await sleep(750);
     } while (Date.now() < deadline);

@@ -55,6 +55,7 @@ const awaitingScorecard = !recordFailure && requestedAwaitingScorecard && baseCo
 const status = complete ? "complete" : awaitingScorecard ? "awaiting_scorecard_1315" : "failed";
 const blockingReason = complete ? "" : failureReason || delivery.firstBlocker || (recoveryReplay ? "strategy3_recovery_replay_closure_not_complete" : awaitingScorecard ? "scorecard_collection_pending_1315" : !baseComplete ? "strategy3_base_closure_not_complete" : "strategy3_tri_surface_scorecard_not_complete");
 const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "strategy3", tradeDate: date,
+  startedAt: scan?.started_at || null, finishedAt: scan?.finished_at || scan?.checked_at || null,
   lineStatus: acceptedLineException ? "SKIPPED_QUOTA_EXHAUSTED" : (line?.status || "missing"),
   completionScope: acceptedLineException ? "scan_database_three_surfaces_with_user_accepted_line_exception" : "full_delivery",
   lineDelivered: line?.line_push_personal_ok === true && line?.line_push_group_ok === true,

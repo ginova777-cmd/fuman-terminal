@@ -87,6 +87,9 @@ try {
     }
     Invoke-Required "complete delivery verifier" { & $nodeExe --use-system-ca scripts\verify-strategy3-delivery.js --recovery-replay }
     Invoke-Required "independent recovery final receipt" { & $nodeExe --use-system-ca scripts\finalize-strategy3-complete.js --recovery-replay }
+    Invoke-Required "publish final scan audit via canonical collector" { & $pwshExe -NoProfile -File scripts\run-scorecard88-terminal-collector.ps1 -Slot '13:15' -ProjectRoot $PSScriptRoot -RuntimeRoot $runtime -Recovery -ExpectedRunId $scan.run_id -RecoveryReason 'strategy3_final_receipt_audit_refresh' }
+    Invoke-Required "final rendered UI including scan audit" { & $nodeExe --use-system-ca scripts\verify-terminal-ui-e2e.js --only=desktop-night,mobile-phone-portrait-night --routes=strategy3 --skip-watchlist --require-content --include-scorecard --require-strategy3-audit "--out=$runtime\data\strategy3-ui" "--expected-run-id=$($scan.run_id)" "--expected-symbols=$((@($scan.results | ForEach-Object {$_.code}) -join ','))" --route-timeout=120000 --eval-timeout=60000 }
+    Invoke-Required "final receipt after audit display readback" { & $nodeExe --use-system-ca scripts\finalize-strategy3-complete.js --recovery-replay }
     exit 0
   }
   if ($Recovery) {
