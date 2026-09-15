@@ -63,5 +63,13 @@ if ($Slot -eq '13:15' -and $ExpectedRunId -notmatch '^strategy3v2-recovery-repla
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   & node (Join-Path $ProjectRoot 'scripts\finalize-strategy3-complete.js')
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  & node $script "--slot=$Slot" --recovery "--expected-run-id=$strategy3RunId" --recovery-reason=strategy3_final_receipt_audit_refresh
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  & node $verifier "--slot=$Slot"
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  & node (Join-Path $ProjectRoot 'scripts\verify-terminal-ui-e2e.js') --only=desktop-night,mobile-phone-portrait-night --routes=strategy3 --skip-watchlist --require-content --include-scorecard --require-strategy3-audit "--out=$RuntimeRoot\data\strategy3-ui" "--expected-run-id=$strategy3RunId" "--expected-symbols=$((@($scan.results | ForEach-Object {$_.code}) -join ','))" --route-timeout=120000 --eval-timeout=60000
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  & node (Join-Path $ProjectRoot 'scripts\finalize-strategy3-complete.js')
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 exit 0
