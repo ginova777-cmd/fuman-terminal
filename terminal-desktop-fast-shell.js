@@ -54,7 +54,7 @@
     [MARKET_ROUTE]: { limit: 24, ttl: 14000, live: true, today: true },
     "strategy|策略2": { limit: 240, ttl: 6500, live: true, today: true },
     "strategy|策略3": { limit: 60, ttl: 22000, live: true, verify: true, noSnapshot: true },
-    "strategy|策略4": { limit: 70, ttl: 24000 },
+    "strategy|策略4": { limit: 2000, ttl: 24000 },
     "strategy|策略5": { limit: 140, ttl: 22000 },
     "chip-trade|買賣超": { limit: 60, ttl: 32000, live: true, noSnapshot: true },
   };
@@ -1593,7 +1593,7 @@
     if (!endpoint) return "";
     const options = canvasOptionsForRoute(route);
     const minLimit = isStrategy4Route(route) ? 10 : 20;
-    const maxLimit = isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : isStrategy5Route(route) ? 140 : 120;
+    const maxLimit = isStrategy4Route(route) ? 2000 : isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : isStrategy5Route(route) ? 140 : 120;
     const query = new URLSearchParams({
       canvas: "1",
       compact: "1",
@@ -1926,7 +1926,7 @@
         .map((row, index) => normalizeCanvasRow(row, index, route))
         .filter((row) => isStrategy3Route(route) ? /^\d{4}$/.test(String(row.code || "")) : (row.code || row.title)))
       .sort((a, b) => b.length - a.length)[0] || [];
-    const maxLimit = isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : isStrategy5Route(route) ? 140 : 120;
+    const maxLimit = isStrategy4Route(route) ? 2000 : isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : isStrategy5Route(route) ? 140 : 120;
     if (isRealtimeRadarRoute(route)) {
       return best
         .sort((a, b) => radarDomTimeValue(b) - radarDomTimeValue(a)
