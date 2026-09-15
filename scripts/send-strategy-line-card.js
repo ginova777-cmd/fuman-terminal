@@ -600,13 +600,32 @@ async function main() {
   if (!dryRun) {
     if (!lineEnv.token || invalidLineTarget(lineEnv.to)) throw new Error("Missing valid LINE token or target userId");
     const { sendLineFlex } = require(path.join(ROOT, "scripts", "line-push.js"));
-    const deliveries = await sendLineFlex(altText, card, { idempotencyKey: `strategy-line-card:${strategy}:${receipt.date}:${receipt.runId || "no-run"}:${receipt.status}${deliveryId ? `:${deliveryId}` : ""}` });
+    const quotaPolicy = strategy === "strategy4" ? require("../lib/strategy4-line-quota") : null;
+    let quotaEvidence = null;
+    if (quotaPolicy) {
+      try { quotaEvidence = await quotaPolicy.probeQuota(lineEnv.token); }
+      catch (error) { console.warn("Strategy4 quota probe unavailable; normal delivery remains required: " + error.message); }
+    }
+    let deliveries = [];
+    if (!quotaEvidence) {
+      try { deliveries = await sendLineFlex(altText, card, { idempotencyKey: `strategy-line-card:${strategy}:${receipt.date}:${receipt.runId || "no-run"}:${receipt.status}${deliveryId ? `:${deliveryId}` : ""}` });
+      } catch (error) {
+        quotaEvidence = quotaPolicy?.evidenceFromError(error);
+        if (!quotaEvidence) throw error;
+      }
+    }
+    if (quotaEvidence) {
+      quotaPolicy.applyQuotaException(receipt, quotaEvidence);
+    } else {
     const attempted = Array.isArray(deliveries) ? deliveries : [];
     const failed = attempted.filter((item) => item?.sent !== true);
     if (!attempted.length || failed.length) throw new Error(`LINE delivery not confirmed: attempted=${attempted.length};failed=${failed.length}`);
     receipt.line_push_ok = true;
     receipt.delivery_id = deliveryId;
     receipt.delivery_count = attempted.length;
+    receipt.delivery_status = "DELIVERED";
+    receipt.delivery_confirmed = true;
+    }
   }
   const file = writeReceipt(strategy, receipt, { dryRun });
   console.log(JSON.stringify({ ok: true, dry_run: dryRun, strategy, line_push_ok: receipt.line_push_ok, status: receipt.status, count, runId: receipt.runId, blockedReason, receipt_path: file }, null, 2));
