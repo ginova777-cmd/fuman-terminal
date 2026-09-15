@@ -26,7 +26,7 @@ async function capture(run){
  const runs=await get('strategy4_scan_runs',{select:'*',run_id:'eq.'+run,limit:1});const db=runs[0];
  if(!db||db.complete!==true||db.result_count!==scan.matches||db.scanned_count!==scan.scanned||db.expected_total!==scan.total)throw Error('DB run mismatch');
  const rows=[];for(let offset=0;offset<db.result_count;offset+=1000){const page=await get('strategy4_scan_results',{select:'code,run_id,scan_date,payload',run_id:'eq.'+run,order:'rank.asc',offset,limit:1000});if(!page.length)break;rows.push(...page);}
- const issues=require('../lib/strategy4-v3-evidence').strategy4V3Issues(db.payload||{},rows);
+ const issues=require('../lib/strategy4-v4-evidence').strategy4V4Issues(db.payload||{},rows);
  const symbols=rows.map(x=>String(x.code)).sort();
  if(rows.length!==scan.matches||new Set(symbols).size!==symbols.length||issues.length)throw Error('DB full readback invalid '+issues.join(';'));
  const day=run.split('-')[1];if(String(scan.tradeDate).replace(/-/g,'')!==day||rows.some(x=>String(x.run_id)!==run||String(x.scan_date).replace(/-/g,'')!==day))throw Error('DB row date/run mismatch');

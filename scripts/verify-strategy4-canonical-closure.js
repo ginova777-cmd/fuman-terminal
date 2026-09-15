@@ -11,7 +11,7 @@ const SUPABASE_KEY = terminalSupabaseKey({ root: ROOT, runtimeDir: RUNTIME_DIR }
 const RESULTS_TABLE = process.env.STRATEGY4_SUPABASE_RESULTS_TABLE || "strategy4_scan_results";
 const RUNS_TABLE = process.env.STRATEGY4_SUPABASE_RUNS_TABLE || "strategy4_scan_runs";
 const OUT_DIR = path.join(RUNTIME_DIR, "data", "scan-receipts");
-const DISPLAY_LIMIT = Math.max(1, Number(process.env.STRATEGY4_CANONICAL_DISPLAY_LIMIT || 70));
+const DISPLAY_LIMIT = Math.max(1, Number(process.env.STRATEGY4_CANONICAL_DISPLAY_LIMIT || 2000));
 const EXPECTED_RUN_ID = String(process.env.EXPECTED_STRATEGY4_RUN_ID || "").trim();
 
 function cleanNumber(value) {
@@ -149,7 +149,7 @@ async function readPublishedRun() {
     noDataCount: cleanNumber(run.no_data_count),
     errorCount: cleanNumber(run.error_count),
     qualityStatus: String(run.quality_status || ""),
-    v3Issues: require("../lib/strategy4-v3-evidence").strategy4V3Issues(run.payload || {}, rows),
+    v3Issues: require("../lib/strategy4-v4-evidence").strategy4V4Issues(run.payload || {}, rows),
     resultContract: run.payload?.resultContract || "",
     rows: canonicalRows(rows.map((row) => ({ ...row, ...(row.payload || {}) }))),
   };
@@ -197,10 +197,10 @@ async function main() {
   if (scanRunId && scanRunId !== published.runId) issues.push(`scan_receipt_runId_mismatch scan=${scanRunId} published=${published.runId}`);
   if (cleanNumber(scanReceipt.matches) && cleanNumber(scanReceipt.matches) !== published.count) issues.push(`scan_receipt_match_count_mismatch scan=${scanReceipt.matches} published=${published.count}`);
   if (apiRows.length !== displayRows.length) issues.push(`api_display_count_mismatch apiRows=${apiRows.length} displayCount=${displayRows.length} publishedCount=${published.count}`);
-  if (lineRows.length !== displayRows.length) issues.push(`line_display_count_mismatch lineRows=${lineRows.length} displayCount=${displayRows.length} publishedCount=${published.count}`);
-  if (apiRows.length !== lineRows.length) issues.push(`api_line_display_count_mismatch apiRows=${apiRows.length} lineRows=${lineRows.length}`);
+  if (lineRows.length !== Math.min(70, displayRows.length)) issues.push(`line_display_count_mismatch lineRows=${lineRows.length} displayCount=${displayRows.length} publishedCount=${published.count}`);
+  if (Math.min(70, apiRows.length) !== lineRows.length) issues.push(`api_line_display_count_mismatch apiRows=${apiRows.length} lineRows=${lineRows.length}`);
   issues.push(...compareDisplayedRowsAgainstPublished("api_vs_published_display", apiRows, publishedRows));
-  issues.push(...compareRows("line_vs_api_display", apiRows, lineRows));
+  issues.push(...compareRows("line_vs_api_display", apiRows.slice(0,70), lineRows));
   issues.push(...compareDisplayedRowsAgainstPublished("line_vs_published_display", lineRows, publishedRows));
   const missingTargets = publishedRows.filter((row) => row.entryPrice <= 0 || row.targetPrice <= 0 || row.stopPrice <= 0 || row.score <= 0 || !row.zone).map((row) => row.code);
   if (missingTargets.length) issues.push(`published_strategy4_required_display_fields_missing:${missingTargets.join(",")}`);

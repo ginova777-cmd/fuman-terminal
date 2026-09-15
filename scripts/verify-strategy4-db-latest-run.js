@@ -89,8 +89,26 @@ async function main() {
     if (!Array.isArray(page.json) || !page.json.length) break;
     resultRows.push(...page.json);
   }
-  const v3Issues = require("../lib/strategy4-v3-evidence").strategy4V3Issues(row.payload || {}, resultRows);
+  const v3Issues = require("../lib/strategy4-v4-evidence").strategy4V4Issues(row.payload || {}, resultRows);
   if (resultRows.length !== resultCount) v3Issues.push("strategy4_full_row_readback_incomplete");
+  const volumeWindow=require("../lib/strategy4-volume-window");
+  const expectedDates=await volumeWindow.recentTradingDates(String(row.scan_date).slice(0,10),path.join(RUNTIME_DIR,"state"));
+  const filter=row.payload?.volumeFilter || {};
+  if(JSON.stringify(expectedDates)!==JSON.stringify(filter.expectedDates))v3Issues.push("volume_calendar_window_mismatch");
+  const daily=[];
+  for(let offset=0;offset<20000;offset+=1000){
+    const search=new URLSearchParams({select:"symbol,trade_date,volume_lots,volume_shares",order:"trade_date.asc,symbol.asc",offset:String(offset),limit:"1000"});
+    search.append("trade_date","gte."+expectedDates[0]);search.append("trade_date","lte."+expectedDates.at(-1));
+    const page=await supabase("/rest/v1/"+(process.env.STRATEGY4_DAILY_VIEW || "stock_daily_volume")+"?"+search);
+    if(!Array.isArray(page.json))throw new Error("volume_readback_not_array");daily.push(...page.json);if(page.json.length<1000)break;
+    if(offset===19000)throw new Error("volume_readback_page_limit");
+  }
+  const byCode=new Map();for(const d of daily){if(!byCode.has(d.symbol))byCode.set(d.symbol,[]);byCode.get(d.symbol).push(d);}
+  for(const e of filter.evaluations || []){
+    const actual=volumeWindow.evaluateVolumeWindow(byCode.get(e.code)||[],expectedDates);
+    if(actual.ok!==e.ok || actual.avgVolume5!==e.avgVolume5 || JSON.stringify(actual.rows)!==JSON.stringify(e.rows))v3Issues.push("volume_authoritative_readback_mismatch:"+e.code);
+  }
+
   const expectedTotal = Number(row.expected_total || 0);
   const scannedCount = Number(row.scanned_count || 0);
   const qualityStatus = String(row.quality_status || "");
