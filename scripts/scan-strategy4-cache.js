@@ -1999,9 +1999,6 @@ async function main() {
   if (!codes.length) throw new Error("No stock universe");
   strategy4ExpectedVolumeDates = await recentTradingDates(normalizeIsoDate(RUN_STAMP), STATE_DIR);
   await refreshStrategy4VolumeCacheFromSupabase();
-  const volumeRepair = await require("../lib/strategy4-volume-repair").repairVolumeGaps(universe, readJson(STRATEGY4_VOLUME_CACHE_FILE, {}), strategy4ExpectedVolumeDates, RUNTIME_DIR);
-  console.log(`strategy4 bounded volume repair: candidates=${volumeRepair.candidates} appliedRows=${volumeRepair.appliedRows} stopped=${volumeRepair.stoppedReason}`);
-  if (volumeRepair.appliedRows > 0) await refreshStrategy4VolumeCacheFromSupabase();
 
   const previousRaw = {
     ok: true,
