@@ -1,6 +1,8 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const { meetsEffectiveCoverage, summarizeCoverage } = require("./daytrade-intraday-5m-coverage-contract");
 const { resolveVolumeUnit } = require("./daytrade-intraday-5m-volume-unit");
 
@@ -48,5 +50,10 @@ assert.equal(resolveVolumeUnit({ type: "EQUITY", market: "ESB" }).volume_unit, "
 assert.equal(resolveVolumeUnit({ type: "ODDLOT", market: "TSE" }).volume_unit, "shares");
 assert.equal(resolveVolumeUnit({ type: "INDEX", market: "TSE" }).volume_unit, "currency_amount");
 assert.equal(resolveVolumeUnit({ type: "EQUITY", market: "UNKNOWN" }).volume_available, false);
+
+const latestViewSql = fs.readFileSync(path.join(__dirname, "..", "ops", "public-slot", "DaytradeIntraday5mLatestClosedReadback_20260915.sql"), "utf8");
+assert.match(latestViewSql, /effective_threshold[^\n]*>= 0\.9/i, "latest view must exclude legacy runs with a lower threshold");
+assert.match(latestViewSql, /effective_count[^\n]*\* 10[\s\S]*>= [\s\S]*total[^\n]*\* 9/i, "latest view must use exact integer cross multiplication");
+assert.match(latestViewSql, /meets_effective_coverage[^\n]*is true/i, "latest view must require an affirmative 90% receipt diagnostic");
 
 console.log("PASS: exact 184/205 and 185/205 boundaries, denominator, per-symbol effectiveness, and Fugle volume-unit mapping.");
