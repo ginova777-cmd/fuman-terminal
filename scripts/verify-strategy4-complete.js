@@ -7,8 +7,10 @@ function validate(e,run){
  if(!scanReady(s,run))fail.push('scan_not_ready');
  for(const [name,obj,key] of [['daily',d,'runId'],['line',l,'runId'],['wrapper',w,'run_id'],['verifier',v,'run_id'],['canonical',c,'runId']])if(!obj||obj.ok!==true||obj[key]!==run)fail.push(name+'_not_verified_same_run');
  if(d?.issues?.length||c?.issues?.length||d?.count!==s.matches||d?.scan?.complete!==true)fail.push('daily_or_canonical_invalid');
+ const quotaAccepted=require('../lib/strategy4-line-quota').isQuotaException(l);
+ if(quotaAccepted&&(w?.line_push_ok!==false||v?.line_push_ok!==false||w?.delivery_status!=='SKIPPED_QUOTA_EXHAUSTED'||v?.quota_exception_accepted!==true))fail.push('quota_exception_not_independently_verified');
  const norm=a=>JSON.stringify([...a].sort());
- if(l?.dry_run!==false||l?.line_push_ok!==true||l?.count!==Math.min(s.matches,70)||l?.rendered_count!==l?.count||!Array.isArray(l?.rendered_symbols)||!Array.isArray(l?.accepted_symbols)||norm(l.rendered_symbols)!==norm(l.accepted_symbols))fail.push('line_not_rendered_and_delivered');
+ if(l?.dry_run!==false||(l?.line_push_ok!==true&&!quotaAccepted)||l?.count!==Math.min(s.matches,70)||l?.rendered_count!==l?.count||!Array.isArray(l?.rendered_symbols)||!Array.isArray(l?.accepted_symbols)||norm(l.rendered_symbols)!==norm(l.accepted_symbols))fail.push('line_not_rendered_and_delivered');
  if(w?.status!=='complete'||w?.first_blocker!=null||v?.status!=='complete')fail.push('wrapper_or_verifier_incomplete');
  return fail;
 }
@@ -20,7 +22,7 @@ function main(){
  const rendered=require('./verify-strategy4-rendered-complete').runRendered(run,scan);
  const e={scan,rendered,daily:read(path.join(root,`data/scan-receipts/strategy4-daily-publish-${day}.json`)),canonical:read(path.join(root,`data/scan-receipts/strategy4-canonical-closure-${day}.json`)),line:read(path.join(root,`data/line-cards/strategy4-line-card-${day}.json`)),wrapper:read(path.join(root,`data/line-cards/strategy4-line-card-wrapper-receipt-${day}.json`)),verifier:read(path.join(root,`data/line-cards/strategy4-line-card-canonical-verifier-receipt-${day}.json`))};
  const issues=validate(e,run);if(issues.length)throw Error(issues.join(';'));
- const final={...scan,status:'complete',complete:true,qualityStatus:'complete',finishedAt:new Date().toISOString(),completionContract:'strategy4_runner_verifier_receipt_v2',deliveryVerifiedRunId:run,renderedVerifiedRunId:run,renderedReceipt:rendered.receiptPath,renderedVerifiedAt:rendered.checkedAt};
+ const final={...scan,status:'complete',complete:true,qualityStatus:'complete',finishedAt:new Date().toISOString(),completionContract:'strategy4_runner_verifier_receipt_v3',deliveryVerifiedRunId:e.line.line_push_ok?run:null,deliveryPolicyVerifiedRunId:run,lineDelivery:{status:e.line.delivery_status||(e.line.line_push_ok?'DELIVERED':'NOT_SENT'),delivered:e.line.line_push_ok===true,quotaExceptionAccepted:require('../lib/strategy4-line-quota').isQuotaException(e.line),evidence:e.line.quota_evidence||null},renderedVerifiedRunId:run,renderedReceipt:rendered.receiptPath,renderedVerifiedAt:rendered.checkedAt};
  const tmp=scanPath+'.finalizing';fs.writeFileSync(tmp,JSON.stringify(final,null,2)+'\n');fs.renameSync(tmp,scanPath);
  try { require('child_process').execFileSync(process.execPath,['--use-system-ca',path.join(__dirname,'publish-scorecard-scan-audit.js')],{cwd:path.resolve(__dirname,'..'),stdio:'pipe',windowsHide:true,timeout:90000}); require('child_process').execFileSync('C:/Program Files/PowerShell/7/pwsh.exe',['-NoProfile','-File',path.join(__dirname,'run-scorecard88-terminal-collector.ps1'),'-Slot','17:00','-ProjectRoot',path.resolve(__dirname,'..'),'-RuntimeRoot',root,'-Recovery','-ExpectedRunId',run,'-RecoveryReason','verified Strategy4 delivery complete'],{cwd:path.resolve(__dirname,'..'),stdio:'pipe',windowsHide:true,timeout:240000}); } catch(error) { fs.writeFileSync(scanPath,JSON.stringify({...scan,status:'failed',complete:false,exitCode:1,blockingReason:'final_scan_audit_publish_failed'},null,2)+'\n'); throw error; }
  console.log(JSON.stringify({ok:true,runId:run,status:'complete'}));

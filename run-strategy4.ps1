@@ -262,7 +262,8 @@ function Invoke-Strategy4ClosureAndLine {
   $lineFile = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-$((Get-Date).ToString('yyyyMMdd')).json"
   $lineReceipt = Get-Content -LiteralPath $lineFile -Raw | ConvertFrom-Json
   $expectedLineCount = [Math]::Min($ExpectedCount, 70)
-  if ($lineReceipt.line_push_ok -ne $true -or [string]$lineReceipt.runId -ne $RunId -or [int]$lineReceipt.count -ne $expectedLineCount) { throw "Strategy4 LINE receipt mismatch push=$($lineReceipt.line_push_ok) runId=$($lineReceipt.runId) count=$($lineReceipt.count) expectedDisplay=$expectedLineCount" }
+  # Only the independent LINE verifier can accept the authorized quota exception.
+  if ([string]$lineReceipt.runId -ne $RunId -or [int]$lineReceipt.count -ne $expectedLineCount) { throw "Strategy4 LINE receipt mismatch push=$($lineReceipt.line_push_ok) runId=$($lineReceipt.runId) count=$($lineReceipt.count) expectedDisplay=$expectedLineCount" }
   & $nodeExe "scripts\verify-strategy4-line-card-contract.js" *>&1 | Tee-Object -FilePath $log -Append
   if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE canonical verifier failed exit=$LASTEXITCODE" }
   $lineVerifierFile = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-canonical-verifier-receipt-$((Get-Date).ToString('yyyyMMdd')).json"
@@ -290,6 +291,8 @@ function Invoke-Strategy4ClosureAndLine {
     canonical_verifier_receipt = $lineVerifierFile
     runner_status = $lineReceipt.status
     verifier_status = $lineVerifierReceipt.status
+    delivery_status = $lineVerifierReceipt.delivery_status
+    quota_exception_accepted = [bool]$lineVerifierReceipt.quota_exception_accepted
     line_push_ok = [bool]$lineReceipt.line_push_ok
     first_blocker = $null
   } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $lineWrapperFile -Encoding utf8
