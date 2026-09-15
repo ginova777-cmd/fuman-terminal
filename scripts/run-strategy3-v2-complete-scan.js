@@ -1,4 +1,5 @@
 "use strict";
+const TREND_CONTRACT = require("../data/contracts/strategy3_technical_trend_v2.json");
 
 const { spawnSync } = require("child_process");
 const path = require("path");
@@ -119,7 +120,7 @@ function parseJson(text) {
 }
 
 function runMarketGuard() {
-  const child = spawnSync(process.execPath, ["--use-system-ca", path.join(ROOT, "scripts", "check-market-calendar-action.js"), "--label=strategy3-v2-complete-scan", "--receipt"], {
+  const child = spawnSync(process.execPath, ["--use-system-ca", path.join(ROOT, "scripts", "check-market-calendar-action.js"), "--label=strategy3-v2-complete-scan", `--date=${tradeDate}`, "--receipt"], {
     cwd: ROOT,
     encoding: "utf8",
     windowsHide: true,
@@ -341,6 +342,12 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
       high_price: pool.high_price,
       low_price: pool.low_price,
       total_volume: pool.total_volume,
+      total_volume_unit: pool.total_volume_unit,
+      total_volume_available: pool.total_volume_available,
+      total_volume_source: pool.total_volume_source,
+      total_volume_source_event_at: pool.total_volume_source_event_at,
+      is_synthetic: pool.is_synthetic,
+      mother_pool_snapshot: water.receipt?.mother_pool_snapshot?.identity || null,
       trade_value: pool.trade_value,
       avg_volume5: pool.avg_volume5,
       quote_trade_date: quote.trade_date,
@@ -394,10 +401,14 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
       atrRvolRejectedCount += 1;
       return false;
     }
+    const hourlyBonus = technical.hourly_strategy3_pass === true ? TREND_CONTRACT.hourly60BonusPoints : 0;
+    item.base_score = item.score;
+    item.hourly60_bonus_points = hourlyBonus;
+    item.score = Math.min(TREND_CONTRACT.scoreCap, item.score + hourlyBonus);
+    if (hourlyBonus) item.reason_codes.push("strategy3_v2_60m_rsi_bonus_awarded");
     item.technical_trend_confirmation = technical;
     item.atr_rvol_confirmation = atrRvol;
     item.reason_codes.push(
-      "strategy3_v2_60m_rsi3_over_rsi6_trend_up",
       "strategy3_v2_daily_k_over_d_rsi3_over_rsi6_trend_up",
       "strategy3_v2_atr_rvol_tail_momentum_confirmed",
     );
@@ -439,8 +450,11 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
     },
     technical_trend_gate: {
       required: true,
-      policy: "completed_60m_rsi3_over_rsi6_both_up_and_live_daily_kd_rsi_full_trend",
-      hourly60_rule: "RSI3>RSI6 AND RSI3>previous_RSI3 AND RSI6>previous_RSI6;KD_is_evidence_not_hard_gate",
+      policy: "live_daily_kd_rsi_full_trend_required_completed_60m_rsi_bonus_v2",
+      hourly60_required: TREND_CONTRACT.hourly60Required,
+      hourly60_bonus_max_points: TREND_CONTRACT.hourly60BonusPoints,
+      contract: TREND_CONTRACT.contract,
+      hourly60_rule: "bonus_only_5_points:RSI3>RSI6 AND RSI3>previous_RSI3 AND RSI6>previous_RSI6;missing_or_not_up_does_not_exclude",
       daily_rule: "K>D AND K>previous_K AND D>previous_D AND RSI3>RSI6 AND RSI3>previous_RSI3 AND RSI6>previous_RSI6",
       evaluated_symbols: candidates.length,
       source_gap_count: technicalSourceGapCount,
@@ -629,6 +643,8 @@ async function main() {
   receipt.contract_version = MOTHER_POOL_CONTRACT_VERSION;
   receipt.source_contract_version = MOTHER_POOL_CONTRACT_VERSION;
   receipt.canonical_run_id = scanner.water.receipt?.canonical_run_id || null;
+  receipt.source_field_contract = scanner.water.receipt?.source_field_contract || null;
+  receipt.mother_pool_snapshot = scanner.water.receipt?.mother_pool_snapshot || null;
   receipt.mother_pool_http_status = scanner.water.receipt?.mother_pool_http_status || null;
   receipt.mother_pool_rows = scanner.water.receipt?.mother_pool_rows || 0;
   receipt.mother_pool_pages = scanner.water.receipt?.mother_pool_pages || 0;

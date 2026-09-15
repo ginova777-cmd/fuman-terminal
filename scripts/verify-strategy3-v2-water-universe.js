@@ -44,6 +44,8 @@ async function main() {
     historicalRecoveryReplay: recoveryReplay,
   });
   const issues = [];
+  add(issues, scan?.source_field_contract === "strategy3-source-fields-v2" && water.receipt?.source_field_contract === scan?.source_field_contract, "strategy3_source_field_contract_mismatch");
+  add(issues, scan?.mother_pool_snapshot?.ok === true && water.receipt?.mother_pool_snapshot?.ok === true && JSON.stringify(scan.mother_pool_snapshot.identity) === JSON.stringify(water.receipt.mother_pool_snapshot.identity), "strategy3_runner_verifier_snapshot_identity_mismatch");
   const expectedCount = water.poolBySymbol.size;
   const readyCount = [...water.candleRowsBySymbol.entries()]
     .filter(([symbol, rows]) => rows.length >= MIN_CANDLES_PER_SYMBOL && !water.symbolDataGaps.has(symbol))
@@ -88,6 +90,8 @@ async function main() {
     run_id: scan?.run_id || null,
     canonical_run_id: water.receipt?.canonical_run_id || null,
     result_count: resultCount,
+    source_field_contract: water.receipt?.source_field_contract || null,
+    mother_pool_snapshot: water.receipt?.mother_pool_snapshot || null,
     first_blocker: firstBlocker,
     reason_code: firstBlocker || "strategy3_v2_mother_pool_v4_1_verified",
     consumer_name: STRATEGY,

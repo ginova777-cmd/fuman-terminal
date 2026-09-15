@@ -3,7 +3,9 @@ const fs = require("fs");
 const path = require("path");
 const c = require("./strategy3-v2-contract");
 const runtime = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const date = c.taipeiDate();
+const date = process.argv.find((arg) => arg.startsWith("--trade-date="))?.slice("--trade-date=".length)
+  || process.env.FUMAN_STRATEGY3_TRADE_DATE
+  || c.taipeiDate();
 const compact = date.replace(/\D/g, "");
 const receipts = path.join(runtime, "data", "scan-receipts");
 const recoveryReplay = process.argv.includes("--recovery-replay");
@@ -31,11 +33,12 @@ const recoverySurfaceComplete = recoverySurface?.ok === true
   && recoveryRunId === scan?.run_id
   && recoverySurface?.summary?.tabs?.strategy3?.terminal?.runId === scan?.run_id
   && recoverySurface?.summary?.tabs?.strategy3?.mobileFragment?.runId === scan?.run_id;
+const acceptedLineException = require("../lib/strategy3-line-exception").valid(line, scan, date);
 const recoveryComplete = scan?.ok === true && scan?.status === "RECOVERY_REPLAY_COMPLETE" && scan?.apply === true
   && water?.ok === true && water?.verifier_ok === true && water?.run_id === scan?.run_id
   && water?.recovery_replay === true && recoverySurfaceComplete
-  && line?.ok === true && line?.status === "RECOVERY_REPLAY_PUSHED" && line?.run_id === scan?.run_id
-  && line?.line_push_personal_ok === true && line?.line_push_group_ok === true;
+  && (acceptedLineException || (line?.ok === true && line?.status === "RECOVERY_REPLAY_PUSHED" && line?.run_id === scan?.run_id
+  && line?.line_push_personal_ok === true && line?.line_push_group_ok === true));
 const { verifyDelivery } = require("../lib/strategy3-delivery-evidence");
 const delivery = verifyDelivery({ scan, tri, line, date,
   ui: read(path.join(runtime, "data", "strategy3-ui", "terminal-ui-e2e-report.json")),
@@ -52,6 +55,9 @@ const awaitingScorecard = !recordFailure && requestedAwaitingScorecard && baseCo
 const status = complete ? "complete" : awaitingScorecard ? "awaiting_scorecard_1315" : "failed";
 const blockingReason = complete ? "" : failureReason || delivery.firstBlocker || (recoveryReplay ? "strategy3_recovery_replay_closure_not_complete" : awaitingScorecard ? "scorecard_collection_pending_1315" : !baseComplete ? "strategy3_base_closure_not_complete" : "strategy3_tri_surface_scorecard_not_complete");
 const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "strategy3", tradeDate: date,
+  lineStatus: acceptedLineException ? "SKIPPED_QUOTA_EXHAUSTED" : (line?.status || "missing"),
+  completionScope: acceptedLineException ? "scan_database_three_surfaces_with_user_accepted_line_exception" : "full_delivery",
+  lineDelivered: line?.line_push_personal_ok === true && line?.line_push_group_ok === true,
   checkedAt: new Date().toISOString(), status, complete, exitCode: complete || awaitingScorecard ? 0 : 1,
   blockingReason, fallback: false, recoveryReplay, completionKind: recoveryReplay ? "recovery_replay" : "natural_slot", naturalSlotComplete: !recoveryReplay && complete, warnings: [], triSurfaceStatus: triComplete && delivery.ok ? "complete" : "pending", failed_checks: delivery.issues, first_blocker: blockingReason || null,
   desktopRunId: tri?.desktopRunId || null, mobileRunId: tri?.mobileRunId || null, scorecardRunId: tri?.scorecardRunId || null,
