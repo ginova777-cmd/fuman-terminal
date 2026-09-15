@@ -1232,7 +1232,7 @@ function strategy4ActionableSignals(item = {}) {
 function strategy4DailyTechnicalGateOk(item = {}) {
   const gate = item.dailyTechnicalGate && typeof item.dailyTechnicalGate === "object" ? item.dailyTechnicalGate : {};
   const mutaki = item.mutakiV17 && typeof item.mutakiV17 === "object" ? item.mutakiV17 : {};
-  return require("../lib/strategy4-v3-evidence").dailyTechnicalGateValid(item);
+  return require("../lib/strategy4-v4-evidence").dailyTechnicalGateValid(item);
 }
 
 function strategy4IsActionable(item = {}) {
@@ -1250,7 +1250,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
   // invalid_risk_row_filter_v1: published Strategy4 rows must have positive entry/target/stop/score and a zone.
   const matches = actionableMatches
     .filter(strategy4RiskFieldsValid)
-    .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0))
+    .sort(require("../lib/strategy4-v4-evidence").compareRank)
     .map((item, index) => ({
       ...item,
       rank: index + 1,
@@ -1333,7 +1333,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     fallbackAllowed: false,
     fallbackDetails: [],
     fallbackContract: STRATEGY4_FALLBACK_CONTRACT,
-    resultContract: "strategy4_actionable_patterns_avg5_3000_daily_kd_rsi_trend_gate_v3",
+    resultContract: "strategy4_actionable_patterns_avg5_3000_daily_kd_rsi_bonus_v4",
     liquidityContract: "avg5_volume_gte_3000_lots_v1",
     dataGapContract: "target_date_coverage_gte_90_exclude_stale_v1",
     generatedAt: new Date().toISOString(),

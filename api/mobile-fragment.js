@@ -683,7 +683,7 @@ function normalizeRows(payload, tab = "") {
   if (tab === "strategy3") {
     return rows.filter((row) => isValidBusinessRow(row, tab));
   }
-  return rows.filter((row) => isValidBusinessRow(row, tab)).slice(0, tab === "strategy4" ? 70 : 20);
+  return rows.filter((row) => isValidBusinessRow(row, tab)).slice(0, tab === "strategy4" ? 2000 : 20);
 }
 
 function isEmptyStrategy2Snapshot(payload) {

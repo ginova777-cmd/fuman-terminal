@@ -141,7 +141,7 @@ function parseRequestOptions(request) {
   try {
     const url = new URL(request.url || "", "http://localhost");
     const canvas = url.searchParams.get("canvas") === "1" || url.searchParams.get("compact") === "1";
-    const limit = Math.max(1, Math.min(canvas ? 120 : 2000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 70 : 2000)));
+    const limit = canvas ? 2000 : Math.max(1, Math.min(2000, cleanNumber(url.searchParams.get("limit")) || 2000));
     return { canvas, limit };
   } catch {
     return { canvas: false, limit: 2000 };
@@ -298,7 +298,7 @@ function buildStrategy4GateContract(rows, run, matches) {
   const fallbackDetails = Array.isArray(runPayload.fallbackDetails) ? runPayload.fallbackDetails : [];
   const acceptedTargetDateCompleteRun = isAcceptedTargetDateCompleteRun(run, supabaseCoverage, qualityStatus, fallbackUsed);
   const retentionOk = acceptedTargetDateCompleteRun;
-  const gateIssues = [...(Array.isArray(gate?.issues) ? gate.issues : []), ...require("../lib/strategy4-v3-evidence").strategy4V3Issues(runPayload, rows)];
+  const gateIssues = [...(Array.isArray(gate?.issues) ? gate.issues : []), ...require("../lib/strategy4-v4-evidence").strategy4V4Issues(runPayload, rows)];
   const gateWarnings = Array.isArray(gate?.warnings) ? gate.warnings : [];
   const dailyVolumeFreshness = supabaseCoverage?.coverageRatio ?? (supabaseCoverage?.qualityStatus === "complete" ? 1 : null);
   const sourceCoverageBase = gate?.sourceCoverage || {
@@ -501,7 +501,7 @@ function compactCanvasRows(rows, limit) {
   const sorted = (Array.isArray(rows) ? rows : [])
     .slice()
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code || "").localeCompare(String(b.code || "")));
-  const max = Math.max(30, Math.min(70, cleanNumber(limit) || 70));
+  const max = Math.max(1, Math.min(2000, cleanNumber(limit) || 2000));
   const zoneOrder = ["A", "B", "C"];
   const baseEach = Math.max(10, Math.floor(max / zoneOrder.length));
   const picked = [];
