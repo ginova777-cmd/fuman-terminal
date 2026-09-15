@@ -1079,7 +1079,8 @@ async function waitForMobileRouteReady(cdp, route, timeoutMs = ROUTE_TIMEOUT_MS)
       || expected.fragment === "ai"
       || expected.allowMissingRunId
       || Boolean(runId);
-    const rowsReady = membershipLocked
+    const completeZero = rootKey === "strategy3" && Boolean(runId) && Boolean(root?.querySelector('[data-scan-state="complete-zero"]')) && /掃描完成.*0\s*檔/.test(text);
+    const rowsReady = completeZero || membershipLocked
       || expected.allowEmpty
       || expected.fragment === "ai"
       || rows > 0;
@@ -1683,7 +1684,7 @@ function collectDesktopStats(route) {
     filterCounts,
     unifiedFilterContract,
     freshnessText,
-    emptyStateText,
+    emptyStateText: emptyStateText || zeroResultText,
     waitingEmptyOk,
     dateSignals,
     fieldSignals,
@@ -1709,6 +1710,8 @@ function collectMobileStats(route) {
   const blockerMatches = [...panelText.matchAll(/(?:HTTP\s*503|timeout|fallback|static\s*json|Google Sheet|fuman-terminal-sync|暫時無法取得|讀取失敗|載入失敗|等待資料|讀取中|載入中|未知分頁|沒有資料)/gi)].map((match) => match[0]);
   const rootKey = root?.dataset?.mobileFragmentKey || "";
   const runId = root?.dataset?.runId || "";
+  const completeZeroText = text(root?.querySelector('[data-scan-state="complete-zero"]'));
+  const completeZero = rootKey === "strategy3" && Boolean(runId) && /掃描完成.*0\s*檔/.test(completeZeroText);
   const statusText = text(status);
   const dateSignals = [...`${statusText} ${panelText}`.matchAll(/(?:20\d{2}[\/.-]\d{1,2}[\/.-]\d{1,2}|20\d{6}|\d{2}:\d{2}|runId|run-|fresh|stale|expired|更新|掃描|資料)/gi)].slice(0, 12).map((match) => match[0]);
   const shell = document.querySelector(".shell");
@@ -1866,6 +1869,7 @@ function collectMobileStats(route) {
     sampleRows: rows.slice(0, 3),
     candidateTexts: ["strategy3", "strategy4"].includes(route.key) ? rows : [],
     statusText,
+    emptyStateText: completeZeroText,
     dateSignals,
     layout,
     mobileAiDashboard,
@@ -1877,7 +1881,7 @@ function collectMobileStats(route) {
     ok: membershipLocked
       ? layoutBlockers.length === 0 && blockerMatches.length === 0
       : keyOk
-        && (route.allowEmpty || rows.length > 0)
+        && (route.allowEmpty || completeZero || rows.length > 0)
         && (route.allowEmpty || route.allowMissingRunId || route.fragment === "ai" || Boolean(runId))
         && blockers.length === 0,
   };

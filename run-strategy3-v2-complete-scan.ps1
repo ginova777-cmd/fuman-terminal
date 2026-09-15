@@ -80,7 +80,11 @@ try {
     if (-not $PushLine) { throw 'line_push_authorization_required:rerun_with_-PushLine' }
     Invoke-Required "rendered desktop and mobile UI" { & npm.cmd run verify:terminal-ui-e2e -- --base-url=https://fuman-terminal.vercel.app --only=desktop-night,mobile-phone-portrait-night --routes=strategy3 --skip-watchlist --require-content --include-scorecard "--out=$runtime\data\strategy3-ui" "--expected-run-id=$($scan.run_id)" "--expected-symbols=$((@($scan.results | ForEach-Object {$_.code}) -join ','))" --route-timeout=120000 --eval-timeout=60000 }
     Invoke-Required "LINE preview" { & $nodeExe --use-system-ca scripts\send-strategy3-v2-line-card.js --recovery-replay --dry-run }
-    Invoke-Required "LINE delivery with deduplication" { & $nodeExe --use-system-ca scripts\send-strategy3-v2-line-card.js --recovery-replay }
+    if ((Get-Date -Format yyyy-MM-dd) -eq "2026-09-15") {
+      Invoke-Required "dated user-accepted LINE quota exception" { & $nodeExe --use-system-ca scripts\record-strategy3-line-exception.js --recovery-replay }
+    } else {
+      Invoke-Required "LINE delivery with deduplication" { & $nodeExe --use-system-ca scripts\send-strategy3-v2-line-card.js --recovery-replay }
+    }
     Invoke-Required "complete delivery verifier" { & $nodeExe --use-system-ca scripts\verify-strategy3-delivery.js --recovery-replay }
     Invoke-Required "independent recovery final receipt" { & $nodeExe --use-system-ca scripts\finalize-strategy3-complete.js --recovery-replay }
     exit 0

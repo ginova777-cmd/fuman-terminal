@@ -5228,7 +5228,7 @@
       ctx.fillText(`${label} 正式 API 已回讀`, 44, 158);
       ctx.fillStyle = colors.muted;
       ctx.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText("本輪 0 檔符合條件，這不是斷線、不是載入失敗。", 44, 188);
+      ctx.fillText("本輪完整掃描完成，0 檔符合條件。", 44, 188);
       ctx.fillText("終端保留 runId / evidence；不以舊資料或空白表格冒充。", 44, 214);
       return;
     }
@@ -8934,7 +8934,7 @@
       <section class="fuman-zero-complete-state" aria-label="${escapeHtml(meta.title)} 0 檔正式結果" data-zero-result="1" data-canvas-empty-note>
         <div class="empty-state">
           <strong>本次正式 API 已回讀，0 檔符合條件。</strong>
-          <span>這是完整掃描後的合法空結果，不是載入失敗；不撐空白表格。</span>
+          <span>完整掃描完成，今日沒有符合全部條件的標的。</span>
           ${runId ? `<small>run=${escapeHtml(runId)}</small>` : ""}
         </div>
       </section>

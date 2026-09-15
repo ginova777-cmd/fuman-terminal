@@ -1,0 +1,10 @@
+{
+  "contract": "strategy3-line-date-scoped-exception-v1",
+  "strategy": "strategy3",
+  "tradeDate": "2026-09-15",
+  "scope": "recovery_replay",
+  "deliveryRequired": false,
+  "userAuthorized": true,
+  "reason": "line_monthly_quota_exhausted",
+  "authorization": "User accepted exhausted LINE quota and requested Strategy3 completion; no sent claim; subsequent dates require normal delivery."
+}

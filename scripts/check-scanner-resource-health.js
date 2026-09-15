@@ -18,9 +18,6 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
   || readSecret("supabase-anon-key.txt");
 
 const STRATEGY_ALIASES = new Map([
-  ["strategy1", "Strategy1"],
-  ["open-buy", "Strategy1"],
-  ["open_buy", "Strategy1"],
   ["strategy2", "Strategy2"],
   ["strategy3", "Strategy3"],
   ["strategy4", "Strategy4"],
