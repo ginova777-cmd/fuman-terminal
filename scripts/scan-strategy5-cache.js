@@ -2846,6 +2846,7 @@ async function main() {
   );
   if (process.env.FUMAN_REPLAY_TRADE_DATE && compactDateKey(process.env.FUMAN_REPLAY_TRADE_DATE) !== runMarketDate) throw new Error('strategy5 complete run blocked: replay source date mismatch');
   const technicalTradeDate = `${runMarketDate.slice(0,4)}-${runMarketDate.slice(4,6)}-${runMarketDate.slice(6,8)}`;
+  await require('../lib/strategy5-daily-history-warmup').warm(technicalCandidates, technicalTradeDate);
   const technicalSources = await strategy5Technical.readSources(technicalCandidates, technicalTradeDate);
   const technicalSelection = strategy5Technical.evaluate(technicalCandidates, technicalSources, technicalTradeDate);
   const selectionEvidenceDir = path.join(process.env.FUMAN_RUNTIME_DIR || 'C:/fuman-runtime', 'data', 'strategy5-technical-source');
