@@ -8,7 +8,7 @@ const industryConfig = require("../data/daytrade-industry-prewarm-v1.json");
 const writerSource = fs.readFileSync(path.join(__dirname, "run-daytrade-source-writer.js"), "utf8");
 assert.ok(/mergeCurrentDayCandlePrioritySymbols\(\{[\s\S]*?manifest:\s*currentExisting[\s\S]*?canonicalRunId/s.test(writerSource),
   "canonical Writer must call the persistence contract with its identity-filtered manifest");
-assert.ok(/candlePriorityArtifactChanged[\s\S]*?if \(fiveMinuteEvidenceChanged \|\| !sameDailyIdentity[^\n]*candlePriorityArtifactChanged/s.test(writerSource),
+assert.ok(/candlePriorityArtifactChanged[\s\S]*?if \(!sameDailyIdentity \|\| !sameSymbols[^\n]*candlePriorityArtifactChanged/s.test(writerSource),
   "manifest rewrite condition must observe priority-list changes");
 assert.ok(/\.\.\.industryPrewarm\.symbols/.test(writerSource),
   "industry watchlist must enter the warmup priority union");

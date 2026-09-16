@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { verifyMorningStage } = require("../lib/mother-pool-morning-ack");
 const { isTwseTradingDay } = require("./twse-trading-day");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -120,12 +121,13 @@ function verifySkeletonStatic() {
 function verifyConsumerContractStatic() {
   const strategy2 = fs.readFileSync(path.join(ROOT, "scripts", "run-strategy2-v3-water-scan.js"), "utf8");
   const strategy3 = fs.readFileSync(path.join(ROOT, "scripts", "run-strategy3-v2-complete-scan.js"), "utf8");
+  const canonicalReader = fs.readFileSync(path.join(ROOT, "lib", "daytrade-canonical-water-reader.js"), "utf8");
   const marker = `new Set(["${EXPECTED_MOTHER_POOL_CONTRACT_VERSION}"])`;
   const checks = {
     strategy2_accepts_current_contract: strategy2.includes(marker) && strategy2.includes("strategy2WaterReady"),
     strategy2_receipt_reports_contract: strategy2.includes("motherPoolContractVersion: water.motherPoolContractVersion"),
-    strategy3_accepts_current_contract: strategy3.includes(marker) && strategy3.includes("mother_pool_contract_version_unsupported"),
-    strategy3_receipt_reports_contract: strategy3.includes("accepted_contract_versions"),
+    strategy3_accepts_current_contract: strategy3.includes('require("../lib/daytrade-canonical-water-reader")') && strategy3.includes("readCanonicalDaytradeWater") && canonicalReader.includes('const MOTHER_POOL_CONTRACT_VERSION = "4.1.0"') && canonicalReader.includes("canonical_water_mother_pool_contract_version_mismatch"),
+    strategy3_receipt_reports_contract: strategy3.includes("mother_pool_snapshot: water.receipt?.mother_pool_snapshot?.identity"),
   };
   return { ok: Object.values(checks).every(Boolean), expected_contract_version: EXPECTED_MOTHER_POOL_CONTRACT_VERSION, checks };
 }
@@ -198,8 +200,6 @@ async function main() {
     priority: path.join(RUNTIME, "cache", "intraday", "fugle-daytrade-ws-priority-symbols.json"),
     motherPool: path.join(RUNTIME, "state", "daytrade-mother-pool-delta.json"),
     fastSync: path.join(RUNTIME, "state", "daytrade-fast-supabase-sync.json"),
-    openingReport: path.join(RUNTIME, "data", "opening-report-0830", `opening-report-0830-bridge-aggregate-${clock.compact}.json`),
-    openingReportFieldAck: path.join(RUNTIME, "data", "scan-receipts", `opening-report-0830-mother-pool-field-ack-${clock.compact}.json`),
     futopt0845: path.join(RUNTIME, "data", "scan-receipts", `daytrade-futopt-preopen-evidence-0845-${clock.compact}.json`),
     futopt0850: path.join(RUNTIME, "data", "scan-receipts", `daytrade-futopt-preopen-evidence-0850-${clock.compact}.json`),
   };
@@ -207,8 +207,6 @@ async function main() {
   const priority = readJson(paths.priority);
   const motherPool = readJson(paths.motherPool);
   const fastSync = readJson(paths.fastSync);
-  const openingReport = readJson(paths.openingReport);
-  const openingReportFieldAck = readJson(paths.openingReportFieldAck);
   const futopt0845 = readJson(paths.futopt0845);
   const futopt0850 = readJson(paths.futopt0850);
   const failures = [];
@@ -314,44 +312,17 @@ async function main() {
   check("static_consumer_contract_versions", staticChecks.consumers.ok, "static_consumer_contract_versions_failed");
   check("legacy_mother_pool_verifier_retired", staticChecks.legacyVerifierRetired.ok, "legacy_mother_pool_verifier_still_present");
 
-  const openingRequired = clock.minute >= 8 * 60 + 36;
-  const openingIndustryCount = Number(openingReport?.bridge_handoff_industry_count ?? openingReport?.industry_count);
-  const openingSuccessfulIndustryCount = Number(openingReport?.successful_industry_count ?? openingIndustryCount);
-  const openingObservationCount = Number(openingReport?.observation_count);
-  const openingOk = !openingRequired || (
-    identityOf(openingReport).tradeDate === clock.tradeDate
-    && openingReport?.status === "BRIDGE_OK"
-    && Number.isInteger(openingIndustryCount)
-    && openingIndustryCount >= 0
-    && openingIndustryCount <= 3
-    && openingSuccessfulIndustryCount === openingIndustryCount
-    && Number.isInteger(openingObservationCount)
-    && openingObservationCount >= 0
-    && openingReport?.forbidden_publish_guard === true
-    && Number(openingReport?.formal_candidate_count) === 0
-    && openingReport?.formal_candidate_allowed === false
-  );
-  check("opening_report_bridge_closed", openingOk, "opening_report_bridge_not_closed");
-  const openingAckSymbols = [...new Set([
-    ...(Array.isArray(openingReportFieldAck?.accepted_symbols) ? openingReportFieldAck.accepted_symbols : []),
-    ...(Array.isArray(openingReportFieldAck?.db_readback_symbols) ? openingReportFieldAck.db_readback_symbols : []),
-  ].map(String).filter((symbol) => /^\d{4}$/.test(symbol)))];
-  const openingAckMissingFromMotherPool = openingAckSymbols.filter((symbol) => !motherPoolSymbolSet.has(symbol));
-  const openingFieldAckOk = !openingRequired || (
-    identityOf(openingReportFieldAck).tradeDate === clock.tradeDate
-    && openingReportFieldAck?.contract === "opening-report-0830-mother-pool-field-ack-v1"
-    && openingReportFieldAck?.complete === true
-    && openingReportFieldAck?.db_readback_ok === true
-    && openingReportFieldAck?.formal_candidate_allowed === false
-    && openingReportFieldAck?.forbidden_publish_guard === true
-    && openingAckSymbols.length === openingObservationCount
-  );
-  check("opening_report_field_ack_complete", openingFieldAckOk, "opening_report_field_ack_not_complete");
-  check(
-    "opening_report_ack_symbols_admitted_to_mother_pool",
-    !openingRequired || openingAckMissingFromMotherPool.length === 0,
-    `opening_report_ack_symbols_not_in_mother_pool:${openingAckMissingFromMotherPool.slice(0, 12).join(",")}`,
-  );
+  // Stage ACKs prove observation preservation, not formal membership or notification delivery.
+  const morningStages = ["us_0820", "asia_0850"].map(stage => {
+    const directory = path.join(RUNTIME, "data", "opening-report-stages", stage, "scan-receipts");
+    const handoffPath = path.join(directory, `opening-report-0830-mother-pool-handoff-ack-${clock.compact}.json`);
+    const persistencePath = path.join(directory, `opening-report-0830-mother-pool-persistence-ack-${clock.compact}.json`);
+    const required = clock.minute >= (stage === "us_0820" ? 8 * 60 + 36 : 8 * 60 + 56);
+    const evidence = verifyMorningStage(readJson(handoffPath), readJson(persistencePath), clock.tradeDate);
+    if (required && !evidence.complete) warnings.push(`morning_handoff_${stage}:${evidence.first_blocker}`);
+    return { stage, required, ...evidence, handoff_path: handoffPath, persistence_path: persistencePath };
+  });
+  const morningHandoffComplete = morningStages.every(stage => !stage.required || stage.complete);
 
   const futoptRequired = clock.minute >= 8 * 60 + 50;
   const futoptGuardsSafe = [futopt0845, futopt0850].every((receipt) => !receipt || (
@@ -371,6 +342,12 @@ async function main() {
   const result = {
     ok: failures.length === 0,
     closed_loop_ok: failures.length === 0,
+    status: failures.length ? "blocked" : "complete",
+    complete: failures.length === 0,
+    exit_code: failures.length ? 1 : 0,
+    scope: "mother_pool_core_water",
+    morning_handoff_complete: morningHandoffComplete,
+    all_modules_complete: failures.length === 0 && morningHandoffComplete,
     contract: "daytrade_mother_pool_closed_loop_v1",
     mother_pool_contract_version: EXPECTED_MOTHER_POOL_CONTRACT_VERSION,
     trade_date: clock.tradeDate,
@@ -396,12 +373,10 @@ async function main() {
         avg3_history_pending_rows: avg3PendingRows.length,
       },
       opening_report: {
-        ok: openingOk && openingFieldAckOk && openingAckMissingFromMotherPool.length === 0,
-        required: openingRequired,
-        path: paths.openingReport,
-        field_ack_path: paths.openingReportFieldAck,
-        field_ack_symbols: openingAckSymbols.length,
-        field_ack_missing_from_mother_pool: openingAckMissingFromMotherPool,
+        ok: morningHandoffComplete,
+        scope: "observation_handoff_and_preservation_only",
+        independent_of_core_water: true,
+        stages: morningStages,
       },
       futopt_preopen: {
         ok: futoptClosed || futoptGuardsSafe,
