@@ -1471,6 +1471,7 @@ function readOpeningMorningReport(clock = taipeiClock()) {
   }
   const finalDateOk = compactDate(finalReceipt.date) === compact;
   const stateIndustryRows = listOpeningIndustryBiasFiles(clock)
+    .filter(row => row.payload.run_id === finalReceipt.run_id + "-" + row.payload.industry && (!finalReceipt.stage || row.payload.stage === finalReceipt.stage))
     .map((row) => ({
       industry: row.payload.industry,
       display_name: row.payload.display_name || row.payload.industry,
@@ -1489,7 +1490,7 @@ function readOpeningMorningReport(clock = taipeiClock()) {
   // Cleanup may retire the per-industry state files after the run closes. The
   // frozen 08:20 receipt plus the canonical 15-industry map is sufficient to
   // reconstruct the same observation-only terminal briefing.
-  const frozenByIndustry = new Map(normalizeArray(overseasLeaders?.industries).map((row) => [String(row?.industry || ""), row]));
+  const frozenByIndustry = new Map(normalizeArray(overseasLeaders?.run_id === finalReceipt.run_id && compactDate(overseasLeaders?.date) === compact ? overseasLeaders.industries : []).map((row) => [String(row?.industry || ""), row]));
   const frozenIndustryRows = OPENING_REPORT_0830_INDUSTRY_MAP.map((mapRow) => {
     const frozen = frozenByIndustry.get(mapRow.industry) || {};
     const average = Number(frozen.average_percent);
