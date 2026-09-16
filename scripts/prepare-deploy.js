@@ -32,7 +32,7 @@ run("verify:retired-artifacts", ["npm", "run", "verify:retired-artifacts"]);
 run("verify:terminal-verifier-authority", ["npm", "run", "verify:terminal-verifier-authority"]);
 run("verify:master-control-contract", ["npm", "run", "verify:master-control-contract"]);
 run("verify:after-hours-scan-guard", ["npm", "run", "verify:after-hours-scan-guard"]);
-run("verify:daytrade-burst-telegram", ["npm", "run", "verify:daytrade-burst-telegram"]);
+run("Telegram code contract (natural acceptance remains post-deploy)", ["npm", "run", "verify:daytrade-burst-telegram", "--", "--contract"]);
 run("verify:unified-source-gate", ["npm", "run", "verify:unified-source-gate"]);
 run("verify:publish-gate", ["npm", "run", "verify:publish-gate"]);
 run("verify:bump", ["npm", "run", "verify:bump"]);
