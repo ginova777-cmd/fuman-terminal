@@ -443,7 +443,9 @@ function currentReceiptChecks(checks, tradeDate) {
   addCheck(checks, "current_mother_pool_persistence_ack_same_run", persistenceAckReceipt?.report_run_id === runId, String(persistenceAckReceipt?.report_run_id || "") + "/" + String(runId || ""));
   addCheck(checks, "current_mother_pool_persistence_ack_complete", persistenceAckReceipt?.contract === "opening-report-0830-mother-pool-persistence-ack-v1" && persistenceAckReceipt?.complete === true && persistenceAckReceipt?.db_readback_ok === true && Number(persistenceAckReceipt?.writer_refreshes_observed || 0) >= 2 && persistenceAckReceipt?.first_blocker == null, JSON.stringify({ contract: persistenceAckReceipt?.contract, complete: persistenceAckReceipt?.complete, db_readback_ok: persistenceAckReceipt?.db_readback_ok, writer_refreshes_observed: persistenceAckReceipt?.writer_refreshes_observed, first_blocker: persistenceAckReceipt?.first_blocker }));
   const refreshTimes = persistenceAckReceipt?.writer_refresh_timestamps || [];
-  const handoffMs = Date.parse(handoffAckReceipt?.checked_at || "");
+  const originalHandoff = persistenceAckReceipt?.handoff_ack_receipt ? readJson(persistenceAckReceipt.handoff_ack_receipt) : null;
+  addCheck(checks,"current_persistence_original_handoff_identity",originalHandoff?.complete===true&&originalHandoff?.db_readback_ok===true&&originalHandoff?.report_run_id===runId&&originalHandoff?.trade_date===tradeDate,"original handoff of the two observed refreshes");
+  const handoffMs = Date.parse(originalHandoff?.checked_at || "");
   const persistedMs = Date.parse(persistenceAckReceipt?.checked_at || "");
   addCheck(checks, "current_persistence_two_distinct_refreshes_after_handoff", new Set(refreshTimes).size >= 2 && refreshTimes.every(t => Date.parse(t) > handoffMs && Date.parse(t) <= persistedMs), JSON.stringify(refreshTimes));
   addCheck(checks, "current_ack_dates_match_report", handoffAckReceipt?.trade_date === tradeDate && persistenceAckReceipt?.trade_date === tradeDate, tradeDate);
