@@ -81,7 +81,7 @@ try {
   $telegramVerifierDue = ($marketOpenToday -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("09:00")))
   $telegramVerifierExit = $null
   if ($telegramVerifierDue) {
-    & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-daytrade-intraday-burst-telegram.js") --require-live --require-today
+    & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-telegram-three-detectors.js") --require-live --require-today
     $telegramVerifierExit = [int]$LASTEXITCODE
   }
   $strategy2VerifierDue = ($marketOpenToday -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("12:30")))
