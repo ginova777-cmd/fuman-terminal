@@ -1,0 +1,35 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const {evaluateTurnover,rankTurnover,nativeVolume}=require('../lib/daytrade-intraday-turnover');
+const {verify,verifyDelivery}=require('./verify-daytrade-intraday-turnover');
+const now='2026-09-16T02:00:00.000Z',tradeDate='2026-09-16',canonicalRunId='fugle_daytrade_source:20260916:canonical';
+const master={official_present:true,stock_master_source:'MOPS_OPEN_DATA_TWSE_TPEX',stock_master_source_date:tradeDate,stock_master_synced_at:'2026-09-16T00:00:00Z',official_issued_common_shares:100000000};
+const volume={value:50000,unit:'lots',event_at:now,source:'fugle.websocket.aggregates.total.tradeVolume',is_synthetic:false};
+const base={symbol:'2330',master,volume,tradeDate,now};
+const row=(overrides={})=>evaluateTurnover({...base,...overrides});
+const ranking=()=>rankTurnover([row(),row({symbol:'2303'}),row({symbol:'9999',master:{}})],{tradeDate,canonicalRunId,now});
+const checks=[];function test(name,fn){fn();checks.push(name);}
+test('user example 50000 lots equals 50 percent',()=>assert.equal(row().turnover_pct,50));
+test('shares not converted twice',()=>assert.equal(row({volume:{...volume,value:50000000,unit:'shares'}}).turnover_pct,50));
+test('zero natural volume valid',()=>assert.equal(row({volume:{...volume,value:0}}).turnover_pct,0));
+for(const [field,value,reason] of [['value',null,'MISSING_VOLUME'],['value',-1,'INVALID_VOLUME'],['unit','unknown','UNKNOWN_VOLUME_UNIT'],['event_at',null,'MISSING_VOLUME_EVENT_TIME'],['event_at','2026-09-16T01:57:59Z','STALE_VOLUME_EVENT'],['event_at','2026-09-15T02:00:00Z','TRADE_DATE_MISMATCH'],['is_synthetic',true,'SYNTHETIC_VOLUME'],['is_synthetic','false','NATURAL_VOLUME_UNPROVEN']]) test(reason,()=>{const r=row({volume:{...volume,[field]:value}});assert.equal(r.turnover_pct,null);assert(r.reasons.includes(reason));});
+test('no capital fallback',()=>assert(row({master:{...master,official_issued_common_shares:null,capital:100000000}}).reasons.includes('MISSING_ISSUED_COMMON_SHARES')));
+test('invalid official shares rejected',()=>assert(row({master:{...master,official_issued_common_shares:0}}).reasons.includes('INVALID_ISSUED_COMMON_SHARES')));
+test('gaps preserved and ties sorted',()=>{const r=ranking();assert.equal(r.requested_count,3);assert.equal(r.data_gaps.length,1);assert.deepEqual(r.rows.map(x=>x.symbol),['2303','2330']);assert.equal(verify(r).complete,true);});
+const corruptions=[['cumulative shares',r=>r.rows[0].cumulative_volume_shares=50000],['age',r=>r.rows[0].volume_age_seconds=99],['arithmetic',r=>r.rows[0].turnover_pct=1],['rank',r=>r.rows.reverse()],['canonical',r=>r.canonical_run_id='old'],['date',r=>r.trade_date='2026-09-15'],['publication',r=>r.publish_allowed=true],['counts',r=>r.requested_count=2],['synthetic boolean',r=>r.rows[0].is_synthetic='false']];
+for(const [name,mutate] of corruptions)test('verifier rejects '+name,()=>{const r=ranking();mutate(r);assert.equal(verify(r).complete,false);});
+test('missing anon proof never complete',()=>assert.equal(verifyDelivery(ranking(),ranking()).complete,false));
+test('same batch anon receipt includes all fields',()=>{const r=ranking(),v=verifyDelivery(r,r,{read_role:'anon',db_readback_ok:true});assert.equal(v.complete,true);assert.equal(v.written_count,3);assert.equal(v.readback_count,3);assert.equal(v.rows.length,2);assert.equal(v.data_gaps.length,1);});
+test('self consistent different batch fails',()=>{const r=ranking(),a=structuredClone(r);a.run_id+='other';assert.equal(verifyDelivery(a,r,{read_role:'anon',db_readback_ok:true}).complete,false);});
+test('empty universe does not complete',()=>assert.equal(verify(rankTurnover([],{tradeDate,canonicalRunId,now})).complete,false));
+test('native oddlot units explicit',()=>assert.equal(nativeVolume({market:'TSE',intradayOddLot:true,total:{tradeVolume:5,time:Date.parse(now)*1000}},'fixture').unit,'shares'));
+test('full market selection keeps missing master and low priced nonmembers',()=>{
+ const source=fs.readFileSync(require('node:path').join(__dirname,'run-daytrade-source-writer.js'),'utf8');
+ const start=source.indexOf('  const turnoverExclusions ='),end=source.indexOf('  const intradayTurnoverRanking =',start);
+ const candidates=[{symbol:'1111',basePool:{failedChecks:['price_below_50','daytrade_not_allowed']},turnoverMaster:{}},{symbol:'2222',basePool:{failedChecks:['disposition_or_controlled']}},{symbol:'3333',basePool:{failedChecks:['not_common_stock']}}];
+ const result=vm.runInNewContext(source.slice(start,end)+'turnoverUniverse.map(x=>x.symbol)',{candidates,activeBySymbol:new Map(candidates.map(x=>[x.symbol,x])),Set});
+ assert.deepEqual(Array.from(result),['1111']);
+});
+const report={status:'passed',checks,check_count:checks.length,scope:'isolated_turnover_contract_regression',production_deployed:false,natural_production_complete:false};
+fs.mkdirSync('outputs/mother-source-repair-20260916',{recursive:true});
+fs.writeFileSync('outputs/mother-source-repair-20260916/turnover-contract-tests.json',JSON.stringify(report,null,2));
+console.log(JSON.stringify(report));

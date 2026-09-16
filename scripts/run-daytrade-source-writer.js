@@ -1682,7 +1682,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const intraday = supplementalMaps.intradayMap?.get(symbol) || {};
   const capital = supplementalMaps.capitalMap?.get(symbol) || {};
   const intradayTurnover = evaluateTurnover({ symbol, master: activeRow.turnoverMaster,
-    volume: payload.turnoverVolumeEvidence || {}, tradeDate: taipeiDate(), now: nowIso() });
+    volume: payload.turnoverVolumeEvidence || {}, tradeDate: taipeiDate(), now: supplementalMaps.turnoverCalculatedAt || nowIso() });
   const chip = supplementalMaps.chipMap?.get(symbol) || {};
   const margin = supplementalMaps.marginChangeMap?.get(symbol) || {};
   const stockFuture = supplementalMaps.stockFutureInitialMap?.get(symbol) || {};
@@ -3524,6 +3524,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     row,
   ]).filter(([symbol]) => symbol));
   supplementalMaps.activeBySymbol = activeBySymbol;
+  supplementalMaps.turnoverCalculatedAt = nowIso();
   const seeds = readRuntimePrioritySeeds(activeSymbols);
   const bySymbol = new Map();
   const sourceSeedBySymbol = new Map(seeds.symbols.map((entry) => [entry.symbol, entry]));
@@ -3591,12 +3592,14 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   const volumeRanks = rankMap(rankingCandidates, (row) => row.metrics.totalVolume, { minValue: 0 });
   const valueRanks = rankMap(rankingCandidates, (row) => row.metrics.tradeValue, { minValue: 0 });
   const intradayTurnoverActive = taipeiMinutes() >= 540 && taipeiMinutes() <= 810;
-  const turnoverUniverse = candidates.filter(row => row.turnoverMaster?.official_present === true
-    && !['91'].includes(row.turnoverMaster?.official_industry_code)
-    && row.isActive !== false && row.isEtf !== true && row.isWarrant !== true && row.isCb !== true
-    && row.isSuspended !== true && row.isBlacklisted !== true && row.isDaytradeUnsuitable !== true);
+  // Do not shrink the full-market denominator when official shares are missing.
+  // Price, mother-pool membership and daytrade permission are not turnover gates.
+  const turnoverExclusions = new Set(['inactive', 'halted_or_suspended', 'market_not_twse_otc',
+    'not_common_stock', 'disposition_or_controlled', 'split_trading', 'manual_control']);
+  const turnoverUniverse = candidates.filter(row => activeBySymbol.has(row.symbol)
+    && !row.basePool.failedChecks.some(reason => turnoverExclusions.has(reason)));
   const intradayTurnoverRanking = rankTurnover(turnoverUniverse.map(row => row.metrics.intradayTurnover),
-    { tradeDate: taipeiDate(), canonicalRunId: canonicalDaytradeRunId(taipeiDate()), now: nowIso() });
+    { tradeDate: taipeiDate(), canonicalRunId: canonicalDaytradeRunId(taipeiDate()), now: supplementalMaps.turnoverCalculatedAt });
   const turnoverRanks = intradayTurnoverActive
     ? new Map(intradayTurnoverRanking.rows.map(row => [row.symbol, { rank: row.rank }]))
     : rankMap(rankingCandidates, (row) => row.metrics.turnoverRate3To5d, { minValue: 0 });
@@ -6816,17 +6819,18 @@ function updateMotherPoolDelta(result) {
         'select=trade_date,payload&source_name=eq.' + encodeURIComponent(SOURCE_NAME) + '&trade_date=eq.' + tradeDate + '&limit=1',
         { service: false, pageSize: 2 });
       const actual = readback[0]?.payload?.intraday_turnover_ranking;
-      const verdict = require('./verify-daytrade-intraday-turnover').verify(actual);
+      const verdict = require('./verify-daytrade-intraday-turnover').verifyDelivery(actual, turnover, { read_role: 'anon', db_readback_ok: true });
       const stable = value => JSON.stringify(value, (_, v) => v && typeof v === 'object' && !Array.isArray(v)
         ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
       if (!actual || stable(actual) !== stable(turnover)) throw new Error('turnover_readback_not_same_batch');
       receipt = { ...verdict, run_id: turnover.run_id, trade_date: tradeDate,
         canonical_run_id: turnover.canonical_run_id, checked_at: nowIso(), read_role: 'anon',
         db_readback_ok: true, natural_production_readback_verified: true,
-        requested_count: turnover.requested_count, written_count: turnover.rows.length + turnover.gaps.length,
-        readback_count: actual.rows.length + actual.gaps.length };
+        requested_count: turnover.requested_count, written_count: turnover.rows.length + turnover.data_gaps.length,
+        readback_count: actual.rows.length + actual.data_gaps.length };
     } catch (error) {
-      receipt = { contract: 'daytrade_intraday_turnover_verifier_v1', status: 'blocked', complete: false,
+      receipt = { ...turnover, contract: 'daytrade_intraday_turnover_verifier_v1', status: 'blocked', complete: false,
+        written_count: turnover.rows.length + turnover.data_gaps.length, readback_count: null,
         run_id: turnover.run_id, trade_date: tradeDate, checked_at: nowIso(), exit_code: 1,
         db_readback_ok: false, failed_checks: [String(error.message)], first_blocker: String(error.message) };
     }
