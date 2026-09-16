@@ -285,7 +285,7 @@ const checks = {
     "sample_rejected",
   ]) && !writer.includes("events.push(...hotRankFallbackEvents"),
   price_quote_map_fallback_contract: includesAll(writer, [
-    "writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quoteMap = new Map(), heatmapUniverseRows = rows)",
+    "writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quoteMap = new Map(), heatmapUniverseRows = rows, discoveryOnly = false)",
     "const quote = quoteMap instanceof Map ? (quoteMap.get(symbol) || {}) : {}",
     "quotePayload.price",
     "ageSeconds(quoteFreshnessTime(quote)) <= WINDOW_SECONDS",
