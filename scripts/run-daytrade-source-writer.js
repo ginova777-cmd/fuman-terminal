@@ -70,7 +70,7 @@ async function prioritizeIntradayFiveMinuteStrong(rows) {
     const receipt = receipts[0];
     if (!receipt?.run_id) return applyFiveMinutePriority(rows, [], null, snapshot);
     const strong = await supabaseGetPaged(
-      "v_fugle_intraday_5m_readback",
+      "v_fugle_intraday_5m_batch_readback",
       `select=*&trade_date=eq.${tradeDate}&run_id=eq.${encodeURIComponent(receipt.run_id)}&order=symbol.asc`,
     );
     return applyFiveMinutePriority(rows, strong, receipt, snapshot);
