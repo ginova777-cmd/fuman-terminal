@@ -1718,6 +1718,8 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
 module.exports = async function handler(request, response) {
   const clock = taipeiClock();
   if (String(request.query?.briefingOnly || "") === "1") {
+    response.setHeader("Cache-Control", "no-store, max-age=0");
+    response.setHeader("CDN-Cache-Control", "no-store");
     const snapshotReport = await readOpeningMorningReportSnapshot(clock, 2500);
     const report = snapshotReport?.ok === true ? snapshotReport : readOpeningMorningReport(clock);
     response.status(200).json({
