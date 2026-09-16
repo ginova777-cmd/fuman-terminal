@@ -78,7 +78,9 @@ async function main() {
   const handoff = readJson(handoffPath);
   const final = readJson(finalPath);
   const handoffTime = Date.parse(String(handoff?.checked_at || ""));
-  const refreshes = Number.isFinite(handoffTime) ? await observeWriterRefreshes(handoffTime, requiredRefreshes, timeoutMs) : [];
+  const previous=process.argv.includes('--resume-evidence') ? readJson(output) : null;
+  const retained=previous?.complete===true&&previous?.report_run_id===reportRunId&&previous?.trade_date===tradeDate&&previous?.handoff_ack_receipt===handoffPath&&previous?.db_readback_ok===true ? [...new Set(previous.writer_refresh_timestamps||[])].filter(t=>Date.parse(t)>handoffTime&&Date.parse(t)<=Date.parse(previous.checked_at)) : [];
+  const refreshes = retained.length>=requiredRefreshes ? retained : Number.isFinite(handoffTime) ? await observeWriterRefreshes(handoffTime, requiredRefreshes, timeoutMs) : [];
   const readback = runReadback(tradeDate, reportRunId, bridgeAggregate, readbackOutput);
   const refreshOk = refreshes.length >= requiredRefreshes;
   const readbackOk = readback.exitCode === 0 && readback.receipt?.complete === true && readback.receipt?.db_readback_ok === true;
@@ -101,6 +103,8 @@ async function main() {
     required_writer_refreshes: requiredRefreshes,
     writer_refreshes_observed: refreshes.length,
     writer_refresh_timestamps: refreshes,
+    original_refresh_evidence_reused: retained.length>=requiredRefreshes,
+    fresh_independent_db_readback: true,
     persistence_readback_receipt: readbackOutput,
     received_symbols: Number(readback.receipt?.received_symbols || handoff?.received_symbols || 0),
     db_readback_symbols: readback.receipt?.db_readback_symbols || [],

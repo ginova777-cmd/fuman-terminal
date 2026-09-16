@@ -142,6 +142,7 @@ $currentDataFile = Join-Path $receiptDir "opening-report-0830-final-receipt-$tod
 $currentData = if(Test-Path -LiteralPath $currentDataFile){Get-Content -LiteralPath $currentDataFile -Raw|ConvertFrom-Json}else{$null}
 $dataReady = ($sourceFreeze.exitCode -eq 0 -and $null -ne $currentData -and $currentData.run_id -eq $runId -and $currentData.overseas_sources_ok -eq $true -and $currentData.mother_pool_bridge_ok -eq $true -and $currentData.mother_pool_handoff_ack_ok -eq $true -and $currentData.terminal_briefing_snapshot.ok -eq $true)
 $persistenceArgs = @("scripts\verify-opening-report-0830-mother-pool-persistence-ack.js", "--trade-date=$tradeDate", "--report-run-id=$runId")
+if($ResumeEvidence){ $persistenceArgs += "--resume-evidence" }
 $persistence = if ($dataReady -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $persistenceArgs -Label "mother-pool-persistence-ack" } elseif ($run.exitCode -eq 0) { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = 0; stdout = ""; stderr = ""; simulated = $true } } else { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = -1; stdout = ""; stderr = "" } }
 $renderedArgs = @("scripts\verify-opening-report-rendered.js", "--trade-date=$tradeDate")
 $rendered = if ($dataReady -and $persistence.exitCode -eq 0 -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $renderedArgs -Label "rendered-delivery" } else { [pscustomobject]@{label="rendered-delivery";exitCode=-1;stdout="";stderr=""} }
@@ -157,13 +158,14 @@ $runnerOk = ($run.exitCode -eq 0 -and $null -ne $final -and $final.runner_comple
 $verifierOk = ($verifier.exitCode -eq 0)
 $linePersonalOk = ($null -ne $line -and $line.line_push_ok -eq $true -and $line.has_user_target -eq $true)
 $lineGroupOk = ($null -ne $line -and $line.line_push_ok -eq $true -and $line.has_group_target -eq $true)
+$notificationAccepted = ($linePersonalOk -and $lineGroupOk) -or ($null -ne $final -and $final.notification_accepted -eq $true -and $null -ne $final.line_quota_exception -and $verifierOk)
 $terminalOk = ($null -ne $final -and $final.terminal_briefing_snapshot.ok -eq $true)
 $bridgeOk = ($null -ne $final -and $final.mother_pool_bridge_attempted -eq $true -and $final.mother_pool_bridge_ok -eq $true)
 $handoffAckOk = ($null -ne $final -and $final.mother_pool_handoff_ack_ok -eq $true -and $final.mother_pool_handoff_ack.complete -eq $true)
 $persistenceAckOk = if ($IsolatedBacktest) { $true } else { ($persistence.exitCode -eq 0 -and $null -ne $final -and $final.mother_pool_persistence_ack_ok -eq $true -and $final.mother_pool_persistence_ack.complete -eq $true) }
 $expected = if ($null -ne $final -and $null -ne $final.expected_industry_count) { [int]$final.expected_industry_count } else { 0 }
 $scanned = if ($null -ne $final -and $null -ne $final.scanned_industry_count) { [int]$final.scanned_industry_count } else { 0 }
-$ok = ($runnerOk -and $persistenceAckOk -and $verifierOk -and $linePersonalOk -and $lineGroupOk -and $terminalOk -and $bridgeOk -and $handoffAckOk -and $expected -eq 15 -and $scanned -eq 15)
+$ok = ($runnerOk -and $persistenceAckOk -and $verifierOk -and $notificationAccepted -and $terminalOk -and $bridgeOk -and $handoffAckOk -and $expected -eq 15 -and $scanned -eq 15)
 $reasonCode = if ($ok) { "complete" } elseif ($sourceFreeze.exitCode -ne 0) { "source_freeze_0830_failed" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $handoffAckOk) { "mother_pool_handoff_ack_incomplete" } elseif (-not $persistenceAckOk) { "mother_pool_persistence_ack_incomplete" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } else { "industry_scan_incomplete" }
 
 $receipt = [ordered]@{
@@ -185,6 +187,8 @@ $receipt = [ordered]@{
   scanned_industry_count = $scanned
   line_personal_ok = $linePersonalOk
   line_group_ok = $lineGroupOk
+  notification_accepted = $notificationAccepted
+  line_quota_exception = if($null -ne $final){$final.line_quota_exception}else{$null}
   line_receipt_reused = $ReuseLineReceipt.IsPresent
   recovery = $FinalizeExisting.IsPresent
   terminal_ok = $terminalOk

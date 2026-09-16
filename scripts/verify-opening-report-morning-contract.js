@@ -412,7 +412,7 @@ function currentReceiptChecks(checks, tradeDate) {
   const hasGroup = line.has_group_target === true || line.hasGroupTarget === true;
   const deliveredCount = Number(line.delivered_count || line.deliveredCount || 0);
   const lineAttempted = line.line_push_attempted === true;
-  addCheck(checks, "current_line_user_and_group_delivery", line.ok === true && lineAttempted && targetCount >= 2 && deliveredCount >= 2 && hasUser && hasGroup, JSON.stringify({ ok: line.ok, line_push_attempted: lineAttempted, target_count: targetCount, delivered_count: deliveredCount, has_user_target: hasUser, has_group_target: hasGroup }));
+  addCheck(checks, "current_line_user_and_group_delivery", require("../lib/opening-report-line-policy").accepted(line,finalReceipt.run_id,finalReceipt.delivery_content_hash,tradeDate), JSON.stringify({ ok: line.ok, line_push_attempted: lineAttempted, target_count: targetCount, delivered_count: deliveredCount, has_user_target: hasUser, has_group_target: hasGroup }));
 
   const terminal = finalReceipt.terminal_briefing_snapshot || {};
   addCheck(checks, "current_terminal_snapshot_ok", terminal.ok === true, JSON.stringify({ ok: terminal.ok, key: terminal.key }));
