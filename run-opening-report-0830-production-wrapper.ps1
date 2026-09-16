@@ -3,6 +3,7 @@ param(
   [switch]$IsolatedBacktest,
   [switch]$ReuseLineReceipt,
   [switch]$FinalizeExisting,
+  [switch]$ResumeEvidence,
   [string]$RecoveryContext
 )
 
@@ -41,12 +42,12 @@ trap {
   exit 1
 }
 if ($FinalizeExisting) { $ReuseLineReceipt = [switch]$true }
-if ($ReuseLineReceipt) {
+if ($ReuseLineReceipt -or $ResumeEvidence) {
   $existingLinePath = Join-Path $receiptDir "line-push-receipt-$today.json"
   if (-not (Test-Path -LiteralPath $existingLinePath)) { throw "Cannot reuse missing LINE receipt: $existingLinePath" }
   $existingLine = Get-Content -LiteralPath $existingLinePath -Raw | ConvertFrom-Json
   $existingRunId = [string]($existingLine.report_run_id)
-  if ([string]::IsNullOrWhiteSpace($existingRunId) -or $existingLine.line_push_ok -ne $true) { throw "Cannot reuse incomplete LINE receipt: $existingLinePath" }
+  if ([string]::IsNullOrWhiteSpace($existingRunId) -or (-not $ResumeEvidence -and $existingLine.line_push_ok -ne $true)) { throw "Cannot reuse incomplete LINE receipt: $existingLinePath" }
   $runId = $existingRunId
 }
 
@@ -132,18 +133,21 @@ function Invoke-NodeStep {
 
 # Formal contract: runner -> one canonical verifier -> wrapper receipt.
 # LINE personal/group, terminal output, and Mother Pool bridge remain runner-owned.
-$sourceFreeze = if ($IsolatedBacktest -or $ReuseLineReceipt) { [pscustomobject]@{label="source-freeze-existing-or-isolated";exitCode=0;stdout="";stderr="";evidenceOnly=$true} } else { Invoke-NodeStep -NodeArgs @("scripts\run-opening-report-0830-preflight.js", "--wrapper-owned", "--date=$tradeDate", "--run-id=$runId") -Label "source-freeze-0830" }
+$sourceFreeze = if ($IsolatedBacktest -or $ReuseLineReceipt -or $ResumeEvidence) { [pscustomobject]@{label="source-freeze-existing-or-isolated";exitCode=0;stdout="";stderr="";evidenceOnly=$true} } else { Invoke-NodeStep -NodeArgs @("scripts\run-opening-report-0830-preflight.js", "--wrapper-owned", "--date=$tradeDate", "--run-id=$runId") -Label "source-freeze-0830" }
 $runnerArgs = @("scripts\run-opening-report-0830-production.js", "--apply-bridge", "--date=$tradeDate", "--run-id=$runId")
 if ($IsolatedBacktest) { $runnerArgs += "--isolated-backtest" }
-if ($ReuseLineReceipt) { $runnerArgs += "--reuse-line-receipt" }
+if ($ResumeEvidence) { $runnerArgs += "--resume-evidence" } elseif ($ReuseLineReceipt) { $runnerArgs += "--reuse-line-receipt" }
 $run = if ($sourceFreeze.exitCode -ne 0) { [pscustomobject]@{label="runner-skipped-source-freeze-failed";exitCode=$sourceFreeze.exitCode;stdout="";stderr=""} } elseif ($FinalizeExisting) { [pscustomobject]@{ label="runner-existing-evidence"; exitCode=0; stdout=""; stderr=""; evidenceOnly=$true } } else { Invoke-NodeStep -NodeArgs $runnerArgs -Label "runner" }
+$currentDataFile = Join-Path $receiptDir "opening-report-0830-final-receipt-$today.json"
+$currentData = if(Test-Path -LiteralPath $currentDataFile){Get-Content -LiteralPath $currentDataFile -Raw|ConvertFrom-Json}else{$null}
+$dataReady = ($sourceFreeze.exitCode -eq 0 -and $null -ne $currentData -and $currentData.run_id -eq $runId -and $currentData.overseas_sources_ok -eq $true -and $currentData.mother_pool_bridge_ok -eq $true -and $currentData.mother_pool_handoff_ack_ok -eq $true -and $currentData.terminal_briefing_snapshot.ok -eq $true)
 $persistenceArgs = @("scripts\verify-opening-report-0830-mother-pool-persistence-ack.js", "--trade-date=$tradeDate", "--report-run-id=$runId")
-$persistence = if ($run.exitCode -eq 0 -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $persistenceArgs -Label "mother-pool-persistence-ack" } elseif ($run.exitCode -eq 0) { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = 0; stdout = ""; stderr = ""; simulated = $true } } else { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = -1; stdout = ""; stderr = "" } }
+$persistence = if ($dataReady -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $persistenceArgs -Label "mother-pool-persistence-ack" } elseif ($run.exitCode -eq 0) { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = 0; stdout = ""; stderr = ""; simulated = $true } } else { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = -1; stdout = ""; stderr = "" } }
 $renderedArgs = @("scripts\verify-opening-report-rendered.js", "--trade-date=$tradeDate")
-$rendered = if ($run.exitCode -eq 0 -and $persistence.exitCode -eq 0 -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $renderedArgs -Label "rendered-delivery" } else { [pscustomobject]@{label="rendered-delivery";exitCode=-1;stdout="";stderr=""} }
+$rendered = if ($dataReady -and $persistence.exitCode -eq 0 -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $renderedArgs -Label "rendered-delivery" } else { [pscustomobject]@{label="rendered-delivery";exitCode=-1;stdout="";stderr=""} }
 $verifierArgs = @("scripts\verify-opening-report-morning-contract.js", "--trade-date=$tradeDate")
 if (-not $IsolatedBacktest) { $verifierArgs += "--require-current" }
-$verifier = if ($run.exitCode -eq 0 -and $persistence.exitCode -eq 0 -and ($IsolatedBacktest -or $rendered.exitCode -eq 0)) { Invoke-NodeStep -NodeArgs $verifierArgs -Label "canonical-verifier" } else { [pscustomobject]@{ label = "canonical-verifier"; exitCode = -1; stdout = ""; stderr = "" } }
+$verifier = if ($dataReady -and $persistence.exitCode -eq 0 -and ($IsolatedBacktest -or $rendered.exitCode -eq 0)) { Invoke-NodeStep -NodeArgs $verifierArgs -Label "canonical-verifier" } else { [pscustomobject]@{ label = "canonical-verifier"; exitCode = -1; stdout = ""; stderr = "" } }
 
 $finalFile = Join-Path $receiptDir "opening-report-0830-final-receipt-$today.json"
 $final = if (Test-Path -LiteralPath $finalFile) { Get-Content -LiteralPath $finalFile -Raw | ConvertFrom-Json } else { $null }

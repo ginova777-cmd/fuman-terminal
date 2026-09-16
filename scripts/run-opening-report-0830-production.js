@@ -639,7 +639,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   // Production always hands the same-day report to Mother Pool. Only an
   // explicit isolated test may suppress the bridge.
   const applyBridge = !mock && !hasFlag("--skip-bridge");
-  const reuseLineReceipt = hasFlag("--reuse-line-receipt");
+  const resumeEvidence = hasFlag("--resume-evidence");
+  const reuseLineReceipt = hasFlag("--reuse-line-receipt") || resumeEvidence;
   const sendLine = !mock && !reuseLineReceipt;
   const dryRunLine = mock;
 
@@ -656,7 +657,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   const items = attachPriorityObservation(baseItems, priority);
   const displayTop3 = priority.observations;
   const deliveryContentHash = contentHash(priority.mode, displayTop3, night);
-  if (reuseLineReceipt && !validateReuse(readJson(path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`)), runId, deliveryContentHash)) throw new Error("line_reuse_run_or_content_mismatch");
+  if (resumeEvidence) { const prior=readJson(path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`)); if(prior?.report_run_id!==runId || prior?.delivery_content_hash!==deliveryContentHash || prior?.line_push_attempted!==true) throw Error("resume_evidence_identity_mismatch"); }
+  if (reuseLineReceipt && !resumeEvidence && !validateReuse(readJson(path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`)), runId, deliveryContentHash)) throw new Error("line_reuse_run_or_content_mismatch");
   const reportPath = path.join(RECEIPT_DIR, `opening-report-0830-${compact}.md`);
   const overseasPath = path.join(RECEIPT_DIR, `overseas-preflight-${compact}.json`);
   const finalPath = path.join(RECEIPT_DIR, `opening-report-0830-final-receipt-${compact}.json`);
