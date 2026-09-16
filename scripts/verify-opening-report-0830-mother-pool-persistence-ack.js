@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+const morningStages = require("../lib/opening-report-stage-contract");
 "use strict";
 
 const fs = require("fs");
@@ -7,8 +7,8 @@ const { spawnSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
-const REPORT_DIR = path.join(RUNTIME, "data", "opening-report-0830");
-const RECEIPT_DIR = path.join(RUNTIME, "data", "scan-receipts");
+const REPORT_DIR = (process.env.FUMAN_MORNING_STAGE ? morningStages.directory(RUNTIME) : path.join(RUNTIME, "data", "opening-report-0830"));
+const RECEIPT_DIR = (process.env.FUMAN_MORNING_STAGE ? path.join(morningStages.directory(RUNTIME), "scan-receipts") : path.join(RUNTIME, "data", "scan-receipts"));
 const WRITER_STATE = path.join(RUNTIME, "state", "daytrade-mother-pool-delta.json");
 const HANDOFF_SCRIPT = path.join(__dirname, "verify-opening-report-0830-mother-pool-handoff-ack.js");
 const CONTRACT = "opening-report-0830-mother-pool-persistence-ack-v1";

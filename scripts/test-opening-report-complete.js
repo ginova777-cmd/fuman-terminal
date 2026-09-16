@@ -5,7 +5,7 @@ const {preserveMorningWatchRows}=require("../lib/opening-report-writer-preservat
 const {contentHash,validateReuse}=require("../lib/opening-report-delivery-contract");
 const {validateDbRow}=require("./verify-opening-report-0830-mother-pool-handoff-ack");
 const date="2026-09-14",run="opening-report-0830-20260914-test";
-const payload=(industry,rank)=>({date,report_time:"08:50",source:"opening_report_0830",mode:"priority_bias_only",run_id:`${run}-${industry}`,industry,priority_observation_rank:rank,priority_overseas_leaders:[],bias:"positive",confidence:0.8,evidence_summary:"test"});
+const payload=(industry,rank)=>({date,report_time:"08:20",source:"opening_report_0830",mode:"priority_bias_only",run_id:`${run}-${industry}`,industry,priority_observation_rank:rank,priority_overseas_leaders:[],bias:"positive",confidence:0.8,evidence_summary:"test"});
 const one=payload("IC_DESIGN",1),two=payload("OPTICAL_COMM",2);
 const evidence=mergeOpeningReportEvidence(mergeOpeningReportEvidence(null,one),two);
 assert.deepEqual(evidence.linked_industries,["IC_DESIGN","OPTICAL_COMM"]);
@@ -59,7 +59,7 @@ console.log(JSON.stringify({ok:true,morning_waits_for_matching_rendered_batch:tr
   const source=fs.readFileSync(path.join(__dirname,"verify-opening-report-morning-contract.js"),"utf8");
   const code=source.slice(source.indexOf("async function liveDeliveryChecks("),source.indexOf("function writeReceipt("));
   let renderedCalled=false;
-  const checks=[],ctx={morningRecovery:require("../lib/opening-report-recovery"),path,REPORT_DIR:"fixture",compactDate:x=>x.replace(/-/g,""),readJson:()=>({run_id:"fixture",display_top3:[],delivery_content_hash:"fixture"}),renderedDeliveryChecks:items=>{renderedCalled=true;items.push({name:"missing_rendered_receipt",ok:false});},addCheck:(items,name,ok)=>items.push({name,ok}),require:name=>name.includes("night-futures")?require("../lib/opening-report-night-futures"):name==="util"?require("util"):name.includes("delivery-contract")?{contentHash:()=>"fixture"}:{readSnapshot:async()=>null}};
+  const checks=[],ctx={process, morningStages:require("../lib/opening-report-stage-contract"),morningRecovery:require("../lib/opening-report-recovery"),path,REPORT_DIR:"fixture",compactDate:x=>x.replace(/-/g,""),readJson:()=>({run_id:"fixture",display_top3:[],delivery_content_hash:"fixture"}),renderedDeliveryChecks:items=>{renderedCalled=true;items.push({name:"missing_rendered_receipt",ok:false});},addCheck:(items,name,ok)=>items.push({name,ok}),require:name=>name.includes("night-futures")?require("../lib/opening-report-night-futures"):name==="util"?require("util"):name.includes("delivery-contract")?{contentHash:()=>"fixture"}:{readSnapshot:async()=>null}};
   vm.createContext(ctx);vm.runInContext(code+"\nthis.verifyLive=liveDeliveryChecks",ctx);await ctx.verifyLive(checks,"2026-09-14");
   assert.equal(renderedCalled,true);assert.ok(checks.some(x=>x.name==="missing_rendered_receipt"&&!x.ok));
   const renderedCode=source.slice(source.indexOf("function renderedDeliveryChecks("),source.indexOf("async function liveDeliveryChecks("));
