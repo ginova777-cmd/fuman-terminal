@@ -257,7 +257,7 @@ function canonicalSentEvent(event, tradeDate) {
     industry_heat_score: Number.isFinite(Number(event?.industry_heat_score)) ? Number(event.industry_heat_score) : null,
     industry_flow_priority: String(event?.industry_flow_priority || ""),
     industry_net_flow_proxy: Number.isFinite(Number(event?.industry_net_flow_proxy)) ? Number(event.industry_net_flow_proxy) : null,
-    mother_pool_run_id: event.mother_pool_run_id || null, snapshot_sequence: event.mother_pool_snapshot_sequence ?? null, membership_status: event.membership_status || null, five_minute_run_id: event.five_minute_run_id || null, five_minute_requested: event.five_minute_requested === true, five_minute_readback_found: event.five_minute_readback_found === true, five_minute_snapshot_aligned: event.five_minute_snapshot_aligned === true, telegram_target_count: event.telegram_target_count || 0,
+    mother_pool_run_id: event.mother_pool_run_id || null, snapshot_sequence: event.mother_pool_snapshot_sequence ?? event.snapshot_sequence ?? null, membership_status: event.membership_status || null, five_minute_run_id: event.five_minute_run_id || null, five_minute_requested: event.five_minute_requested === true, five_minute_readback_found: event.five_minute_readback_found === true, five_minute_snapshot_aligned: event.five_minute_snapshot_aligned === true, telegram_target_count: event.telegram_target_count || 0,
     five_minute_role: "diagnostic_bonus_not_hard_gate",
     five_minute_bonus_awarded: fiveMinuteBonus(event),
     five_minute_confirmation_status: String(event?.five_minute_confirmation_status || "DATA_GAP_5M"),
@@ -280,7 +280,15 @@ function uniqueEvents(events, tradeDate) {
     const event = canonicalSentEvent(raw, tradeDate);
     if (!event) continue;
     const previous = byKey.get(event.event_key) || {};
-    byKey.set(event.event_key, { ...previous, ...event, name: event.name || previous.name || "" });
+    const merged = { ...previous, ...event, name: event.name || previous.name || "" };
+    for (const field of ['mother_pool_run_id','snapshot_sequence','membership_status','five_minute_run_id','telegram_target_count']) {
+      if (event[field] == null || event[field] === 0 || event[field] === '') merged[field] = previous[field] ?? event[field];
+    }
+    for (const field of ['five_minute_requested','five_minute_readback_found','five_minute_snapshot_aligned','five_minute_bonus_awarded']) merged[field] = previous[field] === true || event[field] === true;
+    if (previous.five_minute_bonus_awarded === true && event.five_minute_bonus_awarded !== true) {
+      for (const field of ['five_minute_confirmation_status','five_minute_bar_end','five_minute_confirmation_signals']) merged[field] = previous[field];
+    }
+    byKey.set(event.event_key, merged);
   }
   return [...byKey.values()].sort((a, b) => String(a.sent_at).localeCompare(String(b.sent_at)) || a.event_key.localeCompare(b.event_key));
 }
@@ -319,6 +327,7 @@ function finalizeReceiptStatus(receipt) {
 function writeReceiptWithHistory(receipt) {
   const file = receiptPath(receipt.trade_date);
   const previous = readJson(file, {});
+  require('../lib/telegram-closeout-evidence').preserveCloseout(receipt, previous);
   const previousSent = previous?.trade_date === receipt.trade_date ? previous.sent_events : [];
   const stateSent = sentEventsFromState(receipt.trade_date);
   const attemptSentCount = Array.isArray(receipt.sent_events) ? receipt.sent_events.length : 0;
@@ -348,6 +357,10 @@ function writeReceiptWithHistory(receipt) {
   receipt.accepted_event_count = receipt.event_diagnostics?.filter(e=>!e.skip_reason).length || 0;
   receipt.skipped_event_count = receipt.skipped_events.length;
   receipt.telegram_target_count = Math.max(0,...receipt.sent_events.map(e=>e.telegram_target_count||0));
+  if (receipt.sent_events.some(e=>!(e.telegram_target_count>0))) {
+    receipt.failed_checks = [...new Set([...(receipt.failed_checks||[]),'telegram_delivery_target_evidence_missing'])];
+    receipt.first_blocker ||= 'telegram_delivery_target_evidence_missing'; receipt.ok=false; finalizeReceiptStatus(receipt);
+  }
   writeJson(file, receipt);
 }
 function validEvent(event, tradeDate, nowMs) {
@@ -475,7 +488,8 @@ async function notifyFromOutbox(options = {}) {
   receipt.mother_pool_run_id = motherPoolSnapshot.runId || null;
   receipt.mother_pool_snapshot_sequence = snapshot.snapshot_sequence ?? null;
   receipt.snapshot_sequence = snapshot.snapshot_sequence ?? null;
-  receipt.v4_contract_validated = true;
+  receipt.v4_contract_validated = motherPoolSnapshot.ok === true;
+  receipt.mother_pool_snapshot_evidence = snapshot;
   receipt.mother_pool_snapshot_type = snapshot.snapshot_type || null;
   receipt.mother_pool_effective_at = snapshot.effective_at || null;
   receipt.mother_pool_symbol_count = motherPoolSnapshot.symbols.size;
@@ -614,7 +628,7 @@ async function notifyFromOutbox(options = {}) {
         const allSent = Array.isArray(results) && results.length > 0 && results.every((result) => result.sent === true);
         if (allSent) {
           receipt.event_diagnostics[receipt.event_diagnostics.length-1].sent = true;
-          sent[key] = { sent_at: checkedAt, latest_1m_time: event.latest_1m_time, trigger_type: event.trigger_type };
+          sent[key] = canonicalSentEvent({ ...event, sent_at: checkedAt, telegram_target_count: results.length }, tradeDate);
           receipt.sent_events.push(canonicalSentEvent({ ...event, event_time: event.latest_1m_time, sent_at: checkedAt, telegram_target_count: results.length }, tradeDate));
         } else {
           if (!results?.length || results.some(r=>r.sent!==true && !/dedup|already|claim/.test(r.reason||""))) receipt.failed_checks.push("telegram_send_not_confirmed");
@@ -640,7 +654,7 @@ if (require.main === module) {
     process.exitCode = result.first_blocker && result.first_blocker !== "outside_trading_window" ? 1 : 0;
   }).catch((error) => { console.error(error.stack || error.message || String(error)); process.exitCode = 1; });
 }
-module.exports = { fiveMinuteBonus, notifyFromOutbox, eventMessage, readMotherPoolSnapshot, readFiveMinuteConfirmations, sideVolumeEvents, validEvent, validSideVolumeEvent, finalizeReceiptStatus };
+module.exports = { fiveMinuteBonus, notifyFromOutbox, eventMessage, readMotherPoolSnapshot, readFiveMinuteConfirmations, sideVolumeEvents, validEvent, validSideVolumeEvent, finalizeReceiptStatus, canonicalSentEvent, uniqueEvents };
 
 
 

@@ -776,7 +776,9 @@ const runtime = {
 };
 
 checks.runtime_rolling_1m_baseline_available = baselineRuntimeHealthy;const snapshotModule = require("../lib/daytrade-mother-pool-snapshot");
-const snapshotEvidence = snapshotModule.readMotherPoolSnapshot(taipeiDate());
+const snapshotEvidence = receipt?.mother_pool_snapshot_evidence
+  ? snapshotModule.inspectSnapshot(receipt.mother_pool_snapshot_evidence,taipeiDate())
+  : snapshotModule.readMotherPoolSnapshot(taipeiDate());
 checks.v4_snapshot_identity_wiring = canonicalWaterReader.includes('readMotherPoolSnapshot') && notifier.includes('fiveMinuteAligned(receipt, motherPoolSnapshot)') && notifier.includes('five_minute_snapshot_aligned') && notifier.includes('membership_status');
 checks.v4_industry_not_hard_gate = !notifier.includes('receipt.first_blocker = "industry_heatmap_not_ready"');
 checks.v4_isolated_test_present = fs.existsSync(path.join(ROOT,'scripts/test-daytrade-intraday-burst-isolated.js'));
@@ -784,6 +786,9 @@ const fiveRunner=read(path.join(ROOT,'run-daytrade-intraday-5m-current-candidate
 checks.v4_candidate_snapshot_first = fiveRunner.includes("snapshot.symbols") && fiveRunner.includes("daytradeMotherPoolSymbols") && fiveRunner.indexOf("snapshot.symbols")<fiveRunner.indexOf("daytradeMotherPoolSymbols");
 if (requireToday) {
  checks.v4_current_snapshot_valid = snapshotEvidence.ok;
+ checks.v4_delivery_target_evidence = (receipt?.sent_events||[]).every(e=>Number.isInteger(e.telegram_target_count)&&e.telegram_target_count>0);
+ checks.v4_bound_snapshot_evidence = !!receipt?.mother_pool_snapshot_evidence && snapshotEvidence.ok;
+ checks.v4_closeout_evidence = receipt?.last_attempt?.first_blocker !== 'outside_trading_window' || receipt?.closeout?.source_evidence_preserved === true;
  checks.v4_five_minute_bonus_role = receipt?.five_minute_role==='diagnostic_bonus_not_hard_gate' && receipt?.conditions?.five_minute_confirmation_required===false;
  checks.v4_current_notifier_identity = receipt?.v4_contract_validated===true && receipt?.mother_pool_run_id===snapshotEvidence.runId && receipt?.snapshot_sequence===snapshotEvidence.snapshot.snapshot_sequence;
  checks.v4_current_runner_identity = runnerReceipt?.v4_contract_validated===true && runnerReceipt?.mother_pool_run_id===receipt?.mother_pool_run_id && runnerReceipt?.snapshot_sequence===receipt?.snapshot_sequence;
