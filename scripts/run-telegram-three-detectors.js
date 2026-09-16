@@ -12,6 +12,7 @@ const read=(p,fallback=null)=>{try{return JSON.parse(fs.readFileSync(p,'utf8'));
 const write=(p,v)=>{fs.mkdirSync(path.dirname(p),{recursive:true});const tmp=p+'.tmp-'+process.pid;fs.writeFileSync(tmp,JSON.stringify(v,null,2));fs.renameSync(tmp,p);};
 async function execute(){
  const now=new Date().toISOString(),local=new Date(Date.now()+28800000).toISOString(),date=local.slice(0,10),minute=local.slice(11,16),dir=path.join(root,'data/telegram-detectors',date);
+ if(minute==='12:31'&&fs.existsSync(path.join(dir,'day-ledger.json')))return require('./verify-telegram-three-detectors').main({publishReceipt:true});
  if(minute<'09:00'||minute>'12:30'){
   const result={contract:'telegram_three_detectors_attempt_v1',trade_date:date,checked_at:now,status:'not_due',complete:false,reason:'OUTSIDE_NOTIFICATION_WINDOW',previous_evidence_preserved:true};write(path.join(dir,'last-attempt.json'),result);return result;
  }
@@ -42,5 +43,5 @@ async function execute(){
  }finally{fs.closeSync(lockFd);fs.unlinkSync(lock);}
 }
 async function main(){try{return await execute();}catch(e){const date=new Date(Date.now()+28800000).toISOString().slice(0,10),result={contract:'telegram_three_detectors_attempt_v1',run_id:'telegram-failed-'+crypto.randomUUID(),trade_date:date,checked_at:new Date().toISOString(),status:'blocked',complete:false,exit_code:1,failed_checks:[e.message||'RUNNER_EXCEPTION'],first_blocker:e.message||'RUNNER_EXCEPTION',previous_good_preserved:true};write(path.join(root,'data/telegram-detectors',date,'last-attempt.json'),result);write(path.join(root,'data/scan-receipts/telegram-three-detectors-runner-'+date.replaceAll('-','')+'.json'),result);return result;}}
-if(require.main===module)main().then(r=>{console.log(JSON.stringify({status:r.status,complete:r.complete,run_id:r.run_id,event_count:r.event_count,first_blocker:r.first_blocker||r.reason},null,2));process.exitCode=r.status==='not_due'||r.integration_complete===true?0:1;}).catch(e=>{console.error(e.message);process.exitCode=1;});
+if(require.main===module)main().then(r=>{console.log(JSON.stringify({status:r.status,complete:r.complete,run_id:r.run_id,event_count:r.event_count,first_blocker:r.first_blocker||r.reason},null,2));process.exitCode=r.exit_code??(r.status==='not_due'||r.integration_complete===true?0:1);}).catch(e=>{console.error(e.message);process.exitCode=1;});
 module.exports={main};

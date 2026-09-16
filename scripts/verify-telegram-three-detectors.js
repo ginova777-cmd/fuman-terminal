@@ -6,7 +6,7 @@ const {readSnapshot,upsertSnapshot}=require('../lib/supabase-snapshots');
 const {anonKey}=require('../lib/server-supabase-key');
 const root=process.env.FUMAN_RUNTIME_DIR||'C:/fuman-runtime';
 const read=p=>{try{return JSON.parse(fs.readFileSync(p,'utf8'));}catch{return null;}};
-async function main(){
+async function main({publishReceipt=false}={}){
  const date=new Date(Date.now()+28800000).toISOString().slice(0,10),dir=path.join(root,'data/telegram-detectors',date),ledger=read(path.join(dir,'day-ledger.json')),failed=[];
  const db=(await readSnapshot('telegram_three_detectors_latest',{key:anonKey({root:path.resolve(__dirname,'..'),runtimeDir:root}),maxAttempts:1,timeoutMs:8000}))?.payload;
  const latest=ledger?.rounds?.at(-1),evidence=latest?read(latest.file):null;let surfaces=null;
@@ -23,8 +23,8 @@ async function main(){
   receipt.observed_rounds=ledger.rounds.length;receipt.incomplete_rounds=ledger.rounds.filter(r=>!r.integration_complete||!r.source_complete).length;
   receipt.failed_checks.push(...failed);receipt.complete=receipt.failed_checks.length===0;receipt.status=receipt.complete?'complete':'blocked';receipt.exit_code=receipt.complete?0:1;receipt.first_blocker=receipt.failed_checks[0]||null;receipt.scope='formal_three_detectors_current_round';receipt.full_day_verified=false;
  }
- if(receipt.complete){const key='telegram_three_detectors_acceptance_'+receipt.run_id,published=await upsertSnapshot(key,receipt,{tradeDate:date,snapshotId:receipt.run_id});const confirmed=published.ok?(await readSnapshot(key,{maxAttempts:1,timeoutMs:8000}))?.payload:null;if(digest(confirmed)!==digest(receipt)){receipt.complete=false;receipt.status='blocked';receipt.exit_code=1;receipt.failed_checks.push('ACCEPTANCE_DB_READBACK_FAILED');receipt.first_blocker='ACCEPTANCE_DB_READBACK_FAILED';}}
+ if(receipt.complete&&publishReceipt){const key='telegram_three_detectors_acceptance_'+receipt.run_id,published=await upsertSnapshot(key,receipt,{tradeDate:date,snapshotId:receipt.run_id});const confirmed=published.ok?(await readSnapshot(key,{maxAttempts:1,timeoutMs:8000}))?.payload:null;if(digest(confirmed)!==digest(receipt)){receipt.complete=false;receipt.status='blocked';receipt.exit_code=1;receipt.failed_checks.push('ACCEPTANCE_DB_READBACK_FAILED');receipt.first_blocker='ACCEPTANCE_DB_READBACK_FAILED';}}
  const target=path.join(root,'data/scan-receipts/telegram-three-detectors-final-'+date.replaceAll('-','')+'.json');fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target+'.tmp',JSON.stringify(receipt,null,2));fs.renameSync(target+'.tmp',target);console.log(JSON.stringify(receipt,null,2));return receipt;
 }
-if(require.main===module)main().then(r=>{process.exitCode=r.exit_code;}).catch(e=>{console.error(e.message);process.exitCode=1;});
+if(require.main===module)main({publishReceipt:process.argv.includes('--publish-receipt')}).then(r=>{process.exitCode=r.exit_code;}).catch(e=>{console.error(e.message);process.exitCode=1;});
 module.exports={main};
