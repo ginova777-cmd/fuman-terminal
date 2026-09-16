@@ -26,6 +26,7 @@ const { mergeCurrentDayCandlePrioritySymbols } = require("../lib/daytrade-candle
 const { buildDaytradeIndustryPrewarm } = require("../lib/daytrade-industry-prewarm");
 const DAYTRADE_INDUSTRY_PREWARM_CONFIG = require("../data/daytrade-industry-prewarm-v1.json");
 const { isTwseTradingDay } = require("./twse-trading-day");
+const contextDetectors = require("../lib/intraday-context-detectors-b19-b24");
 
 const SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
 const SOURCE_HOST_ID = String(process.env.FUMAN_DAYTRADE_SOURCE_HOST_ID || process.env.FUMAN_SOURCE_HOST_ID || process.env.COMPUTERNAME || "unknown").trim();
@@ -8015,6 +8016,7 @@ async function tick() {
     ...row,
     metrics: quoteMetrics(row.symbol, dailyVolumeMap, quoteMap, supplementalMaps),
   }));
+  result.payload.b19_b24_event_evidence = buildB19B24Evidence(result.industryUniverseRows);
   result.payload.nonfatal_write_errors = fetchResult.errors || [];
   result.payload.websocket_quote_readthrough_written = websocketQuoteReadthroughSync.written || 0;
   result.payload.websocket_quote_readthrough_skipped = Boolean(websocketQuoteReadthroughSync.skipped);
@@ -8147,6 +8149,18 @@ async function tick() {
     errors: fetchResult.errors?.slice(0, 5) || [],
     message: result.message,
   };
+}
+
+function buildB19B24Evidence(rows) {
+  const evidence = (Array.isArray(rows) ? rows : []).map((row) => {
+    const m = row.metrics || {};
+    const side = contextDetectors.b20({ inside_1m: m.insideVolume, outside_1m: m.outsideVolume });
+    const vwap = contextDetectors.b21({ cumulative_turnover: m.tradeValue, cumulative_shares: m.totalVolume, current_price: m.price });
+    const range = contextDetectors.b22({ current_price: m.price, orh: m.openingRangeHigh, orl: m.openingRangeLow });
+    const position = contextDetectors.b23({ current_price: m.price, day_high_so_far: m.highPrice, day_low_so_far: m.lowPrice, today_open: m.openPrice });
+    return { symbol: row.symbol, b19: { data_status: "DATA_GAP", reason: "intraday_1m_return_not_available_in_writer_row" }, b20: side, b21: vwap, b22: range, b23: position, b24: { status: "PENDING_EVENT_INPUT", formal_candidate_allowed: false, publish_allowed: false } };
+  });
+  return { contract: "daytrade_intraday_b19_b24_event_evidence_v1", status: "attached", rows: evidence, b19_b24_formal_candidate_allowed: false, b19_b24_publish_allowed: false, note: "B19/B24 require natural intraday event stream; absent inputs remain DATA_GAP/PENDING and are never synthesized." };
 }
 
 async function main() {
