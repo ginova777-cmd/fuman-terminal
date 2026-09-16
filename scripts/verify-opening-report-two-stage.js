@@ -32,10 +32,10 @@ async function verifyStage(id){
   const p=db?.payload;
   add('stage_db_readback',p?.ok===true&&p.run_id===run&&p.date===date&&p.stage===id&&p.delivery_content_hash===hash&&require('util').isDeepStrictEqual(p.display_top3,final?.display_top3)&&require('util').isDeepStrictEqual(p.night_futures,final?.night_futures));
   const dataComplete=checks.every(x=>x.ok);
-  add('line_delivery',line?.line_push_ok===true&&line.has_user_target===true&&line.has_group_target===true&&line.report_run_id===run&&line.delivery_content_hash===hash);
+  add('line_delivery',require('../lib/opening-report-line-policy').accepted(line,run,hash,date));
   add('canonical_receipt',canonical?.require_current===true&&canonical.complete===true&&canonical.trade_date===date&&canonical.failed_checks?.length===0);
   add('final_receipt',final?.complete===true&&final.status==='complete'&&final.exitCode===0&&wrapper?.complete===true&&wrapper.run_id===run&&wrapper.exitCode===0);
-  return {stage:id,run_id:run||null,data_complete:dataComplete,complete:checks.every(x=>x.ok),checks,source_count:source?.valid_leaders||0,received_symbols:handoff?.received_symbols||0,delivery:{ok:line?.line_push_ok===true,delivered_count:line?.delivered_count||0,target_count:line?.target_count||0,error:line?.line_error_detail||null},receipt_directory:dir};
+  return {stage:id,run_id:run||null,data_complete:dataComplete,complete:checks.every(x=>x.ok),checks,source_count:source?.valid_leaders||0,received_symbols:handoff?.received_symbols||0,delivery:{ok:line?.line_push_ok===true,quota_exception:line?.quota_exception||null,delivered_count:line?.delivered_count||0,target_count:line?.target_count||0,error:line?.line_error_detail||null},receipt_directory:dir};
 }
 (async()=>{
   const results=[];for(const id of Object.keys(stages.STAGES))results.push(await verifyStage(id));

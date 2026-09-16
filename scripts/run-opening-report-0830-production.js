@@ -1,3 +1,4 @@
+const linePolicy = require("../lib/opening-report-line-policy");
 const morningStages = require("../lib/opening-report-stage-contract");
 const nightSource = require("../lib/opening-report-night-futures");
 const morningRecovery = require("../lib/opening-report-recovery");
@@ -330,6 +331,7 @@ function runMotherPoolHandoffAck(tradeDate, runId, bridgeAggregatePath, isolated
   const args = isolatedBacktest
     ? [HANDOFF_ACK_SCRIPT, "--fixture"]
     : [HANDOFF_ACK_SCRIPT, `--trade-date=${tradeDate}`, `--report-run-id=${runId}`, `--bridge-aggregate=${bridgeAggregatePath}`];
+  if(hasFlag("--resume-evidence")) args.push(`--output=${path.join(RECEIPT_DIR,"scan-receipts",`opening-report-resume-handoff-${tradeDate.replace(/-/g, "")}.json`)}`);
   const result = spawnSync(process.execPath, args, { encoding: "utf8", windowsHide: true, cwd: path.resolve(__dirname, "..") });
   let receipt = null;
   try { receipt = JSON.parse(String(result.stdout || "").trim()); } catch {}
@@ -384,7 +386,7 @@ function lineReportText(tradeDate, observations, usMarket, night) {
   ].join("\n"));
   return [
     morningRecovery.title(tradeDate),
-    `${tradeDate}｜15 個產業對照完成（10 個偵測、5 個停用）`,
+    `${tradeDate}｜15 個產業對照完成｜${morningStages.stage().id === "us_0820" ? "美股＋台指期夜盤" : "日韓股／KOSDAQ"}`,
     usMarketDisplayText(usMarket),
     nightSource.summary(night),
     "",
@@ -669,9 +671,10 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   for (const item of items) {
     const inputPath = path.join(STATE_DIR, `opening_report_0830.industry_bias.${process.env.FUMAN_MORNING_STAGE ? morningStages.stage().id + "." : ""}${item.industry}.json`);
     const receiptPath = path.join(process.env.FUMAN_MORNING_STAGE ? path.join(morningStages.directory(RUNTIME_DIR),"scan-receipts") : path.join(RUNTIME_DIR,"data","scan-receipts"), `opening-report-0830-priority-bias-bridge-${item.industry}-${compact}.json`);
-    writeJson(inputPath, item);
+    if(!resumeEvidence) writeJson(inputPath, item);
     const top3 = Number(item.priority_observation_rank) >= 1 && Number(item.priority_observation_rank) <= 3;
-    if (isolatedBacktest && top3) bridgeResults.push({ industry: item.industry, priority_observation_rank: item.priority_observation_rank, priority_observation_basis: item.priority_observation_basis, inputPath, receiptPath, result: { exitCode: 0, simulated: true }, reason_code: "isolated_bridge_contract_pass" });
+    if(resumeEvidence && top3) bridgeResults.push({ industry:item.industry, priority_observation_rank:item.priority_observation_rank, inputPath,receiptPath,result:{exitCode:0},reason_code:"existing_bridge_pending_independent_readback" });
+    else if (isolatedBacktest && top3) bridgeResults.push({ industry: item.industry, priority_observation_rank: item.priority_observation_rank, priority_observation_basis: item.priority_observation_basis, inputPath, receiptPath, result: { exitCode: 0, simulated: true }, reason_code: "isolated_bridge_contract_pass" });
     else if (applyBridge && top3) bridgeResults.push({ industry: item.industry, priority_observation_rank: item.priority_observation_rank, priority_observation_basis: item.priority_observation_basis, inputPath, receiptPath, result: runBridge(inputPath, receiptPath, tradeDate) });
     else bridgeResults.push({ industry: item.industry, priority_observation_rank: item.priority_observation_rank, priority_observation_basis: item.priority_observation_basis, inputPath, receiptPath, skipped: true, reason_code: top3 ? "bridge_apply_not_requested" : "not_priority_observation_top3_bridge_skip" });
   }
@@ -692,7 +695,7 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     formal_candidate_allowed: false,
     checked_at: timestamp(),
   };
-  writeJson(bridgeAggregatePath, bridgeAggregate);
+  if(resumeEvidence) { const prior=readJson(bridgeAggregatePath); if(prior?.run_id!==runId||prior?.trade_date!==tradeDate||prior?.status!=="BRIDGE_OK"||prior?.observation_count!==displayTop3.length) throw Error("resume_bridge_identity_mismatch"); } else writeJson(bridgeAggregatePath, bridgeAggregate);
   const motherPoolHandoffAckRun = runMotherPoolHandoffAck(tradeDate, runId, bridgeAggregatePath, isolatedBacktest);
   const motherPoolHandoffAck = motherPoolHandoffAckRun.receipt || { ok: false, complete: false, first_blocker: "mother_pool_handoff_ack_output_invalid" };
   const lineReceiptPath = path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`);
@@ -711,12 +714,15 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     night_futures_summary: nightSource.summary(night),
   });
   if (!reuseLineReceipt) writeJson(lineReceiptPath, lineReceipt);
+  const quotaException = !isolatedBacktest && !lineReceipt.line_push_ok ? await linePolicy.capture(lineReceipt, windowsUserEnv("FUMAN_LINE_CHANNEL_ACCESS_TOKEN").value, runId, deliveryContentHash, tradeDate) : null;
+  if(quotaException) { lineReceipt.quota_exception=quotaException; writeJson(lineReceiptPath,lineReceipt); }
+  const notificationAccepted = isolatedBacktest || linePolicy.accepted(lineReceipt,runId,deliveryContentHash,tradeDate);
   const lineDeliveryOk = lineReceipt?.line_push_ok === true && (!reuseLineReceipt || String(lineReceipt?.report_run_id || lineReceipt?.run_id || "") === runId);
 
   const final = {
     contract: "opening-report-0830-production-v1",
     stage: morningStages.stage().id, stage_contract: morningStages.CONTRACT,
-    ok: overseasPreflight.ok && Boolean(reportPath) && lineDeliveryOk,
+    ok: overseasPreflight.ok && Boolean(reportPath) && notificationAccepted,
     report_status: "REPORT_OBSERVATION_READY",
     us_market: usMarket,
     overseas_sources_ok: overseasPreflight.ok,
@@ -725,6 +731,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     mother_pool_bridge_ok: (applyBridge || isolatedBacktest) ? eligibleBridgeResults.every((row) => row.result?.exitCode === 0) : null,
     line_push_attempted: sendLine,
     line_push_ok: lineDeliveryOk,
+    notification_accepted: notificationAccepted,
+    line_quota_exception: quotaException,
     delivery_content_hash: deliveryContentHash,
     night_futures: night,
     night_futures_summary: nightSource.summary(night),
@@ -766,13 +774,13 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   final.positive_industry_count = positiveIndustryRows.length;
   final.priority_observation_contract_ok = priorityObservationContractOk;
   final.priority_observation_count = displayTop3.length;
-  const runnerComplete = final.ok === true && final.expected_industry_count === 15 && final.scanned_industry_count === final.expected_industry_count && final.mother_pool_bridge_ok === true && final.mother_pool_handoff_ack_ok === true && final.line_push_ok === true && terminalBriefingSnapshot.ok === true && final.positive_top3_contract_ok === true && priorityObservationContractOk;
+  const runnerComplete = final.ok === true && final.expected_industry_count === 15 && final.scanned_industry_count === final.expected_industry_count && final.mother_pool_bridge_ok === true && final.mother_pool_handoff_ack_ok === true && final.notification_accepted === true && terminalBriefingSnapshot.ok === true && final.positive_top3_contract_ok === true && priorityObservationContractOk;
   final.runner_complete = runnerComplete;
   final.complete = false;
   final.status = runnerComplete ? "waiting_persistence_ack" : "fail_closed";
   final.report_status = runnerComplete ? "WAITING_PERSISTENCE_ACK" : "FAIL_CLOSED";
   final.exitCode = runnerComplete ? 0 : 1;
-  final.first_blocker = runnerComplete ? "mother_pool_persistence_ack_pending" : (!final.mother_pool_bridge_ok ? "mother_pool_bridge_not_complete" : !final.mother_pool_handoff_ack_ok ? (motherPoolHandoffAck.first_blocker || "mother_pool_handoff_ack_not_complete") : !final.line_push_ok ? "line_delivery_not_complete" : terminalBriefingSnapshot.ok !== true ? "terminal_snapshot_not_complete" : !priorityObservationContractOk ? "priority_observation_top3_invalid" : "opening_report_not_complete");
+  final.first_blocker = runnerComplete ? "mother_pool_persistence_ack_pending" : (!final.mother_pool_bridge_ok ? "mother_pool_bridge_not_complete" : !final.mother_pool_handoff_ack_ok ? (motherPoolHandoffAck.first_blocker || "mother_pool_handoff_ack_not_complete") : !final.notification_accepted ? "line_delivery_not_complete" : terminalBriefingSnapshot.ok !== true ? "terminal_snapshot_not_complete" : !priorityObservationContractOk ? "priority_observation_top3_invalid" : "opening_report_not_complete");
   writeJson(finalPath, final);
   console.log(JSON.stringify({ ok: final.ok, final_receipt: finalPath, report_path: reportPath, run_id: runId, report_status: final.report_status, terminal_briefing_snapshot_ok: terminalBriefingSnapshot.ok === true }, null, 2));
   if (!runnerComplete) process.exitCode = 1;
