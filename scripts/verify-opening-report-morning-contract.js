@@ -201,6 +201,8 @@ function symbolMapChecks(checks) {
 }
 
 function staticContractChecks(checks) {
+  const stageTests=run("node",["scripts/test-opening-report-stage-reconstruction.js"]);
+  addCheck(checks,"stage_reconstruction_and_stale_batch_tests",stageTests.ok,stageTests.text.trim());
   const nightTests=run("node",["scripts/test-opening-report-night-futures.js"]);
   addCheck(checks,"night_futures_source_contract_tests",nightTests.ok,nightTests.text.trim());
   addCheck(checks,"night_futures_runner_gate_wired",readText("scripts/run-opening-report-0830-production.js").includes("night_futures_required:") && readText("scripts/run-opening-report-0830-preflight.js").includes("nightIssues.length === 0"),"night source mandatory before delivery");
@@ -482,7 +484,7 @@ async function liveDeliveryChecks(checks, tradeDate) {
   addCheck(checks,"current_full_content_hash",final.delivery_content_hash === expectedHash,"hash includes full Top3 and A/B mappings");
   try {
     const {readSnapshot} = require("../lib/supabase-snapshots");
-    const snapshot = await readSnapshot("opening_report_0830_terminal_briefing", {tradeDate,allowLatestFallback:false,timeoutMs:10000,maxAttempts:2});
+    const snapshot = await readSnapshot(process.env.FUMAN_MORNING_STAGE ? "opening_report_0830_terminal_briefing_"+morningStages.stage().id : "opening_report_0830_terminal_briefing", {tradeDate,allowLatestFallback:false,timeoutMs:10000,maxAttempts:2});
     const payload=snapshot?.payload;
     addCheck(checks,"current_terminal_db_readback",payload?.ok===true && payload.run_id===final.run_id && payload.delivery_content_hash===expectedHash && require("util").isDeepStrictEqual(payload.night_futures,final.night_futures) && payload.night_futures_summary===nightModule.summary(final.night_futures) && require("util").isDeepStrictEqual(payload.display_top3 || [], final.display_top3 || []) && compactDate(payload.date)===compactDate(tradeDate),JSON.stringify({run_id:payload?.run_id,date:payload?.date,hash:payload?.delivery_content_hash}));
   } catch(error) { addCheck(checks,"current_terminal_db_readback",false,error.message); }

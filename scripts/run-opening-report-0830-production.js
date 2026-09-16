@@ -639,7 +639,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   // Production always hands the same-day report to Mother Pool. Only an
   // explicit isolated test may suppress the bridge.
   const applyBridge = !mock && !hasFlag("--skip-bridge");
-  const reuseLineReceipt = hasFlag("--reuse-line-receipt");
+  const resumeEvidence = hasFlag("--resume-evidence");
+  const reuseLineReceipt = hasFlag("--reuse-line-receipt") || resumeEvidence;
   const sendLine = !mock && !reuseLineReceipt;
   const dryRunLine = mock;
 
@@ -656,7 +657,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   const items = attachPriorityObservation(baseItems, priority);
   const displayTop3 = priority.observations;
   const deliveryContentHash = contentHash(priority.mode, displayTop3, night);
-  if (reuseLineReceipt && !validateReuse(readJson(path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`)), runId, deliveryContentHash)) throw new Error("line_reuse_run_or_content_mismatch");
+  if (resumeEvidence) { const prior=readJson(path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`)); if(prior?.report_run_id!==runId || prior?.delivery_content_hash!==deliveryContentHash || prior?.line_push_attempted!==true) throw Error("resume_evidence_identity_mismatch"); }
+  if (reuseLineReceipt && !resumeEvidence && !validateReuse(readJson(path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`)), runId, deliveryContentHash)) throw new Error("line_reuse_run_or_content_mismatch");
   const reportPath = path.join(RECEIPT_DIR, `opening-report-0830-${compact}.md`);
   const overseasPath = path.join(RECEIPT_DIR, `overseas-preflight-${compact}.json`);
   const finalPath = path.join(RECEIPT_DIR, `opening-report-0830-final-receipt-${compact}.json`);
@@ -664,24 +666,6 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   fs.writeFileSync(reportPath, markdownReport({ tradeDate, runId, overseasPreflight, priority, night }), "utf8");
   writeJson(overseasPath, overseasPreflight);
   const bridgeResults = [];
-  const lineReceiptPath = path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`);
-  if (sendLine && morningStages.stage().id === "us_0820") await waitUntilTaipeiMinute(8 * 60 + 30);
-  const lineReceipt = isolatedBacktest
-    ? { line_push_attempted: false, line_push_ok: true, simulated: true, reason_code: "isolated_line_flex_payload_pass", target_count: 2, delivered_count: 2, has_user_target: true, has_group_target: true, token_logged: false, target_logged: false }
-    : reuseLineReceipt
-    ? readJson(lineReceiptPath)
-    : await pushLine({ cardText: lineReportText(tradeDate, displayTop3, usMarket, night), flexCard: lineReportFlex(tradeDate, displayTop3, usMarket, night), runId, dryRun: dryRunLine });
-  if (!reuseLineReceipt) Object.assign(lineReceipt, {
-    ok: lineReceipt?.line_push_ok === true,
-    run_id: runId,
-    report_run_id: runId,
-    delivery_content_hash: deliveryContentHash,
-    night_futures: night,
-    night_futures_summary: nightSource.summary(night),
-  });
-  if (!reuseLineReceipt) writeJson(lineReceiptPath, lineReceipt);
-  const lineDeliveryOk = lineReceipt?.line_push_ok === true && (!reuseLineReceipt || String(lineReceipt?.report_run_id || lineReceipt?.run_id || "") === runId);
-
   for (const item of items) {
     const inputPath = path.join(STATE_DIR, `opening_report_0830.industry_bias.${process.env.FUMAN_MORNING_STAGE ? morningStages.stage().id + "." : ""}${item.industry}.json`);
     const receiptPath = path.join(process.env.FUMAN_MORNING_STAGE ? path.join(morningStages.directory(RUNTIME_DIR),"scan-receipts") : path.join(RUNTIME_DIR,"data","scan-receipts"), `opening-report-0830-priority-bias-bridge-${item.industry}-${compact}.json`);
@@ -711,8 +695,27 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   writeJson(bridgeAggregatePath, bridgeAggregate);
   const motherPoolHandoffAckRun = runMotherPoolHandoffAck(tradeDate, runId, bridgeAggregatePath, isolatedBacktest);
   const motherPoolHandoffAck = motherPoolHandoffAckRun.receipt || { ok: false, complete: false, first_blocker: "mother_pool_handoff_ack_output_invalid" };
+  const lineReceiptPath = path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`);
+  if (sendLine && morningStages.stage().id === "us_0820") await waitUntilTaipeiMinute(8 * 60 + 30);
+  const lineReceipt = isolatedBacktest
+    ? { line_push_attempted: false, line_push_ok: true, simulated: true, reason_code: "isolated_line_flex_payload_pass", target_count: 2, delivered_count: 2, has_user_target: true, has_group_target: true, token_logged: false, target_logged: false }
+    : reuseLineReceipt
+    ? readJson(lineReceiptPath)
+    : await pushLine({ cardText: lineReportText(tradeDate, displayTop3, usMarket, night), flexCard: lineReportFlex(tradeDate, displayTop3, usMarket, night), runId, dryRun: dryRunLine });
+  if (!reuseLineReceipt) Object.assign(lineReceipt, {
+    ok: lineReceipt?.line_push_ok === true,
+    run_id: runId,
+    report_run_id: runId,
+    delivery_content_hash: deliveryContentHash,
+    night_futures: night,
+    night_futures_summary: nightSource.summary(night),
+  });
+  if (!reuseLineReceipt) writeJson(lineReceiptPath, lineReceipt);
+  const lineDeliveryOk = lineReceipt?.line_push_ok === true && (!reuseLineReceipt || String(lineReceipt?.report_run_id || lineReceipt?.run_id || "") === runId);
+
   const final = {
     contract: "opening-report-0830-production-v1",
+    stage: morningStages.stage().id, stage_contract: morningStages.CONTRACT,
     ok: overseasPreflight.ok && Boolean(reportPath) && lineDeliveryOk,
     report_status: "REPORT_OBSERVATION_READY",
     us_market: usMarket,
