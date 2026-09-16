@@ -115,7 +115,7 @@ if (-not $IsolatedBacktest) {
 }
 
 if (-not $IsolatedBacktest) {
-  & "C:\Program Files\nodejs\node.exe" "scripts\verify-release-root-authority.js" "--require-production-root"
+  & "C:\Program Files\nodejs\node.exe" "scripts\verify-opening-report-release.js"
   if ($LASTEXITCODE -ne 0) { throw "RELEASE_ROOT_DRIFT" }
   & "C:\Program Files\nodejs\node.exe" "scripts\supabase-incident-guard.js" check "--class=guard" "--action=opening-report-complete"
   if ($LASTEXITCODE -ne 0) { throw "morning_source_incident_blocked" }
