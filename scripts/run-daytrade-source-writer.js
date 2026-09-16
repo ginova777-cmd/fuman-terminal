@@ -21,6 +21,8 @@ const {
 const { mergeOpeningReportEvidence } = require("../lib/opening-report-0830-mother-pool-evidence");
 const { preserveMorningWatchRows } = require("../lib/opening-report-writer-preservation");
 const { mergeCurrentDayCandlePrioritySymbols } = require("../lib/daytrade-candle-priority-persistence");
+const { buildDaytradeIndustryPrewarm } = require("../lib/daytrade-industry-prewarm");
+const DAYTRADE_INDUSTRY_PREWARM_CONFIG = require("../data/daytrade-industry-prewarm-v1.json");
 const { isTwseTradingDay } = require("./twse-trading-day");
 
 const SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
@@ -4379,13 +4381,18 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
   const bridgeWarmupSymbols = Object.values(bridgeGroups).flatMap((group) => (
     Array.isArray(group?.symbols) ? group.symbols : []
   ));
+  const industryPrewarm = buildDaytradeIndustryPrewarm(
+    DAYTRADE_INDUSTRY_PREWARM_CONFIG,
+    activeUniverseSymbols,
+  );
   // 06:00 warmup must cover every valid Taiwan stock currently exposed by
-  // the active terminal (strategy chips, institution and the Mother Pool),
+  // the active terminal (strategy chips, institution, industry prewarm and Mother Pool),
   // even when a symbol is not selected into today's formal pool. Retired
   // warrant and CB sources must never be carried forward from an old manifest.
   const fullTerminalWarmupSymbols = prependUnique(
-    daytradeMotherPoolSymbols,
+    industryPrewarm.symbols,
     [
+      ...daytradeMotherPoolSymbols,
       ...bridgeWarmupSymbols,
     ],
   );
@@ -4477,9 +4484,18 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     terminalPrioritySymbols: fullTerminalWarmupSymbols,
     terminalPriorityCount: fullTerminalWarmupSymbols.length,
     terminalWarmupScope: "all_valid_taiwan_symbols_currently_exposed_by_terminal",
+    daytradeIndustryPrewarmContract: industryPrewarm.contract,
+    daytradeIndustryPrewarmMode: industryPrewarm.mode,
+    daytradeIndustryPrewarmSymbols: industryPrewarm.symbols,
+    daytradeIndustryPrewarmCount: industryPrewarm.symbols.length,
+    daytradeIndustryPrewarmBySymbol: industryPrewarm.bySymbol,
+    daytradeIndustryPrewarmMissingSymbols: industryPrewarm.missingSymbols,
+    daytradeIndustryPrewarmStatus: industryPrewarm.status,
+    daytradeIndustryPrewarmFormalCandidateAllowed: false,
+    daytradeIndustryPrewarmPublishAllowed: false,
     openingPrioritySymbols: prependUnique(fullTerminalWarmupSymbols, currentExisting.openingPrioritySymbols || currentExisting.primaryPrioritySymbols),
     // Keep the complete current active universe on the live quote radar; do not carry a smaller stale list forward.
-    symbols: prependUnique(daytradeMotherPoolSymbols, activeUniverseSymbols),
+    symbols: prependUnique([...industryPrewarm.symbols, ...daytradeMotherPoolSymbols], activeUniverseSymbols),
     activeUniverseCount: activeUniverseSymbols.length,
     activeUniverseSource: "run-daytrade-source-writer.activeSymbols",
   };
@@ -4493,6 +4509,10 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     !== JSON.stringify(nextPriorityPayload.daytradeCandlePrioritySymbols || []);
   const openingPriorityArtifactChanged = JSON.stringify(existing.openingPrioritySymbols || existing.primaryPrioritySymbols || [])
     !== JSON.stringify(nextPriorityPayload.openingPrioritySymbols || []);
+  const industryPrewarmArtifactChanged = existing.daytradeIndustryPrewarmContract !== nextPriorityPayload.daytradeIndustryPrewarmContract
+    || existing.daytradeIndustryPrewarmStatus !== nextPriorityPayload.daytradeIndustryPrewarmStatus
+    || JSON.stringify(existing.daytradeIndustryPrewarmSymbols || []) !== JSON.stringify(nextPriorityPayload.daytradeIndustryPrewarmSymbols || [])
+    || JSON.stringify(existing.daytradeIndustryPrewarmMissingSymbols || []) !== JSON.stringify(nextPriorityPayload.daytradeIndustryPrewarmMissingSymbols || []);
   const bridgeChanged = Object.keys(bridgeFields).some((key) => JSON.stringify(existing[key]) !== JSON.stringify(bridgeFields[key]));
   const formalPriorityArtifactChanged = JSON.stringify(existing.formalPriorityStrategyChip || {}) !== JSON.stringify(formalPriorityStrategyChip);
   const strategy2FormalWaterArtifactChanged = JSON.stringify(existing.strategy2Symbols || []) !== JSON.stringify(nextPriorityPayload.strategy2Symbols || [])
@@ -4501,7 +4521,7 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
   const priceGateArtifactChanged = Number(existing.daytradeMinimumPrice || 0) !== MOTHER_POOL_MIN_PRICE
     || String(existing.daytradePriceGateStatus || "") !== (MOTHER_POOL_MIN_PRICE > 0 ? "minimum_price_enforced" : "no_price_floor")
     || JSON.stringify(existing.daytradePoolPriceBySymbol || {}) !== JSON.stringify(nextPriorityPayload.daytradePoolPriceBySymbol || {});
-  if (!sameDailyIdentity || !sameSymbols || !samePriorityCounts || candlePriorityArtifactChanged || openingPriorityArtifactChanged || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
+  if (!sameDailyIdentity || !sameSymbols || !samePriorityCounts || candlePriorityArtifactChanged || openingPriorityArtifactChanged || industryPrewarmArtifactChanged || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
     writeJson(PRIORITY_SYMBOLS_FILE, nextPriorityPayload);
     writeFugleWebSocketSymbols(nextPriorityPayload.symbols, {
       source: "daytrade-dedicated-priority-bridge",
@@ -4534,6 +4554,8 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
       strategy2FormalWaterCount: strategy2FormalWaterSymbols.length,
       terminalPriorityCount: nextPriorityPayload.terminalPrioritySymbols.length,
       openingPriorityCount: nextPriorityPayload.openingPrioritySymbols.length,
+      daytradeIndustryPrewarmCount: nextPriorityPayload.daytradeIndustryPrewarmCount,
+      daytradeIndustryPrewarmStatus: nextPriorityPayload.daytradeIndustryPrewarmStatus,
       websocketSymbolUniversePolicy: "active_universe_for_quote_and_candle_water_only_not_formal_gate",
       formalCandidateAllowed: false,
       publishAllowed: false,
