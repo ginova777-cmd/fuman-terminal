@@ -1,0 +1,40 @@
+{
+  "contract": "daytrade_industry_prewarm_v1",
+  "as_of_date": "2026-09-16",
+  "mode": "priority_prewarm_only",
+  "formal_candidate_allowed": false,
+  "publish_allowed": false,
+  "industries": [
+    {
+      "name": "III-V 材料／光通訊",
+      "members": [
+        { "symbol": "3105", "tier": "A" }, { "symbol": "3081", "tier": "A" },
+        { "symbol": "2455", "tier": "A" }, { "symbol": "8086", "tier": "A" },
+        { "symbol": "4991", "tier": "B" }, { "symbol": "6426", "tier": "B" },
+        { "symbol": "4971", "tier": "B" }
+      ]
+    },
+    {
+      "name": "光通訊／CPO／矽光子",
+      "members": [
+        { "symbol": "3363", "tier": "A" }, { "symbol": "6442", "tier": "A" },
+        { "symbol": "4979", "tier": "A" }, { "symbol": "3163", "tier": "A" },
+        { "symbol": "3081", "tier": "A" }, { "symbol": "3450", "tier": "A" },
+        { "symbol": "4977", "tier": "A" }, { "symbol": "4908", "tier": "A" },
+        { "symbol": "4991", "tier": "B" }, { "symbol": "2455", "tier": "B" },
+        { "symbol": "3234", "tier": "B" }, { "symbol": "6451", "tier": "B" },
+        { "symbol": "2345", "tier": "B" }
+      ]
+    },
+    {
+      "name": "機器人／自動化",
+      "members": [
+        { "symbol": "2049", "tier": "A" }, { "symbol": "1590", "tier": "A" },
+        { "symbol": "1597", "tier": "A" }, { "symbol": "2359", "tier": "A" },
+        { "symbol": "4540", "tier": "A" }, { "symbol": "2308", "tier": "B" },
+        { "symbol": "1504", "tier": "B" }, { "symbol": "2371", "tier": "B" },
+        { "symbol": "2356", "tier": "B" }, { "symbol": "2464", "tier": "B" }
+      ]
+    }
+  ]
+}
