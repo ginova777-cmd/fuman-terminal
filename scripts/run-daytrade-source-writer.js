@@ -310,6 +310,7 @@ const INTRADAY_STATUS_CACHE_SYNC_INTERVAL_MS = Math.max(
 let lastIntradayStatusCacheSyncAt = 0;
 const DAILY_VOLUME_MIRROR_SYNC_INTERVAL_MS = Math.max(60000, Number(process.env.DAYTRADE_DAILY_VOLUME_MIRROR_SYNC_INTERVAL_MS || 300000));
 let lastDailyVolumeMirrorSyncAt = 0;
+let writerTickIdentity = null;
 let writerLease = { ok: !APPLY, status: APPLY ? "not_claimed" : "dry_run", leaseExpiresAt: "" };
 
 function hasFlag(name) {
@@ -2454,6 +2455,7 @@ function priorityPoolDbRows(rows) {
     updated_at: row.updated_at || nowIso(),
     payload: {
       ...(row.payload || {}),
+      ...require("../lib/daytrade-writer-identity").requireIdentity(writerTickIdentity, taipeiDate()),
       trade_date: String(row.payload?.trade_date || taipeiDate()),
       canonical_run_id: String(row.payload?.canonical_run_id || `${SOURCE_NAME}:${compactDateKey(taipeiDate())}:canonical`),
       canonical_pool_layer: String(row.payload?.canonical_pool_layer || row.payload?.pool_layer || poolLayerForRank(Number(row.priority_rank))),
@@ -5154,8 +5156,13 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     && formalScanIntraday1mFreshMaxAgeSeconds <= MAX_INTRADAY_1M_STALE_SECONDS;
   const scannerCanRunQuoteOnly = formalScopeQuoteFreshOk
     && rateLimitStatus === "ok";
-  const scopedIndicatorRequired = Math.max(1, Math.ceil(formalScanPoolSymbols * MIN_INDICATOR_WARMUP_COVERAGE));
-  const effectiveMa20Required = Math.min(MIN_READY_MA20_CONTINUOUS, scopedIndicatorRequired);
+  const ma20Scope = [...new Set(priorityRows.filter(isPublishedMotherMember).map(row => normalizeCode(row.symbol)))];
+  const ma20ReadySymbols = ma20Scope.filter(symbol => {
+    const row = intradayMap.get(symbol);
+    return Number(row?.continuous_candle_count) >= 20 && Number(row?.ma20) > 0;
+  });
+  readyMa20 = ma20ReadySymbols.length;
+  const effectiveMa20Required = Math.max(1, Math.ceil(ma20Scope.length * MIN_INDICATOR_WARMUP_COVERAGE));
   const effectiveMa35Required = 0;
   // Before 09:00, a quiet stock has no new trade by design. Warmup health is
   // therefore a transport/data-base check, not an impossible per-symbol trade
@@ -5171,6 +5178,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const warmupGateReady = !after0900
     && motherPoolSymbols > 0
     && formalScanPoolSymbols > 0
+    && readyMa20 >= effectiveMa20Required
     && dailyVolumeStatus === "ready"
     && rateLimitStatus === "ok"
     && warmupTransportHealthy;
@@ -5575,6 +5583,11 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     ready_ma35_continuous: 0,
     ready_ma58: 0,
     ready_ma20_required: effectiveMa20Required,
+    ma20_scope: "published_mother_pool",
+    ma20_requested_count: ma20Scope.length,
+    ma20_ready_count: ma20ReadySymbols.length,
+    ma20_coverage: ma20Scope.length ? ma20ReadySymbols.length / ma20Scope.length : 0,
+    ma20_data_gap_symbols: ma20Scope.filter(symbol => !ma20ReadySymbols.includes(symbol)),
     ready_ma35_required: 0,
     indicator_set: ["MA3", "MA5", "MA10", "MA20", "KD", "MACD", "RSI"],
     preopen_today_1m_required_before_formal: false,
@@ -6381,7 +6394,7 @@ function updateMotherPoolDelta(result) {
   const tradeDate = taipeiDate();
   const checkedAt = nowIso();
   const runId = canonicalDaytradeRunId(tradeDate);
-  const writerRunId = String(WRITER_INSTANCE_ID || SOURCE_NAME) + ":" + compactDateKey(tradeDate) + ":" + Date.now();
+  const writerRunId = require("../lib/daytrade-writer-identity").requireIdentity(writerTickIdentity, tradeDate).writer_run_id;
   const previousPayload = readJson(MOTHER_POOL_DELTA_STATE_FILE, {});
   const previousPayloadCanonicalRunId = String(previousPayload.canonical_run_id || previousPayload.canonicalRunId || previousPayload.run_id || "");
   const currentPreviousPayload = sameDayArtifact(previousPayload, tradeDate) && previousPayloadCanonicalRunId === runId
@@ -6615,6 +6628,7 @@ function updateMotherPoolDelta(result) {
     run_id: runId,
     canonical_run_id: runId,
     writer_run_id: writerRunId,
+    generation_id: writerTickIdentity.generation_id,
     mother_pool_rows: current.size,
     mother_pool_target_min_symbols: MOTHER_POOL_TARGET_MIN_SYMBOLS,
     mother_pool_minimum_count_is_hard_gate: false,
@@ -6655,6 +6669,7 @@ function updateMotherPoolDelta(result) {
     run_id: runId,
     canonical_run_id: runId,
     writer_run_id: writerRunId,
+    generation_id: writerTickIdentity.generation_id,
     mother_pool_target_min_symbols: MOTHER_POOL_TARGET_MIN_SYMBOLS,
     mother_pool_minimum_count_is_hard_gate: false,
     mother_pool_target_shortfall: Math.max(0, MOTHER_POOL_TARGET_MIN_SYMBOLS - current.size),
@@ -6747,6 +6762,7 @@ function updateMotherPoolDelta(result) {
   result.payload.source_host_id = SOURCE_HOST_ID;
   result.payload.source_host_role = SOURCE_HOST_ROLE;
   result.payload.writer_instance_id = WRITER_INSTANCE_ID;
+  Object.assign(result.payload, require("../lib/daytrade-writer-identity").requireIdentity(writerTickIdentity, tradeDate));
   result.payload.writer_lease_required = WRITER_LEASE_REQUIRED;
   result.payload.writer_lease_status = writerLease.status;
   result.payload.writer_heartbeat_at = writerLease.heartbeatAt || nowIso();
@@ -7385,6 +7401,7 @@ async function syncMarketCalendarEvidence() {
 }
 
 async function tick() {
+  writerTickIdentity = require("../lib/daytrade-writer-identity").newIdentity(SOURCE_NAME, WRITER_INSTANCE_ID, taipeiDate());
   const tickStage = (stage, extra = {}) => console.log(JSON.stringify({
     ok: true,
     stage: `daytrade_tick:${stage}`,

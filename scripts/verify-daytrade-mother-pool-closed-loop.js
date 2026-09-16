@@ -322,7 +322,7 @@ async function main() {
     if (required && !evidence.complete) warnings.push(`morning_handoff_${stage}:${evidence.first_blocker}`);
     return { stage, required, ...evidence, handoff_path: handoffPath, persistence_path: persistencePath };
   });
-  const morningHandoffComplete = morningStages.every(stage => !stage.required || stage.complete);
+  const morningHandoffComplete = morningStages.every(stage => stage.complete === true);
 
   const futoptRequired = clock.minute >= 8 * 60 + 50;
   const futoptGuardsSafe = [futopt0845, futopt0850].every((receipt) => !receipt || (
@@ -331,13 +331,13 @@ async function main() {
     && receipt.publish_allowed === false
   ));
   check("futopt_formal_guards_safe", futoptGuardsSafe, "futopt_formal_guard_invalid");
-  const futoptClosed = !futoptRequired || [futopt0845, futopt0850].every((receipt, index) => (
+  const futoptClosed = [futopt0845, futopt0850].every((receipt, index) => (
     receipt?.ok === true
     && receipt?.trade_date === clock.tradeDate
     && receipt?.natural_schedule_evidence === true
     && String(receipt?.capture_slot) === (index === 0 ? "0845" : "0850")
   ));
-  if (!futoptClosed) warnings.push("futopt_preopen_evidence_fail_closed_rank_without_futopt_weight");
+  if (futoptRequired && !futoptClosed) warnings.push("futopt_preopen_evidence_fail_closed_rank_without_futopt_weight");
 
   const result = {
     ok: failures.length === 0,
@@ -347,7 +347,8 @@ async function main() {
     exit_code: failures.length ? 1 : 0,
     scope: "mother_pool_core_water",
     morning_handoff_complete: morningHandoffComplete,
-    all_modules_complete: failures.length === 0 && morningHandoffComplete,
+    all_modules_complete: false,
+    all_modules_scope: "not_evaluated_by_core_water_verifier_use_preopen_a01_a19_receipt",
     contract: "daytrade_mother_pool_closed_loop_v1",
     mother_pool_contract_version: EXPECTED_MOTHER_POOL_CONTRACT_VERSION,
     trade_date: clock.tradeDate,
@@ -382,10 +383,10 @@ async function main() {
         ok: futoptClosed || futoptGuardsSafe,
         natural_evidence_ok: futoptClosed,
         safety_contract_ok: futoptGuardsSafe,
-        status: futoptClosed ? "complete" : (futoptGuardsSafe ? "safe_degraded" : "failed"),
+        status: !futoptRequired ? "pending" : (futoptClosed ? "complete" : (futoptGuardsSafe ? "safe_degraded" : "failed")),
         required: futoptRequired,
         fail_closed_isolated: !futoptClosed,
-        allowed_action: futoptClosed ? "apply_futopt_observation_weight" : "rank_without_futopt_trial_weight",
+        allowed_action: futoptRequired && futoptClosed ? "apply_futopt_observation_weight" : "rank_without_futopt_trial_weight",
         paths: [paths.futopt0845, paths.futopt0850],
       },
       fast_supabase_sync: { ok: checks.fast_supabase_sync_fresh && checks.fast_supabase_quote_write_nonempty && checks.fast_supabase_1m_write_nonempty, path: paths.fastSync, age_seconds: ageSeconds(fastSync?.completed_at), quotes_written: Number(fastSync?.quotes_written || 0), candles_written: Number(fastSync?.candles_written || 0) },

@@ -1,0 +1,12 @@
+"use strict";
+const assert=require("node:assert/strict");
+const {newIdentity,requireIdentity,verifyRows}=require("../lib/daytrade-writer-identity");
+const a=newIdentity("fugle_daytrade_source","writer","2026-09-17"),b=newIdentity("fugle_daytrade_source","writer","2026-09-17");
+assert.notEqual(a.generation_id,b.generation_id);
+assert.throws(()=>requireIdentity(a,"2026-09-18"));
+assert.throws(()=>requireIdentity(null,"2026-09-17"));
+assert.equal(verifyRows([{...a,symbol:"2330"},{...a,symbol:"2317"}],a).ok,true);
+assert.equal(verifyRows([{...a,symbol:"2330"},{...b,symbol:"2317"}],a).ok,false);
+assert.equal(verifyRows([{...a,symbol:"2330",generation_id:null}],a).ok,false);
+assert.equal(verifyRows([{...a,symbol:"2330"},{...a,symbol:"2330"}],a).ok,false);
+console.log("writer identity cross-day, mixed-generation, missing-field and duplicate guards PASS");
