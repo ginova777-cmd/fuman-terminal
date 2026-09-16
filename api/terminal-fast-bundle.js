@@ -573,7 +573,8 @@ function sanitizeStrategy2BundlePayload(payload) {
 function compactSnapshotEndpoints(request, endpoints = {}) {
   const compacted = {};
   for (const [endpoint, payload] of Object.entries(endpoints || {})) {
-    compacted[endpoint] = shapeTopPayload(request, payload);
+    // Strategy5 is an audited complete result; the outer bundle default (80) must not truncate it.
+    compacted[endpoint] = endpoint.split("?")[0] === "/api/strategy5-latest" ? payload : shapeTopPayload(request, payload);
   }
   return compacted;
 }
