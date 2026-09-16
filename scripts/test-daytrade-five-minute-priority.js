@@ -16,18 +16,19 @@ const bar = { symbol: "2303", trade_date: receipt.trade_date, run_id: receipt.ru
   trend_5m_strategy_version: "golden-cross-any-macd-3-9-3-v4", calculation_version: "five-minute-indicators-macd-3-9-3-v4",
   classification_contract: "daytrade_intraday_5m_branch_independent_strict_wait_v1", trend_5m_status: "CONFIRMED_STRONG_5M",
   golden_cross_any_5m: true, rsi3_cross_rsi6_up_5m: true };
-const good = applyFiveMinutePriority(pool, [bar], receipt, snapshot, now);
+const waitBar = {...bar,symbol:"2330",trend_5m_status:"WAIT_5M_CONFIRMATION",golden_cross_any_5m:false,rsi3_cross_rsi6_up_5m:false};
+const good = applyFiveMinutePriority(pool, [waitBar,bar], receipt, snapshot, now);
 assert.deepEqual(good.map(r => r.symbol), ["2303", "2330"]);
 assert.equal(good.basePoolMeta, pool.basePoolMeta);
 assert.equal(good[0], pool[1], "ranking cannot modify formal eligibility");
 for (const bad of [{bar_end:"2026-09-16T03:00:00Z"}, {run_id:"old"}, {is_synthetic:true}, {volume_unit:null},
   {data_gap_5m:true}, {golden_cross_any_5m:false}, {rsi3_cross_rsi6_up_5m:null}, {bar_end:"2026-09-16T04:05:00Z"}]) {
-  assert.deepEqual(applyFiveMinutePriority(pool, [{...bar,...bad}], receipt, snapshot, now).map(r=>r.symbol), ["2330","2303"]);
+  assert.deepEqual(applyFiveMinutePriority(pool, [waitBar,{...bar,...bad}], receipt, snapshot, now).map(r=>r.symbol), ["2330","2303"]);
 }
-assert.equal(applyFiveMinutePriority(pool, [bar], receipt, snapshot, Date.parse("2026-09-16T00:55:00Z")).fiveMinutePriorityEvidence.status,"not_due");
-assert.equal(applyFiveMinutePriority(pool, [bar], receipt, snapshot, Date.parse("2026-09-16T05:30:00Z")).fiveMinutePriorityEvidence.status,"not_due");
-assert.equal(applyFiveMinutePriority(pool,[bar],{...receipt,complete:false},snapshot,now).fiveMinutePriorityEvidence.status,"blocked");
-assert.deepEqual(applyFiveMinutePriority(pool,[bar,bar],receipt,snapshot,now).fiveMinutePriorityEvidence.promoted_symbols,[]);
+assert.equal(applyFiveMinutePriority(pool, [waitBar,bar], receipt, snapshot, Date.parse("2026-09-16T00:55:00Z")).fiveMinutePriorityEvidence.status,"not_due");
+assert.equal(applyFiveMinutePriority(pool, [waitBar,bar], receipt, snapshot, Date.parse("2026-09-16T05:30:00Z")).fiveMinutePriorityEvidence.status,"not_due");
+assert.equal(applyFiveMinutePriority(pool,[waitBar,bar],{...receipt,complete:false},snapshot,now).fiveMinutePriorityEvidence.status,"blocked");
+assert.deepEqual(applyFiveMinutePriority(pool,[waitBar,bar,bar],receipt,snapshot,now).fiveMinutePriorityEvidence.promoted_symbols,[]);
 console.log("PASS intraday priority: time, source, freshness, run, snapshot, duplicate rejection, metadata and eligibility preservation");
 const { verifyPriorityPublication } = require("../lib/daytrade-five-minute-priority");
 const artifact = { tradeDate: receipt.trade_date, canonicalRunId: snapshot.snapshot.canonical_run_id,
@@ -39,3 +40,5 @@ assert.equal(verifyPriorityPublication(artifact, { ...artifact, daytradeCandlePr
 assert.equal(verifyPriorityPublication(artifact, null).complete, false);
 assert.equal(verifyPriorityPublication(artifact, artifact).overall_intraday_complete, false);
 console.log("PASS priority publication readback receipt rejects missing or changed publication");
+assert.equal(applyFiveMinutePriority(pool,[],receipt,snapshot,now).fiveMinutePriorityEvidence.first_blocker,"five_minute_pinned_readback_incomplete");
+assert.equal(applyFiveMinutePriority(pool,[bar],receipt,snapshot,now).fiveMinutePriorityEvidence.first_blocker,"five_minute_pinned_readback_incomplete");
