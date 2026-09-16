@@ -1,4 +1,5 @@
 const { isAuthorizedMorningRecovery } = require("../lib/opening-report-recovery-seed");
+const { isPublishedMotherMember } = require("../lib/daytrade-published-membership");
 process.env.FUGLE_COLLECTOR_ROLE = process.env.FUGLE_COLLECTOR_ROLE || "daytrade";
 const fs = require("fs");
 const path = require("path");
@@ -4331,16 +4332,7 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
       }
     }
   }
-  let priceEligiblePriorityRows = (priorityRows || []).filter((row) => {
-    const metrics = row?.metrics || row?.payload?.motherPoolMetrics || {};
-    const formalEligible = row?.basePool?.eligible === true
-      || row?.payload?.basePoolEligible === true
-      || row?.payload?.formal_pool_eligible === true
-      || row?.payload?.is_daytrade_allowed === true;
-    const warmingPending = row?.warmingPending === true || row?.payload?.warming_pending === true;
-    const terminalForcedAdmission = row?.terminalForcedAdmission === true || row?.payload?.terminal_forced_admission === true;
-    return terminalForcedAdmission || ((formalEligible || warmingPending) && Number(metrics.price) > 0);
-  });
+  let priceEligiblePriorityRows = (priorityRows || []).filter(isPublishedMotherMember);
   // Bind the 5m receipt to the actual published membership, not watch-only
   // rows that are deliberately excluded from the membership snapshot.
   priceEligiblePriorityRows = await prioritizeIntradayFiveMinuteStrong(priceEligiblePriorityRows);
@@ -4555,7 +4547,7 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     || String(existing.daytradePriceGateStatus || "") !== (MOTHER_POOL_MIN_PRICE > 0 ? "minimum_price_enforced" : "no_price_floor")
     || JSON.stringify(existing.daytradePoolPriceBySymbol || {}) !== JSON.stringify(nextPriorityPayload.daytradePoolPriceBySymbol || {});
   const fiveMinuteEvidenceChanged = JSON.stringify(existing.fiveMinutePriorityEvidence) !== JSON.stringify(nextPriorityPayload.fiveMinutePriorityEvidence);
-  if (fiveMinuteEvidenceChanged || !sameDailyIdentity || !sameSymbols || !samePriorityCounts || candlePriorityArtifactChanged || openingPriorityArtifactChanged || industryPrewarmArtifactChanged || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
+  if (!sameDailyIdentity || !sameSymbols || fiveMinuteEvidenceChanged || !samePriorityCounts || candlePriorityArtifactChanged || openingPriorityArtifactChanged || industryPrewarmArtifactChanged || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
     writeJson(PRIORITY_SYMBOLS_FILE, nextPriorityPayload);
     writeFugleWebSocketSymbols(nextPriorityPayload.symbols, {
       source: "daytrade-dedicated-priority-bridge",
@@ -6356,7 +6348,7 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
   return { path: INTRADAY_BURST_TELEGRAM_OUTBOX_FILE, event_count: industryScopedEvents.length, events: industryScopedEvents, diagnostics: payload };
 }
 function updateMotherPoolDelta(result) {
-  const priorityRows = Array.isArray(result?.priorityRows) ? result.priorityRows : [];
+  const priorityRows = (Array.isArray(result?.priorityRows) ? result.priorityRows : []).filter(isPublishedMotherMember);
   const payload = result?.payload || {};
   const tradeDate = taipeiDate();
   const checkedAt = nowIso();
