@@ -34,15 +34,15 @@ async function main(){
   const manifest=await fetch(base+"/api/release-manifest",{signal:AbortSignal.timeout(15000)}).then(r=>r.json());
   try{
     browser=await ui.launchBrowser();
-    for(const mode of [{key:"desktop",width:1440,height:1000,mobile:false},{key:"mobile-portrait",width:390,height:844,mobile:true},{key:"mobile-landscape",width:844,height:390,mobile:true}]){
+    for(const mode of [{key:"desktop",width:1440,height:1000,mobile:false},{key:"mobile-portrait",width:390,height:844,mobile:true},{key:"mobile-landscape",width:844,height:390,mobile:true},{key:"scorecard88",width:1440,height:1000,mobile:false,scorecard:true}]){
       const cdp=await ui.createTab(browser);let actual;
       try{
         await ui.setViewport(cdp,mode);
-        await ui.navigate(cdp,base+(mode.mobile?"/api/mobile-page":"/?desktop=1"),{stopLoading:false});
+        await ui.navigate(cdp,base+(mode.scorecard?"/88":mode.mobile?"/api/mobile-page":"/?desktop=1"),{stopLoading:false});
         if(mode.mobile){
           await ui.waitFor(cdp,()=>({ok:typeof self.FUMAN_MOBILE_MEMBER_OPENED==="function"&&self.FUMAN_MOBILE_MEMBER_OPENED()}),null,45000);
           await ui.clickSelectorByDom(cdp,'#tabs button[data-fragment="morning"]');
-        }else{
+        }else if(!mode.scorecard){
           await ui.waitForSelector(cdp,'aside.sidebar a[data-view="market"]',45000);
           await ui.activateDesktopRoute(cdp,{key:"market-ai",selector:'aside.sidebar a[data-view="market"]',postClickSelector:'#market-view .market-mode-tabs [data-market-mode="ai"]',expectedPanelId:"market-view",expectedRouteKey:"market|市場總覽"});
         }
@@ -60,7 +60,7 @@ async function main(){
       console.log(JSON.stringify({surface:mode.key,ok:actual.ok,checks:actual.checks,error:actual.error}));
     }
   }finally{if(browser){try{browser.child.kill();}catch{}}}
-  const ok=results.length===3&&results.every(x=>x.ok)&&final.delivery_content_hash===fullHash;
+  const ok=results.length===4&&results.every(x=>x.ok)&&final.delivery_content_hash===fullHash;
   const receipt={contract:"opening-report-rendered-v1",checked_at:new Date().toISOString(),trade_date:date,run_id:final.run_id,delivery_content_hash:final.delivery_content_hash,full_content_hash_ok:final.delivery_content_hash===fullHash,base_url:base,git_sha:manifest.gitSha||manifest.git_sha||"",diagnostic,complete:ok&&!diagnostic,status:diagnostic?"diagnostic":ok?"complete":"failed",exitCode:ok?0:1,results};
   const file=path.join(out,"opening-report-rendered.json");fs.writeFileSync(file,JSON.stringify(receipt,null,2));
   console.log(JSON.stringify({receipt:file,complete:receipt.complete,full_content_hash_ok:receipt.full_content_hash_ok}));

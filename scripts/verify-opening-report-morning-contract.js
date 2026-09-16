@@ -458,11 +458,11 @@ function renderedDeliveryChecks(checks, tradeDate, final) {
   const age=Date.now()-Date.parse(receipt?.checked_at||"");
   addCheck(checks,"current_rendered_receipt_fresh",age>=0 && age<30*60*1000,"rendered evidence within 30 minutes");
   const rows=receipt?.results||[];
-  addCheck(checks,"current_rendered_surfaces",["desktop","mobile-portrait","mobile-landscape"].every(surface=>rows.some(row=>row.surface===surface && row.ok===true && row.run_id===final.run_id && row.hash===final.delivery_content_hash && row.screenshot && exists(row.screenshot) && require("crypto").createHash("sha256").update(fs.readFileSync(row.screenshot)).digest("hex")===row.screenshot_sha256)),"actual rendered surfaces and original screenshots");
-  addCheck(checks,"current_rendered_night_futures",rows.length===3 && rows.every(row=>row.night_text===require("../lib/opening-report-night-futures").summary(final.night_futures) && row.night_visible===true),"night futures visible on all three layouts");
+  addCheck(checks,"current_rendered_surfaces",["desktop","mobile-portrait","mobile-landscape","scorecard88"].every(surface=>rows.some(row=>row.surface===surface && row.ok===true && row.run_id===final.run_id && row.hash===final.delivery_content_hash && row.screenshot && exists(row.screenshot) && require("crypto").createHash("sha256").update(fs.readFileSync(row.screenshot)).digest("hex")===row.screenshot_sha256)),"actual rendered surfaces and original screenshots");
+  addCheck(checks,"current_rendered_night_futures",rows.length===4 && rows.every(row=>row.night_text===require("../lib/opening-report-night-futures").summary(final.night_futures) && row.night_visible===true),"night futures visible on all three layouts");
   const expected=require("./verify-opening-report-rendered").expectedRows(final).map(row=>({...row,percent:Number(row.percent.toFixed(2))}));
   const actualRows=row=>(row.rows||[]).map(item=>({...item,a:(item.a||[]).map(({symbol,name})=>({symbol,name})),b:(item.b||[]).map(({symbol,name})=>({symbol,name}))}));
-  addCheck(checks,"current_rendered_full_A_B",rows.length===3 && rows.every(row=>JSON.stringify(actualRows(row))===JSON.stringify(expected) && row.industryCount===15 && (expected.length>0||row.zero===true)),"independent full A/B comparison against runner");
+  addCheck(checks,"current_rendered_full_A_B",rows.length===4 && rows.every(row=>JSON.stringify(actualRows(row))===JSON.stringify(expected) && row.industryCount===15 && (expected.length>0||row.zero===true)),"independent full A/B comparison against runner");
   addCheck(checks,"current_rendered_production_origin",receipt?.base_url==="https://fuman-terminal.vercel.app" && /^[a-f0-9]{40}$/.test(receipt?.git_sha||""),"production origin and release identity required");
 }
 
