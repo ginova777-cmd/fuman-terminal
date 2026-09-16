@@ -1,0 +1,11 @@
+"use strict";
+const assert = require("node:assert/strict");
+const { detect } = require("../lib/intraday-side-strength-v2");
+const r = detect({ symbol: "3450", outside_1m: 600, inside_1m: 200, total_1m: 800, neutral_1m: 20, side_volume_age_seconds: 30, event_time: "2026-09-16T09:30:00+08:00" });
+assert.equal(r.outside_strength, 3);
+assert.equal(r.b14_raw_strong, true);
+assert.equal(r.b14_dynamic_strong, true);
+assert.equal(r.neutral_1m, 20);
+assert.equal(detect({ outside_1m: 600, inside_1m: 200, total_1m: 801, side_volume_age_seconds: 30 }).data_status, "DATA_GAP_SIDE_VOLUME");
+assert.equal(detect({ outside_1m: 100, inside_1m: 0, total_1m: 100, side_volume_age_seconds: 30 }).outside_strength, null);
+console.log("4/4 intraday side-strength V2 checks passed");
