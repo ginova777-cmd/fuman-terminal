@@ -1,5 +1,6 @@
 const { isAuthorizedMorningRecovery } = require("../lib/opening-report-recovery-seed");
 const { isPublishedMotherMember } = require("../lib/daytrade-published-membership");
+const { nativeVolume, typedCollectorVolume, evaluateTurnover, rankTurnover } = require('../lib/daytrade-intraday-turnover');
 process.env.FUGLE_COLLECTOR_ROLE = process.env.FUGLE_COLLECTOR_ROLE || "daytrade";
 const fs = require("fs");
 const path = require("path");
@@ -985,6 +986,7 @@ async function fetchActiveSymbols() {
     { service: true },
   );
   const universeBySymbol = new Map(universeRows.map((row) => [normalizeCode(row.symbol), row]).filter(([symbol]) => symbol));
+  const tickerMasterBySymbol = new Map(rows.map(row => [normalizeCode(row.symbol), objectPayload(row.payload)]));
   const mergedBySymbol = new Map();
   for (const row of [...rows, ...universeRows]) {
     const symbol = normalizeCode(row.symbol);
@@ -1019,6 +1021,7 @@ async function fetchActiveSymbols() {
       isHalted: row.is_halted,
       isTrial: row.is_trial === true || payload.isTrial === true || payload.is_trial === true,
       payload,
+      turnoverMaster: tickerMasterBySymbol.get(symbol) || {},
     });
   }
   active.sort((a, b) => a.symbol.localeCompare(b.symbol));
@@ -1282,7 +1285,7 @@ async function fetchCapitalMap() {
     );
     for (const row of rows) {
       const symbol = normalizeCode(row.code);
-      const issuedShares = firstNumber(row.issued_shares, row.capital);
+      const issuedShares = firstNumber(row.issued_shares);
       if (symbol && issuedShares > 0 && !map.has(symbol)) map.set(symbol, { issuedShares, updated_at: row.updated_at || "" });
     }
   } catch {
@@ -1450,6 +1453,7 @@ function mergeWebSocketQuoteCache(quoteMap) {
         quote_seen_at: seenAt,
         received_at: receivedAt,
         aggregate_last_updated: aggregateLastUpdated,
+        turnoverVolumeEvidence: row.turnoverVolumeEvidence || typedCollectorVolume(row),
         trial_event_at: normalizeTimestamp(
           row.trialEventAt || row.trial_event_at || row.payload?.trialEventAt || previous.trial_event_at || previous.payload?.trial_event_at,
           "",
@@ -1677,6 +1681,8 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const activeRow = supplementalMaps.activeBySymbol?.get(symbol) || {};
   const intraday = supplementalMaps.intradayMap?.get(symbol) || {};
   const capital = supplementalMaps.capitalMap?.get(symbol) || {};
+  const intradayTurnover = evaluateTurnover({ symbol, master: activeRow.turnoverMaster,
+    volume: payload.turnoverVolumeEvidence || {}, tradeDate: taipeiDate(), now: nowIso() });
   const chip = supplementalMaps.chipMap?.get(symbol) || {};
   const margin = supplementalMaps.marginChangeMap?.get(symbol) || {};
   const stockFuture = supplementalMaps.stockFutureInitialMap?.get(symbol) || {};
@@ -1838,7 +1844,9 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   };
   const sectorName = firstText(activeRow.industry, activeRow.payload?.industry, activeRow.payload?.sectorName, activeRow.payload?.sector_name);
   const sectorStrengthScore = firstNumber(activeRow.payload?.sectorStrengthScore, activeRow.payload?.sector_strength_score, payload.sectorStrengthScore, payload.sector_strength_score);
-  const issuedShares = firstNumber(capital.issuedShares, payload.issuedShares, payload.issued_shares, dailyPayload.issuedShares, dailyPayload.issued_shares);
+  const intradayTurnoverMode = currentMinutes >= 540 && currentMinutes <= 810;
+  const issuedShares = intradayTurnoverMode ? (intradayTurnover.status === 'ready' ? intradayTurnover.issued_common_shares : 0)
+    : firstNumber(capital.issuedShares, payload.issuedShares, payload.issued_shares, dailyPayload.issuedShares, dailyPayload.issued_shares);
   const currentTurnoverRate = issuedShares > 0 && totalVolume > 0 ? (totalVolume * 1000 / issuedShares) * 100 : 0;
   const avgTurnoverRate5 = issuedShares > 0 && avgVolume5 > 0 ? (avgVolume5 * 1000 / issuedShares) * 100 : 0;
   const highPrice = firstNumber(quote.high_price, payload.highPrice, payload.high_price, price);
@@ -1862,7 +1870,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const bidVolume = firstNumber(quote.bid_volume, payload.bidVolume, payload.bid_volume);
   const askVolume = firstNumber(quote.ask_volume, payload.askVolume, payload.ask_volume);
   const bidAskRatio = askVolume > 0 ? bidVolume / askVolume : bidVolume > 0 ? 99 : 0;
-  const turnoverRate = firstNumber(
+  const historicalTurnoverRate = firstNumber(
     payload.turnoverRate,
     payload.turnover_rate,
     payload.turnover_percent,
@@ -1873,6 +1881,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     dailyPayload.turnoverPercent,
     currentTurnoverRate,
   );
+  const turnoverRate = intradayTurnoverMode ? intradayTurnover.turnover_pct : historicalTurnoverRate;
   const turnoverRate3d = firstNumber(
     payload.turnoverRate3d,
     payload.turnover_rate_3d,
@@ -1990,6 +1999,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     avgVolume3SampleDays,
     previousVolume,
     issuedShares,
+    intradayTurnover,
     volumeRatio5,
     projectedVolume,
     estimatedVolumeRatio,
@@ -3580,7 +3590,16 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   const estimatedVolumeRanks = rankMap(rankingCandidates, (row) => row.metrics.estimatedVolumeRatio, { minValue: 0 });
   const volumeRanks = rankMap(rankingCandidates, (row) => row.metrics.totalVolume, { minValue: 0 });
   const valueRanks = rankMap(rankingCandidates, (row) => row.metrics.tradeValue, { minValue: 0 });
-  const turnoverRanks = rankMap(rankingCandidates, (row) => row.metrics.turnoverRate3To5d, { minValue: 0 });
+  const intradayTurnoverActive = taipeiMinutes() >= 540 && taipeiMinutes() <= 810;
+  const turnoverUniverse = candidates.filter(row => row.turnoverMaster?.official_present === true
+    && !['91'].includes(row.turnoverMaster?.official_industry_code)
+    && row.isActive !== false && row.isEtf !== true && row.isWarrant !== true && row.isCb !== true
+    && row.isSuspended !== true && row.isBlacklisted !== true && row.isDaytradeUnsuitable !== true);
+  const intradayTurnoverRanking = rankTurnover(turnoverUniverse.map(row => row.metrics.intradayTurnover),
+    { tradeDate: taipeiDate(), canonicalRunId: canonicalDaytradeRunId(taipeiDate()), now: nowIso() });
+  const turnoverRanks = intradayTurnoverActive
+    ? new Map(intradayTurnoverRanking.rows.map(row => [row.symbol, { rank: row.rank }]))
+    : rankMap(rankingCandidates, (row) => row.metrics.turnoverRate3To5d, { minValue: 0 });
   const groupLimitUpLeaders = new Map();
   for (const row of candidates) {
     const metrics = row.metrics;
@@ -3705,7 +3724,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     }
     if (turnoverRank && turnoverRank <= 50) {
       entryScore += 680;
-      reasons.push(`turnover_3_5d_rank_top${turnoverRank}`);
+      reasons.push(`${intradayTurnoverActive ? 'turnover_intraday' : 'turnover_3_5d'}_rank_top${turnoverRank}`);
     }
     if (metrics.stockFutureInitial0846Ok) {
       entryScore += 170;
@@ -3940,6 +3959,8 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         volumeRank,
         valueRank,
         turnoverRank,
+        turnoverRankBasis: intradayTurnoverActive ? 'today_cumulative_volume_over_official_common_shares' : 'historical_3_5d',
+        intradayTurnover: metrics.intradayTurnover,
         outsideVolume: Math.round(metrics.outsideVolume),
         insideVolume: Math.round(metrics.insideVolume),
         sideVolumeTotal: metrics.sideVolumeTotal === null ? null : Math.round(metrics.sideVolumeTotal),
@@ -3966,7 +3987,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         outsideInsideRatio: Number(metrics.outsideInsideRatio.toFixed(4)),
         outsideVolumeGeInsideTimes2: metrics.outsideVolumeGeInsideTimes2,
         outsideVolumeGtInsideTimes2: metrics.outsideVolumeGtInsideTimes2,
-        turnoverRate: Number(metrics.turnoverRate.toFixed(4)),
+        turnoverRate: metrics.turnoverRate === null ? null : Number(metrics.turnoverRate.toFixed(4)),
         turnoverRate3To5d: Number(metrics.turnoverRate3To5d.toFixed(4)),
         marginSampledDays: metrics.marginSampledDays,
         hasMargin3To5d: metrics.hasMargin3To5d,
@@ -4272,6 +4293,9 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   const openingReportSeedBySymbol = readOpeningReport0830PrioritySeeds(activeSymbols);
   preserveMorningWatchRows(output, openingReportSeedBySymbol.symbols, taipeiDate(), priorityUpdatedAt, DEEP_SCAN_POOL_MAX_SYMBOLS);
   output.sourceSeedCounts = seeds.counts;
+  output.intradayTurnoverRanking = intradayTurnoverActive ? intradayTurnoverRanking : {
+    contract: intradayTurnoverRanking.contract, status: 'NOT_DUE', trade_date: taipeiDate(),
+    reason: 'outside_intraday_window', rows: [], gaps: [] };
   output.sourceSeedUpdatedAt = seeds.updatedAt;
   output.sourceSeedUnion = [...new Set(seeds.symbols.flatMap((entry) => entry.sources || []))];
   output.basePoolMeta = {
@@ -4806,7 +4830,7 @@ function normalizeQuote(payload, symbol) {
     session: payload?.session || "",
     last_trade_time: lastTradeTime,
     source: "fugle_daytrade_writer",
-    payload,
+    payload: { ...payload, turnoverVolumeEvidence: nativeVolume(payload, 'fugle.intraday.quote.total.tradeVolume') },
   };
 }
 
@@ -5472,6 +5496,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     hot_pool_min_symbols: HOT_POOL_MIN_SYMBOLS,
     hot_pool_max_symbols: HOT_POOL_MAX_SYMBOLS,
     mother_pool_capital_rows: supplementalMaps.capitalMap?.size || 0,
+    intraday_turnover_ranking: priorityRows.intradayTurnoverRanking || null,
     mother_pool_chip_rows: supplementalMaps.chipMap?.size || 0,
     mother_pool_margin_change_rows: supplementalMaps.marginChangeMap?.size || 0,
     stock_group_contract_source: stockGroupMeta.source || "missing",
@@ -6780,6 +6805,34 @@ function updateMotherPoolDelta(result) {
   }
 
   await supabaseUpsert("source_status", [sourceRow], "source_name");
+  // The turnover checklist has its own independently read-back receipt.
+  // Failure here is visible but cannot erase the already published core source.
+  const turnover = result.payload.intraday_turnover_ranking;
+  if (turnover && turnover.status !== 'NOT_DUE') {
+    let receipt;
+    try {
+      if (!SUPABASE_READ_KEY || SUPABASE_READ_KEY === SUPABASE_SERVICE_KEY) throw new Error('anon_read_key_missing');
+      const readback = await supabaseGetPaged('source_status',
+        'select=trade_date,payload&source_name=eq.' + encodeURIComponent(SOURCE_NAME) + '&trade_date=eq.' + tradeDate + '&limit=1',
+        { service: false, pageSize: 2 });
+      const actual = readback[0]?.payload?.intraday_turnover_ranking;
+      const verdict = require('./verify-daytrade-intraday-turnover').verify(actual);
+      const stable = value => JSON.stringify(value, (_, v) => v && typeof v === 'object' && !Array.isArray(v)
+        ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
+      if (!actual || stable(actual) !== stable(turnover)) throw new Error('turnover_readback_not_same_batch');
+      receipt = { ...verdict, run_id: turnover.run_id, trade_date: tradeDate,
+        canonical_run_id: turnover.canonical_run_id, checked_at: nowIso(), read_role: 'anon',
+        db_readback_ok: true, natural_production_readback_verified: true,
+        requested_count: turnover.requested_count, written_count: turnover.rows.length + turnover.gaps.length,
+        readback_count: actual.rows.length + actual.gaps.length };
+    } catch (error) {
+      receipt = { contract: 'daytrade_intraday_turnover_verifier_v1', status: 'blocked', complete: false,
+        run_id: turnover.run_id, trade_date: tradeDate, checked_at: nowIso(), exit_code: 1,
+        db_readback_ok: false, failed_checks: [String(error.message)], first_blocker: String(error.message) };
+    }
+    writeJsonAtomic(runtimePath('data', 'scan-receipts', 'daytrade-intraday-turnover-' + tradeDate.replace(/-/g, '') + '.json'), receipt);
+    writeJsonAtomic(runtimePath('data', 'scan-receipts', 'turnover', turnover.run_id.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json'), receipt);
+  }
 }
 
 async function writeEnrichmentPendingHeartbeat({ activeSymbols, priorityRows, quoteMap, dailyVolumeMap, state, errors = [] }) {
