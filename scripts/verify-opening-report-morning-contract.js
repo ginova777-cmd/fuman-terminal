@@ -201,6 +201,8 @@ function symbolMapChecks(checks) {
 }
 
 function staticContractChecks(checks) {
+  const stageTests=run("node",["scripts/test-opening-report-stage-reconstruction.js"]);
+  addCheck(checks,"stage_reconstruction_and_stale_batch_tests",stageTests.ok,stageTests.text.trim());
   const nightTests=run("node",["scripts/test-opening-report-night-futures.js"]);
   addCheck(checks,"night_futures_source_contract_tests",nightTests.ok,nightTests.text.trim());
   addCheck(checks,"night_futures_runner_gate_wired",readText("scripts/run-opening-report-0830-production.js").includes("night_futures_required:") && readText("scripts/run-opening-report-0830-preflight.js").includes("nightIssues.length === 0"),"night source mandatory before delivery");
