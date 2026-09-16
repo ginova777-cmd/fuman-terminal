@@ -18,6 +18,7 @@ const {
 } = require("../lib/fugle-websocket-quotes");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const providerSideJournal = require("../lib/provider-side-journal.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-side-journal"));
 const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
   "C:/fuman-terminal/secrets/fugle-api-key.txt",
@@ -1558,6 +1559,7 @@ async function runStreamingCollector() {
         reconnectMaxMs: STREAMING_RECONNECT_MAX_MS,
         staleDataWindow,
         staleRecoveryTriggered,
+        providerSideJournal: providerSideJournal.health(),
         collectorRole: COLLECTOR_ROLE,
         sourceHostId: SOURCE_HOST_ID,
         sourceHostRole: SOURCE_HOST_ROLE,
@@ -1674,6 +1676,7 @@ async function runStreamingCollector() {
           || (data.total || data.bids || data.asks || Object.prototype.hasOwnProperty.call(data, "openPrice") ? "aggregates" : "")
           || STREAMING_CHANNELS[0];
         if (Object.prototype.hasOwnProperty.call(channelMessages, inferredChannel)) channelMessages[inferredChannel] += 1;
+        if (inferredChannel === "aggregates") providerSideJournal.capture(data, lastTransportMessageAt);
         if (inferredChannel === "candles") {
           const candles = normalizeFugleCandles(payload);
           if (candles.length) {

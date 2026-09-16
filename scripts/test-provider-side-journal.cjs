@@ -1,0 +1,6 @@
+'use strict';
+const fs=require('fs'),path=require('path'),assert=require('assert/strict'),{createJournal}=require('../lib/provider-side-journal.cjs');
+const dir=fs.mkdtempSync(path.join(require('os').tmpdir(),'outside-journal-')),j=createJournal(dir),at='2026-09-16T09:58:59+08:00',data={date:'2026-09-16',symbol:'3450',total:{time:Date.parse('2026-09-16T09:58:58+08:00')*1000,tradeVolume:100,tradeVolumeAtBid:30,tradeVolumeAtAsk:60}};
+assert.equal(j.capture(data,at).stored,true);assert.equal(j.capture(data,at).reason,'DUPLICATE');assert.equal(j.capture({...data,isTrial:true},at).stored,false);assert.equal(j.capture({...data,total:{...data.total,time:undefined}},at).reason,'INVALID_PROVIDER_EVENT_TIME');assert.equal(j.capture({...data,total:{...data.total,tradeVolume:1}},at).reason,'SIDE_TOTAL_EXCEEDS_VOLUME');
+const row=JSON.parse(fs.readFileSync(path.join(dir,'2026-09-16','3450.jsonl'),'utf8'));assert.equal(row.aggregation,'DAY_CUMULATIVE');assert.equal(row.total.tradeVolumeAtAsk,60);assert.equal(row.event_at,'2026-09-16T01:58:58.000Z');assert.equal(row.received_at,at);assert.equal(j.health().ok,true);
+console.log('PASS journal preserves provider event clock and totals, excludes trial/bad rows, deduplicates; does not claim minute data');
