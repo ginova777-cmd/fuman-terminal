@@ -42,6 +42,7 @@ async function main() {
     minimumCandlesPerSymbol: MIN_CANDLES_PER_SYMBOL,
     barsPerSymbol: recoveryReplay ? 40 : 20,
     historicalRecoveryReplay: recoveryReplay,
+    motherPoolSnapshotIdentity: scan?.mother_pool_snapshot?.identity || null,
   });
   const issues = [];
   add(issues, scan?.source_field_contract === "strategy3-source-fields-v2" && water.receipt?.source_field_contract === scan?.source_field_contract, "strategy3_source_field_contract_mismatch");

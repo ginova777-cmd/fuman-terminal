@@ -133,6 +133,20 @@ const guard1230 = readJson(receipts.guard1230, null);
 const guard1250 = readJson(receipts.guard1250, null);
 const firstAttempt1255 = readJson(receipts.firstAttempt1255, null);
 const scan = readJson(receipts.scan, null);
+// Preserve the initiating failure. An unexecuted scan has no technical or
+// delivery evidence and cannot legitimately be diagnosed as policy drift.
+if (scan?.ok !== true || scan?.status !== 'COMPLETE') {
+  const firstBlocker = scan?.readiness?.payload?.consumer_receipt?.first_blocker
+    || scan?.scanner_summary?.consumer_receipt?.first_blocker || scan?.first_blocker || 'complete_scan_not_complete';
+  const payload = {ok:false, complete:false, exit_code:1, status:'STRATEGY3_V2_DAILY_UNATTENDED_NO',
+    contract:'strategy3-v2-daily-unattended-closure-v1', checked_at:new Date().toISOString(),
+    trade_date:tradeDate, strategy:'strategy3_v2', run_id:scan?.run_id || null,
+    first_blocker:firstBlocker, reason_code:firstBlocker, receipts,
+    scan:scan ? {ok:scan.ok,status:scan.status,run_id:scan.run_id}:null,
+    not_evaluated:['technical_trend','bonus_scoring','surface_delivery','line_delivery'],
+    issues:[{code:firstBlocker,stage:'scan',path:receipts.scan}]};
+  writeJson(out,payload); console.log(JSON.stringify({...payload,receipt_path:out},null,2)); process.exit(1);
+}
 const line = readJson(receipts.line, null);
 const threeSurfaceLine = readJson(receipts.threeSurfaceLine, null);
 const waterUniverseRun = runNode("scripts/verify-strategy3-v2-water-universe.js", [`--trade-date=${tradeDate}`], 120000);
