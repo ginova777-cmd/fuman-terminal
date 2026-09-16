@@ -1,3 +1,4 @@
+const morningStages = require("../lib/opening-report-stage-contract");
 "use strict";
 const fs=require("fs"),path=require("path"),crypto=require("crypto");
 const ui=require("./verify-terminal-ui-e2e");
@@ -5,8 +6,9 @@ const option=(key,fallback="")=>process.argv.find(x=>x.startsWith(key+"="))?.sli
 const root=path.resolve(__dirname,".."),runtime=process.env.FUMAN_RUNTIME_DIR||"C:/fuman-runtime";
 const date=option("--trade-date",new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()));
 const compact=date.replace(/-/g,""),base=option("--base-url","https://fuman-terminal.vercel.app");
+const reportDir=process.env.FUMAN_MORNING_STAGE?morningStages.directory(runtime):path.join(runtime,"data","opening-report-0830");
 const diagnostic=process.argv.includes("--inspect-only");
-const out=path.resolve(option("--out",path.join(runtime,"data","opening-report-0830","rendered",compact)));
+const out=path.resolve(option("--out",path.join(reportDir,"rendered",compact)));
 const sha=bytes=>crypto.createHash("sha256").update(bytes).digest("hex");
 const read=f=>JSON.parse(fs.readFileSync(f,"utf8").replace(/^\uFEFF/,""));
 function expectedRows(final) {
@@ -26,7 +28,7 @@ function readyForReport(runId) {
 }
 async function main(){
   fs.mkdirSync(out,{recursive:true});
-  const final=read(path.join(runtime,"data","opening-report-0830",`opening-report-0830-final-receipt-${compact}.json`));
+  const final=read(path.join(reportDir,`opening-report-0830-final-receipt-${compact}.json`));
   const expected=expectedRows(final),fullHash=require("../lib/opening-report-delivery-contract").contentHash(final.priority_observation_mode,final.display_top3||[],final.night_futures);
   const results=[];let browser;
   const manifest=await fetch(base+"/api/release-manifest",{signal:AbortSignal.timeout(15000)}).then(r=>r.json());

@@ -1,3 +1,4 @@
+const { isAuthorizedMorningRecovery } = require("../lib/opening-report-recovery-seed");
 process.env.FUGLE_COLLECTOR_ROLE = process.env.FUGLE_COLLECTOR_ROLE || "daytrade";
 const fs = require("fs");
 const path = require("path");
@@ -3368,8 +3369,8 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
     const confidence = Number(payload?.confidence);
     const valid = payload
       && compactDateKey(payload.date) === todayKey
-      && String(payload.report_time || "") === "08:50"
-      && runId.startsWith("opening-report-0830-" + todayKey + "-")
+      && ((payload.stage === "asia_0850" && payload.report_time === "08:50") || ((!payload.stage || payload.stage === "us_0820") && payload.report_time === "08:20"))
+      && (runId.startsWith("opening-report-0830-" + todayKey + "-") || isAuthorizedMorningRecovery(payload, readJson(payload.stage ? runtimePath("data", "opening-report-stages", payload.stage, "opening-report-0830-preflight-receipt-" + todayKey + ".json") : runtimePath("data", "opening-report-0830", "opening-report-0830-preflight-receipt-" + todayKey + ".json"))))
       && payload.source === "opening_report_0830"
       && payload.mode === "priority_bias_only"
       && payload.allowed_action === "boost_scan_priority_only"
@@ -3381,7 +3382,7 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
       && Array.isArray(payload.mapped_symbols) && payload.mapped_symbols.length > 0;
     if (!valid) { rejectedFiles += 1; continue; }
     inputFilesValid += 1;
-    const receiptPath = path.join(receiptDir, "opening-report-0830-priority-bias-bridge-" + String(payload.industry).trim() + "-" + todayKey + ".json");
+    const receiptPath = path.join(payload.stage ? runtimePath("data", "opening-report-stages", payload.stage, "scan-receipts") : receiptDir, "opening-report-0830-priority-bias-bridge-" + String(payload.industry).trim() + "-" + todayKey + ".json");
     const receipt = readJson(receiptPath);
     if (!bridgeReceiptIsValid(receipt, payload, runId, inputPath, receiptPath)) {
       bridgeReceiptsRejected += 1;
@@ -4096,6 +4097,8 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     prev.prioritySource = `${prev.prioritySource},${seed.sources.join(",")}`;
     prev.priorityReason = `${prev.priorityReason}+runtime_priority`;
     if (seed.openingReport0830 === true && Array.isArray(seed.reports) && seed.reports.length) {
+      const openingReportSeed = openingReportSeedBySymbol.get(seed.symbol);
+      if (openingReportSeed?.openingReport0830IndustryBias) prev.openingReport0830IndustryBias = openingReportSeed.openingReport0830IndustryBias;
       const observations = seed.reports.map((report) => ({
         industry: report.industry,
         run_id: report.runId,
@@ -4106,7 +4109,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         bridge_receipt_path: report.bridgeReceiptPath,
       }));
       const reportRunIds = [...new Set(observations.map((entry) => String(entry.run_id || "").replace(/-[A-Z][A-Z0-9_]+$/, "")).filter(Boolean))];
-      prev.openingReport0830IndustryBias = {
+      if (!openingReportSeed?.openingReport0830IndustryBias) prev.openingReport0830IndustryBias = {
         date: taipeiDate(), report_time: "08:50", report_run_id: reportRunIds[0] || "",
         run_id: reportRunIds[0] || "", source: "opening_report_0830", mode: "priority_bias_only",
         industry: observations.slice().sort((a, b) => Number(a.priority_observation_rank || 999) - Number(b.priority_observation_rank || 999))[0]?.industry || "",

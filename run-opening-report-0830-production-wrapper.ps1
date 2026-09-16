@@ -1,4 +1,5 @@
 param(
+  [ValidateSet("us_0820", "asia_0850")][string]$Stage = "us_0820",
   [switch]$IsolatedBacktest,
   [switch]$ReuseLineReceipt,
   [switch]$FinalizeExisting,
@@ -6,6 +7,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$env:FUMAN_MORNING_STAGE = $Stage
 $PSNativeCommandUseErrorActionPreference = $false
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
@@ -16,13 +18,13 @@ $env:FUMAN_STATE_DIR = if ($env:FUMAN_STATE_DIR) { $env:FUMAN_STATE_DIR } else {
 $env:NODE_OPTIONS = "--use-system-ca"
 
 $logDir = Join-Path $RuntimeDir "logs"
-$receiptDir = Join-Path $RuntimeDir "data\opening-report-0830"
+$receiptDir = Join-Path $RuntimeDir "data\opening-report-stages\$Stage"
 New-Item -ItemType Directory -Force -Path $logDir, $receiptDir | Out-Null
 $nowTaipei = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date), "Taipei Standard Time")
 $today = $nowTaipei.ToString("yyyyMMdd")
 $tradeDate = $nowTaipei.ToString("yyyy-MM-dd")
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$runId = "opening-report-0830-$today-$stamp"
+$runId = "opening-report-0830-$today-$Stage-$stamp"
 if ($RecoveryContext) {
   $recovery = Get-Content -LiteralPath $RecoveryContext -Raw | ConvertFrom-Json
   if ($recovery.trade_date -ne $tradeDate) { throw "Recovery date mismatch" }
@@ -58,6 +60,8 @@ if (-not $IsolatedBacktest) {
   if ($calendarExit -eq 10 -or ($null -ne $calendar -and $calendar.marketOpen -eq $false)) {
     [ordered]@{
       contract = "opening-report-morning-wrapper-v1"
+      stage = $Stage
+      stage_contract = "opening-report-two-stage-v1"
       status = "skipped"
       ok = $true
       complete = $false
@@ -84,6 +88,8 @@ if (-not $IsolatedBacktest) {
   if ($calendarExit -ne 0 -or $null -eq $calendar) {
     [ordered]@{
       contract = "opening-report-morning-wrapper-v1"
+      stage = $Stage
+      stage_contract = "opening-report-two-stage-v1"
       status = "fail_closed"
       ok = $false
       complete = $false
@@ -109,7 +115,7 @@ if (-not $IsolatedBacktest) {
 }
 
 if (-not $IsolatedBacktest) {
-  & "C:\Program Files\nodejs\node.exe" "scripts\verify-release-root-authority.js" "--require-production-root"
+  & "C:\Program Files\nodejs\node.exe" "scripts\verify-opening-report-release.js"
   if ($LASTEXITCODE -ne 0) { throw "RELEASE_ROOT_DRIFT" }
   & "C:\Program Files\nodejs\node.exe" "scripts\supabase-incident-guard.js" check "--class=guard" "--action=opening-report-complete"
   if ($LASTEXITCODE -ne 0) { throw "morning_source_incident_blocked" }
@@ -158,6 +164,8 @@ $reasonCode = if ($ok) { "complete" } elseif ($sourceFreeze.exitCode -ne 0) { "s
 
 $receipt = [ordered]@{
   contract = "opening-report-morning-wrapper-v1"
+      stage = $Stage
+      stage_contract = "opening-report-two-stage-v1"
   status = if ($ok) { "complete" } else { "failed" }
   complete = $ok
   ok = $ok

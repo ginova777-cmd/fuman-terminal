@@ -1,3 +1,4 @@
+const morningStages = require("../lib/opening-report-stage-contract");
 "use strict";
 
 const fs = require("fs");
@@ -134,7 +135,7 @@ function validate(payload, options = {}) {
   const date = compactDate(payload?.date);
   if (date.length !== 8) issues.push("invalid_date");
   if (options.expectedDate && date !== compactDate(options.expectedDate)) issues.push("date_mismatch");
-  if (!/^08:50(?:$|[:+T\s])/.test(String(payload?.report_time || ""))) issues.push("report_time_not_0830");
+  if (String(payload?.report_time || "") !== morningStages.stage().time) issues.push("report_time_not_0830");
   if (options.expectedRunId && String(payload?.run_id || "") !== String(options.expectedRunId)) issues.push("run_id_mismatch");
   if (payload?.source !== SOURCE) issues.push("source_mismatch");
   if (payload?.mode !== MODE) issues.push("mode_mismatch");
