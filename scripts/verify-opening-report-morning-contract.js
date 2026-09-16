@@ -412,7 +412,7 @@ function currentReceiptChecks(checks, tradeDate) {
   const hasGroup = line.has_group_target === true || line.hasGroupTarget === true;
   const deliveredCount = Number(line.delivered_count || line.deliveredCount || 0);
   const lineAttempted = line.line_push_attempted === true;
-  addCheck(checks, "current_line_user_and_group_delivery", line.ok === true && lineAttempted && targetCount >= 2 && deliveredCount >= 2 && hasUser && hasGroup, JSON.stringify({ ok: line.ok, line_push_attempted: lineAttempted, target_count: targetCount, delivered_count: deliveredCount, has_user_target: hasUser, has_group_target: hasGroup }));
+  addCheck(checks, "current_line_user_and_group_delivery", require("../lib/opening-report-line-policy").accepted(line,finalReceipt.run_id,finalReceipt.delivery_content_hash,tradeDate), JSON.stringify({ ok: line.ok, line_push_attempted: lineAttempted, target_count: targetCount, delivered_count: deliveredCount, has_user_target: hasUser, has_group_target: hasGroup }));
 
   const terminal = finalReceipt.terminal_briefing_snapshot || {};
   addCheck(checks, "current_terminal_snapshot_ok", terminal.ok === true, JSON.stringify({ ok: terminal.ok, key: terminal.key }));
@@ -443,7 +443,9 @@ function currentReceiptChecks(checks, tradeDate) {
   addCheck(checks, "current_mother_pool_persistence_ack_same_run", persistenceAckReceipt?.report_run_id === runId, String(persistenceAckReceipt?.report_run_id || "") + "/" + String(runId || ""));
   addCheck(checks, "current_mother_pool_persistence_ack_complete", persistenceAckReceipt?.contract === "opening-report-0830-mother-pool-persistence-ack-v1" && persistenceAckReceipt?.complete === true && persistenceAckReceipt?.db_readback_ok === true && Number(persistenceAckReceipt?.writer_refreshes_observed || 0) >= 2 && persistenceAckReceipt?.first_blocker == null, JSON.stringify({ contract: persistenceAckReceipt?.contract, complete: persistenceAckReceipt?.complete, db_readback_ok: persistenceAckReceipt?.db_readback_ok, writer_refreshes_observed: persistenceAckReceipt?.writer_refreshes_observed, first_blocker: persistenceAckReceipt?.first_blocker }));
   const refreshTimes = persistenceAckReceipt?.writer_refresh_timestamps || [];
-  const handoffMs = Date.parse(handoffAckReceipt?.checked_at || "");
+  const originalHandoff = persistenceAckReceipt?.handoff_ack_receipt ? readJson(persistenceAckReceipt.handoff_ack_receipt) : null;
+  addCheck(checks,"current_persistence_original_handoff_identity",originalHandoff?.complete===true&&originalHandoff?.db_readback_ok===true&&originalHandoff?.report_run_id===runId&&originalHandoff?.trade_date===tradeDate,"original handoff of the two observed refreshes");
+  const handoffMs = Date.parse(originalHandoff?.checked_at || "");
   const persistedMs = Date.parse(persistenceAckReceipt?.checked_at || "");
   addCheck(checks, "current_persistence_two_distinct_refreshes_after_handoff", new Set(refreshTimes).size >= 2 && refreshTimes.every(t => Date.parse(t) > handoffMs && Date.parse(t) <= persistedMs), JSON.stringify(refreshTimes));
   addCheck(checks, "current_ack_dates_match_report", handoffAckReceipt?.trade_date === tradeDate && persistenceAckReceipt?.trade_date === tradeDate, tradeDate);
