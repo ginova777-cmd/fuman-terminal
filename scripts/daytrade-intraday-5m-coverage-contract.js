@@ -1,8 +1,8 @@
 "use strict";
 
-const EFFECTIVE_COVERAGE_NUMERATOR = 9;
+const EFFECTIVE_COVERAGE_NUMERATOR = 7;
 const EFFECTIVE_COVERAGE_DENOMINATOR = 10;
-const EFFECTIVE_COVERAGE_THRESHOLD = 0.9;
+const EFFECTIVE_COVERAGE_THRESHOLD = 0.7;
 const NATIVE_SOURCE = "fugle_stock_intraday_candles_timeframe_5";
 const STRATEGY_VERSION = "golden-cross-any-macd-3-9-3-v4";
 const CALCULATION_VERSION = "five-minute-indicators-macd-3-9-3-v4";
@@ -25,6 +25,7 @@ function isFreshClosedRow(row, { tradeDate, runId, asOfMs, maxStaleSeconds }) {
 
 function isEffectiveRow(row, identity) {
   if (!isFreshClosedRow(row, identity) || row.data_gap_5m !== false) return false;
+  if (row.volume_available !== true || !["lots", "shares"].includes(row.volume_unit)) return false;
   if (row.trend_5m_strategy_version !== STRATEGY_VERSION ||
       row.calculation_version !== CALCULATION_VERSION ||
       row.classification_contract !== CLASSIFICATION_CONTRACT) return false;
@@ -33,7 +34,7 @@ function isEffectiveRow(row, identity) {
 }
 
 function meetsEffectiveCoverage(effectiveCount, totalCount) {
-  if (!Number.isInteger(effectiveCount) || !Number.isInteger(totalCount) || totalCount <= 0) return false;
+  if (!Number.isInteger(effectiveCount) || !Number.isInteger(totalCount) || totalCount <= 0 || effectiveCount < 0 || effectiveCount > totalCount) return false;
   return effectiveCount * EFFECTIVE_COVERAGE_DENOMINATOR >=
     totalCount * EFFECTIVE_COVERAGE_NUMERATOR;
 }
@@ -41,6 +42,13 @@ function meetsEffectiveCoverage(effectiveCount, totalCount) {
 function summarizeCoverage(expectedSymbols, rows, identity) {
   const expected = [...new Set(expectedSymbols.map(String))];
   const bySymbol = new Map(rows.map(row => [String(row.symbol), row]));
+  const seen = new Set(), duplicates = new Set();
+  for (const row of rows) {
+    const symbol = String(row.symbol);
+    if (seen.has(symbol)) duplicates.add(symbol);
+    seen.add(symbol);
+  }
+  for (const symbol of duplicates) bySymbol.delete(symbol);
   const fresh = expected.filter(symbol => isFreshClosedRow(bySymbol.get(symbol), identity));
   const confirmed = expected.filter(symbol => isEffectiveRow(bySymbol.get(symbol), identity) &&
     bySymbol.get(symbol).trend_5m_status === "CONFIRMED_STRONG_5M");
@@ -50,6 +58,7 @@ function summarizeCoverage(expectedSymbols, rows, identity) {
   const denominator = expected.length;
   return {
     requested_symbols: denominator,
+    duplicate_symbols: [...duplicates],
     freshness_count: fresh.length,
     freshness_coverage: denominator ? fresh.length / denominator : 0,
     effective_confirmed_count: confirmed.length,
@@ -57,6 +66,9 @@ function summarizeCoverage(expectedSymbols, rows, identity) {
     effective_count: effective.length,
     effective_coverage: denominator ? effective.length / denominator : 0,
     effective_threshold: EFFECTIVE_COVERAGE_THRESHOLD,
+    full_readiness_threshold: 0.9,
+    readiness_status: !denominator || effective.length * 10 < denominator * 7
+      ? "BLOCKED" : effective.length * 10 < denominator * 9 ? "READY_DEGRADED" : "READY",
     effective_required_count: Math.ceil(denominator * EFFECTIVE_COVERAGE_NUMERATOR / EFFECTIVE_COVERAGE_DENOMINATOR),
     effective_gap_symbols: expected.filter(symbol => !effective.includes(symbol)),
     meets_effective_coverage: meetsEffectiveCoverage(effective.length, denominator),

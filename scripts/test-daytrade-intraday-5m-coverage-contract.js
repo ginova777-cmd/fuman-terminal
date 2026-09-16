@@ -6,9 +6,11 @@ const path = require("node:path");
 const { meetsEffectiveCoverage, summarizeCoverage } = require("./daytrade-intraday-5m-coverage-contract");
 const { resolveVolumeUnit } = require("./daytrade-intraday-5m-volume-unit");
 
-assert.equal(meetsEffectiveCoverage(184, 205), false, "184/205 must fail the exact 90% boundary");
-assert.equal(meetsEffectiveCoverage(185, 205), true, "185/205 must pass the exact 90% boundary");
-assert.equal(meetsEffectiveCoverage(169, 205), false);
+assert.equal(meetsEffectiveCoverage(143, 205), false, "below 70% must fail");
+assert.equal(meetsEffectiveCoverage(144, 205), true, "at least 70% permits degraded use");
+assert.equal(meetsEffectiveCoverage(0, 0), false);
+assert.equal(meetsEffectiveCoverage(11, 10), false);
+assert.equal(meetsEffectiveCoverage(-1, 10), false);
 
 const identity = {
   tradeDate: "2026-09-15",
@@ -22,6 +24,8 @@ const makeRow = (symbol, status, overrides = {}) => ({
   run_id: identity.runId,
   source: "fugle_stock_intraday_candles_timeframe_5",
   is_synthetic: false,
+  volume_unit: "lots",
+  volume_available: true,
   bar_end: "2026-09-15T04:15:00.000Z",
   bar_count: 5,
   bar_complete: true,
@@ -56,4 +60,11 @@ assert.match(latestViewSql, /effective_threshold[^\n]*>= 0\.9/i, "latest view mu
 assert.match(latestViewSql, /effective_count[^\n]*\* 10[\s\S]*>= [\s\S]*total[^\n]*\* 9/i, "latest view must use exact integer cross multiplication");
 assert.match(latestViewSql, /meets_effective_coverage[^\n]*is true/i, "latest view must require an affirmative 90% receipt diagnostic");
 
-console.log("PASS: exact 184/205 and 185/205 boundaries, denominator, per-symbol effectiveness, and Fugle volume-unit mapping.");
+for (const [count, status] of [[6, "BLOCKED"], [7, "READY_DEGRADED"], [9, "READY"], [10, "READY"]]) {
+  const symbols = Array.from({ length: 10 }, (_, i) => String(i));
+  const result = summarizeCoverage(symbols, symbols.slice(0, count).map(s => makeRow(s, "WAIT_5M_CONFIRMATION")), identity);
+  assert.equal(result.readiness_status, status);
+}
+assert.equal(summarizeCoverage(["A001"], [rows[0], rows[0]], identity).effective_count, 0);
+assert.equal(summarizeCoverage(["A001"], [makeRow("A001", "WAIT_5M_CONFIRMATION", { volume_unit: null })], identity).effective_count, 0);
+console.log("PASS: 70%/90% readiness boundaries, denominator, duplicates, effectiveness, and Fugle volume-unit mapping; historic SQL remains unchanged.");
