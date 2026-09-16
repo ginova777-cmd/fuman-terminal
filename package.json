@@ -438,7 +438,7 @@
     "verify:terminal-desktop-skeleton": "node scripts/verify-terminal-desktop-skeleton.js",
     "verify:master-control-contract": "node scripts/verify-api-unattended-scorecard.js --contract-only && node scripts/verify-master-control-four-surface-current-date.js && node scripts/verify-cleanup-root-authority.js && node scripts/verify-source-observability-authority-contract.js && node scripts/verify-daytrade-formal-root-default.js && node scripts/verify-daytrade-writer-wrapper-authority.js && npm run verify:canonical-verifier-authority && npm run verify:active-strategy-single-run-authority && npm run verify:opening-report-morning-contract",
     "verify:after-hours-scan-guard": "node scripts/verify-after-hours-scan-guard-contract.js .",
-    "verify:daytrade-burst-telegram": "node scripts/verify-daytrade-intraday-burst-telegram.js",
+    "verify:daytrade-burst-telegram": "node --use-system-ca scripts/verify-telegram-three-detectors.js",
     "check:daytrade-canonical-water": "node --use-system-ca scripts/check-daytrade-canonical-water-reader.js",
     "verify:daytrade-canonical-water-reader": "node scripts/verify-daytrade-canonical-water-reader-contract.js",
     "verify:chip-source-sync-receipt": "node scripts/verify-chip-source-sync-receipt.js",
@@ -448,7 +448,8 @@
     "verify:strategy3-v2-readiness-guard-contract": "node --use-system-ca scripts/verify-strategy3-v2-readiness-guard-contract.js",
     "verify:strategy2-v3-master": "node scripts/verify-strategy2-v3-master.js",
     "verify:daytrade-futopt-v5-release": "node scripts/verify-daytrade-futopt-v5-release-readonly.js",
-    "verify:canonical-reader": "node scripts/verify-canonical-reader.js"
+    "verify:canonical-reader": "node scripts/verify-canonical-reader.js",
+    "run:telegram-three-detectors": "node --use-system-ca scripts/run-telegram-three-detectors.js"
   },
   "engines": {
     "node": "24.x"
