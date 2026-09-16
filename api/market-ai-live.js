@@ -1471,6 +1471,7 @@ function readOpeningMorningReport(clock = taipeiClock()) {
   }
   const finalDateOk = compactDate(finalReceipt.date) === compact;
   const stateIndustryRows = listOpeningIndustryBiasFiles(clock)
+    .filter(row => row.payload.run_id === finalReceipt.run_id + "-" + row.payload.industry && (!finalReceipt.stage || row.payload.stage === finalReceipt.stage))
     .map((row) => ({
       industry: row.payload.industry,
       display_name: row.payload.display_name || row.payload.industry,
