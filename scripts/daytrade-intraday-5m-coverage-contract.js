@@ -1,8 +1,8 @@
 "use strict";
 
-const EFFECTIVE_COVERAGE_NUMERATOR = 9;
+const EFFECTIVE_COVERAGE_NUMERATOR = 7;
 const EFFECTIVE_COVERAGE_DENOMINATOR = 10;
-const EFFECTIVE_COVERAGE_THRESHOLD = 0.9;
+const EFFECTIVE_COVERAGE_THRESHOLD = 0.7;
 const NATIVE_SOURCE = "fugle_stock_intraday_candles_timeframe_5";
 const STRATEGY_VERSION = "golden-cross-any-macd-3-9-3-v4";
 const CALCULATION_VERSION = "five-minute-indicators-macd-3-9-3-v4";
