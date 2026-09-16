@@ -1,0 +1,45 @@
+"use strict";
+const fs=require('fs'),path=require('path'),crypto=require('crypto');
+const stages=require('../lib/opening-report-stage-contract');
+const {contentHash}=require('../lib/opening-report-delivery-contract');
+const {readSnapshot}=require('../lib/supabase-snapshots');
+const runtime=process.env.FUMAN_RUNTIME_DIR||'C:/fuman-runtime';
+const date=process.argv.find(x=>x.startsWith('--date='))?.slice(7)||new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw Error('invalid_trade_date');
+const day=date.replace(/-/g,''),read=f=>{try{return JSON.parse(fs.readFileSync(f,'utf8').replace(/^\uFEFF/,''));}catch{return null;}};
+const sha=b=>crypto.createHash('sha256').update(b).digest('hex');
+async function verifyStage(id){
+  const dir=stages.directory(runtime,id),checks=[];
+  const final=read(path.join(dir,`opening-report-0830-final-receipt-${day}.json`));
+  const source=read(path.join(dir,`opening-report-0830-overseas-leaders-${day}.json`));
+  const preflight=read(path.join(dir,`opening-report-0830-preflight-receipt-${day}.json`));
+  const handoff=read(path.join(dir,'scan-receipts',`opening-report-0830-mother-pool-handoff-ack-${day}.json`));
+  const persistence=read(path.join(dir,'scan-receipts',`opening-report-0830-mother-pool-persistence-ack-${day}.json`));
+  const rendered=read(path.join(dir,'rendered',day,'opening-report-rendered.json'));
+  const line=read(path.join(dir,`line-push-receipt-${day}.json`));
+  const canonical=read(path.join(dir,`opening-report-morning-contract-verifier-${day}.json`));
+  const wrapper=read(path.join(dir,`opening-report-0830-wrapper-receipt-${day}.json`));
+  const run=final?.run_id,hash=final&&contentHash(final.priority_observation_mode,final.display_top3||[],final.night_futures);
+  const add=(name,ok)=>checks.push({name,ok:ok===true});
+  add('source',source?.ok===true&&stages.verifyStageIdentity(source,date,id).length===0&&source.run_id===run&&preflight?.ok===true&&preflight.run_id===run&&preflight.date===date);
+  add('runner_identity',final?.stage===id&&final.date===date&&final.overseas_sources_ok===true&&final.mother_pool_bridge_ok===true&&final.delivery_content_hash===hash);
+  add('handoff',handoff?.contract==='opening-report-0830-mother-pool-handoff-ack-v2'&&handoff.complete===true&&handoff.db_readback_ok===true&&handoff.report_run_id===run&&handoff.trade_date===date&&handoff.missing_fields?.length===0);
+  add('persistence',persistence?.contract==='opening-report-0830-mother-pool-persistence-ack-v1'&&persistence.complete===true&&persistence.db_readback_ok===true&&persistence.report_run_id===run&&persistence.trade_date===date&&persistence.required_writer_refreshes>=2&&persistence.writer_refreshes_observed>=2&&persistence.missing_fields?.length===0);
+  const renderedRows=rendered?.results||[];
+  const shotsValid=renderedRows.every(row=>{try{return row.screenshot_sha256===sha(fs.readFileSync(row.screenshot));}catch{return false;}});
+  add('rendered',rendered?.complete===true&&rendered.diagnostic===false&&rendered.trade_date===date&&rendered.run_id===run&&rendered.delivery_content_hash===hash&&rendered.full_content_hash_ok===true&&rendered.base_url==='https://fuman-terminal.vercel.app'&&['desktop','mobile-portrait','mobile-landscape','scorecard88'].every(surface=>renderedRows.some(row=>row.surface===surface&&row.ok===true&&row.run_id===run&&row.hash===hash))&&shotsValid);
+  const db=await readSnapshot('opening_report_0830_terminal_briefing_'+id,{tradeDate:date,allowLatestFallback:false,timeoutMs:5000,maxAttempts:2}).catch(()=>null);
+  const p=db?.payload;
+  add('stage_db_readback',p?.ok===true&&p.run_id===run&&p.date===date&&p.stage===id&&p.delivery_content_hash===hash&&require('util').isDeepStrictEqual(p.display_top3,final?.display_top3)&&require('util').isDeepStrictEqual(p.night_futures,final?.night_futures));
+  const dataComplete=checks.every(x=>x.ok);
+  add('line_delivery',line?.line_push_ok===true&&line.has_user_target===true&&line.has_group_target===true&&line.report_run_id===run&&line.delivery_content_hash===hash);
+  add('canonical_receipt',canonical?.require_current===true&&canonical.complete===true&&canonical.trade_date===date&&canonical.failed_checks?.length===0);
+  add('final_receipt',final?.complete===true&&final.status==='complete'&&final.exitCode===0&&wrapper?.complete===true&&wrapper.run_id===run&&wrapper.exitCode===0);
+  return {stage:id,run_id:run||null,data_complete:dataComplete,complete:checks.every(x=>x.ok),checks,source_count:source?.valid_leaders||0,received_symbols:handoff?.received_symbols||0,delivery:{ok:line?.line_push_ok===true,delivered_count:line?.delivered_count||0,target_count:line?.target_count||0,error:line?.line_error_detail||null},receipt_directory:dir};
+}
+(async()=>{
+  const results=[];for(const id of Object.keys(stages.STAGES))results.push(await verifyStage(id));
+  const complete=results.every(row=>row.complete),dataComplete=results.every(row=>row.data_complete);
+  const result={contract:stages.CONTRACT,trade_date:date,checked_at:new Date().toISOString(),status:complete?'complete':'blocked',complete,data_complete:dataComplete,exitCode:complete?0:1,stages:results,blocking_reasons:results.flatMap(row=>row.checks.filter(x=>!x.ok).map(x=>row.stage+':'+x.name))};
+  const file=path.join(runtime,'data','opening-report-stages',`morning-two-stage-receipt-${day}.json`);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify({...result,receipt_path:file},null,2));process.exitCode=result.exitCode;
+})().catch(error=>{console.error(error.message);process.exitCode=1;});
