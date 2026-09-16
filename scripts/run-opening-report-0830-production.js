@@ -715,6 +715,7 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
 
   const final = {
     contract: "opening-report-0830-production-v1",
+    stage: morningStages.stage().id, stage_contract: morningStages.CONTRACT,
     ok: overseasPreflight.ok && Boolean(reportPath) && lineDeliveryOk,
     report_status: "REPORT_OBSERVATION_READY",
     us_market: usMarket,
