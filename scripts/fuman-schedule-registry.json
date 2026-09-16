@@ -40,7 +40,8 @@
       "Fuman Strategy5 Watchdog 2130",
       "Fuman Supabase Vercel History Cleanup 1545",
       "Fuman Terminal Autonomous Root Monitor",
-      "Fuman Vercel Cost Health Monitor 2115"
+      "Fuman Vercel Cost Health Monitor 2115",
+      "Fuman Morning Report Asia 0850 Complete"
     ],
     "expectedDisabledTasks": [
       "Fuman Public Slot Shared Source 0800",
@@ -436,6 +437,11 @@
         3,
         4,
         267009
+      ],
+      "Fuman Morning Report Asia 0850 Complete": [
+        0,
+        267009,
+        267011
       ]
     },
     "coveredBy": {
@@ -1008,10 +1014,10 @@
       "taskName": "\\Fuman Morning Report 0830 Complete",
       "displayName": "Fuman Morning Report 0830 Complete",
       "description": "Canonical 15-industry morning report, LINE, terminal and Mother Pool bridge closure.",
-      "time": "08:50",
+      "time": "08:20",
       "expectedState": "Ready",
       "expectedTriggers": [
-        "08:50"
+        "08:20"
       ]
     },
     {
@@ -1465,6 +1471,16 @@
       "expectedState": "Ready",
       "expectedTriggers": [
         "21:40"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Morning Report Asia 0850 Complete",
+      "displayName": "Fuman Morning Report Asia 0850 Complete",
+      "description": "08:50 Japan/Korea/KOSDAQ stage with independent Mother Pool handoff and acceptance.",
+      "time": "08:50",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:50"
       ]
     }
   ]

@@ -1,3 +1,4 @@
+const morningStages = require("../lib/opening-report-stage-contract");
 const morningRecovery = require("../lib/opening-report-recovery");
 "use strict";
 
@@ -14,7 +15,7 @@ const { summarizeReceiptFreshness } = require("../lib/opening-report-asia-freshn
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
-const RECEIPT_DIR = path.join(RUNTIME_DIR, "data", "opening-report-0830");
+const RECEIPT_DIR = (process.env.FUMAN_MORNING_STAGE ? morningStages.directory(RUNTIME_DIR) : path.join(RUNTIME_DIR, "data", "opening-report-0830"));
 
 function taipeiDateKey(date = new Date()) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
@@ -49,9 +50,9 @@ async function main() {
   const selfTest = false; // Formal source freeze cannot bypass the clock with --self-test.
   if (!process.argv.includes("--wrapper-owned")) throw new Error("morning_freeze_requires_unified_wrapper");
   const taipeiTime = taipeiHm();
-  const marketCalendar = await buildMarketCalendarContract({ now: calendarDateAt(tradeDate, "08:50"), stateDir: path.join(RUNTIME_DIR, "state") });
+  const marketCalendar = await buildMarketCalendarContract({ now: calendarDateAt(tradeDate, morningStages.stage().time), stateDir: path.join(RUNTIME_DIR, "state") });
   const calendarAllowsPreflight = marketCalendar.tradingDayOpen === true;
-  const withinPreflightWindow = (morningRecovery.context(tradeDate) && Date.now() >= Date.parse(morningRecovery.context(tradeDate).started_at) && Date.now() <= Date.parse(morningRecovery.cutoff(tradeDate))) || (tradeDate === taipeiDateKey() && taipeiTime >= "08:50" && taipeiTime < "08:51");
+  const withinPreflightWindow = (morningRecovery.context(tradeDate) && Date.now() >= Date.parse(morningRecovery.context(tradeDate).started_at) && Date.now() <= Date.parse(morningRecovery.cutoff(tradeDate))) || morningStages.canStart(tradeDate, new Date().toISOString());
   const shouldRunDetector = calendarAllowsPreflight && withinPreflightWindow;
   const mapCheck = validateIndustryMapContract(OPENING_REPORT_0830_INDUSTRY_MAP);
   const detector = shouldRunDetector
@@ -77,8 +78,9 @@ async function main() {
     : { status: 2, stdout: "", stderr: calendarAllowsPreflight ? "outside_0830_preflight_window" : "market_calendar_non_trading_day" };
   const frozenMarketSnapshotPath = path.join(RECEIPT_DIR, `opening-report-0830-market-snapshot-${compact}.json`);
   const frozenMarketSnapshot = readJson(frozenMarketSnapshotPath);
-  const nightIssues = require("../lib/opening-report-night-futures").verify(frozenMarketSnapshot?.night_futures,{date:tradeDate,runId,cutoff:morningRecovery.cutoff(tradeDate)});
+  const nightIssues = morningStages.verifyNight(frozenMarketSnapshot?.night_futures,{date:tradeDate,runId,cutoff:morningRecovery.cutoff(tradeDate),runtime:process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime"});
   const marketSnapshotOk = shouldRunDetector && marketSnapshotRunner.status === 0 && nightIssues.length === 0
+    && frozenMarketSnapshot?.run_id === runId
     && String(frozenMarketSnapshot?.date || "").replace(/\D/g, "") === compact
     && String(frozenMarketSnapshot?.cutoff || "") === morningRecovery.label(tradeDate)
     && Array.isArray(frozenMarketSnapshot?.items) && frozenMarketSnapshot.items.length >= 4;
@@ -98,7 +100,7 @@ async function main() {
     taipei_time: taipeiTime,
     within_0830_preflight_window: withinPreflightWindow,
     calendar_allows_preflight: calendarAllowsPreflight,
-    scheduled_start_time: `${tradeDate} 08:50:00 Asia/Taipei`,
+    scheduled_start_time: `${tradeDate} ${morningStages.stage().time}:00 Asia/Taipei`,
     evidence_cutoff: morningRecovery.label(tradeDate),
     industry_contract: CONTRACT,
     industry_count: OPENING_REPORT_0830_INDUSTRY_MAP.length,
@@ -118,9 +120,8 @@ async function main() {
     preserved_overseas_detector_receipt: preservedDetectorPath,
     overseas_detector_ok: shouldRunDetector && detectorReceipt?.ok === true && !detectorHasStalePromotion,
     us_market: detectorReceipt?.us_market || null,
-    korea_source_contract: detectorReceipt?.korea_source_contract || "korea_direct_naver_change_percent_only_v1",
-    korea_direct_source: detectorReceipt?.korea_direct_source || "Naver Finance KRX basic",
-    korea_direct_valid_count: shouldRunDetector ? (detectorReceipt?.korea_direct_valid_count ?? 0) : 0,
+    stage: morningStages.stage().id, stage_contract: morningStages.CONTRACT, detection_policy: morningStages.stage().id === "us_0820" ? "us_only_tx_night_0820_v1" : "asia_only_0850_v1",
+    disabled_markets: morningStages.stage().id === "us_0820" ? ["japan", "korea"] : ["us"],
     overseas_source_counts: shouldRunDetector ? (detectorReceipt?.overseas_source_counts || {}) : {},
     overseas_source_gap_count: shouldRunDetector ? detectorFreshness.source_gap_count : 0,
     overseas_stale_promoted_count: shouldRunDetector ? detectorFreshness.stale_promoted_count : 0,
@@ -129,7 +130,7 @@ async function main() {
     total_leaders: shouldRunDetector ? (detectorReceipt?.total_leaders ?? 0) : 0,
     reason_code: skippedForMarketClosed ? "market_calendar_non_trading_day" : (detectorHasStalePromotion ? "opening_report_0830_stale_asia_leader_promoted" : (ok ? (detectorFreshness.source_gap_count ? "opening_report_0830_preflight_ok_with_source_gaps" : "opening_report_0830_preflight_ok") : "opening_report_0830_preflight_fail_closed")),
     report_status: ok ? (detectorFreshness.source_gap_count ? "REPORT_DEGRADED" : "REPORT_OK") : "FAIL_CLOSED",
-    next_action: skippedForMarketClosed ? "skip_all_report_actions_until_next_trading_day" : "08:50 delivery must consume only this frozen 08:50 evidence and publish line_personal_plus_line_group_plus_terminal_plus_mother_pool",
+    next_action: skippedForMarketClosed ? "skip_all_report_actions_until_next_trading_day" : "08:20 delivery must consume only this frozen 08:20 evidence and publish line_personal_plus_line_group_plus_terminal_plus_mother_pool",
   };
   writeJson(receiptPath, { ...receipt, receipt_path: receiptPath });
   console.log(JSON.stringify({ ok, receipt_path: receiptPath, run_id: runId, phase: receipt.phase, reason_code: receipt.reason_code, valid_leaders: receipt.valid_leaders, total_leaders: receipt.total_leaders }, null, 2));

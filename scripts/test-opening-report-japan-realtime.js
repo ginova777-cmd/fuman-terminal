@@ -1,3 +1,4 @@
+process.env.FUMAN_MORNING_STAGE = "asia_0850";
 "use strict";
 const assert=require("assert/strict");
 const {SYMBOLS,PROVIDER,pageState,parseQuote,receiptValid,snapshot}=require("../lib/opening-report-japan-realtime");
