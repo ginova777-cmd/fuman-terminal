@@ -55,6 +55,27 @@ const STRATEGY_PRIORITY_BRIDGE_MAX_ROWS = Math.max(
 let lastStrategyPriorityBridgeRefreshAt = 0;
 let strategyPriorityBridgeRefreshPromise = null;
 
+async function prioritizeIntradayFiveMinuteStrong(rows) {
+  if (!Array.isArray(rows) || !rows.length) return rows;
+  try {
+    const tradeDate = taipeiDate();
+    const strong = await supabaseGet(
+      "v_fugle_intraday_5m_readback",
+      `select=symbol,trade_date,trend_5m_status,run_id&trade_date=eq.${tradeDate}&trend_5m_status=eq.CONFIRMED_STRONG_5M&limit=1000`,
+      { write: false },
+    );
+    const strongSet = new Set((strong || []).map((row) => normalizeCode(row.symbol)).filter(Boolean));
+    if (!strongSet.size) return rows;
+    return [...rows].sort((a, b) => {
+      const delta = Number(strongSet.has(normalizeCode(b.symbol))) - Number(strongSet.has(normalizeCode(a.symbol)));
+      return delta || Number(a.rank || 0) - Number(b.rank || 0);
+    });
+  } catch (error) {
+    console.warn(JSON.stringify({ event: "intraday_5m_priority_readback_degraded", error: error?.message || String(error) }));
+    return rows;
+  }
+}
+
 function ensureDailyStockMasterComplete() {
   if (!APPLY) return { skipped: true, reason: "not_apply_mode" };
   const current = readJson(STOCK_MASTER_RECEIPT_FILE, null);
@@ -7352,6 +7373,7 @@ async function tick() {
   intradayMap = mergeWebSocketQuoteDerivedIntradayStatus(intradayMap, priorityRows);
   tickStage("priority_build_intraday:start");
   priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
+  priorityRows = await prioritizeIntradayFiveMinuteStrong(priorityRows);
   tickStage("priority_build_intraday:complete", { rows: priorityRows.length });
   const nonFatalWriteErrors = [];
   let websocketQuoteReadthroughSync = { written: 0, skipped: true, reason: 'no_fresh_mother_quotes', candidateRows: priorityRows.length, freshRows: 0 };
