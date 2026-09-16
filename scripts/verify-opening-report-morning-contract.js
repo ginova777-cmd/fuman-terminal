@@ -482,7 +482,7 @@ async function liveDeliveryChecks(checks, tradeDate) {
   addCheck(checks,"current_full_content_hash",final.delivery_content_hash === expectedHash,"hash includes full Top3 and A/B mappings");
   try {
     const {readSnapshot} = require("../lib/supabase-snapshots");
-    const snapshot = await readSnapshot("opening_report_0830_terminal_briefing", {tradeDate,allowLatestFallback:false,timeoutMs:10000,maxAttempts:2});
+    const snapshot = await readSnapshot(process.env.FUMAN_MORNING_STAGE ? "opening_report_0830_terminal_briefing_"+morningStages.stage().id : "opening_report_0830_terminal_briefing", {tradeDate,allowLatestFallback:false,timeoutMs:10000,maxAttempts:2});
     const payload=snapshot?.payload;
     addCheck(checks,"current_terminal_db_readback",payload?.ok===true && payload.run_id===final.run_id && payload.delivery_content_hash===expectedHash && require("util").isDeepStrictEqual(payload.night_futures,final.night_futures) && payload.night_futures_summary===nightModule.summary(final.night_futures) && require("util").isDeepStrictEqual(payload.display_top3 || [], final.display_top3 || []) && compactDate(payload.date)===compactDate(tradeDate),JSON.stringify({run_id:payload?.run_id,date:payload?.date,hash:payload?.delivery_content_hash}));
   } catch(error) { addCheck(checks,"current_terminal_db_readback",false,error.message); }
