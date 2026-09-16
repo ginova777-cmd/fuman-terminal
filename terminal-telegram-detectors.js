@@ -11,8 +11,10 @@
  function paint(p){
   body.replaceChildren();box.dataset.runId=p.run_id||'';box.dataset.tradeDate=p.trade_date||'';box.dataset.eventsSha256=p.events_sha256||'';box.dataset.eventCount=String(p.event_count??0);box.dataset.status=p.status||'blocked';
   const replay=p.mode==='replay'||p.scope==='replay_integration_only';
-  line(replay?'歷史回放驗收｜未發送 Telegram，尚非正式 COMPLETE':p.complete===true?'正式驗收 COMPLETE':p.status==='empty'?'尚無當日偵測結果':'正式驗收未完成');
+  const accepted=p.acceptance?.complete===true&&p.acceptance?.run_id===p.run_id;
+  line(replay?'歷史回放驗收｜未發送 Telegram，尚非正式 COMPLETE':accepted||p.complete===true?'本批次正式驗收 COMPLETE':p.status==='empty'?'尚無當日偵測結果':'正式驗收未完成');
   if(p.trade_date)line('資料日期：'+p.trade_date+'｜批次：'+p.run_id);
+  if(p.trade_date&&p.trade_date!==new Date(Date.now()+28800000).toISOString().slice(0,10))line('目前顯示歷史批次，不能代表今日驗收完成。');
   if(p.first_blocker)line('待處理：'+p.first_blocker);
   if(p.data_gaps?.length)line('水源缺口：'+p.data_gaps.length+' 筆');
   line('5 分 K：僅為加分項目');
@@ -27,7 +29,7 @@
    for(const text of [display,symbol,labels[e.event_type]||e.event_type,Number.isFinite(ratio)?ratio.toFixed(2)+'×':'缺資料',replay?'回放未發送':delivery?.status==='delivered'?`${delivery.confirmed_count}/${delivery.target_count} 已交付`:'未確認']){const c=tr.insertCell();c.textContent=text;c.style.padding='4px 10px 4px 0';}
   }body.append(table);
  }
- async function load(){if(loading||loaded)return;loading=true;body.textContent='正在讀取三偵測器資料…';try{const r=await fetch('/api/telegram-detectors',{cache:'no-store'});const p=await r.json();paint(p);loaded=true;}catch{paint({status:'blocked',first_blocker:'三偵測器資料無法讀取',events:[]});}finally{loading=false;}}
+ async function load(){if(loading||loaded)return;loading=true;body.textContent='正在讀取三偵測器資料…';try{const run=new URLSearchParams(location.search).get('telegram-run'),r=await fetch('/api/telegram-detectors'+(run?'?run='+encodeURIComponent(run):''),{cache:'no-store'});const p=await r.json();paint(p);loaded=true;}catch{paint({status:'blocked',first_blocker:'三偵測器資料無法讀取',events:[]});}finally{loading=false;}}
  box.addEventListener('toggle',()=>{if(box.open)load();});
  if(new URLSearchParams(location.search).get('telegram-audit')==='1'){box.open=true;load();}
 })();

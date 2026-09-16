@@ -10,7 +10,7 @@ const {createSender}=require('../lib/telegram-detectors/telegram-delivery.cjs');
 const root=process.env.FUMAN_RUNTIME_DIR||'C:/fuman-runtime';
 const read=(p,fallback=null)=>{try{return JSON.parse(fs.readFileSync(p,'utf8'));}catch{return fallback;}};
 const write=(p,v)=>{fs.mkdirSync(path.dirname(p),{recursive:true});const tmp=p+'.tmp-'+process.pid;fs.writeFileSync(tmp,JSON.stringify(v,null,2));fs.renameSync(tmp,p);};
-async function main(){
+async function execute(){
  const now=new Date().toISOString(),local=new Date(Date.now()+28800000).toISOString(),date=local.slice(0,10),minute=local.slice(11,16),dir=path.join(root,'data/telegram-detectors',date);
  if(minute<'09:00'||minute>'12:30'){
   const result={contract:'telegram_three_detectors_attempt_v1',trade_date:date,checked_at:now,status:'not_due',complete:false,reason:'OUTSIDE_NOTIFICATION_WINDOW',previous_evidence_preserved:true};write(path.join(dir,'last-attempt.json'),result);return result;
@@ -19,7 +19,8 @@ async function main(){
  const calendar=await buildMarketCalendarContract({now:new Date()});
  if(calendar.marketOpen!==true){const r={contract:'telegram_three_detectors_attempt_v1',trade_date:date,checked_at:now,status:'not_due',complete:false,reason:'MARKET_CLOSED',previous_evidence_preserved:true};write(path.join(dir,'last-attempt.json'),r);return r;}
  fs.mkdirSync(dir,{recursive:true});const lock=path.join(dir,'runner.lock');let lockFd;
- try{lockFd=fs.openSync(lock,'wx');}catch(e){if(e.code==='EEXIST')throw Error('RUNNER_ALREADY_ACTIVE');throw e;}
+ try{lockFd=fs.openSync(lock,'wx');}catch(e){if(e.code!=='EEXIST')throw e;const previousLock=read(lock);let alive=true;if(Number.isInteger(previousLock?.pid)){try{process.kill(previousLock.pid,0);}catch(err){if(err.code==='ESRCH')alive=false;}}if(alive)throw Error('RUNNER_ALREADY_ACTIVE_OR_LOCK_UNVERIFIABLE');fs.renameSync(lock,lock+'.stale-'+Date.now());lockFd=fs.openSync(lock,'wx');}
+ fs.writeSync(lockFd,JSON.stringify({pid:process.pid,started_at:now}));
  try{
   const previous=read(path.join(dir,'source-latest.json'),{}),input=produce({runtimeRoot:root,now,previousOutside:previous.outsideState||{}});
   const publicKey=anonKey({root:path.resolve(__dirname,'..'),runtimeDir:root});if(!publicKey)throw Error('ANON_READBACK_KEY_MISSING');
@@ -40,5 +41,6 @@ async function main(){
   return result;
  }finally{fs.closeSync(lockFd);fs.unlinkSync(lock);}
 }
+async function main(){try{return await execute();}catch(e){const date=new Date(Date.now()+28800000).toISOString().slice(0,10),result={contract:'telegram_three_detectors_attempt_v1',run_id:'telegram-failed-'+crypto.randomUUID(),trade_date:date,checked_at:new Date().toISOString(),status:'blocked',complete:false,exit_code:1,failed_checks:[e.message||'RUNNER_EXCEPTION'],first_blocker:e.message||'RUNNER_EXCEPTION',previous_good_preserved:true};write(path.join(root,'data/telegram-detectors',date,'last-attempt.json'),result);write(path.join(root,'data/scan-receipts/telegram-three-detectors-runner-'+date.replaceAll('-','')+'.json'),result);return result;}}
 if(require.main===module)main().then(r=>{console.log(JSON.stringify({status:r.status,complete:r.complete,run_id:r.run_id,event_count:r.event_count,first_blocker:r.first_blocker||r.reason},null,2));process.exitCode=r.status==='not_due'||r.integration_complete===true?0:1;}).catch(e=>{console.error(e.message);process.exitCode=1;});
 module.exports={main};
