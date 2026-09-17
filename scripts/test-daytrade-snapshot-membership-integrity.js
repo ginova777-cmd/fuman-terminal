@@ -1,0 +1,16 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {inspectSnapshot}=require('../lib/daytrade-mother-pool-snapshot');
+const date='2026-09-16',run='snapshot-test';
+const member={symbol:'2330',mother_pool_run_id:run,mother_pool_snapshot_sequence:1,membership_status:'ACTIVE',membership_effective_at:date+'T01:00:00Z'};
+const base={contract:'daytrade_mother_pool_snapshot_v1',contract_version:'4.1.0',trade_date:date,canonical_run_id:'fugle_daytrade_source:20260916:canonical',mother_pool_run_id:run,snapshot_sequence:1,snapshot_type:'OPENING_SNAPSHOT',effective_at:date+'T01:00:00Z',complete:true,status:'complete',exit_code:0,first_blocker:null,symbol_count:1,symbols:['2330'],removed_symbols:[],symbol_membership:[member]};
+const check=patch=>inspectSnapshot({...base,...patch},date).ok;
+assert.equal(check({}),true);
+for(const removed_symbols of [null,{},'2330',['2317','2317'],[2317]])assert.equal(check({removed_symbols}),false);
+assert.equal(check({symbols:[2330]}),false);
+assert.equal(check({symbol_membership:[{...member,symbol:2330}]}),false);
+for(const invalid of [undefined,null,20260916,'2026-02-30','invalid'])assert.equal(inspectSnapshot(base,invalid).ok,false);
+assert.equal(check({symbols:[],symbol_count:0,symbol_membership:[]}),true);
+for(const patch of [{symbol_membership:[member,member]},{symbol_membership:[null]},{symbol_membership:[{...member,membership_status:'REMOVED'}]},{symbol_membership:[member,{...member,symbol:'2317'}]},{removed_symbols:['2330']},{removed_symbols:['2317']},{symbol_membership:[{...member,mother_pool_snapshot_sequence:2}]},{complete:false}])assert.equal(check(patch),false,JSON.stringify(patch));
+assert.equal(check({removed_symbols:['2317'],symbol_membership:[member,{...member,symbol:'2317',membership_status:'REMOVED'}]}),true);
+console.log('PASS snapshot membership: empty summary accepted, duplicates/mixed sequence/removed active/unlisted members rejected');

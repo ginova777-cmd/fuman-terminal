@@ -9,7 +9,14 @@ const expected={checked_at:new Date(now).toISOString(),requested_count:201,ready
  const options={deadlineMs:now+20000,now:()=>now,readRpc:async(body,opt)=>{calls++;assert.ok(body.symbols.length<=100);assert.equal(body.bars_per_symbol,3);assert.ok(opt.timeoutMs<=5000);return rows.filter(r=>body.symbols.includes(r.symbol));}};
  const good=await readbackCandles(expected,options);assert.equal(good.exit_code,0);assert.equal(calls,3);assert.equal(good.complete,false);
  const missing=await readbackCandles(expected,{...options,readRpc:async()=>[]});assert.equal(missing.exit_code,1);
+ for(const invalid of [null,{}, {symbol:'2330',status:'UNKNOWN'}])await assert.rejects(()=>readbackCandles({...expected,items:[invalid]},options),/B01_EXPECTED_ITEMS_INVALID/);
  const one={...expected,requested_count:1,ready_count:1,items:[expected.items[0]]};
+ const oversized=await readbackCandles(one,{...options,readRpc:async()=>Array(4).fill(rows[0])});
+ assert.equal(oversized.first_blocker,'B01_ANON_RPC_READ_FAILED');
+ let lateClock=now;
+ const late=await readbackCandles(one,{deadlineMs:now+1000,now:()=>lateClock,readRpc:async()=>{lateClock=now+1001;return [rows[0]];}});
+ assert.equal(late.first_blocker,'B01_READBACK_BUDGET_EXHAUSTED');
+ assert.equal(late.candle_readback_verified,false);
  let clock=now+29000;
  const crossing=await readbackCandles(one,{deadlineMs:now+60000,now:()=>clock,readRpc:async()=>{clock=now+30001;return [rows[0]];}});
  assert.equal(crossing.candle_readback_verified,false);

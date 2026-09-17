@@ -1,0 +1,14 @@
+'use strict';
+const assert=require('node:assert/strict'),{calculate}=require('../lib/mother-pool-side-rolling-baseline');
+const rows=Array.from({length:20},(_,i)=>({outside_1m:i+1,inside_1m:1}));
+assert.equal(calculate(rows).outside.baseline,10.5);
+assert.equal(calculate(rows.slice(0,9)).outside.status,'INSUFFICIENT_SAMPLE');
+assert.equal(calculate(rows.slice(0,10)).outside.baseline,5.5);
+const zero=calculate(rows.map(x=>({...x,inside_1m:0})));
+assert.equal(zero.outside.baseline,null);assert.equal(zero.outside.zero_denominator_count,20);
+assert.equal(zero.inside.status,'BASELINE_ZERO');
+assert.equal(calculate([null,...rows.slice(1)]).outside.status,'DATA_GAP');
+assert.equal(calculate([{outside_1m:Number.MAX_VALUE,inside_1m:Number.MIN_VALUE}]).outside.invalid_count,1);
+assert.throws(()=>calculate([...rows,rows[0]]),/INVALID_ROLLING_WINDOW/);
+assert.deepEqual(rows.map(x=>x.outside_1m),Array.from({length:20},(_,i)=>i+1));
+console.log('PASS rolling side median: minimum samples, both directions, zero denominators, overflow and no input mutation');

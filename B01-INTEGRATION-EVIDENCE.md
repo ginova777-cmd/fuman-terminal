@@ -1,5 +1,11 @@
 # B01 integration evidence — not deployed
 
+## Follow-up bounded readback audit
+
+Current candidate rejects malformed expected items before RPC, responses exceeding the requested three-bars-per-symbol batch ceiling, and responses completing after the overall readback deadline. A successful response arriving after the deadline cannot be reported as verified even if its candle remains fresh. The adapter test covers all three cases with isolated inputs.
+
+Re-executed successfully: `test-readback-b01-candles.js`, `test-b01-candle-readback.js`, `test-daytrade-early-candle-flush.js`, `test-b01-full-market-evidence-wiring.js`, `test-b01-collector-writer-volume.js`, Writer syntax check and `git diff --check`. These results do not replace natural production latency measurements, deployment, or receiver acceptance. Overall B01 remains incomplete.
+
 ## Main reconciliation
 
 Merged locally with origin/main `b12421fb03d1dd1dc73fc73cb5117bb5c52a768a`. Six conflict resolutions preserve production full-universe turnover gaps/anon delivery, pinned Strategy3 snapshot, core-only mother-pool verifier completion boundary, and retain main's new Telegram code-contract entry. No notification formulas changed. The legacy closeout regression imported removed notifier helpers; four cases now exercise actual current delivery-pipeline persistence/dedup/target evidence instead. All 12 closeout checks pass without network. Writer identity, MA20, 29 turnover checks, 14 pinned snapshot checks, B01 tests and verify:contracts passed during integration. Formal acceptance remains pending.

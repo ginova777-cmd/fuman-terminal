@@ -21,6 +21,14 @@ test('missing anon proof never complete',()=>assert.equal(verifyDelivery(ranking
 test('same batch anon receipt includes all fields',()=>{const r=ranking(),v=verifyDelivery(r,r,{read_role:'anon',db_readback_ok:true});assert.equal(v.complete,true);assert.equal(v.written_count,3);assert.equal(v.readback_count,3);assert.equal(v.rows.length,2);assert.equal(v.data_gaps.length,1);});
 test('self consistent different batch fails',()=>{const r=ranking(),a=structuredClone(r);a.run_id+='other';assert.equal(verifyDelivery(a,r,{read_role:'anon',db_readback_ok:true}).complete,false);});
 test('empty universe does not complete',()=>assert.equal(verify(rankTurnover([],{tradeDate,canonicalRunId,now})).complete,false));
+for (const bad of [null, [], false, 'invalid']) test('malformed readback '+JSON.stringify(bad),()=>{
+ const r=ranking();r.rows[0]=bad;assert.equal(verify(r).complete,false);
+ const g=ranking();g.data_gaps[0]=bad;assert.equal(verify(g).complete,false);
+});
+test('independent verifier rejects conversion overflow',()=>{
+ const r=ranking();Object.assign(r.rows[0],{cumulative_volume:Number.MAX_VALUE,cumulative_volume_shares:Infinity,turnover_pct:Infinity});
+ const v=verify(r);assert.equal(v.complete,false);assert(v.failed_checks.includes('volume_conversion:2303'));assert(v.failed_checks.includes('formula:2303'));
+});
 test('native oddlot units explicit',()=>assert.equal(nativeVolume({market:'TSE',intradayOddLot:true,total:{tradeVolume:5,time:Date.parse(now)*1000}},'fixture').unit,'shares'));
 test('full market selection keeps missing master and low priced nonmembers',()=>{
  const source=fs.readFileSync(require('node:path').join(__dirname,'run-daytrade-source-writer.js'),'utf8');
