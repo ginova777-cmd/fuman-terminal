@@ -8161,9 +8161,17 @@ function buildB19B24Evidence(rows) {
     );
     const side = contextDetectors.b20({ inside_1m: m.insideVolume, outside_1m: m.outsideVolume });
     const vwap = contextDetectors.b21({ raw_turnover_value: m.tradeValue, raw_turnover_unit: m.tradeValueUnit, raw_volume: m.totalVolume, raw_volume_unit: m.totalVolumeUnit, current_price: m.price });
-    const range = contextDetectors.b22({ current_price: m.price, opening_range_bars: Array.isArray(m.openingRangeBars) ? m.openingRangeBars : [] });
-    const position = contextDetectors.b23({ current_price: m.price, day_high_so_far: m.highPrice, day_low_so_far: m.lowPrice, today_open: m.openPrice });
-    return { symbol: row.symbol, b19, b20: side, b21: vwap, b22: range, b23: position, b24: { status: "PENDING_EVENT_INPUT", formal_candidate_allowed: false, publish_allowed: false } };
+    const eventTimestamp = m.eventAt ?? row.event_at ?? row.updated_at;
+    const range = contextDetectors.b22({ current_price: m.price, event_timestamp: eventTimestamp, timestamp: eventTimestamp, opening_range_bars: Array.isArray(m.openingRangeBars) ? m.openingRangeBars : [] });
+    const position = contextDetectors.b23({ current_price: m.price, day_high_so_far: m.highPrice, day_low_so_far: m.lowPrice, today_open: m.openPrice, bars_through_event: Array.isArray(m.barsThroughEvent) ? m.barsThroughEvent : [] });
+    const events = [];
+    if (b19.b19_signal === "PRICE_SPIKE_DOWN") events.push({ type: "PRICE_SPIKE_DOWN", event_id: `${row.symbol}:B19`, event_timestamp: eventTimestamp });
+    if (side.b20_raw_strong) events.push({ type: "INSIDE_STRONG", event_id: `${row.symbol}:B20`, event_timestamp: eventTimestamp });
+    if (range.break_direction) events.push({ type: `OPENING_RANGE_BREAK_${range.break_direction}`, event_id: `${row.symbol}:B22`, event_timestamp: eventTimestamp });
+    if (position.new_high) events.push({ type: "NEW_INTRADAY_HIGH", event_id: `${row.symbol}:B23H`, event_timestamp: eventTimestamp });
+    if (position.new_low) events.push({ type: "NEW_INTRADAY_LOW", event_id: `${row.symbol}:B23L`, event_timestamp: eventTimestamp });
+    const combinations = contextDetectors.b24(events);
+    return { symbol: row.symbol, b19, b20: side, b21: vwap, b22: range, b23: position, b24: { status: combinations.length ? "READY" : (events.length ? "NO_COMBINATION" : "DATA_GAP"), combinations, formal_candidate_allowed: false, publish_allowed: false } };
   });
   return { contract: "daytrade_intraday_b19_b24_event_evidence_v1", status: "attached", rows: evidence, b19_b24_formal_candidate_allowed: false, b19_b24_publish_allowed: false, note: "B19/B24 require natural intraday event stream; absent inputs remain DATA_GAP/PENDING and are never synthesized." };
 }
