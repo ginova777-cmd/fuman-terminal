@@ -27,6 +27,7 @@ const { buildDaytradeIndustryPrewarm } = require("../lib/daytrade-industry-prewa
 const DAYTRADE_INDUSTRY_PREWARM_CONFIG = require("../data/daytrade-industry-prewarm-v1.json");
 const { isTwseTradingDay } = require("./twse-trading-day");
 const contextDetectors = require("../lib/intraday-context-detectors-b19-b24");
+const preopenA15A19 = require("../lib/preopen-a15-a19");
 
 const SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
 const SOURCE_HOST_ID = String(process.env.FUMAN_DAYTRADE_SOURCE_HOST_ID || process.env.FUMAN_SOURCE_HOST_ID || process.env.COMPUTERNAME || "unknown").trim();
@@ -8017,6 +8018,7 @@ async function tick() {
     metrics: quoteMetrics(row.symbol, dailyVolumeMap, quoteMap, supplementalMaps),
   }));
   result.payload.b19_b24_event_evidence = buildB19B24Evidence(result.industryUniverseRows);
+  result.payload.preopen_a15_a19_evidence = buildPreopenA15A19Evidence(activeSymbols, quoteMap, taipeiDate());
   result.payload.nonfatal_write_errors = fetchResult.errors || [];
   result.payload.websocket_quote_readthrough_written = websocketQuoteReadthroughSync.written || 0;
   result.payload.websocket_quote_readthrough_skipped = Boolean(websocketQuoteReadthroughSync.skipped);
@@ -8149,6 +8151,18 @@ async function tick() {
     errors: fetchResult.errors?.slice(0, 5) || [],
     message: result.message,
   };
+}
+
+function buildPreopenA15A19Evidence(activeSymbols, quoteMap, tradeDate) {
+  const rows = Array.isArray(activeSymbols) ? activeSymbols : [];
+  const a15Rows = rows.map((r) => preopenA15A19.a15({ symbol: r.symbol, prev_open: r.prev_open ?? r.previous_open, prev_high: r.prev_high ?? r.previous_high, prev_low: r.prev_low ?? r.previous_low, prev_close: r.prev_close ?? r.previous_close, prev_vwap: r.prev_vwap ?? null }));
+  const a17Samples = [];
+  for (const [symbol, q] of (quoteMap instanceof Map ? quoteMap.entries() : [])) {
+    if (q?.is_trial === true) a17Samples.push({ symbol, capture_slot: q.capture_slot || q.trial_capture_slot, is_trial: true, trial_price: q.trial_price ?? q.payload?.trialPrice, trial_event_at: q.trial_event_at });
+  }
+  const evidence = { a15: a15Rows, a16: [], a17: preopenA15A19.a17(a17Samples), a18: preopenA15A19.a18(a15Rows.map((r) => ({ status: r.data_gap ? "DATA_GAP" : "READY", reason: r.data_gap ? "A15_DATA_GAP" : null }))) };
+  const receipt = preopenA15A19.a19(evidence);
+  return { contract: receipt.contract, trade_date: tradeDate, canonical_run_id: `${SOURCE_NAME}:${String(tradeDate).replace(/-/g, "")}:canonical`, ...evidence, ...receipt, formal_candidate_allowed: false, publish_allowed: false };
 }
 
 function buildB19B24Evidence(rows) {
