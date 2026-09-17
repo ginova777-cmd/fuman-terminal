@@ -8176,8 +8176,8 @@ function buildB19B24Evidence(rows) {
       Array.isArray(m.priorReturns) ? m.priorReturns : [],
       Array.isArray(m.sameMinuteReturns) ? m.sameMinuteReturns : [],
     );
-    const side = contextDetectors.b20({ inside_1m: m.insideVolume, outside_1m: m.outsideVolume });
-    const vwap = contextDetectors.b21({ raw_turnover_value: m.tradeValue, raw_turnover_unit: m.tradeValueUnit, raw_volume: m.totalVolume, raw_volume_unit: m.totalVolumeUnit, current_price: m.price });
+    const side = contextDetectors.b20({ inside_1m: m.insideVolume, outside_1m: m.outsideVolume, side_volume_unit: m.sideVolumeUnit, side_volume_event_at: m.sideVolumeEventAt ?? eventTimestamp, side_volume_is_minute: m.sideVolumeIsMinute === true });
+    const vwap = contextDetectors.b21({ raw_turnover_value: m.tradeValue, raw_turnover_unit: m.tradeValueUnit, raw_volume: m.totalVolume, raw_volume_unit: m.totalVolumeUnit, turnover_event_at: m.turnoverEventAt ?? eventTimestamp, current_price: m.price });
     const eventTimestamp = m.eventAt ?? row.event_at ?? row.updated_at;
     const range = contextDetectors.b22({ trade_date: row.trade_date ?? m.tradeDate, canonical_run_id: row.canonical_run_id ?? m.canonicalRunId, current_price: m.price, event_timestamp: eventTimestamp, timestamp: eventTimestamp, opening_range_bars: Array.isArray(m.openingRangeBars) ? m.openingRangeBars : [] });
     const position = contextDetectors.b23({ current_price: m.price, today_open: m.openPrice, bars_through_event: Array.isArray(m.barsThroughEvent) ? m.barsThroughEvent : [] });
