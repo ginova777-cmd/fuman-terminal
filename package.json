@@ -95,6 +95,7 @@
     "verify:daytrade-intraday-5m-readback": "node --use-system-ca scripts/verify-daytrade-intraday-5m-readback.js",
     "run:daytrade-intraday-5m-writer": "node --use-system-ca scripts/run-daytrade-intraday-5m-writer.js",
     "run:daytrade-intraday-5m-complete": "node --use-system-ca scripts/run-daytrade-intraday-5m-complete.js",
+    "verify:daytrade-five-minute-priority": "node scripts/test-daytrade-five-minute-priority.js",
     "apply:daytrade-source-contract-alignment": "node --use-system-ca scripts/apply-daytrade-source-contract-alignment.js",
     "verify:daytrade-source-writer": "node --check scripts/run-daytrade-source-writer.js && node --use-system-ca scripts/run-daytrade-source-writer.js --local-check",
     "test:daytrade-candle-priority-persistence": "node --check lib/daytrade-candle-priority-persistence.js && node --check lib/daytrade-industry-prewarm.js && node --check scripts/run-daytrade-source-writer.js && node scripts/test-daytrade-candle-priority-persistence.js",
