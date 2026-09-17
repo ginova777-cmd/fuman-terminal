@@ -8172,15 +8172,15 @@ function buildB19B24Evidence(rows) {
   const evidence = (Array.isArray(rows) ? rows : []).map((row) => {
     const m = row.metrics || {};
     const b19 = contextDetectors.b19(
-      { close: m.price ?? row.close, previous_close: m.previousClose ?? row.previous_close, timestamp: m.eventAt ?? row.event_at ?? row.updated_at },
+      { close: m.price ?? row.close, previous_minute_close: m.previousMinuteClose ?? m.previous_minute_close ?? row.previous_minute_close, timestamp: m.eventAt ?? row.event_at ?? row.updated_at },
       Array.isArray(m.priorReturns) ? m.priorReturns : [],
       Array.isArray(m.sameMinuteReturns) ? m.sameMinuteReturns : [],
     );
     const side = contextDetectors.b20({ inside_1m: m.insideVolume, outside_1m: m.outsideVolume });
     const vwap = contextDetectors.b21({ raw_turnover_value: m.tradeValue, raw_turnover_unit: m.tradeValueUnit, raw_volume: m.totalVolume, raw_volume_unit: m.totalVolumeUnit, current_price: m.price });
     const eventTimestamp = m.eventAt ?? row.event_at ?? row.updated_at;
-    const range = contextDetectors.b22({ current_price: m.price, event_timestamp: eventTimestamp, timestamp: eventTimestamp, opening_range_bars: Array.isArray(m.openingRangeBars) ? m.openingRangeBars : [] });
-    const position = contextDetectors.b23({ current_price: m.price, day_high_so_far: m.highPrice, day_low_so_far: m.lowPrice, today_open: m.openPrice, bars_through_event: Array.isArray(m.barsThroughEvent) ? m.barsThroughEvent : [] });
+    const range = contextDetectors.b22({ trade_date: row.trade_date ?? m.tradeDate, canonical_run_id: row.canonical_run_id ?? m.canonicalRunId, current_price: m.price, event_timestamp: eventTimestamp, timestamp: eventTimestamp, opening_range_bars: Array.isArray(m.openingRangeBars) ? m.openingRangeBars : [] });
+    const position = contextDetectors.b23({ current_price: m.price, today_open: m.openPrice, bars_through_event: Array.isArray(m.barsThroughEvent) ? m.barsThroughEvent : [] });
     const events = [];
     if (b19.b19_signal === "PRICE_SPIKE_DOWN") events.push({ type: "PRICE_SPIKE_DOWN", event_id: `${row.symbol}:B19`, event_timestamp: eventTimestamp });
     if (side.b20_raw_strong) events.push({ type: "INSIDE_STRONG", event_id: `${row.symbol}:B20`, event_timestamp: eventTimestamp });
