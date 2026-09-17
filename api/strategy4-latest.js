@@ -431,6 +431,7 @@ function buildPayload(rows, total, run = null, options = {}) {
     ok: true,
     status: gateContract.status,
     resultContract: runPayload.resultContract || "",
+    recentVolumeBonusContract: runPayload.recentVolumeBonusContract || "",
     source: "supabase:strategy4_scan_results",
     cacheSource: "supabase-api",
     ...runTimeSourceSnapshotResponseFields(run?.payload || {}),
