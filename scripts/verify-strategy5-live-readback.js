@@ -57,7 +57,7 @@ async function main() {
     report = { ...report, ok: true, tradeDate: date, scannedCount: run.scanned_count, expectedTotal: run.expected_total, resultCount: rows.length, readbackCount: rows.length, selectionCoverage: run.payload.selectionCoverage, technicalFreshReadback: true, technicalSourceHash: run.payload.technicalSourceHash, rows, visibleRows: visible };
     fs.writeFileSync(path.join(out, 'readback.json'), JSON.stringify(report, null, 2));
     if (process.argv.includes('--render')) {
-      const args = ['--use-system-ca', path.join(root, 'scripts/verify-terminal-ui-e2e.js'), '--routes=strategy5', '--only=desktop-night,desktop-sun,mobile-night,mobile-sun', '--skip-watchlist', '--skip-mobile-watch-add', '--include-strategy5-scorecard', '--strategy5-readback=' + path.join(out,'readback.json'), '--expected-run-id=' + scan.runId, '--expected-total=' + rows.length, '--expected-scorecard-symbols=' + visible.slice(0,120).map(r=>r.code).join(','), '--out=' + path.join(out,'rendered'), '--route-timeout=90000'];
+      const args = ['--use-system-ca', path.join(root, 'scripts/verify-terminal-ui-e2e.js'), '--routes=strategy5', '--only=desktop-night,desktop-sun,mobile-night,mobile-sun', '--skip-watchlist', '--skip-mobile-watch-add', '--include-strategy5-scorecard', '--strategy5-readback=' + path.join(out,'readback.json'), '--expected-run-id=' + scan.runId, '--expected-total=' + rows.length, '--expected-scorecard-symbols=' + visible.map(r=>r.code).join(','), '--out=' + path.join(out,'rendered'), '--route-timeout=90000'];
       const result = cp.spawnSync(process.execPath, args, { cwd: root, stdio: 'inherit', windowsHide: true });
       assert(result.status === 0, 'actual three-surface acceptance failed');
     }

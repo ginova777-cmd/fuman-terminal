@@ -47,7 +47,7 @@ const TASKS = [
     endpoint: "/api/strategy5-latest",
     modulePath: "../api/strategy5-latest",
     arrayKeys: ["matches", "rows"],
-    limit: 120,
+    limit: 2000,
   },
   {
     key: "institution",
@@ -883,7 +883,7 @@ async function fetchStrategy5LatestCompletePayload() {
       "strategy=eq.strategy5",
       `run_id=eq.${encodeURIComponent(run.run_id)}`,
       "order=rank.asc",
-      "limit=120",
+      "limit=2000",
     ].join("&"),
   );
   const rows = resultRows.map((row, index) => {

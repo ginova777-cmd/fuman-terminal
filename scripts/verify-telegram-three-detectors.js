@@ -26,5 +26,25 @@ async function main({publishReceipt=false}={}){
  if(receipt.complete&&publishReceipt){const key='telegram_three_detectors_acceptance_'+receipt.run_id,published=await upsertSnapshot(key,receipt,{tradeDate:date,snapshotId:receipt.run_id});const confirmed=published.ok?(await readSnapshot(key,{maxAttempts:1,timeoutMs:8000}))?.payload:null;if(digest(confirmed)!==digest(receipt)){receipt.complete=false;receipt.status='blocked';receipt.exit_code=1;receipt.failed_checks.push('ACCEPTANCE_DB_READBACK_FAILED');receipt.first_blocker='ACCEPTANCE_DB_READBACK_FAILED';}}
  const target=path.join(root,'data/scan-receipts/telegram-three-detectors-final-'+date.replaceAll('-','')+'.json');fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target+'.tmp',JSON.stringify(receipt,null,2));fs.renameSync(target+'.tmp',target);console.log(JSON.stringify(receipt,null,2));return receipt;
 }
-if(require.main===module)main({publishReceipt:process.argv.includes('--publish-receipt')}).then(r=>{process.exitCode=r.exit_code;}).catch(e=>{console.error(e.message);process.exitCode=1;});
+function verifyCodeContract(){
+ const assert=require('assert/strict'),{spawnSync}=require('child_process'),repo=path.resolve(__dirname,'..');
+ const text=f=>fs.readFileSync(path.join(repo,f),'utf8');
+ const c=JSON.parse(text('data/contracts/telegram_three_independent_detectors_v1.json'));
+ assert.equal(c.contract,'telegram_three_independent_detectors_v1');
+ assert.equal(c.runner,'scripts/run-telegram-three-detectors.js');assert.equal(c.verifier,'scripts/verify-telegram-three-detectors.js');
+ assert.equal(c.five_minute_role,'bonus_only');assert.equal(c.replay_publish_allowed,false);
+ assert.deepEqual(c.formal_complete_requires,['natural_source_independent_check','database_anonymous_readback','per_target_telegram_message_acknowledgement','desktop_mobile_scorecard_rendered_same_batch']);
+ assert.equal(c.current_round_complete_is_not_full_day_complete,true);
+ const pkg=JSON.parse(text('package.json'));assert.equal(pkg.scripts['verify:daytrade-burst-telegram'],'node --use-system-ca scripts/verify-telegram-three-detectors.js');
+ assert(text('run-daytrade-intraday-burst-telegram.ps1').includes('run-telegram-three-detectors.js'));
+ assert(text('run-terminal-master-control.ps1').includes('verify-telegram-three-detectors.js'));
+ for(const [file,target] of [['scripts/verify-daytrade-intraday-burst-telegram.js','verify-telegram-three-detectors'],['scripts/notify-daytrade-intraday-burst-telegram.js','run-telegram-three-detectors']]){
+  const shim=text(file);assert(shim.length<600&&shim.includes("require('./"+target+"')"),'Legacy entry must only dispatch');
+ }
+ for(const file of ['index.html','mobile.html','88.html'])assert(text(file).includes('terminal-telegram-detectors.js'));
+ const tests=['scripts/test-provider-side-journal.cjs',...['volume','price','outside','provider-minute-side','telegram-event-adapter','telegram-delivery','delivery-pipeline','natural-source-runner'].map(n=>'lib/telegram-detectors/test-'+n+'.cjs')];
+ for(const file of tests){const r=spawnSync(process.execPath,[file],{cwd:repo,encoding:'utf8',windowsHide:true});if(r.status!==0)throw Error(file+': '+(r.stderr||r.stdout));}
+ const result={scope:'code_contract_only',ok:true,tests:tests.length,formal_acceptance_evaluated:false,receipt_written:false};console.log(JSON.stringify(result));return result;
+}
+if(require.main===module){if(process.argv.includes('--contract')){try{verifyCodeContract();}catch(e){console.error(e.message);process.exitCode=1;}}else main({publishReceipt:process.argv.includes('--publish-receipt')}).then(r=>{process.exitCode=r.exit_code;}).catch(e=>{console.error(e.message);process.exitCode=1;});}
 module.exports={main};

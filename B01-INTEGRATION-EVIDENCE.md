@@ -1,5 +1,9 @@
 # B01 integration evidence — not deployed
 
+## Main reconciliation
+
+Merged locally with origin/main `b12421fb03d1dd1dc73fc73cb5117bb5c52a768a`. Six conflict resolutions preserve production full-universe turnover gaps/anon delivery, pinned Strategy3 snapshot, core-only mother-pool verifier completion boundary, and retain main's new Telegram code-contract entry. No notification formulas changed. The legacy closeout regression imported removed notifier helpers; four cases now exercise actual current delivery-pipeline persistence/dedup/target evidence instead. All 12 closeout checks pass without network. Writer identity, MA20, 29 turnover checks, 14 pinned snapshot checks, B01 tests and verify:contracts passed during integration. Formal acceptance remains pending.
+
 Base production SHA: `8bf58ab003af28efb2cca436f19a1516f2660457`.
 
 Scoped port: latest natural candle mapping/order/evidence, early full-active-universe flush after lease and active-symbol fetch but before slow enrichment, bounded anon exact-bar readback using completion-time freshness, source-status evidence attachment. Early mode does not advance historical seed checkpoints. Existing production Writer identity and MA20 code retained.
