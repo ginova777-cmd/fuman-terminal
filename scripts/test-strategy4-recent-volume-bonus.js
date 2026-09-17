@@ -1,0 +1,14 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {calculate,valid}=require('../lib/strategy4-recent-volume-bonus');
+const dates=Array.from({length:15},(_,i)=>`2026-08-${String(i+1).padStart(2,'0')}`);
+const rows=()=>dates.map(date=>({date,volume_lots:2000}));
+test('inclusive 2.5, excludes inspected day from denominator',()=>{const r=rows();r[14].volume_lots=5000;const e=calculate(r,dates,dates[14]);assert.equal(e.points,5);assert.equal(e.evaluations.at(-1).priorAverageLots,2000);assert.equal(e.evaluations.at(-1).ratio,2.5);assert(valid(e));});
+test('below threshold no points',()=>{const r=rows();r[14].volume_lots=4999;assert.equal(calculate(r,dates,dates[14]).points,0);});
+test('multiple hits only five points',()=>{const r=rows();r[5].volume_lots=5000;r[14].volume_lots=5000;const e=calculate(r,dates,dates[14]);assert.equal(e.matchedDates.length,2);assert.equal(e.points,5);});
+test('missing date does not borrow older date',()=>{const r=rows();r.splice(10,1);r.at(-1).volume_lots=5000;const e=calculate(r,dates,dates[14]);assert.equal(e.points,0);assert.equal(e.status,'unavailable');assert(valid(e));});
+test('zero baseline not infinity',()=>{const r=rows().map(x=>({...x,volume_lots:0}));r[14].volume_lots=5000;assert.equal(calculate(r,dates,dates[14]).points,0);});
+test('shares explicit conversion',()=>{const r=rows().map(x=>({date:x.date,volume_shares:x.volume_lots*1000}));r[14].volume_shares=5000000;assert.equal(calculate(r,dates,dates[14]).points,5);});
+test('tamper ratio or points rejected',()=>{const e=calculate(rows(),dates,dates[14]);e.points=5;assert.equal(valid(e),false);});
+test('out of window spike not eligible',()=>{const r=rows();r[4].volume_lots=50000;assert.equal(calculate(r,dates,dates[14]).points,0);});
+test('duplicate and future dates cannot create match',()=>{const r=rows();r.push({date:dates[14],volume_lots:50000},{date:'2026-12-31',volume_lots:100000});assert.equal(calculate(r,dates,dates[14]).points,0);});

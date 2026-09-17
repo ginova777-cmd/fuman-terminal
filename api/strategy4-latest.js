@@ -188,6 +188,7 @@ function normalizePayload(row) {
     zone_label: swingZoneLabel,
     pattern: String(payload.pattern || payload.strategy || swingZoneLabel || swingZone).trim(),
     signals,
+    recentVolumeBonus: payload.recentVolumeBonus || null,
     date: String(payload.date || payload.tradeDate || payload.usedDate || row.scan_date || "").trim(),
     usedDate: String(payload.usedDate || payload.tradeDate || payload.date || row.scan_date || "").trim(),
     priceSource: String(payload.priceSource || row.price_source || "").trim(),

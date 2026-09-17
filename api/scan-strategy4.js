@@ -1050,7 +1050,7 @@ function calcBuyStreak(rows, ma20, volMa20) {
   return streak;
 }
 
-function scanStrategy4(code, market, rows, priceSource = "") {
+function scanStrategy4(code, market, rows, priceSource = "", recentVolumeBonus = null) {
   const daily = analyzeRows(rows);
   if (!daily) return null;
   // Daily KD/RSI affect bonus points only; pattern eligibility is independent.
@@ -1271,10 +1271,12 @@ function scanStrategy4(code, market, rows, priceSource = "") {
   );
   const technicalBonus = require("../lib/strategy4-v4-evidence").technicalBonus(daily.dailyTechnicalGate);
   const baseScore = Math.min(100, rawBaseScore);
-  const score = Math.min(100, baseScore + technicalBonus.total);
+  recentVolumeBonus = recentVolumeBonus || require('../lib/strategy4-recent-volume-bonus').calculate([], [], last.date);
+  const score = Math.min(100, baseScore + technicalBonus.total + recentVolumeBonus.points);
+  const volumeBonusText = recentVolumeBonus.points ? '近期放量＋5｜' + recentVolumeBonus.matchedDates.join('、') + '｜最高量比 ' + recentVolumeBonus.maxRatio.toFixed(2) + '倍' : '近期放量＋0｜' + recentVolumeBonus.status;
 
   return {
-    baseScore, rawBaseScore, technicalBonus,
+    baseScore, rawBaseScore, technicalBonus, recentVolumeBonus,
     code,
     market,
     priceSource,
@@ -1364,7 +1366,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
       isRunawayUp: runawayGap,
       isBreakawayUp: breakawayGap,
     },
-    reason: signals[0].reason,
+    reason: signals[0].reason + "；" + volumeBonusText,
   };
 }
 
@@ -1405,7 +1407,7 @@ module.exports = async function handler(request, response) {
     return {
       code,
       source,
-      match: scanStrategy4(code, history.market, history.rows, source),
+      match: scanStrategy4(code, history.market, history.rows, source, await require('../lib/strategy4-recent-volume-bonus').forSymbol(code, history.rows.at(-1).date)),
     };
   }));
   const sourceCounts = {};
@@ -1417,7 +1419,7 @@ module.exports = async function handler(request, response) {
   const matches = results
     .filter((result) => result.status === "fulfilled" && result.value?.match)
     .map((result) => result.value.match || result.value)
-    .sort((a, b) => b.score - a.score || b.percent - a.percent);
+    .sort(require('../lib/strategy4-v4-evidence').compareRank);
   const noDataCodes = results
     .filter((result) => result.status === "fulfilled" && result.value?.noData)
     .map((result) => result.value.code);
