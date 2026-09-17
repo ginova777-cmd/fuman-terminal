@@ -27,7 +27,7 @@ for (const bad of [{bar_end:"2026-09-16T03:00:00Z"}, {run_id:"old"}, {is_synthet
 }
 assert.equal(applyFiveMinutePriority(pool, [waitBar,bar], receipt, snapshot, Date.parse("2026-09-16T00:55:00Z")).fiveMinutePriorityEvidence.status,"not_due");
 assert.equal(applyFiveMinutePriority(pool, [waitBar,bar], receipt, snapshot, Date.parse("2026-09-16T05:30:00Z")).fiveMinutePriorityEvidence.status,"not_due");
-assert.equal(applyFiveMinutePriority(pool,[waitBar,bar],{...receipt,complete:false},snapshot,now).fiveMinutePriorityEvidence.status,"blocked");
+assert.equal(applyFiveMinutePriority(pool,[waitBar,bar],{...receipt,complete:false},snapshot,now).fiveMinutePriorityEvidence.status,"unavailable");
 assert.deepEqual(applyFiveMinutePriority(pool,[waitBar,bar,bar],receipt,snapshot,now).fiveMinutePriorityEvidence.promoted_symbols,[]);
 console.log("PASS intraday priority: time, source, freshness, run, snapshot, duplicate rejection, metadata and eligibility preservation");
 const { verifyPriorityPublication } = require("../lib/daytrade-five-minute-priority");
@@ -42,3 +42,27 @@ assert.equal(verifyPriorityPublication(artifact, artifact).overall_intraday_comp
 console.log("PASS priority publication readback receipt rejects missing or changed publication");
 assert.equal(applyFiveMinutePriority(pool,[],receipt,snapshot,now).fiveMinutePriorityEvidence.first_blocker,"five_minute_pinned_readback_incomplete");
 assert.equal(applyFiveMinutePriority(pool,[bar],receipt,snapshot,now).fiveMinutePriorityEvidence.first_blocker,"five_minute_pinned_readback_incomplete");
+
+// Coverage alone cannot block a genuinely verified, fresh per-symbol bonus.
+const coverageReceipt={...receipt,status:"blocked",complete:false,exit_code:1,anon_http_status:200,ssl_ok:true,
+  failed_checks:["effective_coverage_below_70pct:1/2"],first_blocker:"effective_coverage_below_70pct:1/2",
+  diagnostic_summary:{...receipt.diagnostic_summary,source_errors:[]}};
+const partial=applyFiveMinutePriority(pool,[{...waitBar,data_gap_5m:true,trend_5m_status:"DATA_GAP_5M"},bar],coverageReceipt,snapshot,now);
+assert.deepEqual(partial.fiveMinutePriorityEvidence.promoted_symbols,["2303"]);
+assert.equal(partial.fiveMinutePriorityEvidence.coverage_warnings.length,1);
+assert.equal(partial[0].payload.formal_pool_eligible,false);
+for(const bad of [{ssl_ok:false},{anon_http_status:400},{failed_checks:[...coverageReceipt.failed_checks,"source_mismatch"]},
+  {diagnostic_summary:{...coverageReceipt.diagnostic_summary,source_errors:[{symbol:"2330",error:"HTTP429"}]}}]) {
+  assert.deepEqual(applyFiveMinutePriority(pool,[waitBar,bar],{...coverageReceipt,...bad},snapshot,now).fiveMinutePriorityEvidence.promoted_symbols,[]);
+}
+// Entire bonus source absent: preserve base members, ordering and eligibility;
+// publication integrity is still mandatory and is separately verifiable.
+const absent=applyFiveMinutePriority(pool,[],null,snapshot,now);
+assert.deepEqual(absent.map(r=>r.symbol),pool.map(r=>r.symbol));
+assert.deepEqual(absent.map(r=>r.payload),pool.map(r=>r.payload));
+const noBonusArtifact={...artifact,fiveMinutePriorityEvidence:absent.fiveMinutePriorityEvidence};
+assert.equal(verifyPriorityPublication(noBonusArtifact,structuredClone(noBonusArtifact)).complete,true);
+assert.equal(verifyPriorityPublication(noBonusArtifact,structuredClone(noBonusArtifact)).bonus_status,"unavailable");
+assert.equal(verifyPriorityPublication(noBonusArtifact,{...noBonusArtifact,daytradeMotherPoolSymbols:[]}).complete,false);
+assert.equal(verifyPriorityPublication(noBonusArtifact,noBonusArtifact).overall_intraday_complete,false);
+console.log("PASS bonus-only: missing/429 source preserves base pool; coverage warning allows only valid strong rows; identity/source/readback guards remain.");
