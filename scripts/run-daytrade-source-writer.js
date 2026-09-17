@@ -224,7 +224,10 @@ const MIN_PRIORITY_POOL_SYMBOLS = 1; // Formal Gate evaluates the dynamic deep-s
 const MAX_PRIORITY_POOL_SYMBOLS = 600;
 const MIN_PRIORITY_FRESH_COVERAGE = positiveNumber(CONFIG.priorityPool?.minFreshQuoteCoverageForA, 0.90);
 const MIN_PRIORITY_INJECTING_QUOTES = positiveNumber(CONFIG.priorityPool?.minFreshQuotesForInjectingA, 1);
-const DEEP_SCAN_POOL_MAX_SYMBOLS = Math.max(1, positiveNumber(process.env.DAYTRADE_DEEP_SCAN_POOL_MAX_SYMBOLS, 1000));
+// The intraday contract limits each deep-scan round to 60 symbols.  An
+// explicit deployment override remains possible, but the safe default must
+// not silently expand a round to the whole pool.
+const DEEP_SCAN_POOL_MAX_SYMBOLS = Math.max(1, positiveNumber(process.env.DAYTRADE_DEEP_SCAN_POOL_MAX_SYMBOLS, 60));
 const FORMAL_SIGNAL_MIN_TOTAL_VOLUME = positiveNumber(process.env.DAYTRADE_FORMAL_SIGNAL_MIN_TOTAL_VOLUME, 5000);
 const FORMAL_SIGNAL_MIN_TRADE_VALUE = positiveNumber(process.env.DAYTRADE_FORMAL_SIGNAL_MIN_TRADE_VALUE, 30000000);
 const FORMAL_SIGNAL_MAX_VOLUME_RANK = positiveNumber(process.env.DAYTRADE_FORMAL_SIGNAL_MAX_VOLUME_RANK, 300);
@@ -637,12 +640,14 @@ async function supabaseGetPaged(resource, query = "", options = {}) {
   const key = requireSupabaseKey(Boolean(options.service));
   const pageSize = Math.max(1, Math.min(Number(options.pageSize || 1000), 1000));
   const rows = [];
+  let exactTotal = null;
   for (let offset = 0; offset < 20000; offset += pageSize) {
     const url = `${SUPABASE_URL}/rest/v1/${resource}${query ? `?${query}` : ""}`;
     const response = await supabaseFetch(url, {
       method: "GET",
       headers: {
         ...headers(key),
+        ...(options.requireExactCount ? { Prefer: "count=exact" } : {}),
         Range: `${offset}-${offset + pageSize - 1}`,
       },
       signal: AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_READ_TIMEOUT_MS) : undefined,
@@ -650,10 +655,23 @@ async function supabaseGetPaged(resource, query = "", options = {}) {
     const text = await response.text();
     if (!response.ok) throw new Error(`${resource} HTTP ${response.status}: ${text.slice(0, 240)}`);
     const page = text ? JSON.parse(text) : [];
+    if (options.requireExactCount) {
+      const range = String(response.headers.get('content-range') || '');
+      const match = /^(?:(\d+)-(\d+)|\*)\/(\d+)$/.exec(range);
+      if (!Array.isArray(page) || !match) throw new Error('paged_exact_count_evidence_missing');
+      const total = Number(match[3]);
+      if (exactTotal !== null && total !== exactTotal) throw new Error('paged_exact_count_changed');
+      exactTotal = total;
+      if (page.length && (Number(match[1]) !== offset || Number(match[2]) - offset + 1 !== page.length)) throw new Error('paged_range_mismatch');
+      if (page.length < pageSize && rows.length + page.length !== total) throw new Error('paged_truncated_before_total');
+    }
+    if (Array.isArray(options.pageEvidence)) options.pageEvidence.push({offset,requested:pageSize,http_status:response.status,rows:Array.isArray(page)?page.length:null,content_range:response.headers.get('content-range')});
     if (!Array.isArray(page) || page.length === 0) break;
     rows.push(...page);
+    if (options.requireExactCount && rows.length === exactTotal) break;
     if (page.length < pageSize) break;
   }
+  if (options.requireExactCount && rows.length !== exactTotal) throw new Error('paged_exact_count_incomplete');
   return rows;
 }
 
@@ -1455,6 +1473,7 @@ function mergeWebSocketQuoteCache(quoteMap) {
         received_at: receivedAt,
         aggregate_last_updated: aggregateLastUpdated,
         turnoverVolumeEvidence: row.turnoverVolumeEvidence || typedCollectorVolume(row),
+        tradeValueEvidence: row.tradeValueEvidence || null,
         trial_event_at: normalizeTimestamp(
           row.trialEventAt || row.trial_event_at || row.payload?.trialEventAt || previous.trial_event_at || previous.payload?.trial_event_at,
           "",
@@ -2930,6 +2949,12 @@ function buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunI
     || addedSymbols.length > 0
     || removedSymbols.length > 0
     || Number(previous.symbol_count || previous.symbolCount || 0) !== cleanSymbols.length;
+  // Membership evidence is immutable within one run, including its timestamps.
+  if (!changed) {
+    const inspected = require('../lib/daytrade-mother-pool-snapshot').inspectSnapshot(previous, tradeDate);
+    if (!inspected.ok) throw new Error(`MOTHER_POOL_SNAPSHOT_REUSE_INVALID:${inspected.failedChecks.join(',')}`);
+    return previous;
+  }
   const previousSequence = previousSameDay ? Number(previous.snapshot_sequence || previous.snapshotSequence || 0) : 0;
   const snapshotSequence = changed ? previousSequence + 1 : Math.max(1, previousSequence);
   const motherPoolRunId = changed
@@ -2950,7 +2975,9 @@ function buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunI
     const row = rowBySymbol.get(symbol) || {};
     const previousItem = priorMembership.get(symbol) || {};
     const newlyAdded = addedSymbols.includes(symbol) || !previousSameDay;
-    const membershipStatus = newlyAdded && intradayAdded ? "PENDING_DOWNSTREAM_WARMUP" : "ACTIVE";
+    const membershipStatus = (newlyAdded && intradayAdded)
+      || (!newlyAdded && previousItem.membership_status === "PENDING_DOWNSTREAM_WARMUP")
+      ? "PENDING_DOWNSTREAM_WARMUP" : "ACTIVE";
     return {
       symbol,
       trade_date: tradeDate,
@@ -3012,15 +3039,47 @@ function buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunI
   };
 }
 
-function publishMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunId) {
-  const generatedAt = nowIso();
-  const snapshot = buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunId, generatedAt);
-  const receiptPath = path.join(MOTHER_POOL_SNAPSHOT_RECEIPT_DIR, `daytrade-mother-pool-snapshot-${compactDateKey(tradeDate)}-${String(snapshot.snapshot_sequence).padStart(4, "0")}.json`);
-  // Publish the immutable receipt first, then atomically replace the latest pointer.
-  // Readers never observe a partially written snapshot or a receipt for another generation.
-  writeJsonAtomic(receiptPath, { ...snapshot, receipt_path: receiptPath });
-  writeJsonAtomic(MOTHER_POOL_SNAPSHOT_FILE, snapshot);
-  return snapshot;
+async function publishMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunId) {
+  const build = () => buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunId, nowIso());
+  if (DRY_RUN) return build();
+  const intentPath = path.join(MOTHER_POOL_SNAPSHOT_RECEIPT_DIR, `mother-pool-publication-intent-${compactDateKey(tradeDate)}.json`);
+  return require('../lib/mother-pool-snapshot-publication').publishWithRecovery({
+    tradeDate, canonicalRunId, build,
+    loadIntent: () => fs.existsSync(intentPath) ? JSON.parse(fs.readFileSync(intentPath,'utf8').replace(/^\uFEFF/,'')) : null,
+    saveIntent: intent => writeJsonAtomic(intentPath,intent),
+    validate: snapshot => require('../lib/daytrade-mother-pool-snapshot').inspectSnapshot(snapshot,tradeDate).ok,
+    send: publishMotherPoolSnapshotSupabase,
+    readback: async snapshot => {
+      const pages=[];
+      const startedAt=nowIso();
+      const attemptId=require('node:crypto').randomUUID();
+      const query = `select=*&trade_date=eq.${encodeURIComponent(snapshot.trade_date)}&mother_pool_run_id=eq.${encodeURIComponent(snapshot.run_id)}&snapshot_sequence=eq.${snapshot.snapshot_sequence}&order=symbol.asc.nullsfirst`;
+      let receipt;
+      try {
+        if (!SUPABASE_READ_KEY || SUPABASE_READ_KEY === SUPABASE_SERVICE_KEY) throw new Error('snapshot_anon_key_required');
+        const rows=await supabaseGetPaged('v_fugle_daytrade_mother_pool_snapshot_v4_1',query,{service:false,pageSize:500,pageEvidence:pages,requireExactCount:true});
+        receipt=require('../lib/mother-pool-snapshot-readback').verifySnapshotReadback(snapshot,rows,{role:'anon',pages});
+      } catch(error) {
+        // Do not persist URLs, credentials or arbitrary server response bodies.
+        receipt={contract:'mother_pool_snapshot_anon_readback_v1',trade_date:snapshot.trade_date,
+          canonical_run_id:snapshot.canonical_run_id,mother_pool_run_id:snapshot.run_id,snapshot_sequence:snapshot.snapshot_sequence,
+          status:'blocked',complete:false,exit_code:1,read_role:'anon',pages,
+          failed_checks:['snapshot_anon_readback_error'],first_blocker:'snapshot_anon_readback_error',
+          error_kind:error?.name==='TimeoutError'||error?.name==='AbortError'?'timeout':'readback_failure',
+          http_status:Number(String(error?.message||'').match(/HTTP (\d{3})/)?.[1])||null,verified_at:nowIso()};
+      }
+      receipt={...receipt,attempt_id:attemptId,started_at:startedAt};
+      const file=path.join(MOTHER_POOL_SNAPSHOT_RECEIPT_DIR,`mother-pool-snapshot-anon-${compactDateKey(tradeDate)}-${snapshot.snapshot_sequence}.json`);
+      writeJsonAtomic(file.replace(/\.json$/,`-${attemptId}.json`),receipt);
+      writeJsonAtomic(file,receipt);
+      return receipt;
+    },
+    commit: snapshot => {
+      const receiptPath = path.join(MOTHER_POOL_SNAPSHOT_RECEIPT_DIR, `daytrade-mother-pool-snapshot-${compactDateKey(tradeDate)}-${String(snapshot.snapshot_sequence).padStart(4, "0")}.json`);
+      writeJsonAtomic(receiptPath,{...snapshot,receipt_path:receiptPath});
+      writeJsonAtomic(MOTHER_POOL_SNAPSHOT_FILE,snapshot);
+    },
+  });
 }
 
 async function publishMotherPoolSnapshotSupabase(snapshot) {
@@ -4298,6 +4357,12 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   const openingReportSeedBySymbol = readOpeningReport0830PrioritySeeds(activeSymbols);
   preserveMorningWatchRows(output, openingReportSeedBySymbol.symbols, taipeiDate(), priorityUpdatedAt, DEEP_SCAN_POOL_MAX_SYMBOLS);
   output.sourceSeedCounts = seeds.counts;
+  output.volumeValueRanking = intradayTurnoverActive
+    ? require('../lib/daytrade-volume-value-ranking').buildRanking(turnoverUniverse.map(row => {
+      const payload = quoteMap.get(row.symbol)?.payload || {};
+      return {symbol:row.symbol,volume:payload.turnoverVolumeEvidence || {},amount:payload.tradeValueEvidence || {}};
+    }), {tradeDate:taipeiDate(),canonicalRunId:canonicalDaytradeRunId(taipeiDate()),now:supplementalMaps.turnoverCalculatedAt})
+    : {status:'NOT_DUE',trade_date:taipeiDate(),reason:'outside_intraday_window'};
   output.intradayTurnoverRanking = intradayTurnoverActive ? intradayTurnoverRanking : {
     contract: intradayTurnoverRanking.contract, status: 'NOT_DUE', trade_date: taipeiDate(),
     reason: 'outside_intraday_window', rows: [], gaps: [] };
@@ -4456,13 +4521,12 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     preferredSymbols: prependUnique(fiveMinutePriorityEvidence?.promoted_symbols || [], fullTerminalWarmupSymbols),
     computedSymbols: daytradeCandlePrioritySymbols,
   });
-  const motherPoolSnapshot = publishMotherPoolSnapshot(
+  const motherPoolSnapshot = await publishMotherPoolSnapshot(
     priceEligiblePriorityRows,
     daytradeMotherPoolSymbols,
     tradeDate,
     canonicalRunId,
   );
-  await publishMotherPoolSnapshotSupabase(motherPoolSnapshot);
   const nextPriorityPayload = {
     ...currentExisting,
     ...bridgeFields,
@@ -4835,7 +4899,8 @@ function normalizeQuote(payload, symbol) {
     session: payload?.session || "",
     last_trade_time: lastTradeTime,
     source: "fugle_daytrade_writer",
-    payload: { ...payload, turnoverVolumeEvidence: nativeVolume(payload, 'fugle.intraday.quote.total.tradeVolume') },
+    payload: { ...payload, turnoverVolumeEvidence: nativeVolume(payload, 'fugle.intraday.quote.total.tradeVolume'),
+      tradeValueEvidence: require('../lib/daytrade-trade-value-evidence').nativeTradeValue(payload, 'fugle.intraday.quote.total.tradeValue') },
   };
 }
 
@@ -5508,6 +5573,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     hot_pool_max_symbols: HOT_POOL_MAX_SYMBOLS,
     mother_pool_capital_rows: supplementalMaps.capitalMap?.size || 0,
     intraday_turnover_ranking: priorityRows.intradayTurnoverRanking || null,
+    volume_value_ranking: priorityRows.volumeValueRanking || null,
     mother_pool_chip_rows: supplementalMaps.chipMap?.size || 0,
     mother_pool_margin_change_rows: supplementalMaps.marginChangeMap?.size || 0,
     stock_group_contract_source: stockGroupMeta.source || "missing",
@@ -6827,13 +6893,44 @@ function updateMotherPoolDelta(result) {
   // The turnover checklist has its own independently read-back receipt.
   // Failure here is visible but cannot erase the already published core source.
   const turnover = result.payload.intraday_turnover_ranking;
+  const volumeValue = result.payload.volume_value_ranking;
+  const minuteSide = result.payload.mother_pool_minute_side_evidence;
+  const priceVolume = result.payload.mother_pool_price_volume_evidence;
+  const rankingReceiptWriteFailures = [];
+  const persistRankingReceipt = (file, receipt) => {
+    try { writeJsonAtomic(file, receipt); }
+    catch { rankingReceiptWriteFailures.push('RANKING_RECEIPT_PERSIST_FAILED:' + path.basename(file)); }
+  };
+  let rankingReadback = null;
+  if ([turnover,volumeValue,minuteSide,priceVolume].some(item=>item && item.status !== 'NOT_DUE')) {
+    try {
+      if (!SUPABASE_READ_KEY || SUPABASE_READ_KEY === SUPABASE_SERVICE_KEY) throw new Error('anon_read_key_missing');
+      rankingReadback = await supabaseGetPaged('source_status',
+        'select=trade_date,payload&source_name=eq.' + encodeURIComponent(SOURCE_NAME) + '&trade_date=eq.' + tradeDate + '&limit=1',
+        { service: false, pageSize: 2 });
+    } catch { rankingReadback = null; }
+  }
+  if (volumeValue && volumeValue.status !== 'NOT_DUE') {
+    let volumeReceipt;
+    try {
+      if (!rankingReadback) throw new Error('B02_ANON_READBACK_UNAVAILABLE');
+      volumeReceipt = require('./verify-daytrade-volume-value-ranking').verify(
+        rankingReadback[0]?.payload?.volume_value_ranking, volumeValue, {read_role:'anon',db_readback_ok:true});
+    } catch {
+      volumeReceipt = {contract:'daytrade_volume_value_readback_verifier_v1',status:'blocked',complete:false,
+        db_readback_ok:false,readback_count:null,failed_checks:['B02_READBACK_OR_VERIFIER_FAILED'],first_blocker:'B02_READBACK_OR_VERIFIER_FAILED',exit_code:1};
+    }
+    const savedVolumeReceipt = {...volumeReceipt,run_id:volumeValue.run_id,trade_date:tradeDate,
+      canonical_run_id:volumeValue.canonical_run_id,checked_at:nowIso()};
+    persistRankingReceipt(runtimePath('data','scan-receipts','volume-value',
+      volumeValue.run_id.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json'), savedVolumeReceipt);
+    persistRankingReceipt(runtimePath('data','scan-receipts','daytrade-volume-value-' + tradeDate.replace(/-/g,'') + '.json'), savedVolumeReceipt);
+  }
   if (turnover && turnover.status !== 'NOT_DUE') {
     let receipt;
     try {
-      if (!SUPABASE_READ_KEY || SUPABASE_READ_KEY === SUPABASE_SERVICE_KEY) throw new Error('anon_read_key_missing');
-      const readback = await supabaseGetPaged('source_status',
-        'select=trade_date,payload&source_name=eq.' + encodeURIComponent(SOURCE_NAME) + '&trade_date=eq.' + tradeDate + '&limit=1',
-        { service: false, pageSize: 2 });
+      if (!rankingReadback) throw new Error('B03_ANON_READBACK_UNAVAILABLE');
+      const readback = rankingReadback;
       const actual = readback[0]?.payload?.intraday_turnover_ranking;
       const verdict = require('./verify-daytrade-intraday-turnover').verifyDelivery(actual, turnover, { read_role: 'anon', db_readback_ok: true });
       const stable = value => JSON.stringify(value, (_, v) => v && typeof v === 'object' && !Array.isArray(v)
@@ -6841,7 +6938,7 @@ function updateMotherPoolDelta(result) {
       if (!actual || stable(actual) !== stable(turnover)) throw new Error('turnover_readback_not_same_batch');
       receipt = { ...verdict, run_id: turnover.run_id, trade_date: tradeDate,
         canonical_run_id: turnover.canonical_run_id, checked_at: nowIso(), read_role: 'anon',
-        db_readback_ok: true, natural_production_readback_verified: true,
+        db_readback_ok: true, natural_production_readback_verified: verdict.complete === true && verdict.exit_code === 0,
         requested_count: turnover.requested_count, written_count: turnover.rows.length + turnover.data_gaps.length,
         readback_count: actual.rows.length + actual.data_gaps.length };
     } catch (error) {
@@ -6850,9 +6947,43 @@ function updateMotherPoolDelta(result) {
         run_id: turnover.run_id, trade_date: tradeDate, checked_at: nowIso(), exit_code: 1,
         db_readback_ok: false, failed_checks: [String(error.message)], first_blocker: String(error.message) };
     }
-    writeJsonAtomic(runtimePath('data', 'scan-receipts', 'daytrade-intraday-turnover-' + tradeDate.replace(/-/g, '') + '.json'), receipt);
-    writeJsonAtomic(runtimePath('data', 'scan-receipts', 'turnover', turnover.run_id.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json'), receipt);
+    persistRankingReceipt(runtimePath('data', 'scan-receipts', 'daytrade-intraday-turnover-' + tradeDate.replace(/-/g, '') + '.json'), receipt);
+    persistRankingReceipt(runtimePath('data', 'scan-receipts', 'turnover', turnover.run_id.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json'), receipt);
   }
+  if (minuteSide && minuteSide.status !== 'NOT_DUE') {
+    let sideReceipt;
+    try {
+      if (!rankingReadback) throw new Error('MINUTE_SIDE_ANON_READBACK_UNAVAILABLE');
+      sideReceipt = require('../lib/verify-mother-pool-minute-side-batch').verify(
+        rankingReadback[0]?.payload?.mother_pool_minute_side_evidence, minuteSide, {role:'anon',dbReadback:true});
+    } catch {
+      sideReceipt = {contract:'mother_pool_minute_side_readback_v1',status:'blocked',complete:false,readback_verified:false,
+        failed_checks:['MINUTE_SIDE_READBACK_FAILED'],first_blocker:'MINUTE_SIDE_READBACK_FAILED',exit_code:1};
+    }
+    const attempt = require('node:crypto').randomUUID();
+    const saved = {...sideReceipt,attempt_id:attempt,checked_at:nowIso(),trade_date:tradeDate,
+      canonical_run_id:minuteSide.canonical_run_id,mother_pool_run_id:minuteSide.mother_pool_run_id,snapshot_sequence:minuteSide.snapshot_sequence};
+    const file = runtimePath('data','scan-receipts','mother-pool-minute-side-'+tradeDate.replace(/-/g,'')+'.json');
+    persistRankingReceipt(file.replace(/\.json$/,`-${attempt}.json`),saved);
+    persistRankingReceipt(file,saved);
+  }
+  if (priceVolume && priceVolume.status !== 'NOT_DUE') {
+    let receipt;
+    try {
+      if (!rankingReadback) throw new Error('PRICE_VOLUME_ANON_READBACK_UNAVAILABLE');
+      receipt = require('../lib/verify-mother-pool-price-volume-evidence').verify(
+        rankingReadback[0]?.payload?.mother_pool_price_volume_evidence,priceVolume,{role:'anon',dbReadback:true});
+    } catch {
+      receipt = {contract:'mother_pool_price_volume_readback_v1',complete:false,readback_verified:false,status:'blocked',
+        failed_checks:['PRICE_VOLUME_READBACK_FAILED'],first_blocker:'PRICE_VOLUME_READBACK_FAILED',exit_code:1};
+    }
+    const attempt=require('node:crypto').randomUUID();
+    const saved={...receipt,attempt_id:attempt,checked_at:nowIso(),trade_date:tradeDate,canonical_run_id:priceVolume.canonical_run_id};
+    const file=runtimePath('data','scan-receipts','mother-pool-price-volume-'+tradeDate.replace(/-/g,'')+'.json');
+    persistRankingReceipt(file.replace(/\.json$/,`-${attempt}.json`),saved);
+    persistRankingReceipt(file,saved);
+  }
+  if (rankingReceiptWriteFailures.length) throw new Error(rankingReceiptWriteFailures.join(';'));
 }
 
 async function writeEnrichmentPendingHeartbeat({ activeSymbols, priorityRows, quoteMap, dailyVolumeMap, state, errors = [] }) {
@@ -7935,6 +8066,33 @@ async function tick() {
   result.payload.full_market_bullish_gain_volume_candidate_count = intradaySignalEvidence.bullishGainVolumeCandidateCount;
   result.payload.full_market_volume_surge_top100_candidate_count = intradaySignalEvidence.volumeSurgeTop100CandidateCount;
   tickStage("status_scorecard:start");
+  const sideAsOf = nowIso();
+  const sideMinutes = taipeiClockMinutesFrom(sideAsOf);
+  if (sideMinutes >= 9 * 60 && sideMinutes < 13 * 60 + 30) {
+    try {
+      const detectorCache=readFugleWebSocketCandles({maxAgeMs:90*60*1000});
+      result.payload.mother_pool_price_volume_evidence=require('../lib/mother-pool-price-volume-evidence').collect({
+        candles:detectorCache.candles instanceof Map?[...detectorCache.candles.values()]:[],
+        snapshot:readJson(MOTHER_POOL_SNAPSHOT_FILE,{}),asOf:sideAsOf,
+        readHistory:(symbol,date)=>readJson(runtimePath('data','mother-pool-historical-minutes',date,symbol+'.json'),null),
+      });
+    } catch {
+      result.payload.mother_pool_price_volume_evidence={contract:'mother_pool_price_volume_evidence_v1',complete:false,
+        status:'blocked',first_blocker:'PRICE_VOLUME_SOURCE_BATCH_FAILED',as_of:sideAsOf,publish_allowed:false};
+    }
+    try {
+      result.payload.mother_pool_minute_side_evidence = require('../lib/mother-pool-minute-side-batch').collect({
+        runtimeRoot:path.dirname(path.dirname(MOTHER_POOL_SNAPSHOT_FILE)),
+        snapshot:readJson(MOTHER_POOL_SNAPSHOT_FILE,{}),asOf:sideAsOf,deadlineMs:Date.now()+5000,
+      });
+    } catch {
+      result.payload.mother_pool_minute_side_evidence = {contract:'mother_pool_minute_side_batch_v1',complete:false,
+        status:'blocked',first_blocker:'MINUTE_SIDE_SOURCE_BATCH_FAILED',as_of:sideAsOf,publish_allowed:false};
+    }
+  } else {
+    result.payload.mother_pool_price_volume_evidence={status:'NOT_DUE',as_of:sideAsOf,complete:false,reason:'outside_intraday_window'};
+    result.payload.mother_pool_minute_side_evidence = {status:'NOT_DUE',as_of:sideAsOf,complete:false,reason:'outside_intraday_window'};
+  }
   await writeStatusAndScorecard(result);
   tickStage("status_scorecard:complete");
   const offSession = Boolean(result.payload.off_session);
