@@ -1583,6 +1583,7 @@ function buildSupabaseRunRow(output, runId) {
       computableUniverseTotal: cleanNumber(output.computableUniverseTotal),
       insufficientHistoryCount: cleanNumber(output.insufficientHistoryCount),
       resultContract: String(output.resultContract || ""),
+      recentVolumeBonusContract: output.recentVolumeBonusContract,
       liquidityContract: String(output.liquidityContract || ""),
       dataGapContract: String(output.dataGapContract || ""),
       matchedCount: cleanNumber(output.matchedCount),

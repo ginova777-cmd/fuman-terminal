@@ -12,3 +12,4 @@ test('shares explicit conversion',()=>{const r=rows().map(x=>({date:x.date,volum
 test('tamper ratio or points rejected',()=>{const e=calculate(rows(),dates,dates[14]);e.points=5;assert.equal(valid(e),false);});
 test('out of window spike not eligible',()=>{const r=rows();r[4].volume_lots=50000;assert.equal(calculate(r,dates,dates[14]).points,0);});
 test('duplicate and future dates cannot create match',()=>{const r=rows();r.push({date:dates[14],volume_lots:50000},{date:'2026-12-31',volume_lots:100000});assert.equal(calculate(r,dates,dates[14]).points,0);});
+test('JSONB key ordering preserves evidence',()=>{const reorder=v=>Array.isArray(v)?v.map(reorder):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,reorder(v[k])])):v;assert(valid(reorder(calculate(rows(),dates,dates[14]))));});
