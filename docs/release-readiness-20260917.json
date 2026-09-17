@@ -1,0 +1,30 @@
+{
+  "contract": "mother_pool_release_readiness_v1",
+  "checked_at": "2026-09-17",
+  "branch": "agent/mother-pool-b02-b03-20260917",
+  "head": "dcfeca3",
+  "status": "BLOCKED",
+  "complete": false,
+  "inventory": {"expected": 43, "verified": 43, "missing": 0, "duplicate": 0},
+  "isolated": {
+    "B01": "PASS",
+    "B02": "PASS",
+    "B03": "PASS",
+    "B04_B10": "PASS",
+    "B11": "PASS",
+    "B14_B20_A16": "PASS",
+    "B15": "PASS",
+    "strategy3_snapshot": "PASS",
+    "B12_B13_evidence": "PASS"
+  },
+  "formal": {
+    "production_deployment": "PENDING_AUTHORIZATION",
+    "supabase_anon_readback": "PENDING",
+    "natural_market_validation": "PENDING",
+    "A15_A19_writer": "INCOMPLETE",
+    "B19_B24_event_chain": "INCOMPLETE",
+    "B17_total_receipt": "PENDING"
+  },
+  "first_blocker": "formal_deployment_and_natural_validation_not_authorized_or_available",
+  "forbidden_actions_not_taken": ["strategy_threshold_relaxation", "synthetic_backfill", "production_write", "order_execution"]
+}
