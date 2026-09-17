@@ -7025,7 +7025,24 @@ async function ensureOpening0901CandleEvidence(formalPriorityRows = []) {
   };
 }
 
+async function verifyEarlyB01Candles(evidence, tradeDate) {
+  let receipt;
+  try {
+    if(!SUPABASE_READ_KEY||SUPABASE_READ_KEY===SUPABASE_SERVICE_KEY)throw Error('anon_read_key_missing');
+    receipt=await require('../lib/readback-b01-candles').readbackCandles(evidence,{
+      deadlineMs:Math.min(Date.now()+20000,Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Infinity),
+      readRpc:(body,options)=>supabaseRpc('get_fugle_daytrade_intraday_1m_latest_n',body,{...options,service:false})});
+  } catch {
+    receipt={contract:'b01_exact_candle_readback_v1',complete:false,status:'BLOCKED',
+      candle_readback_verified:false,failed_checks:['B01_READBACK_UNAVAILABLE'],first_blocker:'B01_READBACK_UNAVAILABLE',exit_code:1};
+  }
+  const value={...receipt,trade_date:tradeDate,checked_at:nowIso()};
+  writeJsonAtomic(runtimePath('data','scan-receipts','b01-candle-readback-'+tradeDate.replace(/-/g,'')+'.json'),value);
+  return value;
+}
 async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {}) {
+  const { mapNaturalCandle } = require('../lib/daytrade-fast-candle-row');
+  const syncNowMs = Date.now();
   const extraSymbols = Array.isArray(options.extraSymbols) ? options.extraSymbols : [];
   const tradeDate = taipeiDateFrom(nowIso());
   const priorityArtifact = readJson(PRIORITY_SYMBOLS_FILE, {});
@@ -7036,7 +7053,7 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
   const motherPoolSymbols = [...new Set([
     ...(motherPoolRows || []).map((row) => normalizeCode(row.symbol || row)),
     ...extraSymbols.map((symbol) => normalizeCode(symbol)),
-    ...artifactMotherPool.map((symbol) => normalizeCode(symbol)),
+    ...(options.latestOnly ? [] : artifactMotherPool.map((symbol) => normalizeCode(symbol))),
   ].filter(Boolean))].sort();
   const cache = readFugleWebSocketCandles({ maxAgeMs: WEBSOCKET_CANDLE_HISTORY_MAX_AGE_MS });
   const allowedSymbols = new Set(motherPoolSymbols);
@@ -7046,15 +7063,14 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
     const candleTime = normalizeTimestamp(candle.candleTime || candle.date);
     if (!symbol || !allowedSymbols.has(symbol) || !candleTime || !numberValue(candle.close)) continue;
     if (taipeiDateFrom(candleTime) !== tradeDate) continue;
-    const row = {
-      symbol, market: candle.market || '', candle_time: candleTime,
-      trade_date: candle.tradeDate || taipeiDateFrom(candleTime),
-      open: numberValue(candle.open), high: numberValue(candle.high), low: numberValue(candle.low),
-      close: numberValue(candle.close), volume: numberValue(candle.volume),
-      source: 'fugle_daytrade_writer:websocket_candles',
-      updated_at: candle.candleSeenAt || cache.payload?.updatedAt || nowIso(),
-      payload: { ...(candle.payload || {}), cacheUpdatedAt: cache.payload?.updatedAt || '', source: 'fugle-websocket-candles-cache' },
-    };
+    // Historical same-day candles remain usable for seeding, but never bypass
+    // source, completion, timestamp, OHLC or natural-volume evidence checks.
+    const validated = mapNaturalCandle(candle, { tradeDate, nowMs: syncNowMs, maxSeenAgeMs: Infinity });
+    if (!validated) continue;
+    const row = { ...validated, source: 'fugle_daytrade_writer:websocket_candles',
+      source_channel: 'candles', candle_origin: 'websocket_candle', websocket_row: true,
+      rest_repair_row: false, intraday_odd_lot: false,
+      payload: { ...validated.payload, cacheUpdatedAt: cache.payload?.updatedAt || '', source: 'fugle-websocket-candles-cache' } };
     const rows = bySymbol.get(symbol) || [];
     rows.push(row);
     bySymbol.set(symbol, rows);
@@ -7066,6 +7082,7 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
     source: 'fugle_websocket_candles_dynamic_mother_pool',
     reason: 'no_today_mother_pool_candles',
     motherPoolSymbols: motherPoolSymbols.length,
+    latest_candle_evidence: require('../lib/daytrade-latest-candle-evidence').latestCandleEvidence(motherPoolSymbols, [], syncNowMs),
   };
 
   const selected = new Map();
@@ -7083,6 +7100,9 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
   for (const [symbol, rows] of bySymbol.entries()) {
     rows.sort((a, b) => Date.parse(b.candle_time) - Date.parse(a.candle_time));
     if (rows[0]) selectRow(rows[0]);
+    // The early full-universe flush writes only latest natural bars. It must
+    // not advance the historical seed checkpoint or claim history is ready.
+    if (options.latestOnly) continue;
     const prior = nextMirror.symbols[symbol] || {};
     const latestCandleTime = rows[0]?.candle_time || '';
     if (prior.seeded !== true) {
@@ -7105,9 +7125,13 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
     nextMirror.symbols[symbol] = { seeded: true, lastCandleTime: latestCandleTime, availableCandleCount: rows.length };
   }
 
-  const rows = [...selected.values()];
+  // Emit one latest completed candle per symbol before any historical seed rows.
+  // The checkpoint still advances only after the entire selected set succeeds.
+  const rows = require('../lib/daytrade-candle-write-order').latestFirst([...selected.values()]);
+  const dbWriteStartedMs = Date.now();
   await supabaseUpsert('fugle_daytrade_intraday_1m', rows, 'symbol,candle_time', { batchSize: SLOW_TABLE_BATCH_SIZE, timeoutMs: 15000, retries: 1 });
-  if (state && !DRY_RUN) {
+  const dbWriteCompletedMs = Date.now();
+  if (state && !DRY_RUN && !options.latestOnly) {
     state.daytradeMotherPoolCandleMirror = nextMirror;
     // Persist the expensive seed checkpoint immediately. A later non-critical
     // stage must not make the next task re-upload the entire candle history.
@@ -7118,7 +7142,17 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
     skipped: false,
     cacheCount: cache.candles.size,
     source: 'fugle_websocket_candles_full_dynamic_mother_pool',
+    timing: {
+      cache_scan_started_at: new Date(syncNowMs).toISOString(),
+      cache_artifact_updated_at: cache.payload?.updatedAt || null,
+      db_write_started_at: new Date(dbWriteStartedMs).toISOString(),
+      db_write_completed_at: new Date(dbWriteCompletedMs).toISOString(),
+      cache_selection_elapsed_ms: dbWriteStartedMs - syncNowMs,
+      db_write_elapsed_ms: dbWriteCompletedMs - dbWriteStartedMs,
+      timing_scope: 'writer_local_clock; cache artifact time is not a natural event timestamp',
+    },
     latestRows: bySymbol.size,
+    latest_candle_evidence: require('../lib/daytrade-latest-candle-evidence').latestCandleEvidence(motherPoolSymbols, rows, Date.now()),
     motherPoolSymbols: motherPoolSymbols.length,
     seededSymbols,
     seedAttempts,
@@ -7423,6 +7457,32 @@ async function tick() {
   tickStage("active_symbols:start");
   const activeSymbols = await fetchActiveSymbols();
   tickStage("active_symbols:complete", { rows: activeSymbols.length });
+  const nonFatalWriteErrors = [];
+  // Publish latest natural bars before slow enrichment, under the Writer lease.
+  let fullMarketLatestCandles = { complete: false, db_readback_verified: false, status: 'NOT_EXECUTED' };
+  tickStage("full_market_latest_candles:start");
+  try {
+    const earlyCandles = await syncWebSocketIntraday1mCandles(activeSymbols, state, { latestOnly: true });
+    fullMarketLatestCandles = { ...earlyCandles, scope: 'active_symbols',
+      requested_symbols: activeSymbols.map(row => normalizeCode(row.symbol || row)).filter(Boolean).sort(),
+      trade_date: taipeiDateFrom(nowIso()), status: earlyCandles.skipped ? 'DATA_GAP' : 'WRITE_FINISHED_UNVERIFIED',
+      complete: false, db_readback_verified: false };
+    tickStage("full_market_latest_candles:complete", { ...earlyCandles, requested_symbols: activeSymbols.length });
+  } catch (error) {
+    fullMarketLatestCandles = { complete: false, db_readback_verified: false, status: 'WRITE_FAILED',
+      scope: 'active_symbols', trade_date: taipeiDateFrom(nowIso()), requested_count: activeSymbols.length,
+      first_blocker: 'FULL_MARKET_LATEST_CANDLE_WRITE_FAILED' };
+    nonFatalWriteErrors.push({ target: 'full_market_latest_candles', message: error?.message || String(error) });
+    tickStage("full_market_latest_candles:failed", { reason: error?.message || String(error) });
+  }
+  if (!DRY_RUN && fullMarketLatestCandles.latest_candle_evidence) {
+    try {
+      fullMarketLatestCandles.readback_receipt = await verifyEarlyB01Candles(
+        fullMarketLatestCandles.latest_candle_evidence, fullMarketLatestCandles.trade_date);
+    } catch {
+      fullMarketLatestCandles.readback_receipt = {complete:false,status:'BLOCKED',first_blocker:'B01_RECEIPT_PERSIST_FAILED'};
+    }
+  }
   tickStage("strategy_priority_bridge:start");
   await refreshStrategyChipPriorityBridge();
   tickStage("strategy_priority_bridge:complete");
@@ -7492,7 +7552,6 @@ async function tick() {
   tickStage("priority_build_intraday:start");
   priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
   tickStage("priority_build_intraday:complete", { rows: priorityRows.length });
-  const nonFatalWriteErrors = [];
   let websocketQuoteReadthroughSync = { written: 0, skipped: true, reason: 'no_fresh_mother_quotes', candidateRows: priorityRows.length, freshRows: 0 };
   if (priorityRows.length) {
     // Re-read the direct WebSocket cache immediately before the mother-pool write.
@@ -7859,6 +7918,7 @@ async function tick() {
   result.payload.futopt_preopen_baseline_rows = futoptPreopenBaseline.rows || 0;
   result.payload.futopt_preopen_baseline_natural_schedule_evidence = Boolean(futoptPreopenBaseline.naturalScheduleEvidence);
   if (futoptPreopenBaseline.error) result.payload.futopt_preopen_baseline_error = futoptPreopenBaseline.error;
+  result.payload.full_market_latest_candles = fullMarketLatestCandles;
   result.payload.preopen_snapshot_history_contract = preopenSnapshotHistorySync.contract;
   result.payload.preopen_snapshot_history_status = preopenSnapshotHistorySync.status;
   result.payload.preopen_snapshot_rows_written = preopenSnapshotHistorySync.snapshotRowsWritten;
