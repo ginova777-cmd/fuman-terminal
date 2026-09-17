@@ -8160,7 +8160,10 @@ function buildPreopenA15A19Evidence(activeSymbols, quoteMap, tradeDate) {
   for (const [symbol, q] of (quoteMap instanceof Map ? quoteMap.entries() : [])) {
     if (q?.is_trial === true) a17Samples.push({ symbol, capture_slot: q.capture_slot || q.trial_capture_slot, is_trial: true, trial_price: q.trial_price ?? q.payload?.trialPrice, trial_event_at: q.trial_event_at });
   }
-  const evidence = { a15: a15Rows, a16: [], a17: preopenA15A19.a17(a17Samples), a18: preopenA15A19.a18(a15Rows.map((r) => ({ status: r.data_gap ? "DATA_GAP" : "READY", reason: r.data_gap ? "A15_DATA_GAP" : null }))) };
+  // A16 requires a real same-minute historical producer. Never emit an empty
+  // array (which is ambiguous and could make a receipt appear complete).
+  const a16 = activeSymbols.map((symbol) => ({ symbol: String(symbol), values: [], source_trade_dates: [], status: "INSUFFICIENT_SAMPLE", data_gap: true }));
+  const evidence = { a15: a15Rows, a16, a17: preopenA15A19.a17(a17Samples), a18: preopenA15A19.a18(a15Rows.map((r) => ({ status: r.data_gap ? "DATA_GAP" : "READY", reason: r.data_gap ? "A15_DATA_GAP" : null }))) };
   const receipt = preopenA15A19.a19(evidence);
   return { contract: receipt.contract, trade_date: tradeDate, canonical_run_id: `${SOURCE_NAME}:${String(tradeDate).replace(/-/g, "")}:canonical`, ...evidence, ...receipt, formal_candidate_allowed: false, publish_allowed: false };
 }
