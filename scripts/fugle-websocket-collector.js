@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 
 const {
@@ -18,6 +19,8 @@ const {
 } = require("../lib/fugle-websocket-quotes");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const providerSideJournal = require("../lib/provider-side-journal.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-side-journal"));
+const providerTradeJournal = require("../lib/telegram-detectors/provider-trade-journal.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-trade-journal"));
 const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
   "C:/fuman-terminal/secrets/fugle-api-key.txt",
@@ -1495,6 +1498,10 @@ async function runStreamingCollector() {
         subscribedChannels: STREAMING_CHANNELS.length,
         pending: Math.max(0, selection.requested - selection.selected.length),
         requestedSymbols: selection.requested,
+        // Persist the exact symbol set for this subscription generation so
+        // downstream B01 evidence can use the real round denominator instead
+        // of treating the full universe as subscribed in every round.
+        subscribedSymbolList: selection.selected,
         allSymbols: selection.allSymbols.length,
         prioritySymbols: selection.priority.symbols.length,
         freshSymbols120s: freshCount,
@@ -1558,12 +1565,36 @@ async function runStreamingCollector() {
         reconnectMaxMs: STREAMING_RECONNECT_MAX_MS,
         staleDataWindow,
         staleRecoveryTriggered,
+        providerSideJournal: providerSideJournal.health(),
         collectorRole: COLLECTOR_ROLE,
         sourceHostId: SOURCE_HOST_ID,
         sourceHostRole: SOURCE_HOST_ROLE,
         sourceHostApprovalFile: SOURCE_HOST_APPROVAL_FILE,
         ...extra,
       });
+      // Persist the exact immutable subscription set consumed by B01.
+      const snapshotTradeDate = String(statusSnapshot.tradeDate || "").trim();
+      if (snapshotTradeDate && Array.isArray(selection.selected)) {
+        const symbols = [...new Set(selection.selected.map((row) => String(row?.symbol || row || "").trim()).filter(Boolean))].sort();
+        const generation = crypto.createHash("sha256").update(JSON.stringify(symbols)).digest("hex");
+        writeJson(path.join(RUNTIME_DIR, "data", "scan-receipts", "fugle-daytrade-subscription-snapshot-" + snapshotTradeDate.replace(/-/g, "") + ".json"), {
+          contract: "fugle_daytrade_subscription_snapshot_v1",
+          status: statusSnapshot.websocketConnected && statusSnapshot.websocketAuthenticated ? "complete" : "blocked",
+          complete: statusSnapshot.websocketConnected === true && statusSnapshot.websocketAuthenticated === true && symbols.length > 0,
+          trade_date: snapshotTradeDate,
+          canonical_run_id: statusSnapshot.canonicalRunId || ("fugle_daytrade_source:" + snapshotTradeDate + ":canonical"),
+          generation,
+          snapshot_sequence: Number(statusSnapshot.subscriptionCycle || cycles || 0),
+          requested_count: Number(selection.requested || 0),
+          subscribed_count: symbols.length,
+          subscribed_symbols: symbols,
+          channels: STREAMING_CHANNELS,
+          source: "fugle-websocket",
+          checked_at: statusSnapshot.updatedAt || new Date().toISOString(),
+          first_blocker: symbols.length > 0 ? null : "NO_SUBSCRIPTION_SYMBOLS",
+          exit_code: symbols.length > 0 ? 0 : 1,
+        });
+      }
       scheduleSourceStatusHeartbeat(statusSnapshot);
     };
     let subscribeInProgress = false;
@@ -1674,6 +1705,8 @@ async function runStreamingCollector() {
           || (data.total || data.bids || data.asks || Object.prototype.hasOwnProperty.call(data, "openPrice") ? "aggregates" : "")
           || STREAMING_CHANNELS[0];
         if (Object.prototype.hasOwnProperty.call(channelMessages, inferredChannel)) channelMessages[inferredChannel] += 1;
+        if (inferredChannel === "aggregates") providerSideJournal.capture(data, lastTransportMessageAt);
+        if (inferredChannel === "trades") providerTradeJournal.capture(data, lastTransportMessageAt);
         if (inferredChannel === "candles") {
           const candles = normalizeFugleCandles(payload);
           if (candles.length) {
