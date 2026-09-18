@@ -18,8 +18,10 @@ async function paged(key,q){
 async function main(){
  const key=process.env.SUPABASE_ANON_KEY||secret("supabase-anon-key.txt"),runId=arg("run-id"),tradeDate=arg("trade-date"),requestedSample=arg("sample-symbol"),requestedAsOf=arg("as-of");
  if(!key||!runId||!tradeDate)throw new Error("anon key, --run-id and --trade-date are required");
- const fields=["symbol","trade_date","run_id","bar_start","bar_end","bar_count","bar_complete","bar_kind","confirmation_eligible","data_gap_5m","gap_reason","source_status","calculated_at","calculation_version","trend_5m_strategy_version","classification_contract","rsi3_5m","rsi6_5m","previous_rsi3_5m","previous_rsi6_5m","rsi3_cross_rsi6_up_5m","kd_k_5m","kd_d_5m","previous_kd_k_5m","previous_kd_d_5m","kd_5_3_golden_cross_5m","macd_3_9_3_dif_5m","macd_3_9_3_dea_5m","previous_macd_3_9_3_dif_5m","previous_macd_3_9_3_dea_5m","macd_3_9_3_golden_cross_5m","macd_3_9_3_zero_cross_up_5m","ma5_5m","ma10_5m","ma20_5m","previous_ma5_5m","previous_ma10_5m","previous_ma20_5m","ma5_cross_ma10_up_5m","ma10_cross_ma20_up_5m","ma5_cross_ma20_up_5m","golden_cross_any_5m","trend_5m_status"];
+ const fields=["symbol","trade_date","run_id","bar_start","bar_end","bar_count","bar_complete","bar_kind","confirmation_eligible","data_gap_5m","gap_reason","source_status","calculated_at","calculation_version","ma20_warmup_mode","previous_bar_end","trend_5m_strategy_version","classification_contract","rsi3_5m","rsi6_5m","previous_rsi3_5m","previous_rsi6_5m","rsi3_cross_rsi6_up_5m","kd_k_5m","kd_d_5m","previous_kd_k_5m","previous_kd_d_5m","kd_5_3_golden_cross_5m","macd_3_9_3_dif_5m","macd_3_9_3_dea_5m","previous_macd_3_9_3_dif_5m","previous_macd_3_9_3_dea_5m","macd_3_9_3_golden_cross_5m","macd_3_9_3_zero_cross_up_5m","ma5_5m","ma10_5m","ma20_5m","previous_ma5_5m","previous_ma10_5m","previous_ma20_5m","ma5_cross_ma10_up_5m","ma10_cross_ma20_up_5m","ma5_cross_ma20_up_5m","golden_cross_any_5m","trend_5m_status"];
  const base=`v_fugle_intraday_5m_history_readback?select=${fields.join(",")}&run_id=eq.${encodeURIComponent(runId)}&trade_date=eq.${tradeDate}`;
+ const calendar=await request(key,`market_calendar?select=trade_date,market,is_open,payload&market=eq.TW&trade_date=lte.${tradeDate}&order=trade_date.desc&limit=40`);
+ const previousDate=require("./daytrade-5m-previous-session").previousSession(calendar.rows,tradeDate);
  const all=await paged(key,`${base}&order=symbol.asc,bar_start.asc`),rows=all.rows,issues=[];
  const completeRows=rows.filter(row=>row.bar_complete===true&&Number.isFinite(Date.parse(String(row.bar_end||"")))).sort((a,b)=>Date.parse(a.bar_end)-Date.parse(b.bar_end));
  const defaultReplayRow=completeRows[Math.floor(completeRows.length/2)]||completeRows[0]||null;
@@ -37,7 +39,7 @@ async function main(){
   if(r.classification_contract!=="daytrade_intraday_5m_branch_independent_strict_wait_v1")issues.push(`${r.symbol}:classification_contract`);
   if(r.confirmation_eligible&&(r.bar_kind!=="regular_session"||!r.bar_complete||r.bar_count<1||r.bar_count>5))issues.push(`${r.symbol}:eligible_structure_mismatch`);
   if(r.bar_kind==="closing_special"&&(r.bar_complete||r.confirmation_eligible||!r.data_gap_5m))issues.push(`${r.symbol}:closing_special_quality_mismatch`);
-  if(r.previous_bar_end&&Date.parse(r.bar_start)!==Date.parse(r.previous_bar_end))issues.push(`${r.symbol}:non_adjacent_previous_evidence`);
+  if(r.previous_bar_end&&Date.parse(r.bar_start)!==Date.parse(r.previous_bar_end)){const permitted=r.ma20_warmup_mode===require("./daytrade-5m-previous-session").MODE&&Date.parse(r.bar_start)===Date.parse(`${tradeDate}T09:00:00+08:00`)&&Date.parse(r.previous_bar_end)===Date.parse(`${previousDate}T13:25:00+08:00`);if(!permitted)issues.push(`${r.symbol}:non_adjacent_previous_evidence`);}
  }
  if(duplicates.length)issues.push(`duplicate_keys:${duplicates.length}`);
  if(replay.rows.some(r=>Date.parse(r.bar_end)>Date.parse(asOf)))issues.push("as_of_future_leak");
