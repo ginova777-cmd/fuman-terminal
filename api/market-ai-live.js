@@ -1612,7 +1612,7 @@ async function readOpeningMorningReportSnapshot(clock = taipeiClock(), timeoutMs
     // day briefing visible, matching the terminal's previous-good banner.
     allowLatestFallback: allowPreviousTradingDay,
     // A short retry is more useful to the terminal than one long stalled request.
-    timeoutMs: Math.min(Math.max(500, Number(timeoutMs) || 2000), 1300),
+    timeoutMs: Math.min(Math.max(500, Number(timeoutMs) || 2500), 3000),
     maxAttempts: 3,
   }).catch(() => null);
   const payload = snapshot?.payload;
@@ -1722,7 +1722,10 @@ module.exports = async function handler(request, response) {
     response.setHeader("Cache-Control", "no-store, max-age=0");
     response.setHeader("CDN-Cache-Control", "no-store");
     const snapshotReport = await readOpeningMorningReportSnapshot(clock, 2500);
-    const report = snapshotReport?.ok === true ? snapshotReport : readOpeningMorningReport(clock);
+    const report = snapshotReport?.ok === true ? snapshotReport : {
+      ok: false, date: clock.date, reason_code: "opening_report_snapshot_unavailable",
+      retryable: true, run_id: "", display_top3: [],
+    };
     response.status(200).json({
       ok: report?.ok === true,
       source: "opening-report-0830-briefing-only",

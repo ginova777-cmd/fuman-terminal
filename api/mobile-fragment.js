@@ -405,6 +405,16 @@ async function fetchJsonWithTimeout(url, timeoutMs = 9000, extraHeaders = {}) {
   }
 }
 
+async function fetchMorningInternal(request) {
+  let captured;
+  await require("./market-ai-live")({
+    method: "GET", headers: request?.headers || {},
+    query: { briefingOnly: "1" },
+  }, createCaptureResponse(result => { captured = result; }));
+  if (!captured || captured.statusCode >= 400) throw new Error("morning_internal_unavailable");
+  return captured.payload;
+}
+
 function createCaptureResponse(resolve) {
   let statusCode = 200;
   return {
@@ -1138,7 +1148,7 @@ module.exports = async function handler(request, response) {
       ...(tab === "strategy2" || requestedLiveFragment ? { live: 1, verify: 1, noSnapshot: 1 } : {}),
       ts: Date.now(),
     });
-    const snapshot = await readDesktopRouteSnapshot({
+    const snapshot = tab === "morning" ? null : await readDesktopRouteSnapshot({
       timeoutMs: MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS,
       allowStale: tab !== "strategy2",
     }).catch(() => null);
@@ -1151,7 +1161,7 @@ module.exports = async function handler(request, response) {
       || !hasUsableSnapshotPayload(snapshotPayload, tab)
 
       || (tab === "strategy2" && isEmptyStrategy2Snapshot(snapshotPayload))
-      ? (tab === "strategy4"
+      ? (tab === "morning" ? await fetchMorningInternal(request) : tab === "strategy4"
         ? await fetchStrategy4Internal(request, endpoint)
         : tab === "strategy5"
           ? await fetchStrategy5Internal(request, endpoint)
