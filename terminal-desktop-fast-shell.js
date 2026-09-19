@@ -53,7 +53,7 @@
   const CANVAS_ROUTE_OPTIONS = {
     [MARKET_ROUTE]: { limit: 24, ttl: 14000, live: true, today: true },
     "strategy|策略2": { limit: 240, ttl: 6500, live: true, today: true },
-    "strategy|策略3": { limit: 60, ttl: 22000, live: true, verify: true, noSnapshot: true },
+    "strategy|策略3": { limit: 2000, ttl: 22000, live: true, verify: true, noSnapshot: true },
     "strategy|策略4": { limit: 2000, ttl: 24000 },
     "strategy|策略5": { limit: 140, ttl: 22000 },
     "chip-trade|買賣超": { limit: 60, ttl: 32000, live: true, noSnapshot: true },
@@ -8867,7 +8867,7 @@
     if (clearEmptyUnifiedFilter(route, cards)) cards = unifiedRunCards(route, allRows, payloadMeta);
     let rows = (Array.isArray(canvasState.filtered) ? canvasState.filtered : [])
       .filter((row) => row && typeof row === "object")
-      .slice(0, 160);
+      .slice(0, isStrategy3Route(route) ? 2000 : 160);
     if (isStrategy5Route(route) && canvasState.signalFilter === "multi_strategy_confluence") {
       rows = strategy5TerminalConfluenceRows(allRows).slice(0, 160);
     }
@@ -8916,7 +8916,7 @@
     if (toolbarBadge) toolbarBadge.textContent = meta.badge;
     const scoreValues = rows.map((row) => cleanNumber(row.score)).filter((value) => value);
     const avgScore = scoreValues.length ? Math.round(scoreValues.reduce((sum, value) => sum + value, 0) / scoreValues.length) : 0;
-    if (summary) summary.textContent = `${meta.title}｜${previousGoodReadback ? `上一個完整掃描 ${previousGoodTradeDate || "--"}｜非今日候選` : `完整榜單 run=${runId || "--"}`}｜候選 ${displayCount} 檔`;
+    if (summary) summary.textContent = `${meta.title}｜${previousGoodReadback ? `上一個完整掃描 ${previousGoodTradeDate || "--"}｜非今日候選｜run=${runId || "--"}` : `完整榜單 run=${runId || "--"}`}｜候選 ${displayCount} 檔`;
     if (count) count.textContent = String(displayCount || "--");
     if (avg) avg.textContent = avgScore ? String(avgScore) : "--";
     if (top) top.textContent = rows[0]?.code || rows[0]?.symbol || "--";
