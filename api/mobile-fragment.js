@@ -693,7 +693,7 @@ function normalizeRows(payload, tab = "") {
   if (tab === "strategy3") {
     return rows.filter((row) => isValidBusinessRow(row, tab));
   }
-  return rows.filter((row) => isValidBusinessRow(row, tab)).slice(0, tab === "strategy4" ? 2000 : 20);
+  return rows.filter((row) => isValidBusinessRow(row, tab)).slice(0, ["strategy4", "chip"].includes(tab) ? 2000 : 20);
 }
 
 function isEmptyStrategy2Snapshot(payload) {
@@ -876,7 +876,7 @@ function rowHtml(row, index, tab = "") {
   const score = firstValue(row, ["finalScore", "score", "rankScore", "totalScore"], "--");
   const pct = firstValue(row, ["percent", "changePercent", "pct", "displayPercent", "risePct"], null);
   const reason = firstValue(row, ["reason", "summary", "description", "memo", "note", "why"], "");
-  const line = `${action}｜${score}｜${pct === null ? "--" : `${numberText(pct)}%`}`;
+  const line = tab === "chip" ? `加分 +${Number(row.rankingBonusScore || 0)}｜近期放量 +${Number(row.rankingBonuses?.recentVolume?.points || 0)}｜當沖率 +${Number(row.rankingBonuses?.daytrade?.points || 0)}` : `${action}｜${score}｜${pct === null ? "--" : `${numberText(pct)}%`}`;
   const triangleChart = tab === "strategy4" ? strategy4TriangleSvg(row) : "";
   const mainForceCosts = mobileMainForceHtml(row);
   const strategy4Matched = tab === "strategy5" && Boolean(firstValue(row, ["strategy4Matched", "strategy4_matched", "strategy4RunId", "strategy4_run_id"], ""));
@@ -1138,7 +1138,7 @@ module.exports = async function handler(request, response) {
     }
   }
   try {
-    const endpointLimit = tab === "strategy3" ? 1200 : 60;
+    const endpointLimit = tab === "strategy3" ? 1200 : tab === "chip" ? 2000 : 60;
     const endpoint = appendQuery(config.endpoint, {
       mobile: 1,
       canvas: 1,

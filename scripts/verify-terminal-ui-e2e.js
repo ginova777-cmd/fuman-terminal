@@ -2200,7 +2200,7 @@ async function verifyInstitutionRenderedIdentity(cdp, kind) {
   if (!input) return { ok: false, reason: "authoritative readback file required" };
   const evidence = JSON.parse(await fs.readFile(input, "utf8"));
   if (!evidence.ok || !Array.isArray(evidence.rows)) return { ok: false, reason: "readback incomplete" };
-  const expectedRows = evidence.rows.slice(0, kind === "desktop" ? 60 : 20);
+  const expectedRows = evidence.rows;
   const read = () => evaluate(cdp, (kind) => {
     const root = document.querySelector(kind === "desktop" ? "#chip-trade-view" : '#content [data-mobile-fragment-key="chip"]');
     const nodes = [...(root?.querySelectorAll(kind === "desktop" ? ".fuman-unified-list-card .strategy3-card-stock span" : ".mobile-terminal-row h4") || [])];
@@ -2215,7 +2215,7 @@ async function verifyInstitutionRenderedIdentity(cdp, kind) {
   if(kind==='desktop')await toggle('');
   await sleep(300);
   const checks=[];let actual=await read();
-  const equal=(a,b)=>JSON.stringify([...a].sort())===JSON.stringify([...b].sort());
+  const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
   checks.push({filter:'all',expected:expectedRows.map(r=>r.code),actual:actual.codes,runId:actual.runId,ok:actual.runId===evidence.runId&&equal(actual.codes,expectedRows.map(r=>r.code))});
   if(kind==='desktop'){
     for(const key of ['foreignStreak','trustStreak','jointStreak','foreignTrustVolumePct','tdcc1000']){

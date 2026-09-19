@@ -53,7 +53,7 @@ async function main(){
  report={...report,ok:true,tradeDate:today,sourceCount:run.expected_total,scannedCount:run.scanned_count,resultCount:rows.length,readbackCount:rows.length,sourceDates:source.sourceDates,sourceCoverage:run.payload.sourceCoverage,selectionCoverage:coverage,technicalSourceHash:run.payload.technicalSourceHash,technicalFreshReadback:true,rankingBonusContract:require('../lib/institution-ranking-bonuses').CONTRACT,rankingBonusVerified:true,blankTotal:0,rows};
  fs.writeFileSync(path.join(out,"readback.json"),JSON.stringify(report,null,2));
  if(process.argv.includes("--render")){
-  const expected=rows.slice(0,120).map(r=>r.code).join(",");
+  const expected=rows.map(r=>r.code).join(",");
   const args=["--use-system-ca",path.join(root,"scripts/verify-terminal-ui-e2e.js"),"--routes=institution","--only=desktop-night,desktop-sun,mobile-night,mobile-sun","--skip-watchlist","--skip-mobile-watch-add","--include-institution-scorecard","--institution-readback="+path.join(out,"readback.json"),"--expected-run-id="+runId,"--expected-total="+rows.length,"--expected-scorecard-symbols="+expected,"--out="+path.join(out,"rendered"),"--route-timeout=90000"];
   const child=cp.spawnSync(process.execPath,args,{cwd:root,stdio:"inherit",windowsHide:true});assert(child.status===0,"rendered three-surface acceptance failed");
  }
