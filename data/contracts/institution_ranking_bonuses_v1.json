@@ -1,0 +1,15 @@
+{
+  "contract": "institution-volume10d-prior5-2_5x-daytrade50-bonus-v1",
+  "role": "bonus_only",
+  "recentVolume": {"completedTradingDays":10,"priorTradingDays":5,"minimumRatio":2.5,"points":5,"maximumAwards":1,"source":"stock_daily_volume"},
+  "daytrade": {"formula":"official_daytrade_shares / same_date_total_volume_shares * 100","minimumPct":50,"points":5,"unit":"shares","sameSymbol":true,"sameTradeDate":true,"source":"TWSE TWTB4U / TPEx intraday stat"},
+  "maximumBonusPoints":10,
+  "missingSourcePoints":0,
+  "missingSourceExcludesCandidate":false,
+  "ranking":"bonus points descending; preserve existing order for ties within each category",
+  "runner":"run-buy-sell-complete.ps1",
+  "scanner":"scripts/scan-institution-cache.js",
+  "readbackVerifier":"scripts/verify-institution-live-readback.js",
+  "canonicalVerifier":"scripts/verify-buy-sell-complete.js",
+  "receipt":"data/scan-receipts/buy-sell-complete.json"
+}

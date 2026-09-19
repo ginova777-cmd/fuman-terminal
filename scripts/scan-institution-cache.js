@@ -408,7 +408,7 @@ function buildInstitutionResultRows(output, runId) {
   const scanDate = dateForSupabase(output.usedDate || output.date || output.updatedAt);
   const scanTime = String(output.updatedAt || new Date().toISOString());
   return Object.values(output.data || {})
-    .sort((a, b) => Math.abs(cleanNumber(b.total)) - Math.abs(cleanNumber(a.total)) || String(a.code).localeCompare(String(b.code)))
+    .sort(require('../lib/institution-ranking-bonuses').compare)
     .map((row, index) => ({
       run_id: runId,
       strategy: "institution",
@@ -732,6 +732,8 @@ async function main() {
   const candidates = Object.values(data);
   const tradeDate = dateForSupabase(payload.usedDate);
   const technicalSources = await readTechnicalSources(candidates, tradeDate);
+  const rankingInputs = await require('../lib/institution-ranking-bonuses').read(candidates, tradeDate);
+  for (const row of candidates) technicalSources[row.code].rankingInput = rankingInputs[row.code];
   const selection = evaluateCandidates(candidates, technicalSources, tradeDate, candidateIssues);
   data = Object.fromEntries(selection.selected.map(row => [row.code, row]));
   const count = Object.keys(data).length;

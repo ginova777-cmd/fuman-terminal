@@ -185,6 +185,8 @@ function buildPayload({ institution, tdcc, top = 80, options = {} }) {
       ratioDate3: dates[2],
       ratio3: ratios[2],
       ratioIncrease,
+      rankingBonusScore: Number(row.rankingBonusScore || 0),
+      rankingBonuses: row.rankingBonuses || null,
       close: cleanNumber(row.close),
       changePct: cleanNumber(row.percent ?? row.changePct),
       breakoutScore: cleanNumber(row.breakoutScore) || fallback.breakoutScore,
@@ -198,7 +200,7 @@ function buildPayload({ institution, tdcc, top = 80, options = {} }) {
     });
   }
 
-  matches.sort((a, b) => b.ratioIncrease - a.ratioIncrease || b.breakoutScore - a.breakoutScore || b.foreignLots - a.foreignLots);
+  matches.sort((a, b) => Number(b.rankingBonusScore || 0) - Number(a.rankingBonusScore || 0) || b.ratioIncrease - a.ratioIncrease || b.breakoutScore - a.breakoutScore || b.foreignLots - a.foreignLots);
   const limit = Math.max(1, Math.min(options.smallPayload ? 120 : 300, cleanNumber(options.limit) || top));
   const topMatches = matches.slice(0, limit);
   return {

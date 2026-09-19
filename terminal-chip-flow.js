@@ -324,6 +324,8 @@
         return {
           code,
           name: inst.name || stock.name || code,
+          rankingBonusScore: Number(inst.rankingBonusScore || 0),
+          rankingBonuses: inst.rankingBonuses || null,
           price: cleanNumber(inst.close) || cleanNumber(stock.close),
           change: Number.isFinite(Number(inst.change)) ? Number(inst.change) : cleanNumber(stock.change),
           percent: Number.isFinite(Number(inst.percent)) ? Number(inst.percent) : cleanNumber(stock.percent),
@@ -457,6 +459,7 @@
           }
         }
 
+        rows.sort((a,b) => cleanNumber(b.rankingBonusScore) - cleanNumber(a.rankingBonusScore));
         const visibleRows = rows.slice(0, 80);
         const chipPaged = scope.paginateTerminalRows(visibleRows, scope.chipTradePage, "chip");
         scope.chipTradePage = chipPaged.page;

@@ -1788,6 +1788,8 @@
       foreign: pickFirstValue(merged.foreign, merged.foreignNet, merged.foreign_net, merged.foreignBuy, merged.foreign_buy),
       trust: pickFirstValue(merged.trust, merged.trustNet, merged.trust_net, merged.trustBuy, merged.trust_buy),
       total: pickFirstValue(merged.total, merged.totalNet, merged.total_net, merged.institutionTotal),
+      rankingBonusScore: Number(merged.rankingBonusScore || 0),
+      rankingBonuses: merged.rankingBonuses || null,
       foreignStreak: pickFirstValue(merged.foreignStreak, merged.foreign_streak),
       trustStreak: pickFirstValue(merged.trustStreak, merged.trust_streak),
       jointStreak: pickFirstValue(merged.jointStreak, merged.joint_streak),
@@ -2661,6 +2663,7 @@
       ].join(" ").toLowerCase().includes(query);
     });
     canvasState.filtered = filterRows(chipFilter);
+    if (isChipTradeRoute(canvasState.route)) canvasState.filtered.sort((a,b) => Number(b.rankingBonusScore || 0) - Number(a.rankingBonusScore || 0));
     const pageSize = canvasPageSizeForRoute();
     const maxOffset = pageSize
       ? Math.max(0, (Math.ceil(canvasState.filtered.length / pageSize) - 1) * pageSize)
