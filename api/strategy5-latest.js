@@ -1043,8 +1043,7 @@ async function handler(request, response) {
     });
     const staleReason = staleStrategy5SnapshotReason(cached);
     if (cached && !staleReason) {
-      await attachMainForceCostsToPayload(cached);
-    await attachThreeGatePricesToPayload(cached);
+      await Promise.all([attachMainForceCostsToPayload(cached), attachThreeGatePricesToPayload(cached)]);
       setDesktopSnapshotCache(response);
       response.status(200).json(cached);
       return;
@@ -1063,8 +1062,7 @@ async function handler(request, response) {
     }
     options.chipSourceHealth = await fetchChipSourceHealth();
     const payload = buildPayload(latest.rows, latest.run, options);
-    await attachMainForceCostsToPayload(payload);
-    await attachThreeGatePricesToPayload(payload);
+    await Promise.all([attachMainForceCostsToPayload(payload), attachThreeGatePricesToPayload(payload)]);
     setDesktopSnapshotCache(response);
     response.status(200).json(payload);
   } catch (error) {
