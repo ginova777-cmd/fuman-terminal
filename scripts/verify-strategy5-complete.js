@@ -25,6 +25,7 @@ const liveFile = path.join(root, 'outputs/strategy5-live-acceptance/readback.jso
 const renderedFile = path.join(root, 'outputs/strategy5-live-acceptance/rendered/terminal-ui-e2e-report.json');
 const live = read(liveFile), rendered = read(renderedFile);
 if (!live?.ok || live.runId !== scan?.runId || live.tradeDate !== date || live.readbackCount !== Number(scan?.matches) || !live.technicalFreshReadback || live.selectionCoverage?.contract !== 'strategy5-candidate90-daily-up-hourly60-bonus-v1' || live.selectionCoverage?.ok !== true) issues.push('strategy5_daily_trend_full_readback_not_verified');
+if (live?.rankingBonusVerified !== true || live?.rankingBonusContract !== require('../lib/strategy5-ranking-bonuses').CONTRACT) issues.push('strategy5_ranking_bonus_not_verified');
 if (!rendered?.ok || Date.parse(rendered.generatedAt) < Date.parse(live?.checkedAt || '') || !Array.isArray(rendered.results) || rendered.results.filter(r => r.routeKey === 'strategy5').length < 5 || rendered.results.some(r => r.routeKey === 'strategy5' && (!r.ok || (r.kind === 'scorecard' ? r.audit?.runId !== scan?.runId || r.audit?.tradeDate !== date : !r.identity?.ok || r.identity.runId !== scan?.runId)))) issues.push('strategy5_actual_three_surface_not_verified');
 if (!runnerSource.includes('"--expected-run-id=$([string]$verifiedPayload.runId)"')
   || !runnerSource.includes('"--expected-date=$strategy5ExpectedDate"')) issues.push("strategy5_scorecard_publisher_args_missing");
@@ -77,7 +78,7 @@ if (scorecard?.contract !== "scorecard88-terminal-canonical-collector-v1") issue
 if (String(scorecardReport?.runId || "") !== String(scan?.runId || "")) issues.push("strategy5_scorecard88_run_id_mismatch");
 if (scorecardReport?.ok !== true || Number(scorecardReport?.count || scorecardReport?.resultCount || 0) <= 0) issues.push("strategy5_scorecard88_report_not_complete");
 const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "strategy5", tradeDate: date,
-  checkedAt: new Date().toISOString(), selectionCoverage: live?.selectionCoverage || null, liveReadbackReceipt: liveFile, renderedReceipt: renderedFile, marketMode: process.env.FUMAN_REPLAY_TRADE_DATE ? 'strategy_revision_replay' : 'scheduled', status: issues.length ? "failed" : "complete", complete: issues.length === 0,
+  checkedAt: new Date().toISOString(), rankingBonusVerified: live?.rankingBonusVerified === true, rankingBonusContract: live?.rankingBonusContract || null, selectionCoverage: live?.selectionCoverage || null, liveReadbackReceipt: liveFile, renderedReceipt: renderedFile, marketMode: process.env.FUMAN_REPLAY_TRADE_DATE ? 'strategy_revision_replay' : 'scheduled', status: issues.length ? "failed" : "complete", complete: issues.length === 0,
   exitCode: issues.length ? 1 : 0, runId: scan?.runId || "", count: Number(scan?.matches || 0),
   scanned: Number(scan?.scanned || 0), total: Number(scan?.total || 0), triSurfaceStatus: scan?.triSurfaceStatus || "",
   desktopRunId: scan?.desktopRunId || "", mobileRunId: scan?.mobileRunId || "", scorecardRunId: scan?.scorecardRunId || "",

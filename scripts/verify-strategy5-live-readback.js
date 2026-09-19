@@ -36,17 +36,26 @@ async function main() {
     const recomputed = technical.evaluate(evidence.candidates, evidence.sources, date);
     assert.deepStrictEqual(recomputed.selectionCoverage, run.payload.selectionCoverage, 'coverage recomputation mismatch');
     assert(recomputed.selectionCoverage.ok, 'candidate coverage below threshold');
+    assert(recomputed.selectionCoverage.rankingBonusContract === require('../lib/strategy5-ranking-bonuses').CONTRACT, 'ranking bonus contract missing');
     assert.deepStrictEqual(recomputed.selected.map(r => r.code), rows.map(r => r.code), 'exact selected ranked list mismatch');
     for (const row of rows) {
       const expected = recomputed.selected.find(r => r.code === row.code);
       assert(row.run_id === scan.runId && row.complete && String(row.scan_date).slice(0,10) === date, 'row identity mismatch');
       assert.deepStrictEqual(row.payload.technicalTrend, expected.technicalTrend, 'stored indicators mismatch ' + row.code);
       assert.deepStrictEqual(row.payload.matches, expected.matches, 'base strategies changed ' + row.code);
+      assert(expected.rankingBonus, 'bonus evidence missing '+row.code);
+      assert.deepStrictEqual(row.payload.rankingBonus,expected.rankingBonus,'bonus evidence mismatch '+row.code);
+      assert.strictEqual(Number(row.score),expected.score,'DB bonus score mismatch '+row.code);
+      assert.strictEqual(row.payload.score,expected.score,'payload bonus score mismatch '+row.code);
+      assert.strictEqual(row.rank,recomputed.selected.indexOf(expected)+1,'rank mismatch '+row.code);
     }
     const fresh = technical.evaluate(rows.map(r => r.payload), await technical.readSources(rows.map(r => r.payload), date), date);
     assert(fresh.selected.length === rows.length, 'fresh daily source does not support selected stocks');
     for (const row of rows) {
-      const actual = fresh.selected.find(r => r.code === row.code).technicalTrend;
+      const freshRow=fresh.selected.find(r=>r.code===row.code);
+      assert.strictEqual(freshRow.rankingBonus.recentVolume.points,row.payload.rankingBonus.recentVolume.points,'fresh volume bonus mismatch '+row.code);
+      assert.strictEqual(freshRow.rankingBonus.daytrade.points,row.payload.rankingBonus.daytrade.points,'fresh daytrade bonus mismatch '+row.code);
+      const actual = freshRow.technicalTrend;
       for (const frame of ['daily', 'hourly60']) {
         const stored = row.payload.technicalTrend[frame], now = actual[frame];
         if (frame === 'daily') assert(stored.lastBarTime === now.lastBarTime && stored.previousBarTime === now.previousBarTime && now.trendUp, 'daily source date mismatch');
@@ -54,7 +63,7 @@ async function main() {
       }
     }
     const visible = api.buildPayload(rows, run).matches;
-    report = { ...report, ok: true, tradeDate: date, scannedCount: run.scanned_count, expectedTotal: run.expected_total, resultCount: rows.length, readbackCount: rows.length, selectionCoverage: run.payload.selectionCoverage, technicalFreshReadback: true, technicalSourceHash: run.payload.technicalSourceHash, rows, visibleRows: visible };
+    report = { ...report, ok: true, tradeDate: date, scannedCount: run.scanned_count, expectedTotal: run.expected_total, resultCount: rows.length, readbackCount: rows.length, selectionCoverage: run.payload.selectionCoverage, technicalFreshReadback: true, rankingBonusVerified: true, rankingBonusContract: require('../lib/strategy5-ranking-bonuses').CONTRACT, technicalSourceHash: run.payload.technicalSourceHash, rows, visibleRows: visible };
     fs.writeFileSync(path.join(out, 'readback.json'), JSON.stringify(report, null, 2));
     if (process.argv.includes('--render')) {
       const args = ['--use-system-ca', path.join(root, 'scripts/verify-terminal-ui-e2e.js'), '--routes=strategy5', '--only=desktop-night,desktop-sun,mobile-night,mobile-sun', '--skip-watchlist', '--skip-mobile-watch-add', '--include-strategy5-scorecard', '--strategy5-readback=' + path.join(out,'readback.json'), '--expected-run-id=' + scan.runId, '--expected-total=' + rows.length, '--expected-scorecard-symbols=' + visible.map(r=>r.code).join(','), '--out=' + path.join(out,'rendered'), '--route-timeout=90000'];
