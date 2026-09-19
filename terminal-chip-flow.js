@@ -460,7 +460,7 @@
         }
 
         rows.sort((a,b) => cleanNumber(b.rankingBonusScore) - cleanNumber(a.rankingBonusScore));
-        const visibleRows = rows.slice(0, 80);
+        const visibleRows = rows; // Paginate the complete canonical result, never a truncated subset.
         const chipPaged = scope.paginateTerminalRows(visibleRows, scope.chipTradePage, "chip");
         scope.chipTradePage = chipPaged.page;
         const shown = chipPaged.rows;

@@ -573,8 +573,8 @@ function sanitizeStrategy2BundlePayload(payload) {
 function compactSnapshotEndpoints(request, endpoints = {}) {
   const compacted = {};
   for (const [endpoint, payload] of Object.entries(endpoints || {})) {
-    // Strategy5 is an audited complete result; the outer bundle default (80) must not truncate it.
-    compacted[endpoint] = endpoint.split("?")[0] === "/api/strategy5-latest" ? payload : shapeTopPayload(request, payload);
+    // Audited strategy results retain their complete list through the outer bundle.
+    compacted[endpoint] = ["/api/strategy5-latest", "/api/institution-latest"].includes(endpoint.split("?")[0]) ? payload : shapeTopPayload(request, payload);
   }
   return compacted;
 }
@@ -619,7 +619,7 @@ function directLiveTaskForRequestedRoute(request) {
   if (route === "strategy3") return [["/api/strategy3-latest", strategy3Latest, { ...compactQuery(1200), live: "1", verify: "1", noSnapshot: "1" }, 15000]];
   if (route === "strategy4") return [["/api/strategy4-latest", strategy4Latest, { ...compactQuery(1200), live: "1", verify: "1", noSnapshot: "1" }, 15000]];
   if (route === "strategy5") return [["/api/strategy5-latest", strategy5Latest, { ...compactQuery(1200), live: "1", verify: "1", noSnapshot: "1" }, 15000]];
-  if (route === "institution") return [["/api/institution-latest", institutionLatest, { ...compactQuery(1200), live: "1", verify: "1", noSnapshot: "1" }, 15000]];
+  if (route === "institution") return [["/api/institution-latest", institutionLatest, { ...compactQuery(3000), live: "1", verify: "1", noSnapshot: "1" }, 15000]];
   return null;
 }
 function shouldBuildWatchlistIndex(request) {
@@ -690,9 +690,9 @@ async function repairStrategy3LatestSnapshot(request, endpoints = {}) {
 
 async function repairInstitutionLatestSnapshot(request, endpoints = {}) {
   if (requestedStrategyRoute(request) !== "institution") return null;
-  const endpoint = "/api/institution-latest?canvas=1&compact=1&shell=1&limit=120&live=1&verify=1&noSnapshot=1";
+  const endpoint = "/api/institution-latest?canvas=1&compact=1&shell=1&limit=3000&live=1&verify=1&noSnapshot=1";
   const direct = await callJson("/api/institution-latest", institutionLatest, request, {
-    ...compactQuery(120),
+    ...compactQuery(3000),
     live: "1",
     verify: "1",
     noSnapshot: "1",
@@ -1019,7 +1019,7 @@ module.exports = async function handler(request, response) {
     ["/api/strategy3-latest", strategy3Latest, compactQuery(60), 6000],
     ["/api/strategy4-latest", strategy4Latest, compactQuery(70), 6000],
     ["/api/strategy5-latest", strategy5Latest, compactQuery(140), 6000],
-    ["/api/institution-latest", institutionLatest, { ...compactQuery(120), live: "1", verify: "1", noSnapshot: "1" }, 15000],
+    ["/api/institution-latest", institutionLatest, { ...compactQuery(3000), live: "1", verify: "1", noSnapshot: "1" }, 15000],
     ["/api/watchlist-match-index", watchlistMatchIndex, { compact: "1", shell: "1", limit: "80" }, 3000],
   ];
   const tasks = memberSnapshotRecovery ? memberSnapshotRecoveryTasks : [
@@ -1032,7 +1032,7 @@ module.exports = async function handler(request, response) {
     ["/api/strategy5-latest", strategy5Latest, compactQuery(140), 8000],
     ["/api/latest-signals?strategy=strategy4", latestSignals, { strategy: "strategy4", compact: "1", shell: "1", limit: "70" }, 2300],
     ["/api/market-ai-live", marketAiLive, { canvas: "1", compact: "1", shell: "1", limit: "40" }, 2300],
-    ["/api/institution-latest", institutionLatest, { ...compactQuery(120), live: "1", verify: "1", noSnapshot: "1" }, 15000],
+    ["/api/institution-latest", institutionLatest, { ...compactQuery(3000), live: "1", verify: "1", noSnapshot: "1" }, 15000],
     ["/api/watchlist-match-index", watchlistMatchIndex, { compact: "1", shell: "1", limit: "80" }, 3000],
   ];
 
