@@ -10,7 +10,11 @@ const runtimeDir = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const output = path.join(runtimeDir, "data", "scorecard-scan-audit-latest.json");
 
 async function main() {
-  const payload = buildScanAudit({ runtimeDir });
+  let payload = buildScanAudit({ runtimeDir });
+  if (process.env.FUMAN_REPLAY_TRADE_DATE) {
+    const context = await require("./verify-institution-replay-date").verifyReplayDate(process.env.FUMAN_REPLAY_TRADE_DATE);
+    payload = {...buildScanAudit({runtimeDir, tradeDate:context.tradeDate}), recoveryContext:context};
+  }
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   const result = await upsertSnapshot("scorecard_scan_audit_latest", payload, {

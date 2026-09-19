@@ -94,7 +94,8 @@ function readRequestOptions(request) {
     const compact = url.searchParams.get("compact") === "1" || url.searchParams.get("shell") === "1";
     const live = url.searchParams.get("live") === "1" || url.searchParams.get("noSnapshot") === "1";
     const smallPayload = canvas || compact;
-    const limit = Math.max(1, Math.min(3000, cleanNumber(url.searchParams.get("limit")) || (smallPayload ? 80 : 3000)));
+    const limit = request.fumanInternalVerify === true && url.searchParams.get("snapshotBuild") === "1"
+      ? 3000 : Math.max(1, Math.min(3000, cleanNumber(url.searchParams.get("limit")) || (smallPayload ? 80 : 3000)));
     const fieldContract = String(url.searchParams.get("fieldContract") || "").trim();
     const firstPaint = url.searchParams.get("firstPaint") === "1";
     return { canvas, compact, live, smallPayload, limit, fieldContract, firstPaint };
@@ -573,6 +574,7 @@ async function handler(request, response) {
 
 module.exports = withEntitlementRequired(handler, "institution");
 module.exports._test = {
+  readRequestOptions,
   buildPayload,
   buildInstitutionFilterCounts,
   normalizeRow,
