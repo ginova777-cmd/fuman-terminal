@@ -266,9 +266,17 @@ const retainedHistoryDates = scorecardHistoryDates(retainedRecords);
 const currentTradingDatePresent = retainedHistoryDates.includes(today);
 const payloadBlocker = !currentTradingDatePresent ? "scorecard_current_month_trade_date_missing" : receipts.find((row) => !row.ok)?.firstBlocker || "";
 
+const { buildScanAudit } = require('../lib/scorecard-scan-audit');
+let strategy5RecoveryContext = null;
+if (recoveryAuthorized && recoveryKey === 'strategy5' && process.env.FUMAN_STRATEGY5_REPLAY_VALIDATED === '1') {
+  const verified = require('child_process').execFileSync(process.execPath, ['--use-system-ca', path.join(__dirname, 'verify-institution-replay-date.js'), collectionDate], {encoding:'utf8',windowsHide:true,env:process.env});
+  strategy5RecoveryContext = JSON.parse(verified);
+  if (strategy5RecoveryContext.ok !== true || strategy5RecoveryContext.tradeDate !== collectionDate) throw Error('strategy5_collector_replay_date_unverified');
+}
+let scanAudit = buildScanAudit({ runtimeDir: runtimeRoot, tradeDate: collectionDate, recoveryContext: strategy5RecoveryContext });
 const payload = {
   ...previous,
-  scanAudit: require('../lib/scorecard-scan-audit').buildScanAudit({ runtimeDir: runtimeRoot }),
+  scanAudit,
   ok: receipts.every((row) => row.ok) && currentTradingDatePresent,
   source: "terminal-canonical-fixed-slot-collector",
   cacheSource: "terminal-canonical-json",
