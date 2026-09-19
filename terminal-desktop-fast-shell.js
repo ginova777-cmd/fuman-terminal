@@ -8875,6 +8875,9 @@
     if (isStrategy5Route(route) && canvasState.signalFilter === "multi_strategy_confluence") {
       rows = strategy5TerminalConfluenceRows(allRows).slice(0, 160);
     }
+    if (isStrategy5Route(route) && !rows.length && !allRows.length && !(payloadMeta.ok === true && payloadMeta.runId && payloadMeta.resultCount === 0)) {
+      return renderMemberStrategyPendingShell(route, meta, panel);
+    }
     if (isMemberStrategyPreviewRoute(route) && hasMemberPreviewToken() && !rows.length && !allRows.length && !payloadMetaHasResolvedResponse(payloadMeta)) {
       return renderMemberStrategyPendingShell(route, meta, panel);
     }
@@ -8886,7 +8889,7 @@
     const previousGoodReadback = !isStrategy2Route(route) && (payloadMeta.previousGoodReadback === true || Boolean(routeDataDate && routeDataDate !== taipeiTradeDateKey()));
     const previousGoodTradeDate = routeDataDate || String(payloadMeta.previousGoodTradeDate || "").replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
     const previousGoodNotice = previousGoodReadback
-      ? `上一個完整掃描：${previousGoodTradeDate || "--"}｜非今日候選，不可發布｜待今天完整掃描新 run 完成才切成今日正式結果`
+      ? (isStrategy5Route(route) ? `最新完整掃描資料日：${previousGoodTradeDate || "--"}｜非今日即時資料` : `上一個完整掃描：${previousGoodTradeDate || "--"}｜非今日候選，不可發布｜待今天完整掃描新 run 完成才切成今日正式結果`)
       : "";
     const headerTitle = panel.querySelector(".strategy-header h1, .chip-page-header h1, .page-header h1");
     const headerText = panel.querySelector(".desktop-route-shell-head p, .strategy-header p, .chip-page-header p, .page-header p");

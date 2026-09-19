@@ -2287,6 +2287,16 @@ async function runDesktopMode(browser, theme) {
         await prepareDesktopRoute(cdp, route, { waitForReady: false });
         await activateDesktopRoute(cdp, route);
         await prepareDesktopRoute(cdp, route);
+        if (route.key === 'strategy5' && optionValue('--strategy5-readback')) {
+          const evidence = JSON.parse(await fs.readFile(optionValue('--strategy5-readback'), 'utf8'));
+          if (!evidence.ok) throw new Error('strategy5 DB readback incomplete');
+          await waitFor(cdp, expected => {
+            const root = document.querySelector('#strategy-view');
+            const runId = root?.querySelector('[data-run-id]')?.dataset.runId || '';
+            const count = root?.querySelectorAll('.fuman-unified-list-card').length || 0;
+            return {ok: runId === expected.runId && (expected.count === 0 ? !!root.querySelector('[data-zero-result="1"]') : count === expected.count), runId, count};
+          }, {runId:evidence.runId, count:Math.min(140,evidence.visibleRows.length)}, 45000, 500);
+        }
         await afterDesktopRouteActivate(cdp, route);
         await sleep(["institution", "cb", "warrant"].includes(route.key) ? 5200 : 3200);
         return collectDesktopStatsWhenReady(cdp, route);

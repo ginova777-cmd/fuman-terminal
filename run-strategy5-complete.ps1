@@ -26,6 +26,23 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 if ($Mode -eq 'Recovery') {
   $scan = Get-Content (Join-Path $runtime 'data/scan-receipts/strategy5.json') -Raw | ConvertFrom-Json
   if (-not $ExpectedRunId -or $scan.runId -ne $ExpectedRunId -or -not $scan.complete -or $scan.status -ne 'complete' -or $scan.fallback) { throw 'strategy5_recovery_requires_exact_complete_run' }
+  & $nodeExe --use-system-ca scripts/verify-strategy5-live-readback.js
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  & "$PSScriptRoot/refresh-desktop-route-snapshot.ps1" -Source 'strategy5' -LogPath $log
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  try {
+    $env:FUMAN_SCORECARD_REFRESH_KEY = 'strategy5'
+    $env:FUMAN_SCORECARD_REFRESH_RUN_ID = $ExpectedRunId
+    & npm.cmd run scorecard:terminal-source
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & $nodeExe --use-system-ca scripts/publish-strategy5-scorecard-source-report.js "--expected-run-id=$ExpectedRunId" "--expected-date=$($scan.marketDate)"
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  } finally {
+    Remove-Item Env:FUMAN_SCORECARD_REFRESH_KEY, Env:FUMAN_SCORECARD_REFRESH_RUN_ID -ErrorAction SilentlyContinue
+  }
+  & "$PSScriptRoot/scripts/run-scorecard88-terminal-collector.ps1" -Slot '21:40' -ProjectRoot $PSScriptRoot -RuntimeRoot $runtime -Recovery -ExpectedRunId $ExpectedRunId -RecoveryReason 'strategy5-verified-existing-run-display-recovery'
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 } else {
 & $pwshExe -NoProfile -File ".\run-chip-source-sync.ps1"
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
