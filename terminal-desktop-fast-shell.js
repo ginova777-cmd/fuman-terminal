@@ -1593,7 +1593,7 @@
     if (!endpoint) return "";
     const options = canvasOptionsForRoute(route);
     const minLimit = isStrategy4Route(route) ? 10 : 20;
-    const maxLimit = isStrategy4Route(route) ? 2000 : isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : isStrategy5Route(route) ? 140 : 120;
+    const maxLimit = (route === CHIP_TRADE_ROUTE || isStrategy4Route(route)) ? 2000 : isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : isStrategy5Route(route) ? 140 : 120;
     const query = new URLSearchParams({
       canvas: "1",
       compact: "1",
@@ -1928,7 +1928,7 @@
         .map((row, index) => normalizeCanvasRow(row, index, route))
         .filter((row) => isStrategy3Route(route) ? /^\d{4}$/.test(String(row.code || "")) : (row.code || row.title)))
       .sort((a, b) => b.length - a.length)[0] || [];
-    const maxLimit = isStrategy4Route(route) ? 2000 : isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : isStrategy5Route(route) ? 140 : 120;
+    const maxLimit = (route === CHIP_TRADE_ROUTE || isStrategy4Route(route)) ? 2000 : isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : isStrategy5Route(route) ? 140 : 120;
     if (isRealtimeRadarRoute(route)) {
       return best
         .sort((a, b) => radarDomTimeValue(b) - radarDomTimeValue(a)

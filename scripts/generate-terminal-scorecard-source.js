@@ -55,7 +55,7 @@ const TASKS = [
     endpoint: "/api/institution-latest",
     modulePath: "../api/institution-latest",
     arrayKeys: ["rows", "matches"],
-    limit: 120,
+    limit: 2000,
   },
 ];
 
