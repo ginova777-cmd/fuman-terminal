@@ -2237,7 +2237,7 @@ async function verifyStrategy5RenderedIdentity(cdp, kind) {
   const read = () => evaluate(cdp, kind => {
     const root = document.querySelector(kind === 'desktop' ? '#strategy-view' : '#content [data-mobile-fragment-key="strategy5"]');
     const nodes = [...(root?.querySelectorAll(kind === 'desktop' ? '.fuman-unified-list-card .strategy3-card-stock span' : '.mobile-terminal-row h4') || [])];
-    return {runId:(root?.textContent?.match(/strategy5-\d{8}-\d{14}/)||[])[0] || root?.dataset?.runId || root?.querySelector('[data-run-id]')?.dataset?.runId || '', codes:nodes.map(n=>(n.textContent.trim().match(/^\d{4}/)||[])[0]).filter(Boolean), zero:!!root?.querySelector('[data-zero-result="1"]')};
+    return {runId:(root?.textContent?.match(/strategy5-\d{8}-\d{14}/)||[])[0] || root?.dataset?.runId || root?.querySelector('[data-run-id]')?.dataset?.runId || '', scores:kind === 'desktop' ? nodes.map(n=>Number([...n.closest('.fuman-unified-list-card').querySelectorAll('.strategy3-card-metrics div')].find(x=>x.querySelector('small')?.textContent.trim()==='分數')?.querySelector('strong')?.textContent)) : null, codes:nodes.map(n=>(n.textContent.trim().match(/^\d{4}/)||[])[0]).filter(Boolean), zero:!!root?.querySelector('[data-zero-result="1"]')};
   }, kind);
   const toggle = key => evaluate(cdp, key => {
     const root = document.querySelector('#strategy-view');
@@ -2249,7 +2249,9 @@ async function verifyStrategy5RenderedIdentity(cdp, kind) {
   const check = async (filter, rows) => {
     const actual = await read();
     const codes = rows.map(r=>r.code);
-    checks.push({filter,expected:codes,actual:actual.codes,runId:actual.runId,ok:actual.runId===evidence.runId && JSON.stringify(actual.codes.slice().sort())===JSON.stringify(codes.slice().sort())});
+    const orderOk=JSON.stringify(actual.codes)===JSON.stringify(codes);
+    const scoresOk=kind!=='desktop'||JSON.stringify(actual.scores)===JSON.stringify(rows.map(r=>Number(r.score)));
+    checks.push({filter,expected:codes,actual:actual.codes,runId:actual.runId,orderOk,scoresOk,actualScores:actual.scores,ok:actual.runId===evidence.runId&&orderOk&&scoresOk});
   };
   await check('all',expected);
   if(kind==='desktop') {
@@ -2543,7 +2545,7 @@ async function runStrategy3Scorecard(browser) {
     await clickSelectorByDom(cdp, selector);
     const expectedRun = optionValue("--expected-run-id");
     const expectedSymbols = optionValue("--expected-symbols").split(",").filter(Boolean).sort();
-    const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+    const date = optionValue("--trade-date") || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
     let stats;
     const deadline = Date.now() + ROUTE_TIMEOUT_MS;
     do {
@@ -2584,10 +2586,11 @@ async function runStrategy4Scorecard(browser) {
     await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/88`), { stopLoading: false });
     const selector = '#tabs button[data-strategy="策略4成績單"]';
     await waitForSelector(cdp, selector, ROUTE_TIMEOUT_MS);
+    await scrollSelectorIntoView(cdp, selector);
     await clickSelectorByDom(cdp, selector);
     const expectedRun = optionValue("--expected-run-id");
     const expectedSymbols = optionValue("--expected-symbols").split(",").filter(Boolean).sort();
-    const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+    const date = optionValue("--trade-date") || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
     let stats;
     const deadline = Date.now() + ROUTE_TIMEOUT_MS;
     do {
