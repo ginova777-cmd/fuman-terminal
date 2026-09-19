@@ -32,6 +32,13 @@ async function main(){
  const recomputed=evaluateCandidates(evidence.candidates,evidence.sources,today,evidence.extraIssues);assert.deepStrictEqual(recomputed.selectionCoverage,coverage,"source coverage arithmetic mismatch");
  assert.deepStrictEqual(recomputed.selected.map(r=>r.code).sort(),rows.map(r=>r.code).sort(),"selected result identity mismatch");
  for(const row of rows)assert.deepStrictEqual(row.payload.technicalTrend,recomputed.selected.find(r=>r.code===row.code)?.technicalTrend,'stored daily/60m bonus differs from raw evidence:'+row.code);
+ for(const row of rows){
+  const expected=recomputed.selected.find(r=>r.code===row.code);
+  assert.deepStrictEqual(row.payload.rankingBonuses,expected.rankingBonuses,'ranking bonus evidence mismatch:'+row.code);
+  assert.strictEqual(row.payload.rankingBonusScore,expected.rankingBonusScore,'ranking score mismatch:'+row.code);
+ }
+ const ranked=[...recomputed.selected].sort(require('../lib/institution-ranking-bonuses').compare);
+ for(const row of rows)assert.strictEqual(row.rank,ranked.findIndex(r=>r.code===row.code)+1,'ranking order mismatch:'+row.code);
  const freshSources=await readTechnicalSources(rows.map(r=>r.payload),today);const fresh=evaluateCandidates(rows.map(r=>r.payload),freshSources,today);assert(fresh.selected.length===rows.length,"fresh daily/60m source no longer supports selected rows");
  for(const row of rows){
   const expected=fresh.selected.find(r=>r.code===row.code)?.technicalTrend;assert(row.payload.technicalTrend?.pass===true&&row.payload.technicalTrend.contract===SELECTION_CONTRACT,"technical gate missing");
@@ -43,7 +50,7 @@ async function main(){
   for(const [a,b] of [["foreign","foreign_net"],["trust","trust_net"],["dealer","dealer_net"],["total","total_net"]])assert(p[a]===row[b],row.code+" DB column mismatch "+a);
  }
  assert(!/"mother_pool[^" ]*"\s*:/.test(JSON.stringify({run,rows,receipt})),"retired mother pool dependency fields");
- report={...report,ok:true,tradeDate:today,sourceCount:run.expected_total,scannedCount:run.scanned_count,resultCount:rows.length,readbackCount:rows.length,sourceDates:source.sourceDates,sourceCoverage:run.payload.sourceCoverage,selectionCoverage:coverage,technicalSourceHash:run.payload.technicalSourceHash,technicalFreshReadback:true,blankTotal:0,rows};
+ report={...report,ok:true,tradeDate:today,sourceCount:run.expected_total,scannedCount:run.scanned_count,resultCount:rows.length,readbackCount:rows.length,sourceDates:source.sourceDates,sourceCoverage:run.payload.sourceCoverage,selectionCoverage:coverage,technicalSourceHash:run.payload.technicalSourceHash,technicalFreshReadback:true,rankingBonusContract:require('../lib/institution-ranking-bonuses').CONTRACT,rankingBonusVerified:true,blankTotal:0,rows};
  fs.writeFileSync(path.join(out,"readback.json"),JSON.stringify(report,null,2));
  if(process.argv.includes("--render")){
   const expected=rows.slice(0,120).map(r=>r.code).join(",");

@@ -68,6 +68,7 @@ if (Number(snapshotSummary.count || 0) !== effectiveCount) issues.push("institut
 const liveFile = path.join(root, "outputs/institution-live-acceptance/readback.json");
 const renderedFile = path.join(root, "outputs/institution-live-acceptance/rendered/terminal-ui-e2e-report.json");
 const live = readJson(liveFile), rendered = readJson(renderedFile);
+if (live?.rankingBonusContract !== require('../lib/institution-ranking-bonuses').CONTRACT || live?.rankingBonusVerified !== true) issues.push('institution_ranking_bonus_not_verified');
 if (live?.selectionCoverage?.contract !== "institution-candidate90-daily-up-hourly60-bonus-v1" || live?.selectionCoverage?.ok !== true || live?.selectionCoverage?.dataCoverage < 0.9 || live?.technicalFreshReadback !== true) issues.push("institution_90pct_daily_trend_not_verified");
 if (!live?.ok || live.runId !== effectiveRunId || live.resultCount !== effectiveCount || live.readbackCount !== effectiveCount || live.blankTotal !== 0) issues.push("institution_live_readback_not_complete");
 if (!rendered?.ok || Date.parse(rendered.generatedAt || "") < Date.parse(live?.checkedAt || "")) issues.push("institution_rendered_evidence_not_complete");
