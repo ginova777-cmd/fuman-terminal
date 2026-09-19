@@ -13,7 +13,7 @@ async function main() {
   let payload = buildScanAudit({ runtimeDir });
   if (process.env.FUMAN_REPLAY_TRADE_DATE) {
     const context = await require("./verify-institution-replay-date").verifyReplayDate(process.env.FUMAN_REPLAY_TRADE_DATE);
-    payload = {...buildScanAudit({runtimeDir, tradeDate:context.tradeDate}), recoveryContext:context};
+    payload = {...buildScanAudit({runtimeDir, tradeDate:context.tradeDate, recoveryContext:context}), recoveryContext:context};
   }
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
