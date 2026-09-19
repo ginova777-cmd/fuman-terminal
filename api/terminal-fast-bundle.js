@@ -618,7 +618,7 @@ function directLiveTaskForRequestedRoute(request) {
   const route = requestedStrategyRoute(request);
   if (route === "strategy3") return [["/api/strategy3-latest", strategy3Latest, { ...compactQuery(1200), live: "1", verify: "1", noSnapshot: "1" }, 15000]];
   if (route === "strategy4") return [["/api/strategy4-latest", strategy4Latest, { ...compactQuery(1200), live: "1", verify: "1", noSnapshot: "1" }, 15000]];
-  if (route === "strategy5") return [["/api/strategy5-latest", strategy5Latest, { ...compactQuery(1200), live: "1", verify: "1", noSnapshot: "1" }, 15000]];
+  if (route === "strategy5") return [["/api/strategy5-latest", strategy5Latest, { ...compactQuery(140), live: "1", verify: "1", noSnapshot: "1" }, 15000]];
   if (route === "institution") return [["/api/institution-latest", institutionLatest, { ...compactQuery(3000), live: "1", verify: "1", noSnapshot: "1" }, 15000]];
   return null;
 }
