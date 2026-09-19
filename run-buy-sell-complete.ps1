@@ -15,6 +15,7 @@ if ($ReplayTradeDate) {
   if ($LASTEXITCODE -ne 0) { throw "institution_replay_date_invalid" }
   $env:FUMAN_INSTITUTION_REPLAY_VALIDATED = "1"
   $env:FUMAN_SCANNER_TARGET_TRADE_DATE = $ReplayTradeDate
+  $env:FUMAN_SCORECARD_TRADE_DATE = $ReplayTradeDate
   $env:FUMAN_TERMINAL_TARGET_TRADE_DATE = $ReplayTradeDate
 }
 $pwshExe = (Get-Process -Id $PID).Path
