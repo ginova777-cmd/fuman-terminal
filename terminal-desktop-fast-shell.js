@@ -56,7 +56,7 @@
     "strategy|策略3": { limit: 2000, ttl: 22000, live: true, verify: true, noSnapshot: true },
     "strategy|策略4": { limit: 2000, ttl: 24000 },
     "strategy|策略5": { limit: 140, ttl: 22000 },
-    "chip-trade|買賣超": { limit: 60, ttl: 32000, live: true, noSnapshot: true },
+    "chip-trade|買賣超": { limit: 2000, ttl: 32000, live: true, noSnapshot: true },
   };
   const CHIP_TRADE_DEFAULT_FILTER = "";
   const CHIP_TRADE_FILTERS = [
@@ -8750,6 +8750,7 @@
 
   function unifiedListCard(row, index, route) {
     const tags = unifiedListTags(row, route);
+    if (isChipTradeRoute(route)) tags.push(`近期放量 +${Number(row.rankingBonuses?.recentVolume?.points || 0)}`, `當沖率 +${Number(row.rankingBonuses?.daytrade?.points || 0)}`, `加分 +${Number(row.rankingBonusScore || 0)}`);
     const metrics = unifiedListMetrics(row, route);
     const labels = unifiedListMetricLabels(route);
     const kind = unifiedListKind(route);
@@ -8870,7 +8871,7 @@
     if (clearEmptyUnifiedFilter(route, cards)) cards = unifiedRunCards(route, allRows, payloadMeta);
     let rows = (Array.isArray(canvasState.filtered) ? canvasState.filtered : [])
       .filter((row) => row && typeof row === "object")
-      .slice(0, isStrategy3Route(route) ? 2000 : 160);
+      .slice(0, (isStrategy3Route(route) || isChipTradeRoute(route)) ? 2000 : 160);
     if (isStrategy5Route(route) && canvasState.signalFilter === "multi_strategy_confluence") {
       rows = strategy5TerminalConfluenceRows(allRows).slice(0, 160);
     }

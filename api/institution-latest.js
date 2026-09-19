@@ -94,7 +94,7 @@ function readRequestOptions(request) {
     const compact = url.searchParams.get("compact") === "1" || url.searchParams.get("shell") === "1";
     const live = url.searchParams.get("live") === "1" || url.searchParams.get("noSnapshot") === "1";
     const smallPayload = canvas || compact;
-    const limit = Math.max(1, Math.min(smallPayload ? 120 : 3000, cleanNumber(url.searchParams.get("limit")) || (smallPayload ? 80 : 3000)));
+    const limit = Math.max(1, Math.min(3000, cleanNumber(url.searchParams.get("limit")) || (smallPayload ? 80 : 3000)));
     const fieldContract = String(url.searchParams.get("fieldContract") || "").trim();
     const firstPaint = url.searchParams.get("firstPaint") === "1";
     return { canvas, compact, live, smallPayload, limit, fieldContract, firstPaint };
