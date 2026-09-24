@@ -25,7 +25,7 @@ function verifyJournal(auth) {
     if(!row||row.exitCode!==0||!row.finishedAt||row.receipts.length!==receipts()[step].length) throw Error(`cleanup_maintenance_step_failed:${step}`);
     for(const file of receipts()[step]) {
       const evidence=row.receipts.find(x=>x.file===file), payload=JSON.parse(fs.readFileSync(file,'utf8'));
-      if(step==='retired')assertRetiredReference(payload,auth);
+      if(step==='retired'||step==='history')assertRetiredReference(payload,auth);
       const checked=Date.parse(payload.checkedAt||payload.finishedAt);
       if(!evidence||hash(file)!==evidence.sha256||payload.ok!==true||checked<Date.parse(row.startedAt)||checked>Date.parse(row.finishedAt)||(!['cost','janitor'].includes(step)&&!(payload.applied===true||payload.dryRun===false))) throw Error(`cleanup_maintenance_receipt_invalid:${step}`);
     }

@@ -76,3 +76,5 @@
 ## 無法解析的通知 claim
 
 通知原文清理只接受可證明已送達、具防重送識別且超過30日的紀錄。無法解析的 claim 不具刪除資格，必須原位保留，以維持 exclusive-create 防重送；不得補寫成已送達、刪除或移走。擴充清理回執逐檔記錄 bytes、SHA256、未知交付狀態及原位讀回結果，獨立 verifier 重新盤點。這類保護保留可完成清理驗收，但不代表通知來源損壞已修復。保護檔在本次盤點中有變動時仍必須失敗。
+
+Authorized history maintenance uses the authorization issuedAt as the retention reference for Supabase event, snapshot, date, run and Vercel deployment cutoffs. The runner and independent readback pass the same authorization; journal verification rejects a mismatched run, authorization hash or reference time. Items becoming eligible after that reference belong to a later cleanup, avoiding moving-cutoff false failures. Full runtime inventory readback has a bounded 10-minute timeout.
