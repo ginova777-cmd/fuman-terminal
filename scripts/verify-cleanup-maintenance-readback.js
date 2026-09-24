@@ -4,15 +4,15 @@ const checks=[['retired','cleanup-api-only-retired-artifacts.js',['--dry-run','-
 const authArg=process.argv.find(x=>x.startsWith('--maintenance-authorization='));
 const context=require('./cleanup-maintenance-context');
 const auth=authArg?context.authorization(authArg.slice('--maintenance-authorization='.length)):null;
-if(auth)checks[0][2].push('--maintenance-authorization='+auth.file);
+if(auth)for(const check of checks.filter(x=>['retired','history'].includes(x[0])))check[2].push('--maintenance-authorization='+auth.file);
 const results=[],issues=[];
 for(const [name,script,args] of checks){
- const r=spawnSync(process.execPath,['--use-system-ca',`scripts/${script}`,...args],{encoding:'utf8',windowsHide:true,timeout: name === 'history' ? 18*60*1000 : 120000,maxBuffer:32*1024*1024,env:{...process.env,FUMAN_HISTORY_CLEANUP_ENABLE_VERCEL_CLI:'1'}});
+ const r=spawnSync(process.execPath,['--use-system-ca',`scripts/${script}`,...args],{encoding:'utf8',windowsHide:true,timeout: name === 'history' ? 18*60*1000 : name === 'runtime' ? 10*60*1000 : 120000,maxBuffer:32*1024*1024,env:{...process.env,FUMAN_HISTORY_CLEANUP_ENABLE_VERCEL_CLI:'1'}});
  let p;try{p=JSON.parse(r.stdout);}catch{}
- if(auth&&name==='retired'&&p)context.assertRetiredReference(p,auth);
+ if(auth&&['retired','history'].includes(name)&&p)context.assertRetiredReference(p,auth);
  const remaining=name==='retired'?p?.deletedCount:name==='runtime'?p?.candidates:p?.supabase?.sections?.reduce((n,s)=>n+Number(s.candidates||s.candidateRuns||0),0)+Number(p?.vercel?.candidateDeployments||0);
  const ok=r.status===0&&p?.ok===true&&remaining===0&&(name!=='history'||(p.supabase?.ok===true&&p.vercel?.ok===true&&p.vercel.inventoryComplete===true&&!p.supabase.skipped&&!p.vercel.skipped));
  results.push({name,ok,remaining,payload:p,error:r.stderr||r.error?.message||null});if(!ok)issues.push(`cleanup_readback_remaining_or_failed:${name}`);
 }
-console.log(JSON.stringify({ok:issues.length===0,checkedAt:new Date().toISOString(),results,issues},null,2));
+console.log(JSON.stringify({ok:issues.length===0,checkedAt:new Date().toISOString(),issues,summary:results.map(x=>({name:x.name,ok:x.ok,remaining:x.remaining,error:x.error})),results},null,2));
 if(issues.length)process.exitCode=1;
