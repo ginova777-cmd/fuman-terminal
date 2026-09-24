@@ -42,7 +42,7 @@ try {
     if (-not $ExpectedRunId -or $scan.runId -ne $ExpectedRunId -or -not $scan.complete -or $scan.status -ne 'complete' -or $scan.fallback) { throw 'strategy5_recovery_requires_exact_complete_run' }
   & $nodeExe --use-system-ca scripts/verify-strategy5-live-readback.js
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-  & "$PSScriptRoot/refresh-desktop-route-snapshot.ps1" -Source 'strategy5' -LogPath $log
+  & "$PSScriptRoot/refresh-desktop-route-snapshot.ps1" -Source 'strategy5' -LogPath ($log + '.snapshot.log')
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   try {
     $env:FUMAN_SCORECARD_REFRESH_KEY = 'strategy5'
@@ -54,14 +54,18 @@ try {
   } finally {
     Remove-Item Env:FUMAN_SCORECARD_REFRESH_KEY, Env:FUMAN_SCORECARD_REFRESH_RUN_ID -ErrorAction SilentlyContinue
   }
-  & "$PSScriptRoot/scripts/run-scorecard88-terminal-collector.ps1" -Slot '21:40' -ProjectRoot $PSScriptRoot -RuntimeRoot $runtime -Recovery -ExpectedRunId $ExpectedRunId -RecoveryReason 'strategy5-verified-existing-run-display-recovery'
-  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
   } else {
     Invoke-CompleteStep 'chip-source-sync' $pwshExe @('-NoProfile','-File','.\run-chip-source-sync.ps1')
     Invoke-CompleteStep 'composite-producers' $nodeExe @('scripts/verify-strategy5-composite-producers.js')
     Invoke-CompleteStep 'full-scan' $pwshExe @('-NoProfile','-File','.\run-strategy5.ps1')
+    $scan = Get-Content (Join-Path $runtime 'data/scan-receipts/strategy5.json') -Raw | ConvertFrom-Json
+    if (-not $scan.runId -or -not $scan.complete -or $scan.status -ne 'complete' -or $scan.exitCode -ne 0 -or $scan.fallback) { throw 'strategy5_collection_requires_complete_run' }
+    $ExpectedRunId = [string]$scan.runId
+    Invoke-CompleteStep 'pre-collection-readback' $nodeExe @('--use-system-ca','scripts/verify-strategy5-live-readback.js')
   }
+  # Both modes require canonical publication. This audited exact-run collection
+  # does not claim that the later 21:40 scheduled slot already executed.
+  Invoke-CompleteStep 'canonical-scorecard-collection' $pwshExe @('-NoProfile','-File',"$PSScriptRoot/scripts/run-scorecard88-terminal-collector.ps1",'-Slot','21:40','-ProjectRoot',$PSScriptRoot,'-RuntimeRoot',$runtime,'-Recovery','-ExpectedRunId',$ExpectedRunId,'-RecoveryReason','strategy5-verified-post-scan-canonical-publication')
   Invoke-CompleteStep 'scorecard-audit' $nodeExe @('--use-system-ca','scripts/publish-scorecard-scan-audit.js')
   Invoke-CompleteStep 'db-and-rendered-readback' $nodeExe @('--use-system-ca','scripts/verify-strategy5-live-readback.js','--render')
   Invoke-CompleteStep 'canonical-receipt' $nodeExe @('scripts/verify-strategy5-complete.js','--write-receipt')
