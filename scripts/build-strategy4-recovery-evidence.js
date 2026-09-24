@@ -19,8 +19,8 @@ const surface = (read(surfaceFile).rows || []).find((item) => item.key === "stra
 const allowedIssues = (row?.issues || []).every((issue) => String(issue).startsWith("scorecard /88 row/sourceReport runId != latest pointer"));
 const validScan = scan?.runId === runId
   && scan?.tradeDate === `${date.slice(0,4)}-${date.slice(4,6)}-${date.slice(6,8)}`
-  && scan?.status === "complete"
-  && scan?.complete === true
+  && ((scan?.status === "complete" && scan?.complete === true)
+    || (["verifying", "delivering"].includes(scan?.status) && scan?.complete === false))
   && scan?.scanComplete === true
   && Number(scan?.exitCode) === 0
   && scan?.fallback !== true
@@ -30,6 +30,10 @@ const valid = validScan
   && row?.supabase?.ok === true
   && row.supabase.runId === runId
   && row.supabase.scannedCount === row.supabase.expectedTotal
+  && Number(scan.scanned) === row.supabase.scannedCount
+  && Number(scan.total) === row.supabase.expectedTotal
+  && Number(scan.matches) === row.supabase.count
+  && !scan.blockingReason
   && row.supabase.count > 0
   && row.desktopSnapshot?.runId === runId
   && row.mobileFragment?.runId === runId

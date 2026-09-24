@@ -107,12 +107,12 @@ function currentPreflightReceiptChecks(checks, tradeDate) {
     addCheck(checks, "current_preflight_receipt_exists:" + key, exists(filePath), filePath);
   }
   if (!Object.values(paths).every(exists)) return;
-  const preflight = readJson(paths.preflight);
+  const preflight = require("../lib/opening-frozen-preflight-recovery").resolvePreflight(REPORT_DIR, tradeDate);
   const leaders = readJson(paths.leaders);
   const snapshot = readJson(paths.snapshot);
   addCheck(checks,"frozen_source_policy",leaders.detection_policy === (morningStages.stage().id === "us_0820" ? "us_only_tx_night_0820_v1" : "asia_only_0850_v1") && (leaders.industries || []).flatMap(row=>row.leaders || []).every(row=>morningStages.allowed(row.yahoo_symbol)),"reject old scope before delivery");
   const industries = leaders.industries || leaders.industry_bias || leaders.rows || leaders.overseas_industries || [];
-  addCheck(checks, "current_preflight_ok", preflight.ok === true && ["REPORT_OK", "REPORT_DEGRADED"].includes(preflight.report_status), JSON.stringify({ ok: preflight.ok, report_status: preflight.report_status }));
+  addCheck(checks, "current_preflight_ok", preflight.ok === true && ["REPORT_OK", "REPORT_DEGRADED", "RECOVERED_FROZEN_EVIDENCE"].includes(preflight.report_status), JSON.stringify({ ok: preflight.ok, report_status: preflight.report_status }));
   addCheck(checks, "current_preflight_15_industries", Array.isArray(industries) && industries.length === 15, "count=" + (Array.isArray(industries) ? industries.length : "not-array"));
   addCheck(checks, "current_preflight_snapshot_ok", snapshot.ok === true && (snapshot.date === tradeDate || snapshot.trade_date === tradeDate), JSON.stringify({ ok: snapshot.ok, date: snapshot.date, trade_date: snapshot.trade_date }));
 }
@@ -345,7 +345,7 @@ function currentReceiptChecks(checks, tradeDate) {
 
   if (!Object.values(paths).every(exists)) return;
 
-  const preflight = readJson(paths.preflight);
+  const preflight = require("../lib/opening-frozen-preflight-recovery").resolvePreflight(REPORT_DIR, tradeDate);
   const leaders = readJson(paths.leaders);
   const snapshot = readJson(paths.snapshot);
   const finalReceipt = readJson(paths.final);

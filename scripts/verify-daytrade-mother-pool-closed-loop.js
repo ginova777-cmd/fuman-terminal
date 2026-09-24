@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { readOpeningEvidence } = require("../lib/mother-pool-opening-evidence");
 const { isTwseTradingDay } = require("./twse-trading-day");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -137,12 +138,15 @@ function verifySkeletonStatic() {
 function verifyConsumerContractStatic() {
   const strategy2 = fs.readFileSync(path.join(ROOT, "scripts", "run-strategy2-v3-water-scan.js"), "utf8");
   const strategy3 = fs.readFileSync(path.join(ROOT, "scripts", "run-strategy3-v2-complete-scan.js"), "utf8");
+  const sharedReader = fs.readFileSync(path.join(ROOT, "lib", "daytrade-canonical-water-reader.js"), "utf8");
+  const strategy3Reader = fs.readFileSync(path.join(ROOT, "lib", "strategy3-canonical-water-reader.js"), "utf8");
+  const readerVersion = require("../lib/strategy3-canonical-water-reader").MOTHER_POOL_CONTRACT_VERSION;
   const marker = `new Set(["${EXPECTED_MOTHER_POOL_CONTRACT_VERSION}"])`;
   const checks = {
     strategy2_accepts_current_contract: strategy2.includes(marker) && strategy2.includes("strategy2WaterReady"),
     strategy2_receipt_reports_contract: strategy2.includes("motherPoolContractVersion: water.motherPoolContractVersion"),
-    strategy3_accepts_current_contract: strategy3.includes(marker) && strategy3.includes("mother_pool_contract_version_unsupported"),
-    strategy3_receipt_reports_contract: strategy3.includes("accepted_contract_versions"),
+    strategy3_accepts_current_contract: readerVersion === EXPECTED_MOTHER_POOL_CONTRACT_VERSION && strategy3.includes("strategy3Consumer: true") && strategy3.includes('require("../lib/daytrade-canonical-water-reader")') && sharedReader.includes('require("./strategy3-canonical-water-reader").readCanonicalDaytradeWater(options)') && strategy3Reader.includes("canonical_water_mother_pool_contract_version_mismatch"),
+    strategy3_receipt_reports_contract: strategy3.includes("contract_version: MOTHER_POOL_CONTRACT_VERSION") && strategy3Reader.includes("mother_pool_contract_version: MOTHER_POOL_CONTRACT_VERSION"),
   };
   return { ok: Object.values(checks).every(Boolean), expected_contract_version: EXPECTED_MOTHER_POOL_CONTRACT_VERSION, checks };
 }
@@ -217,8 +221,6 @@ async function main() {
     fastSync: path.join(RUNTIME, "state", "daytrade-fast-supabase-sync.json"),
     industryTop3: path.join(RUNTIME, "data", "scan-receipts", `daytrade-industry-top3-${clock.compact}.json`),
     industryFastInject: path.join(RUNTIME, "data", "scan-receipts", `daytrade-industry-fast-inject-${clock.compact}.json`),
-    openingReport: path.join(RUNTIME, "data", "opening-report-0830", `opening-report-0830-bridge-aggregate-${clock.compact}.json`),
-    openingReportHandoffAck: path.join(RUNTIME, "data", "scan-receipts", `opening-report-0830-mother-pool-handoff-ack-${clock.compact}.json`),
     futopt0845: path.join(RUNTIME, "data", "scan-receipts", `daytrade-futopt-preopen-evidence-0845-${clock.compact}.json`),
     futopt0850: path.join(RUNTIME, "data", "scan-receipts", `daytrade-futopt-preopen-evidence-0850-${clock.compact}.json`),
   };
@@ -228,8 +230,6 @@ async function main() {
   const fastSync = readJson(paths.fastSync);
   const industryTop3 = readJson(paths.industryTop3);
   const industryFastInject = readJson(paths.industryFastInject);
-  const openingReport = readJson(paths.openingReport);
-  const openingReportHandoffAck = readJson(paths.openingReportHandoffAck);
   const futopt0845 = readJson(paths.futopt0845);
   const futopt0850 = readJson(paths.futopt0850);
   const failures = [];
@@ -341,20 +341,11 @@ async function main() {
   check("static_consumer_contract_versions", staticChecks.consumers.ok, "static_consumer_contract_versions_failed");
   check("legacy_mother_pool_verifier_retired", staticChecks.legacyVerifierRetired.ok, "legacy_mother_pool_verifier_still_present");
 
-  const openingRequired = clock.minute >= 8 * 60 + 36;
-  const openingOk = !openingRequired || (
-    identityOf(openingReport).tradeDate === clock.tradeDate
-    && openingReport?.status === "BRIDGE_OK"
-    && Number(openingReport?.bridge_handoff_industry_count ?? openingReport?.industry_count) === 3
-    && openingReport?.forbidden_publish_guard === true
-    && Number(openingReport?.formal_candidate_count) === 0
-    && openingReport?.formal_candidate_allowed === false
-  );
+  const openingEvidence = readOpeningEvidence(RUNTIME, clock.tradeDate, clock.minute);
+  const openingRequired = openingEvidence.required;
+  const openingOk = openingEvidence.bridgeOk;
   check("opening_report_bridge_closed", openingOk, "opening_report_bridge_not_closed");
-  const openingAckSymbols = [...new Set([
-    ...(Array.isArray(openingReportHandoffAck?.accepted_symbols) ? openingReportHandoffAck.accepted_symbols : []),
-    ...(Array.isArray(openingReportHandoffAck?.db_readback_symbols) ? openingReportHandoffAck.db_readback_symbols : []),
-  ].map(String).filter((symbol) => /^\d{4}$/.test(symbol)))];
+  const openingAckSymbols = openingEvidence.symbols;
   const prioritySymbolSet = new Set(Array.isArray(priority?.symbols) ? priority.symbols.map(String) : []);
   const openingAckMissingFromWriterManifest = openingAckSymbols.filter((symbol) => !prioritySymbolSet.has(symbol));
   const openingQuoteReadback = openingAckSymbols.length
@@ -372,15 +363,7 @@ async function main() {
   const openingAckMissingFromMotherPool = openingAckLiveAdmissibleSymbols.filter((symbol) => !motherPoolSymbolSet.has(symbol));
   const openingAckSkippedStaleQuote = openingAckSymbols.filter((symbol) =>
     !motherPoolSymbolSet.has(symbol) && openingQuoteFreshBySymbol.get(symbol) !== true);
-  const openingHandoffAckOk = !openingRequired || (
-    identityOf(openingReportHandoffAck).tradeDate === clock.tradeDate
-    && openingReportHandoffAck?.contract === "opening-report-0830-mother-pool-handoff-ack-v2"
-    && openingReportHandoffAck?.complete === true
-    && openingReportHandoffAck?.db_readback_ok === true
-    && openingReportHandoffAck?.formal_candidate_allowed === false
-    && openingReportHandoffAck?.forbidden_publish_guard === true
-    && openingAckSymbols.length > 0
-  );
+  const openingHandoffAckOk = openingEvidence.ackOk;
   check("opening_report_handoff_ack_complete", openingHandoffAckOk, "opening_report_handoff_ack_not_complete");
   check(
     "opening_report_ack_symbols_received_by_writer_manifest",
@@ -446,8 +429,7 @@ async function main() {
         ok: openingOk && openingHandoffAckOk && openingAckMissingFromWriterManifest.length === 0
           && openingQuoteReadback.ok === true && openingAckMissingFromMotherPool.length === 0,
         required: openingRequired,
-        path: paths.openingReport,
-        handoff_ack_path: paths.openingReportHandoffAck,
+        stages: openingEvidence.stages,
         handoff_ack_symbols: openingAckSymbols.length,
         handoff_ack_missing_from_writer_manifest: openingAckMissingFromWriterManifest,
         handoff_ack_live_admissible_symbols: openingAckLiveAdmissibleSymbols,

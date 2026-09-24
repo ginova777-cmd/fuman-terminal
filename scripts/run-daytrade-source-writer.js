@@ -1,4 +1,5 @@
 const { isAuthorizedMorningRecovery } = require("../lib/opening-report-recovery-seed");
+const { boundedScorecardPayload } = require("../lib/daytrade-scorecard-payload");
 const { isPublishedMotherMember } = require("../lib/daytrade-published-membership");
 const { nativeVolume, typedCollectorVolume, evaluateTurnover, rankTurnover } = require('../lib/daytrade-intraday-turnover');
 const { outsideRatio, normalizeNaturalMinute } = require("../lib/daytrade-source-evidence");
@@ -382,7 +383,11 @@ function writeJson(file, payload) {
 function writeJsonAtomic(file, payload) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = `${file}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(temporary, `${JSON.stringify(payload, null, 2)}\n`, { flag: "w" });
+  const descriptor = fs.openSync(temporary, "wx");
+  try {
+    fs.writeFileSync(descriptor, `${JSON.stringify(payload, null, 2)}\n`);
+    fs.fsyncSync(descriptor);
+  } finally { fs.closeSync(descriptor); }
   fs.renameSync(temporary, file);
 }
 
@@ -660,9 +665,10 @@ async function supabaseGet(resource, query = "", options = {}) {
 async function supabaseGetPaged(resource, query = "", options = {}) {
   const key = requireSupabaseKey(Boolean(options.service));
   const pageSize = Math.max(1, Math.min(Number(options.pageSize || 1000), 1000));
+  const maxRows = Math.max(pageSize, Math.min(100000, Number(options.maxRows || 20000)));
   const rows = [];
   let exactTotal = null;
-  for (let offset = 0; offset < 20000; offset += pageSize) {
+  for (let offset = 0; offset < maxRows; offset += pageSize) {
     const url = `${SUPABASE_URL}/rest/v1/${resource}${query ? `?${query}` : ""}`;
     const response = await supabaseFetch(url, {
       method: "GET",
@@ -681,6 +687,7 @@ async function supabaseGetPaged(resource, query = "", options = {}) {
       const match = /^(?:(\d+)-(\d+)|\*)\/(\d+)$/.exec(range);
       if (!Array.isArray(page) || !match) throw new Error('paged_exact_count_evidence_missing');
       const total = Number(match[3]);
+      if (total > maxRows) throw new Error('paged_exact_count_exceeds_budget');
       if (exactTotal !== null && total !== exactTotal) throw new Error('paged_exact_count_changed');
       exactTotal = total;
       if (page.length && (Number(match[1]) !== offset || Number(match[2]) - offset + 1 !== page.length)) throw new Error('paged_range_mismatch');
@@ -876,6 +883,7 @@ function readWriterState() {
     lastRestFallbackAt: state.lastRestFallbackAt || "",
     lastRestFallbackOutcome: state.lastRestFallbackOutcome || "",
     intradayMirrorCursor: Math.max(0, Number(state.intradayMirrorCursor || 0)),
+    daytradeMotherPoolCandleMirror: state.daytradeMotherPoolCandleMirror || null,
   };
 }
 
@@ -1094,7 +1102,7 @@ async function fetchRecentThreeDayAverageVolume() {
   const calendar=await require('../lib/mother-pool-historical-sessions').selectSessions({tradeDate,resolveDay:date=>require('./twse-trading-day').isTwseTradingDay(date,{stateDir:statePath(''),ignoreOverrides:true})});
   const dates=require('../lib/mother-pool-daily-volume-baseline').datesFromCalendar(calendar,tradeDate);
   const historyDates=require('../lib/mother-pool-daily-volume-baseline').datesFromCalendar(calendar,tradeDate,15);
-  const rows=await supabaseGetPaged('strategy4_daily_ohlcv_view',`select=symbol,trade_date,volume_lots,open,high,low,close&trade_date=gte.${historyDates[0]}&trade_date=lt.${tradeDate}&order=trade_date.desc,symbol.asc`,{service:true,pageSize:1000,requireExactCount:true});
+  const rows=await supabaseGetPaged('strategy4_daily_ohlcv_view',`select=symbol,trade_date,volume_lots,open,high,low,close&trade_date=gte.${historyDates[0]}&trade_date=lt.${tradeDate}&order=trade_date.desc,symbol.asc`,{service:true,pageSize:1000,maxRows:60000,requireExactCount:true});
   const dailyReadAt=nowIso();
   const bySymbol=new Map();
   for(const symbol of new Set(rows.map(r=>normalizeCode(r.symbol)).filter(Boolean))){
@@ -2718,7 +2726,9 @@ function extractConstObjectLiteral(source, name) {
 
 function readHeatmapStaticGroupMap() {
   const map = new Map();
-  const source = readText(HEATMAP_API_FILE);
+  // Evidence hashes must use the same raw bytes as the mapping verifier.
+  let source = "";
+  try { source = fs.readFileSync(HEATMAP_API_FILE, "utf8"); } catch {}
   if (!source) {
     map.meta = { source: "missing", rows: 0 };
     return map;
@@ -7087,7 +7097,8 @@ async function writeStatusAndScorecard(result) {
   result.payload.mother_pool_round_summary = motherPoolDelta.round_summary;
   result.payload.target_symbol_diagnostics = motherPoolDelta.target_symbol_diagnostics;
   await ensureWriterLease();
-  const nonFatalWriteErrors = result.payload.nonfatal_write_errors || [];
+  const nonFatalWriteErrors = (result.payload.nonfatal_write_errors || []).map(require('../lib/daytrade-diagnostic-errors').encodeDiagnosticError);
+  result.payload.nonfatal_write_errors = nonFatalWriteErrors;
   result.payload.source_host_id = SOURCE_HOST_ID;
   result.payload.source_host_role = SOURCE_HOST_ROLE;
   result.payload.writer_instance_id = WRITER_INSTANCE_ID;
@@ -7128,7 +7139,7 @@ async function writeStatusAndScorecard(result) {
     futopt_stock_mapped: result.payload.futopt_stock_mapped,
     preopen_status: result.payload.preopen_status,
     source_status: result.status, bounded_scope: "A01-A19", mode: "preopen_light"
-  } : result.payload;
+  } : boundedScorecardPayload(result.payload);
   const scorecardRow = {
     trade_date: tradeDate,
     source_name: SOURCE_NAME,
@@ -7164,14 +7175,21 @@ async function writeStatusAndScorecard(result) {
   try {
     await supabaseInsert("fugle_daytrade_source_speed_scorecard", [scorecardRow]);
   } catch (error) {
-    nonFatalWriteErrors.push({
+    nonFatalWriteErrors.push(require("../lib/daytrade-diagnostic-errors").encodeDiagnosticError({
       target: "fugle_daytrade_source_speed_scorecard",
       message: error?.message || String(error),
-    });
+    }));
     result.payload.nonfatal_write_errors = nonFatalWriteErrors;
     sourceRow.payload = result.payload;
   }
 
+  const nullPaths = [];
+  function inspectNull(value, key) {
+    if (typeof value === 'string' && value.includes(String.fromCharCode(0))) nullPaths.push(key);
+    else if (value && typeof value === 'object') for (const [child, item] of Object.entries(value)) inspectNull(item, key + '.' + child);
+  }
+  inspectNull(sourceRow, 'source_status');
+  if (nullPaths.length) throw Error('SOURCE_STATUS_NULL_CHARACTER_FIELDS:' + JSON.stringify(nullPaths));
   await supabaseUpsert("source_status", [sourceRow], "source_name");
   // The turnover checklist has its own independently read-back receipt.
   // Failure here is visible but cannot erase the already published core source.
