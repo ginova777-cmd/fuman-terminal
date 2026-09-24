@@ -42,7 +42,7 @@ try {
     if (-not $ExpectedRunId -or $scan.runId -ne $ExpectedRunId -or -not $scan.complete -or $scan.status -ne 'complete' -or $scan.fallback) { throw 'strategy5_recovery_requires_exact_complete_run' }
   & $nodeExe --use-system-ca scripts/verify-strategy5-live-readback.js
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-  & "$PSScriptRoot/refresh-desktop-route-snapshot.ps1" -Source 'strategy5' -LogPath $log
+  & "$PSScriptRoot/refresh-desktop-route-snapshot.ps1" -Source 'strategy5' -LogPath ($log + '.snapshot.log')
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   try {
     $env:FUMAN_SCORECARD_REFRESH_KEY = 'strategy5'
