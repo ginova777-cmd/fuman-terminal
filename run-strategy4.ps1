@@ -1,4 +1,4 @@
-param([switch]$Recovery, [string]$ReplayTradeDate = "", [string]$ReplayRuntime = "", [switch]$ResumeReplay)
+param([switch]$Recovery, [string]$ReplayTradeDate = "", [string]$ReplayRuntime = "", [switch]$ResumeReplay, [switch]$SkipNotifications)
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
@@ -74,7 +74,7 @@ function Write-Strategy4Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     scanned = [int]$Scanned
     total = [int]$Total
     matches = $Matches
-    scanComplete = ($Complete -or $Status -eq "delivering")
+    scanComplete = ($Complete -or ($Status -in @("verifying", "delivering") -and $Scanned -gt 0 -and $Scanned -eq $Total -and $RunId))
     complete = $Complete
     qualityStatus = if ($Complete) { "complete" } else { "" }
     fallback = $false
@@ -254,6 +254,12 @@ function Invoke-Strategy4ClosureAndLine {
   foreach ($command in $commands) {
     & $nodeExe "--use-system-ca" @command *>&1 | Tee-Object -FilePath $log -Append
     if ($LASTEXITCODE -ne 0) { throw "Strategy4 closure verifier failed: $($command[0]) exit=$LASTEXITCODE" }
+  }
+  if ($SkipNotifications) {
+    & $nodeExe "--use-system-ca" "scripts\verify-strategy4-tri-surface-complete.js" "--expect-run-id=$RunId" "--notifications=disabled-by-user"
+    if ($LASTEXITCODE -ne 0) { throw "Strategy4 three-surface completion rejected" }
+    Write-Log "Strategy4 three-surface closure complete; notifications disabled by user runId=$RunId"
+    return
   }
   if (-not $ReuseDeliveredLineEvidence) {
     & $nodeExe "--use-system-ca" "scripts\send-strategy-line-card.js" "--strategy=strategy4" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
@@ -530,6 +536,7 @@ try {
   if ($dbVerify.ok -ne $true) { throw "DB latest-run verifier ok=false" }
   if ($ResumeReplay -and [string]$dbVerify.runId -ne [string]$resumeProof.runId) { throw 'ResumeReplay DB run differs from original published scan' }
   if ([string]::IsNullOrWhiteSpace([string]$dbVerify.runId)) { throw "DB latest-run verifier missing runId" }
+  Write-Strategy4Receipt "verifying" 0 $false ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) @() "" ([int]$dbVerify.scannedCount) ([int]$dbVerify.expectedTotal)
 } catch {
   Write-Log "Strategy4 DB latest-run verification before API readback failed: $($_.Exception.Message)"
   Write-Strategy4Receipt "failed" 1 $false 0 "" @($_.Exception.Message) "critical scan failed during DB latest-run verification"
