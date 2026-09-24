@@ -1,0 +1,20 @@
+"use strict";
+const assert=require('assert'),fs=require('fs'),path=require('path');
+const {verify,RETIRED_TASK,RETIRED_INSTALLER}=require('./verify-verifier-retirement');
+const root=path.resolve(__dirname,'..');
+const parent=path.join(root,'outputs','verifier-retirement-tests');fs.mkdirSync(parent,{recursive:true});
+const fixture=fs.mkdtempSync(path.join(parent,'case-'));
+for(const file of ['scripts/fuman-schedule-registry.json','scripts/register-terminal-unattended-tasks.ps1','scripts/sync-main-deploy-source.js','package.json','run-terminal-master-control.ps1','scripts/verify-daily-retention-maintenance.js','scripts/verify-publish-gate.js']){const dest=path.join(fixture,file);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(path.join(root,file),dest);}
+const tasks=[{name:'Fuman Terminal Autonomous Root Monitor',enabled:true,action:'pwsh -File "C:\\fuman-release-owner\\fuman-terminal\\run-terminal-master-control.ps1" -RequireProtectedReadback'}];
+assert.equal(verify(fixture,tasks).ok,true);
+assert.equal(verify(fixture,[...tasks,{name:RETIRED_TASK,enabled:false,action:'node old.js'}]).ok,false,'disabled retired task still forbidden');
+assert.equal(verify(fixture,[...tasks,{name:'Renamed old audit',enabled:true,action:'node scripts/run-terminal-unattended-final-audit.js'}]).ok,false,'renaming old task cannot evade guard');
+assert.equal(verify(fixture,[...tasks,{...tasks[0],name:'Second Root'}]).ok,false,'duplicate canonical root forbidden');
+assert.equal(verify(fixture,[{...tasks[0],action:'pwsh run-terminal-autonomous-root.ps1'}]).ok,false,'old root action rejected');
+assert.equal(verify(fixture,null).ok,false,'unreadable task inventory fails closed');
+fs.writeFileSync(path.join(fixture,RETIRED_INSTALLER),'old installer restored');
+assert(verify(fixture,tasks).issues.includes('retired_installer_restored'));
+fs.unlinkSync(path.join(fixture,RETIRED_INSTALLER));
+const daily=path.join(fixture,'scripts/verify-daily-retention-maintenance.js');fs.writeFileSync(daily,fs.readFileSync(daily,'utf8').replace("'scripts/cleanup-extended-retention.js','--verify'",'removed'));
+assert(verify(fixture,tasks).issues.includes('extended_independent_verifier_missing'),'retirement cannot remove necessary checks');
+console.log(JSON.stringify({ok:true,tests:8,fixture}));

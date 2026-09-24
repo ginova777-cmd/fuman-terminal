@@ -86,11 +86,12 @@ function main() {
   const registrationReceiptAuthoritative = registrationReceipt?.ok === true;
   const registrationReceiptIgnoredReason = registrationReceipt && registrationReceipt.ok !== true ? "live_task_readback_is_authoritative_after_existing_task_verified" : "";
   const taskRegistered = task.exists === true && task.enabled === true;
+  const retiredFinalAuditAbsent = finalAuditTask.exists === false && !finalAuditTask.probe_error;
   const legacyTaskConflict = legacyTask.exists === true && legacyTask.enabled === true;
   const unattendedPrincipalReady = String(task.logonType || "").toLowerCase() === "s4u" && String(task.runLevel || "").toLowerCase() === "highest";
   const startWhenAvailableReady = task.startWhenAvailable === true;
   const multipleInstancesReady = String(task.multipleInstances || "").toLowerCase() === "ignorenew";
-  const rootActionReady = /run-terminal-autonomous-root\.ps1/i.test(`${task.execute || ""} ${task.arguments || ""}`);
+  const rootActionReady = /run-terminal-master-control\.ps1/i.test(`${task.execute || ""} ${task.arguments || ""}`);
   const rootReadOnlyReady = !/\s-ApplyScanners(\s|$)/i.test(` ${task.arguments || ""} `);
   const rootProtectedReadbackReady = /\s-RequireProtectedReadback(\s|$)/i.test(` ${task.arguments || ""} `);
   const triggerCountReady = Number(task.triggerCount || 0) >= 8;
@@ -98,7 +99,7 @@ function main() {
   const lockSafe = lock.safe === true;
   const staleLockHandled = lock.staleLockHandled === true;
   const eventRows = Array.isArray(events.events) ? events.events : (events.events ? [events.events] : []);
-  const powerRecoveryOk = taskRegistered && unattendedPrincipalReady && startWhenAvailableReady && multipleInstancesReady && rootActionReady && rootReadOnlyReady && rootProtectedReadbackReady && triggerCountReady && postBootRecoveryVerified && lockSafe && staleLockHandled && !legacyTaskConflict;
+  const powerRecoveryOk = taskRegistered && unattendedPrincipalReady && startWhenAvailableReady && multipleInstancesReady && rootActionReady && rootReadOnlyReady && rootProtectedReadbackReady && triggerCountReady && postBootRecoveryVerified && lockSafe && staleLockHandled && !legacyTaskConflict && retiredFinalAuditAbsent;
   const payload = {
     contract: "terminal-power-recovery-receipt-v1",
     ok: powerRecoveryOk,
@@ -114,6 +115,7 @@ function main() {
     registrationReceiptAuthoritative,
     registrationReceiptIgnoredReason,
     taskRegistered,
+    retiredFinalAuditAbsent,
     startWhenAvailableReady,
     multipleInstancesReady,
     rootActionReady,
@@ -134,6 +136,7 @@ function main() {
     lock,
     checked_at: new Date().toISOString(),
     failures: [
+      ...(retiredFinalAuditAbsent ? [] : ["retired_final_audit_task_present_or_unreadable"]),
       ...(taskRegistered ? [] : ["autonomous_root_monitor_task_missing_or_disabled"]),
       ...(unattendedPrincipalReady ? [] : ["autonomous_root_monitor_task_not_s4u_highest"]),
       ...(startWhenAvailableReady ? [] : ["autonomous_root_monitor_task_not_start_when_available"]),

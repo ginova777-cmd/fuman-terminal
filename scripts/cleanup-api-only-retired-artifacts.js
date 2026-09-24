@@ -2,6 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
+const { assertTree } = require('./cleanup-path-protection');
+let retentionReferenceMs = Date.now();
 const REPO_ROOT = path.resolve(__dirname, "..");
 const DEFAULT_ROOTS = [
   process.env.FUMAN_TERMINAL_ROOT || "C:\\fuman-terminal",
@@ -232,6 +234,7 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--dry-run") args.dryRun = true;
+    else if (arg.startsWith("--maintenance-authorization=")) args.maintenanceAuthorization = arg.slice("--maintenance-authorization=".length);
     else if (arg === "--json") args.json = true;
     else if (arg === "--no-status") args.writeStatus = false;
     else if (arg === "--root") args.roots.push(argv[++i]);
@@ -308,6 +311,7 @@ function rmDirectory(root, rel, result, dryRun) {
     result.skipped.push({ path: target, reason: "not-directory" });
     return;
   }
+  assertTree(root,target);
   if (!dryRun) fs.rmSync(target, { recursive: true, force: true });
   result.deleted.push(target);
 }
@@ -419,6 +423,7 @@ function pruneMatchingDirectories(parentDir, predicate, result, dryRun) {
   for (const entry of fs.readdirSync(parentDir, { withFileTypes: true })) {
     if (!entry.isDirectory() || !predicate(entry.name)) continue;
     const target = path.join(parentDir, entry.name);
+    assertTree(parentDir,target);
     if (!dryRun) fs.rmSync(target, { recursive: true, force: true });
     result.deleted.push(target);
   }
@@ -426,9 +431,11 @@ function pruneMatchingDirectories(parentDir, predicate, result, dryRun) {
 
 function pruneOldFiles(dir, maxAgeDays, result, dryRun) {
   if (!fs.existsSync(dir)) return;
-  const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+  const cutoff = retentionReferenceMs - maxAgeDays * 24 * 60 * 60 * 1000;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const target = path.join(dir, entry.name);
+    if (entry.name.toLowerCase() === "production-health.jsonl") continue;
+    assertTree(dir,target);
     if (entry.isDirectory()) {
       pruneOldFiles(target, maxAgeDays, result, dryRun);
       try {
@@ -446,9 +453,11 @@ function pruneOldFiles(dir, maxAgeDays, result, dryRun) {
 
 function pruneOldFilesWhere(dir, maxAgeDays, predicate, result, dryRun) {
   if (!fs.existsSync(dir)) return;
-  const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+  const cutoff = retentionReferenceMs - maxAgeDays * 24 * 60 * 60 * 1000;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const target = path.join(dir, entry.name);
+    if (entry.name.toLowerCase() === "production-health.jsonl") continue;
+    assertTree(dir,target);
     if (entry.isDirectory()) {
       pruneOldFilesWhere(target, maxAgeDays, predicate, result, dryRun);
       try {
@@ -490,10 +499,12 @@ function dateKeyFromName(name) {
 
 function pruneRetiredDataFiles(dir, maxAgeDays, result, dryRun) {
   if (!fs.existsSync(dir)) return;
-  const cutoffKey = taipeiDateKey(new Date(Date.now() - maxAgeDays * 24 * 60 * 60 * 1000));
-  const cutoffMs = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+  const cutoffKey = taipeiDateKey(new Date(retentionReferenceMs - maxAgeDays * 24 * 60 * 60 * 1000));
+  const cutoffMs = retentionReferenceMs - maxAgeDays * 24 * 60 * 60 * 1000;
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const target = path.join(dir, entry.name);
+    if (entry.name.toLowerCase() === "production-health.jsonl") continue;
+    assertTree(dir,target);
     if (entry.isDirectory()) {
       pruneRetiredDataFiles(target, maxAgeDays, result, dryRun);
       try {
@@ -513,7 +524,7 @@ function pruneRetiredDataFiles(dir, maxAgeDays, result, dryRun) {
 
 function isPrunableScanReceipt(file, name) {
   const base = String(name || "").toLowerCase();
-  if (base.includes("latest")) return false;
+  if (base.includes("latest") || !/20\d{2}[-]?\d{2}[-]?\d{2}/.test(base)) return false;
   return base.endsWith(".json") || base.endsWith(".jsonl") || base.endsWith(".log");
 }
 
@@ -631,13 +642,15 @@ function writeStatus(runtimeRoot, payload) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const startedAt = new Date();
+  const maintenance = args.maintenanceAuthorization ? require("./cleanup-maintenance-context").authorization(args.maintenanceAuthorization) : null;
+  retentionReferenceMs = maintenance ? Date.parse(maintenance.issuedAt) : startedAt.getTime();
   const rootResults = args.roots.map((root) => cleanupRoot(root, args));
   const runtimeResult = { root: args.runtimeRoot, deleted: [], skipped: [] };
   pruneOldFiles(path.join(args.runtimeRoot, "archive", "strategy2-intraday", "static-latest"), RUNTIME_RETENTION_DAYS, runtimeResult, args.dryRun);
   pruneOldFiles(path.join(args.runtimeRoot, "archive", "strategy2-intraday", "history"), RUNTIME_HISTORY_RETENTION_DAYS, runtimeResult, args.dryRun);
   pruneMatchingDirectories(path.join(args.runtimeRoot, "cache", "fugle"), (name) => /^historical-legacy-mixed-units-/i.test(name), runtimeResult, args.dryRun);
-  pruneOldFiles(path.join(args.runtimeRoot, "logs"), LOG_RETENTION_DAYS, runtimeResult, args.dryRun);
-  pruneOldFiles(path.join(args.runtimeRoot, "tmp"), RUNTIME_TMP_RETENTION_DAYS, runtimeResult, args.dryRun);
+  // Logs now belong to the manifest-based local-assets runner (sealed gzip archives).
+  // Temporary files require terminated-job evidence in the local-assets runner.
   pruneRetiredDataFiles(path.join(args.runtimeRoot, "data", "retired"), RUNTIME_RETIRED_RETENTION_DAYS, runtimeResult, args.dryRun);
   pruneOldFilesWhere(path.join(args.runtimeRoot, "data", "scan-receipts"), RUNTIME_SCAN_RECEIPT_RETENTION_DAYS, isPrunableScanReceipt, runtimeResult, args.dryRun);
   pruneOldFilesWhere(path.join(args.runtimeRoot, "data"), RUNTIME_BACKUP_RETENTION_DAYS, isBackupLikeRuntimeFile, runtimeResult, args.dryRun);
@@ -649,6 +662,9 @@ async function main() {
     dryRun: args.dryRun,
     startedAt: startedAt.toISOString(),
     finishedAt: new Date().toISOString(),
+    retentionReferenceTime: new Date(retentionReferenceMs).toISOString(),
+    maintenanceRunId: maintenance?.runId || null,
+    maintenanceAuthorizationSha256: maintenance?.sha256 || null,
     source: "api-only-retired-artifact-cleanup",
     repoRoot: REPO_ROOT,
     roots: rootResults,

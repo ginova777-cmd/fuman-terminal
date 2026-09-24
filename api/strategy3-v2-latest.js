@@ -26,8 +26,9 @@ function compactReason(row) {
   const entry = row.entry_price ?? row.entryPrice ?? "--";
   const close = row.close_price ?? row.close ?? "--";
   const candles = row.candle_count ?? row.candleCount ?? "--";
-  const entryTime = String(row.entry_candle_time || row.entryCandleTime || "").slice(11, 16) || "13:00";
-  return `Strategy3 V2 隔日沖參考；${entryTime} 進場價=${entry}；收盤=${close}；當日 1m=${candles} 根；同日 Fugle candles/quotes 完整掃。`;
+  const instant = new Date(row.entry_candle_time || row.entryCandleTime || "");
+  const entryTime = Number.isFinite(instant.getTime()) ? new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false }).format(instant) : "13:00";
+  return `Strategy3 V2 隔日沖參考；13:00 參考進場價=${entry}（${entryTime} K）；收盤=${close}；當日 1m=${candles} 根；同日 Fugle candles/quotes 完整掃。`;
 }
 
 function pctText(value) {
@@ -70,7 +71,7 @@ function normalizeRow(source = {}, index = 0) {
     entry_price: entry,
     pct,
     change: pct,
-    percent: pct,
+    percent: cleanNumber(row.change_percent ?? row.changePercent ?? row.pct ?? row.percent),
     changePercent: row.change_percent ?? row.changePercent,
     stopPrice: row.stop_price ?? row.stopPrice,
     targetPrice: row.conservative_target_price ?? row.targetPrice,
@@ -137,10 +138,10 @@ async function readSupabasePayload(dateDash, options = {}) {
   };
 }
 
-function payloadFromComplete({ source, runId, tradeDate, status, count, rows, scannerSummary, latestReadOnly = false }) {
+function payloadFromComplete({ source, runId, tradeDate, status, count, rows, scannerSummary, latestReadOnly = false, recoveryReplay = false }) {
   const readonlyHistory = latestReadOnly === true;
-  const displayMode = readonlyHistory ? "latest_readonly_history" : "strategy3_v2_complete_run";
-  const formalDisplayAllowed = !readonlyHistory;
+  const displayMode = readonlyHistory ? "latest_readonly_history" : recoveryReplay ? "recovery_replay_complete" : "strategy3_v2_complete_run";
+  const formalDisplayAllowed = !readonlyHistory && !recoveryReplay;
   const publishAllowed = !readonlyHistory;
   const unattendedStatus = readonlyHistory ? "HISTORY_ONLY" : "YES";
   const evidenceStatus = readonlyHistory ? "historical_readonly" : "complete";
@@ -159,7 +160,9 @@ function payloadFromComplete({ source, runId, tradeDate, status, count, rows, sc
     usedDate: tradeDate,
     dataDate: tradeDate,
     expectedTradeDate: tradeDate,
-    status: readonlyHistory ? "READONLY_HISTORY" : "complete",
+    status: readonlyHistory ? "READONLY_HISTORY" : recoveryReplay ? "RECOVERY_REPLAY_COMPLETE" : "complete",
+    recoveryReplay,
+    naturalSlotComplete: !recoveryReplay && !readonlyHistory,
     rawStatus: readonlyHistory ? "READONLY_HISTORY" : (status || "COMPLETE"),
     qualityStatus: readonlyHistory ? "historical_readonly" : "complete",
     evidenceStatus,
@@ -189,7 +192,7 @@ function payloadFromComplete({ source, runId, tradeDate, status, count, rows, sc
       runId,
       tradeDate,
       sourceDate: tradeDate,
-      moduleStatus: readonlyHistory ? "historical_readonly" : "complete",
+      moduleStatus: readonlyHistory ? "historical_readonly" : recoveryReplay ? "recovery_replay_complete" : "complete",
       todayAuthoritative: !latestReadOnly,
       formalDisplayAllowed,
       displayMode,
@@ -228,6 +231,7 @@ module.exports = async function strategy3V2Latest(request, response) {
       rows: supabase.rows,
       scannerSummary: supabase.run.coverage || {},
       latestReadOnly: supabase.latestReadOnly === true,
+      recoveryReplay: supabase.run?.source_chain?.recovery_replay === true || supabase.run?.formal_allowed === false,
     })));
   }
 

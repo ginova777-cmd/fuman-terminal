@@ -1,0 +1,6 @@
+const assert=require('assert/strict'),p=require('../lib/opening-report-line-policy');
+const run='same-run',hash='same-hash',date='2026-09-16';
+const l={report_run_id:run,delivery_content_hash:hash,line_push_attempted:true,line_push_ok:false,has_user_target:true,has_group_target:true,target_count:2,delivered_count:1,line_error_detail:'group:http_429 ',quota_exception:{contract:p.CONTRACT,authorized_policy:'user-approved-20260916-morning-quota-exception',report_run_id:run,delivery_content_hash:hash,trade_date:date,status:'quota_exhausted_not_delivered',source:'LINE Messaging API quota and consumption',quota_type:'limited',quota_limit:200,total_usage:200,checked_at:new Date().toISOString()}};
+assert.equal(p.accepted(l,run,hash,date),true);
+for(const bad of [{...l,quota_exception:null},{...l,line_error_detail:'group:http_401'},{...l,line_push_attempted:false},{...l,delivery_content_hash:'other'},{...l,quota_exception:{...l.quota_exception,total_usage:199}},{...l,quota_exception:{...l.quota_exception,checked_at:'2026-09-01'}},{...l,has_group_target:false}])assert.equal(p.accepted(bad,run,hash,date),false);
+assert.equal(l.line_push_ok,false);console.log('PASS: quota exhaustion only; no forged delivery; auth, stale, missing and mismatched evidence rejected');

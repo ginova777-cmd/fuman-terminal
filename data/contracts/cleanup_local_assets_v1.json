@@ -1,0 +1,25 @@
+{
+  "contract": "cleanup-local-assets-v1",
+  "manifest": "config/cleanup-local-assets.json",
+  "categories": {
+    "retired_cache": { "keepDays": 30, "action": "delete", "evidenceType": "retired_release" },
+    "test_artifact": { "keepDays": 30, "action": "delete", "evidenceType": "closed_test" },
+    "sealed_log": { "keepDays": 30, "action": "gzip", "evidenceType": "sealed_log" },
+    "retired_worktree": { "keepDays": 45, "action": "git_worktree_remove", "evidenceType": "retired_release" },
+    "retired_backup": { "keepDays": 45, "action": "delete", "evidenceType": "verified_backup_retirement" },
+    "interrupted_temp": { "keepDays": 7, "action": "delete", "evidenceType": "terminated_job" }
+  },
+  "protectedRoots": [
+    "C:/fuman-terminal-preserved-20260919-cleanup",
+    "C:/fuman-release-owner/prod81",
+    "C:/fuman-release-owner/fuman-terminal-production-20260828-pr81",
+    "C:/fuman-release-owner/fuman-terminal",
+    "C:/fuman-terminal",
+    "C:/fuman-terminal-publish-sync"
+  ],
+  "allowedRoots": ["C:/fuman-runtime/outputs", "C:/fuman-runtime/logs", "C:/fuman-runtime/tmp", "C:/fuman-release-owner"],
+  "protectedNames": ["production-health.jsonl", "sent-notifications.jsonl"],
+  "lockPolicy": "report_only",
+  "schedule": "existing_daily_retention_stage",
+  "missingEvidence": "preserve"
+}

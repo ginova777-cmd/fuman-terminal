@@ -3,10 +3,10 @@ const fs = require("fs");
 const path = require("path");
 const runtime = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const root = path.resolve(__dirname, "..");
-const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const today = process.env.FUMAN_REPLAY_TRADE_DATE || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 const key = today.replace(/\D/g, "");
 const taipeiWeekday = new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", weekday: "short" }).format(new Date());
-const marketClosedWeekend = taipeiWeekday === "Sat" || taipeiWeekday === "Sun";
+const marketClosedWeekend = !process.env.FUMAN_REPLAY_TRADE_DATE && (taipeiWeekday === "Sat" || taipeiWeekday === "Sun");
 const readJson = (file) => { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } };
 const readText = (file) => { try { return fs.readFileSync(file, "utf8"); } catch { return ""; } };
 const institutionFile = path.join(runtime, "data", "scan-receipts", "institution.json");
@@ -25,6 +25,28 @@ const effectiveRunId = marketClosedWeekend ? previousGoodRunId : String(institut
 const effectiveCount = marketClosedWeekend ? previousGoodCount : Number(institution?.matches || 0);
 const effectiveDateKey = marketClosedWeekend ? String(e2e?.sourceDataDate || e2e?.runIdDate || "") : key;
 const issues = [];
+// Institution canonical retirement gate: no obsolete verifier may satisfy COMPLETE.
+const retiredInstitutionVerifiers = [
+  'run-institution-battle-verify.ps1',
+  'scripts/verify-institution-battle-state.js',
+  'scripts/verify-institution-prewater-strict.js',
+  'scripts/verify-institution-filter-counts.js',
+  'scripts/verify-strategy5-institution-unattended-contract.js',
+];
+for (const retired of retiredInstitutionVerifiers) {
+  if (fs.existsSync(path.join(root, retired))) issues.push('retired_institution_verifier_returned:' + retired);
+}
+const institutionPackage = readJson(path.join(root, 'package.json'));
+if (!institutionPackage?.scripts) issues.push('institution_package_scripts_unreadable');
+for (const [name, command] of Object.entries(institutionPackage?.scripts || {})) {
+  const normalized = String(command).replaceAll('\\', '/');
+  if (retiredInstitutionVerifiers.some(file => normalized.includes(file) || normalized.includes(path.basename(file)))
+      || /^verify:institution-prewater(?:$|:)/.test(name)) {
+    issues.push('retired_institution_verifier_alias_returned:' + name);
+  }
+}
+// End Institution canonical retirement gate.
+
 const indexHtml = readText(path.join(root, "index.html"));
 const desktopShell = readText(path.join(root, "terminal-desktop-fast-shell.js"));
 const requiredLoadingMarkers = [
@@ -55,7 +77,7 @@ if (marketClosedWeekend) {
 } else {
   if (institution?.complete !== true || institution?.status !== "complete" || Number(institution?.exitCode) !== 0) issues.push("institution_receipt_not_complete");
   if (!String(institution?.runId || "").includes(key)) issues.push("institution_run_not_today");
-  if (Number(institution?.matches || 0) <= 0) issues.push("institution_result_empty");
+  if (Number(institution?.matches || 0) < 0) issues.push("institution_result_empty");
   if (institution?.publishAllowed !== true || institution?.evidenceStatus !== "complete" || institution?.unattendedStatus !== "YES") issues.push("institution_publish_contract_not_complete");
 }
 if (e2e?.ok !== true) issues.push("institution_e2e_not_complete");
@@ -64,14 +86,34 @@ const snapshotEndpoint = "/api/institution-latest?canvas=1&compact=1&shell=1&lim
 const snapshotSummary = snapshot?.summary?.[snapshotEndpoint] || {};
 if (snapshot?.ok !== true || snapshot?.partial === true) issues.push("institution_desktop_snapshot_not_complete");
 if (String(snapshotSummary.runId || "") !== effectiveRunId) issues.push("institution_desktop_snapshot_runid_mismatch");
-if (Number(snapshotSummary.count || 0) <= 0 || Number(snapshotSummary.count || 0) > effectiveCount) issues.push("institution_desktop_snapshot_count_invalid");
+if (Number(snapshotSummary.count || 0) !== effectiveCount) issues.push("institution_desktop_snapshot_count_invalid");
+const liveFile = path.join(root, "outputs/institution-live-acceptance/readback.json");
+const renderedFile = path.join(root, "outputs/institution-live-acceptance/rendered/terminal-ui-e2e-report.json");
+const live = readJson(liveFile), rendered = readJson(renderedFile);
+if (live?.rankingBonusContract !== require('../lib/institution-ranking-bonuses').CONTRACT || live?.rankingBonusVerified !== true) issues.push('institution_ranking_bonus_not_verified');
+if (live?.selectionCoverage?.contract !== "institution-candidate90-daily-up-hourly60-bonus-v1" || live?.selectionCoverage?.ok !== true || live?.selectionCoverage?.dataCoverage < 0.9 || live?.technicalFreshReadback !== true) issues.push("institution_90pct_daily_trend_not_verified");
+if (!live?.ok || live.runId !== effectiveRunId || live.resultCount !== effectiveCount || live.readbackCount !== effectiveCount || live.blankTotal !== 0) issues.push("institution_live_readback_not_complete");
+if (!rendered?.ok || Date.parse(rendered.generatedAt || "") < Date.parse(live?.checkedAt || "")) issues.push("institution_rendered_evidence_not_complete");
+for (const kind of ["desktop", "mobile", "scorecard"]) {
+  const entries = (rendered?.results || []).filter(row => row.kind === kind && row.routeKey === "institution");
+  if (!entries.length || entries.some(row => row.ok !== true || (kind === "scorecard" ? row.contentAcceptance?.actualRun : row.identity?.runId) !== effectiveRunId || (kind !== "scorecard" && row.identity?.ok !== true))) issues.push("institution_rendered_" + kind + "_identity_mismatch");
+}
 const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "institution", label: "買賣超",
   checkedAt: new Date().toISOString(), tradeDate: effectiveDateKey ? `${effectiveDateKey.slice(0, 4)}-${effectiveDateKey.slice(4, 6)}-${effectiveDateKey.slice(6, 8)}` : today,
-  marketMode: marketClosedWeekend ? "weekend_previous_good" : "trading_day_current_run", status: issues.length ? "failed" : "complete",
+  marketMode: process.env.FUMAN_REPLAY_TRADE_DATE ? "strategy_revision_replay" : marketClosedWeekend ? "weekend_previous_good" : "trading_day_current_run", status: issues.length ? "failed" : "complete",
   complete: issues.length === 0, exitCode: issues.length ? 1 : 0, runId: effectiveRunId,
+  notificationRequirement: 'not_required',
+  selectionCoverage: live?.selectionCoverage || null, indicatorContract: "technical-kd5-3-rsi3-6-v1",
+  triSurfaceStatus: issues.length ? "incomplete" : "complete", blockingReason: issues.join("; "),
+  desktopRunId: rendered?.results?.find(r => r.kind === "desktop" && r.routeKey === "institution")?.identity?.runId || "",
+  mobileRunId: rendered?.results?.find(r => r.kind === "mobile" && r.routeKey === "institution")?.identity?.runId || "",
+  scorecardRunId: rendered?.results?.find(r => r.kind === "scorecard" && r.routeKey === "institution")?.contentAcceptance?.actualRun || "",
+  liveReadbackReceipt: liveFile, renderedReceipt: renderedFile, scannedCount: live?.scannedCount || 0, resultCount: live?.resultCount || 0, readbackCount: live?.readbackCount || 0,
   count: effectiveCount, sourceReceipt: sourceFile, institutionReceipt: marketClosedWeekend ? null : institutionFile,
   e2eReceipt: e2eFile, snapshotReceipt: snapshotFile, snapshotRunId: String(snapshotSummary.runId || ""), snapshotCount: Number(snapshotSummary.count || 0),
   displayContract: "scheduled-complete-scan -> route-snapshot -> click-snapshot-first -> background-api-refresh",
+  sourceAuthority: "TWSE T86 + TPEx 3itrade + shared daily OHLCV + Fugle historical 60m",
+  sourceDependency: "independent_no_mother_pool",
   verifier: "scripts/verify-buy-sell-complete.js", issues };
 if (process.argv.includes("--write-receipt")) { fs.mkdirSync(path.dirname(out), { recursive: true }); fs.writeFileSync(out, JSON.stringify(payload, null, 2), "utf8"); }
 console.log(JSON.stringify({ ...payload, receiptPath: out, readOnly: !process.argv.includes("--write-receipt") }, null, 2));

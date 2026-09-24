@@ -1444,7 +1444,7 @@ function readOpeningShortwave(clock = taipeiClock()) {
 function readOpeningMorningReport(clock = taipeiClock()) {
   const compact = clock.ymd;
   const date = `${compact.slice(0, 4)}-${compact.slice(4, 6)}-${compact.slice(6, 8)}`;
-  const reportDir = path.join(RUNTIME_ROOT, "data", "opening-report-0830");
+  const reportDir = process.env.FUMAN_MORNING_STAGE ? require("../lib/opening-report-stage-contract").directory(RUNTIME_ROOT) : path.join(RUNTIME_ROOT, "data", "opening-report-0830");
   const finalReceiptPath = path.join(reportDir, `opening-report-0830-final-receipt-${compact}.json`);
   const overseasLeadersPath = path.join(reportDir, `overseas-leaders-0830-${compact}.json`);
   const lineReceiptPath = path.join(reportDir, `line-push-receipt-${compact}.json`);
@@ -1471,6 +1471,7 @@ function readOpeningMorningReport(clock = taipeiClock()) {
   }
   const finalDateOk = compactDate(finalReceipt.date) === compact;
   const stateIndustryRows = listOpeningIndustryBiasFiles(clock)
+    .filter(row => row.payload.run_id === finalReceipt.run_id + "-" + row.payload.industry && (!finalReceipt.stage || row.payload.stage === finalReceipt.stage))
     .map((row) => ({
       industry: row.payload.industry,
       display_name: row.payload.display_name || row.payload.industry,
@@ -1489,7 +1490,7 @@ function readOpeningMorningReport(clock = taipeiClock()) {
   // Cleanup may retire the per-industry state files after the run closes. The
   // frozen 08:20 receipt plus the canonical 15-industry map is sufficient to
   // reconstruct the same observation-only terminal briefing.
-  const frozenByIndustry = new Map(normalizeArray(overseasLeaders?.industries).map((row) => [String(row?.industry || ""), row]));
+  const frozenByIndustry = new Map(normalizeArray(overseasLeaders?.run_id === finalReceipt.run_id && compactDate(overseasLeaders?.date) === compact ? overseasLeaders.industries : []).map((row) => [String(row?.industry || ""), row]));
   const frozenIndustryRows = OPENING_REPORT_0830_INDUSTRY_MAP.map((mapRow) => {
     const frozen = frozenByIndustry.get(mapRow.industry) || {};
     const average = Number(frozen.average_percent);
@@ -1603,7 +1604,7 @@ function readOpeningMorningReport(clock = taipeiClock()) {
   };
 }
 
-async function readOpeningMorningReportSnapshot(clock = taipeiClock(), timeoutMs = Number(process.env.FUMAN_OPENING_REPORT_0830_SNAPSHOT_TIMEOUT_MS || 2000)) {
+async function readOpeningMorningReportSnapshot(clock = taipeiClock(), timeoutMs = Number(process.env.FUMAN_OPENING_REPORT_0830_SNAPSHOT_TIMEOUT_MS || 5000)) {
   const allowPreviousTradingDay = isWeekend(clock);
   const snapshot = await readSnapshot("opening_report_0830_terminal_briefing", {
     tradeDate: clock.date,
@@ -1611,7 +1612,7 @@ async function readOpeningMorningReportSnapshot(clock = taipeiClock(), timeoutMs
     // day briefing visible, matching the terminal's previous-good banner.
     allowLatestFallback: allowPreviousTradingDay,
     // A short retry is more useful to the terminal than one long stalled request.
-    timeoutMs: Math.min(Math.max(500, Number(timeoutMs) || 2000), 1300),
+    timeoutMs: Math.min(Math.max(500, Number(timeoutMs) || 5000), 5000),
     maxAttempts: 3,
   }).catch(() => null);
   const payload = snapshot?.payload;
@@ -1718,8 +1719,13 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
 module.exports = async function handler(request, response) {
   const clock = taipeiClock();
   if (String(request.query?.briefingOnly || "") === "1") {
-    const snapshotReport = await readOpeningMorningReportSnapshot(clock, 2500);
-    const report = snapshotReport?.ok === true ? snapshotReport : readOpeningMorningReport(clock);
+    response.setHeader("Cache-Control", "no-store, max-age=0");
+    response.setHeader("CDN-Cache-Control", "no-store");
+    const snapshotReport = await readOpeningMorningReportSnapshot(clock, 5000);
+    const report = snapshotReport?.ok === true ? snapshotReport : {
+      ok: false, date: clock.date, reason_code: "opening_report_snapshot_unavailable",
+      retryable: true, run_id: "", display_top3: [],
+    };
     response.status(200).json({
       ok: report?.ok === true,
       source: "opening-report-0830-briefing-only",

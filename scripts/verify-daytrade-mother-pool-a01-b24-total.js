@@ -1,0 +1,56 @@
+'use strict';
+// Independent 43-item verifier. It never upgrades missing natural evidence to PASS.
+const fs=require('fs');
+const path=require('path');
+const {spawnSync}=require('child_process');
+const IDS=[...Array.from({length:19},(_,i)=>`A${String(i+1).padStart(2,'0')}`),...Array.from({length:24},(_,i)=>`B${String(i+1).padStart(2,'0')}`)];
+const arg=(name,def)=>{const p=process.argv.find(x=>x.startsWith(`--${name}=`));return p?String(p.slice(name.length+3)):def;};
+const runtime=arg('runtime',process.env.FUMAN_RUNTIME||'C:/fuman-runtime');
+const tradeDate=arg('trade-date',new Date().toISOString().slice(0,10));
+const out=arg('out',path.join(runtime,'data','scan-receipts',`mother-pool-a01-b24-total-${tradeDate}.json`));
+const registry=JSON.parse(fs.readFileSync(path.join(__dirname,'..','data','contracts','mother-pool-a01-b24-module-registry-v1.json'),'utf8'));
+const readJson=f=>{try{return JSON.parse(fs.readFileSync(f,'utf8'));}catch{return null;}};
+const files=[]; const walk=d=>{if(!fs.existsSync(d))return; for(const e of fs.readdirSync(d,{withFileTypes:true})){const f=path.join(d,e.name);if(e.isDirectory())walk(f);else files.push(f);}}; walk(path.join(runtime,'data','scan-receipts'));
+const text=files.filter(f=>/\.json$/.test(f)&&!f.toLowerCase().includes('fixture')&&!f.toLowerCase().includes('total-verifier')&&!f.toLowerCase().includes('summary')).map(f=>[f,readJson(f)]);
+const resultIndex=arg('module-results',null);
+const index=resultIndex?readJson(resultIndex):null;
+const allowed=new Set((index?.results||[]).filter(x=>x.complete===true&&x.exit_code===0).map(x=>path.resolve(x.out)));
+const canonical=arg('canonical',`fugle_daytrade_source:${tradeDate.replaceAll('-','')}:canonical`);
+const receipts=text.filter(([,v])=>v&&String(v.trade_date||'').slice(0,10)===tradeDate);
+const has=(terms)=>receipts.some(([f,v])=>terms.some(t=>f.toLowerCase().includes(t)||JSON.stringify(v).toLowerCase().includes(t)));
+const validRound=(r,tradeDate)=>{
+  if(!r||typeof r!=='object')return false;
+  if(r.trade_date!==tradeDate||!r.run_id||!r.writer_run_id||!r.canonical_run_id||!r.mother_pool_run_id||!r.generation_id||!r.snapshot_generation||!Number.isInteger(r.snapshot_sequence)||r.snapshot_sequence<1||!r.observed_at)return false;
+  if(!Number.isFinite(Date.parse(r.observed_at)))return false;
+  if(!Number.isFinite(r.requested)||!Number.isFinite(r.written)||!Number.isFinite(r.readback)||!Number.isFinite(r.unique_symbols))return false;
+  if(r.requested!==r.written||r.written!==r.readback||r.readback!==r.unique_symbols)return false;
+  if(r.db_readback_ok!==true||r.anon_readback_ok!==true)return false;
+  if(!Array.isArray(r.failed_checks)||r.failed_checks.length!==0)return false;
+  return true;
+};
+const localMinutes=(value)=>{const d=new Date(value);if(!Number.isFinite(d.getTime()))return null;const p=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(d);const h=Number(p.find(x=>x.type==='hour')?.value),m=Number(p.find(x=>x.type==='minute')?.value);return Number.isFinite(h)&&Number.isFinite(m)?h*60+m:null;};
+const validOpeningRange=(v,tradeDate)=>{if(!v||v.valid!==true||!Array.isArray(v.bars)||v.bars.length!==5)return false;const symbols=new Set(v.bars.map(b=>String(b?.symbol||'')));if(symbols.size!==1||symbols.has(''))return false;const seen=new Set();for(const b of v.bars){if(!b||b.trade_date!==tradeDate||b.synthetic===true||b.natural!==true||b.completed!==true)return false;const stamp=b.event_time||b.time||b.timestamp;const d=new Date(stamp);if(!Number.isFinite(d.getTime())||new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(d)!==tradeDate)return false;const mins=localMinutes(stamp);if(mins===null||mins<540||mins>544)return false;const key=mins;if(seen.has(key))return false;seen.add(key);}return seen.size===5&&[540,541,542,543,544].every(x=>seen.has(x));};
+const completeFor=(id)=>receipts.some(([f,v])=>{
+  if(!resultIndex||index?.trade_date!==tradeDate||index?.canonical_run_id!==canonical||!allowed.has(path.resolve(f))||v?.canonical_run_id!==canonical||v?.verified_by!==(id==='B18'?'verify-mother-pool-closeout.js':'verify-daytrade-module-receipt.js'))return false;
+  if(!v||v.complete!==true||v.status!=='complete'||v.exit_code!==0||v.first_blocker!==null)return false;
+  if(!Array.isArray(v.failed_checks)||v.failed_checks.length)return false;
+  if(v.module_id!==id||v.contract!==registry.modules[id]||v.trade_date!==tradeDate||v.natural_evidence!==true||v.replay===true||v.synthetic===true||v.look_ahead===true)return false;
+  const rounds=Array.isArray(v.rounds_verified)?v.rounds_verified:[];
+  if(rounds.length<2||!rounds.every(r=>validRound(r,tradeDate)))return false;
+  const ids=new Set(rounds.map(r=>r.run_id)), gens=new Set(rounds.map(r=>r.generation_id));
+  const times=rounds.map(r=>Date.parse(r.observed_at));
+  const canonicalSet=new Set(rounds.map(r=>r.canonical_run_id));
+  if(v.canonical_run_id && rounds.some(r=>r.canonical_run_id!==v.canonical_run_id))return false;
+  if(ids.size<2||gens.size<2||canonicalSet.size!==1||new Set(rounds.map(r=>r.mother_pool_run_id)).size<2||times.some(t=>!Number.isFinite(t))||!(times[1]>times[0]))return false;
+  if(id==='B18'&&!(v.closeout===true&&v.closeout_at&&Number.isFinite(Date.parse(v.closeout_at))&&String(v.closeout_at).slice(0,10)===tradeDate&&localMinutes(v.closeout_at)>=810&&Date.parse(v.closeout_at)>times.at(-1)))return false;
+  if(id==='B22'&&!rounds.every(r=>require('../lib/verify-module-opening-range').validAll(r.opening_range,tradeDate,r.requested_symbols)))return false;
+  return true;
+});
+const rows=IDS.map(id=>({id,status:'PENDING',complete:false,reason:'NATURAL_RECEIPT_NOT_FOUND',evidence:[]}));
+for(const r of rows){const low=r.id.toLowerCase();if(has([low])){r.evidence=receipts.filter(([f,v])=>JSON.stringify(v).toLowerCase().includes(low)||f.toLowerCase().includes(low)).map(([f])=>f).slice(0,5);r.complete=completeFor(r.id);r.status=r.complete?'COMPLETE_EVIDENCE':'EVIDENCE_FOUND';r.reason=r.complete?null:'REQUIRES_ITEM_VERIFIER_OR_NATURAL_EVIDENCE';}}
+const wiring=spawnSync(process.execPath,[path.join(__dirname,'verify-mother-pool-wiring-inventory.js')],{encoding:'utf8'});
+const wiringOk=wiring.status===0&&/"ok":true/.test(wiring.stdout||'');
+const failed=rows.filter(r=>r.complete!==true).map(r=>`${r.id}:${r.reason}`);
+if(!wiringOk)failed.unshift('WIRING_INVENTORY_FAILED');
+const receipt={contract:'daytrade_mother_pool_a01_b24_total_verifier_v1',scope:'A01-A19+B01-B24',canonical_run_id:canonical,module_results:index?resultIndex:null,excluded:['B25'],registry_contract:registry.contract,trade_date:tradeDate,checked_at:new Date().toISOString(),wiring_inventory_ok:wiringOk,item_count:43,items:rows,failed_checks:failed,first_blocker:failed[0]||null,status:failed.length?'blocked':'complete',complete:failed.length===0,exit_code:failed.length?1:0,natural_evidence_policy:'No replay, synthetic, look-ahead or manual receipt promotion'};
+fs.mkdirSync(path.dirname(out),{recursive:true});fs.writeFileSync(out,JSON.stringify(receipt,null,2),{flag:'wx'});console.log(JSON.stringify(receipt,null,2));process.exitCode=receipt.exit_code;

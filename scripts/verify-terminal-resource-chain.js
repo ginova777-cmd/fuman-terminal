@@ -140,6 +140,7 @@ const STRATEGIES = [
   },
   {
     key: "institution",
+    allowZeroTerminal: true,
     label: "買賣超",
     policy: "latest complete scan",
     unattendedDueTime: "21:00",
@@ -260,8 +261,16 @@ function cleanNumber(value) {
 
 function receiptSummary(receiptKey) {
   if (!receiptKey) return null;
-  const file = path.join(RUNTIME_DIR, "data", "scan-receipts", `${receiptKey}.json`);
-  const raw = readJsonFile(file);
+  let file = path.join(RUNTIME_DIR, "data", "scan-receipts", `${receiptKey}.json`);
+  let raw = readJsonFile(file);
+  if (receiptKey === 'strategy3' && (!raw || compactDate(raw.tradeDate || raw.trade_date) !== EXPECTED_DATE || raw.complete !== true)) {
+    const recoveryFile = path.join(RUNTIME_DIR, 'data', 'scan-receipts', 'strategy3-recovery-replay.json');
+    const recovery = readJsonFile(recoveryFile);
+    if (recovery?.recoveryReplay === true && compactDate(recovery.tradeDate) === EXPECTED_DATE && runDateFromId(recovery.runId) === EXPECTED_DATE) {
+      file = recoveryFile;
+      raw = recovery;
+    }
+  }
   if (!raw) return { ok: false, key: receiptKey, file, status: "missing", error: "receipt_missing" };
   const row = normalizeStrategyScanReceipt(raw, { key: receiptKey, strategy: receiptKey });
   const preservedLatest = row.preservedLatest === true && row.publishBlocked === true && Boolean(String(row.runId || ""));

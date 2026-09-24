@@ -94,7 +94,8 @@ function readRequestOptions(request) {
     const compact = url.searchParams.get("compact") === "1" || url.searchParams.get("shell") === "1";
     const live = url.searchParams.get("live") === "1" || url.searchParams.get("noSnapshot") === "1";
     const smallPayload = canvas || compact;
-    const limit = Math.max(1, Math.min(smallPayload ? 120 : 3000, cleanNumber(url.searchParams.get("limit")) || (smallPayload ? 80 : 3000)));
+    const limit = request.fumanInternalVerify === true && url.searchParams.get("snapshotBuild") === "1"
+      ? 3000 : Math.max(1, Math.min(3000, cleanNumber(url.searchParams.get("limit")) || (smallPayload ? 80 : 3000)));
     const fieldContract = String(url.searchParams.get("fieldContract") || "").trim();
     const firstPaint = url.searchParams.get("firstPaint") === "1";
     return { canvas, compact, live, smallPayload, limit, fieldContract, firstPaint };
@@ -396,6 +397,8 @@ function buildPayload(rows, run, options = {}) {
     schemaVersion: String(run?.schema_version || rows[0]?.schema_version || "institution-run-id-complete-v1"),
     dataContractSource: String(run?.data_contract_source || rows[0]?.data_contract_source || "institution-cache"),
     fieldContractVersion: INSTITUTION_FIELD_CONTRACT_VERSION,
+    selectionCoverage: run?.payload?.selectionCoverage || null,
+    technicalContract: run?.payload?.selectionCoverage?.contract || null,
     count: resultCount,
     returnedCount: outputRows.length,
     filterCounts,
@@ -479,13 +482,13 @@ function validateCompleteRun(run) {
   if (expectedTotal <= 0) throw new Error("institution_expected_total_missing");
   if (scannedCount <= 0) throw new Error("institution_scanned_count_missing");
   if (expectedTotal !== scannedCount) throw new Error(`institution_scan_incomplete:${scannedCount}/${expectedTotal}`);
-  if (resultCount <= 0) throw new Error("institution_result_count_missing");
+  if (resultCount < 0 || (resultCount === 0 && run.payload?.selectionCoverage?.ok !== true)) throw new Error("institution_result_count_missing");
 }
 
 function validateReadback(rows, run) {
   const resultCount = cleanNumber(run?.result_count);
-  if (!rows.length) throw new Error("institution_complete_run_empty");
-  if (resultCount > 0 && rows.length !== resultCount) {
+  if (!rows.length && run.payload?.selectionCoverage?.ok !== true) throw new Error("institution_complete_run_empty");
+  if (rows.length !== resultCount) {
     throw new Error(`institution_readback_count_mismatch:${rows.length}/${resultCount}`);
   }
   const incomplete = rows.find((row) => row.complete === false || String(row.quality_status || "complete") !== "complete");
@@ -553,7 +556,7 @@ async function handler(request, response) {
     }
     const sourceHealth = await fetchInstitutionSourceHealth().catch(() => ({}));
     const latest = await fetchLatestCompleteRows();
-    if (!latest.rows.length) {
+    if (!latest.rows.length && latest.run?.payload?.selectionCoverage?.ok !== true) {
       response.status(404).json(apiOnlyError("institution_scan_results_latest_empty"));
       return;
     }
@@ -571,6 +574,7 @@ async function handler(request, response) {
 
 module.exports = withEntitlementRequired(handler, "institution");
 module.exports._test = {
+  readRequestOptions,
   buildPayload,
   buildInstitutionFilterCounts,
   normalizeRow,

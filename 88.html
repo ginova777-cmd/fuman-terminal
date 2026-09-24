@@ -1077,7 +1077,7 @@ function renderScanAudit(payload) {
         <thead><tr><th>模組</th><th>應掃時間</th><th>實際掃描</th><th>資料日</th><th>runId</th><th>筆數</th><th>三端驗收</th><th>狀態 / 原因</th></tr></thead>
         <tbody>${modules.map((row) => {
           const actual = row.actualStartedAt ? `${scanAuditTime(row.actualStartedAt)}${row.actualFinishedAt ? ` - ${scanAuditTime(row.actualFinishedAt)}` : ""}` : "--";
-          const count = row.verifiedCount ? `${esc(String(row.count || 0))} / ${esc(String(row.verifiedCount))}` : esc(String(row.count || 0));
+          const count = (row.verifiedCount || (row.key === "institution" && row.triSurfaceStatus === "complete")) ? `${esc(String(row.count || 0))} / ${esc(String(row.verifiedCount))}` : esc(String(row.count || 0));
           const verified = ["complete", "late_complete"].includes(row.status) ? `電腦 / 88 / 手機一致${row.status === "late_complete" ? "（逾時）" : ""}` : (row.triSurfaceStatus || "未完成");
           const runId = row.runId || (row.previousGoodRunId ? `保留 ${row.previousGoodRunId}` : "--");
           return `<tr><td>${esc(row.label || row.key || "--")}</td><td>${esc(row.scheduledAt || "--")}</td><td>${esc(actual)}</td><td>${esc(row.receiptDate || audit.marketDate || "--")}</td><td>${esc(runId)}</td><td>${count}</td><td>${esc(verified)}</td><td class="scan-audit-detail">${esc(scanAuditStatus(row.status))}｜${esc(row.reason || "--")}</td></tr>`;
@@ -1111,7 +1111,8 @@ function sourceReportForStrategy(strategy) {
       || (normalized.includes("策略2") && keys.some((key) => key.includes("strategy2")))
       || (normalized.includes("策略3") && keys.some((key) => key.includes("strategy3")))
       || (normalized.includes("策略4") && keys.some((key) => key.includes("strategy4")))
-      || (normalized.includes("策略5") && keys.some((key) => key.includes("strategy5")));
+      || (normalized.includes("策略5") && keys.some((key) => key.includes("strategy5")))
+      || (normalized.includes("買賣超") && keys.some((key) => key === "institution"));
   }) || null;
 }
 
@@ -1311,7 +1312,9 @@ function render() {
     metric("總損益", pnlText(summary.totalPnl), (summary.totalPnl || 0) >= 0 ? "good" : "bad", "scorecard-metric-pnl"),
   ].join("");
 
-  const strategies = uniqueStrategies(rows);
+  const zeroReports = (payload.sourceReports || []).filter(r => r.key === 'strategy3' && r.ok === true && r.publishAllowed === true && r.evidenceStatus === 'complete' && r.fallbackUsed === false && Number(r.resultCount ?? r.count) === 0 && (r.tradeDate || r.date || r.sourceDate) === latestDate && r.runId);
+  const strategies = [...new Set([...uniqueStrategies(rows), ...zeroReports.map(() => '策略3隔日沖成績單')])];
+  reportsNode.hidden = zeroReports.length === 0;
   const supplementalTabs = [
     ["當沖 PS1", "daytradeEntryPanel", "scorecard-daytrade-ps1-tab"],
     ["七策略每日紀錄", "sevenStrategyDailyHistoryPanel", "scorecard-seven-strategy-daily-history-tab"],
@@ -1491,5 +1494,8 @@ load();
 <script data-market-closed-banner="v1">
 (()=>{if(window.__fumanMarketClosedBannerReady)return;window.__fumanMarketClosedBannerReady=!0;function label(p){return p?.closedReasonText||("typhoon_holiday"===p?.closedReason?"颱風假休市":"市場休市")}function show(p){if(!p||p.marketOpen!==false)return;let n=document.querySelector("#fuman-market-closed-banner");if(!n){n=document.createElement("aside");n.id="fuman-market-closed-banner";n.setAttribute("role","status");n.style.cssText="margin:10px 0 12px;border:1px solid #f59e0b;border-radius:8px;background:#78350f;color:#fff7ed;padding:10px 12px;font-weight:800;line-height:1.5";const target=document.querySelector("main")||document.body;target.prepend(n)}n.textContent=label(p)+"｜休市保護啟動，顯示最後交易日 "+(p.displayTradeDate||"上一交易日")+"；不掃描、不寫空結果、不覆蓋 previous good。"}fetch("/api/market-calendar?t="+Date.now(),{cache:"no-store"}).then(r=>r.ok?r.json():null).then(show).catch(()=>{})})();
 </script>
+<script src="/terminal-opening-report-view.js"></script>
+<script src="/morning-scorecard-view.js"></script>
+<script src="terminal-telegram-detectors.js"></script>
 </body>
 </html>

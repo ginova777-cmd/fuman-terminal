@@ -10,7 +10,7 @@ $env:FUMAN_STATE_DIR = Join-Path $runtime "state"
 $env:NODE_OPTIONS = "--use-system-ca"
 if (-not $env:INSTITUTION_SLOW_SCAN) { $env:INSTITUTION_SLOW_SCAN = "0" }
 if (-not $env:INSTITUTION_REQUEST_DELAY_MS) { $env:INSTITUTION_REQUEST_DELAY_MS = "1200" }
-if (-not $env:INSTITUTION_FETCH_RETRIES) { $env:INSTITUTION_FETCH_RETRIES = "1" }
+if (-not $env:INSTITUTION_FETCH_RETRIES) { $env:INSTITUTION_FETCH_RETRIES = "3" }
 if (-not $env:INSTITUTION_SOURCE_PROVIDER) { $env:INSTITUTION_SOURCE_PROVIDER = "auto" }
 if (-not $env:SHIOAJI_PYTHON) { $env:SHIOAJI_PYTHON = "C:\Users\ginov\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" }
 $nodeExe = "C:\Program Files\nodejs\node.exe"
@@ -22,18 +22,20 @@ New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
 $blockedReceiptPath = Join-Path $receiptDir "institution-blocked-latest.json"
 $scanStartedAt = (Get-Date).ToString("o")
 $script:institutionDiagnosticWarnings = New-Object System.Collections.Generic.List[string]
+$script:InstitutionSourceUniverseCount = 0
 
 function New-InstitutionReceiptSourceStatus($Status, $Complete, $Matches, $BlockingReason = "") {
   $publishAllowed = $Complete -and [string]::IsNullOrWhiteSpace($BlockingReason)
+  $sourceUniverseCount = if ($script:InstitutionSourceUniverseCount -gt 0) { [int]$script:InstitutionSourceUniverseCount } else { [int]$Matches }
   [ordered]@{
     ok = [bool]$publishAllowed
     status = if ($publishAllowed) { "ready" } else { "blocked" }
     coverageStatus = if ($publishAllowed) { "ready" } else { "blocked" }
     latestTradeDate = ""
     usedDate = ""
-    institutionalRows = [int]$Matches
-    validAfterExclusionRows = [int]$Matches
-    sourceRows = [int]$Matches
+    institutionalRows = $sourceUniverseCount
+    validAfterExclusionRows = $sourceUniverseCount
+    sourceRows = $sourceUniverseCount
     resultRows = [int]$Matches
     sources = @("TWSE T86", "TPEx 3itrade")
     reason = $BlockingReason
@@ -56,7 +58,21 @@ function New-InstitutionReceiptWriteBudget($Allowed, $Reason = "") {
 
 function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunId, $Warnings = @(), $BlockingReason = "", $PreservePreviousGood = $false) {
   $publishAllowed = $Complete -and -not $PreservePreviousGood
+  $authoritative = $null
+  if ($publishAllowed) {
+    $metadataLines = @(Get-Content -LiteralPath $log | Where-Object { $_ -like 'institution authoritative readback metadata: *' })
+    if ($metadataLines.Count -eq 0) { throw "institution authoritative readback metadata missing" }
+    $authoritative = ($metadataLines[-1] -replace '^institution authoritative readback metadata: ', '') | ConvertFrom-Json
+    if ($authoritative.runId -ne $RunId -or [int]$authoritative.resultCount -ne [int]$Matches -or [int]$authoritative.blankTotal -ne 0) { throw "institution authoritative readback metadata mismatch" }
+    $script:InstitutionSourceUniverseCount = [int]$authoritative.sourceRows
+  }
   $sourceStatusAtRun = New-InstitutionReceiptSourceStatus $Status $publishAllowed $Matches $BlockingReason
+  if ($null -ne $authoritative) {
+    $sourceStatusAtRun.latestTradeDate = [string]$authoritative.usedDate
+    $sourceStatusAtRun.usedDate = [string]$authoritative.usedDate
+    $sourceStatusAtRun.validAfterExclusionRows = [int]$authoritative.resultCount
+    $Warnings = @($Warnings) + @($authoritative.warnings)
+  }
   $writeBudget = New-InstitutionReceiptWriteBudget $publishAllowed $BlockingReason
   $evidenceStatus = if ($publishAllowed) { "complete" } else { "insufficient" }
   $unattendedStatus = if ($publishAllowed) { "YES" } else { "NO" }
@@ -67,7 +83,7 @@ function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunI
     startedAt = $scanStartedAt
     marketDate = (Get-Date).ToString("yyyyMMdd")
     finishedAt = (Get-Date).ToString("o")
-    source_snapshot_captured_at = $scanStartedAt
+    source_snapshot_captured_at = if ($null -ne $authoritative) { [string]$authoritative.sourceSnapshotCapturedAt } else { $scanStartedAt }
     institution_source_status_at_run = $sourceStatusAtRun
     chip_source_status_at_run = $sourceStatusAtRun
     sourceCoverage = [ordered]@{
@@ -80,8 +96,11 @@ function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunI
     }
     status = $Status
     exitCode = $ExitCode
-    scanned = 0
-    total = 0
+    scanned = [int]$sourceStatusAtRun.sourceRows
+    total = [int]$sourceStatusAtRun.sourceRows
+    selectionCoverage = if ($null -ne $authoritative) { $authoritative.selectionCoverage } else { $null }
+    technicalSourceReceipt = if ($null -ne $authoritative) { $authoritative.technicalSourceReceipt } else { $null }
+    technicalSourceHash = if ($null -ne $authoritative) { $authoritative.technicalSourceHash } else { $null }
     matches = $Matches
     complete = $Complete
     qualityStatus = if ($Complete) { "complete" } else { "" }
@@ -236,7 +255,7 @@ function Get-InstitutionReadbackFromLog {
   if (-not $match.Success) { return $null }
   $runId = [string]$match.Groups[1].Value
   $count = [int]$match.Groups[2].Value
-  if ([string]::IsNullOrWhiteSpace($runId) -or $count -le 0) { return $null }
+  if ([string]::IsNullOrWhiteSpace($runId) -or $count -lt 0) { return $null }
   return [pscustomobject]@{
     ok = $true
     runId = $runId
@@ -273,7 +292,7 @@ function Assert-InstitutionApi {
   if ($response.StatusCode -ne 200 -or $payload.ok -ne $true -or -not $payload.runId) {
     throw "Institution API verification failed status=$($response.StatusCode) ok=$($payload.ok) runId=$($payload.runId)"
   }
-  if ([int]$payload.count -le 0) { throw "Institution API empty count=$($payload.count)" }
+  if ([int]$payload.count -lt 0) { throw "Institution API empty count=$($payload.count)" }
   $apiUpdatedAtText = [string]($payload.updatedAt ?? $payload.generatedAt)
   if ([string]::IsNullOrWhiteSpace($apiUpdatedAtText)) { throw "Institution API missing updatedAt" }
   $apiUpdatedAt = [DateTimeOffset]::Parse($apiUpdatedAtText)
@@ -340,6 +359,11 @@ if ($chipReceiptExit -ne 0) {
   exit 3
 }
 $resourceGate = Invoke-ScannerResourceHealthGate -Strategy "institution" -LogPath $log
+$resourceGateRecord = @($resourceGate) | Where-Object { $null -ne $_ -and $null -ne $_.PSObject.Properties["rowCount"] } | Select-Object -Last 1
+$resourceGateRowCountProperty = if ($null -ne $resourceGateRecord) { $resourceGateRecord.PSObject.Properties["rowCount"] } else { $null }
+if ($null -ne $resourceGateRowCountProperty -and [int]$resourceGateRowCountProperty.Value -gt 0) {
+  $script:InstitutionSourceUniverseCount = [int]$resourceGateRowCountProperty.Value
+}
 if (Test-InstitutionTransientResourceHealthFailure $resourceGate) {
   $diagnostic = "resource health diagnostic unavailable: $($resourceGate.Reason)"
   "Institution resource health preflight was transiently unavailable; continuing to scanner/readback gates. $diagnostic" >> $log
@@ -415,7 +439,7 @@ try {
   exit 1
 }
 Write-InstitutionReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
-Update-PostScanReceiptEvidence -RuntimeRoot $env:FUMAN_RUNTIME_DIR -Route "institution" -RunId ([string]$verifiedPayload.runId) -ExpectedDate ((Get-Date).ToString("yyyyMMdd")) -Row $triSurfaceRow
+Update-PostScanReceiptEvidence -RuntimeRoot $env:FUMAN_RUNTIME_DIR -Route "institution" -RunId ([string]$verifiedPayload.runId) -ExpectedDate (Get-PostScanExpectedDateKey) -Row $triSurfaceRow
 Write-FumanFlowHealth -Scope institution -Status ok -Message "Institution scan completed through API-only terminal pipeline" -Detail @{ log = $log; runId = [string]$verifiedPayload.runId }
 "Institution API-only: slim generation, local mirror, and cache sync are disabled; terminal reads Supabase/API plus desktop snapshot." >> $log
 "=== Institution scan end $(Get-Date) ===" >> $log

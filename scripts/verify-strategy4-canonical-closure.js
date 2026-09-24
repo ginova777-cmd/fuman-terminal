@@ -11,7 +11,8 @@ const SUPABASE_KEY = terminalSupabaseKey({ root: ROOT, runtimeDir: RUNTIME_DIR }
 const RESULTS_TABLE = process.env.STRATEGY4_SUPABASE_RESULTS_TABLE || "strategy4_scan_results";
 const RUNS_TABLE = process.env.STRATEGY4_SUPABASE_RUNS_TABLE || "strategy4_scan_runs";
 const OUT_DIR = path.join(RUNTIME_DIR, "data", "scan-receipts");
-const DISPLAY_LIMIT = Math.max(1, Number(process.env.STRATEGY4_CANONICAL_DISPLAY_LIMIT || 70));
+const DISPLAY_LIMIT = Math.max(1, Number(process.env.STRATEGY4_CANONICAL_DISPLAY_LIMIT || 2000));
+const EXPECTED_RUN_ID = String(process.env.EXPECTED_STRATEGY4_RUN_ID || "").trim();
 
 function cleanNumber(value) {
   const number = Number(String(value ?? "").replace(/[,%%+]/g, "").trim());
@@ -125,10 +126,13 @@ async function supabaseAllRows(pathname, expectedCount) {
   return rows;
 }
 async function readPublishedRun() {
-  const selectRun = encodeURIComponent("run_id,scan_date,status,complete,expected_total,scanned_count,result_count,no_data_count,error_count,quality_status,finished_at");
-  const runs = await supabaseRows(`${RUNS_TABLE}?select=${selectRun}&strategy=eq.strategy4&status=eq.complete&complete=eq.true&order=finished_at.desc&limit=1`);
+  const selectRun = encodeURIComponent("run_id,scan_date,status,complete,expected_total,scanned_count,result_count,no_data_count,error_count,quality_status,finished_at,payload");
+  const runFilter = EXPECTED_RUN_ID
+    ? `run_id=eq.${encodeURIComponent(EXPECTED_RUN_ID)}`
+    : "status=eq.complete&complete=eq.true&order=finished_at.desc";
+  const runs = await supabaseRows(`${RUNS_TABLE}?select=${selectRun}&strategy=eq.strategy4&${runFilter}&limit=1`);
   const run = Array.isArray(runs) ? runs[0] : null;
-  if (!run?.run_id) throw new Error("strategy4_latest_complete_run_missing");
+  if (!run?.run_id) throw new Error(EXPECTED_RUN_ID ? `strategy4_expected_run_missing:${EXPECTED_RUN_ID}` : "strategy4_latest_complete_run_missing");
   const selectRows = encodeURIComponent("run_id,scan_date,code,name,price,change_percent,score,zone,zone_label,rank,price_source,payload");
   const rows = await supabaseAllRows(
     `${RESULTS_TABLE}?select=${selectRows}&run_id=eq.${encodeURIComponent(run.run_id)}&strategy=eq.strategy4&order=rank.asc`,
@@ -145,6 +149,8 @@ async function readPublishedRun() {
     noDataCount: cleanNumber(run.no_data_count),
     errorCount: cleanNumber(run.error_count),
     qualityStatus: String(run.quality_status || ""),
+    v3Issues: require("../lib/strategy4-v4-evidence").strategy4V4Issues(run.payload || {}, rows),
+    resultContract: run.payload?.resultContract || "",
     rows: canonicalRows(rows.map((row) => ({ ...row, ...(row.payload || {}) }))),
   };
 }
@@ -160,11 +166,12 @@ function runLineDryRun() {
   return { summary, receipt, receiptPath };
 }
 async function main() {
-  const expectedDate = compactDate(process.argv.find((arg) => arg.startsWith("--date="))?.slice("--date=".length)) || taipeiDateKey();
+  const expectedDate = compactDate(process.argv.find((arg) => arg.startsWith("--date="))?.slice("--date=".length)) || require('../lib/strategy4-recovery-date').targetDate().replace(/-/g,'');
   const issues = [];
   const warnings = [];
   const api = await readApiPayload();
   const published = await readPublishedRun();
+  issues.push(...published.v3Issues);
   const scanReceipt = readScanReceipt();
   const line = runLineDryRun();
   const apiRows = canonicalRows(api.matches || api.rows || []);
@@ -182,6 +189,7 @@ async function main() {
   if (published.scannedCount !== published.expectedTotal) issues.push(`published_scanned_not_full:${published.scannedCount}/${published.expectedTotal}`);
   if (published.noDataCount !== 0) warnings.push(`published_no_data_disclosed:${published.noDataCount}`);
   if (published.errorCount !== 0) issues.push(`published_error_not_zero:${published.errorCount}`);
+  if (EXPECTED_RUN_ID && published.runId !== EXPECTED_RUN_ID) issues.push(`published_expected_run_id_mismatch:${published.runId || "missing"}:${EXPECTED_RUN_ID}`);
   if (line.receipt.status !== "ready" || line.receipt.ok !== true) issues.push(`line_dry_run_not_ready:${line.receipt.status || "missing"}:${line.receipt.blockedReason || ""}`);
   if (dateFromRunId(published.runId) !== expectedDate) issues.push(`published_date_mismatch:${published.runId}:expected=${expectedDate}`);
   if (!apiRunId || apiRunId !== published.runId) issues.push(`api_runId_mismatch api=${apiRunId || "missing"} published=${published.runId || "missing"}`);
@@ -189,10 +197,10 @@ async function main() {
   if (scanRunId && scanRunId !== published.runId) issues.push(`scan_receipt_runId_mismatch scan=${scanRunId} published=${published.runId}`);
   if (cleanNumber(scanReceipt.matches) && cleanNumber(scanReceipt.matches) !== published.count) issues.push(`scan_receipt_match_count_mismatch scan=${scanReceipt.matches} published=${published.count}`);
   if (apiRows.length !== displayRows.length) issues.push(`api_display_count_mismatch apiRows=${apiRows.length} displayCount=${displayRows.length} publishedCount=${published.count}`);
-  if (lineRows.length !== displayRows.length) issues.push(`line_display_count_mismatch lineRows=${lineRows.length} displayCount=${displayRows.length} publishedCount=${published.count}`);
-  if (apiRows.length !== lineRows.length) issues.push(`api_line_display_count_mismatch apiRows=${apiRows.length} lineRows=${lineRows.length}`);
+  if (lineRows.length !== Math.min(70, displayRows.length)) issues.push(`line_display_count_mismatch lineRows=${lineRows.length} displayCount=${displayRows.length} publishedCount=${published.count}`);
+  if (Math.min(70, apiRows.length) !== lineRows.length) issues.push(`api_line_display_count_mismatch apiRows=${apiRows.length} lineRows=${lineRows.length}`);
   issues.push(...compareDisplayedRowsAgainstPublished("api_vs_published_display", apiRows, publishedRows));
-  issues.push(...compareRows("line_vs_api_display", apiRows, lineRows));
+  issues.push(...compareRows("line_vs_api_display", apiRows.slice(0,70), lineRows));
   issues.push(...compareDisplayedRowsAgainstPublished("line_vs_published_display", lineRows, publishedRows));
   const missingTargets = publishedRows.filter((row) => row.entryPrice <= 0 || row.targetPrice <= 0 || row.stopPrice <= 0 || row.score <= 0 || !row.zone).map((row) => row.code);
   if (missingTargets.length) issues.push(`published_strategy4_required_display_fields_missing:${missingTargets.join(",")}`);

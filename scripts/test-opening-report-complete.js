@@ -1,0 +1,76 @@
+"use strict";
+const assert=require("node:assert/strict"),fs=require("fs"),path=require("path"),vm=require("vm");
+const {mergeOpeningReportEvidence}=require("../lib/opening-report-0830-mother-pool-evidence");
+const {preserveMorningWatchRows,validMorningBoostRank}=require("../lib/opening-report-writer-preservation");
+const {contentHash,validateReuse}=require("../lib/opening-report-delivery-contract");
+const {validateDbRow}=require("./verify-opening-report-0830-mother-pool-handoff-ack");
+const date="2026-09-14",run="opening-report-0830-20260914-test";
+const payload=(industry,rank)=>({date,report_time:"08:20",source:"opening_report_0830",mode:"priority_bias_only",run_id:`${run}-${industry}`,industry,priority_observation_rank:rank,priority_overseas_leaders:[],bias:"positive",confidence:0.8,evidence_summary:"test"});
+const one=payload("IC_DESIGN",1),two=payload("OPTICAL_COMM",2);
+const evidence=mergeOpeningReportEvidence(mergeOpeningReportEvidence(null,one),two);
+assert.deepEqual(evidence.linked_industries,["IC_DESIGN","OPTICAL_COMM"]);
+const seeds=[{symbol:"2330",name:"台積電",market:"TWSE",openingReport0830IndustryBias:evidence},{symbol:"9999",name:"測試觀察",market:"TPEX",openingReport0830IndustryBias:evidence}];
+let rows=[{symbol:"2330",market:"TWSE",payload:{deep_scan_eligible:true,formal_pool_eligible:true}}];
+for(let i=0;i<2;i++) rows=preserveMorningWatchRows([{symbol:"2330",market:"TWSE",payload:{deep_scan_eligible:true,formal_pool_eligible:true}}],seeds,date,`${date}T08:4${i}:00+08:00`,300);
+assert.equal(rows.length,2);assert.equal(rows[0].payload.deep_scan_eligible,true);
+assert.equal(rows[1].payload.deep_scan_eligible,false);assert.equal(rows[1].payload.formal_candidate_allowed,false);assert.ok(rows[1].priority_rank>300);
+for(const row of rows)assert.deepEqual(validateDbRow(row,[one,two]),[]);
+assert.equal(preserveMorningWatchRows([],seeds,"2026-09-15","",300).length,0);
+const altered=structuredClone(rows[1]);altered.payload.openingReport0830IndustryBias.observations.pop();assert.ok(validateDbRow(altered,[one,two]).length>0);
+const hash=contentHash("positive_industry_top3",[{rank:1,mapped_symbols_a:[{symbol:"2330",name:"台積電"}]}]);
+assert.notEqual(hash,contentHash("positive_industry_top3",[{rank:1,mapped_symbols_a:[{symbol:"2317",name:"鴻海"}]}]));
+const line={line_push_attempted:true,line_push_ok:true,ok:true,report_run_id:run,delivery_content_hash:hash,has_user_target:true,has_group_target:true,delivered_count:2};
+assert.equal(validateReuse(line,run,hash),true);assert.equal(validateReuse(line,run,"other"),false);assert.equal(validateReuse(line,"other",hash),false);assert.equal(validateReuse({...line,line_push_attempted:false},run,hash),false);
+// Exercise the real Writer seed reader with no active-stock match and no quote.
+const source=fs.readFileSync(path.join(__dirname,"run-daytrade-source-writer.js"),"utf8");
+const func=source.slice(source.indexOf("function readOpeningReport0830PrioritySeeds("),source.indexOf("function readRuntimePrioritySeeds("));
+const mapped={...one,display_name:"IC",allowed_action:"boost_scan_priority_only",forbidden_action:"publish_formal_candidate_without_taiwan_evidence",mapped_symbols:[{symbol:"9999",name:"測試觀察"}]};
+const input=path.join("state","opening_report_0830.industry_bias.IC_DESIGN.json"),receiptPath=path.join("data","scan-receipts","opening-report-0830-priority-bias-bridge-IC_DESIGN-20260914.json");
+const bridge={contract:"opening-report-0830-priority-bias-bridge-v1",received:true,validation:{ok:true},date,run_id:one.run_id,evidence_path:input,source:one.source,mode:one.mode,reason_code:"opening_report_0830_industry_bias",status:"priority_scan",forbidden_publish_guard:true,formal_candidate_count:0,formal_candidate_allowed:false,accepted_symbols:["9999"],applied_boosts:[{symbol:"9999",applied_priority_rank:301,status:"watchlist_boosted",price:null,quote_age_seconds:null,quote_validation:"delegated_to_mother_pool"}],receipt_path:receiptPath};
+const ctx={validMorningBoostRank,path,fs:{readdirSync:()=>[path.basename(input)],statSync:()=>({mtime:new Date()})},compactDateKey:x=>x.replace(/-/g,""),taipeiDate:()=>date,runtimePath:(...x)=>path.join(...x),normalizeCode:String,readJson:f=>f===input?mapped:f===receiptPath?bridge:null,nowIso:()=>new Date().toISOString(),numberValue:x=>Number(x)||0,mergeOpeningReportEvidence,MOTHER_POOL_MIN_PRICE:50};
+vm.createContext(ctx);vm.runInContext(func+"\nresult=readOpeningReport0830PrioritySeeds([])",ctx);assert.equal(ctx.result.symbols.length,1);assert.equal(ctx.result.symbols[0].openingReport0830IndustryBias.report_run_id,run);
+console.log(JSON.stringify({ok:true,tests:["overlapping_industries","two_writer_rebuilds","morning_only_protection","next_day_expiry","missing_observation_rejected","ab_hash_change","line_reuse_identity","dry_run_not_delivery","real_writer_missing_master_no_quote"]}));
+
+(async()=>{ const detector=require("./run-opening-report-0830-overseas-leader-detector"); const map=require("./opening-report-0830-industry-map-contract"); for(const symbol of ["5803.T","000725.SZ"]) { assert.ok(!map.OPENING_REPORT_0830_INDUSTRY_MAP.some(row=>row.overseas_leaders.some(leader=>leader.yahoo_symbol===symbol))); await assert.rejects(detector.detectLeader({industry:"test"},["retired",symbol],date,{}),/retired_morning_source/); } assert.equal(map.OPENING_REPORT_0830_INDUSTRY_MAP.length,15); console.log(JSON.stringify({ok:true,retired_source_network_guard:true,industry_count:15})); })().catch(error=>{console.error(error);process.exitCode=1;});
+
+const {render:renderMorning}=require("../terminal-opening-report-view");
+const ready={ok:true,date,run_id:run,industry_bias:{count:15},display_top3:[]};
+assert.match(renderMorning(null),/data-opening-report-state="empty"/);
+assert.match(renderMorning({...ready,ok:false,reason_code:"source_gap"}),/data-opening-report-state="blocked"/);
+assert.match(renderMorning({...ready,previousTradingDay:true}),/data-opening-report-state="degraded"/);
+assert.match(renderMorning(ready),/data-morning-zero/);
+const ab={...ready,display_top3:[{rank:1,display_name:"test",percent:2,mapped_symbols_a:[{symbol:"2330",name:"台積電"}],mapped_symbols_b:[{symbol:"2317",name:"鴻海"}]}]};
+assert.match(renderMorning(ab),/data-morning-group="B"/);assert.match(renderMorning(ab),/2317 鴻海/);
+assert.ok(!renderMorning({...ab,display_top3:[{...ab.display_top3[0],display_name:"<script>"}]}).includes("<script>"));
+console.log(JSON.stringify({ok:true,morning_ui_states:["empty","blocked","degraded","zero","full_A_B","escaped_text"]}));
+const renderedSource=fs.readFileSync(path.join(__dirname,"verify-opening-report-rendered.js"),"utf8");
+const readinessCode=renderedSource.slice(renderedSource.indexOf("function readyForReport("),renderedSource.indexOf("async function main()"));
+let renderedNode=null;
+const readinessContext={document:{querySelector:()=>renderedNode}};
+vm.createContext(readinessContext);vm.runInContext(readinessCode+"\nthis.ready=readyForReport",readinessContext);
+assert.equal(readinessContext.ready(run).ok,false);
+renderedNode={dataset:{runId:run,openingReportState:"empty"}};assert.equal(readinessContext.ready(run).ok,false);
+renderedNode.dataset.openingReportState="zero";assert.equal(readinessContext.ready(run).ok,true);
+renderedNode.dataset.runId="other-run";assert.equal(readinessContext.ready(run).ok,false);
+console.log(JSON.stringify({ok:true,morning_waits_for_matching_rendered_batch:true}));
+
+// Exercise the live canonical path: defining a checker without calling it must fail.
+(async()=>{
+  const source=fs.readFileSync(path.join(__dirname,"verify-opening-report-morning-contract.js"),"utf8");
+  const code=source.slice(source.indexOf("async function liveDeliveryChecks("),source.indexOf("function writeReceipt("));
+  let renderedCalled=false;
+  const checks=[],ctx={process, morningStages:require("../lib/opening-report-stage-contract"),morningRecovery:require("../lib/opening-report-recovery"),path,REPORT_DIR:"fixture",compactDate:x=>x.replace(/-/g,""),readJson:()=>({run_id:"fixture",display_top3:[],delivery_content_hash:"fixture"}),renderedDeliveryChecks:items=>{renderedCalled=true;items.push({name:"missing_rendered_receipt",ok:false});},addCheck:(items,name,ok)=>items.push({name,ok}),require:name=>name.includes("night-futures")?require("../lib/opening-report-night-futures"):name==="util"?require("util"):name.includes("delivery-contract")?{contentHash:()=>"fixture"}:{readSnapshot:async()=>null}};
+  vm.createContext(ctx);vm.runInContext(code+"\nthis.verifyLive=liveDeliveryChecks",ctx);await ctx.verifyLive(checks,"2026-09-14");
+  assert.equal(renderedCalled,true);assert.ok(checks.some(x=>x.name==="missing_rendered_receipt"&&!x.ok));
+  const renderedCode=source.slice(source.indexOf("function renderedDeliveryChecks("),source.indexOf("async function liveDeliveryChecks("));
+  const missing=[],negative={path,REPORT_DIR:"fixture",compactDate:x=>x.replace(/-/g,""),readJson:()=>{throw Error("ENOENT");},addCheck:(items,name,ok)=>items.push({name,ok}),require:()=>({expectedRows:()=>[]})};
+  vm.createContext(negative);vm.runInContext(renderedCode+"\nthis.verifyRendered=renderedDeliveryChecks",negative);negative.verifyRendered(missing,"2099-01-01",{run_id:"missing",display_top3:[]});
+  assert.equal(missing.length,6);assert.ok(missing.every(x=>!x.ok));
+  console.log(JSON.stringify({ok:true,canonical_requires_rendered_evidence:true}));
+})().catch(error=>{console.error(error);process.exitCode=1;});
+
+const markdownSource=fs.readFileSync(path.join(__dirname,"run-opening-report-0830-production.js"),"utf8");
+const markdownFn=vm.runInNewContext("("+markdownSource.match(/function markdownReport[\s\S]*?\n}\r?\n/)[0]+")", {morningRecovery:require("../lib/opening-report-recovery"),nightSource:require("../lib/opening-report-night-futures")});
+const markdown=markdownFn({tradeDate:date,runId:run,overseasPreflight:{ok:true},priority:{mode:"positive_industry_top3",observations:[{rank:1,display_name:"測試",percent:1,mapped_symbols_a:[{symbol:"2330",name:"台積電"}],mapped_symbols_b:[{symbol:"2308",name:"台達電"}]}]}});
+assert.ok(markdown.includes("台積電（2330）")&&markdown.includes("台達電（2308）"));
+console.log(JSON.stringify({ok:true,markdown_full_names_and_symbols:true}));

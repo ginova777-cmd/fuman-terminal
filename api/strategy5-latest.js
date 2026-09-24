@@ -656,7 +656,7 @@ function parseRequestOptions(request) {
       || url.searchParams.get("compact") === "1"
       || url.searchParams.get("shell") === "1";
     const live = url.searchParams.get("live") === "1" || url.searchParams.get("noSnapshot") === "1";
-    const limit = Math.max(1, Math.min(canvas ? 140 : 2000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 70 : 2000)));
+    const limit = Math.max(1, Math.min(2000, cleanNumber(url.searchParams.get("limit")) || (canvas ? 70 : 2000)));
     return { canvas, live, limit };
   } catch {
     return { canvas: false, live: false, limit: 2000 };
@@ -766,7 +766,7 @@ function buildPayload(rows, run, options = {}) {
     .slice()
     .sort((a, b) => cleanNumber(a.rank) - cleanNumber(b.rank) || String(a.code).localeCompare(String(b.code)))
     .map(normalizePayload);
-  const matches = normalizedRows.filter((row) => row.matches.length);
+  const matches = normalizedRows.filter((row) => row.matches.length).slice(0, Math.max(1, Math.min(2000, Number(options.limit) || 2000)));
   const strategy5CompositeRules = run?.payload?.strategy5CompositeRules || first.payload?.strategy5CompositeRules || {};
   const compositeMatchCounts = {};
   matches.forEach((row) => row.matches.forEach((match) => {
@@ -823,6 +823,8 @@ function buildPayload(rows, run, options = {}) {
     ...runTimeEvidence,
     runId: String(first.run_id || run?.run_id || ""),
     updatedAt: String(run?.finished_at || first.updated_at || new Date().toISOString()),
+    selectionCoverage: run?.payload?.selectionCoverage || null,
+    technicalSourceHash: run?.payload?.technicalSourceHash || null,
     generatedDate: scanDate,
     scanDate,
     tradeDate: scanDate,
@@ -1041,8 +1043,7 @@ async function handler(request, response) {
     });
     const staleReason = staleStrategy5SnapshotReason(cached);
     if (cached && !staleReason) {
-      await attachMainForceCostsToPayload(cached);
-    await attachThreeGatePricesToPayload(cached);
+      await Promise.all([attachMainForceCostsToPayload(cached), attachThreeGatePricesToPayload(cached)]);
       setDesktopSnapshotCache(response);
       response.status(200).json(cached);
       return;
@@ -1054,15 +1055,14 @@ async function handler(request, response) {
       response.status(503).json(apiOnlyError("supabase_not_configured"));
       return;
     }
-    const latest = await fetchLatestCompleteRows(options.limit);
+    const latest = await fetchLatestCompleteRows(2000);
     if (!latest.rows.length) {
       response.status(404).json(apiOnlyError(latest.gate || "strategy5_scan_results_latest_empty"));
       return;
     }
     options.chipSourceHealth = await fetchChipSourceHealth();
     const payload = buildPayload(latest.rows, latest.run, options);
-    await attachMainForceCostsToPayload(payload);
-    await attachThreeGatePricesToPayload(payload);
+    await Promise.all([attachMainForceCostsToPayload(payload), attachThreeGatePricesToPayload(payload)]);
     setDesktopSnapshotCache(response);
     response.status(200).json(payload);
   } catch (error) {

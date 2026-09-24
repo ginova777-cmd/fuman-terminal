@@ -124,6 +124,20 @@ function verifyStatic() {
   console.log(`[terminal-display-snapshot] static ok snapshot=${SNAPSHOT_CONTRACT} dailyK=${DAILY_KLINE_CONTRACT}`);
 }
 
+function currentStrategy3ZeroSnapshot(route, payload) {
+  const date = String(payload.tradeDate || "");
+  const compact = date.replace(/-/g, "");
+  const run = String(payload.runId || "");
+  const updated = Date.parse(payload.updatedAt || "");
+  return route === "strategy3" && payload.route === route && payload.ok === true
+    && payload.contract === SNAPSHOT_CONTRACT && payload.snapshotHit === true
+    && payload.snapshotFresh === true && payload.source === "supabase:desktop_route_snapshot:route"
+    && payload.count === 0 && Array.isArray(payload.rows) && payload.rows.length === 0
+    && /^\d{4}-\d{2}-\d{2}$/.test(date)
+    && new RegExp("^strategy3v2(?:-recovery-replay)?-" + compact + "-\\d{14}$").test(run)
+    && Number.isFinite(updated) && updated >= Date.parse(date + "T00:00:00+08:00") && updated <= Date.now() + 5000; // bounded server/client clock skew; snapshotFresh is still required
+}
+
 async function fetchSnapshot(route) {
   const result = await fetchText(`/api/terminal-display-snapshot?route=${encodeURIComponent(route)}&verify=${Date.now()}`);
   assert(result.status >= 200 && result.status < 300, `${route} snapshot HTTP ${result.status}`);
@@ -133,7 +147,8 @@ async function fetchSnapshot(route) {
   assert(payload.route === route, `${route} snapshot route mismatch`);
   assert(payload.snapshotHit === true, `${route} snapshotHit must be true`);
   assert(Array.isArray(payload.rows), `${route} snapshot rows must be an array`);
-  if (REQUIRED_DATA_ROUTES.includes(route)) {
+  const verifiedZero = currentStrategy3ZeroSnapshot(route, payload);
+  if (REQUIRED_DATA_ROUTES.includes(route) && !verifiedZero) {
     assert(Number(payload.count) > 0, `${route} snapshot count must be > 0`);
     assert(payload.rows.length > 0, `${route} snapshot rows must be > 0`);
     assert(payload.rows[0] && payload.rows[0].code, `${route} snapshot first row must include code`);
@@ -141,6 +156,7 @@ async function fetchSnapshot(route) {
   return {
     route,
     count: Number(payload.count || 0),
+    verifiedZero,
     rows: payload.rows.length,
     source: payload.source || "",
     first: payload.rows[0]?.code || "",

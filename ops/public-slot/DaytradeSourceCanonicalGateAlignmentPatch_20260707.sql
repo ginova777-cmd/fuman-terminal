@@ -72,7 +72,7 @@ scored as (
       and writer_formal_entry_allowed is true
       and scanner_can_run_opening is true
       and priority_fresh_quote_coverage_120s >= 0.95
-      and quote_age_seconds <= 90
+      and quote_age_seconds <= 120
       and rate_limit_status not in ('rate_limited', 'cooldown')
     ) as canonical_ready,
     (
@@ -82,7 +82,7 @@ scored as (
       + (writer_formal_entry_allowed is true)::integer
       + (scanner_can_run_opening is true)::integer
       + (priority_fresh_quote_coverage_120s >= 0.95)::integer
-      + (quote_age_seconds <= 90)::integer
+      + (quote_age_seconds <= 120)::integer
       + (rate_limit_status not in ('rate_limited', 'cooldown'))::integer
       + (priority_pool_symbols >= 300)::integer
       + (daily_volume_status = 'ready')::integer
@@ -107,7 +107,7 @@ projected as (
       when writer_formal_entry_allowed is not true then 'formal_entry_not_allowed'
       when scanner_can_run_opening is not true then 'scanner_can_run_opening_false'
       when priority_fresh_quote_coverage_120s < 0.95 then 'priority_quote_coverage_low'
-      when quote_age_seconds > 90 then 'quote_age_too_old'
+      when quote_age_seconds > 120 then 'quote_age_too_old'
       when rate_limit_status in ('rate_limited', 'cooldown') then 'rate_limited'
       else 'source_contract_not_ready'
     end as final_reason

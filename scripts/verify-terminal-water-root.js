@@ -419,7 +419,7 @@ async function main() {
       limit: "1",
     }),
     query("canonical_gate", "v_fugle_daytrade_canonical_gate", {
-      select: "*",
+      select: "canonical_gate_grade,canonical_gate_status,reason,phase,formal_entry_speed_verdict,formal_entry_allowed,priority_fresh_quote_coverage_120s,quote_age_seconds,scanner_can_run_opening",
       limit: "1",
     }),
     query("mother_pool", "v_fugle_daytrade_mother_pool", {

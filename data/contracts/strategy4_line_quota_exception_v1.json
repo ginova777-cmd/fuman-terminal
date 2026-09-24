@@ -1,0 +1,16 @@
+{
+  "contract": "strategy4_line_quota_exception_v1",
+  "strategy": "strategy4",
+  "authorizedOn": "2026-09-15",
+  "authorization": "LINE額度問題不要影響COMPLETE",
+  "scope": "natural_and_recovery",
+  "deliveryStatus": "SKIPPED_QUOTA_EXHAUSTED",
+  "completionAllowed": true,
+  "deliveryConfirmed": false,
+  "evidence": [
+    "same_day_official_quota_consumption",
+    "exact_monthly_limit_429"
+  ],
+  "otherDeliveryErrorsBlocking": true,
+  "sourceAndRenderedGatesUnchanged": true
+}

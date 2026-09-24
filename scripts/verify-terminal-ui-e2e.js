@@ -12,8 +12,10 @@ const BASE_URL = optionValue("--base-url") || process.env.FUMAN_UI_E2E_BASE_URL 
 const BASE_ORIGIN = new URL(BASE_URL).origin;
 const FUMAN_AUTH_URL = process.env.FUMAN_AUTH_URL || "https://jxnqyqnigsppqsxinlrq.supabase.co";
 const FUMAN_AUTH_KEY = process.env.FUMAN_AUTH_KEY || "sb_publishable_kCocRYzO4oCBnFRQO_pfvg_JZUl0oxm";
-const FUMAN_TEST_MEMBER_EMAIL = String(process.env.FUMAN_TEST_MEMBER_EMAIL || "").trim();
-const FUMAN_TEST_MEMBER_PASSWORD = String(process.env.FUMAN_TEST_MEMBER_PASSWORD || "");
+let configuredMember = {};
+try { configuredMember = JSON.parse(require("fs").readFileSync(path.join(process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime", "secrets", "protected-readback-credential.json"), "utf8").replace(/^\uFEFF/, "")); } catch {}
+const FUMAN_TEST_MEMBER_EMAIL = String(process.env.FUMAN_TEST_MEMBER_EMAIL || configuredMember.email || configuredMember.FUMAN_TEST_MEMBER_EMAIL || "").trim();
+const FUMAN_TEST_MEMBER_PASSWORD = String(process.env.FUMAN_TEST_MEMBER_PASSWORD || configuredMember.password || configuredMember.FUMAN_TEST_MEMBER_PASSWORD || "");
 let fumanUiE2eMemberSessionPromise = null;
 const OUT_DIR = path.resolve(optionValue("--out") || process.env.FUMAN_UI_E2E_OUT || path.join(ROOT, "outputs", "terminal-ui-e2e"));
 const SCREENSHOT_DIR = path.join(OUT_DIR, "screenshots");
@@ -510,7 +512,7 @@ async function setViewport(cdp, mode) {
   }
 }
 
-async function navigate(cdp, url) {
+async function navigate(cdp, url, { stopLoading = true } = {}) {
   cdp.events = cdp.events.filter((event) => !["Runtime.executionContextCreated"].includes(event.method));
   const contextReady = cdp.waitForEvent("Runtime.executionContextCreated", 45000).catch(() => null);
   await cdp.send("Page.navigate", { url }, 45000);
@@ -519,7 +521,7 @@ async function navigate(cdp, url) {
     ok: document.readyState === "interactive" || document.readyState === "complete",
     state: document.readyState,
   }), null, 45000, 500).catch(() => null);
-  await cdp.send("Page.stopLoading").catch(() => null);
+  if (stopLoading) await cdp.send("Page.stopLoading").catch(() => null);
   await sleep(1000);
   await cdp.send("Page.bringToFront").catch(() => null);
 }
@@ -1077,7 +1079,8 @@ async function waitForMobileRouteReady(cdp, route, timeoutMs = ROUTE_TIMEOUT_MS)
       || expected.fragment === "ai"
       || expected.allowMissingRunId
       || Boolean(runId);
-    const rowsReady = membershipLocked
+    const completeZero = rootKey === "strategy3" && Boolean(runId) && Boolean(root?.querySelector('[data-scan-state="complete-zero"]')) && /掃描完成.*0\s*檔/.test(text);
+    const rowsReady = completeZero || membershipLocked
       || expected.allowEmpty
       || expected.fragment === "ai"
       || rows > 0;
@@ -1441,6 +1444,10 @@ function collectDesktopStats(route) {
     const activeButtons = currentButtons.filter((button) => button.classList.contains("active"));
     const activeKey = activeButtons[0]?.dataset?.unifiedStrategyFilter || "";
     const afterRows = rowCount();
+    if (route.key === "strategy4") {
+      const activeFilter = currentButtons.find(b => b.classList.contains("active"));
+      activeFilter?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    }
     return {
       buttonCount: buttons.length,
       checked: true,
@@ -1672,10 +1679,12 @@ function collectDesktopStats(route) {
     canvasPixelDiversity,
     canvasSize,
     sampleRows: domRows.slice(0, 3),
+    candidateTexts: ["strategy3", "strategy4"].includes(route.key) ? domRows.map(row => row.text) : [],
+    contentRunId: route.key === "strategy4" ? (typeof strategy4ApiRunId !== "undefined" ? String(strategy4ApiRunId) : (String(activePanel.textContent || "").match(/strategy4-\d{8}-\d{14}/) || [""])[0]) : route.key === "institution" ? (String(activePanel.textContent || "").match(/institution-\d{8}-\d{14}/) || [""])[0] : route.key === "strategy3" ? (String(activePanel.textContent || "").match(/strategy3v2-(?:recovery-replay-)?\d{8}-\d{14}/) || [""])[0] : "",
     filterCounts,
     unifiedFilterContract,
     freshnessText,
-    emptyStateText,
+    emptyStateText: emptyStateText || zeroResultText,
     waitingEmptyOk,
     dateSignals,
     fieldSignals,
@@ -1701,6 +1710,8 @@ function collectMobileStats(route) {
   const blockerMatches = [...panelText.matchAll(/(?:HTTP\s*503|timeout|fallback|static\s*json|Google Sheet|fuman-terminal-sync|暫時無法取得|讀取失敗|載入失敗|等待資料|讀取中|載入中|未知分頁|沒有資料)/gi)].map((match) => match[0]);
   const rootKey = root?.dataset?.mobileFragmentKey || "";
   const runId = root?.dataset?.runId || "";
+  const completeZeroText = text(root?.querySelector('[data-scan-state="complete-zero"]'));
+  const completeZero = rootKey === "strategy3" && Boolean(runId) && /掃描完成.*0\s*檔/.test(completeZeroText);
   const statusText = text(status);
   const dateSignals = [...`${statusText} ${panelText}`.matchAll(/(?:20\d{2}[\/.-]\d{1,2}[\/.-]\d{1,2}|20\d{6}|\d{2}:\d{2}|runId|run-|fresh|stale|expired|更新|掃描|資料)/gi)].slice(0, 12).map((match) => match[0]);
   const shell = document.querySelector(".shell");
@@ -1856,7 +1867,9 @@ function collectMobileStats(route) {
     runId,
     rowsVisible: rows.length,
     sampleRows: rows.slice(0, 3),
+    candidateTexts: ["strategy3", "strategy4"].includes(route.key) ? rows : [],
     statusText,
+    emptyStateText: completeZeroText,
     dateSignals,
     layout,
     mobileAiDashboard,
@@ -1868,7 +1881,7 @@ function collectMobileStats(route) {
     ok: membershipLocked
       ? layoutBlockers.length === 0 && blockerMatches.length === 0
       : keyOk
-        && (route.allowEmpty || rows.length > 0)
+        && (route.allowEmpty || completeZero || rows.length > 0)
         && (route.allowEmpty || route.allowMissingRunId || route.fragment === "ai" || Boolean(runId))
         && blockers.length === 0,
   };
@@ -1989,7 +2002,12 @@ async function collectDesktopStatsWhenReady(cdp, route, timeoutMs = 22000) {
   while (Date.now() - start < timeoutMs) {
     last = await evaluate(cdp, collectDesktopStats, route)
       .catch((error) => fallbackDesktopStats(cdp, route, error));
-    if (last?.ok && !(last.blockerMatches || []).length) {
+    // Strategy4 may paint an initial subset before the full ranked list arrives.
+    // Wait within the existing deadline for exact identity; never waive missing rows.
+    const expectedS4 = optionValue("--expected-symbols").split(",").filter(Boolean).sort();
+    const actualS4 = [...new Set((last?.candidateTexts || []).map(t => (String(t).match(/#\d+\s+(?:[^\d]*?\s)?(\d{4,6})\b/) || [])[1]).filter(Boolean))].sort();
+    const s4IdentityReady = route.key !== "strategy4" || !process.argv.includes("--require-content") || (last?.contentRunId === optionValue("--expected-run-id") && JSON.stringify(actualS4) === JSON.stringify(expectedS4));
+    if (last?.ok && !(last.blockerMatches || []).length && s4IdentityReady) {
       if (route.key === "market-ai") {
         const stability = await collectMarketAiLayoutStability(cdp).catch((error) => ({
           ok: false,
@@ -2177,6 +2195,77 @@ function collectDesktopMembershipLockStats(route) {
     ok: blockerMatches.length === 0,
   };
 }
+async function verifyInstitutionRenderedIdentity(cdp, kind) {
+  const input = optionValue("--institution-readback");
+  if (!input) return { ok: false, reason: "authoritative readback file required" };
+  const evidence = JSON.parse(await fs.readFile(input, "utf8"));
+  if (!evidence.ok || !Array.isArray(evidence.rows)) return { ok: false, reason: "readback incomplete" };
+  const expectedRows = evidence.rows;
+  const read = () => evaluate(cdp, (kind) => {
+    const root = document.querySelector(kind === "desktop" ? "#chip-trade-view" : '#content [data-mobile-fragment-key="chip"]');
+    const nodes = [...(root?.querySelectorAll(kind === "desktop" ? ".fuman-unified-list-card .strategy3-card-stock span" : ".mobile-terminal-row h4") || [])];
+    return { runId: (root?.textContent?.match(/institution-\d{8}-\d{14}/)||[])[0] || root?.dataset?.runId || "", codes: nodes.map(n => (n.textContent.trim().match(/^\d{4}/)||[])[0]).filter(Boolean), zero: !!root?.querySelector('[data-zero-result="1"]') };
+  }, kind);
+  const toggle = key => evaluate(cdp, key => {
+    const root=document.querySelector('#chip-trade-view');
+    const active=root?.querySelector('[data-unified-strategy-filter].active');
+    if(active)active.click();
+    if(key)root?.querySelector(`[data-unified-strategy-filter="${key}"]`)?.click();
+  }, key);
+  if(kind==='desktop')await toggle('');
+  await sleep(300);
+  const checks=[];let actual=await read();
+  const equal=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+  checks.push({filter:'all',expected:expectedRows.map(r=>r.code),actual:actual.codes,runId:actual.runId,ok:actual.runId===evidence.runId&&equal(actual.codes,expectedRows.map(r=>r.code))});
+  if(kind==='desktop'){
+    for(const key of ['foreignStreak','trustStreak','jointStreak','foreignTrustVolumePct','tdcc1000']){
+      const expected=expectedRows.filter(({payload:p})=>key==='foreignTrustVolumePct'?p.foreign+p.trust>0&&p.foreignTrustVolumePct>0:key==='tdcc1000'?p.foreignStreak>=3&&(p.foreignLots>0||p.foreign>0)&&(p.ratioIncrease>0||(p.ratio3>0&&p.ratio3>=p.ratio2&&p.ratio2>=p.ratio1)):p[key]>0).map(r=>r.code);
+      await toggle(key);await sleep(300);actual=await read();
+      checks.push({filter:key,expected,actual:actual.codes,runId:actual.runId,ok:actual.runId===evidence.runId&&equal(actual.codes,expected)&&(expected.length>0||actual.zero)});
+    }
+    await toggle('');
+  }
+  return {ok:checks.every(c=>c.ok),runId:evidence.runId,checks};
+}
+
+
+async function verifyStrategy5RenderedIdentity(cdp, kind) {
+  const evidence = JSON.parse(await fs.readFile(optionValue('--strategy5-readback'), 'utf8'));
+  if (!evidence.ok) return {ok:false,reason:'DB readback incomplete'};
+  const expected = evidence.visibleRows.slice(0, kind === 'desktop' ? 140 : 20);
+  const checks = [];
+  const read = () => evaluate(cdp, kind => {
+    const root = document.querySelector(kind === 'desktop' ? '#strategy-view' : '#content [data-mobile-fragment-key="strategy5"]');
+    const nodes = [...(root?.querySelectorAll(kind === 'desktop' ? '.fuman-unified-list-card .strategy3-card-stock span' : '.mobile-terminal-row h4') || [])];
+    return {runId:(root?.textContent?.match(/strategy5-\d{8}-\d{14}/)||[])[0] || root?.dataset?.runId || root?.querySelector('[data-run-id]')?.dataset?.runId || '', scores:kind === 'desktop' ? nodes.map(n=>Number([...n.closest('.fuman-unified-list-card').querySelectorAll('.strategy3-card-metrics div')].find(x=>x.querySelector('small')?.textContent.trim()==='分數')?.querySelector('strong')?.textContent)) : null, codes:nodes.map(n=>(n.textContent.trim().match(/^\d{4}/)||[])[0]).filter(Boolean), zero:!!root?.querySelector('[data-zero-result="1"]')};
+  }, kind);
+  const toggle = key => evaluate(cdp, key => {
+    const root = document.querySelector('#strategy-view');
+    root?.querySelector('[data-unified-strategy-filter].active')?.click();
+    if(key) root?.querySelector('[data-unified-strategy-filter="'+key+'"]')?.click();
+  },key);
+  if(kind==='desktop') await toggle('');
+  await sleep(300);
+  const check = async (filter, rows) => {
+    const actual = await read();
+    const codes = rows.map(r=>r.code);
+    const orderOk=JSON.stringify(actual.codes)===JSON.stringify(codes);
+    const scoresOk=kind!=='desktop'||JSON.stringify(actual.scores)===JSON.stringify(rows.map(r=>Number(r.score)));
+    checks.push({filter,expected:codes,actual:actual.codes,runId:actual.runId,orderOk,scoresOk,actualScores:actual.scores,ok:actual.runId===evidence.runId&&orderOk&&scoresOk});
+  };
+  await check('all',expected);
+  if(kind==='desktop') {
+    const filters=await evaluate(cdp,()=>[...document.querySelectorAll('#strategy-view [data-unified-strategy-filter]')].map(n=>({key:n.dataset.unifiedStrategyFilter,disabled:n.disabled,count:Number(n.querySelector('strong')?.textContent.replace(/[^0-9]/g,''))})).filter(x=>x.key&&x.key!=='multi_strategy_confluence'));
+    for(const filter of filters){
+      const rows=expected.filter(r=>(r.matches||[]).some(m=>m.id===filter.key));
+      if(filter.disabled){checks.push({filter:filter.key,disabled:true,expectedCount:rows.length,displayedCount:filter.count,ok:rows.length===0&&filter.count===0});continue;}
+      await toggle(filter.key);await sleep(250);await check(filter.key,rows);
+    }
+    await toggle('');
+  }
+  return {ok:checks.every(c=>c.ok),runId:evidence.runId,checks};
+}
+
 async function runDesktopMode(browser, theme) {
   debug(`desktop mode start theme=${theme}`);
   const cdp = await createTab(browser);
@@ -2198,6 +2287,16 @@ async function runDesktopMode(browser, theme) {
         await prepareDesktopRoute(cdp, route, { waitForReady: false });
         await activateDesktopRoute(cdp, route);
         await prepareDesktopRoute(cdp, route);
+        if (route.key === 'strategy5' && optionValue('--strategy5-readback')) {
+          const evidence = JSON.parse(await fs.readFile(optionValue('--strategy5-readback'), 'utf8'));
+          if (!evidence.ok) throw new Error('strategy5 DB readback incomplete');
+          await waitFor(cdp, expected => {
+            const root = document.querySelector('#strategy-view');
+            const runId = root?.querySelector('[data-run-id]')?.dataset.runId || '';
+            const count = root?.querySelectorAll('.fuman-unified-list-card').length || 0;
+            return {ok: runId === expected.runId && (expected.count === 0 ? !!root.querySelector('[data-zero-result="1"]') : count === expected.count), runId, count};
+          }, {runId:evidence.runId, count:Math.min(140,evidence.visibleRows.length)}, 45000, 500);
+        }
         await afterDesktopRouteActivate(cdp, route);
         await sleep(["institution", "cb", "warrant"].includes(route.key) ? 5200 : 3200);
         return collectDesktopStatsWhenReady(cdp, route);
@@ -2205,7 +2304,9 @@ async function runDesktopMode(browser, theme) {
       stats = { kind: "desktop", routeKey: route.key, label: route.label, ok: false, rowsVisible: 0, blockerMatches: [error.message], warnings: [] };
     }
 
-    }    stats.theme = theme;
+    }    if (route.key === "institution" && optionValue("--institution-readback")) { stats.identity = await verifyInstitutionRenderedIdentity(cdp, "desktop"); stats.ok = stats.ok && stats.identity.ok; }
+    if (route.key === "strategy5" && optionValue("--strategy5-readback")) { stats.identity = await verifyStrategy5RenderedIdentity(cdp, "desktop"); stats.ok = stats.ok && stats.identity.ok; }
+    stats.theme = theme;
     stats.screenshot = await withTimeout(
       screenshot(cdp, `desktop-${theme}-${route.key}.png`),
       Math.min(ROUTE_TIMEOUT_MS, 30000),
@@ -2395,6 +2496,8 @@ async function runMobileMode(browser, theme, viewport = MOBILE_VIEWPORTS["phone-
       stats = { kind: "mobile", routeKey: effectiveRoute.key, label: effectiveRoute.label, fragment: effectiveRoute.fragment, ok: false, rowsVisible: 0, blockerMatches: [error.message], warnings: [] };
     }
     stats.theme = theme;
+    if (effectiveRoute.key === "institution" && optionValue("--institution-readback")) { stats.identity = await verifyInstitutionRenderedIdentity(cdp, "mobile"); stats.ok = stats.ok && stats.identity.ok; }
+    if (effectiveRoute.key === "strategy5" && optionValue("--strategy5-readback")) { stats.identity = await verifyStrategy5RenderedIdentity(cdp, "mobile"); stats.ok = stats.ok && stats.identity.ok; }
     stats.viewportKey = viewport.key;
     stats.viewportLabel = viewport.label;
     stats.screenshot = await withTimeout(
@@ -2440,6 +2543,192 @@ function isCdpStartupError(error) {
     .test(String(error?.stack || error?.message || error || ""));
 }
 
+async function runStrategy3Scorecard(browser) {
+  const cdp = await createTab(browser);
+  try {
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(() => { const original = window.fetch.bind(window); window.__scorecardFetchErrors = []; window.fetch = async (...args) => { try { return await original(...args); } catch (error) { window.__scorecardFetchErrors.push({ path: new URL(typeof args[0] === 'string' ? args[0] : args[0].url, location.href).pathname, error: error.message, stack: error.stack }); throw error; } }; })();` });
+    await setViewport(cdp, { width: 1440, height: 1000, mobile: false });
+    await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/88`), { stopLoading: false });
+    const selector = '#tabs button[data-strategy="策略3隔日沖成績單"]';
+    await waitForSelector(cdp, selector, ROUTE_TIMEOUT_MS);
+    await scrollSelectorIntoView(cdp, selector);
+    await clickSelectorByDom(cdp, selector);
+    const expectedRun = optionValue("--expected-run-id");
+    const expectedSymbols = optionValue("--expected-symbols").split(",").filter(Boolean).sort();
+    const date = optionValue("--trade-date") || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+    let stats;
+    const deadline = Date.now() + ROUTE_TIMEOUT_MS;
+    do {
+      stats = await evaluate(cdp, ({ date }) => {
+        const rows = [...document.querySelectorAll('#rows tr[data-strategy="策略3隔日沖成績單"]')]
+          .filter(row => row.getBoundingClientRect().height > 0 && row.cells[0]?.innerText.trim() === date)
+          .map(row => ({ symbol: row.cells[2]?.innerText.trim(), runId: row.dataset.runId, sourceRunId: row.dataset.sourceReportRunId, text: row.innerText }));
+        const auditRow = [...document.querySelectorAll('#scanAudit tbody tr')].find(row => row.cells[0]?.innerText.trim() === '策略3');
+        return { rows, auditText: auditRow?.innerText || '', emptyText: document.querySelector('#rows .empty')?.innerText || "", sourceText: document.querySelector('#scorecardSourceReports')?.innerText || "" };
+      }, { date });
+      stats.actualSymbols = stats.rows.map(row => row.symbol).sort();
+      stats.ok = Boolean(expectedRun) && JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols)
+        && stats.rows.every(row => row.runId === expectedRun && row.sourceRunId === expectedRun)
+        && (expectedSymbols.length > 0 || (/沒有符合/.test(stats.emptyText) && stats.sourceText.includes(expectedRun)));
+      if (process.argv.includes('--require-strategy3-audit')) stats.ok = stats.ok && stats.auditText.includes(expectedRun) && stats.auditText.includes(date) && /電腦 \/ 88 \/ 手機一致/.test(stats.auditText) && !/未完成|未收到/.test(stats.auditText);
+      if (stats.ok) break;
+      await sleep(750);
+    } while (Date.now() < deadline);
+    return { kind: "scorecard", routeKey: "strategy3", theme: "night", ...stats,
+      contentAcceptance: { expectedRun, actualRun: stats.ok ? expectedRun : null, expectedSymbols, actualSymbols: stats.actualSymbols, sameSymbols: JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols) },
+      screenshot: await screenshot(cdp, "scorecard-strategy3.png") };
+  } catch (error) {
+    return { kind: "scorecard", routeKey: "strategy3", theme: "night", ok: false,
+      blockerMatches: [error.message], pageText: await evaluate(cdp, () => document.body.innerText.slice(0, 4000)).catch(() => ""),
+      networkErrors: cdp.events.filter(event => event.method === "Network.loadingFailed").map(event => ({ error: event.params?.errorText, blockedReason: event.params?.blockedReason, corsError: event.params?.corsErrorStatus })),
+      networkResponses: cdp.events.filter(event => event.method === "Network.responseReceived").map(event => ({ path: new URL(event.params.response.url).pathname, status: event.params.response.status })),
+      browserErrors: cdp.events.filter(event => event.method === "Log.entryAdded").map(event => event.params?.entry?.text),
+      fetchErrors: await evaluate(cdp, () => window.__scorecardFetchErrors || []).catch(() => []),
+      screenshot: await screenshot(cdp, "scorecard-strategy3-failed.png").catch(() => null) };
+  } finally { cdp.close(); }
+}
+
+async function runStrategy4Scorecard(browser) {
+  const cdp = await createTab(browser);
+  try {
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(() => { const original = window.fetch.bind(window); window.__scorecardFetchErrors = []; window.fetch = async (...args) => { try { return await original(...args); } catch (error) { window.__scorecardFetchErrors.push({ path: new URL(typeof args[0] === 'string' ? args[0] : args[0].url, location.href).pathname, error: error.message, stack: error.stack }); throw error; } }; })();` });
+    await setViewport(cdp, { width: 1440, height: 1000, mobile: false });
+    await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/88`), { stopLoading: false });
+    const selector = '#tabs button[data-strategy="策略4成績單"]';
+    await waitForSelector(cdp, selector, ROUTE_TIMEOUT_MS);
+    await scrollSelectorIntoView(cdp, selector);
+    await clickSelectorByDom(cdp, selector);
+    const expectedRun = optionValue("--expected-run-id");
+    const expectedSymbols = optionValue("--expected-symbols").split(",").filter(Boolean).sort();
+    const date = optionValue("--trade-date") || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+    let stats;
+    const deadline = Date.now() + ROUTE_TIMEOUT_MS;
+    do {
+      stats = await evaluate(cdp, ({ date }) => {
+        const rows = [...document.querySelectorAll('#rows tr[data-strategy="策略4成績單"]')]
+          .filter(row => row.getBoundingClientRect().height > 0 && row.cells[0]?.innerText.trim() === date)
+          .map(row => ({ symbol: row.cells[2]?.innerText.trim(), runId: row.dataset.runId, sourceRunId: row.dataset.sourceReportRunId, text: row.innerText }));
+        return { rows, emptyText: document.querySelector('#rows .empty')?.innerText || "", sourceText: document.querySelector('#scorecardSourceReports')?.innerText || "" };
+      }, { date });
+      stats.actualSymbols = stats.rows.map(row => row.symbol).sort();
+      stats.ok = Boolean(expectedRun) && JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols)
+        && stats.rows.every(row => row.runId === expectedRun && row.sourceRunId === expectedRun)
+        && (expectedSymbols.length > 0 || (/沒有符合/.test(stats.emptyText) && stats.sourceText.includes(expectedRun)));
+      if (stats.ok) break;
+      await sleep(750);
+    } while (Date.now() < deadline);
+    return { kind: "scorecard", routeKey: "strategy4", theme: "night", ...stats,
+      contentAcceptance: { expectedRun, actualRun: stats.ok ? expectedRun : null, expectedSymbols, actualSymbols: stats.actualSymbols, sameSymbols: JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols) },
+      screenshot: await screenshot(cdp, "scorecard-strategy4.png") };
+  } catch (error) {
+    return { kind: "scorecard", routeKey: "strategy4", theme: "night", ok: false,
+      blockerMatches: [error.message], pageText: await evaluate(cdp, () => document.body.innerText.slice(0, 4000)).catch(() => ""),
+      networkErrors: cdp.events.filter(event => event.method === "Network.loadingFailed").map(event => ({ error: event.params?.errorText, blockedReason: event.params?.blockedReason, corsError: event.params?.corsErrorStatus })),
+      networkResponses: cdp.events.filter(event => event.method === "Network.responseReceived").map(event => ({ path: new URL(event.params.response.url).pathname, status: event.params.response.status })),
+      browserErrors: cdp.events.filter(event => event.method === "Log.entryAdded").map(event => event.params?.entry?.text),
+      fetchErrors: await evaluate(cdp, () => window.__scorecardFetchErrors || []).catch(() => []),
+      screenshot: await screenshot(cdp, "scorecard-strategy4-failed.png").catch(() => null) };
+  } finally { cdp.close(); }
+}
+
+async function runInstitutionScorecard(browser) {
+  const cdp = await createTab(browser);
+  try {
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(() => { const original = window.fetch.bind(window); window.__scorecardFetchErrors = []; window.fetch = async (...args) => { try { return await original(...args); } catch (error) { window.__scorecardFetchErrors.push({ path: new URL(typeof args[0] === 'string' ? args[0] : args[0].url, location.href).pathname, error: error.message, stack: error.stack }); throw error; } }; })();` });
+    await setViewport(cdp, { width: 1440, height: 1000, mobile: false });
+    await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/88`), { stopLoading: false });
+    const selector = '#tabs button[data-strategy="買賣超成績單"]';
+    await waitForSelector(cdp, selector, ROUTE_TIMEOUT_MS);
+    await clickSelectorByDom(cdp, selector);
+    const expectedRun = optionValue("--expected-run-id");
+    const expectedSymbols = optionValue("--expected-scorecard-symbols").split(",").filter(Boolean).sort();
+    const expectedTotal = Number(optionValue("--expected-total"));
+    const date = process.env.FUMAN_REPLAY_TRADE_DATE || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+    const readback = JSON.parse(await fs.readFile(optionValue("--institution-readback"), "utf8"));
+    if (!readback.ok || readback.runId !== expectedRun) throw new Error("institution scorecard readback evidence missing");
+    let stats;
+    const deadline = Date.now() + ROUTE_TIMEOUT_MS;
+    do {
+      stats = await evaluate(cdp, ({ date }) => {
+        const rows = [...document.querySelectorAll('#rows tr[data-strategy="買賣超成績單"]')]
+          .filter(row => row.getBoundingClientRect().height > 0 && row.cells[0]?.innerText.trim() === date)
+          .map(row => ({ symbol: row.cells[2]?.innerText.trim(), runId: row.dataset.runId, sourceRunId: row.dataset.sourceReportRunId, entryPrice: Number(row.cells[5]?.innerText.replaceAll(",", "")), highPrice: Number(row.cells[6]?.innerText.replaceAll(",", "")), text: row.innerText }));
+        const auditRow = [...document.querySelectorAll('#scanAudit tr')].find(row => row.cells[0]?.innerText.trim() === '買賣超');
+        const audit = auditRow ? { tradeDate:auditRow.cells[3]?.innerText.trim(), runId:auditRow.cells[4]?.innerText.trim(), count:Number(auditRow.cells[5]?.innerText.split("/")[0].trim()), verifiedCount:Number(auditRow.cells[5]?.innerText.split("/")[1]?.trim()), surfaces:auditRow.cells[6]?.innerText, status:auditRow.cells[7]?.innerText } : null;
+        return { rows, audit, emptyText: document.querySelector('#rows .empty')?.innerText || "", sourceText: document.querySelector('#scorecardSourceReports')?.innerText || "" };
+      }, { date });
+      stats.actualSymbols = stats.rows.map(row => row.symbol).sort();
+      stats.ok = Boolean(expectedRun) && JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols)
+        && stats.audit?.tradeDate === date && stats.audit?.runId === expectedRun && stats.audit?.count === expectedTotal && stats.audit?.verifiedCount === expectedTotal && stats.audit?.surfaces.includes('一致')
+        && stats.rows.every(row => row.runId === expectedRun && row.sourceRunId === expectedRun && Math.abs(row.entryPrice - Number(readback.rows.find(r => r.code === row.symbol)?.payload?.close)) < .011 && Math.abs(row.highPrice - row.entryPrice) < .011)
+        && (expectedSymbols.length > 0 || (/沒有符合/.test(stats.emptyText) && stats.sourceText.includes(expectedRun)));
+      if (stats.ok) break;
+      await sleep(750);
+    } while (Date.now() < deadline);
+    return { kind: "scorecard", routeKey: "institution", theme: "night", ...stats,
+      contentAcceptance: { expectedRun, actualRun: stats.ok ? expectedRun : null, expectedSymbols, actualSymbols: stats.actualSymbols, sameSymbols: JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols) },
+      screenshot: await screenshot(cdp, "scorecard-institution.png") };
+  } catch (error) {
+    return { kind: "scorecard", routeKey: "institution", theme: "night", ok: false,
+      blockerMatches: [error.message], pageText: await evaluate(cdp, () => document.body.innerText.slice(0, 4000)).catch(() => ""),
+      networkErrors: cdp.events.filter(event => event.method === "Network.loadingFailed").map(event => ({ error: event.params?.errorText, blockedReason: event.params?.blockedReason, corsError: event.params?.corsErrorStatus })),
+      networkResponses: cdp.events.filter(event => event.method === "Network.responseReceived").map(event => ({ path: new URL(event.params.response.url).pathname, status: event.params.response.status })),
+      browserErrors: cdp.events.filter(event => event.method === "Log.entryAdded").map(event => event.params?.entry?.text),
+      fetchErrors: await evaluate(cdp, () => window.__scorecardFetchErrors || []).catch(() => []),
+      screenshot: await screenshot(cdp, "scorecard-institution-failed.png").catch(() => null) };
+  } finally { cdp.close(); }
+}
+
+
+async function runStrategy5Scorecard(browser) {
+  const cdp = await createTab(browser);
+  try {
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: `(() => { const original = window.fetch.bind(window); window.__scorecardFetchErrors = []; window.fetch = async (...args) => { try { return await original(...args); } catch (error) { window.__scorecardFetchErrors.push({ path: new URL(typeof args[0] === 'string' ? args[0] : args[0].url, location.href).pathname, error: error.message, stack: error.stack }); throw error; } }; })();` });
+    await setViewport(cdp, { width: 1440, height: 1000, mobile: false });
+    await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/88`), { stopLoading: false });
+    const selector = '#tabs button[data-strategy="策略5成績單"]';
+    await waitForSelector(cdp, selector, ROUTE_TIMEOUT_MS);
+    await clickSelectorByDom(cdp, selector);
+    const expectedRun = optionValue("--expected-run-id");
+    const expectedSymbols = optionValue("--expected-scorecard-symbols").split(",").filter(Boolean).sort();
+    const expectedTotal = Number(optionValue("--expected-total"));
+    const date = process.env.FUMAN_REPLAY_TRADE_DATE || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+    const readback = JSON.parse(await fs.readFile(optionValue("--strategy5-readback"), "utf8"));
+    if (!readback.ok || readback.runId !== expectedRun) throw new Error("strategy5 scorecard readback evidence missing");
+    let stats;
+    const deadline = Date.now() + ROUTE_TIMEOUT_MS;
+    do {
+      stats = await evaluate(cdp, ({ date }) => {
+        const rows = [...document.querySelectorAll('#rows tr[data-strategy="策略5成績單"]')]
+          .filter(row => row.getBoundingClientRect().height > 0 && row.cells[0]?.innerText.trim() === date)
+          .map(row => ({ symbol: row.cells[2]?.innerText.trim(), runId: row.dataset.runId, sourceRunId: row.dataset.sourceReportRunId, entryPrice: Number(row.cells[5]?.innerText.replaceAll(",", "")), highPrice: Number(row.cells[6]?.innerText.replaceAll(",", "")), text: row.innerText }));
+        const auditRow = [...document.querySelectorAll('#scanAudit tr')].find(row => row.cells[0]?.innerText.trim() === '策略5');
+        const audit = auditRow ? { tradeDate:auditRow.cells[3]?.innerText.trim(), runId:auditRow.cells[4]?.innerText.trim(), count:Number(auditRow.cells[5]?.innerText.split("/")[0].trim()), verifiedCount:Number(auditRow.cells[5]?.innerText.split("/")[1]?.trim()), surfaces:auditRow.cells[6]?.innerText, status:auditRow.cells[7]?.innerText } : null;
+        return { rows, audit, emptyText: document.querySelector('#rows .empty')?.innerText || "", sourceText: document.querySelector('#scorecardSourceReports')?.innerText || "" };
+      }, { date });
+      stats.actualSymbols = stats.rows.map(row => row.symbol).sort();
+      stats.ok = Boolean(expectedRun) && JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols)
+        && stats.audit?.tradeDate === date && stats.audit?.runId === expectedRun && stats.audit?.count === expectedTotal && stats.audit?.verifiedCount === expectedTotal && stats.audit?.surfaces.includes('一致')
+        && stats.rows.every(row => row.runId === expectedRun && row.sourceRunId === expectedRun && Math.abs(row.entryPrice - Number(readback.rows.find(r => r.code === row.symbol)?.payload?.close)) < .011 && Math.abs(row.highPrice - row.entryPrice) < .011)
+        && (expectedSymbols.length > 0 || (/沒有符合/.test(stats.emptyText) && stats.sourceText.includes(expectedRun)));
+      if (stats.ok) break;
+      await sleep(750);
+    } while (Date.now() < deadline);
+    return { kind: "scorecard", routeKey: "strategy5", theme: "night", ...stats,
+      contentAcceptance: { expectedRun, actualRun: stats.ok ? expectedRun : null, expectedSymbols, actualSymbols: stats.actualSymbols, sameSymbols: JSON.stringify(stats.actualSymbols) === JSON.stringify(expectedSymbols) },
+      screenshot: await screenshot(cdp, "scorecard-strategy5.png") };
+  } catch (error) {
+    return { kind: "scorecard", routeKey: "strategy5", theme: "night", ok: false,
+      blockerMatches: [error.message], pageText: await evaluate(cdp, () => document.body.innerText.slice(0, 4000)).catch(() => ""),
+      networkErrors: cdp.events.filter(event => event.method === "Network.loadingFailed").map(event => ({ error: event.params?.errorText, blockedReason: event.params?.blockedReason, corsError: event.params?.corsErrorStatus })),
+      networkResponses: cdp.events.filter(event => event.method === "Network.responseReceived").map(event => ({ path: new URL(event.params.response.url).pathname, status: event.params.response.status })),
+      browserErrors: cdp.events.filter(event => event.method === "Log.entryAdded").map(event => event.params?.entry?.text),
+      fetchErrors: await evaluate(cdp, () => window.__scorecardFetchErrors || []).catch(() => []),
+      screenshot: await screenshot(cdp, "scorecard-strategy5-failed.png").catch(() => null) };
+  } finally { cdp.close(); }
+}
+
+
 async function runE2eOnce(options = {}) {
   const browser = await launchBrowser(options);
   const results = [];
@@ -2447,6 +2736,10 @@ async function runE2eOnce(options = {}) {
     if (RUN_ONLY.has("desktop-night")) results.push(...await runDesktopMode(browser, "night"));
     if (RUN_ONLY.has("desktop-sun")) results.push(...await runDesktopMode(browser, "sun"));
     const mobileExecuted = new Set();
+    if (process.argv.includes("--include-institution-scorecard")) results.push(await runInstitutionScorecard(browser));
+    if (process.argv.includes("--include-strategy5-scorecard")) results.push(await runStrategy5Scorecard(browser));
+    if (process.argv.includes("--include-strategy4-scorecard")) results.push(await runStrategy4Scorecard(browser));
+    if (process.argv.includes("--include-scorecard")) results.push(await runStrategy3Scorecard(browser));
     for (const spec of MOBILE_RUNS) {
       if (!RUN_ONLY.has(spec.flag)) continue;
       const key = `${spec.viewport.key}:${spec.theme}`;
@@ -2481,6 +2774,22 @@ async function main() {
     }
   }
   if (!results) throw lastError || new Error("terminal-ui-e2e did not produce results");
+  if (process.argv.includes("--require-content")) {
+    const expectedRun = optionValue("--expected-run-id");
+    const expectedSymbols = optionValue("--expected-symbols").split(",").filter(Boolean).sort();
+    for (const item of results.filter(x => ["strategy3", "strategy4"].includes(x.routeKey) && x.kind !== "scorecard")) {
+      const text = (item.candidateTexts || []).join(" ");
+      const actualSymbols = [...new Set((item.candidateTexts || []).map(row => (String(row).match(/#\d+\s+(?:[^\d]*?\s)?(\d{4,6})\b/) || [])[1]).filter(Boolean))].sort();
+      const actualRun = item.kind === "mobile" ? item.runId : item.contentRunId;
+      const sameSymbols = JSON.stringify(actualSymbols) === JSON.stringify(expectedSymbols);
+      const zeroOk = expectedSymbols.length === 0 && /無符合|0 檔|0筆|沒有符合/.test(item.emptyStateText || text);
+      item.contentAcceptance = { expectedRun, actualRun, expectedSymbols, actualSymbols, sameSymbols };
+      if (!expectedRun || actualRun !== expectedRun || item.accessState === "membership_locked" || !sameSymbols || (!expectedSymbols.length && !zeroOk)) {
+        item.ok = false;
+        item.blockerMatches = [...(item.blockerMatches || []), `${item.routeKey}_rendered_content_identity_or_symbols_mismatch`];
+      }
+    }
+  }
   const report = {
     ok: results.every((item) => item.ok),
     baseUrl: BASE_URL.replace(/\/+$/, ""),
@@ -2500,7 +2809,9 @@ async function main() {
   console.log(`[terminal-ui-e2e] ok ${results.length}/${results.length}`);
 }
 
-main().catch((error) => {
+module.exports = {launchBrowser,createTab,setViewport,navigate,evaluate,waitFor,waitForSelector,clickSelectorByDom,activateDesktopRoute};
+
+if (require.main === module) main().catch((error) => {
   console.error(`[terminal-ui-e2e] failed: ${error?.stack || error}`);
   process.exit(1);
 });

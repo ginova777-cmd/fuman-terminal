@@ -11,6 +11,7 @@ const {
 } = require("../lib/run-time-source-snapshot-contract");
 
 const ROOT = path.resolve(__dirname, "..");
+const RELEASE_AUTHORITY_FILE = path.join(ROOT, "data", "contracts", "release_root_authority_v1.json");
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const DEFAULT_REPORT_DIR = path.join(RUNTIME_DIR, "reports");
 const DEFAULT_STATE_DIR = path.join(RUNTIME_DIR, "state");
@@ -55,7 +56,7 @@ const EXPECTED_RELEASE_SHA = normalizeSha(
   ARGS.values.get("release-sha")
   || process.env.FUMAN_RELEASE_SHA
   || process.env.FUMAN_DEPLOY_SHA
-  || gitValue(["rev-parse", "HEAD"])
+  || readApprovedProductionSha()
 );
 const STRATEGY_FILTER = String(ARGS.values.get("strategy") || ARGS.values.get("only") || process.env.FUMAN_API_UNATTENDED_STRATEGY || "")
   .split(",")
@@ -140,7 +141,7 @@ const STRATEGIES = [
     retentionPolicy: "complete run authoritative; 1m warmup retained by Supabase contract",
     writeBudget: "scanner receipt and source-chain verifier",
     verifierCommands: [
-      ["scripts/verify-strategy3-v2-full-closure.js"],
+      ["scripts/verify-strategy3-complete.js"],
     ],
   },
   {
@@ -527,6 +528,15 @@ function isTaipeiWeekend(date = new Date()) {
 
 function normalizeSha(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function readApprovedProductionSha() {
+  try {
+    const authority = JSON.parse(fs.readFileSync(RELEASE_AUTHORITY_FILE, "utf8"));
+    return normalizeSha(authority?.approvedProductionSha);
+  } catch {
+    return "";
+  }
 }
 
 function strategyDueStatus(strategy, date = new Date()) {

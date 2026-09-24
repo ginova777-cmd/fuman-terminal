@@ -214,6 +214,11 @@ if ([string]::IsNullOrWhiteSpace($actualRunDate) -or $actualRunDate -ne $expecte
   Write-Strategy5Receipt "blocked" 3 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @($reason) $reason
   exit 3
 }
+& $nodeExe --use-system-ca scripts/verify-strategy5-live-readback.js "--expected-run-id=$([string]$verifiedPayload.runId)" "--expected-count=$([int]$verifiedPayload.count)"
+ if ($LASTEXITCODE -ne 0) {
+  Write-Strategy5Receipt "failed" 1 $false ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId) @("independent DB and technical readback failed") "strategy5_full_readback_failed"
+  exit 1
+}
 $snapshotScript = "${PSScriptRoot}\refresh-desktop-route-snapshot.ps1"
 if (Test-Path -LiteralPath $snapshotScript) {
   & $snapshotScript -Source "strategy5" -LogPath $log

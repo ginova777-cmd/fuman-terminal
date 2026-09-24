@@ -1,0 +1,34 @@
+"use strict";
+const assert = require("node:assert/strict");
+const {validateDispositions: check, rejectedObservationPresent, fixture} = require("./verify-opening-report-0830-mother-pool-handoff-ack");
+const payload={mapped_symbols:[{symbol:"2049"},{symbol:"2371"}],stage:"asia_0850",run_id:"report-20260917-ROBOTICS_AUTOMATION"};
+const bridge={accepted_symbols:["2049"],rejected_symbols:[{symbol:"2371",reason:"price_below_50",price:28.5}],applied_boosts:[{symbol:"2049"}]};
+assert.deepEqual(check(bridge,payload),[]);
+assert(check({...bridge,accepted_symbols:[]},payload).includes("disposition_missing:2049"));
+assert(check({...bridge,accepted_symbols:["2049","2371"]},payload).some(x=>x.startsWith("disposition_duplicate_or_overlap")));
+assert(check({...bridge,accepted_symbols:["2049","2049"]},payload).some(x=>x.startsWith("disposition_duplicate_or_overlap")));
+assert(check({...bridge,accepted_symbols:["2049","9999"]},payload).includes("disposition_symbol_not_mapped:9999"));
+for(const price of [0,-1,50,NaN,"28.5",null]) assert(check({...bridge,rejected_symbols:[{symbol:"2371",reason:"price_below_50",price}]},payload).includes("rejection_not_supported:2371"));
+assert(check({...bridge,rejected_symbols:[{symbol:"2371",reason:"missing_quote",price:28.5}]},payload).includes("rejection_not_supported:2371"));
+assert(check({...bridge,applied_boosts:[{symbol:"2371"}]},payload).includes("rejected_symbol_boosted:2371"));
+const db={payload:{openingReport0830IndustryBias:{stages:{asia_0850:{observations:[{run_id:payload.run_id}]}}}}};
+assert.equal(rejectedObservationPresent(db,payload),true);
+assert.equal(rejectedObservationPresent(db,{...payload,run_id:"other-run"}),false);
+assert.equal(rejectedObservationPresent(null,payload),false);
+assert.equal(fixture().ok,true);
+const {validMorningBoostRank,preserveMorningWatchRows}=require('../lib/opening-report-writer-preservation');
+const {mergeOpeningReportEvidence}=require('../lib/opening-report-0830-mother-pool-evidence');
+const retained={applied_priority_rank:31,previous_priority_rank:31,boost:0,boost_once:true,duplicate_boost_skipped:true,existed_before_handoff:true};
+assert.equal(validMorningBoostRank(retained),true);
+for(const change of [{boost:1},{previous_priority_rank:32},{duplicate_boost_skipped:false},{existed_before_handoff:false},{applied_priority_rank:0}]) assert.equal(validMorningBoostRank({...retained,...change}),false);
+assert.equal(validMorningBoostRank({applied_priority_rank:41}),true);
+const early={date:'2026-09-17',stage:'us_0820',report_time:'08:20',industry:'AI_GPU_CLOUD',priority_observation_rank:1,run_id:'us-AI_GPU_CLOUD'};
+const late={...early,stage:'asia_0850',report_time:'08:50',industry:'ROBOTICS_AUTOMATION',run_id:'asia-ROBOTICS_AUTOMATION'};
+const both=mergeOpeningReportEvidence(mergeOpeningReportEvidence(null,early),late);
+for(let round=0;round<2;round++) {
+  const rows=preserveMorningWatchRows([],[{symbol:'2356',openingReport0830IndustryBias:both}],'2026-09-17','now',300);
+  assert.equal(rows[0].payload.openingReport0830IndustryBias.stages.asia_0850.report_time,'08:50');
+  assert.equal(rows[0].payload.openingReport0830IndustryBias.stages.us_0820.report_time,'08:20');
+  assert.equal(rows[0].payload.formal_pool_eligible,false);
+}
+console.log(JSON.stringify({ok:true,scope:"handoff_dispositions",valid_exclusion:true,missing_overlap_duplicate_unknown_and_invalid_rejections_blocked:true,rejected_current_evidence_blocked:true}));

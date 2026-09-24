@@ -1,0 +1,25 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),os=require('node:os'),{spawnSync}=require('node:child_process');
+const {reconcile,hash}=require('../lib/mother-pool-module-write-set');
+const id={trade_date:'2026-09-18',canonical_run_id:'fugle_daytrade_source:20260918:canonical',writer_run_id:'writer1',generation_id:'gen1',mother_pool_run_id:'snap1',snapshot_generation:'snap1',snapshot_sequence:1};
+const plan={created_at:'2026-09-18T01:06:00Z',requested_symbols:['1101','2330'],data_gap_symbols:[],special_evidence:{},rows:['1101','2330'].map(symbol=>({symbol,volume:100,volume_unit:'LOTS',provenance:{source:'test',unit:'LOTS'}}))};
+const ws={...id,module_id:'B02',contract:'mother_pool_module_write_set_v1',plan,plan_hash:hash(plan),ack:{committed:true,committed_at:'2026-09-18T01:06:01Z',plan_hash:hash(plan),written_symbols:['1101','2330']}};
+const rows=plan.requested_symbols.map(symbol=>({...id,...plan.rows.find(r=>r.symbol===symbol)}));let count=0;
+function test(name,fn){fn();count++;console.log('PASS '+name);}
+const clone=x=>JSON.parse(JSON.stringify(x));
+test('real independent sets pass',()=>assert.deepEqual(reconcile(ws,rows,rows,id,'B02').failed_checks,[]));
+test('both DB and anon omit same stock',()=>assert(reconcile(ws,rows.slice(0,1),rows.slice(0,1),id,'B02').failed_checks.includes('MISSING_SYMBOLS')));
+test('missing producer cannot be inferred from readback',()=>assert(reconcile(null,rows,rows,id,'B02').failed_checks.includes('MODULE_WRITE_SET_REQUIRED')));
+test('unacknowledged write rejected',()=>{const w=clone(ws);w.ack.committed=false;assert(reconcile(w,rows,rows,id,'B02').failed_checks.includes('WRITE_ACK_REQUIRED'));});
+test('plan edited after write rejected',()=>{const w=clone(ws);w.plan.requested_symbols=['1101'];assert(reconcile(w,rows,rows,id,'B02').failed_checks.includes('PLAN_HASH_MISMATCH'));});
+test('ack omitted symbol rejected',()=>{const w=clone(ws);w.ack.written_symbols=['1101'];assert(reconcile(w,rows,rows,id,'B02').failed_checks.includes('SOURCE_GAP_OR_WRITE_MISSING'));});
+test('duplicate anon rejected',()=>assert(reconcile(ws,rows,[...rows,rows[0]],id,'B02').failed_checks.includes('DUPLICATE_SYMBOLS')));
+test('wrong writer row rejected',()=>assert(reconcile(ws,[{...rows[0],writer_run_id:'old'},rows[1]],rows,id,'B02').failed_checks.includes('ROW_IDENTITY:writer_run_id')));
+test('both roles agree on wrong producer value rejected',()=>{const altered=rows.map(r=>({...r,volume:101}));assert(reconcile(ws,altered,altered,id,'B02').failed_checks.some(x=>x.startsWith('PRODUCER_VALUE_MISMATCH:')));});
+test('JSONB object key order does not create false mismatch',()=>{const reordered=rows.map(r=>({...r,provenance:{unit:'LOTS',source:'test'}}));assert.deepEqual(reconcile(ws,reordered,reordered,id,'B02').failed_checks,[]);});
+test('missing immutable producer rows rejected',()=>{const w=clone(ws);delete w.plan.rows;w.plan_hash=hash(w.plan);w.ack.plan_hash=w.plan_hash;assert(reconcile(w,rows,rows,id,'B02').failed_checks.includes('PRODUCER_ROWS_SET_MISMATCH'));});
+test('B22 every symbol evidence bound',()=>{const w=clone(ws);w.module_id='B22';w.plan.rows=rows.map(r=>({symbol:r.symbol,opening_range:{symbol:r.symbol,valid:true,bars:[]}}));w.plan_hash=hash(w.plan);w.ack.plan_hash=w.plan_hash;const r=rows.map((x,i)=>({...x,opening_range:w.plan.rows[i].opening_range}));assert.deepEqual(reconcile(w,r,r,id,'B22').failed_checks,[]);assert(reconcile(w,r,rows,id,'B22').failed_checks.includes('OPENING_RANGE_READBACK_MISMATCH'));});
+test('B18 missing closeout rejected',()=>{const w=clone(ws);w.module_id='B18';assert(reconcile(w,rows,rows,id,'B18').failed_checks.includes('SPECIAL_EVIDENCE_MISSING:closeout'));});
+const runtime=fs.mkdtempSync(path.join(os.tmpdir(),'mother-wiring-test-'));
+test('empty runner invokes total and exits pending nonzero',()=>{const p=spawnSync(process.execPath,['scripts/run-daytrade-module-verifiers.js'],{encoding:'utf8',env:{...process.env,FUMAN_RUNTIME:runtime,TRADE_DATE:id.trade_date}});assert.equal(p.status,2,p.stderr);const r=JSON.parse(p.stdout);assert.equal(r.complete,false);assert.equal(r.status,'pending');assert.equal(r.results.length,43);assert(fs.existsSync(r.total.out));assert.equal(JSON.parse(fs.readFileSync(r.total.out)).complete,false);});
+console.log(JSON.stringify({ok:true,tests:count,scope:'isolated',production_complete:false,runtime}));

@@ -1423,13 +1423,16 @@ async function runStreamingCollector() {
   }
 
   let rotationCursor = 0;
+  let connectionAttempts = 0;
   const runOnce = () => new Promise((resolve) => {
+    const connectionAttempt = ++connectionAttempts;
     let selection = selectStreamingSymbols(rotationCursor);
     rotationCursor = selection.nextRotationCursor;
     let chunks = chunkArray(selection.selected, STREAMING_SUBSCRIBE_CHUNK_SIZE);
     let ws;
     let openedAt = "";
     let authenticated = false;
+    const subscriptionEvidence = require('../lib/fugle-subscription-evidence').create(crypto.randomUUID(), STREAMING_CHANNELS);
     let messages = 0;
     let quoteMessages = 0;
     let candleMessages = 0;
@@ -1475,6 +1478,8 @@ async function runStreamingCollector() {
         streamingOpenedAt: openedAt,
         websocketConnected: Boolean(ws && ws.readyState === WebSocket.OPEN),
         websocketAuthenticated: authenticated,
+        subscriptionAckEvidence: subscriptionEvidence.snapshot(),
+        connectionAttempt,
         streamingMessages: messages,
         streamingQuotes: quoteMessages,
         streamingQuoteSpeedPerSec: elapsedSeconds > 0 ? Number((quoteMessages / elapsedSeconds).toFixed(4)) : 0,
@@ -1575,12 +1580,16 @@ async function runStreamingCollector() {
       // Persist the exact immutable subscription set consumed by B01.
       const snapshotTradeDate = String(statusSnapshot.tradeDate || "").trim();
       if (snapshotTradeDate && Array.isArray(selection.selected)) {
-        const symbols = [...new Set(selection.selected.map((row) => String(row?.symbol || row || "").trim()).filter(Boolean))].sort();
-        const generation = crypto.createHash("sha256").update(JSON.stringify(symbols)).digest("hex");
+        const ack = subscriptionEvidence.snapshot();
+        const symbols = [...new Set(ack.acknowledged.map(row => row.symbol))].sort();
+        const subscriptionComplete = statusSnapshot.websocketConnected === true && ack.authenticated === true
+          && ack.requested.length === selection.subscriptionCount && ack.acknowledged.length === selection.subscriptionCount
+          && ack.pending.length === 0 && symbols.length > 0;
+        const generation = crypto.createHash("sha256").update(JSON.stringify({connection_id:ack.connection_id,acknowledged:ack.acknowledged})).digest("hex");
         writeJson(path.join(RUNTIME_DIR, "data", "scan-receipts", "fugle-daytrade-subscription-snapshot-" + snapshotTradeDate.replace(/-/g, "") + ".json"), {
           contract: "fugle_daytrade_subscription_snapshot_v1",
-          status: statusSnapshot.websocketConnected && statusSnapshot.websocketAuthenticated ? "complete" : "blocked",
-          complete: statusSnapshot.websocketConnected === true && statusSnapshot.websocketAuthenticated === true && symbols.length > 0,
+          status: subscriptionComplete ? "complete" : "blocked",
+          complete: subscriptionComplete,
           trade_date: snapshotTradeDate,
           canonical_run_id: statusSnapshot.canonicalRunId || ("fugle_daytrade_source:" + snapshotTradeDate + ":canonical"),
           generation,
@@ -1588,11 +1597,14 @@ async function runStreamingCollector() {
           requested_count: Number(selection.requested || 0),
           subscribed_count: symbols.length,
           subscribed_symbols: symbols,
+          subscription_ack_evidence: ack,
+          planned_symbols: selection.selected,
+          planned_subscription_count: selection.subscriptionCount,
           channels: STREAMING_CHANNELS,
           source: "fugle-websocket",
           checked_at: statusSnapshot.updatedAt || new Date().toISOString(),
-          first_blocker: symbols.length > 0 ? null : "NO_SUBSCRIPTION_SYMBOLS",
-          exit_code: symbols.length > 0 ? 0 : 1,
+          first_blocker: subscriptionComplete ? null : "SUBSCRIPTION_ACK_INCOMPLETE",
+          exit_code: subscriptionComplete ? 0 : 1,
         });
       }
       scheduleSourceStatusHeartbeat(statusSnapshot);
@@ -1636,6 +1648,7 @@ async function runStreamingCollector() {
         let sent = 0;
         const sendSubscription = async (channel, symbol) => {
           if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          if (!subscriptionEvidence.request(channel, symbol, nowIso())) return;
           ws.send(JSON.stringify({ event: "subscribe", data: { channel, symbol } }));
           chunksSent += 1;
           sent += 1;
@@ -1684,8 +1697,9 @@ async function runStreamingCollector() {
         if (/heartbeat|pong/.test(eventName) || /"(?:event|type)"\s*:\s*"(?:heartbeat|pong)"/i.test(text)) {
           lastWebSocketHeartbeatAt = lastTransportMessageAt;
         }
-        if (/authenticated|auth/i.test(text)) {
-          authenticated = true;
+        subscriptionEvidence.message(payload, lastTransportMessageAt);
+        authenticated = subscriptionEvidence.snapshot().authenticated;
+        if (payload?.event === 'authenticated' && authenticated) {
           if (!lastSubscribeSignature) subscribe();
         }
         const notice = getStreamingNotice(payload, text);
@@ -1697,6 +1711,7 @@ async function runStreamingCollector() {
           lastForbiddenEvent = notice.eventName.slice(0, 120);
           lastForbiddenChannel = String(payload?.data?.channel || payload?.channel || "").slice(0, 80);
         }
+        if (!authenticated || !['data','snapshot'].includes(payload?.event)) return;
         const data = payload?.data || payload || {};
         const payloadChannel = String(data.channel || payload?.channel || "").toLowerCase();
         const inferredChannel = payloadChannel
@@ -1741,6 +1756,8 @@ async function runStreamingCollector() {
         writeStreamingStatus({ ok: false, websocketError: event?.message || "websocket_error" });
       });
       ws.addEventListener("close", () => {
+        subscriptionEvidence.close(nowIso());
+        authenticated = false;
         closed = true;
         clearInterval(statusTimer);
         clearInterval(subscribeTimer);
@@ -1837,3 +1854,7 @@ if (COLLECTOR_MODE === "rest") {
     process.exit(1);
   });
 }
+
+
+
+

@@ -9,7 +9,7 @@ const ACTIVE_FILES = [
   "run-buy-sell-complete.ps1",
   "run-strategy3-v2-complete-scan.ps1",
   "run-strategy3-v2-1255-first-attempt.ps1",
-  "run-strategy3-ready-snapshot.ps1",
+  "run-strategy3-v2-readiness-guard.ps1",
   "run-strategy5-complete.ps1",
   "ops/run-strategy2-v3-water-gate.ps1",
   "run-strategy4-partial-sync.ps1",
@@ -18,7 +18,8 @@ const ACTIVE_FILES = [
   "scripts/verify-strategy3-v2-daily-unattended-closure.js",
   "scripts/verify-strategy2-seven-strategy-contract.js",
   "scripts/verify-strategy2-v3-live-closure.js",
-  "scripts/verify-strategy3-v2-full-closure.js",
+  "scripts/verify-strategy3-complete.js",
+  "scripts/verify-strategy3-verifier-retirement.js",
   "scripts/verify-strategy4-canonical-closure.js",
   "scripts/verify-strategy4-88-data-chain.js",
   "scripts/verify-strategy5-88-data-chain.js",
@@ -50,3 +51,5 @@ const report = {
   issues,
 };
 console.log(JSON.stringify(report, null, 2));
+
+process.exitCode = report.ok ? 0 : 1;

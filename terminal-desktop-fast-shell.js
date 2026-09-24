@@ -53,10 +53,10 @@
   const CANVAS_ROUTE_OPTIONS = {
     [MARKET_ROUTE]: { limit: 24, ttl: 14000, live: true, today: true },
     "strategy|策略2": { limit: 240, ttl: 6500, live: true, today: true },
-    "strategy|策略3": { limit: 60, ttl: 22000, live: true, verify: true, noSnapshot: true },
-    "strategy|策略4": { limit: 70, ttl: 24000 },
+    "strategy|策略3": { limit: 2000, ttl: 22000, live: true, verify: true, noSnapshot: true },
+    "strategy|策略4": { limit: 2000, ttl: 24000 },
     "strategy|策略5": { limit: 140, ttl: 22000 },
-    "chip-trade|買賣超": { limit: 60, ttl: 32000, live: true, noSnapshot: true },
+    "chip-trade|買賣超": { limit: 2000, ttl: 32000, live: true, noSnapshot: true },
   };
   const CHIP_TRADE_DEFAULT_FILTER = "";
   const CHIP_TRADE_FILTERS = [
@@ -1159,7 +1159,7 @@
         const rawId = signal.id || signal.key || signal.type || signal.name || signal.label || "";
         const rawLabel = signal.label || signal.short || signal.title || signal.name || signal.id || signal.key || "";
         const rawReason = signal.reason || signal.message || signal.note || "";
-        const id = compactText(rawId, 48);
+        const id = isStrategy5Route(route) ? String(rawId).trim() : compactText(rawId, 48);
         const label = compactText((translateStrategy4 && (strategy4SignalLabel(rawId) || strategy4SignalLabel(rawLabel))) || rawLabel || rawId, 40);
         const reason = compactText((translateStrategy4 && strategy4SignalLabel(rawReason)) || rawReason, 96);
         if (!id && !label && !reason) return null;
@@ -1396,7 +1396,7 @@
       applyCanvasFilter();
       return renderUnifiedListShell(key, meta, panel);
     };
-    const availableRows = (canvasState.filtered?.length ? canvasState.filtered : canvasState.rows || []).filter((row) => row && (row.code || row.title || row.line));
+    const availableRows = (isChipTradeRoute(key) ? canvasState.rows || [] : canvasState.filtered?.length ? canvasState.filtered : canvasState.rows || []).filter((row) => row && (row.code || row.title || row.line));
     if (availableRows.length) return renderRows(availableRows, source || "api-cache");
     const keepInstitutionLoadingShell = isChipTradeRoute(key);
     if (!keepInstitutionLoadingShell) restoreNativeFixedDomRoute(key, panel);
@@ -1593,7 +1593,7 @@
     if (!endpoint) return "";
     const options = canvasOptionsForRoute(route);
     const minLimit = isStrategy4Route(route) ? 10 : 20;
-    const maxLimit = isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : isStrategy5Route(route) ? 140 : 120;
+    const maxLimit = (route === CHIP_TRADE_ROUTE || isStrategy4Route(route)) ? 2000 : isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : isStrategy5Route(route) ? 140 : 120;
     const query = new URLSearchParams({
       canvas: "1",
       compact: "1",
@@ -1702,10 +1702,8 @@
       strategyNameLabel(rawSubStrategy) || (isStrategy4Route(route) && strategy4SignalLabel(rawSubStrategy)) || rawSubStrategy,
       42
     );
-    const subStrategyId = compactText(
-      merged.subStrategyId || merged.strategyId || merged.signalId || merged.setupId || active.id || active.key || active.type || primarySignal?.id || subStrategy,
-      48
-    );
+    const rawSubStrategyId = merged.subStrategyId || merged.strategyId || merged.signalId || merged.setupId || active.id || active.key || active.type || primarySignal?.id || subStrategy;
+    const subStrategyId = isStrategy5Route(route) ? String(rawSubStrategyId).trim() : compactText(rawSubStrategyId, 48);
     const signalLine = signalSummary(signals);
     const strategyDisplay = compactText(
       strategyNameLabel(subStrategyId) || strategyNameLabel(rawSubStrategy) || subStrategy || signalLine,
@@ -1790,6 +1788,8 @@
       foreign: pickFirstValue(merged.foreign, merged.foreignNet, merged.foreign_net, merged.foreignBuy, merged.foreign_buy),
       trust: pickFirstValue(merged.trust, merged.trustNet, merged.trust_net, merged.trustBuy, merged.trust_buy),
       total: pickFirstValue(merged.total, merged.totalNet, merged.total_net, merged.institutionTotal),
+      rankingBonusScore: Number(merged.rankingBonusScore || 0),
+      rankingBonuses: merged.rankingBonuses || null,
       foreignStreak: pickFirstValue(merged.foreignStreak, merged.foreign_streak),
       trustStreak: pickFirstValue(merged.trustStreak, merged.trust_streak),
       jointStreak: pickFirstValue(merged.jointStreak, merged.joint_streak),
@@ -1928,7 +1928,7 @@
         .map((row, index) => normalizeCanvasRow(row, index, route))
         .filter((row) => isStrategy3Route(route) ? /^\d{4}$/.test(String(row.code || "")) : (row.code || row.title)))
       .sort((a, b) => b.length - a.length)[0] || [];
-    const maxLimit = isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : isStrategy5Route(route) ? 140 : 120;
+    const maxLimit = (route === CHIP_TRADE_ROUTE || isStrategy4Route(route)) ? 2000 : isRealtimeRadarRoute(route) ? 1200 : isLiveStrategyRoute(route) ? 240 : isStrategy5Route(route) ? 140 : 120;
     if (isRealtimeRadarRoute(route)) {
       return best
         .sort((a, b) => radarDomTimeValue(b) - radarDomTimeValue(a)
@@ -2663,6 +2663,7 @@
       ].join(" ").toLowerCase().includes(query);
     });
     canvasState.filtered = filterRows(chipFilter);
+    if (isChipTradeRoute(canvasState.route)) canvasState.filtered.sort((a,b) => Number(b.rankingBonusScore || 0) - Number(a.rankingBonusScore || 0));
     const pageSize = canvasPageSizeForRoute();
     const maxOffset = pageSize
       ? Math.max(0, (Math.ceil(canvasState.filtered.length / pageSize) - 1) * pageSize)
@@ -5230,7 +5231,7 @@
       ctx.fillText(`${label} 正式 API 已回讀`, 44, 158);
       ctx.fillStyle = colors.muted;
       ctx.font = "700 14px system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-      ctx.fillText("本輪 0 檔符合條件，這不是斷線、不是載入失敗。", 44, 188);
+      ctx.fillText("本輪完整掃描完成，0 檔符合條件。", 44, 188);
       ctx.fillText("終端保留 runId / evidence；不以舊資料或空白表格冒充。", 44, 214);
       return;
     }
@@ -6950,57 +6951,13 @@
   function renderOpeningReport0830DesktopBriefing(aiPayload = {}) {
     const incoming = aiPayload?.openingMorningReport;
     if (incoming?.ok === true) window.__fumanOpeningReport0830 = incoming;
-    const data = incoming?.ok === true ? incoming : window.__fumanOpeningReport0830;
+    const data = incoming !== undefined ? incoming : window.__fumanOpeningReport0830;
     const panel = ensureMarketDesktopShell().ai || document.querySelector("#market-view [data-market-api-ai], #market-view #market-ai-panel, #market-view .market-ai-panel");
     document.getElementById("terminal-opening-report-0830-root")?.remove();
-    if (!panel || !data) return Boolean(panel?.querySelector?.("[data-opening-report-0830-briefing]"));
-    const hasToday = data.ok === true || String(data.reason_code || "") !== "opening_report_0830_final_receipt_missing";
-    if (!hasToday) return Boolean(panel.querySelector?.("[data-opening-report-0830-briefing]"));
-    const esc = (value) => escapeHtml(String(value ?? ""));
-    const arr = (value) => Array.isArray(value) ? value : [];
-    const pct = (value) => {
-      const n = Number(value);
-      return Number.isFinite(n) ? `${n > 0 ? "+" : ""}${n.toFixed(2)}%` : "--";
-    };
-    const toneClass = (value) => {
-      const text = String(value || "").toLowerCase();
-      if (text.includes("negative") || text.includes("偏弱")) return "opening-report-0830-down";
-      if (text.includes("neutral") || text.includes("分歧") || text.includes("中性")) return "opening-report-0830-flat";
-      return "opening-report-0830-up";
-    };
-    const names = (rows, max = 4) => {
-      const list = arr(rows).map((row) => row.name || row.symbol).filter(Boolean);
-      return list.length ? `${list.slice(0, max).join("、")}${list.length > max ? " +" + (list.length - max) : ""}` : "--";
-    };
-    const rows = arr(data.market_snapshot?.items).slice(0, 4);
-    const priorities = arr(data.priority_industries).slice(0,3);
-    const recommended = (arr(data.recommended_symbols).length
-      ? arr(data.recommended_symbols)
-      : priorities.flatMap((item) => arr(item.a_symbols).map((stock) => ({ ...stock, industry: item.display_name || item.industry })))
-    ).slice(0,18);
-    const node = document.createElement("section");
-    node.className = "opening-report-0830-briefing";
-    node.setAttribute("data-opening-report-0830-briefing", "1");
-    node.setAttribute("data-opening-report-state", "mounted");
-    node.innerHTML = `
-      <header class="opening-report-0830-head">
-        <div class="opening-report-0830-title">
-          <b>${esc(data.date || "")} 晨報｜${esc(rows[1]?.label || "全球盤面")} ${pct(rows[1]?.percent)}｜${esc(priorities[0]?.display_name || "今日推薦")}</b>
-          <span>資料截點 08:20（日本／韓國早盤凍結；美股以前一交易日收盤）｜顯示窗 ${esc(data?.visible_window?.label || "08:30-08:59")}｜僅供觀察排序，不構成正式進場訊號</span>
-        </div>
-        <div class="opening-report-0830-run"><span>${esc(data.report_status || "WATCH")}</span><span>${esc("僅供觀察排序")}</span></div>
-      </header>
-      <div class="opening-report-0830-grid">
-        <article class="opening-report-0830-card"><h4>大盤紅綠燈</h4><div class="opening-report-0830-bias ${toneClass(priorities[0]?.bias)}">${esc(priorities[0]?.bias?.includes?.("negative") ? "偏弱" : priorities[0]?.bias?.includes?.("neutral") ? "分歧" : "偏多")}</div><p>${esc(priorities[0]?.evidence_summary || data.reason_code || "等待 08:30 晨報來源")}</p></article>
-        <article class="opening-report-0830-card"><h4>全球速覽</h4>${rows.length ? rows.map((row) => `<div class="opening-report-0830-minirow"><span>${esc(row.label)}</span><b class="${toneClass(row.direction || row.display)}">${pct(row.percent)}</b></div>`).join("") : `<p class="opening-report-0830-gap">${esc(data.reason_code || "market_snapshot_missing")}</p>`}</article>
-        <article class="opening-report-0830-card"><h4>台股前線</h4><p>三大法人：${esc(data.institutional?.reason_code || data.institutional?.status || "等待來源寫入")}</p><p>短波訊號：${esc(data.shortwave?.reason_code || data.shortwave?.status || "等待來源寫入")}；僅讀 Strategy5 昨日收盤已閉環結果。</p></article>
-      </div>
-      <section class="opening-report-0830-priority">${priorities.length ? priorities.map((item, index) => `<article><b>${index + 1}. ${esc(item.display_name || item.industry)}</b><strong class="${toneClass(item.bias)}">${esc(item.bias || "觀察")}</strong><span>${esc(names(item.a_symbols,8))}</span></article>`).join("") : `<article><b>今日推薦</b><strong class="opening-report-0830-gap">等待 08:30</strong><span>${esc(data.reason_code || "opening_report_missing")}</span></article>`}</section>
-      <div class="opening-report-0830-bottom">
-        <article class="opening-report-0830-card"><h4>短波訊號關注</h4><p>${esc(data.shortwave?.status || "source_gap")}；Strategy5 共振策略可列入，但只讀前日閉環 runId。</p></article>
-        <article class="opening-report-0830-card"><h4>大事紀要</h4><p>${esc(data.event_digest?.reason_code || data.event_digest?.status || "等待 08:30 前新聞來源寫入")}</p></article>
-        <article class="opening-report-0830-card"><h4>今日觀察</h4><p>開盤後確認量價與族群承接。</p><div class="opening-report-0830-symbols">${recommended.length ? recommended.map((stock) => `<span>${esc(stock.name || stock.symbol)}</span>`).join("") : `<span>${esc("觀察名單尚待晨報來源")}</span>`}</div></article>
-      </div>`;
+    if (!panel) return false;
+    const container = document.createElement("div");
+    container.innerHTML = window.FUMAN_OPENING_REPORT_VIEW.render(data);
+    const node = container.firstElementChild;
     panel.querySelector?.("[data-opening-report-0830-briefing]")?.remove();
     const anchor = panel.querySelector?.(".market-ai-summary");
     if (anchor) anchor.insertAdjacentElement("afterend", node);
@@ -7030,10 +6987,12 @@
           document.documentElement.dataset.fumanOpeningReport0830 = "mounted";
           return;
         }
+        renderOpeningReport0830DesktopBriefing({openingMorningReport:payload?.openingMorningReport || null});
         throw new Error(payload?.openingMorningReport?.reason_code || "opening_report_not_ready");
       } catch (error) {
         if (attempt >= 3) {
-          document.documentElement.dataset.fumanOpeningReport0830 = "retrying";
+          document.documentElement.dataset.fumanOpeningReport0830 = "blocked";
+          renderOpeningReport0830DesktopBriefing({openingMorningReport:{ok:false,reason_code:error?.message || "晨報連線失敗"}});
           window.setTimeout(() => load(0), 15000);
           return;
         }
@@ -8791,6 +8750,7 @@
 
   function unifiedListCard(row, index, route) {
     const tags = unifiedListTags(row, route);
+    if (isChipTradeRoute(route)) tags.push(`近期放量 +${Number(row.rankingBonuses?.recentVolume?.points || 0)}`, `當沖率 +${Number(row.rankingBonuses?.daytrade?.points || 0)}`, `加分 +${Number(row.rankingBonusScore || 0)}`);
     const metrics = unifiedListMetrics(row, route);
     const labels = unifiedListMetricLabels(route);
     const kind = unifiedListKind(route);
@@ -8911,9 +8871,12 @@
     if (clearEmptyUnifiedFilter(route, cards)) cards = unifiedRunCards(route, allRows, payloadMeta);
     let rows = (Array.isArray(canvasState.filtered) ? canvasState.filtered : [])
       .filter((row) => row && typeof row === "object")
-      .slice(0, 160);
+      .slice(0, (isStrategy3Route(route) || isChipTradeRoute(route)) ? 2000 : 160);
     if (isStrategy5Route(route) && canvasState.signalFilter === "multi_strategy_confluence") {
       rows = strategy5TerminalConfluenceRows(allRows).slice(0, 160);
+    }
+    if (isStrategy5Route(route) && !rows.length && !allRows.length && !(payloadMeta.ok === true && payloadMeta.runId && payloadMeta.resultCount === 0)) {
+      return renderMemberStrategyPendingShell(route, meta, panel);
     }
     if (isMemberStrategyPreviewRoute(route) && hasMemberPreviewToken() && !rows.length && !allRows.length && !payloadMetaHasResolvedResponse(payloadMeta)) {
       return renderMemberStrategyPendingShell(route, meta, panel);
@@ -8926,7 +8889,7 @@
     const previousGoodReadback = !isStrategy2Route(route) && (payloadMeta.previousGoodReadback === true || Boolean(routeDataDate && routeDataDate !== taipeiTradeDateKey()));
     const previousGoodTradeDate = routeDataDate || String(payloadMeta.previousGoodTradeDate || "").replace(/^(\d{4})(\d{2})(\d{2})$/, "$1-$2-$3");
     const previousGoodNotice = previousGoodReadback
-      ? `上一個完整掃描：${previousGoodTradeDate || "--"}｜非今日候選，不可發布｜待今天完整掃描新 run 完成才切成今日正式結果`
+      ? (isStrategy5Route(route) ? `最新完整掃描資料日：${previousGoodTradeDate || "--"}｜非今日即時資料` : `上一個完整掃描：${previousGoodTradeDate || "--"}｜非今日候選，不可發布｜待今天完整掃描新 run 完成才切成今日正式結果`)
       : "";
     const headerTitle = panel.querySelector(".strategy-header h1, .chip-page-header h1, .page-header h1");
     const headerText = panel.querySelector(".desktop-route-shell-head p, .strategy-header p, .chip-page-header p, .page-header p");
@@ -8960,7 +8923,7 @@
     if (toolbarBadge) toolbarBadge.textContent = meta.badge;
     const scoreValues = rows.map((row) => cleanNumber(row.score)).filter((value) => value);
     const avgScore = scoreValues.length ? Math.round(scoreValues.reduce((sum, value) => sum + value, 0) / scoreValues.length) : 0;
-    if (summary) summary.textContent = `${meta.title}｜${previousGoodReadback ? `上一個完整掃描 ${previousGoodTradeDate || "--"}｜非今日候選` : `完整榜單 run=${runId || "--"}`}｜候選 ${displayCount} 檔`;
+    if (summary) summary.textContent = `${meta.title}｜${previousGoodReadback ? `上一個完整掃描 ${previousGoodTradeDate || "--"}｜非今日候選｜run=${runId || "--"}` : `完整榜單 run=${runId || "--"}`}｜候選 ${displayCount} 檔`;
     if (count) count.textContent = String(displayCount || "--");
     if (avg) avg.textContent = avgScore ? String(avgScore) : "--";
     if (top) top.textContent = rows[0]?.code || rows[0]?.symbol || "--";
@@ -8978,7 +8941,7 @@
       <section class="fuman-zero-complete-state" aria-label="${escapeHtml(meta.title)} 0 檔正式結果" data-zero-result="1" data-canvas-empty-note>
         <div class="empty-state">
           <strong>本次正式 API 已回讀，0 檔符合條件。</strong>
-          <span>這是完整掃描後的合法空結果，不是載入失敗；不撐空白表格。</span>
+          <span>完整掃描完成，今日沒有符合全部條件的標的。</span>
           ${runId ? `<small>run=${escapeHtml(runId)}</small>` : ""}
         </div>
       </section>

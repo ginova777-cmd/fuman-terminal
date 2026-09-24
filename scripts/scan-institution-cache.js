@@ -1,6 +1,8 @@
 const fs = require("fs");
 const path = require("path");
 const scanInstitution = require("../api/institution");
+const crypto = require("crypto");
+const { readTechnicalSources, evaluateCandidates } = require("../lib/institution-technical-selection");
 const { fetchMisQuotes } = require("../lib/mis-quotes");
 const { writeSummary } = require("./cache-summary");
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
@@ -14,9 +16,9 @@ const SUMMARY_FILE = dataPath("institution-summary.json");
 const STOCK_URL = process.env.STOCK_UNIVERSE_URL || "https://fuman-terminal.vercel.app/api/stocks";
 const SLOW_SCAN = ["1", "true", "yes"].includes(String(process.env.INSTITUTION_SLOW_SCAN || "").toLowerCase());
 const REQUEST_DELAY_MS = Number(process.env.INSTITUTION_REQUEST_DELAY_MS || (SLOW_SCAN ? 15000 : 1200));
-const FETCH_RETRIES = Number(process.env.INSTITUTION_FETCH_RETRIES || (SLOW_SCAN ? 4 : 1));
+const FETCH_RETRIES = Number(process.env.INSTITUTION_FETCH_RETRIES || (SLOW_SCAN ? 4 : 3));
 const MIN_SOURCE_ROWS = Number(process.env.INSTITUTION_MIN_SOURCE_ROWS || 1000);
-const MIN_OUTPUT_ROWS = Number(process.env.INSTITUTION_MIN_OUTPUT_ROWS || 100);
+const MIN_OUTPUT_ROWS = 0; // Technical rejection is not missing data; a complete scan may have no bullish candidates.
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const SUPABASE_URL = (
   process.env.SUPABASE_URL
@@ -31,15 +33,7 @@ const INSTITUTION_RUNS_TABLE = process.env.INSTITUTION_SUPABASE_RUNS_TABLE || "i
 const INSTITUTION_RESULTS_TABLE = process.env.INSTITUTION_SUPABASE_RESULTS_TABLE || "institution_scan_results";
 const INSTITUTION_API_ONLY = true;
 const INSTITUTION_RAW_KEEP_DAYS = Number(process.env.INSTITUTION_RAW_KEEP_DAYS || 14);
-const INSTITUTION_REQUIRED_FIELDS = [
-  "code",
-  "name",
-  "foreignNet",
-  "trustNet",
-  "dealerNet",
-  "totalNet",
-  "institutionTotalNet",
-];
+const INSTITUTION_REQUIRED_FIELDS = ["code", "name", "foreign", "trust", "dealer", "total"];
 
 function readSecretText(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
@@ -51,7 +45,7 @@ function sleep(ms) {
 
 function isRetriableFetchError(error) {
   const message = String(error?.message || "");
-  return /HTTP (403|429|500|502|503|504)|aborted|fetch failed/i.test(message);
+  return /HTTP (403|429|500|502|503|504)|aborted|terminated|ECONNRESET|fetch failed/i.test(message);
 }
 
 function readJson(file, fallback) {
@@ -167,13 +161,24 @@ function notRequiredReadiness(reason) {
   };
 }
 
+function institutionSourceDateIssues(output, expectedDate = process.env.FUMAN_REPLAY_TRADE_DATE || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date())) {
+  const expected = normalizeDateKey(expectedDate), issues = [];
+  for (const market of ["twse", "tpex"]) if (normalizeDateKey(output.sourceDates?.[market]) !== expected) issues.push(market + "_source_date_not_today");
+  if (normalizeDateKey(output.usedDate) !== expected) issues.push("used_date_not_today");
+  if (!output.selectionCoverage && (output.errors || []).length) issues.push("official_source_history_incomplete");
+  if (!output.selectionCoverage && (output.sourceHealth?.warnings || []).length) issues.push("five_day_metric_history_incomplete");
+  if (output.selectionCoverage && (output.selectionCoverage.ok !== true || output.selectionCoverage.dataCoverage < 0.9)) issues.push("candidate_data_coverage_below_90pct");
+  return issues;
+}
+
 function buildInstitutionSourceStatusAtRun(output, { sourceCount = 0, resultCount = 0, dataAge = 0 } = {}) {
   const sourceDates = output.sourceDates && typeof output.sourceDates === "object" ? output.sourceDates : {};
   const errors = Array.isArray(output.errors) ? output.errors : [];
   const ready = (
     sourceCount >= MIN_SOURCE_ROWS
     && resultCount >= MIN_OUTPUT_ROWS
-    && dataAge <= 3
+    && (process.env.FUMAN_REPLAY_TRADE_DATE ? normalizeDateKey(output.usedDate) === normalizeDateKey(process.env.FUMAN_REPLAY_TRADE_DATE) : dataAge === 0)
+    && institutionSourceDateIssues(output).length === 0
     && Boolean(output.usedDate)
   );
   return {
@@ -371,6 +376,9 @@ function buildInstitutionRunRow(output, runId, status = "complete") {
         resultRows: sourceStatusAtRun.resultRows,
         sourceLabels: sourceStatusAtRun.sources,
       },
+      selectionCoverage: output.selectionCoverage || null,
+      technicalSourceReceipt: output.technicalSourceReceipt || null,
+      technicalSourceHash: output.technicalSourceHash || null,
       sourceHealth: output.sourceHealth || {},
       sourceStatusAtRun,
       institution_source_status_at_run: sourceStatusAtRun,
@@ -400,7 +408,7 @@ function buildInstitutionResultRows(output, runId) {
   const scanDate = dateForSupabase(output.usedDate || output.date || output.updatedAt);
   const scanTime = String(output.updatedAt || new Date().toISOString());
   return Object.values(output.data || {})
-    .sort((a, b) => Math.abs(cleanNumber(b.total)) - Math.abs(cleanNumber(a.total)) || String(a.code).localeCompare(String(b.code)))
+    .sort(require('../lib/institution-ranking-bonuses').compare)
     .map((row, index) => ({
       run_id: runId,
       strategy: "institution",
@@ -417,7 +425,7 @@ function buildInstitutionResultRows(output, runId) {
       total_net: cleanNumber(row.total),
       rank: index + 1,
       reason: "",
-      payload: { ...row, rank: index + 1, dataContractSource: output.dataContractSource || "institution-cache" },
+      payload: { ...row, rank: index + 1, runId, tradeDate: scanDate, source: row.market === "上市" ? "TWSE T86" : "TPEx 3itrade", direction: row.total > 0 ? "buy" : row.total < 0 ? "sell" : "flat", foreignTrustVolumePct: row.fiveDayAvgVolume > 0 ? ((row.foreign + row.trust) / row.fiveDayAvgVolume) * 100 : null, dataContractSource: output.dataContractSource || "institution-cache" },
       complete: true,
       quality_status: "complete",
       schema_version: output.schemaVersion || "institution-run-id-complete-v1",
@@ -509,9 +517,9 @@ function signedChange(sign, value) {
 }
 
 function collectTradingMetric(bucket, code, close, change, volume) {
-  if (!/^\d{4}$/.test(code) || close <= 0 || volume <= 0) return;
+  if (!/^\d{4}$/.test(code) || volume <= 0) return;
   const prevClose = close - change;
-  const pct = prevClose > 0 ? (change / prevClose) * 100 : 0;
+  const pct = close > 0 && prevClose > 0 ? (change / prevClose) * 100 : null;
   const list = bucket.get(code) || [];
   list.push({ pct, volume });
   bucket.set(code, list);
@@ -567,18 +575,25 @@ async function fetchHistoricalTradingMetrics() {
       warnings.push(`tpex 5-day metrics failed: ${formatTpexDate(date)} :: ${error.message}`);
     }
   }
+  return { map: summarizeTradingMetrics(bucket), warnings };
+}
+
+function summarizeTradingMetrics(bucket) {
   const map = new Map();
   bucket.forEach((values, code) => {
     const usable = values.slice(0, 5);
     if (!usable.length) return;
-    const fiveDayPctSum = usable.reduce((sum, item) => sum + item.pct, 0);
-    const fiveDayAvgVolume = usable.reduce((sum, item) => sum + item.volume, 0) / usable.length;
-    map.set(code, {
-      fiveDayPctSum: Number(fiveDayPctSum.toFixed(2)),
-      fiveDayAvgVolume: Math.round(fiveDayAvgVolume),
-    });
+    const prices = usable.filter(item => Number.isFinite(item.pct));
+    const fiveDayPctSum = prices.length === 5 ? Number(prices.reduce((sum, item) => sum + item.pct, 0).toFixed(2)) : null;
+    map.set(code, { fiveDayPctSum, fiveDayAvgVolume: Math.round(usable.reduce((sum, item) => sum + item.volume, 0) / usable.length), fiveDayVolumeCount: usable.length, fiveDayPriceCount: prices.length });
   });
-  return { map, warnings };
+  return map;
+}
+
+function assertCandidateTradingMetrics(row, metrics) {
+  if (!(row.close > 0 && row.tradeVolume > 0 && metrics?.fiveDayAvgVolume > 0 && metrics.fiveDayVolumeCount === 5 && metrics.fiveDayPriceCount === 5)) {
+    throw new Error("institution candidate trading metrics incomplete: " + row.code + "; preserve previous complete run");
+  }
 }
 
 function buildQuoteMap(payload) {
@@ -698,18 +713,32 @@ async function main() {
   tradingMetricResult.warnings.forEach((warning) => console.warn(`institution metric warning: ${warning}`));
   const enrichedData = enrichInstitutionData(payload.data || {}, quoteMap, tradingMetricResult.map);
   const blacklistCodes = loadChipTradeBlacklist();
-  const data = {};
+  let data = {};
+  const candidateIssues = {};
+  const sourceWarnings = [...(payload.errors || []), ...tradingMetricResult.warnings];
+  const affected = row => sourceWarnings.filter(w => /tpex/i.test(w) ? row.market === "上櫃" : /twse/i.test(w) ? row.market === "上市" : true);
   const excludedCounts = {};
   for (const [code, row] of Object.entries(enrichedData)) {
-    const exclusion = chipTradeExclusion(row, blacklistCodes);
+    const uncertain = affected(row);
+    const exclusion = chipTradeExclusion(uncertain.length ? { ...row, fiveDayAvgVolume: 0 } : row, blacklistCodes);
     if (exclusion.excluded) {
       for (const reason of exclusion.reasons) excludedCounts[reason] = (excludedCounts[reason] || 0) + 1;
       continue;
     }
+    candidateIssues[code] = [...uncertain];
+    try { assertCandidateTradingMetrics(row, tradingMetricResult.map.get(code)); } catch (error) { candidateIssues[code].push(error.message); }
     data[code] = row;
   }
+  const candidates = Object.values(data);
+  const tradeDate = dateForSupabase(payload.usedDate);
+  const technicalSources = await readTechnicalSources(candidates, tradeDate);
+  const rankingInputs = await require('../lib/institution-ranking-bonuses').read(candidates, tradeDate);
+  for (const row of candidates) technicalSources[row.code].rankingInput = rankingInputs[row.code];
+  const selection = evaluateCandidates(candidates, technicalSources, tradeDate, candidateIssues);
+  data = Object.fromEntries(selection.selected.map(row => [row.code, row]));
   const count = Object.keys(data).length;
   const output = {
+    selectionCoverage: selection.selectionCoverage,
     ...payload,
     ok: true,
     source: "github-actions",
@@ -734,6 +763,7 @@ async function main() {
   };
   output.fieldCompleteness = buildFieldCompleteness(Object.values(data));
   output.requiredFields = output.fieldCompleteness.requiredFields;
+  if (output.fieldCompleteness.blankTotal > 0) throw new Error("institution required source fields missing; preserve previous complete run");
   output.rowsChecked = output.fieldCompleteness.rowsChecked;
   output.blankCounts = output.fieldCompleteness.blankCounts;
   output.blankTotal = output.fieldCompleteness.blankTotal;
@@ -741,6 +771,11 @@ async function main() {
   output.sampleMissingRows = output.fieldCompleteness.sampleMissingRows;
   output.rawKeepDays = INSTITUTION_RAW_KEEP_DAYS;
   output.runId = institutionRunIdFromOutput(output);
+  const technicalEvidence = JSON.stringify({ runId: output.runId, tradeDate, candidates, sources: technicalSources, extraIssues: candidateIssues, selectionCoverage: selection.selectionCoverage });
+  output.technicalSourceReceipt = path.join(RUNTIME_DIR, "data/institution-technical-source", output.runId + ".json");
+  fs.mkdirSync(path.dirname(output.technicalSourceReceipt), { recursive: true });
+  fs.writeFileSync(output.technicalSourceReceipt, technicalEvidence);
+  output.technicalSourceHash = crypto.createHash("sha256").update(technicalEvidence).digest("hex");
   output.complete = true;
   output.schemaVersion = output.schemaVersion || "institution-run-id-complete-v1";
   output.dataContractSource = output.dataContractSource || "institution-cache";
@@ -760,8 +795,11 @@ async function main() {
     process.exit(2);
   }
 
+  const sourceDateIssues = institutionSourceDateIssues(output, process.env.FUMAN_REPLAY_TRADE_DATE || undefined);
+  if (sourceDateIssues.length) throw new Error("institution source freshness: " + sourceDateIssues.join(",") + "; preserve previous complete run");
   await publishInstitutionCompleteRunToSupabase(output);
   await publishInstitutionSnapshot(output);
+  console.log("institution authoritative readback metadata: " + JSON.stringify({ runId: output.runId, sourceRows: sourceCount, resultCount: count, usedDate: output.usedDate, sourceSnapshotCapturedAt: output.updatedAt, warnings: output.sourceHealth.warnings, blankTotal: output.blankTotal, selectionCoverage: output.selectionCoverage, technicalSourceReceipt: output.technicalSourceReceipt, technicalSourceHash: output.technicalSourceHash }));
 
   if (INSTITUTION_API_ONLY) {
     console.log(`institution API-only: skipped static institution*.json output, rows ${count}, usedDate ${output.usedDate || "--"}`);
@@ -782,6 +820,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+  collectTradingMetric, summarizeTradingMetrics, assertCandidateTradingMetrics,
+  institutionSourceDateIssues,
   buildInstitutionRunRow,
   buildInstitutionResultRows,
   buildInstitutionSourceStatusAtRun,
@@ -789,4 +829,3 @@ module.exports = {
   buildFieldCompleteness,
   institutionRunIdFromOutput,
 };
-

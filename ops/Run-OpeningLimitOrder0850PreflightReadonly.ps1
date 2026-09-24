@@ -3,7 +3,7 @@
   [int]$Limit = 1600,
   [string]$RunId = "",
   [switch]$WaitUntil0850,
-  [string]$TerminalDir = "C:\fuman-terminal",
+  [string]$TerminalDir = "C:\fuman-release-owner\fuman-terminal",
   [string]$RuntimeDir = "C:\fuman-runtime"
 )
 

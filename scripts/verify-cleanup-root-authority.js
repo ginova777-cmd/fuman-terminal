@@ -20,6 +20,8 @@ const checks = {
   stage4RunnerFailsClosedWithReceipt: stage4Runner.includes("retention_wrapper_failed_before_canonical_receipt"),
   stage4RunnerProtectsBoundedContract: stage4Runner.includes("maxBatchSize = 5000") && stage4Runner.includes("requestedMaxBatches") && stage4Runner.includes("protectedLatestTradeDateRequired = $true"),
   allApplyRunnersOwnMarketCalendarGuard: cleanupApplyRunners.every(({ text }) => text.includes("schedule-guard.ps1") && text.includes("Invoke-FumanWeekdayGuard")),
+  cleanupAllowsAfterFormalWindow: cleanupApplyRunners.every(({ text }) => /Invoke-FumanWeekdayGuard[^\r\n]+-AllowAfterFormalSourceWindow/.test(text)),
+  auditWrappersPropagateExit: ['run-global-cost-janitor-scorecard.ps1', 'run-vercel-cost-health-monitor.ps1'].every(file => fs.readFileSync(path.join(repo,file),'utf8').includes('exit $LASTEXITCODE')),
   rootUsesMarketCalendarNotWeekendOnly: rootRunner.includes("check-market-calendar-action.js") && rootRunner.includes("$marketOpenToday") && rootRunner.includes('$cleanupVerifierDue = ($effectiveMode -eq "Full" -and $marketOpenToday)'),
   holidayCleanupVerifierSkipsApplyEvidence: fs.readFileSync(path.join(repo, "scripts", "verify-daily-retention-maintenance.js"), "utf8").includes("skip_apply_cleanup_read_only_health_only"),
 };

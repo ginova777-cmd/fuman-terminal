@@ -259,6 +259,8 @@ async function main() {
       ratioDate3: dates[2],
       ratio3: ratios[2],
       ratioIncrease,
+      rankingBonusScore: Number(row.rankingBonusScore || 0),
+      rankingBonuses: row.rankingBonuses || null,
       close: cleanNumber(row.close),
       changePct: cleanNumber(row.percent ?? row.changePct),
       breakoutScore: cleanNumber(row.breakoutScore) || fallback.breakoutScore,
@@ -273,7 +275,8 @@ async function main() {
   }
 
   matches.sort((a, b) => (
-    b.ratioIncrease - a.ratioIncrease
+    Number(b.rankingBonusScore || 0) - Number(a.rankingBonusScore || 0)
+    || b.ratioIncrease - a.ratioIncrease
     || b.breakoutScore - a.breakoutScore
     || b.foreignLots - a.foreignLots
   ));

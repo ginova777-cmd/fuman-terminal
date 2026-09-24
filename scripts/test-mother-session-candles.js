@@ -1,0 +1,16 @@
+'use strict';
+const assert=require('node:assert/strict'),{select}=require('../lib/mother-pool-session-candles'),{collect}=require('../lib/mother-pool-candle-module-producer');
+const date='2026-09-18',asOf=date+'T13:29:01+08:00',start=Date.parse(date+'T09:00:00+08:00');
+const identity={trade_date:date,canonical_run_id:'fugle_daytrade_source:20260918:canonical',writer_run_id:'isolated',generation_id:'g',mother_pool_run_id:'s',snapshot_generation:'s',snapshot_sequence:1};
+const bars=Array.from({length:270},(_,i)=>({symbol:'2330',tradeDate:date,market:'TSE',source:'fugle-ws-candles',sourceChannel:'candles',candleOrigin:'websocket_candle',synthetic:false,volumeStrategyUsable:true,candleTime:new Date(start+i*60000).toISOString(),candleSeenAt:new Date(start+(i+1)*60000).toISOString(),open:100,high:i===0?150:102,low:i===1?50:99,close:101,volume:100}));
+const selected=select({payload:{candles:bars},tradeDate:date,asOf});assert.equal(selected.length,269);
+const run=candles=>collect({candles,identity,symbols:['2330'],asOf});
+const plans=run(selected),range=plans.find(p=>p.module_id==='B22').rows[0],point=plans.find(p=>p.module_id==='B23').rows[0];
+assert.equal(range.status,'READY');assert.equal(range.opening_range.bars.length,5);assert.equal(point.status,'READY');assert.equal(point.day_high_so_far,150);assert.equal(point.day_low_so_far,50);
+const prior={...bars[0],tradeDate:'2026-09-17',candleTime:'2026-09-17T09:00:00+08:00'};
+assert.equal(select({payload:{candles:[prior,...bars]},tradeDate:date,asOf}).length,269);
+assert.equal(run(selected.slice(180)).find(p=>p.module_id==='B23').rows[0].status,'DATA_GAP');
+const future={...bars[0],candleTime:date+'T13:31:00+08:00',candleSeenAt:date+'T13:32:00+08:00'};
+assert.equal(run(select({payload:{candles:[...bars,future]},tradeDate:date,asOf})).find(p=>p.module_id==='B23').rows[0].status,'DATA_GAP');
+assert.throws(()=>select({payload:{},tradeDate:date,asOf}),/SESSION_CANDLE_SOURCE_INVALID/);
+console.log(JSON.stringify({status:'passed',checks:10,scope:'isolated_full_session_candle_input',production_complete:false}));

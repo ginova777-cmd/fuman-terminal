@@ -47,28 +47,53 @@ function candles(tradeDate, symbol, count = 61) {
     volume: 1000,
     source: "fugle_websocket_candles",
     synthetic: false,
+    volume_strategy_usable: true,
     updated_at: new Date().toISOString(),
     payload: {},
   }));
 }
 
+function v41PoolRow(tradeDate, overrides = {}) {
+  const now = new Date().toISOString();
+  return {
+    contract_version: "4.1.0", trade_date: tradeDate, canonical_run_id: canonicalRunId(tradeDate),
+    writer_run_id: `writer-${tradeDate}`, generation_id: `generation-${tradeDate}`, symbol: "2330", name: "台積電", market: "TSE",
+    source_name: "fugle_daytrade_source", source_trade_date: tradeDate, source_updated_at: now, source_freshness: "same_trade_date_current", updated_at: now,
+    mother_pool_rank: 1, priority_rank: 1, mother_pool_score: 90, priority_score: 88, entry_score: 87, upgrade_score: 1,
+    priority_reason: "test", priority_reasons: ["test"], mother_reason: "test", mother_source: "writer", pool_source: "terminal_union", pool_layer: "warmup",
+    source_flags: ["test_source"], source_run_ids: [canonicalRunId(tradeDate)], mother_readiness_status: "ready", is_formal_entry_eligible: true,
+    price: 100, open_price: 99, previous_close: 98, high_price: 101, low_price: 97, change_percent: 2, total_volume: 1000, trade_value: 100000,
+    avg_volume5: 900, quote_trade_date: tradeDate, quote_seen_at: now, quote_age_seconds: 1, last_trade_time: now, last_trade_age_seconds: 1,
+    latest_candle_time: now, intraday_1m_stale_seconds: 1, mother_updated_at: now, pool_updated_trade_date: tradeDate,
+    sector_name: "半導體", sector_strength_score: 80, sector_member_active_count: 10, industry_signal_fast_injected: false,
+    industry_signal_fast_inject_industries: [], ma5: 101, ma10: 100, ma20: 99, ma5_ma10_ma20_bullish: true,
+    ...overrides,
+  };
+}
+
 function installFetch(tradeDate, options = {}) {
   const calls = [];
   calls.quoteQueries = [];
+  calls.poolQueries = [];
   global.fetch = async (input) => {
     const url = new URL(String(input));
     const target = url.pathname.split("/").pop();
     calls.push(target);
+    if (target === "market_calendar") return response([{ market: "TW", trade_date: tradeDate, is_open: true, calendar_contract: "market-calendar-contract-v1", updated_at: new Date().toISOString() }]);
     if (target === "source_status") return response([{ ...gateRow(tradeDate, { status: "ok" }), payload: gateRow(tradeDate, options.sourceOverrides) }]);
     if (target === "v_fugle_daytrade_canonical_gate") return response([gateRow(tradeDate, options.canonicalOverrides)]);
     if (target === "v_fugle_daytrade_unattended_gate_status") return response([gateRow(tradeDate, options.unattendedOverrides)]);
-    if (target === "v_fugle_daytrade_mother_pool_v4_1") return response(options.poolRows || [{ trade_date: tradeDate, symbol: "2330", name: "台積電", market: "TSE", mother_pool_rank: 1, priority_reason: "test", pool_source: "terminal_union", pool_layer: "warmup", entry_score: 1, upgrade_score: 0, source_flags: ["test_source"], source_run_ids: [canonicalRunId(tradeDate)], priority_reasons: ["test"], source_updated_at: new Date().toISOString(), source_freshness: "same_trade_date_current", price: 100, open_price: 99, previous_close: 98, change_percent: 2, total_volume: 1000, trade_value: 100000, quote_seen_at: new Date().toISOString(), quote_age_seconds: 1, last_trade_time: new Date().toISOString(), last_trade_age_seconds: 1, latest_candle_time: new Date().toISOString(), intraday_1m_stale_seconds: 1, ma5: 101, ma10: 100, ma20: 99, ma5_ma10_ma20_bullish: true, contract_version: "4.1.0", canonical_run_id: canonicalRunId(tradeDate), updated_at: new Date().toISOString() }]);
+    if (target === "v_fugle_daytrade_mother_pool_v4_1") {
+      calls.poolQueries.push(url);
+      return response(options.poolRows || [v41PoolRow(tradeDate)]);
+    }
+    if (target === "v_fugle_daytrade_mother_pool_receipt_v4_1") return response(options.receiptRows || [{ verification_run_id: `verify-${tradeDate}`, contract_version: "4.1.0", trade_date: tradeDate, canonical_run_id: canonicalRunId(tradeDate), verified_at: new Date().toISOString(), complete: true, mother_pool_rows: (options.poolRows || [1]).length, failed_checks: [], first_blocker: null }]);
     if (target === "fugle_daytrade_quotes_live") {
       calls.quoteQueries.push(url);
       return response([{ symbol: "2330", trade_date: tradeDate, name: "台積電", price: 100, quote_seen_at: new Date().toISOString(), last_trade_time: new Date().toISOString(), updated_at: new Date().toISOString(), ...options.quoteOverrides }]);
     }
     if (target === "v_fugle_daytrade_intraday_1m_status") return response([{ symbol: "2330", latest_candle_time: new Date(Date.now() - 60000).toISOString(), today_candle_count: 61, updated_at: new Date().toISOString() }]);
-    if (target === "get_fugle_daytrade_intraday_1m_latest_n") return response(candles(tradeDate, "2330"));
+    if (target === "get_fugle_daytrade_intraday_1m_latest_n") return response(options.candleRows || candles(tradeDate, "2330"));
     return response([], 404);
   };
   return calls;
@@ -110,6 +135,92 @@ async function main() {
     "latest_candle_time", "intraday_1m_stale_seconds", "ma5", "ma10", "ma20", "ma5_ma10_ma20_bullish",
   ];
   checks.v4_1_required_fields_preserved = requiredV41Fields.every((field) => Object.prototype.hasOwnProperty.call(normalizedHealthyRow, field));
+
+  // Regression: a PostgREST server can cap the entire RPC response at 1,000
+  // rows. Twenty-three symbols still need all 61 bars each, including the tail.
+  const batchSymbols = Array.from({ length: 23 }, (_, index) => String(2100 + index));
+  const batchCalls = installFetch(tradeDate, { poolRows: batchSymbols.map(symbol => v41PoolRow(tradeDate, { symbol })) });
+  const ordinaryFetch = global.fetch;
+  const rpcSizes = [];
+  global.fetch = async (input, init = {}) => {
+    const target = new URL(String(input)).pathname.split('/').pop();
+    if (target === 'get_fugle_daytrade_intraday_1m_latest_n') {
+      const body = JSON.parse(init.body);
+      rpcSizes.push(body.symbols.length * body.bars_per_symbol);
+      return response(body.symbols.flatMap(symbol => candles(tradeDate, symbol, body.bars_per_symbol)).slice(0, 1000));
+    }
+    if (target === 'fugle_daytrade_quotes_live') return response(batchSymbols.map(symbol => ({ symbol, trade_date: tradeDate, price: 100, quote_seen_at: new Date().toISOString(), last_trade_time: new Date().toISOString() })));
+    if (target === 'v_fugle_daytrade_intraday_1m_status') return response(batchSymbols.map(symbol => ({ symbol, latest_candle_time: new Date(Date.now()-60000).toISOString(), today_candle_count: 61 })));
+    return ordinaryFetch(input, init);
+  };
+  const cappedRpc = await readCanonicalDaytradeWater({ tradeDate, symbols: batchSymbols, barsPerSymbol: 61 });
+  checks.rpc_row_cap_preserves_all_23_symbols = cappedRpc.ok === true
+    && cappedRpc.receipt?.intraday_1m_rpc_rows === 1403
+    && cappedRpc.receipt?.event_evidence?.length === 23
+    && cappedRpc.receipt.event_evidence.every(row => row.intraday_1m_sample_count === 61 && row.intraday_1m_ready)
+    && rpcSizes.length > 1 && rpcSizes.every(size => size <= 1000);
+
+  const strategyCalls = installFetch(tradeDate);
+  const strategy3 = await readCanonicalDaytradeWater({
+    tradeDate,
+    consumerName: "strategy3_v2",
+    strategy3Consumer: true,
+    requireMarketCalendar: true,
+    requireMotherPoolReceipt: true,
+    hydrateMotherPoolCandles: true,
+    minimumCandlesPerSymbol: 20,
+    barsPerSymbol: 61,
+  });
+  checks.strategy3_v4_1_contract_complete = strategy3.ok === true
+    && strategy3.receipt?.reader_mode === "strategy3_v2_mother_pool_v4_1"
+    && strategy3.receipt?.mother_pool_http_status === 200
+    && strategy3.receipt?.mother_pool_rows === 1
+    && strategy3.receipt?.mother_pool_pages === 1
+    && strategy3.receipt?.unique_symbols === 1
+    && strategy3.receipt?.quote_valid_rows === 1
+    && strategy3.receipt?.intraday_1m_valid_rows === 1
+    && strategy3.receipt?.symbol_data_gap_rows === 0
+    && strategy3.receipt?.global_formal_gate_blocked === false
+    && strategy3.receipt?.receipt_incomplete === false
+    && strategy3.candleRowsBySymbol.get("2330")?.length === 61;
+  checks.strategy3_v4_1_read_order = strategyCalls.indexOf("market_calendar") < strategyCalls.indexOf("source_status")
+    && strategyCalls.indexOf("source_status") < strategyCalls.indexOf("v_fugle_daytrade_canonical_gate")
+    && strategyCalls.indexOf("v_fugle_daytrade_unattended_gate_status") < strategyCalls.indexOf("v_fugle_daytrade_mother_pool_v4_1")
+    && strategyCalls.indexOf("v_fugle_daytrade_mother_pool_v4_1") < strategyCalls.indexOf("v_fugle_daytrade_mother_pool_receipt_v4_1")
+    && strategyCalls.indexOf("v_fugle_daytrade_mother_pool_receipt_v4_1") < strategyCalls.indexOf("fugle_daytrade_quotes_live")
+    && strategyCalls.indexOf("fugle_daytrade_quotes_live") < strategyCalls.indexOf("get_fugle_daytrade_intraday_1m_latest_n");
+  checks.strategy3_v4_1_pool_query_contract = strategyCalls.poolQueries.length > 0
+    && strategyCalls.poolQueries.every((url) => url.searchParams.get("trade_date") === `eq.${tradeDate}`)
+    && strategyCalls.poolQueries.every((url) => url.searchParams.get("canonical_run_id") === `eq.${canonicalRunId(tradeDate)}`)
+    && strategyCalls.poolQueries.every((url) => url.searchParams.get("contract_version") === "eq.4.1.0")
+    && strategyCalls.poolQueries.every((url) => url.searchParams.get("order") === "symbol.asc")
+    && strategyCalls.poolQueries.every((url) => url.searchParams.get("limit") === "200");
+
+  installFetch(tradeDate, { candleRows: candles(tradeDate, "2330").map((row, index) => index === 0 ? { ...row, volume_strategy_usable: false } : row) });
+  const strategy3Gap = await readCanonicalDaytradeWater({ tradeDate, consumerName: "strategy3_v2", strategy3Consumer: true, requireMarketCalendar: true, requireMotherPoolReceipt: true, hydrateMotherPoolCandles: true, minimumCandlesPerSymbol: 20, barsPerSymbol: 61 });
+  checks.strategy3_unusable_volume_is_symbol_data_gap = strategy3Gap.ok === true
+    && strategy3Gap.symbolDataGaps.get("2330")?.includes("intraday_1m_not_volume_strategy_usable")
+    && strategy3Gap.receipt?.symbol_data_gap_rows === 1;
+
+  const missingSectorRow = v41PoolRow(tradeDate);
+  delete missingSectorRow.sector_name;
+  installFetch(tradeDate, { poolRows: [missingSectorRow] });
+  const missingSector = await readCanonicalDaytradeWater({ tradeDate, consumerName: "strategy3_v2", strategy3Consumer: true, requireMarketCalendar: true, requireMotherPoolReceipt: true, hydrateMotherPoolCandles: true, minimumCandlesPerSymbol: 20, barsPerSymbol: 61 });
+  checks.strategy3_missing_business_field_is_symbol_data_gap = missingSector.ok === true
+    && missingSector.symbolDataGaps.get("2330")?.includes("mother_pool_field_missing:sector_name");
+
+  const missingIdentityRow = v41PoolRow(tradeDate);
+  delete missingIdentityRow.writer_run_id;
+  installFetch(tradeDate, { poolRows: [missingIdentityRow] });
+  const missingIdentity = await readCanonicalDaytradeWater({ tradeDate, consumerName: "strategy3_v2", strategy3Consumer: true, requireMarketCalendar: true, requireMotherPoolReceipt: true, hydrateMotherPoolCandles: true, minimumCandlesPerSymbol: 20, barsPerSymbol: 61 });
+  checks.strategy3_missing_identity_field_fails_closed = missingIdentity.ok === false
+    && missingIdentity.failedChecks.some((code) => code.startsWith("canonical_water_mother_pool_identity_fields_missing:2330:writer_run_id"));
+
+  installFetch(tradeDate, { receiptRows: [{ contract_version: "4.1.0", trade_date: tradeDate, canonical_run_id: canonicalRunId(tradeDate), complete: false, mother_pool_rows: 1, failed_checks: ["test"], first_blocker: "test" }] });
+  const incompleteReceipt = await readCanonicalDaytradeWater({ tradeDate, consumerName: "strategy3_v2", strategy3Consumer: true, requireMarketCalendar: true, requireMotherPoolReceipt: true, hydrateMotherPoolCandles: true, minimumCandlesPerSymbol: 20, barsPerSymbol: 61 });
+  checks.strategy3_incomplete_producer_receipt_fails_closed = incompleteReceipt.ok === false
+    && incompleteReceipt.receipt?.receipt_incomplete === true
+    && incompleteReceipt.failedChecks.includes("canonical_water_mother_pool_receipt_incomplete");
 
   installFetch(tradeDate, { poolRows: [{ trade_date: tradeDate, symbol: "2330", source_updated_at: new Date().toISOString(), source_freshness: "same_trade_date_current", contract_version: "4.0.0", canonical_run_id: canonicalRunId(tradeDate) }] });
   const wrongContract = await readCanonicalDaytradeWater({ tradeDate, symbols: [], telegramObservation: true });

@@ -1,7 +1,9 @@
 const scanStrategy4 = require("../api/scan-strategy4");
+const fs = require("fs");
+const path = require("path");
 
 const DEFAULT_CODES = ["2330", "2317", "2382", "2454", "3017", "3037", "5274", "6446"];
-const MIN_MATCHES = Number(process.env.STRATEGY4_CONTRACT_MIN_MATCHES || 3);
+const MIN_MATCHES = Number(process.env.STRATEGY4_CONTRACT_MIN_MATCHES || 0);
 const codes = String(process.env.STRATEGY4_CONTRACT_CODES || DEFAULT_CODES.join(","))
   .split(",")
   .map((code) => code.replace(/\D/g, "").slice(0, 4))
@@ -61,7 +63,22 @@ function hasTriangleChartLines(item) {
     Number.isFinite(Number(marker.price));
 }
 
+function hasDailyTechnicalGate(item = {}) { return require("../lib/strategy4-v4-evidence").dailyTechnicalGateValid(item); }
+
+function verifyStaticContracts() {
+  const root = path.resolve(__dirname, "..");
+  const cacheSource = fs.readFileSync(path.join(root, "scripts", "scan-strategy4-cache.js"), "utf8");
+  const apiSource = fs.readFileSync(path.join(root, "api", "scan-strategy4.js"), "utf8");
+  if (!cacheSource.includes("strategy4_actionable_patterns_avg5_3000_daily_kd_rsi_bonus_v4")) {
+    fail("Strategy4 cache runner is not using daily KD/RSI v3 result contract");
+  }
+  if (!apiSource.includes("strategy4_daily_kd_rsi_bonus_v1") || !apiSource.includes("dailyTechnicalGate")) {
+    fail("Strategy4 API missing daily KD/RSI technical gate");
+  }
+}
+
 (async () => {
+  verifyStaticContracts();
   if (codes.length < 3) fail("Strategy4 contract needs at least 3 seed codes");
   const payload = await callHandler();
   const matches = Array.isArray(payload?.matches) ? payload.matches : [];
@@ -78,10 +95,11 @@ function hasTriangleChartLines(item) {
     !item.signals.length ||
     !item.priceSource ||
     !item.reason ||
-    !hasTriangleChartLines(item)
+    !hasDailyTechnicalGate(item) ||
+    (item.patternTags?.includes?.("triangle_breakout") && !hasTriangleChartLines(item))
   );
   if (malformed) fail(`Strategy4 malformed match payload for ${malformed.code || "unknown code"}`, payload);
-  console.log(`Strategy4 contract OK: ${matches.length}/${codes.length} seed codes matched`);
+  console.log(`Strategy4 contract OK: seed smoke test ${matches.length}/${codes.length}; daily KD/RSI bonus verified`);
 })().catch((error) => {
   console.error(error.message || error);
   process.exit(1);

@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('node:assert/strict'),{admit}=require('../lib/mother-pool-anomaly-admission');
+const row={same_minute_sample_count:10,same_minute_baseline:1,rolling20_sample_count:20,primary_baseline_method:'ROLLING_20M_MEDIAN',primary_baseline:2,primary_ratio:3,data_gap:false,baseline_zero:false};
+const options={ratioField:'primary_ratio'};
+assert.equal(admit(row,options).allowed,true);
+for(const patch of [{rolling20_sample_count:19},{rolling20_sample_count:null},{primary_baseline:0},{primary_ratio:Infinity},{primary_ratio:NaN},{primary_ratio:2.999},{data_gap:true},{data_gap:undefined},{baseline_zero:true},{primary_baseline_method:'rolling60'}])assert.equal(admit({...row,...patch},options).allowed,false,JSON.stringify(patch));
+assert.equal(admit({...row,same_minute_sample_count:0,same_minute_baseline:null},options).allowed,true);
+for(const patch of [{same_minute_sample_count:9},{same_minute_sample_count:null},{same_minute_baseline:0},{same_minute_baseline:null}])assert.equal(admit({...row,primary_baseline_method:'SAME_MINUTE_HISTORICAL',...patch},options).allowed,false);
+assert.equal(admit(row,{...options,directionValid:false}).allowed,false);
+assert.equal(admit(null,options).allowed,false);
+assert.equal(admit({...row,primary_baseline_method:'SAME_MINUTE_HISTORICAL'},options).allowed,true);
+console.log('PASS Mother Pool final anomaly safeguard: historical >=10 or rolling20 >=20, positive active baseline, finite ratio >=3, quality and direction');

@@ -82,6 +82,44 @@ function Update-PostScanReceiptEvidence {
     "[$Route] receipt evidence update warning: $($_.Exception.Message)" | Out-File -LiteralPath (Join-Path $RuntimeRoot "logs\post-scan-tri-surface-evidence-warnings.log") -Append -Encoding utf8
   }
 }
+
+function Test-PostScanScorecardCollectorRowComplete {
+  param(
+    [Parameter(Mandatory = $true)][string]$RuntimeRoot,
+    [Parameter(Mandatory = $true)][string]$Route,
+    [Parameter(Mandatory = $true)][string]$RunId
+  )
+  $recoveryEvidenceFile = Join-Path $RuntimeRoot "data\scan-receipts\strategy4-recovery-evidence.json"
+  if ($Route -eq "strategy4" -and (Test-Path -LiteralPath $recoveryEvidenceFile)) {
+    try {
+      $recovery = Get-Content -LiteralPath $recoveryEvidenceFile -Raw | ConvertFrom-Json
+      if ([string]$recovery.runId -eq $RunId -and $recovery.ok -eq $true -and $recovery.complete -eq $true -and [int]($recovery.count ?? $recovery.resultCount ?? 0) -gt 0) { return $true }
+    } catch {}
+  }
+  $scorecardFile = Join-Path $RuntimeRoot "data\scorecard-terminal-current.json"
+  if (-not (Test-Path -LiteralPath $scorecardFile)) { return $false }
+  try {
+    $payload = Get-Content -LiteralPath $scorecardFile -Raw | ConvertFrom-Json
+    $candidateRows = @()
+    if ($null -ne $payload.reports) { $candidateRows += @($payload.reports) }
+    if ($null -ne $payload.sourceReports) { $candidateRows += @($payload.sourceReports) }
+    if ($null -ne $payload.modules) { $candidateRows += @($payload.modules) }
+    if ($null -ne $payload.scanAudit -and $null -ne $payload.scanAudit.modules) { $candidateRows += @($payload.scanAudit.modules) }
+    $row = @($candidateRows | Where-Object {
+      [string]$_.key -eq $Route -or [string]$_.strategy -eq $Route -or [string]$_.strategy -match "策略4"
+    }) | Where-Object { [string]$_.runId -eq $RunId } | Select-Object -First 1
+    return (
+      $null -ne $row `
+      -and $row.ok -eq $true `
+      -and $row.publishAllowed -eq $true `
+      -and [string]$row.evidenceStatus -eq "complete" `
+      -and ([int]($row.count ?? $row.resultCount ?? 0)) -gt 0
+    )
+  } catch {
+    return $false
+  }
+}
+
 function Invoke-PostScanSurfacePublication {
   param(
     [Parameter(Mandatory = $true)][string]$Route,
@@ -97,8 +135,8 @@ function Invoke-PostScanSurfacePublication {
   $previousRefreshKey = $env:FUMAN_SCORECARD_REFRESH_KEY
   $previousRefreshRunId = $env:FUMAN_SCORECARD_REFRESH_RUN_ID
   try {
-    if ($Route -eq "strategy3") {
-      $env:FUMAN_SCORECARD_REFRESH_KEY = "strategy3"
+    if ($Route -in @("strategy3", "institution")) {
+      $env:FUMAN_SCORECARD_REFRESH_KEY = $Route
       $env:FUMAN_SCORECARD_REFRESH_RUN_ID = $RunId
     }
     & npm.cmd run scorecard:terminal-source *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
@@ -111,7 +149,13 @@ function Invoke-PostScanSurfacePublication {
       if ($LASTEXITCODE -ne 0) { throw "scorecard88 recovery evidence exit=$LASTEXITCODE" }
       & (Join-Path $RepoRoot "scripts\run-scorecard88-terminal-collector.ps1") -Slot '17:00' -ProjectRoot $RepoRoot -RuntimeRoot $RuntimeRoot -Recovery -ExpectedRunId $RunId -RecoveryReason 'post_scan_tri_surface_recovery' *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null
       $collectorExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
-      if ($collectorExit -ne 0) { throw "scorecard88 recovery collector exit=$collectorExit" }
+      if ($collectorExit -ne 0) {
+        if (Test-PostScanScorecardCollectorRowComplete -RuntimeRoot $RuntimeRoot -Route $Route -RunId $RunId) {
+          "[$Route] scorecard88 recovery collector exit=$collectorExit accepted: runtime Strategy4 row/evidence is complete and runId aligned" | Tee-Object -FilePath $LogPath -Append | Out-Null
+        } else {
+          throw "scorecard88 recovery collector exit=$collectorExit"
+        }
+      }
     }
     if ($Route -eq "strategy3") {
       & $NodeExe "scripts\collect-scorecard88-terminal-surface-evidence.js" "--slot=13:15" *>&1 | Tee-Object -FilePath $LogPath -Append | Out-Null

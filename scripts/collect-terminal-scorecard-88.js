@@ -14,6 +14,7 @@ const slot = String(process.argv.find((arg) => arg.startsWith("--slot=")) || "")
 const recovery = process.argv.includes("--recovery");
 const expectedRunId = String(process.argv.find((arg) => arg.startsWith("--expected-run-id=")) || "").split("=")[1] || "";
 const recoveryReason = String(process.argv.find((arg) => arg.startsWith("--recovery-reason=")) || "").split("=")[1] || "";
+const requestedTradeDate = process.env.FUMAN_SCORECARD_TRADE_DATE || '';
 const slots = {
   "12:40": ["strategy2"],
   "13:15": ["strategy3"],
@@ -72,6 +73,7 @@ function taipeiDate() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 function compactDate(value) { return String(value || "").replace(/\D/g, "").slice(0, 8); }
+const collectionDate = requestedTradeDate || taipeiDate();
 function runDate(runId) { return (String(runId || "").match(/20\d{6}/) || [""])[0]; }
 function num(...values) {
   for (const value of values) if (Number.isFinite(Number(value))) return Number(value);
@@ -85,16 +87,16 @@ function boolean(value, fallback = false) {
   return typeof value === "boolean" ? value : fallback;
 }
 function surfaceEvidence(key) {
-  const file = path.join(receiptDir, `scorecard88-surface-evidence-${compactDate(taipeiDate())}-${slot.replace(":", "")}.json`);
+  const file = path.join(receiptDir, `scorecard88-surface-evidence-${compactDate(collectionDate)}-${slot.replace(":", "")}.json`);
   const report = readJson(file);
-  if (!report || report.contract !== "scorecard88-terminal-surface-evidence-v1" || report.slot !== slot || compactDate(report.tradeDate) !== compactDate(taipeiDate())) return null;
+  if (!report || report.contract !== "scorecard88-terminal-surface-evidence-v1" || report.slot !== slot || compactDate(report.tradeDate) !== compactDate(collectionDate)) return null;
   return Array.isArray(report.rows) ? report.rows.find((row) => row?.key === key) || null : null;
 }
 function canonicalReceipt(key) {
-  const todayKey = compactDate(taipeiDate());
+  const todayKey = compactDate(collectionDate);
   const files = {
     strategy2: ["strategy2-v3-live.json"],
-    strategy3: [`strategy3-v2-daily-unattended-closure-${todayKey}.json`, `strategy3-v2-complete-scan-${todayKey}.json`],
+    strategy3: recovery && expectedRunId.startsWith("strategy3v2-recovery-replay-") ? [`strategy3-v2-recovery-closure-${todayKey}.json`] : [`strategy3-v2-daily-unattended-closure-${todayKey}.json`, `strategy3-v2-complete-scan-${todayKey}.json`],
     strategy4: recovery ? ["strategy4-recovery-evidence.json"] : ["strategy4-canonical-closure-latest.json"],
     strategy5: ["strategy5.json"],
     institution: ["institution.json"],
@@ -121,7 +123,8 @@ function canonicalFromDesktop(key, desktop) {
   const receiptRunId = detail.runId || detail.run_id || scan.runId || scan.run_id || "";
   const runId = String(summary.runId || receiptRunId || "");
   const strategy4PublishReady = key === "strategy4" && detail.status === "verifying" && Number(detail.exitCode || 0) === 0 && Boolean(receiptRunId) && num(detail.matches, detail.resultCount, detail.count) > 0 && detail.fallback !== true;
-  const receiptComplete = strategy4PublishReady || detail.ok === true || detail.complete === true || detail.status === "complete" || detail.status === "PASS" || detail.status === "STRATEGY3_V2_DAILY_UNATTENDED_YES";
+  const strictRecovery = key !== "strategy3" || !recovery || !expectedRunId.startsWith("strategy3v2-recovery-replay-") || (detail.ok === true && detail.complete === true && detail.verifier_ok === true && detail.run_id === expectedRunId && detail.trade_date === collectionDate && Array.isArray(detail.failed_checks) && detail.failed_checks.length === 0);
+  const receiptComplete = strictRecovery && (strategy4PublishReady || detail.ok === true || detail.complete === true || detail.status === "complete" || detail.status === "PASS" || detail.status === "STRATEGY3_V2_DAILY_UNATTENDED_YES");
   const fullScannedCount = num(detail.scannedCount, detail.scanned_count, detail.scanned, scan.scannedCount, scan.scanned_count, summary.scannedCount, summary.count);
   const fullResultCount = num(detail.resultCount, detail.result_count, detail.matches, detail.count, scan.resultCount, scan.result_count, scan.count, summary.resultCount, summary.count);
   const surface = surfaceEvidence(key);
@@ -131,11 +134,11 @@ function canonicalFromDesktop(key, desktop) {
   const mobileRunId = text(surface?.mobileRunId);
   const surfaceMatches = surface?.ok === true && desktopStatus === "PASS" && mobileStatus === "PASS" && desktopRunId === runId && mobileRunId === runId;
   return {
-    key, strategy: key, runId, tradeDate: taipeiDate(), date: taipeiDate(),
-    sourceDate: text(detail.sourceDate, detail.source_date, detail.scanDate, detail.scan_date, taipeiDate()),
+    key, strategy: key, runId, tradeDate: collectionDate, date: collectionDate,
+    sourceDate: key === 'strategy5' ? compactDate(detail.marketDate).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : key === 'institution' ? compactDate(detail.institution_source_status_at_run?.usedDate || detail.institution_source_status_at_run?.latestTradeDate).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : text(detail.sourceDate, detail.source_date, detail.scanDate, detail.scan_date, detail.trade_date, collectionDate),
     startedAt: text(detail.startedAt, detail.started_at, scan.startedAt, scan.started_at),
     finishedAt: text(detail.finishedAt, detail.finished_at, detail.checkedAt, detail.checked_at, summary.updatedAt, desktop.updatedAt),
-    universeCount: num(detail.universeCount, detail.universe_count, detail.expectedTotal, detail.expected_total, scan.universeCount, scan.expectedTotal),
+    universeCount: num(detail.universeCount, detail.universe_count, detail.expectedTotal, detail.expected_total, scan.universeCount, scan.expectedTotal, key === 'institution' ? detail.total : undefined),
     scannedCount: fullScannedCount, resultCount: fullResultCount, count: fullResultCount,
     qualityStatus: text(detail.qualityStatus, detail.quality_status, detail.published?.qualityStatus) || (receiptComplete ? "complete" : "blocked"),
     evidenceStatus: text(detail.evidenceStatus, detail.evidence_status) || (receiptComplete ? "complete" : "blocked"),
@@ -195,18 +198,19 @@ if (!slots[slot]) {
   process.exit(2);
 }
 const collectionWindow = fixedCollectionWindow(slot);
-const recoveryKey = /^strategy5-\d{8}-\d{14}$/.test(expectedRunId) ? "strategy5"
+const recoveryKey = /^institution-\d{8}-\d{14}$/.test(expectedRunId) ? "institution"
+  : /^strategy5-\d{8}-\d{14}$/.test(expectedRunId) ? "strategy5"
   : /^strategy4-\d{8}-\d{14}$/.test(expectedRunId) ? "strategy4"
-    : /^strategy3v2-\d{8}-\d{14}$/.test(expectedRunId) ? "strategy3"
+    : /^strategy3v2-(?:recovery-replay-)?\d{8}-\d{14}$/.test(expectedRunId) ? "strategy3"
       : "";
 const recoveryRunAllowed = Boolean(recoveryKey && slots[slot].includes(recoveryKey));
-const recoveryAuthorized = recovery && recoveryRunAllowed && runDate(expectedRunId) === compactDate(taipeiDate()) && recoveryReason.length >= 8;
+const recoveryAuthorized = recovery && recoveryRunAllowed && runDate(expectedRunId) === compactDate(collectionDate) && recoveryReason.length >= 8;
 if (!collectionWindow.allowed && !recoveryAuthorized) {
   console.error(JSON.stringify({ ok: false, status: "FAIL_CLOSED", reason: "outside_fixed_collection_window", slot, writeAllowed: false, blobPublishAllowed: false, collectionWindow }));
   process.exit(6);
 }
 
-const today = taipeiDate();
+const today = collectionDate;
 const todayKey = compactDate(today);
 const desktopFile = path.join(receiptDir, "desktop-route-snapshot.json");
 const desktop = readJson(desktopFile);
@@ -262,8 +266,24 @@ const retainedHistoryDates = scorecardHistoryDates(retainedRecords);
 const currentTradingDatePresent = retainedHistoryDates.includes(today);
 const payloadBlocker = !currentTradingDatePresent ? "scorecard_current_month_trade_date_missing" : receipts.find((row) => !row.ok)?.firstBlocker || "";
 
+const { buildScanAudit } = require('../lib/scorecard-scan-audit');
+let strategy5RecoveryContext = null;
+if (recoveryAuthorized && recoveryKey === 'strategy5' && process.env.FUMAN_STRATEGY5_REPLAY_VALIDATED === '1') {
+  const verified = require('child_process').execFileSync(process.execPath, ['--use-system-ca', path.join(__dirname, 'verify-institution-replay-date.js'), collectionDate], {encoding:'utf8',windowsHide:true,env:process.env});
+  strategy5RecoveryContext = JSON.parse(verified);
+  if (strategy5RecoveryContext.ok !== true || strategy5RecoveryContext.tradeDate !== collectionDate) throw Error('strategy5_collector_replay_date_unverified');
+}
+let scanAudit = buildScanAudit({ runtimeDir: runtimeRoot, tradeDate: collectionDate, recoveryContext: strategy5RecoveryContext });
+if (recoveryAuthorized && expectedRunId.startsWith('strategy4-') && process.env.STRATEGY4_REPLAY_TRADE_DATE === collectionDate) {
+  const baseline = buildScanAudit({runtimeDir:'C:/fuman-runtime',tradeDate:collectionDate});
+  baseline.modules = baseline.modules.map(row => row.key === 'strategy4' ? scanAudit.modules.find(x => x.key === 'strategy4') : row);
+  baseline.qualityStatus = baseline.modules.every(row => row.status === 'complete') ? 'complete' : 'degraded';
+  baseline.unattendedStatus = baseline.qualityStatus === 'complete' ? 'YES' : 'NO';
+  scanAudit = baseline;
+}
 const payload = {
   ...previous,
+  scanAudit,
   ok: receipts.every((row) => row.ok) && currentTradingDatePresent,
   source: "terminal-canonical-fixed-slot-collector",
   cacheSource: "terminal-canonical-json",

@@ -946,7 +946,7 @@ function scannerRunnerForKey(key = "", fallbackCommand = "") {
 function scannerClosureStepsForKey(key = "") {
   const map = {
     strategy2: ["verify:strategy2-e2e-closure"],
-    strategy3: ["verify:strategy3-v2-full-closure"],
+    strategy3: ["verify:strategy3-complete"],
     strategy4: ["verify:strategy4-full-closure"],
     strategy5: ["verify:strategy5-e2e-closure"],
     institution: ["verify:institution-e2e-closure"],
@@ -1312,7 +1312,7 @@ function selfTest() {
   }
   const strategy3ApplyAction = planForJob({ key: "strategy3", state: "FAILED_SCAN" }, policy, { waterRoot: waterOkFixture, applyScanners: true });
   const strategy3CommandLabels = strategy3ApplyAction.commands.map((command) => command.label || command.command || "");
-  for (const expectedLabel of ["scanner:strategy3", "npm:verify:strategy3-v2-full-closure", "npm:scan-receipts:normalize", "npm:verify:strategy-scan-receipt-contract"]) {
+  for (const expectedLabel of ["scanner:strategy3", "npm:verify:strategy3-complete", "npm:scan-receipts:normalize", "npm:verify:strategy-scan-receipt-contract"]) {
     if (!strategy3CommandLabels.includes(expectedLabel)) failures.push(`strategy3 apply chain missing ${expectedLabel}`);
   }
   const strategy3Scanner = strategy3ApplyAction.commands.find((command) => command.label === "scanner:strategy3");

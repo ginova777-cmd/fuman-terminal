@@ -36,7 +36,7 @@ function validateOpeningReport(payload, tradeDate) {
   const date = dashDate(payload?.trade_date || payload?.date);
   const confidence = n(payload?.confidence);
   return date === tradeDate
-    && /^08:30(?:$|[:+T\s])/.test(String(payload?.report_time || ""))
+    && /^08:50(?:$|[:+T\s])/.test(String(payload?.report_time || ""))
     && Boolean(payload?.run_id)
     && payload?.source === "opening_report_0830"
     && payload?.mode === "priority_bias_only"

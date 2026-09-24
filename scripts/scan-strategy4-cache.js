@@ -1,3 +1,5 @@
+const { CONTRACT: VOLUME_WINDOW_CONTRACT, evaluateVolumeWindow, recentTradingDates } = require("../lib/strategy4-volume-window");
+let strategy4ExpectedVolumeDates = [];
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
@@ -43,6 +45,7 @@ const ALLOW_FILTER_RULE_DROP = process.env.STRATEGY4_ALLOW_FILTER_RULE_DROP !== 
 const ALLOW_LEGACY_VOLUME_FALLBACK = process.env.STRATEGY4_ALLOW_LEGACY_VOLUME_FALLBACK === "1";
 const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "fugle", "historical");
 const STRATEGY4_VOLUME_CACHE_FILE = path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "strategy4-volume-avg5.json");
+const STRATEGY4_PRIORITY_FILE = path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "intraday", "fugle-daytrade-ws-priority-symbols.json");
 const STRATEGY4_VOLUME_REFRESH_DAYS = Number(process.env.STRATEGY4_VOLUME_REFRESH_DAYS || 20);
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const STATE_DIR = process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state");
@@ -119,7 +122,19 @@ const REQUIRED_MUTAKI_FIELDS = [
   "fib618",
   "fibRatio",
   "bias20",
-  "rsi14",
+  "rsi6",
+  "rsi6Prev",
+  "kdK",
+  "kdD",
+  "kdPrevK",
+  "kdPrevD",
+  "kdTrendUp",
+  "kdGoldenCross",
+  "rsi3",
+  "rsi6",
+  "rsiTrendUp",
+  "rsiGoldenCross",
+  "dailyTechnicalGateOk",
   "atr14",
   "entryPrice",
   "stopPrice",
@@ -170,7 +185,7 @@ function refreshStrategy4PublishGate() {
   const result = spawnSync(process.execPath, [
     "--use-system-ca",
     path.join(ROOT, "scripts", "verify-supabase-publish-hard-gate.js"),
-    "--strategy=strategy4",
+    "--strategy=strategy4", "--dry-run-alert",
   ], {
     cwd: ROOT,
     encoding: "utf8",
@@ -380,7 +395,7 @@ const STRATEGY4_BUSINESS_FIELD_PATHS = [
   ["wallet.syncScore", "wallet.syncScore"],
   ["wallet.strongBuy", "wallet.strongBuy"],
   ["mutakiV17.ma20", "mutakiV17.ma20"],
-  ["mutakiV17.rsi14", "mutakiV17.rsi14"],
+  ["mutakiV17.rsi6", "mutakiV17.rsi6"],
   ["mutakiV17.entryPrice", "mutakiV17.entryPrice"],
   ["mutakiV17.stopPrice", "mutakiV17.stopPrice"],
   ["mutakiV17.targetPrice", "mutakiV17.targetPrice"],
@@ -507,7 +522,7 @@ async function fetchSupabaseDailyVolumeRows(from, to) {
       url.searchParams.set("select", select);
       url.searchParams.append("trade_date", `gte.${from}`);
       url.searchParams.append("trade_date", `lte.${to}`);
-      url.searchParams.set("order", "trade_date.asc");
+      url.searchParams.set("order", "trade_date.asc,symbol.asc");
       const response = await fetch(url, {
         headers: {
           apikey: SUPABASE_KEY,
@@ -582,22 +597,22 @@ async function fetchSupabaseDailyVolumeRows(from, to) {
 }
 
 function refreshVolumeAvg5Cache(rows) {
-  if (!rows.length) return 0;
+  if (!rows.length) throw new Error("strategy4_volume_refresh_empty");
   const cache = readJson(STRATEGY4_VOLUME_CACHE_FILE, { source: strategy4VolumeCacheSource, byCode: {} });
-  const byCode = cache.byCode && typeof cache.byCode === "object" ? cache.byCode : {};
+  const byCode = {}; // Every refresh replaces the volume snapshot; never revive an absent symbol from old cache.
   let updated = 0;
   rows.forEach((row) => {
     const code = normalizeCode(row.symbol || row.code || row.stock_id || row.data_id);
     const date = String(row.trade_date || row.date || row.trading_date || "").slice(0, 10);
     const explicitVolumeLots = cleanNumber(row.volume_lots ?? row.volumeLots);
-    const volumeLots = explicitVolumeLots
-      || (row.__source === "supabase:fugle_daily_volume:legacy-lots" ? cleanNumber(row.volume || row.trade_volume || row.trading_volume) : 0);
+    const validNumber = value => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value)) && Number(value) >= 0;
+    const volumeLots = validNumber(row.volume_lots) ? Number(row.volume_lots) : validNumber(row.volume_shares) ? Number(row.volume_shares) / 1000 : null;
     const volumeShares = cleanNumber(row.volume_shares ?? row.volumeShares) || (volumeLots ? volumeLots * 1000 : 0);
     const tradeValueTwd = cleanNumber(row.trade_value_twd ?? row.tradeValueTwd);
     const close = cleanNumber(row.close);
     const avgVolume5Lots = cleanNumber(row.avg_volume_5_lots ?? row.avgVolume5Lots);
     const avgVolume20Lots = cleanNumber(row.avg_volume_20_lots ?? row.avgVolume20Lots);
-    if (!/^\d{4}$/.test(code) || !date || !volumeLots) return;
+    if (!/^\d{4}$/.test(code) || !date || volumeLots === null) return;
     const current = Array.isArray(byCode[code]) ? byCode[code] : [];
     const map = new Map(current.map((item) => [item.date, item]));
     map.set(date, {
@@ -639,7 +654,7 @@ async function refreshStrategy4VolumeCacheFromSupabase() {
     const updated = refreshVolumeAvg5Cache(rows);
     console.log(`strategy4 supabase volume avg5 refresh: rows ${rows.length}, writes ${updated}`);
   } catch (error) {
-    console.log(`strategy4 supabase volume avg5 refresh failed: ${error.message || error}`);
+    throw new Error(`strategy4_volume_refresh_failed_no_old_cache: ${error.message || error}`);
   }
 }
 
@@ -707,75 +722,18 @@ function insufficientHistoryCodesFromCoverage(supabaseCoverage) {
     .filter((code) => /^\d{4}$/.test(code)));
 }
 
-function cachedAvgVolume5(code) {
-  if (strategy4VolumeCache === null) {
-    strategy4VolumeCache = readJson(STRATEGY4_VOLUME_CACHE_FILE, {});
-  }
-  const validCacheContract = (
-    strategy4VolumeCache?.schemaVersion === STRATEGY4_VOLUME_CACHE_SCHEMA_VERSION
-    && strategy4VolumeCache?.volumeUnit === STRATEGY4_VOLUME_UNIT
-    && strategy4VolumeCache?.unit === VOLUME_CACHE_UNIT
-  );
-  const volumeRows = Array.isArray(strategy4VolumeCache?.byCode?.[normalizeCode(code)]) ? strategy4VolumeCache.byCode[normalizeCode(code)] : [];
-  if (validCacheContract && volumeRows.length >= 5) {
-    const volumes = volumeRows
-      .slice()
-      .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
-      .slice(-5)
-      .map((row) => cleanNumber(row.volume_lots ?? row.volume));
-    const latestAvg = cleanNumber(volumeRows.slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))).at(-1)?.avg_volume_5_lots);
-    if (latestAvg) return Number(latestAvg.toFixed(2));
-    const cachedValue = avg(volumes);
-    if (cachedValue) return Number(cachedValue.toFixed(2));
-  }
-  if (!ALLOW_LEGACY_VOLUME_FALLBACK) return null;
-  const file = path.join(FUGLE_HISTORY_CACHE_DIR, `${normalizeCode(code)}.json`);
-  const payload = readJson(file, null);
-  const source = String(payload?.source || "");
-  const sourceUnit = /supabase|fugle|finmind|yahoo|twse|tpex/i.test(source) ? "shares" : "";
-  const rows = Array.isArray(payload?.rows) ? payload.rows.map((row) => ({
-    ...row,
-    volumeUnit: row.volumeUnit || row.volume_unit || sourceUnit || undefined,
-  })) : [];
-  if (rows.length < 5) return null;
-  const volumes = rows
-    .slice()
-    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
-    .slice(-5)
-    .map((row) => normalizeVolumeLots(row.volume, row));
-  const value = avg(volumes);
-  return value ? Number(value.toFixed(2)) : null;
-}
-
 function buildVolumePrefilter(stocks) {
-  const filtered = [];
-  const missing = [];
-  let cacheHit = 0;
-  let cacheMiss = 0;
-  stocks.forEach((stock) => {
-    const avgVolume5 = cachedAvgVolume5(stock.code);
-    if (avgVolume5 == null) {
-      cacheMiss += 1;
-      missing.push({ code: stock.code, name: stock.name || stock.code, reason: "avg5-volume-missing" });
-      return;
-    }
-    cacheHit += 1;
-    if (avgVolume5 < MIN_AVG_VOLUME_5) {
-      filtered.push({ code: stock.code, name: stock.name || stock.code, avgVolume5 });
-    }
-  });
-  return {
-    enabled: true,
-    rule: "avgVolume5-gte-hard-gate",
-    policy: "avg5_below_3000_excludes_strategy4",
-    unit: "lots",
-    exceptionAllowed: false,
-    minAvgVolume5: MIN_AVG_VOLUME_5,
-    filtered,
-    missing,
-    cacheHit,
-    cacheMiss,
-  };
+  strategy4VolumeCache = readJson(STRATEGY4_VOLUME_CACHE_FILE, {});
+  const validContract = strategy4VolumeCache.schemaVersion === STRATEGY4_VOLUME_CACHE_SCHEMA_VERSION && strategy4VolumeCache.volumeUnit === "lots" && strategy4VolumeCache.unit === VOLUME_CACHE_UNIT;
+  if (!validContract || !strategy4ExpectedVolumeDates.length) throw new Error("strategy4_volume_snapshot_contract_invalid");
+  const filtered=[], missing=[], evaluations=[];
+  for (const stock of stocks) {
+    const value=evaluateVolumeWindow(strategy4VolumeCache.byCode?.[stock.code] || [], strategy4ExpectedVolumeDates);
+    evaluations.push({code:stock.code,...value});
+    if (!value.ok) missing.push({code:stock.code,name:stock.name || stock.code,reason:"volume_trading_dates_or_units_invalid",issues:value.issues});
+    else if (value.avgVolume5 < MIN_AVG_VOLUME_5) filtered.push({code:stock.code,name:stock.name || stock.code,avgVolume5:value.avgVolume5});
+  }
+  return {enabled: true,rule: "avgVolume5-gte-hard-gate",policy: "avg5_below_3000_excludes_strategy4",unit: "lots",exceptionAllowed: false,minAvgVolume5:MIN_AVG_VOLUME_5,contract:VOLUME_WINDOW_CONTRACT,expectedDates:strategy4ExpectedVolumeDates,expectedTotal:stocks.length,evaluations,filtered,missing,cacheHit:stocks.length-missing.length,cacheMiss:missing.length};
 }
 
 async function fetchSupabaseQuoteLiquidityRows() {
@@ -1264,14 +1222,21 @@ const STRATEGY4_OBSERVATION_ONLY_SIGNAL_IDS = new Set([
   "full_scan_watch",
   "below_20d_high_8",
   "lower_half_60d",
+  "daily_kd_rsi_trend_up",
 ]);
 
 function strategy4ActionableSignals(item = {}) {
   return strategy4Signals(item).filter((signal) => !STRATEGY4_OBSERVATION_ONLY_SIGNAL_IDS.has(String(signal?.id || "").trim()));
 }
 
+function strategy4DailyTechnicalGateOk(item = {}) {
+  const gate = item.dailyTechnicalGate && typeof item.dailyTechnicalGate === "object" ? item.dailyTechnicalGate : {};
+  const mutaki = item.mutakiV17 && typeof item.mutakiV17 === "object" ? item.mutakiV17 : {};
+  return require("../lib/strategy4-v4-evidence").dailyTechnicalGateValid(item);
+}
+
 function strategy4IsActionable(item = {}) {
-  return strategy4ActionableSignals(item).length > 0;
+  return strategy4DailyTechnicalGateOk(item) && strategy4ActionableSignals(item).length > 0;
 }
 
 function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, currentMatches, dataSourceCounts, complete, runMode, scanStamp, volumeFilter, quoteLiquidityFilter, supabaseCoverage, insufficientHistory = [] }) {
@@ -1285,7 +1250,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
   // invalid_risk_row_filter_v1: published Strategy4 rows must have positive entry/target/stop/score and a zone.
   const matches = actionableMatches
     .filter(strategy4RiskFieldsValid)
-    .sort((a, b) => (b.swingScore || b.score || 0) - (a.swingScore || a.score || 0) || (b.percent || 0) - (a.percent || 0))
+    .sort(require("../lib/strategy4-v4-evidence").compareRank)
     .map((item, index) => ({
       ...item,
       rank: index + 1,
@@ -1368,7 +1333,8 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     fallbackAllowed: false,
     fallbackDetails: [],
     fallbackContract: STRATEGY4_FALLBACK_CONTRACT,
-    resultContract: "strategy4_actionable_patterns_avg5_3000_v2",
+    resultContract: "strategy4_actionable_patterns_avg5_3000_daily_kd_rsi_bonus_v4",
+    recentVolumeBonusContract: "strategy4_recent_volume_10d_prior5_bonus_v1",
     liquidityContract: "avg5_volume_gte_3000_lots_v1",
     dataGapContract: "target_date_coverage_gte_90_exclude_stale_v1",
     generatedAt: new Date().toISOString(),
@@ -1468,7 +1434,7 @@ function validateStrategy4VolumeCache(cache, options = {}) {
       const volumeShares = cleanNumber(row.volume_shares);
       const close = cleanNumber(row.close);
       const tradeValueTwd = cleanNumber(row.trade_value_twd);
-      if (!(volumeLots > 0)) errors.push(`${label}: volume_lots <= 0`);
+      if (!Number.isFinite(Number(row.volume_lots)) || row.volume_lots == null || Number(row.volume_lots) < 0) errors.push(`${label}: invalid volume_lots`);
       if (volumeShares > 0 && volumeLots > 0) {
         const ratio = volumeShares / volumeLots;
         if (Math.abs(ratio - 1000) > 2) errors.push(`${label}: volume_shares/volume_lots=${ratio.toFixed(2)} not 1000`);
@@ -1617,6 +1583,7 @@ function buildSupabaseRunRow(output, runId) {
       computableUniverseTotal: cleanNumber(output.computableUniverseTotal),
       insufficientHistoryCount: cleanNumber(output.insufficientHistoryCount),
       resultContract: String(output.resultContract || ""),
+      recentVolumeBonusContract: output.recentVolumeBonusContract,
       liquidityContract: String(output.liquidityContract || ""),
       dataGapContract: String(output.dataGapContract || ""),
       matchedCount: cleanNumber(output.matchedCount),
@@ -2032,6 +1999,7 @@ async function main() {
   }
   const codes = universe.map((stock) => stock.code);
   if (!codes.length) throw new Error("No stock universe");
+  strategy4ExpectedVolumeDates = await recentTradingDates(normalizeIsoDate(RUN_STAMP), STATE_DIR);
   await refreshStrategy4VolumeCacheFromSupabase();
 
   const previousRaw = {
@@ -2071,10 +2039,20 @@ async function main() {
       scanned.add(item.code);
     });
   }
-  // Strategy4 is an independent after-close daily-K strategy. Its universe,
-  // liquidity gate and scan order must never depend on the daytrade Mother Pool.
-  universe.sort((a, b) => a.code.localeCompare(b.code));
-  console.log(`strategy4 independent daily-K scan order: fullUniverse ${universe.length}, motherPoolDependency=false`);
+  // Prioritize the canonical daytrade pool, whose ordering is built from the
+  // volume-ranking and turnover-ranking union. This changes scan order only;
+  // every remaining Strategy4-eligible stock is still scanned.
+  const priorityArtifact = await require('../lib/strategy4-mother-priority').readPriority(normalizeIsoDate(RUN_STAMP));
+  const prioritySymbols = [...new Set((priorityArtifact.daytradeMotherPoolSymbols || [])
+    .map((value) => normalizeCode(value?.symbol || value?.code || value))
+    .filter((code) => /^\d{4}$/.test(code)))];
+  const priorityOrder = new Map(prioritySymbols.map((code, index) => [code, index]));
+  universe.sort((a, b) => {
+    const left = priorityOrder.has(a.code) ? priorityOrder.get(a.code) : Number.MAX_SAFE_INTEGER;
+    const right = priorityOrder.has(b.code) ? priorityOrder.get(b.code) : Number.MAX_SAFE_INTEGER;
+    return left - right || a.code.localeCompare(b.code);
+  });
+  console.log(`strategy4 scan priority: volume+turnover ranking union first ${universe.filter((stock) => priorityOrder.has(stock.code)).length}, fullUniverse ${universe.length}, hardGate=false`);
   const quoteLiquidityFilter = await buildQuoteLiquidityPrefilter(universe);
   quoteLiquidityFilter.filtered.forEach((item) => {
     currentMatches.delete(item.code);
@@ -2225,6 +2203,26 @@ async function main() {
     insufficientHistory,
   });
 
+  output.strategy4MotherPoolSource = {
+    ...priorityArtifact,
+    contract: "strategy4_fixed_mother_priority_v2",
+    source: String(priorityArtifact.source || ""),
+    sourceFile: priorityArtifact.sourceFile,
+    tradeDate: String(priorityArtifact.tradeDate || priorityArtifact.trade_date || ""),
+    canonicalRunId: String(priorityArtifact.canonicalRunId || priorityArtifact.canonical_run_id || ""),
+    symbolField: "daytradeMotherPoolSymbols",
+    symbolCount: prioritySymbols.length,
+    priorityOnly: true,
+    hardGate: false,
+    strategy2Dependency: false,
+    strategy2FallbackAllowed: false,
+  };
+
+  if(process.env.STRATEGY4_REPLAY_TRADE_DATE) {
+    output.recoveryContext = await require('../lib/strategy4-recovery-date').validateReplay();
+    const evidenceDir=path.join(RUNTIME_DIR,'data/strategy4-replay');fs.mkdirSync(evidenceDir,{recursive:true});
+    fs.writeFileSync(path.join(evidenceDir,'scan-'+Date.now()+'.json'),JSON.stringify(output,null,2),{flag:'wx'});
+  }
   output.supabasePublishGate = assertStrategy4PublishGate();
   console.log(`strategy4 publish hard gate ok: status=${output.supabasePublishGate.status} publishAllowed=${output.supabasePublishGate.publishAllowed} staleSeconds=${output.supabasePublishGate.staleSeconds}`);
 

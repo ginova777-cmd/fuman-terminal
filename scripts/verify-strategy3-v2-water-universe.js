@@ -42,8 +42,11 @@ async function main() {
     minimumCandlesPerSymbol: MIN_CANDLES_PER_SYMBOL,
     barsPerSymbol: recoveryReplay ? 40 : 20,
     historicalRecoveryReplay: recoveryReplay,
+    motherPoolSnapshotIdentity: scan?.mother_pool_snapshot?.identity || null,
   });
   const issues = [];
+  add(issues, scan?.source_field_contract === "strategy3-source-fields-v2" && water.receipt?.source_field_contract === scan?.source_field_contract, "strategy3_source_field_contract_mismatch");
+  add(issues, scan?.mother_pool_snapshot?.ok === true && water.receipt?.mother_pool_snapshot?.ok === true && JSON.stringify(scan.mother_pool_snapshot.identity) === JSON.stringify(water.receipt.mother_pool_snapshot.identity), "strategy3_runner_verifier_snapshot_identity_mismatch");
   const expectedCount = water.poolBySymbol.size;
   const readyCount = [...water.candleRowsBySymbol.entries()]
     .filter(([symbol, rows]) => rows.length >= MIN_CANDLES_PER_SYMBOL && !water.symbolDataGaps.has(symbol))
@@ -88,6 +91,8 @@ async function main() {
     run_id: scan?.run_id || null,
     canonical_run_id: water.receipt?.canonical_run_id || null,
     result_count: resultCount,
+    source_field_contract: water.receipt?.source_field_contract || null,
+    mother_pool_snapshot: water.receipt?.mother_pool_snapshot || null,
     first_blocker: firstBlocker,
     reason_code: firstBlocker || "strategy3_v2_mother_pool_v4_1_verified",
     consumer_name: STRATEGY,
@@ -105,7 +110,7 @@ async function main() {
     runner_status: scan?.runner_status || scan?.status || null,
     verifier_ok: issues.length === 0,
     recovery_replay: recoveryReplay,
-    natural_slot_complete: !recoveryReplay,
+    natural_slot_complete: !recoveryReplay && issues.length === 0,
     receipt_written: true,
     sources: { motherPool: MOTHER_POOL_VIEW, producerReceipt: MOTHER_POOL_RECEIPT_VIEW, quote: QUOTE_TABLE, intraday1m: `rpc:${INTRADAY_1M_RPC}` },
     readback: { expectedCount, readyCount, requiredReadyCount, coverageRatio: Number(coverageRatio.toFixed(4)), resultCount, symbolDataGaps: water.receipt?.symbol_data_gaps || [] },

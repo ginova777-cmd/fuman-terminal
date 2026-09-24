@@ -43,8 +43,15 @@ function main() {
   requireMarker(marketApi, "opening_report_0830_terminal_briefing", "market_api", failures);
   requireMarker(shell, `payload.openingMorningReport && typeof payload.openingMorningReport === "object"`, "desktop_shell", failures);
   requireMarker(shell, "renderOpeningReport0830DesktopBriefing(aiPayload);", "desktop_shell", failures);
-  requireMarker(shell, "node.setAttribute(\"data-opening-report-0830-briefing\", \"1\");", "desktop_shell", failures);
-  requireMarker(shell, "node.setAttribute(\"data-opening-report-state\", \"mounted\");", "desktop_shell", failures);
+  const morningView = read("terminal-opening-report-view.js");
+  requireMarker(index, 'src="terminal-opening-report-view.js"', "index", failures);
+  requireMarker(shell, "window.FUMAN_OPENING_REPORT_VIEW.render(data)", "desktop_shell", failures);
+  requireMarker(morningView, 'data-opening-report-0830-briefing="1"', "morning_view", failures);
+  requireMarker(morningView, 'data-opening-report-state="${state}"', "morning_view", failures);
+  const render = require("../terminal-opening-report-view").render;
+  for (const [input,state] of [[null,"empty"],[{ok:false},"blocked"],[{ok:true,industry_bias:{count:15},display_top3:[]},"zero"]]) {
+    if (!render(input).includes(`data-opening-report-state="${state}"`)) failures.push("morning_view_state:"+state);
+  }
   requireMarker(shell, ".market-ai-hero-board, [data-opening-report-0830-briefing]", "desktop_shell", failures);
   requireMarker(shell, "!shell.ai.querySelector?.(", "desktop_shell", failures);
   requireMarker(index, "terminal-opening-report-0830-standalone.js?v=" + version.version, "index", failures);

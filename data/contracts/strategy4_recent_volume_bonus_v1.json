@@ -1,0 +1,14 @@
+{
+  "contract": "strategy4_recent_volume_10d_prior5_bonus_v1",
+  "effectiveDate": "2026-09-17",
+  "lookbackTradingDays": 10,
+  "baselinePriorTradingDays": 5,
+  "thresholdInclusive": 2.5,
+  "points": 5,
+  "repeatAward": false,
+  "required": false,
+  "source": "stock_daily_volume",
+  "dateRule": "each evaluated date excluded from its own baseline",
+  "missingPolicy": "skip incomplete windows; no proven match means zero bonus",
+  "scoreCap": 100
+}

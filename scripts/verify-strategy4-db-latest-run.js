@@ -74,7 +74,8 @@ function collectDataGapCodes(payload = {}) {
   return [...codes].sort();
 }
 async function main() {
-  const latestRun = await supabase(`/rest/v1/${RUNS_TABLE}?${query({ select: "*", strategy: "eq.strategy4", status: "eq.complete", order: "updated_at.desc", limit: 1 })}`);
+  const expectedRunId = String(process.env.EXPECTED_STRATEGY4_RUN_ID || "").trim();
+  const latestRun = await supabase(`/rest/v1/${RUNS_TABLE}?${query({ select: "*", strategy: "eq.strategy4", ...(expectedRunId ? {run_id: `eq.${expectedRunId}`} : {status: "eq.complete"}), order: "updated_at.desc", limit: 1 })}`);
   const row = Array.isArray(latestRun.json) ? latestRun.json[0] : null;
   if (!row?.run_id) throw new Error("missing latest complete Strategy4 run");
   const countResp = await supabase(`/rest/v1/${RESULTS_TABLE}?${query({ select: "run_id", run_id: `eq.${row.run_id}` })}`, { headers: { Prefer: "count=exact", Range: "0-0" } });
@@ -82,6 +83,35 @@ async function main() {
   const match = range.match(/\/(\d+)$/);
   const readbackCount = match ? Number(match[1]) || 0 : 0;
   const resultCount = Number(row.result_count || 0);
+  const resultRows = [];
+  for (let offset = 0; offset < resultCount; offset += 1000) {
+    const page = await supabase(`/rest/v1/${RESULTS_TABLE}?${query({select: "code,payload", run_id: `eq.${row.run_id}`, order: "rank.asc", offset, limit: Math.min(1000, resultCount-offset)})}`);
+    if (!Array.isArray(page.json) || !page.json.length) break;
+    resultRows.push(...page.json);
+  }
+  const v3Issues = require("../lib/strategy4-v4-evidence").strategy4V4Issues(row.payload || {}, resultRows);
+  if (resultRows.length !== resultCount) v3Issues.push("strategy4_full_row_readback_incomplete");
+  const volumeWindow=require("../lib/strategy4-volume-window");
+  const expectedDates=await volumeWindow.recentTradingDates(String(row.scan_date).slice(0,10),path.join(RUNTIME_DIR,"state"));
+  const filter=row.payload?.volumeFilter || {};
+  if(JSON.stringify(expectedDates)!==JSON.stringify(filter.expectedDates))v3Issues.push("volume_calendar_window_mismatch");
+  const daily=[];
+  for(let offset=0;offset<20000;offset+=1000){
+    const search=new URLSearchParams({select:"symbol,trade_date,volume_lots,volume_shares",order:"trade_date.asc,symbol.asc",offset:String(offset),limit:"1000"});
+    search.append("trade_date","gte."+expectedDates[0]);search.append("trade_date","lte."+expectedDates.at(-1));
+    const page=await supabase("/rest/v1/"+(process.env.STRATEGY4_DAILY_VIEW || "stock_daily_volume")+"?"+search);
+    if(!Array.isArray(page.json))throw new Error("volume_readback_not_array");daily.push(...page.json);if(page.json.length<1000)break;
+    if(offset===19000)throw new Error("volume_readback_page_limit");
+  }
+  const byCode=new Map();for(const d of daily){if(!byCode.has(d.symbol))byCode.set(d.symbol,[]);byCode.get(d.symbol).push(d);}
+  for(const e of filter.evaluations || []){
+    const actual=volumeWindow.evaluateVolumeWindow(byCode.get(e.code)||[],expectedDates);
+    if(actual.ok!==e.ok || actual.avgVolume5!==e.avgVolume5 || JSON.stringify(actual.rows)!==JSON.stringify(e.rows))v3Issues.push("volume_authoritative_readback_mismatch:"+e.code);
+  }
+
+  const bonusModule=require('../lib/strategy4-recent-volume-bonus');
+  const bonusTarget=String(row.scan_date).slice(0,10),bonusDates=await bonusModule.tradingDates(bonusTarget);
+  for(let i=0;i<resultRows.length;i+=40){const group=resultRows.slice(i,i+40);const q=new URLSearchParams({select:'symbol,trade_date,volume_lots,volume_shares',symbol:'in.('+group.map(r=>r.code).join(',')+')',order:'trade_date.asc,symbol.asc',limit:'1000'});q.append('trade_date','gte.'+bonusDates[0]);q.append('trade_date','lte.'+bonusTarget);const response=await supabase('/rest/v1/stock_daily_volume?'+q);if(!Array.isArray(response.json)||response.json.length>=1000)throw Error('recent_volume_readback_incomplete');for(const r of group){const actual=bonusModule.calculate(response.json.filter(d=>d.symbol===r.code),bonusDates,bonusTarget);if(!require('node:util').isDeepStrictEqual(actual,r.payload?.recentVolumeBonus))v3Issues.push('recent_volume_authoritative_mismatch:'+r.code);}}
   const expectedTotal = Number(row.expected_total || 0);
   const scannedCount = Number(row.scanned_count || 0);
   const qualityStatus = String(row.quality_status || "");
@@ -101,8 +131,8 @@ async function main() {
   const qualityAccepted = qualityStatus === "complete" || (qualityStatus === "degraded" && coverageAccepted);
   const dataGapCodesComplete = dataGapCount === 0 || dataGapCodes.length === dataGapCount;
   const dataGapsExcluded = displayedDataGapCodes.length === 0;
-  const ok = row.complete === true && qualityAccepted && expectedTotal > 0 && scannedCount === expectedTotal && resultCount > 0 && readbackCount === resultCount && errorCount === 0 && dataGapCodesComplete && dataGapsExcluded;
-  console.log(JSON.stringify({ ok, runId: row.run_id, updatedAt: row.updated_at || row.finished_at || "", expectedTotal, scannedCount, resultCount, readbackCount, qualityStatus, qualityAccepted, complete: row.complete === true, noDataCount, dataGapCount, dataGapCodes, dataGapCodesComplete, dataGapsExcluded, displayedDataGapCodes, errorCount, sourceSnapshotCapturedAt: row.payload?.source_snapshot_captured_at || row.payload?.generatedAt || row.generated_at || "", supabaseCoverage: coverage }, null, 2));
+  const ok = v3Issues.length === 0 && row.complete === true && qualityAccepted && expectedTotal > 0 && scannedCount === expectedTotal && resultCount > 0 && readbackCount === resultCount && errorCount === 0 && dataGapCodesComplete && dataGapsExcluded;
+  console.log(JSON.stringify({ ok, resultContract: row.payload?.resultContract, v3Issues, runId: row.run_id, updatedAt: row.updated_at || row.finished_at || "", expectedTotal, scannedCount, resultCount, readbackCount, qualityStatus, qualityAccepted, complete: row.complete === true, noDataCount, dataGapCount, dataGapCodes, dataGapCodesComplete, dataGapsExcluded, displayedDataGapCodes, errorCount, sourceSnapshotCapturedAt: row.payload?.source_snapshot_captured_at || row.payload?.generatedAt || row.generated_at || "", supabaseCoverage: coverage }, null, 2));
   if (!ok) process.exitCode = 1;
 }
 main().catch((error) => { console.error(JSON.stringify({ ok: false, error: error.message }, null, 2)); process.exit(1); });

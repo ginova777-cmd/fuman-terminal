@@ -11,7 +11,7 @@ $nodeExe = "C:\Program Files\nodejs\node.exe"
 $script = Join-Path $root "scripts\cleanup-api-only-retired-artifacts.js"
 
 . (Join-Path $root "schedule-guard.ps1")
-Invoke-FumanWeekdayGuard -Label "API-only retired artifact cleanup"
+Invoke-FumanWeekdayGuard -Label "API-only retired artifact cleanup" -AllowAfterFormalSourceWindow
 
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $lockFile) | Out-Null

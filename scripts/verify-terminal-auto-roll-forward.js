@@ -157,7 +157,7 @@ function main() {
   }
   for (const forbidden of [
     "verify:strategy2-e2e-closure",
-    "verify:strategy3-v2-full-closure",
+    "verify:strategy3-complete",
     "verify:strategy5-e2e-closure",
     "verify:institution-e2e-closure",
   ]) {

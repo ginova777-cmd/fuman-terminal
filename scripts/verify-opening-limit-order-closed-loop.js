@@ -66,7 +66,7 @@ function main() {
     verifier0900: path.join(TERMINAL_DIR, "ops", "Run-OpeningLimitOrder0900Verifier.ps1"),
     register0840: path.join(TERMINAL_DIR, "ops", "Register-OpeningLimitOrder0840Task.ps1"),
     candidateVerifier: path.join(TERMINAL_DIR, "scripts", "verify-opening-limit-order-candidate-readonly.js"),
-    verifier0855: path.join(TERMINAL_DIR, "scripts", "verify-opening-limit-order-0855-readonly.js"),
+    verifier0850Freeze: path.join(TERMINAL_DIR, "scripts", "verify-opening-limit-order-0850-freeze.js"),
     sourceVerifier: path.join(TERMINAL_DIR, "scripts", "verify-opening-limit-order-source-contract.js"),
     closedLoopVerifier: path.join(TERMINAL_DIR, "scripts", "verify-opening-limit-order-closed-loop.js"),
   };
@@ -104,6 +104,7 @@ function main() {
     preCandidates: path.join(DATA_DIR, `opening-limit-order-0840-pre-candidates-${compact}.json`),
     futoptReadback: path.join(DATA_DIR, `opening-limit-order-0845-futopt-readback-${compact}.json`),
     preflight: path.join(DATA_DIR, `opening-limit-order-0850-preflight-${compact}.json`),
+    predictionFreeze: path.join(DATA_DIR, `opening-limit-order-0850-predictions-${compact}.json`),
     watchlist: path.join(DATA_DIR, `opening-limit-order-0855-watchlist-${compact}.json`),
     candidates: path.join(DATA_DIR, `opening-limit-order-0855-candidates-${compact}.json`),
     rankedWatchlist: path.join(DATA_DIR, `opening-limit-order-0855-ranked-watchlist-${compact}.json`),
@@ -120,6 +121,9 @@ function main() {
     if (!runtime.morningReceipt) failures.push("morning_total_receipt_missing_for_current_date_before_next_scheduled_run");
     if (runtime.preCandidates && !guardOk(runtime.preCandidates.action_guard)) failures.push("pre_candidates_action_guard_failed");
     if (runtime.futoptReadback && !guardOk(runtime.futoptReadback.action_guard)) failures.push("futopt_readback_action_guard_failed");
+    if (runtime.predictionFreeze?.contract !== "opening_limit_order_0850_prediction_freeze_v1") failures.push("prediction_freeze_contract_invalid");
+    if (runtime.predictionFreeze?.immutable_after_publish !== true) failures.push("prediction_freeze_not_immutable");
+    if (runtime.predictionFreeze?.allowed_after_0850 !== "monitor_and_rank_only") failures.push("prediction_freeze_post_0850_action_invalid");
     if (runtime.watchlist && !guardOk(runtime.watchlist.action_guard)) failures.push("watchlist_action_guard_failed");
     if (runtime.candidates && !guardOk(runtime.candidates.action_guard)) failures.push("candidates_action_guard_failed");
     if (runtime.summary && !guardOk(runtime.summary.action_guard)) failures.push("summary_action_guard_failed");
@@ -131,6 +135,7 @@ function main() {
       preCandidates: runtime.preCandidates?.run_id || "",
       futoptReadback: runtime.futoptReadback?.run_id || "",
       preflight: runtime.preflight?.run_id || "",
+      predictionFreeze: runtime.predictionFreeze?.run_id || "",
       watchlist: runtime.watchlist?.run_id || "",
       candidates: runtime.candidates?.run_id || "",
       rankedWatchlist: runtime.rankedWatchlist?.run_id || "",

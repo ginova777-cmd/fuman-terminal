@@ -310,14 +310,24 @@ function alignRow(task, snapshotBundlePayload, snapshotApi, liveApi, maxAgeOk) {
   const snapshotHit = /desktop_route_snapshot/.test(snapshot.cacheSource);
   const bundleHit = Boolean(bundlePayload);
   const protectedApiBlocked = isProtectedAuthBlock(snapshot) && isProtectedAuthBlock(live);
+  let verifiedZero = false;
+  if (task.key === "strategy3" && bundle.ok && bundle.complete === true && bundle.qualityStatus === "complete" && bundle.count === 0 && bundle.returnedCount === 0) {
+    for (const file of ["strategy3-v2-complete-scan-", "strategy3-v2-recovery-replay-"]) {
+      try {
+        const scan = JSON.parse(fs.readFileSync(path.join(RUNTIME_DIR,"data","scan-receipts",file+bundle.date+".json"),"utf8").replace(/^\uFEFF/,""));
+        if (scan.ok === true && scan.apply === true && ["COMPLETE","RECOVERY_REPLAY_COMPLETE"].includes(scan.status) && scan.run_id === bundle.runId && compactDate(scan.trade_date) === bundle.date && scan.result_count === 0 && Array.isArray(scan.results) && scan.results.length === 0) verifiedZero = true;
+      } catch {}
+    }
+  }
+  const effectiveMinCount = verifiedZero ? 0 : task.minCount;
   const runIdAligned = protectedApiBlocked
     ? Boolean(bundle.runId)
     : (live.runId ? live.runId === snapshot.runId && live.runId === bundle.runId : snapshot.runId === bundle.runId);
-  const countAligned = protectedApiBlocked ? bundle.count >= task.minCount : live.count === snapshot.count && snapshot.count === bundle.count;
+  const countAligned = protectedApiBlocked ? bundle.count >= effectiveMinCount : live.count === snapshot.count && snapshot.count === bundle.count;
   const dateAligned = protectedApiBlocked ? Boolean(bundle.date || bundle.updatedAt) : (!live.date || !snapshot.date || live.date === snapshot.date);
   const enoughRows = protectedApiBlocked
-    ? bundle.count >= task.minCount
-    : live.count >= task.minCount && snapshot.count >= task.minCount && bundle.count >= task.minCount;
+    ? bundle.count >= effectiveMinCount
+    : live.count >= effectiveMinCount && snapshot.count >= effectiveMinCount && bundle.count >= effectiveMinCount;
   const bundleDisplayReady = bundleHit && runIdAligned && countAligned && dateAligned && enoughRows;
 
   if (!maxAgeOk) reasons.push("desktop_route_snapshot is stale");

@@ -3,13 +3,13 @@
 const fs = require("fs");
 const path = require("path");
 
-const terminalDir = process.argv.find((arg) => arg.startsWith("--terminal-dir="))?.slice("--terminal-dir=".length) || "C:/fuman-terminal";
+const terminalDir = process.argv.find((arg) => arg.startsWith("--terminal-dir="))?.slice("--terminal-dir=".length) || "C:/fuman-release-owner/fuman-terminal";
 const read = (file) => fs.readFileSync(path.join(terminalDir, file), "utf8");
 const candidate = read("scripts/verify-opening-limit-order-candidate-readonly.js");
 const preflight = read("ops/Run-OpeningLimitOrder0850PreflightReadonly.ps1");
 const engine = read("ops/Run-OpeningLimitOrder0850PreflightReadonly.engine-v2.ps1");
 const runner0855 = read("ops/Run-OpeningLimitOrder0855Readonly.ps1");
-const verifier0855 = read("scripts/verify-opening-limit-order-0855-readonly.js");
+const verifier0850Freeze = read("scripts/verify-opening-limit-order-0850-freeze.js");
 const staticPrefilter = read("scripts/build-opening-limit-order-static-prefilter.js");
 const issues = [];
 
@@ -28,6 +28,17 @@ const candidateMarkers = [
   "creates_order: false",
   "creates_formal_candidate: false",
   "publish_allowed: false",
+  "LIMIT_UP_NEXT_DAY_TRIAL_SHORT_MIN_PCT",
+  "LIMIT_UP_NEXT_DAY_TRIAL_SHORT_MAX_PCT",
+  "LIMIT_UP_NEXT_DAY_TRIAL_LONG_FLAT_MIN_PCT",
+  "LIMIT_UP_NEXT_DAY_TRIAL_LONG_DOWN_MIN_PCT",
+  "LIMIT_UP_KD_PREOPEN_HIGH_SHORT",
+  "LIMIT_UP_KD_PREOPEN_FLAT_DOWN_LONG",
+  "LIMIT_UP_NEXT_DAY_TRIAL_OUTSIDE_RANGE_NO_TRADE",
+  "n(slot.trial_price) > 0",
+  "openingShortSignal",
+  "opening-short-postclose-",
+  "LIMIT_UP_KD_PREOPEN_TRIAL_DATA_GAP",
 ];
 const schedulerMarkers = [
   "check-market-calendar-action.js",
@@ -61,7 +72,7 @@ for (const marker of schedulerMarkers) if (!preflight.includes(marker)) issues.p
 for (const marker of engineMarkers) if (!engine.includes(marker)) issues.push(`engine_marker_missing:${marker}`);
 for (const marker of staticMarkers) if (!staticPrefilter.includes(marker)) issues.push(`static_prefilter_marker_missing:${marker}`);
 for (const marker of ["[string]$RunId", "run_id = $RunId", "-RunId $RunId"]) if (!preflight.includes(marker) && !engine.includes(marker) && !runner0855.includes(marker)) issues.push(`run_id_marker_missing:${marker}`);
-for (const marker of ["expectedRunId", "runIdReadback", "run_id_missing_all_receipts"]) if (!verifier0855.includes(marker)) issues.push(`run_id_verifier_marker_missing:${marker}`);
+for (const marker of ["expectedRunId", "opening_limit_order_0850_freeze_verifier_v1", "prediction_freeze_contract_invalid", "prediction_not_immutable", "ranked_predictions_drifted_from_0850", "summary_predictions_drifted_from_0850"]) if (!verifier0850Freeze.includes(marker)) issues.push(`freeze_verifier_marker_missing:${marker}`);
 if (candidate.includes("prev_low_above_prior_open_overnight_trader_branches")) issues.push("legacy_rule8_previous_open_condition_present");
 if (candidate.includes('const REQUIRED_PREOPEN_SLOTS = ["0845", "0850", "0855", "0859"]')) issues.push("preopen_decision_must_not_require_0859");
 if (candidate.includes("us_sector_1d_strength_missing_or_not_positive")) issues.push("legacy_us_only_sector_gap_present");
@@ -78,10 +89,10 @@ console.log(JSON.stringify({
     conditional_rules: ["3", "4", "9", "10"],
     rule_8: "W-neckline two-day hold + verified overnight trader",
   },
-  final_preopen_decision_at: "08:55 Asia/Taipei",
+  final_preopen_decision_at: "08:50 Asia/Taipei",
   opening_report_sector_closure: "sector_up_1d = us_sector_up_1d || overseas_sector_up_1d || sector_return_1d_pct > 0",
   decision_preopen_slots: ["0845", "0850"],
-  post_open_phase: "09:00 second-confirm only",
+  post_freeze_phase: "08:55 monitor-and-rank only; 09:00 user execution",
   rules: 10,
   failed_checks: issues,
   first_blocker: issues[0] || null,

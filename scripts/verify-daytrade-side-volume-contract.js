@@ -18,7 +18,7 @@ const SUPABASE_URL = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABA
 const CONTRACT = "daytrade_side_volume_2000_canonical_verifier_v3";
 const CONTRACT_VERSION = "cross-computer-symbol-isolation-v3";
 const SOURCE_NAME = "fugle_daytrade_source";
-const MOTHER_POOL_VIEW = "v_fugle_daytrade_mother_pool";
+const MOTHER_POOL_VIEW = "v_fugle_daytrade_mother_pool_v4_1";
 const QUOTE_TABLE = "fugle_daytrade_quotes_live";
 const SOURCE_STATUS_TABLE = "source_status";
 const VIEWER_MAX_SOURCE_AGE_SECONDS = 120;
@@ -373,6 +373,7 @@ async function liveCheck() {
   const key = anonKey();
   if (!key) failures.push("SUPABASE_ANON_KEY_MISSING");
   let poolRows = [];
+  let quoteRows = [];
   let quote3030 = null;
   let poolEvidence = [];
   let sample3030 = null;
@@ -382,17 +383,19 @@ async function liveCheck() {
   if (key) {
     try {
       poolRows = await readRows(key, MOTHER_POOL_VIEW, {
-        select: "trade_date,symbol,name,priority_rank,updated_at,mother_updated_at,mother_pool_metrics,payload",
+        select: "*",
         trade_date: `eq.${tradeDate}`,
-        order: "priority_rank.asc",
+        canonical_run_id: `eq.${expectedRunId}`,
+        contract_version: "eq.4.1.0",
+        order: "symbol.asc",
         limit: 1000,
       });
-      const quoteRows = await readRows(key, QUOTE_TABLE, {
+      quoteRows = await readRows(key, QUOTE_TABLE, {
         select: "symbol,name,quote_seen_at,last_trade_time,updated_at,total_volume,cumulative_bid_volume,cumulative_ask_volume,cumulative_bid_ask_volume,payload",
-        symbol: "eq.3030",
-        limit: 1,
+        order: "symbol.asc",
+        limit: 2000,
       });
-      quote3030 = quoteRows[0] || null;
+      quote3030 = quoteRows.find((row) => String(row?.symbol || "") === "3030") || null;
       const sourceRows = await readRows(key, SOURCE_STATUS_TABLE, {
         select: "trade_date,status,updated_at,payload",
         source_name: `eq.${SOURCE_NAME}`,
@@ -424,7 +427,12 @@ async function liveCheck() {
     }
   }
 
-  poolEvidence = poolRows.map((row) => publishedEvidence(row, tradeDate));
+  const quoteBySymbol = new Map(quoteRows.map((row) => [String(row?.symbol || ""), row]));
+  poolEvidence = poolRows.map((row) => {
+    const quote = quoteBySymbol.get(String(row?.symbol || ""));
+    const metrics = quote ? deriveDaytradeSideVolumeContract({ quote, expectedTradeDate: tradeDate }) : {};
+    return publishedEvidence({ ...row, mother_pool_metrics: metrics }, tradeDate);
+  });
   const invalidRows = poolEvidence.filter((row) => row && !row.ok);
   if (!poolRows.length) failures.push("MOTHER_POOL_SAME_DAY_ROWS_MISSING");
   if (invalidRows.length) failures.push("MOTHER_POOL_SIDE_VOLUME_CONTRACT_INCOMPLETE");

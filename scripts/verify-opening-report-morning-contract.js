@@ -1,3 +1,5 @@
+const morningStages = require("../lib/opening-report-stage-contract");
+const morningRecovery = require("../lib/opening-report-recovery");
 "use strict";
 
 const fs = require("fs");
@@ -6,7 +8,7 @@ const childProcess = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 const RUNTIME = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
-const REPORT_DIR = path.join(RUNTIME, "data", "opening-report-0830");
+const REPORT_DIR = (process.env.FUMAN_MORNING_STAGE ? morningStages.directory(RUNTIME) : path.join(RUNTIME, "data", "opening-report-0830"));
 const STATE_DIR = path.join(RUNTIME, "state");
 
 const CONTRACT = "opening-report-morning-single-verifier-v1";
@@ -14,7 +16,11 @@ const SINGLE_VERIFIER_SCRIPT = "scripts/verify-opening-report-morning-contract.j
 const SINGLE_VERIFIER_CMD = "node --use-system-ca " + SINGLE_VERIFIER_SCRIPT;
 const RETIRED_TELEGRAM_SCRIPT = path.join(ROOT, "scripts", "verify-opening-report-0830-telegram-contract.js");
 const RETIRED_TELEGRAM_PACKAGE_KEY = "verify:opening-report-0830-telegram-contract";
+const RETIRED_FIELD_ACK_SCRIPT = path.join(ROOT, "scripts", "verify-opening-report-0830-mother-pool-field-ack.js");
+const RETIRED_FIELD_ACK_PACKAGE_KEYS = ["verify:opening-report-mother-pool-field-ack", "verify:opening-report-mother-pool-field-ack:fixture"];
 const KOREA_NAVER_ENFORCE_FROM = "2026-09-09";
+const FUJIKURA_RETIRE_ENFORCE_FROM = "2026-09-12";
+const BOE_RETIRE_ENFORCE_FROM = "2026-09-10";
 
 const RETIRED_ALIASES = [
   "verify:opening-report-0820-preflight",
@@ -93,9 +99,9 @@ function parseArgs() {
 function currentPreflightReceiptChecks(checks, tradeDate) {
   const ymd = compactDate(tradeDate);
   const paths = {
-    preflight: path.join(REPORT_DIR, "opening-report-0820-preflight-receipt-" + ymd + ".json"),
-    leaders: path.join(REPORT_DIR, "opening-report-0820-overseas-leaders-" + ymd + ".json"),
-    snapshot: path.join(REPORT_DIR, "opening-report-0820-market-snapshot-" + ymd + ".json"),
+    preflight: path.join(REPORT_DIR, "opening-report-0830-preflight-receipt-" + ymd + ".json"),
+    leaders: path.join(REPORT_DIR, "opening-report-0830-overseas-leaders-" + ymd + ".json"),
+    snapshot: path.join(REPORT_DIR, "opening-report-0830-market-snapshot-" + ymd + ".json"),
   };
   for (const [key, filePath] of Object.entries(paths)) {
     addCheck(checks, "current_preflight_receipt_exists:" + key, exists(filePath), filePath);
@@ -104,6 +110,7 @@ function currentPreflightReceiptChecks(checks, tradeDate) {
   const preflight = readJson(paths.preflight);
   const leaders = readJson(paths.leaders);
   const snapshot = readJson(paths.snapshot);
+  addCheck(checks,"frozen_source_policy",leaders.detection_policy === (morningStages.stage().id === "us_0820" ? "us_only_tx_night_0820_v1" : "asia_only_0850_v1") && (leaders.industries || []).flatMap(row=>row.leaders || []).every(row=>morningStages.allowed(row.yahoo_symbol)),"reject old scope before delivery");
   const industries = leaders.industries || leaders.industry_bias || leaders.rows || leaders.overseas_industries || [];
   addCheck(checks, "current_preflight_ok", preflight.ok === true && ["REPORT_OK", "REPORT_DEGRADED"].includes(preflight.report_status), JSON.stringify({ ok: preflight.ok, report_status: preflight.report_status }));
   addCheck(checks, "current_preflight_15_industries", Array.isArray(industries) && industries.length === 15, "count=" + (Array.isArray(industries) ? industries.length : "not-array"));
@@ -171,15 +178,22 @@ function symbolMapChecks(checks) {
   addCheck(checks, "manual_mapping_8039_pcb_ccl_b", hasSymbol(pcb.tw_b || pcb.twB || pcb.b || pcb.mapped_symbols_b, "8039"), "8039 must be PCB/CCL B");
   addCheck(checks, "manual_mapping_4991_iii_v_related_b", hasSymbol(iiiV.tw_b || iiiV.twB || iiiV.b || iiiV.mapped_symbols_b, "4991"), "4991 must be III-V/optical related B");
   addCheck(checks, "manual_mapping_3105_iii_v_a", hasSymbol(iiiV.tw_a || iiiV.twA || iiiV.a || iiiV.mapped_symbols_a, "3105"), "3105 must be III-V/optical A");
+  const pcbLeaders = pcb.overseas_leaders || pcb.overseasLeaders || pcb.leaders || [];
+  const fujikura = pcbLeaders.find((leader) => String(leader?.yahoo_symbol || leader?.yahooSymbol || "") === "5803.T");
+  addCheck(checks, "fujikura_5803_retired", !fujikura, JSON.stringify(fujikura || null));
 
   const passive = getIndustryRow(contract, "PASSIVE_COMPONENTS") || {};
   const passiveLeaders = passive.overseas_leaders || passive.overseasLeaders || passive.leaders || [];
-  addCheck(checks, "passive_components_anchor_only_murata", passiveLeaders.length === 1 && hasSymbol(passiveLeaders, "6981.T"), JSON.stringify(passiveLeaders));
+  addCheck(checks, "passive_components_murata_anchor", passiveLeaders.length === 1 && passiveLeaders[0].yahoo_symbol === "6981.T", JSON.stringify(passiveLeaders));
 
   const optical = getIndustryRow(contract, "OPTICAL_COMM") || {};
   const opticalLeaders = optical.overseas_leaders || optical.overseasLeaders || optical.leaders || [];
   const opticalRequired = ["COHR", "LITE", "CIEN", "AAOI", "GLW"];
   addCheck(checks, "optical_us_leaders_include_required", opticalRequired.every((symbol) => hasSymbol(opticalLeaders, symbol)), JSON.stringify(opticalLeaders));
+
+  const activeOverseasLeaders = rows.flatMap((row) => row.overseas_leaders || row.overseasLeaders || row.leaders || []);
+  const activeBoe = activeOverseasLeaders.filter((leader) => String(leader?.name || "").toUpperCase() === "BOE" || String(leader?.yahoo_symbol || leader?.yahooSymbol || "").toUpperCase() === "000725.SZ");
+  addCheck(checks, "boe_000725sz_absent_from_active_map", activeBoe.length === 0, JSON.stringify(activeBoe));
 
   const contractText = readText("scripts/opening-report-0830-industry-map-contract.js");
   const forbidden = ["6967.T", "WCI", "SCFI", "BDI"];
@@ -187,6 +201,18 @@ function symbolMapChecks(checks) {
 }
 
 function staticContractChecks(checks) {
+  const stageTests=run("node",["scripts/test-opening-report-stage-reconstruction.js"]);
+  addCheck(checks,"stage_reconstruction_and_stale_batch_tests",stageTests.ok,stageTests.text.trim());
+  const nightTests=run("node",["scripts/test-opening-report-night-futures.js"]);
+  addCheck(checks,"night_futures_source_contract_tests",nightTests.ok,nightTests.text.trim());
+  addCheck(checks,"night_futures_runner_gate_wired",readText("scripts/run-opening-report-0830-production.js").includes("night_futures_required:") && readText("scripts/run-opening-report-0830-preflight.js").includes("nightIssues.length === 0"),"night source mandatory before delivery");
+  const authority = require("../lib/opening-report-receipt-authority").CONTRACT;
+  addCheck(checks,"runner_verifier_receipt_authority",authority.runner==="run-opening-report-0830-production-wrapper.ps1" && authority.canonical_verifier===SINGLE_VERIFIER_SCRIPT && authority.canonical_command==="verify:opening-report-morning-contract" && authority.static_receipt_is_delivery===false,"one formal runner and canonical verifier");
+  for(const file of authority.retired_files) addCheck(checks,"authority_retired_absent:"+file,!exists(path.join(ROOT,file)),file);
+  const dispositions=run("node",["scripts/test-opening-report-handoff-dispositions.js"]);
+  addCheck(checks,"handoff_dispositions_and_writer_regression",dispositions.ok,dispositions.text.trim());
+  const receiptAuthority=run("node",["scripts/test-opening-report-receipt-authority.js"]);
+  addCheck(checks,"receipt_scope_identity_regression",receiptAuthority.ok,receiptAuthority.text.trim());
   const pkg = readJson(path.join(ROOT, "package.json"));
   addCheck(checks, "single_morning_verifier_package_entry", pkg.scripts && pkg.scripts["verify:opening-report-morning-contract"] === SINGLE_VERIFIER_CMD, pkg.scripts && pkg.scripts["verify:opening-report-morning-contract"]);
   for (const alias of RETIRED_ALIASES) {
@@ -202,46 +228,66 @@ function staticContractChecks(checks) {
   const detector = readText("scripts/run-opening-report-0830-overseas-leader-detector.js");
   const usCalendar = readText("scripts/us-equity-market-calendar.js");
   addCheck(checks, "us_market_calendar_contract_present", usCalendar.includes("NYSE_NASDAQ_2026") && usCalendar.includes("2026-09-07") && usCalendar.includes("Labor Day") && usCalendar.includes("early_close"), "NYSE/Nasdaq 2026 closure and early-close contract required");
-  addCheck(checks, "us_market_closed_excluded_japan_korea_remain", detector.includes("us_market_closed_no_new_session") && detector.includes("us_market_closed_previous_session_background_only") && detector.includes("Naver Finance KRX basic"), "US closed rows must be background-only while fresh Japan/Korea rows remain eligible");
-  addCheck(checks, "japan_korea_freeze_window_0800_0820", detector.includes("08:00-08:20 Asia/Taipei") && detector.includes("T08:20:59.999+08:00"), "Japan/Korea must freeze by 08:20 minute end");
-  addCheck(checks, "korea_naver_percent_only_primary_present", detector.includes("korea_naver_change_percent_primary") && detector.includes("fluctuationsRatio") && detector.includes("localTradedAt") && detector.includes("KQ"), "Korean .KS/.KQ rows must use Naver directly with same-day percent and source time");
-  const detectorModule = require(path.join(ROOT, "scripts", "run-opening-report-0830-overseas-leader-detector.js"));
-  addCheck(checks, "overseas_market_classifier_contract", detectorModule.classifyLeaderMarket("AAPL") === "us" && detectorModule.classifyLeaderMarket("6861.T") === "japan" && detectorModule.classifyLeaderMarket("005930.KS") === "korea" && detectorModule.classifyLeaderMarket("222800.KQ") === "korea" && detectorModule.classifyLeaderMarket("000725.SZ") === "other", "US, Japan, Korea and unsupported markets must not be conflated");
-  const naverFixture = detectorModule.parseNaverKoreaBasic({ itemCode: "005930", fluctuationsRatio: "1.11", localTradedAt: "2026-09-08T09:20:59+09:00" }, { yahoo: "005930.KS" }, "2026-09-08");
-  const naverAfterCutoff = detectorModule.parseNaverKoreaBasic({ itemCode: "005930", fluctuationsRatio: "1.12", localTradedAt: "2026-09-08T09:21:00+09:00" }, { yahoo: "005930.KS" }, "2026-09-08");
-  addCheck(checks, "korea_naver_percent_fixture", naverFixture.ok === true && naverFixture.percent === 1.11 && naverFixture.reason_code === "korea_naver_change_percent_primary", JSON.stringify(naverFixture));
-  addCheck(checks, "korea_naver_after_cutoff_rejected", naverAfterCutoff.ok === false && naverAfterCutoff.reason_code === "naver_korea_outside_0800_0820_window", JSON.stringify(naverAfterCutoff));
+  const detectorModule = require(path.join(ROOT,"scripts/run-opening-report-0830-overseas-leader-detector.js"));
+  const active = loadIndustryContract().OPENING_REPORT_0830_INDUSTRY_MAP.flatMap(row=>row.overseas_leaders).filter(row=>require("../lib/opening-report-stage-contract").allowed(row.yahoo_symbol));
+  addCheck(checks,"us_only_source_map",active.length > 0 && active.every(row=>require("../lib/opening-report-stage-contract").allowed(row.yahoo_symbol)),JSON.stringify(active.map(row=>row.yahoo_symbol)));
+  addCheck(checks,"out_of_stage_and_retired_sources_rejected",["5803.T","000725.SZ"].every(symbol=>detectorModule.isRetiredLeader("",symbol)) && detector.includes("morningStages.allowed(yahoo)"),"reject disabled markets before network");
+  const japanRealtime=require("../lib/opening-report-japan-realtime");
+  const japanTests=run("node",[path.join(ROOT,"scripts/test-opening-report-japan-realtime.js")]);
+  addCheck(checks,"japan_realtime_strict_source_tests",japanTests.ok,japanTests.text.trim());
+  const sourceMap=loadIndustryContract().OPENING_REPORT_0830_INDUSTRY_MAP.flatMap(row=>row.overseas_leaders);
+  addCheck(checks,"japan_realtime_five_source_mappings",japanRealtime.SYMBOLS.every(symbol=>sourceMap.some(row=>row.yahoo_symbol===symbol&&row.source_provider===japanRealtime.PROVIDER)),"five approved TSE symbols");
+  addCheck(checks,"overseas_market_classifier_contract",detectorModule.classifyLeaderMarket("AAPL")==="us"&&detectorModule.classifyLeaderMarket("6861.T")==="japan"&&detectorModule.classifyLeaderMarket("222800.KQ")==="korea"&&detectorModule.classifyLeaderMarket("000725.SZ")==="other","market boundaries");
+  const fixtureDate="2026-09-08",fixtureCutoff=Date.parse(morningStages.cutoff(fixtureDate));
+  const naver = time=>detectorModule.parseNaverKoreaBasic({itemCode:"222800",fluctuationsRatio:"1.11",localTradedAt:new Date(time).toISOString()},{yahoo:"222800.KQ"},fixtureDate);
+  addCheck(checks,"korea_naver_percent_fixture",naver(fixtureCutoff-1).ok===true&&naver(fixtureCutoff-1).percent===1.11,"KOSDAQ percent and source timestamp");
+  addCheck(checks,"korea_naver_after_cutoff_rejected",naver(fixtureCutoff+1).ok===false,"late source rejected");
+  addCheck(checks,"korea_naver_missing_percent_rejected",detectorModule.parseNaverKoreaBasic({itemCode:"222800",fluctuationsRatio:null,localTradedAt:new Date(fixtureCutoff-1).toISOString()},{yahoo:"222800.KQ"},fixtureDate).ok===false,"null is not zero");
   const calendarModule = require(path.join(ROOT, "scripts", "us-equity-market-calendar.js"));
   const holidayFixture = calendarModule.buildUsEquityMarketCalendar("2026-09-08");
   addCheck(checks, "us_market_labor_day_runtime_switch", holidayFixture.us_market_status === "market_closed" && holidayFixture.no_new_us_session === true && holidayFixture.us_holiday_name === "Labor Day", JSON.stringify(holidayFixture));
 
-  const preflight = readText("scripts/run-opening-report-0820-preflight.js");
-  addCheck(checks, "preflight_freezes_at_0820", preflight.includes("08:20:59.999 Asia/Taipei"), "08:20 minute-end freeze must be explicit");
+  const preflight = readText("scripts/run-opening-report-0830-preflight.js");
+  addCheck(checks, "preflight_freezes_at_0830", preflight.includes("morningRecovery.label(tradeDate)") && morningRecovery.label("2000-01-01").includes(morningStages.stage().time+":59.999"), "08:20 minute-end freeze must be explicit");
 
   const runner = readText("scripts/run-opening-report-0830-production.js");
-  const fieldAck = readText("scripts/verify-opening-report-0830-mother-pool-field-ack.js");
+  const handoffAck = readText("scripts/verify-opening-report-0830-mother-pool-handoff-ack.js");
+  const persistenceAck = readText("scripts/verify-opening-report-0830-mother-pool-persistence-ack.js");
+  const motherPoolWriter = readText("scripts/run-daytrade-source-writer.js");
+  const motherPoolEvidence = readText("lib/opening-report-0830-mother-pool-evidence.js");
   addCheck(checks, "runner_owns_non_trading_day_guard", runner.includes("isTwseTradingDay") && runner.includes("market_calendar_non_trading_day") && runner.includes("no_side_effects") && runner.includes("line_push_attempted: false") && runner.includes("mother_pool_bridge_attempted: false"), "direct runner invocation must skip before every side effect on market-closed days");
-  addCheck(checks, "runner_consumes_frozen_snapshot_only", runner.includes("frozen 08:20 evidence only") || runner.includes("凍結"), "08:30 runner must not refetch overseas direction");
+  addCheck(checks, "runner_consumes_frozen_snapshot_only", runner.includes("frozen 08:20 evidence only") || runner.includes("凍結"), "08:20 runner must not refetch overseas direction");
   addCheck(checks, "runner_observation_only", runner.includes("formal_candidates: 0") && runner.includes("watchlist_only: true") && runner.includes("industry_observation_only"), "morning report must never create formal candidates");
-  addCheck(checks, "runner_does_not_read_or_grade_intraday_gate", !runner.includes("readTaiwanGate") && !runner.includes("daytrade-unattended-gate-watchdog"), "08:30 report must not read, calculate, or grade intraday Gate A-D");
+  addCheck(checks, "runner_does_not_read_or_grade_intraday_gate", !runner.includes("readTaiwanGate") && !runner.includes("daytrade-unattended-gate-watchdog"), "08:20 report must not read, calculate, or grade intraday Gate A-D");
   addCheck(checks, "runner_preserves_previous_good_on_incomplete_briefing", runner.includes("briefing?.ok !== true") && runner.includes("preserve_previous_good: true"), "an incomplete briefing must never overwrite the last complete terminal snapshot");
   addCheck(checks, "line_delivery_contract_present", runner.includes("line-push-receipt") && runner.includes("pushLine") && runner.includes("lineReportFlex"), "LINE Flex delivery remains canonical");
-  addCheck(checks, "line_customer_layout_fixed", ["📈 08:30 漲幅族群晨報", "15 個產業掃描完成", "海外平均漲幅", "日韓早盤漲幅", "台股 A：", "台股 B："].every((token) => runner.includes(token)), "LINE customer layout must support regular and US-closed fallback cards");
+  addCheck(checks, "line_customer_layout_fixed", ["morningRecovery.title(tradeDate)", "15 個產業對照完成（10 個偵測、5 個停用）", "海外平均漲幅", "日韓早盤漲幅", "台股 A：", "台股 B："].every((token) => runner.includes(token)), "LINE customer layout must support regular and US-closed fallback cards");
   const lineLayoutSource = (runner.match(/function lineReportText[\s\S]*?function invalidLineTarget/) || [""])[0];
   addCheck(checks, "line_customer_layout_hides_internal_status", ["掃描：15／15", "資料截點：08:20", "Mother Pool：", "台股 Gate：", "狀態：", "FAIL_CLOSED", "僅供觀察，不是自動下單訊號"].every((token) => !lineLayoutSource.includes(token)), "LINE customer card must not expose internal operations");
   addCheck(checks, "us_closed_asia_positive_leader_top3_handoff", runner.includes("us_market_closed_asia_positive_leader_top3") && runner.includes("asiaPositiveLeaderObservations") && runner.includes("priority_overseas_leaders"), "US-closed days must hand positive Japan/Korea leader Top 3 mappings to Mother Pool");
   addCheck(checks, "positive_top3_zero_to_three_is_valid", runner.includes("displayTop3.length <= 3") && !runner.includes("displayTop3.length === 3"), "Zero to three positive observations is a valid completed report");
-  addCheck(checks, "bridge_priority_observation_nonblocking", runner.includes("us_open_positive_industry_or_us_closed_asia_positive_leader_top3_v2") && runner.includes("It must never change the 08:30 report delivery decision."), "Mother Pool bridge only changes scan priority");
-  addCheck(checks, "runner_requires_mother_pool_field_ack", runner.includes("runMotherPoolFieldAck") && runner.includes("mother_pool_field_ack_ok") && runner.includes("mother_pool_field_ack_not_complete"), "final complete must require Mother Pool anon readback field acknowledgement");
-  addCheck(checks, "mother_pool_field_ack_contract_present", fieldAck.includes("opening-report-0830-mother-pool-field-ack-v1") && fieldAck.includes("credential_role: \"anon_read_only\"") && fieldAck.includes("db_readback_ok"), "Mother Pool must publish its own canonical field acknowledgement receipt");
-  addCheck(checks, "mother_pool_field_ack_checks_observation_only", ["formal_candidate_count", "formal_candidate_allowed", "forbidden_publish_guard", "market_not_TW"].every((token) => fieldAck.includes(token)), "field acknowledgement must preserve observation-only and canonical TW market fields");
+  addCheck(checks, "bridge_priority_observation_nonblocking", runner.includes("us_open_positive_industry_or_us_closed_asia_positive_leader_top3_v2") && runner.includes("It must never change the 08:20 report delivery decision."), "Mother Pool bridge only changes scan priority");
+  addCheck(checks, "old_immediate_field_ack_retired", !exists(RETIRED_FIELD_ACK_SCRIPT) && RETIRED_FIELD_ACK_PACKAGE_KEYS.every((key) => !JSON.stringify(readJson(path.join(ROOT, "package.json"))).includes(key)), "old immediate field ACK verifier and aliases must be absent");
+  addCheck(checks, "runner_requires_mother_pool_handoff_ack", runner.includes("runMotherPoolHandoffAck") && runner.includes("mother_pool_handoff_ack_ok") && runner.includes("mother_pool_persistence_ack_pending"), "runner must stop at HANDOFF_ACK and wait for persistence verification");
+  addCheck(checks, "mother_pool_handoff_ack_contract_present", handoffAck.includes("opening-report-0830-mother-pool-handoff-ack-v2") && handoffAck.includes("credential_role: \"anon_read_only\"") && handoffAck.includes("db_readback_ok"), "Mother Pool must publish HANDOFF_ACK after initial anon readback");
+  addCheck(checks, "mother_pool_persistence_ack_contract_present", persistenceAck.includes("opening-report-0830-mother-pool-persistence-ack-v1") && persistenceAck.includes("writer_refreshes_observed") && persistenceAck.includes("required_writer_refreshes") && persistenceAck.includes("db_readback_ok"), "PERSISTENCE_ACK must verify canonical Writer rewrites");
+  addCheck(checks, "mother_pool_handoff_ack_checks_observation_only", ["formal_candidate_count", "formal_candidate_allowed", "forbidden_publish_guard", "market_not_TW"].every((token) => handoffAck.includes(token)), "handoff acknowledgement must preserve observation-only and canonical TW market fields");
+  addCheck(checks, "mother_pool_accepts_canonical_twse_tpex_markets", motherPoolEvidence.includes('["TW", "TWSE", "TPEX"]') && handoffAck.includes("market_not_TW_TWSE_TPEX"), "TWSE and TPEX are canonical Taiwan markets and must not be rejected as non-Taiwan");
+  addCheck(checks, "mother_pool_writer_preserves_morning_evidence", motherPoolWriter.includes("openingReportSeedBySymbol") && motherPoolWriter.includes("mergeOpeningReportEvidence") && motherPoolWriter.includes("openingReport0830IndustryBias") && motherPoolWriter.includes("preserveMorningWatchRows") && readText("lib/opening-report-writer-preservation.js").includes("opening_report_0830_priority_reason"), "canonical Mother Pool rewrites must reconstruct verified morning evidence from per-symbol reports instead of erasing it");
+  addCheck(checks, "mother_pool_overlap_evidence_contract_present", motherPoolEvidence.includes("industry_observations") && motherPoolEvidence.includes("linked_industries") && handoffAck.includes("overlapping_industries_preserved"), "one stock must retain every linked Top-3 industry observation");
+  const handoffAckFixture = run("node", ["scripts/verify-opening-report-0830-mother-pool-handoff-ack.js", "--fixture"]);
+  addCheck(checks, "mother_pool_handoff_ack_multi_industry_fixture", handoffAckFixture.ok && handoffAckFixture.text.includes('"overlapping_industries_preserved": true') && handoffAckFixture.text.includes('"db_twse": true') && handoffAckFixture.text.includes('"db_tpex": true'), handoffAckFixture.text.trim());
+  const persistenceAckFixture = run("node", ["scripts/verify-opening-report-0830-mother-pool-persistence-ack.js", "--fixture"]);
+  addCheck(checks, "mother_pool_persistence_ack_fixture", persistenceAckFixture.ok && persistenceAckFixture.text.includes('"writer_refreshes_observed": 2') && persistenceAckFixture.text.includes('"db_readback_ok": true'), persistenceAckFixture.text.trim());
 
   const wrapper = readText("run-opening-report-0830-production-wrapper.ps1");
+  const clockTests = run("node", ["scripts/test-opening-report-unified-0830.js"]);
+  addCheck(checks,"unified_0830_clock_and_source_chain",clockTests.ok,clockTests.text.trim());
   addCheck(checks, "wrapper_owns_non_trading_day_guard", wrapper.includes("check-market-calendar-action.js") && wrapper.includes("market_calendar_non_trading_day") && wrapper.includes("line_push_attempted = $false") && wrapper.includes("mother_pool_bridge_attempted = $false"), "Task Scheduler wrapper must guard independently before invoking the runner");
-  addCheck(checks, "wrapper_runner_verifier_receipt_chain", wrapper.includes("run-opening-report-0830-production.js") && wrapper.includes("verify-opening-report-morning-contract.js") && wrapper.includes("opening-report-morning-wrapper-v1"), "wrapper must be runner -> canonical verifier -> wrapper receipt");
+  addCheck(checks, "wrapper_runner_verifier_receipt_chain", wrapper.includes("run-opening-report-0830-production.js") && wrapper.includes("verify-opening-report-0830-mother-pool-persistence-ack.js") && wrapper.includes("verify-opening-report-morning-contract.js") && wrapper.includes("opening-report-morning-wrapper-v1"), "wrapper must be runner -> PERSISTENCE_ACK -> canonical verifier -> wrapper receipt");
   addCheck(checks, "wrapper_audited_line_receipt_recovery", wrapper.includes("ReuseLineReceipt") && wrapper.includes("--reuse-line-receipt") && wrapper.includes("existingLine.line_push_ok"), "bounded recovery may reuse only the already successful same-run LINE receipt");
   addCheck(checks, "wrapper_has_no_telegram_execution", !wrapper.includes("send-opening-report-0830-telegram") && !wrapper.includes("TELEGRAM_BOT_TOKEN") && wrapper.includes("telegram_enabled = $false"), "Telegram must remain retired from morning wrapper");
-  addCheck(checks, "wrapper_complete_requires_all_channels", wrapper.includes("$linePersonalOk") && wrapper.includes("$lineGroupOk") && wrapper.includes("$terminalOk") && wrapper.includes("$bridgeOk") && wrapper.includes("$fieldAckOk") && wrapper.includes("$expected -eq 15") && wrapper.includes("$scanned -eq 15"), "complete must require 15/15 + LINE personal/group + terminal + Mother Pool field acknowledgement");
+  addCheck(checks, "wrapper_complete_requires_all_channels", wrapper.includes("$linePersonalOk") && wrapper.includes("$lineGroupOk") && wrapper.includes("$terminalOk") && wrapper.includes("$bridgeOk") && wrapper.includes("$handoffAckOk") && wrapper.includes("$persistenceAckOk") && wrapper.includes("$expected -eq 15") && wrapper.includes("$scanned -eq 15"), "complete must require 15/15 + LINE personal/group + terminal + HANDOFF_ACK + PERSISTENCE_ACK");
 
   const bridge = readText("scripts/apply-opening-report-0830-priority-bias-bridge.js");
   addCheck(checks, "bridge_cannot_publish_formal_candidates", bridge.includes("formal_candidate_allowed") && bridge.includes("formal_candidate_count") && bridge.includes("forbidden_publish_guard"), "bridge only boosts scan priority");
@@ -251,7 +297,8 @@ function staticContractChecks(checks) {
   const terminalApp = readText("terminal-app.js");
   const terminalShell = readText("terminal-desktop-fast-shell.js");
   const marketApi = readText("api/market-ai-live.js");
-  addCheck(checks, "terminal_displays_0830_window_observation_only", (terminalApp + terminalShell).includes("08:30-08:59") && (terminalApp + terminalShell).includes("僅供觀察排序"), "terminal must show morning report as observation-only");
+  const sharedMorningView = fs.readFileSync(path.join(ROOT,"terminal-opening-report-view.js"),"utf8");
+  addCheck(checks, "terminal_displays_actual_cutoff_observation_only", sharedMorningView.includes("data?.report_time") && sharedMorningView.includes("data-morning-cutoff") && sharedMorningView.includes("data?.source_cutoff") && sharedMorningView.includes("僅供觀察排序") && terminalShell.includes("FUMAN_OPENING_REPORT_VIEW.render"), "shared desktop/mobile morning view must remain observation-only");
   addCheck(checks, "terminal_weekend_uses_last_complete_morning_report", marketApi.includes("const allowPreviousTradingDay = isWeekend(clock)") && marketApi.includes("allowLatestFallback: allowPreviousTradingDay") && marketApi.includes("previousTradingDay: payloadDate !== clock.ymd"), "weekends must retain the last completed trading-day morning report");
   addCheck(checks, "terminal_morning_report_uses_canonical_15_industries", marketApi.includes("OPENING_REPORT_0830_REQUIRED_INDUSTRIES = OPENING_REPORT_0830_INDUSTRY_MAP.length") && marketApi.includes("frozenIndustryRows.length >= OPENING_REPORT_0830_REQUIRED_INDUSTRIES") && !marketApi.includes("industryRows.length < 19"), "terminal reconstruction must follow the canonical 15-industry contract");
 }
@@ -285,9 +332,9 @@ function expectedAsiaPositiveLeaderTop3(leaders) {
 function currentReceiptChecks(checks, tradeDate) {
   const ymd = compactDate(tradeDate);
   const paths = {
-    preflight: path.join(REPORT_DIR, "opening-report-0820-preflight-receipt-" + ymd + ".json"),
-    leaders: path.join(REPORT_DIR, "opening-report-0820-overseas-leaders-" + ymd + ".json"),
-    snapshot: path.join(REPORT_DIR, "opening-report-0820-market-snapshot-" + ymd + ".json"),
+    preflight: path.join(REPORT_DIR, "opening-report-0830-preflight-receipt-" + ymd + ".json"),
+    leaders: path.join(REPORT_DIR, "opening-report-0830-overseas-leaders-" + ymd + ".json"),
+    snapshot: path.join(REPORT_DIR, "opening-report-0830-market-snapshot-" + ymd + ".json"),
     final: path.join(REPORT_DIR, "opening-report-0830-final-receipt-" + ymd + ".json"),
     line: path.join(REPORT_DIR, "line-push-receipt-" + ymd + ".json"),
   };
@@ -303,8 +350,11 @@ function currentReceiptChecks(checks, tradeDate) {
   const snapshot = readJson(paths.snapshot);
   const finalReceipt = readJson(paths.final);
   const line = readJson(paths.line);
+  addCheck(checks, "current_unified_source_run_identity", !!finalReceipt.run_id && [preflight,leaders,snapshot].every(row => row.run_id === finalReceipt.run_id), "source freeze, snapshot and final must share the unified run");
   const windowStartMs = Date.parse(tradeDate + "T08:00:00+08:00");
-  const cutoffMs = Date.parse(tradeDate + "T08:20:59.999+08:00");
+  const cutoffMs = Date.parse(morningRecovery.cutoff(tradeDate));
+  const recovery = morningRecovery.context(tradeDate);
+  if(recovery) addCheck(checks,"authorized_recovery_source_identity",[preflight,leaders,snapshot].every(row=>row.recovery?.run_id===recovery.run_id)&&finalReceipt.run_id===recovery.run_id,"same-day recovery must be explicit in all frozen sources");
 
   addCheck(checks, "current_preflight_ok", preflight.ok === true || preflight.status === "OK" || preflight.report_status === "REPORT_OK" || preflight.report_status === "REPORT_DEGRADED", JSON.stringify({ ok: preflight.ok, status: preflight.status, report_status: preflight.report_status }));
 
@@ -316,8 +366,18 @@ function currentReceiptChecks(checks, tradeDate) {
     const sourceMs = Date.parse(String(row.source_time || ""));
     return Number.isFinite(sourceMs) && sourceMs >= windowStartMs && sourceMs <= cutoffMs;
   });
-  addCheck(checks, "current_no_source_after_0820", allSourcesWithinCutoff, "cutoff=" + tradeDate + "T08:20:00+08:00");
+  addCheck(checks, "current_no_source_after_0830", allSourcesWithinCutoff, "cutoff=" + tradeDate + "T08:20:00+08:00");
 
+  addCheck(checks,"current_disabled_markets_absent",rows.every(row=>morningStages.allowed(row.yahoo_symbol)),"Japan/Korea disabled");
+  addCheck(checks,"current_source_policy",leaders.detection_policy === (morningStages.stage().id === "us_0820" ? "us_only_tx_night_0820_v1" : "asia_only_0850_v1"),"reject old source scope");
+  if(morningStages.stage().id === "asia_0850") {
+    const realtime=require("../lib/opening-report-japan-realtime"),japan=rows.filter(row=>realtime.SYMBOLS.includes(row.yahoo_symbol));
+    addCheck(checks,"current_japan_realtime_primary",japan.length===realtime.SYMBOLS.length&&japan.every(row=>row.source_provider===realtime.PROVIDER&&row.source===realtime.SOURCE),"five approved TSE sources");
+    addCheck(checks,"current_japan_realtime_evidence",japan.filter(row=>row.ok===true).every(row=>realtime.receiptValid(row,tradeDate)),"timestamp, zero delay, raw fields and numeric consistency");
+    const korea=rows.filter(row=>/\.(KS|KQ)$/.test(row.yahoo_symbol));
+    addCheck(checks,"current_korea_uses_naver_primary",korea.length>0&&korea.every(row=>row.source==="Naver Finance KRX basic"),"KRX/KOSDAQ primary source");
+    addCheck(checks,"current_naver_korea_primary_valid",korea.filter(row=>row.ok===true).every(row=>row.source_fields?.includes("fluctuationsRatio")&&row.source_fields?.includes("localTradedAt")&&typeof row.percent==="number"&&Number.isFinite(row.percent)),"no null or nonnumeric percentages");
+  }
   const usMarket = leaders.us_market || {};
   addCheck(checks, "current_us_market_status_contract", ["regular", "early_close", "market_closed"].includes(usMarket.us_market_status) && typeof usMarket.no_new_us_session === "boolean" && usMarket.calendar_timezone === "America/New_York", JSON.stringify(usMarket));
   const currentDetectorModule = require(path.join(ROOT, "scripts", "run-opening-report-0830-overseas-leader-detector.js"));
@@ -325,20 +385,21 @@ function currentReceiptChecks(checks, tradeDate) {
   addCheck(checks, "current_us_closed_rows_not_promoted", usMarket.no_new_us_session !== true || usRows.every((row) => row.ok !== true && row.percent == null && row.reason_code === "us_market_closed_no_new_session"), "closed US rows must be background-only and excluded from ranking");
   const otherMarketRows = rows.filter((row) => currentDetectorModule.classifyLeaderMarket(row.yahoo_symbol) === "other");
   addCheck(checks, "current_other_market_rows_not_ranked", otherMarketRows.every((row) => row.ok !== true && row.percent == null), JSON.stringify(otherMarketRows.map((row) => ({ symbol: row.yahoo_symbol, reason_code: row.reason_code }))));
-  const koreaRows = rows.filter((row) => /\.(?:KS|KQ)$/i.test(String(row.yahoo_symbol || "")));
-  const naverRequired = tradeDate >= KOREA_NAVER_ENFORCE_FROM;
-  addCheck(checks, "current_korea_uses_naver_primary", !naverRequired || koreaRows.every((row) => row.source === "Naver Finance KRX basic"), JSON.stringify({ enforce_from: KOREA_NAVER_ENFORCE_FROM, required: naverRequired, count: koreaRows.length, sources: [...new Set(koreaRows.map((row) => row.source))] }));
-  addCheck(checks, "current_naver_korea_primary_valid", koreaRows.filter((row) => row.ok === true).every((row) => row.source === "Naver Finance KRX basic" && Array.isArray(row.source_fields) && row.source_fields.includes("fluctuationsRatio") && row.source_fields.includes("localTradedAt") && Number.isFinite(Number(row.percent))), JSON.stringify(koreaRows.filter((row) => row.ok === true).map((row) => ({ symbol: row.yahoo_symbol, percent: row.percent, source: row.source }))));
+  const fujikuraRows = rows.filter((row) => String(row.yahoo_symbol || "").toUpperCase() === "5803.T");
+  addCheck(checks, "current_fujikura_retired", tradeDate < FUJIKURA_RETIRE_ENFORCE_FROM || fujikuraRows.length === 0, JSON.stringify({enforce_from:FUJIKURA_RETIRE_ENFORCE_FROM,rows:fujikuraRows.map(row=>row.yahoo_symbol)}));
+  const boeRows = rows.filter((row) => String(row.name || "").toUpperCase() === "BOE" || String(row.yahoo_symbol || "").toUpperCase() === "000725.SZ");
+  addCheck(checks, "current_boe_000725sz_retired", tradeDate < BOE_RETIRE_ENFORCE_FROM || boeRows.length === 0, JSON.stringify({ enforce_from: BOE_RETIRE_ENFORCE_FROM, rows: boeRows }));
 
   addCheck(checks, "current_snapshot_trade_date", snapshot.trade_date === tradeDate || snapshot.tradeDate === tradeDate || snapshot.date === tradeDate, JSON.stringify({ trade_date: snapshot.trade_date, tradeDate: snapshot.tradeDate, date: snapshot.date }));
-  addCheck(checks, "current_report_status_is_report_only", ["REPORT_OK", "REPORT_DEGRADED", "COMPLETE", "complete"].includes(finalReceipt.report_status || finalReceipt.status), finalReceipt.report_status || finalReceipt.status);
+  addCheck(checks, "current_report_status_is_report_only", ["REPORT_OK", "REPORT_DEGRADED", "COMPLETE", "complete", "WAITING_CANONICAL_VERIFIER"].includes(finalReceipt.report_status), finalReceipt.report_status || finalReceipt.status);
+  addCheck(checks, "current_runner_and_persistence_ready", finalReceipt.contract === "opening_report_0830_complete_v1" && finalReceipt.runner_complete === true && finalReceipt.mother_pool_persistence_ack_ok === true && ((finalReceipt.complete === true && finalReceipt.status === "complete" && finalReceipt.first_blocker == null) || (finalReceipt.complete === false && finalReceipt.status === "waiting_canonical_verifier" && finalReceipt.first_blocker === "canonical_verifier_pending")), JSON.stringify({ contract: finalReceipt.contract, complete: finalReceipt.complete, status: finalReceipt.status, first_blocker: finalReceipt.first_blocker }));
   addCheck(checks, "current_report_observation_only", finalReceipt.watchlist_only === true && Number(finalReceipt.formal_candidates || 0) === 0, JSON.stringify({ watchlist_only: finalReceipt.watchlist_only, formal_candidates: finalReceipt.formal_candidates }));
   addCheck(checks, "current_scan_15_of_15", Number(finalReceipt.expected_industry_count) === 15 && Number(finalReceipt.scanned_industry_count) === 15, JSON.stringify({ expected_industry_count: finalReceipt.expected_industry_count, scanned_industry_count: finalReceipt.scanned_industry_count }));
 
   const priorityRows = Array.isArray(finalReceipt.priority_observations) ? finalReceipt.priority_observations : [];
   const priorityContractOk = priorityRows.length <= 3 && priorityRows.every((row, index) => Number(row.rank) === index + 1 && Number(row.percent) > 0);
   addCheck(checks, "current_priority_observation_zero_to_three_valid", priorityContractOk && finalReceipt.priority_observation_contract_ok === true && Number(finalReceipt.priority_observation_count) === priorityRows.length, JSON.stringify(priorityRows.map((row) => ({ rank: row.rank, symbol: row.overseas_symbol || null, percent: row.percent }))));
-  if (usMarket.no_new_us_session === true) {
+  if (usMarket.no_new_us_session === true && morningStages.stage().id === "us_0820") {
     const expectedAsia = expectedAsiaPositiveLeaderTop3(leaders);
     const actualAsia = priorityRows.map((row) => ({ rank: Number(row.rank), symbol: row.overseas_symbol, percent: Number(row.percent) }));
     addCheck(checks, "current_us_closed_asia_positive_leader_top3_exact", finalReceipt.priority_observation_mode === "us_market_closed_asia_positive_leader_top3" && JSON.stringify(actualAsia) === JSON.stringify(expectedAsia), JSON.stringify({ expected: expectedAsia, actual: actualAsia }));
@@ -358,7 +419,7 @@ function currentReceiptChecks(checks, tradeDate) {
   const hasGroup = line.has_group_target === true || line.hasGroupTarget === true;
   const deliveredCount = Number(line.delivered_count || line.deliveredCount || 0);
   const lineAttempted = line.line_push_attempted === true;
-  addCheck(checks, "current_line_user_and_group_delivery", line.ok === true && lineAttempted && targetCount >= 2 && deliveredCount >= 2 && hasUser && hasGroup, JSON.stringify({ ok: line.ok, line_push_attempted: lineAttempted, target_count: targetCount, delivered_count: deliveredCount, has_user_target: hasUser, has_group_target: hasGroup }));
+  addCheck(checks, "current_line_user_and_group_delivery", require("../lib/opening-report-line-policy").accepted(line,finalReceipt.run_id,finalReceipt.delivery_content_hash,tradeDate), JSON.stringify({ ok: line.ok, line_push_attempted: lineAttempted, target_count: targetCount, delivered_count: deliveredCount, has_user_target: hasUser, has_group_target: hasGroup }));
 
   const terminal = finalReceipt.terminal_briefing_snapshot || {};
   addCheck(checks, "current_terminal_snapshot_ok", terminal.ok === true, JSON.stringify({ ok: terminal.ok, key: terminal.key }));
@@ -377,32 +438,91 @@ function currentReceiptChecks(checks, tradeDate) {
   addCheck(checks, "current_bridge_aggregate_ok", bridge?.status === "BRIDGE_OK" && Number(bridge?.successful_industry_count || 0) === Number(bridge?.industry_count || 0) && Number(bridge?.observation_count || 0) === priorityRows.length, JSON.stringify({ status: bridge?.status, observation_count: bridge?.observation_count, industry_count: bridge?.industry_count, successful_industry_count: bridge?.successful_industry_count }));
   addCheck(checks, "current_bridge_same_run_id", bridge?.run_id === runId, String(bridge?.run_id || "") + "/" + String(runId || ""));
   addCheck(checks, "current_bridge_observation_only", bridge?.forbidden_publish_guard === true && Number(bridge?.formal_candidate_count || 0) === 0 && bridge?.formal_candidate_allowed === false, JSON.stringify({ forbidden_publish_guard: bridge?.forbidden_publish_guard, formal_candidate_count: bridge?.formal_candidate_count, formal_candidate_allowed: bridge?.formal_candidate_allowed }));
-  const fieldAckPath = String(finalReceipt.mother_pool_field_ack_receipt || path.join(RUNTIME, "data", "scan-receipts", "opening-report-0830-mother-pool-field-ack-" + compactDate(tradeDate) + ".json"));
-  const fieldAckReceipt = fieldAckPath && exists(fieldAckPath) ? readJson(fieldAckPath) : null;
-  addCheck(checks, "current_mother_pool_field_ack_exists", Boolean(fieldAckReceipt), fieldAckPath);
-  addCheck(checks, "current_mother_pool_field_ack_same_run", fieldAckReceipt?.report_run_id === runId, String(fieldAckReceipt?.report_run_id || "") + "/" + String(runId || ""));
-  addCheck(checks, "current_mother_pool_field_ack_complete", fieldAckReceipt?.contract === "opening-report-0830-mother-pool-field-ack-v1" && fieldAckReceipt?.complete === true && fieldAckReceipt?.db_readback_ok === true && fieldAckReceipt?.first_blocker == null, JSON.stringify({ contract: fieldAckReceipt?.contract, complete: fieldAckReceipt?.complete, db_readback_ok: fieldAckReceipt?.db_readback_ok, first_blocker: fieldAckReceipt?.first_blocker }));
-  addCheck(checks, "current_mother_pool_field_ack_observation_only", Number(fieldAckReceipt?.formal_candidate_count || 0) === 0 && fieldAckReceipt?.formal_candidate_allowed === false && fieldAckReceipt?.forbidden_publish_guard === true, JSON.stringify({ formal_candidate_count: fieldAckReceipt?.formal_candidate_count, formal_candidate_allowed: fieldAckReceipt?.formal_candidate_allowed, forbidden_publish_guard: fieldAckReceipt?.forbidden_publish_guard }));
+  const handoffAckPath = String(finalReceipt.mother_pool_handoff_ack_receipt || path.join(RUNTIME, "data", "scan-receipts", "opening-report-0830-mother-pool-handoff-ack-" + compactDate(tradeDate) + ".json"));
+  const handoffAckReceipt = handoffAckPath && exists(handoffAckPath) ? readJson(handoffAckPath) : null;
+  addCheck(checks, "current_mother_pool_handoff_ack_exists", Boolean(handoffAckReceipt), handoffAckPath);
+  addCheck(checks, "current_mother_pool_handoff_ack_same_run", handoffAckReceipt?.report_run_id === runId, String(handoffAckReceipt?.report_run_id || "") + "/" + String(runId || ""));
+  addCheck(checks, "current_mother_pool_handoff_ack_complete", handoffAckReceipt?.contract === "opening-report-0830-mother-pool-handoff-ack-v2" && handoffAckReceipt?.complete === true && handoffAckReceipt?.db_readback_ok === true && handoffAckReceipt?.first_blocker == null, JSON.stringify({ contract: handoffAckReceipt?.contract, complete: handoffAckReceipt?.complete, db_readback_ok: handoffAckReceipt?.db_readback_ok, first_blocker: handoffAckReceipt?.first_blocker }));
+  addCheck(checks,"current_handoff_dispositions_v1",handoffAckReceipt?.disposition_contract==="opening-report-handoff-dispositions-v1" && handoffAckReceipt?.accepted_count===handoffAckReceipt?.accepted_readback_count && Array.isArray(handoffAckReceipt?.business_excluded_symbols),"legacy all-mapped-symbol ACK cannot satisfy current receipt");
+  addCheck(checks, "current_mother_pool_handoff_ack_observation_only", Number(handoffAckReceipt?.formal_candidate_count || 0) === 0 && handoffAckReceipt?.formal_candidate_allowed === false && handoffAckReceipt?.forbidden_publish_guard === true, JSON.stringify({ formal_candidate_count: handoffAckReceipt?.formal_candidate_count, formal_candidate_allowed: handoffAckReceipt?.formal_candidate_allowed, forbidden_publish_guard: handoffAckReceipt?.forbidden_publish_guard }));
+  const persistenceAckPath = String(finalReceipt.mother_pool_persistence_ack_receipt || path.join(RUNTIME, "data", "scan-receipts", "opening-report-0830-mother-pool-persistence-ack-" + compactDate(tradeDate) + ".json"));
+  const persistenceAckReceipt = persistenceAckPath && exists(persistenceAckPath) ? readJson(persistenceAckPath) : null;
+  addCheck(checks, "current_mother_pool_persistence_ack_exists", Boolean(persistenceAckReceipt), persistenceAckPath);
+  addCheck(checks, "current_mother_pool_persistence_ack_same_run", persistenceAckReceipt?.report_run_id === runId, String(persistenceAckReceipt?.report_run_id || "") + "/" + String(runId || ""));
+  addCheck(checks, "current_mother_pool_persistence_ack_complete", persistenceAckReceipt?.contract === "opening-report-0830-mother-pool-persistence-ack-v1" && persistenceAckReceipt?.complete === true && persistenceAckReceipt?.db_readback_ok === true && Number(persistenceAckReceipt?.writer_refreshes_observed || 0) >= 2 && persistenceAckReceipt?.first_blocker == null, JSON.stringify({ contract: persistenceAckReceipt?.contract, complete: persistenceAckReceipt?.complete, db_readback_ok: persistenceAckReceipt?.db_readback_ok, writer_refreshes_observed: persistenceAckReceipt?.writer_refreshes_observed, first_blocker: persistenceAckReceipt?.first_blocker }));
+  const refreshTimes = persistenceAckReceipt?.writer_refresh_timestamps || [];
+  const originalHandoff = persistenceAckReceipt?.handoff_ack_receipt ? readJson(persistenceAckReceipt.handoff_ack_receipt) : null;
+  addCheck(checks,"current_persistence_original_handoff_identity",originalHandoff?.complete===true&&originalHandoff?.db_readback_ok===true&&originalHandoff?.report_run_id===runId&&originalHandoff?.trade_date===tradeDate,"original handoff of the two observed refreshes");
+  const handoffMs = Date.parse(originalHandoff?.checked_at || "");
+  const persistedMs = Date.parse(persistenceAckReceipt?.checked_at || "");
+  addCheck(checks, "current_persistence_two_distinct_refreshes_after_handoff", new Set(refreshTimes).size >= 2 && refreshTimes.every(t => Date.parse(t) > handoffMs && Date.parse(t) <= persistedMs), JSON.stringify(refreshTimes));
+  addCheck(checks, "current_ack_dates_match_report", handoffAckReceipt?.trade_date === tradeDate && persistenceAckReceipt?.trade_date === tradeDate, tradeDate);
+  const readback = persistenceAckReceipt?.persistence_readback_receipt ? readJson(persistenceAckReceipt.persistence_readback_receipt) : null;
+  addCheck(checks, "current_persistence_live_readback_link", readback?.complete === true && readback?.db_readback_ok === true && readback?.report_run_id === runId && readback?.trade_date === tradeDate && Date.parse(readback.checked_at) >= Math.max(...refreshTimes.map(Date.parse)) && JSON.stringify(readback.db_readback_symbols || []) === JSON.stringify(persistenceAckReceipt.db_readback_symbols || []), persistenceAckReceipt?.persistence_readback_receipt || "missing");
+  addCheck(checks, "current_final_links_persistence_ack", finalReceipt.mother_pool_handoff_ack_ok === true && finalReceipt.mother_pool_persistence_ack_ok === true, JSON.stringify({ handoff: finalReceipt.mother_pool_handoff_ack_ok, persistence: finalReceipt.mother_pool_persistence_ack_ok }));
+}
+
+function renderedDeliveryChecks(checks, tradeDate, final) {
+  const file=path.join(REPORT_DIR,"rendered",compactDate(tradeDate),"opening-report-rendered.json");
+  let receipt=null;
+  try { receipt=readJson(file); } catch { /* Missing or invalid evidence remains a failed check. */ }
+  addCheck(checks,"current_rendered_receipt",receipt?.contract==="opening-report-rendered-v1" && receipt.complete===true && receipt.diagnostic===false && receipt.run_id===final.run_id && receipt.trade_date===tradeDate && receipt.delivery_content_hash===final.delivery_content_hash && receipt.full_content_hash_ok===true,"same-run live desktop/mobile required");
+  const age=Date.now()-Date.parse(receipt?.checked_at||"");
+  addCheck(checks,"current_rendered_receipt_fresh",age>=0 && age<30*60*1000,"rendered evidence within 30 minutes");
+  const rows=receipt?.results||[];
+  addCheck(checks,"current_rendered_surfaces",["desktop","mobile-portrait","mobile-landscape","scorecard88"].every(surface=>rows.some(row=>row.surface===surface && row.ok===true && row.run_id===final.run_id && row.hash===final.delivery_content_hash && row.screenshot && exists(row.screenshot) && require("crypto").createHash("sha256").update(fs.readFileSync(row.screenshot)).digest("hex")===row.screenshot_sha256)),"actual rendered surfaces and original screenshots");
+  addCheck(checks,"current_rendered_night_futures",rows.length===4 && rows.every(row=>row.night_text===require("../lib/opening-report-night-futures").summary(final.night_futures) && row.night_visible===true),"night futures visible on all three layouts");
+  const expected=require("./verify-opening-report-rendered").expectedRows(final).map(row=>({...row,percent:Number(row.percent.toFixed(2))}));
+  const actualRows=row=>(row.rows||[]).map(item=>({...item,a:(item.a||[]).map(({symbol,name})=>({symbol,name})),b:(item.b||[]).map(({symbol,name})=>({symbol,name}))}));
+  addCheck(checks,"current_rendered_full_A_B",rows.length===4 && rows.every(row=>JSON.stringify(actualRows(row))===JSON.stringify(expected) && row.industryCount===15 && (expected.length>0||row.zero===true)),"independent full A/B comparison against runner");
+  addCheck(checks,"current_rendered_production_origin",receipt?.base_url==="https://fuman-terminal.vercel.app" && /^[a-f0-9]{40}$/.test(receipt?.git_sha||""),"production origin and release identity required");
+}
+
+async function liveDeliveryChecks(checks, tradeDate) {
+  const finalPath = path.join(REPORT_DIR, "opening-report-0830-final-receipt-" + compactDate(tradeDate) + ".json");
+  const final = readJson(finalPath);
+  if (!final) return;
+  renderedDeliveryChecks(checks, tradeDate, final);
+  const nightModule=require("../lib/opening-report-night-futures");
+  const nightIssues=morningStages.verifyNight(final.night_futures,{date:tradeDate,runId:final.run_id,cutoff:morningRecovery.cutoff(tradeDate),runtime:process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime"});
+  addCheck(checks,"current_night_futures_source",nightIssues.length===0,JSON.stringify(nightIssues));
+  const frozen=readJson(path.join(REPORT_DIR,"opening-report-0830-market-snapshot-"+compactDate(tradeDate)+".json"));
+  const line=readJson(path.join(REPORT_DIR,"line-push-receipt-"+compactDate(tradeDate)+".json"));
+  addCheck(checks,"current_night_futures_frozen_line_identity", require("util").isDeepStrictEqual(frozen?.night_futures,final.night_futures) && require("util").isDeepStrictEqual(line?.night_futures,final.night_futures) && line?.night_futures_summary===nightModule.summary(final.night_futures),"same frozen evidence and actual LINE content hash");
+  const {contentHash} = require("../lib/opening-report-delivery-contract");
+  const expectedHash = contentHash(final.priority_observation_mode, final.display_top3 || [], final.night_futures);
+  addCheck(checks,"current_full_content_hash",final.delivery_content_hash === expectedHash,"hash includes full Top3 and A/B mappings");
+  try {
+    const {readSnapshot} = require("../lib/supabase-snapshots");
+    const snapshot = await readSnapshot(process.env.FUMAN_MORNING_STAGE ? "opening_report_0830_terminal_briefing_"+morningStages.stage().id : "opening_report_0830_terminal_briefing", {tradeDate,allowLatestFallback:false,timeoutMs:10000,maxAttempts:2});
+    const payload=snapshot?.payload;
+    addCheck(checks,"current_terminal_db_readback",payload?.ok===true && payload.run_id===final.run_id && payload.delivery_content_hash===expectedHash && require("util").isDeepStrictEqual(payload.night_futures,final.night_futures) && payload.night_futures_summary===nightModule.summary(final.night_futures) && require("util").isDeepStrictEqual(payload.display_top3 || [], final.display_top3 || []) && compactDate(payload.date)===compactDate(tradeDate),JSON.stringify({run_id:payload?.run_id,date:payload?.date,hash:payload?.delivery_content_hash}));
+  } catch(error) { addCheck(checks,"current_terminal_db_readback",false,error.message); }
 }
 
 function writeReceipt(result, tradeDate) {
+  const outputArg = process.argv.find(x => x.startsWith("--output="));
+  if (outputArg) { const target = path.resolve(outputArg.slice(9)); fs.mkdirSync(path.dirname(target), {recursive:true}); fs.writeFileSync(target, JSON.stringify(result,null,2)); return target; }
   fs.mkdirSync(REPORT_DIR, { recursive: true });
   const ymd = compactDate(tradeDate);
-  const filePath = path.join(REPORT_DIR, "opening-report-morning-contract-verifier-" + ymd + ".json");
+  const filePath = path.join(REPORT_DIR, require("../lib/opening-report-receipt-authority").receiptFilename(result.phase,ymd));
   fs.writeFileSync(filePath, JSON.stringify(result, null, 2));
   return filePath;
 }
 
-function main() {
+async function main() {
   const args = parseArgs();
   const checks = [];
 
-  staticContractChecks(checks);
+  const recoveryContextFile=process.env.FUMAN_MORNING_RECOVERY_CONTEXT;
+  delete process.env.FUMAN_MORNING_RECOVERY_CONTEXT;
+  try { staticContractChecks(checks); } finally { if(recoveryContextFile)process.env.FUMAN_MORNING_RECOVERY_CONTEXT=recoveryContextFile; }
   symbolMapChecks(checks);
   if (args.phase === "preflight") {
     currentPreflightReceiptChecks(checks, args.tradeDate);
   } else if (args.requireCurrent) {
     currentReceiptChecks(checks, args.tradeDate);
+    await liveDeliveryChecks(checks, args.tradeDate);
   }
 
   const failures = checks.filter((check) => !check.ok);
@@ -416,6 +536,9 @@ function main() {
     trade_date: args.tradeDate,
     require_current: args.requireCurrent,
     phase: args.phase,
+    scope: args.phase === "delivery" ? "stage_delivery" : args.phase === "preflight" ? "source_preflight" : "contract_only",
+    stage: morningStages.stage().id,
+    run_id: args.phase === "delivery" ? readJson(path.join(REPORT_DIR,"opening-report-0830-final-receipt-"+compactDate(args.tradeDate)+".json"))?.run_id || null : null,
     terminal_dir: ROOT,
     runtime_dir: RUNTIME,
     retired_contracts: [RETIRED_TELEGRAM_PACKAGE_KEY],
@@ -429,7 +552,7 @@ function main() {
 
   result.receipt_path = writeReceipt(result, args.tradeDate);
   console.log(JSON.stringify(result, null, 2));
-  process.exit(result.ok ? 0 : 1);
+  process.exitCode = result.ok ? 0 : 1;
 }
 
-main();
+main().catch(error => { console.error(error.stack || error.message); process.exitCode=1; });

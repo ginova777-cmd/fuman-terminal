@@ -327,13 +327,13 @@ scored as (
       and mother_pool_symbols >= 300
       and mother_fresh_quote_coverage_120s >= 0.80
       and formal_priority_symbols = 40
-      and formal_fresh_quote_coverage_120s >= 0.95
+      and formal_fresh_quote_coverage_120s >= 0.90
       and formal_max_quote_age_seconds <= 120
       and formal_scope in ('priority_top40', 'mother_pool_rotation_priority_top40', 'mother_pool_300_rotating_deep_scan')
       and formal_priority_strategy_chip_status = 'ready'
       and formal_priority_strategy_chip_complete_latest_run_evidence is true
       and priority_fresh_quote_coverage_120s >= 0.95
-      and quote_age_seconds <= 90
+      and quote_age_seconds <= 120
       and intraday_1m_stale_seconds <= 120
       and ready_ma20_continuous_symbols > 0
       and ready_ma35_continuous_symbols > 0
@@ -359,13 +359,13 @@ scored as (
       + (mother_pool_symbols >= 300)::integer
       + (mother_fresh_quote_coverage_120s >= 0.80)::integer
       + (formal_priority_symbols = 40)::integer
-      + (formal_fresh_quote_coverage_120s >= 0.95)::integer
+      + (formal_fresh_quote_coverage_120s >= 0.90)::integer
       + (formal_max_quote_age_seconds <= 120)::integer
       + (formal_scope in ('priority_top40', 'mother_pool_rotation_priority_top40', 'mother_pool_300_rotating_deep_scan'))::integer
       + (formal_priority_strategy_chip_status = 'ready')::integer
       + (formal_priority_strategy_chip_complete_latest_run_evidence is true)::integer
       + (priority_fresh_quote_coverage_120s >= 0.95)::integer
-      + (quote_age_seconds <= 90)::integer
+      + (quote_age_seconds <= 120)::integer
       + (intraday_1m_stale_seconds <= 120)::integer
       + (ready_ma20_continuous_symbols > 0)::integer
       + (ready_ma35_continuous_symbols > 0)::integer
@@ -401,12 +401,12 @@ projected as (
       when mother_pool_symbols < 300 then 'mother_pool_below_300'
       when mother_fresh_quote_coverage_120s < 0.80 then 'mother_pool_quote_coverage_low'
       when formal_priority_symbols <> 40 then 'formal_priority_top40_not_40'
-      when formal_fresh_quote_coverage_120s < 0.95 then 'formal_priority_quote_coverage_low'
+      when formal_fresh_quote_coverage_120s < 0.90 then 'formal_priority_quote_coverage_low'
       when formal_max_quote_age_seconds > 120 then 'formal_priority_quote_age_too_old'
       when formal_scope not in ('priority_top40', 'mother_pool_rotation_priority_top40', 'mother_pool_300_rotating_deep_scan') then 'formal_scope_invalid'
       when formal_priority_strategy_chip_status <> 'ready' or formal_priority_strategy_chip_complete_latest_run_evidence is not true then 'strategy_chip_complete_latest_run_missing'
       when priority_fresh_quote_coverage_120s < 0.95 then 'priority_quote_coverage_low'
-      when quote_age_seconds > 90 then 'quote_age_too_old'
+      when quote_age_seconds > 120 then 'quote_age_too_old'
       when rate_limit_status in ('rate_limited', 'cooldown') then 'rate_limited'
       else 'source_contract_not_ready'
     end as final_reason

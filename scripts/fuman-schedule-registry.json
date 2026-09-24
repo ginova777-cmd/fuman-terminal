@@ -10,6 +10,8 @@
       "Fuman Chip Source Sync 2005",
       "Fuman Daily Retention Maintenance 1625",
       "Fuman Daytrade Intraday Retention 1605",
+      "Fuman Daytrade 5m Candidate Verification",
+      "Fuman Daytrade Preopen Snapshot 0845-0859",
       "Fuman Daytrade Futopt Collector Recovery 0835",
       "Fuman Daytrade Futopt Preopen Evidence 0845",
       "Fuman Daytrade Futopt Preopen Evidence 0850",
@@ -23,7 +25,6 @@
       "Fuman Market Calendar Auto Update 1900-0830",
       "Fuman Mother Pool Telegram 0900-1230",
       "Fuman Opening Limit Order Morning Readonly 0840",
-      "Fuman Opening Report 0820 Preflight",
       "Fuman Morning Report 0830 Complete",
       "Fuman Scorecard88 Collect Evening 2140",
       "Fuman Scorecard88 Collect Strategy2 1240",
@@ -41,7 +42,8 @@
       "Fuman Strategy5 Watchdog 2130",
       "Fuman Supabase Vercel History Cleanup 1545",
       "Fuman Terminal Autonomous Root Monitor",
-      "Fuman Vercel Cost Health Monitor 2115"
+      "Fuman Vercel Cost Health Monitor 2115",
+      "Fuman Morning Report Asia 0850 Complete"
     ],
     "expectedDisabledTasks": [
       "Fuman Public Slot Shared Source 0800",
@@ -124,7 +126,8 @@
       "Fuman Terminal Autonomous Ops User 5m",
       "Fuman Terminal Full Unattended Final Audit",
       "Fuman Terminal Local Freshness Verify 0830-2230",
-      "FumanTerminalProductionHealthMonitor"
+      "FumanTerminalProductionHealthMonitor",
+      "Fuman Opening Report 0820 Preflight"
     ],
     "retiredTaskNamePatterns": [
       "^Fuman Freshness Gate Full [0-9]{4} 2010$"
@@ -245,11 +248,6 @@
       ],
       "Fuman Strategy4 LINE Card 1610": [
         0,
-        267011
-      ],
-      "Fuman Terminal Full Unattended Final Audit": [
-        0,
-        267009,
         267011
       ],
       "Fuman Terminal Autonomous Ops 5m": [
@@ -441,6 +439,11 @@
         3,
         4,
         267009
+      ],
+      "Fuman Morning Report Asia 0850 Complete": [
+        0,
+        267009,
+        267011
       ]
     },
     "coveredBy": {
@@ -503,6 +506,26 @@
     }
   },
   "tasks": [
+    {
+      "taskName": "\\Fuman Daytrade 5m Candidate Verification",
+      "displayName": "Fuman Daytrade 5m Candidate Verification",
+      "description": "Five-minute confirmation is a diagnostic bonus for Mother Pool notifications; this task writes the current candidate readback.",
+      "time": "09:00-13:30 every 5 minutes",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "09:00"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daytrade Preopen Snapshot 0845-0859",
+      "displayName": "Fuman Daytrade Preopen Snapshot 0845-0859",
+      "description": "Preopen WebSocket snapshot writer used by daytrade source readiness.",
+      "time": "08:45-09:00 every 1 minute",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:45"
+      ]
+    },
     {
       "taskName": "\\Fuman API-Only Retired Artifact Cleanup 1535",
       "displayName": "Fuman API-Only Retired Artifact Cleanup 1535",
@@ -1013,10 +1036,10 @@
       "taskName": "\\Fuman Morning Report 0830 Complete",
       "displayName": "Fuman Morning Report 0830 Complete",
       "description": "Canonical 15-industry morning report, LINE, terminal and Mother Pool bridge closure.",
-      "time": "08:30",
+      "time": "08:20",
       "expectedState": "Ready",
       "expectedTriggers": [
-        "08:30"
+        "08:20"
       ]
     },
     {
@@ -1037,19 +1060,6 @@
       "expectedState": "Disabled",
       "expectedTriggers": [
         "16:10"
-      ]
-    },
-    {
-      "taskName": "\\Fuman Terminal Full Unattended Final Audit",
-      "displayName": "Fuman Terminal Full Unattended Final Audit",
-      "description": "Full unattended final audit task. Produces final YES/NO receipt after daily closures.",
-      "time": "07:00,09:00,16:00,22:30",
-      "expectedState": "Ready",
-      "expectedTriggers": [
-        "07:00",
-        "09:00",
-        "16:00",
-        "22:30"
       ]
     },
     {
@@ -1239,12 +1249,13 @@
     {
       "taskName": "\\Fuman Opening Report 0820 Preflight",
       "displayName": "Fuman Opening Report 0820 Preflight",
-      "description": "Observed production Windows Task Scheduler entry.",
+      "description": "Retired independent 08:20 source task; source freeze is owned by the weekday 08:30 complete wrapper.",
       "time": "08:20",
-      "expectedState": "Ready",
+      "expectedState": "Disabled",
       "expectedTriggers": [
         "08:20"
-      ]
+      ],
+      "retiredReason": "unified_0830_wrapper_owns_source_freeze"
     },
     {
       "taskName": "\\Fuman Opening Report 0830 Telegram",
@@ -1252,7 +1263,9 @@
       "description": "Retired legacy task name; the same wrapper must be registered only as Fuman Morning Report 0830 Complete.",
       "time": "08:30",
       "expectedState": "Disabled",
-      "expectedTriggers": ["08:30"],
+      "expectedTriggers": [
+        "08:30"
+      ],
       "retiredReason": "replaced_by_canonical_morning_complete_task"
     },
     {
@@ -1384,7 +1397,9 @@
       "description": "Retired legacy Strategy2 task name; the formal runner closes at 12:30.",
       "time": "08:45",
       "expectedState": "Disabled",
-      "expectedTriggers": ["08:45"],
+      "expectedTriggers": [
+        "08:45"
+      ],
       "retiredReason": "replaced_by_strategy2_0845_1230_contract"
     },
     {
@@ -1413,7 +1428,9 @@
       "description": "Retired orphan task; referenced runner no longer exists and is outside the formal unattended flow.",
       "time": "17:40",
       "expectedState": "Disabled",
-      "expectedTriggers": ["17:40"],
+      "expectedTriggers": [
+        "17:40"
+      ],
       "retiredReason": "runner_missing_and_outside_formal_scope"
     },
     {
@@ -1422,7 +1439,9 @@
       "description": "Retired orphan task; referenced runner no longer exists and is outside the formal unattended flow.",
       "time": "20:10",
       "expectedState": "Disabled",
-      "expectedTriggers": ["20:10"],
+      "expectedTriggers": [
+        "20:10"
+      ],
       "retiredReason": "runner_missing_and_outside_formal_scope"
     },
     {
@@ -1431,7 +1450,9 @@
       "description": "Retired orphan task; referenced runner no longer exists and is outside the formal unattended flow.",
       "time": "21:40",
       "expectedState": "Disabled",
-      "expectedTriggers": ["21:40"],
+      "expectedTriggers": [
+        "21:40"
+      ],
       "retiredReason": "runner_missing_and_outside_formal_scope"
     },
     {
@@ -1472,6 +1493,16 @@
       "expectedState": "Ready",
       "expectedTriggers": [
         "21:40"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Morning Report Asia 0850 Complete",
+      "displayName": "Fuman Morning Report Asia 0850 Complete",
+      "description": "08:50 Japan/Korea/KOSDAQ stage with independent Mother Pool handoff and acceptance.",
+      "time": "08:50",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:50"
       ]
     }
   ]

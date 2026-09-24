@@ -1,0 +1,68 @@
+{
+  "weak_threshold": 8,
+  "overheat_slope_min": 1,
+  "return_3d_bands": [
+    [
+      15,
+      5
+    ],
+    [
+      20,
+      10
+    ],
+    [
+      25,
+      15
+    ]
+  ],
+  "return_5d_bands": [
+    20,
+    30
+  ],
+  "volume_bands": [
+    [
+      1.5,
+      5
+    ],
+    [
+      2,
+      10
+    ],
+    [
+      3,
+      15
+    ]
+  ],
+  "near_limit_return": 8,
+  "volume_average_includes_today": true,
+  "a_weights": {
+    "monthly_slope_down": 20,
+    "ma20_down": 20,
+    "daily_bearish": 20,
+    "hourly_turning_bearish": 20,
+    "hourly_bearish": 15,
+    "ema30_bearish": 10,
+    "ma_resistance_failed": 10,
+    "mainforce_long_sell": 10,
+    "concentration_down": 10,
+    "ownership_dispersing": 10,
+    "institution_net_sell": 5,
+    "daytrade_sell_pressure": 5
+  },
+  "b_weights": {
+    "concentration_down": 10,
+    "institution_buy_to_sell": 10,
+    "large_order_buy_to_sell": 10,
+    "daytrade_large_buy": 10
+  },
+  "undefined_thresholds": {
+    "long_upper_shadow": null,
+    "new_high_close_low": null,
+    "ma20_deviation": null
+  },
+  "skipped_conditions": [
+    "long_upper_shadow",
+    "new_high_close_low",
+    "ma20_deviation"
+  ]
+}

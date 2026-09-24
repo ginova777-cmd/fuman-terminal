@@ -1,3 +1,4 @@
+const { indicatorTrend: sharedTrend } = require("../lib/technical-indicators");
 const cache = new Map();
 const CACHE_MS = 30 * 60 * 1000;
 let tpexDailyCache = null;
@@ -301,11 +302,11 @@ async function fetchTpexMonth(code, date) {
 }
 
 async function fetchFugleHistory(code) {
-  if (!FUGLE_API_KEY) return { rows: [], source: "" };
   const from = isoDateDaysAgo(HISTORY_LOOKBACK_DAYS);
-  const to = new Date().toISOString().slice(0, 10);
+  const to = process.env.STRATEGY4_REPLAY_TRADE_DATE || new Date().toISOString().slice(0, 10);
   const cached = readFugleHistoryCache(code, from, to);
   if (cached) return cached;
+  if (!FUGLE_API_KEY) return { rows: [], source: "missing_fugle_key_and_cache" };
   if (SUPABASE_FIRST && !ALLOW_EXTERNAL_FALLBACK) return { rows: [], source: "supabase-cache-miss" };
   const params = new URLSearchParams({
     symbol: code,
@@ -507,7 +508,7 @@ function emaSeries(values, length) {
 
 function kdSnapshot(rows, period = 5, smooth = 3) {
   if (!Array.isArray(rows) || rows.length < period + 1) {
-    return { k: 50, d: 50, prevK: 50, prevD: 50, goldenCross: false };
+    return { k: 50, d: 50, prevK: 50, prevD: 50, goldenCross: false, trendUp: false };
   }
   let k = 50;
   let d = 50;
@@ -532,9 +533,26 @@ function kdSnapshot(rows, period = 5, smooth = 3) {
     prevK,
     prevD,
     goldenCross: prevK <= prevD && k > d,
+    trendUp: k > prevK && d >= prevD,
   };
 }
-function rsi(values, length = 14) {
+
+function rsiCrossSnapshot(values, fastLength = 3, slowLength = 6) {
+  const fast = rsi(values, fastLength);
+  const slow = rsi(values, slowLength);
+  const prevValues = values.slice(0, -1);
+  const prevFast = rsi(prevValues, fastLength);
+  const prevSlow = rsi(prevValues, slowLength);
+  return {
+    fast,
+    slow,
+    prevFast,
+    prevSlow,
+    trendUp: fast > prevFast && slow >= prevSlow,
+    goldenCross: prevFast <= prevSlow && fast > slow,
+  };
+}
+function rsi(values, length = 6) {
   if (values.length <= length) return 50;
   let gains = 0;
   let losses = 0;
@@ -902,7 +920,12 @@ function analyzeRows(rows) {
   const volMa5 = sma(volumes, 5);
   const volMa20 = sma(volumes, 20);
   const macd = macdSnapshot(closes);
-  const rsi14 = rsi(closes, 14);
+  const rsi6 = rsi(closes, 6);
+  const rsi6Prev = rsi(closes.slice(0, -1), 6);
+  const kd5 = kdSnapshot(normalizedRows, 5, 3);
+  const rsi36 = rsiCrossSnapshot(closes, 3, 6);
+  const sharedTechnical = sharedTrend(normalizedRows);
+  const dailyTechnicalGate = {...sharedTechnical, contract: "strategy4_daily_kd_rsi_bonus_v1", indicatorContract: sharedTechnical.contract, mode: "bonus_only", ok: true};
   const atr14 = atr(rows, 14);
   const wallet = walletSnapshot(normalizedRows);
   const lookback = normalizedRows.slice(-40);
@@ -954,7 +977,11 @@ function analyzeRows(rows) {
     volMa20,
     volumeRatio,
     macd,
-    rsi14,
+    rsi6,
+    rsi6Prev,
+    kd5,
+    rsi36,
+    dailyTechnicalGate,
     atr14,
     wallet,
     stage,
@@ -1023,9 +1050,10 @@ function calcBuyStreak(rows, ma20, volMa20) {
   return streak;
 }
 
-function scanStrategy4(code, market, rows, priceSource = "") {
+function scanStrategy4(code, market, rows, priceSource = "", recentVolumeBonus = null) {
   const daily = analyzeRows(rows);
   if (!daily) return null;
+  // Daily KD/RSI affect bonus points only; pattern eligibility is independent.
   const last = daily.last;
   const prev = daily.prev;
   const isRed = last.close > last.open;
@@ -1047,14 +1075,14 @@ function scanStrategy4(code, market, rows, priceSource = "") {
   const nState = detectNBase(daily.rows, daily.volMa20);
   const nBase = nState.triggered && daily.realBody && isRed;
   const roc3 = daily.closes.length > 3 ? ((last.close - daily.closes.at(-4)) / daily.closes.at(-4)) * 100 : 0;
-  const vFast = roc3 < -10 && daily.volumeRatio >= 1.5 && isRed && prev && daily.prev2 && crossedOver(last.close, prev.close, prev.high, daily.prev2.high) && daily.rsi14 < 50;
+  const vFast = roc3 < -10 && daily.volumeRatio >= 1.5 && isRed && prev && daily.prev2 && crossedOver(last.close, prev.close, prev.high, daily.prev2.high) && daily.rsi6 < 50;
   const buyStreak = calcBuyStreak(daily.rows, daily.ma20, daily.volMa20);
   const vReversal = daily.deepFall && isRed && (
     (roc3 < -5 ? 35 : 0) +
     (prev && last.close > prev.high ? 25 : 0) +
     (buyStreak >= 1 ? 20 : 0) +
     (runawayGap ? 20 : 0) +
-    (daily.rsi14 < 40 ? 10 : 0)
+    (daily.rsi6 < 40 ? 10 : 0)
   ) >= 60;
   const threeInsideKd = kdSnapshot(daily.rows, 5, 3);
   const threeInside = daily.rows.length >= 3 && (() => {
@@ -1099,7 +1127,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
   });
   if (breakawayGap) signals.push({ id: "breakaway_gap", short: "突破缺口", icon: "◆", reason: "跳空突破近20日整理高點，偏突破缺口。" });
   if (runawayGap) signals.push({ id: "runaway_gap", short: "逃逸缺口", icon: "🚀", reason: "跳空且站上MA20，多頭段延續，偏逃逸缺口。" });
-  if (vFast) signals.push({ id: "v_fast", short: "V快殺", icon: "V", reason: `3日急跌後放量翻紅，RSI ${daily.rsi14.toFixed(1)}，偏V型快殺反彈。` });
+  if (vFast) signals.push({ id: "v_fast", short: "V快殺", icon: "V", reason: `3日急跌後放量翻紅，RSI ${daily.rsi6.toFixed(1)}，偏V型快殺反彈。` });
   if (vReversal) signals.push({
     id: runawayGap ? "v_reversal_runaway" : "v_reversal",
     short: runawayGap ? "V轉逃逸" : "V轉",
@@ -1132,13 +1160,19 @@ function scanStrategy4(code, market, rows, priceSource = "") {
       reason: `主力爸爸錢包量能紅K交叉${daily.wallet.volumeCrossDate ? `（${daily.wallet.volumeCrossDate}）` : ""}：5日資金量均線 ${Math.round(daily.wallet.volumeMa5).toLocaleString("zh-TW")} 上穿 60日 ${Math.round(daily.wallet.volumeMa60).toLocaleString("zh-TW")}。`,
     });
   }
+  if (daily.dailyTechnicalGate.trendUp) signals.push({
+    id: "daily_kd_rsi_trend_up",
+    short: "日KD/RSI",
+    icon: daily.dailyTechnicalGate.kdGoldenCross || daily.dailyTechnicalGate.rsiGoldenCross ? "✦" : "↑",
+    reason: `日K KD(5,3)與RSI趨勢向上；KD K/D ${daily.dailyTechnicalGate.kdK}/${daily.dailyTechnicalGate.kdD}，RSI6 ${daily.dailyTechnicalGate.rsi6Prev}→${daily.dailyTechnicalGate.rsi6}。`,
+  });
 
   const aboveMa20 = last.close > daily.ma20;
   const nearMa20 = daily.ma20 ? Math.abs((last.close - daily.ma20) / daily.ma20) <= 0.06 : false;
   const ma5TurningUp = daily.ma5 > sma(daily.closes, 5, 1);
   const macdImproving = daily.macd.rising || daily.macd.macd > daily.macd.signal;
-  const healthyRsi = daily.rsi14 >= 45 && daily.rsi14 <= 72;
-  const setupRsi = daily.rsi14 >= 38 && daily.rsi14 <= 62;
+  const healthyRsi = daily.rsi6 >= 45 && daily.rsi6 <= 72;
+  const setupRsi = daily.rsi6 >= 38 && daily.rsi6 <= 62;
   const stageNotHot = daily.stage.tone !== "hot";
   const trendScore = [
     aboveMa20,
@@ -1179,7 +1213,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
       id: "base_setup",
       short: "C準備",
       icon: "C",
-      reason: `低/中位階整理接近發動；準備分 ${prepScore}/7，RSI ${daily.rsi14.toFixed(1)}，量比 ${daily.volumeRatio.toFixed(2)}。`,
+      reason: `低/中位階整理接近發動；準備分 ${prepScore}/7，RSI ${daily.rsi6.toFixed(1)}，量比 ${daily.volumeRatio.toFixed(2)}。`,
     });
   }
 
@@ -1223,9 +1257,9 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     ? (entryPrice < daily.fib382 ? daily.fib382 : (entryPrice < daily.fib500 ? daily.fib500 : daily.fib618))
     : entryPrice + (entryPrice - stopPrice) * 1.2;
   const currentFibRatio = daily.swDiff ? Number(((entryPrice - daily.swLow) / daily.swDiff).toFixed(4)) : 0;
-  const score = Math.min(100, Math.round(
+  const rawBaseScore = Math.round(
     zoneBase +
-    signals.length * 7 +
+    signals.filter(s => s.id !== "daily_kd_rsi_trend_up").length * 7 +
     trendScore * 3 +
     prepScore * 2 +
     Math.min(daily.volumeRatio * 8, 18) +
@@ -1234,9 +1268,15 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     (daily.wallet.volumeCrossUp ? 6 : 0) +
     (triangleBreakout.detected ? 10 : 0) +
     (daily.stage.tone === "low" ? 8 : daily.stage.tone === "mid" ? 5 : daily.stage.tone === "high" ? 2 : -8)
-  ));
+  );
+  const technicalBonus = require("../lib/strategy4-v4-evidence").technicalBonus(daily.dailyTechnicalGate);
+  const baseScore = Math.min(100, rawBaseScore);
+  recentVolumeBonus = recentVolumeBonus || require('../lib/strategy4-recent-volume-bonus').calculate([], [], last.date);
+  const score = Math.min(100, baseScore + technicalBonus.total + recentVolumeBonus.points);
+  const volumeBonusText = recentVolumeBonus.points ? '近期放量＋5｜' + recentVolumeBonus.matchedDates.join('、') + '｜最高量比 ' + recentVolumeBonus.maxRatio.toFixed(2) + '倍' : '近期放量＋0｜' + recentVolumeBonus.status;
 
   return {
+    baseScore, rawBaseScore, technicalBonus, recentVolumeBonus,
     code,
     market,
     priceSource,
@@ -1259,9 +1299,13 @@ function scanStrategy4(code, market, rows, priceSource = "") {
     signals,
     triangleBreakout,
     elliottWave,
+    dailyTechnicalGate: daily.dailyTechnicalGate,
     patternTags: [
       ...(triangleBreakout.detected ? ["triangle_breakout"] : []),
       ...(["confirmed", "probable"].includes(elliottWave.status) ? ["elliott_wave"] : []),
+      ...(daily.dailyTechnicalGate.trendUp ? ["daily_kd_rsi_trend_up"] : []),
+      ...(daily.dailyTechnicalGate.kdGoldenCross ? ["daily_kd_golden_cross"] : []),
+      ...(daily.dailyTechnicalGate.rsiGoldenCross ? ["daily_rsi_4_6_golden_cross"] : []),
     ],
     wallet: {
       mf: Math.round(daily.wallet.mf),
@@ -1296,7 +1340,19 @@ function scanStrategy4(code, market, rows, priceSource = "") {
       fib618: Number(daily.fib618.toFixed(2)),
       fibRatio: currentFibRatio,
       bias20: Number(daily.bias20.toFixed(2)),
-      rsi14: Number(daily.rsi14.toFixed(2)),
+      kdK: daily.dailyTechnicalGate.kdK,
+      kdD: daily.dailyTechnicalGate.kdD,
+      kdPrevK: daily.dailyTechnicalGate.kdPrevK,
+      kdPrevD: daily.dailyTechnicalGate.kdPrevD,
+      kdTrendUp: daily.dailyTechnicalGate.kdTrendUp,
+      kdGoldenCross: daily.dailyTechnicalGate.kdGoldenCross,
+      rsi3Prev: daily.dailyTechnicalGate.rsi3Prev,
+      rsi6Prev: daily.dailyTechnicalGate.rsi6Prev,
+      rsi3: daily.dailyTechnicalGate.rsi3,
+      rsi6: daily.dailyTechnicalGate.rsi6,
+      rsiTrendUp: daily.dailyTechnicalGate.rsiTrendUp,
+      rsiGoldenCross: daily.dailyTechnicalGate.rsiGoldenCross,
+      dailyTechnicalGateOk: daily.dailyTechnicalGate.ok,
       atr14: Number(daily.atr14.toFixed(2)),
       entryPrice: Number(entryPrice.toFixed(2)),
       stopPrice: Number(stopPrice.toFixed(2)),
@@ -1310,7 +1366,7 @@ function scanStrategy4(code, market, rows, priceSource = "") {
       isRunawayUp: runawayGap,
       isBreakawayUp: breakawayGap,
     },
-    reason: signals[0].reason,
+    reason: signals[0].reason + "；" + volumeBonusText,
   };
 }
 
@@ -1340,7 +1396,10 @@ module.exports = async function handler(request, response) {
 
   const quoteMap = USE_MIS_QUOTES ? await fetchMisQuotes(codes) : new Map();
   const results = await Promise.allSettled(codes.map(async (code, index) => {
-    const officialHistory = await mergeTpexDailyQuote(code, await fetchHistory(code, markets[index] || ""));
+    const rawHistory = await fetchHistory(code, markets[index] || "");
+    const replayDate = process.env.STRATEGY4_REPLAY_TRADE_DATE;
+    const officialHistory = replayDate ? {...rawHistory, rows:rawHistory.rows.filter(row=>row.date<=replayDate)} : await mergeTpexDailyQuote(code, rawHistory);
+    if (replayDate && USE_MIS_QUOTES) throw Error('STRATEGY4_REPLAY_REJECTS_LIVE_QUOTES');
     const history = USE_MIS_QUOTES
       ? mergeMisQuoteIntoHistory(officialHistory, quoteMap.get(code))
       : officialHistory;
@@ -1351,7 +1410,7 @@ module.exports = async function handler(request, response) {
     return {
       code,
       source,
-      match: scanStrategy4(code, history.market, history.rows, source),
+      match: scanStrategy4(code, history.market, history.rows, source, await require('../lib/strategy4-recent-volume-bonus').forSymbol(code, history.rows.at(-1).date)),
     };
   }));
   const sourceCounts = {};
@@ -1363,7 +1422,7 @@ module.exports = async function handler(request, response) {
   const matches = results
     .filter((result) => result.status === "fulfilled" && result.value?.match)
     .map((result) => result.value.match || result.value)
-    .sort((a, b) => b.score - a.score || b.percent - a.percent);
+    .sort(require('../lib/strategy4-v4-evidence').compareRank);
   const noDataCodes = results
     .filter((result) => result.status === "fulfilled" && result.value?.noData)
     .map((result) => result.value.code);

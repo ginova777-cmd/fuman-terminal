@@ -790,7 +790,7 @@ function commandFor(key, state, classification = {}, options = {}) {
   const blockerText = String(classification.blocker || classification.reasonCode || "");
   const reasonCode = String(classification.reasonCode || "");
   if (state === "NEXT_TRADING_DAY_REPAIR_DEFERRED" && reasonCode === "strategy3_1300_intraday_source_quality_gap") {
-    return "npm run verify:strategy3-v2-full-closure";
+    return "npm run verify:strategy3-complete";
   }
   const deferredRepairUsesExecutionDate = state === "NEXT_TRADING_DAY_REPAIR_DEFERRED";
   const expectedDateForCommand = (options.dynamicTradeDate === true || deferredRepairUsesExecutionDate) ? "" : EXPECTED_DATE;
@@ -810,7 +810,7 @@ function commandFor(key, state, classification = {}, options = {}) {
   if (state === "FAILED_DISPLAY") return "npm run verify:terminal-resource-chain:unattended";
   const map = {
     strategy2: expectedDateForCommand ? `npm run verify:strategy2-e2e-closure -- --expected-date=${expectedDateForCommand}` : "npm run verify:strategy2-e2e-closure",
-    strategy3: "npm run verify:strategy3-v2-full-closure",
+    strategy3: "npm run verify:strategy3-complete",
     strategy4: "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\run-strategy4.ps1",
     strategy5: "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\run-strategy5.ps1",
     institution: "npm run verify:institution-live-closure",
@@ -1045,7 +1045,7 @@ function selfTest() {
       marketCalendar: closedMarket,
       expectedState: "NEXT_TRADING_DAY_REPAIR_DEFERRED",
       expectedJob: true,
-      expectedCommand: "npm run verify:strategy3-v2-full-closure",
+      expectedCommand: "npm run verify:strategy3-complete",
     },
   ];
   const failures = [];

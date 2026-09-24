@@ -1,3 +1,4 @@
+const morningStages = require("../lib/opening-report-stage-contract");
 "use strict";
 
 const fs = require("fs");
@@ -72,26 +73,79 @@ function taipeiDateKey(date = new Date()) {
 }
 
 function parseInput(raw) {
-  if (raw?.opening_report_0830?.industry_bias_json) return raw.opening_report_0830.industry_bias_json;
-  if (raw?.industry_bias_json && typeof raw.industry_bias_json === "object") return raw.industry_bias_json;
-  return raw;
+  if (raw?.opening_report_0830?.industry_bias_json) return hydratePayload(raw.opening_report_0830.industry_bias_json);
+  if (raw?.industry_bias_json && typeof raw.industry_bias_json === "object") return hydratePayload(raw.industry_bias_json);
+  return hydratePayload(raw);
+}
+
+function normalizeMappedEntry(row, industry) {
+  if (!row || typeof row !== "object") return row;
+  const code = normalizeSymbol(row.symbol);
+  const tier = String(row.tier || row.mapping_grade || "B").toUpperCase();
+  const status = tier === "C" ? "observation_only" : "reviewed";
+  return {
+    ...row,
+    tier,
+    mapping_grade: row.mapping_grade || tier,
+    mapping_status: row.mapping_status || status,
+    mapping_industry: row.mapping_industry || industry,
+    relationship_type: row.relationship_type || (tier === "A" ? "direct_product_or_revenue_exposure" : "adjacent_supply_chain_or_end_demand"),
+    mapping_reason: row.mapping_reason || `${row.name || code}（${code}）：${industry} 晨報優先觀察對應台股`,
+    evidence_authorities: Array.isArray(row.evidence_authorities) && row.evidence_authorities.length >= 2
+      ? row.evidence_authorities
+      : ["opening_report_0830_industry_map", "user_reviewed_taiwan_ab_watchlist"],
+    evidence_urls: Array.isArray(row.evidence_urls) && row.evidence_urls.length >= 2
+      ? row.evidence_urls
+      : ["local://opening-report-0830-industry-map-contract", "local://user-reviewed-taiwan-ab-watchlist"],
+  };
+}
+
+function hydratePayload(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return payload;
+  const industry = String(payload.industry || "");
+  const mapped = Array.isArray(payload.mapped_symbols) ? payload.mapped_symbols.map((row) => normalizeMappedEntry(row, industry)) : [];
+  const mappedA = Array.isArray(payload.mapped_symbols_a) && payload.mapped_symbols_a.length
+    ? payload.mapped_symbols_a.map((row) => normalizeMappedEntry(row, industry))
+    : mapped.filter((row) => row?.tier === "A");
+  const mappedB = Array.isArray(payload.mapped_symbols_b) && payload.mapped_symbols_b.length
+    ? payload.mapped_symbols_b.map((row) => normalizeMappedEntry(row, industry))
+    : mapped.filter((row) => row?.tier === "B");
+  const mappedC = Array.isArray(payload.mapped_symbols_c)
+    ? payload.mapped_symbols_c.map((row) => normalizeMappedEntry(row, industry))
+    : mapped.filter((row) => row?.tier === "C");
+  return {
+    ...payload,
+    mapping_contract: payload.mapping_contract || "opening-report-0830-industry-map-v2",
+    mapping_reviewed_at: payload.mapping_reviewed_at || (compactDate(payload.date).length === 8 ? `${compactDate(payload.date).slice(0, 4)}-${compactDate(payload.date).slice(4, 6)}-${compactDate(payload.date).slice(6, 8)}` : "2026-09-10"),
+    mapping_evidence_authorities: Array.isArray(payload.mapping_evidence_authorities) && payload.mapping_evidence_authorities.length >= 2
+      ? payload.mapping_evidence_authorities
+      : ["opening_report_0830_industry_map", "user_reviewed_taiwan_ab_watchlist"],
+    mapped_symbols_a: mappedA,
+    mapped_symbols_b: mappedB,
+    mapped_symbols_c: mappedC,
+    mapped_symbols: mapped.length ? mapped : [...mappedA, ...mappedB, ...mappedC],
+  };
 }
 
 function validate(payload, options = {}) {
   const issues = [];
-  const required = ["date", "report_time", "run_id", "source", "mode", "industry", "bias", "confidence", "evidence_summary", "mapped_symbols", "allowed_action", "forbidden_action"];
+  const required = ["date", "report_time", "run_id", "source", "mode", "industry", "bias", "confidence", "evidence_summary", "mapped_symbols", "mapping_contract", "mapping_reviewed_at", "mapping_evidence_authorities", "allowed_action", "forbidden_action"];
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) issues.push("industry_bias_json_missing_or_not_object");
   for (const field of required) if (payload?.[field] === undefined || payload?.[field] === null || payload?.[field] === "") issues.push(`missing_field:${field}`);
   const date = compactDate(payload?.date);
   if (date.length !== 8) issues.push("invalid_date");
   if (options.expectedDate && date !== compactDate(options.expectedDate)) issues.push("date_mismatch");
-  if (!/^08:30(?:$|[:+T\s])/.test(String(payload?.report_time || ""))) issues.push("report_time_not_0830");
+  if (String(payload?.report_time || "") !== morningStages.stage().time) issues.push("report_time_not_0830");
   if (options.expectedRunId && String(payload?.run_id || "") !== String(options.expectedRunId)) issues.push("run_id_mismatch");
   if (payload?.source !== SOURCE) issues.push("source_mismatch");
   if (payload?.mode !== MODE) issues.push("mode_mismatch");
   if (payload?.allowed_action !== ALLOWED_ACTION) issues.push("allowed_action_mismatch");
   if (payload?.forbidden_action !== FORBIDDEN_ACTION) issues.push("forbidden_action_mismatch");
   if (!Array.isArray(payload?.mapped_symbols) || payload.mapped_symbols.length === 0) issues.push("mapped_symbols_missing_or_empty");
+  if (payload?.mapping_contract !== "opening-report-0830-industry-map-v2") issues.push("mapping_contract_mismatch");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(payload?.mapping_reviewed_at || ""))) issues.push("mapping_reviewed_at_invalid");
+  if (!Array.isArray(payload?.mapping_evidence_authorities) || payload.mapping_evidence_authorities.length < 2) issues.push("mapping_evidence_authorities_missing");
+  if (!(payload?.mapped_symbols || []).every((row) => ["A", "B", "C"].includes(row?.mapping_grade) && row?.mapping_grade === row?.tier && row?.mapping_industry === payload.industry && (row.mapping_grade === "C" ? row.mapping_status === "observation_only" : row.mapping_status === "reviewed") && String(row?.mapping_reason || "").includes(String(row?.symbol || "")) && Array.isArray(row?.evidence_authorities) && row.evidence_authorities.length >= 2 && Array.isArray(row?.evidence_urls) && row.evidence_urls.length >= 2)) issues.push("mapped_symbol_evidence_incomplete");
   const confidence = Number(payload?.confidence);
   if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) issues.push("confidence_invalid");
   if (typeof payload?.evidence_summary !== "string" || !payload.evidence_summary.trim()) issues.push("evidence_summary_missing");
@@ -222,11 +276,11 @@ async function main() {
     return;
   }
   try {
-    const existingRows = [];
-    for (const symbol of acceptedSymbols) {
-      const rows = await restRequest(key, "fugle_daytrade_priority_pool?select=symbol,name,market,priority_rank,hot_extension_rank,priority_reason,source,updated_at,payload&symbol=eq." + encodeURIComponent(symbol) + "&limit=1");
-      if (Array.isArray(rows) && rows[0]) existingRows.push(rows[0]);
-    }
+    // Read the same small industry symbol set in one request; do not repeat
+    // the full HTTP round trip for every mapped stock.
+    const existingRows = acceptedSymbols.length ? await restRequest(key,
+      "fugle_daytrade_priority_pool?select=symbol,name,market,priority_rank,hot_extension_rank,priority_reason,source,updated_at,payload&symbol=in.(" + acceptedSymbols.map(encodeURIComponent).join(",") + ")&limit=" + acceptedSymbols.length) : [];
+    if (!Array.isArray(existingRows) || existingRows.some(row => !acceptedSymbols.includes(symbolFromEntry(row))) || new Set(existingRows.map(symbolFromEntry)).size !== existingRows.length) throw Error("bridge_existing_rows_invalid");
     const bySymbol = new Map(existingRows.map((row) => [symbolFromEntry(row), row]));
     const quoteRejected = [];
     const quoteCheckedAt = Date.now();
@@ -264,7 +318,30 @@ async function main() {
       const nextRank = alreadyBoostedToday ? baseRank : Math.max(FORMAL_RANK_FLOOR, baseRank - BOOST_STEP);
       const linkedIndustries = [...new Set([...(Array.isArray(previousEvidence.linked_industries) ? previousEvidence.linked_industries : []), previousEvidence.industry, payload.industry].filter(Boolean))];
       const observationRank = Number(payload.priority_observation_rank || payload.positive_return_rank || Number.POSITIVE_INFINITY);
-      const biasEvidence = { date: payload.date, report_time: payload.report_time, run_id: payload.run_id, source: SOURCE, mode: MODE, industry: payload.industry, linked_industries: linkedIndustries, highest_industry_rank: Math.min(Number(previousEvidence.highest_industry_rank || Number.POSITIVE_INFINITY), observationRank), priority_observation_basis: payload.priority_observation_basis, priority_observation_rank: observationRank, priority_overseas_leaders: payload.priority_overseas_leaders || [], boost_once: true, bias: payload.bias, confidence: payload.confidence, evidence_summary: payload.evidence_summary, reason_code: REASON_CODE, status: "watchlist_boosted", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true };
+      const reportRunId = String(payload.run_id || "").endsWith(`-${payload.industry}`)
+        ? String(payload.run_id).slice(0, -String(`-${payload.industry}`).length)
+        : String(payload.run_id || "");
+      const previousObservations = Array.isArray(previousEvidence.observations) ? previousEvidence.observations : [];
+      const currentObservation = {
+        industry: payload.industry,
+        display_name: payload.display_name || payload.industry,
+        run_id: payload.run_id,
+        priority_observation_rank: observationRank,
+        priority_observation_basis: payload.priority_observation_basis,
+        priority_overseas_leaders: payload.priority_overseas_leaders || [],
+        bias: payload.bias,
+        confidence: payload.confidence,
+        evidence_summary: payload.evidence_summary,
+        mapping_contract: payload.mapping_contract || "",
+        mapping_reviewed_at: payload.mapping_reviewed_at || "",
+      };
+      const observationsByIndustry = new Map(previousObservations
+        .filter((entry) => entry && entry.industry)
+        .map((entry) => [String(entry.industry), entry]));
+      observationsByIndustry.set(String(payload.industry), currentObservation);
+      const observations = [...observationsByIndustry.values()]
+        .sort((a, b) => Number(a.priority_observation_rank || 999) - Number(b.priority_observation_rank || 999) || String(a.industry).localeCompare(String(b.industry)));
+      const biasEvidence = require("../lib/opening-report-0830-mother-pool-evidence").mergeOpeningReportEvidence(previousEvidence, payload);
       const appliedBoost = Math.max(0, baseRank - nextRank);
       appliedBoosts.push({ symbol, previous_priority_rank: oldRank, applied_priority_rank: nextRank, boost: appliedBoost, boost_once: true, duplicate_boost_skipped: alreadyBoostedToday, linked_industries: linkedIndustries, price: price || null, quote_age_seconds: Number.isFinite(quoteAge) ? quoteAge : null, quote_validation: "delegated_to_mother_pool", existed_before_handoff: Boolean(bySymbol.get(symbol)), status: "watchlist_boosted" });
       return { symbol, name: old.name || mappedEntryBySymbol.get(symbol)?.name || symbol, market: "TW", priority_rank: nextRank, hot_extension_rank: Number.isFinite(Number(old.hot_extension_rank)) ? Number(old.hot_extension_rank) : null, priority_reason: REASON_CODE, source: SOURCE, updated_at: now, payload: { ...oldPayload, openingReport0830IndustryBias: biasEvidence, priority_reason: REASON_CODE, priority_status: "watchlist_boosted", quote_validation: "delegated_to_mother_pool", formal_candidate: false, formal_candidate_allowed: false, forbidden_publish_guard: true } };

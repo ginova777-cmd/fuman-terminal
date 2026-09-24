@@ -124,7 +124,7 @@ async function fetchHolidayRows(stateDir, year) {
   const cached = readJson(cacheFile);
   const cachedAt = cached?.cachedAt ? Date.parse(cached.cachedAt) : 0;
   if (Array.isArray(cached?.rows) && cached.rows.length && cachedAt && Date.now() - cachedAt < CACHE_MAX_AGE_MS) {
-    const value = { rows: cached.rows, source: "cache" };
+    const value = { rows: cached.rows, source: "cache", fetched_at: cached.cachedAt };
     HOLIDAY_MEMORY_CACHE.set(cacheKey, { fetchedAt: Date.now(), value });
     return value;
   }
@@ -145,7 +145,7 @@ async function fetchHolidayRows(stateDir, year) {
     const rows = await response.json();
     if (!Array.isArray(rows)) throw new Error("unexpected TWSE holiday response");
     writeJson(cacheFile, { cachedAt: new Date().toISOString(), rows });
-    const value = { rows, source: "twse" };
+    const value = { rows, source: "twse", fetched_at: new Date().toISOString() };
     HOLIDAY_MEMORY_CACHE.set(cacheKey, { fetchedAt: Date.now(), value });
     return value;
   } catch (error) {
@@ -168,19 +168,20 @@ async function isTwseTradingDay(date = new Date(), options = {}) {
   if (override && options.ignoreOverrides !== true) return override;
   const rocKey = rocDateKey(parts);
   const weekend = isWeekend(parts);
-  const { rows, source, error } = await fetchHolidayRows(stateDir, parts.year);
+  const { rows, source, error, fetched_at } = await fetchHolidayRows(stateDir, parts.year);
+  const evidence = options.includeEvidence === true ? { calendar_evidence: { rows, source, fetched_at: fetched_at || null, source_url: HOLIDAY_API_URL, year: Number(parts.year) } } : {};
   const row = rows.find((item) => String(item?.Date || "") === rocKey);
 
   if (row && isExplicitTradingRow(row)) {
-    return { isTradingDay: true, date: key, rocDate: rocKey, reason: "special_trading_day", source, row };
+    return { ...evidence, isTradingDay: true, date: key, rocDate: rocKey, reason: "special_trading_day", source, row };
   }
   if (row && isClosedRow(row)) {
-    return { isTradingDay: false, date: key, rocDate: rocKey, reason: "twse_closed_day", source, row };
+    return { ...evidence, isTradingDay: false, date: key, rocDate: rocKey, reason: "twse_closed_day", source, row };
   }
   if (weekend) {
-    return { isTradingDay: false, date: key, rocDate: rocKey, reason: "weekend", source, row: row || null };
+    return { ...evidence, isTradingDay: false, date: key, rocDate: rocKey, reason: "weekend", source, row: row || null };
   }
-  return { isTradingDay: true, date: key, rocDate: rocKey, reason: error ? "weekday_fallback" : "regular_weekday", source, row: row || null, error };
+  return { ...evidence, isTradingDay: true, date: key, rocDate: rocKey, reason: error ? "weekday_fallback" : "regular_weekday", source, row: row || null, error };
 }
 
 module.exports = {

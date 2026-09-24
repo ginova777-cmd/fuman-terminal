@@ -22,6 +22,7 @@ const MOBILE_FRAGMENT_HTML_SNAPSHOT_READ_TIMEOUT_MS = Number(process.env.FUMAN_M
 const MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_HTML_SNAPSHOT_MAX_AGE_MS || 72 * 60 * 60 * 1000);
 
 const TAB_CONFIG = {
+  morning: {title:"晨報",subtitle:"08:30 漲幅族群晨報",endpoint:"/api/market-ai-live?briefingOnly=1",points:[]},
   ai: {
     title: "AI 判讀",
     subtitle: "市場總覽 AI dashboard",
@@ -234,6 +235,14 @@ function attachTerminalAuthority(tab, payload = {}) {
       };
     }
   }
+  if (String(tab || "").toLowerCase() === "strategy4") {
+    const { strategy4MobileAuthority } = require("../lib/strategy4-mobile-authority");
+    const ownAuthority = strategy4MobileAuthority(payload, taipeiDateKey());
+    if (ownAuthority) {
+      terminalAuthority = ownAuthority;
+      payload = { ...payload, preservePreviousGood: ownAuthority.preservePreviousGood };
+    }
+  }
   if (!terminalAuthority) return payload;
   return {
     ...payload,
@@ -394,6 +403,16 @@ async function fetchJsonWithTimeout(url, timeoutMs = 9000, extraHeaders = {}) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function fetchMorningInternal(request) {
+  let captured;
+  await require("./market-ai-live")({
+    method: "GET", headers: request?.headers || {},
+    query: { briefingOnly: "1" },
+  }, createCaptureResponse(result => { captured = result; }));
+  if (!captured || captured.statusCode >= 400) throw new Error("morning_internal_unavailable");
+  return captured.payload;
 }
 
 function createCaptureResponse(resolve) {
@@ -674,7 +693,7 @@ function normalizeRows(payload, tab = "") {
   if (tab === "strategy3") {
     return rows.filter((row) => isValidBusinessRow(row, tab));
   }
-  return rows.filter((row) => isValidBusinessRow(row, tab)).slice(0, 20);
+  return rows.filter((row) => isValidBusinessRow(row, tab)).slice(0, ["strategy4", "chip"].includes(tab) ? 2000 : 20);
 }
 
 function isEmptyStrategy2Snapshot(payload) {
@@ -857,7 +876,7 @@ function rowHtml(row, index, tab = "") {
   const score = firstValue(row, ["finalScore", "score", "rankScore", "totalScore"], "--");
   const pct = firstValue(row, ["percent", "changePercent", "pct", "displayPercent", "risePct"], null);
   const reason = firstValue(row, ["reason", "summary", "description", "memo", "note", "why"], "");
-  const line = `${action}｜${score}｜${pct === null ? "--" : `${numberText(pct)}%`}`;
+  const line = tab === "chip" ? `加分 +${Number(row.rankingBonusScore || 0)}｜近期放量 +${Number(row.rankingBonuses?.recentVolume?.points || 0)}｜當沖率 +${Number(row.rankingBonuses?.daytrade?.points || 0)}` : `${action}｜${score}｜${pct === null ? "--" : `${numberText(pct)}%`}`;
   const triangleChart = tab === "strategy4" ? strategy4TriangleSvg(row) : "";
   const mainForceCosts = mobileMainForceHtml(row);
   const strategy4Matched = tab === "strategy5" && Boolean(firstValue(row, ["strategy4Matched", "strategy4_matched", "strategy4RunId", "strategy4_run_id"], ""));
@@ -881,6 +900,7 @@ function rowHtml(row, index, tab = "") {
 }
 
 async function renderFragment(tab, config, payload) {
+  if (tab === "morning") { const report=payload?.openingMorningReport; return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="morning" data-run-id="${esc(report?.run_id || "")}">${require("../terminal-opening-report-view").render(report)}</section>`; }
   if (tab === "ai") return renderAiFragment(tab, config, payload);
   payload = attachTerminalAuthority(tab, payload);
   const diagnosticReplay = payload?.status === "diagnostic_replay" && payload?.diagnosticReplay === true;
@@ -920,7 +940,8 @@ async function renderFragment(tab, config, payload) {
 
   const displayResultCount = Number(payload.resultCount ?? payload.result_count ?? payload.count ?? payload.total ?? rows.length);
   const points = config.points.map((point, index) => `<p><b>${index + 1}</b>${esc(point)}</p>`).join("");
-  const list = rows.length ? rows.map((row, index) => rowHtml(row, index, tab)).join("") : `<div class="empty-state">等待最新 complete run。</div>`;
+  const completeZero = tab === 'strategy3' && payload?.ok === true && payload?.complete === true && quality === 'complete' && Boolean(runId) && displayResultCount === 0 && rows.length === 0;
+  const list = rows.length ? rows.map((row, index) => rowHtml(row, index, tab)).join("") : completeZero ? '<div class="empty-state" data-scan-state="complete-zero">今日掃描完成，符合條件 0 檔。</div>' : '<div class="empty-state">等待最新 complete run。</div>';
   return `<section class="mobile-terminal-fragment" data-mobile-terminal-fragment="1" data-mobile-fragment-key="${esc(tab)}" data-run-id="${esc(runId)}" data-trade-date="${esc(tradeDate)}" data-result-count="${displayResultCount}" data-observation-count="${rows.length}" data-formal-display-allowed="${formalDisplayAllowed === true ? "1" : "0"}" data-today-authoritative="${todayAuthoritative === true ? "1" : "0"}" data-display-mode="${esc(displayMode)}">
       <article class="mobile-terminal-head">
         <small>${validationDisplayAllowed || diagnosticReplay ? "V3 回測驗證 / 不發布、不寫入 /88" : "API-only complete run"}</small>
@@ -1108,7 +1129,7 @@ module.exports = async function handler(request, response) {
       return;
     }
     const bypassHtmlSnapshot = requestedLiveFragment;
-    const htmlSnapshot = (bypassHtmlSnapshot || tab === "strategy2") ? null : await readMobileFragmentHtmlSnapshot(
+    const htmlSnapshot = (bypassHtmlSnapshot || tab === "strategy2" || tab === "morning") ? null : await readMobileFragmentHtmlSnapshot(
       tab);
     if (htmlSnapshot?.html) {
       response.setHeader("ETag", `"${crypto.createHash("sha1").update(htmlSnapshot.html).digest("hex").slice(0, 16)}"`);
@@ -1117,7 +1138,7 @@ module.exports = async function handler(request, response) {
     }
   }
   try {
-    const endpointLimit = tab === "strategy3" ? 1200 : 60;
+    const endpointLimit = tab === "strategy3" ? 1200 : tab === "chip" ? 2000 : 60;
     const endpoint = appendQuery(config.endpoint, {
       mobile: 1,
       canvas: 1,
@@ -1127,11 +1148,11 @@ module.exports = async function handler(request, response) {
       ...(tab === "strategy2" || requestedLiveFragment ? { live: 1, verify: 1, noSnapshot: 1 } : {}),
       ts: Date.now(),
     });
-    const snapshot = await readDesktopRouteSnapshot({
+    const snapshot = tab === "morning" ? null : await readDesktopRouteSnapshot({
       timeoutMs: MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS,
       allowStale: tab !== "strategy2",
     }).catch(() => null);
-    const snapshotPayload = tab === "ai" ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
+    const snapshotPayload = ["ai","morning"].includes(tab) ? null : endpointPayloadFromSnapshot(snapshot?.payload, endpoint);
     // Formal strategy/chip tabs must never paint an older HTML snapshot as current.
     // They all read the same protected latest API path as the desktop terminal.
     const forceLivePayload = ["strategy2", "strategy3", "strategy4", "strategy5", "chip"].includes(tab)
@@ -1140,7 +1161,7 @@ module.exports = async function handler(request, response) {
       || !hasUsableSnapshotPayload(snapshotPayload, tab)
 
       || (tab === "strategy2" && isEmptyStrategy2Snapshot(snapshotPayload))
-      ? (tab === "strategy4"
+      ? (tab === "morning" ? await fetchMorningInternal(request) : tab === "strategy4"
         ? await fetchStrategy4Internal(request, endpoint)
         : tab === "strategy5"
           ? await fetchStrategy5Internal(request, endpoint)
@@ -1154,7 +1175,7 @@ module.exports = async function handler(request, response) {
               : await fetchJsonWithTimeout(`${originFrom(request)}${endpoint}`, ["ai", "chip"].includes(tab) ? 30000 : 12000, authHeadersFrom(request)))
       : snapshotPayload;
     const html = await renderFragment(tab, config, payload);
-    if (tab !== "ai" && tab !== "strategy2") writeMobileFragmentHtmlSnapshot(tab, html, payload);
+    if (tab !== "ai" && tab !== "strategy2" && tab !== "morning") writeMobileFragmentHtmlSnapshot(tab, html, payload);
     response.setHeader("ETag", `"${crypto.createHash("sha1").update(html).digest("hex").slice(0, 16)}"`);
     sendHtml(request, response, 200, html, { tab });
   } catch (error) {

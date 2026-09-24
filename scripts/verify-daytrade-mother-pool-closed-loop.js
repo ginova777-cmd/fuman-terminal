@@ -19,6 +19,23 @@ function readSecret(file) {
   try { return fs.readFileSync(file, "utf8").trim(); } catch { return ""; }
 }
 
+function anonKey() {
+  return process.env.SUPABASE_ANON_KEY || process.env.FUMAN_SUPABASE_ANON_KEY
+    || readSecret(path.join(RUNTIME, "secrets", "supabase-anon-key.txt"));
+}
+
+async function readSupabaseRows(resource, query, key = anonKey()) {
+  if (!key) return { ok: false, rows: [], status: 0, error: "SUPABASE_ANON_KEY_MISSING" };
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${resource}?${query}`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" },
+    signal: AbortSignal.timeout(30000),
+  });
+  const text = await response.text();
+  let rows = [];
+  try { rows = text ? JSON.parse(text) : []; } catch {}
+  return { ok: response.ok, rows: Array.isArray(rows) ? rows : [], status: response.status, error: response.ok ? "" : text.slice(0, 300) };
+}
+
 async function publishReceipt(result) {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.FUMAN_SUPABASE_SERVICE_ROLE_KEY
     || readSecret(path.join(RUNTIME, "secrets", "supabase-service-role-key.txt"));
@@ -198,7 +215,10 @@ async function main() {
     priority: path.join(RUNTIME, "cache", "intraday", "fugle-daytrade-ws-priority-symbols.json"),
     motherPool: path.join(RUNTIME, "state", "daytrade-mother-pool-delta.json"),
     fastSync: path.join(RUNTIME, "state", "daytrade-fast-supabase-sync.json"),
+    industryTop3: path.join(RUNTIME, "data", "scan-receipts", `daytrade-industry-top3-${clock.compact}.json`),
+    industryFastInject: path.join(RUNTIME, "data", "scan-receipts", `daytrade-industry-fast-inject-${clock.compact}.json`),
     openingReport: path.join(RUNTIME, "data", "opening-report-0830", `opening-report-0830-bridge-aggregate-${clock.compact}.json`),
+    openingReportHandoffAck: path.join(RUNTIME, "data", "scan-receipts", `opening-report-0830-mother-pool-handoff-ack-${clock.compact}.json`),
     futopt0845: path.join(RUNTIME, "data", "scan-receipts", `daytrade-futopt-preopen-evidence-0845-${clock.compact}.json`),
     futopt0850: path.join(RUNTIME, "data", "scan-receipts", `daytrade-futopt-preopen-evidence-0850-${clock.compact}.json`),
   };
@@ -206,7 +226,10 @@ async function main() {
   const priority = readJson(paths.priority);
   const motherPool = readJson(paths.motherPool);
   const fastSync = readJson(paths.fastSync);
+  const industryTop3 = readJson(paths.industryTop3);
+  const industryFastInject = readJson(paths.industryFastInject);
   const openingReport = readJson(paths.openingReport);
+  const openingReportHandoffAck = readJson(paths.openingReportHandoffAck);
   const futopt0845 = readJson(paths.futopt0845);
   const futopt0850 = readJson(paths.futopt0850);
   const failures = [];
@@ -284,12 +307,23 @@ async function main() {
   check("fast_supabase_sync_fresh", ageSeconds(fastSync?.completed_at) <= 120, "fast_supabase_sync_stale");
   check("fast_supabase_quote_write_nonempty", Number(fastSync?.quotes_written) > 0, "fast_supabase_quote_write_empty");
   check("fast_supabase_1m_write_nonempty", Number(fastSync?.candles_written) > 0, "fast_supabase_1m_write_empty");
+  const industryReceiptsRequired = clock.minute >= 9 * 60;
+  check("industry_top3_receipt_readable", !industryReceiptsRequired || Boolean(industryTop3), "industry_top3_receipt_missing");
+  check("industry_top3_receipt_complete", !industryReceiptsRequired || industryTop3?.complete === true, "industry_top3_receipt_not_complete");
+  check("industry_top3_scan_executed", !industryReceiptsRequired || industryTop3?.scan_executed === true, "industry_top3_scan_not_executed");
+  check("industry_top3_source_rows_present", !industryReceiptsRequired || Number(industryTop3?.source_rows) > 0, "industry_top3_source_rows_empty");
+  check("industry_fast_inject_receipt_readable", !industryReceiptsRequired || Boolean(industryFastInject), "industry_fast_inject_receipt_missing");
+  check("industry_fast_inject_receipt_complete", !industryReceiptsRequired || industryFastInject?.complete === true, "industry_fast_inject_receipt_not_complete");
+  check("industry_fast_inject_scan_executed", !industryReceiptsRequired || industryFastInject?.scan_executed === true, "industry_fast_inject_scan_not_executed");
+  check("industry_fast_inject_zero_event_explained", !industryReceiptsRequired || Number(industryFastInject?.injection_count || 0) > 0 || industryFastInject?.zero_event === true, "industry_fast_inject_zero_event_unexplained");
 
   const staticChecks = {
     skeleton: verifySkeletonStatic(),
     dailyIdentity: runStatic("scripts/verify-daytrade-priority-daily-rollover-contract.js"),
     futoptLockRetry: runStatic("scripts/verify-daytrade-futopt-lock-retry-contract.js"),
     sideVolume2000: runStatic("scripts/verify-daytrade-side-volume-contract.js", ["--static-only"]),
+    industryTop3: runStatic("scripts/verify-daytrade-industry-top3.js"),
+    industryFastInject: runStatic("scripts/verify-daytrade-industry-fast-inject.js"),
     consumers: verifyConsumerContractStatic(),
     legacyVerifierRetired: {
       ok: !fs.existsSync(path.join(ROOT, "scripts", "verify-daytrade-mother-pool-contract.js"))
@@ -317,6 +351,52 @@ async function main() {
     && openingReport?.formal_candidate_allowed === false
   );
   check("opening_report_bridge_closed", openingOk, "opening_report_bridge_not_closed");
+  const openingAckSymbols = [...new Set([
+    ...(Array.isArray(openingReportHandoffAck?.accepted_symbols) ? openingReportHandoffAck.accepted_symbols : []),
+    ...(Array.isArray(openingReportHandoffAck?.db_readback_symbols) ? openingReportHandoffAck.db_readback_symbols : []),
+  ].map(String).filter((symbol) => /^\d{4}$/.test(symbol)))];
+  const prioritySymbolSet = new Set(Array.isArray(priority?.symbols) ? priority.symbols.map(String) : []);
+  const openingAckMissingFromWriterManifest = openingAckSymbols.filter((symbol) => !prioritySymbolSet.has(symbol));
+  const openingQuoteReadback = openingAckSymbols.length
+    ? await readSupabaseRows(
+      "fugle_daytrade_quotes_live",
+      `select=${encodeURIComponent("symbol,price,updated_at,quote_seen_at")}&symbol=in.(${openingAckSymbols.join(",")})`,
+    )
+    : { ok: true, rows: [], status: 200, error: "" };
+  const openingQuoteFreshBySymbol = new Map(openingQuoteReadback.rows.map((row) => [
+    String(row.symbol),
+    Math.min(ageSeconds(row.quote_seen_at), ageSeconds(row.updated_at)) <= 120 && Number(row.price) > 0,
+  ]));
+  const openingAckLiveAdmissibleSymbols = openingAckSymbols.filter((symbol) =>
+    motherPoolSymbolSet.has(symbol) || openingQuoteFreshBySymbol.get(symbol) === true);
+  const openingAckMissingFromMotherPool = openingAckLiveAdmissibleSymbols.filter((symbol) => !motherPoolSymbolSet.has(symbol));
+  const openingAckSkippedStaleQuote = openingAckSymbols.filter((symbol) =>
+    !motherPoolSymbolSet.has(symbol) && openingQuoteFreshBySymbol.get(symbol) !== true);
+  const openingHandoffAckOk = !openingRequired || (
+    identityOf(openingReportHandoffAck).tradeDate === clock.tradeDate
+    && openingReportHandoffAck?.contract === "opening-report-0830-mother-pool-handoff-ack-v2"
+    && openingReportHandoffAck?.complete === true
+    && openingReportHandoffAck?.db_readback_ok === true
+    && openingReportHandoffAck?.formal_candidate_allowed === false
+    && openingReportHandoffAck?.forbidden_publish_guard === true
+    && openingAckSymbols.length > 0
+  );
+  check("opening_report_handoff_ack_complete", openingHandoffAckOk, "opening_report_handoff_ack_not_complete");
+  check(
+    "opening_report_ack_symbols_received_by_writer_manifest",
+    !openingRequired || openingAckMissingFromWriterManifest.length === 0,
+    `opening_report_ack_symbols_not_in_writer_manifest:${openingAckMissingFromWriterManifest.slice(0, 12).join(",")}`,
+  );
+  check(
+    "opening_report_ack_quote_readback",
+    !openingRequired || openingQuoteReadback.ok === true,
+    `opening_report_ack_quote_readback_failed:${openingQuoteReadback.status}:${openingQuoteReadback.error}`,
+  );
+  check(
+    "opening_report_ack_symbols_admitted_to_mother_pool",
+    !openingRequired || openingAckMissingFromMotherPool.length === 0,
+    `opening_report_ack_symbols_not_in_mother_pool:${openingAckMissingFromMotherPool.slice(0, 12).join(",")}`,
+  );
 
   const futoptRequired = clock.minute >= 8 * 60 + 50;
   const futoptGuardsSafe = [futopt0845, futopt0850].every((receipt) => !receipt || (
@@ -325,17 +405,19 @@ async function main() {
     && receipt.publish_allowed === false
   ));
   check("futopt_formal_guards_safe", futoptGuardsSafe, "futopt_formal_guard_invalid");
-  const futoptClosed = !futoptRequired || [futopt0845, futopt0850].every((receipt, index) => (
+  const futoptClosed = [futopt0845, futopt0850].every((receipt, index) => (
     receipt?.ok === true
     && receipt?.trade_date === clock.tradeDate
     && receipt?.natural_schedule_evidence === true
     && String(receipt?.capture_slot) === (index === 0 ? "0845" : "0850")
   ));
-  if (!futoptClosed) warnings.push("futopt_preopen_evidence_fail_closed_rank_without_futopt_weight");
+  if (futoptRequired && !futoptClosed) warnings.push("futopt_preopen_evidence_fail_closed_rank_without_futopt_weight");
 
   const result = {
     ok: failures.length === 0,
     closed_loop_ok: failures.length === 0,
+    all_modules_complete: false,
+    all_modules_scope: "not_evaluated_by_core_water_verifier_use_preopen_a01_a19_receipt",
     contract: "daytrade_mother_pool_closed_loop_v1",
     mother_pool_contract_version: EXPECTED_MOTHER_POOL_CONTRACT_VERSION,
     trade_date: clock.tradeDate,
@@ -360,18 +442,46 @@ async function main() {
         avg3_pass_rows: avg3PassRows.length,
         avg3_history_pending_rows: avg3PendingRows.length,
       },
-      opening_report: { ok: openingOk, required: openingRequired, path: paths.openingReport },
+      opening_report: {
+        ok: openingOk && openingHandoffAckOk && openingAckMissingFromWriterManifest.length === 0
+          && openingQuoteReadback.ok === true && openingAckMissingFromMotherPool.length === 0,
+        required: openingRequired,
+        path: paths.openingReport,
+        handoff_ack_path: paths.openingReportHandoffAck,
+        handoff_ack_symbols: openingAckSymbols.length,
+        handoff_ack_missing_from_writer_manifest: openingAckMissingFromWriterManifest,
+        handoff_ack_live_admissible_symbols: openingAckLiveAdmissibleSymbols,
+        handoff_ack_missing_from_mother_pool: openingAckMissingFromMotherPool,
+        handoff_ack_skipped_stale_quote_symbols: openingAckSkippedStaleQuote,
+      },
       futopt_preopen: {
         ok: futoptClosed || futoptGuardsSafe,
         natural_evidence_ok: futoptClosed,
         safety_contract_ok: futoptGuardsSafe,
-        status: futoptClosed ? "complete" : (futoptGuardsSafe ? "safe_degraded" : "failed"),
+        status: !futoptRequired ? "pending" : (futoptClosed ? "complete" : (futoptGuardsSafe ? "safe_degraded" : "failed")),
         required: futoptRequired,
         fail_closed_isolated: !futoptClosed,
-        allowed_action: futoptClosed ? "apply_futopt_observation_weight" : "rank_without_futopt_trial_weight",
+        allowed_action: futoptRequired && futoptClosed ? "apply_futopt_observation_weight" : "rank_without_futopt_trial_weight",
         paths: [paths.futopt0845, paths.futopt0850],
       },
       fast_supabase_sync: { ok: checks.fast_supabase_sync_fresh && checks.fast_supabase_quote_write_nonempty && checks.fast_supabase_1m_write_nonempty, path: paths.fastSync, age_seconds: ageSeconds(fastSync?.completed_at), quotes_written: Number(fastSync?.quotes_written || 0), candles_written: Number(fastSync?.candles_written || 0) },
+      industry_top3: {
+        ok: checks.industry_top3_receipt_complete && checks.industry_top3_scan_executed && checks.industry_top3_source_rows_present,
+        required: industryReceiptsRequired,
+        path: paths.industryTop3,
+        source_rows: Number(industryTop3?.source_rows || 0),
+        top3_count: Number(industryTop3?.top3_count || 0),
+        industries: Array.isArray(industryTop3?.industries) ? industryTop3.industries : [],
+      },
+      industry_fast_inject: {
+        ok: checks.industry_fast_inject_receipt_complete && checks.industry_fast_inject_scan_executed && checks.industry_fast_inject_zero_event_explained,
+        required: industryReceiptsRequired,
+        path: paths.industryFastInject,
+        injection_count: Number(industryFastInject?.injection_count || 0),
+        zero_event: industryFastInject?.zero_event === true,
+        zero_event_reason: industryFastInject?.zero_event_reason || null,
+        symbols: Array.isArray(industryFastInject?.symbols) ? industryFastInject.symbols : [],
+      },
     },
     checks,
     static_checks: staticChecks,
@@ -406,3 +516,5 @@ if (STATIC_ONLY) {
     process.exitCode = 1;
   });
 }
+
+

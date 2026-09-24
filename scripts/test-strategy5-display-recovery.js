@@ -1,0 +1,13 @@
+'use strict';
+const assert=require('assert'),fs=require('fs'),os=require('os'),path=require('path');
+const {buildScanAudit}=require('../lib/scorecard-scan-audit');
+const temp=fs.mkdtempSync(path.join(os.tmpdir(),'strategy5-replay-'));const dir=path.join(temp,'data','scan-receipts');fs.mkdirSync(dir,{recursive:true});
+const run='strategy5-20260918-20260918065116';const receipt={strategy:'strategy5',marketDate:'20260918',runId:run,status:'complete',complete:true,exitCode:0,fallback:false,triSurfaceStatus:'complete',desktopRunId:run,mobileRunId:run,scorecardRunId:run,startedAt:'2026-09-19T14:50:00+08:00',finishedAt:'2026-09-19T15:08:00+08:00',matches:273,verifiedResultCount:273};
+const context={ok:true,mode:'strategy_revision_replay',tradeDate:'2026-09-18',calendarSource:'official'};
+const check=(r,c=context)=>{fs.writeFileSync(path.join(dir,'strategy5.json'),JSON.stringify(r));return buildScanAudit({runtimeDir:temp,tradeDate:'2026-09-18',now:new Date('2026-09-19T16:00:00+08:00'),recoveryContext:c}).modules.find(m=>m.key==='strategy5');};
+assert.equal(check(receipt).status,'late_complete');assert.equal(check(receipt).count,273);assert.equal(check(receipt).runId,run);assert.notEqual(check(receipt,null).status,'late_complete');
+for(const r of [{...receipt,complete:false},{...receipt,fallback:true},{...receipt,mobileRunId:'wrong'},{...receipt,finishedAt:'2026-09-20T00:00:00Z'},{...receipt,marketDate:'20260917'},{...receipt,runId:'strategy5-20260917-20260917065116'}])assert.notEqual(check(r).status,'late_complete');
+assert.notEqual(check(receipt,{...context,calendarSource:'fallback'}).status,'late_complete');
+const source=fs.readFileSync(path.join(__dirname,'../api/strategy5-latest.js'),'utf8');assert(source.includes('fetchLatestCompleteRows(2000)'));assert(source.includes('normalizedRows.filter((row) => row.matches.length).slice('));
+const ui=fs.readFileSync(path.join(__dirname,'../terminal-desktop-fast-shell.js'),'utf8');assert(ui.includes('payloadMeta.ok === true && payloadMeta.runId && payloadMeta.resultCount === 0'));
+console.log('Strategy5 replay acceptance/rejection and display boundaries PASS');

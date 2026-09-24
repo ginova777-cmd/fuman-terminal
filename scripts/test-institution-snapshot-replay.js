@@ -1,0 +1,13 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {readRequestOptions}=require('../api/institution-latest')._test;
+const req={url:'/api/institution-latest?canvas=1&limit=60&snapshotBuild=1',headers:{host:'localhost'}};
+assert.equal(readRequestOptions(req).limit,60);
+assert.equal(readRequestOptions({...req,fumanInternalVerify:true}).limit,3000);
+assert.equal(readRequestOptions({...req,url:'/api/institution-latest?canvas=1&limit=2000'}).limit,2000);
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'institution-audit-'));fs.mkdirSync(path.join(root,'data/scan-receipts'),{recursive:true});
+fs.writeFileSync(path.join(root,'data/scan-receipts/institution.json'),JSON.stringify({marketDate:'20260919',runId:'institution-20260918-20260919033859',institution_source_status_at_run:{usedDate:'20260918'},status:'complete',complete:true,exitCode:0,matches:127,verifiedResultCount:127,triSurfaceStatus:'complete'}));
+const {buildScanAudit}=require('../lib/scorecard-scan-audit');
+const day=buildScanAudit({runtimeDir:root,tradeDate:'2026-09-18',now:new Date('2026-09-19T04:00:00Z')}).modules.find(r=>r.key==='institution');assert.equal(day.runId,'institution-20260918-20260919033859');assert.equal(day.count,127);
+const weekend=buildScanAudit({runtimeDir:root,tradeDate:'2026-09-19',now:new Date('2026-09-19T04:00:00Z')}).modules.find(r=>r.key==='institution');assert.equal(weekend.runId,'');assert.equal(weekend.count,0);
+console.log('PASS snapshot population and replay audit date: 7 assertions; isolated runtime '+root);

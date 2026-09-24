@@ -39,6 +39,48 @@ function Write-WrapperLog {
   Add-Content -LiteralPath $WrapperLog -Value $line -Encoding utf8
 }
 
+function Invoke-MotherPoolReceiptRollover {
+  param([int]$FastSyncExitCode)
+  if (-not $Apply -or $FastSyncExitCode -ne 0) { return }
+
+  $receiptPath = Join-Path $RuntimeDir "data\scan-receipts\daytrade-mother-pool-closed-loop-$($TradeDate.Replace('-','')).json"
+  $receiptComplete = $false
+  try {
+    if (Test-Path -LiteralPath $receiptPath) {
+      $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+      $receiptComplete = (
+        $receipt.closed_loop_ok -eq $true -and
+        [string]$receipt.trade_date -eq $TradeDate -and
+        [string]$receipt.canonical_run_id -eq "fugle_daytrade_source:$($TradeDate.Replace('-','')):canonical"
+      )
+    }
+  } catch {
+    Write-WrapperLog "MOTHER_POOL_RECEIPT_ROLLOVER existing_receipt_unreadable path=$receiptPath error=$($_.Exception.Message)"
+  }
+  # A complete receipt for an earlier pool size must be refreshed after membership changes.
+  if ($receiptComplete) {
+    try {
+      $delta = Get-Content -LiteralPath (Join-Path $RuntimeDir "state\daytrade-mother-pool-delta.json") -Raw | ConvertFrom-Json
+      $receiptComplete = ([string]$delta.trade_date -eq $TradeDate -and [string]$delta.canonical_run_id -eq [string]$receipt.canonical_run_id -and @($delta.rows).Count -eq [int]$receipt.components.mother_pool.rows)
+    } catch { $receiptComplete = $false }
+  }
+  if ($receiptComplete) {
+    Write-WrapperLog "MOTHER_POOL_RECEIPT_ROLLOVER skip=today_complete path=$receiptPath"
+    return
+  }
+
+  $verifierScript = Join-Path $RepoRoot "scripts\verify-daytrade-mother-pool-closed-loop.js"
+  if (-not (Test-Path -LiteralPath $verifierScript)) {
+    Write-WrapperLog "MOTHER_POOL_RECEIPT_ROLLOVER skip=verifier_missing path=$verifierScript"
+    return
+  }
+  $verifyOutput = & node --use-system-ca $verifierScript --write-receipt 2>&1
+  $verifyExit = $LASTEXITCODE
+  $verifyText = (($verifyOutput | Out-String) -replace "[\r\n]+", " ").Trim()
+  if ($verifyText.Length -gt 700) { $verifyText = $verifyText.Substring(0, 700) }
+  Write-WrapperLog "MOTHER_POOL_RECEIPT_ROLLOVER exit=$verifyExit output=$verifyText"
+}
+
 function Get-IsoAgeSeconds {
   param([object]$Value)
   try {
@@ -281,7 +323,37 @@ function Invoke-DaytradeSideVolumeCanonicalVerifier {
   $verifierText = ($verifierOutput | Out-String).Trim()
   $verifierText | Set-Content -LiteralPath $verifierLog -Encoding utf8
   $verifierPayload = $null
-  try { $verifierPayload = $verifierText | ConvertFrom-Json } catch {}
+  # Native stdout can be transcoded by a scheduled PowerShell host and corrupt
+  # non-ASCII stock names. The verifier's UTF-8 canonical receipt is the
+  # parsing authority; stdout remains diagnostic-only.
+  $canonicalReceiptPath = Join-Path $RuntimeDir "data\scan-receipts\daytrade-side-volume-2000-canonical-receipt-latest.json"
+  $receiptReadError = ""
+  for ($receiptReadAttempt = 1; $receiptReadAttempt -le 5 -and $null -eq $verifierPayload; $receiptReadAttempt++) {
+    try {
+      if (Test-Path -LiteralPath $canonicalReceiptPath) {
+        $candidate = Get-Content -LiteralPath $canonicalReceiptPath -Raw | ConvertFrom-Json -DateKind String
+        # Force both ISO-8601 values to UTC. On a Taiwan host the one-argument
+        # Parse overload can reinterpret a trailing Z as local +08:00 and make
+        # a newly written receipt appear eight hours older than this attempt.
+        $utcStyle = [Globalization.DateTimeStyles]::RoundtripKind
+        $invariantCulture = [Globalization.CultureInfo]::InvariantCulture
+        $candidateTime = [DateTimeOffset]::Parse([string]$candidate.checked_at, $invariantCulture, $utcStyle)
+        $startedTime = [DateTimeOffset]::Parse([string]$state.started_at, $invariantCulture, $utcStyle)
+        if ([string]$candidate.trade_date -eq $TradeDate -and $candidateTime -ge $startedTime) {
+          $verifierPayload = $candidate
+        } else {
+          $receiptReadError = "canonical_receipt_not_from_current_attempt"
+        }
+      } else {
+        $receiptReadError = "canonical_receipt_missing"
+      }
+    } catch {
+      $receiptReadError = $_.Exception.Message
+    }
+    if ($null -eq $verifierPayload -and $receiptReadAttempt -lt 5) {
+      Start-Sleep -Milliseconds 200
+    }
+  }
   $state.completed_at = [DateTimeOffset]::UtcNow.ToString("o")
   $state.exit_code = $verifierExit
   $state.receipt_status = if ($null -ne $verifierPayload) { [string]$verifierPayload.status } else { "unparseable" }
@@ -289,6 +361,7 @@ function Invoke-DaytradeSideVolumeCanonicalVerifier {
   $state.status = if ($verifierExit -eq 0) { "complete" } elseif ($null -ne $verifierPayload -and [string]$verifierPayload.status -eq "partial") { "partial" } else { "failed" }
   $state.verification_run_id = if ($null -ne $verifierPayload) { [string]$verifierPayload.verification_run_id } else { "" }
   $state.first_blocker = if ($null -ne $verifierPayload) { [string]$verifierPayload.first_blocker } else { "verifier_output_unparseable" }
+  $state.receipt_read_error = if ($null -ne $verifierPayload) { $null } else { $receiptReadError }
   $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $scheduleStatePath -Encoding utf8
   Write-WrapperLog "SIDE_VOLUME_VERIFIER_DONE status=$($state.status) receipt_status=$($state.receipt_status) complete=$($state.receipt_complete) exit=$verifierExit verification_run_id=$($state.verification_run_id)"
 }
@@ -307,6 +380,10 @@ $env:DAYTRADE_SUPABASE_TRANSIENT_RETRIES = "2"
 $env:DAYTRADE_SUPABASE_RETRY_BASE_DELAY_MS = "1000"
 $env:FUMAN_FORMAL_SOURCE_WINDOW_START = "0600"
 $env:FUMAN_FORMAL_SOURCE_WINDOW_END = "1330"
+
+# Closeout shares the same cross-session and OS mutex as the Writer.
+$closeoutNow = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, "Taipei Standard Time")
+$runCloseout = $Apply -and -not $LocalCheck -and (($closeoutNow.Hour * 60 + $closeoutNow.Minute) -ge 810)
 
 # FUMAN_MARKET_CLOSED_RUNNER_GUARD_V1
 . "$RepoRoot\schedule-guard.ps1"
@@ -330,7 +407,7 @@ if ($preopenWarmup) {
     exit 0
   }
   Write-WrapperLog "PREOPEN_WARMUP_ALLOWED trade_date=$($calendarPayload.tradingDay.date); warmup_only=true; formal_entry_allowed=false"
-} else {
+} elseif (-not $runCloseout) {
   Invoke-FumanWeekdayGuard -Label "Daytrade source writer" -LogPath $WrapperLog
 }
 
@@ -344,7 +421,7 @@ if ($LocalCheck) {
   if ($Once) {
     $args += "--once"
   } else {
-    $args += "--max-seconds=300"
+    $args += "--max-seconds=420"
   }
 } else {
   $args += "--dry-run"
@@ -359,8 +436,9 @@ if ($Fetch -and -not $Apply) {
 
 $EffectiveOnce = $args -contains "--once"
 Write-WrapperLog "START run_id=$RunId apply=$Apply fetch=$Fetch once=$Once continuous=$Continuous effectiveOnce=$EffectiveOnce localCheck=$LocalCheck"
-Invoke-DaytradeWebSocketCollectorSelfHeal
-if ($Apply) {
+if (-not $runCloseout) { Invoke-DaytradeWebSocketCollectorSelfHeal }
+if ($Apply -and -not $runCloseout) {
+  $fastSyncExit = -1
   $fastSyncScript = Join-Path $RepoRoot "scripts\sync-daytrade-websocket-supabase-fast.js"
   if (Test-Path -LiteralPath $fastSyncScript) {
     $fastSyncOutput = & node --use-system-ca $fastSyncScript --apply 2>&1
@@ -371,6 +449,7 @@ if ($Apply) {
   } else {
     Write-WrapperLog "FAST_SUPABASE_SYNC skip=script_missing path=$fastSyncScript"
   }
+  Invoke-MotherPoolReceiptRollover -FastSyncExitCode $fastSyncExit
 }
 try {
   if (Test-Path -LiteralPath $CrossSessionLockPath) {
@@ -422,6 +501,19 @@ try {
     exit 0
   }
 
+  if ($runCloseout) {
+    $env:FUMAN_RUNTIME = $RuntimeDir
+    & node (Join-Path $RepoRoot "scripts/run-mother-pool-closeout.js") --apply
+    $closeoutExit = $LASTEXITCODE
+    Write-WrapperLog "MOTHER_CLOSEOUT exit=$closeoutExit"
+    if ($closeoutExit -eq 3) { exit 0 }
+    if ($closeoutExit -eq 0) {
+      & node (Join-Path $RepoRoot "scripts/run-daytrade-module-verifiers.js")
+      exit $LASTEXITCODE
+    }
+    exit $closeoutExit
+  }
+
   if ($Apply -and -not (Invoke-FugleFutoptCollectorReleaseReconcile)) {
     Write-WrapperLog "WARN futopt collector reconcile blocked; canonical gate remains fail-closed"
   }
@@ -434,9 +526,9 @@ try {
   for ($attempt = 1; $attempt -le $attempts; $attempt++) {
     Write-WrapperLog "NODE_ATTEMPT $attempt/$attempts stdout=$StdoutLog stderr=$StderrLog"
     # The current Mother Pool v4 universe can legitimately need more than 270s.
-    # Keep a small budget below the Windows task's five-minute ceiling so the
-    # canonical verifier and wrapper cleanup can still finish in the same run.
-    $nodeTimeoutSeconds = if ($env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS) { [int]$env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS } else { 285 }
+    # Keep one writer alive until its runner/readback/receipt cycle finishes;
+    # cross-session lock + IgnoreNew prevents overlapping writers.
+    $nodeTimeoutSeconds = if ($env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS) { [int]$env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS } else { 450 }
     if ($nodeTimeoutSeconds -lt 30) { $nodeTimeoutSeconds = 30 }
     $nodeProcess = Start-Process -FilePath $node -ArgumentList $args -RedirectStandardOutput $StdoutLog -RedirectStandardError $StderrLog -PassThru -WindowStyle Hidden
     if (-not $nodeProcess.WaitForExit($nodeTimeoutSeconds * 1000)) {

@@ -1,12 +1,23 @@
-param([ValidateSet("Complete", "Status")][string]$Mode = "Complete")
+param([ValidateSet("Complete", "Status", "Recovery")][string]$Mode = "Complete", [string]$ExpectedRunId = "", [string]$ReplayTradeDate = "")
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 Set-Location -LiteralPath $PSScriptRoot
 $runtime = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
 $env:FUMAN_RUNTIME_DIR = $runtime
+$env:FUMAN_REPLAY_TRADE_DATE = $ReplayTradeDate
+$env:FUMAN_ALLOW_REPLAY_CLOSED_DAY = [string](-not [string]::IsNullOrWhiteSpace($ReplayTradeDate))
+$env:FUMAN_INSTITUTION_REPLAY_VALIDATED = "0"
 $env:NODE_OPTIONS = "--use-system-ca"
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 if (-not (Test-Path -LiteralPath $nodeExe)) { $nodeExe = "node.exe" }
+if ($ReplayTradeDate) {
+  & $nodeExe "--use-system-ca" "scripts/verify-institution-replay-date.js" $ReplayTradeDate
+  if ($LASTEXITCODE -ne 0) { throw "institution_replay_date_invalid" }
+  $env:FUMAN_INSTITUTION_REPLAY_VALIDATED = "1"
+  $env:FUMAN_SCANNER_TARGET_TRADE_DATE = $ReplayTradeDate
+  $env:FUMAN_SCORECARD_TRADE_DATE = $ReplayTradeDate
+  $env:FUMAN_TERMINAL_TARGET_TRADE_DATE = $ReplayTradeDate
+}
 $pwshExe = (Get-Process -Id $PID).Path
 $logDir = Join-Path $runtime "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -23,13 +34,41 @@ if ($Mode -eq "Status") {
 . "$PSScriptRoot\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Buy/sell complete" -LogPath $log -AllowAfterFormalSourceWindow
 try {
+  Invoke-Required "release root authority" { & $nodeExe "scripts\verify-release-root-authority.js" "--require-production-root" }
+  if ($Mode -eq "Recovery") {
+    $existing = Get-Content -LiteralPath (Join-Path $runtime "data\scan-receipts\institution.json") -Raw | ConvertFrom-Json
+    if (-not $ExpectedRunId -or $existing.runId -ne $ExpectedRunId -or $existing.complete -ne $true -or $existing.status -ne "complete" -or $existing.fallbackUsed -eq $true) { throw "recovery_requires_exact_complete_nonfallback_run" }
+    Invoke-Required "recovery authoritative live readback" { & $nodeExe "--use-system-ca" "scripts\verify-institution-live-readback.js" }
+  } else {
   Invoke-Required "chip source sync" { & $pwshExe -NoProfile -File ".\run-chip-source-sync.ps1" }
   Invoke-Required "institution formal scan" { & $pwshExe -NoProfile -File ".\run-institution.ps1" }
+  }
   Invoke-Required "institution E2E closure" { & $nodeExe "--use-system-ca" "scripts\verify-institution-e2e-closure.js" }
   Invoke-Required "business fields" { & $nodeExe "scripts\verify-institution-business-fields.js" }
   Invoke-Required "strategy requirements" { & $nodeExe "scripts\verify-institution-strategy-requirements.js" }
   Invoke-Required "formal payloads" { & $nodeExe "scripts\verify-institution-formal-payloads.js" }
   Invoke-Required "UI display" { & $nodeExe "scripts\verify-institution-ui-display.js" }
+  Invoke-Required "institution live data before scorecard publication" { & $nodeExe "--use-system-ca" "scripts\verify-institution-live-readback.js" }
+  Invoke-Required "institution audited scorecard publication" {
+    $institutionEvidence = Get-Content -LiteralPath (Join-Path $runtime "data\scan-receipts\institution.json") -Raw | ConvertFrom-Json
+    if ($institutionEvidence.complete -ne $true -or $institutionEvidence.status -ne "complete") { throw "institution_not_complete_for_scorecard_publication" }
+    $priorKey = $env:FUMAN_SCORECARD_REFRESH_KEY
+    $priorRun = $env:FUMAN_SCORECARD_REFRESH_RUN_ID
+    try {
+      $env:FUMAN_SCORECARD_REFRESH_KEY = "institution"
+      $env:FUMAN_SCORECARD_REFRESH_RUN_ID = [string]$institutionEvidence.runId
+      & $nodeExe "--use-system-ca" "scripts\generate-terminal-scorecard-source.js"
+      if ($LASTEXITCODE -ne 0) { throw "institution_scorecard_records_refresh_failed" }
+    } finally {
+      $env:FUMAN_SCORECARD_REFRESH_KEY = $priorKey
+      $env:FUMAN_SCORECARD_REFRESH_RUN_ID = $priorRun
+    }
+    & $pwshExe -NoProfile -File ".\scripts\run-scorecard88-terminal-collector.ps1" -Slot "21:40" -ProjectRoot $PSScriptRoot -RuntimeRoot $runtime -Recovery -ExpectedRunId ([string]$institutionEvidence.runId) -RecoveryReason "Institution complete runner: publish independently verified desktop/mobile run to scorecard before rendered acceptance"
+  }
+  Invoke-Required "institution scan audit publication" { & $nodeExe "--use-system-ca" "scripts\publish-scorecard-scan-audit.js" }
+  Invoke-Required "institution complete desktop snapshot publication" { & $pwshExe -NoProfile -File ".\refresh-desktop-route-snapshot.ps1" -Source institution }
+  Invoke-Required "institution mobile fragment publication" { & $nodeExe "--use-system-ca" "scripts\publish-mobile-fragment-snapshots.js" "--tabs=chip" }
+  Invoke-Required "live database and rendered three-surface acceptance" { & $nodeExe "--use-system-ca" "scripts\verify-institution-live-readback.js" "--render" }
   Invoke-Required "buy-sell canonical receipt" { & $nodeExe "--use-system-ca" "scripts\verify-buy-sell-complete.js" "--write-receipt" }
   exit 0
 } catch {

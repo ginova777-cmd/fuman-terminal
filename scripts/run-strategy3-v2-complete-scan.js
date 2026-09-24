@@ -1,4 +1,6 @@
 "use strict";
+const TREND_CONTRACT = require("../data/contracts/strategy3_technical_trend_v2.json");
+const { scoreBonuses } = require("../lib/strategy3-score-bonuses");
 
 const { spawnSync } = require("child_process");
 const path = require("path");
@@ -26,6 +28,8 @@ const {
   failClosed,
 } = require("./strategy3-v2-contract");
 const { readCanonicalDaytradeWater } = require("../lib/daytrade-canonical-water-reader");
+const { readStrategy3TechnicalTrends } = require("../lib/strategy3-technical-trend-reader");
+const { readStrategy3AtrRvol } = require("../lib/strategy3-atr-rvol-reader");
 
 const tradeDate = process.argv.find((arg) => arg.startsWith("--trade-date="))?.slice("--trade-date=".length) || taipeiDate();
 const compactDate = tradeDate.replace(/\D/g, "");
@@ -39,7 +43,7 @@ const attemptPhase = process.argv.find((arg) => arg.startsWith("--attempt-phase=
 const SUPABASE_URL = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
 const SUPABASE_KEY = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
 const MIN_CHANGE_PERCENT = 5;
-const MAX_CHANGE_PERCENT = 7;
+const MAX_CHANGE_PERCENT = 8;
 
 async function supabaseRequest(method, table, query, body) {
   if (!SUPABASE_URL || !SUPABASE_KEY) throw new Error("supabase_credentials_missing");
@@ -117,7 +121,7 @@ function parseJson(text) {
 }
 
 function runMarketGuard() {
-  const child = spawnSync(process.execPath, ["--use-system-ca", path.join(ROOT, "scripts", "check-market-calendar-action.js"), "--label=strategy3-v2-complete-scan", "--receipt"], {
+  const child = spawnSync(process.execPath, ["--use-system-ca", path.join(ROOT, "scripts", "check-market-calendar-action.js"), "--label=strategy3-v2-complete-scan", `--date=${tradeDate}`, "--receipt"], {
     cwd: ROOT,
     encoding: "utf8",
     windowsHide: true,
@@ -170,7 +174,7 @@ function round(value, digits = 2) {
   return Math.round(number * factor) / factor;
 }
 
-async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
+async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, readTechnicalTrends = readStrategy3TechnicalTrends, readAtrRvol = readStrategy3AtrRvol) {
   const water = await readWater({
     tradeDate,
     consumerName: STRATEGY,
@@ -232,6 +236,7 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
     const entryAverage = [entry.open, entry.high, entry.low, entry.close].map(Number).filter((value) => Number.isFinite(value) && value > 0);
     const entryPrice = Number(entry.close || (entryAverage.length ? entryAverage.reduce((sum, value) => sum + value, 0) / entryAverage.length : 0));
     const closePrice = Number(quote.price || last.close || 0);
+    const limitUpPrice = Number(quote.limit_up_price || quote.payload?.limitUpPrice || quote.payload?.limit_up_price || 0);
     const prevClose = Number(quote.previous_close || 0);
     const changePercent = Number.isFinite(Number(quote.change_percent))
       ? Number(quote.change_percent)
@@ -250,13 +255,16 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
       belowChangeRangeCount += 1;
       continue;
     }
-    // The 7% inclusive ceiling explicitly excludes every limit-up stock from
-    // Strategy3, without relying on a separately inferred limit-price field.
+    const isLimitUp = limitUpPrice > 0 ? closePrice >= limitUpPrice * 0.9999 : changePercent >= 9.7;
+    if (isLimitUp) {
+      aboveChangeRangeOrLimitUpCount += 1;
+      continue;
+    }
     if (changePercent > MAX_CHANGE_PERCENT) {
       aboveChangeRangeOrLimitUpCount += 1;
       continue;
     }
-    if (!(closePrice >= entryPrice && totalVolume > 0)) continue;
+    // Entry continuation and positive volume award a bonus; they do not exclude candidates.
 
     const tailShare = totalVolume > 0 ? (tailVolume / totalVolume) * 100 : 0;
     const fullSessionBonus = count >= 200 ? 8 : count >= 100 ? 4 : 0;
@@ -294,8 +302,7 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
       reason_codes: [
         "strategy3_v2_same_day_1m_ready",
         "strategy3_v2_1300_entry_window_present",
-        "strategy3_v2_close_above_entry",
-        "strategy3_v2_change_percent_5_to_7_inclusive",
+        "strategy3_v2_change_percent_5_to_8_inclusive",
         "strategy3_v2_limit_up_exclusion_passed",
       ],
       formal_source: `${MOTHER_POOL_VIEW}+${QUOTE_TABLE}+rpc:${INTRADAY_1M_RPC}`,
@@ -331,9 +338,16 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
       price: pool.price,
       open_price: pool.open_price,
       previous_close: pool.previous_close,
+      limit_up_price: limitUpPrice || null,
       high_price: pool.high_price,
       low_price: pool.low_price,
       total_volume: pool.total_volume,
+      total_volume_unit: pool.total_volume_unit,
+      total_volume_available: pool.total_volume_available,
+      total_volume_source: pool.total_volume_source,
+      total_volume_source_event_at: pool.total_volume_source_event_at,
+      is_synthetic: pool.is_synthetic,
+      mother_pool_snapshot: water.receipt?.mother_pool_snapshot?.identity || null,
       trade_value: pool.trade_value,
       avg_volume5: pool.avg_volume5,
       quote_trade_date: quote.trade_date,
@@ -357,8 +371,44 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
     });
   }
 
-  candidates.sort((a, b) => b.score - a.score || b.change_percent - a.change_percent || b.tail_volume_share_pct - a.tail_volume_share_pct);
-  candidates.forEach((item, index) => { item.rank = index + 1; });
+  const candidateSymbols = candidates.map((item) => item.code);
+  const [technicalBySymbol, atrRvolBySymbol] = candidates.length
+    ? await Promise.all([
+      readTechnicalTrends({ symbols: candidateSymbols, tradeDate, poolBySymbol: water.poolBySymbol }),
+      readAtrRvol({ symbols: candidateSymbols, tradeDate, poolBySymbol: water.poolBySymbol }),
+    ])
+    : [new Map(), new Map()];
+  let technicalSourceGapCount = 0;
+  let technicalTrendRejectedCount = 0;
+  let atrRvolSourceGapCount = 0;
+  let atrRvolRejectedCount = 0;
+  const confirmedCandidates = candidates.map((item) => {
+    const technical = technicalBySymbol.get(item.code) || {ok:false,source_ready:false,reason:'technical_evidence_unavailable'};
+    const atrRvol = atrRvolBySymbol.get(item.code) || {ok:false,source_ready:false,reason:'atr_rvol_evidence_unavailable'};
+    if (!technical.source_ready) technicalSourceGapCount += 1;
+    if (technical.source_ready && !technical.daily_strategy3_pass) technicalTrendRejectedCount += 1;
+    if (!atrRvol.source_ready) atrRvolSourceGapCount += 1;
+    if (atrRvol.source_ready && !atrRvol.ok) atrRvolRejectedCount += 1;
+    item.technical_trend_confirmation = technical;
+    item.atr_rvol_confirmation = atrRvol;
+    const bonuses = scoreBonuses(item);
+    item.base_score = item.score;
+    item.score_contract = TREND_CONTRACT.contract;
+    item.bonus_evidence = bonuses;
+    item.entry_continuation_bonus_points = bonuses.entryContinuation.points;
+    item.daily_bonus_points = bonuses.daily.points;
+    item.atr_rvol_bonus_points = bonuses.atrRvol.points;
+    item.hourly60_bonus_points = bonuses.hourly60.points;
+    item.score = Math.min(TREND_CONTRACT.scoreCap, item.base_score + Object.values(bonuses).reduce((sum,x)=>sum+x.points,0));
+    if (bonuses.entryContinuation.points) item.reason_codes.push('strategy3_v2_close_above_entry');
+    if (bonuses.daily.points) item.reason_codes.push('strategy3_v2_daily_k_over_d_rsi3_over_rsi6_trend_up');
+    if (bonuses.atrRvol.points) item.reason_codes.push('strategy3_v2_atr_rvol_tail_momentum_confirmed');
+    if (bonuses.hourly60.points) item.reason_codes.push('strategy3_v2_60m_rsi_bonus_awarded');
+    item.reason_codes.push('strategy3_v2_optional_bonus_groups_no_exclusion');
+    return item;
+  });
+  confirmedCandidates.sort((a, b) => b.score - a.score || b.change_percent - a.change_percent || b.tail_volume_share_pct - a.tail_volume_share_pct);
+  confirmedCandidates.forEach((item, index) => { item.rank = index + 1; });
   return {
     water,
     mother_pool: {
@@ -371,7 +421,15 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
       pages: water.receipt?.mother_pool_pages || 0,
     },
     quote_source: { table: QUOTE_TABLE, valid_symbols: water.receipt?.quote_valid_rows || 0 },
-    candle_source: { rpc: INTRADAY_1M_RPC, valid_symbols: water.receipt?.intraday_1m_valid_rows || 0 },
+    candle_source: {
+      ownership: "shared_with_daytrade_canonical_source",
+      writer: "fugle_daytrade_source",
+      table: "fugle_daytrade_intraday_1m",
+      rpc: INTRADAY_1M_RPC,
+      trade_date_policy: "same_trade_date_only",
+      independent_strategy3_writer: false,
+      valid_symbols: water.receipt?.intraday_1m_valid_rows || 0,
+    },
     same_day_candle_symbols: water.candleRowsBySymbol.size,
     ready_20_candle_symbols: ready20Count,
     entry_window_symbols: entryWindowCount,
@@ -379,16 +437,45 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater) {
       min_inclusive: MIN_CHANGE_PERCENT,
       max_inclusive: MAX_CHANGE_PERCENT,
       limit_up_excluded: true,
-      policy: "strategy3_v2_change_percent_5_to_7_inclusive_exclude_limit_up",
+      policy: "strategy3_v2_change_percent_5_to_8_inclusive_exclude_actual_limit_up",
       below_range_count: belowChangeRangeCount,
       above_range_or_limit_up_count: aboveChangeRangeOrLimitUpCount,
     },
+    technical_trend_gate: {
+      required: false,
+      daily_bonus_max_points: TREND_CONTRACT.dailyBonusPoints,
+      policy: "daily_and_completed_60m_optional_bonus_v3",
+      hourly60_required: TREND_CONTRACT.hourly60Required,
+      hourly60_bonus_max_points: TREND_CONTRACT.hourly60BonusPoints,
+      contract: TREND_CONTRACT.contract,
+      hourly60_rule: "bonus_only_5_points:RSI3>RSI6 AND RSI3>previous_RSI3 AND RSI6>previous_RSI6;missing_or_not_up_does_not_exclude",
+      daily_rule: "K>D AND K>previous_K AND D>previous_D AND RSI3>RSI6 AND RSI3>previous_RSI3 AND RSI6>previous_RSI6",
+      evaluated_symbols: candidates.length,
+      source_gap_count: technicalSourceGapCount,
+      trend_rejected_count: 0,
+      daily_not_awarded_count: technicalTrendRejectedCount,
+      confirmed_count: confirmedCandidates.filter(row => row.daily_bonus_points > 0).length,
+      symbol_evidence: [...technicalBySymbol.entries()].map(([symbol, evidence]) => ({ symbol, ...evidence })),
+    },
+    atr_rvol_gate: {
+      required: false,
+      bonus_max_points: TREND_CONTRACT.atrRvolBonusPoints,
+      policy: "1560_style_tail_continuation_bonus_v3",
+      rule: "close_location>=0.75;session_RVOL_baseline>=1.5;tail_RVOL_baseline>=1.5;0.8<=TR/ATR14<=2.2;minimum_two_comparable_sessions;two_to_four_low_sample_confidence",
+      evaluated_symbols: candidates.length,
+      source_gap_count: atrRvolSourceGapCount,
+      rejected_count: 0,
+      not_awarded_count: atrRvolRejectedCount,
+      confirmed_count: confirmedCandidates.filter(row => row.atr_rvol_bonus_points > 0).length,
+      symbol_evidence: [...atrRvolBySymbol.entries()].map(([symbol, evidence]) => ({ symbol, ...evidence })),
+    },
     symbol_data_gap_rows: water.symbolDataGaps.size,
-    results: candidates,
+    results: confirmedCandidates,
   };
 }
 
 async function main() {
+  const scanStartedAt = new Date().toISOString();
   const market = runMarketGuard();
   if (market.closed) {
     const receipt = {
@@ -478,6 +565,8 @@ async function main() {
           ready_20_candle_symbols: scanner.ready_20_candle_symbols,
           entry_window_symbols: scanner.entry_window_symbols,
           change_percent_gate: scanner.change_percent_gate,
+          technical_trend_gate: scanner.technical_trend_gate,
+          atr_rvol_gate: scanner.atr_rvol_gate,
           formal_ready_target: formalReadyTarget,
           mother_pool_coverage_ratio: round(motherPoolCoverageRatio, 4),
           minimum_mother_pool_coverage_ratio: MIN_MOTHER_POOL_COVERAGE_RATIO,
@@ -511,6 +600,8 @@ async function main() {
           ready_20_candle_symbols: scanner.ready_20_candle_symbols,
           entry_window_symbols: scanner.entry_window_symbols,
           change_percent_gate: scanner.change_percent_gate,
+          technical_trend_gate: scanner.technical_trend_gate,
+          atr_rvol_gate: scanner.atr_rvol_gate,
           formal_ready_target: formalReadyTarget,
           mother_pool_coverage_ratio: round(motherPoolCoverageRatio, 4),
           minimum_mother_pool_coverage_ratio: MIN_MOTHER_POOL_COVERAGE_RATIO,
@@ -545,11 +636,15 @@ async function main() {
       receipt.supabase_apply = { ok: false, error: String(error?.message || error).slice(0, 600) };
     }
   }
+  receipt.started_at = scanStartedAt;
+  receipt.finished_at = new Date().toISOString();
   receipt.consumer_name = STRATEGY;
   receipt.consumer_commit = scanner.water.receipt?.consumer_commit || "unknown";
   receipt.contract_version = MOTHER_POOL_CONTRACT_VERSION;
   receipt.source_contract_version = MOTHER_POOL_CONTRACT_VERSION;
   receipt.canonical_run_id = scanner.water.receipt?.canonical_run_id || null;
+  receipt.source_field_contract = scanner.water.receipt?.source_field_contract || null;
+  receipt.mother_pool_snapshot = scanner.water.receipt?.mother_pool_snapshot || null;
   receipt.mother_pool_http_status = scanner.water.receipt?.mother_pool_http_status || null;
   receipt.mother_pool_rows = scanner.water.receipt?.mother_pool_rows || 0;
   receipt.mother_pool_pages = scanner.water.receipt?.mother_pool_pages || 0;

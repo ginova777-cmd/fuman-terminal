@@ -1,3 +1,4 @@
+const morningStages = require("../lib/opening-report-stage-contract");
 "use strict";
 
 const { upsertSnapshot } = require("../lib/supabase-snapshots");
@@ -16,19 +17,28 @@ async function main() {
   const report = marketAiLive.__test.readOpeningMorningReport({
     date,
     ymd: compact,
-    seconds: 8 * 60 * 60 + 30 * 60,
-    time: "08:30:00",
+    seconds: 8 * 60 * 60 + 50 * 60,
+    time: morningStages.stage().time + ":00",
   });
   if (report?.ok !== true) {
     console.log(JSON.stringify({ ok: false, trade_date: date, reason_code: report?.reason_code || "opening_report_0830_not_ready" }, null, 2));
     process.exitCode = 1;
     return;
   }
-  const result = await upsertSnapshot("opening_report_0830_terminal_briefing", {
-    ...report,
+  const fs=require("fs"),path=require("path"),night=require("../lib/opening-report-night-futures");
+  const final=JSON.parse(fs.readFileSync(path.join(process.env.FUMAN_MORNING_STAGE?morningStages.directory(process.env.FUMAN_RUNTIME_DIR||"C:/fuman-runtime"):path.join(process.env.FUMAN_RUNTIME_DIR||"C:/fuman-runtime","data","opening-report-0830"),"opening-report-0830-final-receipt-"+compact+".json"),"utf8").replace(/^\uFEFF/,""));
+  const issues=morningStages.verifyNight(final.night_futures,{date,runId:report.run_id,cutoff:final.recovery?.cutoff_at||require("../lib/opening-report-recovery").cutoff(date),runtime:process.env.FUMAN_RUNTIME_DIR||"C:/fuman-runtime"});
+  if(issues.length||final.run_id!==report.run_id)throw Error("night_futures_snapshot_repair_blocked:"+issues.join(";"));
+  const payload = {
+    ...report, stage: morningStages.stage().id, report_time: morningStages.stage().time,
+    delivery_content_hash:final.delivery_content_hash,display_top3:final.display_top3,source_cutoff:final.recovery?.cutoff_at||require("../lib/opening-report-recovery").label(date),recovery:final.recovery,
+    night_futures:final.night_futures,night_futures_summary:night.summary(final.night_futures),
     source: "opening_report_0830_terminal_briefing",
     updatedAt: new Date().toISOString(),
-  }, {
+  };
+  const stageResult=await upsertSnapshot("opening_report_0830_terminal_briefing_"+morningStages.stage().id,payload,{tradeDate:date,snapshotId:report.run_id,source:"opening_report_0830_terminal_briefing"});
+  if(stageResult.ok!==true)throw Error("stage_snapshot_write_failed");
+  const result = await upsertSnapshot("opening_report_0830_terminal_briefing",payload, {
     tradeDate: date,
     snapshotId: report.run_id || "opening-report-0830-" + compact,
     source: "opening_report_0830_terminal_briefing",

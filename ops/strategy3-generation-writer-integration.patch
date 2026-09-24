@@ -1,0 +1,13 @@
+diff --git a/scripts/run-daytrade-source-writer.js b/scripts/run-daytrade-source-writer.js
+index 3d513a02..793cb963 100644
+--- a/scripts/run-daytrade-source-writer.js
++++ b/scripts/run-daytrade-source-writer.js
+@@ -3058,7 +3058,7 @@ async function publishMotherPoolSnapshot(priorityRows, symbols, tradeDate, canon
+       const pages=[];
+       const startedAt=nowIso();
+       const attemptId=require('node:crypto').randomUUID();
+-      const query = `select=*&trade_date=eq.${encodeURIComponent(snapshot.trade_date)}&mother_pool_run_id=eq.${encodeURIComponent(snapshot.run_id)}&snapshot_sequence=eq.${snapshot.snapshot_sequence}&order=symbol.asc.nullsfirst`;
++      const query = `select=*&trade_date=eq.${encodeURIComponent(snapshot.trade_date)}&mother_pool_run_id=eq.${encodeURIComponent(snapshot.run_id)}&canonical_run_id=eq.${encodeURIComponent(snapshot.canonical_run_id)}&generation=eq.${encodeURIComponent(snapshot.generation)}&snapshot_sequence=eq.${snapshot.snapshot_sequence}&order=symbol.asc.nullsfirst`;
+       let receipt;
+       try {
+         if (!SUPABASE_READ_KEY || SUPABASE_READ_KEY === SUPABASE_SERVICE_KEY) throw new Error('snapshot_anon_key_required');

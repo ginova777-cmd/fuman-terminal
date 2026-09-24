@@ -7,6 +7,7 @@ param(
   [int]$DelaySeconds = 8,
   [int]$BatchSize = 300,
   [int]$MinimumCoveragePercent = 90,
+  [string[]]$Symbols = @(),
   [switch]$DryRun
 )
 
@@ -441,7 +442,19 @@ $universeSet = Get-Strategy4UniverseSet -ReadKey $anonKey
 $coverage = Get-Strategy4Coverage -UniverseSet $universeSet -ReadKey $anonKey
 Write-Host ("Before: loaded={0} / expected={1}, missing={2}" -f $coverage.loaded, $coverage.expected, $coverage.missing)
 
-$targets = @($coverage.missing_symbols | Select-Object -First $MaxSymbols)
+if ($Symbols.Count -gt 0) {
+  $requestedSymbols = @($Symbols | ForEach-Object { ([string]$_).Trim() } | Select-Object -Unique)
+  $invalidSymbols = @($requestedSymbols | Where-Object {
+    $_ -notmatch '^\d{4}$' -or $_.StartsWith('00') -or -not $universeSet.ContainsKey($_)
+  })
+  if ($invalidSymbols.Count -gt 0) {
+    throw "Targeted backfill symbols are not in the official eligible universe: $($invalidSymbols -join ',')"
+  }
+  $targets = @($requestedSymbols | Select-Object -First $MaxSymbols)
+  Write-Host ("Targeted mode: requested={0}, selected={1}; global sync status will be preserved" -f $requestedSymbols.Count, $targets.Count)
+} else {
+  $targets = @($coverage.missing_symbols | Select-Object -First $MaxSymbols)
+}
 $done = 0
 $attempted = 0
 $rowsWritten = 0
@@ -578,7 +591,11 @@ $note = if ($rateLimited) {
 } else {
   "Backfilled $done symbols, rows=$rowsWritten, max_symbols=$MaxSymbols, delay_seconds=$DelaySeconds"
 }
-$after = Write-Strategy4SyncStatus -UniverseSet $universeSet -ReadKey $anonKey -ServiceRoleKey $serviceRoleKey -StartedAt $startedAt -StatusNote $note
+if ($Symbols.Count -gt 0) {
+  $after = Get-Strategy4Coverage -UniverseSet $universeSet -ReadKey $anonKey
+} else {
+  $after = Write-Strategy4SyncStatus -UniverseSet $universeSet -ReadKey $anonKey -ServiceRoleKey $serviceRoleKey -StartedAt $startedAt -StatusNote $note
+}
 
 Write-Host ""
 Write-Host "DONE" -ForegroundColor Green

@@ -1,8 +1,9 @@
 param(
   [string]$ProjectRoot = $PSScriptRoot,
   [string]$RuntimeRoot = $(if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }),
-  [ValidateSet("Auto", "Checkpoint", "Full")]
+  [ValidateSet("Auto", "Checkpoint", "Full", "CleanupMaintenance")]
   [string]$Mode = "Auto",
+  [string]$MaintenanceAuthorizationFile = "",
   [switch]$RequireProtectedReadback
 )
 
@@ -36,6 +37,17 @@ try {
     exit 0
   }
   Set-Location $ProjectRoot
+  & node (Join-Path $ProjectRoot "scripts\verify-verifier-retirement.js") --require-live
+  if ($LASTEXITCODE -ne 0) { throw "VERIFIER_AUTHORITY_DRIFT" }
+  if ($effectiveMode -eq "CleanupMaintenance") {
+    if (-not $MaintenanceAuthorizationFile) { throw "CleanupMaintenance requires explicit authorization file" }
+    & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-release-root-authority.js") --require-production-root
+    if ($LASTEXITCODE -ne 0) { throw "RELEASE_ROOT_DRIFT" }
+    & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-daily-retention-maintenance.js") "--maintenance-authorization=$MaintenanceAuthorizationFile"
+    $maintenanceExit = [int]$LASTEXITCODE
+    # The canonical cleanup verifier writes a scope-specific receipt. Never relabel a full-system checkpoint.
+    exit $maintenanceExit
+  }
   $marketCalendarOutput = & node --use-system-ca (Join-Path $ProjectRoot "scripts\check-market-calendar-action.js") "--label=terminal-master-control" 2>$null
   $marketCalendarExit = [int]$LASTEXITCODE
   $marketOpenToday = ($marketCalendarExit -eq 0)
@@ -69,7 +81,7 @@ try {
   $telegramVerifierDue = ($marketOpenToday -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("09:00")))
   $telegramVerifierExit = $null
   if ($telegramVerifierDue) {
-    & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-daytrade-intraday-burst-telegram.js") --require-live --require-today
+    & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-telegram-three-detectors.js") --require-live --require-today
     $telegramVerifierExit = [int]$LASTEXITCODE
   }
   $strategy2VerifierDue = ($marketOpenToday -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("12:30")))

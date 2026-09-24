@@ -1,9 +1,18 @@
-param([switch]$Recovery)
+param([switch]$Recovery, [string]$ReplayTradeDate = "", [string]$ReplayRuntime = "", [switch]$ResumeReplay)
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
 $repo = "${PSScriptRoot}"
 $runtime = "C:\fuman-runtime"
+if ($ReplayTradeDate) {
+  if ($Recovery) { throw 'ReplayTradeDate cannot be combined with Recovery' }
+  if (-not $ReplayRuntime) { throw 'Replay requires an isolated runtime' }
+  $runtime = [IO.Path]::GetFullPath($ReplayRuntime)
+  if ($runtime.TrimEnd('\') -eq 'C:\fuman-runtime') { throw 'Replay must preserve natural runtime evidence' }
+  $env:STRATEGY4_REPLAY_TRADE_DATE = $ReplayTradeDate
+  $env:STRATEGY4_EXECUTION_MODE = 'recovery_replay'
+  $env:FUMAN_SCANNER_TARGET_TRADE_DATE = $ReplayTradeDate
+}
 $RuntimeRoot = $runtime
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 $gitPath = "C:\Program Files\Git\cmd"
@@ -37,6 +46,12 @@ if ([string]::IsNullOrWhiteSpace($strategy4Stamp)) { $strategy4Stamp = Normalize
 if ([string]::IsNullOrWhiteSpace($strategy4Stamp)) { $strategy4Stamp = Normalize-Strategy4DateStamp $env:FUMAN_EXPECTED_DATE }
 if ([string]::IsNullOrWhiteSpace($strategy4Stamp)) { $strategy4Stamp = Get-Date -Format yyyyMMdd }
 
+if ($ReplayTradeDate) {
+  & $nodeExe 'scripts/verify-strategy4-recovery-context.js'
+  if ($LASTEXITCODE -ne 0) { throw 'Strategy4 replay date validation failed' }
+  $strategy4Stamp = $ReplayTradeDate.Replace('-','')
+  $env:FUMAN_SCORECARD_TRADE_DATE = $ReplayTradeDate
+}
 function Write-Log($message) {
   $message | Tee-Object -FilePath $log -Append | Out-Null
 }
@@ -48,6 +63,8 @@ function Write-Strategy4Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     strategy = "strategy4"
     label = "strategy4 full scan"
     tier = "critical"
+    executionMode = if ($ReplayTradeDate) { 'recovery_replay' } else { 'natural' }
+    naturalSlotComplete = $false
     startedAt = $scanStartedAt
     marketDate = $runDateStamp
     tradeDate = if ($runDateStamp.Length -eq 8) { "$($runDateStamp.Substring(0,4))-$($runDateStamp.Substring(4,2))-$($runDateStamp.Substring(6,2))" } else { "" }
@@ -57,6 +74,7 @@ function Write-Strategy4Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     scanned = [int]$Scanned
     total = [int]$Total
     matches = $Matches
+    scanComplete = ($Complete -or $Status -eq "delivering")
     complete = $Complete
     qualityStatus = if ($Complete) { "complete" } else { "" }
     fallback = $false
@@ -123,7 +141,7 @@ function Invoke-Strategy4ScorecardSourceRefresh($RunId = "") {
       if ($LASTEXITCODE -ne 0) { throw "scorecard88 surface evidence exit=$LASTEXITCODE" }
       $triSeedOut = Join-Path $RuntimeRoot ("outputs\post-scan-tri-surface\strategy4\{0}" -f $RunId)
       New-Item -ItemType Directory -Force -Path $triSeedOut | Out-Null
-      & $nodeExe "scripts\verify-terminal-resource-chain.js" "--routes=strategy4" ("--expected-date={0}" -f (Get-Date).ToString("yyyyMMdd")) "--require-unattended" ("--out={0}" -f $triSeedOut) *>&1 | Tee-Object -FilePath $log -Append | Out-Null
+      & $nodeExe "scripts\verify-terminal-resource-chain.js" "--routes=strategy4" ("--expected-date={0}" -f $strategy4Stamp) "--require-unattended" ("--out={0}" -f $triSeedOut) *>&1 | Tee-Object -FilePath $log -Append | Out-Null
       & $nodeExe "scripts\build-strategy4-recovery-evidence.js" "--run-id=$RunId" *>&1 | Tee-Object -FilePath $log -Append
       if ($LASTEXITCODE -ne 0) { throw "scorecard88 Strategy4 evidence exit=$LASTEXITCODE" }
       & (Join-Path $repo "scripts\run-scorecard88-terminal-collector.ps1") -Slot '17:00' -ProjectRoot $repo -RuntimeRoot $RuntimeRoot -Recovery -ExpectedRunId $RunId -RecoveryReason 'strategy4_pre_verifier_publication' *>&1 | Tee-Object -FilePath $log -Append
@@ -240,7 +258,7 @@ function Invoke-Strategy4ClosureAndLine {
   if (-not $ReuseDeliveredLineEvidence) {
     & $nodeExe "--use-system-ca" "scripts\send-strategy-line-card.js" "--strategy=strategy4" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
     if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE dry-run failed exit=$LASTEXITCODE" }
-    & $nodeExe "scripts\verify-strategy4-line-card-contract.js" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
+    & $nodeExe "scripts\verify-strategy4-line-card-contract.js" "--date=$strategy4Stamp" "--dry-run" *>&1 | Tee-Object -FilePath $log -Append
     if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE dry-run canonical verifier failed exit=$LASTEXITCODE" }
   }
   # Strategy4 owns its target-date coverage contract. The scanner and the
@@ -258,30 +276,31 @@ function Invoke-Strategy4ClosureAndLine {
   } else {
     Write-Log "Strategy4 LINE push skipped; reusing delivered same-run evidence runId=$RunId"
   }
-  $lineFile = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-$((Get-Date).ToString('yyyyMMdd')).json"
+  $lineFile = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-$strategy4Stamp.json"
   $lineReceipt = Get-Content -LiteralPath $lineFile -Raw | ConvertFrom-Json
   $expectedLineCount = [Math]::Min($ExpectedCount, 70)
-  if ($lineReceipt.line_push_ok -ne $true -or [string]$lineReceipt.runId -ne $RunId -or [int]$lineReceipt.count -ne $expectedLineCount) { throw "Strategy4 LINE receipt mismatch push=$($lineReceipt.line_push_ok) runId=$($lineReceipt.runId) count=$($lineReceipt.count) expectedDisplay=$expectedLineCount" }
-  & $nodeExe "scripts\verify-strategy4-line-card-contract.js" *>&1 | Tee-Object -FilePath $log -Append
+  # Only the independent LINE verifier can accept the authorized quota exception.
+  if ([string]$lineReceipt.runId -ne $RunId -or [int]$lineReceipt.count -ne $expectedLineCount) { throw "Strategy4 LINE receipt mismatch push=$($lineReceipt.line_push_ok) runId=$($lineReceipt.runId) count=$($lineReceipt.count) expectedDisplay=$expectedLineCount" }
+  & $nodeExe "scripts\verify-strategy4-line-card-contract.js" "--date=$strategy4Stamp" *>&1 | Tee-Object -FilePath $log -Append
   if ($LASTEXITCODE -ne 0) { throw "Strategy4 LINE canonical verifier failed exit=$LASTEXITCODE" }
-  $lineVerifierFile = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-canonical-verifier-receipt-$((Get-Date).ToString('yyyyMMdd')).json"
+  $lineVerifierFile = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-canonical-verifier-receipt-$strategy4Stamp.json"
   $lineVerifierReceipt = Get-Content -LiteralPath $lineVerifierFile -Raw | ConvertFrom-Json
   if ($lineVerifierReceipt.status -ne "complete" -or $lineVerifierReceipt.ok -ne $true -or [string]$lineVerifierReceipt.run_id -ne $RunId) { throw "Strategy4 LINE canonical verifier receipt mismatch" }
   $dailyPublishExit = 1
   for ($attempt = 1; $attempt -le 3; $attempt++) {
-    & $nodeExe "--use-system-ca" "scripts\verify-strategy4-daily-publish.js" "--expect-run-id=$RunId" "--expect-count=$ExpectedCount" *>&1 | Tee-Object -FilePath $log -Append
+    & $nodeExe "--use-system-ca" "scripts\verify-strategy4-daily-publish.js" "--expect-run-id=$RunId" "--expect-count=$ExpectedCount" "--finalizing-scan" *>&1 | Tee-Object -FilePath $log -Append
     $dailyPublishExit = if ($null -ne $LASTEXITCODE) { [int]$LASTEXITCODE } else { 0 }
     if ($dailyPublishExit -eq 0) { break }
     if ($attempt -lt 3) { Start-Sleep -Seconds 8 }
   }
   if ($dailyPublishExit -ne 0) { throw "Strategy4 formal daily publish verifier failed after retries exit=$dailyPublishExit" }
-  $lineWrapperFile = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-wrapper-receipt-$((Get-Date).ToString('yyyyMMdd')).json"
+  $lineWrapperFile = Join-Path $RuntimeRoot "data\line-cards\strategy4-line-card-wrapper-receipt-$strategy4Stamp.json"
   [ordered]@{
     contract = "strategy4-line-card-wrapper-receipt-v2"
     status = "complete"
     ok = $true
     checked_at = [DateTimeOffset]::UtcNow.ToString("o")
-    trade_date = (Get-Date).ToString("yyyy-MM-dd")
+    trade_date = if ($ReplayTradeDate) { $ReplayTradeDate } else { (Get-Date).ToString("yyyy-MM-dd") }
     run_id = $RunId
     expected_count = $ExpectedCount
     displayed_count = $expectedLineCount
@@ -289,9 +308,13 @@ function Invoke-Strategy4ClosureAndLine {
     canonical_verifier_receipt = $lineVerifierFile
     runner_status = $lineReceipt.status
     verifier_status = $lineVerifierReceipt.status
+    delivery_status = $lineVerifierReceipt.delivery_status
+    quota_exception_accepted = [bool]$lineVerifierReceipt.quota_exception_accepted
     line_push_ok = [bool]$lineReceipt.line_push_ok
     first_blocker = $null
   } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $lineWrapperFile -Encoding utf8
+  & $nodeExe "scripts\verify-strategy4-complete.js" "--expect-run-id=$RunId"
+  if ($LASTEXITCODE -ne 0) { throw "Strategy4 final receipt evidence rejected" }
   Write-Log "Strategy4 LINE closure complete runId=$RunId count=$ExpectedCount"
 }
 . "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
@@ -319,21 +342,35 @@ if ($Recovery) {
   $publishEvidencePath = Join-Path $RuntimeRoot "data\scan-receipts\strategy4-daily-publish-$recoveryDate.json"
   $publishEvidence = if (Test-Path -LiteralPath $publishEvidencePath) { Get-Content -LiteralPath $publishEvidencePath -Raw | ConvertFrom-Json } else { $null }
   $isTodayRecovery = $recoveryDate -eq (Get-Date).ToString("yyyyMMdd")
+  if ($isTodayRecovery -and $null -ne $lineEvidence -and $lineEvidence.line_push_ok -ne $true) { $lineEvidence = $null }
   if ($null -ne $lineEvidence -and ($lineEvidence.line_push_ok -ne $true -or [string]$lineEvidence.runId -ne $recoveryRunId)) { throw "Strategy4 recovery found mismatched LINE evidence for runId=$recoveryRunId" }
   if ($null -eq $lineEvidence -and -not $isTodayRecovery) { throw "Strategy4 historical recovery requires delivered LINE evidence for runId=$recoveryRunId" }
   if ($null -ne $publishEvidence -and ($publishEvidence.ok -ne $true -or [string]$publishEvidence.runId -ne $recoveryRunId)) { throw "Strategy4 recovery found mismatched daily publish evidence for runId=$recoveryRunId" }
   if ($null -eq $publishEvidence -and -not $isTodayRecovery) { throw "Strategy4 historical recovery requires complete daily publish evidence for runId=$recoveryRunId" }
-  Write-Strategy4Receipt "complete" 0 $true $recoveryCount $recoveryRunId @() "" ([int]$row.supabase.scannedCount) ([int]$row.supabase.expectedTotal)
+  Write-Strategy4Receipt "delivering" 0 $false $recoveryCount $recoveryRunId @() "" ([int]$row.supabase.scannedCount) ([int]$row.supabase.expectedTotal)
   Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId $recoveryRunId -ExpectedDate $recoveryDate -Row $row
   if ($isTodayRecovery) {
+    try {
     Invoke-Strategy4ClosureAndLine $recoveryRunId $recoveryCount -ReuseDeliveredLineEvidence:($null -ne $lineEvidence)
+    } catch { Write-Strategy4Receipt "failed" 1 $false $recoveryCount $recoveryRunId @() $_.Exception.Message ([int]$row.supabase.scannedCount) ([int]$row.supabase.expectedTotal); exit 1 }
   }
   else { Write-Log "Strategy4 historical recovery reused existing delivered LINE evidence; no notification resent. runId=$recoveryRunId tradeDate=$recoveryDate" }
+  if (-not $isTodayRecovery) {
+    & $nodeExe "scripts\verify-strategy4-complete.js" "--expect-run-id=$recoveryRunId"
+    if ($LASTEXITCODE -ne 0) { throw "Strategy4 historical final receipt evidence rejected" }
+  }
   Write-Log "Strategy4 one-entry recovery complete runId=$recoveryRunId count=$recoveryCount"
   exit 0
 }
+if ($ResumeReplay) {
+  if (-not $ReplayTradeDate) { throw 'ResumeReplay requires validated ReplayTradeDate' }
+  $resumeProof = Get-Content (Join-Path $env:FUMAN_STATE_DIR 'strategy4-supabase-status.json') -Raw | ConvertFrom-Json
+  if ($resumeProof.ok -ne $true -or $resumeProof.scanDate -ne $ReplayTradeDate -or -not $resumeProof.runId) { throw 'ResumeReplay requires complete same-date published scan evidence' }
+  $scanExit = 0
+} else {
 Write-Log "=== Strategy4 full scan start $(Get-Date) ==="
 . "${PSScriptRoot}\schedule-guard.ps1"
+if (-not $ReplayTradeDate) {
 Invoke-FumanWeekdayGuard -Label "Strategy4 full scan" -LogPath $log -AllowAfterFormalSourceWindow
 
 & $nodeExe "scripts\check-full-scan-date-preflight.js" "--label=strategy4" "--receipt" *>&1 | Tee-Object -FilePath $log -Append
@@ -351,10 +388,11 @@ if ($datePreflightExit -ne 0) {
   exit $datePreflightExit
 }
 
+}
 Write-Strategy4Receipt "running" 0 $false 0 "" @("formal runner entered; awaiting source gate and tri-surface closure") "strategy4_runner_started"
 Write-Log "Strategy4 formal runner entered after market-calendar gate; receipt status=running."
 
-& $nodeExe "scripts\verify-supabase-publish-hard-gate.js" "--strategy=strategy4" *>&1 | Tee-Object -FilePath $log -Append
+& $nodeExe "scripts\verify-supabase-publish-hard-gate.js" "--strategy=strategy4" "--dry-run-alert" *>&1 | Tee-Object -FilePath $log -Append
 $publishGateExit = $LASTEXITCODE
 if ($publishGateExit -ne 0) {
   $reason = "Strategy4 Supabase publish hard gate blocked new publish; preserving latest complete run. exit=$publishGateExit"
@@ -393,7 +431,7 @@ if ($resourceGate.PreserveLatest) {
   }
   Write-Log "Strategy4 source gate recovered after repair; continuing full scan."
 }
-if ($env:STRATEGY4_ALLOW_BEFORE_1600 -ne "1") {
+if (-not $ReplayTradeDate -and $env:STRATEGY4_ALLOW_BEFORE_1600 -ne "1") {
   try {
     $tz = [TimeZoneInfo]::FindSystemTimeZoneById("Taipei Standard Time")
     $taipeiNow = [TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz)
@@ -412,7 +450,7 @@ if ($env:STRATEGY4_ALLOW_BEFORE_1600 -ne "1") {
 $env:FULL_SCAN = "1"
 $env:STRATEGY4_BATCH_SIZE = "80"
 $env:STRATEGY4_BATCHES_PER_RUN = "999"
-$env:STRATEGY4_USE_MIS = "1"
+$env:STRATEGY4_USE_MIS = if ($ReplayTradeDate) { "0" } else { "1" }
 $env:STRATEGY4_FAIL_ON_INCOMPLETE = "1"
 $env:STRATEGY4_SYNC_PARTIAL = "1"
 $env:STRATEGY4_PARTIAL_SYNC_EVERY_CHUNKS = "3"
@@ -439,6 +477,11 @@ try {
     Write-Log "Strategy4 contract verification failed with exit code $contractExit"
     Write-Strategy4Receipt "failed" $contractExit $false 0 "" @("contract verification exit code $contractExit") "critical scan failed during contract verification"
     exit $contractExit
+  }
+  if ($ReplayTradeDate) {
+    & $nodeExe 'scripts/verify-strategy4-source-root.js' "--date=$strategy4Stamp"
+    if ($LASTEXITCODE -ne 0) { throw 'Replay historical source root failed' }
+    $env:STRATEGY4_SKIP_SUPABASE_HISTORY_PREWARM = '1'
   }
   $prewarmReceiptReady = Test-Strategy4PrewarmReceiptReady
   if ($prewarmReceiptReady) {
@@ -468,6 +511,7 @@ try {
   Remove-Item Env:STRATEGY4_SKIP_SUPABASE_HISTORY_PREWARM -ErrorAction SilentlyContinue
 }
 
+}
 if ($scanExit -ne 0) {
   Write-Log "Strategy4 scan failed with exit code $scanExit"
   Write-Strategy4Receipt "failed" $scanExit $false 0 "" @("scanner exit code $scanExit") "critical scan failed with exit code $scanExit"
@@ -484,6 +528,7 @@ try {
   if ($dbVerifyExit -ne 0) { throw "DB latest-run verifier exit=$dbVerifyExit" }
   $dbVerify = $dbVerifyOutput | ConvertFrom-Json -ErrorAction Stop
   if ($dbVerify.ok -ne $true) { throw "DB latest-run verifier ok=false" }
+  if ($ResumeReplay -and [string]$dbVerify.runId -ne [string]$resumeProof.runId) { throw 'ResumeReplay DB run differs from original published scan' }
   if ([string]::IsNullOrWhiteSpace([string]$dbVerify.runId)) { throw "DB latest-run verifier missing runId" }
 } catch {
   Write-Log "Strategy4 DB latest-run verification before API readback failed: $($_.Exception.Message)"
@@ -510,7 +555,7 @@ try {
   if ([string]::IsNullOrWhiteSpace($apiUpdatedAtText)) { throw "missing updatedAt" }
   $apiUpdatedAt = [DateTimeOffset]::Parse($apiUpdatedAtText)
   $scanStarted = [DateTimeOffset]::Parse($scanStartedAt)
-  if ($apiUpdatedAt -lt $scanStarted.AddMinutes(-5)) {
+  if (-not $ResumeReplay -and $apiUpdatedAt -lt $scanStarted.AddMinutes(-5)) {
     throw "api did not expose this scan yet: runId=$($strategy4Output.runId) updatedAt=$apiUpdatedAtText scanStartedAt=$scanStartedAt"
   }
   Write-Log "Strategy4 API-only verification ok: runId=$($strategy4Output.runId) count=$($strategy4Output.count) scanStamp=$($strategy4Output.scanStamp) cache=$cacheControl"
@@ -551,8 +596,8 @@ try {
       Write-Strategy4Receipt "failed" 1 $false 0 "" @($postScanWarnings + $reason) $reason
       exit 1
     }
-    Write-Strategy4Receipt "complete" 0 $true ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) $postScanWarnings "" ([int]$dbVerify.scannedCount) ([int]$dbVerify.expectedTotal)
-    Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId ([string]$dbVerify.runId) -ExpectedDate ((Get-Date).ToString("yyyyMMdd")) -Row $triSurfaceRow
+    Write-Strategy4Receipt "delivering" 0 $false ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) $postScanWarnings "" ([int]$dbVerify.scannedCount) ([int]$dbVerify.expectedTotal)
+    Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId ([string]$dbVerify.runId) -ExpectedDate ($strategy4Stamp) -Row $triSurfaceRow
     try { Invoke-Strategy4ClosureAndLine ([string]$dbVerify.runId) ([int]$dbVerify.resultCount) } catch { $reason = "critical scan failed during Strategy4 LINE closure: $($_.Exception.Message)"; Write-Log $reason; Write-Strategy4Receipt "failed" 1 $false 0 "" @($postScanWarnings + $reason) $reason; exit 1 }
     Write-Log "Strategy4 DB readback verification ok after API verification failure: runId=$($dbVerify.runId) resultCount=$($dbVerify.resultCount) readbackCount=$($dbVerify.readbackCount)"
     Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
@@ -579,7 +624,7 @@ try {
   exit 1
 }
 
-Write-Strategy4Receipt "complete" 0 $true ([int]$strategy4Output.count) ([string]$strategy4Output.runId) $postScanWarnings "" ([int]$strategy4Output.scannedCount) ([int]$strategy4Output.total)
-Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId ([string]$strategy4Output.runId) -ExpectedDate ((Get-Date).ToString("yyyyMMdd")) -Row $triSurfaceRow
+Write-Strategy4Receipt "delivering" 0 $false ([int]$strategy4Output.count) ([string]$strategy4Output.runId) $postScanWarnings "" ([int]$strategy4Output.scannedCount) ([int]$strategy4Output.total)
+Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId ([string]$strategy4Output.runId) -ExpectedDate ($strategy4Stamp) -Row $triSurfaceRow
 try { Invoke-Strategy4ClosureAndLine ([string]$strategy4Output.runId) ([int]$strategy4Output.count) } catch { $reason = "critical scan failed during Strategy4 LINE closure: $($_.Exception.Message)"; Write-Log $reason; Write-Strategy4Receipt "failed" 1 $false 0 "" @($postScanWarnings + $reason) $reason; exit 1 }
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="

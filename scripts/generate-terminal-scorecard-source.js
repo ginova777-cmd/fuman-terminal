@@ -39,7 +39,7 @@ const TASKS = [
     endpoint: "/api/strategy4-latest",
     modulePath: "../api/strategy4-latest",
     arrayKeys: ["matches", "rows"],
-    limit: 120,
+    limit: 2000,
   },
   {
     key: "strategy5",
@@ -47,7 +47,7 @@ const TASKS = [
     endpoint: "/api/strategy5-latest",
     modulePath: "../api/strategy5-latest",
     arrayKeys: ["matches", "rows"],
-    limit: 120,
+    limit: 2000,
   },
   {
     key: "institution",
@@ -55,7 +55,7 @@ const TASKS = [
     endpoint: "/api/institution-latest",
     modulePath: "../api/institution-latest",
     arrayKeys: ["rows", "matches"],
-    limit: 120,
+    limit: 2000,
   },
 ];
 
@@ -582,7 +582,7 @@ async function enrichWithQuoteHighs(records) {
   const quoteMap = await fetchQuoteHighMap(records);
   if (!quoteMap.size) return records;
   return records.map((row) => {
-    if (cleanText(row.strategy) === "策略3隔日沖成績單") return row;
+    if (["策略3隔日沖成績單", "買賣超成績單", "策略5成績單"].includes(cleanText(row.strategy))) return row;
     const quote = quoteMap.get(cleanText(row.ticker));
     if (!quote) return row;
     const entryPrice = cleanNumber(row.entry_price);
@@ -633,83 +633,6 @@ async function previousTwseTradingDate(dateText) {
   return "";
 }
 
-function chunkValues(values = [], size = 80) {
-  const out = [];
-  for (let index = 0; index < values.length; index += size) out.push(values.slice(index, index + size));
-  return out;
-}
-
-function candleMinute(row = {}) {
-  const text = cleanText(row.candle_time || row.candleTime || row.time || "");
-  const parsed = Date.parse(text);
-  if (Number.isFinite(parsed)) {
-    const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour12: false, hour: "2-digit", minute: "2-digit" }).formatToParts(new Date(parsed));
-    const hour = Number(parts.find((part) => part.type === "hour")?.value || 0);
-    const minute = Number(parts.find((part) => part.type === "minute")?.value || 0);
-    return hour * 60 + minute;
-  }
-  return timeMinutes(text);
-}
-
-function normalizeCandleRow(row = {}) {
-  return {
-    symbol: codeOf(row, ""),
-    trade_date: normalizeDate(row.trade_date || ""),
-    candle_time: cleanText(row.candle_time || row.candleTime || row.time || ""),
-    open: cleanNumber(row.open),
-    high: cleanNumber(row.high),
-    low: cleanNumber(row.low),
-    close: cleanNumber(row.close),
-    volume: cleanNumber(row.volume),
-    updated_at: cleanText(row.updated_at || row.updatedAt || ""),
-  };
-}
-
-async function fetchStrategy3Entry1mMap(scanDate, rows = []) {
-  const tradeDate = normalizeDate(scanDate || "");
-  const symbols = [...new Set((rows || []).map((row) => codeOf(row, "")).filter((code) => /^\d{4}$/.test(code)))];
-  const byCode = new Map();
-  if (!tradeDate || !symbols.length) return { ok: false, byCode, missing: symbols, source: "fugle_daytrade_intraday_1m", reason: "missing_trade_date_or_symbols" };
-  const table = process.env.STRATEGY3_SUPABASE_1M_TABLE || "fugle_daytrade_intraday_1m";
-  const entryWindowStartUtc = `${tradeDate}T04:50:00.000Z`;
-  const entryWindowEndUtc = `${tradeDate}T05:00:59.999Z`;
-  for (const group of chunkValues(symbols, 80)) {
-    const query = [
-      "select=symbol,market,candle_time,open,high,low,close,volume,updated_at,trade_date",
-      `trade_date=eq.${encodeURIComponent(tradeDate)}`,
-      `candle_time=gte.${encodeURIComponent(entryWindowStartUtc)}`,
-      `candle_time=lte.${encodeURIComponent(entryWindowEndUtc)}`,
-      `symbol=in.(${group.map(encodeURIComponent).join(",")})`,
-      "order=symbol.asc,candle_time.desc",
-      `limit=${Math.max(1000, group.length * 260)}`,
-    ].join("&");
-    const candles = await fetchSupabaseRows(table, query);
-    for (const raw of candles) {
-      const candle = normalizeCandleRow(raw);
-      const minute = candleMinute(candle);
-      if (!/^\d{4}$/.test(candle.symbol)) continue;
-      if (candle.trade_date !== tradeDate) continue;
-      if (!(candle.close > 0)) continue;
-      if (minute == null || minute < 12 * 60 + 50 || minute > 13 * 60) continue;
-      const current = byCode.get(candle.symbol);
-      if (!current || minute > current.minute || (minute === current.minute && Date.parse(candle.candle_time) > Date.parse(current.candle_time))) byCode.set(candle.symbol, { ...candle, minute });
-    }
-  }
-  const missing = symbols.filter((symbol) => !byCode.has(symbol));
-  return { ok: missing.length === 0, byCode, missing, source: `${table}:12:50-13:00`, tradeDate, found: byCode.size, expected: symbols.length, reason: missing.length ? "strategy3_1300_intraday_1m_missing_symbols" : "strategy3_1300_intraday_1m_ready" };
-}
-
-function applyStrategy3Entry1m(rows = [], entryMapResult = {}) {
-  const byCode = entryMapResult.byCode || new Map();
-  return (rows || []).map((row) => {
-    const code = codeOf(row, "");
-    const candle = byCode.get(code);
-    if (!candle) return row;
-    const entryPrice = roundPrice(candle.close);
-    const reason = `${cleanText(row.reason)}；Strategy3 13:00進場價=intraday_1m ${candle.candle_time}`.slice(0, 500);
-    return { ...row, entry_price: entryPrice, entryPrice: entryPrice, entry_price_source: "intraday_1m_1300", entryPriceSource: "intraday_1m_1300", entry_candle_time: candle.candle_time, entry_trade_date: candle.trade_date, entry_price_source_detail: entryMapResult.source || "fugle_daytrade_intraday_1m", high_price: entryPrice, highPrice: entryPrice, highestPrice: entryPrice, pnl: 0, reason };
-  });
-}
 async function fetchStrategy3PayloadForScanDate(scanDate) {
   const runRows = await fetchSupabaseRows(
     process.env.STRATEGY3_V2_RUNS_TABLE || "strategy3_v2_scan_runs",
@@ -744,7 +667,7 @@ async function fetchStrategy3PayloadForScanDate(scanDate) {
       rawName: cleanText(payload.rawName || payload.name || row.name || row.code),
       close: cleanNumber(payload.close || payload.price || row.entry_price),
       price: cleanNumber(payload.price || payload.close || row.entry_price),
-      percent: cleanNumber(payload.percent ?? payload.changePercent ?? row.change_percent),
+      percent: cleanNumber(payload.percent ?? payload.changePercent ?? payload.change_percent ?? row.change_percent),
       tradeVolume: cleanNumber(payload.tradeVolume || payload.volume || row.trade_volume || row.volume),
       volume: cleanNumber(payload.volume || payload.tradeVolume || row.volume || row.trade_volume),
       value: cleanNumber(payload.value || payload.tradeValue || row.trade_value),
@@ -758,40 +681,43 @@ async function fetchStrategy3PayloadForScanDate(scanDate) {
       _strategy3ScorecardSourceDate: scanDate,
     };
   });
-  const entryMapResult = await fetchStrategy3Entry1mMap(scanDate, rows);
-  const acceptedEntrySources = new Set(["intraday_1m_1300", "intraday_1m_1300_exact", "intraday_1m_entry_window_tolerance", "intraday_1m_tail_volume_confirmed"]);
-  const enrichedRows = applyStrategy3Entry1m(rows, entryMapResult)
-    .filter((row) => acceptedEntrySources.has(cleanText(row.entry_price_source || row.entryPriceSource)));
+  const acceptedEntrySource = "get_fugle_daytrade_intraday_1m_latest_n:first_close_1259_1302";
+  const enrichedRows = rows.filter((row) => cleanText(row.entry_price_source || row.entryPriceSource) === acceptedEntrySource
+    && cleanNumber(row.entry_price || row.entryPrice) > 0
+    && normalizeDate(row.trade_date || row.scan_date) === scanDate
+    && cleanText(row.contract_version) === "4.1.0"
+    && cleanText(row.canonical_run_id).startsWith("fugle_daytrade_source:")
+    && cleanText(row.universe_source) === "v_fugle_daytrade_mother_pool_v4_1");
   const emittedSymbols = new Set(enrichedRows.map((row) => codeOf(row, "")));
   const missingSymbols = rows.map((row) => codeOf(row, "")).filter((code) => code && !emittedSymbols.has(code));
-  const tailVolumeRows = enrichedRows.filter((row) => cleanText(row.entry_price_source || row.entryPriceSource) === "intraday_1m_tail_volume_confirmed");
-  const evidenceComplete = enrichedRows.length === rows.length && missingSymbols.length === 0;
+  const reportedCount = Number(run.result_count ?? run.coverage?.result_count);
+  const evidenceComplete = Number.isInteger(reportedCount) && reportedCount >= 0 && rows.length === reportedCount && enrichedRows.length === rows.length && missingSymbols.length === 0;
   return {
-    ok: evidenceComplete && enrichedRows.length > 0,
-    source: "supabase:strategy3_v2_scan_results+local_fugle_daytrade_ws_candles_entry_evidence",
+    ok: evidenceComplete,
+    source: "supabase:strategy3_v2_scan_results+mother_pool_v4_1+intraday_1m_rpc_evidence",
     runId: cleanText(run.run_id),
     usedDate: scanDate,
     date: scanDate,
     updatedAt: cleanText(run.finished_at || run.updated_at),
-    count: Math.max(enrichedRows.length, cleanNumber(run.result_count || run.coverage?.result_count)),
+    count: Number.isInteger(reportedCount) ? reportedCount : rows.length,
     matches: enrichedRows,
     rows: enrichedRows,
-    publishAllowed: enrichedRows.length > 0,
+    publishAllowed: evidenceComplete,
     qualityStatus: evidenceComplete ? "complete" : "degraded",
     evidenceStatus: evidenceComplete ? "complete" : "degraded",
     sourceCoverage: {
       ok: evidenceComplete,
-      source: entryMapResult.source,
-      tradeDate: entryMapResult.tradeDate,
-      expectedSymbols: entryMapResult.expected,
-      foundSymbols: entryMapResult.found,
+      source: "get_fugle_daytrade_intraday_1m_latest_n",
+      tradeDate: scanDate,
+      expectedSymbols: rows.length,
+      foundSymbols: enrichedRows.length,
       emittedSymbols: enrichedRows.length,
       suppressedSymbols: missingSymbols.length,
       missingSymbols,
-      tailVolumeConfirmedSymbols: tailVolumeRows.length,
+      sourceContractVersion: "4.1.0",
     },
     reason: evidenceComplete
-      ? `scorecard_source_previous_trading_day:${scanDate}; strategy3_entry_evidence_ready; tail_volume=${tailVolumeRows.length}`
+      ? `scorecard_source_date:${scanDate}; strategy3_v4_1_entry_evidence_ready`
       : `strategy3_entry_evidence_partial:${enrichedRows.length}/${rows.length}; missing=${missingSymbols.slice(0, 20).join(",")}`,
   };
 }
@@ -840,7 +766,10 @@ function normalizeRecord(task, payload, row, index) {
   const recordDate = scorecardRecordDate(task, payload, row);
   const code = codeOf(row, `${task.key}-${index + 1}`);
   const entryPrice = priceOf(row);
-  const highPrice = highOf(row, entryPrice);
+  // Institution is selected after the close: pre-entry intraday highs are not forward returns.
+  const highPrice = ["institution", "strategy5"].includes(task.key) ? entryPrice : highOf(row, entryPrice);
+  if (task.key === "institution" && (!payload.runId || row.runId !== payload.runId)) throw new Error("institution scorecard source run mismatch");
+  if (task.key === "strategy5" && (!payload.runId || (row.runId && row.runId !== payload.runId))) throw new Error("strategy5 scorecard source run mismatch");
   const sourceDate = normalizeDate(row._strategy3ScorecardSourceDate || row._strategy5ScorecardSourceDate || row.source_date || row.scan_date || payload.sourceDate || payload.usedDate || "");
   const source = "terminal-complete-run-scorecard";
   const reason = reasonOf(row, task);
@@ -858,6 +787,8 @@ function normalizeRecord(task, payload, row, index) {
     sourceRow,
     payload,
     record: {
+    ...require('../lib/mother-pool-scorecard-source').bind(task, payload, row, sourceDate || recordDate, code),
+    ...(["institution", "strategy5"].includes(task.key) ? { sourceRunId: payload.runId, runId: row.runId || payload.runId, forward_observation_status: "not_started", high_price_source: "entry_reference_no_forward_observation" } : {}),
     record_id: `${recordDate}-${task.key}-${code}-${index + 1}`,
     record_date: recordDate,
     source_date: sourceDate || recordDate,
@@ -892,15 +823,20 @@ async function fetchStrategy4LatestCompletePayload() {
   );
   const run = runRows[0];
   if (!run?.run_id) return null;
-  const resultRows = await fetchSupabaseRows(
-    process.env.STRATEGY4_SUPABASE_RESULTS_TABLE || "strategy4_scan_results",
-    [
-      "select=*",
-      `run_id=eq.${encodeURIComponent(run.run_id)}`,
-      "order=rank.asc",
-      "limit=120",
-    ].join("&"),
-  );
+  const resultRows = [];
+  for (let offset = 0; offset < Number(run.result_count); offset += 1000) {
+    const page = await fetchSupabaseRows(
+      process.env.STRATEGY4_SUPABASE_RESULTS_TABLE || "strategy4_scan_results",
+      ["select=*", `run_id=eq.${encodeURIComponent(run.run_id)}`, "order=rank.asc", "limit=1000", `offset=${offset}`].join("&"),
+    );
+    resultRows.push(...page);
+    if (page.length < 1000) break;
+  }
+  if (resultRows.length !== Number(run.result_count)
+      || new Set(resultRows.map(row => String(row.code))).size !== resultRows.length
+      || resultRows.some(row => row.run_id !== run.run_id || normalizeDate(row.scan_date) !== normalizeDate(run.scan_date))) {
+    throw new Error("strategy4_scorecard_full_readback_mismatch");
+  }
   const rows = resultRows.map((row, index) => {
     const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
     return {
@@ -954,7 +890,7 @@ async function fetchStrategy5LatestCompletePayload() {
       "strategy=eq.strategy5",
       `run_id=eq.${encodeURIComponent(run.run_id)}`,
       "order=rank.asc",
-      "limit=120",
+      "limit=2000",
     ].join("&"),
   );
   const rows = resultRows.map((row, index) => {
@@ -1199,10 +1135,12 @@ async function main() {
   const sourceLatestDate = reports.filter((report) => cleanNumber(report.emittedRows ?? report.count) > 0).map(dateFromReport).filter(Boolean).sort().at(-1) || "";
   const batchLatestDate = rawRecords.map((row) => row.record_date).sort().at(-1) || taipeiDate();
   let latestDate = tradingDay.isTradingDay ? batchLatestDate : (sourceLatestDate || batchLatestDate);
-  const strategy3SourceDate = latestDate;
+  // A current zero-result batch must not inherit another strategy's older row date.
+  const strategy3SourceDate = expectedDisplayDate;
   const strategy3Task = TASKS.find((task) => task.key === "strategy3");
   const strategy3Payload = strategy3SourceDate ? await fetchStrategy3PayloadForScanDate(strategy3SourceDate) : null;
-  if (strategy3Task && strategy3Payload?.matches?.length) {
+  if (strategy3Task && strategy3Payload?.ok === true && strategy3Payload.runId && Array.isArray(strategy3Payload.matches) && strategy3Payload.matches.length === strategy3Payload.count) {
+    latestDate = [latestDate, strategy3SourceDate].sort().at(-1);
     for (let index = records.length - 1; index >= 0; index -= 1) {
       if (records[index]?.strategy === strategy3Task.strategy) records.splice(index, 1);
     }
@@ -1218,6 +1156,8 @@ async function main() {
       report.ok = strategy3Payload.ok === true && !report.suppressedRows;
       report.publishAllowed = strategy3Payload.publishAllowed === true;
       report.evidenceStatus = strategy3Payload.evidenceStatus || strategy3Payload.qualityStatus || "";
+      report.statusCode = 200;
+      report.expectedDisplayDate = strategy3SourceDate;
       report.date = strategy3SourceDate;
       report.reason = strategy3Payload.reason;
     }
@@ -1406,7 +1346,7 @@ async function main() {
   if (!activeFiltered.length) process.exit(2);
 }
 
-main().catch((error) => {
+if (require.main === module) main().catch((error) => {
   console.error(JSON.stringify({ ok: false, error: error?.message || String(error) }, null, 2));
   process.exit(1);
 });
@@ -1423,3 +1363,5 @@ main().catch((error) => {
 
 
 
+
+module.exports = { normalizeRecord, enrichWithQuoteHighs };

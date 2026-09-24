@@ -30,7 +30,7 @@ function priorSent(target, runId) {
       try {
         const row = JSON.parse(line);
         return row.channel === "line" && row.target === target && row.status === "sent"
-          && (row.idempotencyKey === `strategy3-v2:${runId}` || row.idempotencyKey === `strategy3-v2:${runId}:${target}`);
+          && (["strategy3-v2", "strategy3-v2-recovery-replay"].some(prefix => row.idempotencyKey === `${prefix}:${runId}` || row.idempotencyKey === `${prefix}:${runId}:${target}`));
       } catch { return false; }
     });
   } catch { return false; }
@@ -69,18 +69,19 @@ async function main() {
       source_contract: "Strategy3 V2 applied complete receipt only; legacy Strategy3 tables forbidden" } };
   if (!dryRun) {
     if (!cfg.token || !cfg.targets.length) throw new Error("strategy3_v2_line_config_missing");
-    const targetsToSend = retryTarget ? cfg.targets.filter((target) => type(target) === retryTarget) : cfg.targets;
-    if (!targetsToSend.length) throw new Error(`strategy3_v2_line_retry_target_missing:${retryTarget}`);
+    const eligibleTargets = retryTarget ? cfg.targets.filter((target) => type(target) === retryTarget) : cfg.targets;
+    const targetsToSend = eligibleTargets.filter(target => !priorSent(target, scan.run_id));
+    if (!eligibleTargets.length) throw new Error(`strategy3_v2_line_retry_target_missing:${retryTarget}`);
     process.env.LINE_CHANNEL_ACCESS_TOKEN = cfg.token; process.env.LINE_TO = targetsToSend.join(",");
     process.env.LINE_PUSH_RETRIES = process.env.LINE_PUSH_RETRIES || "3"; process.env.LINE_PUSH_TIMEOUT_MS = process.env.LINE_PUSH_TIMEOUT_MS || "4500";
     process.env.NOTIFY_GUARD_DISABLED = "1";
-    const deliveries = await require("./line-push").sendLineFlex(recoveryReplay ? `策略3 修復重播結果 ${scan.trade_date}` : `隔日沖參考 ${scan.trade_date}`, card(scan), {
+    const deliveries = targetsToSend.length ? await require("./line-push").sendLineFlex(recoveryReplay ? `策略3 修復重播結果 ${scan.trade_date}` : `隔日沖參考 ${scan.trade_date}`, card(scan), {
       idempotencyKey: `${recoveryReplay ? "strategy3-v2-recovery-replay" : "strategy3-v2"}:${scan.run_id}`,
       strategy3V2Line: true,
       dataConfirmed: true,
-    });
+    }) : [];
     if (!Array.isArray(deliveries) || deliveries.length !== targetsToSend.length || deliveries.some((item) => item.sent !== true)) {
-      throw new Error(`strategy3_v2_line_not_delivered:${JSON.stringify(deliveries || [])}`);
+      throw new Error("strategy3_v2_line_not_delivered");
     }
     const delivered = new Map(deliveries.map((item) => [item.target, item.sent === true]));
     const targetOk = (target) => delivered.get(target) === true || priorSent(target, scan.run_id);
@@ -99,7 +100,7 @@ async function main() {
 main().catch((error) => {
   const receipt = c.failClosed("strategy3_v2_line_push_failed", { checked_at: c.nowTaipeiIso(), date: compact, dry_run: dryRun,
     status: "FAILED", line_push_ok: false, line_push_personal_ok: false, line_push_group_ok: false,
-    token_logged: false, target_logged: false, error: error?.message || String(error) });
-  const file = c.writeJson(c.lineReceiptPath(compact, dryRun ? ".dry-run" : ""), receipt);
+    token_logged: false, target_logged: false, error: "strategy3_v2_line_push_failed_inspect_redacted_delivery_log" });
+  const file = c.writeJson(c.lineReceiptPath(compact, `${recoveryReplay ? ".recovery-replay" : ""}${dryRun ? ".dry-run" : ""}`), receipt);
   console.error(JSON.stringify({ ...receipt, receipt_path: file }, null, 2)); process.exit(1);
 });
