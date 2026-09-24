@@ -1542,8 +1542,12 @@ async function runStreamingCollector() {
         subscriptionSymbolLimit: selection.symbolLimit,
         subscriptionLimitApplied: selection.requested > selection.selected.length || selection.subscriptionCount >= STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
         pinnedPrioritySymbols: selection.pinnedPriorityCount,
-        formalSubscribedSymbols: selection.formalSymbols.length,
-        formalSubscribedChannels: selection.formalChannelCount,
+        // The current transport uses candleRadarSymbols as the formal 1m
+        // cohort. formalSymbols is retained for legacy channel plans and is
+        // intentionally empty in the rotating plan; reporting it alone made
+        // a live 1m subscription appear to be zero.
+        formalSubscribedSymbols: selection.formalSymbols.length + selection.candleRadarSymbols.length,
+        formalSubscribedChannels: selection.formalChannelCount + (selection.candleRadarSymbols.length ? 1 : 0),
         candleRadarSymbols: selection.candleRadarSymbols.length,
         candleChannel: selection.candleChannel,
         candleCoverageTarget: selection.candleCoverageTarget,
