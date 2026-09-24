@@ -183,6 +183,9 @@ const MOPS_OFFICIAL_INDUSTRY_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 const APPLY = hasFlag("apply") || envFlag("FUMAN_DAYTRADE_WRITER_APPLY");
 const DRY_RUN = !APPLY;
+// Bound the pre-open scorecard to the A01-A19 warmup contract. The wrapper
+// clears this flag after 09:00 so the full intraday payload is retained.
+const PREOPEN_LIGHT_MODE = process.env.DAYTRADE_PREOPEN_LIGHT_MODE === "1";
 const LOCAL_CHECK = hasFlag("local-check");
 const NO_FETCH = hasFlag("no-fetch") || envFlag("FUMAN_DAYTRADE_WRITER_NO_FETCH");
 let FETCH_ENABLED = false;
@@ -7078,6 +7081,26 @@ function updateMotherPoolDelta(result) {
   };
   if (result.status === "ok") sourceRow.last_success_at = nowIso();
 
+  const scorecardPayload = PREOPEN_LIGHT_MODE ? {
+    trade_date: tradeDate, canonical_run_id: canonicalRunId,
+    writer_run_id: result.payload.writer_run_id || result.run_id || null,
+    generation_id: result.payload.generation_id || null,
+    mother_pool_run_id: result.payload.mother_pool_run_id || null,
+    snapshot_generation: result.payload.mother_pool_snapshot?.generation || null,
+    snapshot_sequence: result.payload.mother_pool_snapshot_sequence || null,
+    active_symbols: result.payload.active_symbols,
+    priority_symbols: result.payload.priority_symbols,
+    priority_pool_symbols: result.payload.priority_pool_symbols,
+    selected_symbols_fresh_ok: result.payload.selected_symbols_fresh_ok,
+    scanner_can_run_opening: result.payload.scanner_can_run_opening,
+    daily_volume_status: result.payload.daily_volume_status,
+    avg_volume5_eligible: result.payload.avg_volume5_eligible,
+    ready_ma20_continuous: result.payload.ready_ma20_continuous,
+    ready_ma35_continuous: result.payload.ready_ma35_continuous,
+    futopt_stock_mapped: result.payload.futopt_stock_mapped,
+    preopen_status: result.payload.preopen_status,
+    source_status: result.status, bounded_scope: "A01-A19", mode: "preopen_light"
+  } : result.payload;
   const scorecardRow = {
     trade_date: tradeDate,
     source_name: SOURCE_NAME,
@@ -7108,7 +7131,7 @@ function updateMotherPoolDelta(result) {
     cooldown_until: result.payload.cooldown_until,
     self_heal_count: result.payload.self_heal_count,
     message: result.message,
-    payload: result.payload,
+    payload: scorecardPayload,
   };
   try {
     await supabaseInsert("fugle_daytrade_source_speed_scorecard", [scorecardRow]);
@@ -7134,7 +7157,7 @@ function updateMotherPoolDelta(result) {
     catch { rankingReceiptWriteFailures.push('RANKING_RECEIPT_PERSIST_FAILED:' + path.basename(file)); }
   };
   let rankingReadback = null;
-  if ([turnover,volumeValue,minuteSide,priceVolume].some(item=>item && item.status !== 'NOT_DUE')) {
+  if (!PREOPEN_LIGHT_MODE && [turnover,volumeValue,minuteSide,priceVolume].some(item=>item && item.status !== 'NOT_DUE')) {
     try {
       if (!SUPABASE_READ_KEY || SUPABASE_READ_KEY === SUPABASE_SERVICE_KEY) throw new Error('anon_read_key_missing');
       rankingReadback = await supabaseGetPaged('source_status',

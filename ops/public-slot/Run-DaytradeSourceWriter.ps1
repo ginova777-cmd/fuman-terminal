@@ -411,6 +411,10 @@ if ($preopenWarmup) {
   Invoke-FumanWeekdayGuard -Label "Daytrade source writer" -LogPath $WrapperLog
 }
 
+# Keep the pre-open scorecard bounded to A01-A19. This is explicitly reset on
+# every post-open invocation so 09:00+ retains the full scorecard payload.
+$env:DAYTRADE_PREOPEN_LIGHT_MODE = if ($preopenWarmup) { "1" } else { "0" }
+
 $node = "node"
 $args = @("--use-system-ca", $WriterScript)
 
