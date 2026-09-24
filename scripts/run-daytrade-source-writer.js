@@ -7090,7 +7090,8 @@ async function writeStatusAndScorecard(result) {
   result.payload.mother_pool_round_summary = motherPoolDelta.round_summary;
   result.payload.target_symbol_diagnostics = motherPoolDelta.target_symbol_diagnostics;
   await ensureWriterLease();
-  const nonFatalWriteErrors = result.payload.nonfatal_write_errors || [];
+  const nonFatalWriteErrors = (result.payload.nonfatal_write_errors || []).map(require('../lib/daytrade-diagnostic-errors').encodeDiagnosticError);
+  result.payload.nonfatal_write_errors = nonFatalWriteErrors;
   result.payload.source_host_id = SOURCE_HOST_ID;
   result.payload.source_host_role = SOURCE_HOST_ROLE;
   result.payload.writer_instance_id = WRITER_INSTANCE_ID;
@@ -7167,14 +7168,21 @@ async function writeStatusAndScorecard(result) {
   try {
     await supabaseInsert("fugle_daytrade_source_speed_scorecard", [scorecardRow]);
   } catch (error) {
-    nonFatalWriteErrors.push({
+    nonFatalWriteErrors.push(require("../lib/daytrade-diagnostic-errors").encodeDiagnosticError({
       target: "fugle_daytrade_source_speed_scorecard",
       message: error?.message || String(error),
-    });
+    }));
     result.payload.nonfatal_write_errors = nonFatalWriteErrors;
     sourceRow.payload = result.payload;
   }
 
+  const nullPaths = [];
+  function inspectNull(value, key) {
+    if (typeof value === 'string' && value.includes(String.fromCharCode(0))) nullPaths.push(key);
+    else if (value && typeof value === 'object') for (const [child, item] of Object.entries(value)) inspectNull(item, key + '.' + child);
+  }
+  inspectNull(sourceRow, 'source_status');
+  if (nullPaths.length) throw Error('SOURCE_STATUS_NULL_CHARACTER_FIELDS:' + JSON.stringify(nullPaths));
   await supabaseUpsert("source_status", [sourceRow], "source_name");
   // The turnover checklist has its own independently read-back receipt.
   // Failure here is visible but cannot erase the already published core source.
