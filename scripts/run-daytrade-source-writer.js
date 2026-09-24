@@ -2726,7 +2726,9 @@ function extractConstObjectLiteral(source, name) {
 
 function readHeatmapStaticGroupMap() {
   const map = new Map();
-  const source = readText(HEATMAP_API_FILE);
+  // Evidence hashes must use the same raw bytes as the mapping verifier.
+  let source = "";
+  try { source = fs.readFileSync(HEATMAP_API_FILE, "utf8"); } catch {}
   if (!source) {
     map.meta = { source: "missing", rows: 0 };
     return map;
