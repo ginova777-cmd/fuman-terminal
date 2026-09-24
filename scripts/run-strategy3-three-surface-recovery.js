@@ -18,6 +18,9 @@ function main(){
  node('verify-strategy3-recovery-replay-complete.js',['--trade-date='+date,'--prepare-three-surfaces']);
  const source=read(path.join(receipts,`strategy3-v2-recovery-publish-evidence-${compact}.json`));
  assert(require('../lib/strategy3-recovery-publish-evidence').valid(source,run,date),'source publication evidence invalid');
+ process.env.FUMAN_SCORECARD_REFRESH_KEY='strategy3';
+ process.env.FUMAN_SCORECARD_REFRESH_RUN_ID=run;
+ node('generate-terminal-scorecard-source.js');
  execute('pwsh.exe',['-NoProfile','-File','scripts/run-scorecard88-terminal-collector.ps1','-Slot','13:15','-Recovery','-ExpectedRunId',run,'-RecoveryReason','user-approved-after-close-three-surface-recovery']);
  execute('pwsh.exe',['-NoProfile','-Command',`. './verify-post-scan-tri-surface.ps1'; Assert-PostScanTriSurfaceClosure -Route strategy3 -RunId '${run}' -LogPath './logs/strategy3-surface-recovery.log' -SkipPublication | Out-Null`]);
  const tri=read(path.join(receipts,'tri-surface-closures/strategy3.json'));
