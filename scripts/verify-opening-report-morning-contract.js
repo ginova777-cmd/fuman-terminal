@@ -107,7 +107,7 @@ function currentPreflightReceiptChecks(checks, tradeDate) {
     addCheck(checks, "current_preflight_receipt_exists:" + key, exists(filePath), filePath);
   }
   if (!Object.values(paths).every(exists)) return;
-  const preflight = readJson(paths.preflight);
+  const preflight = require("../lib/opening-frozen-preflight-recovery").resolvePreflight(REPORT_DIR, tradeDate);
   const leaders = readJson(paths.leaders);
   const snapshot = readJson(paths.snapshot);
   addCheck(checks,"frozen_source_policy",leaders.detection_policy === (morningStages.stage().id === "us_0820" ? "us_only_tx_night_0820_v1" : "asia_only_0850_v1") && (leaders.industries || []).flatMap(row=>row.leaders || []).every(row=>morningStages.allowed(row.yahoo_symbol)),"reject old scope before delivery");
