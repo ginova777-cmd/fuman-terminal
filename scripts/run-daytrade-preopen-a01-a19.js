@@ -5,6 +5,12 @@ const root=path.resolve(__dirname,'..');
 const read=p=>JSON.parse(fs.readFileSync(p,'utf8').replace(/^\uFEFF/,''));
 const taipeiDate=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const date=process.env.TRADE_DATE||taipeiDate();
+const preopenDir=path.join(runtime,'data','scan-receipts','preopen');
+const completeMarker=path.join(preopenDir,`a01-a19-${date}.complete.json`);
+if(fs.existsSync(completeMarker)){console.log(JSON.stringify({ok:true,complete:true,status:'already_complete',trade_date:date}));process.exit(0);}
+fs.mkdirSync(preopenDir,{recursive:true});
+let lock;
+try{lock=fs.openSync(path.join(preopenDir,`a01-a19-${date}.lock`),'wx');fs.writeSync(lock,`${process.pid}\n`);}catch{console.log(JSON.stringify({ok:true,complete:false,status:'already_running',trade_date:date}));process.exit(0);}
 const delta=read(path.join(runtime,'state','daytrade-mother-pool-delta.json'));
 const snapshot=read(path.join(runtime,'state','daytrade-mother-pool-snapshot-latest.json'));
 if(delta.trade_date!==date)throw Error(`TRADE_DATE_MISMATCH:${delta.trade_date}:${date}`);
@@ -20,4 +26,4 @@ const output={contract:'daytrade_preopen_a01_a19_runner_v1',trade_date:date,cano
 for(let i=0;i<modules.length;i+=5){const batch=modules.slice(i,i+5).filter(id=>registry.modules?.[id]);if(!batch.length)continue;const batchArgs=args.map(x=>x.startsWith('--modules=')?`--modules=${batch.join(',')}`:x);const p=spawnSync(process.execPath,batchArgs,{cwd:root,encoding:'utf8',windowsHide:true,timeout:120000,env:{...process.env,FUMAN_RUNTIME_DIR:runtime}});output.batches.push({modules:batch,status:p.status,stdout:p.stdout||'',stderr:p.stderr||'',error:p.error?.message||null});if(p.status!==0)break;}
 const verifier=spawnSync(process.execPath,[path.join(__dirname,'run-daytrade-module-verifiers.js')],{cwd:root,encoding:'utf8',windowsHide:true,timeout:120000,env:{...process.env,FUMAN_RUNTIME_DIR:runtime,TRADE_DATE:date}});
 output.verifier={status:verifier.status,stdout:verifier.stdout||'',stderr:verifier.stderr||'',error:verifier.error?.message||null};output.complete=output.batches.length>0&&output.batches.every(x=>x.status===0)&&verifier.status===0;output.first_blocker=output.complete?null:(output.batches.find(x=>x.status!==0)?.error||'PREOPEN_A01_A19_VERIFIER_BLOCKED');output.finished_at=new Date().toISOString();
-const outDir=path.join(runtime,'data','scan-receipts','preopen');fs.mkdirSync(outDir,{recursive:true});fs.writeFileSync(path.join(outDir,`a01-a19-${date}.json`),JSON.stringify(output,null,2)+'\n');console.log(JSON.stringify({ok:output.complete,complete:output.complete,first_blocker:output.first_blocker,batches:output.batches.map(x=>({modules:x.modules,status:x.status})),verifier_status:verifier.status},null,2));process.exitCode=output.complete?0:1;
+const outDir=preopenDir;fs.writeFileSync(path.join(outDir,`a01-a19-${date}.json`),JSON.stringify(output,null,2)+'\n');if(output.complete)fs.writeFileSync(completeMarker,JSON.stringify(output,null,2)+'\n');try{fs.closeSync(lock);fs.unlinkSync(path.join(preopenDir,`a01-a19-${date}.lock`));}catch{}console.log(JSON.stringify({ok:output.complete,complete:output.complete,first_blocker:output.first_blocker,batches:output.batches.map(x=>({modules:x.modules,status:x.status})),verifier_status:verifier.status},null,2));process.exitCode=output.complete?0:1;

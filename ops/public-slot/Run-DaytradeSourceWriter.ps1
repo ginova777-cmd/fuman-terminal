@@ -505,6 +505,21 @@ try {
   $retrySeconds = if ($env:FUMAN_DAYTRADE_WRAPPER_RETRY_SECONDS) { [int]$env:FUMAN_DAYTRADE_WRAPPER_RETRY_SECONDS } else { 8 }
   if ($retrySeconds -lt 0) { $retrySeconds = 0 }
   $exitCode = 1
+  # Preopen A01-A19 is a dedicated bounded batch.  It runs outside the
+  # minute Writer's status_scorecard tail; the script owns a daily lock and
+  # completion marker, so repeated wrapper ticks cannot duplicate it.
+  $preopenNow = (Get-Date).TimeOfDay.TotalMinutes
+  if ($Apply -and $preopenNow -ge 360 -and $preopenNow -lt 540) {
+    $preopenScript = "C:\fuman-release-owner\prod81\scripts\run-daytrade-preopen-a01-a19.js"
+    if (Test-Path -LiteralPath $preopenScript) {
+      try {
+        Start-Process -FilePath $node -ArgumentList @("--use-system-ca", $preopenScript) -WorkingDirectory (Split-Path -Parent $preopenScript) -WindowStyle Hidden | Out-Null
+        Write-WrapperLog "PREOPEN_A01_A19 start=detached script=$preopenScript"
+      } catch {
+        Write-WrapperLog "PREOPEN_A01_A19 start_failed message=$($_.Exception.Message)"
+      }
+    } else { Write-WrapperLog "PREOPEN_A01_A19 skip=script_missing path=$preopenScript" }
+  }
   for ($attempt = 1; $attempt -le $attempts; $attempt++) {
     Write-WrapperLog "NODE_ATTEMPT $attempt/$attempts stdout=$StdoutLog stderr=$StderrLog"
     # The current Mother Pool v4 universe can legitimately need more than 270s.
