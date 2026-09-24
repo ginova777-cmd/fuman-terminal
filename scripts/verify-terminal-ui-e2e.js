@@ -2237,7 +2237,9 @@ async function verifyStrategy5RenderedIdentity(cdp, kind) {
   const read = () => evaluate(cdp, kind => {
     const root = document.querySelector(kind === 'desktop' ? '#strategy-view' : '#content [data-mobile-fragment-key="strategy5"]');
     const nodes = [...(root?.querySelectorAll(kind === 'desktop' ? '.fuman-unified-list-card .strategy3-card-stock span' : '.mobile-terminal-row h4') || [])];
-    return {runId:(root?.textContent?.match(/strategy5-\d{8}-\d{14}/)||[])[0] || root?.dataset?.runId || root?.querySelector('[data-run-id]')?.dataset?.runId || '', scores:kind === 'desktop' ? nodes.map(n=>Number([...n.closest('.fuman-unified-list-card').querySelectorAll('.strategy3-card-metrics div')].find(x=>x.querySelector('small')?.textContent.trim()==='分數')?.querySelector('strong')?.textContent)) : null, codes:nodes.map(n=>(n.textContent.trim().match(/^\d{4}/)||[])[0]).filter(Boolean), zero:!!root?.querySelector('[data-zero-result="1"]')};
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date()).replace(/\D/g, '');
+    const authority = kind === 'mobile' ? {today, tradeDate:root?.dataset?.tradeDate, formalDisplayAllowed:root?.dataset?.formalDisplayAllowed, todayAuthoritative:root?.dataset?.todayAuthoritative, displayMode:root?.dataset?.displayMode, blocked:!!root?.querySelector('.mobile-terminal-blocked'), preserved:/preserve previous good/i.test(root?.querySelector('.mobile-terminal-status')?.textContent || root?.textContent || '')} : null;
+    return {authority, runId:(root?.textContent?.match(/strategy5-\d{8}-\d{14}/)||[])[0] || root?.dataset?.runId || root?.querySelector('[data-run-id]')?.dataset?.runId || '', scores:kind === 'desktop' ? nodes.map(n=>Number([...n.closest('.fuman-unified-list-card').querySelectorAll('.strategy3-card-metrics div')].find(x=>x.querySelector('small')?.textContent.trim()==='分數')?.querySelector('strong')?.textContent)) : null, codes:nodes.map(n=>(n.textContent.trim().match(/^\d{4}/)||[])[0]).filter(Boolean), zero:!!root?.querySelector('[data-zero-result="1"]')};
   }, kind);
   const toggle = key => evaluate(cdp, key => {
     const root = document.querySelector('#strategy-view');
@@ -2251,7 +2253,12 @@ async function verifyStrategy5RenderedIdentity(cdp, kind) {
     const codes = rows.map(r=>r.code);
     const orderOk=JSON.stringify(actual.codes)===JSON.stringify(codes);
     const scoresOk=kind!=='desktop'||JSON.stringify(actual.scores)===JSON.stringify(rows.map(r=>Number(r.score)));
-    checks.push({filter,expected:codes,actual:actual.codes,runId:actual.runId,orderOk,scoresOk,actualScores:actual.scores,ok:actual.runId===evidence.runId&&orderOk&&scoresOk});
+    const day = String(evidence.tradeDate || '').replace(/\D/g, '');
+    const a = actual.authority;
+    const authorityOk = kind !== 'mobile' || (a && String(a.tradeDate || '').replace(/\D/g, '') === day && (a.today === day
+      ? a.formalDisplayAllowed === '1' && a.todayAuthoritative === '1' && !a.blocked && !a.preserved && /^TODAY_(?:ZERO_RESULT_)?COMPLETE$/.test(a.displayMode)
+      : a.todayAuthoritative === '0'));
+    checks.push({filter,expected:codes,actual:actual.codes,runId:actual.runId,orderOk,scoresOk,authorityOk,authority:a,actualScores:actual.scores,ok:actual.runId===evidence.runId&&orderOk&&scoresOk&&authorityOk});
   };
   await check('all',expected);
   if(kind==='desktop') {

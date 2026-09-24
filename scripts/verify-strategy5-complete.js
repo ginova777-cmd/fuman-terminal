@@ -24,6 +24,8 @@ const issues = [];
 const liveFile = path.join(root, 'outputs/strategy5-live-acceptance/readback.json');
 const renderedFile = path.join(root, 'outputs/strategy5-live-acceptance/rendered/terminal-ui-e2e-report.json');
 const live = read(liveFile), rendered = read(renderedFile);
+const mobileViews = (rendered?.results || []).filter(r => r.routeKey === 'strategy5' && r.kind === 'mobile');
+if (mobileViews.length < 2 || mobileViews.some(r => !r.identity?.checks?.length || r.identity.checks.some(c => c.authorityOk !== true))) issues.push('strategy5_mobile_display_authority_not_verified');
 if (!live?.ok || live.runId !== scan?.runId || live.tradeDate !== date || live.readbackCount !== Number(scan?.matches) || !live.technicalFreshReadback || live.selectionCoverage?.contract !== 'strategy5-candidate90-daily-up-hourly60-bonus-v1' || live.selectionCoverage?.ok !== true) issues.push('strategy5_daily_trend_full_readback_not_verified');
 if (live?.rankingBonusVerified !== true || live?.rankingBonusContract !== require('../lib/strategy5-ranking-bonuses').CONTRACT) issues.push('strategy5_ranking_bonus_not_verified');
 if (!rendered?.ok || Date.parse(rendered.generatedAt) < Date.parse(live?.checkedAt || '') || !Array.isArray(rendered.results) || rendered.results.filter(r => r.routeKey === 'strategy5').length < 5 || rendered.results.some(r => r.routeKey === 'strategy5' && (!r.ok || (r.kind === 'scorecard' ? r.audit?.runId !== scan?.runId || r.audit?.tradeDate !== date : !r.identity?.ok || r.identity.runId !== scan?.runId)))) issues.push('strategy5_actual_three_surface_not_verified');

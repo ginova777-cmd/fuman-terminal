@@ -243,6 +243,11 @@ function attachTerminalAuthority(tab, payload = {}) {
       payload = { ...payload, preservePreviousGood: ownAuthority.preservePreviousGood };
     }
   }
+  if (String(tab || "").toLowerCase() === "strategy5") {
+    const { strategy5MobileAuthority } = require("../lib/strategy5-mobile-authority");
+    const ownAuthority = strategy5MobileAuthority(payload, taipeiDateKey());
+    if (ownAuthority) terminalAuthority = ownAuthority;
+  }
   if (!terminalAuthority) return payload;
   return {
     ...payload,
