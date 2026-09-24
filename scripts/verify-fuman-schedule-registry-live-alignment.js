@@ -29,6 +29,46 @@ try {
 } catch (error) {
   issues.push(`live_query_invalid_json:${error.message}`);
 }
+if (liveResult.status !== 0 || live.length === 0) {
+  const fallbackScript = String.raw`
+$raw = (& schtasks.exe /Query /FO LIST /V 2>$null | Out-String)
+$out = foreach ($block in ($raw -split '\\r?\\n\\r?\\n')) {
+  $m = [regex]::Match($block, '(?im)^TaskName:\s*(\\Fuman .+)$'); if (-not $m.Success) { continue }
+  $name = $m.Groups[1].Value -replace '^\\',''
+  $state = ([regex]::Match($block, '(?im)^Scheduled Task State:\s*(.+)$')).Groups[1].Value
+  if ($state.Trim() -eq 'Disabled') { continue }
+  $start = ([regex]::Match($block, '(?im)^Start Time:\s*(.+)$')).Groups[1].Value
+  $taskToRun = ([regex]::Match($block, '(?im)^Task To Run:\s*(.+)$')).Groups[1].Value
+  $triggers = @()
+  if ($start -match '(?i)(\d{1,2}:\d{2})') { $triggers = @(([datetime]::Parse($Matches[1])).ToString('HH:mm')) }
+  [pscustomobject]@{name=$name;state=$state.Trim();execute='';arguments=$taskToRun;workingDirectory='';triggers=$triggers}
+}
+@($out) | ConvertTo-Json -Depth 5 -Compress
+`;
+  const fallback = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", fallbackScript], {
+    encoding: "utf8", timeout: 20000, windowsHide: true,
+  });
+  try {
+    const parsedFallback = JSON.parse(String(fallback.stdout || "[]").trim() || "[]");
+    const fallbackRows = Array.isArray(parsedFallback) ? parsedFallback : [parsedFallback];
+    if (fallbackRows.length) live = fallbackRows;
+  } catch (error) {
+    issues.push(`live_fallback_invalid_json:${error.message}`);
+  }
+}
+if (live.length === 0) {
+  const listFallback = spawnSync(process.env.ComSpec || "cmd.exe", ["/d", "/c", "schtasks.exe /Query /FO LIST /V"], { encoding: "utf8", timeout: 20000, windowsHide: true });
+  const blocks = String(listFallback.stdout || "").split(/\r?\n\r?\n/);
+  for (const block of blocks) {
+    const name = (block.match(/^TaskName:\s*(\\Fuman .+)$/mi) || [])[1];
+    const state = (block.match(/^Scheduled Task State:\s*(.+)$/mi) || [])[1];
+    if (!name || String(state).trim() === "Disabled") continue;
+    const taskToRun = (block.match(/^Task To Run:\s*(.+)$/mi) || [])[1] || "";
+    const start = (block.match(/^Start Time:\s*(.+)$/mi) || [])[1] || "";
+    const tm = start.match(/(\d{1,2}:\d{2})/);
+    live.push({ name: name.replace(/^\\/, ""), state: String(state || "").trim(), execute: "", arguments: taskToRun, workingDirectory: "", triggers: tm ? [tm[1].padStart(5, "0")] : [] });
+  }
+}
 const liveNames = [...new Set(live.map((row) => row.name))].sort();
 for (const name of active.filter((name) => !liveNames.includes(name))) issues.push(`registry_active_missing_live:${name}`);
 for (const name of liveNames.filter((name) => !active.includes(name))) issues.push(`live_enabled_missing_registry_active:${name}`);
