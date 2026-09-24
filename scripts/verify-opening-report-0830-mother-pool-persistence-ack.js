@@ -36,10 +36,12 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function observeWriterRefreshes(afterTime, required, timeoutMs) {
+async function observeWriterRefreshes(afterTime, required, timeoutMs, tradeDate) {
   const seen = new Set();
   const started = Date.now();
   while (Date.now() - started <= timeoutMs && seen.size < required) {
+    const events = require('../lib/opening-report-writer-refresh-evidence').readAfter(RUNTIME, tradeDate, afterTime);
+    if (events.length >= required) return events.map(event => event.completed_at);
     const state = readJson(WRITER_STATE);
     const updatedAt = String(state?.updated_at || state?.updatedAt || "");
     const updatedMs = Date.parse(updatedAt);
@@ -80,7 +82,7 @@ async function main() {
   const handoffTime = Date.parse(String(handoff?.checked_at || ""));
   const previous=process.argv.includes('--resume-evidence') ? readJson(output) : null;
   const retained=previous?.complete===true&&previous?.report_run_id===reportRunId&&previous?.trade_date===tradeDate&&previous?.handoff_ack_receipt===handoffPath&&previous?.db_readback_ok===true ? [...new Set(previous.writer_refresh_timestamps||[])].filter(t=>Date.parse(t)>handoffTime&&Date.parse(t)<=Date.parse(previous.checked_at)) : [];
-  const refreshes = retained.length>=requiredRefreshes ? retained : Number.isFinite(handoffTime) ? await observeWriterRefreshes(handoffTime, requiredRefreshes, timeoutMs) : [];
+  const refreshes = retained.length>=requiredRefreshes ? retained : Number.isFinite(handoffTime) ? await observeWriterRefreshes(handoffTime, requiredRefreshes, timeoutMs, tradeDate) : [];
   const readback = runReadback(tradeDate, reportRunId, bridgeAggregate, readbackOutput);
   const refreshOk = refreshes.length >= requiredRefreshes;
   const readbackOk = readback.exitCode === 0 && readback.receipt?.complete === true && readback.receipt?.db_readback_ok === true;

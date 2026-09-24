@@ -7045,8 +7045,36 @@ function updateMotherPoolDelta(result) {
     round_summary: roundSummary,
     target_symbol_diagnostics: targetSymbolDiagnostics,
   };
-}async function writeStatusAndScorecard(result) {
-  const motherPoolDelta = updateMotherPoolDelta(result);
+}function buildPreopenLightMotherPoolDelta(result) {
+  const payload = result?.payload || {};
+  const rows = (Array.isArray(result?.priorityRows) ? result.priorityRows : [])
+    .filter(isPublishedMotherMember)
+    .slice(0, Math.max(1, MOTHER_POOL_TARGET_MIN_SYMBOLS));
+  const tradeDate = taipeiDate();
+  const canonicalRunId = canonicalDaytradeRunId(tradeDate);
+  const summary = {
+    contract_version: MOTHER_POOL_CONTRACT_VERSION,
+    trade_date: tradeDate,
+    checked_at: nowIso(),
+    run_id: canonicalRunId,
+    canonical_run_id: canonicalRunId,
+    writer_run_id: writerTickIdentity.writer_run_id,
+    generation_id: writerTickIdentity.generation_id,
+    mother_pool_rows: rows.length,
+    mother_pool_target_min_symbols: MOTHER_POOL_TARGET_MIN_SYMBOLS,
+    mother_pool_target_shortfall: Math.max(0, MOTHER_POOL_TARGET_MIN_SYMBOLS - rows.length),
+    source_status: payload.source_status || result?.status || "",
+    quote_age_seconds: numberValue(payload.quote_age_seconds, 999999),
+    mode: "preopen_light",
+    bounded_scope: "A01-A19",
+  };
+  return { mode: "preopen_light", bounded_scope: "A01-A19", previous_count: 0,
+    current_count: rows.length, added_count: 0, removed_count: 0,
+    upgraded_to_priority_count: 0, downgraded_count: 0, round_summary: summary,
+    target_symbol_diagnostics: [] };
+}
+async function writeStatusAndScorecard(result) {
+  const motherPoolDelta = PREOPEN_LIGHT_MODE ? buildPreopenLightMotherPoolDelta(result) : updateMotherPoolDelta(result);
   const tradeDate = taipeiDate();
   const canonicalRunId = canonicalDaytradeRunId(tradeDate);
   result.payload.trade_date = tradeDate;
@@ -8084,6 +8112,10 @@ async function tick() {
         `updated_at=lt.${encodeURIComponent(priorityRows[0].updated_at)}`,
       );
       tickStage("priority_pool_write:complete", { rows: priorityRows.length });
+      require('../lib/opening-report-writer-refresh-evidence').record({
+        runtime: process.env.FUMAN_RUNTIME_DIR || 'C:/fuman-runtime',
+        date: taipeiDate(), identity: writerTickIdentity, rows: priorityRows,
+      });
     } catch (error) {
       nonFatalWriteErrors.push({
         target: "fugle_daytrade_priority_pool",
