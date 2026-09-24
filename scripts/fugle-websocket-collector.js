@@ -638,7 +638,16 @@ function readPrioritySymbols(symbols) {
   };
 
   addMany("daytradeCandlePriority", payload.daytradeCandlePrioritySymbols, { priority: true });
-  addMany("daytrade", payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, { priority: true });
+  // The writer publishes the canonical Mother Pool membership separately from
+  // the legacy strategy-priority fields. Keep that membership on the formal
+  // candle subscription path even when the strategy bridge is blocked or
+  // contains stale strategy dates.
+  addMany("daytrade", [
+    ...(Array.isArray(payload.daytradeMotherPoolSymbols) ? payload.daytradeMotherPoolSymbols : []),
+    ...(Array.isArray(payload.daytradePrioritySymbols) ? payload.daytradePrioritySymbols : []),
+    ...(Array.isArray(payload.daytradeSymbols) ? payload.daytradeSymbols : []),
+    ...(Array.isArray(payload.daytrade) ? payload.daytrade : []),
+  ], { priority: true });
   addMany("terminalPriority", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, { priority: true });
   addMany("openingPriority", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, { priority: true });
   counts.strategy1 = 0; // retired: do not subscribe Strategy1 priority symbols
