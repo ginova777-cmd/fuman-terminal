@@ -1,4 +1,5 @@
 const { isAuthorizedMorningRecovery } = require("../lib/opening-report-recovery-seed");
+const { boundedScorecardPayload } = require("../lib/daytrade-scorecard-payload");
 const { isPublishedMotherMember } = require("../lib/daytrade-published-membership");
 const { nativeVolume, typedCollectorVolume, evaluateTurnover, rankTurnover } = require('../lib/daytrade-intraday-turnover');
 const { outsideRatio, normalizeNaturalMinute } = require("../lib/daytrade-source-evidence");
@@ -7128,7 +7129,7 @@ async function writeStatusAndScorecard(result) {
     futopt_stock_mapped: result.payload.futopt_stock_mapped,
     preopen_status: result.payload.preopen_status,
     source_status: result.status, bounded_scope: "A01-A19", mode: "preopen_light"
-  } : result.payload;
+  } : boundedScorecardPayload(result.payload);
   const scorecardRow = {
     trade_date: tradeDate,
     source_name: SOURCE_NAME,
