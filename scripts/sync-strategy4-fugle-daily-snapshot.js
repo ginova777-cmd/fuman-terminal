@@ -88,12 +88,13 @@ function updateCache(row, updatedAt) {
   if (!DRY_RUN) fs.writeFileSync(file, `${JSON.stringify({ ...current, code: row.symbol, from: current.from || TARGET_DATE, to: TARGET_DATE, source: row.source, updatedAt, rows })}\n`, "utf8");
 }
 async function main() {
-  const [stocks, tsePayload, otcPayload] = await Promise.all([
+  const [stocks, tsePayload, otcPayload, tibPayload] = await Promise.all([
     universe(),
     fetchJson("https://api.fugle.tw/marketdata/v1.0/stock/snapshot/quotes/TSE", { "X-API-KEY": FUGLE_KEY, Accept: "application/json" }),
     fetchJson("https://api.fugle.tw/marketdata/v1.0/stock/snapshot/quotes/OTC", { "X-API-KEY": FUGLE_KEY, Accept: "application/json" }),
+    fetchJson("https://api.fugle.tw/marketdata/v1.0/stock/snapshot/quotes/TIB", { "X-API-KEY": FUGLE_KEY, Accept: "application/json" }),
   ]);
-  const tse = parseSnapshot(tsePayload, "TSE"); const otc = parseSnapshot(otcPayload, "OTC"); const snapshot = new Map([...tse, ...otc]);
+  const tse = parseSnapshot(tsePayload, "TSE"); const otc = parseSnapshot(otcPayload, "OTC"); const tib = parseSnapshot(tibPayload, "TIB"); const snapshot = new Map([...tse, ...otc, ...tib]);
   const accepted = [...stocks.values()].map((meta) => ({ meta, quote: snapshot.get(String(meta.symbol)) })).filter((item) => item.quote);
   const missing = [...stocks.keys()].filter((symbol) => !snapshot.has(symbol));
   if (accepted.length < MIN_ROWS) throw new Error(`fugle_snapshot_accepted_rows_too_low:${accepted.length}<${MIN_ROWS}:missing=${missing.length}`);
@@ -102,7 +103,7 @@ async function main() {
   const volume = accepted.map(({ meta, quote }) => ({ symbol: quote.symbol, market: meta.market || "", trade_date: TARGET_DATE, volume: quote.volumeLots, updated_at: updatedAt, payload: { source: quote.source, volume_unit: "lots", raw_volume_lots: quote.volumeLots, snapshot_script: "sync-strategy4-fugle-daily-snapshot.js" } }));
   accepted.forEach(({ quote }) => updateCache(quote, updatedAt));
   await upsert("fugle_daily_ohlcv", "symbol,trade_date", ohlcv); await upsert("fugle_daily_volume", "symbol,trade_date", volume);
-  await upsert("fugle_daily_sync_status", "trade_date,source", [{ trade_date: TARGET_DATE, source: "fugle", started_at: updatedAt, finished_at: new Date().toISOString(), symbols_expected: stocks.size, symbols_loaded: accepted.length, missing_symbols_count: missing.length, status: "complete", error_message: null, updated_at: new Date().toISOString(), payload: { importer: "sync-strategy4-fugle-daily-snapshot.js", source: "fugle_snapshot", tse_rows: tse.size, otc_rows: otc.size, accepted_rows: accepted.length, missing_sample: missing.slice(0, 100), target_trade_date: TARGET_DATE } }]);
-  console.log(JSON.stringify({ ok: true, dryRun: DRY_RUN, targetDate: TARGET_DATE, source: "fugle_snapshot", universe: stocks.size, accepted: accepted.length, missing: missing.length, tseRows: tse.size, otcRows: otc.size }, null, 2));
+  await upsert("fugle_daily_sync_status", "trade_date,source", [{ trade_date: TARGET_DATE, source: "fugle", started_at: updatedAt, finished_at: new Date().toISOString(), symbols_expected: stocks.size, symbols_loaded: accepted.length, missing_symbols_count: missing.length, status: "complete", error_message: null, updated_at: new Date().toISOString(), payload: { importer: "sync-strategy4-fugle-daily-snapshot.js", source: "fugle_snapshot", tse_rows: tse.size, otc_rows: otc.size, tib_rows: tib.size, accepted_rows: accepted.length, missing_sample: missing.slice(0, 100), target_trade_date: TARGET_DATE } }]);
+  console.log(JSON.stringify({ ok: true, dryRun: DRY_RUN, targetDate: TARGET_DATE, source: "fugle_snapshot", universe: stocks.size, accepted: accepted.length, missing: missing.length, tseRows: tse.size, otcRows: otc.size, tibRows: tib.size }, null, 2));
 }
 main().catch((error) => { console.error(JSON.stringify({ ok: false, targetDate: TARGET_DATE, error: error?.message || String(error) }, null, 2)); process.exit(1); });

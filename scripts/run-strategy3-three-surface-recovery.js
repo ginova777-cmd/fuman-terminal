@@ -10,6 +10,8 @@ function main(){
  assert(/^strategy3v2-recovery-replay-\d{8}-\d{14}$/.test(run),'exact recovery run required');
  const compact=run.split('-')[3],date=compact.replace(/^(\d{4})(\d{2})(\d{2})$/,'$1-$2-$3');
  const receipts=path.join(runtime,'data/scan-receipts');
+ fs.mkdirSync(path.join(runtime,'logs'),{recursive:true});
+ process.env.FUMAN_STRATEGY3_RECOVERY_LOG=path.join(runtime,'logs','strategy3-surface-recovery.log');
  const scan=read(path.join(receipts,`strategy3-v2-recovery-replay-${compact}.json`));
  assert.equal(scan.run_id,run);
  node('verify-release-root-authority.js',['--require-production-root']);
@@ -22,7 +24,7 @@ function main(){
  process.env.FUMAN_SCORECARD_REFRESH_RUN_ID=run;
  node('generate-terminal-scorecard-source.js');
  execute('pwsh.exe',['-NoProfile','-File','scripts/run-scorecard88-terminal-collector.ps1','-Slot','13:15','-Recovery','-ExpectedRunId',run,'-RecoveryReason','user-approved-after-close-three-surface-recovery']);
- execute('pwsh.exe',['-NoProfile','-Command',`. './verify-post-scan-tri-surface.ps1'; Assert-PostScanTriSurfaceClosure -Route strategy3 -RunId '${run}' -LogPath './logs/strategy3-surface-recovery.log' -SkipPublication | Out-Null`]);
+ execute('pwsh.exe',['-NoProfile','-Command',`. './verify-post-scan-tri-surface.ps1'; Assert-PostScanTriSurfaceClosure -Route strategy3 -RunId '${run}' -LogPath $env:FUMAN_STRATEGY3_RECOVERY_LOG -SkipPublication | Out-Null`]);
  const tri=read(path.join(receipts,'tri-surface-closures/strategy3.json'));
  assert(tri.complete===true&&tri.status==='complete'&&tri.runId===run&&['desktopRunId','mobileRunId','scorecardRunId'].every(k=>tri[k]===run),'tri-surface closure invalid');
  const symbols=scan.results.map(x=>x.code).sort();
