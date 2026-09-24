@@ -13,3 +13,5 @@ test("changed identity, later data, failed original evidence and bad raw night e
  for(const edit of edits){const e=fixture();edit(e);assert.ok(validate(e,"2026-09-24","us_0820",[]).length);}
  assert.ok(validate(fixture(),"2026-09-24","us_0820",["hash_mismatch"]).length);
 });
+
+test("resumed consumption may be later while frozen sources remain inside cutoff",()=>{const e=fixture();e.consumed.checked_at="2026-09-24T18:30:00+08:00";assert.deepEqual(validate(e,"2026-09-24","us_0820",[]),[]);e.frozen.checked_at="2026-09-24T18:00:00+08:00";assert.ok(validate(e,"2026-09-24","us_0820",[]).includes("frozen_capture_outside_window"));});

@@ -345,7 +345,7 @@ function currentReceiptChecks(checks, tradeDate) {
 
   if (!Object.values(paths).every(exists)) return;
 
-  const preflight = readJson(paths.preflight);
+  const preflight = require("../lib/opening-frozen-preflight-recovery").resolvePreflight(REPORT_DIR, tradeDate);
   const leaders = readJson(paths.leaders);
   const snapshot = readJson(paths.snapshot);
   const finalReceipt = readJson(paths.final);
