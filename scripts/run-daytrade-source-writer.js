@@ -661,9 +661,10 @@ async function supabaseGet(resource, query = "", options = {}) {
 async function supabaseGetPaged(resource, query = "", options = {}) {
   const key = requireSupabaseKey(Boolean(options.service));
   const pageSize = Math.max(1, Math.min(Number(options.pageSize || 1000), 1000));
+  const maxRows = Math.max(pageSize, Math.min(100000, Number(options.maxRows || 20000)));
   const rows = [];
   let exactTotal = null;
-  for (let offset = 0; offset < 20000; offset += pageSize) {
+  for (let offset = 0; offset < maxRows; offset += pageSize) {
     const url = `${SUPABASE_URL}/rest/v1/${resource}${query ? `?${query}` : ""}`;
     const response = await supabaseFetch(url, {
       method: "GET",
@@ -682,6 +683,7 @@ async function supabaseGetPaged(resource, query = "", options = {}) {
       const match = /^(?:(\d+)-(\d+)|\*)\/(\d+)$/.exec(range);
       if (!Array.isArray(page) || !match) throw new Error('paged_exact_count_evidence_missing');
       const total = Number(match[3]);
+      if (total > maxRows) throw new Error('paged_exact_count_exceeds_budget');
       if (exactTotal !== null && total !== exactTotal) throw new Error('paged_exact_count_changed');
       exactTotal = total;
       if (page.length && (Number(match[1]) !== offset || Number(match[2]) - offset + 1 !== page.length)) throw new Error('paged_range_mismatch');
@@ -1095,7 +1097,7 @@ async function fetchRecentThreeDayAverageVolume() {
   const calendar=await require('../lib/mother-pool-historical-sessions').selectSessions({tradeDate,resolveDay:date=>require('./twse-trading-day').isTwseTradingDay(date,{stateDir:statePath(''),ignoreOverrides:true})});
   const dates=require('../lib/mother-pool-daily-volume-baseline').datesFromCalendar(calendar,tradeDate);
   const historyDates=require('../lib/mother-pool-daily-volume-baseline').datesFromCalendar(calendar,tradeDate,15);
-  const rows=await supabaseGetPaged('strategy4_daily_ohlcv_view',`select=symbol,trade_date,volume_lots,open,high,low,close&trade_date=gte.${historyDates[0]}&trade_date=lt.${tradeDate}&order=trade_date.desc,symbol.asc`,{service:true,pageSize:1000,requireExactCount:true});
+  const rows=await supabaseGetPaged('strategy4_daily_ohlcv_view',`select=symbol,trade_date,volume_lots,open,high,low,close&trade_date=gte.${historyDates[0]}&trade_date=lt.${tradeDate}&order=trade_date.desc,symbol.asc`,{service:true,pageSize:1000,maxRows:60000,requireExactCount:true});
   const dailyReadAt=nowIso();
   const bySymbol=new Map();
   for(const symbol of new Set(rows.map(r=>normalizeCode(r.symbol)).filter(Boolean))){
