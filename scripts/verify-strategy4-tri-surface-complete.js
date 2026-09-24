@@ -24,6 +24,13 @@ function main(){
  const issues=validate({scan,tri,audit,db,rendered},run);if(issues.length)throw Error(issues.join(';'));
  const final={...scan,status:'complete',complete:true,qualityStatus:'complete',exitCode:0,blockingReason:'',failed_checks:[],first_blocker:null,finishedAt:new Date().toISOString(),completionContract:'strategy4_tri_surface_user_scope_v1',acceptanceScope:['desktop','mobile','scorecard88'],notificationPolicy:'disabled_by_user',lineDelivery:{status:'DISABLED_BY_USER',delivered:false},renderedVerifiedRunId:run,renderedReceipt:rendered.receiptPath,renderedVerifiedAt:rendered.checkedAt};
  const tmp=file+'.finalizing';fs.writeFileSync(tmp,JSON.stringify(final,null,2)+'\n');fs.renameSync(tmp,file);
+ try {
+  cp.execFileSync(process.execPath,['--use-system-ca',path.join(__dirname,'publish-scorecard-scan-audit.js')],{cwd:root,stdio:'inherit',windowsHide:true,timeout:120000});
+ } catch(error) {
+  const failed={...final,status:'failed',complete:false,exitCode:1,blockingReason:'final_scorecard_audit_publish_failed',first_blocker:'final_scorecard_audit_publish_failed'};
+  fs.writeFileSync(file,JSON.stringify(failed,null,2)+'\n');
+  throw error;
+ }
  console.log(JSON.stringify({ok:true,runId:run,status:'complete',acceptanceScope:final.acceptanceScope,notificationPolicy:final.notificationPolicy}));
 }
 module.exports={validate};
