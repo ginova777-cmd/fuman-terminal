@@ -166,7 +166,16 @@ function staticContractCheck() {
     "sideVolumeGe2000Lots",
     "outsideVolume >= insideVolume * 2",
   ]) if (!writer.includes(marker)) issues.push(`writer_marker_missing:${marker}`);
-  if (writer.includes("outsideVolume > insideVolume * 2")) issues.push("strict_greater_than_two_times_rule_still_present");
+  // Ranking has its own strict >2 rule. B14 must keep the inclusive boundary.
+  const ratioStart = writer.indexOf("  const outsideVolumeGeInsideTimes2 =");
+  const ratioEnd = writer.indexOf(";", ratioStart);
+  const ratioCode = ratioStart >= 0 && ratioEnd > ratioStart ? writer.slice(ratioStart, ratioEnd + 1) : "";
+  try {
+    const vm = require("vm");
+    const evaluate = (insideVolume, outsideVolume, available) => vm.runInNewContext(ratioCode + "\noutsideVolumeGeInsideTimes2", { insideVolume, outsideVolume, sideVolumeContract: { sideVolumeAvailable: available } });
+    if (evaluate(500, 1000, true) !== true || evaluate(500, 999, true) !== false || evaluate(500, 1000, false) !== false) issues.push("writer_inclusive_two_times_boundary_failed");
+  } catch { issues.push("writer_inclusive_two_times_rule_missing"); }
+  if (!writer.includes("b14Event: metrics.outsideVolumeGeInsideTimes2 === true")) issues.push("b14_inclusive_two_times_mapping_missing");
   for (const forbidden of [
     "volumeToLots(payload?.total?.tradeVolumeAtBid)",
     "volumeToLots(payload?.total?.tradeVolumeAtAsk)",
