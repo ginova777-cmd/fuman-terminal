@@ -383,7 +383,11 @@ function writeJson(file, payload) {
 function writeJsonAtomic(file, payload) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = `${file}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(temporary, `${JSON.stringify(payload, null, 2)}\n`, { flag: "w" });
+  const descriptor = fs.openSync(temporary, "wx");
+  try {
+    fs.writeFileSync(descriptor, `${JSON.stringify(payload, null, 2)}\n`);
+    fs.fsyncSync(descriptor);
+  } finally { fs.closeSync(descriptor); }
   fs.renameSync(temporary, file);
 }
 
@@ -879,6 +883,7 @@ function readWriterState() {
     lastRestFallbackAt: state.lastRestFallbackAt || "",
     lastRestFallbackOutcome: state.lastRestFallbackOutcome || "",
     intradayMirrorCursor: Math.max(0, Number(state.intradayMirrorCursor || 0)),
+    daytradeMotherPoolCandleMirror: state.daytradeMotherPoolCandleMirror || null,
   };
 }
 

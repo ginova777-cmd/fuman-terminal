@@ -45,7 +45,13 @@ function main(){
  const target=path.join(receipts,'strategy3-recovery-replay.json');
  const write=p=>{fs.writeFileSync(target+'.tmp',JSON.stringify(p,null,2)+'\n');fs.renameSync(target+'.tmp',target);};
  write(payload);
- try{node('publish-scorecard-scan-audit.js');node('verify-terminal-ui-e2e.js',[...uiArgs,'--require-strategy3-audit']);}
+ try{
+  node('publish-scorecard-scan-audit.js');
+  // /88 serves the collector artifact, including its embedded audit.
+  node('collect-terminal-scorecard-88.js',['--slot=13:15','--recovery','--expected-run-id='+run,'--recovery-reason=strategy3_final_receipt_audit_refresh']);
+  node('verify-scorecard88-collection.js',['--slot=13:15']);
+  node('verify-terminal-ui-e2e.js',[...uiArgs,'--require-strategy3-audit']);
+ }
  catch(error){write({...payload,status:'failed',complete:false,exitCode:1,blockingReason:'final_audit_or_rendered_verification_failed',first_blocker:'final_audit_or_rendered_verification_failed'});throw error;}
  console.log(JSON.stringify({ok:true,runId:run,resultCount:scan.result_count,complete:true,notificationPolicy:'disabled_by_user'}));
 }
