@@ -7,7 +7,7 @@ const auth=authArg?context.authorization(authArg.slice('--maintenance-authorizat
 if(auth)checks[0][2].push('--maintenance-authorization='+auth.file);
 const results=[],issues=[];
 for(const [name,script,args] of checks){
- const r=spawnSync(process.execPath,['--use-system-ca',`scripts/${script}`,...args],{encoding:'utf8',windowsHide:true,timeout: name === 'history' ? 18*60*1000 : 120000,maxBuffer:32*1024*1024,env:{...process.env,FUMAN_HISTORY_CLEANUP_ENABLE_VERCEL_CLI:'1'}});
+ const r=spawnSync(process.execPath,['--use-system-ca',`scripts/${script}`,...args],{encoding:'utf8',windowsHide:true,timeout: name === 'history' ? 18*60*1000 : name === 'runtime' ? 10*60*1000 : 120000,maxBuffer:32*1024*1024,env:{...process.env,FUMAN_HISTORY_CLEANUP_ENABLE_VERCEL_CLI:'1'}});
  let p;try{p=JSON.parse(r.stdout);}catch{}
  if(auth&&name==='retired'&&p)context.assertRetiredReference(p,auth);
  const remaining=name==='retired'?p?.deletedCount:name==='runtime'?p?.candidates:p?.supabase?.sections?.reduce((n,s)=>n+Number(s.candidates||s.candidateRuns||0),0)+Number(p?.vercel?.candidateDeployments||0);
