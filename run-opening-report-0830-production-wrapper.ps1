@@ -34,10 +34,19 @@ if ($RecoveryContext) {
 }
 $wrapperReceipt = Join-Path $receiptDir "opening-report-0830-wrapper-receipt-$today.json"
 
+function Invoke-MorningAggregate {
+  if ($IsolatedBacktest) { return }
+  & "C:\Program Files\nodejs\node.exe" "scripts\verify-opening-report-two-stage.js" "--date=$tradeDate" "--if-ready"
+  # Per-stage completion remains separate from aggregate completion. Preserve
+  # failures in the aggregate receipt; the evidence-only retry task can resume.
+  if ($LASTEXITCODE -ne 0) { Write-Warning "Morning two-stage aggregate remains blocked; inspect its receipt." }
+}
+
 trap {
   if ($wrapperReceipt) {
     [ordered]@{contract="opening-report-morning-wrapper-v1"; status="failed"; complete=$false; exitCode=1; first_blocker=$_.Exception.Message; trade_date=$tradeDate; run_id=$runId; checked_at=(Get-Date).ToString("o"); execution_mode=if($RecoveryContext){"authorized_same_day_recovery"}else{"scheduled"}} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8
   }
+  if (-not $IsolatedBacktest) { Invoke-MorningAggregate }
   Write-Error $_ -ErrorAction Continue
   exit 1
 }
@@ -84,6 +93,7 @@ if (-not $IsolatedBacktest) {
       canonical_verifier = "scripts/verify-opening-report-morning-contract.js"
       telegram_enabled = $false
     } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8
+    Invoke-MorningAggregate
     exit 0
   }
   if ($calendarExit -ne 0 -or $null -eq $calendar) {
@@ -111,6 +121,7 @@ if (-not $IsolatedBacktest) {
       canonical_verifier = "scripts/verify-opening-report-morning-contract.js"
       telegram_enabled = $false
     } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8
+    Invoke-MorningAggregate
     exit 1
   }
 }
@@ -120,6 +131,16 @@ if (-not $IsolatedBacktest) {
   if ($LASTEXITCODE -ne 0) { throw "RELEASE_ROOT_DRIFT" }
   & "C:\Program Files\nodejs\node.exe" "scripts\supabase-incident-guard.js" check "--class=guard" "--action=opening-report-complete"
   if ($LASTEXITCODE -ne 0) { throw "morning_source_incident_blocked" }
+}
+
+if (-not $IsolatedBacktest) {
+  if (Test-Path -LiteralPath $wrapperReceipt) {
+    $startHistory = Join-Path $receiptDir "history"
+    New-Item -ItemType Directory -Force -Path $startHistory | Out-Null
+    Copy-Item -LiteralPath $wrapperReceipt -Destination (Join-Path $startHistory "wrapper-before-start-$today-$stamp-$([guid]::NewGuid()).json")
+  }
+  [ordered]@{contract="opening-report-morning-wrapper-v1";stage=$Stage;trade_date=$tradeDate;run_id=$runId;status="running";complete=$false;exitCode=$null;checked_at=(Get-Date).ToString("o");process_id=$PID} | ConvertTo-Json | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8
+  Invoke-MorningAggregate
 }
 
 function Invoke-NodeStep {
@@ -158,7 +179,7 @@ $runnerOk = ($run.exitCode -eq 0 -and $null -ne $final -and $final.runner_comple
 $verifierOk = ($verifier.exitCode -eq 0)
 $linePersonalOk = ($null -ne $line -and $line.line_push_ok -eq $true -and $line.has_user_target -eq $true)
 $lineGroupOk = ($null -ne $line -and $line.line_push_ok -eq $true -and $line.has_group_target -eq $true)
-$notificationAccepted = ($linePersonalOk -and $lineGroupOk) -or ($null -ne $final -and $final.notification_accepted -eq $true -and $null -ne $final.line_quota_exception -and $verifierOk)
+$notificationAccepted = ($linePersonalOk -and $lineGroupOk) -or ($null -ne $final -and $final.notification_accepted -eq $true -and ($null -ne $final.line_quota_exception -or ($final.notification_status -eq 'paused_by_user' -and $final.completion_scope -eq 'tri_surface')) -and $verifierOk)
 $terminalOk = ($null -ne $final -and $final.terminal_briefing_snapshot.ok -eq $true)
 $bridgeOk = ($null -ne $final -and $final.mother_pool_bridge_attempted -eq $true -and $final.mother_pool_bridge_ok -eq $true)
 $handoffAckOk = ($null -ne $final -and $final.mother_pool_handoff_ack_ok -eq $true -and $final.mother_pool_handoff_ack.complete -eq $true)
@@ -188,9 +209,12 @@ $receipt = [ordered]@{
   line_personal_ok = $linePersonalOk
   line_group_ok = $lineGroupOk
   notification_accepted = $notificationAccepted
+  completion_scope = if ($null -ne $final) { $final.completion_scope } else { $null }
+  notification_status = if ($null -ne $final) { $final.notification_status } else { $null }
+  line_delivered = ($linePersonalOk -and $lineGroupOk)
   line_quota_exception = if($null -ne $final){$final.line_quota_exception}else{$null}
   line_receipt_reused = ($ReuseLineReceipt.IsPresent -or $ResumeEvidence.IsPresent)
-  line_push_attempted_in_this_run = -not ($ReuseLineReceipt.IsPresent -or $ResumeEvidence.IsPresent -or $FinalizeExisting.IsPresent -or $IsolatedBacktest.IsPresent)
+  line_push_attempted_in_this_run = ($null -ne $final -and $final.line_push_attempted -eq $true -and -not ($ReuseLineReceipt.IsPresent -or $ResumeEvidence.IsPresent -or $FinalizeExisting.IsPresent -or $IsolatedBacktest.IsPresent))
   recovery = ($FinalizeExisting.IsPresent -or $ResumeEvidence.IsPresent -or [bool]$RecoveryContext)
   execution_mode = if ($RecoveryContext) { "authorized_same_day_recovery" } elseif ($ResumeEvidence) { "resume_existing_evidence" } else { "scheduled" }
   terminal_ok = $terminalOk
@@ -225,5 +249,6 @@ if ($null -ne $final -and $final.run_id -eq $runId) {
 }
 if ($IsolatedBacktest) { $receipt.complete = $false; $receipt.status = "isolated_backtest" }
 $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8
+Invoke-MorningAggregate
 if (-not $ok) { exit 1 }
 exit 0

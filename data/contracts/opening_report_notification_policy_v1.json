@@ -1,0 +1,9 @@
+{
+  "contract": "opening-report-notification-policy-v1",
+  "line_mode": "paused",
+  "effective_from": "2026-09-26",
+  "authorization": "user-20260926-continue-line-pause-separate-surface-acceptance",
+  "completion_scope": "tri_surface",
+  "delivery_required": false,
+  "resume_requires_user_authorization": true
+}

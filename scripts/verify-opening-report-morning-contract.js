@@ -201,6 +201,10 @@ function symbolMapChecks(checks) {
 }
 
 function staticContractChecks(checks) {
+  const aggregateTests=run('node',['--test','scripts/test-opening-report-aggregate-readiness.js']);
+  addCheck(checks,'aggregate_wait_failure_recovery_and_notification_policy',aggregateTests.ok,aggregateTests.text.trim());
+  const aggregateWrapper=readText('run-opening-report-0830-production-wrapper.ps1').replace(/\r\n/g,'\n');
+  addCheck(checks,'aggregate_automatic_wrapper_closure',aggregateWrapper.includes('function Invoke-MorningAggregate')&&aggregateWrapper.includes('"--if-ready"')&&aggregateWrapper.includes('$receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8\nInvoke-MorningAggregate'), 'each stage updates aggregate after terminal receipt');
   const stageTests=run("node",["scripts/test-opening-report-stage-reconstruction.js"]);
   addCheck(checks,"stage_reconstruction_and_stale_batch_tests",stageTests.ok,stageTests.text.trim());
   const nightTests=run("node",["scripts/test-opening-report-night-futures.js"]);
@@ -419,7 +423,7 @@ function currentReceiptChecks(checks, tradeDate) {
   const hasGroup = line.has_group_target === true || line.hasGroupTarget === true;
   const deliveredCount = Number(line.delivered_count || line.deliveredCount || 0);
   const lineAttempted = line.line_push_attempted === true;
-  addCheck(checks, "current_line_user_and_group_delivery", require("../lib/opening-report-line-policy").accepted(line,finalReceipt.run_id,finalReceipt.delivery_content_hash,tradeDate), JSON.stringify({ ok: line.ok, line_push_attempted: lineAttempted, target_count: targetCount, delivered_count: deliveredCount, has_user_target: hasUser, has_group_target: hasGroup }));
+  addCheck(checks, "current_notification_policy", require("../lib/opening-report-line-policy").notificationAccepted(line,finalReceipt.run_id,finalReceipt.delivery_content_hash,tradeDate), JSON.stringify({ notification_status:line.notification_status||null, ok: line.ok, line_push_attempted: lineAttempted, target_count: targetCount, delivered_count: deliveredCount, has_user_target: hasUser, has_group_target: hasGroup }));
 
   const terminal = finalReceipt.terminal_briefing_snapshot || {};
   addCheck(checks, "current_terminal_snapshot_ok", terminal.ok === true, JSON.stringify({ ok: terminal.ok, key: terminal.key }));

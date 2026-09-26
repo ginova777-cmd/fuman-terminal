@@ -646,7 +646,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   const applyBridge = !mock && !hasFlag("--skip-bridge");
   const resumeEvidence = hasFlag("--resume-evidence");
   const reuseLineReceipt = hasFlag("--reuse-line-receipt") || resumeEvidence;
-  const sendLine = !mock && !reuseLineReceipt;
+  const linePaused = linePolicy.pauseEnabled(tradeDate);
+  const sendLine = !mock && !reuseLineReceipt && !linePaused;
   const dryRunLine = mock;
 
   const frozenLeaders = frozenLeadersReceipt(tradeDate);
@@ -662,7 +663,7 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   const items = attachPriorityObservation(baseItems, priority);
   const displayTop3 = priority.observations;
   const deliveryContentHash = contentHash(priority.mode, displayTop3, night);
-  if (resumeEvidence) { const prior=readJson(path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`)); if(prior?.report_run_id!==runId || prior?.delivery_content_hash!==deliveryContentHash || prior?.line_push_attempted!==true) throw Error("resume_evidence_identity_mismatch"); }
+  if (resumeEvidence) { const prior=readJson(path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`)); if(prior?.report_run_id!==runId || prior?.delivery_content_hash!==deliveryContentHash || (prior?.line_push_attempted!==true&&!linePolicy.paused(prior,runId,deliveryContentHash,tradeDate))) throw Error("resume_evidence_identity_mismatch"); }
   if (reuseLineReceipt && !resumeEvidence && !validateReuse(readJson(path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`)), runId, deliveryContentHash)) throw new Error("line_reuse_run_or_content_mismatch");
   const reportPath = path.join(RECEIPT_DIR, `opening-report-0830-${compact}.md`);
   const overseasPath = path.join(RECEIPT_DIR, `overseas-preflight-${compact}.json`);
@@ -713,6 +714,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     ? { line_push_attempted: false, line_push_ok: true, simulated: true, reason_code: "isolated_line_flex_payload_pass", target_count: 2, delivered_count: 2, has_user_target: true, has_group_target: true, token_logged: false, target_logged: false }
     : reuseLineReceipt
     ? readJson(lineReceiptPath)
+    : linePaused
+    ? linePolicy.pausedReceipt(runId,deliveryContentHash,tradeDate)
     : await pushLine({ cardText: lineReportText(tradeDate, displayTop3, usMarket, night), flexCard: lineReportFlex(tradeDate, displayTop3, usMarket, night), runId, dryRun: dryRunLine });
   if (!reuseLineReceipt) Object.assign(lineReceipt, {
     ok: lineReceipt?.line_push_ok === true,
@@ -723,9 +726,9 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     night_futures_summary: nightSource.summary(night),
   });
   if (!reuseLineReceipt) writeJson(lineReceiptPath, lineReceipt);
-  const quotaException = !isolatedBacktest && !lineReceipt.line_push_ok ? await linePolicy.capture(lineReceipt, windowsUserEnv("FUMAN_LINE_CHANNEL_ACCESS_TOKEN").value, runId, deliveryContentHash, tradeDate) : null;
+  const quotaException = !isolatedBacktest && !linePaused && !lineReceipt.line_push_ok ? await linePolicy.capture(lineReceipt, windowsUserEnv("FUMAN_LINE_CHANNEL_ACCESS_TOKEN").value, runId, deliveryContentHash, tradeDate) : null;
   if(quotaException) { lineReceipt.quota_exception=quotaException; writeJson(lineReceiptPath,lineReceipt); }
-  const notificationAccepted = isolatedBacktest || linePolicy.accepted(lineReceipt,runId,deliveryContentHash,tradeDate);
+  const notificationAccepted = isolatedBacktest || linePolicy.notificationAccepted(lineReceipt,runId,deliveryContentHash,tradeDate);
   const lineDeliveryOk = lineReceipt?.line_push_ok === true && (!reuseLineReceipt || String(lineReceipt?.report_run_id || lineReceipt?.run_id || "") === runId);
 
   const final = {
@@ -741,6 +744,9 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     line_push_attempted: sendLine,
     line_push_ok: lineDeliveryOk,
     notification_accepted: notificationAccepted,
+    completion_scope: linePolicy.paused(lineReceipt,runId,deliveryContentHash,tradeDate) ? 'tri_surface' : 'stage_delivery',
+    notification_status: linePolicy.paused(lineReceipt,runId,deliveryContentHash,tradeDate) ? 'paused_by_user' : lineDeliveryOk ? 'delivered' : lineReceipt.quota_exception ? 'quota_exhausted_not_delivered' : 'failed',
+    line_delivered: lineDeliveryOk,
     line_quota_exception: quotaException,
     delivery_content_hash: deliveryContentHash,
     night_futures: night,
