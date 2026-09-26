@@ -32,7 +32,7 @@ function verifyCodeContract(){
  const c=JSON.parse(text('data/contracts/telegram_three_independent_detectors_v1.json'));
  assert.equal(c.contract,'telegram_three_independent_detectors_v1');
  assert.equal(c.runner,'scripts/run-telegram-three-detectors.js');assert.equal(c.verifier,'scripts/verify-telegram-three-detectors.js');
- assert.equal(c.five_minute_role,'bonus_only');assert.equal(c.replay_publish_allowed,false);
+ assert.equal(c.candle_timeframe,'1m');assert.equal(c.replay_publish_allowed,false);
  assert.deepEqual(c.formal_complete_requires,['natural_source_independent_check','database_anonymous_readback','per_target_telegram_message_acknowledgement','desktop_mobile_scorecard_rendered_same_batch']);
  assert.equal(c.current_round_complete_is_not_full_day_complete,true);
  const pkg=JSON.parse(text('package.json'));assert.equal(pkg.scripts['verify:daytrade-burst-telegram'],'node --use-system-ca scripts/verify-telegram-three-detectors.js');
