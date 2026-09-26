@@ -6,7 +6,7 @@
   "legacy_verifier_role": "compatibility_dispatch_only_no_legacy_checks",
   "scope": "independent_detectors_on_available_canonical_fugle_regular_equity_minutes",
   "notification_window": "09:00-12:30 Asia/Taipei",
-  "five_minute_role": "bonus_only",
+  "candle_timeframe": "1m",
   "replay_publish_allowed": false,
   "raw_dynamic_events": "separate",
   "missing_source": "data_gap_no_fabrication",
