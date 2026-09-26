@@ -9,7 +9,7 @@
  let loading=false,loaded=false;
  function line(text){const e=document.createElement('p');e.textContent=text;body.append(e);}
  function paint(p){
-  body.replaceChildren();box.dataset.runId=p.run_id||'';box.dataset.tradeDate=p.trade_date||'';box.dataset.eventsSha256=p.events_sha256||'';box.dataset.eventCount=String(p.event_count??0);box.dataset.status=p.status||'blocked';
+  body.replaceChildren();box.dataset.runId=p.run_id||'';box.dataset.tradeDate=p.trade_date||'';box.dataset.eventsSha256=p.events_sha256||'';box.dataset.eventCount=String(p.event_count??0);box.dataset.status=p.status||'blocked';box.dataset.notificationGate=p.notification_gate||'';box.dataset.gateEvidenceSha256=p.gate_evidence_sha256||'';
   const replay=p.mode==='replay'||p.scope==='replay_integration_only';
   const accepted=p.acceptance?.complete===true&&p.acceptance?.run_id===p.run_id;
   line(replay?'歷史回放驗收｜未發送 Telegram，尚非正式 COMPLETE':accepted||p.complete===true?'本批次正式驗收 COMPLETE':p.status==='empty'?'尚無當日偵測結果':'正式驗收未完成');
