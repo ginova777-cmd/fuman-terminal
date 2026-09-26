@@ -16,5 +16,35 @@
     "per_target_telegram_message_acknowledgement",
     "desktop_mobile_scorecard_rendered_same_batch"
   ],
-  "current_round_complete_is_not_full_day_complete": true
+  "current_round_complete_is_not_full_day_complete": true,
+  "enabled_detectors": [
+    "volume",
+    "price"
+  ],
+  "disabled_detectors": [
+    "outside"
+  ],
+  "level_cross_specification": {
+    "implementation_status": "calculation_tested_integration_pending",
+    "timeframe": "1m",
+    "rsi": [
+      5,
+      15
+    ],
+    "kd": [
+      5,
+      3,
+      3
+    ],
+    "macd": [
+      5,
+      9,
+      20
+    ],
+    "cross_mode": "any",
+    "tolerance_ticks_each_side": 2,
+    "touch_bar_included": true,
+    "following_clock_minutes": 3,
+    "trigger_relationship": "original_detector_then_position_and_cross"
+  }
 }
