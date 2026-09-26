@@ -25,7 +25,7 @@
     "outside"
   ],
   "level_cross_specification": {
-    "implementation_status": "calculation_tested_integration_pending",
+    "implementation_status": "wired",
     "timeframe": "1m",
     "rsi": [
       5,
@@ -45,6 +45,16 @@
     "tolerance_ticks_each_side": 2,
     "touch_bar_included": true,
     "following_clock_minutes": 3,
-    "trigger_relationship": "original_detector_then_position_and_cross"
-  }
+    "trigger_relationship": "original_detector_then_position_and_cross",
+    "trigger_to_touch_following_minutes": 3,
+    "include_trigger_bar": true,
+    "first_touch_deadline_does_not_reset": true,
+    "source": "same-day 0850 cache or bounded FinMind prior-session read; actual Fugle websocket open",
+    "cost_method": "top_net_buy_branch_net_amount_divided_by_net_quantity",
+    "rsi_method": "rolling-gain-loss",
+    "kd_seed": 50,
+    "ema_seed": "period_sma",
+    "notification_identity": "one earliest confirmation per original detector event"
+  },
+  "notification_gate": "telegram_level_cross_gate_v1"
 }
