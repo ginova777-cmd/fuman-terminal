@@ -32,7 +32,7 @@ tri-surface acceptance. Tests below do not establish formal completion.
 
 ## Evidence
 
-`node scripts/verify-telegram-three-detectors.js --contract`: 21 suites.
+`node scripts/verify-telegram-three-detectors.js --contract`: 22 suites.
 All delivery tests inject mock HTTP; no Telegram/LINE sends.
 Source audit and four-stock local UI evidence are in the task workspace under
 `outputs/autodetect-goal/`. This source branch has not been deployed.
@@ -49,6 +49,15 @@ Source audit and four-stock local UI evidence are in the task workspace under
   trading-day receipt. Production-root dirty entry currently blocks release.
 - Notification delivery remains paused at the user's request; delivery acceptance
   and tri-surface acceptance must be reported separately.
+
+The canonical runner also dispatches `--premarket-plan` to the new producer.
+Explicit `--as-of` always means replay. An actual clock outside 08:59 does not
+invent a freeze timestamp. The producer writes uniquely named attempt artifacts,
+checks their readback hashes, and exits 2 for blocked plans. No accepted runtime
+plan is replaced until source, universe and deferred rules can be verified.
+Current saved source has 386 symbols with no authoritative exchange universe;
+it cannot establish the required full-market coverage. A 386-row replay emitted
+the consumer plan schema with none of the blocked directions promoted to live.
 
 The earlier frozen PR296 branch was not modified. This branch starts from the
 subsequent local 4979 case commit. An unrelated dirty prewarm PowerShell file is
