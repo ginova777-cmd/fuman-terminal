@@ -36,7 +36,13 @@ async function execute(){
   const contexts=await levels.hydrate({runtimeRoot:root,tradeDate:date,previousDate,groups:input.groups,quotes:input.quotes,symbols,now});
   now=new Date().toISOString();
   const finished=new Set(saved.finished),rawEvents=input.events;
-  const filtered=gate.build({events:rawEvents.filter(e=>!finished.has(gate.key(e))),previous:saved.entries,contexts,now,tradeDate:date});
+  const plan=read(path.join(root,'data/telegram-detectors',date,'premarket-plan.json'));
+  const planProof=require('../lib/telegram-detectors/premarket-plan-contract.cjs').validate(plan,{tradeDate:date,now});
+  input.proof.premarket_plan_verification=planProof;
+  input.proof.premarket_plan_sha256=plan?digest(plan):null;
+  input.proof.failed_checks.push(...planProof.failed_checks);
+  input.proof.complete=input.proof.complete&&planProof.complete;
+  const filtered=gate.build({events:rawEvents.filter(e=>!finished.has(gate.key(e))),previous:saved.entries,contexts,now,tradeDate:date,plan});
   input.events=filtered.events;
   const gateFailures=gate.verify(input.events,filtered.evidence);
   for(const e of filtered.evidence)for(const gap of e.levelInput.gaps||[])input.batch.data_gaps.push({symbol:e.event.stock_id,module:'level_source',reason:gap});
@@ -54,7 +60,7 @@ async function execute(){
    finally{if(old===undefined)delete process.env.FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM;else process.env.FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM=old;}
   }});
   // Preserve failed attempts as evidence; a blocked source never becomes complete.
-  const file=path.join(dir,input.batch.run_id+'.json');write(file,{result,sourceProof:input.proof});const delivered=new Set(result.deliveries.filter(d=>d.status==='delivered').map(d=>d.event_id));
+  const file=path.join(dir,input.batch.run_id+'.json');write(file,{result,sourceProof:input.proof});const delivered=new Set(result.deliveries.filter(d=>['delivered','suppressed','resolved'].includes(d.status)).map(d=>d.event_id));
   for(const e of input.events)if(delivered.has(gate.key(e))||['expired','source_missing'].includes(e.gate?.status))finished.add(gate.key(e));
   const gateState={entries:filtered.state.filter(x=>!finished.has(gate.key(x.event))),finished:[...finished]};
   write(path.join(dir,'source-latest.json'),{gateState,gateStateHash:digest(gateState),run_id:input.batch.run_id});
@@ -66,5 +72,9 @@ async function execute(){
  }finally{fs.closeSync(lockFd);fs.unlinkSync(lock);}
 }
 async function main(){try{return await execute();}catch(e){const date=new Date(Date.now()+28800000).toISOString().slice(0,10),result={contract:'telegram_three_detectors_attempt_v1',run_id:'telegram-failed-'+crypto.randomUUID(),trade_date:date,checked_at:new Date().toISOString(),status:'blocked',complete:false,exit_code:1,failed_checks:[e.message||'RUNNER_EXCEPTION'],first_blocker:e.message||'RUNNER_EXCEPTION',previous_good_preserved:true};write(path.join(root,'data/telegram-detectors',date,'last-attempt.json'),result);write(path.join(root,'data/scan-receipts/telegram-three-detectors-runner-'+date.replaceAll('-','')+'.json'),result);return result;}}
-if(require.main===module)main().then(r=>{console.log(JSON.stringify({status:r.status,complete:r.complete,run_id:r.run_id,event_count:r.event_count,first_blocker:r.first_blocker||r.reason},null,2));process.exitCode=r.exit_code??(r.status==='not_due'||r.integration_complete===true?0:1);}).catch(e=>{console.error(e.message);process.exitCode=1;});
+if(require.main===module){
+ if(process.argv.includes('--premarket-plan')){try{const r=require('./produce-telegram-premarket-plan.cjs').main();process.exitCode=r.receipt.complete?0:2;}catch(e){console.error(e.message);process.exitCode=1;}}
+ else if(process.argv.includes('--premarket-validation')){try{require('./run-premarket-validation.cjs').main();}catch(e){console.error(e.message);process.exitCode=1;}}
+ else main().then(r=>{console.log(JSON.stringify({status:r.status,complete:r.complete,run_id:r.run_id,event_count:r.event_count,first_blocker:r.first_blocker||r.reason},null,2));process.exitCode=r.exit_code??(r.status==='not_due'||r.integration_complete===true?0:1);}).catch(e=>{console.error(e.message);process.exitCode=1;});
+}
 module.exports={main};
