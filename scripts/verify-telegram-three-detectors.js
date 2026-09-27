@@ -32,7 +32,7 @@ function verifyCodeContract(){
  const c=JSON.parse(text('data/contracts/telegram_three_independent_detectors_v1.json'));
  assert.equal(c.contract,'telegram_three_independent_detectors_v1');
  assert.equal(c.runner,'scripts/run-telegram-three-detectors.js');assert.equal(c.verifier,'scripts/verify-telegram-three-detectors.js');
- assert.equal(c.five_minute_role,'bonus_only');assert.equal(c.replay_publish_allowed,false);
+ assert.deepEqual(c.enabled_detectors,['volume','price']);assert.deepEqual(c.disabled_detectors,['outside']);assert.equal(c.level_cross_specification.tolerance_ticks_each_side,2);assert.equal(c.candle_timeframe,'1m');assert.equal(c.replay_publish_allowed,false);
  assert.deepEqual(c.formal_complete_requires,['natural_source_independent_check','database_anonymous_readback','per_target_telegram_message_acknowledgement','desktop_mobile_scorecard_rendered_same_batch']);
  assert.equal(c.current_round_complete_is_not_full_day_complete,true);
  const pkg=JSON.parse(text('package.json'));assert.equal(pkg.scripts['verify:daytrade-burst-telegram'],'node --use-system-ca scripts/verify-telegram-three-detectors.js');
@@ -42,7 +42,7 @@ function verifyCodeContract(){
   const shim=text(file);assert(shim.length<600&&shim.includes("require('./"+target+"')"),'Legacy entry must only dispatch');
  }
  for(const file of ['index.html','mobile.html','88.html'])assert(text(file).includes('terminal-telegram-detectors.js'));
- const tests=['scripts/test-provider-side-journal.cjs',...['volume','price','outside','provider-minute-side','telegram-event-adapter','telegram-delivery','delivery-pipeline','natural-source-runner'].map(n=>'lib/telegram-detectors/test-'+n+'.cjs')];
+ const tests=['scripts/test-provider-side-journal.cjs',...['level-cross-gate','level-source','level-touch','level-cross-indicators','volume','price','outside','provider-minute-side','telegram-event-adapter','telegram-delivery','delivery-pipeline','natural-source-runner'].map(n=>'lib/telegram-detectors/test-'+n+'.cjs')];
  for(const file of tests){const r=spawnSync(process.execPath,[file],{cwd:repo,encoding:'utf8',windowsHide:true});if(r.status!==0)throw Error(file+': '+(r.stderr||r.stdout));}
  const result={scope:'code_contract_only',ok:true,tests:tests.length,formal_acceptance_evaluated:false,receipt_written:false};console.log(JSON.stringify(result));return result;
 }
