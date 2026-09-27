@@ -30,7 +30,10 @@ async function verify({artifact,output}){
     await ui.waitFor(cdp,id=>({ok:document.getElementById('premarket-workflow')?.dataset.runId===id}),payload.run_id,20000,200);
     const state=await ui.evaluate(cdp,()=>{const p=document.getElementById('premarket-workflow');p.scrollIntoView({block:'start'});return {run_id:p.dataset.runId,rows_sha256:p.dataset.rowsSha256,row_count:Number(p.dataset.rowCount),status:p.dataset.status,visible:p.open&&p.getBoundingClientRect().width>0,text:p.innerText,rows:[...p.querySelectorAll('section[data-symbol]')].map(e=>({stock_id:e.dataset.symbol,text:e.textContent,visible_text:e.innerText}))};});
     assert.equal(state.run_id,payload.run_id);assert.equal(state.rows_sha256,payload.rows_sha256);assert.equal(state.row_count,payload.rows.length);assert.equal(state.visible,true);assert.equal(state.rows.length,payload.rows.length);assert(state.text.includes('Telegram 未發送'));
-    for(const row of payload.rows){const found=state.rows.find(r=>r.stock_id===row.stock_id);assert(found);for(const blocker of row.blockers)assert(found.text.includes(blocker));}
+    for(const row of payload.rows){const found=state.rows.find(r=>r.stock_id===row.stock_id);assert(found);for(const blocker of row.blockers)assert(found.text.includes(blocker));
+     if(row.broker_comparison){assert(found.visible_text.includes('比例僅為數值對照'));const b=row.broker_comparison.branch;if(b)assert(found.visible_text.includes(b.buy_lots.toFixed(2)));const ratio=row.broker_comparison.comparisons.foreign.ratio;if(typeof ratio==='number')assert(found.visible_text.includes((ratio*100).toFixed(2)+'%'));}
+     const states={matched:'符合已列條件',not_matched:'未符合',insufficient_data:'資料不足'};for(const scenario of row.scenario_assessments||[])assert(found.visible_text.includes(states[scenario.status]));
+    }
     const shot=await cdp.send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false},15000),bytes=Buffer.from(shot.data,'base64');fs.writeFileSync(path.join(output,name+'.png'),bytes);observed[name]={...state,screenshot_sha256:require('node:crypto').createHash('sha256').update(bytes).digest('hex')};
    }finally{cdp.close();}
   }

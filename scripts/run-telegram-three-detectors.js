@@ -36,7 +36,13 @@ async function execute(){
   const contexts=await levels.hydrate({runtimeRoot:root,tradeDate:date,previousDate,groups:input.groups,quotes:input.quotes,symbols,now});
   now=new Date().toISOString();
   const finished=new Set(saved.finished),rawEvents=input.events;
-  const filtered=gate.build({events:rawEvents.filter(e=>!finished.has(gate.key(e))),previous:saved.entries,contexts,now,tradeDate:date});
+  const plan=read(path.join(root,'data/telegram-detectors',date,'premarket-plan.json'));
+  const planProof=require('../lib/telegram-detectors/premarket-plan-contract.cjs').validate(plan,{tradeDate:date,now});
+  input.proof.premarket_plan_verification=planProof;
+  input.proof.premarket_plan_sha256=plan?digest(plan):null;
+  input.proof.failed_checks.push(...planProof.failed_checks);
+  input.proof.complete=input.proof.complete&&planProof.complete;
+  const filtered=gate.build({events:rawEvents.filter(e=>!finished.has(gate.key(e))),previous:saved.entries,contexts,now,tradeDate:date,plan});
   input.events=filtered.events;
   const gateFailures=gate.verify(input.events,filtered.evidence);
   for(const e of filtered.evidence)for(const gap of e.levelInput.gaps||[])input.batch.data_gaps.push({symbol:e.event.stock_id,module:'level_source',reason:gap});
@@ -54,7 +60,7 @@ async function execute(){
    finally{if(old===undefined)delete process.env.FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM;else process.env.FUMAN_ALLOW_DAYTRADE_BURST_TELEGRAM=old;}
   }});
   // Preserve failed attempts as evidence; a blocked source never becomes complete.
-  const file=path.join(dir,input.batch.run_id+'.json');write(file,{result,sourceProof:input.proof});const delivered=new Set(result.deliveries.filter(d=>d.status==='delivered').map(d=>d.event_id));
+  const file=path.join(dir,input.batch.run_id+'.json');write(file,{result,sourceProof:input.proof});const delivered=new Set(result.deliveries.filter(d=>['delivered','suppressed','resolved'].includes(d.status)).map(d=>d.event_id));
   for(const e of input.events)if(delivered.has(gate.key(e))||['expired','source_missing'].includes(e.gate?.status))finished.add(gate.key(e));
   const gateState={entries:filtered.state.filter(x=>!finished.has(gate.key(x.event))),finished:[...finished]};
   write(path.join(dir,'source-latest.json'),{gateState,gateStateHash:digest(gateState),run_id:input.batch.run_id});
