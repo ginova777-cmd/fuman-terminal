@@ -59,6 +59,7 @@ async function main() {
   require('../lib/telegram-detectors/trial-evidence-store.cjs').save({runtimeRoot:RUNTIME,tradeDate:today,rows:historyRows,now:now.toISOString()});
   await upsert("fugle_preopen_snapshot", snapshotRows, "symbol");
   await upsert("fugle_preopen_snapshot_history", historyRows, "trade_date,symbol,observed_at");
+  if(inWindow&&!RECOVER_TRIAL_ONLY){const trialView=await require('./publish-telegram-trial-view.cjs').main({runtimeRoot:RUNTIME});console.log(JSON.stringify({trial_view:trialView}));}
   console.log(JSON.stringify({ ok: true, complete: true, contract: "preopen-websocket-lightweight-v1", trade_date: today, snapshot_rows: snapshotRows.length, history_rows: historyRows.length, order_book_ready_rows: historyRows.filter((row) => row.payload.order_book_status === "same_event_current").length, order_book_data_gap_rows: historyRows.filter((row) => row.payload.order_book_status !== "same_event_current").length, recovery_mode: RECOVER_TRIAL_ONLY }, null, 2));
 }
 main().catch((error) => { console.error(JSON.stringify({ ok: false, complete: false, first_blocker: error.message }, null, 2)); process.exitCode = 1; });
