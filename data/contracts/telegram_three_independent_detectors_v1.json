@@ -50,7 +50,7 @@
     "include_trigger_bar": true,
     "first_touch_deadline_does_not_reset": true,
     "source": "same-day 0850 cache or bounded FinMind prior-session read; actual Fugle websocket open",
-    "cost_method": "top_net_buy_branch_net_amount_divided_by_net_quantity",
+    "cost_method": "top_net_buy_branch_buy_vwap",
     "rsi_method": "rolling-gain-loss",
     "kd_seed": 50,
     "ema_seed": "period_sma",
