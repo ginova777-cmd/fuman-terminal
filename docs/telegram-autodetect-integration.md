@@ -51,6 +51,12 @@ Source audit and four-stock local UI evidence are in the task workspace under
   and tri-surface acceptance must be reported separately.
 
 The canonical runner also dispatches `--premarket-plan` to the new producer.
+With `--collect-runtime --output=<attempt-dir>`, it reads the existing static
+snapshot and quote cache itself, combines the required cached calendar years,
+and reads the separately verified `data/telegram-detectors/<date>/universe.json`.
+The source capture and hashes are retained with the attempt. Missing calendar,
+universe or trial evidence remains blocking; an empty/missing source is not a
+healthy zero-result scan. Scheduler installation remains pending release.
 Explicit `--as-of` always means replay. An actual clock outside 08:59 does not
 invent a freeze timestamp. The producer writes uniquely named attempt artifacts,
 checks their readback hashes, and exits 2 for blocked plans. No accepted runtime
