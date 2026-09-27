@@ -56,5 +56,11 @@
     "ema_seed": "period_sma",
     "notification_identity": "one earliest confirmation per original detector event"
   },
-  "notification_gate": "telegram_level_cross_gate_v1"
+  "notification_gate": "telegram_level_cross_gate_v1",
+  "delivery_freshness": {
+    "event_time": "gate.confirmed_at",
+    "max_age_seconds": 120,
+    "completed_confirmation_bar_required": true,
+    "identity": "original_detector_event_unchanged"
+  }
 }

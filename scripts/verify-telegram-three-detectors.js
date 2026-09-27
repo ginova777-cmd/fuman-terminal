@@ -35,6 +35,7 @@ function verifyCodeContract(){
  assert.deepEqual(c.enabled_detectors,['volume','price']);assert.deepEqual(c.disabled_detectors,['outside']);assert.equal(c.level_cross_specification.tolerance_ticks_each_side,2);assert.equal(c.candle_timeframe,'1m');assert.equal(c.replay_publish_allowed,false);
  assert.deepEqual(c.formal_complete_requires,['natural_source_independent_check','database_anonymous_readback','per_target_telegram_message_acknowledgement','desktop_mobile_scorecard_rendered_same_batch']);
  assert.equal(c.current_round_complete_is_not_full_day_complete,true);
+ assert.deepEqual(c.delivery_freshness,{event_time:'gate.confirmed_at',max_age_seconds:120,completed_confirmation_bar_required:true,identity:'original_detector_event_unchanged'});
  const pkg=JSON.parse(text('package.json'));assert.equal(pkg.scripts['verify:daytrade-burst-telegram'],'node --use-system-ca scripts/verify-telegram-three-detectors.js');
  assert(text('run-daytrade-intraday-burst-telegram.ps1').includes('run-telegram-three-detectors.js'));
  assert(text('run-terminal-master-control.ps1').includes('verify-telegram-three-detectors.js'));
