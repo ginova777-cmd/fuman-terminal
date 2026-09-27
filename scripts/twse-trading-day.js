@@ -184,6 +184,8 @@ async function isTwseTradingDay(date = new Date(), options = {}) {
 }
 
 module.exports = {
+  isClosedRow,
+  isExplicitTradingRow,
   isTwseTradingDay,
   taipeiDateParts,
   dateKey,

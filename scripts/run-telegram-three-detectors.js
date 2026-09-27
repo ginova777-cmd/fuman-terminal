@@ -66,5 +66,8 @@ async function execute(){
  }finally{fs.closeSync(lockFd);fs.unlinkSync(lock);}
 }
 async function main(){try{return await execute();}catch(e){const date=new Date(Date.now()+28800000).toISOString().slice(0,10),result={contract:'telegram_three_detectors_attempt_v1',run_id:'telegram-failed-'+crypto.randomUUID(),trade_date:date,checked_at:new Date().toISOString(),status:'blocked',complete:false,exit_code:1,failed_checks:[e.message||'RUNNER_EXCEPTION'],first_blocker:e.message||'RUNNER_EXCEPTION',previous_good_preserved:true};write(path.join(root,'data/telegram-detectors',date,'last-attempt.json'),result);write(path.join(root,'data/scan-receipts/telegram-three-detectors-runner-'+date.replaceAll('-','')+'.json'),result);return result;}}
-if(require.main===module)main().then(r=>{console.log(JSON.stringify({status:r.status,complete:r.complete,run_id:r.run_id,event_count:r.event_count,first_blocker:r.first_blocker||r.reason},null,2));process.exitCode=r.exit_code??(r.status==='not_due'||r.integration_complete===true?0:1);}).catch(e=>{console.error(e.message);process.exitCode=1;});
+if(require.main===module){
+ if(process.argv.includes('--premarket-validation')){try{require('./run-premarket-validation.cjs').main();}catch(e){console.error(e.message);process.exitCode=1;}}
+ else main().then(r=>{console.log(JSON.stringify({status:r.status,complete:r.complete,run_id:r.run_id,event_count:r.event_count,first_blocker:r.first_blocker||r.reason},null,2));process.exitCode=r.exit_code??(r.status==='not_due'||r.integration_complete===true?0:1);}).catch(e=>{console.error(e.message);process.exitCode=1;});
+}
 module.exports={main};
