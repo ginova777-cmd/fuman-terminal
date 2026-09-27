@@ -42,6 +42,7 @@
    add(card,'p',`參考價：${(row.references||[]).map(x=>`${priceLabels[x.source]||x.source} ${number(x.price)}`).join('；')}`);
    add(card,'p',`推算觀察目標（不等於歷史支撐）：${(row.targets||[]).map(x=>number(x.price)).join('、')||'無'}`);
    add(card,'p',`待處理：${(row.blockers||[]).map(x=>reasons[x]||x).join('、')||'無'}`);
+   if(row.provenance?.calendar?.historical?.reason==='HISTORICAL_CALENDAR_NOT_COVERED')add(card,'p','歷史資料提醒：較早年度尚未核對交易日連續性；當日與前一交易日已分開驗證。');
    const audit=document.createElement('details');add(audit,'summary','來源與檢核明細');add(audit,'p',(row.blockers||[]).join('、'));add(audit,'p',`來源時間：${row.provenance?.source_fetched_at||'缺資料'}｜來源識別：${row.provenance?.source_sha256||'缺資料'}`);card.append(audit);
    const detail=document.createElement('details');add(detail,'summary','通知內容預覽');card.append(detail);
    for(const preview of p.notification_previews?.filter(x=>x.stock_id===row.stock_id)||[])add(detail,'pre',preview.text).style.cssText='white-space:pre-wrap;font:inherit';

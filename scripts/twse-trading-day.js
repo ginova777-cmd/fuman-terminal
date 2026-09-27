@@ -47,7 +47,7 @@ function isExplicitTradingRow(row) {
 function isClosedRow(row) {
   const text = rowText(row);
   if (isExplicitTradingRow(row)) return false;
-  return /市場無交易|停止交易|休市|放假|暫停交易/.test(text);
+  return /市場無交易|停止交易|休市|放假|補假|暫停交易/.test(text);
 }
 
 function cacheFileForYear(stateDir, year) {
@@ -184,6 +184,7 @@ async function isTwseTradingDay(date = new Date(), options = {}) {
 }
 
 module.exports = {
+  readTradingDayOverride,
   isClosedRow,
   isExplicitTradingRow,
   isTwseTradingDay,
