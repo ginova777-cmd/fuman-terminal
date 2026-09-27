@@ -32,7 +32,7 @@ tri-surface acceptance. Tests below do not establish formal completion.
 
 ## Evidence
 
-`node scripts/verify-telegram-three-detectors.js --contract`: 22 suites.
+`node scripts/verify-telegram-three-detectors.js --contract`: 25 suites.
 All delivery tests inject mock HTTP; no Telegram/LINE sends.
 Source audit and four-stock local UI evidence are in the task workspace under
 `outputs/autodetect-goal/`. This source branch has not been deployed.
@@ -43,10 +43,13 @@ Source audit and four-stock local UI evidence are in the task workspace under
   and schedule integration; no hand-authored plan or user trial substitution.
 - Decide deferred rules only when user provides confirmation; preserve explicit
   blockers meanwhile. Do not turn a candidate into an approved direction.
-- Complete real-data detector-baseline replay, including fixed direction and
-  trigger -> touch -> cross timing; existing 3055 research only proves level/cross.
+- Natural fixed-direction handoff still needs acceptance. The 3055 research
+  replay now uses actual detector baselines: 09:08 and 09:09 volume triggers,
+  same-bar P4 touch, 09:10 KD cross, and 09:11 confirmation. Mock acknowledgement
+  cooldown suppresses the second event. This does not prove live arrival or send.
 - Durable remote publication, full rendered production surfaces and natural
-  trading-day receipt. Production-root dirty entry currently blocks release.
+  trading-day receipt. The user-authorized production entry backup/restore is
+  finished; release-root authority and the publish gate passed on 2026-09-27.
 - Notification delivery remains paused at the user's request; delivery acceptance
   and tri-surface acceptance must be reported separately.
 
@@ -68,3 +71,21 @@ the consumer plan schema with none of the blocked directions promoted to live.
 The earlier frozen PR296 branch was not modified. This branch starts from the
 subsequent local 4979 case commit. An unrelated dirty prewarm PowerShell file is
 excluded from this work.
+
+## Trial-price publication and calendar scope
+
+The existing natural preopen source writer now invokes the trial-price publisher.
+Only same-day 08:45-08:59 validation payloads can publish; pinned readback must
+match before latest is written, and empty trial results preserve the prior latest.
+No notification or order is sent. Formal direction plans remain blocked and are
+not silently replaced by a validation view.
+
+Current-session calendar proof is separate from historical continuity. The
+collector reads the current year, plus the previous year only at a year boundary
+when needed to prove T-1. Compensatory holidays and existing terminal market
+overrides are honored. Older uncovered history is a visible warning; proven gaps
+inside calendar coverage still block direction candidates.
+
+PR #297 carries this integration. Local three-route component rendering passed
+after the calendar fix, with identical run ID and row hash; unrelated page scripts
+were disabled, so production rendering and DB readback remain unverified.
