@@ -5531,7 +5531,7 @@
   }
 
   function terminalFastVersion() {
-    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-98";
+    return window.FUMAN_TERMINAL_BOOT?.version || window.FUMAN_TERMINAL_VERSION || "public-terminal-fast-20260714-99";
   }
 
   function loadScriptOnce(src, attr) {
