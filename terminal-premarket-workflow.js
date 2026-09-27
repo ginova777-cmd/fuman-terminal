@@ -20,6 +20,13 @@
    add(card,'h3',`${row.stock_id}｜${row.scenarios?.map(s=>labels[s.id]||s.id).join('／')||'未命中已定義劇本'}`);
    add(card,'p',`空方分數 ${row.ranking?.score??'未完成'}/12｜主力成本 ${number(row.cost?.value)}｜08:59 試撮 ${number(row.trial?.price)}`);
    add(card,'p',`第一分點：${row.cost?.selected?.[0]?.name||row.cost?.selected?.[0]?.id||'缺資料'}｜成本公式：買進金額 ÷ 買進量`);
+   const priceLevels=row.trial_price_levels;
+   if(priceLevels){
+    const names={TRIAL_PLUS_3:'試撮＋3%壓力',TRIAL_PLUS_5:'試撮＋5%壓力',TRIAL_MINUS_2:'試撮－2%支撐',TRIAL_MINUS_5:'試撮－5%支撐'};
+    add(card,'p',priceLevels.trial_derived_complete?'試撮價位已算出（不需等待劇本放行）':'等待有效試撮：收到後自動計算支撐／壓力');
+    for(const level of priceLevels.levels.filter(x=>x.basis==='indicative_trial'))add(card,'p',`${names[level.id]}：${typeof level.price==='number'?Number(level.price.toFixed(6)):'缺資料'}${level.tick_range?`｜上下2 tick範圍 ${level.tick_range.lower}～${level.tick_range.upper}`:''}`);
+    add(card,'p','以上基於盤前試撮；盤中開盤價位另依實際開盤計算。');
+   }
    const comparison=row.broker_comparison;
    if(comparison){
     add(card,'p',`第一分點買進 ${number(comparison.branch?.buy_lots)} 張｜賣出 ${number(comparison.branch?.sell_lots)} 張｜淨買超 ${number(comparison.branch?.net_buy_lots)} 張`);

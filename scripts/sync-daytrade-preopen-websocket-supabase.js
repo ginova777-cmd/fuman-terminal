@@ -55,6 +55,8 @@ async function main() {
     historyRows.push({ ...common, observed_at: observedAt });
   }
   if (!historyRows.length) throw new Error("same_day_trial_rows_missing");
+  // Preserve natural 08:59 trial evidence before either DB request can fail.
+  require('../lib/telegram-detectors/trial-evidence-store.cjs').save({runtimeRoot:RUNTIME,tradeDate:today,rows:historyRows,now:now.toISOString()});
   await upsert("fugle_preopen_snapshot", snapshotRows, "symbol");
   await upsert("fugle_preopen_snapshot_history", historyRows, "trade_date,symbol,observed_at");
   console.log(JSON.stringify({ ok: true, complete: true, contract: "preopen-websocket-lightweight-v1", trade_date: today, snapshot_rows: snapshotRows.length, history_rows: historyRows.length, order_book_ready_rows: historyRows.filter((row) => row.payload.order_book_status === "same_event_current").length, order_book_data_gap_rows: historyRows.filter((row) => row.payload.order_book_status !== "same_event_current").length, recovery_mode: RECOVER_TRIAL_ONLY }, null, 2));

@@ -33,6 +33,7 @@ async function verify({artifact,output}){
     for(const row of payload.rows){const found=state.rows.find(r=>r.stock_id===row.stock_id);assert(found);for(const blocker of row.blockers)assert(found.text.includes(blocker));
      if(row.broker_comparison){assert(found.visible_text.includes('比例僅為數值對照'));const b=row.broker_comparison.branch;if(b)assert(found.visible_text.includes(b.buy_lots.toFixed(2)));const ratio=row.broker_comparison.comparisons.foreign.ratio;if(typeof ratio==='number')assert(found.visible_text.includes((ratio*100).toFixed(2)+'%'));}
      const states={matched:'符合已列條件',not_matched:'未符合',insufficient_data:'資料不足'};for(const scenario of row.scenario_assessments||[])assert(found.visible_text.includes(states[scenario.status]));
+     if(row.trial_price_levels){assert(found.visible_text.includes(row.trial_price_levels.trial_derived_complete?'試撮價位已算出':'等待有效試撮'));for(const level of row.trial_price_levels.levels.filter(l=>l.basis==='indicative_trial'&&l.price!==null))assert(found.visible_text.includes(String(Number(level.price.toFixed(6)))));}
     }
     const shot=await cdp.send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false},15000),bytes=Buffer.from(shot.data,'base64');fs.writeFileSync(path.join(output,name+'.png'),bytes);observed[name]={...state,screenshot_sha256:require('node:crypto').createHash('sha256').update(bytes).digest('hex')};
    }finally{cdp.close();}
