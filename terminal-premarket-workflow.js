@@ -7,6 +7,7 @@
  const add=(parent,tag,text)=>{const e=document.createElement(tag);e.textContent=text;parent.append(e);return e;};
  const number=v=>typeof v==='number'&&Number.isFinite(v)?v.toFixed(2):'缺資料';
  const labels={A_DISTRIBUTION_DIVERGENCE:'A 高檔出貨背離候選',B_BREAK_LOW_CONTINUATION:'B 破昨低續弱',A_UPPER_SHADOW_REBOUND_REVIEW:'A 上影轉弱／反彈成本候選（門檻待確認）'};
+ labels.L_LOW_OPEN_FOREIGN_BUY_3='低開外資連買多（表格第一列）';
  const priceLabels={previous_high:'昨高',previous_low:'昨低',previous_close:'昨收',plan_cost:'主力成本',plan_cost_plus_3pct:'成本＋3%',plan_cost_plus_5pct:'成本＋5%'};
  const reasons={VALID_0859_TRIAL_MISSING:'缺少有效08:59試撮',CONFLICTING_0859_TRIAL:'08:59試撮資料衝突',CALENDAR_EVIDENCE_MISSING:'交易日曆證據不足',DAILY_HISTORY_CALENDAR_GAP:'歷史日K與日曆尚未完整核對',ADDITIONAL_VETO_RULES_PENDING:'額外否決條件待累積劇本確認',NO_MATCHING_CONFIRMED_SCENARIO:'尚未命中已定義劇本',DAILY_INPUT_INCOMPLETE:'日K或法人資料不完整'};
  function paint(p){
@@ -17,7 +18,7 @@
   add(body,'p',`檢查 ${p.coverage?.evaluated??p.rows.length} 檔／要求 ${p.coverage?.requested??p.rows.length} 檔；來源總數 ${p.coverage?.static_source_total??'未知'}。`);
   for(const row of p.rows){
    const card=document.createElement('section');card.dataset.symbol=row.stock_id;card.style.cssText='border-top:1px solid #64748b;padding:12px 0';body.append(card);
-   add(card,'h3',`${row.stock_id}｜${row.scenarios?.map(s=>labels[s.id]||s.id).join('／')||'未命中已定義劇本'}`);
+   add(card,'h3',`${row.stock_id}｜${row.scenario_assessments?.filter(s=>s.status==='matched').map(s=>labels[s.id]||s.id).join('／')||'未命中已定義劇本'}`);
    add(card,'p',`空方分數 ${row.ranking?.score??'未完成'}/12｜主力成本 ${number(row.cost?.value)}｜08:59 試撮 ${number(row.trial?.price)}`);
    add(card,'p',`第一分點：${row.cost?.selected?.[0]?.name||row.cost?.selected?.[0]?.id||'缺資料'}｜成本公式：買進金額 ÷ 買進量`);
    const priceLevels=row.trial_price_levels;
@@ -36,7 +37,8 @@
    }
    const states={matched:'符合已列條件',not_matched:'未符合',insufficient_data:'資料不足'};
    for(const scenario of row.scenario_assessments||[])add(card,'p',`${labels[scenario.id]||scenario.id}：${states[scenario.status]||scenario.status}${scenario.unresolved_rules?.length?'；正式規則待確認':''}`);
-   add(card,'p',`盤前動作：先不掛｜方向候選：${row.direction_candidate==='short'?'空':'待確認'}｜正式放行：否`);
+   add(card,'p',`策略建議：${row.preopen_recommendation==='LIMIT_UP_LONG'?'掛漲停買（僅建議，未下單）':'先不掛'}｜方向候選：${row.direction_candidate==='long'?'多':row.direction_candidate==='short'?'空':'待確認'}｜自動下單：停用`);
+   if(row.long_table_rule){const r=row.long_table_rule;add(card,'p',`低開外資連買多：向上 ${r.up_count}/3｜最近3個交易日外資淨買超：${r.foreign_history.map(x=>`${x.date} ${number(x.net)}`).join('、')}｜成本×1.03目標 ${number(r.target)}`);}
    add(card,'p',`歷史支撐：${number(row.support?.nearest?.price)}｜下方空間：${typeof row.support?.downside_space==='number'?(row.support.downside_space*100).toFixed(2)+'%':'待驗證'}`);
    add(card,'p',`歷史支撐參考：${(row.historical_support_levels||[]).map(x=>`${number(x.price)}（${x.kind==='swing_low'?'波段低點':'缺口'}）`).join('、')||'缺資料'}`);
    add(card,'p',`參考價：${(row.references||[]).map(x=>`${priceLabels[x.source]||x.source} ${number(x.price)}`).join('；')}`);
