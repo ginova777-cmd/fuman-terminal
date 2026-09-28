@@ -14,8 +14,11 @@ function main(args=process.argv.slice(2)){
  // Attempt artifacts never overwrite the last accepted operational plan.
  const attempt=path.join(dir,result.plan.run_id);fs.mkdirSync(attempt);
  for(const [name,payload] of Object.entries({plan:result.plan,receipt:result.receipt,verification:result.verification,...(collected?{source_capture:collected}:{})})){const file=path.join(attempt,name+'.json');fs.writeFileSync(file,JSON.stringify(payload,null,2),{flag:'wx'});if(digest(read(file))!==digest(payload))throw Error('PLAN_ARTIFACT_READBACK_MISMATCH');}
- if(result.verification.complete&&mode==='live')throw Error('LIVE_PLAN_PUBLICATION_REQUIRES_REVIEWED_RULES');
- console.log(JSON.stringify({run_id:result.plan.run_id,status:result.receipt.status,complete:false,mode,row_count:result.plan.rows.length,output:attempt,failed_checks:result.receipt.failed_checks}));
+ if(result.verification.complete&&mode==='live'){
+  result.handoff=require('../lib/telegram-detectors/premarket-plan-handoff.cjs').publish({plan:result.plan,runtimeRoot:arg('runtime-root')||process.env.FUMAN_RUNTIME_DIR||'C:/fuman-runtime',now});
+  fs.writeFileSync(path.join(attempt,'handoff.json'),JSON.stringify(result.handoff,null,2),{flag:'wx'});
+ }
+ console.log(JSON.stringify({run_id:result.plan.run_id,status:result.receipt.status,complete:result.receipt.complete,mode,row_count:result.plan.rows.length,output:attempt,handoff:result.handoff||null,failed_checks:result.receipt.failed_checks}));
  return result;
 }
 if(require.main===module){try{const r=main();process.exitCode=r.receipt.complete?0:2;}catch(e){console.error(e.message);process.exitCode=1;}}
