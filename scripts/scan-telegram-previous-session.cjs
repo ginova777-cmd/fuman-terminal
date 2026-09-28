@@ -20,7 +20,7 @@ function scan({runtimeRoot='C:/fuman-runtime',now=new Date().toISOString()}){
  const rows=[],gaps=[];
  for(const file of fs.readdirSync(dir).filter(f=>/^\d{4}\.json$/.test(f)).sort()){
   const symbol=file.slice(0,4),sourceFile=path.join(dir,file);let p;try{p=JSON.parse(fs.readFileSync(sourceFile));}catch{gaps.push({symbol,reason:'PRICE_FILE_INVALID'});continue;}
-  const prices=(p.rows||[]).filter(r=>r.date<=base);if(!prices.some(r=>r.date===base)){gaps.push({symbol,reason:'BASE_DAY_PRICE_MISSING'});continue;}
+  let normalized;try{normalized=require('../lib/telegram-detectors/institution-buy-surge.cjs').deduplicate((p.rows||[]).filter(r=>r.date<=base));}catch(e){gaps.push({symbol,reason:e.message});continue;}const prices=normalized.rows;if(!prices.some(r=>r.date===base)){gaps.push({symbol,reason:'BASE_DAY_PRICE_MISSING'});continue;}
   const f=flows.get(symbol);
   const source={symbol,trade_date:trade,signal_date:base,fetched_at:now,price_rows:prices.map(r=>({stock_id:symbol,date:r.date,open:r.open,max:r.high,min:r.low,close:r.close,Trading_Volume:Number.isFinite(r.volume_shares)?r.volume_shares:Number.isFinite(r.volume_lots)?r.volume_lots*1000:r.volumeUnit==='lots'?r.volume*1000:r.volume})),branch_rows:[],institutional_rows:[]};
   const d=adaptDaily({source,symbol,baseDate:base,tradeDate:trade,asOf:now}),c=d.short_rank_input?.current,prev=d.short_rank_input?.previous;
@@ -30,7 +30,7 @@ function scan({runtimeRoot='C:/fuman-runtime',now=new Date().toISOString()}){
   const longChecks={kd_up:kd.every(x=>x===1),rsi_up:rsi.every(x=>x===1),macd_up:macd===1};
   const shortChecks={kd_down:kd.every(x=>x===-1),rsi_down:rsi.every(x=>x===-1),macd_down:macd===-1};
   const up=Object.values(longChecks).filter(Boolean).length,down=Object.values(shortChecks).filter(Boolean).length;
-  rows.push({stock_id:symbol,name:f?.name||'',base_date:base,previous:d.previous_ohlc,source_file:sourceFile,institution_source:f?flowFile:null,institutions:f?{foreign:f.foreign,trust:f.trust,dealer_total:f.dealer}:null,cost:null,cost_status:'BASE_DAY_BRANCH_SOURCE_MISSING',long_conditions:longChecks,short_conditions:shortChecks,long_condition_count:up,short_condition_count:down,daily_direction:up>=2?'long':down>=2?'short':'mixed',scenario_status:'DAILY_PREFILTER_ONLY_PENDING_BRANCH_AND_OPENING',formal_eligible:false});
+  rows.push({stock_id:symbol,name:f?.name||'',base_date:base,previous:d.previous_ohlc,source_file:sourceFile,identical_duplicates_removed:normalized.removed,volume_risk:require('../lib/telegram-detectors/institution-buy-surge.cjs').volumeRisk(prices,base),institution_source:f?flowFile:null,institutions:f?{foreign:f.foreign,trust:f.trust,dealer_total:f.dealer}:null,cost:null,cost_status:'BASE_DAY_BRANCH_SOURCE_MISSING',long_conditions:longChecks,short_conditions:shortChecks,long_condition_count:up,short_condition_count:down,daily_direction:up>=2?'long':down>=2?'short':'mixed',scenario_status:'DAILY_PREFILTER_ONLY_PENDING_BRANCH_AND_OPENING',formal_eligible:false});
  }
  return {contract:'telegram_previous_session_scan_v1',...context,checked_at:now,scope:'available_historical_price_cache',full_market_verified:false,examined:rows.length+gaps.length,evaluated:rows.length,rows,gaps,source_notes:['Institution source covers candidates only, missing stocks remain unknown','No prior-date broker cost substituted','Daily direction is a prefilter, not a complete scenario or order permission'],notifications_sent:0,orders_sent:0};
 }
