@@ -9,6 +9,7 @@
  const labels={A_DISTRIBUTION_DIVERGENCE:'A 高檔出貨背離候選',B_BREAK_LOW_CONTINUATION:'B 破昨低續弱',A_UPPER_SHADOW_REBOUND_REVIEW:'A 上影轉弱／反彈成本候選（門檻待確認）'};
  labels.L_LOW_OPEN_FOREIGN_BUY_3='低開外資連買多（表格第一列）';
  labels.A_COST_EXTENSION_DISTRIBUTION_REVIEW='A 成本上方乖離出貨空候選';
+ labels.L_NEAR_COST_DEALER_BUY_REVIEW='多方：成本附近／自營商買超（案例候選）';
  const priceLabels={previous_high:'昨高',previous_low:'昨低',previous_close:'昨收',plan_cost:'主力成本',plan_cost_plus_3pct:'成本＋3%',plan_cost_plus_5pct:'成本＋5%'};
  const reasons={VALID_0859_TRIAL_MISSING:'缺少有效08:59試撮',CONFLICTING_0859_TRIAL:'08:59試撮資料衝突',CALENDAR_EVIDENCE_MISSING:'交易日曆證據不足',DAILY_HISTORY_CALENDAR_GAP:'歷史日K與日曆尚未完整核對',ADDITIONAL_VETO_RULES_PENDING:'額外否決條件待累積劇本確認',NO_MATCHING_CONFIRMED_SCENARIO:'尚未命中已定義劇本',DAILY_INPUT_INCOMPLETE:'日K或法人資料不完整'};
  function paint(p){
