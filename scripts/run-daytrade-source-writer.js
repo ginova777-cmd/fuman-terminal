@@ -6726,7 +6726,20 @@ function updateMotherPoolDelta(result) {
     round_summary: roundSummary,
     target_symbol_diagnostics: targetSymbolDiagnostics,
   };
-}async function writeStatusAndScorecard(result) {
+}async function traceStatusWrite(stage, action) {
+  const started = Date.now();
+  console.log(JSON.stringify({ stage: 'status_write:' + stage + ':start', checkedAt: nowIso() }));
+  try {
+    const result = await action();
+    console.log(JSON.stringify({ stage: 'status_write:' + stage + ':complete', elapsed_ms: Date.now() - started, checkedAt: nowIso() }));
+    return result;
+  } catch (cause) {
+    console.error(JSON.stringify({ stage: 'status_write:' + stage + ':failed', elapsed_ms: Date.now() - started, error_name: cause?.name || 'Error', checkedAt: nowIso() }));
+    const error = new Error('STATUS_WRITE_FAILED:' + stage + ':' + (cause?.name || 'Error'), { cause });
+    throw error;
+  }
+}
+async function writeStatusAndScorecard(result) {
   const motherPoolDelta = updateMotherPoolDelta(result);
   const tradeDate = taipeiDate();
   const canonicalRunId = canonicalDaytradeRunId(tradeDate);
@@ -6739,7 +6752,7 @@ function updateMotherPoolDelta(result) {
   result.payload.mother_pool_delta = motherPoolDelta;
   result.payload.mother_pool_round_summary = motherPoolDelta.round_summary;
   result.payload.target_symbol_diagnostics = motherPoolDelta.target_symbol_diagnostics;
-  await ensureWriterLease();
+  await traceStatusWrite('lease', () => ensureWriterLease());
   const nonFatalWriteErrors = result.payload.nonfatal_write_errors || [];
   result.payload.source_host_id = SOURCE_HOST_ID;
   result.payload.source_host_role = SOURCE_HOST_ROLE;
@@ -6794,7 +6807,7 @@ function updateMotherPoolDelta(result) {
     payload: result.payload,
   };
   try {
-    await supabaseInsert("fugle_daytrade_source_speed_scorecard", [scorecardRow]);
+    await traceStatusWrite("speed_scorecard", () => supabaseInsert("fugle_daytrade_source_speed_scorecard", [scorecardRow]));
   } catch (error) {
     nonFatalWriteErrors.push({
       target: "fugle_daytrade_source_speed_scorecard",
@@ -6804,7 +6817,7 @@ function updateMotherPoolDelta(result) {
     sourceRow.payload = result.payload;
   }
 
-  await supabaseUpsert("source_status", [sourceRow], "source_name");
+  await traceStatusWrite("source_status", () => supabaseUpsert("source_status", [sourceRow], "source_name"));
   // The turnover checklist has its own independently read-back receipt.
   // Failure here is visible but cannot erase the already published core source.
   const turnover = result.payload.intraday_turnover_ranking;
