@@ -3,8 +3,10 @@ const assert=require('assert'),fs=require('fs'),os=require('os'),path=require('p
 const runtime=fs.mkdtempSync(path.join(os.tmpdir(),'a12-refresh-'));
 process.env.FUMAN_RUNTIME_DIR=runtime;
 const evidence=require('../lib/opening-report-writer-refresh-evidence');
-const {observeWriterRefreshes,validReadback}=require('./verify-opening-report-0830-mother-pool-persistence-ack');
+const {observeWriterRefreshes,validReadback,sameAcceptedSymbols}=require('./verify-opening-report-0830-mother-pool-persistence-ack');
 (async()=>{
+ assert.equal(sameAcceptedSymbols(['2330'],['2330']),true);
+ for(const actual of [undefined,[],['2330','2330'],['1301'],['2330','1301']])assert.equal(sameAcceptedSymbols(['2330'],actual),false);
  const startedAt=Date.parse('2026-09-29T00:03:00Z'), now=startedAt+1000;
  const valid={startedAt,exitCode:0,receipt:{complete:true,db_readback_ok:true,trade_date:'2026-09-29',report_run_id:'r1',checked_at:new Date(now).toISOString()}};
  assert.equal(validReadback(valid,'2026-09-29','r1',now),true);
@@ -24,6 +26,8 @@ const {observeWriterRefreshes,validReadback}=require('./verify-opening-report-08
  assert.equal((await observeWriterRefreshes(after,2,0,date)).length,1);
  put('two',{generation_id:'g6',writer_run_id:'w6',completed_at:'2026-09-29T00:02:00Z'});
  const result=await observeWriterRefreshes(after,2,0,date);assert.equal(result.length,2);
+ assert.equal((await observeWriterRefreshes(after,2,0,date,['1301'])).length,0,'unrelated Writer refresh cannot prove retained symbols');
+ assert.equal((await observeWriterRefreshes(after,2,0,date,['2330'])).length,2);
  for(const e of result){assert.ok(e.evidence_path);assert.match(e.evidence_sha256,/^[a-f0-9]{64}$/);}
  console.log('PASS A12: heartbeat rejected; distinct Writer rounds; duplicate symbols/date/time rejected; hashed evidence retained');
 })().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>fs.rmSync(runtime,{recursive:true,force:true}));

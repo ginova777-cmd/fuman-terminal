@@ -35,15 +35,22 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function observeWriterRefreshes(afterTime, required, timeoutMs, tradeDate) {
+async function observeWriterRefreshes(afterTime, required, timeoutMs, tradeDate, requiredSymbols = []) {
+  if(!Array.isArray(requiredSymbols)||new Set(requiredSymbols).size!==requiredSymbols.length||requiredSymbols.some(s=>!/^\d{4}$/.test(s)))throw Error("HANDOFF_SYMBOL_SET_INVALID");
   const started = Date.now();
   let events = [];
   do {
-    events = require('../lib/opening-report-writer-refresh-evidence').readAfter(RUNTIME, tradeDate, afterTime);
+    events = require('../lib/opening-report-writer-refresh-evidence').readAfter(RUNTIME, tradeDate, afterTime).filter(event=>requiredSymbols.every(symbol=>event.symbols.includes(symbol)));
     if (events.length >= required || Date.now() - started >= timeoutMs) break;
     await sleep(Math.min(5000, Math.max(0, timeoutMs - (Date.now() - started))));
   } while (Date.now() - started <= timeoutMs);
   return events;
+}
+
+function sameAcceptedSymbols(expected,actual){
+  return Array.isArray(expected)&&Array.isArray(actual)&&expected.every(s=>typeof s==='string'&&/^\d{4}$/.test(s))
+    &&new Set(expected).size===expected.length&&new Set(actual).size===actual.length
+    &&expected.length===actual.length&&expected.every(s=>actual.includes(s));
 }
 
 function validReadback(result, tradeDate, reportRunId, now = Date.now()) {
@@ -85,17 +92,19 @@ async function main() {
   const final = readJson(finalPath);
   const handoffTime = Date.parse(String(handoff?.checked_at || ""));
   // Re-read immutable Writer evidence even on resume; old timestamps are not proof.
-  const refreshEvidence = Number.isFinite(handoffTime) ? await observeWriterRefreshes(handoffTime, requiredRefreshes, timeoutMs, tradeDate) : [];
+  const refreshEvidence = Number.isFinite(handoffTime) ? await observeWriterRefreshes(handoffTime, requiredRefreshes, timeoutMs, tradeDate, handoff?.accepted_symbols) : [];
   const refreshes = refreshEvidence.map(event => event.completed_at);
   const readback = runReadback(tradeDate, reportRunId, bridgeAggregate, readbackOutput);
   const refreshOk = refreshes.length >= requiredRefreshes;
   const readbackOk = validReadback(readback, tradeDate, reportRunId);
   const sameRun = !!reportRunId && handoff?.trade_date === tradeDate && handoff?.report_run_id === reportRunId && readback.receipt?.report_run_id === reportRunId;
-  const complete = handoff?.complete === true && refreshOk && readbackOk && sameRun;
+  const sameSymbols = sameAcceptedSymbols(handoff?.accepted_symbols,readback.receipt?.accepted_readback_symbols);
+  const complete = handoff?.complete === true && refreshOk && readbackOk && sameRun && sameSymbols;
   const firstBlocker = complete ? null
     : handoff?.complete !== true ? "mother_pool_handoff_ack_not_complete"
     : !refreshOk ? `mother_pool_writer_refreshes_below_${requiredRefreshes}`
     : !sameRun ? "mother_pool_persistence_run_id_mismatch"
+    : !sameSymbols ? "mother_pool_persistence_symbol_set_mismatch"
     : (readback.receipt?.first_blocker || readback.stderr || "mother_pool_persistence_readback_failed");
   const receipt = {
     contract: CONTRACT,
@@ -111,6 +120,8 @@ async function main() {
     writer_refresh_timestamps: refreshes,
     original_refresh_evidence_reused: false,
     writer_refresh_evidence: refreshEvidence,
+    accepted_symbols: handoff?.accepted_symbols || [],
+    symbol_set_verified: sameSymbols,
     fresh_independent_db_readback: readbackOk,
     persistence_readback_receipt: readbackOutput,
     received_symbols: Number(readback.receipt?.received_symbols || handoff?.received_symbols || 0),
@@ -147,7 +158,7 @@ async function main() {
   if (!complete) process.exitCode = 1;
 }
 
-module.exports = { observeWriterRefreshes, validReadback };
+module.exports = { observeWriterRefreshes, validReadback, sameAcceptedSymbols };
 if (require.main === module) main().catch((error) => {
   console.error(error.stack || error.message || String(error));
   process.exitCode = 1;
