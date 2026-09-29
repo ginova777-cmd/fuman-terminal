@@ -3458,9 +3458,8 @@ async function refreshStrategyChipPriorityBridge() {
         source_count: Number(group.sourceCount || group.resultRows || 0),
         deduplicated_count: Number(group.deduplicatedCount || group.symbolCount || (Array.isArray(group.symbols) ? group.symbols.length : 0)),
       }];
-      if (key === "futures" && taipeiMinutes() < (8 * 60 + 45)) {
-        return [key, { status: "NOT_DUE", reason: "A13_NATURAL_FUTURES_SLOT_NOT_DUE", source_date: "", handoff_trade_date: taipeiDate(), run_id: "", canonical_run_id: "", symbols: [], source_count: 0, deduplicated_count: 0, due_time: "08:45" }];
-      }
+      // A03 consumes the previous completed session's futures evidence.
+      // Its adapter is due during warmup; A13's 08:45 live trial slot is separate.
       return [key, { status: "BLOCKED", reason: "source_adapter_not_registered", source_date: "", handoff_trade_date: taipeiDate(), run_id: "", canonical_run_id: "", symbols: [], source_count: 0, deduplicated_count: 0 }];
     }));
     const terminalUnion = [...new Set(Object.values(terminalGroups).flatMap((group) => group.status === "READY" ? group.symbols : []))].sort();
