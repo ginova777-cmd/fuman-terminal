@@ -3196,8 +3196,10 @@ function strategyPriorityStockCode(row, codeMode) {
 
 async function readStrategyPriorityBridgeSource(source) {
   if (source.adapter === "turnover_receipt") {
-    const files = (() => { try { return fs.readdirSync(runtimePath("data", "scan-receipts")); } catch { return []; } })
-      .filter((name) => /^daytrade-intraday-turnover-\d{8}\.json$/.test(name))
+    const previousSourceDate = await previousCompletedTradingDate(taipeiDate(), process.env.FUMAN_STATE_DIR || statePath(''));
+    const expectedFile = 'daytrade-intraday-turnover-' + compactDateKey(previousSourceDate) + '.json';
+    const files = (() => { try { return fs.readdirSync(runtimePath("data", "scan-receipts")); } catch { return []; } })()
+      .filter((name) => name === expectedFile)
       .sort()
       .reverse();
     const file = files[0] ? path.join(runtimePath("data", "scan-receipts"), files[0]) : "";
@@ -3207,7 +3209,7 @@ async function readStrategyPriorityBridgeSource(source) {
     const sourceDate = compactDateKey(receipt?.trade_date || "");
     const runId = String(receipt?.run_id || "");
     const handoff = await resolveStrategyHandoff({ strategyId: "ranking", sourceReceipt: { source_date: sourceDate, run_id: runId, canonical_run_id: receipt?.canonical_run_id || "", strategy_version: receipt?.contract || source.contract, complete: receipt?.complete === true || (receipt?.status === "complete" && symbols.length > 0), checked_at: receipt?.calculated_at }, executionDate: taipeiDate(), stateDir: process.env.FUMAN_STATE_DIR || statePath("") });
-    return { key: source.key, status: handoff.ok ? (symbols.length ? "ready" : "empty") : "blocked", symbols: handoff.ok ? symbols : [], reason: handoff.ok ? "" : handoff.reason_code, runId, scanDate: sourceDate, finishedAt: receipt?.calculated_at || "", qualityStatus: receipt?.status || "", publishAllowed: handoff.ok, resultRows: rows.length, sourceCount: rows.length, deduplicatedCount: symbols.length, handoff, sourceFile: file };
+    return { key: source.key, status: handoff.ok ? "ready" : "blocked", symbols: handoff.ok ? symbols : [], reason: handoff.ok ? "" : handoff.reason_code, runId, scanDate: sourceDate, finishedAt: receipt?.calculated_at || "", qualityStatus: receipt?.status || "", publishAllowed: handoff.ok, resultRows: rows.length, sourceCount: rows.length, deduplicatedCount: symbols.length, handoff, sourceFile: file };
   }
   // This is an authorized Writer-side bridge. Use service-role reads so RLS
   // cannot silently turn a complete strategy run into an empty warmup source.
