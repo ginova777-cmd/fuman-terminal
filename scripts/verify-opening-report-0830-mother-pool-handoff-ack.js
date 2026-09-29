@@ -154,14 +154,16 @@ function validateBridge(receipt, payload) {
   return issues;
 }
 
-async function request(resource, key) {
+async function request(resource, key, evidence) {
   const response = await fetch(`${PROJECT_URL}/rest/v1/${resource}`, {
     headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" },
     signal: AbortSignal.timeout(20000),
   });
   const text = await response.text();
   if (!response.ok) throw new Error(`anon_readback_http_${response.status}:${text.slice(0, 200)}`);
-  return text ? JSON.parse(text) : [];
+  const rows = text ? JSON.parse(text) : [];
+  if (evidence) evidence.push({resource,method:"GET",role:"anon",http_status:response.status,content_range:response.headers?.get("content-range")||null,checked_at:new Date().toISOString(),row_count:Array.isArray(rows)?rows.length:null});
+  return rows;
 }
 
 function validateDbRow(row, expectedPayloads) {
@@ -252,10 +254,12 @@ async function main() {
   const rejectedPayloads = [];
   const accepted = new Set();
   const rejected = [];
+  const bridgeEvidence = [];
   for (const payload of payloads) {
     for (const issue of validatePayload(payload, tradeDate, reportRunId)) missingFields.push(`${payload.industry}:${issue}`);
     const bridgePath = path.join(RECEIPT_DIR, `opening-report-0830-priority-bias-bridge-${payload.industry}-${ymd}.json`);
     const bridge = readJson(bridgePath);
+    bridgeEvidence.push({path:bridgePath,receipt:bridge});
     for (const issue of validateBridge(bridge, payload)) missingFields.push(`${payload.industry}:${issue}`);
     for (const value of Array.isArray(bridge?.accepted_symbols) ? bridge.accepted_symbols : []) accepted.add(String(value));
     for (const value of Array.isArray(bridge?.rejected_symbols) ? bridge.rejected_symbols : []) rejected.push(value);
@@ -270,11 +274,12 @@ async function main() {
 
   const key = process.env.SUPABASE_ANON_KEY || process.env.FUMAN_SUPABASE_ANON_KEY || readSecret("supabase-anon-key.txt");
   let rows = [];
+  const requests = [];
   let readbackError = "";
   try {
     if (!key) throw new Error("supabase_anon_key_missing");
     const symbols = [...receivedSymbols];
-    if (symbols.length) rows = await request(`fugle_daytrade_priority_pool?select=symbol,name,market,priority_rank,priority_reason,source,updated_at,payload&symbol=in.(${symbols.join(",")})&order=symbol.asc`, key);
+    if (symbols.length) rows = await request(`fugle_daytrade_priority_pool?select=symbol,name,market,priority_rank,priority_reason,source,updated_at,payload&symbol=in.(${symbols.join(",")})&order=symbol.asc`, key, requests);
   } catch (error) {
     readbackError = error.message || String(error);
     missingFields.push(readbackError);
@@ -299,6 +304,19 @@ async function main() {
     ok: complete,
     trade_date: tradeDate,
     report_run_id: reportRunId,
+    source_evidence: {
+      contract: "opening_report_handoff_raw_evidence_v1",
+      stage: morningStages.stage().id,
+      aggregate_path: aggregatePath,
+      aggregate,
+      industry_payloads: payloads,
+      bridges: bridgeEvidence,
+      readback_role: "anon",
+      requests,
+      rows,
+      rows_sha256: require("../lib/mother-pool-module-write-set").hash(rows),
+      fixed_writer_batch_verified: false,
+    },
     priority_observation_mode: aggregate?.priority_observation_mode || "",
     received_industries: payloads.length,
     disposition_contract: "opening-report-handoff-dispositions-v1",
