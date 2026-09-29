@@ -1121,6 +1121,7 @@ async function fetchRecentThreeDayAverageVolume() {
 }
 
 async function fetchDailyVolumeAvg() {
+  const tickStage = (stage, extra = {}) => console.log(JSON.stringify({ stage, checkedAt: new Date().toISOString(), ...extra }));
   const sources = [
     {
       resource: "fugle_daytrade_daily_volume_avg",
