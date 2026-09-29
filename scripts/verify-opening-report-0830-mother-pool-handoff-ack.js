@@ -248,7 +248,8 @@ async function main() {
   if (aggregate?.status !== "BRIDGE_OK") missingFields.push("bridge_aggregate_not_ok");
 
   const files = fs.existsSync(STATE_DIR) ? fs.readdirSync(STATE_DIR).filter((name) => /^opening_report_0830\.industry_bias\..+\.json$/.test(name)) : [];
-  const payloads = files.map((name) => readJson(path.join(STATE_DIR, name))).filter((row) => row?.date === tradeDate && Number(row?.priority_observation_rank) >= 1 && Number(row?.priority_observation_rank) <= 3 && String(row?.run_id || "").startsWith(`${reportRunId}-`));
+  const allIndustryPayloads = files.map((name) => readJson(path.join(STATE_DIR, name))).filter((row) => row?.date === tradeDate && String(row?.run_id || "").startsWith(`${reportRunId}-`));
+  const payloads = allIndustryPayloads.filter((row) => Number(row?.priority_observation_rank) >= 1 && Number(row?.priority_observation_rank) <= 3);
   const expectedBySymbol = new Map();
   const receivedSymbols = new Set();
   const rejectedPayloads = [];
@@ -310,6 +311,8 @@ async function main() {
       aggregate_path: aggregatePath,
       aggregate,
       industry_payloads: payloads,
+      all_industry_payloads: allIndustryPayloads,
+      all_industry_payloads_sha256: require('../lib/mother-pool-module-write-set').hash(allIndustryPayloads),
       bridges: bridgeEvidence,
       readback_role: "anon",
       requests,
