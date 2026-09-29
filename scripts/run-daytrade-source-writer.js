@@ -8584,8 +8584,11 @@ async function tick() {
     m.vwapSignal = vwapProbe.source_contract_ok ? `VWAP_${vwapProbe.vwap_state}` : null;
   }
   result.payload.b19_b24_event_evidence = buildB19B24Evidence(result.industryUniverseRows);
-  // Publish producer payload before fixed readback; never read the previous round.
-  await writeStatusAndScorecard(result);
+  // One memoized write barrier: a failed write is never implicitly retried by
+  // the outer module error handler. Input checkpoints precede this barrier.
+  let initialSourcePublication = null;
+  const publishInitialSource = () => initialSourcePublication ||
+    (initialSourcePublication = writeStatusAndScorecard(result));
   // Persist real natural-candle module rows before fixed-round capture.
   result.payload.module_write_sets = {};
   result.payload.module_persistence_errors = [];
@@ -8642,6 +8645,10 @@ async function tick() {
           parents:result.payload.module_write_sets,side:sideFile?readJson(sideFile,null):null,asOf:nowIso()});
       }});
       if(sideMinutes>=539)inputs.push({module_id:'A18',build:()=>require('../lib/mother-pool-preopen-quality').collect({identity,symbols:snapshot.symbols,parents:result.payload.module_write_sets,asOf:nowIso()})});
+      result.payload.module_input_checkpoint=require('../lib/mother-pool-module-input-checkpoint').save({
+        directory:runtimePath('data','module-input-checkpoints',identity.trade_date),identity,inputs,observedAt:sideAsOf});
+      const frozenModuleInputs=require('../lib/mother-pool-module-input-checkpoint').load(result.payload.module_input_checkpoint,identity).inputs;
+      await publishInitialSource();
       persistModuleInput = async input => {
           const evidenceId=require('node:crypto').randomUUID();
           const saved=await require('../lib/persist-mother-pool-module-round').persistModuleRound(input,{
@@ -8668,7 +8675,7 @@ async function tick() {
           return saved;
       };
       for(const queued of inputs){
-        let input=queued;
+        let input=typeof queued.build==='function'?queued:frozenModuleInputs.find(value=>value.module_id===queued.module_id);
         try {
           if(typeof input.build==='function')input=input.build();
           const saved=await persistModuleInput(input);
@@ -8681,6 +8688,7 @@ async function tick() {
         side:sideFile?readJson(sideFile,null):null,asOf:nowIso()});
     }catch(error){result.payload.module_persistence_errors.push({error:String(error.message||error)});}
   }
+  await publishInitialSource();
   writeModuleProducerReceipts(result, taipeiDate());
   try {
     const moduleRegistry = readJson(path.resolve(__dirname, '..', 'data', 'contracts', 'mother-pool-a01-b24-module-registry-v1.json'), { modules: {} });
