@@ -434,6 +434,7 @@ function buildPayload(rows, total, run = null, options = {}) {
     resultContract: runPayload.resultContract || "",
     recentVolumeBonusContract: runPayload.recentVolumeBonusContract || "",
     daytradeBonusContract: runPayload.daytradeBonusContract || "",
+    volumeFilter: runPayload.volumeFilter || null,
     source: "supabase:strategy4_scan_results",
     cacheSource: "supabase-api",
     ...runTimeSourceSnapshotResponseFields(run?.payload || {}),
