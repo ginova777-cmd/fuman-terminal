@@ -1494,6 +1494,8 @@ async function runStreamingCollector() {
         staleDataWindow,
         staleRecoveryTriggered,
         providerSideJournal: providerSideJournal.health(),
+        providerTradeJournal: providerTradeJournal.health(),
+        nativeSideSubscriptionCoverage: require('../lib/mother-pool-native-side-subscription-coverage').inspect(selection),
         collectorRole: COLLECTOR_ROLE,
         sourceHostId: SOURCE_HOST_ID,
         sourceHostRole: SOURCE_HOST_ROLE,
