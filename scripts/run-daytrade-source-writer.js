@@ -7282,9 +7282,9 @@ async function writeStatusAndScorecard(result) {
   if (!PREOPEN_LIGHT_MODE && [turnover,volumeValue,minuteSide,priceVolume].some(item=>item && item.status !== 'NOT_DUE')) {
     try {
       if (!SUPABASE_READ_KEY || SUPABASE_READ_KEY === SUPABASE_SERVICE_KEY) throw new Error('anon_read_key_missing');
-      rankingReadback = await supabaseGetPaged('source_status',
-        'select=trade_date,payload&source_name=eq.' + encodeURIComponent(SOURCE_NAME) + '&trade_date=eq.' + tradeDate + '&limit=1',
-        { service: false, pageSize: 2 });
+      const rankingReader = require('../lib/daytrade-ranking-readback');
+      rankingReadback = rankingReader.decode(await supabaseGet('source_status',
+        rankingReader.query(sourceRow), { service: false }), sourceRow);
     } catch { rankingReadback = null; }
   }
   if (volumeValue && volumeValue.status !== 'NOT_DUE') {

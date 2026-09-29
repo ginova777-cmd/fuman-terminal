@@ -1,0 +1,13 @@
+'use strict';
+const assert=require('node:assert/strict'),{query,decode}=require('../lib/daytrade-ranking-readback');
+const payload={trade_date:'2026-09-29',canonical_run_id:'c',writer_run_id:'w',generation_id:'g'};
+const expected={source_name:'fugle_daytrade_source',trade_date:payload.trade_date,payload};
+const q=new URLSearchParams(query(expected));
+assert.equal(q.get('limit'),'2');
+for(const k of Object.keys(payload))assert.equal(q.get('payload->>'+k),'eq.'+payload[k]);
+assert(!q.get('select').split(',').includes('payload'));
+const row={trade_date:payload.trade_date,...Object.fromEntries(Object.entries(payload).map(([k,v])=>['identity_'+k,v])),volume_value_ranking:{rows:[{symbol:'2330',volume:12}]},intraday_turnover_ranking:null,mother_pool_minute_side_evidence:null,mother_pool_price_volume_evidence:null};
+assert.deepEqual(decode([row],expected)[0].payload.volume_value_ranking,row.volume_value_ranking);
+for(const rows of [[],[row,row],[{...row,identity_writer_run_id:'other'}],[{...row,trade_date:'2026-09-28'}]])assert.throws(()=>decode(rows,expected));
+const missing={...row};delete missing.mother_pool_price_volume_evidence;assert.throws(()=>decode([missing],expected));
+console.log('PASS ranking projection preserves source fields; empty, duplicate, mixed identity and missing fields rejected');
