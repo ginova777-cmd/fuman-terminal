@@ -269,113 +269,23 @@ function retryableSourceStatusError(status) {
 }
 
 async function mirrorDaytradeSourceTransport(snapshot) {
-  const checkedAt = nowIso();
+  // A collector heartbeat cannot republish a Writer generation or refresh its
+  // authoritative timestamp. Persist transport observations independently.
   const receipt = {
-    contract: "fugle_daytrade_collector_transport_heartbeat_v1",
-    source_name: "fugle_daytrade_source",
-    checked_at: checkedAt,
-    collector_role: COLLECTOR_ROLE,
-    interval_seconds: Math.round(SOURCE_STATUS_HEARTBEAT_MS / 1000),
-    retry_limit: SOURCE_STATUS_HEARTBEAT_RETRIES,
-    attempts: 0,
-    status: "pending",
-    first_blocker: null,
+    contract: "fugle_daytrade_collector_transport_heartbeat_v2",
+    checked_at: nowIso(), collector_role: COLLECTOR_ROLE,
+    status: COLLECTOR_ROLE === 'daytrade' ? 'observed' : 'skipped_non_daytrade_collector',
+    authoritative: false, source_status_written: false, complete: false,
+    first_blocker: null, attempts: 0,
+    websocket_connected: snapshot.websocketConnected === true,
+    websocket_authenticated: snapshot.websocketAuthenticated === true,
+    websocket_subscribed: Number(snapshot.subscribed || 0),
+    websocket_subscribed_symbols: Number(snapshot.subscribedSymbols || 0),
+    websocket_status_updated_at: snapshot.updatedAt || null,
+    websocket_heartbeat_at: snapshot.websocketHeartbeatAt || null,
+    aggregates_last_updated_at: snapshot.aggregatesLastUpdatedAt || null,
   };
-  if (COLLECTOR_ROLE !== "daytrade") {
-    receipt.status = "skipped_non_daytrade_collector";
-    writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
-    return receipt;
-  }
-  const baseUrl = serverSupabaseUrl();
-  const apiKey = serverSupabaseKey();
-  if (!baseUrl || !apiKey) {
-    receipt.status = "blocked";
-    receipt.first_blocker = "source_status_credentials_missing";
-    writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
-    return receipt;
-  }
-
-  for (let attempt = 1; attempt <= SOURCE_STATUS_HEARTBEAT_RETRIES; attempt += 1) {
-    receipt.attempts = attempt;
-    try {
-      const read = await fetch(`${baseUrl}/rest/v1/source_status?source_name=eq.fugle_daytrade_source&select=source_name,trade_date,status,message,stale_seconds,payload&limit=1`, {
-        headers: { apikey: apiKey, Authorization: `Bearer ${apiKey}` },
-      });
-      if (!read.ok) throw Object.assign(new Error(`source_status_baseline_read_http_${read.status}`), { status: read.status });
-      const rows = await read.json();
-      const baseline = Array.isArray(rows) ? rows[0] : null;
-      const baselinePayload = baseline?.payload && typeof baseline.payload === "object" ? baseline.payload : null;
-      const tradeDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
-      const baselineDate = String(baselinePayload?.trade_date || baseline?.trade_date || "");
-      if (!baselinePayload || baselineDate !== tradeDate) {
-        receipt.status = "blocked";
-        receipt.first_blocker = "same_day_source_status_baseline_missing_or_stale";
-        receipt.baseline_trade_date = baselineDate;
-        writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
-        return receipt;
-      }
-
-      const transportPayload = {
-        websocket_status_ok: snapshot.ok !== false,
-        websocket_mode: "streaming",
-        websocket_connected: snapshot.websocketConnected === true,
-        websocket_authenticated: snapshot.websocketAuthenticated === true,
-        websocket_subscribed: Number(snapshot.subscribed || 0),
-        websocket_subscribed_symbols: Number(snapshot.subscribedSymbols || 0),
-        websocket_streaming_channels: Array.isArray(snapshot.streamingChannels) ? snapshot.streamingChannels : [],
-        websocket_rest_disabled: snapshot.restDisabled === true,
-        websocket_status_updated_at: snapshot.updatedAt || checkedAt,
-        websocket_last_message_at: snapshot.websocketLastMessageAt || snapshot.lastMessageAt || "",
-        websocket_last_message_age_seconds: Number(snapshot.websocketHeartbeatAgeSeconds ?? snapshot.aggregatesLastUpdatedAgeSeconds ?? 999999),
-        websocket_heartbeat_at: snapshot.websocketHeartbeatAt || "",
-        websocket_heartbeat_age_seconds: Number(snapshot.websocketHeartbeatAgeSeconds ?? 999999),
-        aggregates_last_updated_at: snapshot.aggregatesLastUpdatedAt || "",
-        aggregates_last_updated_age_seconds: Number(snapshot.aggregatesLastUpdatedAgeSeconds ?? 999999),
-        websocket_pipeline_healthy: snapshot.ok !== false && (Boolean(snapshot.websocketHeartbeatAt) || Boolean(snapshot.aggregatesLastUpdatedAt)),
-        collector_transport_heartbeat_at: checkedAt,
-        collector_transport_heartbeat_contract: "preserve_writer_gate_verdict_v1",
-      };
-      const payload = { ...baselinePayload, ...transportPayload };
-      const write = await fetch(`${baseUrl}/rest/v1/source_status?on_conflict=source_name`, {
-        method: "POST",
-        headers: {
-          apikey: apiKey,
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          Prefer: "resolution=merge-duplicates,return=minimal",
-        },
-        body: JSON.stringify([{
-          source_name: "fugle_daytrade_source",
-          trade_date: tradeDate,
-          status: baseline.status || "degraded",
-          message: baseline.message || "collector transport heartbeat",
-          stale_seconds: Number.isFinite(Number(baseline.stale_seconds)) ? Number(baseline.stale_seconds) : 0,
-          updated_at: checkedAt,
-          payload,
-        }]),
-      });
-      if (!write.ok) throw Object.assign(new Error(`source_status_transport_heartbeat_http_${write.status}`), { status: write.status });
-      receipt.status = "written";
-      receipt.preserved_gate_fields = ["daytrade_gate_grade", "gate_grade", "formal_entry_allowed", "formal_entry_speed_verdict"];
-      receipt.websocket_status_updated_at = transportPayload.websocket_status_updated_at;
-      receipt.websocket_last_message_age_seconds = transportPayload.websocket_last_message_age_seconds;
-      writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
-      return receipt;
-    } catch (error) {
-      const status = Number(error?.status || 0);
-      receipt.last_error = error?.message || String(error);
-      if (attempt >= SOURCE_STATUS_HEARTBEAT_RETRIES || !retryableSourceStatusError(status)) {
-        receipt.status = "retry_exhausted";
-        receipt.first_blocker = status ? `source_status_transport_heartbeat_http_${status}` : "source_status_transport_heartbeat_exception";
-        writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
-        return receipt;
-      }
-      const delayMs = Math.min(60000, SOURCE_STATUS_HEARTBEAT_BACKOFF_MS * (2 ** (attempt - 1)));
-      receipt.next_retry_at = new Date(Date.now() + delayMs).toISOString();
-      writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
-      await sleep(delayMs);
-    }
-  }
+  writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
   return receipt;
 }
 
