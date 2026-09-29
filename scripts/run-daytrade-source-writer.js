@@ -773,10 +773,10 @@ async function supabaseUpsert(resource, rows, conflict, options = {}) {
   let written = 0;
   const batchSize = Math.max(1, Math.min(Number(options.batchSize || 300), 500));
   const writeTimeoutMs = Math.max(SUPABASE_WRITE_TIMEOUT_MS, Number(options.timeoutMs || 0));
-  const retries = Math.max(0, Math.min(Number(options.retries || 0), 2));
+  const retries = resource==='fugle_daytrade_priority_pool'?0:Math.max(0, Math.min(Number(options.retries || 0), 2));
   const retryDelayMs = Math.max(250, Math.min(Number(options.retryDelayMs || 1000), 5000));
   for (let i = 0; i < rows.length; i += batchSize) {
-    const chunk = rows.slice(i, i + batchSize);
+    const chunk = JSON.parse(JSON.stringify(rows.slice(i, i + batchSize)));
     let lastError = null;
     for (let attempt = 0; attempt <= retries; attempt += 1) {
       try {
@@ -798,6 +798,15 @@ async function supabaseUpsert(resource, rows, conflict, options = {}) {
         break;
       } catch (error) {
         lastError = error;
+        if(resource==='fugle_daytrade_priority_pool'&&['TimeoutError','AbortError'].includes(error?.name)){
+          const expected=JSON.parse(JSON.stringify(chunk));
+          const query=new URLSearchParams({select:Object.keys(expected[0]).join(','),symbol:'in.('+expected.map(r=>r.symbol).join(',')+')',order:'symbol.asc'});
+          for(const field of ['trade_date','canonical_run_id','writer_run_id','generation_id'])query.set('payload->>'+field,'eq.'+expected[0].payload[field]);
+          const actual=await supabaseGetPaged(resource,query.toString(),{service:true,requireExactCount:true,pageSize:500});
+          const ack=require('../lib/daytrade-priority-write-ack').verify(expected,actual);
+          console.log(JSON.stringify({stage:'priority_pool_chunk_ack',...ack}));
+          written+=chunk.length;lastError=null;break;
+        }
         const message = String(error?.message || error || "");
         const retryable = attempt < retries && /timeout|aborted|502|503|504|522|429|ECONNRESET|ETIMEDOUT/i.test(message);
         if (!retryable) throw error;
