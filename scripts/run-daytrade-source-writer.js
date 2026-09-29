@@ -7226,7 +7226,7 @@ async function writeStatusAndScorecard(result) {
   }
   inspectNull(sourceRow, 'source_status');
   if (nullPaths.length) throw Error('SOURCE_STATUS_NULL_CHARACTER_FIELDS:' + JSON.stringify(nullPaths));
-  console.log(JSON.stringify({stage:'source_status_write_size',checkedAt:nowIso(),writer_run_id:sourceRow.payload.writer_run_id,bytes:Buffer.byteLength(JSON.stringify(sourceRow),'utf8')}));
+  console.log(JSON.stringify({stage:'source_status_write_size',checkedAt:nowIso(),writer_run_id:sourceRow.payload.writer_run_id,bytes:Buffer.byteLength(JSON.stringify(sourceRow),'utf8'),largest_fields:require('../lib/daytrade-payload-size').inspect(sourceRow.payload)}));
   const sourceStatusAck = await traceStatusWrite("source_status", () => require('../lib/daytrade-source-status-ack').writeWithAcknowledgement({
     row: sourceRow,
     onMismatch: evidence => console.error(JSON.stringify({stage:'source_status_ack_mismatch',checkedAt:nowIso(),...evidence})),
