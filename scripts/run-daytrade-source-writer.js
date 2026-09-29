@@ -3446,6 +3446,16 @@ async function refreshStrategyChipPriorityBridge() {
     const errorCount = statuses.filter((status) => status === "error").length;
     const registeredKeys = Object.keys(SOURCE_REGISTRY);
     const terminalGroups = Object.fromEntries(registeredKeys.map((key) => {
+      if (key === 'scorecard88') return [key, {
+        status: scorecardSource.status, reason: scorecardSource.first_blocker || '',
+        source_date: scorecardSource.source_trade_date, handoff_trade_date: taipeiDate(),
+        run_id: null, canonical_run_id: null,
+        source_runs: scorecardSource.sources, source_hash: scorecardSource.source_hash,
+        source_contract: scorecardSource.contract, source_updated_at: scorecardSource.source_updated_at,
+        symbols: scorecardSource.status === 'READY' ? scorecardSource.symbols : [],
+        source_count: scorecardSource.source_count, deduplicated_count: scorecardSource.symbols.length,
+        failed_checks: scorecardSource.failed_checks,
+      }];
       const group = objectPayload(groups[key]);
       if (group.key) return [key, {
         status: group.handoff?.ok === true && group.status === "ready" ? "READY" : "BLOCKED",
