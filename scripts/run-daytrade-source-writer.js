@@ -664,7 +664,7 @@ async function supabaseGet(resource, query = "", options = {}) {
 
 async function supabaseGetPaged(resource, query = "", options = {}) {
   const key = requireSupabaseKey(Boolean(options.service));
-  const pageSize = Math.max(1, Math.min(Number(options.pageSize || 1000), 1000));
+  const pageSize = Math.max(1, Math.min(Number(options.pageSize || 500), 500));
   const maxRows = Math.max(pageSize, Math.min(100000, Number(options.maxRows || 20000)));
   const rows = [];
   let exactTotal = null;
@@ -686,6 +686,7 @@ async function supabaseGetPaged(resource, query = "", options = {}) {
       const range = String(response.headers.get('content-range') || '');
       const match = /^(?:(\d+)-(\d+)|\*)\/(\d+)$/.exec(range);
       if (!Array.isArray(page) || !match) throw new Error('paged_exact_count_evidence_missing');
+      if (page.length > pageSize) throw new Error('paged_response_exceeds_requested_range');
       const total = Number(match[3]);
       if (total > maxRows) throw new Error('paged_exact_count_exceeds_budget');
       if (exactTotal !== null && total !== exactTotal) throw new Error('paged_exact_count_changed');
