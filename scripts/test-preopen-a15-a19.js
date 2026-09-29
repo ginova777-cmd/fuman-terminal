@@ -21,3 +21,11 @@ for(const change of [{trade_date:'2026-09-24'},{trial_event_at:'2026-09-24T08:45
 }
 assert.equal(d.a17(trials,{...ctx,as_of:'2026-09-29T00:58:00Z'}).complete,false);
 console.log('PASS A17 fixed universe, date, slot, event time and future sample guards');
+
+const closure={a15:[{data_gap:false}],a16:[{status:'READY',contract:'mother_pool_a16_writer_reference_v1',db_readback_ok:true,source_ready:true}],a17:{complete:true,data_gap:false},a18:{ready:true,failed_checks:[]}};
+assert.equal(d.a19(closure).complete,true);
+for(const key of ['a15','a16','a17','a18']){const incomplete={...closure};delete incomplete[key];assert.equal(d.a19(incomplete).complete,false,key);}
+assert.equal(d.a19({...closure,a15:[{data_gap:true}]}).complete,false);
+assert.equal(d.a19({...closure,a17:{complete:false,data_gap:false}}).complete,false);
+assert.equal(d.a19({...closure,a18:{ready:false,failed_checks:[]}}).complete,false);
+console.log('PASS A19 missing prerequisite and contradictory quality rejection');
