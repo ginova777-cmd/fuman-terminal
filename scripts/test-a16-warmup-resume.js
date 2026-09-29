@@ -20,7 +20,7 @@ async function scenario(mode){
   '../lib/mother-pool-historical-sessions':{selectSessions:async()=>({status:'SESSION_DATES_VERIFIED',session_dates:[]})},
   './twse-trading-day':{isTwseTradingDay:async()=>({isTradingDay:true,source:'cache'})},
   '../lib/mother-pool-a16-baseline':{build:i=>({symbol:i.symbol,trade_date:date,canonical_run_id:canonical,calculated_at:i.asOf,rows:Array.from({length:1084},()=>({value:1})),requested_count:1084,complete:mode!=='sample-gap',first_blocker:mode==='sample-gap'?'INSUFFICIENT_SAMPLE':null})},
-  '../lib/verify-mother-pool-a16':{verify:()=>({verification_passed:true,failed_checks:[]})},
+  '../lib/verify-mother-pool-a16':{verify:()=>({verification_passed:true,complete:mode!=='sample-gap',failed_checks:[]})},
  };
  async function run(){class Clock extends Date{constructor(...a){super(...(a.length?a:[clock]));}static now(){return Date.parse(clock);}}
   const proc={argv:['node','runner','--apply','--scheduled','--universe=universe'],env:{FUMAN_RUNTIME_DIR:runtime},execPath:'node',exitCode:0};
@@ -28,6 +28,10 @@ async function scenario(mode){
   return io.read(path.join(dir,'writer-summary.json'));
  }
  let result=await run();
+ if(mode==='missing-anon')assert.equal(result.first_blocker,'A16_ANON_READBACK_UNVERIFIED');
+ if(mode==='partial-count')assert.equal(result.first_blocker,'A16_READBACK_COUNT_MISMATCH');
+ const artifacts=[...memory.entries()].filter(([k,v])=>k.endsWith('.json')&&v?.receipt&&v?.db).map(([,v])=>v);
+ if(['ok','missing-anon','partial-count','sample-gap'].includes(mode))assert(artifacts.every(a=>a.complete===(mode==='ok')));
  if(mode==='corrupt'){assert.equal(result.attempted_count,2);assert.equal(result.rows[0].db_readback_ok,false);assert.equal(result.rows[1].db_readback_ok,true);assert.equal(result.complete,false);}
  if(mode==='timeout'){assert.equal(result.attempted_count,1);assert.equal(result.complete,false);}
  if(['sample-gap','missing-anon','partial-count'].includes(mode)){assert.equal(result.attempted_count,2);assert.equal(result.complete,false);}

@@ -65,7 +65,7 @@ async function main(){
     }
     dbResult=reuse?await db.verifyReadback(receipt,generation):await db.writeReadback(receipt,generation);
    }catch(e){failure=e.message;}
-   const entry={symbol,source_ready:receipt.complete,verifier_passed:verifier.verification_passed,requested_count:receipt.requested_count,...dbResult,first_blocker:failure||verifier.failed_checks[0]||receipt.first_blocker};rows.push(entry);
+   const entry={symbol,source_ready:receipt.complete,verifier_passed:verifier.verification_passed,requested_count:receipt.requested_count,...dbResult,first_blocker:failure||verifier.failed_checks[0]||receipt.first_blocker||(dbResult.db_readback_ok!==true?'A16_DB_READBACK_UNVERIFIED':dbResult.anon_readback_ok!==true?'A16_ANON_READBACK_UNVERIFIED':dbResult.written_count!==1084||dbResult.readback_count!==1084?'A16_READBACK_COUNT_MISMATCH':!/^[0-9a-f]{64}$/.test(dbResult.payload_sha256||'')?'A16_PAYLOAD_HASH_MISSING':null)};rows.push(entry);
    atomic(path.join(receiptDir,symbol+'.json'),{input_reference:{history_file:file,side_journal_dates:Object.keys(sideJournals)},receipt,verifier,db:dbResult,generation,mode,complete:receipt.complete===true&&verifier.complete===true&&dbResult.db_readback_ok===true&&dbResult.anon_readback_ok===true&&dbResult.written_count===1084&&dbResult.readback_count===1084});
    atomic(summaryFile,summary());console.log(JSON.stringify({symbol,attempted:rows.length,total:universe.symbols.length,db_readback_ok:dbResult.db_readback_ok,first_blocker:entry.first_blocker}));
    if(failure||[401,403,429].includes(history.result?.http_status))break;
