@@ -8926,6 +8926,20 @@ function writeModuleProducerReceipts(result, tradeDate) {
 }
 
 async function main() {
+  if (hasFlag("resume-module-checkpoint")) {
+    if (!APPLY || SOURCE_HOST_ROLE !== "writer") throw Error("recovery_requires_writer_apply");
+    ensureApprovedSourceHost();
+    const authority=spawnSync(process.execPath,[path.join(__dirname,'verify-release-root-authority.js'),'--require-production-root'],{encoding:'utf8',windowsHide:true,timeout:15000});
+    if(authority.status!==0)throw Error('RECOVERY_RELEASE_AUTHORITY_BLOCKED');
+    const guard=async()=>{const p=spawnSync(process.execPath,[path.join(__dirname,'supabase-incident-guard.js'),'check','--class=writer','--action=same-batch-module-recovery'],{encoding:'utf8',windowsHide:true,timeout:10000});if(p.status!==0)throw Error('RECOVERY_INCIDENT_GUARD_BLOCKED');};
+    const recovered=await require('../lib/run-mother-pool-checkpoint-recovery').run({
+      sourceIntent:{file:argValue('source-intent'),row_sha256:argValue('source-intent-sha256')},runtime:runtimePath(),url:SUPABASE_URL,key:requireSupabaseKey(true),hostId:SOURCE_HOST_ID,instanceId:WRITER_INSTANCE_ID,tradeDate:taipeiDate(),guard,
+      calendar:async date=>{const day=await isTwseTradingDay(new Date(date+'T12:00:00+08:00'),{stateDir:statePath(),ignoreOverrides:true});if(day.isTradingDay!==true||day.error||!['cache','twse'].includes(day.source))throw Error('RECOVERY_TRADING_DAY_UNVERIFIED');},
+      read:async(table,query)=>supabaseGetPaged(table,new URLSearchParams(query).toString(),{service:true,requireExactCount:true,pageSize:2,maxRows:2}),
+      invoke:async(script,args)=>{const p=spawnSync(process.execPath,[path.join(__dirname,script),...args],{encoding:'utf8',windowsHide:true,timeout:180000,env:{...process.env,FUMAN_RUNTIME:runtimePath(),SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY:requireSupabaseKey(true)}});return {exit_code:p.status,stdout:p.stdout||'',error:p.error?.code||null};}
+    });
+    console.log(JSON.stringify(recovered));process.exitCode=recovered.first_blocker?1:2;return;
+  }
   if (hasFlag("refresh-strategy-priority-bridge")) {
     if (!APPLY) throw new Error("bridge_refresh_requires_apply");
     for (const args of [["scripts/verify-release-root-authority.js", "--require-production-root"], ["scripts/supabase-incident-guard.js", "check", "--class=guard", "--action=strategy-priority-bridge"]]) {
