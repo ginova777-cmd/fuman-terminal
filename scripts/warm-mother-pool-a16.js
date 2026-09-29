@@ -74,7 +74,9 @@ async function main(){
       if(!originalVerifier.verification_passed)throw Error('A16_CHECKPOINT_REVALIDATION_FAILED');
       receipt=previous.receipt;verifier=originalVerifier;
     }
-    if(reuse||pending)dbResult=await db.verifyReadback(receipt,generation);
+    if(reuse&&require('../lib/mother-pool-a16-checkpoint').retainable(previous,receipt,generation,mode,input.asOf)){
+      dbResult={...previous.db,readback_reused:true,source_revalidated_at:input.asOf};
+    }else if(reuse||pending)dbResult=await db.verifyReadback(receipt,generation);
     else {
       fs.mkdirSync(receiptDir,{recursive:true});
       require('../lib/daytrade-durable-json').writeExclusive(intentFile,{contract:'a16_write_intent_v1',generation,mode,payload_sha256:hash(compact(receipt)),receipt});
