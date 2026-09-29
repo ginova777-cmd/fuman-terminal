@@ -7257,7 +7257,7 @@ async function writeStatusAndScorecard(result) {
   let sourceStatusCheckpoint;
   const sourceStatusAck = await traceStatusWrite("source_status", () => require('../lib/daytrade-source-status-ack').writeWithAcknowledgement({
     row: sourceRow,
-    onPrepared: row => {sourceStatusCheckpoint=sourceStatusJournal.prepare(runtimePath('data','source-status-write-intents'),row);},
+    onPrepared: row => {sourceStatusCheckpoint=sourceStatusJournal.prepare(runtimePath('data','source-status-write-intents'),row);console.log(JSON.stringify({stage:'source_status_intent:durable',checkedAt:nowIso(),writer_run_id:row.payload.writer_run_id,...sourceStatusCheckpoint}));},
     onAcknowledged: ack => sourceStatusJournal.confirm(sourceStatusCheckpoint,ack),
     retryDelaysMs: [5000,10000],
     onMismatch: evidence => console.error(JSON.stringify({stage:'source_status_ack_mismatch',checkedAt:nowIso(),...evidence})),
