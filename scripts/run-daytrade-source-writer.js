@@ -1126,8 +1126,15 @@ async function fetchRecentThreeDayAverageVolume() {
   const calendar=await require('../lib/mother-pool-historical-sessions').selectSessions({tradeDate,resolveDay:date=>require('./twse-trading-day').isTwseTradingDay(date,{stateDir:statePath(''),ignoreOverrides:true})});
   const dates=require('../lib/mother-pool-daily-volume-baseline').datesFromCalendar(calendar,tradeDate);
   const historyDates=require('../lib/mother-pool-daily-volume-baseline').datesFromCalendar(calendar,tradeDate,15);
-  const rows=await supabaseGetPaged('strategy4_daily_ohlcv_view',`select=symbol,trade_date,volume_lots,open,high,low,close&trade_date=gte.${historyDates[0]}&trade_date=lt.${tradeDate}&order=trade_date.desc,symbol.asc`,{service:true,pageSize:1000,maxRows:60000,requireExactCount:true});
-  const dailyReadAt=nowIso();
+  const historyQuery=`select=symbol,trade_date,volume_lots,open,high,low,close&trade_date=gte.${historyDates[0]}&trade_date=lt.${tradeDate}&order=trade_date.desc,symbol.asc`;
+  const historyCache=require('../lib/daytrade-historical-read-cache');
+  const historyCacheFile=runtimePath('data','historical-read-cache','daily-ohlcv-'+tradeDate+'.json');
+  const historyScope={tradeDate,source:'strategy4_daily_ohlcv_view',query:historyQuery,sessionDates:calendar.session_dates};
+  const cachedHistory=historyCache.load(historyCacheFile,historyScope);
+  const dailyReadAt=cachedHistory?.readAt||nowIso();
+  const rows=cachedHistory?.rows||await supabaseGetPaged('strategy4_daily_ohlcv_view',historyQuery,{service:true,pageSize:500,maxRows:60000,requireExactCount:true});
+  if(!cachedHistory){try{historyCache.save(historyCacheFile,historyScope,rows,dailyReadAt);}catch(error){console.error(JSON.stringify({stage:'historical_cache_save_failed',message:error.message}));}}
+  console.log(JSON.stringify({stage:'historical_daily_read',cache_hit:Boolean(cachedHistory),source_read_at:dailyReadAt,rows:rows.length,trade_date:tradeDate}));
   const bySymbol=new Map(),rowsBySymbol=new Map();
   for(const row of rows){if(!rowsBySymbol.has(row.symbol))rowsBySymbol.set(row.symbol,[]);rowsBySymbol.get(row.symbol).push(row);}
   for(const symbol of new Set(rows.map(r=>normalizeCode(r.symbol)).filter(Boolean))){
