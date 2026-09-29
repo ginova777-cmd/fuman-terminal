@@ -23,5 +23,21 @@ async function run(alter=x=>x,mode='timeout'){
  const batch=['2330','2317','1101'].map(symbol=>({...row,symbol}));
  await assert.rejects(box.supabaseUpsert('fugle_daytrade_priority_pool',batch,'symbol',{batchSize:1,retries:1}),/PRIORITY_ACK_SET_MISMATCH/);
  assert.equal(writes,3);assert.equal(reads,2);
+ const before=writes;
+ await assert.rejects(box.supabaseUpsert('fugle_daytrade_priority_pool',batch.map(r=>({...r,payload:{...r.payload,value:999}})),'symbol'),/PRIORITY_ROUND_WRITE_UNCONFIRMED/);
+ assert.equal(writes,before);assert.equal(reads,2);
+ box.fetch=async()=>{writes++;return {ok:true,status:200};};
+ const next=batch.map(r=>({...r,payload:{...r.payload,writer_run_id:'next-writer',generation_id:'next-generation'}}));
+ assert.equal((await box.supabaseUpsert('fugle_daytrade_priority_pool',next,'symbol')).written,3);
+ assert.equal(writes,before+1);
+ // A successfully acknowledged phase may still publish a later rebuilt phase.
+ assert.equal((await box.supabaseUpsert('fugle_daytrade_priority_pool',next,'symbol')).written,3);
+ assert.equal(writes,before+2);
+ await assert.rejects(box.supabaseUpsert('fugle_daytrade_priority_pool',[next[0],batch[1]],'symbol'),/PRIORITY_ROUND_IDENTITY_INVALID/);
+ assert.equal(writes,before+2);
+ let release;box.fetch=async()=>{writes++;await new Promise(resolve=>{release=resolve;});return {ok:true,status:200};};
+ const pending=box.supabaseUpsert('fugle_daytrade_priority_pool',next,'symbol');
+ await assert.rejects(box.supabaseUpsert('fugle_daytrade_priority_pool',next,'symbol'),/PRIORITY_ROUND_WRITE_INFLIGHT/);
+ release();await pending;assert.equal(writes,before+3);
  console.log('PASS actual Writer priority timeout: one POST, exact same-batch GET acknowledgement; partial/duplicate/new generation/content mismatch reject without replay; HTTP failure not blindly retried. Isolated only.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

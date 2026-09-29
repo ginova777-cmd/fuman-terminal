@@ -767,6 +767,13 @@ async function ensureWriterLease() {
 }
 
 async function supabaseUpsert(resource, rows, conflict, options = {}) {
+  if(resource==='fugle_daytrade_priority_pool'&&rows.length&&!DRY_RUN){
+    const guard=supabaseUpsert.priorityRoundGuard||(supabaseUpsert.priorityRoundGuard=require('../lib/daytrade-priority-round-write-guard').create());
+    return guard.run(rows,()=>supabaseUpsertUnchecked(resource,rows,conflict,options));
+  }
+  return supabaseUpsertUnchecked(resource,rows,conflict,options);
+}
+async function supabaseUpsertUnchecked(resource, rows, conflict, options = {}) {
   if (!rows.length) return { written: 0, skipped: true };
   if (DRY_RUN) return { written: 0, skipped: true, dryRun: true };
   const key = requireSupabaseKey(true);
