@@ -8183,32 +8183,6 @@ async function tick() {
       });
     }
     try {
-      tickStage("priority_pool_write:start", { rows: priorityRows.length });
-      await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
-        batchSize: SLOW_TABLE_BATCH_SIZE,
-        timeoutMs: 30000,
-        retries: 1,
-        retryDelayMs: 1000,
-      });
-      tickStage("priority_pool_upsert:complete", { rows: priorityRows.length });
-      tickStage("priority_pool_cleanup:start");
-      await supabaseDelete(
-        "fugle_daytrade_priority_pool",
-        `updated_at=lt.${encodeURIComponent(priorityRows[0].updated_at)}`,
-      );
-      tickStage("priority_pool_write:complete", { rows: priorityRows.length });
-      require('../lib/opening-report-writer-refresh-evidence').record({
-        runtime: process.env.FUMAN_RUNTIME_DIR || 'C:/fuman-runtime',
-        date: taipeiDate(), identity: writerTickIdentity, rows: priorityRows,
-      });
-    } catch (error) {
-      console.error(JSON.stringify({ok:false,stage:'priority_pool_write:failed',checkedAt:nowIso(),writer_run_id:writerTickIdentity.writer_run_id,generation_id:writerTickIdentity.generation_id,error_name:error?.name||'Error',message:String(error?.message||error).slice(0,500)}));
-      nonFatalWriteErrors.push({
-        target: "fugle_daytrade_priority_pool",
-        message: error?.message || String(error),
-      });
-    }
-    try {
       tickStage("intraday_candles_sync:start");
       websocketCandleSync = await syncWebSocketIntraday1mCandles(priorityRows, state);
       if (!websocketCandleSync.skipped && numberValue(websocketCandleSync.written) > 0) {
@@ -8221,16 +8195,7 @@ async function tick() {
         if (candleSyncedPriorityRows.length) {
           priorityRows = candleSyncedPriorityRows;
           await publishDaytradePrioritySymbols(priorityRows, activeSymbols);
-          await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
-            batchSize: SLOW_TABLE_BATCH_SIZE,
-            timeoutMs: 30000,
-            retries: 1,
-            retryDelayMs: 1000,
-          });
-          await supabaseDelete(
-            "fugle_daytrade_priority_pool",
-            `updated_at=lt.${encodeURIComponent(priorityRows[0].updated_at)}`,
-          );
+
         }
       }
       tickStage("intraday_candles_sync:complete", { written: websocketCandleSync.written || 0 });
@@ -8314,22 +8279,40 @@ async function tick() {
     if (rebuiltPriorityRows.length) {
       priorityRows = rebuiltPriorityRows;
       try {
-        // Persist the post-fetch rebuild so the canonical mother-pool view sees
-        // the same fresh quote timestamps used by source_status.payload.
         await publishDaytradePrioritySymbols(priorityRows, activeSymbols);
-        await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
+      } catch (error) {
+        fetchResult.errors.push({ target: "fugle_daytrade_priority_pool_rebuild", message: error?.message || String(error) });
+      }
+    }
+  }
+
+  // Persist the final priority set once, after candle and quote rebuilds.
+  if (priorityRows.length) {
+    try {
+      tickStage("priority_pool_write:start", { rows: priorityRows.length });
+      await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
         batchSize: SLOW_TABLE_BATCH_SIZE,
         timeoutMs: 30000,
         retries: 1,
         retryDelayMs: 1000,
       });
-        await supabaseDelete(
-          "fugle_daytrade_priority_pool",
-          "updated_at=lt." + encodeURIComponent(priorityRows[0].updated_at),
-        );
-      } catch (error) {
-        fetchResult.errors.push({ target: "fugle_daytrade_priority_pool_rebuild", message: error?.message || String(error) });
-      }
+      tickStage("priority_pool_upsert:complete", { rows: priorityRows.length });
+      tickStage("priority_pool_cleanup:start");
+      await supabaseDelete(
+        "fugle_daytrade_priority_pool",
+        `updated_at=lt.${encodeURIComponent(priorityRows[0].updated_at)}`,
+      );
+      tickStage("priority_pool_write:complete", { rows: priorityRows.length });
+      require('../lib/opening-report-writer-refresh-evidence').record({
+        runtime: process.env.FUMAN_RUNTIME_DIR || 'C:/fuman-runtime',
+        date: taipeiDate(), identity: writerTickIdentity, rows: priorityRows,
+      });
+    } catch (error) {
+      console.error(JSON.stringify({ok:false,stage:'priority_pool_write:failed',checkedAt:nowIso(),writer_run_id:writerTickIdentity.writer_run_id,generation_id:writerTickIdentity.generation_id,error_name:error?.name||'Error',message:String(error?.message||error).slice(0,500)}));
+      fetchResult.errors.push({
+        target: "fugle_daytrade_priority_pool",
+        message: error?.message || String(error),
+      });
     }
   }
 
