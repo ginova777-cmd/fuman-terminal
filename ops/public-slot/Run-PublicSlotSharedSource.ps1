@@ -3443,9 +3443,14 @@ function Normalize-StockFutureName {
 
 function Get-StockNameLookup {
   $lookup = @{}
+  $ambiguous = @{}
   foreach ($row in @(Convert-StocksSlimToTickerRows)) {
     $key = Normalize-StockFutureName ([string]$row.name)
-    if (-not [string]::IsNullOrWhiteSpace($key) -and -not $lookup.ContainsKey($key)) {
+    if ([string]::IsNullOrWhiteSpace($key) -or $ambiguous.ContainsKey($key)) { continue }
+    if ($lookup.ContainsKey($key) -and $lookup[$key].symbol -ne $row.symbol) {
+      $lookup.Remove($key)
+      $ambiguous[$key] = $true
+    } elseif (-not $lookup.ContainsKey($key)) {
       $lookup[$key] = $row
     }
   }
@@ -3764,17 +3769,19 @@ function Convert-StocksSlimToTickerRows {
   try {
     if (-not (Test-Path -LiteralPath $stocksFile)) { return $rows.ToArray() }
     $rawStocks = Get-Content -LiteralPath $stocksFile -Raw -ErrorAction Stop
-    $matches = [regex]::Matches($rawStocks, '"code"\s*:\s*"(\d{4})"[\s\S]{0,400}?"name"\s*:\s*"([^"]*)"[\s\S]{0,400}?"market"\s*:\s*"([^"]*)"')
+    $parsedStocks = ConvertFrom-Json -InputObject $rawStocks -ErrorAction Stop
+    $stockRows = if ($parsedStocks -is [array]) { $parsedStocks } elseif ($null -ne $parsedStocks.stocks) { @($parsedStocks.stocks) } elseif ($null -ne $parsedStocks.data) { @($parsedStocks.data) } else { @() }
     $seen = @{}
-    foreach ($match in $matches) {
-      $symbol = [string]$match.Groups[1].Value
+    foreach ($stock in $stockRows) {
+      $symbol = if ($stock.code) { [string]$stock.code } else { [string]$stock.symbol }
+      if ($symbol -notmatch '^\d{4}$' -or [string]::IsNullOrWhiteSpace([string]$stock.name)) { continue }
       if ($seen.ContainsKey($symbol)) { continue }
       $seen[$symbol] = $true
-      $market = Convert-Market ([string]$match.Groups[3].Value)
+      $market = Convert-Market ([string]$stock.market)
       $isEtf = $symbol.StartsWith("00")
       $rows.Add([ordered]@{
         symbol = $symbol
-        name = [string]$match.Groups[2].Value
+        name = [string]$stock.name
         market = $market
         stock_type = if ($isEtf) { "ETF" } else { "COMMONSTOCK" }
         industry = $null
