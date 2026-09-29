@@ -11,3 +11,11 @@ const build=s=>collect({identity,symbols:['2049','2308'],asOf:'2026-09-08T01:01:
 const plans=build(source);for(const p of plans){assert(p.rows.every(r=>r.status==='READY'),JSON.stringify(p.rows[0].data_gap_reason));const round={...identity,observed_at:p.created_at,writer_write_set:{plan:{requested_symbols:p.requested_symbols,source_evidence:p.source_evidence}}};assert.equal(verify(p.module_id,p.rows,round),true);const altered=structuredClone(p.rows);altered[0].source_hash='bad';assert.equal(verify(p.module_id,altered,round),false);}
 for(const mutate of [s=>delete s.us_0820.handoff.source_evidence,s=>s.asia_0850.refresh_files.pop(),s=>s.us_0820.refresh_files[0].expected_sha256='bad',s=>s.asia_0850.readback.accepted_symbols=['2049']]){const s=structuredClone(source);mutate(s);assert(build(s).find(p=>p.module_id==='A12').rows.every(r=>r.status==='DATA_GAP'));}
 console.log('PASS morning fixed-module producers and verifier: both stages, two rounds, full symbol set, corrupt/missing evidence fail closed');
+for(const value of [null,{},42,'2049']) {
+ const s=structuredClone(source);s.us_0820.readback.accepted_symbols=value;
+ assert(build(s).find(p=>p.module_id==='A12').rows.every(r=>r.status==='DATA_GAP'));
+ const t=structuredClone(source);t.asia_0850.refresh_files=value;
+ assert(build(t).find(p=>p.module_id==='A12').rows.every(r=>r.status==='DATA_GAP'));
+ assert(build(t).find(p=>p.module_id==='A11').rows.every(r=>r.status==='READY'));
+}
+console.log('PASS malformed persistence arrays preserve A11 and record A12 DATA_GAP without crashing Writer');
