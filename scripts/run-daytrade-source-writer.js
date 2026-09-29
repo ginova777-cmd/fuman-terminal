@@ -3518,6 +3518,7 @@ async function refreshStrategyChipPriorityBridge() {
       groups,
       counts: Object.fromEntries(Object.entries(groups).map(([key, group]) => [key, Array.isArray(group.symbols) ? group.symbols.length : 0])),
       scorecardSource,
+      previousSourceDate,
       readyGroups: readyCount,
       errorGroups: errorCount,
       terminalHandoff: {
@@ -8604,6 +8605,7 @@ async function tick() {
       const sessionCandles=sideMinutes>=540?require('../lib/mother-pool-session-candles').select({payload:cache.payload,tradeDate:identity.trade_date,asOf:sideAsOf}):[];
       const inputs=[require('../lib/mother-pool-identity-source').collect({identity,symbols:snapshot.symbols,calendar:marketCalendarEvidence,lease:writerLease,asOf:nowIso()})];
       inputs.push(require('../lib/mother-pool-eligibility-source').collect({identity,evidence:activeSymbols.sourceEvidence,asOf:sideAsOf}));
+      inputs.push(require('../lib/mother-pool-warmup-union').collect({identity,symbols:snapshot.symbols,bridge:readJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE,null),asOf:sideAsOf}));
       inputs.push(require('../lib/mother-pool-historical-volume-price').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,asOf:nowIso()}));
       inputs.push(require('../lib/mother-pool-daytrade-ratio').collect({identity,symbols:snapshot.symbols,activeSymbols,dailyVolumeMap,officialSource:officialDaytradeSource,asOf:nowIso()}));
       const collectorStatus=readJson(FUGLE_WS_STATUS_FILE,null);
