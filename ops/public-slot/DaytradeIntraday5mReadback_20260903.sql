@@ -5,13 +5,13 @@ do $$ begin
 end $$;
 create table if not exists public.fugle_intraday_5m_signal_cache(
  trade_date date not null,symbol text not null,candle_time timestamptz not null,bar_start timestamptz not null,bar_end timestamptz not null,
- open numeric,high numeric,low numeric,close numeric,volume numeric,bar_count integer,bar_complete boolean not null,
+  open numeric,high numeric,low numeric,close numeric,volume numeric,volume_unit text,volume_unit_source text,volume_available boolean not null default false,is_synthetic boolean,instrument_type text,market text,bar_count integer,bar_complete boolean not null,
  ma5_5m numeric,ma10_5m numeric,ma20_5m numeric,ma5_rising_5m boolean,ma10_rising_5m boolean,ma20_rising_5m boolean,
  ma5_cross_ma10_up_5m boolean,ma10_cross_ma20_up_5m boolean,ma5_cross_ma20_up_5m boolean,
  kd_k_5m numeric,kd_d_5m numeric,kd_golden_cross_5m boolean,rsi6_5m numeric,rsi12_5m numeric,rsi_golden_cross_5m boolean,
  macd_dif_5m numeric,macd_signal_5m numeric,macd_golden_cross_5m boolean,macd_zero_cross_up_5m boolean,
  data_gap_5m boolean not null,source_status text not null,trend_5m_status text not null,trend_5m_reason text,
- ma20_warmup_mode text not null default 'previous_and_current_trade_date',source text not null default 'fugle_daytrade_intraday_1m',
+  ma20_warmup_mode text not null default 'previous_and_current_trade_date',source text not null default 'unavailable',
  run_id text not null,updated_at timestamptz not null default now(),primary key(trade_date,symbol,candle_time)
 );
 alter table public.fugle_intraday_5m_signal_cache
@@ -36,10 +36,35 @@ alter table public.fugle_intraday_5m_signal_cache
  add column if not exists previous_ma10_5m numeric,
  add column if not exists previous_ma20_5m numeric,
  add column if not exists gap_reason text,
- add column if not exists calculated_at timestamptz not null default now();
+ add column if not exists calculated_at timestamptz not null default now(),
+ add column if not exists volume_unit text,
+ add column if not exists volume_unit_source text,
+ add column if not exists volume_available boolean not null default false,
+ add column if not exists is_synthetic boolean,
+ add column if not exists instrument_type text,
+ add column if not exists market text;
+alter table public.fugle_intraday_5m_signal_cache alter column source set default 'unavailable';
 create index if not exists fugle_intraday_5m_signal_cache_latest on public.fugle_intraday_5m_signal_cache(symbol,trade_date desc,candle_time desc);
 create table if not exists public.fugle_intraday_5m_history
  (like public.fugle_intraday_5m_signal_cache including defaults);
+alter table public.fugle_intraday_5m_history
+ add column if not exists volume_unit text,
+ add column if not exists volume_unit_source text,
+ add column if not exists volume_available boolean not null default false,
+ add column if not exists is_synthetic boolean,
+ add column if not exists instrument_type text,
+ add column if not exists market text;
+alter table public.fugle_intraday_5m_history alter column source set default 'unavailable';
+do $$ begin
+ if not exists(select 1 from pg_constraint where conname='fugle_intraday_5m_signal_cache_volume_unit_check') then
+  alter table public.fugle_intraday_5m_signal_cache add constraint fugle_intraday_5m_signal_cache_volume_unit_check
+   check(volume_unit is null or volume_unit in ('lots','shares','currency_amount'));
+ end if;
+ if not exists(select 1 from pg_constraint where conname='fugle_intraday_5m_history_volume_unit_check') then
+  alter table public.fugle_intraday_5m_history add constraint fugle_intraday_5m_history_volume_unit_check
+   check(volume_unit is null or volume_unit in ('lots','shares','currency_amount'));
+ end if;
+end $$;
 do $$ begin
  if not exists(select 1 from pg_constraint where conrelid='public.fugle_intraday_5m_history'::regclass and contype='p') then
   alter table public.fugle_intraday_5m_history add primary key(run_id,trade_date,symbol,candle_time);
@@ -55,6 +80,7 @@ create or replace view public.v_fugle_intraday_5m_readback as
   select c.*,row_number() over(partition by trade_date,symbol order by candle_time desc,updated_at desc) as latest_rank
   from public.fugle_intraday_5m_signal_cache c
  ) x where latest_rank=1;
+drop view if exists public.v_fugle_intraday_5m_history_readback;
 create or replace view public.v_fugle_intraday_5m_history_readback as
  select * from public.fugle_intraday_5m_history;
 grant select on public.v_fugle_intraday_5m_readback to anon,authenticated,service_role;
@@ -65,6 +91,10 @@ revoke insert,update,delete on public.fugle_intraday_5m_history from anon,authen
 grant select,insert,update,delete on public.fugle_intraday_5m_history to service_role;
 comment on view public.v_fugle_intraday_5m_readback is 'Lightweight canonical 5m trend readback. Only the independent service-role writer may populate completed bars.';
 comment on view public.v_fugle_intraday_5m_history_readback is 'Canonical versioned 5m history for replay. Retention is 30 calendar days. Consumers must filter symbol, trade_date, run_id and bar_end <= as_of. Unique evidence key is run_id+trade_date+symbol+candle_time.';
+comment on column public.fugle_intraday_5m_signal_cache.volume_unit is 'lots for whole-share TSE/OTC/TIB equity, shares for ESB equity or oddlot, currency_amount for index; null means unknown/unavailable.';
+comment on column public.fugle_intraday_5m_signal_cache.volume_unit_source is 'Fugle response type+market mapping contract fugle_intraday_candles_volume_contract_v1; historical rows are not backfilled.';
+comment on column public.fugle_intraday_5m_signal_cache.volume_available is 'True only when raw volume is present and Fugle type+market resolve a documented unit.';
+comment on column public.fugle_intraday_5m_signal_cache.is_synthetic is 'False for newly written native Fugle bars; null for legacy rows whose lineage has not been independently proven.';
 
 create table if not exists public.fugle_intraday_5m_verification_receipts(
  run_id text primary key,
