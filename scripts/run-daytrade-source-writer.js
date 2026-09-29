@@ -8167,6 +8167,8 @@ async function tick() {
         retries: 1,
         retryDelayMs: 1000,
       });
+      tickStage("priority_pool_upsert:complete", { rows: priorityRows.length });
+      tickStage("priority_pool_cleanup:start");
       await supabaseDelete(
         "fugle_daytrade_priority_pool",
         `updated_at=lt.${encodeURIComponent(priorityRows[0].updated_at)}`,
@@ -8177,6 +8179,7 @@ async function tick() {
         date: taipeiDate(), identity: writerTickIdentity, rows: priorityRows,
       });
     } catch (error) {
+      console.error(JSON.stringify({ok:false,stage:'priority_pool_write:failed',checkedAt:nowIso(),writer_run_id:writerTickIdentity.writer_run_id,generation_id:writerTickIdentity.generation_id,error_name:error?.name||'Error',message:String(error?.message||error).slice(0,500)}));
       nonFatalWriteErrors.push({
         target: "fugle_daytrade_priority_pool",
         message: error?.message || String(error),
