@@ -8,6 +8,9 @@ const previous={complete:true,generation:'g',mode:'scheduled',verifier:{complete
 const check=p=>retainable(p,receipt,'g','scheduled','2026-09-29T00:02:00Z');
 assert.equal(check(previous),true);
 for(const patch of [{checked_at:'2026-09-28T23:59:00Z'},{checked_at:'2026-09-29T00:03:00Z'},{symbol:'1303'},{canonical_run_id:'other'},{trade_date:'2026-09-28'},{generation:'other'},{payload_sha256:'0'.repeat(64)},{row_count:0},{role:'DB'}]){const p=structuredClone(previous);Object.assign(p.db.readback_evidence[1],patch);assert.equal(check(p),false);}
-for(const key of ['complete']){const p=structuredClone(previous);p[key]=false;assert.equal(check(p),false);}
+const gap=structuredClone(previous),gapReceipt={...receipt,complete:false,first_blocker:'INSUFFICIENT_SAMPLE'};
+gap.complete=false;gap.verifier.complete=false;gap.db.payload_sha256=hash(compact(gapReceipt));for(const e of gap.db.readback_evidence)e.payload_sha256=gap.db.payload_sha256;
+assert.equal(retainable(gap,gapReceipt,'g','scheduled','2026-09-29T00:02:00Z'),true);
+assert.equal(gapReceipt.complete,false);gap.verifier.verification_passed=false;assert.equal(retainable(gap,gapReceipt,'g','scheduled','2026-09-29T00:02:00Z'),false);
 for(const patch of [{readback_count:1083},{written_count:0},{anon_readback_ok:false},{readback_evidence:[]}]){const p=structuredClone(previous);Object.assign(p.db,patch);assert.equal(check(p),false);}
 console.log('PASS A16 checkpoint: original dual-read evidence required; identity, time, count, hash and incomplete evidence rejected');
