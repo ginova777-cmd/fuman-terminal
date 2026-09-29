@@ -4,7 +4,7 @@ const text=fs.readFileSync(require.resolve('./run-daytrade-source-writer'),'utf8
 const code=text.slice(text.indexOf('async function supabaseUpsert('),text.indexOf('async function supabaseDelete('));
 const row={symbol:'2330',updated_at:'2026-09-29T02:00:00Z',payload:{trade_date:'2026-09-29',canonical_run_id:'c',writer_run_id:'w',generation_id:'g',value:10}};
 async function run(alter=x=>x,mode='timeout'){
- let writes=0,reads=0;const box={require,JSON,DRY_RUN:false,requireSupabaseKey:()=> 'isolated',SUPABASE_WRITE_TIMEOUT_MS:100,SUPABASE_URL:'https://isolated.invalid',headers:()=>({}),AbortSignal,URLSearchParams,setTimeout,console:{log:()=>{}},
+ let writes=0,reads=0;const box={require,JSON,Buffer,DRY_RUN:false,requireSupabaseKey:()=> 'isolated',SUPABASE_WRITE_TIMEOUT_MS:100,SUPABASE_URL:'https://isolated.invalid',headers:()=>({}),AbortSignal,URLSearchParams,setTimeout,console:{log:()=>{},error:()=>{}},
   fetch:async()=>{writes++;if(mode==='http')return {ok:false,status:503,text:async()=> 'unavailable'};throw Object.assign(Error('timeout'),{name:'TimeoutError'});},
   supabaseGetPaged:async(resource,query,options)=>{reads++;const q=new URLSearchParams(query);assert.equal(q.get('payload->>writer_run_id'),'eq.w');assert.equal(options.requireExactCount,true);return alter([structuredClone(row)]);}};
  vm.runInNewContext(code,box);
@@ -16,7 +16,7 @@ async function run(alter=x=>x,mode='timeout'){
  r=await run(x=>x,'http');assert(r.error);assert.equal(r.writes,1);assert.equal(r.reads,0);
  r=await run(x=>{x[0].updated_at='2026-09-29T02:00:00+00:00';return x;});assert.equal(r.result.written,1);
  let writes=0,reads=0,last;
- const box={require,JSON,DRY_RUN:false,requireSupabaseKey:()=> 'isolated',SUPABASE_WRITE_TIMEOUT_MS:100,SUPABASE_URL:'https://isolated.invalid',headers:()=>({}),AbortSignal,URLSearchParams,setTimeout,console:{log:()=>{}},
+ const box={require,JSON,Buffer,DRY_RUN:false,requireSupabaseKey:()=> 'isolated',SUPABASE_WRITE_TIMEOUT_MS:100,SUPABASE_URL:'https://isolated.invalid',headers:()=>({}),AbortSignal,URLSearchParams,setTimeout,console:{log:()=>{},error:()=>{}},
   fetch:async(_url,options)=>{writes++;last=JSON.parse(options.body);if(writes===1)return {ok:true};throw Object.assign(Error('timeout'),{name:'TimeoutError'});},
   supabaseGetPaged:async(_resource,_query,options)=>{reads++;assert.equal(options.maxRows,500);return writes===2?last:[];}};
  vm.runInNewContext(code,box);

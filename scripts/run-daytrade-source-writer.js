@@ -777,8 +777,13 @@ async function supabaseUpsert(resource, rows, conflict, options = {}) {
   const retryDelayMs = Math.max(250, Math.min(Number(options.retryDelayMs || 1000), 5000));
   for (let i = 0; i < rows.length; i += batchSize) {
     const chunk = JSON.parse(JSON.stringify(rows.slice(i, i + batchSize)));
+    const body = JSON.stringify(chunk);
+    const tracePriority = resource==='fugle_daytrade_priority_pool';
+    const batchEvidence = tracePriority ? {resource,offset:i,requested:chunk.length,bytes:Buffer.byteLength(body),sha256:require('node:crypto').createHash('sha256').update(body).digest('hex'),writer_run_id:chunk[0]?.payload?.writer_run_id,generation_id:chunk[0]?.payload?.generation_id} : null;
     let lastError = null;
     for (let attempt = 0; attempt <= retries; attempt += 1) {
+      const started = Date.now();
+      if(tracePriority)console.log(JSON.stringify({stage:'priority_pool_batch:start',...batchEvidence,attempt}));
       try {
         const response = await fetch(`${SUPABASE_URL}/rest/v1/${resource}?on_conflict=${encodeURIComponent(conflict)}`, {
           method: "POST",
@@ -786,7 +791,7 @@ async function supabaseUpsert(resource, rows, conflict, options = {}) {
             ...headers(key),
             Prefer: "resolution=merge-duplicates",
           },
-          body: JSON.stringify(chunk),
+          body,
           signal: AbortSignal.timeout ? AbortSignal.timeout(writeTimeoutMs) : undefined,
         });
         if (!response.ok) {
@@ -794,10 +799,12 @@ async function supabaseUpsert(resource, rows, conflict, options = {}) {
           throw new Error(`${resource} upsert HTTP ${response.status}: ${responseText.slice(0, 240)}`);
         }
         written += chunk.length;
+        if(tracePriority)console.log(JSON.stringify({stage:'priority_pool_batch:ack',...batchEvidence,attempt,http_status:response.status,written:chunk.length,elapsed_ms:Date.now()-started}));
         lastError = null;
         break;
       } catch (error) {
         lastError = error;
+        if(tracePriority)console.error(JSON.stringify({stage:'priority_pool_batch:unconfirmed',...batchEvidence,attempt,error_name:error?.name||'Error',elapsed_ms:Date.now()-started}));
         if(resource==='fugle_daytrade_priority_pool'&&['TimeoutError','AbortError'].includes(error?.name)){
           const expected=JSON.parse(JSON.stringify(chunk));
           const query=new URLSearchParams({select:Object.keys(expected[0]).join(','),symbol:'in.('+expected.map(r=>r.symbol).join(',')+')',order:'symbol.asc'});
