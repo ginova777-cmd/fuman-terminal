@@ -8649,7 +8649,7 @@ async function tick() {
           if(typeof input.build==='function')input=input.build();
           const evidenceId=require('node:crypto').randomUUID();
           const saved=await require('../lib/persist-mother-pool-module-round').persistModuleRound(input,{
-            savePlan:async plan=>fs.writeFileSync(path.join(dir,evidenceId+'-plan.json'),JSON.stringify(plan),{flag:'wx'}),
+            savePlan:async plan=>require('../lib/daytrade-durable-json').writeExclusive(path.join(dir,evidenceId+'-plan.json'),plan),
             persist:async body=>{
               if(DRY_RUN)throw Error('MODULE_DRY_RUN_NO_PERSISTENCE');
               const response=await fetch(SUPABASE_URL+'/rest/v1/rpc/persist_daytrade_module_round_v2',{
@@ -8657,7 +8657,7 @@ async function tick() {
               if(!response.ok)throw Error('MODULE_RPC_HTTP_'+response.status+':'+(await response.text()).slice(0,240));
               return response.json();
             },
-            saveEvidence:async evidence=>fs.writeFileSync(path.join(dir,evidenceId+'.json'),JSON.stringify(evidence),{flag:'wx'})
+            saveEvidence:async evidence=>require('../lib/daytrade-durable-json').writeExclusive(path.join(dir,evidenceId+'.json'),evidence)
           });
           result.payload.module_write_sets[input.module_id]=saved;
           if(input.module_id==='B02')writeJson(statePath('daytrade-b02-module-latest.json'),saved);
