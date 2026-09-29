@@ -4,7 +4,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$collector = Join-Path $FumanRoot "scripts\fugle-websocket-collector.js"
+$collector = $null
+$collectorRelease = $null
 $node = "C:\Program Files\nodejs\node.exe"
 $logDir = Join-Path $RuntimeDir "logs"
 $stateDir = Join-Path $RuntimeDir "state"
@@ -18,6 +19,25 @@ $lastRestartReason = ""
 
 function Get-TaipeiNow {
   [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, "Taipei Standard Time")
+}
+
+function Resolve-CollectorRelease {
+  # The scheduled launcher may live in source; the child must use the approved
+  # detached release. Never infer authority from whichever checkout is newest.
+  $bootstrap = Get-Content -LiteralPath (Join-Path $FumanRoot 'data\contracts\release_root_authority_v1.json') -Raw | ConvertFrom-Json
+  $verifier = Join-Path $bootstrap.sourceRoot 'scripts\verify-release-root-authority.js'
+  $raw = & $node $verifier --require-production-root
+  if ($LASTEXITCODE -ne 0) { throw 'RELEASE_ROOT_DRIFT: collector authority verification failed' }
+  $release = ($raw -join "`n") | ConvertFrom-Json
+  if ($release.ok -ne $true -or $release.productionClean -ne $true -or
+      $release.productionRootPresent -ne $true -or
+      $release.productionHead -notmatch '^[0-9a-f]{40}$' -or
+      $release.productionHead -ne $release.approvedProductionSha) {
+    throw 'RELEASE_ROOT_DRIFT: collector release is not approved and clean'
+  }
+  $entry = Join-Path $release.productionRoot 'scripts\fugle-websocket-collector.js'
+  if (-not (Test-Path -LiteralPath $entry -PathType Leaf)) { throw 'collector_script_missing' }
+  [pscustomobject]@{ entry = $entry; root = $release.productionRoot; sha = $release.productionHead }
 }
 
 function Write-State {
@@ -37,6 +57,9 @@ function Write-State {
     websocketStatusFile = (Join-Path $stateDir "fugle-daytrade-websocket-status-v2.json")
     maxCollectors = 1
     lastRestartReason = $script:lastRestartReason
+    collectorEntry = $collector
+    releaseRoot = $collectorRelease.root
+    releaseSha = $collectorRelease.sha
   } | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $statusFile -Encoding utf8
 }
 
@@ -101,6 +124,8 @@ try {
     Write-State -Status "duplicate_blocked" -Reason "supervisor_mutex_held"
     exit 0
   }
+  $collectorRelease = Resolve-CollectorRelease
+  $collector = $collectorRelease.entry
   $reapedOrphans = @(Stop-OrphanCollectorProcesses)
   if ($reapedOrphans.Count -gt 0) {
     Write-State -Status "starting" -Reason ("orphan_collector_reaped:" + ($reapedOrphans -join ','))
@@ -163,6 +188,9 @@ try {
       exit 0
     }
 
+    # Revalidate before each naturally requested child start, including recovery.
+    $collectorRelease = Resolve-CollectorRelease
+    $collector = $collectorRelease.entry
     $stamp = [DateTimeOffset]::UtcNow.ToString("yyyyMMddHHmmss")
     $stdout = Join-Path $logDir "fugle-daytrade-websocket-$stamp.stdout.log"
     $stderr = Join-Path $logDir "fugle-daytrade-websocket-$stamp.stderr.log"

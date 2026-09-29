@@ -11,6 +11,13 @@ param(
 # Run-DaytradeSourceWriter.ps1 is a release-owner wrapper.
 # Default mode is dry-run/no-fetch/once. Use -Apply only in an approved writer window.
 $ErrorActionPreference = "Stop"
+$WrapperClock = [Diagnostics.Stopwatch]::StartNew()
+
+function Get-WriterProcessBudget {
+  param([double]$ElapsedSeconds, [int]$MaximumSeconds = 285, [int]$ReserveSeconds = 15)
+  if ([double]::IsNaN($ElapsedSeconds) -or [double]::IsInfinity($ElapsedSeconds) -or $ElapsedSeconds -lt 0 -or $MaximumSeconds -lt 1 -or $ReserveSeconds -lt 5) { throw 'WRITER_TIME_BUDGET_INVALID' }
+  return [int][Math]::Max(0, [Math]::Min($MaximumSeconds, [Math]::Floor(300 - $ReserveSeconds - $ElapsedSeconds)))
+}
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = $FumanRoot
@@ -25,7 +32,7 @@ New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
 $StdoutLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-',''))-$Stamp.stdout.log"
 $StderrLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-',''))-$Stamp.stderr.log"
 $WrapperLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-','')).wrapper.log"
-$FutoptCollectorRelease = "futopt-formal-live-mirror-v5"
+$FutoptCollectorRelease = "futopt-formal-live-mirror-v7-daily-catalogue"
 $MutexName = "Global\FumanFugleDaytradeSourceWriter"
 $CrossSessionLockPath = Join-Path $StateDir "daytrade-source-writer.cross-session.lock"
 $CrossSessionLockStream = $null
@@ -318,10 +325,18 @@ function Invoke-DaytradeSideVolumeCanonicalVerifier {
     log = $verifierLog
   }
   $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $scheduleStatePath -Encoding utf8
-  $verifierOutput = & $node --use-system-ca $verifierScript "--write-receipt" "--publish-receipt" 2>&1
-  $verifierExit = [int]$LASTEXITCODE
-  $verifierText = ($verifierOutput | Out-String).Trim()
-  $verifierText | Set-Content -LiteralPath $verifierLog -Encoding utf8
+  $verifierBudget = Get-WriterProcessBudget -ElapsedSeconds $WrapperClock.Elapsed.TotalSeconds -ReserveSeconds 5
+  if ($verifierBudget -lt 1) {
+    $state.status = 'failed'; $state.exit_code = 124; $state.first_blocker = 'WRAPPER_TIME_BUDGET_EXHAUSTED'
+    $state.completed_at = [DateTimeOffset]::UtcNow.ToString('o')
+    $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $scheduleStatePath -Encoding utf8
+    throw 'WRAPPER_TIME_BUDGET_EXHAUSTED:side_volume_verifier'
+  }
+  $verifierProcess = Start-Process -FilePath $node -ArgumentList @('--use-system-ca', $verifierScript, '--write-receipt', '--publish-receipt') -RedirectStandardOutput $verifierLog -RedirectStandardError ($verifierLog + '.stderr') -PassThru -WindowStyle Hidden
+  if (-not $verifierProcess.WaitForExit($verifierBudget * 1000)) {
+    Stop-Process -Id $verifierProcess.Id -Force -ErrorAction Stop
+    $verifierExit = 124
+  } else { $verifierExit = [int]$verifierProcess.ExitCode }
   $verifierPayload = $null
   # Native stdout can be transcoded by a scheduled PowerShell host and corrupt
   # non-ASCII stock names. The verifier's UTF-8 canonical receipt is the
@@ -358,12 +373,13 @@ function Invoke-DaytradeSideVolumeCanonicalVerifier {
   $state.exit_code = $verifierExit
   $state.receipt_status = if ($null -ne $verifierPayload) { [string]$verifierPayload.status } else { "unparseable" }
   $state.receipt_complete = $null -ne $verifierPayload -and $verifierPayload.complete -eq $true
-  $state.status = if ($verifierExit -eq 0) { "complete" } elseif ($null -ne $verifierPayload -and [string]$verifierPayload.status -eq "partial") { "partial" } else { "failed" }
+  $state.status = if ($verifierExit -eq 0 -and $state.receipt_complete -eq $true) { "complete" } elseif ($null -ne $verifierPayload -and [string]$verifierPayload.status -eq "partial") { "partial" } else { "failed" }
   $state.verification_run_id = if ($null -ne $verifierPayload) { [string]$verifierPayload.verification_run_id } else { "" }
   $state.first_blocker = if ($null -ne $verifierPayload) { [string]$verifierPayload.first_blocker } else { "verifier_output_unparseable" }
   $state.receipt_read_error = if ($null -ne $verifierPayload) { $null } else { $receiptReadError }
   $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $scheduleStatePath -Encoding utf8
   Write-WrapperLog "SIDE_VOLUME_VERIFIER_DONE status=$($state.status) receipt_status=$($state.receipt_status) complete=$($state.receipt_complete) exit=$verifierExit verification_run_id=$($state.verification_run_id)"
+  if ($verifierExit -ne 0 -or $state.receipt_complete -ne $true) { throw 'SIDE_VOLUME_VERIFIER_INCOMPLETE' }
 }
 
 if (-not (Test-Path -LiteralPath $WriterScript)) {
@@ -380,6 +396,10 @@ $env:DAYTRADE_SUPABASE_TRANSIENT_RETRIES = "2"
 $env:DAYTRADE_SUPABASE_RETRY_BASE_DELAY_MS = "1000"
 $env:FUMAN_FORMAL_SOURCE_WINDOW_START = "0600"
 $env:FUMAN_FORMAL_SOURCE_WINDOW_END = "1330"
+
+# Closeout shares the same cross-session and OS mutex as the Writer.
+$closeoutNow = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, "Taipei Standard Time")
+$runCloseout = $Apply -and -not $LocalCheck -and (($closeoutNow.Hour * 60 + $closeoutNow.Minute) -ge 810)
 
 # FUMAN_MARKET_CLOSED_RUNNER_GUARD_V1
 . "$RepoRoot\schedule-guard.ps1"
@@ -403,9 +423,13 @@ if ($preopenWarmup) {
     exit 0
   }
   Write-WrapperLog "PREOPEN_WARMUP_ALLOWED trade_date=$($calendarPayload.tradingDay.date); warmup_only=true; formal_entry_allowed=false"
-} else {
+} elseif (-not $runCloseout) {
   Invoke-FumanWeekdayGuard -Label "Daytrade source writer" -LogPath $WrapperLog
 }
+
+# Keep the pre-open scorecard bounded to A01-A19. This is explicitly reset on
+# every post-open invocation so 09:00+ retains the full scorecard payload.
+$env:DAYTRADE_PREOPEN_LIGHT_MODE = if ($preopenWarmup) { "1" } else { "0" }
 
 $node = "node"
 $args = @("--use-system-ca", $WriterScript)
@@ -417,7 +441,7 @@ if ($LocalCheck) {
   if ($Once) {
     $args += "--once"
   } else {
-    $args += "--max-seconds=300"
+    $args += "--max-seconds=420"
   }
 } else {
   $args += "--dry-run"
@@ -432,8 +456,9 @@ if ($Fetch -and -not $Apply) {
 
 $EffectiveOnce = $args -contains "--once"
 Write-WrapperLog "START run_id=$RunId apply=$Apply fetch=$Fetch once=$Once continuous=$Continuous effectiveOnce=$EffectiveOnce localCheck=$LocalCheck"
-Invoke-DaytradeWebSocketCollectorSelfHeal
-if ($Apply) {
+if (-not $runCloseout) { Invoke-DaytradeWebSocketCollectorSelfHeal }
+if ($Apply -and -not $runCloseout) {
+  $fastSyncExit = -1
   $fastSyncScript = Join-Path $RepoRoot "scripts\sync-daytrade-websocket-supabase-fast.js"
   if (Test-Path -LiteralPath $fastSyncScript) {
     $fastSyncOutput = & node --use-system-ca $fastSyncScript --apply 2>&1
@@ -444,6 +469,7 @@ if ($Apply) {
   } else {
     Write-WrapperLog "FAST_SUPABASE_SYNC skip=script_missing path=$fastSyncScript"
   }
+  Invoke-MotherPoolReceiptRollover -FastSyncExitCode $fastSyncExit
 }
 if ($Apply) { Invoke-MotherPoolReceiptRollover -FastSyncExitCode $fastSyncExit }
 try {
@@ -496,6 +522,19 @@ try {
     exit 0
   }
 
+  if ($runCloseout) {
+    $env:FUMAN_RUNTIME = $RuntimeDir
+    & node (Join-Path $RepoRoot "scripts/run-mother-pool-closeout.js") --apply
+    $closeoutExit = $LASTEXITCODE
+    Write-WrapperLog "MOTHER_CLOSEOUT exit=$closeoutExit"
+    if ($closeoutExit -eq 3) { exit 0 }
+    if ($closeoutExit -eq 0) {
+      & node (Join-Path $RepoRoot "scripts/run-daytrade-module-verifiers.js")
+      exit $LASTEXITCODE
+    }
+    exit $closeoutExit
+  }
+
   if ($Apply -and -not (Invoke-FugleFutoptCollectorReleaseReconcile)) {
     Write-WrapperLog "WARN futopt collector reconcile blocked; canonical gate remains fail-closed"
   }
@@ -522,11 +561,12 @@ try {
   }
   for ($attempt = 1; $attempt -le $attempts; $attempt++) {
     Write-WrapperLog "NODE_ATTEMPT $attempt/$attempts stdout=$StdoutLog stderr=$StderrLog"
-    # The current Mother Pool v4 universe can legitimately need more than 270s.
-    # Keep a small budget below the Windows task's five-minute ceiling so the
-    # canonical verifier and wrapper cleanup can still finish in the same run.
-    $nodeTimeoutSeconds = if ($env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS) { [int]$env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS } else { 285 }
-    if ($nodeTimeoutSeconds -lt 30) { $nodeTimeoutSeconds = 30 }
+    # The task's five-minute ceiling includes calendar, fast sync and setup.
+    # Keep cleanup time; never add a fresh per-child five-minute allowance.
+    $requestedTimeout = if ($env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS) { [int]$env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS } else { 285 }
+    $nodeTimeoutSeconds = Get-WriterProcessBudget -ElapsedSeconds $WrapperClock.Elapsed.TotalSeconds -MaximumSeconds $requestedTimeout
+    Write-WrapperLog "NODE_BUDGET seconds=$nodeTimeoutSeconds elapsed_seconds=$([Math]::Round($WrapperClock.Elapsed.TotalSeconds)) task_limit_seconds=300"
+    if ($nodeTimeoutSeconds -lt 1) { throw 'WRAPPER_TIME_BUDGET_EXHAUSTED:writer' }
     $nodeProcess = Start-Process -FilePath $node -ArgumentList $args -RedirectStandardOutput $StdoutLog -RedirectStandardError $StderrLog -PassThru -WindowStyle Hidden
     if (-not $nodeProcess.WaitForExit($nodeTimeoutSeconds * 1000)) {
       try { Stop-Process -Id $nodeProcess.Id -Force -ErrorAction Stop } catch {}

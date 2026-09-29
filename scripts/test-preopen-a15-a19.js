@@ -1,0 +1,31 @@
+"use strict"; const assert=require("node:assert/strict"); const d=require("../lib/preopen-a15-a19");
+assert.equal(d.a15({prev_high:110,prev_low:100,prev_close:105}).prev_range,10);
+assert.throws(()=>d.a16([{values:Array.from({length:10},()=>1)}]),/A16_LEGACY_VALUES_VERIFIER_RETIRED/);
+assert.equal(d.a17([{symbol:"2330",trade_date:"2026-09-17",capture_slot:"08:45",is_trial:true,trial_price:100}]).data_gap,true);
+assert.equal(d.a15({prev_high:null,prev_low:null,prev_close:null}).data_gap,true);
+assert.equal(d.a19({}).complete,false);
+assert.deepEqual(d.a18([{status:"READY"}]).failed_checks,['A16_NO_ROWS','A17_TRIAL_DATA_GAP']);
+const completeParts={a15:[{status:'READY'}],a16:[{status:'READY',contract:'mother_pool_a16_writer_reference_v1',db_readback_ok:true,source_ready:true}],a17:{complete:true,data_gap:false}};
+assert.equal(d.a18(completeParts).failed_checks.length,0);
+for(const key of ['a15','a16','a17']){const missing={...completeParts};delete missing[key];assert(d.a18(missing).failed_checks.length>0);}
+assert.equal(d.a19({a15:{data_gap:false},a16:[{status:"READY"}],a17:{data_gap:false},a18:{failed_checks:[]}}).complete,false);
+console.log("PASS A15-A19 isolated checks, including mandatory A15/A16/A17 closure evidence");
+
+const ctx={trade_date:'2026-09-29',symbols:['2330','2317'],as_of:'2026-09-29T01:00:00Z'};
+const trials=ctx.symbols.flatMap(symbol=>['08:45','08:50','08:55','08:59'].map(capture_slot=>({symbol,trade_date:ctx.trade_date,capture_slot,is_trial:true,trial_price:100,trial_event_at:`2026-09-29T${capture_slot}:00+08:00`})));
+assert.equal(d.a17(trials,ctx).complete,true);
+assert.equal(d.a17(trials.filter(x=>x.symbol==='2330'),ctx).complete,false);
+assert.equal(d.a17(trials).complete,false);
+for(const change of [{trade_date:'2026-09-24'},{trial_event_at:'2026-09-24T08:45:00+08:00'},{trial_event_at:'2026-09-29T08:46:00+08:00'},{is_trial:false},{trial_price:Infinity},{symbol:'9999'}]){
+ assert.equal(d.a17([{...trials[0],...change},...trials.slice(1)],ctx).complete,false);
+}
+assert.equal(d.a17(trials,{...ctx,as_of:'2026-09-29T00:58:00Z'}).complete,false);
+console.log('PASS A17 fixed universe, date, slot, event time and future sample guards');
+
+const closure={a15:[{data_gap:false}],a16:[{status:'READY',contract:'mother_pool_a16_writer_reference_v1',db_readback_ok:true,source_ready:true}],a17:{complete:true,data_gap:false},a18:{ready:true,failed_checks:[]}};
+assert.equal(d.a19(closure).complete,true);
+for(const key of ['a15','a16','a17','a18']){const incomplete={...closure};delete incomplete[key];assert.equal(d.a19(incomplete).complete,false,key);}
+assert.equal(d.a19({...closure,a15:[{data_gap:true}]}).complete,false);
+assert.equal(d.a19({...closure,a17:{complete:false,data_gap:false}}).complete,false);
+assert.equal(d.a19({...closure,a18:{ready:false,failed_checks:[]}}).complete,false);
+console.log('PASS A19 missing prerequisite and contradictory quality rejection');

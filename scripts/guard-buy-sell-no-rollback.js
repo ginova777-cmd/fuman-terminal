@@ -160,6 +160,17 @@ requireIncludes("run-flow-watchdog.ps1", [
   "watchdog_failed",
   "-watchdog-alert.json",
   "no local cache fallback allowed",
+  "institution-watchdog-contract.ps1",
+  "Test-InstitutionWatchdogEvidence",
+  "official institution scan receipt missing",
+]);
+if (/\$count\s*-lt\s*100|count too low/.test(read("run-flow-watchdog.ps1"))) {
+  fail("run-flow-watchdog.ps1 must not reject valid institution result counts using a hard-coded minimum");
+}
+requireIncludes("scripts/institution-watchdog-contract.ps1", [
+  "institution-candidate90-daily-up-hourly60-bonus-v1",
+  "institution_candidate_coverage_below_90pct",
+  "institution_api_count_does_not_match_scan_receipt",
 ]);
 
 requireIncludes("scripts/send-workflow-alert.js", [

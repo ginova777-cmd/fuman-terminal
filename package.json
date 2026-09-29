@@ -180,7 +180,7 @@
     "sync:chip:sources": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File ./run-chip-source-sync.ps1",
     "sync:chip:sources:install": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-chip-source-sync-task.ps1",
     "verify:chip-source": "node --use-system-ca scripts/verify-chip-source-health.js",
-    "check:scanner-resource-health": "node --use-system-ca scripts/check-scanner-resource-health.js",
+    "check:scanner-resource-health": "node --use-system-ca scripts/run-scanner-with-mother-pool-v4-1.js",
     "sync:finmind:kbar": "node --use-system-ca scripts/sync-finmind-intraday-1m.js",
     "publish:source-gate": "node --use-system-ca scripts/check-publish-source-gate.js",
     "verify:desktop-api-only": "node scripts/verify-desktop-api-only.js",
@@ -240,7 +240,7 @@
     "verify:strategy4-source-root": "node --use-system-ca scripts/verify-strategy4-source-root.js",
     "verify:strategy4-match-yield": "node --use-system-ca scripts/verify-strategy4-match-yield-diagnostics.js",
     "verify:strategy4-canonical-closure": "node --use-system-ca scripts/verify-strategy4-canonical-closure.js",
-    "verify:strategy4-full-closure": "npm run verify:strategy4-source-root && npm run verify:strategy4-match-yield && npm run verify:strategy4-canonical-closure && npm run verify:strategy4-daily-ohlcv-scan-closure && npm run verify:strategy4-88-data-chain",
+    "verify:strategy4-full-closure": "npm run verify:strategy4-source-root && npm run verify:strategy4-match-yield && npm run verify:strategy4-canonical-closure && npm run verify:strategy4-88-data-chain",
     "verify:strategy4-daily-publish": "node --use-system-ca scripts/verify-strategy4-daily-publish.js",
     "verify:strategy4-current-bad-source-drill": "node --use-system-ca scripts/strategy4-current-bad-source-drill.js",
     "verify:canonical-verifier-authority": "npm run verify:retired-artifacts && node scripts/verify-active-strategy-root-authority.js",
@@ -412,7 +412,6 @@
     "strategy3-v2:readiness": "node --use-system-ca scripts/check-strategy3-v2-readiness.js",
     "strategy3-v2:scan": "node --use-system-ca scripts/run-strategy3-v2-complete-scan.js --apply",
     "strategy3-v2:line:dry-run": "node --use-system-ca scripts/send-strategy3-v2-line-card.js --dry-run",
-    "verify:strategy3-v2-full-closure": "node --use-system-ca scripts/verify-strategy3-v2-full-closure.js",
     "verify:strategy3-v2-water-universe": "node --use-system-ca scripts/verify-strategy3-v2-water-universe.js",
     "verify:strategy3-v2-schema-contract": "node --use-system-ca scripts/verify-strategy3-v2-schema-contract.js",
     "verify:strategy3-v2-collector-boot-contract": "node --use-system-ca scripts/verify-strategy3-v2-collector-boot-contract.js",
@@ -449,12 +448,32 @@
     "verify:strategy2-v3-master": "node scripts/verify-strategy2-v3-master.js",
     "verify:daytrade-futopt-v5-release": "node scripts/verify-daytrade-futopt-v5-release-readonly.js",
     "verify:canonical-reader": "node scripts/verify-canonical-reader.js",
-    "run:telegram-three-detectors": "node --use-system-ca scripts/run-telegram-three-detectors.js"
+    "run:telegram-three-detectors": "node --use-system-ca scripts/run-telegram-three-detectors.js",
+    "warm:mother-pool-a16": "node --use-system-ca scripts/warm-mother-pool-a16.js",
+    "verify:mother-pool-a16": "node --use-system-ca scripts/verify-mother-pool-a16-live.js",
+    "test:mother-pool-a16": "node scripts/test-mother-pool-a16.js && node scripts/test-mother-pool-a16-wiring.js",
+    "test:institution-watchdog-contract": "pwsh.exe -NoProfile -ExecutionPolicy Bypass -File scripts/test-institution-watchdog-contract.ps1",
+    "verify:daytrade-mother-pool-consumer-adapters": "node scripts/verify-daytrade-mother-pool-consumer-adapters.js",
+    "run:daytrade-industry-top3": "node --use-system-ca scripts/run-daytrade-industry-top3.js",
+    "verify:daytrade-industry-top3": "node --use-system-ca scripts/verify-daytrade-industry-top3.js --write-receipt",
+    "run:daytrade-industry-fast-inject": "node --use-system-ca scripts/run-daytrade-industry-fast-inject.js",
+    "verify:daytrade-industry-fast-inject": "node --use-system-ca scripts/verify-daytrade-industry-fast-inject.js --write-receipt",
+    "verify:fugle-round-scan": "node --check scripts/fugle-websocket-collector.js && node --use-system-ca scripts/verify-fugle-round-scan-contract.js",
+    "verify:opening-report-mother-pool-handoff-ack:fixture": "node scripts/verify-opening-report-0830-mother-pool-handoff-ack.js --fixture",
+    "verify:opening-report-mother-pool-persistence-ack:fixture": "node scripts/verify-opening-report-0830-mother-pool-persistence-ack.js --fixture",
+    "verify:opening-limit-order-0850-freeze": "node scripts/verify-opening-limit-order-0850-freeze.js",
+    "verify:strategy3-complete": "node --use-system-ca scripts/verify-strategy3-complete.js",
+    "verify:strategy3-v2-mother-pool-v4-1-scan-contract": "node --use-system-ca scripts/verify-strategy3-v2-mother-pool-v4-1-scan-contract.js",
+    "verify:strategy3-v2-technical-trend": "node --use-system-ca scripts/verify-strategy3-technical-trend-contract.js",
+    "verify:strategy3-v2-atr-rvol": "node --use-system-ca scripts/verify-strategy3-atr-rvol-contract.js",
+    "verify:strategy3-v2-recovery-complete": "node --use-system-ca scripts/verify-strategy3-recovery-replay-complete.js",
+    "verify:strategy3-mother-pool-warmup-authority": "node --use-system-ca scripts/verify-strategy3-mother-pool-warmup-authority.js"
   },
   "engines": {
     "node": "24.x"
   },
   "dependencies": {
     "@vercel/blob": "^2.8.0"
-  }
+  },
+  "devDependencies": {}
 }

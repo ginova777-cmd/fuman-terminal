@@ -1,6 +1,8 @@
 const { isAuthorizedMorningRecovery } = require("../lib/opening-report-recovery-seed");
+const { boundedScorecardPayload } = require("../lib/daytrade-scorecard-payload");
 const { isPublishedMotherMember } = require("../lib/daytrade-published-membership");
 const { nativeVolume, typedCollectorVolume, evaluateTurnover, rankTurnover } = require('../lib/daytrade-intraday-turnover');
+const { outsideRatio, normalizeNaturalMinute } = require("../lib/daytrade-source-evidence");
 process.env.FUGLE_COLLECTOR_ROLE = process.env.FUGLE_COLLECTOR_ROLE || "daytrade";
 const fs = require("fs");
 const path = require("path");
@@ -21,11 +23,16 @@ const {
   deriveDaytradeSideVolumeContract,
 } = require("../lib/daytrade-side-volume-contract");
 const { mergeOpeningReportEvidence } = require("../lib/opening-report-0830-mother-pool-evidence");
-const { preserveMorningWatchRows } = require("../lib/opening-report-writer-preservation");
+const { preserveMorningWatchRows, validMorningBoostRank } = require("../lib/opening-report-writer-preservation");
 const { mergeCurrentDayCandlePrioritySymbols } = require("../lib/daytrade-candle-priority-persistence");
 const { buildDaytradeIndustryPrewarm } = require("../lib/daytrade-industry-prewarm");
 const DAYTRADE_INDUSTRY_PREWARM_CONFIG = require("../data/daytrade-industry-prewarm-v1.json");
 const { isTwseTradingDay } = require("./twse-trading-day");
+const contextDetectors = require("../lib/intraday-context-detectors-b19-b24");
+const preopenA15A19 = require("../lib/preopen-a15-a19");
+const a16Writer = require("../lib/mother-pool-a16-writer");
+const { resolveStrategyHandoff, SOURCE_REGISTRY, previousCompletedTradingDate } = require("../lib/terminal-strategy-morning-handoff");
+
 
 const SOURCE_NAME = process.env.DAYTRADE_SOURCE_NAME || "fugle_daytrade_source";
 const SOURCE_HOST_ID = String(process.env.FUMAN_DAYTRADE_SOURCE_HOST_ID || process.env.FUMAN_SOURCE_HOST_ID || process.env.COMPUTERNAME || "unknown").trim();
@@ -51,10 +58,6 @@ const STRATEGY_PRIORITY_BRIDGE_REFRESH_MS = Math.max(
   60000,
   Number(process.env.DAYTRADE_STRATEGY_PRIORITY_BRIDGE_REFRESH_MS || 300000),
 );
-const STRATEGY_PRIORITY_BRIDGE_MAX_ROWS = Math.max(
-  40,
-  Math.min(300, Number(process.env.DAYTRADE_STRATEGY_PRIORITY_BRIDGE_MAX_ROWS || 160)),
-);
 let lastStrategyPriorityBridgeRefreshAt = 0;
 let strategyPriorityBridgeRefreshPromise = null;
 
@@ -66,15 +69,16 @@ async function prioritizeIntradayFiveMinuteStrong(rows) {
   const snapshot = readMotherPoolSnapshot(tradeDate);
   if (!intradayWindow(Date.now(), tradeDate)) return applyFiveMinutePriority(rows, [], null, snapshot);
   try {
-    const receipts = await supabaseGet("v_fugle_intraday_5m_verification_readback",
-      `select=*&trade_date=eq.${tradeDate}&order=verified_at.desc&limit=1`);
-    const receipt = receipts[0];
-    if (!receipt?.run_id) return applyFiveMinutePriority(rows, [], null, snapshot);
-    const strong = await supabaseGetPaged(
-      "v_fugle_intraday_5m_batch_readback",
-      `select=*&trade_date=eq.${tradeDate}&run_id=eq.${encodeURIComponent(receipt.run_id)}&order=symbol.asc`,
-    );
-    return applyFiveMinutePriority(rows, strong, receipt, snapshot);
+    if (!snapshot.ok) return applyFiveMinutePriority(rows, [], null, snapshot);
+    const asOf = nowIso();
+    const source = await require('../lib/mother-pool-five-minute-source').read({
+      snapshot: snapshot.snapshot, asOf, runtime: runtimePath(), get: supabaseGet, paged: supabaseGetPaged,
+    });
+    const identity = { trade_date: tradeDate, canonical_run_id: snapshot.snapshot.canonical_run_id,
+      mother_pool_run_id: snapshot.snapshot.mother_pool_run_id,
+      snapshot_sequence: snapshot.snapshot.snapshot_sequence, snapshot_generation: snapshot.snapshot.generation };
+    return require('../lib/mother-pool-five-minute-priority').apply(rows,
+      { identity, snapshot: snapshot.snapshot, ...source, asOf }, Date.parse(asOf));
   } catch (error) {
     console.warn(JSON.stringify({ event: "intraday_5m_priority_readback_degraded", error: error?.message || String(error) }));
     const result = applyFiveMinutePriority(rows, [], null, snapshot);
@@ -120,6 +124,15 @@ function ensureDailyStockMasterComplete() {
 
 const STRATEGY_PRIORITY_BRIDGE_SOURCES = [
   {
+    key: "strategy2",
+    latestResource: "strategy2_scan_runs",
+    latestQuery: "select=*&strategy=eq.strategy2&complete=eq.true&order=finished_at.desc&limit=1",
+    resultsResource: "strategy2_scan_results",
+    resultSelect: "code,rank,score,complete,quality_status,scan_date,run_id,payload",
+    codeMode: "stock",
+    sourceContract: "strategy2-live-v3",
+  },
+  {
     key: "strategy3",
     latestResource: "v_strategy3_v2_latest_complete_run",
     latestQuery: "select=*&limit=1",
@@ -153,6 +166,12 @@ const STRATEGY_PRIORITY_BRIDGE_SOURCES = [
     resultSelect: "code,rank,complete,quality_status,scan_date,run_id,payload",
     codeMode: "stock",
   },
+  {
+    key: "ranking",
+    adapter: "turnover_receipt",
+    contract: "daytrade_intraday_turnover_verifier_v1",
+    codeMode: "stock",
+  },
 ];
 const WARMUP_EVIDENCE_DIR = process.env.DAYTRADE_UNATTENDED_OUTPUT_DIR || "C:/Users/ginov/Documents/Codex/buy-sell-autonomy-main/outputs";
 const HEATMAP_LATEST_FILES = [
@@ -165,6 +184,9 @@ const MOPS_OFFICIAL_INDUSTRY_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
 const APPLY = hasFlag("apply") || envFlag("FUMAN_DAYTRADE_WRITER_APPLY");
 const DRY_RUN = !APPLY;
+// Bound the pre-open scorecard to the A01-A19 warmup contract. The wrapper
+// clears this flag after 09:00 so the full intraday payload is retained.
+const PREOPEN_LIGHT_MODE = process.env.DAYTRADE_PREOPEN_LIGHT_MODE === "1";
 const LOCAL_CHECK = hasFlag("local-check");
 const NO_FETCH = hasFlag("no-fetch") || envFlag("FUMAN_DAYTRADE_WRITER_NO_FETCH");
 let FETCH_ENABLED = false;
@@ -183,8 +205,8 @@ const DEFAULT_CONFIG = {
     targetFreshQuotes: 1500,
     minFreshQuoteCoverage: 0.9,
     requiredSymbolsPerSecond: 12.5,
-    maxQuoteAgeSeconds: 90,
-    selectedSymbolMaxQuoteAgeSeconds: 60,
+    maxQuoteAgeSeconds: 120,
+    selectedSymbolMaxQuoteAgeSeconds: 120,
   },
   priorityPool: {
     targetSymbolsMin: 300,
@@ -218,13 +240,16 @@ const WINDOW_SECONDS = positiveNumber(CONFIG.speedTargets?.freshQuoteWindowSecon
 const TARGET_FRESH_QUOTES = positiveNumber(CONFIG.speedTargets?.targetFreshQuotes, 1500);
 const REQUIRED_SYMBOLS_PER_SECOND = positiveNumber(CONFIG.speedTargets?.requiredSymbolsPerSecond, TARGET_FRESH_QUOTES / WINDOW_SECONDS);
 const MIN_FRESH_QUOTE_COVERAGE = positiveNumber(CONFIG.speedTargets?.minFreshQuoteCoverage, 0.9);
-const MAX_QUOTE_AGE_SECONDS = positiveNumber(CONFIG.speedTargets?.maxQuoteAgeSeconds, 90);
-const SELECTED_SYMBOL_MAX_AGE_SECONDS = positiveNumber(CONFIG.speedTargets?.selectedSymbolMaxQuoteAgeSeconds, 60);
+const MAX_QUOTE_AGE_SECONDS = positiveNumber(CONFIG.speedTargets?.maxQuoteAgeSeconds, 120);
+const SELECTED_SYMBOL_MAX_AGE_SECONDS = positiveNumber(CONFIG.speedTargets?.selectedSymbolMaxQuoteAgeSeconds, 120);
 const MIN_PRIORITY_POOL_SYMBOLS = 1; // Formal Gate evaluates the dynamic deep-scan pool, never a fixed priority count.
 const MAX_PRIORITY_POOL_SYMBOLS = 600;
 const MIN_PRIORITY_FRESH_COVERAGE = positiveNumber(CONFIG.priorityPool?.minFreshQuoteCoverageForA, 0.90);
 const MIN_PRIORITY_INJECTING_QUOTES = positiveNumber(CONFIG.priorityPool?.minFreshQuotesForInjectingA, 1);
-const DEEP_SCAN_POOL_MAX_SYMBOLS = Math.max(1, positiveNumber(process.env.DAYTRADE_DEEP_SCAN_POOL_MAX_SYMBOLS, 1000));
+// The intraday contract limits each deep-scan round to 60 symbols.  An
+// explicit deployment override remains possible, but the safe default must
+// not silently expand a round to the whole pool.
+const DEEP_SCAN_POOL_MAX_SYMBOLS = Math.max(1, Math.min(60, Math.floor(positiveNumber(process.env.DAYTRADE_DEEP_SCAN_POOL_MAX_SYMBOLS, 60))));
 const FORMAL_SIGNAL_MIN_TOTAL_VOLUME = positiveNumber(process.env.DAYTRADE_FORMAL_SIGNAL_MIN_TOTAL_VOLUME, 5000);
 const FORMAL_SIGNAL_MIN_TRADE_VALUE = positiveNumber(process.env.DAYTRADE_FORMAL_SIGNAL_MIN_TRADE_VALUE, 30000000);
 const FORMAL_SIGNAL_MAX_VOLUME_RANK = positiveNumber(process.env.DAYTRADE_FORMAL_SIGNAL_MAX_VOLUME_RANK, 300);
@@ -310,6 +335,7 @@ const INTRADAY_STATUS_CACHE_SYNC_INTERVAL_MS = Math.max(
 let lastIntradayStatusCacheSyncAt = 0;
 const DAILY_VOLUME_MIRROR_SYNC_INTERVAL_MS = Math.max(60000, Number(process.env.DAYTRADE_DAILY_VOLUME_MIRROR_SYNC_INTERVAL_MS || 300000));
 let lastDailyVolumeMirrorSyncAt = 0;
+let writerTickIdentity = null;
 let writerLease = { ok: !APPLY, status: APPLY ? "not_claimed" : "dry_run", leaseExpiresAt: "" };
 
 function hasFlag(name) {
@@ -357,7 +383,11 @@ function writeJson(file, payload) {
 function writeJsonAtomic(file, payload) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const temporary = `${file}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(temporary, `${JSON.stringify(payload, null, 2)}\n`, { flag: "w" });
+  const descriptor = fs.openSync(temporary, "wx");
+  try {
+    fs.writeFileSync(descriptor, `${JSON.stringify(payload, null, 2)}\n`);
+    fs.fsyncSync(descriptor);
+  } finally { fs.closeSync(descriptor); }
   fs.renameSync(temporary, file);
 }
 
@@ -634,14 +664,17 @@ async function supabaseGet(resource, query = "", options = {}) {
 
 async function supabaseGetPaged(resource, query = "", options = {}) {
   const key = requireSupabaseKey(Boolean(options.service));
-  const pageSize = Math.max(1, Math.min(Number(options.pageSize || 1000), 1000));
+  const pageSize = Math.max(1, Math.min(Number(options.pageSize || 500), 500));
+  const maxRows = Math.max(pageSize, Math.min(100000, Number(options.maxRows || 20000)));
   const rows = [];
-  for (let offset = 0; offset < 20000; offset += pageSize) {
+  let exactTotal = null;
+  for (let offset = 0; offset < maxRows; offset += pageSize) {
     const url = `${SUPABASE_URL}/rest/v1/${resource}${query ? `?${query}` : ""}`;
     const response = await supabaseFetch(url, {
       method: "GET",
       headers: {
         ...headers(key),
+        ...(options.requireExactCount ? { Prefer: "count=exact" } : {}),
         Range: `${offset}-${offset + pageSize - 1}`,
       },
       signal: AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_READ_TIMEOUT_MS) : undefined,
@@ -649,24 +682,37 @@ async function supabaseGetPaged(resource, query = "", options = {}) {
     const text = await response.text();
     if (!response.ok) throw new Error(`${resource} HTTP ${response.status}: ${text.slice(0, 240)}`);
     const page = text ? JSON.parse(text) : [];
+    if (options.requireExactCount) {
+      const range = String(response.headers.get('content-range') || '');
+      const match = /^(?:(\d+)-(\d+)|\*)\/(\d+)$/.exec(range);
+      if (!Array.isArray(page) || !match) throw new Error('paged_exact_count_evidence_missing');
+      if (page.length > pageSize) throw new Error('paged_response_exceeds_requested_range');
+      const total = Number(match[3]);
+      if (total > maxRows) throw new Error('paged_exact_count_exceeds_budget');
+      if (exactTotal !== null && total !== exactTotal) throw new Error('paged_exact_count_changed');
+      exactTotal = total;
+      if (page.length && (Number(match[1]) !== offset || Number(match[2]) - offset + 1 !== page.length)) throw new Error('paged_range_mismatch');
+      if (page.length < pageSize && rows.length + page.length !== total) throw new Error('paged_truncated_before_total');
+    }
+    if (Array.isArray(options.pageEvidence)) options.pageEvidence.push({offset,requested:pageSize,http_status:response.status,rows:Array.isArray(page)?page.length:null,content_range:response.headers.get('content-range'),...(options.captureRows?{row_data:page}:{})});
     if (!Array.isArray(page) || page.length === 0) break;
     rows.push(...page);
+    if (options.requireExactCount && rows.length === exactTotal) break;
     if (page.length < pageSize) break;
   }
+  if (options.requireExactCount && rows.length !== exactTotal) throw new Error('paged_exact_count_incomplete');
   return rows;
 }
 
 async function supabaseRpc(resource, body, options = {}) {
   const key = requireSupabaseKey(Boolean(options.service));
-  const response = await supabaseFetch(`${SUPABASE_URL}/rest/v1/rpc/${resource}`, {
-    method: 'POST',
-    headers: headers(key),
-    body: JSON.stringify(body || {}),
-    signal: AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_READ_TIMEOUT_MS) : undefined,
+  return require('../lib/daytrade-rpc-observation').invoke({resource,
+    send:()=>supabaseFetch(`${SUPABASE_URL}/rest/v1/rpc/${resource}`, {
+      method:'POST',headers:headers(key),body:JSON.stringify(body || {}),
+      signal:AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_READ_TIMEOUT_MS) : undefined,
+    }),
+    onFailure:evidence=>console.error(JSON.stringify({...evidence,checkedAt:nowIso()})),
   });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`${resource} RPC HTTP ${response.status}: ${text.slice(0, 240)}`);
-  return text ? JSON.parse(text) : [];
 }
 
 function ensureApprovedSourceHost() {
@@ -713,23 +759,36 @@ async function ensureWriterLease() {
     heartbeatAt: lease.heartbeat_at || nowIso(),
     leaseExpiresAt: lease.lease_expires_at || "",
     leaseSeconds: WRITER_LEASE_SECONDS,
+    rpcEvidence: lease,
   };
   return writerLease;
 }
 
 async function supabaseUpsert(resource, rows, conflict, options = {}) {
+  if(resource==='fugle_daytrade_priority_pool'&&rows.length&&!DRY_RUN){
+    const guard=supabaseUpsert.priorityRoundGuard||(supabaseUpsert.priorityRoundGuard=require('../lib/daytrade-priority-round-write-guard').create());
+    return guard.run(rows,()=>supabaseUpsertUnchecked(resource,rows,conflict,options));
+  }
+  return supabaseUpsertUnchecked(resource,rows,conflict,options);
+}
+async function supabaseUpsertUnchecked(resource, rows, conflict, options = {}) {
   if (!rows.length) return { written: 0, skipped: true };
   if (DRY_RUN) return { written: 0, skipped: true, dryRun: true };
   const key = requireSupabaseKey(true);
   let written = 0;
   const batchSize = Math.max(1, Math.min(Number(options.batchSize || 300), 500));
   const writeTimeoutMs = Math.max(SUPABASE_WRITE_TIMEOUT_MS, Number(options.timeoutMs || 0));
-  const retries = Math.max(0, Math.min(Number(options.retries || 0), 2));
+  const retries = resource==='fugle_daytrade_priority_pool'?0:Math.max(0, Math.min(Number(options.retries || 0), 2));
   const retryDelayMs = Math.max(250, Math.min(Number(options.retryDelayMs || 1000), 5000));
   for (let i = 0; i < rows.length; i += batchSize) {
-    const chunk = rows.slice(i, i + batchSize);
+    const chunk = JSON.parse(JSON.stringify(rows.slice(i, i + batchSize)));
+    const body = JSON.stringify(chunk);
+    const tracePriority = resource==='fugle_daytrade_priority_pool';
+    const batchEvidence = tracePriority ? {resource,offset:i,requested:chunk.length,bytes:Buffer.byteLength(body),sha256:require('node:crypto').createHash('sha256').update(body).digest('hex'),writer_run_id:chunk[0]?.payload?.writer_run_id,generation_id:chunk[0]?.payload?.generation_id} : null;
     let lastError = null;
     for (let attempt = 0; attempt <= retries; attempt += 1) {
+      const started = Date.now();
+      if(tracePriority)console.log(JSON.stringify({stage:'priority_pool_batch:start',...batchEvidence,attempt}));
       try {
         const response = await fetch(`${SUPABASE_URL}/rest/v1/${resource}?on_conflict=${encodeURIComponent(conflict)}`, {
           method: "POST",
@@ -737,7 +796,7 @@ async function supabaseUpsert(resource, rows, conflict, options = {}) {
             ...headers(key),
             Prefer: "resolution=merge-duplicates",
           },
-          body: JSON.stringify(chunk),
+          body,
           signal: AbortSignal.timeout ? AbortSignal.timeout(writeTimeoutMs) : undefined,
         });
         if (!response.ok) {
@@ -745,10 +804,21 @@ async function supabaseUpsert(resource, rows, conflict, options = {}) {
           throw new Error(`${resource} upsert HTTP ${response.status}: ${responseText.slice(0, 240)}`);
         }
         written += chunk.length;
+        if(tracePriority)console.log(JSON.stringify({stage:'priority_pool_batch:ack',...batchEvidence,attempt,http_status:response.status,written:chunk.length,elapsed_ms:Date.now()-started}));
         lastError = null;
         break;
       } catch (error) {
         lastError = error;
+        if(tracePriority)console.error(JSON.stringify({stage:'priority_pool_batch:unconfirmed',...batchEvidence,attempt,error_name:error?.name||'Error',elapsed_ms:Date.now()-started}));
+        if(resource==='fugle_daytrade_priority_pool'&&['TimeoutError','AbortError'].includes(error?.name)){
+          const expected=JSON.parse(JSON.stringify(chunk));
+          const query=new URLSearchParams({select:Object.keys(expected[0]).join(','),symbol:'in.('+expected.map(r=>r.symbol).join(',')+')',order:'symbol.asc'});
+          for(const field of ['trade_date','canonical_run_id','writer_run_id','generation_id'])query.set('payload->>'+field,'eq.'+expected[0].payload[field]);
+          const actual=await supabaseGetPaged(resource,query.toString(),{service:true,requireExactCount:true,pageSize:500,maxRows:500});
+          const ack=require('../lib/daytrade-priority-write-ack').verify(expected,actual);
+          console.log(JSON.stringify({stage:'priority_pool_chunk_ack',...ack}));
+          written+=chunk.length;lastError=null;break;
+        }
         const message = String(error?.message || error || "");
         const retryable = attempt < retries && /timeout|aborted|502|503|504|522|429|ECONNRESET|ETIMEDOUT/i.test(message);
         if (!retryable) throw error;
@@ -835,6 +905,7 @@ function readWriterState() {
     lastRestFallbackAt: state.lastRestFallbackAt || "",
     lastRestFallbackOutcome: state.lastRestFallbackOutcome || "",
     intradayMirrorCursor: Math.max(0, Number(state.intradayMirrorCursor || 0)),
+    daytradeMotherPoolCandleMirror: state.daytradeMotherPoolCandleMirror || null,
   };
 }
 
@@ -888,7 +959,7 @@ function evaluateMotherPoolBasePool(row, metrics) {
     payload.dispositionStatus,
     payload.disposition_status,
   ].filter(Boolean).join(" ").toLowerCase();
-  const statusControlled = ["disposition", "split trading", "split-trading", "controlled", "restricted", "halted", "suspended", "\\u8655\\u7f6e", "\\u5206\\u76e4", "\\u505c\\u724c", "\\u4eba\\u5de5\\u7ba1\\u5236"].some((term) => statusText.includes(term));
+  const statusControlled = ["disposition", "split trading", "split-trading", "controlled", "restricted", "halted", "suspended", "處置", "分盤", "停牌", "人工管制"].some((term) => statusText.includes(term));
   const dispositionFlag = [
     payload.isDisposition,
     payload.is_disposition,
@@ -1025,6 +1096,7 @@ async function fetchActiveSymbols() {
     });
   }
   active.sort((a, b) => a.symbol.localeCompare(b.symbol));
+  active.sourceEvidence = { stock_tickers: rows, stock_universe: universeRows, observed_at: nowIso() };
   return active;
 }
 function dailyVolumeRowsToMap(rows, source) {
@@ -1049,37 +1121,38 @@ async function fetchRecentThreeDayAverageVolume() {
   if (recentThreeDayVolumeCache.tradeDate === tradeDate && Date.now() - recentThreeDayVolumeCache.loadedAt <= 30 * 60 * 1000) {
     return recentThreeDayVolumeCache;
   }
-  const fromDate = taipeiDateDaysAgo(14);
-  const rows = await supabaseGetPaged(
-    "strategy4_daily_ohlcv_view",
-    `select=symbol,trade_date,volume_lots&trade_date=gte.${fromDate}&trade_date=lt.${tradeDate}&order=trade_date.desc,symbol.asc`,
-    { service: true, pageSize: 1000 },
-  );
-  const samplesBySymbol = new Map();
-  for (const row of rows) {
-    const symbol = normalizeCode(row.symbol);
-    const date = String(row.trade_date || "").slice(0, 10);
-    const volumeLots = numberValue(row.volume_lots);
-    if (!symbol || !date || volumeLots < 0) continue;
-    const samples = samplesBySymbol.get(symbol) || [];
-    if (!samples.some((sample) => sample.trade_date === date) && samples.length < 3) samples.push({ trade_date: date, volume_lots: volumeLots });
-    samplesBySymbol.set(symbol, samples);
-  }
-  const bySymbol = new Map();
-  for (const [symbol, samples] of samplesBySymbol.entries()) {
-    if (samples.length !== 3) continue;
-    bySymbol.set(symbol, {
-      avg_volume3: samples.reduce((sum, sample) => sum + sample.volume_lots, 0) / 3,
-      avg_volume3_sample_days: 3,
-      avg_volume3_dates: samples.map((sample) => sample.trade_date),
-      avg_volume3_source: "strategy4_daily_ohlcv_view:prior_3_trading_days",
-    });
+  const calendar=await require('../lib/mother-pool-historical-sessions').selectSessions({tradeDate,resolveDay:date=>require('./twse-trading-day').isTwseTradingDay(date,{stateDir:statePath(''),ignoreOverrides:true})});
+  const dates=require('../lib/mother-pool-daily-volume-baseline').datesFromCalendar(calendar,tradeDate);
+  const historyDates=require('../lib/mother-pool-daily-volume-baseline').datesFromCalendar(calendar,tradeDate,15);
+  const historyQuery=`select=symbol,trade_date,volume_lots,open,high,low,close&trade_date=gte.${historyDates[0]}&trade_date=lt.${tradeDate}&order=trade_date.desc,symbol.asc`;
+  const historyCache=require('../lib/daytrade-historical-read-cache');
+  const historyCacheFile=runtimePath('data','historical-read-cache','daily-ohlcv-'+tradeDate+'.json');
+  const historyScope={tradeDate,source:'strategy4_daily_ohlcv_view',query:historyQuery,sessionDates:calendar.session_dates};
+  const cachedHistory=historyCache.load(historyCacheFile,historyScope);
+  const dailyReadAt=cachedHistory?.readAt||nowIso();
+  const rows=cachedHistory?.rows||await supabaseGetPaged('strategy4_daily_ohlcv_view',historyQuery,{service:true,pageSize:500,maxRows:60000,requireExactCount:true});
+  if(!cachedHistory){try{historyCache.save(historyCacheFile,historyScope,rows,dailyReadAt);}catch(error){console.error(JSON.stringify({stage:'historical_cache_save_failed',message:error.message}));}}
+  console.log(JSON.stringify({stage:'historical_daily_read',cache_hit:Boolean(cachedHistory),source_read_at:dailyReadAt,rows:rows.length,trade_date:tradeDate}));
+  const bySymbol=new Map(),rowsBySymbol=new Map();
+  for(const row of rows){if(!rowsBySymbol.has(row.symbol))rowsBySymbol.set(row.symbol,[]);rowsBySymbol.get(row.symbol).push(row);}
+  for(const symbol of new Set(rows.map(r=>normalizeCode(r.symbol)).filter(Boolean))){
+    const symbolRows=rowsBySymbol.get(symbol)||[];
+    const evidence=require('../lib/mother-pool-daily-volume-baseline').build({symbol,tradeDate,rows:symbolRows,calendar});
+    const historicalEvidence={symbol,trade_date:tradeDate,source:'strategy4_daily_ohlcv_view',volume_unit:'LOTS',dates:historyDates,calendar,rows:symbolRows.filter(r=>historyDates.includes(r.trade_date))};
+    const historicalVolume=require('../lib/mother-pool-historical-volume').evaluate({symbol,tradeDate,evidence:historicalEvidence});
+    const recentDates=dates.slice(-3),recent=symbolRows.filter(r=>recentDates.includes(r.trade_date));
+    const validThree=recentDates.every(d=>recent.filter(r=>r.trade_date===d).length===1)&&recent.every(r=>typeof r.volume_lots==='number'&&Number.isFinite(r.volume_lots)&&r.volume_lots>=0);
+    bySymbol.set(symbol,{avg_volume5:evidence.avg_volume5,daily_volume_evidence:evidence,daily_ohlcv_read_at:dailyReadAt,
+      historical_daily_evidence:historicalEvidence,historical_volume_evidence:historicalVolume,
+      avg_volume3:validThree?recent.reduce((n,r)=>n+r.volume_lots,0)/3:null,avg_volume3_sample_days:validThree?3:0,
+      avg_volume3_dates:recentDates,avg_volume3_source:'strategy4_daily_ohlcv_view:prior_3_trading_days'});
   }
   recentThreeDayVolumeCache = { loadedAt: Date.now(), tradeDate, source: "strategy4_daily_ohlcv_view", bySymbol };
   return recentThreeDayVolumeCache;
 }
 
 async function fetchDailyVolumeAvg() {
+  const tickStage = (stage, extra = {}) => console.log(JSON.stringify({ stage, checkedAt: new Date().toISOString(), ...extra }));
   const sources = [
     {
       resource: "fugle_daytrade_daily_volume_avg",
@@ -1117,7 +1190,10 @@ async function fetchDailyVolumeAvg() {
     let loaded = false;
     for (const service of [true, false]) {
       try {
-        const rows = await supabaseGetPaged(spec.resource, spec.query, { service, pageSize: 1000 });
+        tickStage("daily_volume:source:start", { resource: spec.resource, service });
+        const sourceStartedAt = Date.now();
+        const rows = await supabaseGetPaged(spec.resource, spec.query, { service, pageSize: 500 });
+        tickStage("daily_volume:source:complete", { resource: spec.resource, service, rows: rows.length, elapsed_ms: Date.now() - sourceStartedAt });
         const map = dailyVolumeRowsToMap(rows, `${spec.source}${service ? "" : "_anon_retry"}`);
         for (const [symbol, row] of map.entries()) {
           if (!combined.has(symbol) || shouldReplace(combined.get(symbol), row)) combined.set(symbol, row);
@@ -1135,13 +1211,17 @@ async function fetchDailyVolumeAvg() {
     if (!loaded && spec.resource === "fugle_daytrade_daily_volume_avg" && combined.size >= DEEP_SCAN_POOL_MAX_SYMBOLS) break;
   }
   try {
+    tickStage("daily_volume:recent_three_day:start");
+    const recentStartedAt = Date.now();
     const recentThreeDay = await fetchRecentThreeDayAverageVolume();
+    tickStage("daily_volume:recent_three_day:complete", { rows: recentThreeDay.bySymbol.size, elapsed_ms: Date.now() - recentStartedAt });
     for (const [symbol, history] of recentThreeDay.bySymbol.entries()) {
       combined.set(symbol, { ...(combined.get(symbol) || { symbol }), ...history });
     }
     combined.recentThreeDaySource = recentThreeDay.source;
   } catch (error) {
     readErrors.push({ resource: "strategy4_daily_ohlcv_view", service: true, message: error?.message || String(error) });
+    tickStage('daily_volume:recent_three_day:failed', {error:require('../lib/daytrade-diagnostic-errors').encodeDiagnosticError({target:'strategy4_daily_ohlcv_view',message:error?.message||String(error)})});
     combined.recentThreeDaySource = "unavailable";
   }
   combined.source = combined.source || "missing_daily_volume";
@@ -1454,6 +1534,7 @@ function mergeWebSocketQuoteCache(quoteMap) {
         received_at: receivedAt,
         aggregate_last_updated: aggregateLastUpdated,
         turnoverVolumeEvidence: row.turnoverVolumeEvidence || typedCollectorVolume(row),
+        tradeValueEvidence: row.tradeValueEvidence || null,
         trial_event_at: normalizeTimestamp(
           row.trialEventAt || row.trial_event_at || row.payload?.trialEventAt || previous.trial_event_at || previous.payload?.trial_event_at,
           "",
@@ -1594,6 +1675,7 @@ function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, 
     ) || (previousVolume > 0 && metrics.totalVolume > previousVolume);
     return {
       symbol,
+      source_evidence: {quote:quoteMap.get(symbol)||null,quote_event_at:quoteFreshnessTime(quoteMap.get(symbol)),daily_baseline:dailyVolumeMap.get(symbol)?.daily_volume_evidence||null,intraday_status:intraday},
       name: row.name || symbol,
       changePercent: Number(metrics.changePercent.toFixed(4)),
       totalVolume: Math.round(metrics.totalVolume),
@@ -1620,9 +1702,11 @@ function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, 
       gainAbove2: metrics.changePercent > 2,
     };
   });
-  const volumeRanks = rankMap(rows, (row) => row.totalVolume, { minValue: 0 });
+  const discoveryCheckedAt=nowIso();
+  for(const row of rows)row.source_verification=require('../lib/verify-mother-pool-discovery-source').inspect(row,taipeiDate(),discoveryCheckedAt);
+  const volumeRanks = rankMap(rows.filter(row=>row.source_verification.status==='SOURCE_VERIFIED'), (row) => row.totalVolume, { minValue: 0 });
   for (const row of rows) row.volumeRank = volumeRanks.get(row.symbol)?.rank || 0;
-  const fresh = rows.filter((row) => row.quoteAgeSeconds <= WINDOW_SECONDS);
+  const fresh = rows.filter((row) => row.quoteAgeSeconds <= WINDOW_SECONDS && row.source_verification.status==='SOURCE_VERIFIED');
   const bullish = fresh.filter((row) => row.gainAbove2 && row.ma5Ma10Ma20Bullish && row.volumeExpanding && row.totalVolume > 0);
   const volumeSurgeTop100 = fresh.filter((row) => row.totalVolume > 10000 && row.volumeRatio5 >= 2 && row.volumeExpanding && row.recent1mVolumeNotShrinking && row.volumeRank > 0 && row.volumeRank <= 100);
   const compact = (row) => ({
@@ -1651,6 +1735,8 @@ function buildFullMarketIntradaySignalEvidence({ activeSymbols, dailyVolumeMap, 
   return {
     source: "fugle_daytrade_quotes_live+v_fugle_daytrade_intraday_1m_status",
     universe: "full_market_active_common_stock",
+    requested_symbols:activeSymbols.map(row=>row.symbol),
+    source_rows:rows,
     activeSymbols: activeSymbols.length,
     freshQuoteSymbols: fresh.length,
     freshQuoteCoverage120s: activeSymbols.length ? Number((fresh.length / activeSymbols.length).toFixed(4)) : 0,
@@ -1682,7 +1768,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const intraday = supplementalMaps.intradayMap?.get(symbol) || {};
   const capital = supplementalMaps.capitalMap?.get(symbol) || {};
   const intradayTurnover = evaluateTurnover({ symbol, master: activeRow.turnoverMaster,
-    volume: payload.turnoverVolumeEvidence || {}, tradeDate: taipeiDate(), now: nowIso() });
+    volume: payload.turnoverVolumeEvidence || {}, tradeDate: taipeiDate(), now: supplementalMaps.turnoverCalculatedAt || nowIso() });
   const chip = supplementalMaps.chipMap?.get(symbol) || {};
   const margin = supplementalMaps.marginChangeMap?.get(symbol) || {};
   const stockFuture = supplementalMaps.stockFutureInitialMap?.get(symbol) || {};
@@ -1862,7 +1948,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
   const insideVolume = firstNumber(sideVolumeContract.insideVolume);
   const outsideVolume = firstNumber(sideVolumeContract.outsideVolume);
   const sideTotal = firstNumber(sideVolumeContract.sideVolumeTotal);
-  const outsideInsideRatio = insideVolume > 0 ? outsideVolume / insideVolume : outsideVolume > 0 ? 99 : 0;
+  const outsideInsideRatio = outsideRatio(insideVolume, outsideVolume);
   const outsideVolumeGeInsideTimes2 = sideVolumeContract.sideVolumeAvailable === true
     && outsideVolume > 0
     && outsideVolume >= insideVolume * 2;
@@ -1891,8 +1977,6 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     dailyPayload.turnover_rate_3d,
     dailyPayload.turnover3d,
     dailyPayload.avg_turnover_rate_3d,
-    avgTurnoverRate5,
-    turnoverRate,
   );
   const turnoverRate5d = firstNumber(
     payload.turnoverRate5d,
@@ -1903,10 +1987,8 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     dailyPayload.turnover_rate_5d,
     dailyPayload.turnover5d,
     dailyPayload.avg_turnover_rate_5d,
-    avgTurnoverRate5,
-    turnoverRate,
   );
-  const turnoverRate3To5d = Math.max(turnoverRate3d, turnoverRate5d, turnoverRate);
+  const turnoverRate3To5d = Math.max(turnoverRate3d, turnoverRate5d);
   const foreignNet = firstNumber(payload.foreignNet, payload.foreign_net, payload.foreign_buy_sell, dailyPayload.foreignNet, dailyPayload.foreign_net, chip.foreignNet);
   const trustNet = firstNumber(payload.trustNet, payload.trust_net, payload.investment_trust_net, dailyPayload.trustNet, dailyPayload.trust_net, chip.trustNet);
   const dealerNet = firstNumber(payload.dealerNet, payload.dealer_net, dailyPayload.dealerNet, dailyPayload.dealer_net, chip.dealerNet);
@@ -2250,12 +2332,12 @@ async function fetchIntradayStatus(activeSymbols = []) {
       }
       const chronologicalHighs = (current._highs || []).slice().reverse();
       const chronologicalLows = (current._lows || []).slice().reverse();
-      if (chronologicalCloses.length >= 9 && chronologicalHighs.length >= 9 && chronologicalLows.length >= 9) {
+      if (chronologicalCloses.length >= 5 && chronologicalHighs.length >= 5 && chronologicalLows.length >= 5) {
         let k = 50;
         let d = 50;
-        for (let i = 8; i < chronologicalCloses.length; i += 1) {
-          const high = Math.max(...chronologicalHighs.slice(i - 8, i + 1));
-          const low = Math.min(...chronologicalLows.slice(i - 8, i + 1));
+        for (let i = 4; i < chronologicalCloses.length; i += 1) {
+          const high = Math.max(...chronologicalHighs.slice(i - 4, i + 1));
+          const low = Math.min(...chronologicalLows.slice(i - 4, i + 1));
           const rsv = high > low ? ((chronologicalCloses[i] - low) / (high - low)) * 100 : 50;
           k = ((2 * k) + rsv) / 3;
           d = ((2 * d) + k) / 3;
@@ -2266,6 +2348,7 @@ async function fetchIntradayStatus(activeSymbols = []) {
         current.kd_k = null;
         current.kd_d = null;
       }
+      // Legacy RSI14 cache column is retained for schema compatibility only; strategy gates calculate shared RSI3/6 from OHLCV.
       if (chronologicalCloses.length >= 15) {
         const recent = chronologicalCloses.slice(-15);
         let gains = 0;
@@ -2316,13 +2399,17 @@ async function fetchIntradayStatus(activeSymbols = []) {
     try {
       const symbols = [...new Set((activeSymbols || []).map((row) => normalizeCode(row.symbol || row)).filter(Boolean))];
       const rows = [];
+      const rawWarmupRows = [], warmupPages = [];
       for (let index = 0; index < symbols.length; index += 40) {
         const page = await supabaseRpc(
           "get_fugle_daytrade_intraday_1m_latest_n",
           { symbols: symbols.slice(index, index + 40), bars_per_symbol: 25 },
           { service: true },
         );
-        rows.push(...(Array.isArray(page) ? page : []).filter((row) => row.synthetic !== true && row.is_synthetic !== true));
+        if (!Array.isArray(page)) throw Error('PREOPEN_HISTORY_RPC_ROWS_INVALID');
+        rawWarmupRows.push(...page);
+        warmupPages.push({page_index: warmupPages.length, requested_symbols: symbols.slice(index, index + 40), row_count: page.length});
+        rows.push(...page.filter((row) => row.synthetic !== true && row.is_synthetic !== true));
       }
       const grouped = buildGrouped(rows, tradeDate);
       const naturalWarmupRows = [...grouped.values()].filter((row) =>
@@ -2330,7 +2417,10 @@ async function fetchIntradayStatus(activeSymbols = []) {
         && numberValue(row.latest_candle_age_seconds, 999999) <= 7 * 24 * 60 * 60
       );
       if (naturalWarmupRows.length) {
-        return finalizeIntradayMap(naturalWarmupRows, "dedicated_daytrade_intraday_1m_latest_25_batched_natural_warmup");
+        const map = await finalizeIntradayMap(naturalWarmupRows, "dedicated_daytrade_intraday_1m_latest_25_batched_natural_warmup");
+        return require('../lib/daytrade-preopen-raw-evidence').attach(map, {
+          tradeDate, requestedSymbols: symbols, pages: warmupPages, rows: rawWarmupRows, observedAt: nowIso(),
+        });
       }
     } catch {
       // Fall through to persisted status-cache warmup without weakening quality checks.
@@ -2373,29 +2463,11 @@ async function fetchIntradayStatus(activeSymbols = []) {
     }
   }
 
-  try {
-    const rows = await supabaseGetPaged(
-      "v_fugle_daytrade_intraday_1m_status",
-      "select=symbol,latest_candle_time,today_candle_count,warmup_candle_count,continuous_candle_count,ready_ma3,ready_ma5,ready_ma10,ready_ma20_continuous,ready_ma30,ready_ma58,ready_ma35_continuous,latest_candle_age_seconds,ma3,ma5,ma10,ma20,ma30,ma35,ma58,ma3_rising,ma5_rising,ma10_rising,ma30_rising,ma35_rising,ma58_rising,ma5_ma10_ma35_bullish,ma_bullish_alignment",
-      { service: true, pageSize: 1000 },
-    );
-    if (rows.length) {
-      const currentReadyRows = rows.filter((row) =>
-        taipeiDateFrom(row.latest_candle_time || "") === taipeiDateFrom(nowIso())
-        && numberValue(row.today_candle_count) > 0
-        && numberValue(row.latest_candle_age_seconds, 999999) <= MAX_INTRADAY_1M_STALE_SECONDS
-      );
-      const collapsedRows = rows.filter((row) => numberValue(row.today_candle_count) <= 1 && numberValue(row.continuous_candle_count) <= 1).length;
-      const viewLooksQuoteCollapsed = collapsedRows >= Math.min(10, rows.length);
-      // The cache view may contain quote-derived rows from an older writer.
-      // It is diagnostic only; raw candle/RPC reads below are authoritative.
-      if (false && currentReadyRows.length >= Math.min(40, rows.length) && !viewLooksQuoteCollapsed) {
-        return finalizeIntradayMap(rows, "dedicated_daytrade_intraday_1m_view_fresh" );
-      }
-    }
-  } catch {
-    // The view may timeout under load; use the narrow dedicated-table read below.
-  }
+  // Do not query v_fugle_daytrade_intraday_1m_status here. Its only
+  // consumer was permanently disabled above (the branch was `if (false)`),
+  // while the view can scan the full candle table and consume the bounded
+  // Writer tick. The local WebSocket cache, status cache, RPC and direct
+  // table reads below are the authoritative fallbacks.
 
   try {
     const symbols = [...new Set((activeSymbols || []).map((row) => normalizeCode(row.symbol || row)).filter(Boolean))];
@@ -2454,6 +2526,7 @@ function priorityPoolDbRows(rows) {
     updated_at: row.updated_at || nowIso(),
     payload: {
       ...(row.payload || {}),
+      ...require("../lib/daytrade-writer-identity").requireIdentity(writerTickIdentity, taipeiDate()),
       trade_date: String(row.payload?.trade_date || taipeiDate()),
       canonical_run_id: String(row.payload?.canonical_run_id || `${SOURCE_NAME}:${compactDateKey(taipeiDate())}:canonical`),
       canonical_pool_layer: String(row.payload?.canonical_pool_layer || row.payload?.pool_layer || poolLayerForRank(Number(row.priority_rank))),
@@ -2644,6 +2717,8 @@ function addGroupContractRow(map, row, source) {
   const previous = map.get(symbol) || {};
   map.set(symbol, {
     ...previous,
+    officialEvidence: row?.officialEvidence || previous.officialEvidence || null,
+    detailedEvidence: row?.detailedEvidence || previous.detailedEvidence || null,
     symbol,
     name: row?.name || previous.name || "",
     industry: row?.industry || row?.officialIndustry || previous.industry || "",
@@ -2697,7 +2772,9 @@ function extractConstObjectLiteral(source, name) {
 
 function readHeatmapStaticGroupMap() {
   const map = new Map();
-  const source = readText(HEATMAP_API_FILE);
+  // Evidence hashes must use the same raw bytes as the mapping verifier.
+  let source = "";
+  try { source = fs.readFileSync(HEATMAP_API_FILE, "utf8"); } catch {}
   if (!source) {
     map.meta = { source: "missing", rows: 0 };
     return map;
@@ -2722,6 +2799,7 @@ function readHeatmapStaticGroupMap() {
         heatmapSector: group,
         primaryIndustry: group,
         themes: [group],
+        detailedEvidence: {source:"api/heatmap.js:BB_HEATMAP_GROUPS",version:require("node:crypto").createHash("sha256").update(source).digest("hex"),valid_from:"2026-07-09",industry:group,symbol:String(symbol)},
         source: "api/heatmap.js:BB_HEATMAP_GROUPS",
         confidence: "medium",
         updatedAt: "2026-07-09T00:00:00+08:00",
@@ -2732,17 +2810,7 @@ function readHeatmapStaticGroupMap() {
   return map;
 }
 
-const MOPS_INDUSTRY_NAMES = {
-  "01": "水泥工業", "02": "食品工業", "03": "塑膠工業", "04": "紡織纖維",
-  "05": "電機機械", "06": "電器電纜", "08": "玻璃陶瓷", "09": "造紙工業",
-  "10": "鋼鐵工業", "11": "橡膠工業", "12": "汽車工業", "14": "建材營造",
-  "15": "航運業", "16": "觀光餐旅", "17": "金融保險", "18": "貿易百貨",
-  "20": "其他", "21": "化學工業", "22": "生技醫療", "23": "油電燃氣",
-  "24": "半導體", "25": "電腦及週邊", "26": "光電", "27": "通信網路",
-  "28": "電子零組件", "29": "電子通路", "30": "資訊服務", "31": "其他電子",
-  "32": "文化創意", "33": "農業科技", "34": "電子商務", "35": "綠能環保",
-  "36": "數位雲端", "37": "運動休閒", "38": "居家生活",
-};
+const MOPS_INDUSTRY_NAMES = require('../lib/mops-industry-names');
 
 function parseReferenceCsv(text) {
   const rows = [];
@@ -2767,7 +2835,7 @@ async function fetchMopsOfficialIndustryMap() {
   const map = new Map();
   const cached = readJson(MOPS_OFFICIAL_INDUSTRY_CACHE_FILE, null);
   const cacheAgeMs = cached?.updated_at ? Date.now() - Date.parse(cached.updated_at) : Infinity;
-  if (Array.isArray(cached?.rows) && cached.rows.length && cacheAgeMs >= 0 && cacheAgeMs <= MOPS_OFFICIAL_INDUSTRY_CACHE_MAX_AGE_MS) {
+  if (Array.isArray(cached?.rows) && cached.rows.length && cached.rows.every(r=>r.officialEvidence?.raw_row) && cacheAgeMs >= 0 && cacheAgeMs <= MOPS_OFFICIAL_INDUSTRY_CACHE_MAX_AGE_MS) {
     for (const row of cached.rows) addGroupContractRow(map, row, "mops_open_data_cache");
     map.meta = { source: "mops_open_data_cache", rows: map.size, updatedAt: cached.updated_at };
     return map;
@@ -2782,16 +2850,16 @@ async function fetchMopsOfficialIndustryMap() {
     try {
       const response = await fetch(url, { signal: controller.signal, headers: { "User-Agent": "Mozilla/5.0 (compatible; FumanTerminal/1.0)" } });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return parseReferenceCsv(await response.text());
+      const body=await response.text();return {rows:parseReferenceCsv(body),source_url:url,response_sha256:require("node:crypto").createHash("sha256").update(body).digest("hex"),fetched_at:nowIso()};
     } finally { clearTimeout(timer); }
   }));
   for (const result of results) {
     if (result.status !== "fulfilled") continue;
-    for (const row of result.value) {
+    for (const row of result.value.rows) {
       const symbol = normalizeCode(row["公司代號"]);
       const rawIndustry = firstText(row["產業別"]);
       const officialIndustry = MOPS_INDUSTRY_NAMES[rawIndustry] || rawIndustry;
-      if (symbol && officialIndustry) addGroupContractRow(map, { symbol, officialIndustry, source: "mops_open_data", confidence: "high", updatedAt: nowIso() }, "mops_open_data");
+      if (symbol && officialIndustry) addGroupContractRow(map, { symbol, officialIndustry, source: "mops_open_data", confidence: "high", updatedAt: result.value.fetched_at, officialEvidence:{source_url:result.value.source_url,response_sha256:result.value.response_sha256,fetched_at:result.value.fetched_at,raw_row:row} }, "mops_open_data");
     }
   }
   if (map.size && !DRY_RUN) writeJson(MOPS_OFFICIAL_INDUSTRY_CACHE_FILE, { contract: "mops_official_industry_reference_v1", updated_at: nowIso(), rows: [...map.values()] });
@@ -2906,7 +2974,7 @@ function canonicalDaytradeRunId(tradeDate = taipeiDate()) {
 function motherPoolSnapshotType(sequence, effectiveAt) {
   const minutes = taipeiClockMinutesFrom(effectiveAt || nowIso());
   if (minutes >= 13 * 60 + 30) return "CLOSEOUT_SNAPSHOT";
-  if (sequence <= 1 || minutes < 9 * 60) return "OPENING_SNAPSHOT";
+  if (minutes < 9 * 60) return "OPENING_SNAPSHOT";
   return "INTRADAY_FULL_SNAPSHOT";
 }
 
@@ -2924,10 +2992,17 @@ function buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunI
   const nextSet = new Set(cleanSymbols);
   const addedSymbols = cleanSymbols.filter((symbol) => !previousSet.has(symbol));
   const removedSymbols = previousSymbols.filter((symbol) => !nextSet.has(symbol));
-  const changed = !previousSameDay
+  const phaseChanged = previousSameDay && motherPoolSnapshotType(previous.snapshot_sequence, generatedAt) !== previous.snapshot_type;
+  const changed = phaseChanged || !previousSameDay
     || addedSymbols.length > 0
     || removedSymbols.length > 0
     || Number(previous.symbol_count || previous.symbolCount || 0) !== cleanSymbols.length;
+  // Membership evidence is immutable within one run, including its timestamps.
+  if (!changed) {
+    const inspected = require('../lib/daytrade-mother-pool-snapshot').inspectSnapshot(previous, tradeDate);
+    if (!inspected.ok) throw new Error(`MOTHER_POOL_SNAPSHOT_REUSE_INVALID:${inspected.failedChecks.join(',')}`);
+    return previous;
+  }
   const previousSequence = previousSameDay ? Number(previous.snapshot_sequence || previous.snapshotSequence || 0) : 0;
   const snapshotSequence = changed ? previousSequence + 1 : Math.max(1, previousSequence);
   const motherPoolRunId = changed
@@ -2948,7 +3023,9 @@ function buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunI
     const row = rowBySymbol.get(symbol) || {};
     const previousItem = priorMembership.get(symbol) || {};
     const newlyAdded = addedSymbols.includes(symbol) || !previousSameDay;
-    const membershipStatus = newlyAdded && intradayAdded ? "PENDING_DOWNSTREAM_WARMUP" : "ACTIVE";
+    const membershipStatus = (newlyAdded && intradayAdded)
+      || (!newlyAdded && previousItem.membership_status === "PENDING_DOWNSTREAM_WARMUP")
+      ? "PENDING_DOWNSTREAM_WARMUP" : "ACTIVE";
     return {
       symbol,
       trade_date: tradeDate,
@@ -2984,6 +3061,7 @@ function buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunI
     canonical_run_id: canonicalRunId,
     run_id: motherPoolRunId,
     mother_pool_run_id: motherPoolRunId,
+    generation: motherPoolRunId,
     generated_at: generatedAt,
     effective_at: effectiveAt,
     snapshot_sequence: snapshotSequence,
@@ -3004,21 +3082,54 @@ function buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunI
     read_interface: {
       latest_complete_snapshot: MOTHER_POOL_SNAPSHOT_FILE,
       fixed_snapshot_by_run_id: "read receipt where run_id equals mother_pool_run_id",
+      fixed_generation: "generation equals mother_pool_run_id and is required for every page",
       delta_fields: ["added_symbols", "removed_symbols"],
       per_symbol_effective_time: "symbol_membership[].membership_effective_at",
     },
   };
 }
 
-function publishMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunId) {
-  const generatedAt = nowIso();
-  const snapshot = buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunId, generatedAt);
-  const receiptPath = path.join(MOTHER_POOL_SNAPSHOT_RECEIPT_DIR, `daytrade-mother-pool-snapshot-${compactDateKey(tradeDate)}-${String(snapshot.snapshot_sequence).padStart(4, "0")}.json`);
-  // Publish the immutable receipt first, then atomically replace the latest pointer.
-  // Readers never observe a partially written snapshot or a receipt for another generation.
-  writeJsonAtomic(receiptPath, { ...snapshot, receipt_path: receiptPath });
-  writeJsonAtomic(MOTHER_POOL_SNAPSHOT_FILE, snapshot);
-  return snapshot;
+async function publishMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunId) {
+  const build = () => buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunId, nowIso());
+  if (DRY_RUN) return build();
+  const intentPath = path.join(MOTHER_POOL_SNAPSHOT_RECEIPT_DIR, `mother-pool-publication-intent-${compactDateKey(tradeDate)}.json`);
+  return require('../lib/mother-pool-snapshot-publication').publishWithRecovery({
+    tradeDate, canonicalRunId, build,
+    loadIntent: () => fs.existsSync(intentPath) ? JSON.parse(fs.readFileSync(intentPath,'utf8').replace(/^\uFEFF/,'')) : null,
+    saveIntent: intent => writeJsonAtomic(intentPath,intent),
+    validate: snapshot => require('../lib/daytrade-mother-pool-snapshot').inspectSnapshot(snapshot,tradeDate).ok,
+    send: publishMotherPoolSnapshotSupabase,
+    readback: async snapshot => {
+      const pages=[];
+      const startedAt=nowIso();
+      const attemptId=require('node:crypto').randomUUID();
+      const query = `select=*&trade_date=eq.${encodeURIComponent(snapshot.trade_date)}&mother_pool_run_id=eq.${encodeURIComponent(snapshot.run_id)}&canonical_run_id=eq.${encodeURIComponent(snapshot.canonical_run_id)}&generation=eq.${encodeURIComponent(snapshot.generation)}&snapshot_sequence=eq.${snapshot.snapshot_sequence}&order=symbol.asc.nullsfirst`;
+      let receipt;
+      try {
+        if (!SUPABASE_READ_KEY || SUPABASE_READ_KEY === SUPABASE_SERVICE_KEY) throw new Error('snapshot_anon_key_required');
+        const rows=await supabaseGetPaged('v_fugle_daytrade_mother_pool_snapshot_v4_1',query,{service:false,pageSize:500,pageEvidence:pages,requireExactCount:true,captureRows:true});
+        receipt=require('../lib/mother-pool-snapshot-readback').verifySnapshotReadback(snapshot,rows,{role:'anon',pages});
+      } catch(error) {
+        // Do not persist URLs, credentials or arbitrary server response bodies.
+        receipt={contract:'mother_pool_snapshot_anon_readback_v1',trade_date:snapshot.trade_date,
+          canonical_run_id:snapshot.canonical_run_id,mother_pool_run_id:snapshot.run_id,snapshot_sequence:snapshot.snapshot_sequence,
+          status:'blocked',complete:false,exit_code:1,read_role:'anon',pages,
+          failed_checks:['snapshot_anon_readback_error'],first_blocker:'snapshot_anon_readback_error',
+          error_kind:error?.name==='TimeoutError'||error?.name==='AbortError'?'timeout':'readback_failure',
+          http_status:Number(String(error?.message||'').match(/HTTP (\d{3})/)?.[1])||null,verified_at:nowIso()};
+      }
+      receipt={...receipt,attempt_id:attemptId,started_at:startedAt,query_identity:{trade_date:snapshot.trade_date,canonical_run_id:snapshot.canonical_run_id,mother_pool_run_id:snapshot.run_id,generation:snapshot.generation,snapshot_sequence:snapshot.snapshot_sequence}};
+      const file=path.join(MOTHER_POOL_SNAPSHOT_RECEIPT_DIR,`mother-pool-snapshot-anon-${compactDateKey(tradeDate)}-${snapshot.snapshot_sequence}.json`);
+      writeJsonAtomic(file.replace(/\.json$/,`-${attemptId}.json`),receipt);
+      writeJsonAtomic(file,receipt);
+      return receipt;
+    },
+    commit: snapshot => {
+      const receiptPath = path.join(MOTHER_POOL_SNAPSHOT_RECEIPT_DIR, `daytrade-mother-pool-snapshot-${compactDateKey(tradeDate)}-${String(snapshot.snapshot_sequence).padStart(4, "0")}.json`);
+      writeJsonAtomic(receiptPath,{...snapshot,receipt_path:receiptPath});
+      writeJsonAtomic(MOTHER_POOL_SNAPSHOT_FILE,snapshot);
+    },
+  });
 }
 
 async function publishMotherPoolSnapshotSupabase(snapshot) {
@@ -3115,6 +3226,22 @@ function strategyPriorityStockCode(row, codeMode) {
 }
 
 async function readStrategyPriorityBridgeSource(source) {
+  if (source.adapter === "turnover_receipt") {
+    const previousSourceDate = await previousCompletedTradingDate(taipeiDate(), process.env.FUMAN_STATE_DIR || statePath(''));
+    const expectedFile = 'daytrade-intraday-turnover-' + compactDateKey(previousSourceDate) + '.json';
+    const files = (() => { try { return fs.readdirSync(runtimePath("data", "scan-receipts")); } catch { return []; } })()
+      .filter((name) => name === expectedFile)
+      .sort()
+      .reverse();
+    const file = files[0] ? path.join(runtimePath("data", "scan-receipts"), files[0]) : "";
+    const receipt = file ? readJson(file, null) : null;
+    const rows = Array.isArray(receipt?.rows) ? receipt.rows : [];
+    const symbols = [...new Set(rows.filter((row) => String(row?.status || "").toLowerCase() === "ready").map((row) => normalizeCode(row.symbol)).filter((code) => /^\d{4}$/.test(code)))];
+    const sourceDate = compactDateKey(receipt?.trade_date || "");
+    const runId = String(receipt?.run_id || "");
+    const handoff = await resolveStrategyHandoff({ strategyId: "ranking", sourceReceipt: { source_date: sourceDate, run_id: runId, canonical_run_id: receipt?.canonical_run_id || "", strategy_version: receipt?.contract || source.contract, complete: receipt?.complete === true || (receipt?.status === "complete" && symbols.length > 0), checked_at: receipt?.calculated_at }, executionDate: taipeiDate(), stateDir: process.env.FUMAN_STATE_DIR || statePath("") });
+    return { key: source.key, status: handoff.ok ? "ready" : "blocked", symbols: handoff.ok ? symbols : [], reason: handoff.ok ? "" : handoff.reason_code, runId, scanDate: sourceDate, finishedAt: receipt?.calculated_at || "", qualityStatus: receipt?.status || "", publishAllowed: handoff.ok, resultRows: rows.length, sourceCount: rows.length, deduplicatedCount: symbols.length, handoff, sourceFile: file };
+  }
   // This is an authorized Writer-side bridge. Use service-role reads so RLS
   // cannot silently turn a complete strategy run into an empty warmup source.
   const latestRows = await supabaseGet(source.latestResource, source.latestQuery, { service: true });
@@ -3132,9 +3259,22 @@ async function readStrategyPriorityBridgeSource(source) {
     };
   }
   const validation = strategyPriorityRunValidation(run, source);
+  const handoff = await resolveStrategyHandoff({
+    strategyId: source.key,
+    sourceReceipt: {
+      ...run,
+      sourceDate: validation.scanDate,
+      runId: validation.runId,
+      complete: validation.ok,
+      strategy_version: run.strategy_version || run.strategyVersion || run.schema_version || run.schemaVersion || run.contract_version || source.key,
+      checked_at: validation.finishedAt,
+    },
+    executionDate: taipeiDate(),
+    stateDir: process.env.FUMAN_STATE_DIR || statePath(""),
+  }).catch((error) => ({ ok: false, status: "BLOCKED", reason_code: "HANDOFF_CHECK_FAILED", failed_checks: [error?.message || String(error)] }));
   const base = {
     key: source.key,
-    status: validation.ok ? "ready" : "blocked",
+    status: validation.ok && handoff.ok ? "ready" : "blocked",
     symbols: [],
     reason: validation.ok ? "" : validation.reason,
     runId: validation.runId,
@@ -3143,15 +3283,19 @@ async function readStrategyPriorityBridgeSource(source) {
     qualityStatus: validation.qualityStatus,
     publishAllowed: validation.publishAllowed,
     resultRows: 0,
+    handoff,
+    sourceReceipt: run,
   };
-  if (!validation.ok || !validation.runId) return base;
+  if (!validation.ok || !validation.runId || !handoff.ok) return base;
   const query = [
     "select=" + source.resultSelect,
     "run_id=eq." + encodeURIComponent(validation.runId),
-    "limit=" + STRATEGY_PRIORITY_BRIDGE_MAX_ROWS,
-    "order=" + (source.resultOrder || (source.key === "cb" ? "updated_at.desc" : "rank.asc")),
+    "order=" + (source.resultOrder || "rank.asc") + ",code.asc",
   ].join("&");
-  const rows = await supabaseGet(source.resultsResource, query, { service: true });
+  const pages = [];
+  const rows = await supabaseGetPaged(source.resultsResource, query, { service: true, requireExactCount: true, captureRows: true, pageEvidence: pages });
+  const reconciliation = require('../lib/mother-pool-strategy-bridge-rows').inspect({ run, rows, runId: validation.runId, sourceDate: validation.scanDate });
+  if (!reconciliation.ok) return { ...base, status: 'blocked', reason: reconciliation.first_blocker, sourceRows: rows, pages, reconciliation };
   const symbols = [];
   const seen = new Set();
   for (const row of Array.isArray(rows) ? rows : []) {
@@ -3164,10 +3308,16 @@ async function readStrategyPriorityBridgeSource(source) {
   }
   return {
     ...base,
-    status: symbols.length || source.allowZeroComplete === true ? "ready" : "empty",
+    status: "ready",
     symbols,
     resultRows: Array.isArray(rows) ? rows.length : 0,
     symbolCount: symbols.length,
+    sourceCount: Array.isArray(rows) ? rows.length : 0,
+    deduplicatedCount: symbols.length,
+    handoff,
+    sourceRows: rows,
+    pages,
+    reconciliation,
   };
 }
 
@@ -3187,6 +3337,7 @@ function buildFormalStrategyChipArtifact(bridge, formalPrioritySymbols = [], fal
     const status = String(group.status || "missing").trim().toLowerCase();
     const qualityStatus = String(group.qualityStatus || "").trim().toLowerCase();
     const readyEvidence = status === "ready"
+      && group.handoff?.ok === true
       && Boolean(group.runId)
       && Boolean(group.scanDate)
       && Boolean(group.finishedAt)
@@ -3199,9 +3350,17 @@ function buildFormalStrategyChipArtifact(bridge, formalPrioritySymbols = [], fal
       scanDate: String(group.scanDate || ""),
       finishedAt: String(group.finishedAt || ""),
       qualityStatus: String(group.qualityStatus || ""),
+      handoffStatus: String(group.handoff?.status || ""),
+      handoffReason: String(group.handoff?.reason_code || ""),
+      strategySourceDate: String(group.handoff?.strategy_source_date || group.scanDate || ""),
+      handoffTradeDate: String(group.handoff?.handoff_trade_date || fallbackTradeDate),
+      handoffRunId: String(group.handoff?.handoff_run_id || ""),
+      sourceCanonicalRunId: String(group.handoff?.source_canonical_run_id || ""),
       publishAllowed: group.publishAllowed === undefined ? null : group.publishAllowed,
       resultRows: numberValue(group.resultRows),
       sourceSymbolCount: sourceSymbols.length,
+      sourceCount: numberValue(group.sourceCount || group.resultRows),
+      deduplicatedCount: numberValue(group.deduplicatedCount || group.symbolCount || sourceSymbols.length),
       formalPriorityMatchCount: formalPriorityMatchedSymbols.length,
       formalPriorityMatchedSymbols,
       latestCompleteRunEvidence: readyEvidence,
@@ -3250,6 +3409,8 @@ function mergeStrategyPriorityBridgeIntoRuntimeFile(bridge) {
       tradeDate: bridge.tradeDate,
       groups: bridge.groups,
       counts: bridge.counts,
+      terminalHandoff: bridge.terminalHandoff,
+      scorecardSource: bridge.scorecardSource,
     },
     formalPriorityStrategyChip: buildFormalStrategyChipArtifact(
       bridge,
@@ -3310,8 +3471,48 @@ async function refreshStrategyChipPriorityBridge() {
       }
     }
     const statuses = Object.values(groups).map((group) => group.status);
+    const previousSourceDate = await previousCompletedTradingDate(taipeiDate(), process.env.FUMAN_STATE_DIR || statePath(""));
+    const scorecardSource = require('../lib/mother-pool-scorecard-source').inspect({
+      payload: readJson(runtimePath('data','scorecard-terminal-current.json'), null),
+      expectedSourceDate: previousSourceDate, asOf: nowIso(),
+    });
     const readyCount = statuses.filter((status) => status === "ready").length;
     const errorCount = statuses.filter((status) => status === "error").length;
+    const registeredKeys = Object.keys(SOURCE_REGISTRY);
+    let futuresSource;
+    try { futuresSource=await require('../lib/mother-pool-futures-catalogue').refresh({runtime:runtimePath(),tradeDate:taipeiDate(),asOf:nowIso(),key:FUGLE_API_KEY}); }
+    catch(error){ futuresSource={status:'BLOCKED',error:String(error.message||error)}; }
+    const futuresCheck=require('../lib/mother-pool-futures-catalogue').inspect(futuresSource,taipeiDate(),nowIso());
+    const terminalGroups = Object.fromEntries(registeredKeys.map((key) => {
+      if(key==='futures')return [key,{status:futuresCheck.status,reason:futuresCheck.failed_checks[0]||'',source_date:futuresCheck.source_date,handoff_trade_date:taipeiDate(),run_id:futuresCheck.run_id,symbols:futuresCheck.status==='READY'?futuresCheck.symbols:[],source_count:futuresCheck.source_count,deduplicated_count:futuresCheck.symbols.length,failed_checks:futuresCheck.failed_checks}];
+      if (key === 'scorecard88') return [key, {
+        status: scorecardSource.status, reason: scorecardSource.first_blocker || '',
+        source_date: scorecardSource.source_trade_date, handoff_trade_date: taipeiDate(),
+        run_id: null, canonical_run_id: null,
+        source_runs: scorecardSource.sources, source_hash: scorecardSource.source_hash,
+        source_contract: scorecardSource.contract, source_updated_at: scorecardSource.source_updated_at,
+        symbols: scorecardSource.status === 'READY' ? scorecardSource.symbols : [],
+        source_count: scorecardSource.source_count, deduplicated_count: scorecardSource.symbols.length,
+        failed_checks: scorecardSource.failed_checks,
+      }];
+      const group = objectPayload(groups[key]);
+      if (group.key) return [key, {
+        status: group.handoff?.ok === true && group.status === "ready" ? "READY" : "BLOCKED",
+        reason: group.handoff?.reason_code || group.reason || "source_adapter_not_registered",
+        source_date: group.handoff?.strategy_source_date || group.scanDate || "",
+        handoff_trade_date: taipeiDate(),
+        run_id: group.runId || "",
+        canonical_run_id: group.handoff?.source_canonical_run_id || "",
+        symbols: Array.isArray(group.symbols) ? group.symbols : [],
+        source_count: Number(group.sourceCount || group.resultRows || 0),
+        deduplicated_count: Number(group.deduplicatedCount || group.symbolCount || (Array.isArray(group.symbols) ? group.symbols.length : 0)),
+      }];
+      // A03 consumes the previous completed session's futures evidence.
+      // Its adapter is due during warmup; A13's 08:45 live trial slot is separate.
+      return [key, { status: "BLOCKED", reason: "source_adapter_not_registered", source_date: "", handoff_trade_date: taipeiDate(), run_id: "", canonical_run_id: "", symbols: [], source_count: 0, deduplicated_count: 0 }];
+    }));
+    const terminalUnion = [...new Set(Object.values(terminalGroups).flatMap((group) => group.status === "READY" ? group.symbols : []))].sort();
+    const terminalBlocked = Object.entries(terminalGroups).filter(([, group]) => !["READY", "NOT_DUE"].includes(group.status)).map(([key, group]) => ({ key, reason: group.reason }));
     const bridge = {
       schemaVersion: "daytrade-strategy-chip-priority-bridge-v1",
       source: "supabase:complete-run-priority-bridge",
@@ -3321,8 +3522,22 @@ async function refreshStrategyChipPriorityBridge() {
       canonicalRunId: canonicalDaytradeRunId(taipeiDate()),
       groups,
       counts: Object.fromEntries(Object.entries(groups).map(([key, group]) => [key, Array.isArray(group.symbols) ? group.symbols.length : 0])),
+      scorecardSource,
+      futuresSource,
+      previousSourceDate,
       readyGroups: readyCount,
       errorGroups: errorCount,
+      terminalHandoff: {
+        contract: "terminal_strategy_morning_handoff_v1",
+        source_registry: SOURCE_REGISTRY,
+        execution_trade_date: taipeiDate(),
+        status: terminalBlocked.length ? (terminalUnion.length ? "PARTIAL" : "BLOCKED") : "READY",
+        groups: terminalGroups,
+        terminal_union: terminalUnion,
+        terminal_union_count: terminalUnion.length,
+        blocked_groups: terminalBlocked,
+        first_blocker: terminalBlocked[0]?.reason || null,
+      },
     };
     writeJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE, bridge);
     mergeStrategyPriorityBridgeIntoRuntimeFile(bridge);
@@ -3367,7 +3582,7 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
       || !receipt.applied_boosts.length
       || receipt.receipt_path !== receiptPath) return false;
     return receipt.applied_boosts.every((boost) => (
-      Number(boost?.applied_priority_rank) >= 41
+      validMorningBoostRank(boost)
       && boost?.status === "watchlist_boosted"
       && receipt.accepted_symbols.includes(String(boost.symbol))
       && (boost.quote_validation === "delegated_to_mother_pool" || Number(boost.quote_age_seconds) <= 120)
@@ -3447,25 +3662,50 @@ function readRuntimePrioritySeeds(activeSymbols) {
   const bridgeGroups = objectPayload(bridge.groups);
   const bridgeValues = (key) => {
     const group = objectPayload(bridgeGroups[key]);
-    return group.status === "ready" && Array.isArray(group.symbols) ? group.symbols : [];
+    const handoff = objectPayload(group.handoff);
+    const checkedAt = Date.parse(handoff.checked_at || "");
+    return group.status === "ready" && handoff.ok === true
+      && Array.isArray(handoff.failed_checks) && handoff.failed_checks.length === 0
+      && handoff.handoff_trade_date === tradeDate
+      && Boolean(group.runId) && group.runId === handoff.source_run_id
+      && Boolean(handoff.previous_completed_trade_date)
+      && handoff.strategy_source_date === handoff.previous_completed_trade_date
+      && compactDateKey(group.scanDate) === compactDateKey(handoff.strategy_source_date)
+      && Number.isFinite(checkedAt) && checkedAt <= Date.now()
+      && Array.isArray(group.symbols) ? group.symbols : [];
   };
   const universe = new Set(activeSymbols.map((row) => row.symbol));
   const bySymbol = new Map();
   const counts = {};
+  const sourceAudit = {};
   const addMany = (source, values, weight) => {
     const list = Array.isArray(values) ? values : [];
     let accepted = 0;
+    const seen = new Set(), duplicates = [], rejected = [];
     for (const value of list) {
       const symbol = normalizeCode(value?.symbol || value?.code || value);
-      if (!symbol || !universe.has(symbol)) continue;
+      if (!symbol) { rejected.push(String(value?.symbol || value?.code || value)); continue; }
+      if (seen.has(symbol)) { duplicates.push(symbol); continue; }
+      seen.add(symbol);
+      const universeMatched = universe.has(symbol);
+      if (!universeMatched && source !== "opening_report_0830") { rejected.push(symbol); continue; }
       accepted += 1;
       const prev = bySymbol.get(symbol) || { symbol, sources: [], score: 0 };
+      if (value?.name || value?.stock_name) prev.name = String(value.name || value.stock_name || "").trim();
+      if (numberValue(value?.price) > 0) prev.price = numberValue(value.price);
+      if (source === "opening_report_0830") {
+        prev.openingReport0830MasterFallback = prev.openingReport0830MasterFallback === true || !universeMatched || value?.openingReport0830MasterFallback === true;
+        prev.activeMasterAvailable = prev.activeMasterAvailable === true || universeMatched || value?.activeMasterAvailable === true;
+        if (Array.isArray(value?.reports)) prev.reports = [...(prev.reports || []), ...value.reports];
+        if (value?.openingReport0830IndustryBias) prev.openingReport0830IndustryBias = value.openingReport0830IndustryBias;
+      }
       prev.sources.push(source);
       prev.score += weight;
       if (source === "opening_report_0830") prev.openingReport0830 = true;
       bySymbol.set(symbol, prev);
     }
     counts[source] = accepted;
+    sourceAudit[source] = { source_count: list.length, deduplicated_count: seen.size, accepted_count: accepted, duplicate_symbols: [...new Set(duplicates)], rejected_symbols: [...new Set(rejected)] };
   };
 
   const industryFastInject = readJson(INDUSTRY_SIGNAL_FAST_INJECT_FILE, {});
@@ -3479,20 +3719,23 @@ function readRuntimePrioritySeeds(activeSymbols) {
   addMany("terminal", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, 100);
   addMany("opening", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, 100);
 
-  addMany("strategy3", payload.strategy3 || payload.strategy3Symbols || bridgeValues("strategy3"), 80);
+  addMany("strategy2", bridgeValues("strategy2"), 80);
+  addMany("strategy3", bridgeValues("strategy3"), 80);
   addMany("strategy6", payload.strategy6 || payload.strategy6Symbols || bridgeValues("strategy6"), 80);
   addMany("strategy7", payload.strategy7 || payload.strategy7Symbols || bridgeValues("strategy7"), 80);
-  addMany("slash88", payload.slash88 || payload.eightyEight || payload.strategy88 || payload.strategy88Symbols, 90);
-  addMany("strategy4", payload.strategy4 || payload.strategy4Symbols || bridgeValues("strategy4"), 80);
-  addMany("strategy5", payload.strategy5 || payload.strategy5Symbols || bridgeValues("strategy5"), 80);
+  addMany("slash88", bridge.scorecardSource?.status === 'READY' ? bridge.scorecardSource.symbols : [], 90);
+  addMany("strategy4", bridgeValues("strategy4"), 80);
+  addMany("strategy5", bridgeValues("strategy5"), 80);
   addMany("chip", payload.chip || payload.chipSymbols || payload.chipPrioritySymbols || payload.chip_priority_symbols, 75);
-  addMany("institution", payload.institution || payload.institutionSymbols || bridgeValues("institution"), 75);
+  addMany("institution", bridgeValues("institution"), 75);
+  addMany("ranking", bridgeValues("ranking"), 75);
   addMany("recent_strong", payload.recentStrongSymbols || payload.recentStrengthSymbols || payload.recent_strong_symbols || payload.yesterdayStrongSymbols || payload.yesterday_strong_symbols, 85);
   addMany("yesterday_front", payload.yesterdayFrontSymbols || payload.yesterdayVolumeSymbols || payload.yesterdayTradeValueSymbols || payload.yesterday_top_symbols, 75);
   addMany("yesterday_gain_amplitude_spike", payload.yesterdayGainSymbols || payload.yesterdayAmplitudeSymbols || payload.yesterdayVolumeSpikeSymbols || payload.yesterday_gain_symbols || payload.yesterday_amplitude_symbols || payload.yesterday_volume_spike_symbols, 75);
   addMany("daytrade_hot", payload.hot || payload.daytradeHotSymbols || payload.priorityStrongSymbols, 75);
   addMany("industry_signal_fast_inject", industryFastInjectFresh ? industryFastInject.symbols : [], 240);
-  addMany("stock_future", payload.stockFutureSymbols || payload.futoptSymbols || payload.individualFuturesSymbols, 85);
+  const futuresSeedEvidence=require('../lib/mother-pool-futures-catalogue').inspect(bridge.futuresSource,tradeDate,nowIso());
+  addMany("stock_future", futuresSeedEvidence.status==='READY'?futuresSeedEvidence.symbols:[], 85);
   addMany("manual_watchlist", payload.manualWatchlist || payload.manual_watchlist || payload.watchlist || payload.userWatchlist || payload.user_watchlist, 120);
   const openingReport0830 = readOpeningReport0830PrioritySeeds(activeSymbols);
   addMany("opening_report_0830", openingReport0830.symbols, 50);
@@ -3506,6 +3749,7 @@ function readRuntimePrioritySeeds(activeSymbols) {
   return {
     symbols: [...bySymbol.values()],
     counts,
+    sourceAudit,
     updatedAt: payload.updatedAt || bridge.updatedAt || "",
     source: payload.source || bridge.source || "runtime_priority_file",
     strategyPriorityBridgeStatus: bridge.status || "missing",
@@ -3524,6 +3768,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     row,
   ]).filter(([symbol]) => symbol));
   supplementalMaps.activeBySymbol = activeBySymbol;
+  supplementalMaps.turnoverCalculatedAt = nowIso();
   const seeds = readRuntimePrioritySeeds(activeSymbols);
   const bySymbol = new Map();
   const sourceSeedBySymbol = new Map(seeds.symbols.map((entry) => [entry.symbol, entry]));
@@ -3534,6 +3779,24 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
     ...row,
     basePool: evaluateMotherPoolBasePool(row, row.metrics),
   }));
+  const openingReportMasterFallbackCandidates = seeds.symbols
+    .filter((seed) => seed.openingReport0830 === true && !activeBySymbol.has(seed.symbol))
+    .map((seed) => {
+      const fallbackRow = {
+        symbol: seed.symbol,
+        name: seed.name || seed.symbol,
+        market: "",
+        openingReport0830MasterFallback: true,
+      };
+      const metrics = quoteMetrics(seed.symbol, dailyVolumeMap, quoteMap, supplementalMaps);
+      const basePool = evaluateMotherPoolBasePool(fallbackRow, metrics);
+      return {
+        ...fallbackRow,
+        metrics,
+        basePool,
+      };
+    });
+  candidates.push(...openingReportMasterFallbackCandidates);
   for (const candidate of candidates) {
     const seedSources = sourceSeedBySymbol.get(candidate.symbol)?.sources || [];
     candidate.terminalForcedAdmission = seedSources.includes("terminal");
@@ -3591,12 +3854,14 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   const volumeRanks = rankMap(rankingCandidates, (row) => row.metrics.totalVolume, { minValue: 0 });
   const valueRanks = rankMap(rankingCandidates, (row) => row.metrics.tradeValue, { minValue: 0 });
   const intradayTurnoverActive = taipeiMinutes() >= 540 && taipeiMinutes() <= 810;
-  const turnoverUniverse = candidates.filter(row => row.turnoverMaster?.official_present === true
-    && !['91'].includes(row.turnoverMaster?.official_industry_code)
-    && row.isActive !== false && row.isEtf !== true && row.isWarrant !== true && row.isCb !== true
-    && row.isSuspended !== true && row.isBlacklisted !== true && row.isDaytradeUnsuitable !== true);
+  // Do not shrink the full-market denominator when official shares are missing.
+  // Price, mother-pool membership and daytrade permission are not turnover gates.
+  const turnoverExclusions = new Set(['inactive', 'halted_or_suspended', 'market_not_twse_otc',
+    'not_common_stock', 'disposition_or_controlled', 'split_trading', 'manual_control']);
+  const turnoverUniverse = candidates.filter(row => activeBySymbol.has(row.symbol)
+    && !row.basePool.failedChecks.some(reason => turnoverExclusions.has(reason)));
   const intradayTurnoverRanking = rankTurnover(turnoverUniverse.map(row => row.metrics.intradayTurnover),
-    { tradeDate: taipeiDate(), canonicalRunId: canonicalDaytradeRunId(taipeiDate()), now: nowIso() });
+    { tradeDate: taipeiDate(), canonicalRunId: canonicalDaytradeRunId(taipeiDate()), now: supplementalMaps.turnoverCalculatedAt });
   const turnoverRanks = intradayTurnoverActive
     ? new Map(intradayTurnoverRanking.rows.map(row => [row.symbol, { rank: row.rank }]))
     : rankMap(rankingCandidates, (row) => row.metrics.turnoverRate3To5d, { minValue: 0 });
@@ -3961,6 +4226,18 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         turnoverRank,
         turnoverRankBasis: intradayTurnoverActive ? 'today_cumulative_volume_over_official_common_shares' : 'historical_3_5d',
         intradayTurnover: metrics.intradayTurnover,
+        // B12-B14 producer outputs consumed by the B24 combiner. These are
+        // derived here from the canonical metrics, not inferred by B24.
+        b12Event: metrics.volumeSpikeFlag === true,
+        volumeSpikeSignal: metrics.volumeSpikeFlag === true ? "VOLUME_SPIKE" : null,
+        b13Event: metrics.surgeFlag === true || metrics.rapidGainIncrease === true,
+        priceSpikeUpSignal: (metrics.surgeFlag === true || metrics.rapidGainIncrease === true) ? "PRICE_SPIKE_UP" : null,
+        b14Event: metrics.outsideVolumeGeInsideTimes2 === true,
+        outsideStrengthSignal: metrics.outsideVolumeGeInsideTimes2 === true ? "OUTSIDE_STRONG" : null,
+        eventSourceContract: "canonical_priority_metrics_v1",
+        eventSourceTradeDate: metrics.sideVolumeTradeDate || null,
+        eventSourceCanonicalRunId: metrics.sideVolumeCanonicalRunId || null,
+        eventSourceObservedAt: metrics.sideVolumeSourceEventAt || null,
         outsideVolume: Math.round(metrics.outsideVolume),
         insideVolume: Math.round(metrics.insideVolume),
         sideVolumeTotal: metrics.sideVolumeTotal === null ? null : Math.round(metrics.sideVolumeTotal),
@@ -3984,7 +4261,8 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         sideVolumeIncludesUnclassifiedTrades: metrics.sideVolumeIncludesUnclassifiedTrades,
         sideVolumeDifferenceFromTotal: metrics.sideVolumeDifferenceFromTotal,
         sideVolumeDifferenceExplanation: metrics.sideVolumeDifferenceExplanation,
-        outsideInsideRatio: Number(metrics.outsideInsideRatio.toFixed(4)),
+        outsideInsideRatio: metrics.outsideInsideRatio === null ? null : Number(metrics.outsideInsideRatio.toFixed(4)),
+        outsideInsideRatioStatus: metrics.insideVolume === 0 ? "ZERO_INSIDE_VOLUME" : "DEFINED",
         outsideVolumeGeInsideTimes2: metrics.outsideVolumeGeInsideTimes2,
         outsideVolumeGtInsideTimes2: metrics.outsideVolumeGtInsideTimes2,
         turnoverRate: metrics.turnoverRate === null ? null : Number(metrics.turnoverRate.toFixed(4)),
@@ -4104,6 +4382,8 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       priorityReason: row.priorityReason,
     });
   }
+  const openingReportSeeds = readOpeningReport0830PrioritySeeds(activeSymbols);
+  const openingReportSeedBySymbol = new Map(openingReportSeeds.symbols.map(seed => [seed.symbol, seed]));
   for (const seed of seeds.symbols) {
     const row = rankedBySymbol.get(seed.symbol);
     if (!row || (!row.formalLiquidityEligible && seed.openingReport0830BiasOnly !== true)) continue;
@@ -4132,7 +4412,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       }));
       const reportRunIds = [...new Set(observations.map((entry) => String(entry.run_id || "").replace(/-[A-Z][A-Z0-9_]+$/, "")).filter(Boolean))];
       if (!openingReportSeed?.openingReport0830IndustryBias) prev.openingReport0830IndustryBias = {
-        date: taipeiDate(), report_time: "08:50", report_run_id: reportRunIds[0] || "",
+        date: taipeiDate(), report_time: "08:20", report_run_id: reportRunIds[0] || "",
         run_id: reportRunIds[0] || "", source: "opening_report_0830", mode: "priority_bias_only",
         industry: observations.slice().sort((a, b) => Number(a.priority_observation_rank || 999) - Number(b.priority_observation_rank || 999))[0]?.industry || "",
         linked_industries: [...new Set(observations.map((entry) => entry.industry).filter(Boolean))],
@@ -4229,7 +4509,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
         warming_pending: warmingPending,
         formal_pool_eligible: row.basePool?.eligible === true,
         terminal_forced_admission: row.terminalForcedAdmission === true,
-        ...(row.openingReport0830IndustryBias ? { openingReport0830IndustryBias: row.openingReport0830IndustryBias } : {}),
+        ...(row.openingReport0830IndustryBias ? { openingReport0830IndustryBias: row.openingReport0830IndustryBias, opening_report_0830_source: "opening_report_0830", opening_report_0830_priority_reason: "opening_report_0830_industry_bias" } : {}),
         avg3_volume: Math.round(numberValue(row.priorityMetrics?.avgVolume3)),
         avg3_volume_sample_days: numberValue(row.priorityMetrics?.avgVolume3SampleDays),
         avg3_volume_gate_status: numberValue(row.priorityMetrics?.avgVolume3SampleDays) < 3
@@ -4289,10 +4569,24 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
       },
     });
   });
-  // Reconstruct independently of admission/quote gates; morning-only rows cannot enter deep scan.
-  const openingReportSeedBySymbol = readOpeningReport0830PrioritySeeds(activeSymbols);
-  preserveMorningWatchRows(output, openingReportSeedBySymbol.symbols, taipeiDate(), priorityUpdatedAt, DEEP_SCAN_POOL_MAX_SYMBOLS);
+  const openingReportPreservedSeeds = readOpeningReport0830PrioritySeeds(activeSymbols);
+  preserveMorningWatchRows(output, openingReportPreservedSeeds.symbols, taipeiDate(), priorityUpdatedAt, DEEP_SCAN_POOL_MAX_SYMBOLS);
+  if (intradayTurnoverActive) {
+    require('../lib/mother-pool-scan-allocation').apply(output, {
+      identity: require('../lib/daytrade-writer-identity').requireIdentity(writerTickIdentity, taipeiDate()),
+      previous: readJson(PRIORITY_SYMBOLS_FILE, {}).deepScanAllocation || null,
+      asOf: priorityUpdatedAt, limit: DEEP_SCAN_POOL_MAX_SYMBOLS,
+    });
+  }
   output.sourceSeedCounts = seeds.counts;
+  output.sourceSeedAudit = seeds.sourceAudit;
+  output.moduleRequestedUniverse = turnoverUniverse.map(row=>row.symbol);
+  output.volumeValueRanking = intradayTurnoverActive
+    ? require('../lib/daytrade-volume-value-ranking').buildRanking(turnoverUniverse.map(row => {
+      const payload = quoteMap.get(row.symbol)?.payload || {};
+      return {symbol:row.symbol,volume:payload.turnoverVolumeEvidence || {},amount:payload.tradeValueEvidence || {}};
+    }), {tradeDate:taipeiDate(),canonicalRunId:canonicalDaytradeRunId(taipeiDate()),now:supplementalMaps.turnoverCalculatedAt})
+    : {status:'NOT_DUE',trade_date:taipeiDate(),reason:'outside_intraday_window'};
   output.intradayTurnoverRanking = intradayTurnoverActive ? intradayTurnoverRanking : {
     contract: intradayTurnoverRanking.contract, status: 'NOT_DUE', trade_date: taipeiDate(),
     reason: 'outside_intraday_window', rows: [], gaps: [] };
@@ -4370,7 +4664,9 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
   const daytradeHotPoolSymbols = formalPoolRows.map((row) => normalizeCode(row.symbol)).filter((code) => /^\d{4}$/.test(code)).slice(0, HOT_POOL_MAX_SYMBOLS);
   const daytradePrioritySymbols = formalPoolRows.map((row) => normalizeCode(row.symbol)).filter((code) => /^\d{4}$/.test(code)).slice(0, MOTHER_POOL_MAX_SYMBOLS);
   const daytradePriorityExtensionSymbols = daytradePrioritySymbols.slice(HOT_POOL_MAX_SYMBOLS, MOTHER_POOL_MAX_SYMBOLS);
-  const daytradeFormalPrioritySymbols = daytradePrioritySymbols.slice(0, DEEP_SCAN_POOL_MAX_SYMBOLS);
+  const daytradeFormalPrioritySymbols = priorityRows.deepScanAllocation
+    ? priorityRows.deepScanAllocation.selected_symbols.filter(symbol => new Set(formalPoolRows.map(row => normalizeCode(row.symbol))).has(symbol))
+    : daytradePrioritySymbols.slice(0, DEEP_SCAN_POOL_MAX_SYMBOLS);
   const priceEligibleSymbolSet = new Set(formalPoolRows
     .map((row) => normalizeCode(row.symbol))
     .filter((code) => /^\d{4}$/.test(code)));
@@ -4451,13 +4747,12 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     preferredSymbols: prependUnique(fiveMinutePriorityEvidence?.promoted_symbols || [], fullTerminalWarmupSymbols),
     computedSymbols: daytradeCandlePrioritySymbols,
   });
-  const motherPoolSnapshot = publishMotherPoolSnapshot(
+  const motherPoolSnapshot = await publishMotherPoolSnapshot(
     priceEligiblePriorityRows,
     daytradeMotherPoolSymbols,
     tradeDate,
     canonicalRunId,
   );
-  await publishMotherPoolSnapshotSupabase(motherPoolSnapshot);
   const nextPriorityPayload = {
     ...currentExisting,
     ...bridgeFields,
@@ -4523,6 +4818,7 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     daytradeHotPoolCount: daytradeHotPoolSymbols.length,
     daytradeHotPoolMinCount: HOT_POOL_MIN_SYMBOLS,
     daytradeHotPoolMaxCount: HOT_POOL_MAX_SYMBOLS,
+    deepScanAllocation: priorityRows.deepScanAllocation || null,
     daytradeFormalPrioritySymbols: daytradeFormalPrioritySymbols,
     daytradeFormalPriorityCount: daytradeFormalPrioritySymbols.length,
     strategy2Symbols: strategy2FormalWaterSymbols,
@@ -4571,7 +4867,7 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     || String(existing.daytradePriceGateStatus || "") !== (MOTHER_POOL_MIN_PRICE > 0 ? "minimum_price_enforced" : "no_price_floor")
     || JSON.stringify(existing.daytradePoolPriceBySymbol || {}) !== JSON.stringify(nextPriorityPayload.daytradePoolPriceBySymbol || {});
   const fiveMinuteEvidenceChanged = JSON.stringify(existing.fiveMinutePriorityEvidence) !== JSON.stringify(nextPriorityPayload.fiveMinutePriorityEvidence);
-  if (!sameDailyIdentity || !sameSymbols || fiveMinuteEvidenceChanged || !samePriorityCounts || candlePriorityArtifactChanged || openingPriorityArtifactChanged || industryPrewarmArtifactChanged || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
+  if (!sameDailyIdentity || !sameSymbols || JSON.stringify(existing.deepScanAllocation) !== JSON.stringify(nextPriorityPayload.deepScanAllocation) || fiveMinuteEvidenceChanged || !samePriorityCounts || candlePriorityArtifactChanged || openingPriorityArtifactChanged || industryPrewarmArtifactChanged || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
     writeJson(PRIORITY_SYMBOLS_FILE, nextPriorityPayload);
     writeFugleWebSocketSymbols(nextPriorityPayload.symbols, {
       source: "daytrade-dedicated-priority-bridge",
@@ -4830,7 +5126,8 @@ function normalizeQuote(payload, symbol) {
     session: payload?.session || "",
     last_trade_time: lastTradeTime,
     source: "fugle_daytrade_writer",
-    payload: { ...payload, turnoverVolumeEvidence: nativeVolume(payload, 'fugle.intraday.quote.total.tradeVolume') },
+    payload: { ...payload, turnoverVolumeEvidence: nativeVolume(payload, 'fugle.intraday.quote.total.tradeVolume'),
+      tradeValueEvidence: require('../lib/daytrade-trade-value-evidence').nativeTradeValue(payload, 'fugle.intraday.quote.total.tradeValue') },
   };
 }
 
@@ -4877,6 +5174,8 @@ async function fetchQuoteBatch(symbols) {
 
 function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dailyVolumeMap, intradayMap, futoptRows, websocketFutoptSync = {}, opening0901Evidence = {}, fetchResult, state, supplementalMaps = {} }) {
   const phase = phaseNow();
+  const tradeDate = taipeiDate();
+  const canonicalRunId = canonicalDaytradeRunId(tradeDate);
   const warmupDataFillActive = taipeiMinutes() >= PREOPEN_WARMUP_START_MINUTES;
   const runtimePriority = readRuntimePrioritySummary(activeSymbols);
   const strategyChipCompleteLatestRun = runtimePriority.strategyChipCompleteLatestRun === true;
@@ -4888,7 +5187,9 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const priorityExtensionRows = priorityRows.slice(HOT_POOL_MAX_SYMBOLS, MOTHER_POOL_MAX_SYMBOLS);
   // Formal readiness follows the high-frequency hot pool plus explicit user/case/burst symbols.
   // The larger deep-scan queue remains eligible for candle fill and emits DATA_GAP per symbol.
-  const formalPriorityRows = priorityRows.filter((row, index) => {
+  const formalPriorityRows = priorityRows.deepScanAllocation
+    ? priorityRows.filter(row => row.payload?.deep_scan_eligible === true)
+    : priorityRows.filter((row, index) => {
     const flags = Array.isArray(row.sourceFlags) ? row.sourceFlags : [];
     return index < HOT_POOL_MAX_SYMBOLS
       || flags.some((source) => /manual_watchlist|user_watchlist/i.test(String(source)))
@@ -5151,8 +5452,13 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     && formalScanIntraday1mFreshMaxAgeSeconds <= MAX_INTRADAY_1M_STALE_SECONDS;
   const scannerCanRunQuoteOnly = formalScopeQuoteFreshOk
     && rateLimitStatus === "ok";
-  const scopedIndicatorRequired = Math.max(1, Math.ceil(formalScanPoolSymbols * MIN_INDICATOR_WARMUP_COVERAGE));
-  const effectiveMa20Required = Math.min(MIN_READY_MA20_CONTINUOUS, scopedIndicatorRequired);
+  const ma20Scope = [...new Set(priorityRows.filter(isPublishedMotherMember).map(row => normalizeCode(row.symbol)))];
+  const ma20ReadySymbols = ma20Scope.filter(symbol => {
+    const row = intradayMap.get(symbol);
+    return Number(row?.continuous_candle_count) >= 20 && Number(row?.ma20) > 0;
+  });
+  readyMa20 = ma20ReadySymbols.length;
+  const effectiveMa20Required = Math.max(1, Math.ceil(ma20Scope.length * MIN_INDICATOR_WARMUP_COVERAGE));
   const effectiveMa35Required = 0;
   // Before 09:00, a quiet stock has no new trade by design. Warmup health is
   // therefore a transport/data-base check, not an impossible per-symbol trade
@@ -5168,6 +5474,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const warmupGateReady = !after0900
     && motherPoolSymbols > 0
     && formalScanPoolSymbols > 0
+    && readyMa20 >= effectiveMa20Required
     && dailyVolumeStatus === "ready"
     && rateLimitStatus === "ok"
     && warmupTransportHealthy;
@@ -5482,6 +5789,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     mother_pool_downstream_warmup_pending_count: Array.isArray(motherPoolSnapshot.downstream_warmup_pending_symbols) ? motherPoolSnapshot.downstream_warmup_pending_symbols.length : 0,
     mother_pool_snapshot_read_interface: motherPoolSnapshot.read_interface || {},
     mother_pool_source_seed_counts: priorityRows.sourceSeedCounts || {},
+    mother_pool_source_seed_audit: priorityRows.sourceSeedAudit || {},
     mother_pool_source_seed_union: priorityRows.sourceSeedUnion || [],
     mother_pool_source_seed_updated_at: priorityRows.sourceSeedUpdatedAt || "",
     mother_pool_min_price: MOTHER_POOL_MIN_PRICE,
@@ -5497,6 +5805,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     hot_pool_max_symbols: HOT_POOL_MAX_SYMBOLS,
     mother_pool_capital_rows: supplementalMaps.capitalMap?.size || 0,
     intraday_turnover_ranking: priorityRows.intradayTurnoverRanking || null,
+    volume_value_ranking: priorityRows.volumeValueRanking || null,
+    module_requested_universe: priorityRows.moduleRequestedUniverse || [],
     mother_pool_chip_rows: supplementalMaps.chipMap?.size || 0,
     mother_pool_margin_change_rows: supplementalMaps.marginChangeMap?.size || 0,
     stock_group_contract_source: stockGroupMeta.source || "missing",
@@ -5512,6 +5822,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     priority_extension_pool_symbols: priorityExtensionPoolSymbols,
     priority_extension_fresh_quote_coverage_120s: priorityExtensionPoolSymbols ? Number((priorityExtensionRows.filter((row) => row.priorityMetrics?.quoteFresh === true).length / priorityExtensionPoolSymbols).toFixed(4)) : 0,
     mother_pool_field_coverage_counts: motherFieldCoverageCounts,
+    deep_scan_allocation: priorityRows.deepScanAllocation || null,
     formal_daytrade_priority_limit: DEEP_SCAN_POOL_MAX_SYMBOLS,
     formal_daytrade_priority_symbols: formalPriorityPoolSymbols,
     priority_fresh_quotes_120s: freshPriority.length,
@@ -5572,6 +5883,11 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     ready_ma35_continuous: 0,
     ready_ma58: 0,
     ready_ma20_required: effectiveMa20Required,
+    ma20_scope: "published_mother_pool",
+    ma20_requested_count: ma20Scope.length,
+    ma20_ready_count: ma20ReadySymbols.length,
+    ma20_coverage: ma20Scope.length ? ma20ReadySymbols.length / ma20Scope.length : 0,
+    ma20_data_gap_symbols: ma20Scope.filter(symbol => !ma20ReadySymbols.includes(symbol)),
     ready_ma35_required: 0,
     indicator_set: ["MA3", "MA5", "MA10", "MA20", "KD", "MACD", "RSI"],
     preopen_today_1m_required_before_formal: false,
@@ -5689,19 +6005,10 @@ function buildIntradayBurstCandleCacheBySymbol(tradeDate) {
       const symbol = normalizeCode(row?.symbol || row?.code);
       const candleTime = row?.candleTime || row?.candle_time || row?.time || "";
       if (!symbol || !candleTime || taipeiDateFrom(candleTime) !== tradeDate) continue;
-      const close = numberValue(row?.close);
-      const volume = Math.max(0, numberValue(row?.volume));
-      if (!(close > 0)) continue;
+      const checked = normalizeNaturalMinute(row, tradeDate);
+      if (!checked.ok) continue;
       const rows = bySymbol.get(symbol) || [];
-      rows.push({
-        symbol,
-        candle_time: candleTime,
-        high: numberValue(row?.high),
-        low: numberValue(row?.low),
-        close,
-        volume,
-        source: "fugle_websocket_candle_cache",
-      });
+      rows.push(checked.row);
       bySymbol.set(symbol, rows);
     }
     for (const rows of bySymbol.values()) {
@@ -5836,6 +6143,8 @@ function intradayIndustryClassification(row, metrics, fallbackGroup = {}) {
     industry: detailedReady ? detailedIndustry : "未分類",
     industryParent: officialIndustry || "未分類",
     industrySubgroup: detailedReady ? detailedIndustry : "未分類",
+    officialEvidence:group.officialEvidence||null,
+    detailedEvidence:group.detailedEvidence||null,
     taxonomy: "taiwan_domestic_detailed_industry_v1",
     parentTaxonomy: "twse_tpex_mops_official_domestic",
     classificationStatus: officialIndustry && detailedReady ? "ready" : "DATA_GAP_DOMESTIC_DETAILED_INDUSTRY",
@@ -5866,6 +6175,8 @@ function finalizeIntradayIndustryHeatmap(accumulator, checkedAt) {
     return {
       industry: item.industry,
       symbol_count: item.symbol_count,
+      component_symbols: [...new Set(item.component_symbols || [])].sort(),
+      formula_version: "executed_trade_value_direction_proxy_v1",
       advancers: item.advancers,
       decliners: item.decliners,
       unchanged: item.unchanged,
@@ -5938,6 +6249,7 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
   const industryFlowAccumulator = new Map();
   const industrySourceRejected = [];
   const industryAcceptedSymbols = new Set();
+  const industrySourceRows = [];
   let cacheRolling1mReadyCount = 0;
   const firstPositiveValue = (...values) => {
     for (const value of values) {
@@ -5967,18 +6279,23 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
     const price = firstPositiveValue(metrics.price, metrics.lastPrice, metrics.last_price, row?.price, row?.last_price, quote.price, quote.lastPrice, quote.last_price, quotePayload.price, quotePayload.lastPrice, quotePayload.last_price);
     const previousClose = firstPositiveValue(metrics.previousClose, metrics.previous_close, row?.previous_close, row?.payload?.previous_close, quote.previousClose, quote.previous_close, quotePayload.previousClose, quotePayload.previous_close);
     // Use source turnover, never a last-price times untyped volume estimate.
-    const tradeValue = firstPositiveValue(quote.tradeValue, quote.trade_value, quotePayload.tradeValue, quotePayload.trade_value);
+    const amountEvidence=require('../lib/daytrade-trade-value-evidence').evaluateTradeValue(quotePayload.tradeValueEvidence,tradeDate,Date.parse(checkedAt));
+    const tradeValue = amountEvidence.trade_value_twd;
     const eventAt = quoteFreshnessTime(quote);
     const eventMs = Date.parse(eventAt || "");
     const eventAge = (Date.parse(checkedAt) - eventMs) / 1000;
     const sourceReason = !Number.isFinite(eventAge) || eventAge < 0 || eventAge > WINDOW_SECONDS || taipeiDateFrom(eventAt) !== tradeDate
       ? "quote_event_not_fresh_same_day" : classification.classificationStatus !== "ready"
-      ? "industry_classification_not_ready" : !(tradeValue > 0) ? "source_trade_value_missing" : null;
+      ? "industry_classification_not_ready" : amountEvidence.status !== "ready" ? "source_trade_value_missing" : !(price>0&&previousClose>0) ? "source_price_or_previous_close_missing" : null;
     if (sourceReason) { industrySourceRejected.push({ symbol, reason: sourceReason }); continue; }
+    const mappingCheck=require('../lib/verify-mother-pool-industry-mapping').evaluate({symbol,classification,tradeDate,asOf:checkedAt});
+    if(mappingCheck.failed_checks.length){industrySourceRejected.push({symbol,reason:'INDUSTRY_MAPPING_EVIDENCE_MISSING',failed_checks:mappingCheck.failed_checks});continue;}
     const reportedChangePercent = Number(metrics.changePercent ?? metrics.change_percent);
     const changePercent = Number.isFinite(reportedChangePercent) && reportedChangePercent !== 0 ? reportedChangePercent : (price > 0 && previousClose > 0 ? ((price - previousClose) / previousClose) * 100 : 0);
     industryAcceptedSymbols.add(symbol);
+    industrySourceRows.push({symbol,classification,price,previous_close:previousClose,change_percent:changePercent,trade_value:tradeValue,trade_value_evidence:amountEvidence,event_at:eventAt,volume_ratio_5:metrics.volumeRatio5??metrics.volume_ratio_5??null});
     const industryFlow = industryFlowAccumulator.get(industryName) || { industry: industryName, industry_parent: classification.industryParent, symbol_count: 0, advancers: 0, decliners: 0, unchanged: 0, up_trade_value: 0, down_trade_value: 0, flat_trade_value: 0, change_percent_sum: 0, volume_expansion_count: 0 };
+    industryFlow.component_symbols = [...(industryFlow.component_symbols || []), symbol];
     industryFlow.symbol_count += 1;
     industryFlow.change_percent_sum += changePercent;
     if (numberValue(metrics.volumeRatio5 ?? metrics.volume_ratio_5) >= 1.2) industryFlow.volume_expansion_count += 1;
@@ -5996,30 +6313,35 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
     : null;
   for (const row of industryHeatmap) {
     const previous = previousIndustryMap.get(row.industry);
-    row.flow_delta_proxy = previous && industryDeltaWindowSeconds > 0 && industryDeltaWindowSeconds <= 300
-      ? Math.round(row.net_flow_proxy - numberValue(previous.net_flow_proxy))
-      : 0;
-    row.flow_delta_window_seconds = industryDeltaWindowSeconds;
-    row.previous_average_change_percent = previous && industryDeltaWindowSeconds > 0 && industryDeltaWindowSeconds <= 300
-      ? numberValue(previous.average_change_percent)
-      : null;
+    row.symbols=industrySourceRows.filter(x=>x.classification.industry===row.industry).map(x=>x.symbol).sort();
+    row.trade_date=tradeDate;row.canonical_run_id=canonicalRunId;
+    row.writer_run_id=require('../lib/daytrade-writer-identity').requireIdentity(writerTickIdentity,tradeDate).writer_run_id;
+    const comparison=require('../lib/mother-pool-industry-round-delta').compare({current:row,previous,tradeDate,canonicalRunId,asOf:checkedAt});
+    row.comparison=comparison;
+    row.previous_round_evidence=previous?Object.fromEntries(['trade_date','canonical_run_id','writer_run_id','updated_at','symbols','formula_version','net_flow_proxy','average_change_percent'].map(k=>[k,previous[k]??null])):null;
+    row.flow_delta_proxy = comparison.delta;
+    row.flow_delta_window_seconds = comparison.window_seconds;
+    row.previous_average_change_percent = comparison.comparable ? previous.average_change_percent : null;
+    row.flow_comparable = comparison.comparable;
+    row.flow_comparison_reason = comparison.reason;
+    row.component_hash = require('node:crypto').createHash('sha256').update(JSON.stringify(row.symbols)).digest('hex');
     row.industry_volume_expansion_confirmed = Number(row.volume_expansion_symbol_count) > 0
       && Number(row.volume_expansion_ratio_percent) > 0;
-    row.industry_price_rise_continuing = Boolean(previous)
+    row.industry_price_rise_continuing = comparison.comparable
       && industryDeltaWindowSeconds > 0
       && industryDeltaWindowSeconds <= 300
       && Number(row.average_change_percent) > 0
       && Number(row.breadth_percent) > 0
       && Number(row.average_change_percent) >= numberValue(previous.average_change_percent);
   }
-  const suddenRanked = industryHeatmap.slice().sort((a, b) => b.flow_delta_proxy - a.flow_delta_proxy || a.industry.localeCompare(b.industry, "zh-Hant"));
+  const suddenRanked = industryHeatmap.filter(row=>row.comparison?.comparable===true).slice().sort((a, b) => b.flow_delta_proxy - a.flow_delta_proxy || a.industry.localeCompare(b.industry, "zh-Hant"));
   suddenRanked.forEach((row, index) => { row.sudden_inflow_rank = index + 1; });
   const suddenRankByIndustry = new Map(suddenRanked.map((row) => [row.industry, row.sudden_inflow_rank]));
   for (const row of industryHeatmap) {
     row.sudden_inflow_rank = suddenRankByIndustry.get(row.industry) || null;
     row.persistent_large_inflow = row.flow_rank <= 3 && row.flow_direction === "inflow"
       && row.industry_volume_expansion_confirmed === true && row.industry_price_rise_continuing === true;
-    row.sudden_large_inflow = row.sudden_inflow_rank <= 3 && row.flow_delta_proxy >= 500000000 && row.flow_direction !== "outflow"
+    row.sudden_large_inflow = row.comparison?.comparable === true && Number.isInteger(row.sudden_inflow_rank) && row.sudden_inflow_rank <= 3 && row.flow_delta_proxy >= 500000000 && row.flow_direction !== "outflow"
       && row.industry_volume_expansion_confirmed === true && row.industry_price_rise_continuing === true;
     row.industry_trigger_reason = row.persistent_large_inflow
       ? "top3_persistent_large_inflow_volume_price_confirmed"
@@ -6038,7 +6360,7 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
       industry: classification.industry,
       price: numberValue(metrics.price ?? metrics.lastPrice ?? metrics.last_price),
       change_percent: numberValue(metrics.changePercent ?? metrics.change_percent),
-      trade_value: numberValue(metrics.tradeValue ?? metrics.trade_value),
+      trade_value: industrySourceRows.find(sourceRow => sourceRow.symbol === symbol)?.trade_value ?? null,
       quote_fresh: metrics.quoteFresh === true,
     };
   }).filter((row) => industryAcceptedSymbols.has(row.symbol) && qualifiedIndustryNames.has(row.industry)
@@ -6064,13 +6386,61 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
     });
     industryFastInjectCounts.set(row.industry, count + 1);
   }
+  const industryTop3Rows = industryHeatmap
+    .slice()
+    .sort((a, b) => numberValue(a.flow_rank, 999999) - numberValue(b.flow_rank, 999999)
+      || numberValue(b.net_flow_proxy) - numberValue(a.net_flow_proxy)
+      || String(a.industry || "").localeCompare(String(b.industry || ""), "zh-Hant"))
+    .slice(0, 3)
+    .map((row, index) => ({
+      industry_rank: numberValue(row.flow_rank, index + 1),
+      industry_name: String(row.industry || ""),
+      industry_parent: String(row.industry_parent || ""),
+      flow_direction: String(row.flow_direction || ""),
+      net_flow_proxy: numberValue(row.net_flow_proxy),
+      industry_member_count: numberValue(row.symbol_count),
+      industry_up_count: numberValue(row.advancers),
+      industry_down_count: numberValue(row.decliners),
+      industry_trade_value_delta: numberValue(row.flow_delta_proxy),
+      industry_avg_change_pct: numberValue(row.average_change_percent),
+      industry_breadth_pct: numberValue(row.breadth_percent),
+      persistent_large_inflow: row.persistent_large_inflow === true,
+      sudden_large_inflow: row.sudden_large_inflow === true,
+      industry_trigger_reason: String(row.industry_trigger_reason || "not_qualified"),
+    }));
+  const industryTop3Failures = [];
+  if (industryHeatmap.length <= 0) industryTop3Failures.push("industry_top3_source_rows_empty");
+  if (industryTop3Rows.length <= 0) industryTop3Failures.push("industry_top3_rows_empty");
+  const industryTop3Payload = {
+    ok: industryTop3Failures.length === 0,
+    complete: industryTop3Failures.length === 0,
+    contract: "daytrade_industry_top3_runner_verifier_receipt_v1",
+    trade_date: tradeDate,
+    canonical_run_id: runId,
+    checked_at: checkedAt,
+    source: "taiwan_full_market_detailed_industry_signal",
+    scan_executed: true,
+    source_rows: industryHeatmap.length,
+    top3_count: industryTop3Rows.length,
+    industries: industryTop3Rows.map((row) => row.industry_name),
+    rows: industryTop3Rows,
+    zero_event: false,
+    failed_checks: industryTop3Failures,
+    first_blocker: industryTop3Failures[0] || null,
+    formal_candidate: false,
+    order_allowed: false,
+  };
   const industryFastInjectPayload = {
+    ok: true,
+    complete: true,
     contract: "daytrade_industry_signal_fast_inject_v1",
     trade_date: tradeDate,
     canonical_run_id: canonicalRunId,
     updated_at: checkedAt,
     expires_at: new Date(Date.parse(checkedAt) + 15 * 60 * 1000).toISOString(),
     source: "taiwan_full_market_detailed_industry_signal",
+    scan_executed: true,
+    source_rows: industryHeatmap.length,
     industries: [...qualifiedIndustryNames],
     symbols: industryFastInjectRows.map((row) => row.symbol),
     rows: industryFastInjectRows,
@@ -6081,12 +6451,34 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
     truncated_symbols: industryFastInjectTruncated,
     universe_count: heatmapRows.length,
     accepted_source_count: industryAcceptedSymbols.size,
+    mapping_rows: heatmapRows.map(row=>({symbol:normalizeCode(row.symbol),classification:intradayIndustryClassification(row,{...(row.metrics||{}),...(row.priorityMetrics||{})},classificationFallback(normalizeCode(row.symbol)))})),
+    requested_symbols: heatmapRows.map(row=>normalizeCode(row.symbol)),
+    source_rows: industrySourceRows,
     source_rejected: industrySourceRejected,
     industry_heatmap: industryHeatmap,
     formal_candidate_allowed: false,
     publish_allowed: false,
+    zero_event: industryFastInjectRows.length === 0,
+    zero_event_reason: industryFastInjectRows.length === 0 ? "no_industry_met_fast_inject_threshold" : null,
+    failed_checks: [],
+    first_blocker: null,
+    formal_candidate: false,
+    order_allowed: false,
   };
-  if (!DRY_RUN) writeJson(INDUSTRY_SIGNAL_FAST_INJECT_FILE, industryFastInjectPayload);
+  if (!DRY_RUN) {
+    const compactTradeDate = String(tradeDate || "").replace(/\D/g, "");
+    const top3ReceiptPath = runtimePath("data", "scan-receipts", `daytrade-industry-top3-${compactTradeDate}.json`);
+    const fastInjectReceiptPath = runtimePath("data", "scan-receipts", `daytrade-industry-fast-inject-${compactTradeDate}.json`);
+    writeJson(INDUSTRY_SIGNAL_FAST_INJECT_FILE, industryFastInjectPayload);
+    writeJson(top3ReceiptPath, { ...industryTop3Payload, receipt_path: top3ReceiptPath });
+    writeJson(fastInjectReceiptPath, {
+      ...industryFastInjectPayload,
+      contract: "daytrade_industry_fast_inject_runner_verifier_receipt_v1",
+      source_contract: "daytrade_industry_signal_fast_inject_v1",
+      checked_at: checkedAt,
+      receipt_path: fastInjectReceiptPath,
+    });
+  }
   if (discoveryOnly) return industryFastInjectPayload;
   const detectionPriorityByIndustry = new Map(industryHeatmap.map((row) => [row.industry, row.flow_rank]));
   const orderedInputRows = inputRows.slice().sort((a, b) => {
@@ -6378,7 +6770,7 @@ function updateMotherPoolDelta(result) {
   const tradeDate = taipeiDate();
   const checkedAt = nowIso();
   const runId = canonicalDaytradeRunId(tradeDate);
-  const writerRunId = String(WRITER_INSTANCE_ID || SOURCE_NAME) + ":" + compactDateKey(tradeDate) + ":" + Date.now();
+  const writerRunId = require("../lib/daytrade-writer-identity").requireIdentity(writerTickIdentity, tradeDate).writer_run_id;
   const previousPayload = readJson(MOTHER_POOL_DELTA_STATE_FILE, {});
   const previousPayloadCanonicalRunId = String(previousPayload.canonical_run_id || previousPayload.canonicalRunId || previousPayload.run_id || "");
   const currentPreviousPayload = sameDayArtifact(previousPayload, tradeDate) && previousPayloadCanonicalRunId === runId
@@ -6612,6 +7004,7 @@ function updateMotherPoolDelta(result) {
     run_id: runId,
     canonical_run_id: runId,
     writer_run_id: writerRunId,
+    generation_id: writerTickIdentity.generation_id,
     mother_pool_rows: current.size,
     mother_pool_target_min_symbols: MOTHER_POOL_TARGET_MIN_SYMBOLS,
     mother_pool_minimum_count_is_hard_gate: false,
@@ -6652,6 +7045,7 @@ function updateMotherPoolDelta(result) {
     run_id: runId,
     canonical_run_id: runId,
     writer_run_id: writerRunId,
+    generation_id: writerTickIdentity.generation_id,
     mother_pool_target_min_symbols: MOTHER_POOL_TARGET_MIN_SYMBOLS,
     mother_pool_minimum_count_is_hard_gate: false,
     mother_pool_target_shortfall: Math.max(0, MOTHER_POOL_TARGET_MIN_SYMBOLS - current.size),
@@ -6726,8 +7120,49 @@ function updateMotherPoolDelta(result) {
     round_summary: roundSummary,
     target_symbol_diagnostics: targetSymbolDiagnostics,
   };
-}async function writeStatusAndScorecard(result) {
-  const motherPoolDelta = updateMotherPoolDelta(result);
+}function buildPreopenLightMotherPoolDelta(result) {
+  const payload = result?.payload || {};
+  const rows = (Array.isArray(result?.priorityRows) ? result.priorityRows : [])
+    .filter(isPublishedMotherMember)
+    .slice(0, Math.max(1, MOTHER_POOL_TARGET_MIN_SYMBOLS));
+  const tradeDate = taipeiDate();
+  const canonicalRunId = canonicalDaytradeRunId(tradeDate);
+  const summary = {
+    contract_version: MOTHER_POOL_CONTRACT_VERSION,
+    trade_date: tradeDate,
+    checked_at: nowIso(),
+    run_id: canonicalRunId,
+    canonical_run_id: canonicalRunId,
+    writer_run_id: writerTickIdentity.writer_run_id,
+    generation_id: writerTickIdentity.generation_id,
+    mother_pool_rows: rows.length,
+    mother_pool_target_min_symbols: MOTHER_POOL_TARGET_MIN_SYMBOLS,
+    mother_pool_target_shortfall: Math.max(0, MOTHER_POOL_TARGET_MIN_SYMBOLS - rows.length),
+    source_status: payload.source_status || result?.status || "",
+    quote_age_seconds: numberValue(payload.quote_age_seconds, 999999),
+    mode: "preopen_light",
+    bounded_scope: "A01-A19",
+  };
+  return { mode: "preopen_light", bounded_scope: "A01-A19", previous_count: 0,
+    current_count: rows.length, added_count: 0, removed_count: 0,
+    upgraded_to_priority_count: 0, downgraded_count: 0, round_summary: summary,
+    target_symbol_diagnostics: [] };
+}
+async function traceStatusWrite(stage, action) {
+  const started = Date.now();
+  console.log(JSON.stringify({ stage: 'status_write:' + stage + ':start', checkedAt: nowIso() }));
+  try {
+    const result = await action();
+    console.log(JSON.stringify({ stage: 'status_write:' + stage + ':complete', elapsed_ms: Date.now() - started, checkedAt: nowIso() }));
+    return result;
+  } catch (cause) {
+    console.error(JSON.stringify({ stage: 'status_write:' + stage + ':failed', elapsed_ms: Date.now() - started, error_name: cause?.name || 'Error', checkedAt: nowIso() }));
+    const error = new Error('STATUS_WRITE_FAILED:' + stage + ':' + (cause?.name || 'Error'), { cause });
+    throw error;
+  }
+}
+async function writeStatusAndScorecard(result) {
+  const motherPoolDelta = PREOPEN_LIGHT_MODE ? buildPreopenLightMotherPoolDelta(result) : updateMotherPoolDelta(result);
   const tradeDate = taipeiDate();
   const canonicalRunId = canonicalDaytradeRunId(tradeDate);
   result.payload.trade_date = tradeDate;
@@ -6739,11 +7174,13 @@ function updateMotherPoolDelta(result) {
   result.payload.mother_pool_delta = motherPoolDelta;
   result.payload.mother_pool_round_summary = motherPoolDelta.round_summary;
   result.payload.target_symbol_diagnostics = motherPoolDelta.target_symbol_diagnostics;
-  await ensureWriterLease();
-  const nonFatalWriteErrors = result.payload.nonfatal_write_errors || [];
+  await traceStatusWrite('lease', () => ensureWriterLease());
+  const nonFatalWriteErrors = (result.payload.nonfatal_write_errors || []).map(require('../lib/daytrade-diagnostic-errors').encodeDiagnosticError);
+  result.payload.nonfatal_write_errors = nonFatalWriteErrors;
   result.payload.source_host_id = SOURCE_HOST_ID;
   result.payload.source_host_role = SOURCE_HOST_ROLE;
   result.payload.writer_instance_id = WRITER_INSTANCE_ID;
+  Object.assign(result.payload, require("../lib/daytrade-writer-identity").requireIdentity(writerTickIdentity, tradeDate));
   result.payload.writer_lease_required = WRITER_LEASE_REQUIRED;
   result.payload.writer_lease_status = writerLease.status;
   result.payload.writer_heartbeat_at = writerLease.heartbeatAt || nowIso();
@@ -6761,6 +7198,26 @@ function updateMotherPoolDelta(result) {
   };
   if (result.status === "ok") sourceRow.last_success_at = nowIso();
 
+  const scorecardPayload = PREOPEN_LIGHT_MODE ? {
+    trade_date: tradeDate, canonical_run_id: canonicalRunId,
+    writer_run_id: result.payload.writer_run_id || result.run_id || null,
+    generation_id: result.payload.generation_id || null,
+    mother_pool_run_id: result.payload.mother_pool_run_id || null,
+    snapshot_generation: result.payload.mother_pool_snapshot?.generation || null,
+    snapshot_sequence: result.payload.mother_pool_snapshot_sequence || null,
+    active_symbols: result.payload.active_symbols,
+    priority_symbols: result.payload.priority_symbols,
+    priority_pool_symbols: result.payload.priority_pool_symbols,
+    selected_symbols_fresh_ok: result.payload.selected_symbols_fresh_ok,
+    scanner_can_run_opening: result.payload.scanner_can_run_opening,
+    daily_volume_status: result.payload.daily_volume_status,
+    avg_volume5_eligible: result.payload.avg_volume5_eligible,
+    ready_ma20_continuous: result.payload.ready_ma20_continuous,
+    ready_ma35_continuous: result.payload.ready_ma35_continuous,
+    futopt_stock_mapped: result.payload.futopt_stock_mapped,
+    preopen_status: result.payload.preopen_status,
+    source_status: result.status, bounded_scope: "A01-A19", mode: "preopen_light"
+  } : boundedScorecardPayload(result.payload);
   const scorecardRow = {
     trade_date: tradeDate,
     source_name: SOURCE_NAME,
@@ -6791,48 +7248,133 @@ function updateMotherPoolDelta(result) {
     cooldown_until: result.payload.cooldown_until,
     self_heal_count: result.payload.self_heal_count,
     message: result.message,
-    payload: result.payload,
+    payload: scorecardPayload,
   };
   try {
-    await supabaseInsert("fugle_daytrade_source_speed_scorecard", [scorecardRow]);
+    await traceStatusWrite("speed_scorecard", () => supabaseInsert("fugle_daytrade_source_speed_scorecard", [scorecardRow]));
   } catch (error) {
-    nonFatalWriteErrors.push({
+    nonFatalWriteErrors.push(require("../lib/daytrade-diagnostic-errors").encodeDiagnosticError({
       target: "fugle_daytrade_source_speed_scorecard",
       message: error?.message || String(error),
-    });
+    }));
     result.payload.nonfatal_write_errors = nonFatalWriteErrors;
     sourceRow.payload = result.payload;
   }
 
-  await supabaseUpsert("source_status", [sourceRow], "source_name");
+  const nullPaths = [];
+  function inspectNull(value, key) {
+    if (typeof value === 'string' && value.includes(String.fromCharCode(0))) nullPaths.push(key);
+    else if (value && typeof value === 'object') for (const [child, item] of Object.entries(value)) inspectNull(item, key + '.' + child);
+  }
+  inspectNull(sourceRow, 'source_status');
+  if (nullPaths.length) throw Error('SOURCE_STATUS_NULL_CHARACTER_FIELDS:' + JSON.stringify(nullPaths));
+  console.log(JSON.stringify({stage:'source_status_write_size',checkedAt:nowIso(),writer_run_id:sourceRow.payload.writer_run_id,bytes:Buffer.byteLength(JSON.stringify(sourceRow),'utf8'),largest_fields:require('../lib/daytrade-payload-size').inspect(sourceRow.payload)}));
+  const sourceStatusJournal=require('../lib/daytrade-source-status-journal');
+  let sourceStatusCheckpoint;
+  const sourceStatusAck = await traceStatusWrite("source_status", () => require('../lib/daytrade-source-status-ack').writeWithAcknowledgement({
+    row: sourceRow,
+    onPrepared: row => {sourceStatusCheckpoint=sourceStatusJournal.prepare(runtimePath('data','source-status-write-intents'),row);console.log(JSON.stringify({stage:'source_status_intent:durable',checkedAt:nowIso(),writer_run_id:row.payload.writer_run_id,...sourceStatusCheckpoint}));},
+    onAcknowledged: ack => sourceStatusJournal.confirm(sourceStatusCheckpoint,ack),
+    retryDelaysMs: [5000,10000],
+    onMismatch: evidence => console.error(JSON.stringify({stage:'source_status_ack_mismatch',checkedAt:nowIso(),...evidence})),
+    write: row => supabaseUpsert("source_status", [row], "source_name"),
+    read: row => supabaseGet('source_status',require('../lib/daytrade-source-status-ack').fixedReadQuery(row), {service:true}),
+  }));
+  console.log(JSON.stringify({stage:'source_status_ack',checkedAt:nowIso(),...sourceStatusAck}));
   // The turnover checklist has its own independently read-back receipt.
   // Failure here is visible but cannot erase the already published core source.
   const turnover = result.payload.intraday_turnover_ranking;
+  const volumeValue = result.payload.volume_value_ranking;
+  const minuteSide = result.payload.mother_pool_minute_side_evidence;
+  const priceVolume = result.payload.mother_pool_price_volume_evidence;
+  const rankingReceiptWriteFailures = [];
+  const persistRankingReceipt = (file, receipt) => {
+    try { writeJsonAtomic(file, receipt); }
+    catch { rankingReceiptWriteFailures.push('RANKING_RECEIPT_PERSIST_FAILED:' + path.basename(file)); }
+  };
+  let rankingReadback = null;
+  if (!PREOPEN_LIGHT_MODE && [turnover,volumeValue,minuteSide,priceVolume].some(item=>item && item.status !== 'NOT_DUE')) {
+    try {
+      if (!SUPABASE_READ_KEY || SUPABASE_READ_KEY === SUPABASE_SERVICE_KEY) throw new Error('anon_read_key_missing');
+      const rankingReader = require('../lib/daytrade-ranking-readback');
+      rankingReadback = rankingReader.decode(await supabaseGet('source_status',
+        rankingReader.query(sourceRow), { service: false }), sourceRow);
+    } catch { rankingReadback = null; }
+  }
+  if (volumeValue && volumeValue.status !== 'NOT_DUE') {
+    let volumeReceipt;
+    try {
+      if (!rankingReadback) throw new Error('B02_ANON_READBACK_UNAVAILABLE');
+      volumeReceipt = require('./verify-daytrade-volume-value-ranking').verify(
+        rankingReadback[0]?.payload?.volume_value_ranking, volumeValue, {read_role:'anon',db_readback_ok:true});
+    } catch {
+      volumeReceipt = {contract:'daytrade_volume_value_readback_verifier_v1',status:'blocked',complete:false,
+        db_readback_ok:false,readback_count:null,failed_checks:['B02_READBACK_OR_VERIFIER_FAILED'],first_blocker:'B02_READBACK_OR_VERIFIER_FAILED',exit_code:1};
+    }
+    const savedVolumeReceipt = {...volumeReceipt,run_id:volumeValue.run_id,trade_date:tradeDate,
+      canonical_run_id:volumeValue.canonical_run_id,checked_at:nowIso()};
+    persistRankingReceipt(runtimePath('data','scan-receipts','volume-value',
+      volumeValue.run_id.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json'), savedVolumeReceipt);
+    persistRankingReceipt(runtimePath('data','scan-receipts','daytrade-volume-value-' + tradeDate.replace(/-/g,'') + '.json'), savedVolumeReceipt);
+  }
   if (turnover && turnover.status !== 'NOT_DUE') {
     let receipt;
     try {
-      if (!SUPABASE_READ_KEY || SUPABASE_READ_KEY === SUPABASE_SERVICE_KEY) throw new Error('anon_read_key_missing');
-      const readback = await supabaseGetPaged('source_status',
-        'select=trade_date,payload&source_name=eq.' + encodeURIComponent(SOURCE_NAME) + '&trade_date=eq.' + tradeDate + '&limit=1',
-        { service: false, pageSize: 2 });
+      if (!rankingReadback) throw new Error('B03_ANON_READBACK_UNAVAILABLE');
+      const readback = rankingReadback;
       const actual = readback[0]?.payload?.intraday_turnover_ranking;
-      const verdict = require('./verify-daytrade-intraday-turnover').verify(actual);
+      const verdict = require('./verify-daytrade-intraday-turnover').verifyDelivery(actual, turnover, { read_role: 'anon', db_readback_ok: true });
       const stable = value => JSON.stringify(value, (_, v) => v && typeof v === 'object' && !Array.isArray(v)
         ? Object.fromEntries(Object.keys(v).sort().map(k => [k, v[k]])) : v);
       if (!actual || stable(actual) !== stable(turnover)) throw new Error('turnover_readback_not_same_batch');
       receipt = { ...verdict, run_id: turnover.run_id, trade_date: tradeDate,
         canonical_run_id: turnover.canonical_run_id, checked_at: nowIso(), read_role: 'anon',
-        db_readback_ok: true, natural_production_readback_verified: true,
-        requested_count: turnover.requested_count, written_count: turnover.rows.length + turnover.gaps.length,
-        readback_count: actual.rows.length + actual.gaps.length };
+        db_readback_ok: true, natural_production_readback_verified: verdict.complete === true && verdict.exit_code === 0,
+        requested_count: turnover.requested_count, written_count: turnover.rows.length + turnover.data_gaps.length,
+        readback_count: actual.rows.length + actual.data_gaps.length };
     } catch (error) {
-      receipt = { contract: 'daytrade_intraday_turnover_verifier_v1', status: 'blocked', complete: false,
+      receipt = { ...turnover, contract: 'daytrade_intraday_turnover_verifier_v1', status: 'blocked', complete: false,
+        written_count: turnover.rows.length + turnover.data_gaps.length, readback_count: null,
         run_id: turnover.run_id, trade_date: tradeDate, checked_at: nowIso(), exit_code: 1,
         db_readback_ok: false, failed_checks: [String(error.message)], first_blocker: String(error.message) };
     }
-    writeJsonAtomic(runtimePath('data', 'scan-receipts', 'daytrade-intraday-turnover-' + tradeDate.replace(/-/g, '') + '.json'), receipt);
-    writeJsonAtomic(runtimePath('data', 'scan-receipts', 'turnover', turnover.run_id.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json'), receipt);
+    persistRankingReceipt(runtimePath('data', 'scan-receipts', 'daytrade-intraday-turnover-' + tradeDate.replace(/-/g, '') + '.json'), receipt);
+    persistRankingReceipt(runtimePath('data', 'scan-receipts', 'turnover', turnover.run_id.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json'), receipt);
   }
+  if (minuteSide && minuteSide.status !== 'NOT_DUE') {
+    let sideReceipt;
+    try {
+      if (!rankingReadback) throw new Error('MINUTE_SIDE_ANON_READBACK_UNAVAILABLE');
+      sideReceipt = require('../lib/verify-mother-pool-minute-side-batch').verify(
+        rankingReadback[0]?.payload?.mother_pool_minute_side_evidence, minuteSide, {role:'anon',dbReadback:true});
+    } catch {
+      sideReceipt = {contract:'mother_pool_minute_side_readback_v1',status:'blocked',complete:false,readback_verified:false,
+        failed_checks:['MINUTE_SIDE_READBACK_FAILED'],first_blocker:'MINUTE_SIDE_READBACK_FAILED',exit_code:1};
+    }
+    const attempt = require('node:crypto').randomUUID();
+    const saved = {...sideReceipt,attempt_id:attempt,checked_at:nowIso(),trade_date:tradeDate,
+      canonical_run_id:minuteSide.canonical_run_id,mother_pool_run_id:minuteSide.mother_pool_run_id,snapshot_sequence:minuteSide.snapshot_sequence};
+    const file = runtimePath('data','scan-receipts','mother-pool-minute-side-'+tradeDate.replace(/-/g,'')+'.json');
+    persistRankingReceipt(file.replace(/\.json$/,`-${attempt}.json`),saved);
+    persistRankingReceipt(file,saved);
+  }
+  if (priceVolume && priceVolume.status !== 'NOT_DUE') {
+    let receipt;
+    try {
+      if (!rankingReadback) throw new Error('PRICE_VOLUME_ANON_READBACK_UNAVAILABLE');
+      receipt = require('../lib/verify-mother-pool-price-volume-evidence').verify(
+        rankingReadback[0]?.payload?.mother_pool_price_volume_evidence,priceVolume,{role:'anon',dbReadback:true});
+    } catch {
+      receipt = {contract:'mother_pool_price_volume_readback_v1',complete:false,readback_verified:false,status:'blocked',
+        failed_checks:['PRICE_VOLUME_READBACK_FAILED'],first_blocker:'PRICE_VOLUME_READBACK_FAILED',exit_code:1};
+    }
+    const attempt=require('node:crypto').randomUUID();
+    const saved={...receipt,attempt_id:attempt,checked_at:nowIso(),trade_date:tradeDate,canonical_run_id:priceVolume.canonical_run_id};
+    const file=runtimePath('data','scan-receipts','mother-pool-price-volume-'+tradeDate.replace(/-/g,'')+'.json');
+    persistRankingReceipt(file.replace(/\.json$/,`-${attempt}.json`),saved);
+    persistRankingReceipt(file,saved);
+  }
+  if (rankingReceiptWriteFailures.length) throw new Error(rankingReceiptWriteFailures.join(';'));
 }
 
 async function writeEnrichmentPendingHeartbeat({ activeSymbols, priorityRows, quoteMap, dailyVolumeMap, state, errors = [] }) {
@@ -6864,36 +7406,22 @@ async function writeEnrichmentPendingHeartbeat({ activeSymbols, priorityRows, qu
 
 async function writeFastWebSocketTransportHeartbeat({ priorityRows, quoteMap }) {
   if (!APPLY || !priorityRows.length) return { written: false, reason: "no_priority_rows_or_dry_run" };
-  let baseline;
-  try {
-    const rows = await supabaseGetPaged("source_status", "select=trade_date,status,message,stale_seconds,payload&source_name=eq." + encodeURIComponent(SOURCE_NAME) + "&order=updated_at.desc&limit=1", { service: true, pageSize: 1 });
-    baseline = rows && rows[0] ? rows[0] : null;
-  } catch (error) {
-    return { written: false, reason: "source_status_baseline_read_failed", error: error?.message || String(error) };
-  }
-  const baselinePayload = baseline && baseline.payload && typeof baseline.payload === "object" ? baseline.payload : null;
-  const today = taipeiDate();
-  const baselineDate = String((baselinePayload && (baselinePayload.trade_date || baselinePayload.tradeDate)) || (baseline && baseline.trade_date) || "");
-  if (!baselinePayload || (baselineDate && baselineDate !== today)) return { written: false, reason: "same_day_baseline_missing_or_stale" };
   const websocket = readWebSocketStatusSummary();
-  const freshRows = priorityRows.filter((row) => isFreshWebSocketQuote(quoteMap.get(normalizeCode(row.symbol))));
-  const coverage = priorityRows.length ? Number((freshRows.length / priorityRows.length).toFixed(4)) : 0;
-  const payload = { ...baselinePayload,
-    writer_version: "daytrade-source-writer-fast-websocket-heartbeat-v1",
-    priority_pool_symbols: priorityRows.length, priority_fresh_quotes_120s: freshRows.length, priority_fresh_quote_coverage_120s: coverage,
-    websocket_heartbeat_at: websocket.websocketHeartbeatAt, websocket_heartbeat_age_seconds: websocket.websocketHeartbeatAgeSeconds,
-    websocket_heartbeat_ready: websocket.websocketHeartbeatReady, aggregates_last_updated_at: websocket.aggregatesLastUpdatedAt,
-    aggregates_last_updated_age_seconds: websocket.aggregatesLastUpdatedAgeSeconds, aggregates_pipeline_ready: websocket.aggregatesPipelineReady,
-    websocket_pipeline_healthy: websocket.pipelineHealthy, pipeline_health_uses: websocket.pipelineHealthUses,
-    trades_silence_for_low_turnover_is_not_disconnect: websocket.tradesSilenceForLowTurnoverIsNotDisconnect,
-    fast_transport_heartbeat: true, fast_transport_heartbeat_at: nowIso(), transport_heartbeat_contract: "preserve_complete_gate_verdict_v2",
-  };
-  try {
-    await supabaseUpsert("source_status", [{ source_name: SOURCE_NAME, trade_date: today, updated_at: nowIso(), status: baseline.status || "degraded", message: baseline.message || "WebSocket transport heartbeat", stale_seconds: Number.isFinite(Number(baseline.stale_seconds)) ? Number(baseline.stale_seconds) : 0, payload }], "source_name");
-    return { written: true, coverage, preserved_gate_grade: payload.gate_grade || null };
-  } catch (error) {
-    return { written: false, reason: "source_status_fast_heartbeat_write_failed", error: error?.message || String(error) };
-  }
+  const freshRows = priorityRows.filter(row => isFreshWebSocketQuote(quoteMap.get(normalizeCode(row.symbol))));
+  const coverage = freshRows.length / priorityRows.length;
+  // Transport evidence is not a new verified source round. Never modify the
+  // previous source_status payload or its timestamp with current heartbeat data.
+  writeJson(runtimePath('state', 'daytrade-websocket-transport-heartbeat.json'), {
+    contract: 'daytrade_websocket_transport_observation_v1', trade_date: taipeiDate(), observed_at: nowIso(),
+    authoritative: false, source_status_written: false, complete: false,
+    priority_symbols: priorityRows.length, fresh_quotes: freshRows.length, coverage,
+    websocket_heartbeat_at: websocket.websocketHeartbeatAt,
+    websocket_heartbeat_age_seconds: websocket.websocketHeartbeatAgeSeconds,
+    aggregates_last_updated_at: websocket.aggregatesLastUpdatedAt,
+    aggregates_last_updated_age_seconds: websocket.aggregatesLastUpdatedAgeSeconds,
+    pipeline_healthy: websocket.pipelineHealthy,
+  });
+  return { written: false, local_evidence_written: true, coverage, reason: 'transport_observation_only' };
 }
 
 async function syncDailyVolumeMirror(dailyVolumeMap, activeSymbols) {
@@ -7005,18 +7533,64 @@ async function ensureOpening0901CandleEvidence(formalPriorityRows = []) {
   };
 }
 
+async function verifyEarlyB01Candles(evidence, tradeDate) {
+  const receiptPath = runtimePath('data','scan-receipts','b01-candle-readback-'+tradeDate.replace(/-/g,'')+'.json');
+  // Persist the exact per-symbol evidence before the bounded anon readback.
+  // A slow or unavailable RPC must not leave a stale receipt from an earlier
+  // run that hides the current subscription snapshot and statuses.
+  writeJsonAtomic(receiptPath, {
+    contract: 'b01_exact_candle_readback_v1', status: 'PENDING_READBACK', complete: false,
+    candle_readback_verified: false, trade_date: tradeDate,
+    requested_count: Number(evidence.requested_count || 0),
+    ready_requested_count: Number(evidence.ready_count || 0),
+    source_data_gap_count: Number(evidence.data_gap_count || 0),
+    freshness_reference: evidence.freshness_reference,
+    freshness_limit_seconds: evidence.freshness_limit_seconds,
+    items: evidence.items, checked_at: evidence.checked_at,
+    first_blocker: 'B01_ANON_READBACK_PENDING', exit_code: 1
+  });
+  let receipt;
+  try {
+    if(!SUPABASE_READ_KEY||SUPABASE_READ_KEY===SUPABASE_SERVICE_KEY)throw Error('anon_read_key_missing');
+    receipt=await require('../lib/readback-b01-candles').readbackCandles(evidence,{
+      deadlineMs:Math.min(Date.now()+20000,Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Infinity),
+      readRpc:(body,options)=>supabaseRpc('get_fugle_daytrade_intraday_1m_latest_n',body,{...options,service:false})});
+  } catch {
+    receipt={contract:'b01_exact_candle_readback_v1',complete:false,status:'BLOCKED',
+      candle_readback_verified:false,failed_checks:['B01_READBACK_UNAVAILABLE'],first_blocker:'B01_READBACK_UNAVAILABLE',exit_code:1};
+  }
+  const value={...receipt,trade_date:tradeDate,checked_at:nowIso()};
+  writeJsonAtomic(receiptPath,value);
+  return value;
+}
 async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {}) {
+  const { mapNaturalCandle } = require('../lib/daytrade-fast-candle-row');
+  const syncNowMs = Date.now();
+  // Today's completed one-minute bars do not exist before the market opens.
+  // Historical preopen baselines are verified independently by A07-A09/A16.
+  const observationMinute = new Date(syncNowMs + 28800000).toISOString().slice(11,16);
+  if (observationMinute < '09:00') return {
+    written: 0, skipped: true, status: 'NOT_DUE',
+    reason: 'TODAY_1M_NOT_DUE_IN_PREOPEN',
+    source: 'fugle_websocket_candles_dynamic_mother_pool',
+    trade_date: taipeiDateFrom(new Date(syncNowMs).toISOString()),
+    complete: false,
+  };
   const extraSymbols = Array.isArray(options.extraSymbols) ? options.extraSymbols : [];
   const tradeDate = taipeiDateFrom(nowIso());
+  const websocketStatus = readJson(FUGLE_WS_STATUS_FILE, {});
   const priorityArtifact = readJson(PRIORITY_SYMBOLS_FILE, {});
   const artifactDate = taipeiDateFrom(priorityArtifact.updatedAt || priorityArtifact.tradeDate || '');
   const artifactMotherPool = artifactDate === tradeDate
     ? (priorityArtifact.daytradeMotherPoolSymbols || priorityArtifact.daytradePrioritySymbols || [])
     : [];
+  const configuredSymbols = options.latestOnly && Array.isArray(websocketStatus.subscribedSymbolList)
+    ? websocketStatus.subscribedSymbolList
+    : motherPoolRows || [];
   const motherPoolSymbols = [...new Set([
-    ...(motherPoolRows || []).map((row) => normalizeCode(row.symbol || row)),
+    ...configuredSymbols.map((row) => normalizeCode(row.symbol || row)),
     ...extraSymbols.map((symbol) => normalizeCode(symbol)),
-    ...artifactMotherPool.map((symbol) => normalizeCode(symbol)),
+    ...(options.latestOnly ? [] : artifactMotherPool.map((symbol) => normalizeCode(symbol))),
   ].filter(Boolean))].sort();
   const cache = readFugleWebSocketCandles({ maxAgeMs: WEBSOCKET_CANDLE_HISTORY_MAX_AGE_MS });
   const allowedSymbols = new Set(motherPoolSymbols);
@@ -7026,15 +7600,14 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
     const candleTime = normalizeTimestamp(candle.candleTime || candle.date);
     if (!symbol || !allowedSymbols.has(symbol) || !candleTime || !numberValue(candle.close)) continue;
     if (taipeiDateFrom(candleTime) !== tradeDate) continue;
-    const row = {
-      symbol, market: candle.market || '', candle_time: candleTime,
-      trade_date: candle.tradeDate || taipeiDateFrom(candleTime),
-      open: numberValue(candle.open), high: numberValue(candle.high), low: numberValue(candle.low),
-      close: numberValue(candle.close), volume: numberValue(candle.volume),
-      source: 'fugle_daytrade_writer:websocket_candles',
-      updated_at: candle.candleSeenAt || cache.payload?.updatedAt || nowIso(),
-      payload: { ...(candle.payload || {}), cacheUpdatedAt: cache.payload?.updatedAt || '', source: 'fugle-websocket-candles-cache' },
-    };
+    // Historical same-day candles remain usable for seeding, but never bypass
+    // source, completion, timestamp, OHLC or natural-volume evidence checks.
+    const validated = mapNaturalCandle(candle, { tradeDate, nowMs: syncNowMs, maxSeenAgeMs: Infinity });
+    if (!validated) continue;
+    const row = { ...validated, source: 'fugle_daytrade_writer:websocket_candles',
+      source_channel: 'candles', candle_origin: 'websocket_candle', websocket_row: true,
+      rest_repair_row: false, intraday_odd_lot: false,
+      payload: { ...validated.payload, cacheUpdatedAt: cache.payload?.updatedAt || '', source: 'fugle-websocket-candles-cache' } };
     const rows = bySymbol.get(symbol) || [];
     rows.push(row);
     bySymbol.set(symbol, rows);
@@ -7046,6 +7619,7 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
     source: 'fugle_websocket_candles_dynamic_mother_pool',
     reason: 'no_today_mother_pool_candles',
     motherPoolSymbols: motherPoolSymbols.length,
+    latest_candle_evidence: require('../lib/daytrade-latest-candle-evidence').latestCandleEvidence(motherPoolSymbols, [], syncNowMs),
   };
 
   const selected = new Map();
@@ -7063,6 +7637,9 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
   for (const [symbol, rows] of bySymbol.entries()) {
     rows.sort((a, b) => Date.parse(b.candle_time) - Date.parse(a.candle_time));
     if (rows[0]) selectRow(rows[0]);
+    // The early full-universe flush writes only latest natural bars. It must
+    // not advance the historical seed checkpoint or claim history is ready.
+    if (options.latestOnly) continue;
     const prior = nextMirror.symbols[symbol] || {};
     const latestCandleTime = rows[0]?.candle_time || '';
     if (prior.seeded !== true) {
@@ -7085,9 +7662,13 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
     nextMirror.symbols[symbol] = { seeded: true, lastCandleTime: latestCandleTime, availableCandleCount: rows.length };
   }
 
-  const rows = [...selected.values()];
+  // Emit one latest completed candle per symbol before any historical seed rows.
+  // The checkpoint still advances only after the entire selected set succeeds.
+  const rows = require('../lib/daytrade-candle-write-order').latestFirst([...selected.values()]);
+  const dbWriteStartedMs = Date.now();
   await supabaseUpsert('fugle_daytrade_intraday_1m', rows, 'symbol,candle_time', { batchSize: SLOW_TABLE_BATCH_SIZE, timeoutMs: 15000, retries: 1 });
-  if (state && !DRY_RUN) {
+  const dbWriteCompletedMs = Date.now();
+  if (state && !DRY_RUN && !options.latestOnly) {
     state.daytradeMotherPoolCandleMirror = nextMirror;
     // Persist the expensive seed checkpoint immediately. A later non-critical
     // stage must not make the next task re-upload the entire candle history.
@@ -7098,7 +7679,17 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
     skipped: false,
     cacheCount: cache.candles.size,
     source: 'fugle_websocket_candles_full_dynamic_mother_pool',
+    timing: {
+      cache_scan_started_at: new Date(syncNowMs).toISOString(),
+      cache_artifact_updated_at: cache.payload?.updatedAt || null,
+      db_write_started_at: new Date(dbWriteStartedMs).toISOString(),
+      db_write_completed_at: new Date(dbWriteCompletedMs).toISOString(),
+      cache_selection_elapsed_ms: dbWriteStartedMs - syncNowMs,
+      db_write_elapsed_ms: dbWriteCompletedMs - dbWriteStartedMs,
+      timing_scope: 'writer_local_clock; cache artifact time is not a natural event timestamp',
+    },
     latestRows: bySymbol.size,
+    latest_candle_evidence: require('../lib/daytrade-latest-candle-evidence').latestCandleEvidence(motherPoolSymbols, rows, Date.now()),
     motherPoolSymbols: motherPoolSymbols.length,
     seededSymbols,
     seedAttempts,
@@ -7205,11 +7796,12 @@ async function syncPreopenSnapshotHistory(activeSymbols, quoteMap) {
     const active = activeBySymbol.get(symbol);
     if (!symbol || !active || !isWebSocketQuote(quote)) continue;
     const trialEventAt = normalizeTimestamp(quote?.trial_event_at || quote?.payload?.trial_event_at, "");
-    const observedAt = trialEventAt || normalizeTimestamp(quote?.quote_seen_at || quote?.payload?.aggregate_last_updated, "");
+    // Transport receipt/heartbeat time cannot stand in for a trial event.
+    const observedAt = trialEventAt;
     if (!observedAt || taipeiDateFrom(observedAt) !== tradeDate) continue;
     const observedMinutes = taipeiClockMinutesFrom(observedAt);
     if (observedMinutes < PREOPEN_CAPTURE_START_MINUTES || observedMinutes >= PREOPEN_CAPTURE_END_MINUTES) continue;
-    if (ageSeconds(observedAt) > WINDOW_SECONDS) continue;
+    if (ageSeconds(observedAt) < 0 || ageSeconds(observedAt) > WINDOW_SECONDS) continue;
     const referencePrice = nullableNumber(quote.previous_close ?? quote.payload?.referencePrice, true);
     const trialPrice = nullableNumber(quote.trial_price ?? quote.payload?.trialPrice, true);
     if (referencePrice === null || trialPrice === null || quote.is_trial !== true) continue;
@@ -7224,7 +7816,8 @@ async function syncPreopenSnapshotHistory(activeSymbols, quoteMap) {
       generation_id: `${symbol}:${observedAt}`,
       trade_date: tradeDate,
       observed_at: observedAt,
-      trial_event_at: trialEventAt || observedAt,
+      trial_event_at: trialEventAt,
+      trial_event_time_source: "provider_trial_event",
       quote_received_at: quote.updated_at || null,
       trial_change_percent: ((trialPrice - referencePrice) / referencePrice) * 100,
       bid_ask_ratio: askVolume > 0 && bidVolume !== null ? bidVolume / askVolume : null,
@@ -7357,8 +7950,8 @@ async function captureFutoptPreopenBaseline(futoptRows) {
 }
 
 async function syncMarketCalendarEvidence() {
+  const calendar = await isTwseTradingDay(new Date(), { stateDir: runtimePath("state"), includeEvidence: true });
   const checkedAt = nowIso();
-  const calendar = await isTwseTradingDay(new Date(), { stateDir: runtimePath("state") });
   const minutes = taipeiMinutes();
   const session = minutes < 9 * 60 ? "preopen" : minutes <= 13 * 60 + 30 ? "regular" : "closed";
   const row = {
@@ -7372,6 +7965,7 @@ async function syncMarketCalendarEvidence() {
       source: "daytrade-source-writer:twse-trading-day",
       checked_at: checkedAt,
       calendar_contract: "market-calendar-contract-v1",
+      calendar_decision: calendar,
       override: calendar.override === true,
       reason: calendar.reason || null,
     },
@@ -7381,6 +7975,8 @@ async function syncMarketCalendarEvidence() {
 }
 
 async function tick() {
+  writerTickIdentity = require("../lib/daytrade-writer-identity").newIdentity(SOURCE_NAME, WRITER_INSTANCE_ID, taipeiDate());
+  console.log(JSON.stringify({ stage: 'writer_round_identity', checkedAt: nowIso(), pid: process.pid, parent_pid: process.ppid, entrypoint: __filename, ...writerTickIdentity }));
   const tickStage = (stage, extra = {}) => console.log(JSON.stringify({
     ok: true,
     stage: `daytrade_tick:${stage}`,
@@ -7402,12 +7998,56 @@ async function tick() {
   tickStage("active_symbols:start");
   const activeSymbols = await fetchActiveSymbols();
   tickStage("active_symbols:complete", { rows: activeSymbols.length });
+  const a16Warmup = a16Writer.ensureWarmup({ runtime: runtimePath(), root: repoPath(), tradeDate: taipeiDate(), symbols: activeSymbols, apply: APPLY });
+  tickStage("a16_history_warmup", a16Warmup);
+  // Daily volume is independent of the live candle write. Start it before the
+  // slow full-market candle sync so the two I/O paths do not consume the
+  // writer deadline serially. The result is still awaited before any pool
+  // admission is built.
+  tickStage("daily_volume:start");
+  const dailyVolumePromise = fetchDailyVolumeAvg();
+  const nonFatalWriteErrors = [];
+  // Publish latest natural bars before slow enrichment, under the Writer lease.
+  let fullMarketLatestCandles = { complete: false, db_readback_verified: false, status: 'NOT_EXECUTED' };
+  tickStage("full_market_latest_candles:start");
+  try {
+    const earlyCandles = await syncWebSocketIntraday1mCandles(activeSymbols, state, { latestOnly: true });
+    const subscribedSnapshot = typeof readJson === "function"
+      ? readJson(FUGLE_WS_STATUS_FILE, {}).subscribedSymbolList
+      : null;
+    const requestedSymbols = Array.isArray(subscribedSnapshot)
+      ? [...new Set(subscribedSnapshot.map(row => normalizeCode(row?.symbol || row)).filter(Boolean))].sort()
+      : activeSymbols.map(row => normalizeCode(row.symbol || row)).filter(Boolean).sort();
+    fullMarketLatestCandles = { ...earlyCandles, scope: 'subscription_snapshot',
+      requested_symbols: requestedSymbols,
+      trade_date: taipeiDateFrom(nowIso()), status: earlyCandles.status === 'NOT_DUE' ? 'NOT_DUE' : earlyCandles.skipped ? 'DATA_GAP' : 'WRITE_FINISHED_UNVERIFIED',
+      complete: false, db_readback_verified: false };
+    tickStage("full_market_latest_candles:complete", { ...earlyCandles, requested_symbols: earlyCandles.motherPoolSymbols || activeSymbols.length });
+  } catch (error) {
+    fullMarketLatestCandles = { complete: false, db_readback_verified: false, status: 'WRITE_FAILED',
+      scope: 'active_symbols', trade_date: taipeiDateFrom(nowIso()), requested_count: activeSymbols.length,
+      first_blocker: 'FULL_MARKET_LATEST_CANDLE_WRITE_FAILED' };
+    nonFatalWriteErrors.push({ target: 'full_market_latest_candles', message: error?.message || String(error) });
+    tickStage("full_market_latest_candles:failed", { reason: error?.message || String(error) });
+  }
+  if (!DRY_RUN && fullMarketLatestCandles.latest_candle_evidence) {
+    try {
+      fullMarketLatestCandles.readback_receipt = await verifyEarlyB01Candles(
+        fullMarketLatestCandles.latest_candle_evidence, fullMarketLatestCandles.trade_date);
+    } catch {
+      fullMarketLatestCandles.readback_receipt = {complete:false,status:'BLOCKED',first_blocker:'B01_RECEIPT_PERSIST_FAILED'};
+    }
+  }
   tickStage("strategy_priority_bridge:start");
   await refreshStrategyChipPriorityBridge();
   tickStage("strategy_priority_bridge:complete");
-  tickStage("daily_volume:start");
-  const dailyVolumeMap = await fetchDailyVolumeAvg();
+  const dailyVolumeMap = await dailyVolumePromise;
   tickStage("daily_volume:complete", { rows: dailyVolumeMap.size });
+  let officialDaytradeSource;
+  try {
+    const calendar=[...dailyVolumeMap.values()].find(row=>row.daily_volume_evidence?.calendar)?.daily_volume_evidence.calendar;
+    officialDaytradeSource=await require('../lib/mother-pool-official-daytrade-source').read({tradeDate:taipeiDate(),calendar,runtime:runtimePath()});
+  } catch(error) { officialDaytradeSource={source_date:null,reports:{},error:String(error.message||error)}; }
   const preopenReferencePriceMap = taipeiMinutes() < 9 * 60
     ? await fetchPreopenReferencePriceMap()
     : new Map();
@@ -7446,14 +8086,20 @@ async function tick() {
   });
   await writeFastWebSocketTransportHeartbeat({ priorityRows: provisionalPriorityRows, quoteMap });
   tickStage("supplemental_maps:start");
-  const [capitalMap, chipMap, marginChangeMap, stockFutureInitialMap, stockGroupContractMap] = await Promise.all([
+  const supplementalResults = await Promise.allSettled([
     fetchCapitalMap(),
     fetchChipFlowMap(),
     fetchMarginChangeMap(),
     fetchStockFutureInitialMap(),
     fetchStockGroupContractMap(),
   ]);
-  tickStage("supplemental_maps:complete");
+  const [capitalMap, chipMap, marginChangeMap, stockFutureInitialMap, stockGroupContractMap] = supplementalResults.map((result, index) => {
+    if (result.status === "fulfilled") return result.value;
+    nonFatalWriteErrors.push({ target: `supplemental_map_${index}`, message: result.reason?.message || String(result.reason) });
+    tickStage("supplemental_map:degraded", { index, reason: result.reason?.message || String(result.reason), data_gap: "DATA_GAP_SUPPLEMENTAL_TIMEOUT" });
+    return new Map();
+  });
+  tickStage("supplemental_maps:complete", { degraded_count: supplementalResults.filter(result => result.status === "rejected").length });
   const supplementalMaps = { capitalMap, chipMap, marginChangeMap, stockFutureInitialMap, stockGroupContractMap, preopenReferencePriceMap };
   tickStage("priority_build_supplemental:start");
   let priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
@@ -7471,7 +8117,6 @@ async function tick() {
   tickStage("priority_build_intraday:start");
   priorityRows = buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap, supplementalMaps);
   tickStage("priority_build_intraday:complete", { rows: priorityRows.length });
-  const nonFatalWriteErrors = [];
   let websocketQuoteReadthroughSync = { written: 0, skipped: true, reason: 'no_fresh_mother_quotes', candidateRows: priorityRows.length, freshRows: 0 };
   if (priorityRows.length) {
     // Re-read the direct WebSocket cache immediately before the mother-pool write.
@@ -7562,25 +8207,6 @@ async function tick() {
       });
     }
     try {
-      tickStage("priority_pool_write:start", { rows: priorityRows.length });
-      await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
-        batchSize: SLOW_TABLE_BATCH_SIZE,
-        timeoutMs: 30000,
-        retries: 1,
-        retryDelayMs: 1000,
-      });
-      await supabaseDelete(
-        "fugle_daytrade_priority_pool",
-        `updated_at=lt.${encodeURIComponent(priorityRows[0].updated_at)}`,
-      );
-      tickStage("priority_pool_write:complete", { rows: priorityRows.length });
-    } catch (error) {
-      nonFatalWriteErrors.push({
-        target: "fugle_daytrade_priority_pool",
-        message: error?.message || String(error),
-      });
-    }
-    try {
       tickStage("intraday_candles_sync:start");
       websocketCandleSync = await syncWebSocketIntraday1mCandles(priorityRows, state);
       if (!websocketCandleSync.skipped && numberValue(websocketCandleSync.written) > 0) {
@@ -7593,16 +8219,7 @@ async function tick() {
         if (candleSyncedPriorityRows.length) {
           priorityRows = candleSyncedPriorityRows;
           await publishDaytradePrioritySymbols(priorityRows, activeSymbols);
-          await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
-            batchSize: SLOW_TABLE_BATCH_SIZE,
-            timeoutMs: 30000,
-            retries: 1,
-            retryDelayMs: 1000,
-          });
-          await supabaseDelete(
-            "fugle_daytrade_priority_pool",
-            `updated_at=lt.${encodeURIComponent(priorityRows[0].updated_at)}`,
-          );
+
         }
       }
       tickStage("intraday_candles_sync:complete", { written: websocketCandleSync.written || 0 });
@@ -7686,22 +8303,41 @@ async function tick() {
     if (rebuiltPriorityRows.length) {
       priorityRows = rebuiltPriorityRows;
       try {
-        // Persist the post-fetch rebuild so the canonical mother-pool view sees
-        // the same fresh quote timestamps used by source_status.payload.
         await publishDaytradePrioritySymbols(priorityRows, activeSymbols);
-        await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
+      } catch (error) {
+        fetchResult.errors.push({ target: "fugle_daytrade_priority_pool_rebuild", message: error?.message || String(error) });
+      }
+    }
+  }
+
+  // Persist the final priority set once, after candle and quote rebuilds.
+  if (priorityRows.length) {
+    try {
+      tickStage("priority_pool_write:start", { rows: priorityRows.length });
+      await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
         batchSize: SLOW_TABLE_BATCH_SIZE,
         timeoutMs: 30000,
         retries: 1,
         retryDelayMs: 1000,
       });
-        await supabaseDelete(
-          "fugle_daytrade_priority_pool",
-          "updated_at=lt." + encodeURIComponent(priorityRows[0].updated_at),
-        );
-      } catch (error) {
-        fetchResult.errors.push({ target: "fugle_daytrade_priority_pool_rebuild", message: error?.message || String(error) });
-      }
+      tickStage("priority_pool_upsert:complete", { rows: priorityRows.length });
+      tickStage("priority_pool_cleanup:start");
+      await supabaseDelete(
+        "fugle_daytrade_priority_pool",
+        `updated_at=lt.${encodeURIComponent(priorityRows[0].updated_at)}`,
+      );
+      tickStage("priority_pool_write:complete", { rows: priorityRows.length });
+      require('../lib/opening-report-writer-refresh-evidence').record({
+        runtime: process.env.FUMAN_RUNTIME_DIR || 'C:/fuman-runtime',
+        date: taipeiDate(), identity: writerTickIdentity, rows: priorityRows,
+      });
+    } catch (error) {
+      console.error(JSON.stringify({ok:false,stage:'priority_pool_write:failed',checkedAt:nowIso(),writer_run_id:writerTickIdentity.writer_run_id,generation_id:writerTickIdentity.generation_id,error_name:error?.name||'Error',message:String(error?.message||error).slice(0,500)}));
+      fetchResult.errors.push({
+        target: "fugle_daytrade_priority_pool",
+        message: error?.message || String(error),
+      });
+      throw new Error("PRIORITY_POOL_WRITE_UNCONFIRMED", { cause: error });
     }
   }
 
@@ -7783,6 +8419,7 @@ async function tick() {
     quoteMap,
     intradayMap,
   });
+  console.log(JSON.stringify({ok:true,stage:'daytrade_tick:compute_stats:start',checkedAt:nowIso()}));
   const result = computeStats({
     activeSymbols,
     priorityRows,
@@ -7797,13 +8434,21 @@ async function tick() {
     state: nextState,
     supplementalMaps,
   });
+  console.log(JSON.stringify({ok:true,stage:'daytrade_tick:compute_stats:complete',checkedAt:nowIso()}));
   result.priorityRows = priorityRows;
   result.payload.same_round_industry_discovery = sameRoundIndustryDiscovery;
   result.quoteMap = quoteMap;
   result.industryUniverseRows = activeSymbols.map((row) => ({
     ...row,
+    trade_date: taipeiDate(),
+    canonical_run_id: `${SOURCE_NAME}:${String(taipeiDate()).replace(/-/g, '')}:canonical`,
     metrics: quoteMetrics(row.symbol, dailyVolumeMap, quoteMap, supplementalMaps),
   }));
+  result.payload.b19_b24_event_evidence = buildB19B24Evidence(result.industryUniverseRows);
+  let preopenTrialHistory = null;
+  console.log(JSON.stringify({ok:true,stage:'daytrade_tick:preopen_evidence:start',checkedAt:nowIso()}));
+  result.payload.preopen_a15_a19_evidence = await buildPreopenA15A19Evidence(activeSymbols, quoteMap, taipeiDate(), evidence => { preopenTrialHistory = evidence; });
+  console.log(JSON.stringify({ok:true,stage:'daytrade_tick:preopen_evidence:complete',checkedAt:nowIso()}));
   result.payload.nonfatal_write_errors = fetchResult.errors || [];
   result.payload.websocket_quote_readthrough_written = websocketQuoteReadthroughSync.written || 0;
   result.payload.websocket_quote_readthrough_skipped = Boolean(websocketQuoteReadthroughSync.skipped);
@@ -7838,6 +8483,7 @@ async function tick() {
   result.payload.futopt_preopen_baseline_rows = futoptPreopenBaseline.rows || 0;
   result.payload.futopt_preopen_baseline_natural_schedule_evidence = Boolean(futoptPreopenBaseline.naturalScheduleEvidence);
   if (futoptPreopenBaseline.error) result.payload.futopt_preopen_baseline_error = futoptPreopenBaseline.error;
+  result.payload.full_market_latest_candles = fullMarketLatestCandles;
   result.payload.preopen_snapshot_history_contract = preopenSnapshotHistorySync.contract;
   result.payload.preopen_snapshot_history_status = preopenSnapshotHistorySync.status;
   result.payload.preopen_snapshot_rows_written = preopenSnapshotHistorySync.snapshotRowsWritten;
@@ -7848,12 +8494,266 @@ async function tick() {
   result.payload.preopen_history_source = preopenSnapshotHistorySync.historySource;
   result.payload.preopen_first_blocker = preopenSnapshotHistorySync.firstBlocker;
   if (preopenSnapshotHistorySync.error) result.payload.preopen_snapshot_history_error = preopenSnapshotHistorySync.error;
-  result.payload.full_market_intraday_signal_evidence = intradaySignalEvidence;
+  // Raw per-symbol evidence stays available to the module producer; legacy summary stays compact.
+  const {source_rows:discoverySourceRows,...discoverySummary}=intradaySignalEvidence;
+  result.payload.full_market_intraday_signal_evidence = discoverySummary;
   result.payload.full_market_bullish_gain_volume_candidates = intradaySignalEvidence.bullishGainVolumeCandidates;
   result.payload.full_market_volume_surge_top100_candidates = intradaySignalEvidence.volumeSurgeTop100Candidates;
   result.payload.full_market_bullish_gain_volume_candidate_count = intradaySignalEvidence.bullishGainVolumeCandidateCount;
   result.payload.full_market_volume_surge_top100_candidate_count = intradaySignalEvidence.volumeSurgeTop100CandidateCount;
   tickStage("status_scorecard:start");
+  const sideSnapshot=readJson(MOTHER_POOL_SNAPSHOT_FILE,{});
+  const sideAsOf = nowIso();
+  const sideMinutes = taipeiClockMinutesFrom(sideAsOf);
+  if (sideMinutes >= 9 * 60 && sideMinutes < 13 * 60 + 30) {
+    try {
+      const scorecardSnapshot=readJson(MOTHER_POOL_SNAPSHOT_FILE,{});
+        const detectorCache=readFugleWebSocketCandles({maxAgeMs:90*60*1000});
+        result.payload.mother_pool_price_volume_evidence=require('../lib/mother-pool-price-volume-evidence').collect({
+          candles:detectorCache.candles instanceof Map?[...detectorCache.candles.values()]:[],
+          snapshot:scorecardSnapshot,asOf:sideAsOf,
+          readHistory:(symbol,date)=>readJson(runtimePath('data','mother-pool-historical-minutes',date,symbol+'.json'),null),
+        });
+    } catch {
+      result.payload.mother_pool_price_volume_evidence={contract:'mother_pool_price_volume_evidence_v1',complete:false,
+        status:'blocked',first_blocker:'PRICE_VOLUME_SOURCE_BATCH_FAILED',as_of:sideAsOf,publish_allowed:false};
+    }
+    try {
+      result.payload.mother_pool_minute_side_evidence = require('../lib/mother-pool-minute-side-batch').collect({
+        runtimeRoot:path.dirname(path.dirname(MOTHER_POOL_SNAPSHOT_FILE)),
+        snapshot:sideSnapshot,asOf:sideAsOf,deadlineMs:Date.now()+5000,
+      });
+    } catch {
+      result.payload.mother_pool_minute_side_evidence = {contract:'mother_pool_minute_side_batch_v1',complete:false,
+        status:'blocked',first_blocker:'MINUTE_SIDE_SOURCE_BATCH_FAILED',as_of:sideAsOf,publish_allowed:false};
+    }
+    // Persist native one-minute side rows in the versioned minute-side schema.
+    // This is deliberately separate from the legacy cumulative side-volume table.
+    try {
+      const evidenceDir=runtimePath('data','minute-side-write-sets');
+      fs.mkdirSync(evidenceDir,{recursive:true});
+      const evidenceId=require('node:crypto').randomUUID();
+      const writeEvidenceFile=path.join(evidenceDir,evidenceId+'.json');
+      const saved=await require('../lib/mother-pool-minute-side-persistence').persistMinuteSideRoundEvidence(result,{
+        snapshot:sideSnapshot,
+        savePlan:async plan=>fs.writeFileSync(path.join(evidenceDir,evidenceId+'-plan.json'),JSON.stringify(plan),{flag:'wx'}),
+        persist:async plan=>{
+          if(DRY_RUN)throw Error('MINUTE_SIDE_DRY_RUN_NO_PERSISTENCE');
+          const response=await fetch(SUPABASE_URL+'/rest/v1/rpc/persist_minute_side_round_v1',{
+            method:'POST',headers:headers(requireSupabaseKey(true)),body:JSON.stringify({p_plan:plan}),signal:AbortSignal.timeout(SUPABASE_WRITE_TIMEOUT_MS)});
+          if(!response.ok)throw Error('MINUTE_SIDE_RPC_HTTP_'+response.status+':'+(await response.text()).slice(0,240));
+          return response.json();
+        },
+        saveEvidence:async evidence=>fs.writeFileSync(writeEvidenceFile,JSON.stringify(evidence),{flag:'wx'})
+      });
+      result.payload.mother_pool_minute_side_persist={status:'ok',identity:Object.fromEntries(require('../lib/mother-pool-minute-side-persistence').identityFields.map(k=>[k,saved[k]])),writer_run_id:saved.writer_run_id,write_set_file:writeEvidenceFile};
+    } catch (error) {
+      result.payload.mother_pool_minute_side_persist = {status:'blocked',first_blocker:'MINUTE_SIDE_VERSIONED_WRITE_FAILED',error:String(error?.message || error)};
+    }
+  } else {
+    result.payload.mother_pool_price_volume_evidence={status:'NOT_DUE',as_of:sideAsOf,complete:false,reason:'outside_intraday_window'};
+    result.payload.mother_pool_minute_side_evidence = {status:'NOT_DUE',as_of:sideAsOf,complete:false,reason:'outside_intraday_window'};
+  }
+  // Bind the independent detector outputs into the B24 producer input.  The
+  // legacy priority flags remain useful for ranking, but are never promoted
+  // to B12/B13 events here.  Only validated detector rows may set these fields.
+  const detectorRows = new Map((result.payload.mother_pool_price_volume_evidence?.details || [])
+    .map(d => [String(d.symbol), d]));
+  for (const row of (result.industryUniverseRows || [])) {
+    const d = detectorRows.get(String(row.symbol));
+    if (!d) continue;
+    const v = d.volume || {}, p = d.price || {};
+    const m = row.metrics || (row.metrics = {});
+    const detectorChecks = Array.isArray(d.failed_checks) ? d.failed_checks : [];
+    const volumeAdmissionOk = d.volume_admission?.allowed === true;
+    const priceAdmissionOk = d.price_admission?.allowed === true;
+    m.detectorFailedChecks = detectorChecks;
+    m.b12Event = detectorChecks.length === 0 && volumeAdmissionOk && v.volume_anomaly_event === true;
+    m.volumeSpikeSignal = m.b12Event ? 'VOLUME_SPIKE' : null;
+    m.b13Event = detectorChecks.length === 0 && priceAdmissionOk && p.price_up_anomaly_event === true && Number(p.return_1m) > 0 && Number(p.primary_price_spike_ratio) >= 3;
+    m.priceSpikeUpSignal = m.b13Event ? 'PRICE_SPIKE_UP' : null;
+    m.detectorSourceContract = 'mother_pool_price_volume_evidence_v1';
+    m.detectorSourceTradeDate = result.payload.mother_pool_price_volume_evidence.trade_date || null;
+    m.detectorSourceCanonicalRunId = result.payload.mother_pool_price_volume_evidence.canonical_run_id || null;
+    m.detectorSourceObservedAt = d.current?.at?.(-1)?.timestamp || result.payload.mother_pool_price_volume_evidence.as_of || null;
+    m.volumeDetectorEvidence = v;
+    m.priceDetectorEvidence = p;
+  }
+  const sideRows = new Map((result.payload.mother_pool_minute_side_evidence?.details || [])
+    .map(d => [String(d.symbol), d]));
+  for (const row of (result.industryUniverseRows || [])) {
+    const d = sideRows.get(String(row.symbol)), latest = d?.latest;
+    if (!latest || d.status !== 'SOURCE_READY') continue;
+    const m = row.metrics || (row.metrics = {});
+    m.sideDetectorSourceContract = 'mother_pool_native_minute_side_source_v1';
+    m.sideDetectorSourceTradeDate = result.payload.mother_pool_minute_side_evidence.trade_date || null;
+    m.sideDetectorSourceCanonicalRunId = result.payload.mother_pool_minute_side_evidence.canonical_run_id || null;
+    m.sideDetectorObservedAt = latest.side_volume_timestamp || null;
+    m.sideDetectorEvidence = latest;
+    m.b14Event = Number(latest.outside_1m) >= Number(latest.inside_1m) * 2;
+    m.outsideStrengthSignal = m.b14Event ? 'OUTSIDE_STRONG' : null;
+  }
+  // VWAP is independent of minute side-volume availability.
+  for (const row of (result.industryUniverseRows || [])) {
+    const m = row.metrics || (row.metrics = {});
+    const vwapProbe = contextDetectors.b21({ raw_turnover_value: m.tradeValue, raw_turnover_unit: m.tradeValueUnit, raw_volume: m.totalVolume, raw_volume_unit: m.totalVolumeUnit, turnover_event_at: m.turnoverEventAt || m.eventAt || null, current_price: m.price });
+    m.vwapEvidence = vwapProbe;
+    m.vwapCross = vwapProbe.source_contract_ok && vwapProbe.vwap_state !== 'AT_VWAP';
+    m.vwapSignal = vwapProbe.source_contract_ok ? `VWAP_${vwapProbe.vwap_state}` : null;
+  }
+  result.payload.b19_b24_event_evidence = buildB19B24Evidence(result.industryUniverseRows);
+  // One memoized write barrier: a failed write is never implicitly retried by
+  // the outer module error handler. Input checkpoints precede this barrier.
+  let initialSourcePublication = null;
+  const publishInitialSource = () => initialSourcePublication ||
+    (initialSourcePublication = writeStatusAndScorecard(result));
+  // Persist real natural-candle module rows before fixed-round capture.
+  result.payload.module_write_sets = {};
+  result.payload.module_persistence_errors = [];
+  let persistModuleInput = null;
+  if (sideMinutes >= 360 && sideMinutes < 810) {
+    try {
+      const snapshot = sideSnapshot;
+      if (!require('../lib/daytrade-mother-pool-snapshot').inspectSnapshot(snapshot,taipeiDate()).ok) throw Error('MODULE_SNAPSHOT_INVALID');
+      const identity={trade_date:taipeiDate(),canonical_run_id:snapshot.canonical_run_id,
+        writer_run_id:result.payload.writer_run_id||result.run_id,generation_id:result.payload.generation_id,
+        mother_pool_run_id:snapshot.mother_pool_run_id,snapshot_generation:snapshot.generation,snapshot_sequence:snapshot.snapshot_sequence};
+      const cache=sideMinutes>=540?readFugleWebSocketCandles({maxAgeMs:90*60*1000}):null;
+      const sessionCandles=sideMinutes>=540?require('../lib/mother-pool-session-candles').select({payload:cache.payload,tradeDate:identity.trade_date,asOf:sideAsOf}):[];
+      const inputs=[require('../lib/mother-pool-identity-source').collect({identity,symbols:snapshot.symbols,calendar:marketCalendarEvidence,lease:writerLease,asOf:nowIso()})];
+      inputs.push(require('../lib/mother-pool-eligibility-source').collect({identity,evidence:activeSymbols.sourceEvidence,asOf:sideAsOf}));
+      inputs.push(require('../lib/mother-pool-warmup-union').collect({identity,symbols:snapshot.symbols,bridge:readJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE,null),asOf:sideAsOf}));
+      inputs.push(require('../lib/mother-pool-historical-volume-price').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,asOf:nowIso()}));
+      inputs.push(require('../lib/mother-pool-daytrade-ratio').collect({identity,symbols:snapshot.symbols,activeSymbols,dailyVolumeMap,officialSource:officialDaytradeSource,asOf:nowIso()}));
+      const collectorStatus=readJson(FUGLE_WS_STATUS_FILE,null);
+      inputs.push(require('../lib/mother-pool-websocket-source').collect({identity,symbols:snapshot.symbols,status:collectorStatus,asOf:nowIso()}));
+      inputs.push(require('../lib/mother-pool-previous-ohlc').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,asOf:sideAsOf,lockDirectory:runtimePath('data','mother-pool-a15',identity.trade_date)}));
+      inputs.push(require('../lib/mother-pool-a16-module').collect({identity,symbols:snapshot.symbols,asOf:sideAsOf,runtime:runtimePath()}));
+      if(sideMinutes>=530)inputs.push(...require('../lib/mother-pool-morning-module').collect({identity,symbols:snapshot.symbols,asOf:sideAsOf,runtime:runtimePath()}));
+      if(sideMinutes>=525)inputs.push(require('../lib/mother-pool-natural-trial').collect({identity,symbols:snapshot.symbols,history:preopenTrialHistory,asOf:sideAsOf}));
+      if(sideMinutes>=539)inputs.push(require('../lib/mother-pool-trial-trajectory').collect({identity,symbols:snapshot.symbols,history:preopenTrialHistory,asOf:sideAsOf}));
+      if(sideMinutes<540){
+        inputs.push(require('../lib/mother-pool-preopen-history').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,quoteMap,activeSymbols,rawEvidence:intradayMap.preopenRawEvidence,asOf:sideAsOf}));
+        try { inputs.push(...require('../lib/mother-pool-preopen-ma20').collect({
+          identity,symbols:snapshot.symbols,snapshot,calendar:marketCalendarEvidence,
+          rawEvidence:intradayMap.preopenRawEvidence,asOf:sideAsOf,
+        })); } catch(error) { result.payload.module_persistence_errors.push({modules:['A08','A09'],error:String(error.message||error)}); }
+      }
+      if(sideMinutes>=540){
+      inputs.push(...require('../lib/mother-pool-ma20-producer').collect({identity,snapshot,symbols:snapshot.symbols,candles:sessionCandles,asOf:sideAsOf}));
+      inputs.push(...require('../lib/mother-pool-candle-module-producer').collect({
+        candles:sessionCandles,identity,symbols:snapshot.symbols,asOf:sideAsOf}));
+      try{inputs.push(...require('../lib/mother-pool-liquidity-module-producer').collect({identity,symbols:result.payload.module_requested_universe,volumeValue:result.payload.volume_value_ranking,turnover:result.payload.intraday_turnover_ranking,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B02','B03','B21'],error:String(error.message||error)});}
+      try{inputs.push(...require('../lib/mother-pool-anomaly-module-producer').collect({identity,symbols:snapshot.symbols,evidence:result.payload.mother_pool_price_volume_evidence,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B12','B13','B19'],error:String(error.message||error)});}
+      try{const receipt=readJson(path.join(MOTHER_POOL_SNAPSHOT_RECEIPT_DIR,`mother-pool-snapshot-anon-${compactDateKey(taipeiDate())}-${snapshot.snapshot_sequence}.json`),null);inputs.push(require('../lib/mother-pool-snapshot-module-producer').collect({identity,snapshot,receipt,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B11'],error:String(error.message||error)});}
+      try{inputs.push(require('../lib/mother-pool-industry-delta-producer').collect({identity,discovery:result.payload.same_round_industry_discovery,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B07'],error:String(error.message||error)});}
+      try{inputs.push(...require('../lib/mother-pool-industry-flow-producer').collect({identity,discovery:result.payload.same_round_industry_discovery,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B06','B08'],error:String(error.message||error)});}
+      try{inputs.push(require('../lib/mother-pool-industry-mapping-producer').collect({identity,discovery:result.payload.same_round_industry_discovery,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B05'],error:String(error.message||error)});}
+      try{const previous=readJson(statePath('daytrade-b02-module-latest.json'),null);inputs.push(require('../lib/mother-pool-discovery-producer').collect({identity,symbols:intradaySignalEvidence.requested_symbols,sources:discoverySourceRows,candles:sessionCandles,previous,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B04'],error:String(error.message||error)});}
+      try{inputs.push(require('../lib/mother-pool-allocation-producer').collect({identity,allocation:result.payload.deep_scan_allocation,snapshot,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B10'],error:String(error.message||error)});}
+      try{
+        const fiveMinuteSource=await require('../lib/mother-pool-five-minute-source').read({snapshot,asOf:sideAsOf,runtime:runtimePath(),get:supabaseGet,paged:supabaseGetPaged});
+        inputs.push(require('../lib/mother-pool-five-minute-producer').collect({identity,snapshot,...fiveMinuteSource,asOf:sideAsOf}));
+      }catch(error){result.payload.module_persistence_errors.push({modules:['B15'],error:String(error.message||error)});}
+      }
+      const dir=runtimePath('data','module-write-sets');fs.mkdirSync(dir,{recursive:true});
+      if(sideMinutes>=540)inputs.push({module_id:'B09',build:()=>require('../lib/mother-pool-discovery-union-producer').collect({identity,parents:{B04:result.payload.module_write_sets.B04,B08:result.payload.module_write_sets.B08},asOf:nowIso()})});
+      if(sideMinutes>=540)inputs.push({module_id:'B24',build:()=>{
+        const sideFile=result.payload.mother_pool_minute_side_persist?.write_set_file;
+        return require('../lib/mother-pool-combination-producer').collect({identity,symbols:snapshot.symbols,
+          parents:result.payload.module_write_sets,side:sideFile?readJson(sideFile,null):null,asOf:nowIso()});
+      }});
+      if(sideMinutes>=539)inputs.push({module_id:'A18',build:()=>require('../lib/mother-pool-preopen-quality').collect({identity,symbols:snapshot.symbols,parents:result.payload.module_write_sets,asOf:nowIso()})});
+      result.payload.module_input_checkpoint=require('../lib/mother-pool-module-input-checkpoint').save({
+        directory:runtimePath('data','module-input-checkpoints',identity.trade_date),identity,inputs,observedAt:sideAsOf});
+      const frozenModuleInputs=require('../lib/mother-pool-module-input-checkpoint').load(result.payload.module_input_checkpoint,identity).inputs;
+      await publishInitialSource();
+      persistModuleInput = async input => {
+          const evidenceId=require('node:crypto').randomUUID();
+          const saved=await require('../lib/persist-mother-pool-module-round').persistModuleRound(input,{
+            savePlan:async plan=>{
+              require('../lib/daytrade-module-attempt-journal').begin(path.join(dir,'attempts'),plan);
+              require('../lib/daytrade-durable-json').writeExclusive(path.join(dir,evidenceId+'-plan.json'),plan);
+            },
+            persist:async body=>{
+              if(DRY_RUN)throw Error('MODULE_DRY_RUN_NO_PERSISTENCE');
+              let response;
+              try { response=await fetch(SUPABASE_URL+'/rest/v1/rpc/persist_daytrade_module_round_v2',{
+                method:'POST',headers:headers(requireSupabaseKey(true)),body:JSON.stringify(body),signal:AbortSignal.timeout(SUPABASE_WRITE_TIMEOUT_MS)});
+              } catch(error) {
+                if(!['TimeoutError','AbortError'].includes(error?.name))throw error;
+                const document=JSON.parse(body.p_document);
+                const fixed={module_id:'eq.'+document.module_id,trade_date:'eq.'+document.trade_date,writer_run_id:'eq.'+document.writer_run_id};
+                const rounds=await supabaseGetPaged('fugle_daytrade_module_round_v2',new URLSearchParams({...fixed,select:'module_id,trade_date,writer_run_id,document,committed_at',order:'writer_run_id.asc'}).toString(),{service:true,requireExactCount:true,pageSize:500,maxRows:2});
+                const rows=await supabaseGetPaged('fugle_daytrade_module_rows_v2',new URLSearchParams({...fixed,select:'module_id,trade_date,writer_run_id,symbol,evidence',order:'symbol.asc'}).toString(),{service:true,requireExactCount:true,pageSize:500,maxRows:document.plan.requested_symbols.length});
+                return require('../lib/daytrade-module-write-ack').verify(document,rounds,rows);
+              }
+              if(!response.ok)throw Error('MODULE_RPC_HTTP_'+response.status+':'+(await response.text()).slice(0,240));
+              return response.json();
+            },
+            saveEvidence:async evidence=>require('../lib/daytrade-durable-json').writeExclusive(path.join(dir,evidenceId+'.json'),evidence)
+          });
+          result.payload.module_write_sets[input.module_id]=saved;
+          return saved;
+      };
+      for(const queued of inputs){
+        let input=typeof queued.build==='function'?queued:frozenModuleInputs.find(value=>value.module_id===queued.module_id);
+        try {
+          if(typeof input.build==='function')input=input.build();
+          const saved=await persistModuleInput(input);
+          if(input.module_id==='B02')writeJson(statePath('daytrade-b02-module-latest.json'),saved);
+        }catch(error){result.payload.module_persistence_errors.push({module_id:input.module_id,error:String(error.message||error)});}
+      }
+      const sideFile=result.payload.mother_pool_minute_side_persist?.write_set_file;
+      if(sideMinutes>=540)result.payload.b24_source_coverage=require('../lib/mother-pool-combination-sources').inspect({
+        identity,symbols:snapshot.symbols,parents:result.payload.module_write_sets,
+        side:sideFile?readJson(sideFile,null):null,asOf:nowIso()});
+    }catch(error){result.payload.module_persistence_errors.push({error:String(error.message||error)});}
+  }
+  await publishInitialSource();
+  writeModuleProducerReceipts(result, taipeiDate());
+  try {
+    const moduleRegistry = readJson(path.resolve(__dirname, '..', 'data', 'contracts', 'mother-pool-a01-b24-module-registry-v1.json'), { modules: {} });
+    const snapshotRun = result.payload?.mother_pool_run_id || result.payload?.mother_pool_snapshot?.mother_pool_run_id || '';
+    const snapshotGeneration = result.payload?.mother_pool_snapshot?.generation || snapshotRun;
+    const captureArgs = [path.join(__dirname, 'capture-daytrade-module-readbacks.js'), `--trade-date=${taipeiDate()}`, `--canonical=${result.payload?.canonical_run_id || `${SOURCE_NAME}:${String(taipeiDate()).replace(/-/g, '')}:canonical`}`, `--writer-run-id=${result.payload?.writer_run_id || result.run_id || ''}`, `--writer-generation-id=${result.payload?.generation_id || ''}`, `--snapshot-generation=${snapshotGeneration}`, `--mother-pool-run-id=${snapshotRun}`, `--snapshot-sequence=${result.payload?.mother_pool_snapshot_sequence || ''}`, `--modules=${Object.keys(moduleRegistry.modules || {}).join(',')}`];
+    const captures=[];
+    const nonSide=Object.keys(moduleRegistry.modules||{}).filter(id=>!['B14','B20','A14','A19'].includes(id));
+    const writeSetIndexFile=runtimePath('data','scan-receipts','modules',`writer-write-set-index-${require('node:crypto').randomUUID()}.json`);
+    fs.writeFileSync(writeSetIndexFile,JSON.stringify({modules:result.payload.module_write_sets||{}},null,2),{flag:'wx'});
+    captureArgs.push('--write-set-index='+writeSetIndexFile);
+    const groups=[captureArgs.map(x=>x.startsWith('--modules=')?'--modules='+nonSide.join(','):x)];
+    const persisted=result.payload.mother_pool_minute_side_persist;
+    if(persisted?.write_set_file){
+      const id=persisted.identity;
+      groups.push([captureArgs[0],'--modules=B14,B20','--write-set='+persisted.write_set_file,
+        '--trade-date='+id.trade_date,'--canonical='+id.canonical_run_id,'--writer-run-id='+id.writer_run_id,
+        '--writer-generation-id='+id.generation_id,'--mother-pool-run-id='+id.mother_pool_run_id,
+        '--snapshot-generation='+id.snapshot_generation,'--snapshot-sequence='+id.snapshot_sequence]);
+    }else captures.push({status:1,stderr:'MINUTE_SIDE_WRITE_SET_MISSING'});
+    for(const args of groups){const capture=spawnSync(process.execPath,args,{encoding:'utf8',windowsHide:true,timeout:120000,env:{...process.env,SUPABASE_SERVICE_ROLE_KEY:SUPABASE_SERVICE_KEY,SUPABASE_ANON_KEY:SUPABASE_READ_KEY===SUPABASE_SERVICE_KEY?'':SUPABASE_READ_KEY,MOTHER_POOL_B14_VIEW:'v_daytrade_minute_side_readback_v1',MOTHER_POOL_B20_VIEW:'v_daytrade_minute_side_b20_readback_v1'}});captures.push({status:capture.status,stdout:capture.stdout||'',stderr:capture.stderr||'',error:capture.error?.message||null});}
+    if(persistModuleInput && sideMinutes>=539 && sideMinutes<810){
+      const closureIdentity={trade_date:taipeiDate(),canonical_run_id:sideSnapshot.canonical_run_id,writer_run_id:result.payload.writer_run_id,generation_id:result.payload.generation_id,mother_pool_run_id:sideSnapshot.mother_pool_run_id,snapshot_generation:sideSnapshot.generation,snapshot_sequence:sideSnapshot.snapshot_sequence};
+      const closureCaptures=await require('../lib/run-preopen-closure-stages').run({identity:closureIdentity,symbols:sideSnapshot.symbols,captures,persist:persistModuleInput,runtime:runtimePath(),capture:async(id,saved)=>{
+        const indexFile=runtimePath('data','scan-receipts','modules',`closure-write-set-${require('node:crypto').randomUUID()}.json`);
+        fs.writeFileSync(indexFile,JSON.stringify({modules:{[id]:saved}}),{flag:'wx'});
+        const args=captureArgs.map(x=>x.startsWith('--modules=')?'--modules='+id:x.startsWith('--write-set-index=')?'--write-set-index='+indexFile:x);
+        const c=spawnSync(process.execPath,args,{encoding:'utf8',windowsHide:true,timeout:120000,env:{...process.env,SUPABASE_SERVICE_ROLE_KEY:SUPABASE_SERVICE_KEY,SUPABASE_ANON_KEY:SUPABASE_READ_KEY===SUPABASE_SERVICE_KEY?'':SUPABASE_READ_KEY}});
+        return {module_id:id,status:c.status,stdout:c.stdout||'',stderr:c.stderr||'',error:c.error?.message||null};
+      }});
+      captures.push(...closureCaptures);
+    }
+    result.payload.module_readback_capture={status:captures.every(c=>c.status===0)?'ok':'blocked',captures};
+  } catch (error) { result.payload.module_readback_capture = { status: 'blocked', exit_code: 1, error: String(error?.message || error) }; }
+  // Independent module verification is a separate process. It only promotes
+  // immutable rounds carrying real DB/anon artifacts; pending rounds remain pending.
+  try {
+    const moduleVerify = spawnSync(process.execPath, [path.join(__dirname, 'run-daytrade-module-verifiers.js')], { encoding: 'utf8', windowsHide: true, env: { ...process.env, TRADE_DATE: taipeiDate(), MOTHER_POOL_CANONICAL:result.payload.canonical_run_id } });
+    let moduleAcceptance;try{moduleAcceptance=JSON.parse(moduleVerify.stdout||'{}');}catch{moduleAcceptance={};}
+    result.payload.module_verifier_runner = { execution_status:moduleVerify.error?'failed':'finished',complete:moduleVerify.status===0&&moduleAcceptance.complete===true,status:moduleAcceptance.acceptance_status||'blocked', exit_code: moduleVerify.status, stdout: moduleVerify.stdout || '', stderr: moduleVerify.stderr || '' };
+  } catch (error) {
+    result.payload.module_verifier_runner = { status: 'blocked', exit_code: 1, error: String(error?.message || error) };
+  }
   await writeStatusAndScorecard(result);
   tickStage("status_scorecard:complete");
   const offSession = Boolean(result.payload.off_session);
@@ -7910,7 +8810,146 @@ async function tick() {
   };
 }
 
+async function buildPreopenA15A19Evidence(activeSymbols, quoteMap, tradeDate, onTrialHistory) {
+  const rows = Array.isArray(activeSymbols) ? activeSymbols : [];
+  const a15Rows = rows.map((r) => preopenA15A19.a15({ symbol: r.symbol, prev_open: r.prev_open ?? r.previous_open, prev_high: r.prev_high ?? r.previous_high, prev_low: r.prev_low ?? r.previous_low, prev_close: r.prev_close ?? r.previous_close, prev_vwap: r.prev_vwap ?? null }));
+  const asOf = nowIso();
+  let a17Samples = [], trialReadback = { status: 'NOT_DUE', pages: [], source: 'fugle_preopen_snapshot_history' };
+  if (taipeiMinutes() >= PREOPEN_CAPTURE_START_MINUTES) {
+    try {
+      const history = await supabaseGetPaged('fugle_preopen_snapshot_history',
+        'select=symbol,trade_date,observed_at,trial_price,is_trial,payload&trade_date=eq.' + encodeURIComponent(tradeDate) +
+        '&observed_at=lte.' + encodeURIComponent(asOf) + '&or=' + encodeURIComponent('(' +
+          [['08:45','08:46'],['08:50','08:51'],['08:55','08:56'],['08:59','09:00']].map(([from,to]) =>
+            `and(observed_at.gte.${tradeDate}T${from}:00+08:00,observed_at.lt.${tradeDate}T${to}:00+08:00)`).join(',') + ')') +
+        '&order=symbol.asc,observed_at.asc',
+        { service: true, pageSize: 500, maxRows: 20000, requireExactCount: true, pageEvidence: trialReadback.pages });
+      const allowed = new Set(rows.map(r => String(r.symbol)));
+      a17Samples = history.filter(r => allowed.has(String(r.symbol))).map(r => {
+        const event = r.payload?.trial_event_at;
+        const ms = Date.parse(event);
+        const slot = Number.isFinite(ms) ? new Date(ms + 8 * 3600000).toISOString().slice(11,16) : '';
+        return { symbol: r.symbol, trade_date: r.trade_date, capture_slot: slot,
+          trial_event_at: event, trial_price: r.trial_price,
+          is_trial: r.is_trial === true && r.payload?.trial_event_time_source === 'provider_trial_event' &&
+            r.payload?.source === 'fugle_daytrade_source_writer:preopen_websocket' &&
+            r.payload?.writer_contract === PREOPEN_WRITER_CONTRACT &&
+            Date.parse(r.observed_at) === ms };
+      }).filter(r => ['08:45','08:50','08:55','08:59'].includes(r.capture_slot));
+      trialReadback.status = 'READ'; trialReadback.rows = history.length;
+      if(typeof onTrialHistory==='function')onTrialHistory({rows:history,readback:{status:'READ',source:'fugle_preopen_snapshot_history',trade_date:tradeDate,observed_at:asOf}});
+    } catch (error) {
+      trialReadback.status = 'BLOCKED'; trialReadback.reason = error.message;
+    }
+  }
+  // Canonical A16 producer owns history and fixed-generation anon readback.
+  // Writer only references the current day's verified summary; no raw-values fallback.
+  const a16 = a16Writer.readReferences({ runtime: runtimePath(), tradeDate, symbols: rows });
+  const a17 = preopenA15A19.a17(a17Samples, { trade_date: tradeDate, symbols: rows.map(r => r.symbol), as_of: asOf });
+  a17.source_readback = trialReadback;
+  const evidence = { a15: a15Rows, a16, a17, a18: preopenA15A19.a18({ a15: a15Rows.map((r) => ({ ...r, status: r.data_gap ? "DATA_GAP" : "READY", reason: r.data_gap ? "A15_DATA_GAP" : null })), a16, a17 }) };
+  const receipt = preopenA15A19.a19(evidence);
+  return { contract: receipt.contract, trade_date: tradeDate, canonical_run_id: `${SOURCE_NAME}:${String(tradeDate).replace(/-/g, "")}:canonical`, ...evidence, ...receipt, formal_candidate_allowed: false, publish_allowed: false };
+}
+
+function buildB19B24Evidence(rows) {
+  const evidence = (Array.isArray(rows) ? rows : []).map((row) => {
+    const m = row.metrics || {};
+    const eventTimestamp = m.eventAt ?? row.event_at ?? row.updated_at;
+    const b19 = contextDetectors.b19(
+      { close: m.price ?? row.close, previous_minute_close: m.previousMinuteClose ?? m.previous_minute_close ?? row.previous_minute_close, timestamp: m.eventAt ?? row.event_at ?? row.updated_at },
+      Array.isArray(m.priorReturns) ? m.priorReturns : [],
+      Array.isArray(m.sameMinuteReturns) ? m.sameMinuteReturns : [],
+    );
+    const side = contextDetectors.b20({ inside_1m: m.insideVolume, outside_1m: m.outsideVolume, side_volume_unit: m.sideVolumeUnit, side_volume_event_at: m.sideVolumeEventAt ?? eventTimestamp, side_volume_is_minute: m.sideVolumeIsMinute === true });
+    const vwap = contextDetectors.b21({ raw_turnover_value: m.tradeValue, raw_turnover_unit: m.tradeValueUnit, raw_volume: m.totalVolume, raw_volume_unit: m.totalVolumeUnit, turnover_event_at: m.turnoverEventAt ?? eventTimestamp, current_price: m.price });
+    const range = contextDetectors.b22({ symbol: row.symbol, trade_date: row.trade_date ?? m.tradeDate, canonical_run_id: row.canonical_run_id ?? m.canonicalRunId, current_price: m.price, event_timestamp: eventTimestamp, timestamp: eventTimestamp, opening_range_bars: Array.isArray(m.openingRangeBars) ? m.openingRangeBars : [] });
+    const position = contextDetectors.b23({ symbol: row.symbol, trade_date: row.trade_date ?? m.tradeDate, canonical_run_id: row.canonical_run_id ?? m.canonicalRunId, event_timestamp: eventTimestamp, current_price: m.price, today_open: m.openPrice, bars_through_event: Array.isArray(m.barsThroughEvent) ? m.barsThroughEvent : [] });
+    const events = [];
+    const detectorContract = m.detectorSourceContract || null;
+    const detectorIdentityOk = detectorContract === "mother_pool_price_volume_evidence_v1" && m.detectorSourceTradeDate === (row.trade_date ?? m.tradeDate) && m.detectorSourceCanonicalRunId === (row.canonical_run_id ?? m.canonicalRunId) && Boolean(m.detectorSourceObservedAt);
+    const eventBase = { event_timestamp: eventTimestamp, source_contract: detectorContract || m.eventSourceContract || null, source_contract_ok: detectorIdentityOk };
+    if (b19.b19_signal === "PRICE_SPIKE_DOWN" && b19.data_status === 'READY' && detectorIdentityOk) events.push({ type: "PRICE_SPIKE_DOWN", event_id: `${row.symbol}:B19`, event_timestamp: eventTimestamp, source_contract: detectorContract, source_contract_ok: true });
+    if (eventBase.source_contract_ok && (m.b12Event === true || m.volumeSpikeSignal === "VOLUME_SPIKE")) events.push({ type: "VOLUME_SPIKE", event_id: `${row.symbol}:B12`, ...eventBase });
+    if (eventBase.source_contract_ok && (m.b13Event === true || m.priceSpikeUpSignal === "PRICE_SPIKE_UP")) events.push({ type: "PRICE_SPIKE_UP", event_id: `${row.symbol}:B13`, ...eventBase });
+    const sideBase = { event_timestamp: m.sideDetectorObservedAt || eventTimestamp, source_contract: m.sideDetectorSourceContract || null, source_contract_ok: m.sideDetectorSourceContract === "mother_pool_native_minute_side_source_v1" && m.sideDetectorSourceTradeDate === (row.trade_date ?? m.tradeDate) && m.sideDetectorSourceCanonicalRunId === (row.canonical_run_id ?? m.canonicalRunId) && Boolean(m.sideDetectorObservedAt) };
+    if (sideBase.source_contract_ok && (m.b14Event === true || m.outsideStrengthSignal === "OUTSIDE_STRONG")) events.push({ type: "OUTSIDE_STRONG", event_id: `${row.symbol}:B14`, ...sideBase });
+    if (side.b20_raw_strong && side.source_contract_ok && sideBase.source_contract_ok) events.push({ type: "INSIDE_STRONG", event_id: `${row.symbol}:B20`, event_timestamp: sideBase.event_timestamp, source_contract: sideBase.source_contract, source_contract_ok: true });
+    const vwapBase = { event_timestamp: vwap.turnover_event_at || eventTimestamp, source_contract: 'intraday_vwap_v1', source_contract_ok: vwap.source_contract_ok === true };
+    if (vwapBase.source_contract_ok && (m.vwapCross === true || m.vwapSignal)) events.push({ type: String(m.vwapSignal || "VWAP_CROSS"), event_id: `${row.symbol}:B21`, ...vwapBase, vwap: vwap.vwap, vwap_state: vwap.vwap_state });
+    if (range.break_direction && range.source_contract_ok) events.push({ type: `OPENING_RANGE_BREAK_${range.break_direction}`, event_id: `${row.symbol}:B22`, event_timestamp: eventTimestamp, source_contract: 'intraday_opening_range_v1', source_contract_ok: true });
+    if (position.new_high && position.source_contract_ok) events.push({ type: "NEW_INTRADAY_HIGH", event_id: `${row.symbol}:B23H`, event_timestamp: eventTimestamp, source_contract: 'intraday_point_in_time_v1', source_contract_ok: true });
+    if (position.new_low && position.source_contract_ok) events.push({ type: "NEW_INTRADAY_LOW", event_id: `${row.symbol}:B23L`, event_timestamp: eventTimestamp, source_contract: 'intraday_point_in_time_v1', source_contract_ok: true });
+    const combinations = contextDetectors.b24(events.map(event => ({ ...event, symbol: row.symbol, trade_date: row.trade_date ?? m.tradeDate, canonical_run_id: row.canonical_run_id ?? m.canonicalRunId })));
+    return { symbol: row.symbol, b19, b20: side, b21: vwap, b22: range, b23: position, b24: { status: combinations.length ? "READY" : (events.length ? "NO_COMBINATION" : "DATA_GAP"), combinations, formal_candidate_allowed: false, publish_allowed: false } };
+  });
+  return { contract: "daytrade_intraday_b19_b24_event_evidence_v1", status: "attached", rows: evidence, b19_b24_formal_candidate_allowed: false, b19_b24_publish_allowed: false, note: "B19/B24 require natural intraday event stream; absent inputs remain DATA_GAP/PENDING and are never synthesized." };
+}
+
+function writeModuleProducerReceipts(result, tradeDate) {
+  const registryPath = path.resolve(__dirname, '..', 'data', 'contracts', 'mother-pool-a01-b24-module-registry-v1.json');
+  const registry = readJson(registryPath, { modules: {} });
+  const receiptDir = runtimePath('data', 'scan-receipts', 'modules');
+  fs.mkdirSync(receiptDir, { recursive: true });
+  const canonical = `${SOURCE_NAME}:${String(tradeDate).replace(/-/g, '')}:canonical`;
+  const observedAt = nowIso();
+  const writerRunId = result.payload?.writer_run_id || result.writer_run_id || result.run_id || result.payload?.run_id || result.payload?.mother_pool_run_id || `${canonical}:writer:${observedAt.replace(/[^0-9]/g, '').slice(0, 14)}`;
+  const written = [];
+  for (const [moduleId, contract] of Object.entries(registry.modules || {})) {
+    const existing = result.payload?.module_receipt_status?.[moduleId] || {};
+    const receipt = {
+      module_id: moduleId,
+      contract,
+      source_contract: 'daytrade_source_writer_v1',
+      trade_date: tradeDate,
+      source_date: existing.source_date || tradeDate,
+      canonical_run_id: canonical,
+      run_id: writerRunId,
+      mother_pool_run_id: result.payload?.mother_pool_run_id || null,
+      snapshot_sequence: result.payload?.mother_pool_snapshot_sequence ?? result.payload?.snapshot_sequence ?? result.payload?.snapshotSequence ?? null,
+      generation: result.payload?.generation_id || result.payload?.generation || null,
+      observed_at: observedAt,
+      status: existing.status || 'PENDING',
+      complete: false,
+      natural_evidence: false,
+      replay: false,
+      synthetic: false,
+      look_ahead: false,
+      requested: existing.requested ?? null,
+      written: existing.written ?? null,
+      readback: existing.readback ?? null,
+      unique_symbols: existing.unique_symbols ?? null,
+      failed_checks: existing.failed_checks || ['NATURAL_EVIDENCE_PENDING'],
+      first_blocker: existing.first_blocker || 'NATURAL_EVIDENCE_PENDING',
+      exit_code: 1,
+      producer: 'run-daytrade-source-writer.js:writeModuleProducerReceipts',
+      receipt_generated_by_writer: true
+    };
+    const immutableRun = String(writerRunId).replace(/[^A-Za-z0-9_.-]/g, '_');
+    let file = path.join(receiptDir, `${moduleId.toLowerCase()}-${String(tradeDate).replace(/-/g, '')}-${immutableRun}-${observedAt.replace(/[^0-9]/g, '').slice(0, 17)}.json`);
+    let attempt = 0;
+    while (fs.existsSync(file)) { attempt += 1; file = path.join(receiptDir, `${moduleId.toLowerCase()}-${String(tradeDate).replace(/-/g, '')}-${immutableRun}-${observedAt.replace(/[^0-9]/g, '').slice(0, 17)}-${attempt}.json`); }
+    fs.writeFileSync(file, JSON.stringify(receipt, null, 2), { flag: 'wx' });
+    written.push(file);
+  }
+  result.payload.module_producer_receipts = { count: written.length, paths: written, registry_contract: registry.contract };
+}
+
 async function main() {
+  if (hasFlag("resume-module-checkpoint")) {
+    if (!APPLY || SOURCE_HOST_ROLE !== "writer") throw Error("recovery_requires_writer_apply");
+    ensureApprovedSourceHost();
+    const authority=spawnSync(process.execPath,[path.join(__dirname,'verify-release-root-authority.js'),'--require-production-root'],{encoding:'utf8',windowsHide:true,timeout:15000});
+    if(authority.status!==0)throw Error('RECOVERY_RELEASE_AUTHORITY_BLOCKED');
+    const guard=async()=>{const p=spawnSync(process.execPath,[path.join(__dirname,'supabase-incident-guard.js'),'check','--class=writer','--action=same-batch-module-recovery'],{encoding:'utf8',windowsHide:true,timeout:10000});if(p.status!==0)throw Error('RECOVERY_INCIDENT_GUARD_BLOCKED');};
+    const recovered=await require('../lib/run-mother-pool-checkpoint-recovery').run({
+      sourceIntent:{file:argValue('source-intent'),row_sha256:argValue('source-intent-sha256')},runtime:runtimePath(),url:SUPABASE_URL,key:requireSupabaseKey(true),hostId:SOURCE_HOST_ID,instanceId:WRITER_INSTANCE_ID,tradeDate:taipeiDate(),guard,
+      calendar:async date=>{const day=await isTwseTradingDay(new Date(date+'T12:00:00+08:00'),{stateDir:statePath(),ignoreOverrides:true});if(day.isTradingDay!==true||day.error||!['cache','twse'].includes(day.source))throw Error('RECOVERY_TRADING_DAY_UNVERIFIED');},
+      read:async(table,query)=>supabaseGetPaged(table,new URLSearchParams(query).toString(),{service:true,requireExactCount:true,pageSize:2,maxRows:2}),
+      invoke:async(script,args,verificationEnv={})=>{const p=spawnSync(process.execPath,[path.join(__dirname,script),...args],{encoding:'utf8',windowsHide:true,timeout:180000,maxBuffer:8388608,env:{...process.env,...verificationEnv,FUMAN_RUNTIME:runtimePath(),SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY:requireSupabaseKey(true)}});return {exit_code:p.status,stdout:p.stdout||'',error:p.error?.code||null};}
+    });
+    console.log(JSON.stringify(recovered));process.exitCode=recovered.first_blocker?1:2;return;
+  }
   if (hasFlag("refresh-strategy-priority-bridge")) {
     if (!APPLY) throw new Error("bridge_refresh_requires_apply");
     for (const args of [["scripts/verify-release-root-authority.js", "--require-production-root"], ["scripts/supabase-incident-guard.js", "check", "--class=guard", "--action=strategy-priority-bridge"]]) {
@@ -8022,3 +9061,4 @@ main().catch((error) => {
   }, null, 2));
   process.exit(1);
 });
+

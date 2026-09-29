@@ -1,3 +1,4 @@
+const { indicatorSeries: sharedIndicatorSeries } = require("../lib/technical-indicators");
 "use strict";
 
 const fs = require("fs");
@@ -89,6 +90,7 @@ function indicatorSeries(candles) {
   const macdLine = closes.map((_, index) => (ema12[index] || 0) - (ema26[index] || 0));
   const signal = emaSeries(macdLine, 9);
   const histogram = macdLine.map((value, index) => value - (signal[index] || 0));
+  const technical = sharedIndicatorSeries(candles);
   const k = [];
   const d = [];
   const prefixHigh = [];
@@ -102,11 +104,8 @@ function indicatorSeries(candles) {
     runningLow = Math.min(runningLow, lows[index] || 0);
     prefixHigh.push(runningHigh);
     prefixLow.push(runningLow);
-    const start = Math.max(0, index - 8);
-    const localHigh = Math.max(...highs.slice(start, index + 1));
-    const localLow = Math.min(...lows.slice(start, index + 1));
-    k.push(localHigh > localLow ? ((closes[index] - localLow) / (localHigh - localLow)) * 100 : 50);
-    d.push(average(k.slice(Math.max(0, index - 2), index + 1)));
+    k.push(technical[index].k);
+    d.push(technical[index].d);
     rollingVolume += volumes[index] || 0;
     if (index >= 5) rollingVolume -= volumes[index - 5] || 0;
     averageVolume5.push(rollingVolume / Math.min(5, index + 1));

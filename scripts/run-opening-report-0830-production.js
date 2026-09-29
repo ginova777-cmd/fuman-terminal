@@ -331,7 +331,10 @@ function runMotherPoolHandoffAck(tradeDate, runId, bridgeAggregatePath, isolated
   const args = isolatedBacktest
     ? [HANDOFF_ACK_SCRIPT, "--fixture"]
     : [HANDOFF_ACK_SCRIPT, `--trade-date=${tradeDate}`, `--report-run-id=${runId}`, `--bridge-aggregate=${bridgeAggregatePath}`];
-  if(hasFlag("--resume-evidence")) args.push(`--output=${path.join(RECEIPT_DIR,"scan-receipts",`opening-report-resume-handoff-${tradeDate.replace(/-/g, "")}.json`)}`);
+  const canonicalHandoff=readJson(path.join(RECEIPT_DIR,"scan-receipts",`opening-report-0830-mother-pool-handoff-ack-${tradeDate.replace(/-/g, "")}.json`));
+  // Preserve the original successful handoff timestamp only when it is valid.
+  // A failed handoff must be replaced by this verifier's real same-batch readback.
+  if(hasFlag("--resume-evidence") && canonicalHandoff?.complete===true && canonicalHandoff?.report_run_id===runId && canonicalHandoff?.trade_date===tradeDate) args.push(`--output=${path.join(RECEIPT_DIR,"scan-receipts",`opening-report-resume-handoff-${tradeDate.replace(/-/g, "")}.json`)}`);
   const result = spawnSync(process.execPath, args, { encoding: "utf8", windowsHide: true, cwd: path.resolve(__dirname, "..") });
   let receipt = null;
   try { receipt = JSON.parse(String(result.stdout || "").trim()); } catch {}
@@ -643,7 +646,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   const applyBridge = !mock && !hasFlag("--skip-bridge");
   const resumeEvidence = hasFlag("--resume-evidence");
   const reuseLineReceipt = hasFlag("--reuse-line-receipt") || resumeEvidence;
-  const sendLine = !mock && !reuseLineReceipt;
+  const linePaused = linePolicy.pauseEnabled(tradeDate);
+  const sendLine = !mock && !reuseLineReceipt && !linePaused;
   const dryRunLine = mock;
 
   const frozenLeaders = frozenLeadersReceipt(tradeDate);
@@ -659,7 +663,7 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   const items = attachPriorityObservation(baseItems, priority);
   const displayTop3 = priority.observations;
   const deliveryContentHash = contentHash(priority.mode, displayTop3, night);
-  if (resumeEvidence) { const prior=readJson(path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`)); if(prior?.report_run_id!==runId || prior?.delivery_content_hash!==deliveryContentHash || prior?.line_push_attempted!==true) throw Error("resume_evidence_identity_mismatch"); }
+  if (resumeEvidence) { const prior=readJson(path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`)); if(prior?.report_run_id!==runId || prior?.delivery_content_hash!==deliveryContentHash || (prior?.line_push_attempted!==true&&!linePolicy.paused(prior,runId,deliveryContentHash,tradeDate))) throw Error("resume_evidence_identity_mismatch"); }
   if (reuseLineReceipt && !resumeEvidence && !validateReuse(readJson(path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`)), runId, deliveryContentHash)) throw new Error("line_reuse_run_or_content_mismatch");
   const reportPath = path.join(RECEIPT_DIR, `opening-report-0830-${compact}.md`);
   const overseasPath = path.join(RECEIPT_DIR, `overseas-preflight-${compact}.json`);
@@ -673,7 +677,12 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     const receiptPath = path.join(process.env.FUMAN_MORNING_STAGE ? path.join(morningStages.directory(RUNTIME_DIR),"scan-receipts") : path.join(RUNTIME_DIR,"data","scan-receipts"), `opening-report-0830-priority-bias-bridge-${item.industry}-${compact}.json`);
     if(!resumeEvidence) writeJson(inputPath, item);
     const top3 = Number(item.priority_observation_rank) >= 1 && Number(item.priority_observation_rank) <= 3;
-    if(resumeEvidence && top3) bridgeResults.push({ industry:item.industry, priority_observation_rank:item.priority_observation_rank, inputPath,receiptPath,result:{exitCode:0},reason_code:"existing_bridge_pending_independent_readback" });
+    if(resumeEvidence && top3) {
+      const existingInput=readJson(inputPath), priorBridge=readJson(receiptPath);
+      if(existingInput?.run_id!==item.run_id || existingInput?.industry!==item.industry || JSON.stringify(existingInput?.mapped_symbols)!==JSON.stringify(item.mapped_symbols)) throw Error("resume_bridge_input_identity_mismatch");
+      const alreadyApplied=priorBridge?.ok===true && priorBridge?.run_id===item.run_id;
+      bridgeResults.push({industry:item.industry,priority_observation_rank:item.priority_observation_rank,inputPath,receiptPath,result:alreadyApplied?{exitCode:0}:runBridge(inputPath,receiptPath,tradeDate),reason_code:alreadyApplied?"existing_bridge_pending_independent_readback":"same_batch_failed_bridge_retry"});
+    }
     else if (isolatedBacktest && top3) bridgeResults.push({ industry: item.industry, priority_observation_rank: item.priority_observation_rank, priority_observation_basis: item.priority_observation_basis, inputPath, receiptPath, result: { exitCode: 0, simulated: true }, reason_code: "isolated_bridge_contract_pass" });
     else if (applyBridge && top3) bridgeResults.push({ industry: item.industry, priority_observation_rank: item.priority_observation_rank, priority_observation_basis: item.priority_observation_basis, inputPath, receiptPath, result: runBridge(inputPath, receiptPath, tradeDate) });
     else bridgeResults.push({ industry: item.industry, priority_observation_rank: item.priority_observation_rank, priority_observation_basis: item.priority_observation_basis, inputPath, receiptPath, skipped: true, reason_code: top3 ? "bridge_apply_not_requested" : "not_priority_observation_top3_bridge_skip" });
@@ -695,7 +704,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     formal_candidate_allowed: false,
     checked_at: timestamp(),
   };
-  if(resumeEvidence) { const prior=readJson(bridgeAggregatePath); if(prior?.run_id!==runId||prior?.trade_date!==tradeDate||prior?.status!=="BRIDGE_OK"||prior?.observation_count!==displayTop3.length) throw Error("resume_bridge_identity_mismatch"); } else writeJson(bridgeAggregatePath, bridgeAggregate);
+  if(resumeEvidence) { const prior=readJson(bridgeAggregatePath); if(prior?.run_id!==runId||prior?.trade_date!==tradeDate||prior?.observation_count!==displayTop3.length) throw Error("resume_bridge_identity_mismatch"); }
+  writeJson(bridgeAggregatePath, bridgeAggregate);
   const motherPoolHandoffAckRun = runMotherPoolHandoffAck(tradeDate, runId, bridgeAggregatePath, isolatedBacktest);
   const motherPoolHandoffAck = motherPoolHandoffAckRun.receipt || { ok: false, complete: false, first_blocker: "mother_pool_handoff_ack_output_invalid" };
   const lineReceiptPath = path.join(RECEIPT_DIR, `line-push-receipt-${compact}.json`);
@@ -704,6 +714,8 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     ? { line_push_attempted: false, line_push_ok: true, simulated: true, reason_code: "isolated_line_flex_payload_pass", target_count: 2, delivered_count: 2, has_user_target: true, has_group_target: true, token_logged: false, target_logged: false }
     : reuseLineReceipt
     ? readJson(lineReceiptPath)
+    : linePaused
+    ? linePolicy.pausedReceipt(runId,deliveryContentHash,tradeDate)
     : await pushLine({ cardText: lineReportText(tradeDate, displayTop3, usMarket, night), flexCard: lineReportFlex(tradeDate, displayTop3, usMarket, night), runId, dryRun: dryRunLine });
   if (!reuseLineReceipt) Object.assign(lineReceipt, {
     ok: lineReceipt?.line_push_ok === true,
@@ -714,9 +726,9 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     night_futures_summary: nightSource.summary(night),
   });
   if (!reuseLineReceipt) writeJson(lineReceiptPath, lineReceipt);
-  const quotaException = !isolatedBacktest && !lineReceipt.line_push_ok ? await linePolicy.capture(lineReceipt, windowsUserEnv("FUMAN_LINE_CHANNEL_ACCESS_TOKEN").value, runId, deliveryContentHash, tradeDate) : null;
+  const quotaException = !isolatedBacktest && !linePaused && !lineReceipt.line_push_ok ? await linePolicy.capture(lineReceipt, windowsUserEnv("FUMAN_LINE_CHANNEL_ACCESS_TOKEN").value, runId, deliveryContentHash, tradeDate) : null;
   if(quotaException) { lineReceipt.quota_exception=quotaException; writeJson(lineReceiptPath,lineReceipt); }
-  const notificationAccepted = isolatedBacktest || linePolicy.accepted(lineReceipt,runId,deliveryContentHash,tradeDate);
+  const notificationAccepted = isolatedBacktest || linePolicy.notificationAccepted(lineReceipt,runId,deliveryContentHash,tradeDate);
   const lineDeliveryOk = lineReceipt?.line_push_ok === true && (!reuseLineReceipt || String(lineReceipt?.report_run_id || lineReceipt?.run_id || "") === runId);
 
   const final = {
@@ -732,6 +744,9 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
     line_push_attempted: sendLine,
     line_push_ok: lineDeliveryOk,
     notification_accepted: notificationAccepted,
+    completion_scope: linePolicy.paused(lineReceipt,runId,deliveryContentHash,tradeDate) ? 'tri_surface' : 'stage_delivery',
+    notification_status: linePolicy.paused(lineReceipt,runId,deliveryContentHash,tradeDate) ? 'paused_by_user' : lineDeliveryOk ? 'delivered' : lineReceipt.quota_exception ? 'quota_exhausted_not_delivered' : 'failed',
+    line_delivered: lineDeliveryOk,
     line_quota_exception: quotaException,
     delivery_content_hash: deliveryContentHash,
     night_futures: night,

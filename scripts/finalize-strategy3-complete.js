@@ -3,6 +3,15 @@ const fs = require("fs");
 const path = require("path");
 const c = require("./strategy3-v2-contract");
 const runtime = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+async function main(){
+const retirement=require("./verify-strategy3-verifier-retirement").verify();
+if(!retirement.ok){console.log(JSON.stringify(retirement));process.exitCode=1;return;}
+if(process.argv.includes('--status-only')&&!process.argv.some(x=>x.startsWith('--trade-date='))&&!process.env.FUMAN_STRATEGY3_TRADE_DATE&&!process.argv.includes('--recovery-replay')){
+ const calendar=await require('../lib/market-calendar-contract').buildMarketCalendarContract({stateDir:path.join(runtime,'state')});
+ const summary=require('../lib/strategy3-closed-market-status').closedStatus(calendar,runtime);
+ if(summary){console.log(JSON.stringify(summary,null,2));process.exitCode=0;return;}
+}
+
 const date = process.argv.find((arg) => arg.startsWith("--trade-date="))?.slice("--trade-date=".length)
   || process.env.FUMAN_STRATEGY3_TRADE_DATE
   || c.taipeiDate();
@@ -90,3 +99,6 @@ if (!process.argv.includes("--status-only")) {
 const output = payload;
 console.log(JSON.stringify({ ...output, receiptPath: target }, null, 2));
 process.exitCode = output?.complete === true || output?.status === "awaiting_scorecard_1315" ? 0 : 1;
+
+}
+main().catch(error=>{console.error(error);process.exitCode=1;});

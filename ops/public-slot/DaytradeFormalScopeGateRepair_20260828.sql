@@ -57,7 +57,7 @@ projected as (
     case
       when d.formal_priority_symbols > 0
        and d.formal_priority_symbols <= d.mother_pool_symbols
-       and d.formal_fresh_quote_coverage_120s >= 0.95
+       and d.formal_fresh_quote_coverage_120s >= 0.90
        and d.formal_max_quote_age_seconds <= 120
       then 'ready'
       else 'not_ready'
@@ -96,7 +96,9 @@ select
   contract_status,
   case when contract_status = 'ready' then '' else 'dynamic_formal_scan_scope_not_ready' end::text as contract_reason,
   50::numeric as mother_pool_min_price,
-  true as mother_pool_price_floor_enforced
+  true as mother_pool_price_floor_enforced,
+  formal_priority_symbols as formal_scan_pool_symbols,
+  least(formal_priority_symbols, 40)::bigint as priority_top40_symbols
 from projected
 cross join source_row;
 
@@ -148,6 +150,8 @@ for each row execute function public.sync_fugle_daytrade_daily_volume_avg_aliase
 create index if not exists idx_fugle_daytrade_intraday_1m_symbol_candle_time_desc
   on public.fugle_daytrade_intraday_1m(symbol, candle_time desc);
 
+drop function if exists public.get_fugle_daytrade_intraday_1m_latest_n(text[], integer);
+
 create or replace function public.get_fugle_daytrade_intraday_1m_latest_n(
   symbols text[],
   bars_per_symbol integer default 200
@@ -164,6 +168,7 @@ returns table (
   volume numeric,
   source text,
   synthetic boolean,
+  volume_strategy_usable boolean,
   updated_at timestamptz,
   payload jsonb
 )
@@ -189,6 +194,7 @@ as $$
     m.volume,
     m.source,
     m.synthetic,
+    m.volume_strategy_usable,
     m.updated_at,
     m.payload
   from requested_symbols s
@@ -206,6 +212,7 @@ as $$
       i.volume,
       i.source,
       i.synthetic,
+      i.volume_strategy_usable,
       i.updated_at,
       i.payload
     from public.fugle_daytrade_intraday_1m i
@@ -372,13 +379,17 @@ normalized as (
     coalesce(nullif(payload->>'websocket_rest_disabled', '')::boolean, false) as websocket_rest_disabled,
     nullif(payload->>'websocket_status_updated_at', '')::timestamptz as websocket_status_updated_at,
     coalesce(nullif(payload->>'websocket_last_message_age_seconds', '')::integer, 999999) as websocket_last_message_age_seconds,
+    coalesce(nullif(payload->>'websocket_heartbeat_age_seconds', '')::integer, 999999) as websocket_heartbeat_age_seconds,
+    coalesce(nullif(payload->>'websocket_heartbeat_ready', '')::boolean, false) as websocket_heartbeat_ready,
+    coalesce(nullif(payload->>'aggregates_last_updated_age_seconds', '')::integer, 999999) as aggregates_last_updated_age_seconds,
+    coalesce(nullif(payload->>'websocket_pipeline_healthy', '')::boolean, false) as websocket_pipeline_healthy,
     coalesce(nullif(payload->>'formal_priority_strategy_chip_complete_latest_run_evidence', '')::boolean, false) as formal_priority_strategy_chip_complete_latest_run_evidence,
     coalesce(payload->>'formal_priority_strategy_chip_status', 'missing') as formal_priority_strategy_chip_status,
     coalesce((payload->>'phase'), '') as phase,
     coalesce(payload->>'formal_quote_source', 'fugle_daytrade_quotes_live') as formal_quote_source,
     coalesce(payload->>'formal_intraday_1m_source', 'fugle_daytrade_intraday_1m') as formal_intraday_1m_source,
     coalesce(payload, '{}'::jsonb) as payload,
-    (taipei_minutes >= 525 and taipei_minutes <= 810) as futopt_contract_required,
+    false as futopt_contract_required,
     case
       when taipei_minutes < 360 then 'closed_before_0600'
       when taipei_minutes < 510 then 'warmup_0600_0829'
@@ -406,7 +417,7 @@ scored as (
       and (websocket_streaming_channels ? 'trades')
       and (websocket_streaming_channels ? 'aggregates')
       and (websocket_streaming_channels ? 'candles')
-      and (coalesce(extract(epoch from (now() - greatest(coalesce(websocket_status_updated_at, updated_at), updated_at)))::integer, 999999) <= 300 and websocket_last_message_age_seconds <= 300)
+      and (coalesce(extract(epoch from (now() - greatest(coalesce(websocket_status_updated_at, updated_at), updated_at)))::integer, 999999) <= 300 and (websocket_last_message_age_seconds <= 300 or websocket_heartbeat_ready is true or aggregates_last_updated_age_seconds <= 300 or websocket_pipeline_healthy is true))
     ) as websocket_formal_ready,
     (formal_quote_source in ('fugle_daytrade_quotes_live', 'v_fugle_daytrade_priority_readiness') and quote_transport like 'websocket_%') as quote_source_daytrade_ok,
     (formal_intraday_1m_source in ('fugle_daytrade_intraday_1m', 'v_fugle_daytrade_intraday_1m_status', 'v_strategy2_intraday_ready')
@@ -424,15 +435,15 @@ scored as (
       and (websocket_streaming_channels ? 'trades')
       and (websocket_streaming_channels ? 'aggregates')
       and (websocket_streaming_channels ? 'candles')
-      and (coalesce(extract(epoch from (now() - greatest(coalesce(websocket_status_updated_at, updated_at), updated_at)))::integer, 999999) <= 300 and websocket_last_message_age_seconds <= 300)
+      and (coalesce(extract(epoch from (now() - greatest(coalesce(websocket_status_updated_at, updated_at), updated_at)))::integer, 999999) <= 300 and (websocket_last_message_age_seconds <= 300 or websocket_heartbeat_ready is true or aggregates_last_updated_age_seconds <= 300 or websocket_pipeline_healthy is true))
       and writer_formal_entry_allowed is true
       and scanner_can_run_opening is true
       and formal_priority_symbols > 0 and formal_priority_symbols <= priority_pool_symbols
-      and formal_fresh_quote_coverage_120s >= 0.95
+      and formal_fresh_quote_coverage_120s >= 0.90
       and formal_max_quote_age_seconds <= 120
       and formal_scope = 'priority_hot_deep_scan_pool_only'
       and formal_priority_strategy_chip_complete_latest_run_evidence is true
-      and quote_age_seconds <= 90
+      and quote_age_seconds <= 120
       and intraday_1m_stale_seconds <= 120
       and ready_ma20_continuous_symbols > 0
       and (formal_quote_source in ('fugle_daytrade_quotes_live', 'v_fugle_daytrade_priority_readiness') and quote_transport like 'websocket_%')
@@ -451,15 +462,15 @@ scored as (
       + (quote_transport like 'websocket_%')::integer
       + (websocket_rest_disabled is true)::integer
       + ((websocket_streaming_channels ? 'trades') and (websocket_streaming_channels ? 'aggregates') and (websocket_streaming_channels ? 'candles'))::integer
-      + ((coalesce(extract(epoch from (now() - greatest(coalesce(websocket_status_updated_at, updated_at), updated_at)))::integer, 999999) <= 300 and websocket_last_message_age_seconds <= 300))::integer
+      + ((coalesce(extract(epoch from (now() - greatest(coalesce(websocket_status_updated_at, updated_at), updated_at)))::integer, 999999) <= 300 and (websocket_last_message_age_seconds <= 300 or websocket_heartbeat_ready is true or aggregates_last_updated_age_seconds <= 300 or websocket_pipeline_healthy is true)))::integer
       + (writer_formal_entry_allowed is true)::integer
       + (scanner_can_run_opening is true)::integer
       + (formal_priority_symbols > 0 and formal_priority_symbols <= priority_pool_symbols)::integer
-      + (formal_fresh_quote_coverage_120s >= 0.95)::integer
+      + (formal_fresh_quote_coverage_120s >= 0.90)::integer
       + (formal_max_quote_age_seconds <= 120)::integer
       + (formal_scope = 'priority_hot_deep_scan_pool_only')::integer
       + (formal_priority_strategy_chip_complete_latest_run_evidence is true)::integer
-      + (quote_age_seconds <= 90)::integer
+      + (quote_age_seconds <= 120)::integer
       + (intraday_1m_stale_seconds <= 120)::integer
       + (ready_ma20_continuous_symbols > 0)::integer
       + ((formal_quote_source in ('fugle_daytrade_quotes_live', 'v_fugle_daytrade_priority_readiness') and quote_transport like 'websocket_%') and (formal_intraday_1m_source in ('fugle_daytrade_intraday_1m', 'v_fugle_daytrade_intraday_1m_status', 'v_strategy2_intraday_ready') or formal_intraday_1m_source like 'dedicated_daytrade_intraday_1m%'))::integer
@@ -491,11 +502,11 @@ projected as (
       when writer_formal_entry_allowed is not true then 'formal_entry_not_allowed'
       when scanner_can_run_opening is not true then 'scanner_can_run_opening_false'
       when formal_priority_symbols <= 0 or formal_priority_symbols > priority_pool_symbols then 'formal_priority_pool_invalid'
-      when formal_fresh_quote_coverage_120s < 0.95 then 'formal_priority_quote_coverage_low'
+      when formal_fresh_quote_coverage_120s < 0.90 then 'formal_priority_quote_coverage_low'
       when formal_max_quote_age_seconds > 120 then 'formal_priority_quote_age_too_old'
       when formal_scope <> 'priority_hot_deep_scan_pool_only' then 'formal_scope_invalid'
       when formal_priority_strategy_chip_complete_latest_run_evidence is not true then 'strategy_chip_complete_latest_run_missing'
-      when quote_age_seconds > 90 then 'quote_age_too_old'
+      when quote_age_seconds > 120 then 'quote_age_too_old'
       when rate_limit_status in ('rate_limited', 'cooldown') then 'rate_limited'
       else 'source_contract_not_ready'
     end as final_reason

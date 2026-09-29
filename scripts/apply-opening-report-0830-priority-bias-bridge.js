@@ -276,11 +276,11 @@ async function main() {
     return;
   }
   try {
-    const existingRows = [];
-    for (const symbol of acceptedSymbols) {
-      const rows = await restRequest(key, "fugle_daytrade_priority_pool?select=symbol,name,market,priority_rank,hot_extension_rank,priority_reason,source,updated_at,payload&symbol=eq." + encodeURIComponent(symbol) + "&limit=1");
-      if (Array.isArray(rows) && rows[0]) existingRows.push(rows[0]);
-    }
+    // Read the same small industry symbol set in one request; do not repeat
+    // the full HTTP round trip for every mapped stock.
+    const existingRows = acceptedSymbols.length ? await restRequest(key,
+      "fugle_daytrade_priority_pool?select=symbol,name,market,priority_rank,hot_extension_rank,priority_reason,source,updated_at,payload&symbol=in.(" + acceptedSymbols.map(encodeURIComponent).join(",") + ")&limit=" + acceptedSymbols.length) : [];
+    if (!Array.isArray(existingRows) || existingRows.some(row => !acceptedSymbols.includes(symbolFromEntry(row))) || new Set(existingRows.map(symbolFromEntry)).size !== existingRows.length) throw Error("bridge_existing_rows_invalid");
     const bySymbol = new Map(existingRows.map((row) => [symbolFromEntry(row), row]));
     const quoteRejected = [];
     const quoteCheckedAt = Date.now();

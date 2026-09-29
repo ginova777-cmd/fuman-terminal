@@ -1,0 +1,81 @@
+{
+  "groups": [
+    {
+      "min": 5,
+      "max": 6,
+      "group": "P1",
+      "rank": 1,
+      "score": 100,
+      "label": "最高優先"
+    },
+    {
+      "min": 4,
+      "max": 5,
+      "group": "P2",
+      "rank": 2,
+      "score": 90,
+      "label": "高優先"
+    },
+    {
+      "min": 6,
+      "max": 7,
+      "group": "P3",
+      "rank": 3,
+      "score": 85,
+      "label": "高優先但注意轉強"
+    },
+    {
+      "min": 3,
+      "max": 4,
+      "group": "P4",
+      "rank": 4,
+      "score": 70,
+      "label": "一般觀察"
+    },
+    {
+      "min": 7,
+      "max": 8,
+      "group": "P5",
+      "rank": 5,
+      "score": 60,
+      "label": "接近轉強"
+    },
+    {
+      "min": null,
+      "max": 3,
+      "group": "P6",
+      "rank": 6,
+      "score": 40,
+      "label": "弱但不追空"
+    }
+  ],
+  "daily_scores": {
+    "BEARISH": 20,
+    "NEUTRAL": 0,
+    "BULLISH": -30
+  },
+  "hourly_scores": {
+    "BEARISH": 20,
+    "TURNING_BEARISH": 25,
+    "NEUTRAL": 0,
+    "BULLISH": -25
+  },
+  "slope_1d_score": 10,
+  "slope_5d_score": 10,
+  "chip_condition_weights": {
+    "3": 1,
+    "14": 1,
+    "15": 1
+  },
+  "first_priority_band": {
+    "min": 5,
+    "max": 7,
+    "slope_max_exclusive": 0
+  },
+  "core_test_band": {
+    "min": 5,
+    "max": 6,
+    "slope_min": -0.5,
+    "slope_max_exclusive": 0
+  }
+}

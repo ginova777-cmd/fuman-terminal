@@ -3,9 +3,18 @@ param(
   [switch]$PushLine,
   [switch]$Recovery,
   [switch]$RecoveryReplay,
-  [switch]$RescanRecoveryReplay
+  [switch]$RescanRecoveryReplay,
+  [string]$TradeDate = ""
 )
 $ErrorActionPreference = "Stop"
+$executionDate = Get-Date -Format yyyy-MM-dd
+if (-not $TradeDate) { $TradeDate = $executionDate }
+if ($TradeDate -notmatch '^\d{4}-\d{2}-\d{2}$' -or $TradeDate -gt $executionDate) { throw 'invalid_recovery_trade_date' }
+if ($TradeDate -ne $executionDate -and -not $RecoveryReplay) { throw 'historical_date_requires_recovery_replay' }
+if ($RecoveryReplay) {
+  $env:FUMAN_SCANNER_TARGET_TRADE_DATE = $TradeDate
+  $env:FUMAN_SCORECARD_TRADE_DATE = $TradeDate
+}
 $PSNativeCommandUseErrorActionPreference = $false
 Set-Location -LiteralPath $PSScriptRoot
 $runtime = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
@@ -24,7 +33,7 @@ function Invoke-Required([string]$Name, [scriptblock]$Action) {
 }
 if ($Mode -eq "Status") {
   $statusArgs = @('--status-only')
-  if ($RecoveryReplay) { $statusArgs += '--recovery-replay' }
+  if ($RecoveryReplay) { $statusArgs += @('--recovery-replay', "--trade-date=$TradeDate") }
   & $nodeExe "--use-system-ca" "scripts\finalize-strategy3-complete.js" @statusArgs
   exit $LASTEXITCODE
 }
@@ -46,50 +55,44 @@ function Invoke-Strategy3ScorecardPrepare([string]$RunId, [int]$ExpectedCount) {
   $scorecardPath = Join-Path $runtime "data\scorecard-terminal-current.json"
   $scorecard = Get-Content -LiteralPath $scorecardPath -Raw | ConvertFrom-Json
   $report = @($scorecard.sourceReports | Where-Object { $_.key -eq "strategy3" }) | Select-Object -First 1
-  $rows = @($scorecard.records | Where-Object { $_.strategy -eq "策略3隔日沖成績單" -and $_.record_date -eq (Get-Date -Format "yyyy-MM-dd") })
+  $rows = @($scorecard.records | Where-Object { $_.strategy -eq "策略3隔日沖成績單" -and $_.record_date -eq $TradeDate })
   if ([string]$report.runId -ne $RunId -or $report.ok -ne $true -or $rows.Count -ne $ExpectedCount) { throw "strategy3_scorecard_source_prepare_mismatch:runId=$($report.runId):rows=$($rows.Count):expected=$ExpectedCount" }
 }
 try {
   if ($RescanRecoveryReplay -and -not $RecoveryReplay) { throw "rescan_requires_recovery_replay_mode" }
-  Invoke-Required "release root authority" { & npm.cmd run verify:release-root-authority }
+  Invoke-Required "release root authority" { & $nodeExe scripts\check-strategy3-runtime-authority.js }
+  Invoke-Required "Strategy3 verifier retirement" { & $nodeExe scripts\verify-strategy3-verifier-retirement.js }
   Invoke-Required "source incident gate" { & npm.cmd run supabase:incident:check -- --class=guard --action=strategy3-delivery }
   if ($RecoveryReplay) {
     if ($Recovery) { throw "recovery_modes_are_mutually_exclusive" }
-    $compactDate = Get-Date -Format yyyyMMdd
+    $compactDate = $TradeDate -replace "-", ""
     if ($RescanRecoveryReplay) {
-      Invoke-Required "full recovery scan and DB apply" { & $nodeExe --use-system-ca scripts\run-strategy3-v2-complete-scan.js --apply --recovery-replay }
+      Invoke-Required "full recovery scan and DB apply" { & $nodeExe --use-system-ca scripts\run-strategy3-v2-complete-scan.js --apply --recovery-replay "--trade-date=$TradeDate" }
     }
     $scanPath = Join-Path $runtime "data\scan-receipts\strategy3-v2-recovery-replay-$compactDate.json"
     $scan = Get-Content -LiteralPath $scanPath -Raw | ConvertFrom-Json
-    if ($scan.ok -ne $true -or $scan.status -ne 'RECOVERY_REPLAY_COMPLETE' -or $scan.apply -ne $true -or $scan.trade_date -ne (Get-Date -Format yyyy-MM-dd)) { throw 'recovery_scan_not_publishable' }
-    Invoke-Required "water contract" { & $nodeExe --use-system-ca scripts\verify-strategy3-v2-water-universe.js --recovery-replay }
+    if ($scan.ok -ne $true -or $scan.status -ne 'RECOVERY_REPLAY_COMPLETE' -or $scan.apply -ne $true -or $scan.trade_date -ne $TradeDate) { throw 'recovery_scan_not_publishable' }
+    Invoke-Required "water contract" { & $nodeExe --use-system-ca scripts\verify-strategy3-v2-water-universe.js --recovery-replay "--trade-date=$TradeDate" }
     Invoke-Required "desktop refresh" { & $pwshExe -NoProfile -File .\refresh-desktop-route-snapshot.ps1 -Source strategy3 }
     Invoke-Required "mobile refresh" { & $nodeExe --use-system-ca scripts\publish-mobile-fragment-snapshots.js --tabs=strategy3 }
-    Invoke-Required "surface readback" { & $nodeExe --use-system-ca scripts\verify-strategy3-v2-surface-closure.js --write-receipt }
-    $priorSourceRole = $env:FUMAN_DAYTRADE_SOURCE_ROLE
-    try {
-      $env:FUMAN_DAYTRADE_SOURCE_ROLE = 'writer'
-      Invoke-Required "writer refreshes strategy priority bridge" { & $nodeExe --use-system-ca scripts\run-daytrade-source-writer.js --apply --refresh-strategy-priority-bridge }
-    } finally { $env:FUMAN_DAYTRADE_SOURCE_ROLE = $priorSourceRole }
-    Invoke-Required "bridge authority" { & $nodeExe --use-system-ca scripts\verify-strategy3-mother-pool-warmup-authority.js }
-    Invoke-Required "recovery authoritative DB verifier" { & $nodeExe --use-system-ca scripts\verify-strategy3-recovery-replay-complete.js }
+    Invoke-Required "surface readback" { & $nodeExe --use-system-ca scripts\verify-strategy3-v2-surface-closure.js --write-receipt "--trade-date=$TradeDate" }
+    # Recovery publication verifies this completed scan and DB independently.
+    # Morning admission remains a separate previous-trading-day consumer and
+    # must not reject today's result merely because today's morning has passed.
+    Invoke-Required "recovery authoritative DB and publication verifier" { & $nodeExe --use-system-ca scripts\verify-strategy3-recovery-replay-complete.js "--trade-date=$TradeDate" --prepare-three-surfaces }
     Invoke-Strategy3ScorecardPrepare -RunId $scan.run_id -ExpectedCount $scan.result_count
     Invoke-Required "88 audited recovery collection" { & $pwshExe -NoProfile -File scripts\run-scorecard88-terminal-collector.ps1 -Slot '13:15' -ProjectRoot $PSScriptRoot -RuntimeRoot $runtime -Recovery -ExpectedRunId $scan.run_id -RecoveryReason 'strategy3_recovery_replay_delivery' }
     . (Join-Path $PSScriptRoot "verify-post-scan-tri-surface.ps1")
     Invoke-Required "strict API desktop mobile 88 readback" { Assert-PostScanTriSurfaceClosure -Route strategy3 -RunId $scan.run_id -LogPath $log -SkipPublication | Out-Null }
     if (-not $PushLine) { throw 'line_push_authorization_required:rerun_with_-PushLine' }
     Invoke-Required "rendered desktop and mobile UI" { & npm.cmd run verify:terminal-ui-e2e -- --base-url=https://fuman-terminal.vercel.app --only=desktop-night,mobile-phone-portrait-night --routes=strategy3 --skip-watchlist --require-content --include-scorecard "--out=$runtime\data\strategy3-ui" "--expected-run-id=$($scan.run_id)" "--expected-symbols=$((@($scan.results | ForEach-Object {$_.code}) -join ','))" --route-timeout=120000 --eval-timeout=60000 }
-    Invoke-Required "LINE preview" { & $nodeExe --use-system-ca scripts\send-strategy3-v2-line-card.js --recovery-replay --dry-run }
-    if ((Get-Date -Format yyyy-MM-dd) -eq "2026-09-15") {
-      Invoke-Required "dated user-accepted LINE quota exception" { & $nodeExe --use-system-ca scripts\record-strategy3-line-exception.js --recovery-replay }
-    } else {
-      Invoke-Required "LINE delivery with deduplication" { & $nodeExe --use-system-ca scripts\send-strategy3-v2-line-card.js --recovery-replay }
-    }
-    Invoke-Required "complete delivery verifier" { & $nodeExe --use-system-ca scripts\verify-strategy3-delivery.js --recovery-replay }
-    Invoke-Required "independent recovery final receipt" { & $nodeExe --use-system-ca scripts\finalize-strategy3-complete.js --recovery-replay }
+    Invoke-Required "LINE preview" { & $nodeExe --use-system-ca scripts\send-strategy3-v2-line-card.js --recovery-replay --dry-run "--trade-date=$TradeDate" }
+    Invoke-Required "LINE delivery or verified quota exception" { & $nodeExe --use-system-ca scripts\deliver-strategy3-or-quota-exception.js --recovery-replay "--trade-date=$TradeDate" }
+    Invoke-Required "complete delivery verifier" { & $nodeExe --use-system-ca scripts\verify-strategy3-delivery.js --recovery-replay "--trade-date=$TradeDate" }
+    Invoke-Required "independent recovery final receipt" { & $nodeExe --use-system-ca scripts\finalize-strategy3-complete.js --recovery-replay "--trade-date=$TradeDate" }
     Invoke-Required "publish final scan audit via canonical collector" { & $pwshExe -NoProfile -File scripts\run-scorecard88-terminal-collector.ps1 -Slot '13:15' -ProjectRoot $PSScriptRoot -RuntimeRoot $runtime -Recovery -ExpectedRunId $scan.run_id -RecoveryReason 'strategy3_final_receipt_audit_refresh' }
     Invoke-Required "final rendered UI including scan audit" { & $nodeExe --use-system-ca scripts\verify-terminal-ui-e2e.js --only=desktop-night,mobile-phone-portrait-night --routes=strategy3 --skip-watchlist --require-content --include-scorecard --require-strategy3-audit "--out=$runtime\data\strategy3-ui" "--expected-run-id=$($scan.run_id)" "--expected-symbols=$((@($scan.results | ForEach-Object {$_.code}) -join ','))" --route-timeout=120000 --eval-timeout=60000 }
-    Invoke-Required "final receipt after audit display readback" { & $nodeExe --use-system-ca scripts\finalize-strategy3-complete.js --recovery-replay }
+    Invoke-Required "final receipt after audit display readback" { & $nodeExe --use-system-ca scripts\finalize-strategy3-complete.js --recovery-replay "--trade-date=$TradeDate" }
     exit 0
   }
   if ($Recovery) {
@@ -134,6 +137,6 @@ try {
 } catch {
   $failureReason = $_.Exception.Message
   Write-Host $failureReason
-  if ($RecoveryReplay) { & $nodeExe --use-system-ca scripts\finalize-strategy3-complete.js --record-failure --recovery-replay "--failure-reason=$failureReason" } else { & $nodeExe --use-system-ca scripts\finalize-strategy3-complete.js --record-failure "--failure-reason=$failureReason" }
+  if ($RecoveryReplay) { & $nodeExe --use-system-ca scripts\finalize-strategy3-complete.js --record-failure --recovery-replay "--trade-date=$TradeDate" "--failure-reason=$failureReason" } else { & $nodeExe --use-system-ca scripts\finalize-strategy3-complete.js --record-failure "--failure-reason=$failureReason" }
   exit 1
 }

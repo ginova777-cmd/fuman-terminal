@@ -149,7 +149,19 @@ function Test-Strategy5Healthy {
     return @{ Healthy = $false; Reason = "not updated after 21:00; updatedAt=$updatedAt runId=$runId count=$count" }
   }
 
-  return @{ Healthy = $true; Reason = "runId=$runId count=$count updatedAt=$updatedAt" }
+  $finalFile = Join-Path $runtimeDir "data/scan-receipts/strategy5-complete.json"
+  try { $final = Get-Content -LiteralPath $finalFile -Raw | ConvertFrom-Json -ErrorAction Stop }
+  catch { return @{ Healthy = $false; Reason = "canonical receipt missing or invalid: $finalFile" } }
+  $targetDate = (Get-TaipeiNow).ToString('yyyy-MM-dd')
+  if ($final.contract -ne 'strategy-runner-verifier-receipt-v1' -or $final.strategy -ne 'strategy5' -or
+      $final.tradeDate -ne $targetDate -or $final.runId -ne $runId -or
+      $final.status -ne 'complete' -or $final.complete -ne $true -or $final.exitCode -ne 0 -or
+      [int]$final.count -ne $count -or $final.triSurfaceStatus -ne 'complete' -or
+      @($final.issues).Count -gt 0 -or $final.desktopRunId -ne $runId -or
+      $final.mobileRunId -ne $runId -or $final.scorecardRunId -ne $runId) {
+    return @{ Healthy = $false; Reason = "canonical receipt not complete for API batch: expectedDate=$targetDate receiptDate=$($final.tradeDate) expectedRun=$runId receiptRun=$($final.runId)" }
+  }
+  return @{ Healthy = $true; Reason = "runId=$runId count=$count updatedAt=$updatedAt canonicalReceipt=complete" }
 }
 
 function Test-Strategy5Running {

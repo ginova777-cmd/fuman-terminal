@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 
 const {
@@ -268,113 +269,23 @@ function retryableSourceStatusError(status) {
 }
 
 async function mirrorDaytradeSourceTransport(snapshot) {
-  const checkedAt = nowIso();
+  // A collector heartbeat cannot republish a Writer generation or refresh its
+  // authoritative timestamp. Persist transport observations independently.
   const receipt = {
-    contract: "fugle_daytrade_collector_transport_heartbeat_v1",
-    source_name: "fugle_daytrade_source",
-    checked_at: checkedAt,
-    collector_role: COLLECTOR_ROLE,
-    interval_seconds: Math.round(SOURCE_STATUS_HEARTBEAT_MS / 1000),
-    retry_limit: SOURCE_STATUS_HEARTBEAT_RETRIES,
-    attempts: 0,
-    status: "pending",
-    first_blocker: null,
+    contract: "fugle_daytrade_collector_transport_heartbeat_v2",
+    checked_at: nowIso(), collector_role: COLLECTOR_ROLE,
+    status: COLLECTOR_ROLE === 'daytrade' ? 'observed' : 'skipped_non_daytrade_collector',
+    authoritative: false, source_status_written: false, complete: false,
+    first_blocker: null, attempts: 0,
+    websocket_connected: snapshot.websocketConnected === true,
+    websocket_authenticated: snapshot.websocketAuthenticated === true,
+    websocket_subscribed: Number(snapshot.subscribed || 0),
+    websocket_subscribed_symbols: Number(snapshot.subscribedSymbols || 0),
+    websocket_status_updated_at: snapshot.updatedAt || null,
+    websocket_heartbeat_at: snapshot.websocketHeartbeatAt || null,
+    aggregates_last_updated_at: snapshot.aggregatesLastUpdatedAt || null,
   };
-  if (COLLECTOR_ROLE !== "daytrade") {
-    receipt.status = "skipped_non_daytrade_collector";
-    writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
-    return receipt;
-  }
-  const baseUrl = serverSupabaseUrl();
-  const apiKey = serverSupabaseKey();
-  if (!baseUrl || !apiKey) {
-    receipt.status = "blocked";
-    receipt.first_blocker = "source_status_credentials_missing";
-    writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
-    return receipt;
-  }
-
-  for (let attempt = 1; attempt <= SOURCE_STATUS_HEARTBEAT_RETRIES; attempt += 1) {
-    receipt.attempts = attempt;
-    try {
-      const read = await fetch(`${baseUrl}/rest/v1/source_status?source_name=eq.fugle_daytrade_source&select=source_name,trade_date,status,message,stale_seconds,payload&limit=1`, {
-        headers: { apikey: apiKey, Authorization: `Bearer ${apiKey}` },
-      });
-      if (!read.ok) throw Object.assign(new Error(`source_status_baseline_read_http_${read.status}`), { status: read.status });
-      const rows = await read.json();
-      const baseline = Array.isArray(rows) ? rows[0] : null;
-      const baselinePayload = baseline?.payload && typeof baseline.payload === "object" ? baseline.payload : null;
-      const tradeDate = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
-      const baselineDate = String(baselinePayload?.trade_date || baseline?.trade_date || "");
-      if (!baselinePayload || baselineDate !== tradeDate) {
-        receipt.status = "blocked";
-        receipt.first_blocker = "same_day_source_status_baseline_missing_or_stale";
-        receipt.baseline_trade_date = baselineDate;
-        writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
-        return receipt;
-      }
-
-      const transportPayload = {
-        websocket_status_ok: snapshot.ok !== false,
-        websocket_mode: "streaming",
-        websocket_connected: snapshot.websocketConnected === true,
-        websocket_authenticated: snapshot.websocketAuthenticated === true,
-        websocket_subscribed: Number(snapshot.subscribed || 0),
-        websocket_subscribed_symbols: Number(snapshot.subscribedSymbols || 0),
-        websocket_streaming_channels: Array.isArray(snapshot.streamingChannels) ? snapshot.streamingChannels : [],
-        websocket_rest_disabled: snapshot.restDisabled === true,
-        websocket_status_updated_at: snapshot.updatedAt || checkedAt,
-        websocket_last_message_at: snapshot.websocketLastMessageAt || snapshot.lastMessageAt || "",
-        websocket_last_message_age_seconds: Number(snapshot.websocketHeartbeatAgeSeconds ?? snapshot.aggregatesLastUpdatedAgeSeconds ?? 999999),
-        websocket_heartbeat_at: snapshot.websocketHeartbeatAt || "",
-        websocket_heartbeat_age_seconds: Number(snapshot.websocketHeartbeatAgeSeconds ?? 999999),
-        aggregates_last_updated_at: snapshot.aggregatesLastUpdatedAt || "",
-        aggregates_last_updated_age_seconds: Number(snapshot.aggregatesLastUpdatedAgeSeconds ?? 999999),
-        websocket_pipeline_healthy: snapshot.ok !== false && (Boolean(snapshot.websocketHeartbeatAt) || Boolean(snapshot.aggregatesLastUpdatedAt)),
-        collector_transport_heartbeat_at: checkedAt,
-        collector_transport_heartbeat_contract: "preserve_writer_gate_verdict_v1",
-      };
-      const payload = { ...baselinePayload, ...transportPayload };
-      const write = await fetch(`${baseUrl}/rest/v1/source_status?on_conflict=source_name`, {
-        method: "POST",
-        headers: {
-          apikey: apiKey,
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          Prefer: "resolution=merge-duplicates,return=minimal",
-        },
-        body: JSON.stringify([{
-          source_name: "fugle_daytrade_source",
-          trade_date: tradeDate,
-          status: baseline.status || "degraded",
-          message: baseline.message || "collector transport heartbeat",
-          stale_seconds: Number.isFinite(Number(baseline.stale_seconds)) ? Number(baseline.stale_seconds) : 0,
-          updated_at: checkedAt,
-          payload,
-        }]),
-      });
-      if (!write.ok) throw Object.assign(new Error(`source_status_transport_heartbeat_http_${write.status}`), { status: write.status });
-      receipt.status = "written";
-      receipt.preserved_gate_fields = ["daytrade_gate_grade", "gate_grade", "formal_entry_allowed", "formal_entry_speed_verdict"];
-      receipt.websocket_status_updated_at = transportPayload.websocket_status_updated_at;
-      receipt.websocket_last_message_age_seconds = transportPayload.websocket_last_message_age_seconds;
-      writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
-      return receipt;
-    } catch (error) {
-      const status = Number(error?.status || 0);
-      receipt.last_error = error?.message || String(error);
-      if (attempt >= SOURCE_STATUS_HEARTBEAT_RETRIES || !retryableSourceStatusError(status)) {
-        receipt.status = "retry_exhausted";
-        receipt.first_blocker = status ? `source_status_transport_heartbeat_http_${status}` : "source_status_transport_heartbeat_exception";
-        writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
-        return receipt;
-      }
-      const delayMs = Math.min(60000, SOURCE_STATUS_HEARTBEAT_BACKOFF_MS * (2 ** (attempt - 1)));
-      receipt.next_retry_at = new Date(Date.now() + delayMs).toISOString();
-      writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
-      await sleep(delayMs);
-    }
-  }
+  writeJson(SOURCE_STATUS_HEARTBEAT_RECEIPT_FILE, receipt);
   return receipt;
 }
 
@@ -637,7 +548,16 @@ function readPrioritySymbols(symbols) {
   };
 
   addMany("daytradeCandlePriority", payload.daytradeCandlePrioritySymbols, { priority: true });
-  addMany("daytrade", payload.daytradePrioritySymbols || payload.daytradeSymbols || payload.daytrade, { priority: true });
+  // The writer publishes the canonical Mother Pool membership separately from
+  // the legacy strategy-priority fields. Keep that membership on the formal
+  // candle subscription path even when the strategy bridge is blocked or
+  // contains stale strategy dates.
+  addMany("daytrade", [
+    ...(Array.isArray(payload.daytradeMotherPoolSymbols) ? payload.daytradeMotherPoolSymbols : []),
+    ...(Array.isArray(payload.daytradePrioritySymbols) ? payload.daytradePrioritySymbols : []),
+    ...(Array.isArray(payload.daytradeSymbols) ? payload.daytradeSymbols : []),
+    ...(Array.isArray(payload.daytrade) ? payload.daytrade : []),
+  ], { priority: true });
   addMany("terminalPriority", payload.terminalPrioritySymbols || payload.terminalSymbols || payload.terminalPriority, { priority: true });
   addMany("openingPriority", payload.openingPrioritySymbols || payload.primaryPrioritySymbols, { priority: true });
   counts.strategy1 = 0; // retired: do not subscribe Strategy1 priority symbols
@@ -1422,13 +1342,16 @@ async function runStreamingCollector() {
   }
 
   let rotationCursor = 0;
+  let connectionAttempts = 0;
   const runOnce = () => new Promise((resolve) => {
+    const connectionAttempt = ++connectionAttempts;
     let selection = selectStreamingSymbols(rotationCursor);
     rotationCursor = selection.nextRotationCursor;
     let chunks = chunkArray(selection.selected, STREAMING_SUBSCRIBE_CHUNK_SIZE);
     let ws;
     let openedAt = "";
     let authenticated = false;
+    const subscriptionEvidence = require('../lib/fugle-subscription-evidence').create(crypto.randomUUID(), STREAMING_CHANNELS);
     let messages = 0;
     let quoteMessages = 0;
     let candleMessages = 0;
@@ -1474,6 +1397,8 @@ async function runStreamingCollector() {
         streamingOpenedAt: openedAt,
         websocketConnected: Boolean(ws && ws.readyState === WebSocket.OPEN),
         websocketAuthenticated: authenticated,
+        subscriptionAckEvidence: subscriptionEvidence.snapshot(),
+        connectionAttempt,
         streamingMessages: messages,
         streamingQuotes: quoteMessages,
         streamingQuoteSpeedPerSec: elapsedSeconds > 0 ? Number((quoteMessages / elapsedSeconds).toFixed(4)) : 0,
@@ -1497,6 +1422,10 @@ async function runStreamingCollector() {
         subscribedChannels: STREAMING_CHANNELS.length,
         pending: Math.max(0, selection.requested - selection.selected.length),
         requestedSymbols: selection.requested,
+        // Persist the exact symbol set for this subscription generation so
+        // downstream B01 evidence can use the real round denominator instead
+        // of treating the full universe as subscribed in every round.
+        subscribedSymbolList: selection.selected,
         allSymbols: selection.allSymbols.length,
         prioritySymbols: selection.priority.symbols.length,
         freshSymbols120s: freshCount,
@@ -1523,8 +1452,12 @@ async function runStreamingCollector() {
         subscriptionSymbolLimit: selection.symbolLimit,
         subscriptionLimitApplied: selection.requested > selection.selected.length || selection.subscriptionCount >= STREAMING_MAX_TOTAL_SUBSCRIPTIONS,
         pinnedPrioritySymbols: selection.pinnedPriorityCount,
-        formalSubscribedSymbols: selection.formalSymbols.length,
-        formalSubscribedChannels: selection.formalChannelCount,
+        // The current transport uses candleRadarSymbols as the formal 1m
+        // cohort. formalSymbols is retained for legacy channel plans and is
+        // intentionally empty in the rotating plan; reporting it alone made
+        // a live 1m subscription appear to be zero.
+        formalSubscribedSymbols: selection.formalSymbols.length + selection.candleRadarSymbols.length,
+        formalSubscribedChannels: selection.formalChannelCount + (selection.candleRadarSymbols.length ? 1 : 0),
         candleRadarSymbols: selection.candleRadarSymbols.length,
         candleChannel: selection.candleChannel,
         candleCoverageTarget: selection.candleCoverageTarget,
@@ -1560,12 +1493,45 @@ async function runStreamingCollector() {
         reconnectMaxMs: STREAMING_RECONNECT_MAX_MS,
         staleDataWindow,
         staleRecoveryTriggered,
+        providerSideJournal: providerSideJournal.health(),
+        providerTradeJournal: providerTradeJournal.health(),
+        nativeSideSubscriptionCoverage: require('../lib/mother-pool-native-side-subscription-coverage').inspect(selection),
         collectorRole: COLLECTOR_ROLE,
         sourceHostId: SOURCE_HOST_ID,
         sourceHostRole: SOURCE_HOST_ROLE,
         sourceHostApprovalFile: SOURCE_HOST_APPROVAL_FILE,
         ...extra,
       });
+      // Persist the exact immutable subscription set consumed by B01.
+      const snapshotTradeDate = String(statusSnapshot.tradeDate || "").trim();
+      if (snapshotTradeDate && Array.isArray(selection.selected)) {
+        const ack = subscriptionEvidence.snapshot();
+        const symbols = [...new Set(ack.acknowledged.map(row => row.symbol))].sort();
+        const subscriptionComplete = statusSnapshot.websocketConnected === true && ack.authenticated === true
+          && ack.requested.length === selection.subscriptionCount && ack.acknowledged.length === selection.subscriptionCount
+          && ack.pending.length === 0 && symbols.length > 0;
+        const generation = crypto.createHash("sha256").update(JSON.stringify({connection_id:ack.connection_id,acknowledged:ack.acknowledged})).digest("hex");
+        writeJson(path.join(RUNTIME_DIR, "data", "scan-receipts", "fugle-daytrade-subscription-snapshot-" + snapshotTradeDate.replace(/-/g, "") + ".json"), {
+          contract: "fugle_daytrade_subscription_snapshot_v1",
+          status: subscriptionComplete ? "complete" : "blocked",
+          complete: subscriptionComplete,
+          trade_date: snapshotTradeDate,
+          canonical_run_id: statusSnapshot.canonicalRunId || ("fugle_daytrade_source:" + snapshotTradeDate + ":canonical"),
+          generation,
+          snapshot_sequence: Number(statusSnapshot.subscriptionCycle || cycles || 0),
+          requested_count: Number(selection.requested || 0),
+          subscribed_count: symbols.length,
+          subscribed_symbols: symbols,
+          subscription_ack_evidence: ack,
+          planned_symbols: selection.selected,
+          planned_subscription_count: selection.subscriptionCount,
+          channels: STREAMING_CHANNELS,
+          source: "fugle-websocket",
+          checked_at: statusSnapshot.updatedAt || new Date().toISOString(),
+          first_blocker: subscriptionComplete ? null : "SUBSCRIPTION_ACK_INCOMPLETE",
+          exit_code: subscriptionComplete ? 0 : 1,
+        });
+      }
       scheduleSourceStatusHeartbeat(statusSnapshot);
     };
     let subscribeInProgress = false;
@@ -1607,6 +1573,7 @@ async function runStreamingCollector() {
         let sent = 0;
         const sendSubscription = async (channel, symbol) => {
           if (!ws || ws.readyState !== WebSocket.OPEN) return;
+          if (!subscriptionEvidence.request(channel, symbol, nowIso())) return;
           ws.send(JSON.stringify({ event: "subscribe", data: { channel, symbol } }));
           chunksSent += 1;
           sent += 1;
@@ -1655,8 +1622,9 @@ async function runStreamingCollector() {
         if (/heartbeat|pong/.test(eventName) || /"(?:event|type)"\s*:\s*"(?:heartbeat|pong)"/i.test(text)) {
           lastWebSocketHeartbeatAt = lastTransportMessageAt;
         }
-        if (/authenticated|auth/i.test(text)) {
-          authenticated = true;
+        subscriptionEvidence.message(payload, lastTransportMessageAt);
+        authenticated = subscriptionEvidence.snapshot().authenticated;
+        if (payload?.event === 'authenticated' && authenticated) {
           if (!lastSubscribeSignature) subscribe();
         }
         const notice = getStreamingNotice(payload, text);
@@ -1668,6 +1636,7 @@ async function runStreamingCollector() {
           lastForbiddenEvent = notice.eventName.slice(0, 120);
           lastForbiddenChannel = String(payload?.data?.channel || payload?.channel || "").slice(0, 80);
         }
+        if (!authenticated || !['data','snapshot'].includes(payload?.event)) return;
         const data = payload?.data || payload || {};
         const payloadChannel = String(data.channel || payload?.channel || "").toLowerCase();
         const inferredChannel = payloadChannel
@@ -1712,6 +1681,8 @@ async function runStreamingCollector() {
         writeStreamingStatus({ ok: false, websocketError: event?.message || "websocket_error" });
       });
       ws.addEventListener("close", () => {
+        subscriptionEvidence.close(nowIso());
+        authenticated = false;
         closed = true;
         clearInterval(statusTimer);
         clearInterval(subscribeTimer);
@@ -1808,3 +1779,7 @@ if (COLLECTOR_MODE === "rest") {
     process.exit(1);
   });
 }
+
+
+
+

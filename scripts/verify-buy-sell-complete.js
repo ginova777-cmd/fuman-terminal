@@ -25,6 +25,28 @@ const effectiveRunId = marketClosedWeekend ? previousGoodRunId : String(institut
 const effectiveCount = marketClosedWeekend ? previousGoodCount : Number(institution?.matches || 0);
 const effectiveDateKey = marketClosedWeekend ? String(e2e?.sourceDataDate || e2e?.runIdDate || "") : key;
 const issues = [];
+// Institution canonical retirement gate: no obsolete verifier may satisfy COMPLETE.
+const retiredInstitutionVerifiers = [
+  'run-institution-battle-verify.ps1',
+  'scripts/verify-institution-battle-state.js',
+  'scripts/verify-institution-prewater-strict.js',
+  'scripts/verify-institution-filter-counts.js',
+  'scripts/verify-strategy5-institution-unattended-contract.js',
+];
+for (const retired of retiredInstitutionVerifiers) {
+  if (fs.existsSync(path.join(root, retired))) issues.push('retired_institution_verifier_returned:' + retired);
+}
+const institutionPackage = readJson(path.join(root, 'package.json'));
+if (!institutionPackage?.scripts) issues.push('institution_package_scripts_unreadable');
+for (const [name, command] of Object.entries(institutionPackage?.scripts || {})) {
+  const normalized = String(command).replaceAll('\\', '/');
+  if (retiredInstitutionVerifiers.some(file => normalized.includes(file) || normalized.includes(path.basename(file)))
+      || /^verify:institution-prewater(?:$|:)/.test(name)) {
+    issues.push('retired_institution_verifier_alias_returned:' + name);
+  }
+}
+// End Institution canonical retirement gate.
+
 const indexHtml = readText(path.join(root, "index.html"));
 const desktopShell = readText(path.join(root, "terminal-desktop-fast-shell.js"));
 const requiredLoadingMarkers = [

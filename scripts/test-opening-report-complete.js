@@ -1,7 +1,7 @@
 "use strict";
 const assert=require("node:assert/strict"),fs=require("fs"),path=require("path"),vm=require("vm");
 const {mergeOpeningReportEvidence}=require("../lib/opening-report-0830-mother-pool-evidence");
-const {preserveMorningWatchRows}=require("../lib/opening-report-writer-preservation");
+const {preserveMorningWatchRows,validMorningBoostRank}=require("../lib/opening-report-writer-preservation");
 const {contentHash,validateReuse}=require("../lib/opening-report-delivery-contract");
 const {validateDbRow}=require("./verify-opening-report-0830-mother-pool-handoff-ack");
 const date="2026-09-14",run="opening-report-0830-20260914-test";
@@ -27,7 +27,7 @@ const func=source.slice(source.indexOf("function readOpeningReport0830PrioritySe
 const mapped={...one,display_name:"IC",allowed_action:"boost_scan_priority_only",forbidden_action:"publish_formal_candidate_without_taiwan_evidence",mapped_symbols:[{symbol:"9999",name:"測試觀察"}]};
 const input=path.join("state","opening_report_0830.industry_bias.IC_DESIGN.json"),receiptPath=path.join("data","scan-receipts","opening-report-0830-priority-bias-bridge-IC_DESIGN-20260914.json");
 const bridge={contract:"opening-report-0830-priority-bias-bridge-v1",received:true,validation:{ok:true},date,run_id:one.run_id,evidence_path:input,source:one.source,mode:one.mode,reason_code:"opening_report_0830_industry_bias",status:"priority_scan",forbidden_publish_guard:true,formal_candidate_count:0,formal_candidate_allowed:false,accepted_symbols:["9999"],applied_boosts:[{symbol:"9999",applied_priority_rank:301,status:"watchlist_boosted",price:null,quote_age_seconds:null,quote_validation:"delegated_to_mother_pool"}],receipt_path:receiptPath};
-const ctx={path,fs:{readdirSync:()=>[path.basename(input)],statSync:()=>({mtime:new Date()})},compactDateKey:x=>x.replace(/-/g,""),taipeiDate:()=>date,runtimePath:(...x)=>path.join(...x),normalizeCode:String,readJson:f=>f===input?mapped:f===receiptPath?bridge:null,nowIso:()=>new Date().toISOString(),numberValue:x=>Number(x)||0,mergeOpeningReportEvidence,MOTHER_POOL_MIN_PRICE:50};
+const ctx={validMorningBoostRank,path,fs:{readdirSync:()=>[path.basename(input)],statSync:()=>({mtime:new Date()})},compactDateKey:x=>x.replace(/-/g,""),taipeiDate:()=>date,runtimePath:(...x)=>path.join(...x),normalizeCode:String,readJson:f=>f===input?mapped:f===receiptPath?bridge:null,nowIso:()=>new Date().toISOString(),numberValue:x=>Number(x)||0,mergeOpeningReportEvidence,MOTHER_POOL_MIN_PRICE:50};
 vm.createContext(ctx);vm.runInContext(func+"\nresult=readOpeningReport0830PrioritySeeds([])",ctx);assert.equal(ctx.result.symbols.length,1);assert.equal(ctx.result.symbols[0].openingReport0830IndustryBias.report_run_id,run);
 console.log(JSON.stringify({ok:true,tests:["overlapping_industries","two_writer_rebuilds","morning_only_protection","next_day_expiry","missing_observation_rejected","ab_hash_change","line_reuse_identity","dry_run_not_delivery","real_writer_missing_master_no_quote"]}));
 

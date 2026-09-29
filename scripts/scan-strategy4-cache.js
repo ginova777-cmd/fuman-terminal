@@ -185,7 +185,7 @@ function refreshStrategy4PublishGate() {
   const result = spawnSync(process.execPath, [
     "--use-system-ca",
     path.join(ROOT, "scripts", "verify-supabase-publish-hard-gate.js"),
-    "--strategy=strategy4",
+    "--strategy=strategy4", "--dry-run-alert",
   ], {
     cwd: ROOT,
     encoding: "utf8",
@@ -1335,6 +1335,7 @@ function buildOutput({ codes, scannedThisRun, scanned, noDataCodes, scanErrors, 
     fallbackContract: STRATEGY4_FALLBACK_CONTRACT,
     resultContract: "strategy4_actionable_patterns_avg5_3000_daily_kd_rsi_bonus_v4",
     recentVolumeBonusContract: "strategy4_recent_volume_10d_prior5_bonus_v1",
+    daytradeBonusContract: require("../lib/strategy4-daytrade-bonus").CONTRACT,
     liquidityContract: "avg5_volume_gte_3000_lots_v1",
     dataGapContract: "target_date_coverage_gte_90_exclude_stale_v1",
     generatedAt: new Date().toISOString(),
@@ -1584,6 +1585,7 @@ function buildSupabaseRunRow(output, runId) {
       insufficientHistoryCount: cleanNumber(output.insufficientHistoryCount),
       resultContract: String(output.resultContract || ""),
       recentVolumeBonusContract: output.recentVolumeBonusContract,
+      daytradeBonusContract: output.daytradeBonusContract,
       liquidityContract: String(output.liquidityContract || ""),
       dataGapContract: String(output.dataGapContract || ""),
       matchedCount: cleanNumber(output.matchedCount),
@@ -2042,13 +2044,7 @@ async function main() {
   // Prioritize the canonical daytrade pool, whose ordering is built from the
   // volume-ranking and turnover-ranking union. This changes scan order only;
   // every remaining Strategy4-eligible stock is still scanned.
-  const priorityArtifact = readJson(STRATEGY4_PRIORITY_FILE, {});
-  if (String(priorityArtifact.source || "").trim() !== "daytrade-dedicated-priority-bridge") {
-    throw new Error(`Strategy4 Mother Pool source contract mismatch: ${priorityArtifact.source || "missing_source"}`);
-  }
-  if (!Array.isArray(priorityArtifact.daytradeMotherPoolSymbols) || !priorityArtifact.daytradeMotherPoolSymbols.length) {
-    throw new Error("Strategy4 Mother Pool source missing daytradeMotherPoolSymbols; Strategy2 fallback is forbidden");
-  }
+  const priorityArtifact = await require('../lib/strategy4-mother-priority').readPriority(normalizeIsoDate(RUN_STAMP));
   const prioritySymbols = [...new Set((priorityArtifact.daytradeMotherPoolSymbols || [])
     .map((value) => normalizeCode(value?.symbol || value?.code || value))
     .filter((code) => /^\d{4}$/.test(code)))];
@@ -2210,9 +2206,10 @@ async function main() {
   });
 
   output.strategy4MotherPoolSource = {
-    contract: "strategy4-direct-daytrade-mother-pool-v1",
+    ...priorityArtifact,
+    contract: "strategy4_fixed_mother_priority_v2",
     source: String(priorityArtifact.source || ""),
-    sourceFile: STRATEGY4_PRIORITY_FILE,
+    sourceFile: priorityArtifact.sourceFile,
     tradeDate: String(priorityArtifact.tradeDate || priorityArtifact.trade_date || ""),
     canonicalRunId: String(priorityArtifact.canonicalRunId || priorityArtifact.canonical_run_id || ""),
     symbolField: "daytradeMotherPoolSymbols",
@@ -2223,6 +2220,11 @@ async function main() {
     strategy2FallbackAllowed: false,
   };
 
+  if(process.env.STRATEGY4_REPLAY_TRADE_DATE) {
+    output.recoveryContext = await require('../lib/strategy4-recovery-date').validateReplay();
+    const evidenceDir=path.join(RUNTIME_DIR,'data/strategy4-replay');fs.mkdirSync(evidenceDir,{recursive:true});
+    fs.writeFileSync(path.join(evidenceDir,'scan-'+Date.now()+'.json'),JSON.stringify(output,null,2),{flag:'wx'});
+  }
   output.supabasePublishGate = assertStrategy4PublishGate();
   console.log(`strategy4 publish hard gate ok: status=${output.supabasePublishGate.status} publishAllowed=${output.supabasePublishGate.publishAllowed} staleSeconds=${output.supabasePublishGate.staleSeconds}`);
 

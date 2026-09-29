@@ -2562,7 +2562,7 @@ async function runStrategy3Scorecard(browser) {
     await clickSelectorByDom(cdp, selector);
     const expectedRun = optionValue("--expected-run-id");
     const expectedSymbols = optionValue("--expected-symbols").split(",").filter(Boolean).sort();
-    const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+    const date = optionValue("--trade-date") || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
     let stats;
     const deadline = Date.now() + ROUTE_TIMEOUT_MS;
     do {
@@ -2603,10 +2603,11 @@ async function runStrategy4Scorecard(browser) {
     await navigate(cdp, withCacheBust(`${BASE_URL.replace(/\/+$/, "")}/88`), { stopLoading: false });
     const selector = '#tabs button[data-strategy="策略4成績單"]';
     await waitForSelector(cdp, selector, ROUTE_TIMEOUT_MS);
+    await scrollSelectorIntoView(cdp, selector);
     await clickSelectorByDom(cdp, selector);
     const expectedRun = optionValue("--expected-run-id");
     const expectedSymbols = optionValue("--expected-symbols").split(",").filter(Boolean).sort();
-    const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+    const date = optionValue("--trade-date") || process.env.FUMAN_SCANNER_TARGET_TRADE_DATE || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
     let stats;
     const deadline = Date.now() + ROUTE_TIMEOUT_MS;
     do {

@@ -417,6 +417,13 @@ function writerCodeRegressionChecks() {
     formalGateRequiresWebsocket: /formal_entry_allowed: !offSession && after0900 && gateGrade === "A" && webSocketStatus\.formalReady/.test(source)
       && /latest_update_allowed: !offSession && after0900 && gateGrade === "A" && webSocketStatus\.formalReady/.test(source),
     strategyChipEvidencePolicyConsistent: source.includes('strategyChipCompleteLatestRun') && ((source.includes('formal_priority_strategy_chip_required_for_formal_entry: false') && source.includes('formal_priority_strategy_chip_blocks_formal_entry: false')) || (source.includes('formal_priority_strategy_chip_required_for_formal_entry: true') && source.includes('formal_priority_strategy_chip_blocks_formal_entry: !strategyChipCompleteLatestRun'))),
+    strategy3WarmupReadsDatabaseAuthority: source.includes('latestResource: "v_strategy3_v2_latest_complete_run"')
+      && source.includes('resultsResource: "strategy3_v2_scan_results"')
+      && source.includes('resultSelect: "code,rank,score,complete,quality_status,trade_date,run_id,payload"')
+      && source.includes('authoritativeCompleteView: true')
+      && source.includes('allowZeroComplete: true'),
+    strategy3WarmupDoesNotDependOnProtectedApi: !source.includes('source.key === "strategy3"')
+      && !source.includes('protected_canonical_api:/api/strategy3-latest'),
     formalPrioritySpeedPayload: source.includes("formal_priority_speed_ok"),
     websocketFirstRestFallbackBounded: source.includes("REST_FALLBACK_INTERVAL_SECONDS")
       && source.includes("Math.min(80, positiveNumber(process.env.DAYTRADE_REST_PRIORITY_BATCH_LIMIT")

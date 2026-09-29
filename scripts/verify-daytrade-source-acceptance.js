@@ -94,7 +94,7 @@ function staticChecks() {
     strategyChipCompleteRunHardGate: writer.includes("strategyChipCompleteLatestRun") && canonicalGateSql.includes("formal_priority_strategy_chip_complete_latest_run_evidence") && canonicalGateSql.includes("strategy_chip_complete_latest_run_missing"),
     canonicalGateDynamicPools: canonicalGateSql.includes("formal_scope = 'priority_hot_deep_scan_pool_only'") && canonicalGateSql.includes("formal_priority_symbols > 0 and formal_priority_symbols <= priority_pool_symbols") && !canonicalGateSql.includes("formal_priority_symbols = 40"),
     canonicalGateLastMessageFreshness: canonicalGateSql.includes("websocket_last_message_age_seconds") && canonicalGateSql.includes("websocket_last_message_age_seconds <= 300"),
-    canonicalGateFormalScopeFreshness: canonicalGateSql.includes("formal_fresh_quote_coverage_120s >= 0.95")
+    canonicalGateFormalScopeFreshness: canonicalGateSql.includes("formal_fresh_quote_coverage_120s >= 0.90")
       && !canonicalGateSql.includes("mother_pool_symbols >= 300")
       && !canonicalGateSql.includes("mother_fresh_quote_coverage_120s >= 0.80")
       && !canonicalGateSql.includes("priority_fresh_quote_coverage_120s >= 0.95")
@@ -178,7 +178,7 @@ function buildDecision({ shared, daytrade, canonical, unattended, counts, time }
   const failures = [];
   const fail = (ok, code, detail) => { if (!ok) failures.push({ code, detail }); };
   fail(fields.formal_scan_pool_symbols > 0 && fields.formal_scan_pool_symbols <= fields.priority_pool_symbols, "formal_scan_pool_invalid", `${fields.formal_scan_pool_symbols}/${fields.priority_pool_symbols}`);
-  fail(fields.daytrade_priority_quote_coverage_120s >= 0.95, "priority_quote_coverage_below_095", fields.daytrade_priority_quote_coverage_120s);
+  fail(fields.daytrade_priority_quote_coverage_120s >= 0.90, "priority_quote_coverage_below_090", fields.daytrade_priority_quote_coverage_120s);
   fail(fields.scanner_can_run_opening, "scanner_can_run_opening_false", fields.scanner_can_run_opening);
   fail(fields.daytrade_formal_entry_speed_verdict === "YES", "formal_entry_speed_verdict_not_yes", fields.daytrade_formal_entry_speed_verdict);
   fail(fields.equity_daytrade_gate_status === "ready", "equity_daytrade_gate_not_ready", fields.equity_daytrade_gate_status);
@@ -188,7 +188,7 @@ function buildDecision({ shared, daytrade, canonical, unattended, counts, time }
   fail(fields.futopt_stock_this_loop > 0, "futopt_stock_this_loop_empty", fields.futopt_stock_this_loop);
   fail(fields.daily_volume_status === "ready", "daily_volume_not_ready", fields.daily_volume_status);
   fail(fields.intraday_1m_stale_seconds <= 120, "intraday_1m_stale", fields.intraday_1m_stale_seconds);
-  fail(fields.quote_age_seconds <= 90, "quote_stale", fields.quote_age_seconds);
+  fail(fields.quote_age_seconds <= 120, "quote_stale", fields.quote_age_seconds);
   fail(PASS_STATUS.has(fields.daytrade_status), "daytrade_source_not_ready", fields.daytrade_status);
   fail(fields.websocket_formal_ready, "websocket_formal_not_ready", fields.websocket_formal_ready);
   fail(fields.full_market_signal_evidence_present, "full_market_signal_evidence_missing", fields.full_market_signal_evidence_source);

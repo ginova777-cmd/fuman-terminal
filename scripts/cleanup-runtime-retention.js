@@ -51,13 +51,14 @@ function findDirs(root, allow, days, list) {
 function listCandidates() {
   const list = [];
   findFiles(path.join(RUNTIME, "state"), (name) => /^daytrade-unattended-gate-(?:watchdog|0700|0845|0900|0910|0935)-evidence-.*\.json$/i.test(name), 15, list);
-  findFiles(path.join(RUNTIME, "logs"), (name) => /^(?:production-health-monitor-\d{8}|strategy3-complete-scan-.*)\.(?:log|jsonl)$/i.test(name), 30, list);
+  // Sealed logs are owned by cleanup-local-assets, with retirement and reference evidence.
   findFiles(path.join(RUNTIME, "cache", "fugle"), () => true, 7, list);
-  const testName = /(?:test|e2e|parity|probe|matrix|smoke|collector|regression)/i;
-  for (const root of [path.join(TERMINAL, "outputs"), path.join(RUNTIME, "outputs"), path.join(PUBLISH_SYNC, "outputs")]) findDirs(root, (name) => testName.test(name), 7, list);
-  findDirs(path.join(TERMINAL, "outputs", "terminal-final-audit"), () => true, 30, list);
+  // Test outputs and final-audit directories require explicit retirement evidence.
   return list;
 }
+async function main() {
+const localAssets = await require("./run-cleanup-local-assets").run({apply,noStatus:process.argv.includes("--no-status"),maintenanceAuthorization:process.argv.find(x=>x.startsWith("--maintenance-authorization="))?.slice("--maintenance-authorization=".length)});
+if (!localAssets.ok) throw Error("local_assets_failed");
 const candidates = listCandidates();
 const deleted = [];
 const failures = [];
@@ -66,12 +67,12 @@ if (apply) for (const item of candidates) {
   catch (error) { failures.push({ path: item.path, error: error.message }); }
 }
 const payload = {
-  ok: failures.length === 0, applied: apply, dryRun: !apply, checkedAt: new Date().toISOString(), contract: "runtime-retention-v1",
-  retention: { watchdogEvidenceDays: 15, datedLogsDays: 30, fugleCacheDays: 7, testOutputsDays: 7, finalAuditDays: 30 },
+  localAssets, ok: failures.length === 0, applied: apply, dryRun: !apply, checkedAt: new Date().toISOString(), contract: "runtime-retention-v1",
+  retention: { watchdogEvidenceDays: 15, datedLogsDays: 30, fugleCacheDays: 7, testOutputsDays: 30, retiredVersionsDays: 45, terminatedTempDays: 7 },
   protected: ["cache/intraday/fugle-daytrade-ws-candles.json", "daily OHLCV and volume", "Strategy3/4 results", "/88, mobile and latest scorecard", "newest 15 days of formal evidence", "production-health.jsonl"],
-  candidates: candidates.length, candidateBytes: candidates.reduce((n, item) => n + item.bytes, 0),
+  candidates: candidates.length + localAssets.candidates.length, candidateBytes: [...candidates,...localAssets.candidates].reduce((n, item) => n + item.bytes, 0),
   candidateItems: process.argv.includes("--list") ? candidates : undefined,
-  deleted: deleted.length, deletedBytes: deleted.reduce((n, item) => n + item.bytes, 0), failures,
+  deleted: deleted.length + localAssets.processed.length, deletedBytes: [...deleted,...localAssets.processed].reduce((n, item) => n + item.bytes, 0), failures,
 };
 const status = path.join(RUNTIME, "status");
 fs.mkdirSync(status, { recursive: true });
@@ -79,3 +80,6 @@ payload.receiptFile = path.join(status, `runtime-retention-${taipeiDate()}.json`
 if (!process.argv.includes("--no-status")) fs.writeFileSync(payload.receiptFile, `${JSON.stringify(payload, null, 2)}\n`);
 console.log(json ? JSON.stringify(payload, null, 2) : `runtime retention: ${payload.deleted}/${payload.candidates}`);
 if (!payload.ok) process.exitCode = 1;
+
+}
+main().catch(error=>{console.error(error.stack);process.exitCode=1;});

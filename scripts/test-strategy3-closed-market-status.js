@@ -1,0 +1,15 @@
+'use strict';
+const assert=require('assert/strict'),fs=require('fs'),os=require('os'),path=require('path');
+const {closedStatus}=require('../lib/strategy3-closed-market-status');
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'strategy3-closed-'));const dir=path.join(root,'data','scan-receipts');fs.mkdirSync(path.join(dir,'tri-surface-closures'),{recursive:true});
+const write=(name,x)=>fs.writeFileSync(path.join(dir,name),JSON.stringify(x));
+const c={marketOpen:false,marketDate:'2026-09-19',displayTradeDate:'2026-09-18',closedReason:'weekend'};
+write('strategy3.json',{tradeDate:'2026-09-17',complete:true,status:'complete'});
+write('tri-surface-closures/strategy3.json',{expectedDate:'20260917'});
+write('strategy3-v2-daily-unattended-closure-20260918.json',{trade_date:'2026-09-18',ok:false,first_blocker:'complete_scan_not_complete'});
+let r=closedStatus(c,root);assert.equal(r.status,'skipped');assert.equal(r.tradeDate,'2026-09-18');assert.equal(r.displayLag,true);assert.equal(r.lastTradingDay.complete,false);assert.equal(r.lastTradingDay.first_blocker,'complete_scan_not_complete');assert.equal(r.receiptWritten,false);
+assert.equal(closedStatus({...c,marketOpen:true},root),null);
+write('strategy3.json',{tradeDate:'2026-09-18',complete:true,status:'complete'});write('tri-surface-closures/strategy3.json',{expectedDate:'20260918'});
+r=closedStatus(c,root);assert.equal(r.lastTradingDay.complete,true);assert.equal(r.complete,false);assert.equal(r.displayLag,false);
+r=closedStatus({...c,marketDate:'2026-09-22',displayTradeDate:'2026-09-18',closedReason:'exchange_closed'},root);assert.equal(r.tradeDate,'2026-09-18');assert.equal(r.executionDate,'2026-09-22');
+console.log('PASS weekend/holiday last trading date, old success rejected, historical failure retained, lag exposed, natural path unchanged');

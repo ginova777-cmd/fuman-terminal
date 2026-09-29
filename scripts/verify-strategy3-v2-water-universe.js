@@ -42,6 +42,7 @@ async function main() {
     minimumCandlesPerSymbol: MIN_CANDLES_PER_SYMBOL,
     barsPerSymbol: recoveryReplay ? 40 : 20,
     historicalRecoveryReplay: recoveryReplay,
+    motherPoolSnapshotIdentity: scan?.mother_pool_snapshot?.identity || null,
   });
   const issues = [];
   add(issues, scan?.source_field_contract === "strategy3-source-fields-v2" && water.receipt?.source_field_contract === scan?.source_field_contract, "strategy3_source_field_contract_mismatch");
@@ -109,7 +110,7 @@ async function main() {
     runner_status: scan?.runner_status || scan?.status || null,
     verifier_ok: issues.length === 0,
     recovery_replay: recoveryReplay,
-    natural_slot_complete: !recoveryReplay,
+    natural_slot_complete: !recoveryReplay && issues.length === 0,
     receipt_written: true,
     sources: { motherPool: MOTHER_POOL_VIEW, producerReceipt: MOTHER_POOL_RECEIPT_VIEW, quote: QUOTE_TABLE, intraday1m: `rpc:${INTRADAY_1M_RPC}` },
     readback: { expectedCount, readyCount, requiredReadyCount, coverageRatio: Number(coverageRatio.toFixed(4)), resultCount, symbolDataGaps: water.receipt?.symbol_data_gaps || [] },

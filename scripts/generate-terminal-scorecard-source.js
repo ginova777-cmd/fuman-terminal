@@ -39,7 +39,7 @@ const TASKS = [
     endpoint: "/api/strategy4-latest",
     modulePath: "../api/strategy4-latest",
     arrayKeys: ["matches", "rows"],
-    limit: 120,
+    limit: 2000,
   },
   {
     key: "strategy5",
@@ -690,7 +690,8 @@ async function fetchStrategy3PayloadForScanDate(scanDate) {
     && cleanText(row.universe_source) === "v_fugle_daytrade_mother_pool_v4_1");
   const emittedSymbols = new Set(enrichedRows.map((row) => codeOf(row, "")));
   const missingSymbols = rows.map((row) => codeOf(row, "")).filter((code) => code && !emittedSymbols.has(code));
-  const evidenceComplete = enrichedRows.length === rows.length && missingSymbols.length === 0;
+  const reportedCount = Number(run.result_count ?? run.coverage?.result_count);
+  const evidenceComplete = Number.isInteger(reportedCount) && reportedCount >= 0 && rows.length === reportedCount && enrichedRows.length === rows.length && missingSymbols.length === 0;
   return {
     ok: evidenceComplete,
     source: "supabase:strategy3_v2_scan_results+mother_pool_v4_1+intraday_1m_rpc_evidence",
@@ -698,7 +699,7 @@ async function fetchStrategy3PayloadForScanDate(scanDate) {
     usedDate: scanDate,
     date: scanDate,
     updatedAt: cleanText(run.finished_at || run.updated_at),
-    count: Math.max(enrichedRows.length, cleanNumber(run.result_count || run.coverage?.result_count)),
+    count: Number.isInteger(reportedCount) ? reportedCount : rows.length,
     matches: enrichedRows,
     rows: enrichedRows,
     publishAllowed: evidenceComplete,
@@ -716,7 +717,7 @@ async function fetchStrategy3PayloadForScanDate(scanDate) {
       sourceContractVersion: "4.1.0",
     },
     reason: evidenceComplete
-      ? `scorecard_source_previous_trading_day:${scanDate}; strategy3_v4_1_entry_evidence_ready`
+      ? `scorecard_source_date:${scanDate}; strategy3_v4_1_entry_evidence_ready`
       : `strategy3_entry_evidence_partial:${enrichedRows.length}/${rows.length}; missing=${missingSymbols.slice(0, 20).join(",")}`,
   };
 }
@@ -786,6 +787,7 @@ function normalizeRecord(task, payload, row, index) {
     sourceRow,
     payload,
     record: {
+    ...require('../lib/mother-pool-scorecard-source').bind(task, payload, row, sourceDate || recordDate, code),
     ...(["institution", "strategy5"].includes(task.key) ? { sourceRunId: payload.runId, runId: row.runId || payload.runId, forward_observation_status: "not_started", high_price_source: "entry_reference_no_forward_observation" } : {}),
     record_id: `${recordDate}-${task.key}-${code}-${index + 1}`,
     record_date: recordDate,
@@ -821,15 +823,20 @@ async function fetchStrategy4LatestCompletePayload() {
   );
   const run = runRows[0];
   if (!run?.run_id) return null;
-  const resultRows = await fetchSupabaseRows(
-    process.env.STRATEGY4_SUPABASE_RESULTS_TABLE || "strategy4_scan_results",
-    [
-      "select=*",
-      `run_id=eq.${encodeURIComponent(run.run_id)}`,
-      "order=rank.asc",
-      "limit=120",
-    ].join("&"),
-  );
+  const resultRows = [];
+  for (let offset = 0; offset < Number(run.result_count); offset += 1000) {
+    const page = await fetchSupabaseRows(
+      process.env.STRATEGY4_SUPABASE_RESULTS_TABLE || "strategy4_scan_results",
+      ["select=*", `run_id=eq.${encodeURIComponent(run.run_id)}`, "order=rank.asc", "limit=1000", `offset=${offset}`].join("&"),
+    );
+    resultRows.push(...page);
+    if (page.length < 1000) break;
+  }
+  if (resultRows.length !== Number(run.result_count)
+      || new Set(resultRows.map(row => String(row.code))).size !== resultRows.length
+      || resultRows.some(row => row.run_id !== run.run_id || normalizeDate(row.scan_date) !== normalizeDate(run.scan_date))) {
+    throw new Error("strategy4_scorecard_full_readback_mismatch");
+  }
   const rows = resultRows.map((row, index) => {
     const payload = row.payload && typeof row.payload === "object" ? row.payload : {};
     return {
@@ -1128,10 +1135,12 @@ async function main() {
   const sourceLatestDate = reports.filter((report) => cleanNumber(report.emittedRows ?? report.count) > 0).map(dateFromReport).filter(Boolean).sort().at(-1) || "";
   const batchLatestDate = rawRecords.map((row) => row.record_date).sort().at(-1) || taipeiDate();
   let latestDate = tradingDay.isTradingDay ? batchLatestDate : (sourceLatestDate || batchLatestDate);
-  const strategy3SourceDate = latestDate;
+  // A current zero-result batch must not inherit another strategy's older row date.
+  const strategy3SourceDate = expectedDisplayDate;
   const strategy3Task = TASKS.find((task) => task.key === "strategy3");
   const strategy3Payload = strategy3SourceDate ? await fetchStrategy3PayloadForScanDate(strategy3SourceDate) : null;
-  if (strategy3Task && strategy3Payload?.matches?.length) {
+  if (strategy3Task && strategy3Payload?.ok === true && strategy3Payload.runId && Array.isArray(strategy3Payload.matches) && strategy3Payload.matches.length === strategy3Payload.count) {
+    latestDate = [latestDate, strategy3SourceDate].sort().at(-1);
     for (let index = records.length - 1; index >= 0; index -= 1) {
       if (records[index]?.strategy === strategy3Task.strategy) records.splice(index, 1);
     }
@@ -1147,6 +1156,8 @@ async function main() {
       report.ok = strategy3Payload.ok === true && !report.suppressedRows;
       report.publishAllowed = strategy3Payload.publishAllowed === true;
       report.evidenceStatus = strategy3Payload.evidenceStatus || strategy3Payload.qualityStatus || "";
+      report.statusCode = 200;
+      report.expectedDisplayDate = strategy3SourceDate;
       report.date = strategy3SourceDate;
       report.reason = strategy3Payload.reason;
     }

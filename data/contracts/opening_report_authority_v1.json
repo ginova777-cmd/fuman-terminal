@@ -1,0 +1,18 @@
+{
+  "contract": "opening-report-runner-verifier-receipt-v1",
+  "runner": "run-opening-report-0830-production-wrapper.ps1",
+  "canonical_verifier": "scripts/verify-opening-report-morning-contract.js",
+  "canonical_command": "verify:opening-report-morning-contract",
+  "stages": ["us_0820", "asia_0850"],
+  "handoff_disposition_contract": "opening-report-handoff-dispositions-v1",
+  "daily_aggregate": "scripts/verify-opening-report-two-stage.js",
+  "required_chain": ["runner", "handoff_anon_readback", "two_natural_writer_refreshes", "rendered_surfaces", "canonical_verifier", "wrapper_receipt", "daily_aggregate"],
+  "static_receipt_is_delivery": false,
+  "line_quota_exception_is_delivery": false,
+  "retired_files": [
+    "scripts/verify-opening-report-0830-telegram-contract.js",
+    "scripts/verify-opening-report-0830-mother-pool-field-ack.js",
+    "scripts/verify-market-ai-opening-report-fallback.js",
+    "scripts/verify-terminal-opening-report-0830-standalone-renderer.js"
+  ]
+}

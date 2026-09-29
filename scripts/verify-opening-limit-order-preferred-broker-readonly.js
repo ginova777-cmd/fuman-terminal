@@ -35,6 +35,20 @@ function evidencePriorityCompare(a, b) {
   }
   return String(a?.symbol || "").localeCompare(String(b?.symbol || ""));
 }
+function preferredBrokerCannotCreateCandidate(source) {
+  const okExpression = source.match(/\bconst\s+ok\s*=\s*([^;]+);/)?.[1] || "";
+  const ruleMap = source.match(/\bconst\s+ruleMap\s*=\s*\[([\s\S]*?)\];/)?.[1] || "";
+  const candidateGatePresent = /prediction\.direction\s*===\s*["']多["']/.test(okExpression)
+    && /preopenPriceEligible/.test(okExpression)
+    && /reasons\.length\s*>=\s*1/.test(okExpression)
+    && /dailyKdRsiUp/.test(okExpression)
+    && /hourlyKdRsiUp/.test(okExpression);
+  const strategyReasonsOnly = ruleMap.length > 0
+    && !/preferredTopBroker|preferred_broker/i.test(ruleMap)
+    && /for\s*\(const\s*\[rule,\s*passed\]\s*of\s*ruleMap\)\s*if\s*\(passed\)\s*reasons\.push\(rule\)/.test(source);
+  return candidateGatePresent && strategyReasonsOnly
+    && !/preferredTopBroker|preferred_broker/i.test(okExpression);
+}
 function main() {
   const tradeDate = dashDate(arg("trade-date", taipeiDate())); const compact = compactDate(tradeDate); const requireRuntime = arg("require-runtime", "1") !== "0";
   const runnerPath = path.join(TERMINAL_DIR, "ops", "Run-OpeningLimitOrder0855Readonly.ps1");
@@ -54,7 +68,7 @@ function main() {
   if (!candidateScript.includes("/摩根大通|jpmorgan/")) failures.push("candidate_jpmorgan_detection_missing");
   if (!candidateScript.includes("/摩根士丹利|morganstanley/")) failures.push("candidate_morgan_stanley_detection_missing");
   if (!candidateScript.includes("\"jpmorgan\"") || !candidateScript.includes("\"morgan_stanley\"")) failures.push("candidate_preferred_broker_keys_missing");
-  if (!candidateScript.includes("const ok = preopenPriceEligible && reasons.length >= 1")) failures.push("preferred_broker_must_not_create_candidate_guard_missing");
+  if (!preferredBrokerCannotCreateCandidate(candidateScript)) failures.push("preferred_broker_must_not_create_candidate_guard_missing");
   let summary = {}; let rows = [];
   if (requireRuntime) {
     summary = readJson(summaryPath);

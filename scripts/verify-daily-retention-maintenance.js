@@ -126,11 +126,12 @@ async function main() {
   else if (cost?.ok !== true || !Number.isFinite(Date.parse(cost?.checkedAt)) || taipeiParts(new Date(cost.checkedAt)).iso !== date.iso || (cost.issues || []).length) issues.push('cost_health_today_not_complete');
   for (const receipt of receipts) if (!receipt.ok) issues.push(`receipt_invalid:${receipt.name}`);
   const liveChecks = {
+    localAssets: run(process.execPath, ["scripts/verify-cleanup-local-assets.js"]),
     extended: run(process.execPath, ['--use-system-ca','scripts/cleanup-extended-retention.js','--verify'],10*60*1000),
     intraday: run(process.execPath, ["--use-system-ca", "scripts/verify-daytrade-intraday-retention.js"]),
     sourceObservability: run(process.execPath, ["--use-system-ca", "scripts/verify-source-observability-retention.js"]),
   };
-  if (maintenance) liveChecks.remainingCleanup = run(process.execPath, ['--use-system-ca','scripts/verify-cleanup-maintenance-readback.js'], 20*60*1000);
+  if (maintenance) liveChecks.remainingCleanup = run(process.execPath, ['--use-system-ca','scripts/verify-cleanup-maintenance-readback.js',`--maintenance-authorization=${maintenance.file}`], 20*60*1000);
   for (const [name, result] of Object.entries(liveChecks)) if (!result.ok) issues.push(`live_verifier_failed:${name}`);
   const complete = issues.length === 0 && warnings.length === 0;
   const payload = {

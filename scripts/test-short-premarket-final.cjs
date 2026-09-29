@@ -1,0 +1,6 @@
+const assert=require('node:assert/strict'),{calculate,classify}=require('./short-premarket-final.cjs');
+for(const [s,l,g]of [[-.633,6.77,'A'],[1.17,5.65,'REJECT'],[-.1,3,'A'],[-.1,8,'REJECT'],[-.1,0,'B'],[-.1,-.01,'WATCH'],[-.1,-5,'REJECT'],[0,5,'REJECT'],[-.00001,7.9999,'A'],[null,5,'UNKNOWN']])assert.equal(classify(s,l).short_candidate_grade,g);
+assert.equal(classify(-.3,3).month_trend_strength,'明顯偏空');assert.equal(classify(-.6,3).month_trend_strength,'強空趨勢');
+const a=Array.from({length:21},(_,i)=>({trade_date:`2026-08-${String(i+1).padStart(2,'0')}`,close:120-i,source:'one'}));
+const x=calculate('X','2026-08-21',a);assert.equal(x.ma20_today,109.5);assert.equal(x.ma20_yesterday,110.5);assert(Math.abs(x.month_slope_raw-(-1/110.5*100))<1e-12);assert.equal(x.ddof,0);assert.equal(calculate('X','2026-08-21',a.slice(1)).status,'DATA_GAP');assert.equal(calculate('X','2026-08-22',a).status,'DATA_GAP');assert.equal(calculate('X','2026-08-21',a.map(x=>({...x,close:100}))).boll_level_raw,null);assert.equal(calculate('X','2026-08-21',a.map((x,i)=>({...x,price_basis:i?'raw':'adjusted'}))).status,'DATA_GAP');
+console.log('PASS: supplied classification examples, boundary values, population SD, 21-day history, stale dates and mixed basis');

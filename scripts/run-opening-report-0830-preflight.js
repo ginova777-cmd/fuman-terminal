@@ -35,6 +35,13 @@ function readJson(file) {
 }
 function writeJson(file, value) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  if (value.contract === "opening-report-0830-preflight-v2") {
+    return require("../lib/opening-preflight-receipt").writePreflightReceipt(file, {
+      ...value, ...(morningRecovery.context(value.date || value.trade_date) ? {
+        recovery: morningRecovery.context(value.date || value.trade_date), execution_mode: "authorized_same_day_recovery"
+      } : {})
+    });
+  }
   fs.writeFileSync(file, `${JSON.stringify({...value, ...(morningRecovery.context(value.date || value.trade_date) ? {recovery:morningRecovery.context(value.date || value.trade_date),execution_mode:"authorized_same_day_recovery"} : {})}, null, 2)}\n`, "utf8");
 }
 function calendarDateAt(value, time) {
@@ -132,8 +139,8 @@ async function main() {
     report_status: ok ? (detectorFreshness.source_gap_count ? "REPORT_DEGRADED" : "REPORT_OK") : "FAIL_CLOSED",
     next_action: skippedForMarketClosed ? "skip_all_report_actions_until_next_trading_day" : "08:20 delivery must consume only this frozen 08:20 evidence and publish line_personal_plus_line_group_plus_terminal_plus_mother_pool",
   };
-  writeJson(receiptPath, { ...receipt, receipt_path: receiptPath });
-  console.log(JSON.stringify({ ok, receipt_path: receiptPath, run_id: runId, phase: receipt.phase, reason_code: receipt.reason_code, valid_leaders: receipt.valid_leaders, total_leaders: receipt.total_leaders }, null, 2));
+  const writtenPath = writeJson(receiptPath, { ...receipt, receipt_path: receiptPath });
+  console.log(JSON.stringify({ ok, receipt_path: writtenPath, run_id: runId, phase: receipt.phase, reason_code: receipt.reason_code, valid_leaders: receipt.valid_leaders, total_leaders: receipt.total_leaders }, null, 2));
   if (!ok) process.exitCode = 1;
 }
 

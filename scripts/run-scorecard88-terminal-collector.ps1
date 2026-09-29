@@ -32,6 +32,10 @@ if ($Recovery) {
 }
 & node $surfaceEvidence @surfaceArgs
 $surfaceEvidenceExit = $LASTEXITCODE
+if ($Recovery -and $recoveryKey -eq 'strategy4') {
+  & node (Join-Path $ProjectRoot 'scripts\build-strategy4-recovery-evidence.js') "--run-id=$ExpectedRunId"
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 $collectorArgs = @("--slot=$Slot")
 if ($Recovery) { $collectorArgs += @('--recovery', "--expected-run-id=$ExpectedRunId", "--recovery-reason=$RecoveryReason") }
 & node $script @collectorArgs

@@ -125,14 +125,17 @@ function alertFailure(payload, dryRun = false) {
 async function buildPayload() {
   const now = new Date();
   const minute = taipeiMinuteOfDay(now);
-  const marketSession = minute >= 9 * 60 && minute <= 13 * 60 + 40;
-  const preopenWindow = minute >= 8 * 60 + 45 && minute < 9 * 60;
+  const calendar = await require('./twse-trading-day').isTwseTradingDay(now,{stateDir:path.join(RUNTIME_DIR,'state')});
+  const replay = STRATEGY_KEY === 'strategy4' && process.env.STRATEGY4_EXECUTION_MODE === 'recovery_replay';
+  if(replay) await require('../lib/strategy4-recovery-date').validateReplay();
+  const marketSession = calendar.isTradingDay === true && !replay && minute >= 9 * 60 && minute <= 13 * 60 + 40;
+  const preopenWindow = calendar.isTradingDay === true && !replay && minute >= 8 * 60 + 45 && minute < 9 * 60;
   const liveFreshnessRequired = marketSession;
   const afterFirst1mWindow = liveFreshnessRequired && minute >= 9 * 60 + 1;
   const first1mRequired = liveFreshnessRequired && minute >= 9 * 60 + 5;
   const hard0910Required = liveFreshnessRequired && minute >= 9 * 60 + 10;
   const ready35Required = liveFreshnessRequired && minute >= 9 * 60 + 30;
-  const preopenRequired = minute >= 8 * 60 + 55 && minute < 9 * 60;
+  const preopenRequired = calendar.isTradingDay === true && !replay && minute >= 8 * 60 + 55 && minute < 9 * 60;
   const strategy1CandidateWindow = (STRATEGY_KEY === "strategy1" || STRATEGY_KEY === "open-buy") && !marketSession && !preopenWindow;
   const strategy4AfterClose = STRATEGY_KEY === "strategy4" && !marketSession;
   const allowSharedSourceStopped = strategy1CandidateWindow || strategy4AfterClose;
@@ -359,7 +362,7 @@ main().catch((error) => {
     alertReceipt: ALERT_RECEIPT,
     error: error?.stack || error?.message || String(error),
   };
-  payload.alert = alertFailure(payload);
+  payload.alert = alertFailure(payload, process.argv.includes("--dry-run-alert"));
   fs.writeFileSync(OUT_FILE, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   console.error(error);
   process.exit(1);

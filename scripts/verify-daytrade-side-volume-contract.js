@@ -18,7 +18,7 @@ const SUPABASE_URL = String(process.env.SUPABASE_URL || process.env.FUMAN_SUPABA
 const CONTRACT = "daytrade_side_volume_2000_canonical_verifier_v3";
 const CONTRACT_VERSION = "cross-computer-symbol-isolation-v3";
 const SOURCE_NAME = "fugle_daytrade_source";
-const MOTHER_POOL_VIEW = "v_fugle_daytrade_mother_pool";
+const MOTHER_POOL_VIEW = "v_fugle_daytrade_mother_pool_v4_1";
 const QUOTE_TABLE = "fugle_daytrade_quotes_live";
 const SOURCE_STATUS_TABLE = "source_status";
 const VIEWER_MAX_SOURCE_AGE_SECONDS = 120;
@@ -164,8 +164,18 @@ function staticContractCheck() {
     "sideVolumeTradeDate",
     "sideVolumeCanonicalRunId",
     "sideVolumeGe2000Lots",
-    "outsideVolume > insideVolume * 2",
+    "outsideVolume >= insideVolume * 2",
   ]) if (!writer.includes(marker)) issues.push(`writer_marker_missing:${marker}`);
+  // Ranking has its own strict >2 rule. B14 must keep the inclusive boundary.
+  const ratioStart = writer.indexOf("  const outsideVolumeGeInsideTimes2 =");
+  const ratioEnd = writer.indexOf(";", ratioStart);
+  const ratioCode = ratioStart >= 0 && ratioEnd > ratioStart ? writer.slice(ratioStart, ratioEnd + 1) : "";
+  try {
+    const vm = require("vm");
+    const evaluate = (insideVolume, outsideVolume, available) => vm.runInNewContext(ratioCode + "\noutsideVolumeGeInsideTimes2", { insideVolume, outsideVolume, sideVolumeContract: { sideVolumeAvailable: available } });
+    if (evaluate(500, 1000, true) !== true || evaluate(500, 999, true) !== false || evaluate(500, 1000, false) !== false) issues.push("writer_inclusive_two_times_boundary_failed");
+  } catch { issues.push("writer_inclusive_two_times_rule_missing"); }
+  if (!writer.includes("b14Event: metrics.outsideVolumeGeInsideTimes2 === true")) issues.push("b14_inclusive_two_times_mapping_missing");
   for (const forbidden of [
     "volumeToLots(payload?.total?.tradeVolumeAtBid)",
     "volumeToLots(payload?.total?.tradeVolumeAtAsk)",
@@ -240,7 +250,7 @@ function staticContractCheck() {
   if (exactThreshold.sideVolumeTotal !== 2000) issues.push("inside_plus_outside_total_failed");
   if (staleRewrapped.sideVolumeAvailable !== false) issues.push("stale_side_volume_rewrap_guard_failed");
   if (staleRewrapped.sideVolumeCanonicalRunId === canonicalRunId(fixtureDate)) issues.push("stale_side_volume_run_id_guard_failed");
-  if (!(ratioBoundary.outsideVolume === ratioBoundary.insideVolume * 2)) issues.push("outside_inside_two_times_boundary_fixture_invalid");
+  if (!(ratioBoundary.outsideVolume >= ratioBoundary.insideVolume * 2)) issues.push("outside_inside_two_times_boundary_failed");
   if (totalVolumeOnly.sideVolumeAvailable !== false || totalVolumeOnly.sideVolumeGe2000Lots !== false) issues.push("total_volume_substitution_guard_failed");
   return {
     ok: issues.length === 0,
@@ -372,6 +382,7 @@ async function liveCheck() {
   const key = anonKey();
   if (!key) failures.push("SUPABASE_ANON_KEY_MISSING");
   let poolRows = [];
+  let quoteRows = [];
   let quote3030 = null;
   let poolEvidence = [];
   let sample3030 = null;
@@ -381,17 +392,19 @@ async function liveCheck() {
   if (key) {
     try {
       poolRows = await readRows(key, MOTHER_POOL_VIEW, {
-        select: "trade_date,symbol,name,priority_rank,updated_at,mother_updated_at,mother_pool_metrics,payload",
+        select: "*",
         trade_date: `eq.${tradeDate}`,
-        order: "priority_rank.asc",
+        canonical_run_id: `eq.${expectedRunId}`,
+        contract_version: "eq.4.1.0",
+        order: "symbol.asc",
         limit: 1000,
       });
-      const quoteRows = await readRows(key, QUOTE_TABLE, {
+      quoteRows = await readRows(key, QUOTE_TABLE, {
         select: "symbol,name,quote_seen_at,last_trade_time,updated_at,total_volume,cumulative_bid_volume,cumulative_ask_volume,cumulative_bid_ask_volume,payload",
-        symbol: "eq.3030",
-        limit: 1,
+        order: "symbol.asc",
+        limit: 2000,
       });
-      quote3030 = quoteRows[0] || null;
+      quote3030 = quoteRows.find((row) => String(row?.symbol || "") === "3030") || null;
       const sourceRows = await readRows(key, SOURCE_STATUS_TABLE, {
         select: "trade_date,status,updated_at,payload",
         source_name: `eq.${SOURCE_NAME}`,
@@ -423,7 +436,12 @@ async function liveCheck() {
     }
   }
 
-  poolEvidence = poolRows.map((row) => publishedEvidence(row, tradeDate));
+  const quoteBySymbol = new Map(quoteRows.map((row) => [String(row?.symbol || ""), row]));
+  poolEvidence = poolRows.map((row) => {
+    const quote = quoteBySymbol.get(String(row?.symbol || ""));
+    const metrics = quote ? deriveDaytradeSideVolumeContract({ quote, expectedTradeDate: tradeDate }) : {};
+    return publishedEvidence({ ...row, mother_pool_metrics: metrics }, tradeDate);
+  });
   const invalidRows = poolEvidence.filter((row) => row && !row.ok);
   if (!poolRows.length) failures.push("MOTHER_POOL_SAME_DAY_ROWS_MISSING");
   if (invalidRows.length) failures.push("MOTHER_POOL_SIDE_VOLUME_CONTRACT_INCOMPLETE");

@@ -10,6 +10,8 @@
       "Fuman Chip Source Sync 2005",
       "Fuman Daily Retention Maintenance 1625",
       "Fuman Daytrade Intraday Retention 1605",
+      "Fuman Daytrade 5m Candidate Verification",
+      "Fuman Daytrade Preopen Snapshot 0845-0859",
       "Fuman Daytrade Futopt Collector Recovery 0835",
       "Fuman Daytrade Futopt Preopen Evidence 0845",
       "Fuman Daytrade Futopt Preopen Evidence 0850",
@@ -504,6 +506,26 @@
     }
   },
   "tasks": [
+    {
+      "taskName": "\\Fuman Daytrade 5m Candidate Verification",
+      "displayName": "Fuman Daytrade 5m Candidate Verification",
+      "description": "Five-minute confirmation is a diagnostic bonus for Mother Pool notifications; this task writes the current candidate readback.",
+      "time": "09:00-13:30 every 5 minutes",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "09:00"
+      ]
+    },
+    {
+      "taskName": "\\Fuman Daytrade Preopen Snapshot 0845-0859",
+      "displayName": "Fuman Daytrade Preopen Snapshot 0845-0859",
+      "description": "Preopen WebSocket snapshot writer used by daytrade source readiness.",
+      "time": "08:45-09:00 every 1 minute",
+      "expectedState": "Ready",
+      "expectedTriggers": [
+        "08:45"
+      ]
+    },
     {
       "taskName": "\\Fuman API-Only Retired Artifact Cleanup 1535",
       "displayName": "Fuman API-Only Retired Artifact Cleanup 1535",

@@ -1,0 +1,13 @@
+const fs=require('fs'),path=require('path'),assert=require('assert/strict'),{spawnSync}=require('child_process');
+const root=path.resolve(__dirname,'..'),context=require(root+'/scripts/cleanup-maintenance-context');
+const dir=fs.mkdtempSync(path.join(require('os').tmpdir(),'cleanup-cutoff-test-')),runtime=path.join(dir,'runtime'),repo=path.join(dir,'repo');fs.mkdirSync(runtime+'/archive/strategy2-intraday/static-latest',{recursive:true});fs.mkdirSync(repo);
+const issued=Date.now()-120000,authPath=path.join(dir,'authorization.json');const a={contract:'cleanup-maintenance-authorization-v1',scope:'five-stage-cleanup',authorizedBy:'user',date:context.date(),authorizationText:'Isolated cutoff regression only; no production actions.',runId:'cleanup-cutoff-isolated-test',keepDays:15,preserveWorkdaySchedule:true,sourceRoot:context.ROOT,runtimeRoot:context.RUNTIME,issuedAt:new Date(issued).toISOString(),expiresAt:new Date(Date.now()+3600000).toISOString()};fs.writeFileSync(authPath,JSON.stringify(a));
+for(const [name,offset]of [['expired.log',-1000],['not-yet-expired.log',1000]]){const p=runtime+'/archive/strategy2-intraday/static-latest/'+name;fs.writeFileSync(p,'isolated');const t=new Date(issued-14*86400000+offset);fs.utimesSync(p,t,t);}
+function invoke(auth){const r=spawnSync(process.execPath,[root+'/scripts/cleanup-api-only-retired-artifacts.js','--dry-run','--no-status','--json','--root='+repo,'--runtime-root='+runtime,...(auth?['--maintenance-authorization='+auth]:[])],{encoding:'utf8',windowsHide:true,timeout:30000});return {r,p:r.status===0?JSON.parse(r.stdout):null};}
+let checks=0;const fixed=invoke(authPath);assert.equal(fixed.r.status,0,fixed.r.stderr);checks++;assert.equal(fixed.p.deletedCount,1);checks++;assert.equal(path.basename(fixed.p.runtime.deleted[0]),'expired.log');checks++;
+const auth=context.authorization(authPath);context.assertRetiredReference(fixed.p,auth);checks++;
+for(const mutation of [{maintenanceRunId:'wrong'},{maintenanceAuthorizationSha256:'wrong'},{retentionReferenceTime:new Date(issued+1).toISOString()},{retentionReferenceTime:null}]){assert.throws(()=>context.assertRetiredReference({...fixed.p,...mutation},auth),/reference_mismatch/);checks++;}
+const natural=invoke();assert.equal(natural.r.status,0,natural.r.stderr);checks++;assert.equal(natural.p.deletedCount,2);checks++;
+fs.writeFileSync(authPath,JSON.stringify({...a,expiresAt:new Date(issued-1).toISOString()}));assert.notEqual(invoke(authPath).r.status,0);checks++;
+assert.equal(fs.readdirSync(runtime+'/archive/strategy2-intraday/static-latest').length,2);checks++;
+const result={ok:true,checks,productionActions:false,fixture:dir};console.log(result);

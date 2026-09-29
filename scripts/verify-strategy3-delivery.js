@@ -3,7 +3,7 @@ const fs = require("fs");
 const path = require("path");
 const { verifyDelivery } = require("../lib/strategy3-delivery-evidence");
 const runtime = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const date = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+const date = process.argv.find(x=>x.startsWith("--trade-date="))?.slice(13) || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
 const compact = date.replace(/\D/g, "");
 const recovery = process.argv.includes("--recovery-replay");
 const receipts = path.join(runtime, "data", "scan-receipts");

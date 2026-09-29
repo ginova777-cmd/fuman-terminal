@@ -9,11 +9,15 @@ const { terminalSupabaseKey, terminalSupabaseUrl } = require("../lib/server-supa
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const tradeDate = process.argv.find((arg) => arg.startsWith("--trade-date="))?.slice(13)
   || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei" }).format(new Date());
+const executionDate = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Taipei'}).format(new Date());
+const bridgeDate = process.argv.find(x=>x.startsWith('--bridge-date='))?.slice(14) || tradeDate;
+if (!/^\d{4}-\d{2}-\d{2}$/.test(bridgeDate) || bridgeDate < tradeDate || bridgeDate > executionDate) throw Error('invalid_bridge_execution_date');
 const compact = tradeDate.replace(/\D/g, "");
 const runnerPath = path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-v2-recovery-replay-${compact}.json`);
 const surfacePath = path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-v2-three-surface-recovery-replay-${compact}.json`);
-const bridgeReceiptPath = path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-mother-pool-warmup-authority-${compact}.json`);
-const receiptPath = path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-v2-recovery-closure-${compact}.json`);
+const bridgeReceiptPath = path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy3-mother-pool-warmup-authority-${bridgeDate.replace(/-/g, "")}.json`);
+const surfaceScope = process.argv.includes("--prepare-three-surfaces");
+const receiptPath = path.join(RUNTIME_DIR, "data", "scan-receipts", surfaceScope ? `strategy3-v2-recovery-publish-evidence-${compact}.json` : `strategy3-v2-recovery-closure-${compact}.json`);
 
 function readJson(file) { try { return JSON.parse(fs.readFileSync(file, "utf8")); } catch { return null; } }
 function add(failed, condition, code) { if (!condition) failed.push(code); }
@@ -50,7 +54,10 @@ async function main() {
   add(failed, surfaceTab?.api?.runId === runner?.run_id && Number(surfaceTab?.api?.count || 0) === Number(runner?.result_count || 0), "canonical_api_run_or_count_mismatch");
   add(failed, surfaceTab?.terminal?.runId === runner?.run_id && Number(surfaceTab?.terminal?.count || 0) === Number(runner?.result_count || 0), "desktop_terminal_run_or_count_mismatch");
   add(failed, surfaceTab?.mobileFragment?.runId === runner?.run_id && Number(surfaceTab?.mobileFragment?.count || 0) === Number(runner?.result_count || 0), "mobile_fragment_run_or_count_mismatch");
-  add(failed, bridge?.complete === true && bridge?.authority_run_id === runner?.run_id && Number(bridge?.authority_result_count || 0) === Number(runner?.result_count || 0), "mother_pool_bridge_receipt_mismatch");
+  // Previous-day morning admission is a separate consumer. This explicit
+  // after-close display scope proves the same completed scan/DB/surface run
+  // without declaring that run admitted to today's morning pool.
+  if (!surfaceScope) add(failed, require('../lib/strategy3-recovery-bridge').bridgeMatches(bridge, runner, bridgeDate), "mother_pool_bridge_receipt_mismatch");
   add(failed, Array.isArray(runner?.failed_checks) && runner.failed_checks.length === 0, "runner_failed_checks_not_empty");
   const url = terminalSupabaseUrl({ runtimeDir: RUNTIME_DIR });
   const key = terminalSupabaseKey({ runtimeDir: RUNTIME_DIR });
@@ -74,10 +81,13 @@ async function main() {
     && require("util").isDeepStrictEqual(row.payload?.bonus_evidence, runner.results.find(x=>x.code===row.code)?.bonus_evidence)), "database_bonus_evidence_mismatch");
   const payload = {
     ok: failed.length === 0,
-    status: failed.length === 0 ? "complete" : "failed",
-    complete: failed.length === 0,
-    contract: "strategy3-v2-recovery-runner-verifier-receipt-v1",
+    status: failed.length === 0 ? (surfaceScope ? "ready_to_publish" : "complete") : "failed",
+    complete: !surfaceScope && failed.length === 0,
+    source_readback_complete: surfaceScope && failed.length === 0,
+    acceptance_scope: surfaceScope ? "after_close_three_surface_recovery" : "recovery_with_mother_pool_bridge",
+    contract: surfaceScope ? "strategy3-recovery-publish-evidence-v1" : "strategy3-v2-recovery-runner-verifier-receipt-v1",
     trade_date: tradeDate,
+    bridge_execution_date: bridgeDate,
     run_id: runner?.run_id || "",
     canonical_run_id: runner?.canonical_run_id || "",
     runner_status: runner?.runner_status || "",

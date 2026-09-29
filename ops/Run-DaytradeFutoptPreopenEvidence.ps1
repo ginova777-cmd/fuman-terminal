@@ -8,6 +8,19 @@ param(
 
 $ErrorActionPreference = "Stop"
 $node = "C:\Program Files\nodejs\node.exe"
+# The task may launch from source, but producers and verifiers must come from
+# the single approved detached release.
+$bootstrap = Get-Content -LiteralPath (Join-Path $TerminalDir 'data\contracts\release_root_authority_v1.json') -Raw | ConvertFrom-Json
+$authorityOutput = & $node (Join-Path $bootstrap.sourceRoot 'scripts\verify-release-root-authority.js') --require-production-root
+if ($LASTEXITCODE -ne 0) { throw 'RELEASE_ROOT_DRIFT: preopen authority verification failed' }
+$release = ($authorityOutput -join "`n") | ConvertFrom-Json
+if ($release.ok -ne $true -or $release.productionClean -ne $true -or
+    $release.productionRootPresent -ne $true -or
+    $release.productionHead -notmatch '^[0-9a-f]{40}$' -or
+    $release.productionHead -ne $release.approvedProductionSha) {
+  throw 'RELEASE_ROOT_DRIFT: preopen release is not approved and clean'
+}
+$TerminalDir = $release.productionRoot
 $producer = Join-Path $TerminalDir "scripts\run-daytrade-near-one-source.js"
 $canonicalVerifier = Join-Path $TerminalDir "scripts\verify-star-preopen-slot-symbol-contract.js"
 $calendar = Join-Path $TerminalDir "scripts\check-market-calendar-action.js"
@@ -78,8 +91,8 @@ function Write-Receipt {
   )
   [ordered]@{
     ok = $Ok
-    status = if ($Ok) { "complete" } else { "failed" }
-    complete = $Ok
+    status = if ($SlotResult -eq "skipped") { "skipped" } elseif ($Ok) { "complete" } else { "failed" }
+    complete = ($Ok -and $SlotResult -eq "complete")
     exitCode = if ($Ok) { 0 } else { 1 }
     contract = "daytrade_futopt_preopen_natural_slot_v2"
     trade_date = $tradeDate
@@ -89,6 +102,8 @@ function Write-Receipt {
     natural_schedule_evidence = ($actualSlot -eq $Slot)
     uses_0900_data = $false
     evidence_window = "08:45-08:59 Asia/Taipei"
+    release_root = $release.productionRoot
+    release_sha = $release.productionHead
     runner = "ops/Run-DaytradeFutoptPreopenEvidence.ps1"
     producer = "scripts/run-daytrade-near-one-source.js"
     verifier = "scripts/verify-star-preopen-slot-symbol-contract.js"

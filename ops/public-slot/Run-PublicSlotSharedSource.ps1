@@ -3213,8 +3213,13 @@ function Convert-QuotesToRows {
     try { $isTrial = [bool]$quote.isTrial } catch {}
     $referencePrice = Get-Number $quote.referencePrice
     if ($referencePrice -le 0) { $referencePrice = Get-Number $quote.prevClose }
-    $trialPrice = Get-Number $quote.trialPrice
-    if ($trialPrice -le 0) { $trialPrice = Get-Number $quote.close }
+    # Only an explicitly tagged Fugle trial event may populate trial_price.
+    # quote.close is a regular/latest price and must never become auction evidence.
+    $trialPrice = $null
+    if ($isTrial) {
+      $nativeTrialPrice = Get-Number $quote.trialPrice
+      if ($nativeTrialPrice -gt 0) { $trialPrice = $nativeTrialPrice }
+    }
     $bidPrice = Get-Number $quote.bidPrice
     $askPrice = Get-Number $quote.askPrice
     $rows.Add([ordered]@{
@@ -3250,6 +3255,9 @@ function Convert-QuotesToRows {
       is_trial = $isTrial
       payload = @{
         raw = $quote
+        trial_price_source = if ($null -ne $trialPrice) { "fugle_native_trial" } else { $null }
+        has_trial_price = ($null -ne $trialPrice)
+        data_gap_reason = if ($null -ne $trialPrice) { $null } else { "DATA_GAP_TRIAL" }
         volume_unit = "lots"
         time_standard = "UTC"
         bid_volume_source = "fugle_ws_best_bid_level_size"
@@ -3273,8 +3281,27 @@ function Convert-QuotesToPreopenRows {
     $updatedAt = Get-QuoteTimestamp -Quote $quote -Payload $Payload
     $referencePrice = Get-Number $quote.referencePrice
     if ($referencePrice -le 0) { $referencePrice = Get-Number $quote.prevClose }
-    $trialPrice = Get-Number $quote.trialPrice
-    if ($trialPrice -le 0) { $trialPrice = Get-Number $quote.close }
+    $isTrial = $false
+    try { $isTrial = ([bool]$quote.isTrial -eq $true) } catch {}
+    $trialEventAt = [string]$quote.trialEventAt
+    if ([string]::IsNullOrWhiteSpace($trialEventAt)) { $trialEventAt = [string]$quote.trial_event_at }
+    $trialPrice = $null
+    $trialCaptureSlot = $null
+    $naturalScheduleEvidence = $false
+    if ($isTrial) {
+      $nativeTrialPrice = Get-Number $quote.trialPrice
+      if ($nativeTrialPrice -gt 0 -and -not [string]::IsNullOrWhiteSpace($trialEventAt)) {
+        try {
+          $trialTaipei = [System.TimeZoneInfo]::ConvertTime([datetimeoffset]::Parse($trialEventAt), [System.TimeZoneInfo]::FindSystemTimeZoneById("Taipei Standard Time"))
+          $trialMinute = ($trialTaipei.Hour * 60) + $trialTaipei.Minute
+          if ($trialTaipei.ToString("yyyy-MM-dd") -eq (Get-Date).ToString("yyyy-MM-dd") -and $trialMinute -in @(525, 530)) {
+            $trialPrice = $nativeTrialPrice
+            $trialCaptureSlot = if ($trialMinute -eq 525) { "0845" } else { "0850" }
+            $naturalScheduleEvidence = $true
+          }
+        } catch {}
+      }
+    }
     $bidPrice = Get-Number $quote.bidPrice
     $askPrice = Get-Number $quote.askPrice
     $bidVolume = [int](Get-Number $quote.bidSize)
@@ -3297,7 +3324,7 @@ function Convert-QuotesToPreopenRows {
       updated_at = $updatedAt
       reference_price = $referencePrice
       trial_price = $trialPrice
-      is_trial = ([bool]$quote.isTrial -or (Get-PublicSlotSession) -eq "preopen")
+      is_trial = $isTrial
       is_limit_up_bid = $isLimitUpBid
       best_bid_price = $bidPrice
       best_ask_price = $askPrice
@@ -3309,7 +3336,24 @@ function Convert-QuotesToPreopenRows {
       ask1_volume = $askVolume
       bid_levels_json = @(@{ price = $bidPrice; volume = $bidVolume })
       ask_levels_json = @(@{ price = $askPrice; volume = $askVolume })
-      payload = @{ raw = $quote; volume_unit = "lots"; time_standard = "UTC" }
+      payload = @{
+        raw = $quote
+        volume_unit = "lots"
+        time_standard = "UTC"
+        trial_price_source = if ($null -ne $trialPrice) { "fugle_native_trial" } else { $null }
+        trial_event_at = if ($null -ne $trialPrice) { $trialEventAt } else { $null }
+        has_trial_price = ($null -ne $trialPrice)
+        trial_change_pct = if ($null -ne $trialPrice -and $referencePrice -gt 0) { [math]::Round((($trialPrice - $referencePrice) / $referencePrice) * 100, 6) } else { $null }
+        capture_slot = $trialCaptureSlot
+        natural_schedule_evidence = $naturalScheduleEvidence
+        trade_date = (Get-Date).ToString("yyyy-MM-dd")
+        run_id = if ($null -ne $trialPrice) { "preopen_trial:$((Get-Date).ToString('yyyyMMdd')):canonical" } else { $null }
+        source_event_at = if ($null -ne $trialPrice) { $trialEventAt } else { $null }
+        data_gap_reason = if ($null -ne $trialPrice) { $null } elseif (-not $isTrial) { "DATA_GAP_TRIAL_NOT_TRIAL_EVENT" } elseif ([string]::IsNullOrWhiteSpace($trialEventAt)) { "DATA_GAP_TRIAL_EVENT_TIME_MISSING" } else { "DATA_GAP_TRIAL_SLOT_INVALID" }
+        close_fallback_used = $false
+        bid_ask_fallback_used = $false
+        post_0900_backfill_used = $false
+      }
     })
   }
   return $rows.ToArray()
@@ -3399,9 +3443,14 @@ function Normalize-StockFutureName {
 
 function Get-StockNameLookup {
   $lookup = @{}
+  $ambiguous = @{}
   foreach ($row in @(Convert-StocksSlimToTickerRows)) {
     $key = Normalize-StockFutureName ([string]$row.name)
-    if (-not [string]::IsNullOrWhiteSpace($key) -and -not $lookup.ContainsKey($key)) {
+    if ([string]::IsNullOrWhiteSpace($key) -or $ambiguous.ContainsKey($key)) { continue }
+    if ($lookup.ContainsKey($key) -and $lookup[$key].symbol -ne $row.symbol) {
+      $lookup.Remove($key)
+      $ambiguous[$key] = $true
+    } elseif (-not $lookup.ContainsKey($key)) {
       $lookup[$key] = $row
     }
   }
@@ -3720,17 +3769,19 @@ function Convert-StocksSlimToTickerRows {
   try {
     if (-not (Test-Path -LiteralPath $stocksFile)) { return $rows.ToArray() }
     $rawStocks = Get-Content -LiteralPath $stocksFile -Raw -ErrorAction Stop
-    $matches = [regex]::Matches($rawStocks, '"code"\s*:\s*"(\d{4})"[\s\S]{0,400}?"name"\s*:\s*"([^"]*)"[\s\S]{0,400}?"market"\s*:\s*"([^"]*)"')
+    $parsedStocks = ConvertFrom-Json -InputObject $rawStocks -ErrorAction Stop
+    $stockRows = if ($parsedStocks -is [array]) { $parsedStocks } elseif ($null -ne $parsedStocks.stocks) { @($parsedStocks.stocks) } elseif ($null -ne $parsedStocks.data) { @($parsedStocks.data) } else { @() }
     $seen = @{}
-    foreach ($match in $matches) {
-      $symbol = [string]$match.Groups[1].Value
+    foreach ($stock in $stockRows) {
+      $symbol = if ($stock.code) { [string]$stock.code } else { [string]$stock.symbol }
+      if ($symbol -notmatch '^\d{4}$' -or [string]::IsNullOrWhiteSpace([string]$stock.name)) { continue }
       if ($seen.ContainsKey($symbol)) { continue }
       $seen[$symbol] = $true
-      $market = Convert-Market ([string]$match.Groups[3].Value)
+      $market = Convert-Market ([string]$stock.market)
       $isEtf = $symbol.StartsWith("00")
       $rows.Add([ordered]@{
         symbol = $symbol
-        name = [string]$match.Groups[2].Value
+        name = [string]$stock.name
         market = $market
         stock_type = if ($isEtf) { "ETF" } else { "COMMONSTOCK" }
         industry = $null

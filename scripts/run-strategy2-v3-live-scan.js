@@ -8,6 +8,7 @@ const { auditRunTimeSourceSnapshot, buildRunTimeSourceSnapshotFields } = require
 const { isTwseTradingDay } = require("./twse-trading-day");
 const { CONTRACT: WATER_CONTRACT, MIN_FORMAL_WATER_COVERAGE_RATIO, taipeiClock, readFormalWater, ratio } = require("./run-strategy2-v3-water-scan");
 const { candidateFromWaterRow } = require("../lib/strategy2-v3-signal");
+const { readMotherPoolForStrategy } = require("../lib/daytrade-mother-pool-strategy-adapters");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const DATA_DIR = path.join(RUNTIME_DIR, "data");
@@ -143,6 +144,10 @@ async function main() {
   const observationWindow = clock.minuteOfDay >= (8 * 60 + 45) && clock.minuteOfDay <= (12 * 60 + 30);
   const liveWindow = clock.minuteOfDay >= 9 * 60 && clock.minuteOfDay <= (12 * 60 + 30);
   const tradingDay = await isTwseTradingDay(now, { stateDir: path.join(RUNTIME_DIR, "state") });
+  const motherPoolV41 = await readMotherPoolForStrategy("strategy2", { tradeDate: clock.date });
+  if (motherPoolV41.ok !== true) {
+    throw new Error(`strategy2_mother_pool_v4_1_blocked:${motherPoolV41.firstBlocker || "unknown"}`);
+  }
   const water = await readFormalWater(require("./run-strategy2-v3-water-scan").config(), clock.date);
   const evaluationNow = displayReplay ? replayReferenceTime(water, now) : now;
   const evaluations = water.rows.map((row) => candidateFromWaterRow(
@@ -307,6 +312,13 @@ async function main() {
     dataGapCount: payload.dataGapCount, sourceCoverage: payload.sourceCoverage, snapshot, snapshotContract: snapshotPayload.snapshotContract, snapshotBytes: Buffer.byteLength(JSON.stringify(snapshotPayload)), reason: payload.reason, blockedReason: payload.blockedReason, displayOnlyBlockedEvidence: payload.displayOnlyBlockedEvidence,
     diagnosticReplay: displayReplay, replayDisplayAllowed: payload.replayDisplayAllowed, replayReferenceAt: payload.replayReferenceAt,
     startedAt: now.toISOString(), finishedAt: new Date().toISOString(),
+    mother_pool_contract_version: motherPoolV41.receipt.mother_pool_contract_version,
+    mother_pool_trade_date: motherPoolV41.receipt.trade_date,
+    mother_pool_canonical_run_id: motherPoolV41.receipt.canonical_run_id,
+    mother_pool_source_freshness: motherPoolV41.receipt.mother_pool_source_freshness_matches === true ? "same_trade_date_current" : "invalid",
+    accepted_symbol_count: Number(motherPoolV41.receipt.mother_pool_read_rows || 0),
+    mother_pool_verifier_ok: motherPoolV41.ok === true,
+    mother_pool_failed_checks: motherPoolV41.failedChecks || [],
   };
   writeJson(path.join(DATA_DIR, "scan-receipts", displayReplay ? "strategy2-v3-replay.json" : "strategy2-v3-live.json"), receipt);
   if (snapshot.ok === false) throw new Error(`strategy2_v3_snapshot_write_failed:${snapshot.error || snapshot.reason || "unknown"}`);

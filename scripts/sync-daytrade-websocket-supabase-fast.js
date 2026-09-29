@@ -22,6 +22,14 @@ function tradeDate(value = new Date()) {
 }
 function iso(value) { const time = Date.parse(String(value || "")); return Number.isFinite(time) ? new Date(time).toISOString() : null; }
 function num(value) { const n = Number(value); return Number.isFinite(n) ? n : null; }
+function volumeUnit(q = {}) {
+  const explicit = String(q.totalVolumeUnit || q.total_volume_unit || q.volumeUnit || q.volume_unit || "").toLowerCase();
+  if (["lots", "shares"].includes(explicit)) return explicit;
+  const market = String(q.market || "").toUpperCase();
+  if (q.intradayOddLot === true || market === "ESB") return "shares";
+  if (q.intradayOddLot === false || ["TSE", "OTC", "TIB"].includes(market)) return "lots";
+  return "";
+}
 async function upsert(table, rows, conflict) {
   const key = secret("SUPABASE_SERVICE_ROLE_KEY");
   if (!key) throw new Error("service_role_key_missing");
@@ -46,16 +54,36 @@ async function main() {
   if (!calendar.isTradingDay) return console.log(JSON.stringify({ ok: true, skipped: true, reason: "market_calendar_non_trading_day", trade_date: date }));
   const quoteCache = parseCache("fugle-daytrade-ws-quotes-v2.json");
   const candleCache = parseCache("fugle-daytrade-ws-candles-v2.json");
-  const cutoff = Date.now() - 180000;
-  const quotes = (quoteCache.quotes || []).filter((q) => Date.parse(q.quoteSeenAt || q.exchangeTime || q.receivedAt) >= cutoff).map((q) => ({
-    symbol: String(q.code || q.symbol || ""), trade_date: date, name: q.name || String(q.code || ""), market: q.market || "",
-    quote_seen_at: iso(q.quoteSeenAt || q.exchangeTime || q.receivedAt), updated_at: iso(q.receivedAt || q.quoteSeenAt),
-    last_trade_time: iso(q.lastTradeTime || (q.quoteSource === "fugle-ws-trades" ? q.exchangeTime : null)),
-    price: num(q.formalLastPrice ?? q.close), open_price: num(q.open), high_price: num(q.high), low_price: num(q.low), previous_close: num(q.prevClose),
-    change_percent: num(q.percent), total_volume: num(q.tradeVolume), trade_value: num(q.tradeValue), bid_price: num(q.bidPrice), bid_volume: num(q.bidSize),
-    ask_price: num(q.askPrice), ask_volume: num(q.askSize), cumulative_bid_volume: num(q.cumulativeBidVolume), cumulative_ask_volume: num(q.cumulativeAskVolume),
-    source: "fugle_websocket_fast_sync", payload: { quoteSource: q.quoteSource, exchangeTime: q.exchangeTime, fastSync: true },
-  })).filter((q) => /^\d{4}$/.test(q.symbol) && q.quote_seen_at);
+  // A closed 5-minute candle is verified shortly after its boundary. Keep
+  // enough Fugle candle events to include all five source minutes plus normal
+  // collector/writer delay; three minutes systematically dropped slots 1-2.
+  const cutoff = Date.now() - 15 * 60 * 1000;
+  const quotes = (quoteCache.quotes || []).filter((q) => Date.parse(q.quoteSeenAt || q.exchangeTime || q.receivedAt) >= cutoff).map((q) => {
+    const totalVolume = num(q.tradeVolume);
+    const totalVolumeUnit = volumeUnit(q);
+    const totalVolumeSourceEventAt = iso(q.totalVolumeSourceEventAt || q.exchangeTime || q.quoteSeenAt);
+    const totalVolumeAvailable = totalVolume !== null && totalVolume >= 0 && Boolean(totalVolumeUnit) && Boolean(totalVolumeSourceEventAt);
+    return {
+      symbol: String(q.code || q.symbol || ""), trade_date: date, name: q.name || String(q.code || ""), market: q.market || "",
+      quote_seen_at: iso(q.quoteSeenAt || q.exchangeTime || q.receivedAt), updated_at: iso(q.receivedAt || q.quoteSeenAt),
+      last_trade_time: iso(q.lastTradeTime || (q.quoteSource === "fugle-ws-trades" ? q.exchangeTime : null)),
+      price: num(q.formalLastPrice ?? q.close), open_price: num(q.open), high_price: num(q.high), low_price: num(q.low), previous_close: num(q.prevClose),
+      change_percent: num(q.percent), total_volume: totalVolume, trade_value: num(q.tradeValue), bid_price: num(q.bidPrice), bid_volume: num(q.bidSize),
+      ask_price: num(q.askPrice), ask_volume: num(q.askSize), cumulative_bid_volume: num(q.cumulativeBidVolume), cumulative_ask_volume: num(q.cumulativeAskVolume),
+      source: "fugle_websocket_fast_sync",
+      payload: {
+        quoteSource: q.quoteSource,
+        exchangeTime: q.exchangeTime,
+        fastSync: true,
+        total_volume_unit: totalVolumeUnit || null,
+        volume_unit: totalVolumeUnit || null,
+        total_volume_raw_unit: totalVolumeUnit || null,
+        total_volume_source_event_at: totalVolumeSourceEventAt,
+        total_volume_available: totalVolumeAvailable,
+        is_synthetic: false,
+      },
+    };
+  }).filter((q) => /^\d{4}$/.test(q.symbol) && q.quote_seen_at);
   const candles = (candleCache.candles || []).filter((c) => c.tradeDate === date && Date.parse(c.candleSeenAt || candleCache.updatedAt) >= cutoff).map((c) => ({
     symbol: String(c.symbol || c.code || ""), market: c.market || "", trade_date: date, candle_time: iso(c.candleTime || c.date),
     open: num(c.open), high: num(c.high), low: num(c.low), close: num(c.close), volume: num(c.volume), updated_at: iso(c.candleSeenAt || candleCache.updatedAt),

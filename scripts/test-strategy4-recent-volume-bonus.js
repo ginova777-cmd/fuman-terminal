@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
-const {calculate,valid}=require('../lib/strategy4-recent-volume-bonus');
+const {calculate,valid,matchesAuthoritative}=require('../lib/strategy4-recent-volume-bonus');
 const dates=Array.from({length:15},(_,i)=>`2026-08-${String(i+1).padStart(2,'0')}`);
 const rows=()=>dates.map(date=>({date,volume_lots:2000}));
 test('inclusive 2.5, excludes inspected day from denominator',()=>{const r=rows();r[14].volume_lots=5000;const e=calculate(r,dates,dates[14]);assert.equal(e.points,5);assert.equal(e.evaluations.at(-1).priorAverageLots,2000);assert.equal(e.evaluations.at(-1).ratio,2.5);assert(valid(e));});
@@ -13,3 +13,5 @@ test('tamper ratio or points rejected',()=>{const e=calculate(rows(),dates,dates
 test('out of window spike not eligible',()=>{const r=rows();r[4].volume_lots=50000;assert.equal(calculate(r,dates,dates[14]).points,0);});
 test('duplicate and future dates cannot create match',()=>{const r=rows();r.push({date:dates[14],volume_lots:50000},{date:'2026-12-31',volume_lots:100000});assert.equal(calculate(r,dates,dates[14]).points,0);});
 test('JSONB key ordering preserves evidence',()=>{const reorder=v=>Array.isArray(v)?v.map(reorder):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,reorder(v[k])])):v;assert(valid(reorder(calculate(rows(),dates,dates[14]))));});
+test('authoritative readback accepts shared cache provenance without changing evidence',()=>{const actual=calculate(rows(),dates,dates[14]);const saved=JSON.parse(JSON.stringify(actual));saved.sharedSource={generation:'source-generation',cacheHit:true};assert(matchesAuthoritative(actual,saved));});
+test('authoritative readback still rejects changed volume, points and unexpected errors',()=>{const actual=calculate(rows(),dates,dates[14]);for(const change of [e=>e.rows[0].volume_lots++,e=>e.points=5,e=>e.sourceError='source unavailable']){const saved=JSON.parse(JSON.stringify(actual));saved.sharedSource={generation:'source-generation'};change(saved);assert.equal(matchesAuthoritative(actual,saved),false);}assert.equal(matchesAuthoritative(actual,null),false);});

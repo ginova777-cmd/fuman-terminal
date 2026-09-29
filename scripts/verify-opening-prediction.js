@@ -17,7 +17,7 @@ function verify(file,expectedDate,expectedRun){
   check(/^\d{4,6}$/.test(r.symbol),`SYMBOL_INVALID:${r.symbol}`);
   check(['多','空','不交易'].includes(r.prediction),`DIRECTION_INVALID:${r.symbol}`);
   if(r.prediction==='不交易')continue;
-  check(r.prediction_version==='opening_prediction_v2',`ENGINE_VERSION_INVALID:${r.symbol}`);
+  check(r.prediction_version==='opening_prediction_v3',`ENGINE_VERSION_INVALID:${r.symbol}`);
   check(Boolean(r.tomorrow_prediction_reason)&&Boolean(r.tomorrow_prediction_pattern),`REASON_MISSING:${r.symbol}`);
   const slots=r.evidence?.preopen_slots||[];
   for(const slot of ['0845','0850']) {
@@ -28,7 +28,7 @@ function verify(file,expectedDate,expectedRun){
   if(r.prediction==='多'){
    check(r.evidence?.daily_signal_date<expectedDate,'SIGNAL_DATE_INVALID');
    for(const key of ['daily_indicators','hourly_indicators']) {
-    const i=r.evidence?.[key];check(i?.available===true&&i.version==='opening_prediction_v2'&&i.k>i.previous_k&&i.d>i.previous_d&&i.rsi>i.previous_rsi,`LONG_TREND_INVALID:${r.symbol}:${key}`);
+    const i=r.evidence?.[key];check(i?.available===true&&i.version==='opening_prediction_v3'&&i.k>i.previous_k&&i.d>i.previous_d&&i.rsi3>i.previous_rsi3&&i.rsi6>i.previous_rsi6,`LONG_TREND_INVALID:${r.symbol}:${key}`);
    }
    check(r.matched_strategy_numbers?.length>0,`STRATEGY_MISSING:${r.symbol}`);
   }else{

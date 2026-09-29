@@ -22,13 +22,22 @@ function main() {
   const runner = JSON.parse(fs.readFileSync(input, "utf8"));
   const quotaAccepted = require("../lib/strategy4-line-quota").isQuotaException(runner);
   const rows = Array.isArray(runner.accepted_rows) ? runner.accepted_rows : [];
+  const handoff = runner.handoff && typeof runner.handoff === "object" ? runner.handoff : {};
+  const handoffTradeDate = String(runner.handoff_trade_date || handoff.handoff_trade_date || "").replace(/\D/g, "").slice(0, 8);
+  const sourceTradeDate = String(runner.source_trade_date || handoff.strategy_source_date || runner.dataDate || "").replace(/\D/g, "").slice(0, 8);
+  const handoffIdentityOk = runner.ok === true
+    && handoff.ok === true
+    && handoffTradeDate === date
+    && Boolean(runner.handoff_run_id || handoff.handoff_run_id)
+    && Boolean(runner.source_run_id || handoff.source_run_id)
+    && (sourceTradeDate === date || sourceTradeDate < date);
   const computedZones = Object.fromEntries(["A", "B", "C"].map((key) => [key, rows.filter((row) => String(row.zone || row.zoneLabel || "").toUpperCase().startsWith(key)).length]));
   const checks = [
     ["runner_contract", runner.contract === "strategy4-line-card-runner-v2"],
     ["format_contract", runner.format_contract === "strategy4-line-customer-grouped-v2"],
     ["strategy", runner.strategy === "strategy4"],
     ["runner_ready", runner.ok === true && runner.status === "ready"],
-    ["same_day", runner.dateAligned === true && String(runner.dataDate) === date],
+    ["handoff_identity", handoffIdentityOk],
     ["run_id", Boolean(runner.runId)],
     ["count_matches_rows", Number(runner.count) > 0 && Number(runner.count) === rows.length],
     ["rendered_card_matches_rows", Number(runner.rendered_count) === rows.length

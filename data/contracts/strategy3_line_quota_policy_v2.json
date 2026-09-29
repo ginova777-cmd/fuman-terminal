@@ -1,0 +1,10 @@
+{
+  "contract": "strategy3-line-quota-policy-v2",
+  "strategy": "strategy3",
+  "effectiveFrom": "2026-09-17",
+  "scope": "recovery_replay",
+  "userAuthorized": true,
+  "requiresLiveQuotaEvidence": true,
+  "deliveryClaimAllowed": false,
+  "authorization": "User accepts exhausted LINE quota without blocking Strategy3 COMPLETE; all other delivery checks remain required."
+}

@@ -1,0 +1,33 @@
+'use strict';
+const assert=require('assert'),fs=require('fs'),os=require('os'),path=require('path');
+const runtime=fs.mkdtempSync(path.join(os.tmpdir(),'a12-refresh-'));
+process.env.FUMAN_RUNTIME_DIR=runtime;
+const evidence=require('../lib/opening-report-writer-refresh-evidence');
+const {observeWriterRefreshes,validReadback,sameAcceptedSymbols}=require('./verify-opening-report-0830-mother-pool-persistence-ack');
+(async()=>{
+ assert.equal(sameAcceptedSymbols(['2330'],['2330']),true);
+ for(const actual of [undefined,[],['2330','2330'],['1301'],['2330','1301']])assert.equal(sameAcceptedSymbols(['2330'],actual),false);
+ const startedAt=Date.parse('2026-09-29T00:03:00Z'), now=startedAt+1000;
+ const valid={startedAt,exitCode:0,receipt:{complete:true,db_readback_ok:true,trade_date:'2026-09-29',report_run_id:'r1',checked_at:new Date(now).toISOString()}};
+ assert.equal(validReadback(valid,'2026-09-29','r1',now),true);
+ for(const patch of [{checked_at:new Date(startedAt-1).toISOString()},{checked_at:new Date(now+1).toISOString()},{trade_date:'2026-09-28'},{report_run_id:'old'},{complete:false},{db_readback_ok:false}])assert.equal(validReadback({...valid,receipt:{...valid.receipt,...patch}},'2026-09-29','r1',now),false);
+ assert.equal(validReadback({...valid,exitCode:1},'2026-09-29','r1',now),false);
+ const date='2026-09-29' ,after=Date.parse('2026-09-29T00:00:00Z');
+ const dir=path.join(runtime,'state','opening-report-writer-refreshes',date);fs.mkdirSync(dir,{recursive:true});
+ fs.writeFileSync(path.join(runtime,'state','daytrade-mother-pool-delta.json'),JSON.stringify({updated_at:new Date().toISOString()}));
+ assert.deepStrictEqual(await observeWriterRefreshes(after,2,0,date),[],'heartbeat must not count');
+ const base={contract:evidence.CONTRACT,trade_date:date,write_complete:true,operation:'priority_pool_upsert_and_prune',generation_id:'g1',writer_run_id:'w1',completed_at:'2026-09-29T00:01:00Z',symbols:['2330'],symbol_count:1};
+ const put=(name,extra)=>fs.writeFileSync(path.join(dir,name+'.json'),JSON.stringify({...base,...extra}));
+ put('one',{});put('duplicate-writer',{generation_id:'g2'});
+ assert.equal((await observeWriterRefreshes(after,2,0,date)).length,1);
+ put('bad-symbols',{generation_id:'g3',writer_run_id:'w3',symbols:['2330','2330']});
+ put('old-date',{generation_id:'g4',writer_run_id:'w4',trade_date:'2026-09-28'});
+ put('before-handoff',{generation_id:'g5',writer_run_id:'w5',completed_at:'2026-09-28T23:59:00Z'});
+ assert.equal((await observeWriterRefreshes(after,2,0,date)).length,1);
+ put('two',{generation_id:'g6',writer_run_id:'w6',completed_at:'2026-09-29T00:02:00Z'});
+ const result=await observeWriterRefreshes(after,2,0,date);assert.equal(result.length,2);
+ assert.equal((await observeWriterRefreshes(after,2,0,date,['1301'])).length,0,'unrelated Writer refresh cannot prove retained symbols');
+ assert.equal((await observeWriterRefreshes(after,2,0,date,['2330'])).length,2);
+ for(const e of result){assert.ok(e.evidence_path);assert.match(e.evidence_sha256,/^[a-f0-9]{64}$/);}
+ console.log('PASS A12: heartbeat rejected; distinct Writer rounds; duplicate symbols/date/time rejected; hashed evidence retained');
+})().catch(e=>{console.error(e);process.exitCode=1}).finally(()=>fs.rmSync(runtime,{recursive:true,force:true}));

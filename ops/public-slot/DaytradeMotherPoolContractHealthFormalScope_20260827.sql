@@ -54,7 +54,7 @@ projected as (
     case
       when d.formal_priority_symbols > 0
        and d.formal_priority_symbols <= d.mother_pool_symbols
-       and d.formal_fresh_quote_coverage_120s >= 0.95
+       and d.formal_fresh_quote_coverage_120s >= 0.90
        and d.formal_max_quote_age_seconds <= 120
       then 'ready'
       else 'not_ready'

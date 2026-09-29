@@ -79,6 +79,7 @@ function parseArgs(argv) {
     else if (arg === "--skip-supabase") args.skipSupabase = true;
     else if (arg === "--skip-vercel") args.skipVercel = true;
     else if (arg === "--no-status") args.status = false;
+    else if (arg.startsWith("--maintenance-authorization=")) args.maintenance = require('./cleanup-maintenance-context').authorization(arg.slice('--maintenance-authorization='.length));
     else if (arg === "--supabase-retention-days") args.supabaseRetentionDays = Number(value());
     else if (arg.startsWith("--supabase-retention-days=")) args.supabaseRetentionDays = Number(arg.split("=")[1]);
     else if (arg === "--event-retention-days") args.eventRetentionDays = Number(value());
@@ -103,16 +104,17 @@ function parseArgs(argv) {
   }
   if (args.batchSize < 1) args.batchSize = 1;
   if (args.dailyHistoryRetentionDays < 1) args.dailyHistoryRetentionDays = 1;
+  args.referenceMs = args.maintenance ? Date.parse(args.maintenance.issuedAt) : Date.now();
   return args;
 }
 
-function dateCutoff(days) {
-  return new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+function dateCutoff(days, referenceMs) {
+  return isoCutoff(days, referenceMs).slice(0, 10);
 }
 
 async function cleanupDateRetentionTable(config, args) {
   const retentionDays = config.retentionDays ?? args.dailyHistoryRetentionDays;
-  const cutoff = dateCutoff(retentionDays);
+  const cutoff = dateCutoff(retentionDays, args.referenceMs);
   const query = `${config.dateColumn}=lt.${cutoff}`;
   const count = await countRows(config.table, query);
   const deletion = await deleteRows(config.table, query, args.apply);
@@ -129,8 +131,8 @@ async function cleanupDateRetentionTable(config, args) {
   };
 }
 
-function isoCutoff(days) {
-  return new Date(Date.now() - days * 86400000).toISOString();
+function isoCutoff(days, referenceMs) {
+  return new Date(referenceMs - days * 86400000).toISOString();
 }
 
 function chunks(items, size) {
@@ -196,7 +198,7 @@ async function deleteRows(table, query, apply) {
 
 async function cleanupEventTable(config, args) {
   const retentionDays = config.retentionDays ?? args.eventRetentionDays;
-  const cutoff = isoCutoff(retentionDays);
+  const cutoff = isoCutoff(retentionDays, args.referenceMs);
   const query = `${config.dateColumn}=lt.${encodeURIComponent(cutoff)}`;
   const count = await countRows(config.table, query);
   const deletion = await deleteRows(config.table, query, args.apply);
@@ -205,7 +207,7 @@ async function cleanupEventTable(config, args) {
 
 async function cleanupSnapshotTable(config, args) {
   const retentionDays = config.retentionDays ?? args.supabaseRetentionDays;
-  const cutoff = isoCutoff(retentionDays);
+  const cutoff = isoCutoff(retentionDays, args.referenceMs);
   const query = [config.filter, `${config.dateColumn}=lt.${encodeURIComponent(cutoff)}`].filter(Boolean).join("&");
   const count = await countRows(config.table, query);
   const deletion = await deleteRows(config.table, query, args.apply);
@@ -237,7 +239,7 @@ function rowTime(row, config) {
 async function cleanupRunPair(config, args) {
   const retentionDays = config.retentionDays ?? args.supabaseRetentionDays;
   const keepRuns = config.keepRuns ?? args.keepRuns;
-  const cutoffMs = Date.now() - retentionDays * 86400000;
+  const cutoffMs = args.referenceMs - retentionDays * 86400000;
   let rows;
   try {
     rows = await fetchRunRows(config);
@@ -413,7 +415,7 @@ async function cleanupVercelDeployments(args) {
     return parseVercelJson(result.stdout);
   });
   const deployments=inventory.rows.map(item=>({...item,target:item.target===null ? "preview" : item.target}));
-  const cutoffMs = Date.now() - args.vercelRetentionDays * 86400000;
+  const cutoffMs = args.referenceMs - args.vercelRetentionDays * 86400000;
   const byTarget = new Map();
   for (const item of deployments) {
     const target = String(item.target || item.meta?.githubCommitRef || "unknown");
@@ -523,6 +525,9 @@ async function main() {
     applied: args.apply,
     dryRun: !args.apply,
     checkedAt: new Date().toISOString(),
+    retentionReferenceTime: new Date(args.referenceMs).toISOString(),
+    maintenanceRunId: args.maintenance?.runId || null,
+    maintenanceAuthorizationSha256: args.maintenance?.sha256 || null,
     source: "supabase-vercel-history-cleanup",
     supabase: args.skipSupabase ? { skipped: true } : await cleanupSupabase(args),
     vercel: args.skipVercel ? { skipped: true } : await cleanupVercelDeployments(args).catch((error) => ({ ok: false, error: error.message })),
@@ -545,7 +550,8 @@ async function main() {
   if (!payload.ok) process.exitCode = 1;
 }
 
-main().catch((error) => {
+module.exports = {parseArgs, dateCutoff, isoCutoff};
+if (require.main === module) main().catch((error) => {
   console.error(`[history-cleanup] failed: ${error.stack || error.message || error}`);
   process.exitCode = 1;
 });

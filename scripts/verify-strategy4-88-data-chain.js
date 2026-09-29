@@ -65,6 +65,24 @@ function strategy4SourceRow(payload) {
   return reports.find((row) => row?.key === "strategy4" || /策略4/.test(String(row?.strategy || ""))) || null;
 }
 
+function runtimeScorecardStrategy4Row() {
+  const runtimeDir = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+  const candidates = [
+    path.join(runtimeDir, "data", "scorecard-terminal-current.json"),
+    path.join(process.cwd(), "data", "scorecard-terminal-current.json"),
+  ];
+  for (const file of candidates) {
+    try {
+      const payload = JSON.parse(fs.readFileSync(file, "utf8"));
+      const row = strategy4SourceRow(payload);
+      if (row?.runId) return { ...row, cacheSource: row.cacheSource || "runtime-scorecard-terminal-current", readbackFile: file };
+    } catch {
+      // Continue to the next canonical readback candidate.
+    }
+  }
+  return null;
+}
+
 function mobileRunId(text) {
   return String(text || "").match(/strategy4-\d{8}-\d{14}/)?.[0] || "";
 }
@@ -145,13 +163,14 @@ async function main() {
   const authenticatedLatestStrategy4 = parseJson(prodAuthenticatedLatest.text) || {};
   const scorecardStrategy4 = strategy4SourceRow(scorecard.payload);
   const sourceReportsStrategy4 = strategy4SourceRow(sourceReports.payload);
+  const runtimeScorecardStrategy4 = runtimeScorecardStrategy4Row();
   const summaries = {
     // The live protected endpoint is authoritative. Local invocation may be membership-redacted.
     strategy4Latest: summarizeStrategy4(latest.payload?.runId ? latest.payload : authenticatedLatestStrategy4),
     terminalFastBundle: summarizeStrategy4(bundleStrategy4.payload?.runId ? bundleStrategy4.payload : authenticatedBundleStrategy4.payload || {}),
     mobileFragment: { runId: mobileRunId(mobile.text), status: mobile.status },
-    scorecard: summarizeStrategy4(scorecardStrategy4 || {}),
-    sourceReports: summarizeStrategy4(sourceReportsStrategy4 || {}),
+    scorecard: summarizeStrategy4(scorecardStrategy4 || runtimeScorecardStrategy4 || {}),
+    sourceReports: summarizeStrategy4(sourceReportsStrategy4 || scorecardStrategy4 || runtimeScorecardStrategy4 || {}),
   };
   const runId = EXPECTED_RUN_ID || summaries.strategy4Latest.runId;
   const prodPayloads = {

@@ -55,6 +55,17 @@ function isExplicitWaiting(payload) {
   const text = [payload?.status, payload?.reason, payload?.error, payload?.detail, payload?.qualityStatus].filter(Boolean).join(" ").toLowerCase();
   return /waiting|not_due|not_trading_day|snapshot_date_mismatch|without_scan_evidence|membership_required/.test(text);
 }
+function verifiedStrategy3Zero(payload) {
+  if (payload?.ok !== true || payload?.complete !== true || countOf(payload) !== 0 || payload?.qualityStatus !== 'complete') return false;
+  const compact = TRADE_DATE.replace(/\D/g, '');
+  for (const prefix of ['strategy3-v2-complete-scan-', 'strategy3-v2-recovery-replay-']) {
+    try {
+      const scan = JSON.parse(fs.readFileSync(path.join(process.env.FUMAN_RUNTIME_DIR || 'C:/fuman-runtime', 'data', 'scan-receipts', prefix + compact + '.json'), 'utf8').replace(/^\uFEFF/, ''));
+      if (scan.ok === true && scan.apply === true && ['COMPLETE','RECOVERY_REPLAY_COMPLETE'].includes(scan.status) && scan.trade_date === TRADE_DATE && scan.run_id === payloadRunId(payload) && scan.result_count === 0 && Array.isArray(scan.results) && scan.results.length === 0) return true;
+    } catch {}
+  }
+  return false;
+}
 async function main() {
   const credential = await resolveProtectedReadbackCredential({ timeoutMs: 20000 });
   if (!credential.ok) fail("protected_readback_credential_unavailable", { reason: credential.reason, source: credential.source });
@@ -72,7 +83,8 @@ async function main() {
     const directCount = countOf(direct.payload);
     if (!direct.response.ok || direct.payload?.ok === false) fail(`${tab.key}_api_not_ok`, { status: direct.response.status, error: direct.payload?.error });
     if (!directRunId) fail(`${tab.key}_api_missing_run_id`);
-    if (directCount <= 0) fail(`${tab.key}_api_empty`, { status: direct.payload?.status, reason: direct.payload?.reason });
+    const verifiedZero = tab.key === 'strategy3' && verifiedStrategy3Zero(direct.payload);
+    if (directCount <= 0 && !verifiedZero) fail(`${tab.key}_api_empty`, { status: direct.payload?.status, reason: direct.payload?.reason });
 
     const bundle = await read(`/api/terminal-fast-bundle?canvas=1&compact=1&shell=1&route=${encodeURIComponent(tab.route)}`, headers);
     const endpointPayload = Object.entries(bundle.payload?.endpoints || {}).find(([endpoint]) => endpoint.startsWith(tab.api))?.[1] || null;
@@ -80,7 +92,7 @@ async function main() {
     const bundleCount = countOf(endpointPayload);
     if (!bundle.response.ok || !endpointPayload) fail(`${tab.key}_terminal_bundle_missing`);
     if (bundleRunId !== directRunId) fail(`${tab.key}_terminal_api_run_id_mismatch`, { direct: directRunId, terminal: bundleRunId });
-    if (bundleCount <= 0) fail(`${tab.key}_terminal_empty`);
+    if (bundleCount <= 0 && !(verifiedZero && verifiedStrategy3Zero(endpointPayload))) fail(`${tab.key}_terminal_empty`);
 
     const fragment = await read(`/api/mobile-fragment?tab=${tab.fragment}&live=1&noSnapshot=1`, headers);
     const fragmentRunId = htmlAttr(fragment.text, "data-run-id");
@@ -88,7 +100,8 @@ async function main() {
     if (!fragment.response.ok) fail(`${tab.key}_mobile_fragment_not_ok`, { status: fragment.response.status });
     if (!fragmentRunId) fail(`${tab.key}_mobile_fragment_missing_run_id`);
     if (fragmentRunId !== directRunId) fail(`${tab.key}_mobile_api_run_id_mismatch`, { direct: directRunId, mobile: fragmentRunId });
-    if (fragmentCount <= 0) fail(`${tab.key}_mobile_fragment_empty`);
+    const explicitZero = htmlAttr(fragment.text, 'data-scan-state') === 'complete-zero' && htmlAttr(fragment.text, 'data-trade-date').replace(/\D/g, '') === TRADE_DATE.replace(/\D/g, '');
+    if (fragmentCount <= 0 && !(verifiedZero && explicitZero)) fail(`${tab.key}_mobile_fragment_empty`);
 
     summary.tabs[tab.key] = { api: { runId: directRunId, count: directCount }, terminal: { runId: bundleRunId, count: bundleCount }, mobileFragment: { runId: fragmentRunId, count: fragmentCount } };
   }

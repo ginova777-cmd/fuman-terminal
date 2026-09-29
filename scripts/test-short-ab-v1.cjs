@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict'),{evaluate}=require('./short-ab-v1.cjs'),c=require('./short-ab-v1.config.json');
+const bars=Array.from({length:60},(_,i)=>({trade_date:new Date(Date.UTC(2026,5,1+i)).toISOString().slice(0,10),close:100,volume_lots:1000}));const date=bars.at(-1).trade_date;
+const row={date,boll_position_raw:5,ma20_slope_percent:-.1,boll_upper:120,daily_trend:'BEARISH',hourly_trend:'UNKNOWN',ema30_trend:'UNKNOWN',foreign:{net:-1},trust:{net:0},dealer:{net:0}};
+let x=evaluate(row,bars,c);assert.equal(x.a_short_candidate,true);assert.equal(x.a_short_score,65);assert.equal(x.b_short_score,null);assert.equal(x.short_entry_signal,null);
+x=evaluate({...row,boll_position_raw:8,ma20_slope_percent:1,boll_upper:99},bars,c);assert.equal(x.b_short_candidate,true);assert.equal(x.b_short_score,20);assert.equal(x.a_short_score,null);
+x=evaluate({...row,boll_position_raw:8,ma20_slope_percent:1},bars,c);assert.equal(x.b_short_candidate,false);assert.equal(x.short_type,'NONE');
+x=evaluate({...row,ma20_slope_percent:0},bars,c);assert.equal(x.short_type,'NONE');
+x=evaluate({...row,boll_position_raw:null},bars,c);assert.equal(x.short_type,'UNDETERMINED');
+for(const [pos,expected] of [[8,10],[10,15],[12,15],[12.1,20]])assert.equal(evaluate({...row,boll_position_raw:pos,ma20_slope_percent:2.5},bars,c).b_score_breakdown.position,expected);
+assert.equal(evaluate(row,bars,c).ma60,100);
+console.log('PASS: A/B eligibility, exclusive scores, boundary tiers, missing evidence, no entry signal');

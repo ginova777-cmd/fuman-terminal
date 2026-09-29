@@ -1,0 +1,12 @@
+"use strict";
+const assert=require("node:assert/strict"); const d=require("../lib/intraday-context-detectors-b19-b24");
+assert.equal(d.b19({close:99,previous_minute_close:100,timestamp:"2026-09-16T09:30:00+08:00"},Array(10).fill(.1),Array(10).fill(.1)).b19_signal,"PRICE_SPIKE_DOWN");
+assert.equal(d.b20({inside_1m:600,outside_1m:200}).b20_raw_strong,true);
+assert.equal(d.b20({inside_1m:0,outside_1m:0}).data_status,"DATA_GAP");
+assert.equal(d.b20({inside_1m:0,outside_1m:0}).no_valid_side_volume,"NO_VALID_SIDE_VOLUME");
+assert.equal(d.b21({raw_turnover_value:100000,raw_turnover_unit:"TWD",raw_volume:1000,raw_volume_unit:"SHARES",current_price:110}).vwap_state,"ABOVE_VWAP");
+assert.equal(d.b22({symbol:"2330",canonical_run_id:"isolated-test",trade_date:"2026-09-16",current_price:105,event_timestamp:"2026-09-16T09:05:00+08:00",opening_range_bars:[0,1,2,3,4].map((_,i)=>({symbol:"2330",timestamp:`2026-09-16T09:0${i}:00+08:00`,high:100,low:90,synthetic:false,complete:true}))}).break_direction,"UP"); assert.equal(d.b23({symbol:"2330",trade_date:"2026-09-16",canonical_run_id:"isolated-test",event_timestamp:"2026-09-16T09:10:00+08:00",current_price:110,today_open:100,bars_through_event:[{symbol:"2330",timestamp:"2026-09-16T09:09:00+08:00",high:110,low:90,synthetic:false,complete:true}]}).new_high,true);
+assert.equal(d.b22({current_price:105,event_timestamp:"2026-09-16T10:00:00+08:00",opening_range_bars:[0,1,2,3,4].map((_,i)=>({timestamp:`10:0${i}`,high:100,low:90,synthetic:false,complete:true}))}).opening_range_valid,false);
+assert.equal(d.b19({close:99,previous_close:100,timestamp:"2026-09-16T10:00:00Z"},[.1,.1]).b19_signal,"NO_SIGNAL");
+assert.equal(d.b24([{type:"VOLUME",event_id:"1",event_timestamp:"2026-09-16T09:31:00+08:00",source_contract_ok:true,source_contract:"isolated",symbol:"2330",trade_date:"2026-09-16",canonical_run_id:"isolated"},{type:"PRICE_UP",event_id:"2",event_timestamp:"2026-09-16T09:32:00+08:00",source_contract_ok:true,source_contract:"isolated",symbol:"2330",trade_date:"2026-09-16",canonical_run_id:"isolated"}])[0].formal_candidate_allowed,false);
+console.log("6/6 B19-B24 isolated checks passed");

@@ -25,7 +25,7 @@ function parseOption(name) {
 function number(value) { const parsed = Number(value); return Number.isFinite(parsed) ? parsed : 0; }
 
 function main() {
-  const expectedDate = compactDate(parseOption("date")) || taipeiDateKey();
+  const expectedDate = compactDate(parseOption("date")) || require('../lib/strategy4-recovery-date').targetDate().replace(/-/g,'');
   const expectedRunId = parseOption("expect-run-id") || String(process.env.EXPECTED_STRATEGY4_RUN_ID || "").trim();
   if (expectedRunId) process.env.EXPECTED_STRATEGY4_RUN_ID = expectedRunId;
   const expectedCount = number(parseOption("expect-count"));

@@ -453,6 +453,16 @@ function readScanReceipt(strategy) {
   }
 }
 
+function readStrategy4SourceReceipt(sourceDate) {
+  const key = String(sourceDate || "").replace(/-/g, "");
+  if (!/^\d{8}$/.test(key)) return {};
+  try {
+    return JSON.parse(fs.readFileSync(path.join(RUNTIME_DIR, "data", "scan-receipts", `strategy4-canonical-closure-${key}.json`), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
 function runIdDateKey(value) {
   const textValue = String(value || "");
   const match = textValue.match(/(?:strategy[0-9]+|opening-report-0830)-(\d{8})/i);
@@ -466,6 +476,22 @@ function payloadDateKey(payload, receipt) {
     if (digits.length >= 8) return digits.slice(0, 8);
   }
   return runIdDateKey(payload?.runId) || runIdDateKey(receipt?.runId);
+}
+
+function currentMarketConfirmed(payload, executionDate) {
+  if (payload?.currentMarketConfirmed === true || payload?.current_market_confirmed === true) return true;
+  const calendar = payload?.marketCalendar && typeof payload.marketCalendar === "object" ? payload.marketCalendar : {};
+  const coverage = payload?.sourceCoverage && typeof payload.sourceCoverage === "object" ? payload.sourceCoverage : {};
+  const requested = String(calendar.requestedDate || payload?.requestedDate || "").replace(/-/g, "");
+  const currentDate = String(executionDate || "").replace(/-/g, "");
+  const currentCandle = String(coverage.latest_candle_time || payload?.latest_candle_time || "");
+  const todaySymbols = Number(coverage.today_1m_symbols ?? payload?.today_1m_symbols);
+  return requested === currentDate
+    && calendar.marketOpen === true
+    && calendar.formalSourceWindowOpen === true
+    && currentCandle.length > 0
+    && Number.isFinite(todaySymbols)
+    && todaySymbols > 0;
 }
 
 async function main() {
@@ -485,37 +511,55 @@ async function main() {
   }
   const fullResultCount = cleanNumber(payload.resultCount || payload.count || payload.matches?.length);
   if (Array.isArray(payload.matches)) payload = {...payload, matches: payload.matches.slice(0,70), count: Math.min(70,payload.matches.length)};
-  const altText = "FUMAN 16:00 策略4完整掃描";
+  const altText = process.env.STRATEGY4_REPLAY_TRADE_DATE ? 'FUMAN '+process.env.STRATEGY4_REPLAY_TRADE_DATE+' 策略4歷史補跑' : 'FUMAN 16:00 策略4完整掃描';
   const count = cleanNumber(payload.count || payload.resultCount || (Array.isArray(payload.matches) ? payload.matches.length : 0) || scanReceipt.matches);
   const baseBlockedReason = text(payload.blockedReason || payload.scanner_block_reason || payload.error || (payload.recoveredFrom ? "" : scanReceipt.blockingReason) || apiError, "");
-  const today = compactDate();
+  const recoveryContext=process.env.STRATEGY4_REPLAY_TRADE_DATE ? await require('../lib/strategy4-recovery-date').validateReplay() : null;
+  const today = require('../lib/strategy4-recovery-date').targetDate().replace(/-/g,'');
   const runId = payload.runId || scanReceipt.runId || "";
   const dataDate = payloadDateKey(payload, scanReceipt) || runIdDateKey(runId);
   const dateAligned = dataDate === today;
-  const staleReason = dateAligned ? "" : `strategy_line_card_date_mismatch:today=${today};dataDate=${dataDate || "unknown"};runId=${runId || "missing"}`;
+  const handoff = dateAligned
+    ? { contract: "strategy4_morning_handoff_v1", ok: true, status: "LIVE_SOURCE", reason_code: null, strategy_source_date: dataDate, handoff_trade_date: today, handoff_run_id: `live:${today}:${runId || "missing"}`, source_run_id: runId || null, source_canonical_run_id: payload.canonical_run_id || payload.canonicalRunId || null }
+    : await require('../lib/strategy4-recovery-date').resolveMorningHandoff({
+      sourceReceipt: readStrategy4SourceReceipt(dataDate),
+      executionDate: today,
+      now: new Date(),
+      stateDir: process.env.FUMAN_STATE_DIR || path.join(RUNTIME_DIR, "state"),
+    });
+  const marketConfirmed = dateAligned || currentMarketConfirmed(payload, today);
+  if (!marketConfirmed && handoff.ok) {
+    handoff.ok = false;
+    handoff.status = "BLOCKED";
+    handoff.reason_code = "CURRENT_MARKET_NOT_CONFIRMED";
+    handoff.failed_checks = [...new Set([...(handoff.failed_checks || []), "CURRENT_MARKET_NOT_CONFIRMED"])]
+  }
+  const staleReason = handoff.ok ? "" : `strategy4_morning_handoff:${handoff.reason_code || "SOURCE_NOT_READY"}`;
   const blockedReason = [baseBlockedReason, staleReason].filter(Boolean).join("; ");
-  const readyForLine = dateAligned
+  const readyForLine = handoff.ok
     && payload.ok === true
     && count > 0
     && Boolean(runId)
     && !blockedReason
     && (payload.httpStatusCode == null || Number(payload.httpStatusCode) < 400);
-  const publicCount = dateAligned && readyForLine ? count : 0;
-  const publicRunId = dateAligned && readyForLine ? runId : "";
+  const publicCount = handoff.ok && readyForLine ? count : 0;
+  const publicRunId = handoff.ok && readyForLine ? runId : "";
   const receipt = {
     contract: "strategy4-line-card-runner-v2",
     format_contract: "strategy4-line-customer-grouped-v2",
     format_version: "2026-09-04-v2",
     ok: readyForLine,
     date: today,
+    execution_date: compactDate(),
+    recovery_context: recoveryContext,
     strategy,
     checked_at: nowTaipeiIso(),
     dry_run: dryRun,
     message_type: "flex",
     api_http_status: payload.httpStatusCode || null,
     payload_ok: payload.ok === true,
-    status: !dateAligned ? "fail_closed_no_today_run" : (readyForLine ? "ready" : "blocked_or_empty"),
-    reason_code: !dateAligned ? "strategy_line_card_date_mismatch" : (readyForLine ? "" : "strategy_line_card_not_ready"),
+    status: !handoff.ok ? "blocked_handoff" : (readyForLine ? "ready" : "blocked_or_empty"),
+    reason_code: !handoff.ok ? handoff.reason_code : (readyForLine ? "" : "strategy_line_card_not_ready"),
     line_push_ok: false,
     line_target_configured: Boolean(lineEnv.token && lineEnv.to),
     line_target_valid: !invalidLineTarget(lineEnv.to),
@@ -557,6 +601,12 @@ async function main() {
     disclaimer: "僅供研究參考，不是自動下單訊號",
     dataDate,
     dateAligned,
+    source_trade_date: handoff.strategy_source_date || dataDate || null,
+    handoff_trade_date: handoff.handoff_trade_date || today,
+    handoff_run_id: handoff.handoff_run_id || null,
+    source_run_id: handoff.source_run_id || runId || null,
+    source_canonical_run_id: handoff.source_canonical_run_id || null,
+    handoff,
     blockedReason,
     api_error: apiError,
     ...({
@@ -601,7 +651,7 @@ async function main() {
     if (!lineEnv.token || invalidLineTarget(lineEnv.to)) throw new Error("Missing valid LINE token or target userId");
     const { sendLineFlex } = require(path.join(ROOT, "scripts", "line-push.js"));
     const quotaPolicy = strategy === "strategy4" ? require("../lib/strategy4-line-quota") : null;
-    let history = quotaPolicy?.readDeliveryHistory({targets:require('./line-push').lineTargets(),runId:receipt.runId,date:receipt.date,messages:[{type:'flex',altText,contents:card}]});
+    let history = quotaPolicy?.readDeliveryHistory({targets:require('./line-push').lineTargets(),runId:receipt.runId,date:receipt.date,executionDate:receipt.execution_date,messages:[{type:'flex',altText,contents:card}]});
     let quotaEvidence = history?.quotaEvidence || null;
     if (quotaPolicy && !history) {
       try { quotaEvidence = await quotaPolicy.probeQuota(process.env.LINE_CHANNEL_ACCESS_TOKEN); }
@@ -613,7 +663,7 @@ async function main() {
       } catch (error) {
         quotaEvidence = quotaPolicy?.evidenceFromError(error);
         if (!quotaEvidence) throw error;
-        history = quotaPolicy.readDeliveryHistory({targets:require('./line-push').lineTargets(),runId:receipt.runId,date:receipt.date,messages:[{type:'flex',altText,contents:card}]});
+        history = quotaPolicy.readDeliveryHistory({targets:require('./line-push').lineTargets(),runId:receipt.runId,date:receipt.date,executionDate:receipt.execution_date,messages:[{type:'flex',altText,contents:card}]});
       }
     }
     if (quotaEvidence) {

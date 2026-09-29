@@ -107,12 +107,12 @@ function currentPreflightReceiptChecks(checks, tradeDate) {
     addCheck(checks, "current_preflight_receipt_exists:" + key, exists(filePath), filePath);
   }
   if (!Object.values(paths).every(exists)) return;
-  const preflight = readJson(paths.preflight);
+  const preflight = require("../lib/opening-frozen-preflight-recovery").resolvePreflight(REPORT_DIR, tradeDate);
   const leaders = readJson(paths.leaders);
   const snapshot = readJson(paths.snapshot);
   addCheck(checks,"frozen_source_policy",leaders.detection_policy === (morningStages.stage().id === "us_0820" ? "us_only_tx_night_0820_v1" : "asia_only_0850_v1") && (leaders.industries || []).flatMap(row=>row.leaders || []).every(row=>morningStages.allowed(row.yahoo_symbol)),"reject old scope before delivery");
   const industries = leaders.industries || leaders.industry_bias || leaders.rows || leaders.overseas_industries || [];
-  addCheck(checks, "current_preflight_ok", preflight.ok === true && ["REPORT_OK", "REPORT_DEGRADED"].includes(preflight.report_status), JSON.stringify({ ok: preflight.ok, report_status: preflight.report_status }));
+  addCheck(checks, "current_preflight_ok", preflight.ok === true && ["REPORT_OK", "REPORT_DEGRADED", "RECOVERED_FROZEN_EVIDENCE"].includes(preflight.report_status), JSON.stringify({ ok: preflight.ok, report_status: preflight.report_status }));
   addCheck(checks, "current_preflight_15_industries", Array.isArray(industries) && industries.length === 15, "count=" + (Array.isArray(industries) ? industries.length : "not-array"));
   addCheck(checks, "current_preflight_snapshot_ok", snapshot.ok === true && (snapshot.date === tradeDate || snapshot.trade_date === tradeDate), JSON.stringify({ ok: snapshot.ok, date: snapshot.date, trade_date: snapshot.trade_date }));
 }
@@ -201,11 +201,22 @@ function symbolMapChecks(checks) {
 }
 
 function staticContractChecks(checks) {
+  const aggregateTests=run('node',['--test','scripts/test-opening-report-aggregate-readiness.js']);
+  addCheck(checks,'aggregate_wait_failure_recovery_and_notification_policy',aggregateTests.ok,aggregateTests.text.trim());
+  const aggregateWrapper=readText('run-opening-report-0830-production-wrapper.ps1').replace(/\r\n/g,'\n');
+  addCheck(checks,'aggregate_automatic_wrapper_closure',aggregateWrapper.includes('function Invoke-MorningAggregate')&&aggregateWrapper.includes('"--if-ready"')&&aggregateWrapper.includes('$receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8\nInvoke-MorningAggregate'), 'each stage updates aggregate after terminal receipt');
   const stageTests=run("node",["scripts/test-opening-report-stage-reconstruction.js"]);
   addCheck(checks,"stage_reconstruction_and_stale_batch_tests",stageTests.ok,stageTests.text.trim());
   const nightTests=run("node",["scripts/test-opening-report-night-futures.js"]);
   addCheck(checks,"night_futures_source_contract_tests",nightTests.ok,nightTests.text.trim());
   addCheck(checks,"night_futures_runner_gate_wired",readText("scripts/run-opening-report-0830-production.js").includes("night_futures_required:") && readText("scripts/run-opening-report-0830-preflight.js").includes("nightIssues.length === 0"),"night source mandatory before delivery");
+  const authority = require("../lib/opening-report-receipt-authority").CONTRACT;
+  addCheck(checks,"runner_verifier_receipt_authority",authority.runner==="run-opening-report-0830-production-wrapper.ps1" && authority.canonical_verifier===SINGLE_VERIFIER_SCRIPT && authority.canonical_command==="verify:opening-report-morning-contract" && authority.static_receipt_is_delivery===false,"one formal runner and canonical verifier");
+  for(const file of authority.retired_files) addCheck(checks,"authority_retired_absent:"+file,!exists(path.join(ROOT,file)),file);
+  const dispositions=run("node",["scripts/test-opening-report-handoff-dispositions.js"]);
+  addCheck(checks,"handoff_dispositions_and_writer_regression",dispositions.ok,dispositions.text.trim());
+  const receiptAuthority=run("node",["scripts/test-opening-report-receipt-authority.js"]);
+  addCheck(checks,"receipt_scope_identity_regression",receiptAuthority.ok,receiptAuthority.text.trim());
   const pkg = readJson(path.join(ROOT, "package.json"));
   addCheck(checks, "single_morning_verifier_package_entry", pkg.scripts && pkg.scripts["verify:opening-report-morning-contract"] === SINGLE_VERIFIER_CMD, pkg.scripts && pkg.scripts["verify:opening-report-morning-contract"]);
   for (const alias of RETIRED_ALIASES) {
@@ -338,7 +349,7 @@ function currentReceiptChecks(checks, tradeDate) {
 
   if (!Object.values(paths).every(exists)) return;
 
-  const preflight = readJson(paths.preflight);
+  const preflight = require("../lib/opening-frozen-preflight-recovery").resolvePreflight(REPORT_DIR, tradeDate);
   const leaders = readJson(paths.leaders);
   const snapshot = readJson(paths.snapshot);
   const finalReceipt = readJson(paths.final);
@@ -412,7 +423,7 @@ function currentReceiptChecks(checks, tradeDate) {
   const hasGroup = line.has_group_target === true || line.hasGroupTarget === true;
   const deliveredCount = Number(line.delivered_count || line.deliveredCount || 0);
   const lineAttempted = line.line_push_attempted === true;
-  addCheck(checks, "current_line_user_and_group_delivery", require("../lib/opening-report-line-policy").accepted(line,finalReceipt.run_id,finalReceipt.delivery_content_hash,tradeDate), JSON.stringify({ ok: line.ok, line_push_attempted: lineAttempted, target_count: targetCount, delivered_count: deliveredCount, has_user_target: hasUser, has_group_target: hasGroup }));
+  addCheck(checks, "current_notification_policy", require("../lib/opening-report-line-policy").notificationAccepted(line,finalReceipt.run_id,finalReceipt.delivery_content_hash,tradeDate), JSON.stringify({ notification_status:line.notification_status||null, ok: line.ok, line_push_attempted: lineAttempted, target_count: targetCount, delivered_count: deliveredCount, has_user_target: hasUser, has_group_target: hasGroup }));
 
   const terminal = finalReceipt.terminal_briefing_snapshot || {};
   addCheck(checks, "current_terminal_snapshot_ok", terminal.ok === true, JSON.stringify({ ok: terminal.ok, key: terminal.key }));
@@ -436,6 +447,7 @@ function currentReceiptChecks(checks, tradeDate) {
   addCheck(checks, "current_mother_pool_handoff_ack_exists", Boolean(handoffAckReceipt), handoffAckPath);
   addCheck(checks, "current_mother_pool_handoff_ack_same_run", handoffAckReceipt?.report_run_id === runId, String(handoffAckReceipt?.report_run_id || "") + "/" + String(runId || ""));
   addCheck(checks, "current_mother_pool_handoff_ack_complete", handoffAckReceipt?.contract === "opening-report-0830-mother-pool-handoff-ack-v2" && handoffAckReceipt?.complete === true && handoffAckReceipt?.db_readback_ok === true && handoffAckReceipt?.first_blocker == null, JSON.stringify({ contract: handoffAckReceipt?.contract, complete: handoffAckReceipt?.complete, db_readback_ok: handoffAckReceipt?.db_readback_ok, first_blocker: handoffAckReceipt?.first_blocker }));
+  addCheck(checks,"current_handoff_dispositions_v1",handoffAckReceipt?.disposition_contract==="opening-report-handoff-dispositions-v1" && handoffAckReceipt?.accepted_count===handoffAckReceipt?.accepted_readback_count && Array.isArray(handoffAckReceipt?.business_excluded_symbols),"legacy all-mapped-symbol ACK cannot satisfy current receipt");
   addCheck(checks, "current_mother_pool_handoff_ack_observation_only", Number(handoffAckReceipt?.formal_candidate_count || 0) === 0 && handoffAckReceipt?.formal_candidate_allowed === false && handoffAckReceipt?.forbidden_publish_guard === true, JSON.stringify({ formal_candidate_count: handoffAckReceipt?.formal_candidate_count, formal_candidate_allowed: handoffAckReceipt?.formal_candidate_allowed, forbidden_publish_guard: handoffAckReceipt?.forbidden_publish_guard }));
   const persistenceAckPath = String(finalReceipt.mother_pool_persistence_ack_receipt || path.join(RUNTIME, "data", "scan-receipts", "opening-report-0830-mother-pool-persistence-ack-" + compactDate(tradeDate) + ".json"));
   const persistenceAckReceipt = persistenceAckPath && exists(persistenceAckPath) ? readJson(persistenceAckPath) : null;
@@ -497,7 +509,7 @@ function writeReceipt(result, tradeDate) {
   if (outputArg) { const target = path.resolve(outputArg.slice(9)); fs.mkdirSync(path.dirname(target), {recursive:true}); fs.writeFileSync(target, JSON.stringify(result,null,2)); return target; }
   fs.mkdirSync(REPORT_DIR, { recursive: true });
   const ymd = compactDate(tradeDate);
-  const filePath = path.join(REPORT_DIR, "opening-report-morning-contract-verifier-" + ymd + ".json");
+  const filePath = path.join(REPORT_DIR, require("../lib/opening-report-receipt-authority").receiptFilename(result.phase,ymd));
   fs.writeFileSync(filePath, JSON.stringify(result, null, 2));
   return filePath;
 }
@@ -528,6 +540,9 @@ async function main() {
     trade_date: args.tradeDate,
     require_current: args.requireCurrent,
     phase: args.phase,
+    scope: args.phase === "delivery" ? "stage_delivery" : args.phase === "preflight" ? "source_preflight" : "contract_only",
+    stage: morningStages.stage().id,
+    run_id: args.phase === "delivery" ? readJson(path.join(REPORT_DIR,"opening-report-0830-final-receipt-"+compactDate(args.tradeDate)+".json"))?.run_id || null : null,
     terminal_dir: ROOT,
     runtime_dir: RUNTIME,
     retired_contracts: [RETIRED_TELEGRAM_PACKAGE_KEY],

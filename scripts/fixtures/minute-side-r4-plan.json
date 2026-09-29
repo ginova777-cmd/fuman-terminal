@@ -1,0 +1,293 @@
+{
+  "scope": "isolated",
+  "production_complete": false,
+  "authoritative_candidate": {
+    "contract": "daytrade_mother_pool_snapshot_v1",
+    "contract_version": "4.1.0",
+    "trade_date": "2026-09-18",
+    "canonical_run_id": "fugle_daytrade_source:20260918:canonical",
+    "mother_pool_run_id": "isolated:snapshot:1",
+    "generation": "isolated:snapshot:1",
+    "snapshot_sequence": 1,
+    "snapshot_type": "intraday",
+    "effective_at": "2026-09-18T01:00:00.000Z",
+    "complete": true,
+    "status": "complete",
+    "exit_code": 0,
+    "first_blocker": null,
+    "symbols": [
+      "2330",
+      "2317"
+    ],
+    "symbol_count": 2,
+    "removed_symbols": [],
+    "symbol_membership": [
+      {
+        "symbol": "2330",
+        "mother_pool_run_id": "isolated:snapshot:1",
+        "mother_pool_snapshot_sequence": 1,
+        "membership_effective_at": "2026-09-18T01:00:00.000Z",
+        "membership_status": "ACTIVE"
+      },
+      {
+        "symbol": "2317",
+        "mother_pool_run_id": "isolated:snapshot:1",
+        "mother_pool_snapshot_sequence": 1,
+        "membership_effective_at": "2026-09-18T01:00:00.000Z",
+        "membership_status": "ACTIVE"
+      }
+    ]
+  },
+  "rounds": [
+    {
+      "snapshot": {
+        "contract": "daytrade_mother_pool_snapshot_v1",
+        "contract_version": "4.1.0",
+        "trade_date": "2026-09-18",
+        "canonical_run_id": "fugle_daytrade_source:20260918:canonical",
+        "mother_pool_run_id": "isolated:snapshot:1",
+        "generation": "isolated:snapshot:1",
+        "snapshot_sequence": 1,
+        "snapshot_type": "intraday",
+        "effective_at": "2026-09-18T01:00:00.000Z",
+        "complete": true,
+        "status": "complete",
+        "exit_code": 0,
+        "first_blocker": null,
+        "symbols": [
+          "2330",
+          "2317"
+        ],
+        "symbol_count": 2,
+        "removed_symbols": [],
+        "symbol_membership": [
+          {
+            "symbol": "2330",
+            "mother_pool_run_id": "isolated:snapshot:1",
+            "mother_pool_snapshot_sequence": 1,
+            "membership_effective_at": "2026-09-18T01:00:00.000Z",
+            "membership_status": "ACTIVE"
+          },
+          {
+            "symbol": "2317",
+            "mother_pool_run_id": "isolated:snapshot:1",
+            "mother_pool_snapshot_sequence": 1,
+            "membership_effective_at": "2026-09-18T01:00:00.000Z",
+            "membership_status": "ACTIVE"
+          }
+        ]
+      },
+      "result": {
+        "run_id": "isolated:writer:1",
+        "payload": {
+          "writer_run_id": "isolated:writer:1",
+          "generation_id": "isolated:gen:1",
+          "mother_pool_minute_side_evidence": {
+            "trade_date": "2026-09-18",
+            "canonical_run_id": "fugle_daytrade_source:20260918:canonical",
+            "mother_pool_run_id": "isolated:snapshot:1",
+            "snapshot_sequence": 1,
+            "as_of": "2026-09-18T02:21:10.000Z",
+            "details": [
+              {
+                "symbol": "2330",
+                "status": "SOURCE_READY",
+                "reason": null,
+                "available_minutes": 21,
+                "gap_minutes": 0,
+                "latest": {
+                  "trade_date": "2026-09-18",
+                  "stock_id": "2330",
+                  "timestamp": "2026-09-18T02:20:00.000Z",
+                  "side_volume_timestamp": "2026-09-18T02:20:59.000Z",
+                  "inside_1m": 10,
+                  "outside_1m": 30,
+                  "unknown_1m": 2,
+                  "total_1m": 42,
+                  "volume_unit": "LOTS",
+                  "aggregation": "ONE_MINUTE",
+                  "complete": true,
+                  "is_synthetic": false,
+                  "classification_source": "Fugle.aggregates.total.exact_trade_counter_boundaries",
+                  "start_boundary_identity": "start:2330:1",
+                  "end_boundary_identity": "end:2330:1"
+                },
+                "rolling_baseline": {
+                  "method": "ROLLING_20M_MEDIAN",
+                  "outside": {
+                    "sample_count": 20,
+                    "baseline": 1.5
+                  },
+                  "inside": {
+                    "sample_count": 20,
+                    "baseline": 0.5
+                  }
+                }
+              },
+              {
+                "symbol": "2317",
+                "status": "SOURCE_READY",
+                "reason": null,
+                "available_minutes": 21,
+                "gap_minutes": 0,
+                "latest": {
+                  "trade_date": "2026-09-18",
+                  "stock_id": "2317",
+                  "timestamp": "2026-09-18T02:20:00.000Z",
+                  "side_volume_timestamp": "2026-09-18T02:20:59.000Z",
+                  "inside_1m": 10,
+                  "outside_1m": 30,
+                  "unknown_1m": 2,
+                  "total_1m": 42,
+                  "volume_unit": "LOTS",
+                  "aggregation": "ONE_MINUTE",
+                  "complete": true,
+                  "is_synthetic": false,
+                  "classification_source": "Fugle.aggregates.total.exact_trade_counter_boundaries",
+                  "start_boundary_identity": "start:2317:1",
+                  "end_boundary_identity": "end:2317:1"
+                },
+                "rolling_baseline": {
+                  "method": "ROLLING_20M_MEDIAN",
+                  "outside": {
+                    "sample_count": 20,
+                    "baseline": 1.5
+                  },
+                  "inside": {
+                    "sample_count": 20,
+                    "baseline": 0.5
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "snapshot": {
+        "contract": "daytrade_mother_pool_snapshot_v1",
+        "contract_version": "4.1.0",
+        "trade_date": "2026-09-18",
+        "canonical_run_id": "fugle_daytrade_source:20260918:canonical",
+        "mother_pool_run_id": "isolated:snapshot:2",
+        "generation": "isolated:snapshot:2",
+        "snapshot_sequence": 2,
+        "snapshot_type": "intraday",
+        "effective_at": "2026-09-18T01:00:00.000Z",
+        "complete": true,
+        "status": "complete",
+        "exit_code": 0,
+        "first_blocker": null,
+        "symbols": [
+          "2330",
+          "2317"
+        ],
+        "symbol_count": 2,
+        "removed_symbols": [],
+        "symbol_membership": [
+          {
+            "symbol": "2330",
+            "mother_pool_run_id": "isolated:snapshot:2",
+            "mother_pool_snapshot_sequence": 2,
+            "membership_effective_at": "2026-09-18T01:00:00.000Z",
+            "membership_status": "ACTIVE"
+          },
+          {
+            "symbol": "2317",
+            "mother_pool_run_id": "isolated:snapshot:2",
+            "mother_pool_snapshot_sequence": 2,
+            "membership_effective_at": "2026-09-18T01:00:00.000Z",
+            "membership_status": "ACTIVE"
+          }
+        ]
+      },
+      "result": {
+        "run_id": "isolated:writer:2",
+        "payload": {
+          "writer_run_id": "isolated:writer:2",
+          "generation_id": "isolated:gen:2",
+          "mother_pool_minute_side_evidence": {
+            "trade_date": "2026-09-18",
+            "canonical_run_id": "fugle_daytrade_source:20260918:canonical",
+            "mother_pool_run_id": "isolated:snapshot:2",
+            "snapshot_sequence": 2,
+            "as_of": "2026-09-18T02:22:10.000Z",
+            "details": [
+              {
+                "symbol": "2330",
+                "status": "SOURCE_READY",
+                "reason": null,
+                "available_minutes": 21,
+                "gap_minutes": 0,
+                "latest": {
+                  "trade_date": "2026-09-18",
+                  "stock_id": "2330",
+                  "timestamp": "2026-09-18T02:21:00.000Z",
+                  "side_volume_timestamp": "2026-09-18T02:21:59.000Z",
+                  "inside_1m": 10,
+                  "outside_1m": 30,
+                  "unknown_1m": 2,
+                  "total_1m": 42,
+                  "volume_unit": "LOTS",
+                  "aggregation": "ONE_MINUTE",
+                  "complete": true,
+                  "is_synthetic": false,
+                  "classification_source": "Fugle.aggregates.total.exact_trade_counter_boundaries",
+                  "start_boundary_identity": "start:2330:2",
+                  "end_boundary_identity": "end:2330:2"
+                },
+                "rolling_baseline": {
+                  "method": "ROLLING_20M_MEDIAN",
+                  "outside": {
+                    "sample_count": 20,
+                    "baseline": 1.5
+                  },
+                  "inside": {
+                    "sample_count": 20,
+                    "baseline": 0.5
+                  }
+                }
+              },
+              {
+                "symbol": "2317",
+                "status": "SOURCE_READY",
+                "reason": null,
+                "available_minutes": 21,
+                "gap_minutes": 0,
+                "latest": {
+                  "trade_date": "2026-09-18",
+                  "stock_id": "2317",
+                  "timestamp": "2026-09-18T02:21:00.000Z",
+                  "side_volume_timestamp": "2026-09-18T02:21:59.000Z",
+                  "inside_1m": 10,
+                  "outside_1m": 30,
+                  "unknown_1m": 2,
+                  "total_1m": 42,
+                  "volume_unit": "LOTS",
+                  "aggregation": "ONE_MINUTE",
+                  "complete": true,
+                  "is_synthetic": false,
+                  "classification_source": "Fugle.aggregates.total.exact_trade_counter_boundaries",
+                  "start_boundary_identity": "start:2317:2",
+                  "end_boundary_identity": "end:2317:2"
+                },
+                "rolling_baseline": {
+                  "method": "ROLLING_20M_MEDIAN",
+                  "outside": {
+                    "sample_count": 20,
+                    "baseline": 1.5
+                  },
+                  "inside": {
+                    "sample_count": 20,
+                    "baseline": 0.5
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

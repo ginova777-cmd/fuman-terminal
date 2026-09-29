@@ -93,10 +93,10 @@ function surfaceEvidence(key) {
   return Array.isArray(report.rows) ? report.rows.find((row) => row?.key === key) || null : null;
 }
 function canonicalReceipt(key) {
-  const todayKey = compactDate(taipeiDate());
+  const todayKey = compactDate(collectionDate);
   const files = {
     strategy2: ["strategy2-v3-live.json"],
-    strategy3: recovery && expectedRunId.startsWith("strategy3v2-recovery-replay-") ? [`strategy3-v2-recovery-closure-${todayKey}.json`] : [`strategy3-v2-daily-unattended-closure-${todayKey}.json`, `strategy3-v2-complete-scan-${todayKey}.json`],
+    strategy3: recovery && expectedRunId.startsWith("strategy3v2-recovery-replay-") ? [`strategy3-v2-recovery-publish-evidence-${todayKey}.json`, `strategy3-v2-recovery-closure-${todayKey}.json`] : [`strategy3-v2-daily-unattended-closure-${todayKey}.json`, `strategy3-v2-complete-scan-${todayKey}.json`],
     strategy4: recovery ? ["strategy4-recovery-evidence.json"] : ["strategy4-canonical-closure-latest.json"],
     strategy5: ["strategy5.json"],
     institution: ["institution.json"],
@@ -123,7 +123,7 @@ function canonicalFromDesktop(key, desktop) {
   const receiptRunId = detail.runId || detail.run_id || scan.runId || scan.run_id || "";
   const runId = String(summary.runId || receiptRunId || "");
   const strategy4PublishReady = key === "strategy4" && detail.status === "verifying" && Number(detail.exitCode || 0) === 0 && Boolean(receiptRunId) && num(detail.matches, detail.resultCount, detail.count) > 0 && detail.fallback !== true;
-  const strictRecovery = key !== "strategy3" || !recovery || !expectedRunId.startsWith("strategy3v2-recovery-replay-") || (detail.ok === true && detail.complete === true && detail.verifier_ok === true && detail.run_id === expectedRunId && detail.trade_date === taipeiDate() && Array.isArray(detail.failed_checks) && detail.failed_checks.length === 0);
+  const strictRecovery = key !== "strategy3" || !recovery || !expectedRunId.startsWith("strategy3v2-recovery-replay-") || require('../lib/strategy3-recovery-publish-evidence').valid(detail,expectedRunId,collectionDate) || (detail.ok === true && detail.complete === true && detail.verifier_ok === true && detail.run_id === expectedRunId && detail.trade_date === collectionDate && Array.isArray(detail.failed_checks) && detail.failed_checks.length === 0);
   const receiptComplete = strictRecovery && (strategy4PublishReady || detail.ok === true || detail.complete === true || detail.status === "complete" || detail.status === "PASS" || detail.status === "STRATEGY3_V2_DAILY_UNATTENDED_YES");
   const fullScannedCount = num(detail.scannedCount, detail.scanned_count, detail.scanned, scan.scannedCount, scan.scanned_count, summary.scannedCount, summary.count);
   const fullResultCount = num(detail.resultCount, detail.result_count, detail.matches, detail.count, scan.resultCount, scan.result_count, scan.count, summary.resultCount, summary.count);
@@ -135,7 +135,7 @@ function canonicalFromDesktop(key, desktop) {
   const surfaceMatches = surface?.ok === true && desktopStatus === "PASS" && mobileStatus === "PASS" && desktopRunId === runId && mobileRunId === runId;
   return {
     key, strategy: key, runId, tradeDate: collectionDate, date: collectionDate,
-    sourceDate: key === 'strategy5' ? compactDate(detail.marketDate).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : key === 'institution' ? compactDate(detail.institution_source_status_at_run?.usedDate || detail.institution_source_status_at_run?.latestTradeDate).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : text(detail.sourceDate, detail.source_date, detail.scanDate, detail.scan_date, taipeiDate()),
+    sourceDate: key === 'strategy5' ? compactDate(detail.marketDate).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : key === 'institution' ? compactDate(detail.institution_source_status_at_run?.usedDate || detail.institution_source_status_at_run?.latestTradeDate).replace(/^(\d{4})(\d{2})(\d{2})$/, '$1-$2-$3') : text(detail.sourceDate, detail.source_date, detail.scanDate, detail.scan_date, detail.trade_date, collectionDate),
     startedAt: text(detail.startedAt, detail.started_at, scan.startedAt, scan.started_at),
     finishedAt: text(detail.finishedAt, detail.finished_at, detail.checkedAt, detail.checked_at, summary.updatedAt, desktop.updatedAt),
     universeCount: num(detail.universeCount, detail.universe_count, detail.expectedTotal, detail.expected_total, scan.universeCount, scan.expectedTotal, key === 'institution' ? detail.total : undefined),
@@ -274,6 +274,13 @@ if (recoveryAuthorized && recoveryKey === 'strategy5' && process.env.FUMAN_STRAT
   if (strategy5RecoveryContext.ok !== true || strategy5RecoveryContext.tradeDate !== collectionDate) throw Error('strategy5_collector_replay_date_unverified');
 }
 let scanAudit = buildScanAudit({ runtimeDir: runtimeRoot, tradeDate: collectionDate, recoveryContext: strategy5RecoveryContext });
+if (recoveryAuthorized && expectedRunId.startsWith('strategy4-') && process.env.STRATEGY4_REPLAY_TRADE_DATE === collectionDate) {
+  const baseline = buildScanAudit({runtimeDir:'C:/fuman-runtime',tradeDate:collectionDate});
+  baseline.modules = baseline.modules.map(row => row.key === 'strategy4' ? scanAudit.modules.find(x => x.key === 'strategy4') : row);
+  baseline.qualityStatus = baseline.modules.every(row => row.status === 'complete') ? 'complete' : 'degraded';
+  baseline.unattendedStatus = baseline.qualityStatus === 'complete' ? 'YES' : 'NO';
+  scanAudit = baseline;
+}
 const payload = {
   ...previous,
   scanAudit,

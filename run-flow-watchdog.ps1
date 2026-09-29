@@ -21,6 +21,7 @@ $alertReceipt = Join-Path $receiptDir ("{0}-watchdog-alert.json" -f $Scope)
 
 . "${PSScriptRoot}\schedule-guard.ps1"
 . "${PSScriptRoot}\flow-health.ps1"
+. "${PSScriptRoot}\scripts\institution-watchdog-contract.ps1"
 
 function Write-WatchdogLog($message) {
   Write-Host $message
@@ -127,17 +128,19 @@ function Test-InstitutionFresh {
   try {
     $helper = Join-Path $PSScriptRoot "scripts\read-protected-production-api.js"
     $endpoint = "/api/institution-latest?canvas=1&compact=1&shell=1&limit=60&live=1"
-    $raw = & node "--use-system-ca" $helper "--endpoint=$endpoint" 2>&1
+    $raw = & node "--use-system-ca" $helper "--endpoint=$endpoint" "--summary-fields=ok,status,runId,count,updatedAt" 2>&1
     $helperExit = $LASTEXITCODE
     if ($helperExit -ne 0) { throw "protected readback helper exit=$helperExit $($raw -join ' ')" }
     $envelope = ($raw | Out-String) | ConvertFrom-Json -ErrorAction Stop
     if ($envelope.ok -ne $true -or $null -eq $envelope.payload) { throw "protected readback envelope invalid" }
     $payload = $envelope.payload
-    $count = if ($payload.count) { [int]$payload.count } else { 0 }
-    if ($payload.ok -ne $true -or -not $payload.runId) { return @{ ok = $false; reason = "institution API not ready ok=$($payload.ok) runId=$($payload.runId)" } }
-    if ($count -lt 100) { return @{ ok = $false; reason = "institution API count too low: $count" } }
+    $scanReceiptPath = Join-Path $receiptDir "institution.json"
+    if (-not (Test-Path -LiteralPath $scanReceiptPath)) { return @{ ok = $false; reason = "official institution scan receipt missing: $scanReceiptPath" } }
+    $scanReceipt = Get-Content -LiteralPath $scanReceiptPath -Raw | ConvertFrom-Json -ErrorAction Stop
+    $validation = Test-InstitutionWatchdogEvidence -ScanReceipt $scanReceipt -ApiPayload $payload -ExpectedTradeDate (Get-TaipeiDateKey)
+    if (-not $validation.ok) { return @{ ok = $false; reason = "institution scan/API contract invalid: $($validation.reason)" } }
     if (-not (Test-UpdatedAfterSlot $payload.updatedAt $ExpectedTime)) { return @{ ok = $false; reason = "institution API not updated after $ExpectedTime; updatedAt=$($payload.updatedAt)" } }
-    return @{ ok = $true; reason = "authenticated api ok count=$count runId=$($payload.runId)" }
+    return @{ ok = $true; reason = "$($validation.reason); updatedAt=$($payload.updatedAt)" }
   } catch {
     return @{ ok = $false; reason = "institution authenticated API freshness check failed; no local cache fallback allowed: $($_.Exception.Message)" }
   }

@@ -1,7 +1,7 @@
 ﻿param(
   [string]$TradeDate = "",
   [string]$RunId = "",
-  [string]$TerminalDir = "C:\fuman-terminal",
+  [string]$TerminalDir = "C:\fuman-release-owner\fuman-terminal",
   [string]$RuntimeDir = "C:\fuman-runtime",
   [string]$NodeExe = "C:\Program Files\nodejs\node.exe"
 )
@@ -19,7 +19,7 @@ function Resolve-NodeExe {
 $terminalDir = $TerminalDir
 $runtimeDir = $RuntimeDir
 $node = Resolve-NodeExe -Preferred $NodeExe
-$verifier = Join-Path $terminalDir 'scripts\verify-opening-limit-order-0855-readonly.js'
+$verifier = Join-Path $terminalDir 'scripts\verify-opening-limit-order-0850-freeze.js'
 $tz = [System.TimeZoneInfo]::FindSystemTimeZoneById('Taipei Standard Time')
 if (!$TradeDate) { $TradeDate = [System.TimeZoneInfo]::ConvertTimeFromUtc([DateTime]::UtcNow, $tz).ToString('yyyy-MM-dd') }
 $tradeDate = $TradeDate

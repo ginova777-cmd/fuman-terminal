@@ -6,19 +6,19 @@ const ROOT=path.resolve(__dirname,'..'),RUNTIME='C:\\fuman-runtime',DAY=86400000
 const hash=x=>crypto.createHash('sha256').update(x).digest('hex');
 const date=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 function read(p){return JSON.parse(fs.readFileSync(p,'utf8').replace(/^\uFEFF/,''));}
-function save(p,v){fs.mkdirSync(path.dirname(p),{recursive:true});const t=p+'.'+process.pid+'.tmp';fs.writeFileSync(t,JSON.stringify(v,null,2)+'\n');fs.renameSync(t,p);}
+function save(p,v){fs.mkdirSync(path.dirname(p),{recursive:true});const t=p+'.'+process.pid+'.tmp';const fd=fs.openSync(t,'wx');try{fs.writeFileSync(fd,JSON.stringify(v,null,2)+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}fs.renameSync(t,p);}
 function walk(root,visit){if(!fs.existsSync(root))return;for(const e of fs.readdirSync(root,{withFileTypes:true})){const p=path.join(root,e.name);assertTree(root,p);if(e.isDirectory())walk(p,visit);else if(e.isFile())visit(p);}}
-async function referenceInventory(persist=false){const ids=new Set(),files=[],paths=[],references=new Set(),cachePath=path.join(RUNTIME,'state/cleanup-extended-reference-index.json');let cache={};try{cache=read(cachePath);}catch{}const next={};
+async function referenceInventory(persist=false,excludePaths=[]){const ids=new Set(),files=[],paths=[],references=new Set(),cachePath=path.join(RUNTIME,'state/cleanup-extended-reference-index.json');let cache={};try{cache=read(cachePath);}catch{}const next={};
  for(const dir of ['state','data','status','config'])walk(path.join(RUNTIME,dir),p=>{if(/\.json$/i.test(p)&&!/notification-guard[\\/]claims/.test(p)&&!/cleanup-(?:extended|maintenance)/.test(path.basename(p)))paths.push(p);});
  // Stream every JSON string, including large historical evidence; no first-page/size-based omission.
- for(const p of paths){const before=fs.statSync(p),entry=cache[p];if(entry&&entry.size===before.size&&entry.mtimeMs===before.mtimeMs){const h=crypto.createHash('sha256');for await(const chunk of fs.createReadStream(p,{encoding:'utf8'}))h.update(chunk);const digest=h.digest('hex'),after=fs.statSync(p);if(digest===entry.sha256&&after.size===before.size&&after.mtimeMs===before.mtimeMs){entry.ids.forEach(v=>ids.add(v));entry.references.forEach(v=>references.add(v));files.push({file:p,sha256:digest});next[p]=entry;continue;}}
+ for(const p of paths.filter(p=>!excludePaths.some(x=>path.resolve(x).toLowerCase()===path.resolve(p).toLowerCase()))){const before=fs.statSync(p),entry=cache[p];if(entry&&entry.size===before.size&&entry.mtimeMs===before.mtimeMs){const h=crypto.createHash('sha256');for await(const chunk of fs.createReadStream(p,{encoding:'utf8'}))h.update(chunk);const digest=h.digest('hex'),after=fs.statSync(p);if(digest===entry.sha256&&after.size===before.size&&after.mtimeMs===before.mtimeMs){entry.ids.forEach(v=>ids.add(v));entry.references.forEach(v=>references.add(v));files.push({file:p,sha256:digest});next[p]=entry;continue;}}
   const digest=crypto.createHash('sha256'),localIds=new Set(),localReferences=new Set();let quoted=false,escaped=false,token='',last='',key='';
   for await(const chunk of fs.createReadStream(p,{encoding:'utf8'})){digest.update(chunk);for(const char of chunk){
    if(quoted){token+=char;if(escaped){escaped=false;continue;}if(char==='\\'){escaped=true;continue;}if(char==='"'){quoted=false;last=JSON.parse(token);if(/run.?id/i.test(key)&&last){ids.add(last);localIds.add(last);}if(/(?:https?:|[\\/]|\.json|\.png|\.jpg|\.pdf)/i.test(last)){references.add(last);localReferences.add(last);}key='';token='';}if(token.length>64*1024*1024)throw Error('reference_string_over_bound:'+p);
    }else if(char==='"'){quoted=true;token='"';}else if(char===':'){key=last;}else if(char===','||char==='}'||char===']'){key='';}
   }}if(quoted)throw Error('reference_string_incomplete:'+p);const after=fs.statSync(p);if(before.size!==after.size||before.mtimeMs!==after.mtimeMs)throw Error('reference_changed_during_inventory:'+p);const sha256=digest.digest('hex');files.push({file:p,sha256});next[p]={size:before.size,mtimeMs:before.mtimeMs,sha256,ids:[...localIds],references:[...localReferences]};
  }
- if(persist)save(cachePath,next);return {ids:[...ids].sort(),files,contains:s=>!!s&&[...references].some(v=>v.includes(s))};}
+ if(persist)save(cachePath,next);return {ids:[...ids].sort(),files,contains:s=>!!s&&[...references].some(v=>v.toLowerCase().replaceAll('\\','/').includes(s.toLowerCase().replaceAll('\\','/')))};}
 async function request(route,body,storage=false){const key=serviceRoleKey({root:ROOT,runtimeDir:RUNTIME}),url=terminalSupabaseUrl({root:ROOT,runtimeDir:RUNTIME});if(!key||!url)throw Error('supabase_credentials_missing');const r=await fetch(url+(storage?'/storage/v1/':'/rest/v1/')+route,{method:body===undefined?'GET':'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(60000)});const t=await r.text();if(!r.ok)throw Error('cleanup_api_HTTP_'+r.status+':'+t.slice(0,160));return t?JSON.parse(t):null;}
 function compactNotification(record,now=Date.now()){
  const at=Date.parse(record.recordedAt||record.sent_at||record.sentAt||'');
@@ -27,13 +27,22 @@ function compactNotification(record,now=Date.now()){
  if(!Object.keys(removed).length)return null;
  out.retention={contract:'notification-body-retention-30d-v1',compactedAt:new Date(now).toISOString(),removedBodySha256:hash(JSON.stringify(removed))};return out;
 }
-function notificationCleanup(apply,refs){const dir=path.join(RUNTIME,'state/notification-guard/claims'),items=[];let candidates=0,savedBytes=0,scanned=0;
- walk(dir,p=>{if(!p.endsWith('.json'))return;scanned++;const old=fs.readFileSync(p,'utf8'),v=JSON.parse(old),next=compactNotification(v);if(!next)return;
+function notificationCleanup(apply,refs,dir=path.join(RUNTIME,'state/notification-guard/claims')){const items=[],protectedUnreadable=[];let candidates=0,savedBytes=0,scanned=0;
+ walk(dir,p=>{if(!p.endsWith('.json'))return;scanned++;const bytes=fs.readFileSync(p),old=bytes.toString('utf8');let v;
+  try { v=JSON.parse(old); if(!v||typeof v!=='object'||Array.isArray(v))throw Error('claim_object_required'); }
+  catch {
+    // Unproven delivery/age is ineligible for deletion. Keep the claim in place
+    // so the notification guard's exclusive-create deduplication still blocks it.
+    protectedUnreadable.push({file:p,bytes:bytes.length,sha256:hash(bytes),reason:'unreadable_claim_preserved_no_cleanup_authority',deliveryStatus:'unknown',dedupClaimRetained:true});return;
+  }
+  const next=compactNotification(v);if(!next)return;
   // Explicit file references protect complete delivery evidence.
   if(refs.contains(p)||refs.contains(p.replaceAll('\\','/')))return;
   candidates++;const encoded=JSON.stringify(next,null,2)+'\n';if(apply){if(hash(fs.readFileSync(p))!==hash(old))throw Error('notification_changed_before_cleanup');save(p,next);const actual=read(p);for(const k of ['idempotencyKey','payloadHash','status','target','channel','recordedAt','claimFile'])if(JSON.stringify(actual[k])!==JSON.stringify(v[k]))throw Error('notification_identity_changed');savedBytes+=Math.max(0,Buffer.byteLength(old)-Buffer.byteLength(encoded));}
   items.push({file:p,beforeSha256:hash(old),afterSha256:apply?hash(fs.readFileSync(p)):null});
- });return {ok:true,category:'notification_bodies',scanned,candidates,compacted:apply?candidates:0,savedBytes,keepDays:30,items,protected:['active outbox','pending/failed claims','dedup identities','canonical delivery receipts','sent-notifications.jsonl']};}
+ });
+ for(const item of protectedUnreadable)if(!fs.existsSync(item.file)||fs.statSync(item.file).size!==item.bytes||hash(fs.readFileSync(item.file))!==item.sha256)throw Error('protected_unreadable_claim_changed:'+item.file);
+ return {ok:true,category:'notification_bodies',protectedUnreadable,protectedUnreadableCount:protectedUnreadable.length,protectedReadbackOk:true,scanned,candidates,compacted:apply?candidates:0,savedBytes,keepDays:30,items,protected:['active outbox','pending/failed claims','dedup identities','canonical delivery receipts','sent-notifications.jsonl']};}
 async function blobInventory(){const {list}=require('@vercel/blob');const token=fs.readFileSync(path.join(RUNTIME,'secrets/vercel-blob-read-write-token.txt'),'utf8').trim();let cursor;const rows=[],seen=new Set();for(let page=0;page<100;page++){const p=await list({token,limit:1000,cursor});for(const b of p.blobs){if(seen.has(b.pathname))throw Error('blob_duplicate_page');seen.add(b.pathname);rows.push(b);}if(!p.hasMore)return {rows,pages:page+1};if(!p.cursor||p.cursor===cursor)throw Error('blob_pagination_stalled');cursor=p.cursor;}throw Error('blob_inventory_bound');}
 function eligibleAsset(asset,entry,refs,now=Date.now()){
  if(!entry||entry.owner!=='cleanup-managed-test-assets'||entry.status!=='retired'||entry.formalEvidence!==false||entry.rollbackRequired!==false||entry.referenceAuditComplete!==true)return false;
@@ -61,4 +70,4 @@ async function main(){const apply=process.argv.includes('--apply'),verify=proces
  }finally{p.finishedAt=new Date().toISOString();if(apply||verify){p.receiptFile=path.join(RUNTIME,'status',`cleanup-extended-${verify?'verifier-':''}${date().replaceAll('-','')}.json`);save(p.receiptFile,p);}if(fd!==undefined){fs.closeSync(fd);fs.unlinkSync(lock);}}
  console.log(JSON.stringify(p,null,2));if(!p.ok)process.exitCode=1;
 }
-module.exports={compactNotification,eligibleAsset};if(require.main===module)main().catch(e=>{console.error(e.stack);process.exitCode=1;});
+module.exports={compactNotification,eligibleAsset,referenceInventory,notificationCleanup};if(require.main===module)main().catch(e=>{console.error(e.stack);process.exitCode=1;});

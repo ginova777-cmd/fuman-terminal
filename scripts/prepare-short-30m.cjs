@@ -1,0 +1,8 @@
+'use strict';
+const fs=require('fs'),path=require('path');
+const arg=n=>process.argv.find(x=>x.startsWith('--'+n+'='))?.slice(n.length+3);
+async function main(){const file=arg('report');const r=JSON.parse(fs.readFileSync(file)),date=r.trade_date,dir=path.join(path.dirname(file),'opening-short-sources-'+date);const symbols=r.premarket_final?.evidence_symbols||r.premarket_final?.symbols||[...r.ab_v1.a_symbols,...r.ab_v1.b_symbols];const key=fs.readFileSync('C:/fuman-runtime/secrets/fugle-api-key.txt','utf8').trim();let done=0,errors=[];
+console.log('30分K補抓開始：'+symbols.length+'檔；每次請求最多20秒，遇限流停止本階段補抓');
+for(const symbol of symbols){console.log('30分K進度 '+(symbols.indexOf(symbol)+1)+'/'+symbols.length+' '+symbol);const f=path.join(dir,'hourly30-'+symbol+'.json');if(fs.existsSync(f)){done++;continue;}const from=new Date(Date.parse(date)-21*86400000).toISOString().slice(0,10);const u=new URL('https://api.fugle.tw/marketdata/v1.0/stock/historical/candles/'+symbol);for(const[k,v]of Object.entries({from,to:date,timeframe:'30',sort:'asc'}))u.searchParams.set(k,v);try{const res=await fetch(u,{headers:{'X-API-KEY':key},signal:AbortSignal.timeout(20000)});if(res.status===429){errors.push('RATE_LIMIT_STOP');break;}if(!res.ok)throw Error('HTTP_'+res.status);const j=await res.json();if(j.symbol!==symbol||j.timeframe!=='30'||!Array.isArray(j.data))throw Error('SOURCE_IDENTITY');fs.writeFileSync(f,JSON.stringify(j));done++;}catch(e){errors.push(symbol+':'+e.message);}if(done%25===0)console.log('30m cached '+done+'/'+symbols.length);await new Promise(r=>setTimeout(r,1100));}
+console.log(JSON.stringify({requested:symbols.length,cached:done,errors}));}
+main().catch(e=>{console.error(e.message);process.exitCode=1});

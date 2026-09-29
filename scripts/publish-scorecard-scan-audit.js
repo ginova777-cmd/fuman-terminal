@@ -15,6 +15,15 @@ async function main() {
     const context = await require("./verify-institution-replay-date").verifyReplayDate(process.env.FUMAN_REPLAY_TRADE_DATE);
     payload = {...buildScanAudit({runtimeDir, tradeDate:context.tradeDate, recoveryContext:context}), recoveryContext:context};
   }
+  if (process.env.STRATEGY4_REPLAY_TRADE_DATE) {
+    const context=await require('../lib/strategy4-recovery-date').validateReplay();
+    const target=buildScanAudit({runtimeDir,tradeDate:context.tradeDate});
+    const baseline=buildScanAudit({runtimeDir:'C:/fuman-runtime',tradeDate:context.tradeDate});
+    baseline.modules=baseline.modules.map(row=>row.key==='strategy4'?target.modules.find(x=>x.key==='strategy4'):row);
+    baseline.qualityStatus=baseline.modules.every(row=>row.status==='complete')?'complete':'degraded';
+    baseline.unattendedStatus=baseline.qualityStatus==='complete'?'YES':'NO';
+    payload={...baseline,recoveryContext:context};
+  }
   fs.mkdirSync(path.dirname(output), { recursive: true });
   fs.writeFileSync(output, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   const result = await upsertSnapshot("scorecard_scan_audit_latest", payload, {

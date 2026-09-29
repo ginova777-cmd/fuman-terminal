@@ -59,9 +59,11 @@ const STREAMING_AFTER_HOURS = /^(1|true|yes|on)$/.test(STREAMING_AFTER_HOURS_RAW
     : null;
 
 const FORMAL_LIVE_MIRROR_RECEIPT_FILE = path.join(path.dirname(FUGLE_FUTOPT_WS_STATUS_FILE), "fugle-daytrade-futopt-live-mirror.json");
-const COLLECTOR_RELEASE = "futopt-formal-live-mirror-v5";
+const COLLECTOR_RELEASE = "futopt-formal-live-mirror-v7-daily-catalogue";
 
 let lastMessageAt = "";
+let formalCatalogue = null;
+const catalogueDate = () => new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 let lastFormalLiveMirrorAt = 0;
 let formalLiveMirrorInFlight = false;
 
@@ -116,46 +118,8 @@ function readFutoptTickersPayload() {
 }
 
 function buildTickerRows() {
-  const { payload, file } = readFutoptTickersPayload();
-  const stockLookup = readStocksLookup();
-  const rows = [];
-  for (const item of payload.data || []) {
-    const futureSymbol = normalizeFutureSymbol(item.symbol);
-    if (!futureSymbol) continue;
-    const contractType = String(item.contractType || "");
-    const name = String(item.name || futureSymbol);
-    let product = "FUTURE";
-    let underlyingSymbol = "";
-    let underlyingName = "";
-    if (contractType === "S") {
-      product = "STOCK_FUTURE";
-      const key = cleanStockName(name);
-      const stock = stockLookup.get(key);
-      underlyingSymbol = stock?.symbol || "";
-      underlyingName = stock?.name || key;
-    } else if (/^TXF/i.test(futureSymbol)) {
-      product = "TXF";
-      underlyingSymbol = "TXF";
-      underlyingName = "TAIEX";
-    }
-    rows.push({
-      future_symbol: futureSymbol,
-      name,
-      product,
-      contract_type: contractType,
-      end_date: item.endDate || "",
-      exchange: item.exchange || "TAIFEX",
-      underlying_symbol: underlyingSymbol,
-      underlying_name: underlyingName,
-      session: payload.session || item.session || "REGULAR",
-      payload: item,
-    });
-  }
-  rows.cacheFile = file;
-  rows.stockLookupCount = stockLookup.size;
-  return rows;
+  return require('../lib/futopt-collector-catalogue').build(formalCatalogue,catalogueDate(),nowIso());
 }
-
 function futureEndTime(row) {
   const parsed = Date.parse(row.end_date || "");
   return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
@@ -175,7 +139,7 @@ function selectStreamingTickers() {
     if (!prev || futureEndTime(row) < futureEndTime(prev)) byUnderlying.set(row.underlying_symbol, row);
   }
   const txf = rows
-    .filter((row) => row.product === "TXF" && /^TXF/i.test(row.future_symbol) && !/-[FS]$/i.test(row.future_symbol))
+    .filter((row) => row.product === "TXF" && /^TXF/i.test(row.future_symbol) && !/-[FS]$/i.test(row.future_symbol) && futureEndTime(row) >= today.getTime())
     .sort((a, b) => futureEndTime(a) - futureEndTime(b) || a.future_symbol.localeCompare(b.future_symbol))
     .slice(0, 2);
   const selectedRows = [...txf, ...byUnderlying.values()]
@@ -468,6 +432,7 @@ async function run() {
       const formalReady = extra.ok !== false
         && Boolean(ws && ws.readyState === WebSocket.OPEN)
         && authenticated
+        && formalCatalogue?.trade_date === catalogueDate()
         && requiredChannelsReady
         && selection.selectedSymbols.length > 0
         && selection.allRows.length > 0
@@ -505,6 +470,9 @@ async function run() {
         selectedSymbols: selection.selectedSymbols.length,
         requestedSymbols: selection.requestedSymbols,
         tickerRows: selection.allRows.length,
+        catalogueTradeDate: formalCatalogue?.trade_date,
+        catalogueRunId: formalCatalogue?.run_id,
+        catalogueSourceHash: formalCatalogue?.source_hash,
         tickerCacheFile: selection.tickerCacheFile,
         stockLookupCount: selection.stockLookupCount,
         subscribed: selection.selectedSymbols.length * STREAMING_CHANNELS.length,
@@ -531,6 +499,7 @@ async function run() {
 
     const subscribe = async () => {
       if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      if(formalCatalogue?.trade_date!==catalogueDate()){ws.close(1000,'catalogue day changed');return;}
       selection = selectStreamingTickers();
       chunks = chunkArray(selection.selectedSymbols, STREAMING_SUBSCRIBE_CHUNK_SIZE);
       const signature = `${STREAMING_CHANNELS.join(",")}|${selection.selectedSymbols.join(",")}`;
@@ -637,7 +606,12 @@ async function run() {
   let reconnectDelayMs = STREAMING_RECONNECT_INITIAL_MS;
   while (true) {
     const runStartedAt = Date.now();
-    await runOnce();
+    try {
+      formalCatalogue = await require('../lib/mother-pool-futures-catalogue').refresh({runtime:RUNTIME_DIR,tradeDate:catalogueDate(),asOf:nowIso(),key:apiKey});
+      await runOnce();
+    } catch(error) {
+      writeStatus({ok:false,formalReady:false,formalReadyReason:'futures_catalogue_or_stream_blocked',error:error.message});
+    }
     const delayMs = reconnectDelayMs;
     const connectedLongEnough = Date.now() - runStartedAt >= STREAMING_RECONNECT_MAX_MS;
     reconnectDelayMs = connectedLongEnough

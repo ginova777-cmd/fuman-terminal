@@ -166,7 +166,7 @@ function runLineDryRun() {
   return { summary, receipt, receiptPath };
 }
 async function main() {
-  const expectedDate = compactDate(process.argv.find((arg) => arg.startsWith("--date="))?.slice("--date=".length)) || taipeiDateKey();
+  const expectedDate = compactDate(process.argv.find((arg) => arg.startsWith("--date="))?.slice("--date=".length)) || require('../lib/strategy4-recovery-date').targetDate().replace(/-/g,'');
   const issues = [];
   const warnings = [];
   const api = await readApiPayload();

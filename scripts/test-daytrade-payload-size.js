@@ -1,0 +1,13 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {inspect}=require('../lib/daytrade-payload-size');
+const payload={records:[{secret:'never-log-this-value',label:'台灣'}],status:'ok'};
+const before=JSON.stringify(payload),out=inspect(payload);
+assert.equal(JSON.stringify(payload),before);
+assert.equal(out[0].field,'records');
+assert.equal(out[0].bytes,Buffer.byteLength(JSON.stringify(payload.records),'utf8'));
+assert.equal(out[0].items,1);
+assert.equal(JSON.stringify(out).includes('never-log-this-value'),false);
+assert.equal(inspect(Object.fromEntries(Array.from({length:30},(_,i)=>['key'+i,'x'.repeat(i)]))).length,15);
+assert.deepEqual(inspect(null),[]);
+console.log('PASS bounded field-size diagnostics: UTF8, unchanged payload, no values');

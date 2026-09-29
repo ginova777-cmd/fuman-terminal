@@ -2,11 +2,14 @@
   [string]$TradeDate = "",
   [int]$Limit = 1600,
   [string]$RunId = "",
-  [string]$TerminalDir = "C:\fuman-terminal",
+  [string]$TerminalDir = "C:\fuman-release-owner\fuman-terminal",
   [string]$RuntimeDir = "C:\fuman-runtime"
 )
 
 $ErrorActionPreference = "Stop"
+
+Write-Host '& "C:\Program Files\PowerShell\7\pwsh.exe" -File "C:\fuman-release-owner\fuman-terminal\ops\Run-OpeningShortOnlyReadonly.ps1"   # 第一行：開盤空'
+Write-Host '& "C:\Users\ginov\Documents\Codex\2026-09-06\su3\outputs\terminal-345-institution-ranking.ps1"   # 第二行：開盤多／綜合（顯示指令）'
 
 function Get-TaipeiDate {
   $tz = [System.TimeZoneInfo]::FindSystemTimeZoneById("Taipei Standard Time")

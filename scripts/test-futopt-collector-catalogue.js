@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('assert/strict'),{build}=require('../lib/futopt-collector-catalogue'),{hash}=require('../lib/mother-pool-module-write-set'),{FUGLE,TAIFEX}=require('../lib/mother-pool-futures-catalogue');
+const html='證券代號 股票期貨<tr>'+['CA','南亞公司','1303','南亞','●','','','◎','','','','2000','',''].map(x=>'<td>'+x+'</td>').join('')+'</tr>';
+const raw={data:[{symbol:'CAFC7',contractType:'S',endDate:'2027-03-17'},{symbol:'TXFH6',contractType:'I',endDate:'2026-08-19'},{symbol:'TXFJ6',contractType:'I',endDate:'2026-10-21'}]};
+const snapshot={contract:'mother_pool_futures_catalogue_v1',trade_date:'2026-09-29',run_id:'isolated',observed_at:'2026-09-29T00:00:00Z',fugle_url:FUGLE,taifex_url:TAIFEX,raw_fugle:raw,raw_taifex_html:html,source_hash:hash({fugle:raw,taifex:html})};
+const rows=build(snapshot,'2026-09-29','2026-09-29T00:01:00Z');assert.deepEqual(rows.map(r=>r.future_symbol),['CAFC7','TXFJ6']);assert.equal(rows[0].underlying_symbol,'1303');
+assert.throws(()=>build(snapshot,'2026-09-30','2026-09-30T00:01:00Z'),/CATALOGUE_INVALID/);
+const damaged=structuredClone(snapshot);damaged.raw_fugle.data[0].symbol='ZZFC7';assert.throws(()=>build(damaged,'2026-09-29','2026-09-29T00:01:00Z'),/CATALOGUE_INVALID/);
+const noTXF=structuredClone(snapshot);noTXF.raw_fugle.data=noTXF.raw_fugle.data.filter(r=>r.contractType==='S');noTXF.source_hash=hash({fugle:noTXF.raw_fugle,taifex:html});assert.throws(()=>build(noTXF,'2026-09-29','2026-09-29T00:01:00Z'),/TXF_CATALOGUE_MISSING/);
+console.log('PASS Collector catalogue: verified mapping, current TXF, expired exclusion, cross-date/hash/no-TXF refusal');

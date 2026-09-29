@@ -51,12 +51,12 @@ function symbol(value) {
   return /^\d{4}$/.test(result) ? result : "";
 }
 
-function validatePayload(payload, tradeDate, reportRunId) {
+function validatePayload(payload, tradeDate, reportRunId, stageId) {
   const issues = [];
   const requiredText = ["run_id", "source", "mode", "industry", "display_name", "priority_observation_basis", "bias", "evidence_summary", "mapping_contract", "mapping_reviewed_at", "allowed_action", "forbidden_action"];
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return ["payload_missing"];
   if (payload.date !== tradeDate) issues.push("date_mismatch");
-  if (payload.report_time !== morningStages.stage().time) issues.push("report_time_not_0830");
+  if (payload.report_time !== morningStages.stage(stageId).time) issues.push("report_time_not_0830");
   for (const field of requiredText) if (!String(payload[field] ?? "").trim()) issues.push(`missing_field:${field}`);
   if (!String(payload.run_id || "").startsWith(`${reportRunId}-`)) issues.push("run_id_not_bound_to_report");
   if (payload.source !== SOURCE) issues.push("source_mismatch");
@@ -100,6 +100,35 @@ function validatePayload(payload, tradeDate, reportRunId) {
   return [...new Set(issues)];
 }
 
+// Every mapped symbol must have exactly one disposition in its own industry.
+// Only evidenced business exclusions are non-blocking; data gaps remain failures.
+function validateDispositions(receipt, payload) {
+  const issues = [];
+  const mapped = (payload?.mapped_symbols || []).map(symbol);
+  const accepted = Array.isArray(receipt?.accepted_symbols) ? receipt.accepted_symbols : [];
+  const rejected = Array.isArray(receipt?.rejected_symbols) ? receipt.rejected_symbols : [];
+  if (!Array.isArray(receipt?.accepted_symbols)) issues.push("bridge_accepted_symbols_missing");
+  const all = [...accepted, ...rejected.map(symbol)];
+  for (const code of all) {
+    if (!code || !mapped.includes(code)) issues.push("disposition_symbol_not_mapped:" + code);
+    if (all.filter(value => value === code).length !== 1) issues.push("disposition_duplicate_or_overlap:" + code);
+  }
+  for (const code of mapped) if (!all.includes(code)) issues.push("disposition_missing:" + code);
+  for (const row of rejected) {
+    if (row?.reason !== "price_below_50" || typeof row.price !== "number" || !Number.isFinite(row.price) || row.price <= 0 || row.price >= 50)
+      issues.push("rejection_not_supported:" + symbol(row));
+    if ((receipt?.applied_boosts || []).some(boost => symbol(boost) === symbol(row)))
+      issues.push("rejected_symbol_boosted:" + symbol(row));
+  }
+  return [...new Set(issues)];
+}
+
+function rejectedObservationPresent(row, payload) {
+  const all = row?.payload?.openingReport0830IndustryBias;
+  const evidence = all?.stages?.[payload.stage || "us_0820"] || all;
+  return (evidence?.observations || []).some(entry => entry.run_id === payload.run_id);
+}
+
 function validateBridge(receipt, payload) {
   const issues = [];
   const required = {
@@ -121,17 +150,20 @@ function validateBridge(receipt, payload) {
   if (receipt.run_id !== payload.run_id) issues.push("bridge_run_id_mismatch");
   if (receipt.validation?.ok !== true) issues.push("bridge_validation_not_ok");
   if (!Array.isArray(receipt.rejected_symbols)) issues.push("bridge_rejected_symbols_missing");
+  issues.push(...validateDispositions(receipt, payload));
   return issues;
 }
 
-async function request(resource, key) {
+async function request(resource, key, evidence) {
   const response = await fetch(`${PROJECT_URL}/rest/v1/${resource}`, {
     headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/json" },
     signal: AbortSignal.timeout(20000),
   });
   const text = await response.text();
   if (!response.ok) throw new Error(`anon_readback_http_${response.status}:${text.slice(0, 200)}`);
-  return text ? JSON.parse(text) : [];
+  const rows = text ? JSON.parse(text) : [];
+  if (evidence) evidence.push({resource,method:"GET",role:"anon",http_status:response.status,content_range:response.headers?.get("content-range")||null,checked_at:new Date().toISOString(),row_count:Array.isArray(rows)?rows.length:null});
+  return rows;
 }
 
 function validateDbRow(row, expectedPayloads) {
@@ -183,7 +215,7 @@ function fixture() {
     mapped_symbols: [{ symbol: "2049", name: "上銀", tier: "A", mapping_grade: "A", mapping_status: "reviewed", mapping_industry: "ROBOTICS_AUTOMATION", relationship_type: "direct_product_or_revenue_exposure", mapping_reason: "上銀（2049）：傳動元件為直接產品", evidence_authorities: ["MOPS", "ISSUER"], evidence_urls: ["https://example.test/mops/2049", "https://example.test/issuer/2049"] }, { symbol: "2308", name: "台達電", tier: "B", mapping_grade: "B", mapping_status: "reviewed", mapping_industry: "ROBOTICS_AUTOMATION", relationship_type: "adjacent_supply_chain_or_end_demand", mapping_reason: "台達電（2308）：控制器為相鄰供應鏈", evidence_authorities: ["MOPS", "ISSUER"], evidence_urls: ["https://example.test/mops/2308", "https://example.test/issuer/2308"] }],
     bias: "positive", confidence: 0.8, evidence_summary: "fixture", mapping_contract: "opening-report-0830-industry-map-v2", mapping_reviewed_at: "2026-09-09", mapping_evidence_authorities: ["MOPS", "ISSUER"], allowed_action: "boost_scan_priority_only", forbidden_action: "publish_formal_candidate_without_taiwan_evidence",
   };
-  const bridge = { contract: "opening-report-0830-priority-bias-bridge-v1", ok: true, received: true, source: SOURCE, mode: MODE, status: "priority_scan", reason_code: REASON, forbidden_publish_guard: true, formal_candidate_count: 0, formal_candidate_allowed: false, publish_allowed: false, opening_report_status_unchanged: true, run_id: payload.run_id, validation: { ok: true }, rejected_symbols: [] };
+  const bridge = { contract: "opening-report-0830-priority-bias-bridge-v1", ok: true, received: true, source: SOURCE, mode: MODE, status: "priority_scan", reason_code: REASON, forbidden_publish_guard: true, formal_candidate_count: 0, formal_candidate_allowed: false, publish_allowed: false, opening_report_status_unchanged: true, run_id: payload.run_id, validation: { ok: true }, accepted_symbols: ["2049", "2308"], rejected_symbols: [] };
   const secondPayload = { ...payload, run_id: `${reportRunId}-OPTICAL_COMM`, industry: "OPTICAL_COMM", priority_observation_rank: 2 };
   const observations = [
     { industry: payload.industry, run_id: payload.run_id, priority_observation_rank: 1, priority_overseas_leaders: payload.priority_overseas_leaders },
@@ -216,31 +248,39 @@ async function main() {
   if (aggregate?.status !== "BRIDGE_OK") missingFields.push("bridge_aggregate_not_ok");
 
   const files = fs.existsSync(STATE_DIR) ? fs.readdirSync(STATE_DIR).filter((name) => /^opening_report_0830\.industry_bias\..+\.json$/.test(name)) : [];
-  const payloads = files.map((name) => readJson(path.join(STATE_DIR, name))).filter((row) => row?.date === tradeDate && Number(row?.priority_observation_rank) >= 1 && Number(row?.priority_observation_rank) <= 3 && String(row?.run_id || "").startsWith(`${reportRunId}-`));
+  const allIndustryPayloads = files.map((name) => readJson(path.join(STATE_DIR, name))).filter((row) => row?.date === tradeDate && String(row?.run_id || "").startsWith(`${reportRunId}-`));
+  const payloads = allIndustryPayloads.filter((row) => Number(row?.priority_observation_rank) >= 1 && Number(row?.priority_observation_rank) <= 3);
   const expectedBySymbol = new Map();
+  const receivedSymbols = new Set();
+  const rejectedPayloads = [];
   const accepted = new Set();
   const rejected = [];
+  const bridgeEvidence = [];
   for (const payload of payloads) {
     for (const issue of validatePayload(payload, tradeDate, reportRunId)) missingFields.push(`${payload.industry}:${issue}`);
     const bridgePath = path.join(RECEIPT_DIR, `opening-report-0830-priority-bias-bridge-${payload.industry}-${ymd}.json`);
     const bridge = readJson(bridgePath);
+    bridgeEvidence.push({path:bridgePath,receipt:bridge});
     for (const issue of validateBridge(bridge, payload)) missingFields.push(`${payload.industry}:${issue}`);
     for (const value of Array.isArray(bridge?.accepted_symbols) ? bridge.accepted_symbols : []) accepted.add(String(value));
     for (const value of Array.isArray(bridge?.rejected_symbols) ? bridge.rejected_symbols : []) rejected.push(value);
     for (const value of Array.isArray(payload.mapped_symbols) ? payload.mapped_symbols : []) {
       const code = symbol(value);
-      if (code) expectedBySymbol.set(code, [...(expectedBySymbol.get(code) || []), payload]);
+      if (code) receivedSymbols.add(code);
+      if (code && (bridge?.accepted_symbols || []).includes(code)) expectedBySymbol.set(code, [...(expectedBySymbol.get(code) || []), payload]);
+      if (code && (bridge?.rejected_symbols || []).some(row => symbol(row) === code)) rejectedPayloads.push({code, payload});
     }
   }
   if (payloads.length !== Number(aggregate?.industry_count || 0)) missingFields.push("received_industry_count_mismatch");
 
   const key = process.env.SUPABASE_ANON_KEY || process.env.FUMAN_SUPABASE_ANON_KEY || readSecret("supabase-anon-key.txt");
   let rows = [];
+  const requests = [];
   let readbackError = "";
   try {
     if (!key) throw new Error("supabase_anon_key_missing");
-    const symbols = [...expectedBySymbol.keys()];
-    if (symbols.length) rows = await request(`fugle_daytrade_priority_pool?select=symbol,name,market,priority_rank,priority_reason,source,updated_at,payload&symbol=in.(${symbols.join(",")})&order=symbol.asc`, key);
+    const symbols = [...receivedSymbols];
+    if (symbols.length) rows = await request(`fugle_daytrade_priority_pool?select=symbol,name,market,priority_rank,priority_reason,source,updated_at,payload&symbol=in.(${symbols.join(",")})&order=symbol.asc`, key, requests);
   } catch (error) {
     readbackError = error.message || String(error);
     missingFields.push(readbackError);
@@ -250,8 +290,14 @@ async function main() {
     if (!accepted.has(code)) missingFields.push(`${code}:not_in_bridge_accepted_symbols`);
     for (const issue of validateDbRow(rowBySymbol.get(code), payloads)) missingFields.push(`${code}:${issue}`);
   }
+  for (const {code, payload} of rejectedPayloads) {
+    if (rejectedObservationPresent(rowBySymbol.get(code), payload)) missingFields.push(code + ":rejected_symbol_has_current_observation");
+  }
+  if (rows.length !== rowBySymbol.size) missingFields.push("db_duplicate_symbols");
+  if (rows.some(row => !receivedSymbols.has(String(row.symbol)))) missingFields.push("db_unrequested_symbols");
+  const acceptedReadback = [...expectedBySymbol.keys()].filter(code => rowBySymbol.has(code));
   const uniqueMissing = [...new Set(missingFields)];
-  const complete = uniqueMissing.length === 0 && rejected.length === 0 && rows.length === expectedBySymbol.size;
+  const complete = uniqueMissing.length === 0 && acceptedReadback.length === expectedBySymbol.size;
   const receipt = {
     contract: CONTRACT,
     status: complete ? "complete" : "failed",
@@ -259,14 +305,34 @@ async function main() {
     ok: complete,
     trade_date: tradeDate,
     report_run_id: reportRunId,
+    source_evidence: {
+      contract: "opening_report_handoff_raw_evidence_v1",
+      stage: morningStages.stage().id,
+      aggregate_path: aggregatePath,
+      aggregate,
+      industry_payloads: payloads,
+      all_industry_payloads: allIndustryPayloads,
+      all_industry_payloads_sha256: require('../lib/mother-pool-module-write-set').hash(allIndustryPayloads),
+      bridges: bridgeEvidence,
+      readback_role: "anon",
+      requests,
+      rows,
+      rows_sha256: require("../lib/mother-pool-module-write-set").hash(rows),
+      fixed_writer_batch_verified: false,
+    },
     priority_observation_mode: aggregate?.priority_observation_mode || "",
     received_industries: payloads.length,
-    received_symbols: expectedBySymbol.size,
+    disposition_contract: "opening-report-handoff-dispositions-v1",
+    received_symbols: receivedSymbols.size,
+    accepted_count: expectedBySymbol.size,
+    accepted_readback_count: acceptedReadback.length,
+    accepted_readback_symbols: acceptedReadback.sort(),
+    business_excluded_symbols: [...new Set(rejected.map(symbol))].filter(code => !accepted.has(code)).sort(),
     accepted_symbols: [...accepted].sort(),
     rejected_symbols: rejected,
     db_readback_symbols: [...rowBySymbol.keys()].sort(),
     missing_fields: uniqueMissing,
-    db_readback_ok: !readbackError && rows.length === expectedBySymbol.size,
+    db_readback_ok: !readbackError && acceptedReadback.length === expectedBySymbol.size && uniqueMissing.length === 0,
     formal_candidate_count: 0,
     formal_candidate_allowed: false,
     forbidden_publish_guard: true,
@@ -288,4 +354,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { CONTRACT, validatePayload, validateBridge, validateDbRow, fixture };
+module.exports = { CONTRACT, validatePayload, validateBridge, validateDbRow, validateDispositions, rejectedObservationPresent, fixture };

@@ -215,26 +215,13 @@ function tickerExpiry(row) {
 }
 
 async function readTickerMap(tradeDate) {
-  const liveMappings = await supabaseGetPaged(
-    "fugle_daytrade_futopt_quotes_live",
-    "select=future_symbol,underlying_symbol,updated_at&order=updated_at.desc",
-    { service: true, pageSize: 1000 },
-  );
-  const underlyingByFuture = new Map();
-  for (const row of liveMappings) {
-    const future = normalizeFutureSymbol(row?.future_symbol);
-    const underlying = normalizeCode(row?.underlying_symbol);
-    if (future && underlying && !underlyingByFuture.has(future)) underlyingByFuture.set(future, underlying);
-  }
-  const rows = await supabaseGetPaged(
-    "futopt_tickers",
-    "select=future_symbol,name,product,contract_type,end_date,exchange,underlying_name,underlying_symbol,session,updated_at,payload&order=underlying_symbol.asc,end_date.asc",
-    { service: true, pageSize: 1000 },
-  );
-  const byUnderlying = new Map();
+  const catalogue = await require('../lib/mother-pool-futures-catalogue').refresh({
+    runtime:RUNTIME_DIR,tradeDate,asOf:new Date().toISOString(),key:readSecret('fugle-api-key.txt'),
+  });
+  const rows = require('../lib/futopt-collector-catalogue').build(catalogue,tradeDate,new Date().toISOString());  const byUnderlying = new Map();
   for (const row of rows) {
     const futureSymbol = normalizeFutureSymbol(row?.future_symbol);
-    const symbol = tickerUnderlying(row) || underlyingByFuture.get(futureSymbol) || "";
+    const symbol = tickerUnderlying(row) || "";
     const expiry = tickerExpiry(row);
     const product = String(row?.product || row?.payload?.product || "").toUpperCase();
     if (!symbol || !futureSymbol || product === "TXF" || futureSymbol.startsWith("TXF")) continue;
@@ -267,6 +254,8 @@ async function readTickerMap(tradeDate) {
       resolved_at: new Date().toISOString(),
       source: "fugle_daytrade_source:canonical_near_one",
       payload: {
+        catalogue_run_id: catalogue.run_id,
+        catalogue_source_hash: catalogue.source_hash,
         ticker_name: selected.name,
         candidate_count: candidates.length,
         selection_rule: "earliest_non_expired_end_date",
@@ -291,9 +280,26 @@ function selectQuote(byFuture, contract, tradeDate) {
   };
 }
 
-function trialFromSnapshot(row) {
+function trialFromSnapshot(row, tradeDate, captureSlot) {
   if (!row) return null;
-  const rawTrial = numberValue(row.trial_price ?? row.payload?.trialPrice ?? row.payload?.trial_price);
+  const payload = row.payload || {};
+  const eventAt = normalizeIso(row.trial_event_at || payload.trial_event_at || payload.trialEventAt, "");
+  const eventDate = eventAt ? taipeiDate(eventAt) : "";
+  const event = eventAt ? new Date(eventAt) : null;
+  const taipeiParts = event && !Number.isNaN(event.getTime())
+    ? new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(event)
+    : [];
+  const part = (type) => taipeiParts.find((item) => item.type === type)?.value;
+  const eventSlot = `${part("hour") || ""}${part("minute") || ""}`;
+  const nativeSource = String(row.trial_price_source || payload.trial_price_source || payload.source || "");
+  const nativeTrial = row.is_trial === true
+    && (nativeSource === "fugle_native_trial" || nativeSource === "fugle-daytrade-ws:trial-cache")
+    && eventDate === tradeDate
+    && eventSlot === captureSlot
+    && payload.close_fallback_used !== true
+    && payload.bid_ask_fallback_used !== true
+    && payload.post_0900_backfill_used !== true;
+  const rawTrial = nativeTrial ? numberValue(row.trial_price ?? payload.trialPrice ?? payload.trial_price) : null;
   // A zero trial price means the auction source has not produced a usable
   // price. Keep it null so it cannot be misclassified as a positive basis.
   const trial = rawTrial !== null && rawTrial > 0 ? rawTrial : null;
@@ -308,8 +314,12 @@ function trialFromSnapshot(row) {
     bid_volume: numberValue(row.bid_volume ?? row.bid1_volume ?? row.payload?.bidVolume),
     ask_volume: numberValue(row.ask_volume ?? row.ask1_volume ?? row.payload?.askVolume),
     is_limit_up_bid: row.is_limit_up_bid === true || row.payload?.isLimitUpBid === true,
-    trial_event_at: normalizeIso(row.trial_event_at || row.payload?.trial_event_at || row.payload?.trialEventAt, ""),
-    payload: row.payload || {},
+    is_trial: nativeTrial,
+    trial_price_source: nativeTrial ? nativeSource : null,
+    trial_event_at: nativeTrial ? eventAt : "",
+    natural_schedule_evidence: nativeTrial,
+    data_gap_reason: nativeTrial && trial !== null ? null : "DATA_GAP_TRIAL",
+    payload,
   };
 }
 
@@ -320,7 +330,7 @@ async function readPreopenRows(symbols) {
     const filter = group.map((symbol) => encodeURIComponent(symbol)).join(",");
     rows.push(...await supabaseGetPaged(
       "fugle_preopen_snapshot",
-      `select=symbol,updated_at,reference_price,trial_price,best_bid_price,best_ask_price,bid_volume,ask_volume,bid1_price,bid1_volume,ask1_price,ask1_volume,payload&symbol=in.(${filter})&order=updated_at.desc`,
+      `select=symbol,updated_at,reference_price,trial_price,is_trial,best_bid_price,best_ask_price,bid_volume,ask_volume,bid1_price,bid1_volume,ask1_price,ask1_volume,payload&symbol=in.(${filter})&order=updated_at.desc`,
       { service: true, pageSize: 200 },
     ));
   }
@@ -340,11 +350,12 @@ async function readPreopenRows(symbols) {
       updated_at: trialEventAt,
       reference_price: numberValue(quote?.referencePrice ?? quote?.previousClose),
       trial_price: numberValue(quote?.trialPrice ?? quote?.trial_price),
+      is_trial: true,
       best_bid_price: numberValue(quote?.bidPrice ?? quote?.bidLevels?.[0]?.price),
       best_ask_price: numberValue(quote?.askPrice ?? quote?.askLevels?.[0]?.price),
       bid_volume: numberValue(quote?.bidSize ?? quote?.bidVolume ?? quote?.bidLevels?.[0]?.size),
       ask_volume: numberValue(quote?.askSize ?? quote?.askVolume ?? quote?.askLevels?.[0]?.size),
-      payload: { trialEventAt, source: "fugle-daytrade-ws:trial-cache" },
+      payload: { trialEventAt, trial_price_source: "fugle-daytrade-ws:trial-cache", source: "fugle-daytrade-ws:trial-cache", close_fallback_used: false, bid_ask_fallback_used: false, post_0900_backfill_used: false },
     });
   }
   // Trial-auction evidence only: never substitute regular/post-09:00 live quotes.
@@ -376,7 +387,7 @@ async function captureSlotRows(tradeDate, slot, canonicalRows, quoteRows, preope
   const rows = [];
   for (const contract of canonicalRows) {
     const quote = selectQuote(byFuture, contract, tradeDate);
-    const trial = trialFromSnapshot(preopenBySymbol.get(contract.symbol));
+    const trial = trialFromSnapshot(preopenBySymbol.get(contract.symbol), tradeDate, slot);
     const ratio = trial?.ask_volume && trial.ask_volume > 0 && trial.bid_volume !== null
       ? trial.bid_volume / trial.ask_volume : null;
     rows.push({
@@ -395,16 +406,23 @@ async function captureSlotRows(tradeDate, slot, canonicalRows, quoteRows, preope
       best_bid: trial?.best_bid ?? null,
       best_ask: trial?.best_ask ?? null,
       bid_ask_ratio: ratio,
-      natural_schedule_evidence: true,
-      source: "fugle_daytrade_source:preopen_snapshot",
+      natural_schedule_evidence: trial?.natural_schedule_evidence === true,
+      source: trial?.trial_price_source || "fugle_daytrade_source:preopen_snapshot_data_gap",
       payload: {
-        natural_schedule_evidence: true,
+        natural_schedule_evidence: trial?.natural_schedule_evidence === true,
         natural_schedule_phase: slot,
         run_id: `daytrade_futopt_preopen:${tradeDate.replace(/-/g, "")}`,
         generation_id: `daytrade_futopt_preopen:${tradeDate.replace(/-/g, "")}:${slot}`,
         websocket_quote_seen_at: quote?.observed_at || null,
         preopen_snapshot_updated_at: preopenBySymbol.get(contract.symbol)?.updated_at || null,
         trial_event_at: trial?.trial_event_at || null,
+        is_trial: trial?.is_trial === true,
+        has_trial_price: trial?.trial_price !== null && trial?.trial_price !== undefined,
+        trial_price_source: trial?.trial_price_source || null,
+        data_gap_reason: trial?.data_gap_reason || "DATA_GAP_TRIAL",
+        close_fallback_used: false,
+        bid_ask_fallback_used: false,
+        post_0900_backfill_used: false,
         reference_price: trial?.reference_price ?? null,
         bid_volume: trial?.bid_volume ?? null,
         ask_volume: trial?.ask_volume ?? null,

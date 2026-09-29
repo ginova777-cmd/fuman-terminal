@@ -1,0 +1,36 @@
+{
+  "contract": "strategy3_runner_verifier_receipt_v1",
+  "runner": "run-strategy3-v2-complete-scan.ps1",
+  "verifier": "scripts/verify-strategy3-complete.js",
+  "receiptWriter": "scripts/finalize-strategy3-complete.js",
+  "receiptContract": "strategy-runner-verifier-receipt-v1",
+  "naturalReceipt": "data/scan-receipts/strategy3.json",
+  "recoveryReceipt": "data/scan-receipts/strategy3-recovery-replay.json",
+  "retiredVerifier": "scripts/verify-strategy3-v2-full-closure.js",
+  "retiredAlias": "verify:strategy3-v2-full-closure",
+  "activeReferenceFiles": [
+    "package.json",
+    "lib/terminal-full-module-contract.js",
+    "scripts/run-terminal-auto-roll-forward.js",
+    "scripts/sync-main-deploy-source.js",
+    "scripts/verify-active-strategy-root-authority.js",
+    "scripts/verify-api-unattended-scorecard.js",
+    "scripts/verify-terminal-auto-roll-forward.js",
+    "scripts/write-terminal-orchestrator-state.js"
+  ],
+  "requiredVerifiers": [
+    "scripts/verify-strategy3-delivery.js",
+    "scripts/verify-strategy3-v2-water-universe.js",
+    "scripts/verify-strategy3-v2-surface-closure.js",
+    "scripts/verify-strategy3-recovery-replay-complete.js",
+    "scripts/verify-strategy3-mother-pool-warmup-authority.js",
+    "scripts/verify-terminal-ui-e2e.js"
+  ],
+  "requirements": [
+    "same trade date and authoritative run",
+    "complete DB and rendered desktop/mobile/88 evidence",
+    "verified LINE delivery or authorized quota exception",
+    "complete=true; exitCode=0; failed_checks=[]; first_blocker=null"
+  ],
+  "historicalRecovery": "Explicit --recovery-replay --trade-date; never redate old source or replace natural failure"
+}

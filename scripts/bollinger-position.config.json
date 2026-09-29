@@ -1,0 +1,5 @@
+{
+  "period": 20,
+  "std_multiplier": 2,
+  "weak_threshold": 8
+}

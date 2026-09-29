@@ -1,0 +1,9 @@
+"use strict";
+const fs=require('fs');
+const arg=(n,d)=>process.argv.find(x=>x.startsWith(`--${n}=`))?.slice(n.length+3)||d;
+const reportPath=arg('report'); if(!reportPath) throw Error('report required');
+const telegramPath=arg('telegram','C:/fuman-runtime/data/scan-receipts/daytrade-intraday-burst-telegram-20260911.json');
+const r=JSON.parse(fs.readFileSync(reportPath,'utf8')); r.source_contract=r.source_contract||{}; r.source_files=r.source_files||{}; const t=JSON.parse(fs.readFileSync(telegramPath,'utf8'));
+const events=[...(t.detected_events||[]),...(t.sent_events||[])]; const burst=new Set(events.filter(e=>String(e.notification_type||e.type||e.label||'').includes('volume_burst')||String(e.notification_type||e.type||e.label||'').includes('瞬間巨量')).map(e=>String(e.symbol||e.stock_id||e.code)));
+for(const row of r.rows||[]){ const hit=burst.has(String(row.symbol)); row.telegram_tail_burst={source:telegramPath,matched:hit,event_count:events.filter(e=>String(e.symbol||e.stock_id||e.code)===String(row.symbol)).length}; row.checks=row.checks||{}; const key='尾盤大單買入'; if(row.checks[key]){row.checks[key].matched=hit;row.checks[key].status=hit?'MATCHED':'NOT_MATCHED';} if(hit&&!row.matched_strategy_numbers.includes(15)){row.matched_strategy_numbers.push(15);row.matched_strategy_numbers.sort((a,b)=>a-b);row.matched_count++;}}
+r.source_contract.telegram_tail_burst='daytrade_intraday_burst_telegram_v1'; r.source_files.telegram=telegramPath; r.evaluated_at=new Date().toISOString(); r.rows.sort((a,b)=>b.matched_count-a.matched_count||String(a.symbol).localeCompare(String(b.symbol))); r.qualified_count=r.rows.filter(x=>x.matched_count>=8&&x.data_gaps.length===0).length; fs.writeFileSync(reportPath,JSON.stringify(r,null,2)); console.log(JSON.stringify({telegram_events:events.length,burst_symbols:burst.size,qualified_count:r.qualified_count},null,2));

@@ -1,0 +1,14 @@
+'use strict';
+const assert=require('node:assert/strict'),{parse,map}=require('../lib/taifex-stock-future-mapping');
+const row=(code,symbol,common=true)=>'<tr>'+[code,'正式公司名稱',symbol,'正式簡稱','●','','',common?'◎':'','',common?'':'◎','','2000','',''].map(x=>'<td>'+x+'</td>').join('')+'</tr>';
+const html='證券代號 股票期貨<table>'+row('CA','1303')+row('NY','0050',false)+'</table>';
+const mapping=parse(html),ticker={symbol:'CAFC7',name:'名稱不同也不得猜測',contractType:'S',endDate:'2027-03-17'};
+const result=map([ticker,{...ticker,symbol:'NYFC7'}],mapping,'2026-09-29');
+assert.equal(result.mapped[0].underlying_symbol,'1303');assert.equal(result.excluded[0].reason,'ETF_OUTSIDE_COMMON_STOCK_SCOPE');assert.equal(result.complete,true);
+assert.throws(()=>parse(html+row('CA','2330')),/DUPLICATE/);
+assert.throws(()=>parse(html.replace('<td>2000</td>','')),/ROW_INVALID/);
+assert.equal(map([{...ticker,symbol:'ZZFC7'}],mapping,'2026-09-29').complete,false);
+assert.equal(map([ticker,ticker],mapping,'2026-09-29').complete,false);
+assert.equal(map([{...ticker,endDate:'2026-09-16'}],mapping,'2026-09-29').excluded[0].reason,'EXPIRED');
+assert.equal(map([{...ticker,endDate:null}],mapping,'2026-09-29').gaps[0].reason,'EXPIRY_UNPROVEN');
+console.log('PASS official product-code mapping, ETF exclusion, duplicates, unknown products, expiry and layout fail-closed');
