@@ -7566,6 +7566,16 @@ async function verifyEarlyB01Candles(evidence, tradeDate) {
 async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {}) {
   const { mapNaturalCandle } = require('../lib/daytrade-fast-candle-row');
   const syncNowMs = Date.now();
+  // Today's completed one-minute bars do not exist before the market opens.
+  // Historical preopen baselines are verified independently by A07-A09/A16.
+  const observationMinute = new Date(syncNowMs + 28800000).toISOString().slice(11,16);
+  if (observationMinute < '09:00') return {
+    written: 0, skipped: true, status: 'NOT_DUE',
+    reason: 'TODAY_1M_NOT_DUE_IN_PREOPEN',
+    source: 'fugle_websocket_candles_dynamic_mother_pool',
+    trade_date: taipeiDateFrom(new Date(syncNowMs).toISOString()),
+    complete: false,
+  };
   const extraSymbols = Array.isArray(options.extraSymbols) ? options.extraSymbols : [];
   const tradeDate = taipeiDateFrom(nowIso());
   const websocketStatus = readJson(FUGLE_WS_STATUS_FILE, {});
@@ -8010,7 +8020,7 @@ async function tick() {
       : activeSymbols.map(row => normalizeCode(row.symbol || row)).filter(Boolean).sort();
     fullMarketLatestCandles = { ...earlyCandles, scope: 'subscription_snapshot',
       requested_symbols: requestedSymbols,
-      trade_date: taipeiDateFrom(nowIso()), status: earlyCandles.skipped ? 'DATA_GAP' : 'WRITE_FINISHED_UNVERIFIED',
+      trade_date: taipeiDateFrom(nowIso()), status: earlyCandles.status === 'NOT_DUE' ? 'NOT_DUE' : earlyCandles.skipped ? 'DATA_GAP' : 'WRITE_FINISHED_UNVERIFIED',
       complete: false, db_readback_verified: false };
     tickStage("full_market_latest_candles:complete", { ...earlyCandles, requested_symbols: earlyCandles.motherPoolSymbols || activeSymbols.length });
   } catch (error) {
