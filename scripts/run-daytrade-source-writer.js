@@ -1223,6 +1223,7 @@ async function fetchDailyVolumeAvg() {
     combined.recentThreeDaySource = recentThreeDay.source;
   } catch (error) {
     readErrors.push({ resource: "strategy4_daily_ohlcv_view", service: true, message: error?.message || String(error) });
+    tickStage('daily_volume:recent_three_day:failed', {error:require('../lib/daytrade-diagnostic-errors').encodeDiagnosticError({target:'strategy4_daily_ohlcv_view',message:error?.message||String(error)})});
     combined.recentThreeDaySource = "unavailable";
   }
   combined.source = combined.source || "missing_daily_volume";
