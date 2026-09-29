@@ -25,6 +25,17 @@ async function main(){
  const same=clone(base);same.payload.nested.a=10;
  await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>[same],onMismatch:e=>{diagnostic=e;}}),/CONTENT_MISMATCH/);
  assert.equal(diagnostic.identity_matches,true);
+ const previous=clone(base);previous.payload.writer_run_id='previous';previous.payload.generation_id='previous-g';previous.updated_at='2026-09-28T23:59:50Z';
+ writes=0;reads=0;const delays=[];
+ const settled=await writeWithAcknowledgement({row:base,write:timeout,read:async()=>[++reads<3?previous:clone(base)],retryDelaysMs:[5000,10000],sleep:async ms=>delays.push(ms)});
+ assert.equal(settled.verified_after_timeout,true);assert.equal(writes,1);assert.equal(reads,3);assert.deepEqual(delays,[5000,10000]);
+ writes=0;reads=0;
+ await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>{reads++;return[previous];},retryDelaysMs:[0,0],sleep:async()=>{}}),/CONTENT_MISMATCH/);
+ assert.equal(writes,1);assert.equal(reads,3);
+ for(const bad of [same,{...previous,updated_at:'2026-09-29T00:00:01Z'},{...previous,trade_date:'2026-09-28'}]){
+  reads=0;await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>{reads++;return[bad];},retryDelaysMs:[0,0],sleep:async()=>{throw Error('must not wait');}}),/CONTENT_MISMATCH/);assert.equal(reads,1);
+ }
+ await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>[],retryDelaysMs:[1,2,3]}),/RETRY_BUDGET_INVALID/);
  for(const rows of [[],[base,base]])await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>rows}),/ROW_COUNT/);
  await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>{throw Error('offline');}}),/READ_FAILED/);
  reads=0;await assert.rejects(writeWithAcknowledgement({row:base,write:async()=>{throw Error('HTTP 403');},read:async()=>{reads++;}}),/403/);assert.equal(reads,0);
