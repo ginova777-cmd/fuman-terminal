@@ -41,6 +41,13 @@ async function main(){
  reads=0;await assert.rejects(writeWithAcknowledgement({row:base,write:async()=>{throw Error('HTTP 403');},read:async()=>{reads++;}}),/403/);assert.equal(reads,0);
  const missing=clone(base);delete missing.payload.generation_id;writes=0;
  await assert.rejects(writeWithAcknowledgement({row:missing,write:timeout,read:async()=>[base]}),/IDENTITY_MISSING/);assert.equal(writes,0);
+ writes=0;reads=0;
+ const late=await writeWithAcknowledgement({row:base,write:timeout,read:async()=>++reads<3?[]:[clone(base)],retryDelaysMs:[0,0],sleep:async()=>{}});
+ assert.equal(late.verified_after_timeout,true);assert.equal(writes,1);assert.equal(reads,3);
+ writes=0;reads=0;
+ await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>{reads++;return[];},retryDelaysMs:[0,0],sleep:async()=>{}}),/ROW_COUNT/);
+ assert.equal(writes,1);assert.equal(reads,3);
+ reads=0;await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>{reads++;return[base,base];},retryDelaysMs:[0,0],sleep:async()=>{throw Error('must not wait');}}),/ROW_COUNT/);assert.equal(reads,1);
  console.log('PASS: write success, exact timeout acknowledgement, identity/content mismatch, missing/duplicate/read failure, non-timeout and no write replay');
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

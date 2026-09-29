@@ -7264,9 +7264,7 @@ async function writeStatusAndScorecard(result) {
     retryDelaysMs: [5000,10000],
     onMismatch: evidence => console.error(JSON.stringify({stage:'source_status_ack_mismatch',checkedAt:nowIso(),...evidence})),
     write: row => supabaseUpsert("source_status", [row], "source_name"),
-    read: row => supabaseGet('source_status',
-      'select='+Object.keys(row).join(',')+'&source_name=eq.'+encodeURIComponent(row.source_name)
-      +'&trade_date=eq.'+encodeURIComponent(row.trade_date)+'&limit=2', {service:true}),
+    read: row => supabaseGet('source_status',require('../lib/daytrade-source-status-ack').fixedReadQuery(row), {service:true}),
   }));
   console.log(JSON.stringify({stage:'source_status_ack',checkedAt:nowIso(),...sourceStatusAck}));
   // The turnover checklist has its own independently read-back receipt.
@@ -8998,3 +8996,4 @@ main().catch((error) => {
   }, null, 2));
   process.exit(1);
 });
+
