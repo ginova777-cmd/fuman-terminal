@@ -1128,12 +1128,14 @@ async function fetchRecentThreeDayAverageVolume() {
   const historyDates=require('../lib/mother-pool-daily-volume-baseline').datesFromCalendar(calendar,tradeDate,15);
   const rows=await supabaseGetPaged('strategy4_daily_ohlcv_view',`select=symbol,trade_date,volume_lots,open,high,low,close&trade_date=gte.${historyDates[0]}&trade_date=lt.${tradeDate}&order=trade_date.desc,symbol.asc`,{service:true,pageSize:1000,maxRows:60000,requireExactCount:true});
   const dailyReadAt=nowIso();
-  const bySymbol=new Map();
+  const bySymbol=new Map(),rowsBySymbol=new Map();
+  for(const row of rows){if(!rowsBySymbol.has(row.symbol))rowsBySymbol.set(row.symbol,[]);rowsBySymbol.get(row.symbol).push(row);}
   for(const symbol of new Set(rows.map(r=>normalizeCode(r.symbol)).filter(Boolean))){
-    const evidence=require('../lib/mother-pool-daily-volume-baseline').build({symbol,tradeDate,rows,calendar});
-    const historicalEvidence={symbol,trade_date:tradeDate,source:'strategy4_daily_ohlcv_view',volume_unit:'LOTS',dates:historyDates,calendar,rows:rows.filter(r=>r.symbol===symbol&&historyDates.includes(r.trade_date))};
+    const symbolRows=rowsBySymbol.get(symbol)||[];
+    const evidence=require('../lib/mother-pool-daily-volume-baseline').build({symbol,tradeDate,rows:symbolRows,calendar});
+    const historicalEvidence={symbol,trade_date:tradeDate,source:'strategy4_daily_ohlcv_view',volume_unit:'LOTS',dates:historyDates,calendar,rows:symbolRows.filter(r=>historyDates.includes(r.trade_date))};
     const historicalVolume=require('../lib/mother-pool-historical-volume').evaluate({symbol,tradeDate,evidence:historicalEvidence});
-    const recentDates=dates.slice(-3),recent=rows.filter(r=>r.symbol===symbol&&recentDates.includes(r.trade_date));
+    const recentDates=dates.slice(-3),recent=symbolRows.filter(r=>recentDates.includes(r.trade_date));
     const validThree=recentDates.every(d=>recent.filter(r=>r.trade_date===d).length===1)&&recent.every(r=>typeof r.volume_lots==='number'&&Number.isFinite(r.volume_lots)&&r.volume_lots>=0);
     bySymbol.set(symbol,{avg_volume5:evidence.avg_volume5,daily_volume_evidence:evidence,daily_ohlcv_read_at:dailyReadAt,
       historical_daily_evidence:historicalEvidence,historical_volume_evidence:historicalVolume,
