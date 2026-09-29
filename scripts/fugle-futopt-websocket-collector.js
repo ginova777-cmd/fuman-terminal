@@ -175,7 +175,7 @@ function selectStreamingTickers() {
     if (!prev || futureEndTime(row) < futureEndTime(prev)) byUnderlying.set(row.underlying_symbol, row);
   }
   const txf = rows
-    .filter((row) => row.product === "TXF" && /^TXF/i.test(row.future_symbol) && !/-[FS]$/i.test(row.future_symbol))
+    .filter((row) => row.product === "TXF" && /^TXF/i.test(row.future_symbol) && !/-[FS]$/i.test(row.future_symbol) && futureEndTime(row) >= today.getTime())
     .sort((a, b) => futureEndTime(a) - futureEndTime(b) || a.future_symbol.localeCompare(b.future_symbol))
     .slice(0, 2);
   const selectedRows = [...txf, ...byUnderlying.values()]
