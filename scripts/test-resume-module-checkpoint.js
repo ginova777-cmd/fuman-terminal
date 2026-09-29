@@ -10,16 +10,16 @@ const {resumeCheckpoint}=require('../lib/mother-pool-resume-checkpoint');
  const ref=cp.save({directory,identity,observedAt:at,inputs:[...inputs,{module_id:'B09',build(){throw Error('never regenerate');}}]});
  const row={source_name:'fugle_daytrade_source',trade_date:identity.trade_date,updated_at:at,payload:{...identity,mother_pool_snapshot_sequence:1,module_input_checkpoint:ref}};
  const sourceIntent=journal.prepare(directory,row);
- for(const mode of ['ok','source-mismatch','lease-lost','partial']){
+ for(const mode of ['ok','source-mismatch','lease-lost','partial','deferred-saved']){
  let leases=0,writes=0;const progress=[];
- const options={sourceIntent,identity,guard:async()=>{},assertLease:async()=>{if(++leases===3&&mode==='lease-lost')throw Error('LEASE_LOST');},readSource:async()=>mode==='source-mismatch'?[]:[row],saveProgress:async p=>progress.push(p),adapterFor:async input=>{
+ const options={sourceIntent,identity,loadDeferred:async id=>mode==='deferred-saved'?{...inputs[0],module_id:id}:null,guard:async()=>{},assertLease:async()=>{if(++leases===3&&mode==='lease-lost')throw Error('LEASE_LOST');},readSource:async()=>mode==='source-mismatch'?[]:[row],saveProgress:async p=>progress.push(p),adapterFor:async input=>{
  let document;return {validatePlan:async d=>{document=d;},readCommitted:async()=>({rounds:[],rows:[]}),hasAttempt:async()=>mode==='partial'&&input.module_id==='A02',saveAttempt:async()=>{},persist:async()=>{writes++;return {committed:true,...identity,module_id:input.module_id,plan_hash:document.plan_hash,written_symbols:['2330']};},saveEvidence:async()=>{}};
  }};
  if(mode==='source-mismatch'){await assert.rejects(resumeCheckpoint(options),/ROW_COUNT/);assert.equal(writes,0);assert.equal(progress.length,0);continue;}
- const result=await resumeCheckpoint(options);assert.equal(result.complete,false);assert.equal(result.requires_independent_verification,true);assert.deepEqual(result.deferred_modules,['B09']);
- assert.equal(writes,mode==='ok'?2:1);assert.equal(result.written_modules.length,writes);
+ const result=await resumeCheckpoint(options);assert.equal(result.complete,false);assert.equal(result.requires_independent_verification,true);assert.deepEqual(result.deferred_modules,mode==='deferred-saved'?[]:['B09']);if(mode==='ok')assert.equal(result.deferred_gaps.B09,'ORIGINAL_DEFERRED_PLAN_MISSING');
+ assert.equal(writes,mode==='deferred-saved'?3:mode==='ok'?2:1);assert.equal(result.written_modules.length,writes);
  assert(result.written_modules.every(m=>m.plan.rows[0].status==='DATA_GAP'));
- if(mode!=='ok')assert.equal(result.first_blocker.module_id,'A02');
+ if(!['ok','deferred-saved'].includes(mode))assert.equal(result.first_blocker.module_id,'A02');
  assert.equal(progress[0].written_modules.length,0); // saved progress must not mutate later
  }
  console.log('PASS checkpoint chain: source ACK precedes writes, lease loss/uncertainty stop, original gaps and deferred modules retained, no false COMPLETE');
