@@ -8719,12 +8719,12 @@ function buildPreopenA15A19Evidence(activeSymbols, quoteMap, tradeDate) {
   const a15Rows = rows.map((r) => preopenA15A19.a15({ symbol: r.symbol, prev_open: r.prev_open ?? r.previous_open, prev_high: r.prev_high ?? r.previous_high, prev_low: r.prev_low ?? r.previous_low, prev_close: r.prev_close ?? r.previous_close, prev_vwap: r.prev_vwap ?? null }));
   const a17Samples = [];
   for (const [symbol, q] of (quoteMap instanceof Map ? quoteMap.entries() : [])) {
-    if (q?.is_trial === true) a17Samples.push({ symbol, capture_slot: q.capture_slot || q.trial_capture_slot, is_trial: true, trial_price: q.trial_price ?? q.payload?.trialPrice, trial_event_at: q.trial_event_at });
+    if (q?.is_trial === true) a17Samples.push({ symbol, trade_date: q.trade_date || q.payload?.trade_date, capture_slot: q.capture_slot || q.trial_capture_slot, is_trial: true, trial_price: q.trial_price ?? q.payload?.trialPrice, trial_event_at: q.trial_event_at });
   }
   // Canonical A16 producer owns history and fixed-generation anon readback.
   // Writer only references the current day's verified summary; no raw-values fallback.
   const a16 = a16Writer.readReferences({ runtime: runtimePath(), tradeDate, symbols: rows });
-  const a17 = preopenA15A19.a17(a17Samples);
+  const a17 = preopenA15A19.a17(a17Samples, { trade_date: tradeDate, symbols: rows.map(r => r.symbol), as_of: nowIso() });
   const evidence = { a15: a15Rows, a16, a17, a18: preopenA15A19.a18({ a15: a15Rows.map((r) => ({ ...r, status: r.data_gap ? "DATA_GAP" : "READY", reason: r.data_gap ? "A15_DATA_GAP" : null })), a16, a17 }) };
   const receipt = preopenA15A19.a19(evidence);
   return { contract: receipt.contract, trade_date: tradeDate, canonical_run_id: `${SOURCE_NAME}:${String(tradeDate).replace(/-/g, "")}:canonical`, ...evidence, ...receipt, formal_candidate_allowed: false, publish_allowed: false };
