@@ -16,6 +16,7 @@ async function scenario(mode){
  const deps={
   'node:fs':fakeFs,'node:path':path,'node:crypto':crypto,'node:child_process':{spawnSync:()=>({status:0})},
   '../lib/mother-pool-a16-io':io,
+  '../lib/daytrade-durable-json':{writeExclusive:(file,value)=>{if(mode==='intent-disk')throw Error('DISK_FULL');if(memory.has(file))throw Error('EXISTS');memory.set(file,structuredClone(value));}},
   '../lib/fetch-mother-pool-historical-minutes':{fetchHistory:async()=>{throw Error('unexpected refetch');}},
   '../lib/mother-pool-historical-sessions':{selectSessions:async()=>({status:'SESSION_DATES_VERIFIED',session_dates:[]})},
   './twse-trading-day':{isTwseTradingDay:async()=>({isTradingDay:true,source:'cache'})},
@@ -33,8 +34,10 @@ async function scenario(mode){
  const artifacts=[...memory.entries()].filter(([k,v])=>k.endsWith('.json')&&v?.receipt&&v?.db).map(([,v])=>v);
  if(['ok','missing-anon','partial-count','sample-gap'].includes(mode))assert(artifacts.every(a=>a.complete===(mode==='ok')));
  if(mode==='corrupt'){assert.equal(result.attempted_count,2);assert.equal(result.rows[0].db_readback_ok,false);assert.equal(result.rows[1].db_readback_ok,true);assert.equal(result.complete,false);}
- if(mode==='timeout'){assert.equal(result.attempted_count,1);assert.equal(result.complete,false);}
+ if(mode==='timeout'){assert.equal(result.attempted_count,1);assert.equal(result.complete,false);assert.equal(writes,1);clock='2026-09-29T00:01:00Z';result=await run();assert.equal(reads,1);assert.equal(writes,2);assert.equal(result.rows[0].db_readback_ok,true);assert.equal(result.rows[1].db_readback_ok,false);}
+ if(mode==='intent-disk'){assert.equal(writes,0);assert.equal(reads,0);assert.equal(result.first_blocker,'DISK_FULL');}
+ if(mode==='intent-conflict'){assert.equal(result.complete,true);assert.equal(writes,2);const key=[...memory.keys()].find(k=>k.endsWith('1301-write-intent.json'));memory.get(key).payload_sha256='0'.repeat(64);clock='2026-09-29T00:01:00Z';result=await run();assert.equal(result.first_blocker,'A16_WRITE_INTENT_CONFLICT');assert.equal(writes,2);assert.equal(reads,0);}
  if(['sample-gap','missing-anon','partial-count'].includes(mode)){assert.equal(result.attempted_count,2);assert.equal(result.complete,false);}
  if(mode==='ok'){assert.equal(result.complete,true);assert.equal(writes,2);clock='2026-09-29T00:01:00Z';result=await run();assert.equal(result.complete,true);assert.equal(writes,2);assert.equal(reads,2);}
 }
-(async()=>{for(const m of ['ok','corrupt','timeout','sample-gap','missing-anon','partial-count'])await scenario(m);console.log('PASS: actual A16 runner resume without rewrite, corrupt-symbol isolation, timeout stop, sample gaps retained');})().catch(e=>{console.error(e);process.exitCode=1;});
+(async()=>{for(const m of ['ok','corrupt','timeout','sample-gap','missing-anon','partial-count','intent-disk','intent-conflict'])await scenario(m);console.log('PASS: actual A16 runner resume without rewrite, disk/hash rejection, corrupt-symbol isolation, timeout stop, sample gaps retained');})().catch(e=>{console.error(e);process.exitCode=1;});

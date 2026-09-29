@@ -50,6 +50,17 @@ async function main(){
    const sideJournals=readSide(runtime,symbol,plan.session_dates),input={symbol,tradeDate:date,canonicalRunId:universe.canonical_run_id,asOf:new Date().toISOString(),history,sideJournals};
    let receipt=build(input),verifier=verify(receipt,input);let dbResult={db_readback_ok:false,anon_readback_ok:false,written_count:0,readback_count:0},failure=null;
    if(verifier.verification_passed)try{
+    const intentFile=path.join(receiptDir,symbol+'-write-intent.json');
+    let pending=null;
+    if(fs.existsSync(intentFile)){
+      pending=read(intentFile);
+      if(pending.contract!=='a16_write_intent_v1'||pending.generation!==generation||pending.mode!==mode||!pending.receipt
+        ||pending.payload_sha256!==hash(compact(pending.receipt))
+        ||hash({...compact(pending.receipt),calculated_at:null})!==hash({...compact(receipt),calculated_at:null}))throw Error('A16_WRITE_INTENT_CONFLICT');
+      const checked=verify(pending.receipt,{...input,asOf:pending.receipt.calculated_at});
+      if(!checked.verification_passed||!Number.isFinite(Date.parse(pending.receipt.calculated_at))||Date.parse(pending.receipt.calculated_at)>Date.parse(input.asOf))throw Error('A16_WRITE_INTENT_REVALIDATION_FAILED');
+      receipt=pending.receipt;verifier=checked;
+    }
     let previous;try{previous=read(path.join(receiptDir,symbol+'.json'));}catch{}
     const reuse=previous?.generation===generation&&previous?.mode===mode
       &&previous?.db?.readback_contract==='a16_db_anon_v2'
@@ -63,7 +74,12 @@ async function main(){
       if(!originalVerifier.verification_passed)throw Error('A16_CHECKPOINT_REVALIDATION_FAILED');
       receipt=previous.receipt;verifier=originalVerifier;
     }
-    dbResult=reuse?await db.verifyReadback(receipt,generation):await db.writeReadback(receipt,generation);
+    if(reuse||pending)dbResult=await db.verifyReadback(receipt,generation);
+    else {
+      fs.mkdirSync(receiptDir,{recursive:true});
+      require('../lib/daytrade-durable-json').writeExclusive(intentFile,{contract:'a16_write_intent_v1',generation,mode,payload_sha256:hash(compact(receipt)),receipt});
+      dbResult=await db.writeReadback(receipt,generation);
+    }
    }catch(e){failure=e.message;}
    const entry={symbol,source_ready:receipt.complete,verifier_passed:verifier.verification_passed,requested_count:receipt.requested_count,...dbResult,first_blocker:failure||verifier.failed_checks[0]||receipt.first_blocker||(dbResult.db_readback_ok!==true?'A16_DB_READBACK_UNVERIFIED':dbResult.anon_readback_ok!==true?'A16_ANON_READBACK_UNVERIFIED':dbResult.written_count!==1084||dbResult.readback_count!==1084?'A16_READBACK_COUNT_MISMATCH':!/^[0-9a-f]{64}$/.test(dbResult.payload_sha256||'')?'A16_PAYLOAD_HASH_MISSING':null)};rows.push(entry);
    atomic(path.join(receiptDir,symbol+'.json'),{input_reference:{history_file:file,side_journal_dates:Object.keys(sideJournals)},receipt,verifier,db:dbResult,generation,mode,complete:receipt.complete===true&&verifier.complete===true&&dbResult.db_readback_ok===true&&dbResult.anon_readback_ok===true&&dbResult.written_count===1084&&dbResult.readback_count===1084});
