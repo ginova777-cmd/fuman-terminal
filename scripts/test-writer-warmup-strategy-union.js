@@ -9,7 +9,7 @@ const group = symbols => ({ status: 'ready', symbols, runId: 'prior-run', scanDa
 const defaults = () => ({ strategy2: group(['1101']), strategy3: group(['2330']), strategy4: group(['2317']), strategy5: group(['2454']), institution: group(['2881']), ranking: group(['3105']) });
 function execute(groups = defaults(), extra = {}) {
   const payload = { tradeDate: date, canonicalRunId: canonical, priorityBridge: { tradeDate: date, groups }, ...extra };
-  const context = {
+  const context = { require, nowIso:()=>date+'T01:00:00Z',
     taipeiDate: () => date, canonicalDaytradeRunId: () => canonical,
     PRIORITY_SYMBOLS_FILE: 'priority', STRATEGY_PRIORITY_BRIDGE_CACHE_FILE: 'cache', INDUSTRY_SIGNAL_FAST_INJECT_FILE: 'industry',
     readJson: key => key === 'priority' ? payload : {}, objectPayload: x => x && typeof x === 'object' ? x : {},
@@ -41,4 +41,16 @@ test('union deduplicates shared stocks and retains both source flags', () => { c
 test('legacy slash88 array cannot seed', () => assert(!execute(defaults(), {slash88:['9999']}).symbols.some(r=>r.symbol==='9999')));
 test('validated scorecard adapter seeds slash88', () => {const r=execute(defaults(),{priorityBridge:{tradeDate:date,groups:defaults(),scorecardSource:{status:'READY',symbols:['9999']}}});assert.deepEqual(r.symbols.find(x=>x.symbol==='9999').sources,['slash88']);});
 test('blocked scorecard adapter cannot seed', () => assert(!execute(defaults(),{priorityBridge:{tradeDate:date,groups:defaults(),scorecardSource:{status:'BLOCKED',symbols:['9999']}}}).symbols.some(r=>r.symbol==='9999')));
-console.log(JSON.stringify({ checks, scope:'isolated_actual_Writer_seed_function', production_complete:false }));
+
+
+test('legacy unverified futures arrays cannot seed',()=>assert(!execute(defaults(),{stockFutureSymbols:['9999']}).symbols.some(r=>r.symbol==='9999')));
+
+test('official code-mapped futures enter actual Writer union',()=>{
+ const {FUGLE,TAIFEX}=require('../lib/mother-pool-futures-catalogue'),{hash}=require('../lib/mother-pool-module-write-set');
+ const raw_fugle={data:[{symbol:'CDFL6',contractType:'S',endDate:'2026-12-16'}]},raw_taifex_html='證券代號 股票期貨<tr>'+['CD','公司','2330','台積電','●','','','◎','','','','2000','',''].map(x=>'<td>'+x+'</td>').join('')+'</tr>';
+ const futuresSource={contract:'mother_pool_futures_catalogue_v1',trade_date:date,run_id:'fixture-catalogue',observed_at:date+'T00:00:00Z',fugle_url:FUGLE,taifex_url:TAIFEX,raw_fugle,raw_taifex_html,source_hash:hash({fugle:raw_fugle,taifex:raw_taifex_html})};
+ const result=execute(defaults(),{priorityBridge:{tradeDate:date,groups:defaults(),futuresSource}});
+ assert(result.symbols.find(r=>r.symbol==='2330').sources.includes('stock_future'));
+ assert.equal(result.sourceAudit.stock_future.accepted_count,1);
+});
+console.log(JSON.stringify({checks,scope:'isolated_actual_Writer_seed_function',production_complete:false}));

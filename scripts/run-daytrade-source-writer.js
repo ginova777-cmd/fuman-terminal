@@ -3479,7 +3479,12 @@ async function refreshStrategyChipPriorityBridge() {
     const readyCount = statuses.filter((status) => status === "ready").length;
     const errorCount = statuses.filter((status) => status === "error").length;
     const registeredKeys = Object.keys(SOURCE_REGISTRY);
+    let futuresSource;
+    try { futuresSource=await require('../lib/mother-pool-futures-catalogue').refresh({runtime:runtimePath(),tradeDate:taipeiDate(),asOf:nowIso(),key:FUGLE_API_KEY}); }
+    catch(error){ futuresSource={status:'BLOCKED',error:String(error.message||error)}; }
+    const futuresCheck=require('../lib/mother-pool-futures-catalogue').inspect(futuresSource,taipeiDate(),nowIso());
     const terminalGroups = Object.fromEntries(registeredKeys.map((key) => {
+      if(key==='futures')return [key,{status:futuresCheck.status,reason:futuresCheck.failed_checks[0]||'',source_date:futuresCheck.source_date,handoff_trade_date:taipeiDate(),run_id:futuresCheck.run_id,symbols:futuresCheck.status==='READY'?futuresCheck.symbols:[],source_count:futuresCheck.source_count,deduplicated_count:futuresCheck.symbols.length,failed_checks:futuresCheck.failed_checks}];
       if (key === 'scorecard88') return [key, {
         status: scorecardSource.status, reason: scorecardSource.first_blocker || '',
         source_date: scorecardSource.source_trade_date, handoff_trade_date: taipeiDate(),
@@ -3518,6 +3523,7 @@ async function refreshStrategyChipPriorityBridge() {
       groups,
       counts: Object.fromEntries(Object.entries(groups).map(([key, group]) => [key, Array.isArray(group.symbols) ? group.symbols.length : 0])),
       scorecardSource,
+      futuresSource,
       previousSourceDate,
       readyGroups: readyCount,
       errorGroups: errorCount,
@@ -3728,7 +3734,8 @@ function readRuntimePrioritySeeds(activeSymbols) {
   addMany("yesterday_gain_amplitude_spike", payload.yesterdayGainSymbols || payload.yesterdayAmplitudeSymbols || payload.yesterdayVolumeSpikeSymbols || payload.yesterday_gain_symbols || payload.yesterday_amplitude_symbols || payload.yesterday_volume_spike_symbols, 75);
   addMany("daytrade_hot", payload.hot || payload.daytradeHotSymbols || payload.priorityStrongSymbols, 75);
   addMany("industry_signal_fast_inject", industryFastInjectFresh ? industryFastInject.symbols : [], 240);
-  addMany("stock_future", payload.stockFutureSymbols || payload.futoptSymbols || payload.individualFuturesSymbols, 85);
+  const futuresSeedEvidence=require('../lib/mother-pool-futures-catalogue').inspect(bridge.futuresSource,tradeDate,nowIso());
+  addMany("stock_future", futuresSeedEvidence.status==='READY'?futuresSeedEvidence.symbols:[], 85);
   addMany("manual_watchlist", payload.manualWatchlist || payload.manual_watchlist || payload.watchlist || payload.userWatchlist || payload.user_watchlist, 120);
   const openingReport0830 = readOpeningReport0830PrioritySeeds(activeSymbols);
   addMany("opening_report_0830", openingReport0830.symbols, 50);
