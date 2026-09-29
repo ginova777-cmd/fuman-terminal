@@ -8591,6 +8591,7 @@ async function tick() {
   // Persist real natural-candle module rows before fixed-round capture.
   result.payload.module_write_sets = {};
   result.payload.module_persistence_errors = [];
+  let persistModuleInput = null;
   if (sideMinutes >= 360 && sideMinutes < 810) {
     try {
       const snapshot = sideSnapshot;
@@ -8643,10 +8644,7 @@ async function tick() {
           parents:result.payload.module_write_sets,side:sideFile?readJson(sideFile,null):null,asOf:nowIso()});
       }});
       if(sideMinutes>=539)inputs.push({module_id:'A18',build:()=>require('../lib/mother-pool-preopen-quality').collect({identity,symbols:snapshot.symbols,parents:result.payload.module_write_sets,asOf:nowIso()})});
-      for(const queued of inputs){
-        let input=queued;
-        try {
-          if(typeof input.build==='function')input=input.build();
+      persistModuleInput = async input => {
           const evidenceId=require('node:crypto').randomUUID();
           const saved=await require('../lib/persist-mother-pool-module-round').persistModuleRound(input,{
             savePlan:async plan=>require('../lib/daytrade-durable-json').writeExclusive(path.join(dir,evidenceId+'-plan.json'),plan),
@@ -8669,6 +8667,13 @@ async function tick() {
             saveEvidence:async evidence=>require('../lib/daytrade-durable-json').writeExclusive(path.join(dir,evidenceId+'.json'),evidence)
           });
           result.payload.module_write_sets[input.module_id]=saved;
+          return saved;
+      };
+      for(const queued of inputs){
+        let input=queued;
+        try {
+          if(typeof input.build==='function')input=input.build();
+          const saved=await persistModuleInput(input);
           if(input.module_id==='B02')writeJson(statePath('daytrade-b02-module-latest.json'),saved);
         }catch(error){result.payload.module_persistence_errors.push({module_id:input.module_id,error:String(error.message||error)});}
       }
@@ -8685,7 +8690,7 @@ async function tick() {
     const snapshotGeneration = result.payload?.mother_pool_snapshot?.generation || snapshotRun;
     const captureArgs = [path.join(__dirname, 'capture-daytrade-module-readbacks.js'), `--trade-date=${taipeiDate()}`, `--canonical=${result.payload?.canonical_run_id || `${SOURCE_NAME}:${String(taipeiDate()).replace(/-/g, '')}:canonical`}`, `--writer-run-id=${result.payload?.writer_run_id || result.run_id || ''}`, `--writer-generation-id=${result.payload?.generation_id || ''}`, `--snapshot-generation=${snapshotGeneration}`, `--mother-pool-run-id=${snapshotRun}`, `--snapshot-sequence=${result.payload?.mother_pool_snapshot_sequence || ''}`, `--modules=${Object.keys(moduleRegistry.modules || {}).join(',')}`];
     const captures=[];
-    const nonSide=Object.keys(moduleRegistry.modules||{}).filter(id=>!['B14','B20'].includes(id));
+    const nonSide=Object.keys(moduleRegistry.modules||{}).filter(id=>!['B14','B20','A14','A19'].includes(id));
     const writeSetIndexFile=runtimePath('data','scan-receipts','modules',`writer-write-set-index-${require('node:crypto').randomUUID()}.json`);
     fs.writeFileSync(writeSetIndexFile,JSON.stringify({modules:result.payload.module_write_sets||{}},null,2),{flag:'wx'});
     captureArgs.push('--write-set-index='+writeSetIndexFile);
@@ -8699,6 +8704,17 @@ async function tick() {
         '--snapshot-generation='+id.snapshot_generation,'--snapshot-sequence='+id.snapshot_sequence]);
     }else captures.push({status:1,stderr:'MINUTE_SIDE_WRITE_SET_MISSING'});
     for(const args of groups){const capture=spawnSync(process.execPath,args,{encoding:'utf8',windowsHide:true,timeout:120000,env:{...process.env,SUPABASE_SERVICE_ROLE_KEY:SUPABASE_SERVICE_KEY,SUPABASE_ANON_KEY:SUPABASE_READ_KEY===SUPABASE_SERVICE_KEY?'':SUPABASE_READ_KEY,MOTHER_POOL_B14_VIEW:'v_daytrade_minute_side_readback_v1',MOTHER_POOL_B20_VIEW:'v_daytrade_minute_side_b20_readback_v1'}});captures.push({status:capture.status,stdout:capture.stdout||'',stderr:capture.stderr||'',error:capture.error?.message||null});}
+    if(persistModuleInput && sideMinutes>=539 && sideMinutes<810){
+      const closureIdentity={trade_date:taipeiDate(),canonical_run_id:sideSnapshot.canonical_run_id,writer_run_id:result.payload.writer_run_id,generation_id:result.payload.generation_id,mother_pool_run_id:sideSnapshot.mother_pool_run_id,snapshot_generation:sideSnapshot.generation,snapshot_sequence:sideSnapshot.snapshot_sequence};
+      const closureCaptures=await require('../lib/run-preopen-closure-stages').run({identity:closureIdentity,symbols:sideSnapshot.symbols,captures,persist:persistModuleInput,runtime:runtimePath(),capture:async(id,saved)=>{
+        const indexFile=runtimePath('data','scan-receipts','modules',`closure-write-set-${require('node:crypto').randomUUID()}.json`);
+        fs.writeFileSync(indexFile,JSON.stringify({modules:{[id]:saved}}),{flag:'wx'});
+        const args=captureArgs.map(x=>x.startsWith('--modules=')?'--modules='+id:x.startsWith('--write-set-index=')?'--write-set-index='+indexFile:x);
+        const c=spawnSync(process.execPath,args,{encoding:'utf8',windowsHide:true,timeout:120000,env:{...process.env,SUPABASE_SERVICE_ROLE_KEY:SUPABASE_SERVICE_KEY,SUPABASE_ANON_KEY:SUPABASE_READ_KEY===SUPABASE_SERVICE_KEY?'':SUPABASE_READ_KEY}});
+        return {module_id:id,status:c.status,stdout:c.stdout||'',stderr:c.stderr||'',error:c.error?.message||null};
+      }});
+      captures.push(...closureCaptures);
+    }
     result.payload.module_readback_capture={status:captures.every(c=>c.status===0)?'ok':'blocked',captures};
   } catch (error) { result.payload.module_readback_capture = { status: 'blocked', exit_code: 1, error: String(error?.message || error) }; }
   // Independent module verification is a separate process. It only promotes
