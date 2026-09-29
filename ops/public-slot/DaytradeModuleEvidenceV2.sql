@@ -31,6 +31,7 @@ BEGIN
      OR d->'plan' IS DISTINCT FROM p
      OR d->>'plan_hash' IS DISTINCT FROM encode(sha256(convert_to(p_plan,'UTF8')),'hex')
      OR d->>'module_id' IS NULL OR d->>'module_id' !~ '^(A(0[1-9]|1[0-9])|B(0[1-9]|1[0-9]|2[0-4]))$'
+     OR d->>'module_id' = 'A10'
      OR (d->>'snapshot_sequence')::bigint < 1 THEN RAISE EXCEPTION 'INVALID_MODULE_PLAN'; END IF;
   FOREACH field IN ARRAY ARRAY['trade_date','canonical_run_id','writer_run_id','generation_id','mother_pool_run_id','snapshot_generation','snapshot_sequence','module_contract'] LOOP
     IF nullif(d->>field,'') IS NULL THEN RAISE EXCEPTION 'MISSING_IDENTITY:%',field; END IF;
@@ -71,6 +72,8 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.persist_daytrade_module_round_v2(text,text) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.persist_daytrade_module_round_v2(text,text) TO service_role;
+-- Exact acknowledgement recovery reads the immutable document and original rows.
+GRANT SELECT ON public.fugle_daytrade_module_round_v2, public.fugle_daytrade_module_rows_v2 TO service_role;
 
 CREATE OR REPLACE VIEW public.v_daytrade_module_readback_v2 AS
  SELECT r.module_id,r.trade_date,r.writer_run_id,r.symbol,
