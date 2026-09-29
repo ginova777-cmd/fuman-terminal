@@ -27,6 +27,7 @@ async function main(){
     if(mode==='timeout')assert.equal(result.write_ack,'exact_readback_after_timeout');
    }else await assert.rejects(client(dir).writeReadback(receipt,'g'),/MISMATCH|HTTP_403/);
    assert.equal(calls.filter(c=>c.method==='POST').length,1);
+   if(['bad-db','bad-identity','missing'].includes(mode)){assert.equal(calls.length,2);assert.equal(calls.some(c=>c.key==='anon'),false,'DB failure must stop before anon');}
   }
   for(const kind of ['provider-trade-journal','provider-side-journal']){const folder=path.join(dir,'data',kind,'2026-09-24');fs.mkdirSync(folder,{recursive:true});fs.writeFileSync(path.join(folder,'1301.jsonl'),'{}\n\u0000\n');}
   assert.throws(()=>readSide(dir,'1301',['2026-09-24']),/A16_JOURNAL_JSON_INVALID:.*1301.jsonl:line=2/);
