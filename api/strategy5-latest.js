@@ -1,5 +1,6 @@
 const { withEntitlementRequired } = require("../lib/server-entitlement-guard");
 const { buildMarketCalendarContract, installMarketCalendarResponse } = require("../lib/market-calendar-contract");
+const { strategy5MobileAuthority } = require("../lib/strategy5-mobile-authority");
 const fs = require("fs");
 const path = require("path");
 const { readEndpointFromDesktopSnapshot } = require("../lib/desktop-route-snapshot-cache");
@@ -1024,7 +1025,9 @@ async function fetchLatestCompleteRows(limit = 2000) {
 
 async function handler(request, response) {
   const marketCalendar = await buildMarketCalendarContract().catch(() => null);
-  installMarketCalendarResponse(response, marketCalendar);
+  installMarketCalendarResponse(response, marketCalendar, {
+    verifyCompletedPublication: (payload, day) => strategy5MobileAuthority(payload, day) !== null,
+  });
   wrapJsonRunTimeSourceEvidence(response, { strategy: "strategy5", endpoint: "api/strategy5-latest" });
   response.setHeader("Cache-Control", "no-store, max-age=0, must-revalidate");
   response.setHeader("CDN-Cache-Control", "no-store");
