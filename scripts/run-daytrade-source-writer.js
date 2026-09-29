@@ -8652,8 +8652,17 @@ async function tick() {
             savePlan:async plan=>require('../lib/daytrade-durable-json').writeExclusive(path.join(dir,evidenceId+'-plan.json'),plan),
             persist:async body=>{
               if(DRY_RUN)throw Error('MODULE_DRY_RUN_NO_PERSISTENCE');
-              const response=await fetch(SUPABASE_URL+'/rest/v1/rpc/persist_daytrade_module_round_v2',{
+              let response;
+              try { response=await fetch(SUPABASE_URL+'/rest/v1/rpc/persist_daytrade_module_round_v2',{
                 method:'POST',headers:headers(requireSupabaseKey(true)),body:JSON.stringify(body),signal:AbortSignal.timeout(SUPABASE_WRITE_TIMEOUT_MS)});
+              } catch(error) {
+                if(!['TimeoutError','AbortError'].includes(error?.name))throw error;
+                const document=JSON.parse(body.p_document);
+                const fixed={module_id:'eq.'+document.module_id,trade_date:'eq.'+document.trade_date,writer_run_id:'eq.'+document.writer_run_id};
+                const rounds=await supabaseGetPaged('fugle_daytrade_module_round_v2',new URLSearchParams({...fixed,select:'module_id,trade_date,writer_run_id,document,committed_at',order:'writer_run_id.asc'}).toString(),{service:true,requireExactCount:true,pageSize:500,maxRows:2});
+                const rows=await supabaseGetPaged('fugle_daytrade_module_rows_v2',new URLSearchParams({...fixed,select:'module_id,trade_date,writer_run_id,symbol,evidence',order:'symbol.asc'}).toString(),{service:true,requireExactCount:true,pageSize:500,maxRows:document.plan.requested_symbols.length});
+                return require('../lib/daytrade-module-write-ack').verify(document,rounds,rows);
+              }
               if(!response.ok)throw Error('MODULE_RPC_HTTP_'+response.status+':'+(await response.text()).slice(0,240));
               return response.json();
             },
