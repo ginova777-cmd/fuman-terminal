@@ -8614,6 +8614,7 @@ async function tick() {
         return require('../lib/mother-pool-combination-producer').collect({identity,symbols:snapshot.symbols,
           parents:result.payload.module_write_sets,side:sideFile?readJson(sideFile,null):null,asOf:nowIso()});
       }});
+      if(sideMinutes>=539)inputs.push({module_id:'A18',build:()=>require('../lib/mother-pool-preopen-quality').collect({identity,symbols:snapshot.symbols,parents:result.payload.module_write_sets,asOf:nowIso()})});
       for(const queued of inputs){
         let input=queued;
         try {
