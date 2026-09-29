@@ -8936,7 +8936,7 @@ async function main() {
       sourceIntent:{file:argValue('source-intent'),row_sha256:argValue('source-intent-sha256')},runtime:runtimePath(),url:SUPABASE_URL,key:requireSupabaseKey(true),hostId:SOURCE_HOST_ID,instanceId:WRITER_INSTANCE_ID,tradeDate:taipeiDate(),guard,
       calendar:async date=>{const day=await isTwseTradingDay(new Date(date+'T12:00:00+08:00'),{stateDir:statePath(),ignoreOverrides:true});if(day.isTradingDay!==true||day.error||!['cache','twse'].includes(day.source))throw Error('RECOVERY_TRADING_DAY_UNVERIFIED');},
       read:async(table,query)=>supabaseGetPaged(table,new URLSearchParams(query).toString(),{service:true,requireExactCount:true,pageSize:2,maxRows:2}),
-      invoke:async(script,args)=>{const p=spawnSync(process.execPath,[path.join(__dirname,script),...args],{encoding:'utf8',windowsHide:true,timeout:180000,env:{...process.env,FUMAN_RUNTIME:runtimePath(),SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY:requireSupabaseKey(true)}});return {exit_code:p.status,stdout:p.stdout||'',error:p.error?.code||null};}
+      invoke:async(script,args,verificationEnv={})=>{const p=spawnSync(process.execPath,[path.join(__dirname,script),...args],{encoding:'utf8',windowsHide:true,timeout:180000,maxBuffer:8388608,env:{...process.env,...verificationEnv,FUMAN_RUNTIME:runtimePath(),SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY:requireSupabaseKey(true)}});return {exit_code:p.status,stdout:p.stdout||'',error:p.error?.code||null};}
     });
     console.log(JSON.stringify(recovered));process.exitCode=recovered.first_blocker?1:2;return;
   }
