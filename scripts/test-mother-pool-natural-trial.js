@@ -46,4 +46,6 @@ console.log('PASS A13 raw provenance, four slots, missing/duplicate/stale/synthe
 })().catch(e=>{console.error(e);process.exitCode=1;});
 for(const field of ['trade_date','run_id','generation_id','observed_at']){const changed=structuredClone(raw);changed[0].payload[field]='wrong';assert.equal(build(changed).rows[0].status,'DATA_GAP');}
 assert.equal(verify({source_contract:'preopen_a13_natural_trial_v1',raw_trials:null},round),false);
-console.log('PASS A13 source run/date/generation mismatch and malformed raw rejection');
+console.log('PASS A13 source run/date/generation mismatch and malformed raw rejection');const pgRows=structuredClone(raw).map(r=>({...r,observed_at:new Date(r.observed_at).toISOString().replace('Z','+00:00')}));
+assert.equal(build(pgRows).rows[0].status,'READY');assert(verify(build(pgRows).rows[0],round));
+console.log('PASS A13 equivalent PostgreSQL timestamp serialization preserves exact source generation');
