@@ -8378,6 +8378,7 @@ async function tick() {
     quoteMap,
     intradayMap,
   });
+  console.log(JSON.stringify({ok:true,stage:'daytrade_tick:compute_stats:start',checkedAt:nowIso()}));
   const result = computeStats({
     activeSymbols,
     priorityRows,
@@ -8392,6 +8393,7 @@ async function tick() {
     state: nextState,
     supplementalMaps,
   });
+  console.log(JSON.stringify({ok:true,stage:'daytrade_tick:compute_stats:complete',checkedAt:nowIso()}));
   result.priorityRows = priorityRows;
   result.payload.same_round_industry_discovery = sameRoundIndustryDiscovery;
   result.quoteMap = quoteMap;
@@ -8403,7 +8405,9 @@ async function tick() {
   }));
   result.payload.b19_b24_event_evidence = buildB19B24Evidence(result.industryUniverseRows);
   let preopenTrialHistory = null;
+  console.log(JSON.stringify({ok:true,stage:'daytrade_tick:preopen_evidence:start',checkedAt:nowIso()}));
   result.payload.preopen_a15_a19_evidence = await buildPreopenA15A19Evidence(activeSymbols, quoteMap, taipeiDate(), evidence => { preopenTrialHistory = evidence; });
+  console.log(JSON.stringify({ok:true,stage:'daytrade_tick:preopen_evidence:complete',checkedAt:nowIso()}));
   result.payload.nonfatal_write_errors = fetchResult.errors || [];
   result.payload.websocket_quote_readthrough_written = websocketQuoteReadthroughSync.written || 0;
   result.payload.websocket_quote_readthrough_skipped = Boolean(websocketQuoteReadthroughSync.skipped);
