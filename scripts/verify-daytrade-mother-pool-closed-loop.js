@@ -306,7 +306,9 @@ async function main() {
   check("fast_supabase_sync_same_day", fastSync?.trade_date === clock.tradeDate, "fast_supabase_sync_trade_date_mismatch");
   check("fast_supabase_sync_fresh", ageSeconds(fastSync?.completed_at) <= 120, "fast_supabase_sync_stale");
   check("fast_supabase_quote_write_nonempty", Number(fastSync?.quotes_written) > 0, "fast_supabase_quote_write_empty");
-  check("fast_supabase_1m_write_nonempty", Number(fastSync?.candles_written) > 0, "fast_supabase_1m_write_empty");
+  // Current-session candles are not a preopen warmup requirement.
+  const intradayCandlesRequired = clock.minute >= 9 * 60;
+  check("fast_supabase_1m_write_nonempty", !intradayCandlesRequired || Number(fastSync?.candles_written) > 0, "fast_supabase_1m_write_empty");
   const industryReceiptsRequired = clock.minute >= 9 * 60;
   check("industry_top3_receipt_readable", !industryReceiptsRequired || Boolean(industryTop3), "industry_top3_receipt_missing");
   check("industry_top3_receipt_complete", !industryReceiptsRequired || industryTop3?.complete === true, "industry_top3_receipt_not_complete");

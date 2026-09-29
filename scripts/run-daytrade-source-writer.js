@@ -2360,13 +2360,17 @@ async function fetchIntradayStatus(activeSymbols = []) {
     try {
       const symbols = [...new Set((activeSymbols || []).map((row) => normalizeCode(row.symbol || row)).filter(Boolean))];
       const rows = [];
+      const rawWarmupRows = [], warmupPages = [];
       for (let index = 0; index < symbols.length; index += 40) {
         const page = await supabaseRpc(
           "get_fugle_daytrade_intraday_1m_latest_n",
           { symbols: symbols.slice(index, index + 40), bars_per_symbol: 25 },
           { service: true },
         );
-        rows.push(...(Array.isArray(page) ? page : []).filter((row) => row.synthetic !== true && row.is_synthetic !== true));
+        if (!Array.isArray(page)) throw Error('PREOPEN_HISTORY_RPC_ROWS_INVALID');
+        rawWarmupRows.push(...page);
+        warmupPages.push({page_index: warmupPages.length, requested_symbols: symbols.slice(index, index + 40), row_count: page.length});
+        rows.push(...page.filter((row) => row.synthetic !== true && row.is_synthetic !== true));
       }
       const grouped = buildGrouped(rows, tradeDate);
       const naturalWarmupRows = [...grouped.values()].filter((row) =>
@@ -2374,7 +2378,10 @@ async function fetchIntradayStatus(activeSymbols = []) {
         && numberValue(row.latest_candle_age_seconds, 999999) <= 7 * 24 * 60 * 60
       );
       if (naturalWarmupRows.length) {
-        return finalizeIntradayMap(naturalWarmupRows, "dedicated_daytrade_intraday_1m_latest_25_batched_natural_warmup");
+        const map = await finalizeIntradayMap(naturalWarmupRows, "dedicated_daytrade_intraday_1m_latest_25_batched_natural_warmup");
+        return require('../lib/daytrade-preopen-raw-evidence').attach(map, {
+          tradeDate, requestedSymbols: symbols, pages: warmupPages, rows: rawWarmupRows, observedAt: nowIso(),
+        });
       }
     } catch {
       // Fall through to persisted status-cache warmup without weakening quality checks.
@@ -7083,6 +7090,19 @@ function updateMotherPoolDelta(result) {
     upgraded_to_priority_count: 0, downgraded_count: 0, round_summary: summary,
     target_symbol_diagnostics: [] };
 }
+async function traceStatusWrite(stage, action) {
+  const started = Date.now();
+  console.log(JSON.stringify({ stage: 'status_write:' + stage + ':start', checkedAt: nowIso() }));
+  try {
+    const result = await action();
+    console.log(JSON.stringify({ stage: 'status_write:' + stage + ':complete', elapsed_ms: Date.now() - started, checkedAt: nowIso() }));
+    return result;
+  } catch (cause) {
+    console.error(JSON.stringify({ stage: 'status_write:' + stage + ':failed', elapsed_ms: Date.now() - started, error_name: cause?.name || 'Error', checkedAt: nowIso() }));
+    const error = new Error('STATUS_WRITE_FAILED:' + stage + ':' + (cause?.name || 'Error'), { cause });
+    throw error;
+  }
+}
 async function writeStatusAndScorecard(result) {
   const motherPoolDelta = PREOPEN_LIGHT_MODE ? buildPreopenLightMotherPoolDelta(result) : updateMotherPoolDelta(result);
   const tradeDate = taipeiDate();
@@ -7096,7 +7116,7 @@ async function writeStatusAndScorecard(result) {
   result.payload.mother_pool_delta = motherPoolDelta;
   result.payload.mother_pool_round_summary = motherPoolDelta.round_summary;
   result.payload.target_symbol_diagnostics = motherPoolDelta.target_symbol_diagnostics;
-  await ensureWriterLease();
+  await traceStatusWrite('lease', () => ensureWriterLease());
   const nonFatalWriteErrors = (result.payload.nonfatal_write_errors || []).map(require('../lib/daytrade-diagnostic-errors').encodeDiagnosticError);
   result.payload.nonfatal_write_errors = nonFatalWriteErrors;
   result.payload.source_host_id = SOURCE_HOST_ID;
@@ -7173,7 +7193,7 @@ async function writeStatusAndScorecard(result) {
     payload: scorecardPayload,
   };
   try {
-    await supabaseInsert("fugle_daytrade_source_speed_scorecard", [scorecardRow]);
+    await traceStatusWrite("speed_scorecard", () => supabaseInsert("fugle_daytrade_source_speed_scorecard", [scorecardRow]));
   } catch (error) {
     nonFatalWriteErrors.push(require("../lib/daytrade-diagnostic-errors").encodeDiagnosticError({
       target: "fugle_daytrade_source_speed_scorecard",
@@ -7190,7 +7210,7 @@ async function writeStatusAndScorecard(result) {
   }
   inspectNull(sourceRow, 'source_status');
   if (nullPaths.length) throw Error('SOURCE_STATUS_NULL_CHARACTER_FIELDS:' + JSON.stringify(nullPaths));
-  await supabaseUpsert("source_status", [sourceRow], "source_name");
+  await traceStatusWrite("source_status", () => supabaseUpsert("source_status", [sourceRow], "source_name"));
   // The turnover checklist has its own independently read-back receipt.
   // Failure here is visible but cannot erase the already published core source.
   const turnover = result.payload.intraday_turnover_ranking;
@@ -8542,6 +8562,12 @@ async function tick() {
       const collectorStatus=readJson(FUGLE_WS_STATUS_FILE,null);
       inputs.push(require('../lib/mother-pool-websocket-source').collect({identity,symbols:snapshot.symbols,status:collectorStatus,asOf:nowIso()}));
       inputs.push(require('../lib/mother-pool-previous-ohlc').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,asOf:sideAsOf,lockDirectory:runtimePath('data','mother-pool-a15',identity.trade_date)}));
+      if(sideMinutes<540){
+        try { inputs.push(...require('../lib/mother-pool-preopen-ma20').collect({
+          identity,symbols:snapshot.symbols,snapshot,calendar:marketCalendarEvidence,
+          rawEvidence:intradayMap.preopenRawEvidence,asOf:sideAsOf,
+        })); } catch(error) { result.payload.module_persistence_errors.push({modules:['A08','A09'],error:String(error.message||error)}); }
+      }
       if(sideMinutes>=540){
       inputs.push(...require('../lib/mother-pool-ma20-producer').collect({identity,snapshot,symbols:snapshot.symbols,candles:sessionCandles,asOf:sideAsOf}));
       inputs.push(...require('../lib/mother-pool-candle-module-producer').collect({
@@ -8892,13 +8918,3 @@ main().catch((error) => {
   }, null, 2));
   process.exit(1);
 });
-
-
-
-
-
-
-
-
-
-
