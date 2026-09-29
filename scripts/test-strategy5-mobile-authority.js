@@ -2,6 +2,7 @@
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), Module = require('node:module');
 const { strategy5MobileAuthority } = require('../lib/strategy5-mobile-authority');
+const { installMarketCalendarResponse } = require('../lib/market-calendar-contract');
 const day = new Intl.DateTimeFormat('en-CA', {timeZone:'Asia/Taipei'}).format(new Date()).replace(/\D/g,'');
 const runId = `strategy5-${day}-${day}130230`;
 function valid() {
@@ -26,6 +27,33 @@ for (const [name, change] of Object.entries({
 test('prior day never claims today authority',()=>assert.equal(strategy5MobileAuthority(valid(),'20991231'),null));
 test('readback count remains full count when transport limits visible rows',()=>assert.equal(strategy5MobileAuthority(valid(),day).formalDisplayAllowed,true));
 function zero() {const p=valid();p.resultCount=p.count=p.returnedCount=p.run_quality_at_publish.readbackCount=p.transport.resultReadbackCount=0;p.matches=[];return p;}
+
+function calendarWrapped(p, overrides = {}, optIn = true) {
+  let result;
+  const response = {json: value => { result = value; }};
+  const calendar = {ok:true, tradingDayOpen:true, requestedDate:day,
+    sourceFreshnessRequired:false, displayTradeDate:'20000101',
+    formalSourceWindow:{phase:'after_formal_source_window'}, ...overrides};
+  installMarketCalendarResponse(response, calendar, optIn ? {
+    verifyCompletedPublication:(payload,date)=>strategy5MobileAuthority(payload,date)!==null
+  } : {});
+  response.json(p);
+  return result;
+}
+test('nightly complete response survives calendar wrapper',()=>{
+  const p=calendarWrapped(valid());
+  assert.equal(p.preservePreviousGood,false);
+  assert.equal(p.displayTradeDate,day);
+  assert.equal(strategy5MobileAuthority(p,day).formalDisplayAllowed,true);
+});
+test('nightly zero result survives calendar wrapper',()=>assert.equal(strategy5MobileAuthority(calendarWrapped(zero()),day).moduleStatus,'0-result'));
+test('other endpoints retain calendar preservation',()=>assert.equal(calendarWrapped(valid(),{},false).preservePreviousGood,true));
+for (const [name, overrides] of Object.entries({holiday:{tradingDayOpen:false},unknown:{ok:false},priorDate:{requestedDate:'20000101'},preopen:{formalSourceWindow:{phase:'before_formal_source_window'}}})) {
+  test('calendar remains closed for '+name,()=>assert.equal(calendarWrapped(valid(),overrides).preservePreviousGood,true));
+}
+for (const [name,change] of Object.entries({partial:p=>p.scannedCount--,fallback:p=>p.fallbackUsed=true,preserved:p=>p.preservePreviousGood=true,stale:p=>p.sourceDate='20000101',blocked:p=>p.publishAllowed=false})) {
+  test('wrapper rejects '+name,()=>{const p=valid();change(p);assert.equal(calendarWrapped(p).preservePreviousGood,true);});
+}
 test('healthy zero result is complete',()=>assert.equal(strategy5MobileAuthority(zero(),day).moduleStatus,'0-result'));
 
 // Render the actual fragment without network enrichment. Only the unrelated cost
