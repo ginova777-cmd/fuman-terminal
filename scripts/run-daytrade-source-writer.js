@@ -7230,8 +7230,12 @@ async function writeStatusAndScorecard(result) {
   inspectNull(sourceRow, 'source_status');
   if (nullPaths.length) throw Error('SOURCE_STATUS_NULL_CHARACTER_FIELDS:' + JSON.stringify(nullPaths));
   console.log(JSON.stringify({stage:'source_status_write_size',checkedAt:nowIso(),writer_run_id:sourceRow.payload.writer_run_id,bytes:Buffer.byteLength(JSON.stringify(sourceRow),'utf8'),largest_fields:require('../lib/daytrade-payload-size').inspect(sourceRow.payload)}));
+  const sourceStatusJournal=require('../lib/daytrade-source-status-journal');
+  let sourceStatusCheckpoint;
   const sourceStatusAck = await traceStatusWrite("source_status", () => require('../lib/daytrade-source-status-ack').writeWithAcknowledgement({
     row: sourceRow,
+    onPrepared: row => {sourceStatusCheckpoint=sourceStatusJournal.prepare(runtimePath('data','source-status-write-intents'),row);},
+    onAcknowledged: ack => sourceStatusJournal.confirm(sourceStatusCheckpoint,ack),
     retryDelaysMs: [5000,10000],
     onMismatch: evidence => console.error(JSON.stringify({stage:'source_status_ack_mismatch',checkedAt:nowIso(),...evidence})),
     write: row => supabaseUpsert("source_status", [row], "source_name"),
