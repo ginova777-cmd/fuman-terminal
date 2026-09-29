@@ -1158,7 +1158,10 @@ async function fetchDailyVolumeAvg() {
     let loaded = false;
     for (const service of [true, false]) {
       try {
-        const rows = await supabaseGetPaged(spec.resource, spec.query, { service, pageSize: 1000 });
+        tickStage("daily_volume:source:start", { resource: spec.resource, service });
+        const sourceStartedAt = Date.now();
+        const rows = await supabaseGetPaged(spec.resource, spec.query, { service, pageSize: 500 });
+        tickStage("daily_volume:source:complete", { resource: spec.resource, service, rows: rows.length, elapsed_ms: Date.now() - sourceStartedAt });
         const map = dailyVolumeRowsToMap(rows, `${spec.source}${service ? "" : "_anon_retry"}`);
         for (const [symbol, row] of map.entries()) {
           if (!combined.has(symbol) || shouldReplace(combined.get(symbol), row)) combined.set(symbol, row);
@@ -1176,7 +1179,10 @@ async function fetchDailyVolumeAvg() {
     if (!loaded && spec.resource === "fugle_daytrade_daily_volume_avg" && combined.size >= DEEP_SCAN_POOL_MAX_SYMBOLS) break;
   }
   try {
+    tickStage("daily_volume:recent_three_day:start");
+    const recentStartedAt = Date.now();
     const recentThreeDay = await fetchRecentThreeDayAverageVolume();
+    tickStage("daily_volume:recent_three_day:complete", { rows: recentThreeDay.bySymbol.size, elapsed_ms: Date.now() - recentStartedAt });
     for (const [symbol, history] of recentThreeDay.bySymbol.entries()) {
       combined.set(symbol, { ...(combined.get(symbol) || { symbol }), ...history });
     }
