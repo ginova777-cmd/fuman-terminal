@@ -24,7 +24,7 @@ for(const moduleId of Object.keys(registry.modules)){
  for(const r of list){if(selected.every(x=>x.value.writer_run_id!==r.value.writer_run_id&&x.value.generation_id!==r.value.generation_id&&x.value.snapshot_generation!==r.value.snapshot_generation))selected.push(r);if(selected.length===2)break;}
  if(selected.length<2){results.push({module_id:moduleId,status:'pending',complete:false,reason:'TWO_DISTINCT_ROUNDS_REQUIRED'});continue;}
  selected.reverse();const out=path.join(dir,`${moduleId.toLowerCase()}-verified-${tradeDate}-${attempt}.json`);
- const p=spawnSync(process.execPath,[path.join(__dirname,'verify-daytrade-module-receipt.js'),`--module=${moduleId}`,`--round1=${selected[0].file}`,`--round2=${selected[1].file}`,`--out=${out}`],{encoding:'utf8',windowsHide:true,timeout:30000});
+ const p=spawnSync(process.execPath,[path.join(__dirname,'verify-daytrade-module-receipt.js'),'--summary',`--module=${moduleId}`,`--round1=${selected[0].file}`,`--round2=${selected[1].file}`,`--out=${out}`],{encoding:'utf8',windowsHide:true,timeout:30000});
  const receipt=read(out);const complete=p.status===0&&receipt?.complete===true&&receipt?.status==='complete'&&receipt?.exit_code===0;
  results.push({module_id:moduleId,status:complete?'complete':'blocked',complete,out,exit_code:p.status,stdout:p.stdout||'',stderr:p.stderr||'',reason:receipt?.first_blocker||p.error?.message||null});
 }
