@@ -7218,6 +7218,7 @@ async function writeStatusAndScorecard(result) {
   if (nullPaths.length) throw Error('SOURCE_STATUS_NULL_CHARACTER_FIELDS:' + JSON.stringify(nullPaths));
   const sourceStatusAck = await traceStatusWrite("source_status", () => require('../lib/daytrade-source-status-ack').writeWithAcknowledgement({
     row: sourceRow,
+    onMismatch: evidence => console.error(JSON.stringify({stage:'source_status_ack_mismatch',checkedAt:nowIso(),...evidence})),
     write: row => supabaseUpsert("source_status", [row], "source_name"),
     read: row => supabaseGet('source_status',
       'select='+Object.keys(row).join(',')+'&source_name=eq.'+encodeURIComponent(row.source_name)

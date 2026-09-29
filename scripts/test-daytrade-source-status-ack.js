@@ -17,6 +17,14 @@ async function main(){
   const bad=clone(base);change(bad);writes=0;
   await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>[bad]}),/CONTENT_MISMATCH/);assert.equal(writes,1);
  }
+ let diagnostic;
+ const old=clone(base);old.payload.writer_run_id='older-round';old.payload.secret='must-not-log';
+ await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>[old],onMismatch:e=>{diagnostic=e;}}),/CONTENT_MISMATCH/);
+ assert.equal(diagnostic.identity_matches,false);assert.equal(diagnostic.actual_identity.writer_run_id,'older-round');
+ assert(!JSON.stringify(diagnostic).includes('must-not-log'));
+ const same=clone(base);same.payload.nested.a=10;
+ await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>[same],onMismatch:e=>{diagnostic=e;}}),/CONTENT_MISMATCH/);
+ assert.equal(diagnostic.identity_matches,true);
  for(const rows of [[],[base,base]])await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>rows}),/ROW_COUNT/);
  await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>{throw Error('offline');}}),/READ_FAILED/);
  reads=0;await assert.rejects(writeWithAcknowledgement({row:base,write:async()=>{throw Error('HTTP 403');},read:async()=>{reads++;}}),/403/);assert.equal(reads,0);
