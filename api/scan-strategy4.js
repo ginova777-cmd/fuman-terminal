@@ -306,7 +306,7 @@ async function fetchFugleHistory(code) {
   const to = process.env.STRATEGY4_REPLAY_TRADE_DATE || new Date().toISOString().slice(0, 10);
   const cached = readFugleHistoryCache(code, from, to);
   if (cached) return cached;
-  if (!FUGLE_API_KEY) return { rows: [], source: "missing_fugle_key_and_cache" };
+  if (!FUGLE_API_KEY) return { rows: [], source: 'missing_fugle_key_and_cache' };
   if (SUPABASE_FIRST && !ALLOW_EXTERNAL_FALLBACK) return { rows: [], source: "supabase-cache-miss" };
   const params = new URLSearchParams({
     symbol: code,
@@ -1050,7 +1050,7 @@ function calcBuyStreak(rows, ma20, volMa20) {
   return streak;
 }
 
-function scanStrategy4(code, market, rows, priceSource = "", recentVolumeBonus = null) {
+function scanStrategy4(code, market, rows, priceSource = "", recentVolumeBonus = null, daytradeBonus = null) {
   const daily = analyzeRows(rows);
   if (!daily) return null;
   // Daily KD/RSI affect bonus points only; pattern eligibility is independent.
@@ -1272,11 +1272,12 @@ function scanStrategy4(code, market, rows, priceSource = "", recentVolumeBonus =
   const technicalBonus = require("../lib/strategy4-v4-evidence").technicalBonus(daily.dailyTechnicalGate);
   const baseScore = Math.min(100, rawBaseScore);
   recentVolumeBonus = recentVolumeBonus || require('../lib/strategy4-recent-volume-bonus').calculate([], [], last.date);
-  const score = Math.min(100, baseScore + technicalBonus.total + recentVolumeBonus.points);
+  daytradeBonus = daytradeBonus || require('../lib/strategy4-daytrade-bonus').calculate({symbol:code},last.date);
+  const score = Math.min(100, baseScore + technicalBonus.total + recentVolumeBonus.points + daytradeBonus.points);
   const volumeBonusText = recentVolumeBonus.points ? '近期放量＋5｜' + recentVolumeBonus.matchedDates.join('、') + '｜最高量比 ' + recentVolumeBonus.maxRatio.toFixed(2) + '倍' : '近期放量＋0｜' + recentVolumeBonus.status;
 
   return {
-    baseScore, rawBaseScore, technicalBonus, recentVolumeBonus,
+    baseScore, rawBaseScore, technicalBonus, recentVolumeBonus, daytradeBonus,
     code,
     market,
     priceSource,
@@ -1366,7 +1367,7 @@ function scanStrategy4(code, market, rows, priceSource = "", recentVolumeBonus =
       isRunawayUp: runawayGap,
       isBreakawayUp: breakawayGap,
     },
-    reason: signals[0].reason + "；" + volumeBonusText,
+    reason: signals[0].reason + "；" + volumeBonusText + "；當沖比加分＋" + daytradeBonus.points + "｜" + (daytradeBonus.ratioPct === null ? "資料不可用" : daytradeBonus.ratioPct.toFixed(2) + "%"),
   };
 }
 
@@ -1410,7 +1411,7 @@ module.exports = async function handler(request, response) {
     return {
       code,
       source,
-      match: scanStrategy4(code, history.market, history.rows, source, await require('../lib/strategy4-recent-volume-bonus').forSymbol(code, history.rows.at(-1).date)),
+      match: scanStrategy4(code, history.market, history.rows, source, await require('../lib/strategy4-recent-volume-bonus').forSymbol(code, history.rows.at(-1).date), await require('../lib/strategy4-daytrade-bonus').forSymbol(code, history.market, history.rows.at(-1).date)),
     };
   }));
   const sourceCounts = {};

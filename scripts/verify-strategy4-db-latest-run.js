@@ -112,6 +112,20 @@ async function main() {
   const bonusModule=require('../lib/strategy4-recent-volume-bonus');
   const bonusTarget=String(row.scan_date).slice(0,10),bonusDates=await bonusModule.tradingDates(bonusTarget);
   for(let i=0;i<resultRows.length;i+=40){const group=resultRows.slice(i,i+40);const q=new URLSearchParams({select:'symbol,trade_date,volume_lots,volume_shares',symbol:'in.('+group.map(r=>r.code).join(',')+')',order:'trade_date.asc,symbol.asc',limit:'1000'});q.append('trade_date','gte.'+bonusDates[0]);q.append('trade_date','lte.'+bonusTarget);const response=await supabase('/rest/v1/stock_daily_volume?'+q);if(!Array.isArray(response.json)||response.json.length>=1000)throw Error('recent_volume_readback_incomplete');for(const r of group){const actual=bonusModule.calculate(response.json.filter(d=>d.symbol===r.code),bonusDates,bonusTarget);if(!bonusModule.matchesAuthoritative(actual,r.payload?.recentVolumeBonus))v3Issues.push('recent_volume_authoritative_mismatch:'+r.code);}}
+  const daytradeModule=require('../lib/strategy4-daytrade-bonus');
+  const daytradeTarget=String(row.scan_date).slice(0,10);
+  const officialDaytrade=await daytradeModule.reports(daytradeTarget);
+  for(const result of resultRows){
+    const saved=result.payload?.daytradeBonus;
+    if(!daytradeModule.valid(saved)){v3Issues.push('daytrade_bonus_invalid:'+result.code);continue;}
+    if(saved.points===0&&saved.status==='unavailable')continue;
+    const original=saved.input.official;
+    const authoritative=officialDaytrade[original.market]?.rows[result.code];
+    const totalRows=(byCode.get(result.code)||[]).filter(d=>String(d.trade_date).slice(0,10)===daytradeTarget);
+    const d=totalRows.length===1?totalRows[0]:null;
+    const total=d&&d.volume_shares!=null?Number(d.volume_shares):d&&d.volume_lots!=null?Number(d.volume_lots)*1000:null;
+    if(!authoritative||authoritative.sourceHash!==original.sourceHash||authoritative.daytradeShares!==original.daytradeShares||total!==saved.input.totalVolumeShares)v3Issues.push('daytrade_authoritative_readback_mismatch:'+result.code);
+  }
   const expectedTotal = Number(row.expected_total || 0);
   const scannedCount = Number(row.scanned_count || 0);
   const qualityStatus = String(row.quality_status || "");
