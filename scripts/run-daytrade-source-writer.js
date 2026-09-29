@@ -706,15 +706,13 @@ async function supabaseGetPaged(resource, query = "", options = {}) {
 
 async function supabaseRpc(resource, body, options = {}) {
   const key = requireSupabaseKey(Boolean(options.service));
-  const response = await supabaseFetch(`${SUPABASE_URL}/rest/v1/rpc/${resource}`, {
-    method: 'POST',
-    headers: headers(key),
-    body: JSON.stringify(body || {}),
-    signal: AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_READ_TIMEOUT_MS) : undefined,
+  return require('../lib/daytrade-rpc-observation').invoke({resource,
+    send:()=>supabaseFetch(`${SUPABASE_URL}/rest/v1/rpc/${resource}`, {
+      method:'POST',headers:headers(key),body:JSON.stringify(body || {}),
+      signal:AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_READ_TIMEOUT_MS) : undefined,
+    }),
+    onFailure:evidence=>console.error(JSON.stringify({...evidence,checkedAt:nowIso()})),
   });
-  const text = await response.text();
-  if (!response.ok) throw new Error(`${resource} RPC HTTP ${response.status}: ${text.slice(0, 240)}`);
-  return text ? JSON.parse(text) : [];
 }
 
 function ensureApprovedSourceHost() {
