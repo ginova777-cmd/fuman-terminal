@@ -1,4 +1,4 @@
-param([switch]$Recovery, [string]$ReplayTradeDate = "", [string]$ReplayRuntime = "", [switch]$ResumeReplay, [switch]$SkipNotifications)
+param([switch]$Recovery, [string]$ReplayTradeDate = "", [string]$ReplayRuntime = "", [switch]$ResumeReplay, [switch]$SkipNotifications, [string]$ResumePublishedRunId = "")
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
@@ -63,7 +63,7 @@ function Write-Strategy4Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     strategy = "strategy4"
     label = "strategy4 full scan"
     tier = "critical"
-    executionMode = if ($ReplayTradeDate) { 'recovery_replay' } else { 'natural' }
+    executionMode = if ($ReplayTradeDate) { 'recovery_replay' } elseif ($ResumePublishedRunId) { 'recovery_same_run' } else { 'natural' }
     naturalSlotComplete = $false
     startedAt = $scanStartedAt
     marketDate = $runDateStamp
@@ -368,7 +368,13 @@ if ($Recovery) {
   Write-Log "Strategy4 one-entry recovery complete runId=$recoveryRunId count=$recoveryCount"
   exit 0
 }
-if ($ResumeReplay) {
+if ($ResumePublishedRunId) {
+  if ($Recovery -or $ReplayTradeDate -or $ResumeReplay) { throw 'ResumePublishedRunId cannot combine with other recovery modes' }
+  if ($ResumePublishedRunId -notmatch ('^strategy4-' + (Get-Date -Format yyyyMMdd) + '-[0-9]{14}$')) { throw 'ResumePublishedRunId requires same-day published run' }
+  $original = Join-Path $receiptDir 'strategy4.json'
+  if (Test-Path $original) { Copy-Item -LiteralPath $original -Destination (Join-Path $receiptDir ('strategy4-before-resume-' + (Get-Date -Format yyyyMMddHHmmssfff) + '.json')) }
+  $scanExit = 0
+} elseif ($ResumeReplay) {
   if (-not $ReplayTradeDate) { throw 'ResumeReplay requires validated ReplayTradeDate' }
   $resumeProof = Get-Content (Join-Path $env:FUMAN_STATE_DIR 'strategy4-supabase-status.json') -Raw | ConvertFrom-Json
   if ($resumeProof.ok -ne $true -or $resumeProof.scanDate -ne $ReplayTradeDate -or -not $resumeProof.runId) { throw 'ResumeReplay requires complete same-date published scan evidence' }
@@ -534,6 +540,7 @@ try {
   if ($dbVerifyExit -ne 0) { throw "DB latest-run verifier exit=$dbVerifyExit" }
   $dbVerify = $dbVerifyOutput | ConvertFrom-Json -ErrorAction Stop
   if ($dbVerify.ok -ne $true) { throw "DB latest-run verifier ok=false" }
+  if ($ResumePublishedRunId -and [string]$dbVerify.runId -ne $ResumePublishedRunId) { throw "ResumePublishedRunId does not match independently verified DB run" }
   if ($ResumeReplay -and [string]$dbVerify.runId -ne [string]$resumeProof.runId) { throw 'ResumeReplay DB run differs from original published scan' }
   if ([string]::IsNullOrWhiteSpace([string]$dbVerify.runId)) { throw "DB latest-run verifier missing runId" }
   Write-Strategy4Receipt "verifying" 0 $false ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) @() "" ([int]$dbVerify.scannedCount) ([int]$dbVerify.expectedTotal)
@@ -562,7 +569,7 @@ try {
   if ([string]::IsNullOrWhiteSpace($apiUpdatedAtText)) { throw "missing updatedAt" }
   $apiUpdatedAt = [DateTimeOffset]::Parse($apiUpdatedAtText)
   $scanStarted = [DateTimeOffset]::Parse($scanStartedAt)
-  if (-not $ResumeReplay -and $apiUpdatedAt -lt $scanStarted.AddMinutes(-5)) {
+  if (-not $ResumeReplay -and -not $ResumePublishedRunId -and $apiUpdatedAt -lt $scanStarted.AddMinutes(-5)) {
     throw "api did not expose this scan yet: runId=$($strategy4Output.runId) updatedAt=$apiUpdatedAtText scanStartedAt=$scanStartedAt"
   }
   Write-Log "Strategy4 API-only verification ok: runId=$($strategy4Output.runId) count=$($strategy4Output.count) scanStamp=$($strategy4Output.scanStamp) cache=$cacheControl"
@@ -578,6 +585,7 @@ try {
       if ($dbVerifyExit -ne 0) { throw "DB latest-run verifier exit=$dbVerifyExit" }
       $dbVerify = $dbVerifyOutput | ConvertFrom-Json -ErrorAction Stop
       if ($dbVerify.ok -ne $true) { throw "DB latest-run verifier ok=false" }
+  if ($ResumePublishedRunId -and [string]$dbVerify.runId -ne $ResumePublishedRunId) { throw "ResumePublishedRunId does not match independently verified DB run" }
     } else {
       Write-Log "Strategy4 DB latest-run verification reused after API mismatch: runId=$($dbVerify.runId)"
     }
