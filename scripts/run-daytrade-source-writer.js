@@ -7350,36 +7350,22 @@ async function writeEnrichmentPendingHeartbeat({ activeSymbols, priorityRows, qu
 
 async function writeFastWebSocketTransportHeartbeat({ priorityRows, quoteMap }) {
   if (!APPLY || !priorityRows.length) return { written: false, reason: "no_priority_rows_or_dry_run" };
-  let baseline;
-  try {
-    const rows = await supabaseGetPaged("source_status", "select=trade_date,status,message,stale_seconds,payload&source_name=eq." + encodeURIComponent(SOURCE_NAME) + "&order=updated_at.desc&limit=1", { service: true, pageSize: 1 });
-    baseline = rows && rows[0] ? rows[0] : null;
-  } catch (error) {
-    return { written: false, reason: "source_status_baseline_read_failed", error: error?.message || String(error) };
-  }
-  const baselinePayload = baseline && baseline.payload && typeof baseline.payload === "object" ? baseline.payload : null;
-  const today = taipeiDate();
-  const baselineDate = String((baselinePayload && (baselinePayload.trade_date || baselinePayload.tradeDate)) || (baseline && baseline.trade_date) || "");
-  if (!baselinePayload || (baselineDate && baselineDate !== today)) return { written: false, reason: "same_day_baseline_missing_or_stale" };
   const websocket = readWebSocketStatusSummary();
-  const freshRows = priorityRows.filter((row) => isFreshWebSocketQuote(quoteMap.get(normalizeCode(row.symbol))));
-  const coverage = priorityRows.length ? Number((freshRows.length / priorityRows.length).toFixed(4)) : 0;
-  const payload = { ...baselinePayload,
-    writer_version: "daytrade-source-writer-fast-websocket-heartbeat-v1",
-    priority_pool_symbols: priorityRows.length, priority_fresh_quotes_120s: freshRows.length, priority_fresh_quote_coverage_120s: coverage,
-    websocket_heartbeat_at: websocket.websocketHeartbeatAt, websocket_heartbeat_age_seconds: websocket.websocketHeartbeatAgeSeconds,
-    websocket_heartbeat_ready: websocket.websocketHeartbeatReady, aggregates_last_updated_at: websocket.aggregatesLastUpdatedAt,
-    aggregates_last_updated_age_seconds: websocket.aggregatesLastUpdatedAgeSeconds, aggregates_pipeline_ready: websocket.aggregatesPipelineReady,
-    websocket_pipeline_healthy: websocket.pipelineHealthy, pipeline_health_uses: websocket.pipelineHealthUses,
-    trades_silence_for_low_turnover_is_not_disconnect: websocket.tradesSilenceForLowTurnoverIsNotDisconnect,
-    fast_transport_heartbeat: true, fast_transport_heartbeat_at: nowIso(), transport_heartbeat_contract: "preserve_complete_gate_verdict_v2",
-  };
-  try {
-    await supabaseUpsert("source_status", [{ source_name: SOURCE_NAME, trade_date: today, updated_at: nowIso(), status: baseline.status || "degraded", message: baseline.message || "WebSocket transport heartbeat", stale_seconds: Number.isFinite(Number(baseline.stale_seconds)) ? Number(baseline.stale_seconds) : 0, payload }], "source_name");
-    return { written: true, coverage, preserved_gate_grade: payload.gate_grade || null };
-  } catch (error) {
-    return { written: false, reason: "source_status_fast_heartbeat_write_failed", error: error?.message || String(error) };
-  }
+  const freshRows = priorityRows.filter(row => isFreshWebSocketQuote(quoteMap.get(normalizeCode(row.symbol))));
+  const coverage = freshRows.length / priorityRows.length;
+  // Transport evidence is not a new verified source round. Never modify the
+  // previous source_status payload or its timestamp with current heartbeat data.
+  writeJson(runtimePath('state', 'daytrade-websocket-transport-heartbeat.json'), {
+    contract: 'daytrade_websocket_transport_observation_v1', trade_date: taipeiDate(), observed_at: nowIso(),
+    authoritative: false, source_status_written: false, complete: false,
+    priority_symbols: priorityRows.length, fresh_quotes: freshRows.length, coverage,
+    websocket_heartbeat_at: websocket.websocketHeartbeatAt,
+    websocket_heartbeat_age_seconds: websocket.websocketHeartbeatAgeSeconds,
+    aggregates_last_updated_at: websocket.aggregatesLastUpdatedAt,
+    aggregates_last_updated_age_seconds: websocket.aggregatesLastUpdatedAgeSeconds,
+    pipeline_healthy: websocket.pipelineHealthy,
+  });
+  return { written: false, local_evidence_written: true, coverage, reason: 'transport_observation_only' };
 }
 
 async function syncDailyVolumeMirror(dailyVolumeMap, activeSymbols) {
