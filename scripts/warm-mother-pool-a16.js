@@ -38,7 +38,7 @@ async function main(){
   for(const symbol of universe.symbols){
    if(scheduled&&(local().slice(0,10)!==date||local().slice(11,16)>='09:00'))break;
    guard();try{const file=path.join(runtime,'data','mother-pool-historical-minutes',date,symbol+'.json');let history;
-   try{const cached=read(file);if(cached.calendar?.sha256===calendar.sha256&&cached.symbol===symbol&&cached.trade_date===date&&cached.result?.status==='HISTORY_FETCHED')history=cached;}catch{}
+   try{const cached=read(file);if(cached.calendar?.sha256===calendar.sha256&&cached.symbol===symbol&&cached.trade_date===date&&cached.result?.status==='HISTORY_FETCHED')history=cached;}catch(error){if(error.code!=='ENOENT')throw error;}
    if(!history){
     const result=await fetchHistory({symbol,tradeDate:date,sessionDates:plan.session_dates,apiKey});
     // Raw response is the evidence. Avoid storing a duplicate expanded copy of
