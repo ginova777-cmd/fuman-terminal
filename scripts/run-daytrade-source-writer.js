@@ -8612,6 +8612,7 @@ async function tick() {
       if(sideMinutes>=525)inputs.push(require('../lib/mother-pool-natural-trial').collect({identity,symbols:snapshot.symbols,history:preopenTrialHistory,asOf:sideAsOf}));
       if(sideMinutes>=539)inputs.push(require('../lib/mother-pool-trial-trajectory').collect({identity,symbols:snapshot.symbols,history:preopenTrialHistory,asOf:sideAsOf}));
       if(sideMinutes<540){
+        inputs.push(require('../lib/mother-pool-preopen-history').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,quoteMap,activeSymbols,rawEvidence:intradayMap.preopenRawEvidence,asOf:sideAsOf}));
         try { inputs.push(...require('../lib/mother-pool-preopen-ma20').collect({
           identity,symbols:snapshot.symbols,snapshot,calendar:marketCalendarEvidence,
           rawEvidence:intradayMap.preopenRawEvidence,asOf:sideAsOf,
