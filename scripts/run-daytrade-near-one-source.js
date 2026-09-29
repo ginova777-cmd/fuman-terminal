@@ -215,26 +215,13 @@ function tickerExpiry(row) {
 }
 
 async function readTickerMap(tradeDate) {
-  const liveMappings = await supabaseGetPaged(
-    "fugle_daytrade_futopt_quotes_live",
-    "select=future_symbol,underlying_symbol,updated_at&order=updated_at.desc",
-    { service: true, pageSize: 1000 },
-  );
-  const underlyingByFuture = new Map();
-  for (const row of liveMappings) {
-    const future = normalizeFutureSymbol(row?.future_symbol);
-    const underlying = normalizeCode(row?.underlying_symbol);
-    if (future && underlying && !underlyingByFuture.has(future)) underlyingByFuture.set(future, underlying);
-  }
-  const rows = await supabaseGetPaged(
-    "futopt_tickers",
-    "select=future_symbol,name,product,contract_type,end_date,exchange,underlying_name,underlying_symbol,session,updated_at,payload&order=underlying_symbol.asc,end_date.asc",
-    { service: true, pageSize: 1000 },
-  );
-  const byUnderlying = new Map();
+  const catalogue = await require('../lib/mother-pool-futures-catalogue').refresh({
+    runtime:RUNTIME_DIR,tradeDate,asOf:new Date().toISOString(),key:readSecret('fugle-api-key.txt'),
+  });
+  const rows = require('../lib/futopt-collector-catalogue').build(catalogue,tradeDate,new Date().toISOString());  const byUnderlying = new Map();
   for (const row of rows) {
     const futureSymbol = normalizeFutureSymbol(row?.future_symbol);
-    const symbol = tickerUnderlying(row) || underlyingByFuture.get(futureSymbol) || "";
+    const symbol = tickerUnderlying(row) || "";
     const expiry = tickerExpiry(row);
     const product = String(row?.product || row?.payload?.product || "").toUpperCase();
     if (!symbol || !futureSymbol || product === "TXF" || futureSymbol.startsWith("TXF")) continue;
@@ -267,6 +254,8 @@ async function readTickerMap(tradeDate) {
       resolved_at: new Date().toISOString(),
       source: "fugle_daytrade_source:canonical_near_one",
       payload: {
+        catalogue_run_id: catalogue.run_id,
+        catalogue_source_hash: catalogue.source_hash,
         ticker_name: selected.name,
         candidate_count: candidates.length,
         selection_rule: "earliest_non_expired_end_date",
