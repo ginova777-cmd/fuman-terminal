@@ -76,13 +76,10 @@ try {
     Invoke-Required "desktop refresh" { & $pwshExe -NoProfile -File .\refresh-desktop-route-snapshot.ps1 -Source strategy3 }
     Invoke-Required "mobile refresh" { & $nodeExe --use-system-ca scripts\publish-mobile-fragment-snapshots.js --tabs=strategy3 }
     Invoke-Required "surface readback" { & $nodeExe --use-system-ca scripts\verify-strategy3-v2-surface-closure.js --write-receipt "--trade-date=$TradeDate" }
-    $priorSourceRole = $env:FUMAN_DAYTRADE_SOURCE_ROLE
-    try {
-      $env:FUMAN_DAYTRADE_SOURCE_ROLE = 'writer'
-      Invoke-Required "writer refreshes strategy priority bridge" { & $nodeExe --use-system-ca scripts\run-daytrade-source-writer.js --apply --refresh-strategy-priority-bridge }
-    } finally { $env:FUMAN_DAYTRADE_SOURCE_ROLE = $priorSourceRole }
-    Invoke-Required "bridge authority" { & $nodeExe --use-system-ca scripts\verify-strategy3-mother-pool-warmup-authority.js "--trade-date=$executionDate" }
-    Invoke-Required "recovery authoritative DB verifier" { & $nodeExe --use-system-ca scripts\verify-strategy3-recovery-replay-complete.js "--trade-date=$TradeDate" "--bridge-date=$executionDate" }
+    # Recovery publication verifies this completed scan and DB independently.
+    # Morning admission remains a separate previous-trading-day consumer and
+    # must not reject today's result merely because today's morning has passed.
+    Invoke-Required "recovery authoritative DB and publication verifier" { & $nodeExe --use-system-ca scripts\verify-strategy3-recovery-replay-complete.js "--trade-date=$TradeDate" --prepare-three-surfaces }
     Invoke-Strategy3ScorecardPrepare -RunId $scan.run_id -ExpectedCount $scan.result_count
     Invoke-Required "88 audited recovery collection" { & $pwshExe -NoProfile -File scripts\run-scorecard88-terminal-collector.ps1 -Slot '13:15' -ProjectRoot $PSScriptRoot -RuntimeRoot $runtime -Recovery -ExpectedRunId $scan.run_id -RecoveryReason 'strategy3_recovery_replay_delivery' }
     . (Join-Path $PSScriptRoot "verify-post-scan-tri-surface.ps1")
