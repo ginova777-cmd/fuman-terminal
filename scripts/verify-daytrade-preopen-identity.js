@@ -10,7 +10,12 @@ async function main(){
  let result;
  for(let attempt=1;attempt<=3;attempt++){
   const before=read(path.join(runtime,"state/daytrade-mother-pool-delta.json"));
-  const rows=[];for(let offset=0;offset<10000;offset+=200){const r=await fetch(`${url}/rest/v1/v_fugle_daytrade_mother_pool_v4_1?select=*&trade_date=eq.${date}&order=symbol.asc&limit=200&offset=${offset}`,{headers:{apikey:key,Authorization:`Bearer ${key}`},signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error(`anon_readback_http_${r.status}`);const page=await r.json();rows.push(...page);if(page.length<200)break;}
+  const fixed=await require('../lib/daytrade-preopen-fixed-readback').read({identity:before,request:async query=>{
+   const r=await fetch(`${url}/rest/v1/v_fugle_daytrade_mother_pool_v4_1?${query}`,{headers:{apikey:key,Authorization:`Bearer ${key}`,Prefer:'count=exact'},signal:AbortSignal.timeout(15000)});
+   if(!r.ok)throw Error(`anon_readback_http_${r.status}`);
+   return {status:r.status,contentRange:r.headers.get('content-range'),rows:await r.json()};
+  }});
+  const rows=fixed.rows;
   const after=read(path.join(runtime,"state/daytrade-mother-pool-delta.json")),identity=verifyRows(rows,before),failures=[...identity.failed_checks];
   if(before.writer_run_id!==after.writer_run_id||before.generation_id!==after.generation_id)failures.push("writer_advanced_during_readback");
   const expected=(before.rows||[]).map(r=>r.symbol).sort(),actual=rows.map(r=>r.symbol).sort();
@@ -18,7 +23,7 @@ async function main(){
   if(before.trade_date!==date)failures.push("runner_trade_date_mismatch");
   result={contract:"daytrade_preopen_writer_identity_v1",scope:"A01_writer_identity_readback",trade_date:date,checked_at:new Date().toISOString(),attempt,
    canonical_run_id:before.canonical_run_id,writer_run_id:before.writer_run_id,generation_id:before.generation_id,
-   requested_count:expected.length,written_count:before.rows?.length||0,readback_count:rows.length,
+   pages:fixed.pages,requested_count:expected.length,written_count:before.rows?.length||0,readback_count:rows.length,
    readback_sha256:crypto.createHash("sha256").update(JSON.stringify(rows)).digest("hex"),
    failed_checks:failures,first_blocker:failures[0]||null,status:failures.length?"blocked":"complete",complete:!failures.length,exit_code:failures.length?1:0};
   if(result.complete)break;
