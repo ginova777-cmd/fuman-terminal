@@ -5,7 +5,7 @@ const {selectSessions}=require('../lib/mother-pool-historical-sessions');
 const {isTwseTradingDay}=require('./twse-trading-day');
 const {build}=require('../lib/mother-pool-a16-baseline');
 const {verify}=require('../lib/verify-mother-pool-a16');
-const {hash,read,atomic,readSide,client}=require('../lib/mother-pool-a16-io');
+const {hash,read,atomic,readSide,client,compact}=require('../lib/mother-pool-a16-io');
 const arg=n=>process.argv.find(x=>x.startsWith('--'+n+'='))?.slice(n.length+3);
 const root=path.join(__dirname,'..'),runtime=process.env.FUMAN_RUNTIME_DIR||'C:/fuman-runtime';
 const scheduled=process.argv.includes('--scheduled'),apply=process.argv.includes('--apply');
@@ -37,7 +37,7 @@ async function main(){
   function summary(){const failed=rows.filter(r=>r.source_ready!==true||r.db_readback_ok!==true||r.verifier_passed!==true);return {contract:'mother_pool_a16_writer_summary_v1',trade_date:date,canonical_run_id:universe.canonical_run_id,generation,mode,universe_sha256:universeHash,requested_symbols:universe.symbols,requested_count:universe.symbols.length,attempted_count:rows.length,rows,rows_sha256:hash(rows),status:rows.length===universe.symbols.length&&!failed.length?'complete':'blocked',complete:rows.length===universe.symbols.length&&!failed.length,failed_checks:[...(rows.length<universe.symbols.length?['WARMUP_PENDING']:[]),...new Set(failed.map(r=>r.first_blocker||'A16_SOURCE_NOT_READY'))],first_blocker:failed[0]?.first_blocker|| (rows.length<universe.symbols.length?'WARMUP_PENDING':null),formal_candidate_allowed:false,publish_allowed:false,updated_at:new Date().toISOString()};}
   for(const symbol of universe.symbols){
    if(scheduled&&(local().slice(0,10)!==date||local().slice(11,16)>='09:00'))break;
-   guard();const file=path.join(runtime,'data','mother-pool-historical-minutes',date,symbol+'.json');let history;
+   guard();try{const file=path.join(runtime,'data','mother-pool-historical-minutes',date,symbol+'.json');let history;
    try{const cached=read(file);if(cached.calendar?.sha256===calendar.sha256&&cached.symbol===symbol&&cached.trade_date===date&&cached.result?.status==='HISTORY_FETCHED')history=cached;}catch{}
    if(!history){
     const result=await fetchHistory({symbol,tradeDate:date,sessionDates:plan.session_dates,apiKey});
@@ -48,12 +48,36 @@ async function main(){
     await new Promise(resolve=>setTimeout(resolve,2000));
    }
    const sideJournals=readSide(runtime,symbol,plan.session_dates),input={symbol,tradeDate:date,canonicalRunId:universe.canonical_run_id,asOf:new Date().toISOString(),history,sideJournals};
-   const receipt=build(input),verifier=verify(receipt,input);let dbResult={db_readback_ok:false,anon_readback_ok:false,written_count:0,readback_count:0},failure=null;
-   if(verifier.verification_passed)try{dbResult=await db.writeReadback(receipt,generation);}catch(e){failure=e.message;}
+   let receipt=build(input),verifier=verify(receipt,input);let dbResult={db_readback_ok:false,anon_readback_ok:false,written_count:0,readback_count:0},failure=null;
+   if(verifier.verification_passed)try{
+    let previous;try{previous=read(path.join(receiptDir,symbol+'.json'));}catch{}
+    const reuse=previous?.generation===generation&&previous?.mode===mode
+      &&previous?.db?.readback_contract==='a16_db_anon_v2'
+      &&previous.db.db_readback_ok===true&&previous.db.anon_readback_ok===true
+      &&previous.verifier?.verification_passed===true&&previous.receipt
+      &&Number.isFinite(Date.parse(previous.receipt.calculated_at))&&Date.parse(previous.receipt.calculated_at)<=Date.parse(input.asOf)
+      &&previous.db.payload_sha256===hash(compact(previous.receipt))
+      &&hash({...compact(previous.receipt),calculated_at:null})===hash({...compact(receipt),calculated_at:null});
+    if(reuse){
+      const originalVerifier=verify(previous.receipt,{...input,asOf:previous.receipt.calculated_at});
+      if(!originalVerifier.verification_passed)throw Error('A16_CHECKPOINT_REVALIDATION_FAILED');
+      receipt=previous.receipt;verifier=originalVerifier;
+    }
+    dbResult=reuse?await db.verifyReadback(receipt,generation):await db.writeReadback(receipt,generation);
+   }catch(e){failure=e.message;}
    const entry={symbol,source_ready:receipt.complete,verifier_passed:verifier.verification_passed,requested_count:receipt.requested_count,...dbResult,first_blocker:failure||verifier.failed_checks[0]||receipt.first_blocker};rows.push(entry);
    atomic(path.join(receiptDir,symbol+'.json'),{input_reference:{history_file:file,side_journal_dates:Object.keys(sideJournals)},receipt,verifier,db:dbResult,generation,mode,complete:receipt.complete&&verifier.complete&&dbResult.db_readback_ok});
    atomic(summaryFile,summary());console.log(JSON.stringify({symbol,attempted:rows.length,total:universe.symbols.length,db_readback_ok:dbResult.db_readback_ok,first_blocker:entry.first_blocker}));
    if(failure||[401,403,429].includes(history.result?.http_status))break;
+   }catch(error){
+    const reason=String(error?.message||error),entry={symbol,source_ready:false,verifier_passed:false,requested_count:0,written_count:0,readback_count:0,db_readback_ok:false,anon_readback_ok:false,first_blocker:reason};
+    rows.push(entry);atomic(summaryFile,summary());
+    atomic(path.join(receiptDir,symbol+'-failure.json'),{trade_date:date,generation,mode,symbol,checked_at:new Date().toISOString(),complete:false,error:reason,error_name:error?.name||'Error'});
+    console.log(JSON.stringify({symbol,attempted:rows.length,total:universe.symbols.length,db_readback_ok:false,first_blocker:reason}));
+    // Corrupt local evidence blocks this symbol, not unrelated symbols. Other
+    // failures stop this run so an outage cannot turn into thousands of retries.
+    if(!/^A16_(JOURNAL_JSON_INVALID|JSON_READ_FAILED):/.test(reason))break;
+   }
   }
   const final=summary();atomic(summaryFile,final);console.log(JSON.stringify({status:final.status,complete:final.complete,attempted_count:rows.length,summary:summaryFile}));
   process.exitCode=final.complete?0:2;

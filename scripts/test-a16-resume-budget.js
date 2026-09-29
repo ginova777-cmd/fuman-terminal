@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('node:assert/strict'),{budget}=require('../lib/a16-resume-budget');
+let b=budget(null,null);assert.equal(b.allowed,true);
+b=budget({...b,attempts:1},{attempted_count:11});assert.equal(b.allowed,true);assert.equal(b.no_progress_attempts,0);
+b=budget({...b,attempts:2},{attempted_count:11});assert.equal(b.allowed,true);
+b=budget({...b,attempts:3},{attempted_count:11});assert.equal(b.allowed,false);
+assert.equal(budget({attempts:2},{attempted_count:11}).allowed,false);
+assert.equal(budget({attempts:1},{attempted_count:11}).allowed,true);
+assert.throws(()=>budget(null,{attempted_count:-1}),/PROGRESS_INVALID/);
+console.log('PASS: progress permits resume, repeated no-progress stops, exhausted legacy state preserved');
