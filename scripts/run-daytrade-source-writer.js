@@ -7217,6 +7217,7 @@ async function writeStatusAndScorecard(result) {
   }
   inspectNull(sourceRow, 'source_status');
   if (nullPaths.length) throw Error('SOURCE_STATUS_NULL_CHARACTER_FIELDS:' + JSON.stringify(nullPaths));
+  console.log(JSON.stringify({stage:'source_status_write_size',checkedAt:nowIso(),writer_run_id:sourceRow.payload.writer_run_id,bytes:Buffer.byteLength(JSON.stringify(sourceRow),'utf8')}));
   const sourceStatusAck = await traceStatusWrite("source_status", () => require('../lib/daytrade-source-status-ack').writeWithAcknowledgement({
     row: sourceRow,
     onMismatch: evidence => console.error(JSON.stringify({stage:'source_status_ack_mismatch',checkedAt:nowIso(),...evidence})),
@@ -7911,6 +7912,7 @@ async function syncMarketCalendarEvidence() {
 
 async function tick() {
   writerTickIdentity = require("../lib/daytrade-writer-identity").newIdentity(SOURCE_NAME, WRITER_INSTANCE_ID, taipeiDate());
+  console.log(JSON.stringify({ stage: 'writer_round_identity', checkedAt: nowIso(), pid: process.pid, parent_pid: process.ppid, entrypoint: __filename, ...writerTickIdentity }));
   const tickStage = (stage, extra = {}) => console.log(JSON.stringify({
     ok: true,
     stage: `daytrade_tick:${stage}`,
