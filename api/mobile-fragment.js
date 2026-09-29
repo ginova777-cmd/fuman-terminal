@@ -15,6 +15,7 @@ const { rateLimitRequest, sendRateLimited } = require("../lib/fuman-api-rate-lim
 const { fetchMainForceCosts, normalizeAsOfDate, normalizeCode } = require("../lib/terminal-main-force-costs");
 const { fetchThreeGatePrices } = require("../lib/terminal-three-gate-prices");
 
+const MOBILE_STRATEGY4_DIRECT_TIMEOUT_MS = 30000;
 const MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_FRAGMENT_SNAPSHOT_TIMEOUT_MS || 1200);
 const MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_STRATEGY2_DIRECT_TIMEOUT_MS || 18000);
 const MOBILE_STRATEGY3_DIRECT_TIMEOUT_MS = Number(process.env.FUMAN_MOBILE_STRATEGY3_DIRECT_TIMEOUT_MS || 30000);
@@ -503,7 +504,7 @@ function fetchStrategy4Internal(request, endpoint) {
   const url = new URL(endpoint, originFrom(request));
   const query = { ...Object.fromEntries(url.searchParams.entries()), verify: "1" };
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("strategy4_internal_timeout")), 12000);
+    const timer = setTimeout(() => reject(new Error("strategy4_internal_timeout")), MOBILE_STRATEGY4_DIRECT_TIMEOUT_MS);
     const finish = (result) => {
       clearTimeout(timer);
       if (Number(result.statusCode || 0) >= 400 || result.payload?.ok === false) {
