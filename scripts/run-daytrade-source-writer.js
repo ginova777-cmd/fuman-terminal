@@ -7210,7 +7210,14 @@ async function writeStatusAndScorecard(result) {
   }
   inspectNull(sourceRow, 'source_status');
   if (nullPaths.length) throw Error('SOURCE_STATUS_NULL_CHARACTER_FIELDS:' + JSON.stringify(nullPaths));
-  await traceStatusWrite("source_status", () => supabaseUpsert("source_status", [sourceRow], "source_name"));
+  const sourceStatusAck = await traceStatusWrite("source_status", () => require('../lib/daytrade-source-status-ack').writeWithAcknowledgement({
+    row: sourceRow,
+    write: row => supabaseUpsert("source_status", [row], "source_name"),
+    read: row => supabaseGet('source_status',
+      'select='+Object.keys(row).join(',')+'&source_name=eq.'+encodeURIComponent(row.source_name)
+      +'&trade_date=eq.'+encodeURIComponent(row.trade_date)+'&limit=2', {service:true}),
+  }));
+  console.log(JSON.stringify({stage:'source_status_ack',checkedAt:nowIso(),...sourceStatusAck}));
   // The turnover checklist has its own independently read-back receipt.
   // Failure here is visible but cannot erase the already published core source.
   const turnover = result.payload.intraday_turnover_ranking;
