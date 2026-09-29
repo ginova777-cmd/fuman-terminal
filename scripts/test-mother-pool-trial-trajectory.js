@@ -5,6 +5,10 @@ const identity={trade_date:date,canonical_run_id:'c',writer_run_id:'w',generatio
 const raw=['08:45','08:50','08:55','08:59'].map((slot,i)=>({symbol:'2330',trade_date:date,observed_at:`${date}T${slot}:00+08:00`,trial_price:100+i,is_trial:true,payload:{trial_event_at:`${date}T${slot}:00+08:00`,source:'fugle_daytrade_source_writer:preopen_websocket',writer_contract:'preopen_snapshot_history_v2',trial_event_time_source:'provider_trial_event'}}));
 const readback={status:'READ',source:'fugle_preopen_snapshot_history',trade_date:date,observed_at:asOf};
 const build=rows=>collect({identity,symbols:['2330','2317'],history:{rows,readback},asOf});
+for(const invalid of [undefined,'','invalid-date','2026-09-30T01:00:00Z']){
+ const bad=collect({identity,symbols:['2330'],history:{rows:raw,readback},asOf:invalid});
+ assert.equal(bad.rows[0].status,'DATA_GAP');assert.equal(verify(bad.rows[0],{...identity,observed_at:invalid}),false);
+}
 const good=build(raw),round={...identity,observed_at:asOf};
 assert.equal(good.rows[0].status,'READY');assert(verify(good.rows[0],round));
 assert.equal(good.rows[1].status,'DATA_GAP');assert.equal(verify(good.rows[1],round),false);
@@ -12,6 +16,7 @@ assert.deepEqual(good.rows[0].price_changes.map(x=>x.change),[1,1,1]);
 for(const mutate of [r=>{r.pop();},r=>r.push(structuredClone(r[0])),r=>{r[0].trade_date='2026-09-28';},r=>{r[0].payload.trial_event_time_source='quote_seen_at';},r=>{r[0].payload.synthetic=true;},r=>{r[0].observed_at=date+'T08:46:00+08:00';}]){
  const rows=structuredClone(raw);mutate(rows);assert.equal(build(rows).rows[0].status,'DATA_GAP');
 }
+for(const malformed of [null,42,[],false])assert.equal(build([...raw,malformed]).rows[0].status,'DATA_GAP');
 const tampered=structuredClone(good.rows[0]);tampered.trajectory[0].price=999;assert.equal(verify(tampered,round),false);
 const reordered=structuredClone(good.rows[0]);reordered.raw_trials=reordered.raw_trials.map(r=>Object.fromEntries(Object.entries(r).reverse()));assert(verify(reordered,round));
 assert.equal(verify(good.rows[0],{...round,observed_at:date+'T00:58:00Z'}),false);
