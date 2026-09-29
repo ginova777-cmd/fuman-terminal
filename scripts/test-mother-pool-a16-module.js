@@ -21,6 +21,10 @@ io.atomic(path.join(runtime,'data','mother-pool-a16',date,'writer-summary.json')
 let plan=collect(input);assert.equal(plan.rows[0].status,'DATA_GAP');assert.equal(plan.rows[0].baseline_counts.OUTSIDE_STRENGTH.gaps,271);
 assert.equal(verify(plan.rows,{...identity,observed_at:asOf,writer_write_set:{plan}},{runtime}),false);
 const tamper=structuredClone(artifact);tamper.receipt.rows[0].baseline_value=999;io.atomic(file,tamper);assert.match(collect(input).rows[0].data_gap_reason,/ARTIFACT_MISMATCH/);
+for(const replacement of [{symbol:'2317'},{trade_date:'2026-09-28'},{canonical_run_id:'other'}]){
+ const mixed=structuredClone(artifact);Object.assign(mixed.receipt,replacement);io.atomic(file,mixed);
+ assert.match(collect(input).rows[0].data_gap_reason,/BASELINE_IDENTITY_MISMATCH/);
+}
 io.atomic(file,artifact);const badHistory=structuredClone(history);badHistory.result.raw.data[0].volume=999;io.atomic(historyFile,badHistory);assert.match(collect({...input,recalculate:true}).rows[0].data_gap_reason,/FORMULA/);
 io.atomic(historyFile,history);io.atomic(file,{...artifact,mode:'acceptance_probe'});assert.match(collect(input).rows[0].data_gap_reason,/ARTIFACT_MISMATCH/);
 io.atomic(file,artifact);assert.match(collect({...input,asOf:'2026-09-30T00:00:00Z'}).rows[0].data_gap_reason,/IDENTITY_INVALID/);
