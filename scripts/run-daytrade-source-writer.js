@@ -8625,8 +8625,7 @@ async function tick() {
       try{
         const fiveMinuteSource=await require('../lib/mother-pool-five-minute-source').read({snapshot,asOf:sideAsOf,runtime:runtimePath(),get:supabaseGet,paged:supabaseGetPaged});
         inputs.push(require('../lib/mother-pool-five-minute-producer').collect({identity,snapshot,...fiveMinuteSource,asOf:sideAsOf}));
-        inputs.push(require('../lib/mother-pool-five-minute-priority').collect({identity,snapshot,...fiveMinuteSource,asOf:sideAsOf}));
-      }catch(error){result.payload.module_persistence_errors.push({modules:['A10','B15'],error:String(error.message||error)});}
+      }catch(error){result.payload.module_persistence_errors.push({modules:['B15'],error:String(error.message||error)});}
       }
       const dir=runtimePath('data','module-write-sets');fs.mkdirSync(dir,{recursive:true});
       if(sideMinutes>=540)inputs.push({module_id:'B09',build:()=>require('../lib/mother-pool-discovery-union-producer').collect({identity,parents:{B04:result.payload.module_write_sets.B04,B08:result.payload.module_write_sets.B08},asOf:nowIso()})});

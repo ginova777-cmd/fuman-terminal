@@ -1,14 +1,14 @@
 'use strict';
-// Independent 43-item verifier. It never upgrades missing natural evidence to PASS.
+// Independent registry-scoped verifier. It never upgrades missing natural evidence to PASS.
 const fs=require('fs');
 const path=require('path');
 const {spawnSync}=require('child_process');
-const IDS=[...Array.from({length:19},(_,i)=>`A${String(i+1).padStart(2,'0')}`),...Array.from({length:24},(_,i)=>`B${String(i+1).padStart(2,'0')}`)];
 const arg=(name,def)=>{const p=process.argv.find(x=>x.startsWith(`--${name}=`));return p?String(p.slice(name.length+3)):def;};
 const runtime=arg('runtime',process.env.FUMAN_RUNTIME||'C:/fuman-runtime');
 const tradeDate=arg('trade-date',new Date().toISOString().slice(0,10));
 const out=arg('out',path.join(runtime,'data','scan-receipts',`mother-pool-a01-b24-total-${tradeDate}.json`));
 const registry=JSON.parse(fs.readFileSync(path.join(__dirname,'..','data','contracts','mother-pool-a01-b24-module-registry-v1.json'),'utf8'));
+const IDS=Object.keys(registry.modules);
 const readJson=f=>{try{return JSON.parse(fs.readFileSync(f,'utf8'));}catch{return null;}};
 const resultIndex=arg('module-results',null);
 const index=resultIndex?readJson(resultIndex):null;
@@ -55,5 +55,5 @@ const wiringOk=wiring.status===0&&/"ok":true/.test(wiring.stdout||'');
 const failed=rows.filter(r=>r.complete!==true).map(r=>`${r.id}:${r.reason}`);
 if(!indexValid)failed.unshift('MODULE_RESULT_INDEX_INVALID');
 if(!wiringOk)failed.unshift('WIRING_INVENTORY_FAILED');
-const receipt={contract:'daytrade_mother_pool_a01_b24_total_verifier_v1',scope:'A01-A19+B01-B24',canonical_run_id:canonical,module_results:index?resultIndex:null,excluded:['B25'],registry_contract:registry.contract,trade_date:tradeDate,checked_at:new Date().toISOString(),wiring_inventory_ok:wiringOk,item_count:43,items:rows,failed_checks:failed,first_blocker:failed[0]||null,status:failed.length?'blocked':'complete',complete:failed.length===0,exit_code:failed.length?1:0,natural_evidence_policy:'No replay, synthetic, look-ahead or manual receipt promotion'};
+const receipt={contract:'daytrade_mother_pool_a01_b24_total_verifier_v1',scope:registry.scope,canonical_run_id:canonical,module_results:index?resultIndex:null,excluded:registry.excluded||['B25'],registry_contract:registry.contract,trade_date:tradeDate,checked_at:new Date().toISOString(),wiring_inventory_ok:wiringOk,item_count:IDS.length,items:rows,failed_checks:failed,first_blocker:failed[0]||null,status:failed.length?'blocked':'complete',complete:failed.length===0,exit_code:failed.length?1:0,natural_evidence_policy:'No replay, synthetic, look-ahead or manual receipt promotion'};
 fs.mkdirSync(path.dirname(out),{recursive:true});fs.writeFileSync(out,JSON.stringify(receipt,null,2),{flag:'wx'});console.log(JSON.stringify(receipt,null,2));process.exitCode=receipt.exit_code;
