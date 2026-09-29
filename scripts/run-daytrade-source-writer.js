@@ -8562,7 +8562,7 @@ async function tick() {
         mother_pool_run_id:snapshot.mother_pool_run_id,snapshot_generation:snapshot.generation,snapshot_sequence:snapshot.snapshot_sequence};
       const cache=sideMinutes>=540?readFugleWebSocketCandles({maxAgeMs:90*60*1000}):null;
       const sessionCandles=sideMinutes>=540?require('../lib/mother-pool-session-candles').select({payload:cache.payload,tradeDate:identity.trade_date,asOf:sideAsOf}):[];
-      const inputs=[require('../lib/mother-pool-identity-source').collect({identity,symbols:snapshot.symbols,calendar:marketCalendarEvidence,lease:writerLease,asOf:sideAsOf})];
+      const inputs=[require('../lib/mother-pool-identity-source').collect({identity,symbols:snapshot.symbols,calendar:marketCalendarEvidence,lease:writerLease,asOf:nowIso()})];
       inputs.push(require('../lib/mother-pool-eligibility-source').collect({identity,evidence:activeSymbols.sourceEvidence,asOf:sideAsOf}));
       inputs.push(require('../lib/mother-pool-historical-volume-price').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,asOf:nowIso()}));
       inputs.push(require('../lib/mother-pool-daytrade-ratio').collect({identity,symbols:snapshot.symbols,activeSymbols,dailyVolumeMap,officialSource:officialDaytradeSource,asOf:nowIso()}));
