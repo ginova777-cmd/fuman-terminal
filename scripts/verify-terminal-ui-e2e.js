@@ -2791,6 +2791,10 @@ async function main() {
       const sameSymbols = JSON.stringify(actualSymbols) === JSON.stringify(expectedSymbols);
       const zeroOk = expectedSymbols.length === 0 && /無符合|0 檔|0筆|沒有符合/.test(item.emptyStateText || text);
       item.contentAcceptance = { expectedRun, actualRun, expectedSymbols, actualSymbols, sameSymbols };
+      const currentTaipeiDay = new Intl.DateTimeFormat("en-CA", {timeZone:"Asia/Taipei",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()).replaceAll("-", "");
+      if (item.routeKey === "strategy4" && item.kind === "mobile" && expectedRun.startsWith("strategy4-"+currentTaipeiDay+"-") && (!/display TODAY_(?:ZERO_RESULT_)?COMPLETE/.test(item.statusText || "") || /preserve previous good|today-authority blocked/i.test(item.statusText || ""))) {
+        item.ok = false; item.blockerMatches = [...(item.blockerMatches || []), "strategy4_mobile_current_authority_missing"];
+      }
       if (!expectedRun || actualRun !== expectedRun || item.accessState === "membership_locked" || !sameSymbols || (!expectedSymbols.length && !zeroOk)) {
         item.ok = false;
         item.blockerMatches = [...(item.blockerMatches || []), `${item.routeKey}_rendered_content_identity_or_symbols_mismatch`];

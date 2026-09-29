@@ -1,0 +1,2 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+test('latest API preserves full volume proof needed by mobile authority',()=>{const {buildPayload}=require('../api/strategy4-latest');const volumeFilter={contract:'strategy4-volume-five-trading-dates-v1',expectedDates:['2026-09-29'],expectedTotal:0,evaluations:[],filtered:[],missing:[]};const p=buildPayload([{code:'2330',scan_date:'2026-09-29',run_id:'strategy4-20260929-20260929101326',payload:{code:'2330',close:100}}],1605,{payload:{volumeFilter}},{});assert.deepEqual(p.volumeFilter,volumeFilter);});
