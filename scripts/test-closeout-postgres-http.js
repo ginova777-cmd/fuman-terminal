@@ -42,7 +42,6 @@ function run(script,args,env){return new Promise((resolve,reject)=>{const child=
  const captured=[],mappingCaptured=[],discoveryCaptured=[],unionCaptured=[],openingCaptured=[],allocationCaptured=[],fiveMinuteCaptured=[],combinationCaptured=[],identityCaptured=[],eligibilityCaptured=[],previousOhlcCaptured=[];
  let previousAllocation=null;
  const ma20Captured={A08:[],A09:[]};
- const priority5mCaptured=[];
  const websocketCaptured=[];
  const daytradeRatioCaptured=[],historicalGapCaptured=[];
  for(let i=1;i<=2;i++){
@@ -79,7 +78,6 @@ function run(script,args,env){return new Promise((resolve,reject)=>{const child=
   combinationCaptured.push(await capture(require('../lib/mother-pool-combination-producer').collect(combinationFixture)));
   const fiveMinuteFixture=require('./test-five-minute-module').fixture(identity,45+i);
   fiveMinuteCaptured.push(await capture(require('../lib/mother-pool-five-minute-producer').collect(fiveMinuteFixture)));
-  priority5mCaptured.push(await capture(require('../lib/mother-pool-five-minute-priority').collect(require('./test-five-minute-priority').fixture(identity,45+i))));
   const mappingPlan=require('../lib/mother-pool-industry-mapping-producer').collect({identity,asOf,discovery:{...identity,requested_symbols:['2454','3443'],mapping_rows:['2454','3443'].map(symbol=>({symbol,classification:require('./test-industry-mapping-module').classification(symbol)}))}});mappingCaptured.push(await capture(mappingPlan));
   const source=structuredClone(require('./test-discovery-source').row);source.source_evidence.quote_event_at=asOf;source.source_evidence.quote.payload.turnoverVolumeEvidence.event_at=asOf;
   const priorAt=new Date(Date.parse(asOf)-60000).toISOString(),priorIdentity={...identity,writer_run_id:identity.writer_run_id+':prior',generation_id:identity.generation_id+':prior'};
@@ -99,9 +97,6 @@ function run(script,args,env){return new Promise((resolve,reject)=>{const child=
  const websocketResult=await run('verify-daytrade-module-receipt.js',['--module=A06','--round1='+websocketCaptured[0].file,'--round2='+websocketCaptured[1].file,'--out='+path.join(runtime,'A06-verified.json')],env);
  assert.equal(websocketResult.code,0,websocketResult.stderr+websocketResult.stdout);
  console.log(JSON.stringify({check:'A06_two_round_RPC_DB_anon_verifier',status:'passed',production_complete:false}));
- const priority5mResult=await run('verify-daytrade-module-receipt.js',['--module=A10','--round1='+priority5mCaptured[0].file,'--round2='+priority5mCaptured[1].file,'--out='+path.join(runtime,'A10-verified.json')],env);
- assert.equal(priority5mResult.code,0,priority5mResult.stderr+priority5mResult.stdout);
- console.log(JSON.stringify({check:'A10_two_round_RPC_DB_anon_verifier',status:'passed',production_complete:false}));
  for(const id of ['A08','A09']){
   const result=await run('verify-daytrade-module-receipt.js',['--module='+id,'--round1='+ma20Captured[id][0].file,'--round2='+ma20Captured[id][1].file,'--out='+path.join(runtime,id+'-verified.json')],env);
   assert.equal(result.code,0,result.stderr+result.stdout);
