@@ -7764,6 +7764,7 @@ async function syncPreopenSnapshotHistory(activeSymbols, quoteMap) {
       trade_date: tradeDate,
       observed_at: observedAt,
       trial_event_at: trialEventAt,
+      trial_event_time_source: "provider_trial_event",
       quote_received_at: quote.updated_at || null,
       trial_change_percent: ((trialPrice - referencePrice) / referencePrice) * 100,
       bid_ask_ratio: askVolume > 0 && bidVolume !== null ? bidVolume / askVolume : null,
@@ -8401,7 +8402,7 @@ async function tick() {
     metrics: quoteMetrics(row.symbol, dailyVolumeMap, quoteMap, supplementalMaps),
   }));
   result.payload.b19_b24_event_evidence = buildB19B24Evidence(result.industryUniverseRows);
-  result.payload.preopen_a15_a19_evidence = buildPreopenA15A19Evidence(activeSymbols, quoteMap, taipeiDate());
+  result.payload.preopen_a15_a19_evidence = await buildPreopenA15A19Evidence(activeSymbols, quoteMap, taipeiDate());
   result.payload.nonfatal_write_errors = fetchResult.errors || [];
   result.payload.websocket_quote_readthrough_written = websocketQuoteReadthroughSync.written || 0;
   result.payload.websocket_quote_readthrough_skipped = Boolean(websocketQuoteReadthroughSync.skipped);
@@ -8721,17 +8722,42 @@ async function tick() {
   };
 }
 
-function buildPreopenA15A19Evidence(activeSymbols, quoteMap, tradeDate) {
+async function buildPreopenA15A19Evidence(activeSymbols, quoteMap, tradeDate) {
   const rows = Array.isArray(activeSymbols) ? activeSymbols : [];
   const a15Rows = rows.map((r) => preopenA15A19.a15({ symbol: r.symbol, prev_open: r.prev_open ?? r.previous_open, prev_high: r.prev_high ?? r.previous_high, prev_low: r.prev_low ?? r.previous_low, prev_close: r.prev_close ?? r.previous_close, prev_vwap: r.prev_vwap ?? null }));
-  const a17Samples = [];
-  for (const [symbol, q] of (quoteMap instanceof Map ? quoteMap.entries() : [])) {
-    if (q?.is_trial === true) a17Samples.push({ symbol, trade_date: q.trade_date || q.payload?.trade_date, capture_slot: q.capture_slot || q.trial_capture_slot, is_trial: true, trial_price: q.trial_price ?? q.payload?.trialPrice, trial_event_at: q.trial_event_at });
+  const asOf = nowIso();
+  let a17Samples = [], trialReadback = { status: 'NOT_DUE', pages: [], source: 'fugle_preopen_snapshot_history' };
+  if (taipeiMinutes() >= PREOPEN_CAPTURE_START_MINUTES) {
+    try {
+      const history = await supabaseGetPaged('fugle_preopen_snapshot_history',
+        'select=symbol,trade_date,observed_at,trial_price,is_trial,payload&trade_date=eq.' + encodeURIComponent(tradeDate) +
+        '&observed_at=lte.' + encodeURIComponent(asOf) + '&or=' + encodeURIComponent('(' +
+          [['08:45','08:46'],['08:50','08:51'],['08:55','08:56'],['08:59','09:00']].map(([from,to]) =>
+            `and(observed_at.gte.${tradeDate}T${from}:00+08:00,observed_at.lt.${tradeDate}T${to}:00+08:00)`).join(',') + ')') +
+        '&order=symbol.asc,observed_at.asc',
+        { service: true, pageSize: 500, maxRows: 20000, requireExactCount: true, pageEvidence: trialReadback.pages });
+      const allowed = new Set(rows.map(r => String(r.symbol)));
+      a17Samples = history.filter(r => allowed.has(String(r.symbol))).map(r => {
+        const event = r.payload?.trial_event_at;
+        const ms = Date.parse(event);
+        const slot = Number.isFinite(ms) ? new Date(ms + 8 * 3600000).toISOString().slice(11,16) : '';
+        return { symbol: r.symbol, trade_date: r.trade_date, capture_slot: slot,
+          trial_event_at: event, trial_price: r.trial_price,
+          is_trial: r.is_trial === true && r.payload?.trial_event_time_source === 'provider_trial_event' &&
+            r.payload?.source === 'fugle_daytrade_source_writer:preopen_websocket' &&
+            r.payload?.writer_contract === PREOPEN_WRITER_CONTRACT &&
+            Date.parse(r.observed_at) === ms };
+      }).filter(r => ['08:45','08:50','08:55','08:59'].includes(r.capture_slot));
+      trialReadback.status = 'READ'; trialReadback.rows = history.length;
+    } catch (error) {
+      trialReadback.status = 'BLOCKED'; trialReadback.reason = error.message;
+    }
   }
   // Canonical A16 producer owns history and fixed-generation anon readback.
   // Writer only references the current day's verified summary; no raw-values fallback.
   const a16 = a16Writer.readReferences({ runtime: runtimePath(), tradeDate, symbols: rows });
-  const a17 = preopenA15A19.a17(a17Samples, { trade_date: tradeDate, symbols: rows.map(r => r.symbol), as_of: nowIso() });
+  const a17 = preopenA15A19.a17(a17Samples, { trade_date: tradeDate, symbols: rows.map(r => r.symbol), as_of: asOf });
+  a17.source_readback = trialReadback;
   const evidence = { a15: a15Rows, a16, a17, a18: preopenA15A19.a18({ a15: a15Rows.map((r) => ({ ...r, status: r.data_gap ? "DATA_GAP" : "READY", reason: r.data_gap ? "A15_DATA_GAP" : null })), a16, a17 }) };
   const receipt = preopenA15A19.a19(evidence);
   return { contract: receipt.contract, trade_date: tradeDate, canonical_run_id: `${SOURCE_NAME}:${String(tradeDate).replace(/-/g, "")}:canonical`, ...evidence, ...receipt, formal_candidate_allowed: false, publish_allowed: false };
