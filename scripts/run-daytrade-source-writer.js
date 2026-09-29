@@ -7737,11 +7737,12 @@ async function syncPreopenSnapshotHistory(activeSymbols, quoteMap) {
     const active = activeBySymbol.get(symbol);
     if (!symbol || !active || !isWebSocketQuote(quote)) continue;
     const trialEventAt = normalizeTimestamp(quote?.trial_event_at || quote?.payload?.trial_event_at, "");
-    const observedAt = trialEventAt || normalizeTimestamp(quote?.quote_seen_at || quote?.payload?.aggregate_last_updated, "");
+    // Transport receipt/heartbeat time cannot stand in for a trial event.
+    const observedAt = trialEventAt;
     if (!observedAt || taipeiDateFrom(observedAt) !== tradeDate) continue;
     const observedMinutes = taipeiClockMinutesFrom(observedAt);
     if (observedMinutes < PREOPEN_CAPTURE_START_MINUTES || observedMinutes >= PREOPEN_CAPTURE_END_MINUTES) continue;
-    if (ageSeconds(observedAt) > WINDOW_SECONDS) continue;
+    if (ageSeconds(observedAt) < 0 || ageSeconds(observedAt) > WINDOW_SECONDS) continue;
     const referencePrice = nullableNumber(quote.previous_close ?? quote.payload?.referencePrice, true);
     const trialPrice = nullableNumber(quote.trial_price ?? quote.payload?.trialPrice, true);
     if (referencePrice === null || trialPrice === null || quote.is_trial !== true) continue;
@@ -7756,7 +7757,7 @@ async function syncPreopenSnapshotHistory(activeSymbols, quoteMap) {
       generation_id: `${symbol}:${observedAt}`,
       trade_date: tradeDate,
       observed_at: observedAt,
-      trial_event_at: trialEventAt || observedAt,
+      trial_event_at: trialEventAt,
       quote_received_at: quote.updated_at || null,
       trial_change_percent: ((trialPrice - referencePrice) / referencePrice) * 100,
       bid_ask_ratio: askVolume > 0 && bidVolume !== null ? bidVolume / askVolume : null,
