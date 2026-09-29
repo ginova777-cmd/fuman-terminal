@@ -13,10 +13,11 @@ async function run({rest,candles,failed=false}){
   selectFetchBatch:()=>({symbols:['2330']}),fetchQuoteBatch:async()=>{events.push('rest');return {rows:[row('rest')],errors:[]};},normalizeCode:x=>x,mergeWebSocketQuoteCache:()=>{},priorityPoolDbRows:x=>x,
   SLOW_TABLE_BATCH_SIZE:200,supabaseUpsert:async(resource,rows)=>{if(resource==='fugle_daytrade_priority_pool'){events.push('priority');writes.push(JSON.parse(JSON.stringify(rows)));if(failed)throw Error('WRITE_FAILED');}},
   supabaseDelete:async()=>events.push('cleanup'),require:()=>({record:()=>events.push('record')}),process:{env:{}},taipeiDate:()=> '2026-09-29',writerTickIdentity:{writer_run_id:'w',generation_id:'g'},nowIso:()=> '2026-09-29T02:00:00Z',console:{error:()=>{}}};
- const result=await vm.runInNewContext('(async()=>{'+src.slice(start,end)+';return fetchResult;})()',ctx);
+ const execution=vm.runInNewContext('(async()=>{'+src.slice(start,end)+';return fetchResult;})()',ctx);
+ let result;if(failed)await assert.rejects(execution,e=>e.message==='PRIORITY_POOL_WRITE_UNCONFIRMED'&&e.cause.message==='WRITE_FAILED');else result=await execution;
  assert.equal(writes.length,1);assert.equal(writes[0][0].phase,rest?'rest':candles?'candles':'initial');assert(events.indexOf('candles')<events.indexOf('priority'));
  if(rest)assert(events.indexOf('rest')<events.indexOf('priority'));
  assert.equal(events.includes('cleanup'),!failed);assert.equal(events.includes('record'),!failed);
- if(failed)assert(result.errors.some(e=>e.target==='fugle_daytrade_priority_pool'&&e.message==='WRITE_FAILED'));
+ if(!failed)assert.equal(result.errors.length,0);
 }
 (async()=>{for(const rest of [false,true])for(const candles of [false,true])for(const failed of [false,true])await run({rest,candles,failed});console.log('PASS 8 actual Writer flows: candles/REST retained, final priority written once, failed write never cleans up or records successful refresh. No network.');})().catch(e=>{console.error(e);process.exitCode=1;});

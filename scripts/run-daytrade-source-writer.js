@@ -8315,6 +8315,7 @@ async function tick() {
         target: "fugle_daytrade_priority_pool",
         message: error?.message || String(error),
       });
+      throw new Error("PRIORITY_POOL_WRITE_UNCONFIRMED", { cause: error });
     }
   }
 
