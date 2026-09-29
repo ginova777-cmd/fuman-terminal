@@ -8652,7 +8652,10 @@ async function tick() {
       persistModuleInput = async input => {
           const evidenceId=require('node:crypto').randomUUID();
           const saved=await require('../lib/persist-mother-pool-module-round').persistModuleRound(input,{
-            savePlan:async plan=>require('../lib/daytrade-durable-json').writeExclusive(path.join(dir,evidenceId+'-plan.json'),plan),
+            savePlan:async plan=>{
+              require('../lib/daytrade-module-attempt-journal').begin(path.join(dir,'attempts'),plan);
+              require('../lib/daytrade-durable-json').writeExclusive(path.join(dir,evidenceId+'-plan.json'),plan);
+            },
             persist:async body=>{
               if(DRY_RUN)throw Error('MODULE_DRY_RUN_NO_PERSISTENCE');
               let response;
