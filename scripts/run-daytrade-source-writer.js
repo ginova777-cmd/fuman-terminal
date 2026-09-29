@@ -8602,6 +8602,7 @@ async function tick() {
       inputs.push(require('../lib/mother-pool-websocket-source').collect({identity,symbols:snapshot.symbols,status:collectorStatus,asOf:nowIso()}));
       inputs.push(require('../lib/mother-pool-previous-ohlc').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,asOf:sideAsOf,lockDirectory:runtimePath('data','mother-pool-a15',identity.trade_date)}));
       inputs.push(require('../lib/mother-pool-a16-module').collect({identity,symbols:snapshot.symbols,asOf:sideAsOf,runtime:runtimePath()}));
+      if(sideMinutes>=530)inputs.push(...require('../lib/mother-pool-morning-module').collect({identity,symbols:snapshot.symbols,asOf:sideAsOf,runtime:runtimePath()}));
       if(sideMinutes>=525)inputs.push(require('../lib/mother-pool-natural-trial').collect({identity,symbols:snapshot.symbols,history:preopenTrialHistory,asOf:sideAsOf}));
       if(sideMinutes>=539)inputs.push(require('../lib/mother-pool-trial-trajectory').collect({identity,symbols:snapshot.symbols,history:preopenTrialHistory,asOf:sideAsOf}));
       if(sideMinutes<540){

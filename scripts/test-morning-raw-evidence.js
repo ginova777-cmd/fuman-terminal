@@ -12,3 +12,4 @@ const options={tradeDate:p.date,stage:'us_0820',asOf:'2026-09-08T00:22:00Z'};
 assert.deepEqual(verifyHandoff(receipt,options),[]);
 for(const mutate of [r=>delete r.source_evidence,r=>r.source_evidence.rows[0].market='SZ',r=>r.source_evidence.rows_sha256='wrong',r=>r.source_evidence.bridges=[],r=>r.accepted_symbols=['2049'],r=>r.checked_at='2026-09-08T00:23:00Z',r=>r.source_evidence.requests[0].http_status=503]){const r=structuredClone(receipt);mutate(r);assert(verifyHandoff(r,options).length>0);}
 console.log('PASS raw handoff evidence: actual payload/bridge/row validators; missing, corrupt, wrong-set, future and HTTP evidence rejected');
+module.exports={receipt,options};
