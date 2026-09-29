@@ -15,5 +15,13 @@ async function run(alter=x=>x,mode='timeout'){
  for(const alter of [()=>[],x=>[...x,...x],x=>{x[0].payload.generation_id='other';return x;},x=>{x[0].payload.value=11;return x;}]){r=await run(alter);assert(r.error);assert.equal(r.writes,1);assert.equal(r.reads,1);}
  r=await run(x=>x,'http');assert(r.error);assert.equal(r.writes,1);assert.equal(r.reads,0);
  r=await run(x=>{x[0].updated_at='2026-09-29T02:00:00+00:00';return x;});assert.equal(r.result.written,1);
+ let writes=0,reads=0,last;
+ const box={require,JSON,DRY_RUN:false,requireSupabaseKey:()=> 'isolated',SUPABASE_WRITE_TIMEOUT_MS:100,SUPABASE_URL:'https://isolated.invalid',headers:()=>({}),AbortSignal,URLSearchParams,setTimeout,console:{log:()=>{}},
+  fetch:async(_url,options)=>{writes++;last=JSON.parse(options.body);if(writes===1)return {ok:true};throw Object.assign(Error('timeout'),{name:'TimeoutError'});},
+  supabaseGetPaged:async(_resource,_query,options)=>{reads++;assert.equal(options.maxRows,500);return writes===2?last:[];}};
+ vm.runInNewContext(code,box);
+ const batch=['2330','2317','1101'].map(symbol=>({...row,symbol}));
+ await assert.rejects(box.supabaseUpsert('fugle_daytrade_priority_pool',batch,'symbol',{batchSize:1,retries:1}),/PRIORITY_ACK_SET_MISMATCH/);
+ assert.equal(writes,3);assert.equal(reads,2);
  console.log('PASS actual Writer priority timeout: one POST, exact same-batch GET acknowledgement; partial/duplicate/new generation/content mismatch reject without replay; HTTP failure not blindly retried. Isolated only.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -802,7 +802,7 @@ async function supabaseUpsert(resource, rows, conflict, options = {}) {
           const expected=JSON.parse(JSON.stringify(chunk));
           const query=new URLSearchParams({select:Object.keys(expected[0]).join(','),symbol:'in.('+expected.map(r=>r.symbol).join(',')+')',order:'symbol.asc'});
           for(const field of ['trade_date','canonical_run_id','writer_run_id','generation_id'])query.set('payload->>'+field,'eq.'+expected[0].payload[field]);
-          const actual=await supabaseGetPaged(resource,query.toString(),{service:true,requireExactCount:true,pageSize:500});
+          const actual=await supabaseGetPaged(resource,query.toString(),{service:true,requireExactCount:true,pageSize:500,maxRows:500});
           const ack=require('../lib/daytrade-priority-write-ack').verify(expected,actual);
           console.log(JSON.stringify({stage:'priority_pool_chunk_ack',...ack}));
           written+=chunk.length;lastError=null;break;
