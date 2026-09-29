@@ -8402,7 +8402,8 @@ async function tick() {
     metrics: quoteMetrics(row.symbol, dailyVolumeMap, quoteMap, supplementalMaps),
   }));
   result.payload.b19_b24_event_evidence = buildB19B24Evidence(result.industryUniverseRows);
-  result.payload.preopen_a15_a19_evidence = await buildPreopenA15A19Evidence(activeSymbols, quoteMap, taipeiDate());
+  let preopenTrialHistory = null;
+  result.payload.preopen_a15_a19_evidence = await buildPreopenA15A19Evidence(activeSymbols, quoteMap, taipeiDate(), evidence => { preopenTrialHistory = evidence; });
   result.payload.nonfatal_write_errors = fetchResult.errors || [];
   result.payload.websocket_quote_readthrough_written = websocketQuoteReadthroughSync.written || 0;
   result.payload.websocket_quote_readthrough_skipped = Boolean(websocketQuoteReadthroughSync.skipped);
@@ -8577,6 +8578,7 @@ async function tick() {
       const collectorStatus=readJson(FUGLE_WS_STATUS_FILE,null);
       inputs.push(require('../lib/mother-pool-websocket-source').collect({identity,symbols:snapshot.symbols,status:collectorStatus,asOf:nowIso()}));
       inputs.push(require('../lib/mother-pool-previous-ohlc').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,asOf:sideAsOf,lockDirectory:runtimePath('data','mother-pool-a15',identity.trade_date)}));
+      if(sideMinutes>=539)inputs.push(require('../lib/mother-pool-trial-trajectory').collect({identity,symbols:snapshot.symbols,history:preopenTrialHistory,asOf:sideAsOf}));
       if(sideMinutes<540){
         try { inputs.push(...require('../lib/mother-pool-preopen-ma20').collect({
           identity,symbols:snapshot.symbols,snapshot,calendar:marketCalendarEvidence,
@@ -8722,7 +8724,7 @@ async function tick() {
   };
 }
 
-async function buildPreopenA15A19Evidence(activeSymbols, quoteMap, tradeDate) {
+async function buildPreopenA15A19Evidence(activeSymbols, quoteMap, tradeDate, onTrialHistory) {
   const rows = Array.isArray(activeSymbols) ? activeSymbols : [];
   const a15Rows = rows.map((r) => preopenA15A19.a15({ symbol: r.symbol, prev_open: r.prev_open ?? r.previous_open, prev_high: r.prev_high ?? r.previous_high, prev_low: r.prev_low ?? r.previous_low, prev_close: r.prev_close ?? r.previous_close, prev_vwap: r.prev_vwap ?? null }));
   const asOf = nowIso();
@@ -8749,6 +8751,7 @@ async function buildPreopenA15A19Evidence(activeSymbols, quoteMap, tradeDate) {
             Date.parse(r.observed_at) === ms };
       }).filter(r => ['08:45','08:50','08:55','08:59'].includes(r.capture_slot));
       trialReadback.status = 'READ'; trialReadback.rows = history.length;
+      if(typeof onTrialHistory==='function')onTrialHistory({rows:history,readback:{status:'READ',source:'fugle_preopen_snapshot_history',trade_date:tradeDate,observed_at:asOf}});
     } catch (error) {
       trialReadback.status = 'BLOCKED'; trialReadback.reason = error.message;
     }
