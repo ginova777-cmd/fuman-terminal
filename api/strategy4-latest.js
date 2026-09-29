@@ -589,8 +589,7 @@ async function handler(request, response) {
   });
   if (cached) {
     setDesktopSnapshotCache(response);
-    await attachMainForceCostsToPayload(cached);
-    await attachThreeGatePricesToPayload(cached);
+    await Promise.all([attachMainForceCostsToPayload(cached), attachThreeGatePricesToPayload(cached)]);
     response.status(200).json(cached);
     return;
   }
@@ -618,8 +617,7 @@ async function handler(request, response) {
       response.status(409).json(apiOnlyError("strategy4_supabase_contract_mismatch"));
       return;
     }
-    await attachMainForceCostsToPayload(payload);
-    await attachThreeGatePricesToPayload(payload);
+    await Promise.all([attachMainForceCostsToPayload(payload), attachThreeGatePricesToPayload(payload)]);
     setDesktopSnapshotCache(response);
     response.status(200).json(payload);
   } catch (error) {

@@ -1,0 +1,7 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),vm=require('vm');
+const text=fs.readFileSync(require('path').join(__dirname,'../api/mobile-fragment.js'),'utf8');
+const source=text.slice(text.indexOf('function fetchStrategy4Internal('),text.indexOf('function fetchStrategy5Internal('));
+function setup(handler){let timeout,ms;const ctx={URL,Promise,Error,MOBILE_STRATEGY4_DIRECT_TIMEOUT_MS:Number(text.match(/const MOBILE_STRATEGY4_DIRECT_TIMEOUT_MS = (\d+)/)[1]),originFrom:()=> 'https://example.test',setTimeout:(fn,n)=>{timeout=fn;ms=n;return 1;},clearTimeout:()=>{},strategy4Latest:handler,createCaptureResponse:fn=>fn};vm.createContext(ctx);vm.runInContext(source,ctx);return {call:()=>ctx.fetchStrategy4Internal({},'/api/strategy4-latest'),expire:()=>timeout(),budget:()=>ms};}
+test('returns complete payload without altering identity; bounded 30s deadline',async()=>{const payload={runId:'same-batch',matches:[{code:'2330'}]};const x=setup((req,done)=>{assert.equal(req.query.verify,'1');done({statusCode:200,payload});});assert.deepEqual(await x.call(),payload);assert.equal(x.budget(),30000);});
+test('internal failure remains failure',async()=>{const x=setup((req,done)=>done({statusCode:503,payload:{error:'source_unavailable'}}));await assert.rejects(x.call(),/source_unavailable/);});
+test('timeout cannot manufacture a successful fragment',async()=>{const x=setup(()=>new Promise(()=>{}));const p=x.call();x.expire();await assert.rejects(p,/strategy4_internal_timeout/);});
