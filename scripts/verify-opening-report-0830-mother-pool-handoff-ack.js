@@ -51,12 +51,12 @@ function symbol(value) {
   return /^\d{4}$/.test(result) ? result : "";
 }
 
-function validatePayload(payload, tradeDate, reportRunId) {
+function validatePayload(payload, tradeDate, reportRunId, stageId) {
   const issues = [];
   const requiredText = ["run_id", "source", "mode", "industry", "display_name", "priority_observation_basis", "bias", "evidence_summary", "mapping_contract", "mapping_reviewed_at", "allowed_action", "forbidden_action"];
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return ["payload_missing"];
   if (payload.date !== tradeDate) issues.push("date_mismatch");
-  if (payload.report_time !== morningStages.stage().time) issues.push("report_time_not_0830");
+  if (payload.report_time !== morningStages.stage(stageId).time) issues.push("report_time_not_0830");
   for (const field of requiredText) if (!String(payload[field] ?? "").trim()) issues.push(`missing_field:${field}`);
   if (!String(payload.run_id || "").startsWith(`${reportRunId}-`)) issues.push("run_id_not_bound_to_report");
   if (payload.source !== SOURCE) issues.push("source_mismatch");
