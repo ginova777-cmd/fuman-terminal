@@ -120,6 +120,7 @@ async function main() {
     receiptCheck("source_observability", "source-observability-retention-15d-v1", path.join(STATUS, `source-observability-retention-${date.id}.json`)),
   ];
   receipts.push(receiptCheck('extended_cleanup','extended-cleanup-v1',path.join(STATUS,`cleanup-extended-${date.id}.json`)));
+  receipts.push(receiptCheck('duplicate_indexes','duplicate-index-cleanup-v1',path.join(STATUS,`duplicate-index-cleanup-${date.id}.json`)));
   const cost = readJson(path.join(RUNTIME,"state/vercel-cost-health-status.json")).value;
   const currentMinutes = Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Taipei',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(new Date()).split(':').reduce((n,v,i)=>n+Number(v)*(i===0?60:1),0));
   if (!maintenance && currentMinutes < 21*60+15) warnings.push('cost_health_today_not_due');
