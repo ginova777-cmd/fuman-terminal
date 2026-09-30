@@ -7265,6 +7265,12 @@ async function writeStatusAndScorecard(result) {
     sourceRow.payload = result.payload;
   }
 
+  const detailJournal=require('../lib/daytrade-source-status-journal');
+  const projectedStatus=require('../lib/daytrade-source-status-projection').project(sourceRow,{
+    save:row=>detailJournal.prepare(runtimePath('data','source-status-producer-details'),row),
+    read:checkpoint=>detailJournal.read(checkpoint),
+  });
+  sourceRow.payload=projectedStatus.payload;
   const nullPaths = [];
   function inspectNull(value, key) {
     if (typeof value === 'string' && value.includes(String.fromCharCode(0))) nullPaths.push(key);
