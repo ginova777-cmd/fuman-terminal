@@ -401,6 +401,32 @@ $env:FUMAN_FORMAL_SOURCE_WINDOW_END = "1330"
 $closeoutNow = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, "Taipei Standard Time")
 $runCloseout = $Apply -and -not $LocalCheck -and (($closeoutNow.Hour * 60 + $closeoutNow.Minute) -ge 810)
 
+# Serializes the entire round, including fast sync before the legacy Writer lock.
+# File ownership is released by Windows even on an early exit or process crash.
+$DatabaseRoundLock = $null
+$BackoffScript = Join-Path $RepoRoot 'scripts\writer-database-backoff.cjs'
+$BackoffState = Join-Path $StateDir 'writer-database-backoff.json'
+function Update-WriterDatabaseBackoff {
+  param([string]$Action, [string]$Diagnostic = '')
+  if (-not $Apply -or $LocalCheck) { return }
+  $out = $Diagnostic | & node $BackoffScript $Action $BackoffState 2>&1
+  if ($LASTEXITCODE -ne 0) { throw 'WRITER_BACKOFF_STATE_UPDATE_FAILED' }
+}
+if ($Apply -and -not $LocalCheck) {
+  if (-not (Test-Path -LiteralPath $BackoffScript)) { throw 'WRITER_BACKOFF_HELPER_MISSING' }
+  try {
+    $DatabaseRoundLock = [IO.File]::Open((Join-Path $StateDir 'writer-database-round.lock'), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+  } catch [IO.IOException] {
+    Write-WrapperLog 'SKIP database_round_already_running'
+    exit 0
+  }
+  $backoffOutput = & node $BackoffScript check $BackoffState 2>&1
+  $backoffExit = $LASTEXITCODE
+  if ($backoffExit -ne 0) {
+    Write-WrapperLog "STOP database_backoff exit=$backoffExit evidence=$backoffOutput"
+    exit $backoffExit
+  }
+}
 # FUMAN_MARKET_CLOSED_RUNNER_GUARD_V1
 . "$RepoRoot\schedule-guard.ps1"
 # A trading-day pre-open run writes warmup evidence only. It must not be
@@ -469,6 +495,7 @@ if ($Apply -and -not $runCloseout) {
     # A failed write may already have committed some batches. Do not start
     # rollover, lease acquisition or another writer after an uncertain result.
     if ($fastSyncExit -ne 0) {
+      Update-WriterDatabaseBackoff 'failure' $fastSyncText
       Write-FailureArtifact 9010 "fast_supabase_sync_failed_stop_current_run"
       Write-WrapperLog "STOP fast_supabase_sync_failed downstream_started=false"
       exit 9010
@@ -593,10 +620,12 @@ try {
   if ($exitCode -ne 0) {
     $diagnostic = (($stderrText + " " + $stdoutText) -replace "[\r\n]+", " ").Trim()
     if ($diagnostic.Length -gt 500) { $diagnostic = $diagnostic.Substring(0, 500) }
+    Update-WriterDatabaseBackoff 'failure' ($stderrText + ' ' + $stdoutText)
     Write-FailureArtifact $exitCode "writer_exit_$exitCode detail=$diagnostic"
     Write-WrapperLog "FAIL writer_exit_$exitCode detail=$diagnostic stdout=$StdoutLog stderr=$StderrLog"
     exit $exitCode
   }
+  Update-WriterDatabaseBackoff 'success'
   Invoke-DaytradeSideVolumeCanonicalVerifier
   Write-WrapperLog "DONE ok stdout=$StdoutLog stderr=$StderrLog"
   exit 0

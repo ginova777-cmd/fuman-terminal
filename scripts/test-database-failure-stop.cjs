@@ -28,6 +28,7 @@ function writerCase(exitCode,message) {
 function Test-Path { return $true }
 function node { $global:LASTEXITCODE=${exitCode}; '${message}' }
 function Write-WrapperLog { param($Message) }
+function Update-WriterDatabaseBackoff { param($Action,$Diagnostic) }
 function Write-FailureArtifact { param($ExitCode,$Reason); Write-Output "FAILURE:$Reason" }
 function Invoke-MotherPoolReceiptRollover { param($FastSyncExitCode); Write-Output 'ROLLOVER' }
 ${normalized.slice(begin,end)}
