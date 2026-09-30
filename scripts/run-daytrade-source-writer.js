@@ -6764,7 +6764,7 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
   if (!DRY_RUN) writeJson(INTRADAY_BURST_TELEGRAM_OUTBOX_FILE, payload);
   return { path: INTRADAY_BURST_TELEGRAM_OUTBOX_FILE, event_count: industryScopedEvents.length, events: industryScopedEvents, diagnostics: payload };
 }
-function updateMotherPoolDelta(result) {
+function updateMotherPoolDelta(result, { preopen = false, publishState = null } = {}) {
   const priorityRows = (Array.isArray(result?.priorityRows) ? result.priorityRows : []).filter(isPublishedMotherMember);
   const payload = result?.payload || {};
   const tradeDate = taipeiDate();
@@ -6901,7 +6901,7 @@ function updateMotherPoolDelta(result) {
 
   let upgradeReceiptPath = "";
   let downgradeReceiptPath = "";
-  if (!DRY_RUN && upgradeRows.length > 0) {
+  if (!DRY_RUN && !preopen && upgradeRows.length > 0) {
     const receiptDir = runtimePath("data", "scan-receipts");
     fs.mkdirSync(receiptDir, { recursive: true });
     upgradeReceiptPath = path.join(receiptDir, "daytrade-mother-pool-upgrade-" + compactDateKey(tradeDate) + "-" + Date.now() + ".json");
@@ -6915,7 +6915,7 @@ function updateMotherPoolDelta(result) {
       upgrades: upgradeRows,
     });
   }
-  if (!DRY_RUN && downgradeRows.length > 0) {
+  if (!DRY_RUN && !preopen && downgradeRows.length > 0) {
     const receiptDir = runtimePath("data", "scan-receipts");
     fs.mkdirSync(receiptDir, { recursive: true });
     downgradeReceiptPath = path.join(receiptDir, "daytrade-mother-pool-downgrade-" + compactDateKey(tradeDate) + "-" + Date.now() + ".json");
@@ -7033,10 +7033,10 @@ function updateMotherPoolDelta(result) {
   };
 
   const burstRows = priorityRows;
-  const intradayBurstTelegramOutbox = writeIntradayBurstTelegramOutbox(burstRows, tradeDate, checkedAt, runId, result?.quoteMap, result?.industryUniverseRows);
+  const intradayBurstTelegramOutbox = preopen ? { event_count: 0 } : writeIntradayBurstTelegramOutbox(burstRows, tradeDate, checkedAt, runId, result?.quoteMap, result?.industryUniverseRows);
   roundSummary.intraday_burst_telegram_event_count = intradayBurstTelegramOutbox.event_count;
 
-  if (!DRY_RUN) writeJson(MOTHER_POOL_DELTA_STATE_FILE, {
+  if (!DRY_RUN) (publishState || (state => writeJson(MOTHER_POOL_DELTA_STATE_FILE, state)))({
     contract: "daytrade-mother-pool-runner-receipt-v2",
     contract_version: MOTHER_POOL_CONTRACT_VERSION,
     source_name: SOURCE_NAME,
@@ -7162,7 +7162,11 @@ async function traceStatusWrite(stage, action) {
   }
 }
 async function writeStatusAndScorecard(result) {
-  const motherPoolDelta = PREOPEN_LIGHT_MODE ? buildPreopenLightMotherPoolDelta(result) : updateMotherPoolDelta(result);
+  let acknowledgedMotherPoolState = null;
+  const motherPoolDelta = updateMotherPoolDelta(result, {
+    preopen: PREOPEN_LIGHT_MODE,
+    publishState: PREOPEN_LIGHT_MODE ? state => { acknowledgedMotherPoolState = state; } : null,
+  });
   const tradeDate = taipeiDate();
   const canonicalRunId = canonicalDaytradeRunId(tradeDate);
   result.payload.trade_date = tradeDate;
@@ -7281,6 +7285,9 @@ async function writeStatusAndScorecard(result) {
     read: row => supabaseGet('source_status',require('../lib/daytrade-source-status-ack').fixedReadQuery(row), {service:true}),
   }));
   console.log(JSON.stringify({stage:'source_status_ack',checkedAt:nowIso(),...sourceStatusAck}));
+  // Publish today's actual local universe only after the source write is acknowledged.
+  // This is a runner artifact, not a module or overall COMPLETE receipt.
+  if (acknowledgedMotherPoolState) writeJsonAtomic(MOTHER_POOL_DELTA_STATE_FILE, acknowledgedMotherPoolState);
   // The turnover checklist has its own independently read-back receipt.
   // Failure here is visible but cannot erase the already published core source.
   const turnover = result.payload.intraday_turnover_ranking;
@@ -8436,6 +8443,8 @@ async function tick() {
   });
   console.log(JSON.stringify({ok:true,stage:'daytrade_tick:compute_stats:complete',checkedAt:nowIso()}));
   result.priorityRows = priorityRows;
+  // Producers/checkpoints run before writeStatusAndScorecard; bind the actual tick now.
+  Object.assign(result.payload, require("../lib/daytrade-writer-identity").requireIdentity(writerTickIdentity, taipeiDate()));
   result.payload.same_round_industry_discovery = sameRoundIndustryDiscovery;
   result.quoteMap = quoteMap;
   result.industryUniverseRows = activeSymbols.map((row) => ({
@@ -8714,8 +8723,9 @@ async function tick() {
   writeModuleProducerReceipts(result, taipeiDate());
   try {
     const moduleRegistry = readJson(path.resolve(__dirname, '..', 'data', 'contracts', 'mother-pool-a01-b24-module-registry-v1.json'), { modules: {} });
-    const snapshotRun = result.payload?.mother_pool_run_id || result.payload?.mother_pool_snapshot?.mother_pool_run_id || '';
-    const snapshotGeneration = result.payload?.mother_pool_snapshot?.generation || snapshotRun;
+    if (!require('../lib/daytrade-mother-pool-snapshot').inspectSnapshot(sideSnapshot,taipeiDate()).ok) throw Error('MODULE_READBACK_SNAPSHOT_INVALID');
+    const snapshotRun = sideSnapshot.mother_pool_run_id;
+    const snapshotGeneration = sideSnapshot.generation;
     const captureArgs = [path.join(__dirname, 'capture-daytrade-module-readbacks.js'), `--trade-date=${taipeiDate()}`, `--canonical=${result.payload?.canonical_run_id || `${SOURCE_NAME}:${String(taipeiDate()).replace(/-/g, '')}:canonical`}`, `--writer-run-id=${result.payload?.writer_run_id || result.run_id || ''}`, `--writer-generation-id=${result.payload?.generation_id || ''}`, `--snapshot-generation=${snapshotGeneration}`, `--mother-pool-run-id=${snapshotRun}`, `--snapshot-sequence=${result.payload?.mother_pool_snapshot_sequence || ''}`, `--modules=${Object.keys(moduleRegistry.modules || {}).join(',')}`];
     const captures=[];
     const nonSide=Object.keys(moduleRegistry.modules||{}).filter(id=>!['B14','B20','A14','A19'].includes(id));

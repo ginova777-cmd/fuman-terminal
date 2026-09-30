@@ -32,6 +32,13 @@ async function main(){
  writes=0;reads=0;
  await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>{reads++;return[previous];},retryDelaysMs:[0,0],sleep:async()=>{}}),/CONTENT_MISMATCH/);
  assert.equal(writes,1);assert.equal(reads,3);
+ const initialRevision=clone(base);initialRevision.updated_at='2026-09-28T23:59:59Z';initialRevision.payload.nested.a=0;
+ writes=0;reads=0;
+ const revised=await writeWithAcknowledgement({row:base,write:timeout,read:async()=>[++reads<3?initialRevision:clone(base)],retryDelaysMs:[0,0],sleep:async()=>{}});
+ assert.equal(revised.verified_after_timeout,true);assert.equal(writes,1);assert.equal(reads,3);
+ writes=0;reads=0;
+ await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>{reads++;return[initialRevision];},retryDelaysMs:[0,0],sleep:async()=>{}}),/CONTENT_MISMATCH/);
+ assert.equal(writes,1);assert.equal(reads,3);
  for(const bad of [same,{...previous,updated_at:'2026-09-29T00:00:01Z'},{...previous,trade_date:'2026-09-28'}]){
   reads=0;await assert.rejects(writeWithAcknowledgement({row:base,write:timeout,read:async()=>{reads++;return[bad];},retryDelaysMs:[0,0],sleep:async()=>{throw Error('must not wait');}}),/CONTENT_MISMATCH/);assert.equal(reads,1);
  }
