@@ -1,3 +1,4 @@
+let memoryReadJson = null;
 const { isAuthorizedMorningRecovery } = require("../lib/opening-report-recovery-seed");
 const { boundedScorecardPayload } = require("../lib/daytrade-scorecard-payload");
 const { isPublishedMotherMember } = require("../lib/daytrade-published-membership");
@@ -368,6 +369,7 @@ function boolValue(value) {
 }
 
 function readJson(file, fallback) {
+  if (memoryReadJson) return memoryReadJson(file, fallback);
   try {
     return JSON.parse(fs.readFileSync(file, "utf8").replace(/^\uFEFF/, ""));
   } catch {
@@ -1461,8 +1463,8 @@ async function fetchMarginChangeMap() {
   return map;
 }
 
-function mergeWebSocketQuoteCache(quoteMap) {
-  const cache = readFugleWebSocketQuotes({ maxAgeMs: WINDOW_SECONDS * 1000 });
+function mergeWebSocketQuoteCache(quoteMap, memoryCache) {
+  const cache = memoryCache || readFugleWebSocketQuotes({ maxAgeMs: WINDOW_SECONDS * 1000 });
   const numeric = (value, fallback, positiveOnly = false) => {
     const parsed = numberValue(value, NaN);
     if (Number.isFinite(parsed) && (!positiveOnly || parsed > 0)) return parsed;
@@ -9070,7 +9072,7 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+if (require.main === module) main().catch((error) => {
   const cause = error && typeof error === "object" ? (error.cause || {}) : {};
   console.error(JSON.stringify({
     ok: false,
@@ -9089,3 +9091,263 @@ main().catch((error) => {
   process.exit(1);
 });
 
+
+function memoryMarginRowsToMap(rows) {
+  const grouped = new Map();
+  try {
+    for (const row of rows) {
+      const symbol = normalizeCode(row.symbol);
+      if (!symbol) continue;
+      const list = grouped.get(symbol) || [];
+      if (list.length < 5) {
+        list.push({
+          tradeDate: row.trade_date || "",
+          marginBalance: numberValue(row.margin_balance),
+          shortBalance: numberValue(row.short_balance),
+          updated_at: row.updated_at || "",
+        });
+        grouped.set(symbol, list);
+      }
+    }
+  } catch {
+    return new Map();
+  }
+  const map = new Map();
+  for (const [symbol, rows] of grouped.entries()) {
+    const latest = rows[0] || {};
+    const previous = rows[1] || {};
+    const previous3 = rows[Math.min(2, rows.length - 1)] || previous;
+    const previous5 = rows[Math.min(4, rows.length - 1)] || previous3 || previous;
+    const marginBalance = numberValue(latest.marginBalance);
+    const shortBalance = numberValue(latest.shortBalance);
+    const marginChange1d = rows.length >= 2 ? marginBalance - numberValue(previous.marginBalance) : 0;
+    const shortChange1d = rows.length >= 2 ? shortBalance - numberValue(previous.shortBalance) : 0;
+    const marginChange3d = rows.length >= 3 ? marginBalance - numberValue(previous3.marginBalance) : marginChange1d;
+    const shortChange3d = rows.length >= 3 ? shortBalance - numberValue(previous3.shortBalance) : shortChange1d;
+    const marginChange5d = rows.length >= 5 ? marginBalance - numberValue(previous5.marginBalance) : marginChange3d;
+    const shortChange5d = rows.length >= 5 ? shortBalance - numberValue(previous5.shortBalance) : shortChange3d;
+    map.set(symbol, {
+      tradeDate: latest.tradeDate || "",
+      sampledDays: rows.length,
+      marginBalance,
+      shortBalance,
+      marginChange: marginChange1d,
+      shortChange: shortChange1d,
+      marginChange1d,
+      shortChange1d,
+      marginChange3d,
+      shortChange3d,
+      marginChange5d,
+      shortChange5d,
+      updated_at: latest.updated_at || "",
+    });
+  }
+  return map;
+}
+
+module.exports.prepareMemoryWarmup = async function({tradeDate,revision,identity,calendar,historyCalendar,cache,warmupLoader,readMemoryJson}) {
+  if(tradeDate!==taipeiDate())throw Error('WARMUP_TRADE_DATE_MISMATCH');
+  return warmupLoader.load({tradeDate,revision,identity,calendar,readMemoryJson,loaders:{
+    activeSymbols:fetchActiveSymbols,dailyVolumeMap:fetchDailyVolumeAvg,
+    capitalMap:fetchCapitalMap,chipMap:fetchChipFlowMap,stockGroupContractMap:fetchStockGroupContractMap,
+    preopenReferencePriceMap:fetchPreopenReferencePriceMap,
+    marginChangeMap:async()=> (await module.exports.loadMemoryMarginBaseline({tradeDate,calendar:historyCalendar,revision,cache})).marginChangeMap,
+  }});
+};
+module.exports.loadMemoryMarginBaseline = async function({tradeDate,calendar,revision,cache}) {
+  const dates=require('../lib/mother-pool-daily-volume-baseline').datesFromCalendar(calendar,tradeDate,5);
+  const query=require('../lib/daytrade-baseline-read-cache').marginQuery(dates);
+  return cache.read({tradeDate,source:'finmind_margin_short:'+query,revision,load:async()=>{
+    const rows=await supabaseGetPaged('finmind_margin_short',query,{service:true,pageSize:500,requireExactCount:true,maxRows:15000});
+    const seen=new Set();
+    for(const row of rows){const key=row.symbol+'|'+row.trade_date;if(!dates.includes(row.trade_date)||seen.has(key))throw Error('MARGIN_BASELINE_IDENTITY_INVALID');seen.add(key);}
+    return {tradeDate,dates,rows,marginChangeMap:memoryMarginRowsToMap(rows)};
+  }});
+};
+module.exports.normalizeMemoryQuotes = function(rawRows,tradeDate) {
+  return require('../lib/daytrade-memory-quotes').normalizeMemoryQuotes(rawRows,{tradeDate,mergeQuotes:mergeWebSocketQuoteCache});
+};
+// Synchronous detection entry: reuse existing rules, with no writer tick or persistence.
+module.exports.evaluateMemoryPool = function({activeSymbols,dailyVolumeMap,quoteMap,supplementalMaps={},identity,readMemoryJson}) {
+  if(!Array.isArray(activeSymbols)||!(dailyVolumeMap instanceof Map)||!(quoteMap instanceof Map)||typeof readMemoryJson!=='function')throw Error('MEMORY_DETECTOR_INPUT_INVALID');
+  const checked=require('../lib/daytrade-writer-identity').requireIdentity(identity,taipeiDate());
+  const previousIdentity=writerTickIdentity,previousRead=memoryReadJson;
+  writerTickIdentity=checked;memoryReadJson=readMemoryJson;
+  try{return buildPriorityPool(activeSymbols,dailyVolumeMap,quoteMap,supplementalMaps);}
+  finally{writerTickIdentity=previousIdentity;memoryReadJson=previousRead;}
+};
+
+module.exports.buildMemoryIntradayIndicators = function(rows,tradeDate){
+  const buildGrouped = (rows, tradeDate) => {
+    const grouped = new Map();
+    for (const row of rows) {
+      const symbol = normalizeCode(row.symbol);
+      if (!symbol) continue;
+      const current = grouped.get(symbol) || {
+        symbol,
+        market: row.market || "",
+        latest_candle_time: "",
+        first_candle_time: "",
+        today_candle_count: 0,
+        warmup_candle_count: 0,
+        continuous_candle_count: 0,
+        ready_ma3: false,
+        ready_ma5: false,
+        ready_ma10: false,
+        ready_ma20_continuous: false,
+        ready_ma30: false,
+        ready_ma58: false,
+        ready_ma35_continuous: false,
+        latest_candle_age_seconds: 999999,
+        _closes: [],
+        _volumes: [],
+        _highs: [],
+        _lows: [],
+      };
+      const candleTime = normalizeTimestamp(row.candle_time || row.updated_at);
+      if (String(row.trade_date || "") === tradeDate || taipeiDateFrom(candleTime) === tradeDate) current.today_candle_count += 1;
+      current.warmup_candle_count += 1;
+      current.continuous_candle_count += 1;
+      const close = numberValue(row.close);
+      if (close > 0) current._closes.push(close);
+      current._volumes.push(Math.max(0, numberValue(row.volume)));
+      current._highs.push(Math.max(0, numberValue(row.high, close)));
+      current._lows.push(Math.max(0, numberValue(row.low, close)));
+      if (candleTime && (!current.first_candle_time || Date.parse(candleTime) < Date.parse(current.first_candle_time))) {
+        current.first_candle_time = candleTime;
+      }
+      if (candleTime && (!current.latest_candle_time || Date.parse(candleTime) > Date.parse(current.latest_candle_time))) {
+        current.latest_candle_time = candleTime;
+        current.latest_candle_age_seconds = ageSeconds(candleTime);
+      }
+      current.ready_ma3 = current.continuous_candle_count >= 3;
+      current.ready_ma5 = current.continuous_candle_count >= 5;
+      current.ready_ma10 = current.continuous_candle_count >= 10;
+      current.ready_ma20_continuous = current.continuous_candle_count >= 20;
+      grouped.set(symbol, current);
+    }
+    for (const current of grouped.values()) {
+      const closes = current._closes || [];
+      const volumes = current._volumes || [];
+      const average = (values) => values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+      const movingAverage = (count, offset = 0) => average(closes.slice(offset, offset + count));
+      const volumeSum = (count, offset = 0) => volumes.slice(offset, offset + count).reduce((sum, value) => sum + value, 0);
+      current.ma3 = movingAverage(3);
+      current.ma5 = movingAverage(5);
+      current.ma10 = movingAverage(10);
+      current.ma20 = movingAverage(20);
+      current.ma5_ma10_ma20_bullish = Number.isFinite(current.ma5)
+        && Number.isFinite(current.ma10)
+        && Number.isFinite(current.ma20)
+        && current.ma5 > current.ma10
+        && current.ma10 > current.ma20
+        && current.ma20 > 0;
+      current.ma_bullish_alignment = current.ma5_ma10_ma20_bullish;
+      current.ma3_rising = closes.length >= 6 && movingAverage(3, 0) > movingAverage(3, 3);
+      current.ma5_rising = closes.length >= 10 && movingAverage(5, 0) > movingAverage(5, 5);
+      current.ma10_rising = closes.length >= 20 && movingAverage(10, 0) > movingAverage(10, 10);
+      const latestVolume = volumeSum(3, 0);
+      const previousVolume = volumeSum(3, 3);
+      current.recent_1m_volume_trend = previousVolume <= 0
+        ? 'unknown'
+        : latestVolume > previousVolume * 1.05
+          ? 'expanding'
+          : latestVolume < previousVolume * 0.85
+            ? 'shrinking'
+            : 'stable';
+      const recentFive = average(volumes.slice(0, 5));
+      const priorTwenty = average(volumes.slice(5, 25));
+      current.relative_volume_5m = recentFive !== null && priorTwenty > 0 ? recentFive / priorTwenty : 0;
+
+      // Indicators use the chronological candle order. Insufficient history stays null.
+      const chronologicalCloses = closes.slice().reverse();
+      const emaSeries = (values, period) => {
+        if (values.length < period) return [];
+        const multiplier = 2 / (period + 1);
+        let ema = values.slice(0, period).reduce((sum, value) => sum + value, 0) / period;
+        const series = [ema];
+        for (const value of values.slice(period)) {
+          ema = ((value - ema) * multiplier) + ema;
+          series.push(ema);
+        }
+        return series;
+      };
+      if (chronologicalCloses.length >= 35) {
+        const fast = emaSeries(chronologicalCloses, 12);
+        const slow = emaSeries(chronologicalCloses, 26);
+        const macdSeries = [];
+        for (let i = 0; i < slow.length; i += 1) {
+          const fastIndex = i + (26 - 12);
+          if (fast[fastIndex] !== undefined) macdSeries.push(fast[fastIndex] - slow[i]);
+        }
+        const signal = emaSeries(macdSeries, 9);
+        current.macd_line = macdSeries.length ? macdSeries[macdSeries.length - 1] : null;
+        current.macd_signal = signal.length ? signal[signal.length - 1] : null;
+        current.macd_histogram = Number.isFinite(current.macd_line) && Number.isFinite(current.macd_signal)
+          ? current.macd_line - current.macd_signal
+          : null;
+      } else {
+        current.macd_line = null;
+        current.macd_signal = null;
+        current.macd_histogram = null;
+      }
+      const chronologicalHighs = (current._highs || []).slice().reverse();
+      const chronologicalLows = (current._lows || []).slice().reverse();
+      if (chronologicalCloses.length >= 5 && chronologicalHighs.length >= 5 && chronologicalLows.length >= 5) {
+        let k = 50;
+        let d = 50;
+        for (let i = 4; i < chronologicalCloses.length; i += 1) {
+          const high = Math.max(...chronologicalHighs.slice(i - 4, i + 1));
+          const low = Math.min(...chronologicalLows.slice(i - 4, i + 1));
+          const rsv = high > low ? ((chronologicalCloses[i] - low) / (high - low)) * 100 : 50;
+          k = ((2 * k) + rsv) / 3;
+          d = ((2 * d) + k) / 3;
+        }
+        current.kd_k = k;
+        current.kd_d = d;
+      } else {
+        current.kd_k = null;
+        current.kd_d = null;
+      }
+      // Legacy RSI14 cache column is retained for schema compatibility only; strategy gates calculate shared RSI3/6 from OHLCV.
+      if (chronologicalCloses.length >= 15) {
+        const recent = chronologicalCloses.slice(-15);
+        let gains = 0;
+        let losses = 0;
+        for (let i = 1; i < recent.length; i += 1) {
+          const delta = recent[i] - recent[i - 1];
+          if (delta > 0) gains += delta;
+          else losses -= delta;
+        }
+        const averageGain = gains / 14;
+        const averageLoss = losses / 14;
+        current.rsi14 = averageLoss === 0 ? 100 : 100 - (100 / (1 + (averageGain / averageLoss)));
+      } else {
+        current.rsi14 = null;
+      }
+      delete current._closes;
+      delete current._volumes;
+      delete current._highs;
+      delete current._lows;
+    }
+    return grouped;
+  };
+return buildGrouped(rows,tradeDate);
+};
+
+module.exports.evaluateMemoryState = function(input){
+ const checked=require('../lib/daytrade-writer-identity').requireIdentity(input.identity,taipeiDate());
+ const previousIdentity=writerTickIdentity,previousRead=memoryReadJson;
+ writerTickIdentity=checked;
+ memoryReadJson=(file,fallback)=>file===FUGLE_WS_STATUS_FILE?(input.transportStatus||{}):input.readMemoryJson(file,fallback);
+ try{
+  const rows=buildPriorityPool(input.activeSymbols,input.dailyVolumeMap,input.quoteMap,input.supplementalMaps||{});
+  const result=computeStats({activeSymbols:input.activeSymbols,priorityRows:rows,quoteMap:input.quoteMap,fetchedRows:[],dailyVolumeMap:input.dailyVolumeMap,
+   intradayMap:input.supplementalMaps?.intradayMap||new Map(),futoptRows:input.futoptRows||[],websocketFutoptSync:input.websocketFutoptSync||{},opening0901Evidence:input.opening0901Evidence||{},
+   fetchResult:{fetched:0,attempted:0,disabledReason:'memory_websocket_only'},state:input.sourceState||{},supplementalMaps:input.supplementalMaps||{}});
+  return {rows,source_evidence:{contract:'mother-pool-memory-readiness-v1',trade_date:input.tradeDate,canonical_run_id:checked.canonical_run_id,
+   observed_at:nowIso(),gate_grade:result.gateGrade,formal_entry_allowed:result.payload.formal_entry_allowed===true,
+   formal_ready:readWebSocketStatusSummary().formalReady===true,reason:result.payload.reason_code||result.message||'',
+   required_fields:['existing_computeStats','existing_sourceGateA'],source_mode:'volatile_memory'}};
+ }finally{writerTickIdentity=previousIdentity;memoryReadJson=previousRead;}
+};
