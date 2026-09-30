@@ -54,7 +54,13 @@ async function main() {
   const requiredReadyCount = Math.ceil(expectedCount * MIN_MOTHER_POOL_COVERAGE_RATIO);
   const coverageRatio = expectedCount ? readyCount / expectedCount : 0;
   const resultCount = Number(scan?.result_count || 0);
-  const expectedScannerSource = `${MOTHER_POOL_VIEW}+${QUOTE_TABLE}+rpc:${INTRADAY_1M_RPC}`;
+  const volatileSource = water.receipt?.source_mode === "volatile_pool_quote_and_persisted_1m";
+  if(volatileSource){
+    add(issues,scan?.source_mode===water.receipt.source_mode,"strategy3_source_mode_mismatch");
+    const a=scan?.candle_readback,b=water.receipt.candle_readback;
+    add(issues,Boolean(a&&b&&/^[0-9a-f]{64}$/.test(a.sha256)&&a.sha256===b.sha256&&a.as_of===b.as_of&&a.rows===b.rows&&a.source===b.source),"strategy3_pinned_candle_readback_changed");
+  }
+  const expectedScannerSource = volatileSource ? "memory:mother-pool-volatile-snapshot-v1+memory:quotes+table:fugle_daytrade_intraday_1m" : `${MOTHER_POOL_VIEW}+${QUOTE_TABLE}+rpc:${INTRADAY_1M_RPC}`;
 
   add(issues, Boolean(scan), "strategy3_v2_scan_receipt_missing", { path: scanPath });
   add(issues, scan?.ok === true && scan?.status === (recoveryReplay ? "RECOVERY_REPLAY_COMPLETE" : "COMPLETE"), "strategy3_v2_scan_not_complete", { status: scan?.status, ok: scan?.ok });
@@ -112,7 +118,8 @@ async function main() {
     recovery_replay: recoveryReplay,
     natural_slot_complete: !recoveryReplay && issues.length === 0,
     receipt_written: true,
-    sources: { motherPool: MOTHER_POOL_VIEW, producerReceipt: MOTHER_POOL_RECEIPT_VIEW, quote: QUOTE_TABLE, intraday1m: `rpc:${INTRADAY_1M_RPC}` },
+    source_mode: water.receipt?.source_mode || null, candle_readback: water.receipt?.candle_readback || null,
+    sources: { motherPool: volatileSource ? "memory:mother-pool-volatile-snapshot-v1" : MOTHER_POOL_VIEW, producerReceipt: volatileSource ? "memory:source_readiness" : MOTHER_POOL_RECEIPT_VIEW, quote: volatileSource ? "memory:quotes" : QUOTE_TABLE, intraday1m: volatileSource ? "table:fugle_daytrade_intraday_1m" : `rpc:${INTRADAY_1M_RPC}` },
     readback: { expectedCount, readyCount, requiredReadyCount, coverageRatio: Number(coverageRatio.toFixed(4)), resultCount, symbolDataGaps: water.receipt?.symbol_data_gaps || [] },
     failed_checks: issues.map((item) => item.code),
     issues,
