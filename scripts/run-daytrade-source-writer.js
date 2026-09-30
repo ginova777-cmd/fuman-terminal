@@ -9154,7 +9154,7 @@ function memoryMarginRowsToMap(rows) {
 
 module.exports.prepareMemoryWarmup = async function({tradeDate,revision,identity,calendar,historyCalendar,cache,warmupLoader,readMemoryJson}) {
   if(tradeDate!==taipeiDate())throw Error('WARMUP_TRADE_DATE_MISMATCH');
-  return warmupLoader.load({tradeDate,revision,identity,calendar,readMemoryJson,loaders:{
+  return warmupLoader.load({tradeDate,revision,identity,calendar,readMemoryJson,allowPartialSources:true,loaders:{
     activeSymbols:fetchActiveSymbols,dailyVolumeMap:fetchDailyVolumeAvg,
     capitalMap:fetchCapitalMap,chipMap:fetchChipFlowMap,stockGroupContractMap:fetchStockGroupContractMap,
     preopenReferencePriceMap:fetchPreopenReferencePriceMap,
@@ -9353,7 +9353,7 @@ module.exports.evaluateMemoryState = function(input){
    intradayMap:input.supplementalMaps?.intradayMap||new Map(),futoptRows:input.futoptRows||[],websocketFutoptSync:input.websocketFutoptSync||{},opening0901Evidence:input.opening0901Evidence||{},
    fetchResult:{fetched:0,attempted:0,disabledReason:'memory_websocket_only'},state:input.sourceState||{},supplementalMaps:input.supplementalMaps||{}});
   return {rows,source_evidence:{contract:'mother-pool-memory-readiness-v1',trade_date:input.tradeDate,canonical_run_id:checked.canonical_run_id,
-   observed_at:nowIso(),gate_grade:result.gateGrade,formal_entry_allowed:result.payload.formal_entry_allowed===true,
+   observed_at:nowIso(),gate_grade:result.gateGrade,formal_entry_allowed:result.payload.formal_entry_allowed===true&&!(input.warmup_failures||[]).length, warmup_failures:input.warmup_failures||[],baseline_complete:!(input.warmup_failures||[]).length,
    formal_ready:readWebSocketStatusSummary().formalReady===true,reason:result.payload.reason_code||result.message||'',
    required_fields:['existing_computeStats','existing_sourceGateA'],source_mode:'volatile_memory'}};
  }finally{writerTickIdentity=previousIdentity;memoryReadJson=previousRead;}
