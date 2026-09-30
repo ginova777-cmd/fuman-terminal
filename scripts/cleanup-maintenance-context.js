@@ -12,7 +12,7 @@ function authorization(file) {
 }
 function receipts() {
   const d=date().replaceAll('-',''), s=path.join(RUNTIME,'status');
-  return {retired:[path.join(s,'api-only-retired-cleanup-status.json')],history:[path.join(s,'supabase-vercel-history-cleanup-status.json')],intraday:[path.join(s,`daytrade-intraday-retention-${d}.json`)],runtime:[path.join(s,`runtime-retention-${d}.json`),path.join(s,`cleanup-local-assets-${d}.json`)],priority:[path.join(s,`daytrade-stale-priority-cache-cleanup-${d}.json`)],observability:[path.join(s,`source-observability-retention-${d}.json`)],extended:[path.join(s,`cleanup-extended-${d}.json`)],cost:[path.join(RUNTIME,'state','vercel-cost-health-status.json')],janitor:[path.join(s,'global-cost-janitor-scorecard.json')]};
+  return {retired:[path.join(s,'api-only-retired-cleanup-status.json')],history:[path.join(s,'supabase-vercel-history-cleanup-status.json')],intraday:[path.join(s,`daytrade-intraday-retention-${d}.json`)],runtime:[path.join(s,`runtime-retention-${d}.json`),path.join(s,`cleanup-local-assets-${d}.json`)],priority:[path.join(s,`daytrade-stale-priority-cache-cleanup-${d}.json`)],observability:[path.join(s,`source-observability-retention-${d}.json`)],extended:[path.join(s,`cleanup-extended-${d}.json`),path.join(s,`duplicate-index-cleanup-${d}.json`)],cost:[path.join(RUNTIME,'state','vercel-cost-health-status.json')],janitor:[path.join(s,'global-cost-janitor-scorecard.json')]};
 }
 function assertRetiredReference(payload,auth) {
   if(payload.maintenanceRunId!==auth.runId || payload.maintenanceAuthorizationSha256!==auth.sha256 || Date.parse(payload.retentionReferenceTime)!==Date.parse(auth.issuedAt)) throw Error('cleanup_retention_reference_mismatch');

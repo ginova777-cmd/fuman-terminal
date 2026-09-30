@@ -12,7 +12,8 @@ async function run({apply=false,rpc,save}){
  return {contract:'duplicate-index-cleanup-v1',checkedAt:new Date().toISOString(),ok,applied:apply,status:ok?(apply?'complete':'preview'):'blocked',before,execution,after};
 }
 async function main(){
- const apply=process.argv.includes('--apply'),date=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date()).replaceAll('-','');
+ const apply=process.argv.includes('--apply'),verify=process.argv.includes('--verify'),date=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date()).replaceAll('-','');
+ if(apply&&verify)throw Error('CONFLICTING_MODE');
  const out={contract:'duplicate-index-cleanup-v1',checkedAt:new Date().toISOString(),ok:false,applied:false};
  const dir=path.join(RUNTIME,'status');fs.mkdirSync(dir,{recursive:true});
  const write=(file,v)=>{const tmp=file+'.'+process.pid+'.tmp';fs.writeFileSync(tmp,JSON.stringify(v,null,2));fs.renameSync(tmp,file);};
@@ -21,8 +22,10 @@ async function main(){
   const key=serviceRoleKey(),url=terminalSupabaseUrl();if(!key||!url)throw Error('CREDENTIALS_MISSING');
   const rpc=async value=>{const r=await fetch(url.replace(/\/$/,'')+'/rest/v1/rpc/fuman_cleanup_duplicate_indexes_v1',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({p_apply:value}),signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('CLEANUP_HTTP_'+r.status);return r.json();};
   Object.assign(out,await run({apply,rpc,save:(type,v)=>write(path.join(dir,'duplicate-index-cleanup-'+type+'-'+date+'-'+Date.now()+'.json'),v)}));
+  if(verify&&out.after?.count!==0){out.ok=false;out.status='blocked';out.reasonCode='DUPLICATES_REMAIN';}
  }catch(e){out.status='blocked';out.reasonCode=e.message;out.requiresReadback=true;}
- write(path.join(dir,'duplicate-index-cleanup-'+date+'.json'),out);write(path.join(dir,'duplicate-index-cleanup-status.json'),out);
+ const file=path.join(dir,'duplicate-index-cleanup-'+(verify?'verifier-':apply?'':'preview-')+date+'.json');out.receiptFile=file;
+ write(file,out);if(apply)write(path.join(dir,'duplicate-index-cleanup-status.json'),out);
  console.log(JSON.stringify(out));if(!out.ok)process.exitCode=1;
 }
 module.exports={run};if(require.main===module)main();

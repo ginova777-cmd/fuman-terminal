@@ -9,9 +9,6 @@ if ($Apply) {
   Invoke-FumanWeekdayGuard -Label "Daily retention maintenance" -AllowAfterFormalSourceWindow
 }
 
-& $node '--use-system-ca' (Join-Path $root 'scripts\cleanup-duplicate-indexes.cjs') @suffix
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
 & $node (Join-Path $root 'scripts\cleanup-runtime-retention.js') @suffix
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
