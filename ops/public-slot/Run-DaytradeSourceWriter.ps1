@@ -466,6 +466,13 @@ if ($Apply -and -not $runCloseout) {
     $fastSyncText = (($fastSyncOutput | Out-String) -replace "[\r\n]+", " ").Trim()
     if ($fastSyncText.Length -gt 700) { $fastSyncText = $fastSyncText.Substring(0, 700) }
     Write-WrapperLog "FAST_SUPABASE_SYNC exit=$fastSyncExit output=$fastSyncText"
+    # A failed write may already have committed some batches. Do not start
+    # rollover, lease acquisition or another writer after an uncertain result.
+    if ($fastSyncExit -ne 0) {
+      Write-FailureArtifact 9010 "fast_supabase_sync_failed_stop_current_run"
+      Write-WrapperLog "STOP fast_supabase_sync_failed downstream_started=false"
+      exit 9010
+    }
   } else {
     Write-WrapperLog "FAST_SUPABASE_SYNC skip=script_missing path=$fastSyncScript"
   }
