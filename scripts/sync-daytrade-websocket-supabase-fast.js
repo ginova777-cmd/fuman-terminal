@@ -30,7 +30,8 @@ function volumeUnit(q = {}) {
   if (q.intradayOddLot === false || ["TSE", "OTC", "TIB"].includes(market)) return "lots";
   return "";
 }
-async function upsert(table, rows, conflict) {
+async function upsert(table, rows, conflict, onBatch = () => {}) {
+  if (!rows.length) return 0;
   const key = secret("SUPABASE_SERVICE_ROLE_KEY");
   if (!key) throw new Error("service_role_key_missing");
   let written = 0;
@@ -43,6 +44,7 @@ async function upsert(table, rows, conflict) {
     });
     if (!response.ok) throw new Error(`${table}_HTTP_${response.status}:${(await response.text()).slice(0, 240)}`);
     written += Math.min(200, rows.length - offset);
+    await onBatch(rows.slice(offset, offset + 200));
   }
   return written;
 }
@@ -84,16 +86,32 @@ async function main() {
       },
     };
   }).filter((q) => /^\d{4}$/.test(q.symbol) && q.quote_seen_at);
-  const candles = (candleCache.candles || []).filter((c) => c.tradeDate === date && Date.parse(c.candleSeenAt || candleCache.updatedAt) >= cutoff).map((c) => ({
+  const candles = (candleCache.candles || []).filter((c) => c.tradeDate === date).map((c) => ({
     symbol: String(c.symbol || c.code || ""), market: c.market || "", trade_date: date, candle_time: iso(c.candleTime || c.date),
     open: num(c.open), high: num(c.high), low: num(c.low), close: num(c.close), volume: num(c.volume), updated_at: iso(c.candleSeenAt || candleCache.updatedAt),
-    source: "fugle_daytrade_fast_sync:websocket_candles", synthetic: false, volume_strategy_usable: c.volumeStrategyUsable !== false,
+    source: "fugle_daytrade_fast_sync:websocket_candles", synthetic: c.synthetic, volume_strategy_usable: c.volumeStrategyUsable !== false,
     payload: { ...(c.payload || {}), fastSync: true, cacheUpdatedAt: candleCache.updatedAt },
   })).filter((c) => /^\d{4}$/.test(c.symbol) && c.candle_time && c.close !== null);
+  const deltaStore = require('../lib/daytrade-candle-delta');
+  const checkpointPath = path.join(RUNTIME, 'state', 'daytrade-fast-candle-delta.json');
+  let checkpoint;
+  try { checkpoint=JSON.parse(readText(checkpointPath)); } catch { checkpoint=null; }
+  const delta = deltaStore.selectDelta(candles, checkpoint, {tradeDate:date,target:URL+'/fugle_daytrade_intraday_1m',nowMs:now.getTime()});
   const result = { ok: true, mode: APPLY ? "apply" : "dry_run", trade_date: date, checked_at: now.toISOString(), quote_rows: quotes.length, candle_rows: candles.length, quote_cache_updated_at: quoteCache.updatedAt, candle_cache_updated_at: candleCache.updatedAt };
+  result.candle_delta_pending = delta.pending.length;
+  result.candle_delta_unchanged = delta.unchanged;
+  result.candle_not_due = delta.not_due;
   if (APPLY) {
     result.quotes_written = await upsert("fugle_daytrade_quotes_live", quotes, "symbol");
-    result.candles_written = await upsert("fugle_daytrade_intraday_1m", candles, "symbol,candle_time");
+    let acknowledged = delta.checkpoint;
+    result.candles_written = await upsert("fugle_daytrade_intraday_1m", delta.pending, "symbol,candle_time", batch => {
+      const next = deltaStore.acknowledge(acknowledged,batch);
+      fs.mkdirSync(path.dirname(checkpointPath),{recursive:true});
+      const temporary=checkpointPath+'.'+process.pid+'.tmp';
+      fs.writeFileSync(temporary,JSON.stringify(next),'utf8');
+      fs.renameSync(temporary,checkpointPath);
+      acknowledged=next;
+    });
     const stateFile = path.join(RUNTIME, "state", "daytrade-fast-supabase-sync.json");
     fs.mkdirSync(path.dirname(stateFile), { recursive: true });
     fs.writeFileSync(stateFile, JSON.stringify({ ...result, completed_at: new Date().toISOString() }, null, 2) + "\n", "utf8");

@@ -1285,6 +1285,11 @@ function mergeStreamingQuotes(newQuotes, flush = false) {
   return quotes.length;
 }
 
+const streamingCandleStore = require('../lib/daytrade-candle-store').createCandleStore({
+  read: () => readJson(FUGLE_WS_CANDLES_FILE, {}),
+  write: value => writeJson(FUGLE_WS_CANDLES_FILE, value),
+  retentionMs: Math.max(QUOTE_TTL_MS, 8 * 60 * 60 * 1000),
+});
 let pendingStreamingCandles = [];
 let streamingCandleFlushTimer = null;
 function mergeStreamingCandles(newCandles, flush = false) {
@@ -1298,33 +1303,7 @@ function mergeStreamingCandles(newCandles, flush = false) {
     }, 500);
     return pendingStreamingCandles.length;
   }
-  const current = readJson(FUGLE_WS_CANDLES_FILE, {});
-  const rows = Array.isArray(current.candles) ? current.candles : [];
-  // Keep the complete trading session so active intraday indicators can accumulate.
-  const cutoff = Date.now() - Math.max(QUOTE_TTL_MS, 8 * 60 * 60 * 1000);
-  const byKey = new Map();
-  for (const row of rows) {
-    const seen = Date.parse(row.candleSeenAt || row.updatedAt || current.updatedAt || "");
-    const code = normalizeCode(row.code || row.symbol);
-    const candleTime = row.candleTime || row.date || "";
-    if (/^\d{4}$/.test(code) && candleTime && Number.isFinite(seen) && seen >= cutoff) {
-      byKey.set(`${code}|${candleTime}`, row);
-    }
-  }
-  for (const candle of newCandles) byKey.set(`${candle.code}|${candle.candleTime}`, candle);
-  const candles = [...byKey.values()].sort((a, b) => {
-    const byCode = String(a.code || a.symbol).localeCompare(String(b.code || b.symbol));
-    if (byCode) return byCode;
-    return Date.parse(a.candleTime || "") - Date.parse(b.candleTime || "");
-  });
-  writeJson(FUGLE_WS_CANDLES_FILE, {
-    source: "fugle-websocket-streaming",
-    channel: "websocket:candles",
-    updatedAt: nowIso(),
-    count: candles.length,
-    candles,
-  });
-  return candles.length;
+  return streamingCandleStore.merge(newCandles);
 }
 
 async function runStreamingCollector() {
@@ -1379,6 +1358,8 @@ async function runStreamingCollector() {
     const staleDataWindow = STREAMING_STALE_RECONNECT_MS;
     let staleRecoveryTimer;
     let priorityRefreshTimer;
+    let stopSubscriptionEvents = () => {};
+    let deferredSubscriptionTimer;
     let closed = false;
     const writeStreamingStatus = (extra = {}) => {
       const freshCount = countFreshCachedQuotes(selection.allSymbols);
@@ -1482,7 +1463,8 @@ async function runStreamingCollector() {
         subscribeChunksSent: chunksSent,
         subscribeCycles: cycles,
         lastSubscribeCycleAt,
-        resubscribeEveryMs: STREAMING_RESUBSCRIBE_MS,
+        resubscribeEveryMs: COLLECTOR_ROLE === "daytrade" ? null : STREAMING_RESUBSCRIBE_MS,
+        subscriptionRefreshMode: COLLECTOR_ROLE === "daytrade" ? "manifest_event_and_session_boundary" : "periodic",
         subscribeForbiddenChunks: forbiddenChunks,
         subscribeForbiddenSymbols: forbiddenSymbols,
         subscribeForbiddenLastAt: lastForbiddenAt,
@@ -1535,8 +1517,13 @@ async function runStreamingCollector() {
       scheduleSourceStatusHeartbeat(statusSnapshot);
     };
     let subscribeInProgress = false;
-    const subscribe = async () => {
-      if (!ws || ws.readyState !== WebSocket.OPEN || subscribeInProgress) return;
+    const subscribe = async (reason = "initial") => {
+      if (!ws || ws.readyState !== WebSocket.OPEN || !authenticated || closed) return;
+      if (subscribeInProgress) {
+        clearTimeout(deferredSubscriptionTimer);
+        deferredSubscriptionTimer = setTimeout(() => void subscribe(reason), 250);
+        return;
+      }
       subscribeInProgress = true;
       try {
         selection = selectStreamingSymbols(rotationCursor);
@@ -1553,13 +1540,15 @@ async function runStreamingCollector() {
           // reconnect until it has carried data for a stable interval.
           priorityManifestChanged = true;
           const openedAtMs = Date.parse(openedAt || "");
-          const canReconnectForPriority = Number.isFinite(openedAtMs)
+          const canReconnectForPriority = reason === "session_boundary" || Number.isFinite(openedAtMs)
             && Date.now() - openedAtMs >= STREAMING_PRIORITY_RECONNECT_MIN_MS;
           if (canReconnectForPriority) {
             ws.close(1000, "priority selection changed after stable stream interval");
             return;
           }
           priorityManifestDeferred = true;
+          clearTimeout(deferredSubscriptionTimer);
+          deferredSubscriptionTimer = setTimeout(() => void subscribe("deferred_change"), Math.max(1, STREAMING_PRIORITY_RECONNECT_MIN_MS - (Date.now() - openedAtMs)));
           writeStreamingStatus({
             priorityManifestChanged,
             priorityManifestDeferred,
@@ -1689,6 +1678,8 @@ async function runStreamingCollector() {
         clearInterval(pingTimer);
         clearInterval(staleRecoveryTimer);
         clearInterval(priorityRefreshTimer);
+        stopSubscriptionEvents();
+        clearTimeout(deferredSubscriptionTimer);
         writeStreamingStatus({ websocketConnected: false });
         resolve();
       });
@@ -1706,23 +1697,28 @@ async function runStreamingCollector() {
         lastClientPingAt = nowIso();
         ws.send(JSON.stringify({ event: "ping" }));
       }, STREAMING_CLIENT_PING_MS);
-      const subscribeTimer = setInterval(() => {
+      const subscribeTimer = COLLECTOR_ROLE === "daytrade" ? null : setInterval(() => {
         if (closed) clearInterval(subscribeTimer);
-        else subscribe();
+        else void subscribe();
       }, STREAMING_RESUBSCRIBE_MS);
-      priorityRefreshTimer = setInterval(() => {
-        if (closed) {
-          clearInterval(priorityRefreshTimer);
-          return;
-        }
-        // The 08:30 bridge can change the priority manifest. Re-check it at
-        // low frequency; a healthy stream is never churned just to refresh it.
-        void subscribe();
-      }, STREAMING_PRIORITY_REFRESH_MS);
+      if (COLLECTOR_ROLE === "daytrade") {
+        stopSubscriptionEvents = require("../lib/daytrade-subscription-events").startSubscriptionEvents({
+          files: [FUGLE_WS_SYMBOLS_FILE, PRIORITY_SYMBOLS_FILE],
+          onChange: reason => void subscribe(reason),
+          onError: error => {
+            writeStreamingStatus({ ok: false, websocketError: "subscription_watch_failed", subscriptionWatchError: error.message });
+            ws.close(1000, "subscription watch recovery");
+          },
+        });
+      } else {
+        priorityRefreshTimer = setInterval(() => { if (!closed) void subscribe(); }, STREAMING_PRIORITY_REFRESH_MS);
+      }
       staleRecoveryTimer = setInterval(() => {
         if (closed) {
           clearInterval(staleRecoveryTimer);
         clearInterval(priorityRefreshTimer);
+        stopSubscriptionEvents();
+        clearTimeout(deferredSubscriptionTimer);
           return;
         }
         const lastDataMs = Date.parse(runLastMessageAt || openedAt || "");
