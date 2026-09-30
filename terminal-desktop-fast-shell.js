@@ -4362,7 +4362,7 @@
   function supportsMainForceCosts(route) { return isStrategy2Route(route) || isStrategy3Route(route) || isStrategy4Route(route) || isStrategy5Route(route) || isChipTradeRoute(route); }
   function mainForceCostKey(code, asOfDate) { const normalized = strategy4DailyKlineCode(code); return normalized ? `${normalized}:${String(asOfDate || "")}` : ""; }
   function mainForceStyleText(label, style) { if (!style || style.status === "data_insufficient") return `${label} 資料不足`; if (style.status === "unclassified") return `${label} 未分類`; if (style.matched) return `${label} 有｜${formatPriceValue(style.costPrice) || "--"}`; return `${label} 無`; }
-  function mainForceCostHtml(code, asOfDate) { const key = mainForceCostKey(code, asOfDate), item = mainForceCostCache.get(key), value = item?.status === "ready" ? (formatPriceValue(item.mainForceCostPrice) || "--") : "資料不足", reference = item?.tradeDate ? `資料日 ${item.tradeDate}` : "須有同日正式分點資料"; return `<div class="three-gate-prices terminal-main-force-costs" data-main-force-key="${escapeHtml(key)}" data-main-force-state="${item ? "ready" : "loading"}"><small>主力成本</small><span data-main-force-cost>${escapeHtml(value)}</span><span data-main-force-overnight>隔日沖主力 資料不足</span><span data-main-force-short>短沖主力 資料不足</span><span data-main-force-daytrade>當沖主力 資料不足</span><em data-main-force-reference>${escapeHtml(reference)}</em></div>`; }
+  function mainForceCostHtml(code, asOfDate) { return `<div class="terminal-main-force-costs"><button type="button" data-main-force-request="${escapeHtml(code)}" data-main-force-date="${escapeHtml(asOfDate)}">查看主力成本</button><small data-main-force-result hidden aria-live="polite"></small></div>`; }
   function paintMainForceCosts() { document.querySelectorAll("[data-main-force-key]").forEach((node) => { const item = mainForceCostCache.get(node.dataset.mainForceKey || ""), cost = node.querySelector("[data-main-force-cost]"), overnight = node.querySelector("[data-main-force-overnight]"), shortSwing = node.querySelector("[data-main-force-short]"), daytrade = node.querySelector("[data-main-force-daytrade]"), reference = node.querySelector("[data-main-force-reference]"); if (item?.status === "ready") { if (cost) cost.textContent = formatPriceValue(item.mainForceCostPrice) || "--"; if (overnight) overnight.textContent = mainForceStyleText("隔日沖主力", item.overnight); if (shortSwing) shortSwing.textContent = mainForceStyleText("短沖主力", item.shortSwing); if (daytrade) daytrade.textContent = mainForceStyleText("當沖主力", item.daytrade); if (reference) reference.textContent = `資料日 ${item.tradeDate || "--"}`; node.dataset.mainForceState = "ready"; } else if (mainForceCostCache.has(node.dataset.mainForceKey || "")) { if (cost) cost.textContent = "資料不足"; if (reference) reference.textContent = "須有同日正式分點資料"; node.dataset.mainForceState = "unavailable"; } }); }
   async function hydrateMainForceCosts(route, rows, dataDate) { if (!supportsMainForceCosts(route)) return; const asOfDate = String(dataDate || ""); if (!/^\d{4}-\d{2}-\d{2}$/.test(asOfDate)) return; const codes = [...new Set((Array.isArray(rows) ? rows : []).map((row) => strategy4DailyKlineCode(row?.code || row?.symbol || "")).filter(Boolean))], pendingCodes = codes.filter((code) => { const key = mainForceCostKey(code, asOfDate); return key && !mainForceCostCache.has(key) && !mainForceCostPending.has(key); }); if (!pendingCodes.length) { paintMainForceCosts(); return; } pendingCodes.forEach((code) => mainForceCostPending.add(mainForceCostKey(code, asOfDate))); try { const query = new URLSearchParams({ codes: pendingCodes.join(","), asOf: asOfDate }), response = await fetch(`/api/main-force-costs?${query.toString()}`, { cache: "no-store" }), payload = await response.json().catch(() => null), items = response.ok && payload?.ok === true && Array.isArray(payload.items) ? payload.items : [], received = new Map(items.map((item) => [strategy4DailyKlineCode(item?.code), item])); pendingCodes.forEach((code) => mainForceCostCache.set(mainForceCostKey(code, asOfDate), received.get(code) || null)); } catch { pendingCodes.forEach((code) => mainForceCostCache.set(mainForceCostKey(code, asOfDate), null)); } finally { pendingCodes.forEach((code) => mainForceCostPending.delete(mainForceCostKey(code, asOfDate))); paintMainForceCosts(); } }  function showCanvasDetail(row, index, preserveScroll = false) {
     const detail = currentCanvasShell()?.querySelector(".desktop-canvas-detail");
@@ -4407,6 +4407,11 @@
   }
 
   function installCanvasHandlers() {
+    if (!document.querySelector('script[data-main-force-demand]')) {
+      const script = document.createElement('script');
+      script.src = '/terminal-main-force-on-demand.js?v=20260930';
+      script.dataset.mainForceDemand = '1'; document.head.appendChild(script);
+    }
     if (document.documentElement.dataset.fumanCanvasHandlersReady === "1") return;
     document.documentElement.dataset.fumanCanvasHandlersReady = "1";
 
@@ -8976,7 +8981,7 @@
       panel.querySelectorAll(":scope > .chip-tool, :scope > .chip-table-wrap, :scope > .chip-empty").forEach((node) => node.remove());
     }
     if (supportsThreeGatePrices(route)) hydrateThreeGatePrices(route, rows, previousGoodTradeDate || routeDataDate).catch(() => undefined);
-    if (supportsMainForceCosts(route)) hydrateMainForceCosts(route, rows, previousGoodTradeDate || routeDataDate).catch(() => undefined);
+    // Main-force costs are requested only by the explicit user button.
     prefetchInlineDailyKlines(route, rows, 120);
     window.setTimeout(() => delete panel.dataset.fumanRouteSnapshotRestoring, 0);
     return true;

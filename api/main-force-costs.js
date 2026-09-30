@@ -14,8 +14,8 @@ module.exports = async (request, response) => {
   }
   const asOfDate = normalizeAsOfDate(request.query?.asOf || request.query?.as_of);
   try {
-    const result = await fetchMainForceCosts({ codes, asOf: asOfDate });
-    response.setHeader("Cache-Control", "private, max-age=60, stale-while-revalidate=120");
+    const result = await fetchMainForceCosts({ codes, asOf: asOfDate, requested: request.query?.requested === "1" });
+    response.setHeader("Cache-Control", "private, max-age=3600");
     response.status(200).json({
       ok: true,
       contract: "terminal-main-force-costs-v1",
@@ -23,6 +23,8 @@ module.exports = async (request, response) => {
       ...result,
     });
   } catch (error) {
+    response.setHeader("Cache-Control", "no-store");
+    response.setHeader("Retry-After", "1800");
     response.status(502).json({
       ok: false,
       error: error?.code || "main_force_cost_fetch_failed",
