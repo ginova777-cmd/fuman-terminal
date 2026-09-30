@@ -1,3 +1,10 @@
+'use strict';
+const motherDateTimeFormatCache = new Map();
+function cachedMotherDateTimeFormat(locale, options) {
+ const key = JSON.stringify([locale, options]);
+ if (!motherDateTimeFormatCache.has(key)) motherDateTimeFormatCache.set(key, new Intl.DateTimeFormat(locale, options));
+ return motherDateTimeFormatCache.get(key);
+}
 let memoryReadJson = null;
 const { isAuthorizedMorningRecovery } = require("../lib/opening-report-recovery-seed");
 const { boundedScorecardPayload } = require("../lib/daytrade-scorecard-payload");
@@ -461,7 +468,7 @@ function normalizeTimestamp(value, fallback = "") {
 }
 
 function taipeiDate() {
-  return new Intl.DateTimeFormat("en-CA", {
+  return cachedMotherDateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
     year: "numeric",
     month: "2-digit",
@@ -472,7 +479,7 @@ function taipeiDate() {
 function taipeiDateFrom(value) {
   const parsed = Date.parse(String(value || ""));
   if (!Number.isFinite(parsed)) return taipeiDate();
-  return new Intl.DateTimeFormat("en-CA", {
+  return cachedMotherDateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
     year: "numeric",
     month: "2-digit",
@@ -506,7 +513,7 @@ function quoteTradeDateForWrite(row = {}) {
 }
 
 function taipeiMinutes() {
-  const parts = new Intl.DateTimeFormat("en-GB", {
+  const parts = cachedMotherDateTimeFormat("en-GB", {
     timeZone: "Asia/Taipei",
     hour12: false,
     hour: "2-digit",
@@ -1232,7 +1239,7 @@ async function fetchDailyVolumeAvg() {
 }
 function taipeiDateDaysAgo(days) {
   const date = new Date(Date.now() - Math.max(0, Number(days) || 0) * 24 * 60 * 60 * 1000);
-  return new Intl.DateTimeFormat("en-CA", {
+  return cachedMotherDateTimeFormat("en-CA", {
     timeZone: "Asia/Taipei",
     year: "numeric",
     month: "2-digit",
@@ -1862,7 +1869,7 @@ function quoteMetrics(symbol, dailyVolumeMap, quoteMap, supplementalMaps = {}) {
     if (!raw) return 0;
     const epoch = Date.parse(raw);
     if (Number.isFinite(epoch)) {
-      const parts = new Intl.DateTimeFormat("en-CA", {
+      const parts = cachedMotherDateTimeFormat("en-CA", {
         timeZone: "Asia/Taipei",
         hour: "2-digit",
         minute: "2-digit",
@@ -7507,7 +7514,7 @@ async function ensureOpening0901CandleEvidence(formalPriorityRows = []) {
     const symbol = normalizeCode(candle.symbol || candle.code);
     const candleTime = normalizeTimestamp(candle.candleTime || candle.date);
     if (!requiredSymbols.includes(symbol) || !candleTime || taipeiDateFrom(candleTime) !== tradeDate) continue;
-    const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(candleTime));
+    const parts = cachedMotherDateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(new Date(candleTime));
     const hhmm = `${parts.find((part) => part.type === "hour")?.value || ""}:${parts.find((part) => part.type === "minute")?.value || ""}`;
     if (hhmm !== "09:01" || bySymbol.has(symbol) || !numberValue(candle.close)) continue;
     fallbackRows.push({
@@ -7762,7 +7769,7 @@ async function syncWebSocketFutoptQuotes() {
 function taipeiClockMinutesFrom(value) {
   const parsed = Date.parse(String(value || ""));
   if (!Number.isFinite(parsed)) return -1;
-  const parts = new Intl.DateTimeFormat("en-GB", {
+  const parts = cachedMotherDateTimeFormat("en-GB", {
     timeZone: "Asia/Taipei",
     hour12: false,
     hour: "2-digit",
@@ -7773,7 +7780,7 @@ function taipeiClockMinutesFrom(value) {
 }
 
 function taipeiWeekday() {
-  return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Taipei", weekday: "short" }).format(new Date());
+  return cachedMotherDateTimeFormat("en-US", { timeZone: "Asia/Taipei", weekday: "short" }).format(new Date());
 }
 
 function nullableNumber(value, positiveOnly = false) {
