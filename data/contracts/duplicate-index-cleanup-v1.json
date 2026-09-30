@@ -1,0 +1,75 @@
+{
+  "contract": "duplicate-index-cleanup-v1",
+  "groups": [
+    {
+      "table": "fugle_daytrade_intraday_1m",
+      "keep": "fugle_daytrade_intraday_1m_trade_date_symbol_candle_time_idx",
+      "remove": [
+        "idx_fugle_daytrade_intraday_1m_trade_date_symbol_candle",
+        "fugle_daytrade_intraday_1m_trade_symbol_time_idx",
+        "idx_fugle_daytrade_intraday_1m_trade_date"
+      ]
+    },
+    {
+      "table": "fugle_daytrade_intraday_1m",
+      "keep": "fugle_daytrade_intraday_1m_symbol_candle_time_idx",
+      "remove": [
+        "idx_fugle_daytrade_intraday_1m_symbol_candle",
+        "idx_fugle_daytrade_intraday_1m_symbol_candle_time",
+        "idx_fugle_daytrade_intraday_1m_symbol_candle_time_desc",
+        "idx_daytrade_intraday_1m_symbol_time"
+      ]
+    },
+    {
+      "table": "fugle_intraday_1m",
+      "keep": "idx_fugle_intraday_1m_trade_symbol_time",
+      "remove": [
+        "idx_fugle_intraday_1m_trade_date",
+        "idx_fugle_intraday_1m_trade_symbol_time_desc"
+      ]
+    },
+    {
+      "table": "fugle_intraday_1m",
+      "keep": "idx_fugle_intraday_1m_symbol_trade_date_candle_desc",
+      "remove": [
+        "idx_fugle_intraday_1m_symbol_trade_time_desc"
+      ]
+    },
+    {
+      "table": "fugle_intraday_1m",
+      "keep": "idx_fugle_intraday_1m_symbol_candle_desc",
+      "remove": [
+        "idx_fugle_intraday_1m_symbol_time",
+        "idx_fugle_intraday_1m_symbol_candle_time_desc"
+      ]
+    },
+    {
+      "table": "fugle_daytrade_quotes_live",
+      "keep": "fugle_daytrade_quotes_live_quote_seen_at_idx",
+      "remove": [
+        "idx_fugle_daytrade_quotes_live_seen_at"
+      ]
+    },
+    {
+      "table": "strategy2_intraday_ready_cache",
+      "keep": "idx_strategy2_intraday_ready_cache_date_symbol",
+      "remove": [
+        "idx_strategy2_intraday_ready_cache_quote_updated_symbol"
+      ]
+    },
+    {
+      "table": "fugle_daytrade_futopt_quotes_live",
+      "keep": "idx_daytrade_futopt_underlying",
+      "remove": [
+        "idx_fugle_daytrade_futopt_underlying"
+      ]
+    },
+    {
+      "table": "fugle_source_coverage",
+      "keep": "idx_fugle_source_coverage_trade_date_checked_at",
+      "remove": [
+        "fugle_source_coverage_trade_date_checked_at_idx"
+      ]
+    }
+  ]
+}

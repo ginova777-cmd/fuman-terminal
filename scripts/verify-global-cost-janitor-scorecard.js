@@ -44,6 +44,11 @@ const EXPECTED_TASKS = [
 
 const STATUS_FILES = [
   {
+    key: 'duplicateIndexes',
+    file: path.join(STATUS_DIR, 'duplicate-index-cleanup-status.json'),
+    description: 'Exact allowlist duplicate indexes; equivalent survivor required',
+  },
+  {
     key: "apiOnlyRetiredCleanup",
     file: path.join(STATUS_DIR, "api-only-retired-cleanup-status.json"),
     description: "API-only retired artifact cleanup status",
