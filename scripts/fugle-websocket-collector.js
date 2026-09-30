@@ -21,6 +21,7 @@ const {
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const providerSideJournal = require("../lib/provider-side-journal.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-side-journal"));
 const providerTradeJournal = require("../lib/telegram-detectors/provider-trade-journal.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-trade-journal"));
+const preopenJournal = require('../lib/mother-preopen.cjs').createJournal(path.join(RUNTIME_DIR, 'data', 'mother-pool', 'preopen-raw'));
 const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
   "C:/fuman-terminal/secrets/fugle-api-key.txt",
@@ -35,6 +36,8 @@ const COLLECTOR_ROLE = String(process.env.FUGLE_COLLECTOR_ROLE || "default").toL
 const MEMORY_ONLY = COLLECTOR_ROLE === 'daytrade' && process.env.FUMAN_MOTHER_POOL_RETENTION_MODE === 'one_minute_only';
 const MEMORY_ENABLED = MEMORY_ONLY || (COLLECTOR_ROLE === 'daytrade' && (process.env.FUMAN_MOTHER_POOL_DETECTION_MODE || 'memory') === 'memory');
 let memoryDetectionHost = null;
+let preopenWorker = null;
+let preopenWorkerStatus = { status: 'NOT_STARTED' };
 const SOURCE_HOST_ID = String(process.env.FUMAN_DAYTRADE_SOURCE_HOST_ID || process.env.FUMAN_SOURCE_HOST_ID || process.env.COMPUTERNAME || "unknown").trim();
 const SOURCE_HOST_ROLE = String(process.env.FUMAN_DAYTRADE_SOURCE_ROLE || "").trim().toLowerCase();
 const SOURCE_HOST_APPROVAL_FILE = path.join(RUNTIME_DIR, "config", "daytrade-source-host-approval.json");
@@ -1346,6 +1349,17 @@ async function runStreamingCollector() {
     process.once('exit', () => memoryDetectionHost.stop());
   }
   let rotationCursor = 0;
+  if (COLLECTOR_ROLE === 'daytrade' && !preopenWorker) {
+    preopenWorker = require('node:child_process').fork(path.join(__dirname, 'mother-preopen-worker.cjs'), [], { windowsHide: true, stdio: ['ignore','ignore','ignore','ipc'] });
+    preopenWorker.on('message', value => { if (value?.type === 'preopen_status') preopenWorkerStatus = value; });
+    preopenWorker.on('error', error => { preopenWorkerStatus = { status: 'BLOCKED', reason: error.code || 'WORKER_ERROR' }; });
+    preopenWorker.on('exit', () => { preopenWorkerStatus = { status: 'BLOCKED', reason: 'WORKER_EXITED' }; });
+    const preopenHeartbeat = setInterval(() => {
+      if (preopenWorker?.connected) preopenWorker.send({ type: 'journal_health', health: preopenJournal.health() }, () => {});
+    }, 5000);
+    preopenHeartbeat.unref();
+    process.once('exit', () => preopenWorker?.kill());
+  }
   let connectionAttempts = 0;
   const runOnce = () => new Promise((resolve) => {
     const connectionAttempt = ++connectionAttempts;
@@ -1502,6 +1516,8 @@ async function runStreamingCollector() {
         staleRecoveryTriggered,
         providerSideJournal: providerSideJournal.health(),
         providerTradeJournal: providerTradeJournal.health(),
+        preopenJournal: preopenJournal.health(),
+        preopenProducer: preopenWorkerStatus,
         nativeSideSubscriptionCoverage: require('../lib/mother-pool-native-side-subscription-coverage').inspect(selection),
         collectorRole: COLLECTOR_ROLE,
         sourceHostId: SOURCE_HOST_ID,
@@ -1660,6 +1676,7 @@ async function runStreamingCollector() {
           || STREAMING_CHANNELS[0];
         if (Object.prototype.hasOwnProperty.call(channelMessages, inferredChannel)) channelMessages[inferredChannel] += 1;
         if (inferredChannel === "aggregates") providerSideJournal.capture(data, lastTransportMessageAt);
+        if (COLLECTOR_ROLE === 'daytrade') preopenJournal.capture({ ...payload, channel: inferredChannel }, lastTransportMessageAt);
         if (inferredChannel === "trades") providerTradeJournal.capture(data, lastTransportMessageAt);
         if (inferredChannel === "candles") {
           const candles = normalizeFugleCandles(payload);
