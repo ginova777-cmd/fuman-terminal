@@ -69,31 +69,10 @@ const STRATEGY_PRIORITY_BRIDGE_REFRESH_MS = Math.max(
 let lastStrategyPriorityBridgeRefreshAt = 0;
 let strategyPriorityBridgeRefreshPromise = null;
 
+// 5M source retired by owner on 2026-09-30. Preserve incoming order.
 async function prioritizeIntradayFiveMinuteStrong(rows) {
-  if (!Array.isArray(rows) || !rows.length) return rows;
-  const { applyFiveMinutePriority, intradayWindow } = require("../lib/daytrade-five-minute-priority");
-  const { readMotherPoolSnapshot } = require("../lib/daytrade-mother-pool-snapshot");
-  const tradeDate = taipeiDate();
-  const snapshot = readMotherPoolSnapshot(tradeDate);
-  if (!intradayWindow(Date.now(), tradeDate)) return applyFiveMinutePriority(rows, [], null, snapshot);
-  try {
-    if (!snapshot.ok) return applyFiveMinutePriority(rows, [], null, snapshot);
-    const asOf = nowIso();
-    const source = await require('../lib/mother-pool-five-minute-source').read({
-      snapshot: snapshot.snapshot, asOf, runtime: runtimePath(), get: supabaseGet, paged: supabaseGetPaged,
-    });
-    const identity = { trade_date: tradeDate, canonical_run_id: snapshot.snapshot.canonical_run_id,
-      mother_pool_run_id: snapshot.snapshot.mother_pool_run_id,
-      snapshot_sequence: snapshot.snapshot.snapshot_sequence, snapshot_generation: snapshot.snapshot.generation };
-    return require('../lib/mother-pool-five-minute-priority').apply(rows,
-      { identity, snapshot: snapshot.snapshot, ...source, asOf }, Date.parse(asOf));
-  } catch (error) {
-    console.warn(JSON.stringify({ event: "intraday_5m_priority_readback_degraded", error: error?.message || String(error) }));
-    const result = applyFiveMinutePriority(rows, [], null, snapshot);
-    result.fiveMinutePriorityEvidence.first_blocker = "five_minute_readback_failed";
-    result.fiveMinutePriorityEvidence.error = String(error?.message || error);
-    return result;
-  }
+  rows.fiveMinutePriorityEvidence = {status:'DISABLED',reason:'OWNER_RETIRED_5M',promoted_symbols:[]};
+  return rows;
 }
 
 function ensureDailyStockMasterComplete() {
@@ -3089,7 +3068,7 @@ function buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunI
     exit_code: 0,
     symbol_membership: [...symbolMembership, ...removedMembership],
     downstream_warmup_pending_symbols: symbolMembership.filter((item) => item.membership_status === "PENDING_DOWNSTREAM_WARMUP").map((item) => item.symbol),
-    downstream_warmup_policy: "intraday_added_symbols_are_pending_until_1m_and_5m_batches_observe_the_same_mother_pool_run_id_or_later_snapshot",
+    downstream_warmup_policy: "intraday_added_symbols_are_pending_until_1m_batches_observe_the_same_mother_pool_run_id_or_later_snapshot",
     read_interface: {
       latest_complete_snapshot: MOTHER_POOL_SNAPSHOT_FILE,
       fixed_snapshot_by_run_id: "read receipt where run_id equals mother_pool_run_id",
@@ -8677,10 +8656,8 @@ async function tick() {
       try{inputs.push(require('../lib/mother-pool-industry-mapping-producer').collect({identity,discovery:result.payload.same_round_industry_discovery,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B05'],error:String(error.message||error)});}
       try{const previous=readJson(statePath('daytrade-b02-module-latest.json'),null);inputs.push(require('../lib/mother-pool-discovery-producer').collect({identity,symbols:intradaySignalEvidence.requested_symbols,sources:discoverySourceRows,candles:sessionCandles,previous,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B04'],error:String(error.message||error)});}
       try{inputs.push(require('../lib/mother-pool-allocation-producer').collect({identity,allocation:result.payload.deep_scan_allocation,snapshot,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B10'],error:String(error.message||error)});}
-      try{
-        const fiveMinuteSource=await require('../lib/mother-pool-five-minute-source').read({snapshot,asOf:sideAsOf,runtime:runtimePath(),get:supabaseGet,paged:supabaseGetPaged});
-        inputs.push(require('../lib/mother-pool-five-minute-producer').collect({identity,snapshot,...fiveMinuteSource,asOf:sideAsOf}));
-      }catch(error){result.payload.module_persistence_errors.push({modules:['B15'],error:String(error.message||error)});}
+      // B15 retired: no 5M API, DB read, or module publication.
+
       }
       const dir=runtimePath('data','module-write-sets');fs.mkdirSync(dir,{recursive:true});
       if(sideMinutes>=540)inputs.push({module_id:'B09',build:()=>require('../lib/mother-pool-discovery-union-producer').collect({identity,parents:{B04:result.payload.module_write_sets.B04,B08:result.payload.module_write_sets.B08},asOf:nowIso()})});

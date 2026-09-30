@@ -75,12 +75,7 @@ const checks = {
     "mother_pool_downstream_warmup_pending_symbols",
     "mother_pool_snapshot_read_interface",
   ]),
-  five_minute_runner_uses_snapshot_first: includesAll(current5m, [
-    "$SnapshotPath",
-    "daytrade-mother-pool-snapshot-latest.json",
-    "candidateSource = 'snapshot.symbols'",
-    "$candidateSymbols = @($snapshot.symbols)",
-  ]),
+  five_minute_runner_retired: current5m.includes('OWNER_RETIRED_5M') && !current5m.includes('run-daytrade-intraday-5m-complete.ps1'),
   package_verifier_script_present: !packageSource || packageSource.includes("verify:daytrade-mother-pool-snapshot"),
 };
 
