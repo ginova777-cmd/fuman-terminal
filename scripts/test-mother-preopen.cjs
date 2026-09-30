@@ -38,6 +38,21 @@ async function main() {
   j.capture(row.payload,row.received_at); j.capture(row.payload,row.received_at); await j.drain();
   assert.equal(fs.readFileSync(path.join(root,'raw',date,'6531.jsonl'),'utf8').trim().split('\n').length,1);
   assert.equal(j.health().ok,true);
+  const {produce}=require('../lib/mother-preopen-service.cjs');
+  const runtimeRoot=path.join(root,'runtime');
+  const rawDir=path.join(runtimeRoot,'data','mother-pool','preopen-raw',date);fs.mkdirSync(rawDir,{recursive:true});
+  fs.writeFileSync(path.join(rawDir,'6531.jsonl'),JSON.stringify(row)+'\n');
+  const options={runtimeRoot,calendar,asOf,health:{ok:true},producerVersion:'test',actualStart:date+'T06:00:00+08:00'};
+  let service=produce(options);assert.equal(service.candidate_request_status,'NOT_SUPPLIED');assert.equal(service.requested_count,null);
+  const same=produce(options);assert.equal(service.revision,same.revision);
+  const requestDir=path.join(runtimeRoot,'data','mother-pool','preopen-requests');fs.mkdirSync(requestDir,{recursive:true});
+  fs.writeFileSync(path.join(requestDir,date+'.json'),candidateBytes);
+  service=produce(options);assert.equal(service.requested_count,2);assert.notEqual(service.revision,same.revision);
+  const shared=read(path.join(runtimeRoot,'data','mother-pool','preopen',date,'receipt.json'),date,'2026-09-29');
+  assert.equal(shared.receipt.covered_count,1);assert.equal(shared.receipt.missing_count,1);
+  assert.throws(()=>produce({...options,health:{ok:false}}),/JOURNAL_UNHEALTHY/);
+  fs.appendFileSync(path.join(rawDir,'6531.jsonl'),'{');
+  assert.throws(()=>produce(options),/APPEND_IN_PROGRESS/);
   console.log(JSON.stringify({ok:true,scope:'isolated_only',natural_0855_verified:false,notifications_sent:0,orders_sent:0,artifact_root:root}));
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});
