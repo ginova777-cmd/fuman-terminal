@@ -1408,8 +1408,8 @@ async function fetchMarginChangeMap() {
   try {
     const rows = await supabaseGetPaged(
       "finmind_margin_short",
-      "select=symbol,trade_date,margin_balance,short_balance,updated_at&order=trade_date.desc",
-      { service: true, pageSize: 1000 },
+      await require('../lib/daytrade-margin-query').query({tradeDate:taipeiDate(),resolveDay:date=>isTwseTradingDay(date,{stateDir:statePath(''),ignoreOverrides:true})}),
+      { service: true, pageSize: 500, requireExactCount: true, maxRows: 15000 },
     );
     for (const row of rows) {
       const symbol = normalizeCode(row.symbol);
