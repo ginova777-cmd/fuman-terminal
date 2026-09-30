@@ -8679,6 +8679,10 @@ async function tick() {
       await publishInitialSource();
       persistModuleInput = async input => {
           const evidenceId=require('node:crypto').randomUUID();
+          const moduleStarted=Date.now();
+          const recordModule=event=>fs.appendFileSync(path.join(dir,'module-persistence-timing-'+identity.trade_date+'.jsonl'),JSON.stringify({checked_at:nowIso(),...identity,module_id:input.module_id,evidence_id:evidenceId,elapsed_ms:Date.now()-moduleStarted,...event})+'\n');
+          recordModule({stage:'start',requested_count:input.requested_symbols.length});
+          try {
           const saved=await require('../lib/persist-mother-pool-module-round').persistModuleRound(input,{
             savePlan:async plan=>{
               require('../lib/daytrade-module-attempt-journal').begin(path.join(dir,'attempts'),plan);
@@ -8686,10 +8690,14 @@ async function tick() {
             },
             persist:async body=>{
               if(DRY_RUN)throw Error('MODULE_DRY_RUN_NO_PERSISTENCE');
+              const wire=require('../lib/daytrade-module-compact-wire').compact(body);
+              const wireText=JSON.stringify(wire);
+              recordModule({stage:'rpc_start',endpoint:'persist_daytrade_module_round_compact_v1',request_bytes:Buffer.byteLength(wireText),legacy_request_bytes:Buffer.byteLength(JSON.stringify(body)),timeout_ms:SUPABASE_WRITE_TIMEOUT_MS});
               let response;
-              try { response=await fetch(SUPABASE_URL+'/rest/v1/rpc/persist_daytrade_module_round_v2',{
-                method:'POST',headers:headers(requireSupabaseKey(true)),body:JSON.stringify(body),signal:AbortSignal.timeout(SUPABASE_WRITE_TIMEOUT_MS)});
+              try { response=await fetch(SUPABASE_URL+'/rest/v1/rpc/persist_daytrade_module_round_compact_v1',{
+                method:'POST',headers:headers(requireSupabaseKey(true)),body:wireText,signal:AbortSignal.timeout(SUPABASE_WRITE_TIMEOUT_MS)});
               } catch(error) {
+                recordModule({stage:'rpc_failure',error_name:error?.name||'Error'});
                 if(!['TimeoutError','AbortError'].includes(error?.name))throw error;
                 const document=JSON.parse(body.p_document);
                 const fixed={module_id:'eq.'+document.module_id,trade_date:'eq.'+document.trade_date,writer_run_id:'eq.'+document.writer_run_id};
@@ -8697,13 +8705,16 @@ async function tick() {
                 const rows=await supabaseGetPaged('fugle_daytrade_module_rows_v2',new URLSearchParams({...fixed,select:'module_id,trade_date,writer_run_id,symbol,evidence',order:'symbol.asc'}).toString(),{service:true,requireExactCount:true,pageSize:500,maxRows:document.plan.requested_symbols.length});
                 return require('../lib/daytrade-module-write-ack').verify(document,rounds,rows);
               }
+              recordModule({stage:'rpc_response',http_status:response.status});
               if(!response.ok)throw Error('MODULE_RPC_HTTP_'+response.status+':'+(await response.text()).slice(0,240));
               return response.json();
             },
             saveEvidence:async evidence=>require('../lib/daytrade-durable-json').writeExclusive(path.join(dir,evidenceId+'.json'),evidence)
           });
           result.payload.module_write_sets[input.module_id]=saved;
+          recordModule({stage:'ack_verified',written_count:saved.ack.written_symbols.length,data_gap_count:saved.plan.data_gap_symbols.length});
           return saved;
+          } catch(error) {recordModule({stage:'failed',error_name:error?.name||'Error',reason:String(error.message||error).split(':')[0]});throw error;}
       };
       for(const queued of inputs){
         let input=typeof queued.build==='function'?queued:frozenModuleInputs.find(value=>value.module_id===queued.module_id);
