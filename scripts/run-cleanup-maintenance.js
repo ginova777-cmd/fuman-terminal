@@ -39,8 +39,15 @@ async function main(){
       Object.assign(row,await command(process.execPath,['--use-system-ca',`scripts/${script}`,...args],row.logFile,{FUMAN_HISTORY_CLEANUP_ENABLE_VERCEL_CLI:'1',FUMAN_PRODUCTION_MIRROR_ROOT:'C:\\fuman-terminal'}));
       row.finishedAt=new Date().toISOString();
       row.receipts=context.receipts()[name].filter(f=>fs.existsSync(f)).map(file=>({file,sha256:context.hash(file)}));save(auth.journalFile,j);
-      // Independent stages continue after a bounded stage failure; the canonical verifier still rejects it.
-      const log=fs.readFileSync(row.logFile,'utf8');if(/HTTP 522|cannot check out|retry_after|owner_action_required/i.test(log))throw Error('supabase_incident_stop');
+      // Do not initiate another stage after an unsuccessful or uncertain operation.
+      // Record the failure before finally closes this run and releases its lock.
+      const log=fs.readFileSync(row.logFile,'utf8');
+      const incident=/HTTP[ _:]?52[0-9]|cannot check out|retry_after|owner_action_required|TimeoutError|AbortError|timed?\s*out|ECONNRESET|ECONNREFUSED|fetch failed/i.test(log);
+      if(row.exitCode!==0 || incident){
+        j.firstFailure={step:name,exitCode:row.exitCode,reason:incident?'supabase_incident_stop':'cleanup_stage_failed',logFile:row.logFile};
+        save(auth.journalFile,j);
+        throw Error(`${j.firstFailure.reason}:${name}`);
+      }
     }
   } finally {
     j.finishedAt=new Date().toISOString();j.protection.changed=j.protection.before.filter(x=>!fs.existsSync(x.file)||context.hash(x.file)!==x.sha256);j.protection.ok=j.protection.changed.length===0;save(auth.journalFile,j);fs.closeSync(lockFd);fs.unlinkSync(lock);
