@@ -43,15 +43,15 @@ function scheduledTasks() {
   const command = [
     `$names = '${names}' | ConvertFrom-Json`,
     "$rows = foreach ($name in $names) {",
-    "  $task = Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue",
+    "  $task = Get-ScheduledTask -TaskName $name -ErrorAction Stop",
     "  if ($null -eq $task) { [pscustomobject]@{ name=$name; missing=$true }; continue }",
-    "  $info = Get-ScheduledTaskInfo -TaskName $name",
+    "  $info = Get-ScheduledTaskInfo -TaskName $name -ErrorAction Stop",
     "  [pscustomobject]@{ name=$name; missing=$false; state=[string]$task.State; lastResult=[int]$info.LastTaskResult; lastRun=$info.LastRunTime.ToString('o'); nextRun=$info.NextRunTime.ToString('o'); enabled=[bool]$task.Settings.Enabled; triggerTimes=@($task.Triggers | ForEach-Object { ([datetime]$_.StartBoundary).ToString('HH:mm') }); logonType=[string]$task.Principal.LogonType; runLevel=[string]$task.Principal.RunLevel; startWhenAvailable=[bool]$task.Settings.StartWhenAvailable; multipleInstances=[string]$task.Settings.MultipleInstances; executionTimeLimit=[string]$task.Settings.ExecutionTimeLimit; restartCount=[int]$task.Settings.RestartCount; action=(($task.Actions | ForEach-Object { ([string]$_.Execute) + ' ' + ([string]$_.Arguments) }) -join ' | '); batteryStartBlocked=[bool]$task.Settings.DisallowStartIfOnBatteries; batteryStop=[bool]$task.Settings.StopIfGoingOnBatteries }",
     "}", "$rows | ConvertTo-Json -Compress",
   ].join("; ");
   const result = run("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command]);
   const rows = parseJson(result.stdout);
-  return { ...result, rows: Array.isArray(rows) ? rows : rows ? [rows] : [] };
+  return { ...result, rows: !result.ok ? [] : Array.isArray(rows) ? rows : rows ? [rows] : [] };
 }
 function receiptCheck(name, expectedContract, file, options = {}) {
   const receipt = readJson(file); const payload = receipt.value;
@@ -103,6 +103,7 @@ async function main() {
   const tasks = scheduledTasks();
   if (!tasks.ok) issues.push("scheduled_task_query_failed");
   const schedule = TASKS.map((expected) => {
+    if (!tasks.ok) return { ...expected, valid:false, queryStatus:'UNKNOWN', naturalRunConfirmed:false, queryError:tasks.stderr || tasks.error || 'scheduled_task_query_failed' };
     const row = tasks.rows.find((item) => item.name === expected.name);
     const valid = !!row && !row.missing && ["Ready", "Running"].includes(row.state) && row.enabled === true && row.action.includes(path.join(ROOT, expected.script)) && row.triggerTimes?.includes(expected.time) && row.logonType === "S4U" && row.runLevel === "Highest" && row.startWhenAvailable === true && row.multipleInstances === "IgnoreNew" && row.executionTimeLimit === "PT20M" && row.restartCount === 0 && !row.batteryStartBlocked && !row.batteryStop;
     if (!valid) issues.push(`task_invalid:${expected.name}`);
