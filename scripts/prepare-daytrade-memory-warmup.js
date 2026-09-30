@@ -21,9 +21,9 @@ async function prepare(){
  const runtimeDir=process.env.FUMAN_RUNTIME_DIR||'C:/fuman-runtime';
  const sourceOptions={root:path.resolve(__dirname,'..'),runtimeDir};
  const {loadHistory,createPageReader}=require('../lib/daytrade-memory-history');
- const history=await loadHistory({tradeDate,symbols:[...universe],calendar:historyCalendar,readPage:createPageReader({url:terminalSupabaseUrl(sourceOptions),key:terminalSupabaseKey(sourceOptions)})});
+ const baseline=await require('../lib/daytrade-memory-history-warmup').completeHistoryWarmup(warmup.baseline,()=>loadHistory({tradeDate,symbols:[...universe],calendar:historyCalendar,readPage:createPageReader({url:terminalSupabaseUrl(sourceOptions),key:terminalSupabaseKey(sourceOptions)})}));
  const currentQuotes=readFugleWebSocketQuotes({maxAgeMs:120000});
  const currentCandles=readFugleWebSocketCandles({maxAgeMs:8*3600000});
- return {...warmup,baseline:{...warmup.baseline,history},initialQuotes:[...currentQuotes.quotes.values()],initialCandles:[...currentCandles.candles.values()].filter(r=>r.tradeDate===tradeDate&&universe.has(String(r.symbol||r.code)))};
+ return {...warmup,baseline,initialQuotes:[...currentQuotes.quotes.values()],initialCandles:[...currentCandles.candles.values()].filter(r=>r.tradeDate===tradeDate&&universe.has(String(r.symbol||r.code)))};
 }
 module.exports={prepare};
