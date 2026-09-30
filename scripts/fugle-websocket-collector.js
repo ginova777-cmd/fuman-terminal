@@ -21,6 +21,7 @@ const {
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const providerSideJournal = require("../lib/provider-side-journal.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-side-journal"));
 const providerTradeJournal = require("../lib/telegram-detectors/provider-trade-journal.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-trade-journal"));
+const preopenJournal = require('../lib/mother-preopen.cjs').createJournal(path.join(RUNTIME_DIR, 'data', 'mother-pool', 'preopen-raw'));
 const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
   "C:/fuman-terminal/secrets/fugle-api-key.txt",
@@ -1502,6 +1503,7 @@ async function runStreamingCollector() {
         staleRecoveryTriggered,
         providerSideJournal: providerSideJournal.health(),
         providerTradeJournal: providerTradeJournal.health(),
+        preopenJournal: preopenJournal.health(),
         nativeSideSubscriptionCoverage: require('../lib/mother-pool-native-side-subscription-coverage').inspect(selection),
         collectorRole: COLLECTOR_ROLE,
         sourceHostId: SOURCE_HOST_ID,
@@ -1660,6 +1662,7 @@ async function runStreamingCollector() {
           || STREAMING_CHANNELS[0];
         if (Object.prototype.hasOwnProperty.call(channelMessages, inferredChannel)) channelMessages[inferredChannel] += 1;
         if (inferredChannel === "aggregates") providerSideJournal.capture(data, lastTransportMessageAt);
+        if (COLLECTOR_ROLE === 'daytrade') preopenJournal.capture({ ...payload, channel: inferredChannel }, lastTransportMessageAt);
         if (inferredChannel === "trades") providerTradeJournal.capture(data, lastTransportMessageAt);
         if (inferredChannel === "candles") {
           const candles = normalizeFugleCandles(payload);
