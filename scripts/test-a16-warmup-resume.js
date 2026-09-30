@@ -16,6 +16,7 @@ async function scenario(mode){
  const deps={
   'node:fs':fakeFs,'node:path':path,'node:crypto':crypto,'node:child_process':{spawnSync:()=>({status:0})},
   '../lib/mother-pool-a16-io':io,
+  '../lib/a16-local-failure-policy':require('../lib/a16-local-failure-policy'),
   '../lib/mother-pool-a16-checkpoint':require('../lib/mother-pool-a16-checkpoint'),
   '../lib/daytrade-durable-json':{writeExclusive:(file,value)=>{if(mode==='intent-disk')throw Error('DISK_FULL');if(memory.has(file))throw Error('EXISTS');memory.set(file,structuredClone(value));}},
   '../lib/fetch-mother-pool-historical-minutes':{fetchHistory:async()=>{throw Error('unexpected refetch');}},
@@ -37,7 +38,7 @@ async function scenario(mode){
  if(['corrupt','corrupt-history'].includes(mode)){assert.equal(result.attempted_count,2);assert.equal(result.rows[0].db_readback_ok,false);assert.equal(result.rows[1].db_readback_ok,true);assert.equal(result.complete,false);}
  if(mode==='timeout'){assert.equal(result.attempted_count,1);assert.equal(result.complete,false);assert.equal(writes,1);clock='2026-09-29T00:01:00Z';result=await run();assert.equal(reads,1);assert.equal(writes,2);assert.equal(result.rows[0].db_readback_ok,true);assert.equal(result.rows[1].db_readback_ok,false);}
  if(mode==='intent-disk'){assert.equal(writes,0);assert.equal(reads,0);assert.equal(result.first_blocker,'DISK_FULL');}
- if(mode==='intent-conflict'){assert.equal(result.complete,true);assert.equal(writes,2);const key=[...memory.keys()].find(k=>k.endsWith('1301-write-intent.json'));memory.get(key).payload_sha256='0'.repeat(64);clock='2026-09-29T00:01:00Z';result=await run();assert.equal(result.first_blocker,'A16_WRITE_INTENT_CONFLICT');assert.equal(writes,2);assert.equal(reads,0);}
+ if(mode==='intent-conflict'){assert.equal(result.complete,true);assert.equal(writes,2);const key=[...memory.keys()].find(k=>k.endsWith('1301-write-intent.json'));const artifact=[...memory.keys()].find(k=>k.endsWith('1301.json')&&memory.get(k)?.db);const original=structuredClone(memory.get(artifact));memory.get(key).payload_sha256='0'.repeat(64);clock='2026-09-29T00:01:00Z';result=await run();assert.equal(result.first_blocker,'A16_WRITE_INTENT_CONFLICT');assert.equal(result.complete,false);assert.equal(result.attempted_count,2);assert.equal(result.rows[1].db_readback_ok,true);assert.equal(writes,2);assert.equal(reads,1);assert.deepEqual(memory.get(artifact),original);assert.equal(memory.get(key).payload_sha256,'0'.repeat(64));}
  if(['sample-gap','missing-anon','partial-count'].includes(mode)){assert.equal(result.attempted_count,2);assert.equal(result.complete,false);}
  if(mode==='sample-gap'){clock='2026-09-29T00:01:00Z';result=await run();assert.equal(result.complete,false);assert.equal(writes,2);assert.equal(reads,0);assert(result.rows.every(r=>r.readback_reused===true&&r.source_ready===false));assert(result.failed_checks.includes('INSUFFICIENT_SAMPLE'));}
  if(mode==='checkpoint'){assert.equal(result.complete,true);clock='2026-09-29T00:01:00Z';result=await run();assert.equal(result.complete,true);assert.equal(writes,2);assert.equal(reads,0);assert(result.rows.every(r=>r.readback_reused===true));

@@ -6,6 +6,7 @@ const {isTwseTradingDay}=require('./twse-trading-day');
 const {build}=require('../lib/mother-pool-a16-baseline');
 const {verify}=require('../lib/verify-mother-pool-a16');
 const {hash,read,atomic,readSide,client,compact}=require('../lib/mother-pool-a16-io');
+const localFailure=require('../lib/a16-local-failure-policy');
 const arg=n=>process.argv.find(x=>x.startsWith('--'+n+'='))?.slice(n.length+3);
 const root=path.join(__dirname,'..'),runtime=process.env.FUMAN_RUNTIME_DIR||'C:/fuman-runtime';
 const scheduled=process.argv.includes('--scheduled'),apply=process.argv.includes('--apply');
@@ -84,9 +85,9 @@ async function main(){
     }
    }catch(e){failure=e.message;}
    const entry={symbol,source_ready:receipt.complete,verifier_passed:verifier.verification_passed,requested_count:receipt.requested_count,...dbResult,first_blocker:failure||verifier.failed_checks[0]||receipt.first_blocker||(dbResult.db_readback_ok!==true?'A16_DB_READBACK_UNVERIFIED':dbResult.anon_readback_ok!==true?'A16_ANON_READBACK_UNVERIFIED':dbResult.written_count!==1084||dbResult.readback_count!==1084?'A16_READBACK_COUNT_MISMATCH':!/^[0-9a-f]{64}$/.test(dbResult.payload_sha256||'')?'A16_PAYLOAD_HASH_MISSING':null)};rows.push(entry);
-   atomic(path.join(receiptDir,symbol+'.json'),{input_reference:{history_file:file,side_journal_dates:Object.keys(sideJournals)},receipt,verifier,db:dbResult,generation,mode,complete:receipt.complete===true&&verifier.complete===true&&dbResult.db_readback_ok===true&&dbResult.anon_readback_ok===true&&dbResult.written_count===1084&&dbResult.readback_count===1084});
+   localFailure.saveArtifact({atomic,path,receiptDir,symbol,failure,checkedAt:input.asOf,artifact:{input_reference:{history_file:file,side_journal_dates:Object.keys(sideJournals)},receipt,verifier,db:dbResult,generation,mode,complete:!failure&&receipt.complete===true&&verifier.complete===true&&dbResult.db_readback_ok===true&&dbResult.anon_readback_ok===true&&dbResult.written_count===1084&&dbResult.readback_count===1084}});
    atomic(summaryFile,summary());console.log(JSON.stringify({symbol,attempted:rows.length,total:universe.symbols.length,db_readback_ok:dbResult.db_readback_ok,first_blocker:entry.first_blocker}));
-   if(failure||[401,403,429].includes(history.result?.http_status))break;
+   if(localFailure.shouldStop(failure,history.result?.http_status))break;
    }catch(error){
     const reason=String(error?.message||error),entry={symbol,source_ready:false,verifier_passed:false,requested_count:0,written_count:0,readback_count:0,db_readback_ok:false,anon_readback_ok:false,first_blocker:reason};
     rows.push(entry);atomic(summaryFile,summary());
@@ -94,7 +95,7 @@ async function main(){
     console.log(JSON.stringify({symbol,attempted:rows.length,total:universe.symbols.length,db_readback_ok:false,first_blocker:reason}));
     // Corrupt local evidence blocks this symbol, not unrelated symbols. Other
     // failures stop this run so an outage cannot turn into thousands of retries.
-    if(!/^A16_(JOURNAL_JSON_INVALID|JSON_READ_FAILED):/.test(reason))break;
+    if(!localFailure.isLocalEvidenceFailure(reason))break;
    }
   }
   const final=summary();atomic(summaryFile,final);console.log(JSON.stringify({status:final.status,complete:final.complete,attempted_count:rows.length,summary:summaryFile}));
