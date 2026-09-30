@@ -642,14 +642,16 @@ function retryableSupabaseFetchError(error) {
 async function supabaseFetch(url, options = {}, timeoutMs = SUPABASE_READ_TIMEOUT_MS) {
   let lastError = null;
   const { signal: _ignoredSignal, ...requestOptions } = options;
-  for (let attempt = 0; attempt <= SUPABASE_TRANSIENT_RETRIES; attempt += 1) {
+  // A timed-out mutation may already have committed. Only retry reads.
+  const retryLimit = /^(GET|HEAD)$/i.test(String(options.method || 'GET')) ? SUPABASE_TRANSIENT_RETRIES : 0;
+  for (let attempt = 0; attempt <= retryLimit; attempt += 1) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       return await fetch(url, { ...requestOptions, signal: controller.signal });
     } catch (error) {
       lastError = error;
-      if (attempt >= SUPABASE_TRANSIENT_RETRIES || !retryableSupabaseFetchError(error)) throw error;
+      if (attempt >= retryLimit || !retryableSupabaseFetchError(error)) throw error;
       await sleep(SUPABASE_RETRY_BASE_DELAY_MS * (attempt + 1));
     } finally {
       clearTimeout(timer);
