@@ -13,7 +13,7 @@ assert.equal(formal.trialPrice, 102);
 assert.equal(formal.referencePrice, 100);
 assert.equal(formal.isTrial, false);
 
-const trial = aggregate({ closePrice: 0, lastTrial: { price: 102 }, referencePrice: 100 });
+const trial = aggregate({ closePrice: 0, lastTrial: { price: 102 }, referencePrice: 100, isTrial: true });
 assert.equal(trial.close, 102, "trial price must warm the preopen quote");
 assert.equal(trial.formalLastPrice, null);
 assert.equal(trial.isTrial, true);
@@ -21,6 +21,9 @@ assert.equal(trial.isTrial, true);
 const reference = aggregate({ closePrice: 0, lastTrial: { price: 0 }, referencePrice: 100 });
 assert.equal(reference.close, 100, "reference price must keep the warmup row visible");
 assert.equal(reference.isTrial, false);
+assert.equal(reference.quoteSeenAt, "", "missing exchange time cannot be replaced by receipt time");
+const postopen = aggregate({ closePrice: 103, lastTrial: { price: 102 }, referencePrice: 100 });
+assert.equal(postopen.isTrial, false, "retained lastTrial does not identify the current event as trial");
 
 function formalGate(row, now = "09:00:00") {
   return now >= "09:00:00" && Number(row?.formalLastPrice) > 0 && row?.isTrial !== true;
