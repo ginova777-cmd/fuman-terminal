@@ -179,6 +179,7 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
     tradeDate,
     consumerName: STRATEGY,
     strategy3Consumer: true,
+    retainMotherPoolSnapshot: true,
     requireMarketCalendar: true,
     // Natural 13:00 runs require the live producer receipt. A post-close
     // recovery validates the persisted v4.1 identities and 1m rows directly;
@@ -201,8 +202,8 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
     return {
       water,
       mother_pool: {
-        source: MOTHER_POOL_VIEW,
-        receipt_source: MOTHER_POOL_RECEIPT_VIEW,
+        source: water.receipt?.mother_pool_transport === "local_named_pipe" ? "mother-pool-volatile-snapshot-v1" : MOTHER_POOL_VIEW,
+        receipt_source: water.receipt?.mother_pool_transport === "local_named_pipe" ? "memory:source_readiness" : MOTHER_POOL_RECEIPT_VIEW,
         trade_date: tradeDate,
         contract_version: MOTHER_POOL_CONTRACT_VERSION,
         canonical_run_id: water.receipt?.canonical_run_id || "",
@@ -306,7 +307,7 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
         "strategy3_v2_limit_up_exclusion_passed",
       ],
       formal_source: `${MOTHER_POOL_VIEW}+${QUOTE_TABLE}+rpc:${INTRADAY_1M_RPC}`,
-      universe_source: MOTHER_POOL_VIEW,
+      universe_source: water.receipt?.mother_pool_transport === "local_named_pipe" ? "mother-pool-volatile-snapshot-v1" : MOTHER_POOL_VIEW,
       in_daytrade_mother_pool: true,
       contract_version: pool.contract_version,
       trade_date: pool.trade_date,
@@ -412,20 +413,20 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
   return {
     water,
     mother_pool: {
-      source: MOTHER_POOL_VIEW,
-      receipt_source: MOTHER_POOL_RECEIPT_VIEW,
+      source: water.receipt?.mother_pool_transport === "local_named_pipe" ? "mother-pool-volatile-snapshot-v1" : MOTHER_POOL_VIEW,
+      receipt_source: water.receipt?.mother_pool_transport === "local_named_pipe" ? "memory:source_readiness" : MOTHER_POOL_RECEIPT_VIEW,
       trade_date: tradeDate,
       contract_version: MOTHER_POOL_CONTRACT_VERSION,
       canonical_run_id: water.receipt?.canonical_run_id || "",
       symbol_count: poolSymbols.length,
       pages: water.receipt?.mother_pool_pages || 0,
     },
-    quote_source: { table: QUOTE_TABLE, valid_symbols: water.receipt?.quote_valid_rows || 0 },
+    quote_source: { table: water.receipt?.mother_pool_transport === "local_named_pipe" ? null : QUOTE_TABLE, transport: water.receipt?.mother_pool_transport || "supabase", valid_symbols: water.receipt?.quote_valid_rows || 0 },
     candle_source: {
       ownership: "shared_with_daytrade_canonical_source",
       writer: "fugle_daytrade_source",
       table: "fugle_daytrade_intraday_1m",
-      rpc: INTRADAY_1M_RPC,
+      rpc: water.receipt?.mother_pool_transport === "local_named_pipe" ? null : INTRADAY_1M_RPC,
       trade_date_policy: "same_trade_date_only",
       independent_strategy3_writer: false,
       valid_symbols: water.receipt?.intraday_1m_valid_rows || 0,
@@ -557,7 +558,7 @@ async function main() {
         apply,
         readiness,
         scanner_core_ready: scannerCoreReady,
-        scanner_source: `${MOTHER_POOL_VIEW}+${QUOTE_TABLE}+rpc:${INTRADAY_1M_RPC}`,
+        scanner_source: scanner.water.receipt?.scanner_source || `${MOTHER_POOL_VIEW}+${QUOTE_TABLE}+rpc:${INTRADAY_1M_RPC}`,
         scanner_summary: {
           universe_scope: "daytrade_mother_pool_only",
           mother_pool: scanner.mother_pool,
@@ -592,7 +593,7 @@ async function main() {
         run_id: runId,
         apply,
         scanner_core_ready: true,
-        scanner_source: `${MOTHER_POOL_VIEW}+${QUOTE_TABLE}+rpc:${INTRADAY_1M_RPC}`,
+        scanner_source: scanner.water.receipt?.scanner_source || `${MOTHER_POOL_VIEW}+${QUOTE_TABLE}+rpc:${INTRADAY_1M_RPC}`,
         scanner_summary: {
           universe_scope: "daytrade_mother_pool_only",
           mother_pool: scanner.mother_pool,
@@ -645,6 +646,9 @@ async function main() {
   receipt.canonical_run_id = scanner.water.receipt?.canonical_run_id || null;
   receipt.source_field_contract = scanner.water.receipt?.source_field_contract || null;
   receipt.mother_pool_snapshot = scanner.water.receipt?.mother_pool_snapshot || null;
+  receipt.candle_readback = scanner.water.receipt?.candle_readback || null;
+  receipt.source_mode = scanner.water.receipt?.source_mode || null;
+  receipt.mother_pool_transport = scanner.water.receipt?.mother_pool_transport || null;
   receipt.mother_pool_http_status = scanner.water.receipt?.mother_pool_http_status || null;
   receipt.mother_pool_rows = scanner.water.receipt?.mother_pool_rows || 0;
   receipt.mother_pool_pages = scanner.water.receipt?.mother_pool_pages || 0;
