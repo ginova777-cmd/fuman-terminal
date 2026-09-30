@@ -780,10 +780,10 @@ async function supabaseUpsertUnchecked(resource, rows, conflict, options = {}) {
   const writeTimeoutMs = Math.max(SUPABASE_WRITE_TIMEOUT_MS, Number(options.timeoutMs || 0));
   const retries = resource==='fugle_daytrade_priority_pool'?0:Math.max(0, Math.min(Number(options.retries || 0), 2));
   const retryDelayMs = Math.max(250, Math.min(Number(options.retryDelayMs || 1000), 5000));
-  for (let i = 0; i < rows.length; i += batchSize) {
-    const chunk = JSON.parse(JSON.stringify(rows.slice(i, i + batchSize)));
-    const body = JSON.stringify(chunk);
-    const tracePriority = resource==='fugle_daytrade_priority_pool';
+  const tracePriority = resource==='fugle_daytrade_priority_pool';
+  for (const {offset:i,chunk,body} of require('../lib/daytrade-write-batches').batches(rows,{
+    maxRows:tracePriority?Math.min(batchSize,50):batchSize,maxBytes:tracePriority?512*1024:Infinity,
+  })) {
     const batchEvidence = tracePriority ? {resource,offset:i,requested:chunk.length,bytes:Buffer.byteLength(body),sha256:require('node:crypto').createHash('sha256').update(body).digest('hex'),writer_run_id:chunk[0]?.payload?.writer_run_id,generation_id:chunk[0]?.payload?.generation_id} : null;
     let lastError = null;
     for (let attempt = 0; attempt <= retries; attempt += 1) {

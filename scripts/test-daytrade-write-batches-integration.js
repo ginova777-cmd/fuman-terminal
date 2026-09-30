@@ -1,0 +1,8 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const source=fs.readFileSync(require.resolve('./run-daytrade-source-writer'),'utf8');
+const start=source.indexOf('async function supabaseUpsertUnchecked('),end=source.indexOf('\nasync function ',start+10);assert(start>=0&&end>start);
+const fn=source.slice(start,end);let active=0,maxActive=0,calls=[];
+const context={require,Buffer,URLSearchParams,AbortSignal,setTimeout,console:{log(){},error(){}},DRY_RUN:false,requireSupabaseKey:()=> 'test',SUPABASE_WRITE_TIMEOUT_MS:1000,SUPABASE_URL:'https://test.invalid',headers:()=>({}),fetch:async(_url,options)=>{active++;maxActive=Math.max(maxActive,active);calls.push(JSON.parse(options.body));await new Promise(r=>setTimeout(r,1));active--;return {ok:true,status:201};}};
+vm.createContext(context);vm.runInContext(fn+'\nthis.run=supabaseUpsertUnchecked;',context);
+(async()=>{const rows=Array.from({length:110},(_,i)=>({symbol:String(i),payload:{writer_run_id:'w',generation_id:'g',x:'字'.repeat(6000)}}));const result=await context.run('fugle_daytrade_priority_pool',rows,'symbol',{batchSize:200});assert.equal(result.written,rows.length);assert.equal(maxActive,1);assert.deepEqual(calls.flat(),rows);assert(calls.every(c=>c.length<=50&&Buffer.byteLength(JSON.stringify(c))<=512*1024));let count=0;context.fetch=async()=>{count++;return {ok:false,status:521,text:async()=> 'down'};};await assert.rejects(context.run('fugle_daytrade_priority_pool',rows,'symbol',{batchSize:200}),/HTTP 521/);assert.equal(count,1);console.log('PASS actual Writer path: bounded batches, serial requests, exact set, HTTP failure stops without replay');})().catch(e=>{console.error(e);process.exitCode=1;});
