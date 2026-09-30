@@ -45,13 +45,13 @@ check(desktop.includes('fetch(`/api/main-force-costs?${query.toString()}`'), "de
 check(desktop.includes('須有同日正式分點資料'), "desktop_main_force_same_day_message_missing");
 check(desktop.includes('style.status === "unclassified"') && desktop.includes('return `${label} 未分類`'), "desktop_main_force_unclassified_state_missing");
 check(/\$\{threeGatePrices\}\r?\n\s+\$\{mainForceCosts\}/.test(desktop), "desktop_main_force_card_not_inserted");
-check(desktop.includes('if (supportsMainForceCosts(route)) hydrateMainForceCosts(route, rows, previousGoodTradeDate || routeDataDate)'), "desktop_main_force_render_hydration_missing");
+check(desktop.includes('data-main-force-request') && !desktop.includes('if (supportsMainForceCosts(route)) hydrateMainForceCosts(route, rows, previousGoodTradeDate || routeDataDate)'), "desktop_main_force_on_demand_missing");
 check(lib.includes('async function attachMainForceCostsToPayload'), "shared_main_force_payload_enrichment_missing");
 check(lib.includes('payload.mainForceCostContract = {'), "shared_main_force_contract_missing");
 check(strategy2.includes('await attachMainForceCostsToPayload(responsePayload);'), "strategy2_main_force_direct_api_missing");
 check(strategy3.includes('strategy3_v2') && fastBundle.includes('MAIN_FORCE_ENDPOINTS'), "strategy3_v2_main_force_fast_bundle_contract_missing");
-check(strategy4.includes('await attachMainForceCostsToPayload(cached);') && strategy4.includes('await attachMainForceCostsToPayload(payload);'), "strategy4_main_force_direct_or_snapshot_api_missing");
-check(strategy5.includes('await attachMainForceCostsToPayload(cached);') && strategy5.includes('await attachMainForceCostsToPayload(payload);'), "strategy5_main_force_direct_or_snapshot_api_missing");
+check(strategy4.includes('attachMainForceCostsToPayload') && lib.includes('options.requested !== true'), "strategy4_main_force_direct_or_snapshot_api_missing");
+check(strategy5.includes('attachMainForceCostsToPayload') && lib.includes('options.requested !== true'), "strategy5_main_force_direct_or_snapshot_api_missing");
 check(institution.includes('allowStale: marketCalendar?.marketOpen === false') && institution.includes('attachMainForceCostsToPayload(payload)'), "institution_main_force_live_api_or_weekend_snapshot_fast_path_missing");
 
 async function main() {
@@ -60,14 +60,15 @@ async function main() {
     const asOf = argValue("--date", "");
     const codes = argValue("--codes", "").split(",").filter(Boolean);
     if (!asOf || !codes.length) throw new Error("live_requires_date_and_codes");
-    const result = await fetchMainForceCosts({ asOf, codes });
+    const result = await fetchMainForceCosts({ asOf, codes, requested: true });
     check(result.asOfDate === asOf, "live_as_of_date_mismatch");
     const compactPayload = { tradeDate: asOf.replace(/-/g, ""), rows: codes.map((code) => ({ code })) };
     await attachMainForceCostsToPayload(compactPayload);
+    check(compactPayload.mainForceCostContract?.source === "on_demand:not_requested", "automatic_payload_read_not_deferred");
     check(compactPayload.mainForceCostContract?.asOfDate === asOf, "live_compact_trade_date_normalization_failed");
     for (const item of result.items) {
       const attached = compactPayload.rows.find((row) => row.code === item.code)?.terminalMainForce;
-      check(attached?.tradeDate === asOf, `live_payload_attach_missing:${item.code}`);
+      check(attached === null, `automatic_payload_should_not_fetch:${item.code}`);
     }
 
     for (const item of result.items) {

@@ -1,0 +1,38 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const { createMainForceReadCache } = require('../lib/main-force-read-cache');
+const { fetchMainForceCosts } = require('../lib/terminal-main-force-costs');
+(async () => {
+  let time=0,calls=0;
+  const cache=createMainForceReadCache({now:()=>time,successMs:100,missingMs:20,failureMs:30});
+  const load=async codes=>{calls++;return codes.filter(c=>c!=='0000').map(code=>({code,tradeDate:'2026-09-30',status:'ready',nested:{value:1}}));};
+  const read=(codes,date='2026-09-30',loader=load)=>cache({scope:'source',date,codes,load:loader});
+  const parallel=await Promise.all(Array.from({length:30},()=>read(['6531'])));
+  assert.equal(calls,1); parallel[0][0].nested.value=99;
+  assert.equal((await read(['6531']))[0].nested.value,1);
+  await read(['6531','2330']); assert.equal(calls,2);
+  await read(['0000']); await read(['0000']); assert.equal(calls,3);
+  time=21; await read(['0000']); assert.equal(calls,4);
+  await read(['6531'],'2026-10-01');assert.equal(calls,5);
+  time=101;await read(['6531']);assert.equal(calls,6);
+  const fail=async()=>{calls++;throw Error('offline');};
+  await assert.rejects(read(['1101'],'2026-09-30',fail));
+  await assert.rejects(read(['1102'],'2026-10-01',fail),/backoff/);assert.equal(calls,7);
+  assert.equal((await read(['6531']))[0].code,'6531');
+  time=132;await assert.rejects(read(['1101'],'2026-09-30',fail));assert.equal(calls,8);
+  time=180;await assert.rejects(read(['1102'],'2026-09-30',fail),/backoff/);assert.equal(calls,8);
+  const deferred=await fetchMainForceCosts({codes:['6531'],asOf:'2026-09-30'});
+  assert.equal(deferred.deferred,true);assert.equal(deferred.items.length,0);
+  let handler,requests=0;
+  const context={window:{},document:{addEventListener:(name,fn)=>{handler=fn;}},Map,Date,URLSearchParams,AbortController,setTimeout,clearTimeout,
+    fetch:async url=>{requests++;assert.match(url,/requested=1/);return {ok:true,json:async()=>({ok:true,items:[{code:'6531',tradeDate:'2026-09-30',status:'ready',mainForceCostPrice:123}]})};}};
+  vm.runInNewContext(fs.readFileSync(require.resolve('../terminal-main-force-on-demand.js'),'utf8'),context);
+  assert.equal(requests,0);
+  const output={},button={dataset:{mainForceRequest:'6531',mainForceDate:'2026-09-30'},parentElement:{querySelector:()=>output}};
+  const event={target:{closest:()=>button},preventDefault(){},stopImmediatePropagation(){}};
+  await Promise.all([handler(event),handler(event)]);assert.equal(requests,1);assert.match(output.textContent,/123/);
+  await handler(event);assert.equal(requests,1);
+  button.dataset.mainForceDate='';await handler(event);assert.equal(requests,1);assert.match(output.textContent,/缺少/);
+  console.log('PASS: no automatic request; click-only, coalescing, date isolation, positive/negative TTL, exponential backoff, immutable cached rows');
+})().catch(e=>{console.error(e);process.exit(1);});
