@@ -33,7 +33,7 @@ const LOOP_MS = Math.max(1000, Number(process.env.FUGLE_COLLECTOR_LOOP_MS || 100
 const COLLECTOR_MODE = String(process.env.FUGLE_COLLECTOR_MODE || "streaming").toLowerCase();
 const COLLECTOR_ROLE = String(process.env.FUGLE_COLLECTOR_ROLE || "default").toLowerCase();
 const MEMORY_ONLY = COLLECTOR_ROLE === 'daytrade' && process.env.FUMAN_MOTHER_POOL_RETENTION_MODE === 'one_minute_only';
-const MEMORY_ENABLED = MEMORY_ONLY || (COLLECTOR_ROLE === 'daytrade' && process.env.FUMAN_MOTHER_POOL_DETECTION_MODE === 'memory');
+const MEMORY_ENABLED = MEMORY_ONLY || (COLLECTOR_ROLE === 'daytrade' && (process.env.FUMAN_MOTHER_POOL_DETECTION_MODE || 'memory') === 'memory');
 let memoryDetectionHost = null;
 const SOURCE_HOST_ID = String(process.env.FUMAN_DAYTRADE_SOURCE_HOST_ID || process.env.FUMAN_SOURCE_HOST_ID || process.env.COMPUTERNAME || "unknown").trim();
 const SOURCE_HOST_ROLE = String(process.env.FUMAN_DAYTRADE_SOURCE_ROLE || "").trim().toLowerCase();
