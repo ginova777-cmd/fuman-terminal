@@ -1,0 +1,12 @@
+const assert=require('assert/strict');const {selectDelta,acknowledge}=require('../lib/daytrade-candle-delta');
+const opts={tradeDate:'2026-09-30',target:'isolated',nowMs:Date.parse('2026-09-30T01:10:00Z')};const row={symbol:'2330',trade_date:opts.tradeDate,candle_time:'2026-09-30T01:00:00Z',close:100,volume:10,synthetic:false,payload:{cacheUpdatedAt:'old'}};
+const first=selectDelta([row],null,opts);assert.equal(first.pending.length,1);
+assert.equal(selectDelta([row],null,opts).pending.length,1,'failure without acknowledgement remains pending');
+const cp=acknowledge(first.checkpoint,first.pending);assert.equal(selectDelta([{...row,updated_at:'new',payload:{cacheUpdatedAt:'new'}}],cp,opts).pending.length,0);
+assert.equal(selectDelta([{...row,close:101}],cp,opts).pending.length,1);
+assert.equal(selectDelta([row],cp,{...opts,target:'another'}).pending.length,1);
+assert.equal(selectDelta([{...row,candle_time:'2026-09-30T01:10:00Z'}],cp,opts).not_due,1);
+assert.equal(selectDelta([row,row],null,opts).pending.length,1);
+assert.throws(()=>selectDelta([row,{...row,close:101}],null,opts),/CONFLICTING/);
+assert.throws(()=>selectDelta([{...row,synthetic:true}],null,opts),/NATURAL/);
+console.log('PASS: unchanged suppression, corrections, no premature ACK, target separation, completed minute only, duplicate protection');

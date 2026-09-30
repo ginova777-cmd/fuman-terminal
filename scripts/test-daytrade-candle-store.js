@@ -1,0 +1,18 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {createCandleStore}=require('../lib/daytrade-candle-store');
+let time=Date.parse('2026-09-30T01:05:00Z'),reads=0,writes=0,saved,fail=false;
+const row={code:'2330',candleTime:'2026-09-30T01:04:00Z',candleSeenAt:new Date(time).toISOString(),close:100,isSynthetic:false};
+const store=createCandleStore({read:()=>{reads++;return {candles:[]};},write:x=>{if(fail)throw Error('disk');writes++;saved=x;},now:()=>time,retentionMs:8*3600000});
+store.merge([row]);for(let i=0;i<100;i++)store.merge([row]);assert.equal(reads,1);assert.equal(writes,1);assert.deepEqual(saved.candles,[row]);
+for(let i=1;i<=1000;i++)store.merge([{...row,candleSeenAt:new Date(time+i).toISOString()}]);
+assert.equal(writes,1,'new receive timestamps must not rewrite unchanged market bars');
+assert.equal(saved.candles[0].candleSeenAt,row.candleSeenAt,'duplicates must not refresh market freshness');
+store.merge([{...row,payload:{volume:200}}]);assert.equal(writes,2);
+store.merge([{...row,payload:{volume:201}}]);assert.equal(writes,3,'provider corrections must be persisted');
+store.merge([{...row,payload:{volume:201},isSynthetic:true}]);assert.equal(writes,4,'quality changes must not be deduplicated');
+store.merge([{...row,close:101}]);assert.equal(saved.candles[0].close,101);assert.equal(saved.count,1);
+fail=true;assert.throws(()=>store.merge([{...row,close:102}]),/disk/);fail=false;store.merge([]);assert.equal(saved.candles[0].close,102);
+time+=9*3600000;store.merge([]);assert.equal(saved.count,0);
+assert.throws(()=>store.merge([{code:'bad'}]),/IDENTITY/);
+console.log('PASS: single read, duplicate suppression, corrected K, failed write retained, expiry, invalid identity');
