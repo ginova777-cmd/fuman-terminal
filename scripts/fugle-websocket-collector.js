@@ -1294,7 +1294,13 @@ function mergeStreamingQuotes(newQuotes, flush = false) {
   return quotes.length;
 }
 
-const streamingCandleStore = require('../lib/daytrade-candle-store').createCandleStore({
+const streamingCandleStore = COLLECTOR_ROLE === 'daytrade'
+  ? require('../lib/daytrade-async-candle-store').createAsyncCandleStore({
+    file: FUGLE_WS_CANDLES_FILE,
+    retentionMs: Math.max(QUOTE_TTL_MS, 8 * 60 * 60 * 1000),
+    onStatus: status => writeStatus({ candlePersistence: status }),
+  })
+  : require('../lib/daytrade-candle-store').createCandleStore({
   read: () => readJson(FUGLE_WS_CANDLES_FILE, {}),
   write: value => writeJson(FUGLE_WS_CANDLES_FILE, value),
   retentionMs: Math.max(QUOTE_TTL_MS, 8 * 60 * 60 * 1000),
