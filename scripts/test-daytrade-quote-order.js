@@ -1,0 +1,34 @@
+const assert=require('node:assert/strict');
+const m={exports:require('../lib/fugle-websocket-quotes')};
+const {normalizeFugleTrade:normal,mergeFugleQuoteState:merge}=m.exports;
+const t=Date.parse('2026-09-30T02:00:00Z');const trade=(serial,time=t,price=100)=>normal({symbol:'2330',price,volume:1000,serial,time:time*1000});
+let state=merge({},trade(10));assert.equal(state.tradeVolume,1000);assert.equal(state.quoteSeenAt,new Date(t).toISOString());
+const legacy=trade(10);assert.deepEqual(merge(legacy,trade(9,t+1000,80)),legacy);assert.equal(merge(legacy,trade(11,t+1000,101)).tradeOrder.serial,11);
+assert.deepEqual(merge(state,trade(10,t+1000,90)),state);assert.deepEqual(merge(state,trade(9,t+2000,80)),state);assert.deepEqual(merge(state,trade(11,t-1000,70)),state);
+state=merge(state,trade(11,t+1000,101));assert.equal(state.close,101);assert.equal(state.tradeVolume,1000);
+let aggregate={quoteSource:'fugle-ws-aggregates',exchangeTime:new Date(t+1000).toISOString(),quoteSeenAt:new Date(t+1000).toISOString(),bidSize:20};state=merge(state,aggregate);assert.equal(state.tradeOrder.serial,11);assert.equal(state.bidSize,20);assert.deepEqual(merge(state,trade(10,t+2000,50)),state);
+assert.equal(merge(state,trade(1,t+86400000,99)).close,99);
+const missing=normal({symbol:'2330',price:120,volume:1000,serial:12});assert(!missing.quoteSeenAt);assert.deepEqual(merge(state,missing),state);
+const agg=m.exports.normalizeFugleAggregate;
+const missingAggregate=agg({symbol:'2330',closePrice:100,previousClose:99,total:{tradeVolume:1000}});
+assert(!missingAggregate.quoteSeenAt);assert.deepEqual(merge(state,missingAggregate),state);
+const realAggregate=agg({symbol:'2330',closePrice:101,previousClose:99,lastUpdated:(t+2000)*1000,lastTrade:{price:101,time:(t+1000)*1000},total:{tradeVolume:1000,time:(t+1500)*1000}});
+assert.equal(realAggregate.lastTradeTime,new Date(t+1000).toISOString());assert.equal(realAggregate.totalVolumeSourceEventAt,new Date(t+1500).toISOString());assert.equal(realAggregate.aggregateLastUpdated,new Date(t+2000).toISOString());
+assert.equal(merge(state,realAggregate).tradeOrder.serial,11);
+// A newer aggregate notification does not prove a newer last-trade price.
+const makeAggregate=(updated,executed,price,volumeAt=updated)=>agg({symbol:'2330',market:'TSE',closePrice:price,previousClose:99,lastUpdated:updated*1000,lastTrade:{price,time:executed*1000},total:{tradeVolume:1200,time:volumeAt*1000},bids:[{price:100,size:20}]});
+let mixed=merge({},trade(20,t+5000,105));
+mixed=merge(mixed,makeAggregate(t+10000,t+3000,103));
+assert.equal(mixed.close,105);assert.equal(mixed.lastTradeTime,new Date(t+5000).toISOString());assert.equal(mixed.bidSize,20);
+assert.equal(mixed.quoteSeenAt,new Date(t+10000).toISOString());
+// Trade time can precede aggregate notification time and still be the newest trade.
+mixed=merge(mixed,trade(21,t+7000,107));
+assert.equal(mixed.close,107);assert.equal(mixed.lastTradeTime,new Date(t+7000).toISOString());
+assert.equal(mixed.quoteSeenAt,new Date(t+10000).toISOString());assert.equal(mixed.tradeVolume,1200);
+assert.equal(mixed.totalVolumeSourceEventAt,new Date(t+10000).toISOString());
+assert.deepEqual(merge(mixed,makeAggregate(t+9000,t+8000,108)),mixed);
+assert.equal(merge(mixed,trade(1,t+86400000,99)).aggregateLastUpdated,undefined);
+const context=merge({...mixed,high:110,low:95,open:98,prevClose:99,tradeValue:123456,market:'TSE'},trade(22,t+11000,106));
+assert.equal(context.high,110);assert.equal(context.low,95);assert.equal(context.open,98);assert.equal(context.prevClose,99);assert.equal(context.tradeValue,123456);assert.equal(context.market,'TSE');
+assert.equal(context.change,7);assert.equal(context.percent,7/99*100);
+console.log(JSON.stringify({pass:true,scope:'isolated_quote_event_order',production_acceptance:false}));
