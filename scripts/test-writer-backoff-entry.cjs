@@ -1,0 +1,18 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),assert=require('node:assert/strict'),{spawnSync}=require('node:child_process');
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'writer-entry-'));
+fs.mkdirSync(path.join(root,'scripts'));fs.mkdirSync(path.join(root,'state'));
+fs.copyFileSync(path.join(__dirname,'writer-database-backoff.cjs'),path.join(root,'scripts','writer-database-backoff.cjs'));
+const source=fs.readFileSync(path.join(__dirname,'../ops/public-slot/Run-DaytradeSourceWriter.ps1'),'utf8');
+const block=source.slice(source.indexOf('# Serializes the entire round'),source.indexOf('# FUMAN_MARKET_CLOSED_RUNNER_GUARD_V1'));
+const quote=s=>"'"+s.replace(/'/g,"''")+"'";
+const script=path.join(root,'entry.ps1'),marker=path.join(root,'downstream.txt'),state=path.join(root,'state','writer-database-backoff.json');
+fs.writeFileSync(script,`$ErrorActionPreference='Stop'\n$Apply=$true;$LocalCheck=$false\n$RepoRoot=${quote(root)}\n$StateDir=Join-Path $RepoRoot 'state'\nfunction Write-WrapperLog { param($Message) }\n${block}\nSet-Content -LiteralPath ${quote(marker)} -Value 'downstream would start'\n`);
+const run=()=>spawnSync('pwsh',['-NoProfile','-File',script],{encoding:'utf8',timeout:10000});
+const b=require('./writer-database-backoff.cjs');b.failure(state,'HTTP 522');
+assert.equal(run().status,75);assert.equal(fs.existsSync(marker),false);
+b.success(state);assert.equal(run().status,0);assert.equal(fs.existsSync(marker),true);
+fs.unlinkSync(marker);fs.writeFileSync(state,'invalid');assert.equal(run().status,1);assert.equal(fs.existsSync(marker),false);
+assert(source.indexOf('Update-WriterDatabaseBackoff \'failure\' $fastSyncText')<source.indexOf('exit 9010'));
+assert(source.includes("Update-WriterDatabaseBackoff 'failure' ($stderrText + ' ' + $stdoutText)"));
+console.log('PASS: actual PowerShell entry blocks downstream during cooldown and corrupt state; allows success-reset round; no network');
