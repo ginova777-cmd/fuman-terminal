@@ -32,6 +32,9 @@ const FINMIND_TOKEN_FILES = [
 const LOOP_MS = Math.max(1000, Number(process.env.FUGLE_COLLECTOR_LOOP_MS || 1000));
 const COLLECTOR_MODE = String(process.env.FUGLE_COLLECTOR_MODE || "streaming").toLowerCase();
 const COLLECTOR_ROLE = String(process.env.FUGLE_COLLECTOR_ROLE || "default").toLowerCase();
+const MEMORY_ONLY = COLLECTOR_ROLE === 'daytrade' && process.env.FUMAN_MOTHER_POOL_RETENTION_MODE === 'one_minute_only';
+const MEMORY_ENABLED = MEMORY_ONLY || (COLLECTOR_ROLE === 'daytrade' && process.env.FUMAN_MOTHER_POOL_DETECTION_MODE === 'memory');
+let memoryDetectionHost = null;
 const SOURCE_HOST_ID = String(process.env.FUMAN_DAYTRADE_SOURCE_HOST_ID || process.env.FUMAN_SOURCE_HOST_ID || process.env.COMPUTERNAME || "unknown").trim();
 const SOURCE_HOST_ROLE = String(process.env.FUMAN_DAYTRADE_SOURCE_ROLE || "").trim().toLowerCase();
 const SOURCE_HOST_APPROVAL_FILE = path.join(RUNTIME_DIR, "config", "daytrade-source-host-approval.json");
@@ -290,6 +293,8 @@ async function mirrorDaytradeSourceTransport(snapshot) {
 }
 
 function scheduleSourceStatusHeartbeat(snapshot) {
+  if (MEMORY_ENABLED) memoryDetectionHost?.updateTransport(snapshot);
+  if (MEMORY_ONLY) return;
   if (COLLECTOR_ROLE !== "daytrade" || sourceStatusHeartbeatInFlight) return;
   const now = Date.now();
   if (now - lastSourceStatusHeartbeatAt < SOURCE_STATUS_HEARTBEAT_MS) return;
@@ -1250,6 +1255,10 @@ function selectStreamingSymbols(rotationCursor = 0) {
 let pendingStreamingQuotes = [];
 let streamingQuoteFlushTimer = null;
 function mergeStreamingQuotes(newQuotes, flush = false) {
+  if (MEMORY_ENABLED && !flush) memoryDetectionHost?.ingest(newQuotes);
+  if (MEMORY_ONLY) {
+    return memoryDetectionHost?.status().bridge?.symbols || 0;
+  }
   if (!flush) {
     pendingStreamingQuotes.push(...newQuotes);
     if (!streamingQuoteFlushTimer) streamingQuoteFlushTimer = setTimeout(() => {
@@ -1293,6 +1302,7 @@ const streamingCandleStore = require('../lib/daytrade-candle-store').createCandl
 let pendingStreamingCandles = [];
 let streamingCandleFlushTimer = null;
 function mergeStreamingCandles(newCandles, flush = false) {
+  if (MEMORY_ENABLED && !flush) memoryDetectionHost?.ingestCandles(newCandles);
   if (!flush) {
     pendingStreamingCandles.push(...newCandles);
     if (!streamingCandleFlushTimer) streamingCandleFlushTimer = setTimeout(() => {
@@ -1320,6 +1330,15 @@ async function runStreamingCollector() {
     return;
   }
 
+  if (MEMORY_ENABLED && !memoryDetectionHost) {
+    memoryDetectionHost = require('../lib/daytrade-collector-detection-host').createCollectorDetectionHost({
+      loadWarmup: () => require('./prepare-daytrade-memory-warmup').prepare(),
+      mergeQuote: mergeFugleQuoteState,
+      onStatus: status => writeStatus({ memoryDetection: status }),
+    });
+    memoryDetectionHost.start().catch(error => writeStatus({ memoryDetection: { ok: false, reason: error.message } }));
+    process.once('exit', () => memoryDetectionHost.stop());
+  }
   let rotationCursor = 0;
   let connectionAttempts = 0;
   const runOnce = () => new Promise((resolve) => {
