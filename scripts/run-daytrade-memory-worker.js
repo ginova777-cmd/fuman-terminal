@@ -12,8 +12,10 @@ async function runWorker({channel=process,endpoint=process.env.FUMAN_MOTHER_POOL
    if(message?.type==='daytrade_detection_warmup'){
     if(!Array.isArray(message.jsonInputs)||message.jsonInputs.length>300)throw Error('WARMUP_JSON_INPUTS_INVALID');
     if(message.baselineEncoding!=='map-metadata-v1')throw Error('WARMUP_ENCODING_REQUIRED');
+    reply({type:'daytrade_detection_warmup_stage',stage:'DECODE_BASELINE'});
     const baseline=decodeBaseline(message.baseline);
     const inputs=new Map(message.jsonInputs);
+    reply({type:'daytrade_detection_warmup_stage',stage:'APPLY_BASELINE'});
     service.warmup({...baseline,readMemoryJson:(file,fallback)=>{
      if(!inputs.has(file))throw Error('MEMORY_INPUT_NOT_PREFETCHED');
      const record=inputs.get(file);
