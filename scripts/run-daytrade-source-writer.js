@@ -8686,11 +8686,12 @@ async function tick() {
             },
             persist:async body=>{
               if(DRY_RUN)throw Error('MODULE_DRY_RUN_NO_PERSISTENCE');
-              const wire=require('../lib/daytrade-module-compact-wire').compact(body);
+              const transport=require('../lib/daytrade-module-shared-wire.cjs').shared(body);
+              const wire=transport.wire;
               const wireText=JSON.stringify(wire);
-              recordModule({stage:'rpc_start',endpoint:'persist_daytrade_module_round_compact_v1',request_bytes:Buffer.byteLength(wireText),legacy_request_bytes:Buffer.byteLength(JSON.stringify(body)),timeout_ms:SUPABASE_WRITE_TIMEOUT_MS});
+              recordModule({stage:'rpc_start',endpoint:transport.endpoint,request_bytes:Buffer.byteLength(wireText),legacy_request_bytes:Buffer.byteLength(JSON.stringify(body)),timeout_ms:SUPABASE_WRITE_TIMEOUT_MS});
               let response;
-              try { response=await fetch(SUPABASE_URL+'/rest/v1/rpc/persist_daytrade_module_round_compact_v1',{
+              try { response=await fetch(SUPABASE_URL+'/rest/v1/rpc/'+transport.endpoint,{
                 method:'POST',headers:headers(requireSupabaseKey(true)),body:wireText,signal:AbortSignal.timeout(SUPABASE_WRITE_TIMEOUT_MS)});
               } catch(error) {
                 recordModule({stage:'rpc_failure',error_name:error?.name||'Error'});
@@ -8698,7 +8699,7 @@ async function tick() {
                 return require('./module-persistence-circuit.cjs').recoverTimedOutWrite(async()=>{
                 const document=JSON.parse(body.p_document);
                 const fixed={module_id:'eq.'+document.module_id,trade_date:'eq.'+document.trade_date,writer_run_id:'eq.'+document.writer_run_id};
-                const rounds=await supabaseGetPaged('fugle_daytrade_module_round_v2',new URLSearchParams({...fixed,select:'module_id,trade_date,writer_run_id,document,committed_at',order:'writer_run_id.asc'}).toString(),{service:true,requireExactCount:true,pageSize:500,maxRows:2});
+                const rounds=await require('../lib/daytrade-module-ack-wait.cjs').waitForRound(()=>supabaseGetPaged('fugle_daytrade_module_round_v2',new URLSearchParams({...fixed,select:'module_id,trade_date,writer_run_id,document,committed_at',order:'writer_run_id.asc'}).toString(),{service:true,requireExactCount:true,pageSize:500,maxRows:2}));
                 const rows=await supabaseGetPaged('fugle_daytrade_module_rows_v2',new URLSearchParams({...fixed,select:'module_id,trade_date,writer_run_id,symbol,evidence',order:'symbol.asc'}).toString(),{service:true,requireExactCount:true,pageSize:500,maxRows:document.plan.requested_symbols.length});
                 return require('../lib/daytrade-module-write-ack').verify(document,rounds,rows);
                 });
