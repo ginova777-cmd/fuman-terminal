@@ -8615,6 +8615,7 @@ async function tick() {
   // Persist real natural-candle module rows before fixed-round capture.
   result.payload.module_write_sets = {};
   result.payload.module_persistence_errors = [];
+  const moduleCircuit = require('./module-persistence-circuit.cjs').createCircuit();
   let persistModuleInput = null;
   if (sideMinutes >= 360 && sideMinutes < 810) {
     try {
@@ -8672,6 +8673,7 @@ async function tick() {
       const frozenModuleInputs=require('../lib/mother-pool-module-input-checkpoint').load(result.payload.module_input_checkpoint,identity).inputs;
       await publishInitialSource();
       persistModuleInput = async input => {
+          moduleCircuit.assertHealthy();
           const evidenceId=require('node:crypto').randomUUID();
           const moduleStarted=Date.now();
           const recordModule=event=>fs.appendFileSync(path.join(dir,'module-persistence-timing-'+identity.trade_date+'.jsonl'),JSON.stringify({checked_at:nowIso(),...identity,module_id:input.module_id,evidence_id:evidenceId,elapsed_ms:Date.now()-moduleStarted,...event})+'\n');
@@ -8693,11 +8695,13 @@ async function tick() {
               } catch(error) {
                 recordModule({stage:'rpc_failure',error_name:error?.name||'Error'});
                 if(!['TimeoutError','AbortError'].includes(error?.name))throw error;
+                return require('./module-persistence-circuit.cjs').recoverTimedOutWrite(async()=>{
                 const document=JSON.parse(body.p_document);
                 const fixed={module_id:'eq.'+document.module_id,trade_date:'eq.'+document.trade_date,writer_run_id:'eq.'+document.writer_run_id};
                 const rounds=await supabaseGetPaged('fugle_daytrade_module_round_v2',new URLSearchParams({...fixed,select:'module_id,trade_date,writer_run_id,document,committed_at',order:'writer_run_id.asc'}).toString(),{service:true,requireExactCount:true,pageSize:500,maxRows:2});
                 const rows=await supabaseGetPaged('fugle_daytrade_module_rows_v2',new URLSearchParams({...fixed,select:'module_id,trade_date,writer_run_id,symbol,evidence',order:'symbol.asc'}).toString(),{service:true,requireExactCount:true,pageSize:500,maxRows:document.plan.requested_symbols.length});
                 return require('../lib/daytrade-module-write-ack').verify(document,rounds,rows);
+                });
               }
               recordModule({stage:'rpc_response',http_status:response.status});
               if(!response.ok)throw Error('MODULE_RPC_HTTP_'+response.status+':'+(await response.text()).slice(0,240));
@@ -8708,7 +8712,7 @@ async function tick() {
           result.payload.module_write_sets[input.module_id]=saved;
           recordModule({stage:'ack_verified',written_count:saved.ack.written_symbols.length,data_gap_count:saved.plan.data_gap_symbols.length});
           return saved;
-          } catch(error) {recordModule({stage:'failed',error_name:error?.name||'Error',reason:String(error.message||error).split(':')[0]});throw error;}
+          } catch(error) {moduleCircuit.record(error);recordModule({stage:'failed',error_name:error?.name||'Error',reason:String(error.message||error).split(':')[0]});throw error;}
       };
       for(const queued of inputs){
         let input=typeof queued.build==='function'?queued:frozenModuleInputs.find(value=>value.module_id===queued.module_id);
@@ -8716,7 +8720,7 @@ async function tick() {
           if(typeof input.build==='function')input=input.build();
           const saved=await persistModuleInput(input);
           if(input.module_id==='B02')writeJson(statePath('daytrade-b02-module-latest.json'),saved);
-        }catch(error){result.payload.module_persistence_errors.push({module_id:input.module_id,error:String(error.message||error)});}
+        }catch(error){result.payload.module_persistence_errors.push({module_id:input.module_id,error:String(error.message||error)});if(moduleCircuit.blocked)break;}
       }
       const sideFile=result.payload.mother_pool_minute_side_persist?.write_set_file;
       if(sideMinutes>=540)result.payload.b24_source_coverage=require('../lib/mother-pool-combination-sources').inspect({
@@ -8724,6 +8728,7 @@ async function tick() {
         side:sideFile?readJson(sideFile,null):null,asOf:nowIso()});
     }catch(error){result.payload.module_persistence_errors.push({error:String(error.message||error)});}
   }
+  moduleCircuit.assertHealthy();
   await publishInitialSource();
   writeModuleProducerReceipts(result, taipeiDate());
   try {
@@ -8760,6 +8765,7 @@ async function tick() {
     }
     result.payload.module_readback_capture={status:captures.every(c=>c.status===0)?'ok':'blocked',captures};
   } catch (error) { result.payload.module_readback_capture = { status: 'blocked', exit_code: 1, error: String(error?.message || error) }; }
+  moduleCircuit.assertHealthy();
   // Independent module verification is a separate process. It only promotes
   // immutable rounds carrying real DB/anon artifacts; pending rounds remain pending.
   try {
