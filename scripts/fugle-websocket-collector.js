@@ -1377,6 +1377,7 @@ async function runStreamingCollector() {
     let messages = 0;
     let quoteMessages = 0;
     let candleMessages = 0;
+    const candleInputDiagnostics = require('../lib/daytrade-candle-input-diagnostics.cjs').create();
     const channelMessages = Object.fromEntries(STREAMING_CHANNELS.map((channel) => [channel, 0]));
     const channelQuotes = Object.fromEntries(STREAMING_CHANNELS.map((channel) => [channel, 0]));
     const channelCandles = Object.fromEntries(STREAMING_CHANNELS.map((channel) => [channel, 0]));
@@ -1427,6 +1428,7 @@ async function runStreamingCollector() {
         streamingQuotes: quoteMessages,
         streamingQuoteSpeedPerSec: elapsedSeconds > 0 ? Number((quoteMessages / elapsedSeconds).toFixed(4)) : 0,
         streamingCandles: candleMessages,
+        candleInputDiagnostics: candleInputDiagnostics.snapshot(),
         streamingChannelMessages: channelMessages,
         streamingChannelQuotes: channelQuotes,
         streamingChannelCandles: channelCandles,
@@ -1684,6 +1686,7 @@ async function runStreamingCollector() {
         if (inferredChannel === "trades") providerTradeJournal.capture(data, lastTransportMessageAt);
         if (inferredChannel === "candles") {
           const candles = normalizeFugleCandles(payload);
+          candleInputDiagnostics.observe(payload, candles, lastTransportMessageAt);
           if (candles.length) {
             candleMessages += candles.length;
             if (Object.prototype.hasOwnProperty.call(channelCandles, inferredChannel)) channelCandles[inferredChannel] += 1;
