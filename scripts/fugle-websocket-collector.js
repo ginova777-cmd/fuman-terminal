@@ -34,7 +34,7 @@ const LOOP_MS = Math.max(1000, Number(process.env.FUGLE_COLLECTOR_LOOP_MS || 100
 const COLLECTOR_MODE = String(process.env.FUGLE_COLLECTOR_MODE || "streaming").toLowerCase();
 const COLLECTOR_ROLE = String(process.env.FUGLE_COLLECTOR_ROLE || "default").toLowerCase();
 const MEMORY_ONLY = COLLECTOR_ROLE === 'daytrade' && process.env.FUMAN_MOTHER_POOL_RETENTION_MODE === 'one_minute_only';
-const MEMORY_ENABLED = MEMORY_ONLY || (COLLECTOR_ROLE === 'daytrade' && (process.env.FUMAN_MOTHER_POOL_DETECTION_MODE || 'memory') === 'memory');
+const MEMORY_ENABLED = MEMORY_ONLY || (COLLECTOR_ROLE === 'daytrade' && (process.env.FUMAN_MOTHER_POOL_DETECTION_MODE || 'legacy') === 'memory');
 let memoryDetectionHost = null;
 let preopenWorker = null;
 let preopenWorkerStatus = { status: 'NOT_STARTED' };
