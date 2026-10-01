@@ -47,7 +47,7 @@ test('legacy unverified futures arrays cannot seed',()=>assert(!execute(defaults
 
 test('official code-mapped futures enter actual Writer union',()=>{
  const {FUGLE,TAIFEX}=require('../lib/mother-pool-futures-catalogue'),{hash}=require('../lib/mother-pool-module-write-set');
- const raw_fugle={data:[{symbol:'CDFL6',contractType:'S',endDate:'2026-12-16'}]},raw_taifex_html='證券代號 股票期貨<tr>'+['CD','公司','2330','台積電','●','','','◎','','','','2000','',''].map(x=>'<td>'+x+'</td>').join('')+'</tr>';
+ const raw_fugle={date,type:'FUTURE',exchange:'TAIFEX',session:'REGULAR',data:[{symbol:'CDFL6',contractType:'S',endDate:'2026-12-16'},{symbol:'TXFL6',contractType:'I',endDate:'2026-12-16'}]},raw_taifex_html='證券代號 股票期貨<tr>'+['CD','公司','2330','台積電','●','','','◎','','','','2000','',''].map(x=>'<td>'+x+'</td>').join('')+'</tr>';
  const futuresSource={contract:'mother_pool_futures_catalogue_v1',trade_date:date,run_id:'fixture-catalogue',observed_at:date+'T00:00:00Z',fugle_url:FUGLE,taifex_url:TAIFEX,raw_fugle,raw_taifex_html,source_hash:hash({fugle:raw_fugle,taifex:raw_taifex_html})};
  const result=execute(defaults(),{priorityBridge:{tradeDate:date,groups:defaults(),futuresSource}});
  assert(result.symbols.find(r=>r.symbol==='2330').sources.includes('stock_future'));

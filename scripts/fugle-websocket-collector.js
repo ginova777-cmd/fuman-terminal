@@ -218,6 +218,10 @@ function symbolSource() {
   if (readDaytradeSymbolBootstrap().length) return "priority_bridge_bootstrap_codes_only";
   return "empty";
 }
+const statusPublication = require('../lib/collector-status-publication.cjs').createStatusPublication(payload => writeJson(FUGLE_WS_STATUS_FILE, payload));
+function writeComponentStatus(name, status) {
+  return statusPublication.component(name, status, { tradeDate: taipeiDate(), pid: process.pid });
+}
 function writeStatus(extra = {}) {
   const currentSymbolSource = symbolSource();
   const tradeDate = taipeiDate();
@@ -266,8 +270,7 @@ function writeStatus(extra = {}) {
     symbolBootstrapOnly: currentSymbolSource === "priority_bridge_bootstrap_codes_only",
     ...extra,
   };
-  writeJson(FUGLE_WS_STATUS_FILE, payload);
-  return payload;
+  return statusPublication.publish(payload);
 }
 
 function retryableSourceStatusError(status) {
@@ -1301,7 +1304,7 @@ const streamingCandleStore = COLLECTOR_ROLE === 'daytrade'
   ? require('../lib/daytrade-async-candle-store').createAsyncCandleStore({
     file: FUGLE_WS_CANDLES_FILE,
     retentionMs: Math.max(QUOTE_TTL_MS, 8 * 60 * 60 * 1000),
-    onStatus: status => writeStatus({ candlePersistence: status }),
+    onStatus: status => writeComponentStatus('candlePersistence', status),
   })
   : require('../lib/daytrade-candle-store').createCandleStore({
   read: () => readJson(FUGLE_WS_CANDLES_FILE, {}),
@@ -1343,9 +1346,9 @@ async function runStreamingCollector() {
     memoryDetectionHost = require('../lib/daytrade-collector-detection-host').createCollectorDetectionHost({
       loadWarmup: () => require('./prepare-daytrade-memory-warmup').prepare(),
       mergeQuote: mergeFugleQuoteState,
-      onStatus: status => writeStatus({ memoryDetection: status }),
+      onStatus: status => writeComponentStatus('memoryDetection', status),
     });
-    memoryDetectionHost.start().catch(error => writeStatus({ memoryDetection: { ok: false, reason: error.message } }));
+    memoryDetectionHost.start().catch(error => writeComponentStatus('memoryDetection', { ok: false, reason: error.message }));
     process.once('exit', () => memoryDetectionHost.stop());
   }
   let rotationCursor = 0;
