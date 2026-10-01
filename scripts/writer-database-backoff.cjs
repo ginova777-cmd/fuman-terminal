@@ -11,7 +11,7 @@ function validate(s) {
   return s;
 }
 function transient(message) {
-  return /HTTP[ _:]*(?:429|500|502|503|504|521|522|523|524)\b|fetch failed|AbortError|TimeoutError|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENOTFOUND|operation was aborted|statement timeout|pool.*(?:timeout|timed out)/i.test(String(message));
+  return /writer_node_timeout_seconds=\d+\b|HTTP[ _:]*(?:429|500|502|503|504|521|522|523|524)\b|fetch failed|AbortError|TimeoutError|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ENOTFOUND|operation was aborted|statement timeout|pool.*(?:timeout|timed out)/i.test(String(message));
 }
 function write(file, state) {
   fs.mkdirSync(path.dirname(file), {recursive:true});
