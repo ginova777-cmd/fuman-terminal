@@ -776,7 +776,7 @@ async function supabaseUpsertUnchecked(resource, rows, conflict, options = {}) {
   const retryDelayMs = Math.max(250, Math.min(Number(options.retryDelayMs || 1000), 5000));
   const tracePriority = resource==='fugle_daytrade_priority_pool';
   for (const {offset:i,chunk,body} of require('../lib/daytrade-write-batches').batches(rows,{
-    maxRows:tracePriority?Math.min(batchSize,50):batchSize,maxBytes:tracePriority?512*1024:Infinity,
+    maxRows:tracePriority?Math.min(batchSize,50):batchSize,maxBytes:tracePriority?512*1024:(options.maxBatchBytes ?? Infinity),
   })) {
     const batchEvidence = tracePriority ? {resource,offset:i,requested:chunk.length,bytes:Buffer.byteLength(body),sha256:require('node:crypto').createHash('sha256').update(body).digest('hex'),writer_run_id:chunk[0]?.payload?.writer_run_id,generation_id:chunk[0]?.payload?.generation_id} : null;
     let lastError = null;
@@ -8359,14 +8359,12 @@ async function tick() {
     }
   }
 
-  // The fetch/rebuild can change deep-scan membership. Re-read the
-  // WebSocket cache against that final ordering so the live quote table and
-  // source payload describe the same formal symbols in the same tick.
+  // Refresh every current mother-pool member after the slow enrichment work.
+  // The deep-scan quota limits analysis, not publication of already collected quotes.
   if (priorityRows.length) {
     const postFetchQuoteMap = new Map(quoteMap);
     mergeWebSocketQuoteCache(postFetchQuoteMap);
     const postFetchWebsocketQuoteRows = priorityRows
-      .slice(0, DEEP_SCAN_POOL_MAX_SYMBOLS)
       .map((row) => postFetchQuoteMap.get(normalizeCode(row.symbol)))
       .filter((quote) => quote && effectiveQuoteAgeSeconds(quote) <= WINDOW_SECONDS)
       .map((quote) => ({
@@ -8402,17 +8400,20 @@ async function tick() {
       .filter((quote) => quote.symbol && /^\d{4}-\d{2}-\d{2}$/.test(quote.trade_date));
     if (postFetchWebsocketQuoteRows.length) {
       try {
-        await supabaseUpsert('fugle_daytrade_quotes_live', postFetchWebsocketQuoteRows, 'symbol', { batchSize: SLOW_TABLE_BATCH_SIZE });
+        tickStage('final_mother_quotes:start',{rows:postFetchWebsocketQuoteRows.length,bytes:Buffer.byteLength(JSON.stringify(postFetchWebsocketQuoteRows)),max_batch_bytes:256*1024});
+        await supabaseUpsert('fugle_daytrade_quotes_live', postFetchWebsocketQuoteRows, 'symbol', { batchSize: Math.min(SLOW_TABLE_BATCH_SIZE,100), maxBatchBytes:256*1024 });
+        tickStage('final_mother_quotes:complete',{rows:postFetchWebsocketQuoteRows.length});
         for (const quote of postFetchWebsocketQuoteRows) quoteMap.set(quote.symbol, quote);
         websocketQuoteReadthroughSync = {
           ...websocketQuoteReadthroughSync,
           written: Math.max(websocketQuoteReadthroughSync.written || 0, postFetchWebsocketQuoteRows.length),
           skipped: false,
-          reason: 'websocket_cache_final_deep_scan_readthrough',
+          reason: 'websocket_cache_final_mother_pool_readthrough',
           finalFormalRows: postFetchWebsocketQuoteRows.length,
         };
       } catch (error) {
         fetchResult.errors.push({ target: 'fugle_daytrade_quotes_live_final_deep_scan_readthrough', message: error?.message || String(error) });
+        throw error;
       }
     }
   }
