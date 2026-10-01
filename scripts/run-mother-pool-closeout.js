@@ -5,18 +5,24 @@ const {persistModuleRound}=require('../lib/persist-mother-pool-module-round');
 const runtime=process.env.FUMAN_RUNTIME||process.env.FUMAN_RUNTIME_DIR||'C:/fuman-runtime';
 const root=path.resolve(__dirname,'..');
 function child(script,args=[]){const p=spawnSync(process.execPath,[path.join(__dirname,script),...args],{cwd:root,encoding:'utf8',windowsHide:true,timeout:120000,env:{...process.env,FUMAN_RUNTIME:runtime,FUMAN_RUNTIME_DIR:runtime}});if(p.status!==0)throw Error(script+':'+(p.stderr||p.stdout||p.error?.message||p.status).slice(-500));return JSON.parse(p.stdout);}
-const read=file=>JSON.parse(fs.readFileSync(file,'utf8'));
+const inputs=require('../lib/mother-pool-closeout-inputs.cjs');
+const read=inputs.readBounded;
 (async()=>{
  if(!process.argv.includes('--apply'))throw Error('CLOSEOUT_APPLY_REQUIRED');
  const now=new Date(),date=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(now);
  if(now.getTime()<Date.parse(date+'T13:30:00+08:00')){console.log(JSON.stringify({status:'pending',reason:'CLOSEOUT_NOT_DUE',complete:false}));process.exitCode=2;return;}
+ // B18 is an after-close entry; use recovery approval without the intraday B time gate.
+ let policy=null;try{policy=read(path.join(runtime,'config','daytrade-module-recovery-policy.json'));}catch{}
+ const head=spawnSync('git',['-C',root,'rev-parse','HEAD'],{encoding:'utf8',windowsHide:true,timeout:5000});
+ const allowed=inputs.permission(policy,require('../data/contracts/mother-pool-a01-b24-module-registry-v1.json'),{trade_date:date,release_sha:head.status===0?String(head.stdout).trim():null});
+ if(!allowed.allowed){console.log(JSON.stringify({status:'paused',module_id:'B18',reason:allowed.reason,complete:false,overall_complete:false}));process.exitCode=3;return;}
  const calendar=child('check-market-calendar-action.js',['--label=Mother Pool closeout']);
  if(calendar.tradingDay?.isTradingDay!==true||calendar.tradingDay?.date!==date){console.log(JSON.stringify({status:'skipped',reason:'NOT_CURRENT_TRADING_DAY',complete:false}));process.exitCode=3;return;}
  child('verify-release-root-authority.js',['--require-production-root']);
  child('supabase-incident-guard.js',['check','--class=guard','--action=mother-module-closeout']);
  const canonical=`fugle_daytrade_source:${date.replaceAll('-','')}:canonical`,dir=path.join(runtime,'data','scan-receipts','modules');
  fs.mkdirSync(dir,{recursive:true});
- const list=fs.readdirSync(dir).filter(f=>f.endsWith('.json')).map(f=>{try{return {file:path.join(dir,f),value:read(path.join(dir,f))};}catch{return null;}}).filter(x=>x?.value.module_id==='B01'&&x.value.trade_date===date&&x.value.canonical_run_id===canonical&&x.value.db_readback&&!x.value.rounds_verified).sort((a,b)=>Date.parse(b.value.observed_at)-Date.parse(a.value.observed_at));
+ const list=inputs.rounds(dir,date,canonical);
  const picked=[];for(const r of list){if(picked.every(x=>x.value.writer_run_id!==r.value.writer_run_id&&x.value.generation_id!==r.value.generation_id&&x.value.snapshot_generation!==r.value.snapshot_generation))picked.push(r);if(picked.length===2)break;}
  if(picked.length<2){console.log(JSON.stringify({status:'pending',reason:'TWO_NATURAL_ROUNDS_REQUIRED',complete:false}));process.exitCode=2;return;}
  picked.reverse();const attempt=randomUUID(),last=picked[1].value;
