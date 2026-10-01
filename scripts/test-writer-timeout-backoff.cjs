@@ -22,4 +22,3 @@ assert.equal(b.failure(file,'fetch failed',now+86400000).failures,1);
 fs.writeFileSync(file,'broken');assert.throws(()=>b.check(file,now),/STATE_INVALID/);
 fs.writeFileSync(file,'{}');assert.throws(()=>b.check(file,now),/STATE_INVALID/);
 console.log('PASS: persistent cooldown, expiry, cap, success reset, day recovery, classification, corrupt-state fail-closed, secret exclusion; no network');
-

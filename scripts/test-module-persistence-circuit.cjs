@@ -9,7 +9,7 @@ const {transient}=require('./writer-database-backoff.cjs');
  try{await recoverTimedOutWrite(async()=>{throw Error('MODULE_ACK_ROUND_COUNT');});}catch(e){timeout=e;}
  assert.equal(timeout.name,'TimeoutError');assert.equal(timeout.cause.message,'MODULE_ACK_ROUND_COUNT');
  assert(transient(timeout.message));
- const source=fs.readFileSync(require.resolve('./run-daytrade-source-writer.js'),'utf8');
+ const source=fs.readFileSync(require.resolve('./run-daytrade-source-writer.js'),'utf8').replace(/\r\n/g,'\n');
  const begin=source.indexOf('      for(const queued of inputs){'),end=source.indexOf('      const sideFile=',begin);
  assert(begin>0&&end>begin);
  const loop=source.slice(begin,end);
