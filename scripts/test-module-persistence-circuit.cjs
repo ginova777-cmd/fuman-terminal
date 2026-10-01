@@ -17,13 +17,16 @@ const {transient}=require('./writer-database-backoff.cjs');
  for(const error of [timeout,Error('MODULE_RPC_HTTP_503'),TypeError('fetch failed'),Error('schema invalid'),null]){
   const moduleCircuit=createCircuit(),calls=[],result={payload:{module_persistence_errors:[]}};
   const frozenModuleInputs=['A03','A04','A05'].map(module_id=>({module_id}));
-  const context={moduleCircuit,result,inputs:frozenModuleInputs,frozenModuleInputs,
+  const context={moduleCircuit,result,inputs:frozenModuleInputs,frozenModuleInputs,moduleWorkIds:()=>['A03','A04','A05'],
    persistModuleInput:async input=>{moduleCircuit.assertHealthy();calls.push(input.module_id);if(error&&input.module_id==='A03'){moduleCircuit.record(error);throw error;}return ack;}};
   await vm.runInNewContext('(async()=>{'+loop+';moduleCircuit.assertHealthy();})()',context).catch(e=>{assert.equal(e,error);});
   const blocked=error&&transient(`${error.name}: ${error.message}`);
   assert.deepEqual(calls,blocked?['A03']:['A03','A04','A05']);
   assert.equal(moduleCircuit.blocked,Boolean(blocked));
  }
+ const excluded={moduleCircuit:createCircuit(),result:{payload:{module_persistence_errors:[]}},inputs:[{module_id:'A03'}],moduleWorkIds:()=>[],persistModuleInput:()=>{throw Error('OUT_OF_SESSION_WRITE');}};
+ await vm.runInNewContext('(async()=>{'+loop+'})()',excluded);
+ assert.equal(excluded.result.payload.module_persistence_errors.length,0);
  const afterLoop=source.slice(end,source.indexOf('  writeModuleProducerReceipts',end));
  assert(afterLoop.includes('moduleCircuit.assertHealthy();'));
  assert(source.includes("moduleCircuit.record(error);recordModule({stage:'failed'"));
