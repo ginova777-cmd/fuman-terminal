@@ -7,5 +7,5 @@ let offset=0;for(const c of chunks){assert.equal(c.offset,offset);assert(c.chunk
 assert.equal([...batches([],{maxRows:50})].length,0);
 assert.throws(()=>[...batches([{x:'x'.repeat(100)}],{maxRows:50,maxBytes:10})],/SINGLE_ROW/);
 const two=[{x:'中'},{x:'文'}],size=Buffer.byteLength(JSON.stringify(two));assert.equal([...batches(two,{maxRows:50,maxBytes:size})].length,1);assert.equal([...batches(two,{maxRows:50,maxBytes:size-1})].length,2);
-const fs=require('fs');const source=fs.readFileSync(require.resolve('./run-daytrade-source-writer'),'utf8');assert(source.includes("maxRows:tracePriority?Math.min(batchSize,50):batchSize,maxBytes:tracePriority?512*1024:Infinity"));
+const fs=require('fs');const source=fs.readFileSync(require.resolve('./run-daytrade-source-writer'),'utf8');assert(source.includes("maxRows:tracePriority?Math.min(batchSize,50):batchSize,maxBytes:tracePriority?512*1024:(options.maxBatchBytes ?? Infinity)"));
 console.log(JSON.stringify({ok:true,rows:rows.length,batches:chunks.length,max_bytes:Math.max(...chunks.map(c=>Buffer.byteLength(c.body))),tests:['exact ordered set','all fields retained','UTF8 byte boundary','row limit','oversize fails closed','writer wiring']}));
