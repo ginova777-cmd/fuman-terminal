@@ -1304,6 +1304,7 @@ const streamingCandleStore = COLLECTOR_ROLE === 'daytrade'
   ? require('../lib/daytrade-async-candle-store').createAsyncCandleStore({
     file: FUGLE_WS_CANDLES_FILE,
     retentionMs: Math.max(QUOTE_TTL_MS, 8 * 60 * 60 * 1000),
+    flushDelayMs: 5000,
     onStatus: status => writeComponentStatus('candlePersistence', status),
   })
   : require('../lib/daytrade-candle-store').createCandleStore({
