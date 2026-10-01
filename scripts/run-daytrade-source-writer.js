@@ -2469,17 +2469,18 @@ async function fetchIntradayStatus(activeSymbols = []) {
 
   try {
     const symbols = [...new Set((activeSymbols || []).map((row) => normalizeCode(row.symbol || row)).filter(Boolean))];
-    // Use one server-side batch for the active universe. Sequential 200-symbol
-    // RPC calls can exceed the bounded writer tick and leave Task Scheduler stuck.
-    const rpcRows = await supabaseRpc(
-      'get_fugle_daytrade_intraday_1m_latest_n',
-      { symbols, bars_per_symbol: 200 },
-      { service: true },
-    );
+    // Bound each result below PostgREST's row cap and prove complete transport.
+    const rpcRows = await require('../lib/daytrade-intraday-rpc-batches.cjs').readLatest({symbols,
+      send:body=>fetch(SUPABASE_URL+'/rest/v1/rpc/get_fugle_daytrade_intraday_1m_latest_n',{
+        method:'POST',headers:{...headers(requireSupabaseKey(true)),Prefer:'count=exact'},body:JSON.stringify(body),
+        signal:AbortSignal.timeout(SUPABASE_READ_TIMEOUT_MS),
+      }),
+    });
     const grouped = buildGrouped(Array.isArray(rpcRows) ? rpcRows : [], tradeDate);
     if (grouped.size) return finalizeIntradayMap([...grouped.values()], 'dedicated_daytrade_intraday_1m_latest_n_rpc');
-  } catch {
-    // Fall through to direct reads; a missing/slow RPC must not weaken the gate.
+  } catch (error) {
+    // A bounded RPC failure must not fan out into a full-table fallback.
+    throw error;
   }
   try {
     const rows = await supabaseGetPaged(
