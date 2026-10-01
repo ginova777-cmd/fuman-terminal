@@ -39,6 +39,10 @@ const { isTwseTradingDay } = require("./twse-trading-day");
 const contextDetectors = require("../lib/intraday-context-detectors-b19-b24");
 const preopenA15A19 = require("../lib/preopen-a15-a19");
 const a16Writer = require("../lib/mother-pool-a16-writer");
+// Owner requested a full optional-module pause followed by one-module acceptance.
+// Keep shared market collection independent of module acceptance.
+let moduleRecovery = {status:'PAUSED',enabled:[],probe:null,reason:'POLICY_NOT_LOADED'};
+const moduleWorkIds = () => [...moduleRecovery.enabled, ...(moduleRecovery.probe ? [moduleRecovery.probe] : [])];
 const { resolveStrategyHandoff, SOURCE_REGISTRY, previousCompletedTradingDate } = require("../lib/terminal-strategy-morning-handoff");
 
 
@@ -4571,12 +4575,12 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   output.sourceSeedCounts = seeds.counts;
   output.sourceSeedAudit = seeds.sourceAudit;
   output.moduleRequestedUniverse = turnoverUniverse.map(row=>row.symbol);
-  output.volumeValueRanking = intradayTurnoverActive
+  output.volumeValueRanking = intradayTurnoverActive && moduleWorkIds().includes('B02')
     ? require('../lib/daytrade-volume-value-ranking').buildRanking(turnoverUniverse.map(row => {
       const payload = quoteMap.get(row.symbol)?.payload || {};
       return {symbol:row.symbol,volume:payload.turnoverVolumeEvidence || {},amount:payload.tradeValueEvidence || {}};
     }), {tradeDate:taipeiDate(),canonicalRunId:canonicalDaytradeRunId(taipeiDate()),now:supplementalMaps.turnoverCalculatedAt})
-    : {status:'NOT_DUE',trade_date:taipeiDate(),reason:'outside_intraday_window'};
+    : {status:'PAUSED',complete:false,trade_date:taipeiDate(),reason:'OWNER_REQUESTED_SEQUENTIAL_VALIDATION'};
   output.intradayTurnoverRanking = intradayTurnoverActive ? intradayTurnoverRanking : {
     contract: intradayTurnoverRanking.contract, status: 'NOT_DUE', trade_date: taipeiDate(),
     reason: 'outside_intraday_window', rows: [], gaps: [] };
@@ -7284,6 +7288,7 @@ async function writeStatusAndScorecard(result) {
   // Publish today's actual local universe only after the source write is acknowledged.
   // This is a runner artifact, not a module or overall COMPLETE receipt.
   if (acknowledgedMotherPoolState) writeJsonAtomic(MOTHER_POOL_DELTA_STATE_FILE, acknowledgedMotherPoolState);
+  if(!moduleWorkIds().some(id=>id.startsWith('B'))) return;
   // The turnover checklist has its own independently read-back receipt.
   // Failure here is visible but cannot erase the already published core source.
   const turnover = result.payload.intraday_turnover_ranking;
@@ -7979,6 +7984,16 @@ async function syncMarketCalendarEvidence() {
 
 async function tick() {
   writerTickIdentity = require("../lib/daytrade-writer-identity").newIdentity(SOURCE_NAME, WRITER_INSTANCE_ID, taipeiDate());
+  const recoveryRegistry = require('../data/contracts/mother-pool-a01-b24-module-registry-v1.json');
+  const recoveryHead = spawnSync('git',['-C',path.resolve(__dirname,'..'),'rev-parse','HEAD'],{encoding:'utf8',windowsHide:true,timeout:5000});
+  const recoveryRelease = recoveryHead.status===0 ? String(recoveryHead.stdout).trim() : null;
+  moduleRecovery = require('../lib/daytrade-module-recovery-policy.cjs').evaluate(
+    readJson(runtimePath('config','daytrade-module-recovery-policy.json'),null), recoveryRegistry,
+    {trade_date:taipeiDate(),release_sha:recoveryRelease});
+  if(!/^[a-f0-9]{40}$/.test(recoveryRelease||'')) moduleRecovery={status:'PAUSED',enabled:[],probe:null,paused:Object.keys(recoveryRegistry.modules),reason:'MODULE_RELEASE_UNVERIFIED'};
+  // Only A01 has a scoped producer path in this first recovery release.
+  // Additional modules require reviewed dependency isolation before probing.
+  if(moduleWorkIds().some(id=>id!=='A01')) moduleRecovery={status:'PAUSED',enabled:[],probe:null,paused:Object.keys(recoveryRegistry.modules),reason:'MODULE_ISOLATION_NOT_IMPLEMENTED'};
   console.log(JSON.stringify({ stage: 'writer_round_identity', checkedAt: nowIso(), pid: process.pid, parent_pid: process.ppid, entrypoint: __filename, ...writerTickIdentity }));
   const tickStage = (stage, extra = {}) => console.log(JSON.stringify({
     ok: true,
@@ -8001,7 +8016,7 @@ async function tick() {
   tickStage("active_symbols:start");
   const activeSymbols = await fetchActiveSymbols();
   tickStage("active_symbols:complete", { rows: activeSymbols.length });
-  const a16Warmup = a16Writer.ensureWarmup({ runtime: runtimePath(), root: repoPath(), tradeDate: taipeiDate(), symbols: activeSymbols, apply: APPLY });
+  const a16Warmup = {status:'PAUSED',complete:false,reason:'OWNER_REQUESTED_SEQUENTIAL_VALIDATION'};
   tickStage("a16_history_warmup", a16Warmup);
   // Daily volume is independent of the live candle write. Start it before the
   // slow full-market candle sync so the two I/O paths do not consume the
@@ -8033,7 +8048,7 @@ async function tick() {
     nonFatalWriteErrors.push({ target: 'full_market_latest_candles', message: error?.message || String(error) });
     tickStage("full_market_latest_candles:failed", { reason: error?.message || String(error) });
   }
-  if (!DRY_RUN && fullMarketLatestCandles.latest_candle_evidence) {
+  if (moduleWorkIds().includes('B01') && !DRY_RUN && fullMarketLatestCandles.latest_candle_evidence) {
     try {
       fullMarketLatestCandles.readback_receipt = await verifyEarlyB01Candles(
         fullMarketLatestCandles.latest_candle_evidence, fullMarketLatestCandles.trade_date);
@@ -8449,10 +8464,17 @@ async function tick() {
     canonical_run_id: `${SOURCE_NAME}:${String(taipeiDate()).replace(/-/g, '')}:canonical`,
     metrics: quoteMetrics(row.symbol, dailyVolumeMap, quoteMap, supplementalMaps),
   }));
-  result.payload.b19_b24_event_evidence = buildB19B24Evidence(result.industryUniverseRows);
+  result.payload.b19_b24_event_evidence = {status:'PAUSED',complete:false,rows:[]};
   let preopenTrialHistory = null;
   console.log(JSON.stringify({ok:true,stage:'daytrade_tick:preopen_evidence:start',checkedAt:nowIso()}));
-  result.payload.preopen_a15_a19_evidence = await buildPreopenA15A19Evidence(activeSymbols, quoteMap, taipeiDate(), evidence => { preopenTrialHistory = evidence; });
+  result.payload.preopen_a15_a19_evidence = {status:'PAUSED',complete:false,reason:'OWNER_REQUESTED_SEQUENTIAL_VALIDATION'};
+  result.payload.module_recovery = {...moduleRecovery,complete:false};
+  for(const field of ['intraday_turnover_ranking','volume_value_ranking']){
+    result.payload[field]={contract:result.payload[field]?.contract,status:'PAUSED',complete:false,
+      trade_date:taipeiDate(),rows:[],data_gaps:[],reason:'OWNER_REQUESTED_SEQUENTIAL_VALIDATION'};
+  }
+  result.payload.module_readback_capture={status:'PAUSED',complete:false};
+  result.payload.module_verifier_runner={status:'PAUSED',complete:false};
   console.log(JSON.stringify({ok:true,stage:'daytrade_tick:preopen_evidence:complete',checkedAt:nowIso()}));
   result.payload.nonfatal_write_errors = fetchResult.errors || [];
   result.payload.websocket_quote_readthrough_written = websocketQuoteReadthroughSync.written || 0;
@@ -8510,7 +8532,7 @@ async function tick() {
   const sideSnapshot=readJson(MOTHER_POOL_SNAPSHOT_FILE,{});
   const sideAsOf = nowIso();
   const sideMinutes = taipeiClockMinutesFrom(sideAsOf);
-  if (sideMinutes >= 9 * 60 && sideMinutes < 13 * 60 + 30) {
+  if (moduleWorkIds().some(id=>['B12','B13','B14','B19','B20'].includes(id)) && sideMinutes >= 9 * 60 && sideMinutes < 13 * 60 + 30) {
     try {
       const scorecardSnapshot=readJson(MOTHER_POOL_SNAPSHOT_FILE,{});
         const detectorCache=readFugleWebSocketCandles({maxAgeMs:90*60*1000});
@@ -8556,12 +8578,13 @@ async function tick() {
       result.payload.mother_pool_minute_side_persist = {status:'blocked',first_blocker:'MINUTE_SIDE_VERSIONED_WRITE_FAILED',error:String(error?.message || error)};
     }
   } else {
-    result.payload.mother_pool_price_volume_evidence={status:'NOT_DUE',as_of:sideAsOf,complete:false,reason:'outside_intraday_window'};
-    result.payload.mother_pool_minute_side_evidence = {status:'NOT_DUE',as_of:sideAsOf,complete:false,reason:'outside_intraday_window'};
+    result.payload.mother_pool_price_volume_evidence={status:'PAUSED',as_of:sideAsOf,complete:false,reason:'OWNER_REQUESTED_SEQUENTIAL_VALIDATION'};
+    result.payload.mother_pool_minute_side_evidence = {status:'PAUSED',as_of:sideAsOf,complete:false,reason:'OWNER_REQUESTED_SEQUENTIAL_VALIDATION'};
   }
   // Bind the independent detector outputs into the B24 producer input.  The
   // legacy priority flags remain useful for ranking, but are never promoted
   // to B12/B13 events here.  Only validated detector rows may set these fields.
+  if(moduleWorkIds().some(id=>id.startsWith('B'))){
   const detectorRows = new Map((result.payload.mother_pool_price_volume_evidence?.details || [])
     .map(d => [String(d.symbol), d]));
   for (const row of (result.industryUniverseRows || [])) {
@@ -8607,6 +8630,7 @@ async function tick() {
     m.vwapSignal = vwapProbe.source_contract_ok ? `VWAP_${vwapProbe.vwap_state}` : null;
   }
   result.payload.b19_b24_event_evidence = buildB19B24Evidence(result.industryUniverseRows);
+  }
   // One memoized write barrier: a failed write is never implicitly retried by
   // the outer module error handler. Input checkpoints precede this barrier.
   let initialSourcePublication = null;
@@ -8617,16 +8641,18 @@ async function tick() {
   result.payload.module_persistence_errors = [];
   const moduleCircuit = require('./module-persistence-circuit.cjs').createCircuit();
   let persistModuleInput = null;
-  if (sideMinutes >= 360 && sideMinutes < 810) {
+  if (moduleWorkIds().length && sideMinutes >= 360 && sideMinutes < 810) {
     try {
       const snapshot = sideSnapshot;
       if (!require('../lib/daytrade-mother-pool-snapshot').inspectSnapshot(snapshot,taipeiDate()).ok) throw Error('MODULE_SNAPSHOT_INVALID');
       const identity={trade_date:taipeiDate(),canonical_run_id:snapshot.canonical_run_id,
         writer_run_id:result.payload.writer_run_id||result.run_id,generation_id:result.payload.generation_id,
         mother_pool_run_id:snapshot.mother_pool_run_id,snapshot_generation:snapshot.generation,snapshot_sequence:snapshot.snapshot_sequence};
-      const cache=sideMinutes>=540?readFugleWebSocketCandles({maxAgeMs:90*60*1000}):null;
-      const sessionCandles=sideMinutes>=540?require('../lib/mother-pool-session-candles').select({payload:cache.payload,tradeDate:identity.trade_date,asOf:sideAsOf}):[];
+      const needsCandles=moduleWorkIds().some(id=>id!=='A01')&&sideMinutes>=540;
+      const cache=needsCandles?readFugleWebSocketCandles({maxAgeMs:90*60*1000}):null;
+      const sessionCandles=needsCandles?require('../lib/mother-pool-session-candles').select({payload:cache.payload,tradeDate:identity.trade_date,asOf:sideAsOf}):[];
       const inputs=[require('../lib/mother-pool-identity-source').collect({identity,symbols:snapshot.symbols,calendar:marketCalendarEvidence,lease:writerLease,asOf:nowIso()})];
+      if(moduleWorkIds().some(id=>id!=='A01')){
       inputs.push(require('../lib/mother-pool-eligibility-source').collect({identity,evidence:activeSymbols.sourceEvidence,asOf:sideAsOf}));
       inputs.push(require('../lib/mother-pool-warmup-union').collect({identity,symbols:snapshot.symbols,bridge:readJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE,null),asOf:sideAsOf}));
       inputs.push(require('../lib/mother-pool-historical-volume-price').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,asOf:nowIso()}));
@@ -8668,6 +8694,8 @@ async function tick() {
           parents:result.payload.module_write_sets,side:sideFile?readJson(sideFile,null):null,asOf:nowIso()});
       }});
       if(sideMinutes>=539)inputs.push({module_id:'A18',build:()=>require('../lib/mother-pool-preopen-quality').collect({identity,symbols:snapshot.symbols,parents:result.payload.module_write_sets,asOf:nowIso()})});
+      }
+      const dir=runtimePath('data','module-write-sets');fs.mkdirSync(dir,{recursive:true});
       result.payload.module_input_checkpoint=require('../lib/mother-pool-module-input-checkpoint').save({
         directory:runtimePath('data','module-input-checkpoints',identity.trade_date),identity,inputs,observedAt:sideAsOf});
       const frozenModuleInputs=require('../lib/mother-pool-module-input-checkpoint').load(result.payload.module_input_checkpoint,identity).inputs;
@@ -8724,7 +8752,7 @@ async function tick() {
         }catch(error){result.payload.module_persistence_errors.push({module_id:input.module_id,error:String(error.message||error)});if(moduleCircuit.blocked)break;}
       }
       const sideFile=result.payload.mother_pool_minute_side_persist?.write_set_file;
-      if(sideMinutes>=540)result.payload.b24_source_coverage=require('../lib/mother-pool-combination-sources').inspect({
+      if(moduleWorkIds().includes('B24')&&sideMinutes>=540)result.payload.b24_source_coverage=require('../lib/mother-pool-combination-sources').inspect({
         identity,symbols:snapshot.symbols,parents:result.payload.module_write_sets,
         side:sideFile?readJson(sideFile,null):null,asOf:nowIso()});
     }catch(error){result.payload.module_persistence_errors.push({error:String(error.message||error)});}
@@ -8732,6 +8760,7 @@ async function tick() {
   moduleCircuit.assertHealthy();
   await publishInitialSource();
   writeModuleProducerReceipts(result, taipeiDate());
+  if(moduleWorkIds().length){
   try {
     const moduleRegistry = readJson(path.resolve(__dirname, '..', 'data', 'contracts', 'mother-pool-a01-b24-module-registry-v1.json'), { modules: {} });
     if (!require('../lib/daytrade-mother-pool-snapshot').inspectSnapshot(sideSnapshot,taipeiDate()).ok) throw Error('MODULE_READBACK_SNAPSHOT_INVALID');
@@ -8739,7 +8768,7 @@ async function tick() {
     const snapshotGeneration = sideSnapshot.generation;
     const captureArgs = [path.join(__dirname, 'capture-daytrade-module-readbacks.js'), `--trade-date=${taipeiDate()}`, `--canonical=${result.payload?.canonical_run_id || `${SOURCE_NAME}:${String(taipeiDate()).replace(/-/g, '')}:canonical`}`, `--writer-run-id=${result.payload?.writer_run_id || result.run_id || ''}`, `--writer-generation-id=${result.payload?.generation_id || ''}`, `--snapshot-generation=${snapshotGeneration}`, `--mother-pool-run-id=${snapshotRun}`, `--snapshot-sequence=${result.payload?.mother_pool_snapshot_sequence || ''}`, `--modules=${Object.keys(moduleRegistry.modules || {}).join(',')}`];
     const captures=[];
-    const nonSide=Object.keys(moduleRegistry.modules||{}).filter(id=>!['B14','B20','A14','A19'].includes(id));
+    const nonSide=moduleWorkIds().filter(id=>!['B14','B20','A14','A19'].includes(id));
     const writeSetIndexFile=runtimePath('data','scan-receipts','modules',`writer-write-set-index-${require('node:crypto').randomUUID()}.json`);
     fs.writeFileSync(writeSetIndexFile,JSON.stringify({modules:result.payload.module_write_sets||{}},null,2),{flag:'wx'});
     captureArgs.push('--write-set-index='+writeSetIndexFile);
@@ -8751,9 +8780,9 @@ async function tick() {
         '--trade-date='+id.trade_date,'--canonical='+id.canonical_run_id,'--writer-run-id='+id.writer_run_id,
         '--writer-generation-id='+id.generation_id,'--mother-pool-run-id='+id.mother_pool_run_id,
         '--snapshot-generation='+id.snapshot_generation,'--snapshot-sequence='+id.snapshot_sequence]);
-    }else captures.push({status:1,stderr:'MINUTE_SIDE_WRITE_SET_MISSING'});
+    }else if(moduleWorkIds().some(id=>['B14','B20'].includes(id))) captures.push({status:1,stderr:'MINUTE_SIDE_WRITE_SET_MISSING'});
     for(const args of groups){const capture=spawnSync(process.execPath,args,{encoding:'utf8',windowsHide:true,timeout:120000,env:{...process.env,SUPABASE_SERVICE_ROLE_KEY:SUPABASE_SERVICE_KEY,SUPABASE_ANON_KEY:SUPABASE_READ_KEY===SUPABASE_SERVICE_KEY?'':SUPABASE_READ_KEY,MOTHER_POOL_B14_VIEW:'v_daytrade_minute_side_readback_v1',MOTHER_POOL_B20_VIEW:'v_daytrade_minute_side_b20_readback_v1'}});captures.push({status:capture.status,stdout:capture.stdout||'',stderr:capture.stderr||'',error:capture.error?.message||null});}
-    if(persistModuleInput && sideMinutes>=539 && sideMinutes<810){
+    if(moduleWorkIds().some(id=>['A14','A19'].includes(id)) && persistModuleInput && sideMinutes>=539 && sideMinutes<810){
       const closureIdentity={trade_date:taipeiDate(),canonical_run_id:sideSnapshot.canonical_run_id,writer_run_id:result.payload.writer_run_id,generation_id:result.payload.generation_id,mother_pool_run_id:sideSnapshot.mother_pool_run_id,snapshot_generation:sideSnapshot.generation,snapshot_sequence:sideSnapshot.snapshot_sequence};
       const closureCaptures=await require('../lib/run-preopen-closure-stages').run({identity:closureIdentity,symbols:sideSnapshot.symbols,captures,persist:persistModuleInput,runtime:runtimePath(),capture:async(id,saved)=>{
         const indexFile=runtimePath('data','scan-receipts','modules',`closure-write-set-${require('node:crypto').randomUUID()}.json`);
@@ -8770,13 +8799,18 @@ async function tick() {
   // Independent module verification is a separate process. It only promotes
   // immutable rounds carrying real DB/anon artifacts; pending rounds remain pending.
   try {
-    const moduleVerify = spawnSync(process.execPath, [path.join(__dirname, 'run-daytrade-module-verifiers.js')], { encoding: 'utf8', windowsHide: true, env: { ...process.env, TRADE_DATE: taipeiDate(), MOTHER_POOL_CANONICAL:result.payload.canonical_run_id } });
+    const moduleVerify = spawnSync(process.execPath, [path.join(__dirname, 'run-daytrade-module-verifiers.js'),'--modules='+moduleWorkIds().join(',')], { encoding: 'utf8', windowsHide: true, timeout:45000, env: { ...process.env, TRADE_DATE: taipeiDate(), MOTHER_POOL_CANONICAL:result.payload.canonical_run_id } });
     let moduleAcceptance;try{moduleAcceptance=JSON.parse(moduleVerify.stdout||'{}');}catch{moduleAcceptance={};}
     result.payload.module_verifier_runner = { execution_status:moduleVerify.error?'failed':'finished',complete:moduleVerify.status===0&&moduleAcceptance.complete===true,status:moduleAcceptance.acceptance_status||'blocked', exit_code: moduleVerify.status, stdout: moduleVerify.stdout || '', stderr: moduleVerify.stderr || '' };
   } catch (error) {
     result.payload.module_verifier_runner = { status: 'blocked', exit_code: 1, error: String(error?.message || error) };
   }
-  await writeStatusAndScorecard(result);
+  }else{
+    result.payload.module_readback_capture={status:'PAUSED',complete:false};
+    result.payload.module_verifier_runner={status:'PAUSED',complete:false};
+  }
+  // initial publication already carries PAUSED state; do not repeat the same large write.
+  if(moduleWorkIds().length) await writeStatusAndScorecard(result);
   tickStage("status_scorecard:complete");
   const offSession = Boolean(result.payload.off_session);
   return {
@@ -8919,6 +8953,10 @@ function writeModuleProducerReceipts(result, tradeDate) {
   const written = [];
   for (const [moduleId, contract] of Object.entries(registry.modules || {})) {
     const existing = result.payload?.module_receipt_status?.[moduleId] || {};
+    if(!moduleWorkIds().includes(moduleId)){
+      existing.status='PAUSED';existing.failed_checks=['OWNER_REQUESTED_SEQUENTIAL_VALIDATION'];
+      existing.first_blocker='OWNER_REQUESTED_SEQUENTIAL_VALIDATION';
+    }
     const receipt = {
       module_id: moduleId,
       contract,
