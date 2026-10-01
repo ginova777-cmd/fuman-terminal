@@ -291,7 +291,15 @@ function Invoke-DaytradeSideVolumeCanonicalVerifier {
   $taipeiNow = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, "Taipei Standard Time")
   $minuteOfDay = ($taipeiNow.Hour * 60) + $taipeiNow.Minute
   if ($minuteOfDay -lt 540 -or $minuteOfDay -gt 810) { return }
-
+  $modulePolicyScript = Join-Path $RepoRoot 'scripts\read-daytrade-side-verifier-policy.cjs'
+  $modulePolicyRaw = & node $modulePolicyScript $StdoutLog $TradeDate
+  if ($LASTEXITCODE -ne 0) { throw 'SIDE_VOLUME_MODULE_POLICY_UNVERIFIED' }
+  $modulePolicy = ($modulePolicyRaw -join "`n") | ConvertFrom-Json
+  if ($modulePolicy.status -eq 'PAUSED') {
+    Write-WrapperLog "SIDE_VOLUME_VERIFIER_PAUSED writer_run_id=$($modulePolicy.writer_run_id) complete=false reason=$($modulePolicy.reason)"
+    return
+  }
+  if ($modulePolicy.status -ne 'RUN') { throw 'SIDE_VOLUME_MODULE_POLICY_INVALID' }
   $verifierScript = Join-Path $RepoRoot "scripts\verify-daytrade-side-volume-contract.js"
   if (-not (Test-Path -LiteralPath $verifierScript)) {
     Write-WrapperLog "SIDE_VOLUME_VERIFIER_SKIP reason=verifier_missing path=$verifierScript"
