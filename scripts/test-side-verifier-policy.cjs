@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('node:assert/strict'),{decide}=require('../lib/daytrade-side-verifier-policy.cjs');
+const input={row:{trade_date:'2026-10-01',payload:{trade_date:'2026-10-01',writer_run_id:'writer',generation_id:'generation',module_recovery:{enabled:[],paused:['B14','B20'],probe:null}}},ack:{contract:'source_status_write_ack_v1',row_sha256:'hash',ack:{mode:'write_response'}},expectedHash:'hash',tradeDate:'2026-10-01'};
+assert.equal(decide(input).status,'PAUSED');assert.equal(decide(input).complete,false);
+assert.throws(()=>decide({...input,tradeDate:'2026-10-02'}));
+assert.throws(()=>decide({...input,expectedHash:'other'}));assert.throws(()=>decide({...input,ack:null}));
+const changed=structuredClone(input);changed.row.payload.module_recovery.probe='B14';assert.throws(()=>decide(changed));
+changed.row.payload.module_recovery.enabled=['B14','B20'];changed.row.payload.module_recovery.probe=null;
+assert.equal(decide(changed).status,'RUN');
+console.log('PASS: pause requires current acknowledged source identity; stale/unacknowledged/partial dependencies fail closed; pause never means complete');
