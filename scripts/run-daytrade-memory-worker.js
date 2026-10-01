@@ -14,6 +14,8 @@ async function runWorker({channel=process,endpoint=process.env.FUMAN_MOTHER_POOL
     if(message.baselineEncoding!=='map-metadata-v1')throw Error('WARMUP_ENCODING_REQUIRED');
     reply({type:'daytrade_detection_warmup_stage',stage:'DECODE_BASELINE'});
     const baseline=decodeBaseline(message.baseline);
+    // Release the encoded graph before applying the private decoded baseline.
+    delete message.baseline;
     const inputs=new Map(message.jsonInputs);
     reply({type:'daytrade_detection_warmup_stage',stage:'APPLY_BASELINE'});
     service.warmup({...baseline,readMemoryJson:(file,fallback)=>{
@@ -21,7 +23,7 @@ async function runWorker({channel=process,endpoint=process.env.FUMAN_MOTHER_POOL
      const record=inputs.get(file);
      if(typeof record?.present!=='boolean')throw Error('MEMORY_INPUT_RECORD_INVALID');
      return record.present?structuredClone(record.value):fallback;
-    }});
+    }},{takeOwnership:true});
     tradeDate=baseline.tradeDate;symbols=baseline.activeSymbols.map(row=>row.symbol).sort();initialized=true;
     reply({type:'daytrade_detection_warmup_ack',tradeDate});return;
    }
