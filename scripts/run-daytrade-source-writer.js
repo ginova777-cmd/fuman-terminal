@@ -328,8 +328,6 @@ const INTRADAY_STATUS_CACHE_SYNC_INTERVAL_MS = Math.max(
   Number(process.env.DAYTRADE_INTRADAY_STATUS_CACHE_SYNC_INTERVAL_MS || 30000),
 );
 let lastIntradayStatusCacheSyncAt = 0;
-const DAILY_VOLUME_MIRROR_SYNC_INTERVAL_MS = Math.max(60000, Number(process.env.DAYTRADE_DAILY_VOLUME_MIRROR_SYNC_INTERVAL_MS || 300000));
-let lastDailyVolumeMirrorSyncAt = 0;
 let writerTickIdentity = null;
 let writerLease = { ok: !APPLY, status: APPLY ? "not_claimed" : "dry_run", leaseExpiresAt: "" };
 
@@ -7439,10 +7437,6 @@ async function writeFastWebSocketTransportHeartbeat({ priorityRows, quoteMap }) 
 
 async function syncDailyVolumeMirror(dailyVolumeMap, activeSymbols) {
   if (DRY_RUN) return { written: 0, skipped: true, reason: 'dry_run' };
-  const now = Date.now();
-  if (now - lastDailyVolumeMirrorSyncAt < DAILY_VOLUME_MIRROR_SYNC_INTERVAL_MS) {
-    return { written: 0, skipped: true, reason: 'interval_cooldown' };
-  }
   const activeSet = new Set((activeSymbols || []).map((row) => normalizeCode(row.symbol || row)).filter(Boolean));
   const rows = [...dailyVolumeMap.entries()]
     .filter(([symbol]) => activeSet.has(symbol))
@@ -7463,8 +7457,13 @@ async function syncDailyVolumeMirror(dailyVolumeMap, activeSymbols) {
       },
     }));
   if (!rows.length) return { written: 0, skipped: true, reason: 'no_active_volume_rows' };
+  const dedup = require('../lib/daytrade-daily-mirror-dedup.cjs');
+  const memoFile = statePath('daytrade-daily-volume-mirror-success.json');
+  const identity = {tradeDate:taipeiDate(),hash:dedup.fingerprint(rows),count:rows.length,now:Date.now()};
+  if (dedup.reusable(readJson(memoFile,null),identity)) return {written:0,skipped:true,reason:'unchanged_daily_volume',rows:rows.length};
   const result = await supabaseUpsert('fugle_daytrade_daily_volume_avg', rows, 'symbol', { batchSize: 250 });
-  lastDailyVolumeMirrorSyncAt = now;
+  if (result.written !== rows.length) throw Error('DAILY_VOLUME_MIRROR_WRITE_INCOMPLETE');
+  writeJsonAtomic(memoFile,dedup.receipt({...identity,now:Date.now()}));
   return { written: result.written || 0, skipped: false, rows: rows.length, source: 'full_market_active_ordinary_stock' };
 }
 async function ensureOpening0901CandleEvidence(formalPriorityRows = []) {
