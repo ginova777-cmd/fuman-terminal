@@ -42,7 +42,11 @@ const a16Writer = require("../lib/mother-pool-a16-writer");
 // Owner requested a full optional-module pause followed by one-module acceptance.
 // Keep shared market collection independent of module acceptance.
 let moduleRecovery = {status:'PAUSED',enabled:[],probe:null,reason:'POLICY_NOT_LOADED'};
-const moduleWorkIds = () => [...moduleRecovery.enabled, ...(moduleRecovery.probe ? [moduleRecovery.probe] : [])];
+const moduleSession = require('../lib/daytrade-module-session.cjs');
+const moduleWorkIds = () => {
+  const current = moduleSession.select(moduleRecovery);
+  return [...current.enabled, ...(current.probe ? [current.probe] : [])];
+};
 const { resolveStrategyHandoff, SOURCE_REGISTRY, previousCompletedTradingDate } = require("../lib/terminal-strategy-morning-handoff");
 
 
@@ -8469,7 +8473,7 @@ async function tick() {
   let preopenTrialHistory = null;
   console.log(JSON.stringify({ok:true,stage:'daytrade_tick:preopen_evidence:start',checkedAt:nowIso()}));
   result.payload.preopen_a15_a19_evidence = {status:'PAUSED',complete:false,reason:'OWNER_REQUESTED_SEQUENTIAL_VALIDATION'};
-  result.payload.module_recovery = {...moduleRecovery,complete:false};
+  result.payload.module_recovery = {...moduleSession.select(moduleRecovery),complete:false};
   for(const field of ['intraday_turnover_ranking','volume_value_ranking']){
     result.payload[field]={contract:result.payload[field]?.contract,status:'PAUSED',complete:false,
       trade_date:taipeiDate(),rows:[],data_gaps:[],reason:'OWNER_REQUESTED_SEQUENTIAL_VALIDATION'};
@@ -8702,6 +8706,7 @@ async function tick() {
       const frozenModuleInputs=require('../lib/mother-pool-module-input-checkpoint').load(result.payload.module_input_checkpoint,identity).inputs;
       await publishInitialSource();
       persistModuleInput = async input => {
+          if (!moduleWorkIds().includes(input.module_id)) throw Error('MODULE_OUTSIDE_ACTIVE_SESSION');
           moduleCircuit.assertHealthy();
           const evidenceId=require('node:crypto').randomUUID();
           const moduleStarted=Date.now();
@@ -8714,6 +8719,7 @@ async function tick() {
               require('../lib/daytrade-durable-json').writeExclusive(path.join(dir,evidenceId+'-plan.json'),plan);
             },
             persist:async body=>{
+              if (!moduleWorkIds().includes(input.module_id)) throw Error('MODULE_OUTSIDE_ACTIVE_SESSION');
               if(DRY_RUN)throw Error('MODULE_DRY_RUN_NO_PERSISTENCE');
               const transport=require('../lib/daytrade-module-shared-wire.cjs').shared(body);
               const wire=transport.wire;
@@ -8745,6 +8751,7 @@ async function tick() {
           } catch(error) {moduleCircuit.record(error);recordModule({stage:'failed',error_name:error?.name||'Error',reason:String(error.message||error).split(':')[0]});throw error;}
       };
       for(const queued of inputs){
+        if (!moduleWorkIds().includes(queued.module_id)) continue;
         let input=typeof queued.build==='function'?queued:frozenModuleInputs.find(value=>value.module_id===queued.module_id);
         try {
           if(typeof input.build==='function')input=input.build();
@@ -8953,6 +8960,9 @@ function writeModuleProducerReceipts(result, tradeDate) {
   const writerRunId = result.payload?.writer_run_id || result.writer_run_id || result.run_id || result.payload?.run_id || result.payload?.mother_pool_run_id || `${canonical}:writer:${observedAt.replace(/[^0-9]/g, '').slice(0, 14)}`;
   const written = [];
   for (const [moduleId, contract] of Object.entries(registry.modules || {})) {
+    // Keep completed preopen receipts available; intraday rounds must not
+    // generate replacement A receipts or repeat their producer work.
+    if (!moduleSession.allowed(moduleId)) continue;
     const existing = result.payload?.module_receipt_status?.[moduleId] || {};
     if(!moduleWorkIds().includes(moduleId)){
       existing.status='PAUSED';existing.failed_checks=['OWNER_REQUESTED_SEQUENTIAL_VALIDATION'];
