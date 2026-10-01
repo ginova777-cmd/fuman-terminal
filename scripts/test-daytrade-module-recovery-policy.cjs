@@ -1,0 +1,18 @@
+'use strict';
+const assert = require('node:assert/strict');
+const {evaluate, checks} = require('../lib/daytrade-module-recovery-policy.cjs');
+const registry = {modules: {A01:'identity', A02:'eligibility', B01:'candles'}};
+const identity = {trade_date:'2026-10-01',release_sha:'release'};
+const base = {contract:'daytrade_module_recovery_policy_v1', ...identity, restored:[],probe:null};
+assert.equal(evaluate(null,registry,identity).status,'PAUSED');
+assert.deepEqual(evaluate(base,registry,identity).enabled,[]);
+assert.equal(evaluate({...base,probe:'A01'},registry,identity).probe,'A01');
+assert.equal(evaluate({...base,probe:['A01','A02']},registry,identity).status,'PAUSED');
+assert.equal(evaluate({...base,probe:'B15'},registry,identity).status,'PAUSED');
+const receipt = {...identity,module_id:'A01',receipt_sha256:'a'.repeat(64),checks:Object.fromEntries(checks.map(k=>[k,true]))};
+const accepted = {...base,restored:['A01'],acceptance:{A01:receipt}};
+assert.deepEqual(evaluate(accepted,registry,identity).enabled,['A01']);
+for(const key of checks) assert.equal(evaluate({...accepted,acceptance:{A01:{...receipt,checks:{...receipt.checks,[key]:false}}}},registry,identity).status,'PAUSED');
+assert.equal(evaluate(accepted,registry,{...identity,trade_date:'2026-10-02'}).status,'PAUSED');
+assert.equal(evaluate({...accepted,probe:'A01'},registry,identity).status,'PAUSED');
+console.log('PASS: empty policy pauses; one probe only; every acceptance check required; stale identity and retired modules rejected');
