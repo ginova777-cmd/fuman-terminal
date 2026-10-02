@@ -5,6 +5,11 @@
   "use strict";
   const arr = value => Array.isArray(value) ? value : [];
   const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+  function requestedStage() {
+    const stage = typeof location === "undefined" ? "" : new URLSearchParams(location.search).get("morningStage");
+    return ["us_0820", "asia_0850"].includes(stage) ? stage : "";
+  }
+  function endpoint(url) { const stage = requestedStage(); return stage ? url + (url.includes("?") ? "&" : "?") + "morningStage=" + stage : url; }
   function rowsOf(data) {
     return arr(data?.display_top3 || data?.priority_industries).map(row => ({
       rank: Number(row.rank), name: row.display_name || row.industry || "",
@@ -28,5 +33,5 @@
       ${valid ? `<p>產業對照 <b data-morning-industry-count>15</b>／15；依本階段水源範圍偵測｜觀察 <b data-morning-count>${rows.length}</b> 筆</p>${!rows.length ? '<p data-morning-zero>沒有符合正漲幅條件的觀察標的（0 筆）。</p>' : rows.map(row => `<article data-morning-rank="${row.rank}" style="border-top:1px solid #64748b;padding:12px 0"><h4><span data-morning-title>${esc(row.name)}</span> <span data-morning-percent>${row.percent > 0 ? "+" : ""}${row.percent.toFixed(2)}%</span></h4>${row.overseas ? `<p>${esc(row.overseas)}</p>` : ""}${stocks(row.a,"A")}${stocks(row.b,"B")}</article>`).join("")}` : ""}
     </section>`;
   }
-  return { render, rowsOf };
+  return { render, rowsOf, requestedStage, endpoint };
 });

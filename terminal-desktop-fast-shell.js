@@ -6955,6 +6955,8 @@
 
   function renderOpeningReport0830DesktopBriefing(aiPayload = {}) {
     const incoming = aiPayload?.openingMorningReport;
+    const requestedMorningStage = window.FUMAN_OPENING_REPORT_VIEW.requestedStage();
+    if (requestedMorningStage && incoming?.ok === true && incoming.stage !== requestedMorningStage) return false;
     if (incoming?.ok === true) window.__fumanOpeningReport0830 = incoming;
     const data = incoming !== undefined ? incoming : window.__fumanOpeningReport0830;
     const panel = ensureMarketDesktopShell().ai || document.querySelector("#market-view [data-market-api-ai], #market-view #market-ai-panel, #market-view .market-ai-panel");
@@ -6979,7 +6981,7 @@
       try {
         const controller = typeof AbortController === "function" ? new AbortController() : null;
         const timeout = window.setTimeout(() => controller?.abort(), 6000);
-        const response = await fetch("/api/market-ai-live?briefingOnly=1", {
+        const response = await fetch(window.FUMAN_OPENING_REPORT_VIEW.endpoint("/api/market-ai-live?briefingOnly=1"), {
           cache: "no-store",
           credentials: "same-origin",
           signal: controller?.signal,
