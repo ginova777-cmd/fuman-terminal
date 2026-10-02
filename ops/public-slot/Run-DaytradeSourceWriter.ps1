@@ -241,7 +241,13 @@ function Invoke-FugleFutoptCollectorReleaseReconcile {
   $env:FUGLE_FUTOPT_STREAMING_MAX_SYMBOLS = "500"
   $env:FUGLE_FUTOPT_COLLECTOR_RELEASE = $FutoptCollectorRelease
   try {
-    $process = Start-Process -FilePath $nodeExe -ArgumentList @("--use-system-ca", $collector) -WorkingDirectory (Split-Path -Parent $collector) -WindowStyle Hidden -PassThru -ErrorAction Stop
+    $collectorLogId = [DateTimeOffset]::UtcNow.ToString("yyyyMMddHHmmss") + "-" + [Guid]::NewGuid().ToString("N")
+    $collectorStdout = Join-Path $LogDir "fugle-futopt-collector-$collectorLogId.stdout.log"
+    $collectorStderr = Join-Path $LogDir "fugle-futopt-collector-$collectorLogId.stderr.log"
+    $receipt.previous_pid_alive = $alive
+    $receipt.stdout_path = $collectorStdout
+    $receipt.stderr_path = $collectorStderr
+    $process = Start-Process -FilePath $nodeExe -ArgumentList @("--use-system-ca", $collector) -WorkingDirectory (Split-Path -Parent $collector) -WindowStyle Hidden -RedirectStandardOutput $collectorStdout -RedirectStandardError $collectorStderr -PassThru -ErrorAction Stop
     $receipt.status = "started"
     $receipt.reason = "collector_release_started"
     $receipt.started_pid = $process.Id
