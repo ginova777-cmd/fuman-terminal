@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const { readOpeningEvidence } = require("../lib/mother-pool-opening-evidence");
+const { readOpeningObservation } = require("../lib/mother-pool-opening-observation");
 const { isTwseTradingDay } = require("./twse-trading-day");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -343,45 +343,10 @@ async function main() {
   check("static_consumer_contract_versions", staticChecks.consumers.ok, "static_consumer_contract_versions_failed");
   check("legacy_mother_pool_verifier_retired", staticChecks.legacyVerifierRetired.ok, "legacy_mother_pool_verifier_still_present");
 
-  const openingEvidence = readOpeningEvidence(RUNTIME, clock.tradeDate, clock.minute);
-  const openingRequired = openingEvidence.required;
-  const openingOk = openingEvidence.bridgeOk;
-  check("opening_report_bridge_closed", openingOk, "opening_report_bridge_not_closed");
-  const openingAckSymbols = openingEvidence.symbols;
-  const prioritySymbolSet = new Set(Array.isArray(priority?.symbols) ? priority.symbols.map(String) : []);
-  const openingAckMissingFromWriterManifest = openingAckSymbols.filter((symbol) => !prioritySymbolSet.has(symbol));
-  const openingQuoteReadback = openingAckSymbols.length
-    ? await readSupabaseRows(
-      "fugle_daytrade_quotes_live",
-      `select=${encodeURIComponent("symbol,price,updated_at,quote_seen_at")}&symbol=in.(${openingAckSymbols.join(",")})`,
-    )
-    : { ok: true, rows: [], status: 200, error: "" };
-  const openingQuoteFreshBySymbol = new Map(openingQuoteReadback.rows.map((row) => [
-    String(row.symbol),
-    Math.min(ageSeconds(row.quote_seen_at), ageSeconds(row.updated_at)) <= 120 && Number(row.price) > 0,
-  ]));
-  const openingAckLiveAdmissibleSymbols = openingAckSymbols.filter((symbol) =>
-    motherPoolSymbolSet.has(symbol) || openingQuoteFreshBySymbol.get(symbol) === true);
-  const openingAckMissingFromMotherPool = openingAckLiveAdmissibleSymbols.filter((symbol) => !motherPoolSymbolSet.has(symbol));
-  const openingAckSkippedStaleQuote = openingAckSymbols.filter((symbol) =>
-    !motherPoolSymbolSet.has(symbol) && openingQuoteFreshBySymbol.get(symbol) !== true);
-  const openingHandoffAckOk = openingEvidence.ackOk;
-  check("opening_report_handoff_ack_complete", openingHandoffAckOk, "opening_report_handoff_ack_not_complete");
-  check(
-    "opening_report_ack_symbols_received_by_writer_manifest",
-    !openingRequired || openingAckMissingFromWriterManifest.length === 0,
-    `opening_report_ack_symbols_not_in_writer_manifest:${openingAckMissingFromWriterManifest.slice(0, 12).join(",")}`,
-  );
-  check(
-    "opening_report_ack_quote_readback",
-    !openingRequired || openingQuoteReadback.ok === true,
-    `opening_report_ack_quote_readback_failed:${openingQuoteReadback.status}:${openingQuoteReadback.error}`,
-  );
-  check(
-    "opening_report_ack_symbols_admitted_to_mother_pool",
-    !openingRequired || openingAckMissingFromMotherPool.length === 0,
-    `opening_report_ack_symbols_not_in_mother_pool:${openingAckMissingFromMotherPool.slice(0, 12).join(",")}`,
-  );
+  const openingEvidence = readOpeningObservation(RUNTIME, clock.tradeDate, clock.minute);
+  const openingObservation = require('../lib/mother-pool-opening-observation').evaluateOpeningObservation(
+    openingEvidence, Array.isArray(priority?.symbols) ? priority.symbols.map(String) : [], [...motherPoolSymbolSet]);
+  if (openingObservation.status === 'UNAVAILABLE') warnings.push('opening_observation_unavailable_core_water_independent');
 
   const futoptRequired = clock.minute >= 8 * 60 + 50;
   const futoptGuardsSafe = [futopt0845, futopt0850].every((receipt) => !receipt || (
@@ -427,17 +392,7 @@ async function main() {
         avg3_pass_rows: avg3PassRows.length,
         avg3_history_pending_rows: avg3PendingRows.length,
       },
-      opening_report: {
-        ok: openingOk && openingHandoffAckOk && openingAckMissingFromWriterManifest.length === 0
-          && openingQuoteReadback.ok === true && openingAckMissingFromMotherPool.length === 0,
-        required: openingRequired,
-        stages: openingEvidence.stages,
-        handoff_ack_symbols: openingAckSymbols.length,
-        handoff_ack_missing_from_writer_manifest: openingAckMissingFromWriterManifest,
-        handoff_ack_live_admissible_symbols: openingAckLiveAdmissibleSymbols,
-        handoff_ack_missing_from_mother_pool: openingAckMissingFromMotherPool,
-        handoff_ack_skipped_stale_quote_symbols: openingAckSkippedStaleQuote,
-      },
+      opening_report: openingObservation,
       futopt_preopen: {
         ok: futoptClosed || futoptGuardsSafe,
         natural_evidence_ok: futoptClosed,
