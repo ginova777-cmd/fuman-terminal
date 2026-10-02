@@ -5,12 +5,33 @@ param(
   [switch]$Fetch,
   [switch]$Once,
   [switch]$Continuous,
-  [switch]$LocalCheck
+  [switch]$LocalCheck,
+  [switch]$ClosingWaterOnly
 )
 
 # Run-DaytradeSourceWriter.ps1 is a release-owner wrapper.
 # Default mode is dry-run/no-fetch/once. Use -Apply only in an approved writer window.
 $ErrorActionPreference = "Stop"
+function Test-ClosingWaterWindow {
+  param([DateTimeOffset]$Now)
+  $local = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId($Now, "Taipei Standard Time")
+  $minute = $local.Hour * 60 + $local.Minute
+  return $local.DayOfWeek -notin @([DayOfWeek]::Saturday, [DayOfWeek]::Sunday) -and $minute -ge 813 -and $minute -lt 816
+}
+function Test-ClosingWaterSyncReceipt {
+  param($Receipt, [string]$Date, [DateTimeOffset]$StartedAt)
+  if ($null -eq $Receipt -or $Receipt.ok -ne $true -or $Receipt.mode -ne 'apply' -or $Receipt.trade_date -ne $Date) { return $false }
+  try {
+    $checked = [DateTimeOffset]::Parse([string]$Receipt.checked_at)
+    $completed = [DateTimeOffset]::Parse([string]$Receipt.completed_at)
+    return $checked -ge $StartedAt -and $completed -ge $checked -and $completed -le [DateTimeOffset]::UtcNow
+  } catch { return $false }
+}
+if ($ClosingWaterOnly -and (-not $Apply -or $Fetch -or $Continuous -or $LocalCheck)) { throw 'CLOSING_WATER_MODE_INVALID' }
+if ($ClosingWaterOnly -and -not (Test-ClosingWaterWindow -Now ([DateTimeOffset]::UtcNow))) {
+  Write-Output '{"status":"not_due","complete":false,"reason":"CLOSING_WATER_WINDOW_1333_1335"}'
+  exit 0
+}
 $WrapperClock = [Diagnostics.Stopwatch]::StartNew()
 
 function Get-WriterProcessBudget {
@@ -496,10 +517,11 @@ if ($Fetch -and -not $Apply) {
 $EffectiveOnce = $args -contains "--once"
 Write-WrapperLog "START run_id=$RunId apply=$Apply fetch=$Fetch once=$Once continuous=$Continuous effectiveOnce=$EffectiveOnce localCheck=$LocalCheck"
 if (-not $runCloseout) { Invoke-DaytradeWebSocketCollectorSelfHeal }
-if ($Apply -and -not $runCloseout) {
+if ($Apply -and (-not $runCloseout -or $ClosingWaterOnly)) {
   $fastSyncExit = -1
   $fastSyncScript = Join-Path $RepoRoot "scripts\sync-daytrade-websocket-supabase-fast.js"
   if (Test-Path -LiteralPath $fastSyncScript) {
+    $fastSyncStartedAt = [DateTimeOffset]::UtcNow
     $fastSyncOutput = & node --use-system-ca $fastSyncScript --apply 2>&1
     $fastSyncExit = $LASTEXITCODE
     $fastSyncText = (($fastSyncOutput | Out-String) -replace "[\r\n]+", " ").Trim()
@@ -515,6 +537,19 @@ if ($Apply -and -not $runCloseout) {
     }
   } else {
     Write-WrapperLog "FAST_SUPABASE_SYNC skip=script_missing path=$fastSyncScript"
+  }
+  if ($ClosingWaterOnly) {
+    if ($fastSyncExit -ne 0) { throw 'CLOSING_WATER_SYNC_NOT_EXECUTED' }
+    $sync = Get-Content -LiteralPath (Join-Path $StateDir 'daytrade-fast-supabase-sync.json') -Raw | ConvertFrom-Json
+    if (-not (Test-ClosingWaterSyncReceipt -Receipt $sync -Date $TradeDate -StartedAt $fastSyncStartedAt)) { throw 'CLOSING_WATER_RECEIPT_INVALID' }
+    $closingReceipt = [ordered]@{contract='daytrade-closing-water-write-v1';trade_date=$TradeDate;status='written_pending_independent_readback';complete=$false;written=$true;source='existing_shared_websocket_cache';fast_sync=$sync;checked_at=[DateTimeOffset]::UtcNow.ToString('o');strategy_scan_started=$false;module_b18_started=$false;notifications_sent=0;orders_sent=0}
+    $closingPath = Join-Path $StateDir ('daytrade-closing-water-' + $TradeDate + '.json')
+    $temp = $closingPath + '.' + $PID + '.tmp'
+    $closingReceipt | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath $temp -Encoding utf8
+    [IO.File]::Move($temp, $closingPath, $true)
+    Update-WriterDatabaseBackoff 'success'
+    Write-WrapperLog 'CLOSING_WATER_WRITTEN strategies_started=false independent_readback_pending=true'
+    exit 0
   }
   Invoke-MotherPoolReceiptRollover -FastSyncExitCode $fastSyncExit
 }
