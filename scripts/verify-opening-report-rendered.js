@@ -38,7 +38,7 @@ async function main(){
       const cdp=await ui.createTab(browser);let actual;
       try{
         await ui.setViewport(cdp,mode);
-        await ui.navigate(cdp,base+(mode.scorecard?"/88":mode.mobile?"/api/mobile-page":"/?desktop=1"),{stopLoading:false});
+        await ui.navigate(cdp,base+(mode.scorecard?"/88?":mode.mobile?"/api/mobile-page?":"/?desktop=1&")+"morningStage="+morningStages.stage().id,{stopLoading:false});
         if(mode.mobile){
           await ui.waitFor(cdp,()=>({ok:typeof self.FUMAN_MOBILE_MEMBER_OPENED==="function"&&self.FUMAN_MOBILE_MEMBER_OPENED()}),null,45000);
           await ui.clickSelectorByDom(cdp,'#tabs button[data-fragment="morning"]');

@@ -415,7 +415,7 @@ async function fetchMorningInternal(request) {
   let captured;
   await require("./market-ai-live")({
     method: "GET", headers: request?.headers || {},
-    query: { briefingOnly: "1" },
+    query: { briefingOnly: "1", morningStage: request?.query?.morningStage || new URL(request.url || "/", "http://localhost").searchParams.get("morningStage") || "" },
   }, createCaptureResponse(result => { captured = result; }));
   if (!captured || captured.statusCode >= 400) throw new Error("morning_internal_unavailable");
   return captured.payload;

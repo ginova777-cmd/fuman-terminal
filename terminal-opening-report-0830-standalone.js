@@ -21,7 +21,7 @@
     let report = null;
     for (const endpoint of ENDPOINTS) {
       try {
-        const response = await fetch(endpoint, { cache: "no-store", credentials: "same-origin" });
+        const response = await fetch(window.FUMAN_OPENING_REPORT_VIEW.endpoint(endpoint), { cache: "no-store", credentials: "same-origin" });
         if (!response.ok) continue;
         const payload = await response.json();
         if (payload?.openingMorningReport?.ok === true) {

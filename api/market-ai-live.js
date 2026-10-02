@@ -1604,9 +1604,10 @@ function readOpeningMorningReport(clock = taipeiClock()) {
   };
 }
 
-async function readOpeningMorningReportSnapshot(clock = taipeiClock(), timeoutMs = Number(process.env.FUMAN_OPENING_REPORT_0830_SNAPSHOT_TIMEOUT_MS || 5000)) {
+async function readOpeningMorningReportSnapshot(clock = taipeiClock(), timeoutMs = Number(process.env.FUMAN_OPENING_REPORT_0830_SNAPSHOT_TIMEOUT_MS || 5000), requestedStage = "") {
+  if (requestedStage && !["us_0820", "asia_0850"].includes(requestedStage)) return null;
   const allowPreviousTradingDay = isWeekend(clock);
-  const snapshot = await readSnapshot("opening_report_0830_terminal_briefing", {
+  const snapshot = await readSnapshot("opening_report_0830_terminal_briefing" + (requestedStage ? "_" + requestedStage : ""), {
     tradeDate: clock.date,
     // On weekends there is no new 08:30 run. Keep the last completed trading
     // day briefing visible, matching the terminal's previous-good banner.
@@ -1617,6 +1618,7 @@ async function readOpeningMorningReportSnapshot(clock = taipeiClock(), timeoutMs
   }).catch(() => null);
   const payload = snapshot?.payload;
   if (!payload || payload.contract !== "opening-report-0830-terminal-briefing-v1") return null;
+  if (requestedStage && (payload.stage !== requestedStage || payload.stage_contract !== "opening-report-two-stage-v1")) return null;
   const payloadDate = compactDate(payload.date);
   if (payloadDate !== clock.ymd && !allowPreviousTradingDay) return null;
   if (!payloadDate || payloadDate > clock.ymd || payload.ok !== true) return null;
@@ -1717,11 +1719,13 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
 }
 
 module.exports = async function handler(request, response) {
+  const requestedMorningStage = String(request.query?.morningStage || "");
+  if (requestedMorningStage && !["us_0820", "asia_0850"].includes(requestedMorningStage)) { response.status(400).json({ok:false,reason_code:"morning_stage_invalid"}); return; }
   const clock = taipeiClock();
   if (String(request.query?.briefingOnly || "") === "1") {
     response.setHeader("Cache-Control", "no-store, max-age=0");
     response.setHeader("CDN-Cache-Control", "no-store");
-    const snapshotReport = await readOpeningMorningReportSnapshot(clock, 5000);
+    const snapshotReport = await readOpeningMorningReportSnapshot(clock, 5000, requestedMorningStage);
     const report = snapshotReport?.ok === true ? snapshotReport : {
       ok: false, date: clock.date, reason_code: "opening_report_snapshot_unavailable",
       retryable: true, run_id: "", display_top3: [],
@@ -1754,7 +1758,7 @@ module.exports = async function handler(request, response) {
   const session = applyMarketCalendarToSession(rawSession, marketCalendar);
   const requireTodayLiveSource = marketCalendar?.marketOpen === false ? false : requiresTodayLiveSource(clock, session);
   const mustDetectToday = marketCalendar?.marketOpen === false ? false : requiresTodayDetection(clock, session);
-  const openingMorningReportSnapshot = await readOpeningMorningReportSnapshot(clock);
+  const openingMorningReportSnapshot = await readOpeningMorningReportSnapshot(clock, undefined, requestedMorningStage);
   const sessionForPayload = { ...session, requiresTodayDetection: mustDetectToday, requiresTodayLiveSource: requireTodayLiveSource, openingMorningReport: openingMorningReportSnapshot };
 
   if (usesSimpleMarketAiReport(request)) {
