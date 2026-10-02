@@ -201,8 +201,7 @@ function Invoke-FugleFutoptCollectorReleaseReconcile {
   $streamStale = $false
   if ($null -ne $current -and -not [string]::IsNullOrWhiteSpace([string]$current.lastMessageAt)) {
     try {
-      $lastMessageUtc = [DateTimeOffset]::Parse([string]$current.lastMessageAt).ToUniversalTime()
-      $streamStale = ([DateTimeOffset]::UtcNow - $lastMessageUtc).TotalSeconds -gt 300
+      $streamStale = (Get-IsoAgeSeconds $current.lastMessageAt) -gt 300
     } catch { $streamStale = $true }
   }
   $receipt = [ordered]@{ contract="fugle_daytrade_futopt_collector_rotation_v1"; checked_at=[DateTimeOffset]::UtcNow.ToString("o"); trade_date=$TradeDate; desired_release=$FutoptCollectorRelease; current_release=$currentRelease; current_pid=$targetProcessId; status="pending"; reason="" }
