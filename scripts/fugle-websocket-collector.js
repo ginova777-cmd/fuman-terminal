@@ -1770,8 +1770,11 @@ async function runStreamingCollector() {
         clearTimeout(deferredSubscriptionTimer);
           return;
         }
-        const lastDataMs = Date.parse(runLastMessageAt || openedAt || "");
-        if (ws && ws.readyState === WebSocket.OPEN && lastDataMs > 0 && Date.now() - lastDataMs > staleDataWindow && !staleRecoveryTriggered) {
+        const transportStale = require('../lib/collector-transport-health.cjs').transportIsStale({
+          nowMs: Date.now(), openedAt, heartbeatAt: lastWebSocketHeartbeatAt,
+          dataReceivedAt: runLastMessageAt, timeoutMs: staleDataWindow,
+        });
+        if (ws && ws.readyState === WebSocket.OPEN && transportStale && !staleRecoveryTriggered) {
           staleRecoveryTriggered = true;
           writeStreamingStatus({ ok: false, websocketError: "reconnect_stale_source", staleDataWindow, staleRecoveryTriggered: true });
           ws.close(1000, "stale source self-heal");
