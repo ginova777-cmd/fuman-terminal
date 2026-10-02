@@ -335,9 +335,15 @@ function runMotherPoolHandoffAck(tradeDate, runId, bridgeAggregatePath, isolated
   // Preserve the original successful handoff timestamp only when it is valid.
   // A failed handoff must be replaced by this verifier's real same-batch readback.
   if(hasFlag("--resume-evidence") && canonicalHandoff?.complete===true && canonicalHandoff?.report_run_id===runId && canonicalHandoff?.trade_date===tradeDate) args.push(`--output=${path.join(RECEIPT_DIR,"scan-receipts",`opening-report-resume-handoff-${tradeDate.replace(/-/g, "")}.json`)}`);
-  const result = spawnSync(process.execPath, args, { encoding: "utf8", windowsHide: true, cwd: path.resolve(__dirname, "..") });
+  // Raw source evidence can exceed Node's default 1 MiB stdout limit.
+  // Keep a bounded allowance and preserve explicit transport failures.
+  const result = spawnSync(process.execPath, args, { encoding: "utf8", windowsHide: true, cwd: path.resolve(__dirname, ".."), maxBuffer: 4 * 1024 * 1024, timeout: 30000 });
   let receipt = null;
-  try { receipt = JSON.parse(String(result.stdout || "").trim()); } catch {}
+  if (result.error || result.signal) {
+    receipt = { ok: false, complete: false, first_blocker: result.error?.code === "ENOBUFS" ? "mother_pool_handoff_ack_output_limit_exceeded" : "mother_pool_handoff_ack_process_failed", process_error_code: result.error?.code || null, signal: result.signal || null };
+  } else {
+    try { receipt = JSON.parse(String(result.stdout || "").trim()); } catch {}
+  }
   return { exitCode: result.status, stdout: result.stdout, stderr: result.stderr, receipt };
 }
 
