@@ -83,13 +83,18 @@ function validateManifest(manifest, contract) {
   add(currentBranch.ok && currentBranch.value === branch, "local_branch_matches_handoff", currentBranch.value);
 
   let remoteHead = null;
+  const remoteTransport = argValue('--remote-transport') || 'git';
+  add(['git','github-api'].includes(remoteTransport), 'remote_transport_supported');
   if (CHECK_REMOTE) {
-    const remote = git(["ls-remote", "origin", `refs/heads/${branch}`]);
+    const remote = remoteTransport === 'github-api'
+      ? require('../lib/release-remote-head').readGithubHead({root:ROOT,repository:manifest.repository,branch})
+      : remoteTransport === 'git' ? git(["ls-remote", "origin", `refs/heads/${branch}`])
+      : {ok:false,value:'',error:'UNSUPPORTED_REMOTE_TRANSPORT'};
     remoteHead = remote.ok ? String(remote.value).split(/\s+/)[0].toLowerCase() : "";
     add(remote.ok && /^[0-9a-f]{40}$/.test(remoteHead), "remote_branch_head_readable", remote.error);
     add(remoteHead === approved, "remote_head_matches_approved", `approved=${approved} remote=${remoteHead}`);
   }
-  return { checks, approvedCommitSha: approved, localHead: head.value, localBranch: currentBranch.value, remoteHead };
+  return { checks, approvedCommitSha: approved, localHead: head.value, localBranch: currentBranch.value, remoteHead, remoteTransport };
 }
 
 function main() {
