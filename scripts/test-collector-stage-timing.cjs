@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('node:assert/strict');let time=0;const p=require('../lib/collector-stage-timing.cjs').create({clock:()=>time});
+assert.equal(p.run('message',()=>{time+=4;return 7}),7);
+const error=new Error('original');assert.throws(()=>p.run('message',()=>{time+=2;throw error}),e=>e===error);
+let s=p.snapshot();assert.deepEqual(s.stages.message,{calls:2,total_ms:6,max_ms:4});s.stages.message.calls=99;assert.equal(p.snapshot().stages.message.calls,2);
+assert.throws(()=>p.run('unbounded-symbol',()=>{}),/UNKNOWN_TIMING_STAGE/);
+for(let i=0;i<10000;i++)p.run('side_journal',()=>{});assert.equal(Object.keys(p.snapshot().stages).length,8);
+const fs=require('fs'),path=require('path');const source=fs.readFileSync(path.join(__dirname,'fugle-websocket-collector.js'),'utf8');
+for(const name of ['message','side_journal','trade_journal','preopen_journal','normalize_candle','quote_flush','candle_flush','subscription'])assert(source.includes('stageTiming.run(\''+name+'\'')||source.includes('stageTiming.run("'+name+'"'));
+console.log('PASS bounded timing, nested measurements, return values, original errors and collector wiring');

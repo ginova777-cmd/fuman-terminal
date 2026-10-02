@@ -1258,6 +1258,7 @@ function selectStreamingSymbols(rotationCursor = 0) {
     subscriptionPlan: "formal_1m_1000_plus_trade_radar_plus_aggregate_priority",
   };
 }
+const stageTiming = require('../lib/collector-stage-timing.cjs').create();
 let pendingStreamingQuotes = [];
 let streamingQuoteFlushTimer = null;
 function mergeStreamingQuotes(newQuotes, flush = false) {
@@ -1271,7 +1272,7 @@ function mergeStreamingQuotes(newQuotes, flush = false) {
       const batch = pendingStreamingQuotes;
       pendingStreamingQuotes = [];
       streamingQuoteFlushTimer = null;
-      mergeStreamingQuotes(batch, true);
+      stageTiming.run('quote_flush', () => mergeStreamingQuotes(batch, true));
     }, 500);
     return pendingStreamingQuotes.length;
   }
@@ -1322,7 +1323,7 @@ function mergeStreamingCandles(newCandles, flush = false) {
       const batch = pendingStreamingCandles;
       pendingStreamingCandles = [];
       streamingCandleFlushTimer = null;
-      mergeStreamingCandles(batch, true);
+      stageTiming.run('candle_flush', () => mergeStreamingCandles(batch, true));
     }, 500);
     return pendingStreamingCandles.length;
   }
@@ -1419,6 +1420,7 @@ async function runStreamingCollector() {
         streamingUrl: STREAMING_URL,
         streamingChannel: STREAMING_CHANNEL,
         streamingChannels: STREAMING_CHANNELS,
+        stageTiming: stageTiming.snapshot(),
         streamingOpenedAt: openedAt,
         websocketConnected: Boolean(ws && ws.readyState === WebSocket.OPEN),
         websocketAuthenticated: authenticated,
@@ -1648,7 +1650,7 @@ async function runStreamingCollector() {
         // after the authenticated event so the initial batch is not discarded.
         writeStreamingStatus();
       });
-      ws.addEventListener("message", (event) => {
+      ws.addEventListener("message", (event) => stageTiming.run("message", () => {
         messages += 1;
         let payload = null;
         try { payload = JSON.parse(String(event.data || "")); } catch {}
@@ -1658,7 +1660,7 @@ async function runStreamingCollector() {
         if (/heartbeat|pong/.test(eventName) || /"(?:event|type)"\s*:\s*"(?:heartbeat|pong)"/i.test(text)) {
           lastWebSocketHeartbeatAt = lastTransportMessageAt;
         }
-        subscriptionEvidence.message(payload, lastTransportMessageAt);
+        stageTiming.run('subscription', () => subscriptionEvidence.message(payload, lastTransportMessageAt));
         authenticated = subscriptionEvidence.snapshot().authenticated;
         if (payload?.event === 'authenticated' && authenticated) {
           if (!lastSubscribeSignature) subscribe();
@@ -1681,11 +1683,11 @@ async function runStreamingCollector() {
           || (data.total || data.bids || data.asks || Object.prototype.hasOwnProperty.call(data, "openPrice") ? "aggregates" : "")
           || STREAMING_CHANNELS[0];
         if (Object.prototype.hasOwnProperty.call(channelMessages, inferredChannel)) channelMessages[inferredChannel] += 1;
-        if (inferredChannel === "aggregates") providerSideJournal.capture(data, lastTransportMessageAt);
-        if (COLLECTOR_ROLE === 'daytrade') preopenJournal.capture({ ...payload, channel: inferredChannel }, lastTransportMessageAt);
-        if (inferredChannel === "trades") providerTradeJournal.capture(data, lastTransportMessageAt);
+        if (inferredChannel === "aggregates") stageTiming.run('side_journal', () => providerSideJournal.capture(data, lastTransportMessageAt));
+        if (COLLECTOR_ROLE === 'daytrade') stageTiming.run('preopen_journal', () => preopenJournal.capture({ ...payload, channel: inferredChannel }, lastTransportMessageAt));
+        if (inferredChannel === "trades") stageTiming.run('trade_journal', () => providerTradeJournal.capture(data, lastTransportMessageAt));
         if (inferredChannel === "candles") {
-          const candles = normalizeFugleCandles(payload);
+          const candles = stageTiming.run('normalize_candle', () => normalizeFugleCandles(payload));
           candleInputDiagnostics.observe(payload, candles, lastTransportMessageAt);
           if (candles.length) {
             candleMessages += candles.length;
@@ -1714,7 +1716,7 @@ async function runStreamingCollector() {
           runLastMessageAt = lastMessageAt;
           mergeStreamingQuotes([quote]);
         }
-      });
+      }));
       ws.addEventListener("error", (event) => {
         writeStreamingStatus({ ok: false, websocketError: event?.message || "websocket_error" });
       });
