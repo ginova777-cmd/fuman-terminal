@@ -33,6 +33,12 @@ async function main(){
   t.merge([row(0),row(1)]);await sleep(40);assert.equal(t.status().reason,'CANDLE_SAVE_TIMEOUT');
   tw.emit('message',{sequence:tw.sent[0].sequence,ok:true,count:1});assert.equal(t.status().persistenceGap,true);
   tw.emit('message',{sequence:tw.sent[1].sequence,ok:true,count:2});assert.equal(t.status().persistenceGap,false);
+  const bw=fake(),barrier=create({file:path.join(root,'barrier.json'),spawn:()=>bw,batchRows:5,saveTimeoutMs:20});
+  barrier.merge([row(0)]);barrier.flush();barrier.merge([row(1)]);
+  await sleep(40);assert.equal(barrier.status().timeoutBarrier,2);
+  barrier.merge([row(2)]); // New traffic must not keep an old resolved timeout latched.
+  bw.emit('message',{sequence:bw.sent[0].sequence,ok:true,count:1});assert.equal(barrier.status().persistenceGap,true);
+  bw.emit('message',{sequence:bw.sent[1].sequence,ok:true,count:2});assert.equal(barrier.status().persistenceGap,false);assert.equal(barrier.status().pendingRows,1);
   const cw=fake(),c=create({file:path.join(root,'cap.json'),spawn:()=>cw,batchRows:1,maxSpoolFiles:1});
   c.merge([row(0),row(1)]);assert.equal(c.status().reason,'CANDLE_SPOOL_CAPACITY');assert.equal(c.status().persistenceGap,true);assert.equal(fs.readdirSync(path.join(root,'cap.json.pending')).length,1);
   const mw=fake(),m=create({file:path.join(root,'mismatch.json'),spawn:()=>mw,batchRows:1});m.merge([row(0)]);mw.emit('message',{sequence:999,ok:true,count:1});assert.equal(m.status().reason,'CANDLE_SAVE_ACK_MISMATCH');assert.equal(fs.readdirSync(path.join(root,'mismatch.json.pending')).length,1);
