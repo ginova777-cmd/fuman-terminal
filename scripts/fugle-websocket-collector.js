@@ -1302,7 +1302,7 @@ function mergeStreamingQuotes(newQuotes, flush = false) {
 }
 
 const streamingCandleStore = COLLECTOR_ROLE === 'daytrade'
-  ? require('../lib/daytrade-async-candle-store').createAsyncCandleStore({
+  ? require('../lib/daytrade-spooled-candle-store').createSpooledCandleStore({
     file: FUGLE_WS_CANDLES_FILE,
     retentionMs: Math.max(QUOTE_TTL_MS, 8 * 60 * 60 * 1000),
     flushDelayMs: 5000,
