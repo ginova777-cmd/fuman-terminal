@@ -63,14 +63,15 @@ function validReadback(result, tradeDate, reportRunId, now = Date.now()) {
 
 function runReadback(tradeDate, reportRunId, bridgeAggregate, output) {
   const startedAt = Date.now();
+  // Read the receipt file; discard duplicate stdout to avoid ENOBUFS.
   const result = spawnSync(process.execPath, [
     HANDOFF_SCRIPT,
     `--trade-date=${tradeDate}`,
     `--report-run-id=${reportRunId}`,
     `--bridge-aggregate=${bridgeAggregate}`,
     `--output=${output}`,
-  ], { cwd: ROOT, encoding: "utf8", windowsHide: true });
-  return { startedAt, exitCode: result.status, receipt: readJson(output), stderr: String(result.stderr || "").trim() };
+  ], { cwd: ROOT, encoding: "utf8", windowsHide: true, stdio: ["ignore", "ignore", "pipe"], timeout: 30000, maxBuffer: 64 * 1024 });
+  return { startedAt, exitCode: result.error || result.signal ? 1 : result.status, receipt: readJson(output), stderr: result.error ? "mother_pool_persistence_child_" + (result.error.code || "failed") : result.signal ? "mother_pool_persistence_child_signal_" + result.signal : String(result.stderr || "").trim() };
 }
 
 async function main() {
