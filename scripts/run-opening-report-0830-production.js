@@ -8,7 +8,7 @@ const fs = require("fs");
 const path = require("path");
 const { contentHash, validateReuse } = require("../lib/opening-report-delivery-contract");
 const { spawnSync } = require("child_process");
-const { upsertSnapshot } = require("../lib/supabase-snapshots");
+const { upsertSnapshot, readSnapshot } = require("../lib/supabase-snapshots");
 const { OPENING_REPORT_0830_INDUSTRY_MAP } = require("./opening-report-0830-industry-map-contract.js");
 const { isTwseTradingDay } = require("./twse-trading-day.js");
 
@@ -785,7 +785,9 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   writeJson(finalPath, final);
   const terminalBriefingSnapshot = isolatedBacktest
     ? { ok: true, key: "opening_report_0830_terminal_briefing", tradeDate: compact, attempts: 0, simulated: true, reason_code: "isolated_terminal_snapshot_payload_pass" }
-    : await syncTerminalBriefingSnapshot(tradeDate, runId);
+    : resumeEvidence
+      ? await require("../lib/opening-report-resume-snapshot").verifyExistingSnapshot({ readSnapshot, final, stage: morningStages.stage().id, stageContract: morningStages.CONTRACT, tradeDate, runId })
+      : await syncTerminalBriefingSnapshot(tradeDate, runId);
   terminalBriefingSnapshot.report_run_id = runId;
   terminalBriefingSnapshot.delivery_content_hash = deliveryContentHash;
   final.terminal_briefing_snapshot = terminalBriefingSnapshot;
