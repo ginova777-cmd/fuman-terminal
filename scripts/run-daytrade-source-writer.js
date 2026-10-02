@@ -768,6 +768,7 @@ async function supabaseUpsert(resource, rows, conflict, options = {}) {
   return supabaseUpsertUnchecked(resource,rows,conflict,options);
 }
 async function supabaseUpsertUnchecked(resource, rows, conflict, options = {}) {
+  if (resource === 'fugle_daytrade_quotes_live') rows = rows.map(require('../lib/daytrade-quote-liquidity-contract').normalizeQuoteLiquidity);
   if (!rows.length) return { written: 0, skipped: true };
   if (DRY_RUN) return { written: 0, skipped: true, dryRun: true };
   const key = requireSupabaseKey(true);

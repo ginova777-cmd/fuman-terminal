@@ -31,6 +31,7 @@ function volumeUnit(q = {}) {
   return "";
 }
 async function upsert(table, rows, conflict, onBatch = () => {}) {
+  if (table === 'fugle_daytrade_quotes_live') rows = rows.map(require('../lib/daytrade-quote-liquidity-contract').normalizeQuoteLiquidity);
   if (!rows.length) return 0;
   const key = secret("SUPABASE_SERVICE_ROLE_KEY");
   if (!key) throw new Error("service_role_key_missing");
@@ -75,6 +76,8 @@ async function main() {
       source: "fugle_websocket_fast_sync",
       payload: {
         quoteSource: q.quoteSource,
+        turnoverVolumeEvidence: q.turnoverVolumeEvidence || null,
+        tradeValueEvidence: q.tradeValueEvidence || null,
         exchangeTime: q.exchangeTime,
         fastSync: true,
         total_volume_unit: totalVolumeUnit || null,
