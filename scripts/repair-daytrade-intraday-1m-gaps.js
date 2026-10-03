@@ -1,4 +1,5 @@
 const fs = require("fs");
+const { normalizeResponse, publishMissing } = require("../lib/daytrade-rest-candle-repair.cjs");
 const path = require("path");
 const { expectedMinuteLabels, buildTimelineAudit, isSynthetic } = require("../lib/daytrade-intraday-1m-timeline");
 
@@ -76,10 +77,15 @@ async function acquireLease(key, ownerId) {
 async function releaseLease(key, ownerId) {
   try { await request(`${SUPABASE_URL}/rest/v1/rpc/release_fugle_daytrade_intraday_writer_lease`, { method: "POST", headers: { ...headers(key), "Content-Type": "application/json" }, body: JSON.stringify({ p_owner_id: ownerId }) }); } catch {}
 }
-async function fugleCandles(symbol, apiKey) {
+async function fugleCandles(symbol, apiKey, tradeDate, runId) {
   const url = `https://api.fugle.tw/marketdata/v1.0/stock/intraday/candles/${encodeURIComponent(symbol)}?timeframe=1`;
   const result = await request(url, { headers: { "X-API-KEY": apiKey, Accept: "application/json" } });
-  return Array.isArray(result) ? result : (Array.isArray(result?.data) ? result.data : []);
+  const receivedAt = new Date().toISOString();
+  const normalized = normalizeResponse(result, { symbol, tradeDate, receivedAt, runId });
+  const evidenceDir = path.join(RUNTIME_DIR, "data", "mother-pool", "repair-evidence", tradeDate);
+  fs.mkdirSync(evidenceDir, { recursive: true });
+  fs.writeFileSync(path.join(evidenceDir, `${symbol}-${runId}.json`), JSON.stringify({ received_at: receivedAt, run_id: runId, response_sha256: normalized.response_sha256, raw: result, rejected: normalized.rejected }), { flag: "wx" });
+  return normalized;
 }
 function candleTime(value) {
   const date = new Date(value);
@@ -91,22 +97,8 @@ function rowMinute(value) {
   const parts = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Taipei", hour: "2-digit", minute: "2-digit", hour12: false }).formatToParts(date);
   return `${parts.find((part) => part.type === "hour")?.value || "00"}:${parts.find((part) => part.type === "minute")?.value || "00"}`;
 }
-function normalizeRestCandle(symbol, raw, tradeDate) {
-  const time = candleTime(raw.date || raw.candleTime || raw.time);
-  if (!time || taipeiDate(time) !== tradeDate) return null;
-  const close = number(raw.close);
-  if (!close) return null;
-  return { symbol, candle_time: time, trade_date: tradeDate, open: number(raw.open), high: number(raw.high), low: number(raw.low), close, volume: number(raw.volume) ?? 0 };
-}
-function makeRealRow(base, market = "") {
-  return { ...base, market, source: "fugle_daytrade_writer:rest_gap_repair", source_channel: "rest", candle_origin: "rest_candle", synthetic: false, volume_strategy_usable: true, websocket_row: false, rest_repair_row: true, intraday_odd_lot: false, updated_at: new Date().toISOString(), payload: { source_channel: "rest", candle_origin: "rest_candle", synthetic: false, volume_strategy_usable: true, intradayOddLot: false } };
-}
-function makeSyntheticRow(symbol, tradeDate, label, close, market = "") {
-  const [hour, minute] = label.split(":").map(Number);
-  const utc = new Date(`${tradeDate}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00+08:00`).toISOString();
-  return { symbol, market, candle_time: utc, trade_date: tradeDate, open: close, high: close, low: close, close, volume: 0, source: "fugle_daytrade_writer:synthetic_flat", source_channel: "synthetic", candle_origin: "synthetic_flat", synthetic: true, volume_strategy_usable: false, websocket_row: false, rest_repair_row: false, intraday_odd_lot: false, updated_at: new Date().toISOString(), payload: { synthetic: true, volume_strategy_usable: false, candle_origin: "synthetic_flat", source_channel: "synthetic", intradayOddLot: false } };
-}
 async function main() {
+  if (SYNTHESIZE) throw new Error("SYNTHETIC_REPAIR_DISABLED");
   const tradeDate = TRADE_DATE || taipeiDate();
   const currentMinute = FINAL ? 13 * 60 + 30 : Math.min(13 * 60 + 30, taipeiMinuteNow() - 1);
   const expectedMinutes = expectedMinuteLabels({ endMinute: currentMinute });
@@ -118,16 +110,20 @@ async function main() {
   const ownerId = `${process.env.COMPUTERNAME || "writer-host"}:${process.pid}:gap-repair`;
   if (APPLY) await acquireLease(serviceKey, ownerId);
   let writtenReal = 0; let writtenSynthetic = 0; let repairedSymbols = 0; let failedSymbols = 0;
+  let auditedSymbols = 0; const incompleteSymbols = [];
   try {
     const universe = (await supabaseGet("stock_universe", "select=symbol,market&is_active=eq.true&is_blacklisted=eq.false&is_daytrade_unsuitable=eq.false&limit=2000", serviceKey)).filter((row) => !REQUESTED_SYMBOLS.size || REQUESTED_SYMBOLS.has(String(row.symbol))).slice(0, MAX_SYMBOLS);
-    const existing = await supabaseGet("fugle_daytrade_intraday_1m", `select=symbol,market,candle_time,trade_date,open,high,low,close,volume,source,source_channel,candle_origin,synthetic,volume_strategy_usable,websocket_row,rest_repair_row,payload&trade_date=eq.${encodeURIComponent(tradeDate)}${REQUESTED_SYMBOLS.size ? `&symbol=in.(${[...REQUESTED_SYMBOLS].join(",")})` : ""}&limit=1000000`, serviceKey);
-    const bySymbol = new Map();
-    for (const row of existing) { const symbol = normalizeSymbol(row.symbol); if (!symbol) continue; if (!bySymbol.has(symbol)) bySymbol.set(symbol, []); bySymbol.get(symbol).push(row); }
     for (const item of universe) {
       if (APPLY) await acquireLease(serviceKey, ownerId);
       const symbol = normalizeSymbol(item.symbol); if (!symbol) continue;
-      const localRows = bySymbol.get(symbol) || [];
+      const readback = async () => {
+        const rows = await request(`${SUPABASE_URL}/rest/v1/fugle_daytrade_intraday_1m?select=*&trade_date=eq.${encodeURIComponent(tradeDate)}&symbol=eq.${encodeURIComponent(symbol)}&order=candle_time.asc&limit=301`, { headers: headers(serviceKey) });
+        if (!Array.isArray(rows) || rows.length > 300 || rows.some(row => row.symbol !== symbol || row.trade_date !== tradeDate)) throw new Error("REPAIR_READBACK_SCOPE_INVALID");
+        return rows;
+      };
+      let localRows = await readback();
       const auditBefore = buildTimelineAudit({ symbol, tradeDate, rows: localRows, expectedMinutes });
+      auditedSymbols += 1;
       if (!auditBefore.missing_minutes.length) {
         if (APPLY) {
           await supabaseUpsert("fugle_daytrade_intraday_1m_timeline_audit", [{ ...auditBefore, checked_at: new Date().toISOString(), payload: { source: "gap-repair", synthesize: SYNTHESIZE, apply: true } }], "symbol,trade_date", serviceKey);
@@ -137,27 +133,42 @@ async function main() {
         continue;
       }
       repairedSymbols += 1;
-      const have = new Set(localRows.filter((row) => !isSynthetic(row) && row.volume_strategy_usable !== false && !String(row.source || "").includes("quote_derived")).map((row) => rowMinute(row.candle_time)));
+      const have = new Set(expectedMinutes.filter(label => !auditBefore.missing_minutes.includes(label)));
       let fetched = [];
-      try { fetched = (await fugleCandles(symbol, fugleKey)).map((raw) => normalizeRestCandle(symbol, raw, tradeDate)).filter(Boolean); } catch (error) { failedSymbols += 1; console.error(`[gap-repair] ${symbol} REST failed: ${error.message}`); }
+      const repairRunId = `rest-repair-${Date.now()}-${process.pid}`;
+      const fetchedEvidence = await fugleCandles(symbol, fugleKey, tradeDate, repairRunId);
+      fetched = fetchedEvidence.rows;
+      if (fetchedEvidence.rejected.length) console.error(JSON.stringify({ symbol, run_id: repairRunId, rejected: fetchedEvidence.rejected }));
       await sleep(REST_DELAY_MS);
       const realRows = fetched.filter((row) => expectedMinutes.includes(rowMinute(row.candle_time)) && !have.has(rowMinute(row.candle_time)));
-      if (APPLY) writtenReal += await supabaseUpsert("fugle_daytrade_intraday_1m", realRows.map((row) => makeRealRow(row, item.market || "")), "symbol,candle_time", serviceKey);
-      localRows.push(...realRows.map((row) => makeRealRow(row, item.market || "")));
-      if (SYNTHESIZE) {
-        const covered = new Set(localRows.map((row) => rowMinute(row.candle_time)));
-        let previousClose = null;
-        for (const label of expectedMinutes) {
-          const row = localRows.find((candidate) => rowMinute(candidate.candle_time) === label && !isSynthetic(candidate) && candidate.volume_strategy_usable !== false && !String(candidate.source || "").includes("quote_derived") && number(candidate.close));
-          if (row) { previousClose = number(row.close); continue; }
-          if (!covered.has(label) && previousClose) { const synthetic = makeSyntheticRow(symbol, tradeDate, label, previousClose, item.market || ""); if (APPLY) writtenSynthetic += await supabaseUpsert("fugle_daytrade_intraday_1m", [synthetic], "symbol,candle_time", serviceKey); localRows.push(synthetic); covered.add(label); }
-        }
+      let blocked = [];
+      if (APPLY) {
+        const result = await publishMissing({ existing: localRows, candidates: realRows, readback,
+          insert: async rows => {
+            const inserted = [];
+            for (let offset = 0; offset < rows.length; offset += 50) {
+              const chunk = rows.slice(offset, offset + 50);
+              const result = await request(`${SUPABASE_URL}/rest/v1/fugle_daytrade_intraday_1m?on_conflict=symbol,candle_time`, {
+                method: "POST", headers: { ...headers(serviceKey), Prefer: "resolution=ignore-duplicates,return=representation", "Content-Type": "application/json" }, body: JSON.stringify(chunk)
+              });
+              if (!Array.isArray(result)) throw new Error("INVALID_INSERT_ACK");
+              inserted.push(...result);
+            }
+            return inserted;
+          } });
+        writtenReal += result.written;
+        blocked = result.blocked;
+        localRows = result.rows;
       }
+      // Dry run audits persisted rows only; proposed repairs are not successful writes.
       const audit = buildTimelineAudit({ symbol, tradeDate, rows: localRows, expectedMinutes });
+      if (!audit.replay_allowed) incompleteSymbols.push({ symbol, missing_minutes: audit.missing_minutes, blocked });
       if (APPLY) await supabaseUpsert("fugle_daytrade_intraday_1m_timeline_audit", [{ ...audit, checked_at: new Date().toISOString(), payload: { source: "gap-repair", synthesize: SYNTHESIZE, apply: true } }], "symbol,trade_date", serviceKey);
       else console.log(JSON.stringify(audit));
     }
-    console.log(JSON.stringify({ ok: true, apply: APPLY, tradeDate, expectedMinutes: expectedMinutes.length, repairedSymbols, failedSymbols, writtenReal, writtenSynthetic, synthesize: SYNTHESIZE, restDelayMs: REST_DELAY_MS, replayAllowedRequiresMissingMinutesEmpty: true }, null, 2));
+    const ok = auditedSymbols > 0 && incompleteSymbols.length === 0;
+    if (!ok) process.exitCode = 1;
+    console.log(JSON.stringify({ ok, auditedSymbols, incompleteSymbols, apply: APPLY, tradeDate, expectedMinutes: expectedMinutes.length, repairedSymbols, failedSymbols, writtenReal, writtenSynthetic, synthesize: SYNTHESIZE, restDelayMs: REST_DELAY_MS, replayAllowedRequiresMissingMinutesEmpty: true }, null, 2));
   } finally { if (APPLY) await releaseLease(serviceKey, ownerId); }
 }
 main().catch((error) => { console.error(JSON.stringify({ ok: false, error: error.message || String(error) }, null, 2)); process.exit(1); });
