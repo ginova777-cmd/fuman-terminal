@@ -1,0 +1,13 @@
+'use strict';
+const assert=require('node:assert/strict'),{normalize}=require('../lib/fugle-rest-quote-evidence.cjs');
+const nowMs=Date.parse('2026-10-02T10:00:00+08:00'),t=nowMs*1000;
+const raw={symbol:'3163',date:'2026-10-02',market:'OTC',previousClose:100,lastTrade:{price:105,time:t-1000000},lastTrial:{price:99,time:t-5000000},total:{tradeVolume:0,tradeValue:0,time:t},lastUpdated:t};
+let r=normalize(raw,'3163',{nowMs});assert.equal(r.close,105);assert.equal(r.isTrial,null);assert.equal(r.isHalted,null);assert.equal(r.totalVolumeAvailable,true);assert.equal(r.tradeVolume,0);assert.equal(r.totalVolumeUnit,'lots');assert.notEqual(r.priceEventAt,r.quoteSeenAt);assert.equal(r.turnoverVolumeEvidence.event_at,r.totalVolumeSourceEventAt);assert.deepEqual(r.rawEvidence.payload,raw);
+r=normalize({...raw,isTrial:true},'3163',{nowMs});assert.equal(r.close,99);assert.equal(r.priceEventAt,r.trialEventAt);
+for(const patch of [{symbol:'2330'},{date:'2026-10-01'},{lastTrade:{}},{lastTrade:{price:105,time:t+1e6}},{lastTrade:{price:'105',time:t}},{lastTrade:{price:105,time:nowMs}}])assert.equal(normalize({...raw,...patch},'3163',{nowMs}),null);
+r=normalize({...raw,total:{tradeVolume:'500',tradeValue:false,time:t}},'3163',{nowMs});assert.equal(r.totalVolumeAvailable,false);assert.equal(r.tradeValueAvailable,false);assert.equal(r.tradeVolume,null);
+r=normalize({...raw,market:'UNKNOWN'},'3163',{nowMs});assert.equal(r.totalVolumeUnit,null);assert.equal(r.totalVolumeAvailable,false);
+r=normalize({...raw,total:{tradeVolume:500,tradeValue:30000000}},'3163',{nowMs});assert.equal(r.totalVolumeSourceEventAt,null);assert.equal(r.totalVolumeAvailable,false);
+r=normalize({...raw,isSynthetic:true},'3163',{nowMs});assert.equal(r.totalVolumeAvailable,false);assert.equal(r.tradeValueAvailable,false);
+r=normalize({...raw,market:'ESB',tradingHalt:{isHalted:false,time:t}},'3163',{nowMs});assert.equal(r.totalVolumeUnit,'shares');assert.equal(r.isHalted,false);
+console.log('PASS: native trade/trial time separation, strict values/date/symbol, no receipt-time fallback, volume/value provenance and unknown flags.');
