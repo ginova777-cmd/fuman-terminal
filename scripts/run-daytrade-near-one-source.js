@@ -296,6 +296,7 @@ function trialFromSnapshot(row, tradeDate, captureSlot) {
     && (nativeSource === "fugle_native_trial" || nativeSource === "fugle-daytrade-ws:trial-cache")
     && eventDate === tradeDate
     && eventSlot === captureSlot
+    && event.getTime() <= Date.now()
     && payload.close_fallback_used !== true
     && payload.bid_ask_fallback_used !== true
     && payload.post_0900_backfill_used !== true;
@@ -323,17 +324,7 @@ function trialFromSnapshot(row, tradeDate, captureSlot) {
   };
 }
 
-async function readPreopenRows(symbols) {
-  const rows = [];
-  for (let offset = 0; offset < symbols.length; offset += 200) {
-    const group = symbols.slice(offset, offset + 200);
-    const filter = group.map((symbol) => encodeURIComponent(symbol)).join(",");
-    rows.push(...await supabaseGetPaged(
-      "fugle_preopen_snapshot",
-      `select=symbol,updated_at,reference_price,trial_price,is_trial,best_bid_price,best_ask_price,bid_volume,ask_volume,bid1_price,bid1_volume,ask1_price,ask1_volume,payload&symbol=in.(${filter})&order=updated_at.desc`,
-      { service: true, pageSize: 200 },
-    ));
-  }
+function readLocalPreopenRows(symbols) {
   // The natural-slot producer and the long Writer start concurrently. Read the
   // authoritative local Fugle cache first so the slot does not race a later
   // Supabase mirror write. Only explicit same-day trial events are admitted.
@@ -359,7 +350,27 @@ async function readPreopenRows(symbols) {
     });
   }
   // Trial-auction evidence only: never substitute regular/post-09:00 live quotes.
-  return [...localRows, ...rows];
+  return localRows;
+}
+async function readPreopenRows(symbols, tradeDate, slot) {
+  return require('../lib/preopen-local-evidence.cjs').readSharedPreopenEvidence({
+    symbols,
+    readLocal: () => readLocalPreopenRows(symbols),
+    isUsable: row => {
+      const trial = trialFromSnapshot(row, tradeDate, slot);
+      const event = Date.parse(trial?.trial_event_at || '');
+      return trial?.natural_schedule_evidence === true
+        && trial.trial_price > 0 && trial.reference_price > 0
+        && trial.best_bid > 0 && trial.best_ask > 0
+        && Number.isFinite(event) && event <= Date.now();
+    },
+    readRemote: group => {
+      const filter = group.map(symbol => encodeURIComponent(symbol)).join(',');
+      return supabaseGetPaged('fugle_preopen_snapshot',
+        `select=symbol,updated_at,reference_price,trial_price,is_trial,best_bid_price,best_ask_price,bid_volume,ask_volume,bid1_price,bid1_volume,ask1_price,ask1_volume,payload&symbol=in.(${filter})&order=updated_at.desc`,
+        { service: true, pageSize: 200 });
+    },
+  });
 }
 function latestBySymbol(rows, tradeDate) {
   const map = new Map();
@@ -478,7 +489,7 @@ async function runOnce() {
   const activeQuotes = tickerResult.rows.filter((row) => selectQuote(byFuture, row, tradeDate));
   result.websocketFreshRows = activeQuotes.length;
   if (!activeQuotes.length) result.failedChecks.push("websocket_quote_source_missing");
-  const preopenRows = await readPreopenRows(tickerResult.rows.map((row) => row.symbol));
+  const preopenRows = await readPreopenRows(tickerResult.rows.map((row) => row.symbol), tradeDate, slot);
   const snapshotRows = slot ? await captureSlotRows(tradeDate, slot, tickerResult.rows, [...dedicatedRows, ...cacheRows], preopenRows) : [];
   result.snapshotRows = snapshotRows.length;
   result.snapshotCompleteRows = snapshotRows.filter((row) => row.fut_price !== null
@@ -571,6 +582,8 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(JSON.stringify({ ok: false, status: "error", error: error?.message || String(error) }, null, 2));
+  console.error(JSON.stringify({ ok: false, status: "error", error: error?.message || String(error),
+    preopenReadEvidence: error?.preopenReadEvidence || null,
+    preopenLocalEvidence: error?.preopenLocalEvidence || null }, null, 2));
   process.exitCode = 1;
 });
