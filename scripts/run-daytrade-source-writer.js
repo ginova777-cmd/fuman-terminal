@@ -539,7 +539,8 @@ function restFallbackDue(state) {
 }
 
 function quoteFreshnessTime(quote) {
-  return quote?.quote_seen_at || quote?.updated_at || quote?.last_trade_time || "";
+  // Receipt/publication time does not prove a new market event.
+  return quote?.last_trade_time || "";
 }
 
 function isWebSocketQuote(quote) {
@@ -565,15 +566,18 @@ function fugleTransportHealthy() {
   return fugleTransportSnapshot.healthy;
 }
 
-// Fugle trades is event-driven: an idle symbol legitimately has no new trade.
-// A same-day WebSocket cumulative quote remains current while the authenticated
-// trades/aggregates/candles transport is healthy (heartbeat or aggregate update).
+// A healthy connection does not establish freshness for any particular symbol.
+// Keep idle quotes available as observations without renewing their event age.
 function effectiveQuoteAgeSeconds(quote, fallback = 999999) {
   if (!quote || !isFugleQuote(quote)) return fallback;
-  const eventAge = ageSeconds(quoteFreshnessTime(quote), fallback);
-  if (isWebSocketQuote(quote) && eventAge <= WINDOW_SECONDS) return eventAge;
-  const quoteTradeDate = String(quote.trade_date || quote.payload?.tradeDate || quote.payload?.trade_date || quoteTradeDateForWrite(quote)).slice(0, 10);
-  return quoteTradeDate === taipeiDate() && fugleTransportHealthy() ? 0 : eventAge;
+  const eventAt = quoteFreshnessTime(quote);
+  const eventMs = Date.parse(String(eventAt || ""));
+  const now = Date.now();
+  if (!Number.isFinite(eventMs) || eventMs > now) return fallback;
+  const eventDate = new Date(eventMs + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const quoteTradeDate = String(quote.trade_date || quote.payload?.tradeDate || quote.payload?.trade_date || "").slice(0, 10);
+  if (quoteTradeDate !== taipeiDate() || eventDate !== quoteTradeDate) return fallback;
+  return Math.floor((now - eventMs) / 1000);
 }
 
 function ageSeconds(value, fallback = 999999) {
@@ -1485,16 +1489,15 @@ function mergeWebSocketQuoteCache(quoteMap, memoryCache) {
       '',
     );
     const changePercentValue = currentValue(row.changePercent, row.change_percent, row.percent);
+    const nativeTradeTime = normalizeTimestamp(row.lastTradeTime, null);
     const merged = {
       ...previous,
       symbol,
+      trade_date: row.tradeDate || row.trade_date || (nativeTradeTime ? taipeiDateFrom(nativeTradeTime) : null),
       market: row.market || previous.market || "",
       quote_seen_at: seenAt,
       updated_at: receivedAt || previous.updated_at || "",
-      last_trade_time: normalizeTimestamp(
-        row.lastTradeTime || row.quoteTime || row.time || previous.last_trade_time,
-        seenAt,
-      ),
+      last_trade_time: nativeTradeTime,
       price: numeric(row.close ?? row.price, previous.price, true),
       open_price: numeric(row.open ?? row.openPrice, previous.open_price, true),
       high_price: numeric(row.high ?? row.highPrice, previous.high_price, true),
@@ -5094,11 +5097,11 @@ function normalizeQuote(payload, symbol) {
   const limitUpPrice = numberValue(payload?.limitUpPrice || payload?.limitUp || payload?.limit_up_price || (previousClose > 0 ? previousClose * 1.1 : 0));
   const limitDownPrice = numberValue(payload?.limitDownPrice || payload?.limitDown || payload?.limit_down_price || (previousClose > 0 ? previousClose * 0.9 : 0));
   const quoteSeenAt = nowIso();
-  const quoteTime = normalizeTimestamp(payload?.lastUpdated || payload?.lastTrade?.time, quoteSeenAt);
-  const lastTradeTime = normalizeTimestamp(payload?.lastTrade?.time || payload?.lastUpdated, quoteTime);
+  const quoteTime = normalizeTimestamp(payload?.lastUpdated, null);
+  const lastTradeTime = normalizeTimestamp(payload?.lastTrade?.time, null);
   return {
     symbol: code,
-    trade_date: taipeiDateFrom(lastTradeTime || quoteTime),
+    trade_date: payload?.date || (lastTradeTime ? taipeiDateFrom(lastTradeTime) : null),
     name: payload?.name || code,
     market: payload?.market || payload?.exchange || "",
     updated_at: quoteTime,
@@ -8154,7 +8157,7 @@ async function tick() {
         market: quote.market || '',
         quote_seen_at: normalizeTimestamp(quote.quote_seen_at || quote.updated_at, nowIso()),
         updated_at: normalizeTimestamp(quote.updated_at || quote.quote_seen_at, nowIso()),
-        last_trade_time: normalizeTimestamp(quote.last_trade_time || quote.quote_seen_at || quote.updated_at, nowIso()),
+        last_trade_time: normalizeTimestamp(quote.last_trade_time, null),
         price: numberValue(quote.price),
         open_price: numberValue(quote.open_price),
         high_price: numberValue(quote.high_price),
@@ -8377,7 +8380,7 @@ async function tick() {
         market: quote.market || '',
         quote_seen_at: normalizeTimestamp(quote.quote_seen_at || quote.updated_at, nowIso()),
         updated_at: normalizeTimestamp(quote.updated_at || quote.quote_seen_at, nowIso()),
-        last_trade_time: normalizeTimestamp(quote.last_trade_time || quote.quote_seen_at || quote.updated_at, nowIso()),
+        last_trade_time: normalizeTimestamp(quote.last_trade_time, null),
         price: numberValue(quote.price),
         open_price: numberValue(quote.open_price),
         high_price: numberValue(quote.high_price),
