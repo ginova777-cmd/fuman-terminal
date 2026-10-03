@@ -89,12 +89,15 @@ async function main() {
       },
     };
   }).filter((q) => /^\d{4}$/.test(q.symbol) && q.quote_seen_at);
-  const candles = (candleCache.candles || []).filter((c) => c.tradeDate === date).map((c) => ({
-    symbol: String(c.symbol || c.code || ""), market: c.market || "", trade_date: date, candle_time: iso(c.candleTime || c.date),
-    open: num(c.open), high: num(c.high), low: num(c.low), close: num(c.close), volume: num(c.volume), updated_at: iso(c.candleSeenAt || candleCache.updatedAt),
-    source: "fugle_daytrade_fast_sync:websocket_candles", synthetic: c.synthetic, volume_strategy_usable: c.volumeStrategyUsable !== false,
-    payload: { ...(c.payload || {}), fastSync: true, cacheUpdatedAt: candleCache.updatedAt },
-  })).filter((c) => /^\d{4}$/.test(c.symbol) && c.candle_time && c.close !== null);
+  const { mapNaturalCandle } = require('../lib/daytrade-fast-candle-row');
+  // Same-day history can catch up after a write outage. Keep original receive
+  // times and require proven natural, closed bars; never mark missing flags true.
+  const candles = (candleCache.candles || []).map(c => {
+    const row = mapNaturalCandle(c, { tradeDate: date, nowMs: now.getTime(), maxSeenAgeMs: Infinity });
+    return row ? { ...row, source_channel: 'candles', candle_origin: 'websocket_candle', websocket_row: true,
+      rest_repair_row: false, intraday_odd_lot: false,
+      payload: { ...row.payload, cacheUpdatedAt: candleCache.updatedAt } } : null;
+  }).filter(Boolean);
   const deltaStore = require('../lib/daytrade-candle-delta');
   const checkpointPath = path.join(RUNTIME, 'state', 'daytrade-fast-candle-delta.json');
   let checkpoint;

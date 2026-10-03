@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {mapNaturalCandle}=require('../lib/daytrade-fast-candle-row');
+const options={tradeDate:'2026-10-02',nowMs:Date.parse('2026-10-02T13:31:00+08:00'),maxSeenAgeMs:Infinity};
+const c={symbol:'3163',market:'OTC',tradeDate:'2026-10-02',candleTime:'2026-10-02T09:01:00+08:00',candleSeenAt:'2026-10-02T09:02:00+08:00',source:'fugle-ws-candles',sourceChannel:'candles',candleOrigin:'websocket_candle',synthetic:false,volumeStrategyUsable:true,intradayOddLot:false,restRepairRow:false,open:100,high:102,low:99,close:101,volume:10,payload:{}};
+assert.equal(mapNaturalCandle(c,options).payload.volume_unit,'lots');
+assert.equal(mapNaturalCandle({...c,market:'ESB'},options).payload.volume_unit,'shares');
+assert.equal(mapNaturalCandle(c,options).payload.sourceCandleSeenAt,'2026-10-02T01:02:00.000Z');
+for(const patch of [{synthetic:undefined},{volumeStrategyUsable:undefined},{volumeStrategyUsable:'false'},{intradayOddLot:undefined},{volume:null},{volume:-1},{source:'fixture'},{market:'UNKNOWN'},{payload:{type:'INDEX'}},{high:99},{tradeDate:'2026-10-01'},{candleSeenAt:'2026-10-02T14:00:00+08:00'}])assert.equal(mapNaturalCandle({...c,...patch},options),null,JSON.stringify(patch));
+assert.equal(mapNaturalCandle(c,{...options,nowMs:Date.parse('2026-10-02T09:01:30+08:00')}),null);
+assert.equal(mapNaturalCandle(c,options).candle_time,'2026-10-02T01:01:00.000Z');
+console.log(JSON.stringify({ok:true,isolated:true,natural_session:false,tests:'units,source,strict booleans,missing volume,dates,closed bars,OHLC,receive time,history preservation'}));
