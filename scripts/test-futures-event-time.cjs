@@ -1,0 +1,11 @@
+'use strict';
+const assert=require('node:assert/strict'),{futuresEventTime}=require('../lib/daytrade-futures-event-time.cjs');
+const ms=Date.parse('2026-10-02T13:44:59+08:00'),now=Date.parse('2026-10-02T23:59:59+08:00');
+const q={quoteSeenAt:'2026-10-02T23:59:58+08:00',updated_at:'2026-10-02T23:59:58+08:00',payload:{lastUpdated:ms*1000}};
+const r=futuresEventTime(q,now);assert.equal(r.event_at,'2026-10-02T05:44:59.000Z');assert.equal(r.received_at,'2026-10-02T15:59:58.000Z');assert.equal(r.source_field,'lastUpdated');
+assert.equal(futuresEventTime({...q,payload:{}},now).ok,false);
+assert.equal(futuresEventTime({...q,payload:{lastUpdated:(now+1000)*1000}},now).ok,false);
+assert.equal(futuresEventTime({...q,quoteSeenAt:'2026-10-02T08:00:00+08:00'},now).ok,false);
+assert.equal(futuresEventTime({...q,payload:{lastTrade:{time:ms*1000}}},now).source_field,'lastTrade.time');
+assert.equal(futuresEventTime({...q,payload:{lastUpdated:String(ms*1000)}},now).ok,false);
+console.log(JSON.stringify({ok:true,isolated:true,tests:'native event vs receive; no timestamp fabrication; future/missing/invalid rejection'}));
