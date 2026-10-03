@@ -1,4 +1,5 @@
 const fs = require("fs");
+const { nativeEventAt } = require("../lib/futopt-native-event-time.cjs");
 const path = require("path");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 
@@ -281,10 +282,12 @@ function finiteNumber(value) {
 function freshFormalFutoptRows(checkedAt) {
   const cache = readJson(FUGLE_FUTOPT_WS_QUOTES_FILE, {});
   const rows = Array.isArray(cache?.quotes) ? cache.quotes : [];
-  const freshnessCutoff = Date.now() - 180000;
+  const nowMs = Date.now();
+  const freshnessCutoff = nowMs - 180000;
   return rows
+    .map(quote => ({ ...quote, native_event_at: nativeEventAt(quote, nowMs) }))
     .filter((quote) => {
-      const seen = Date.parse(quote.quoteSeenAt || quote.updated_at || cache.updatedAt || "");
+      const seen = Date.parse(quote.native_event_at || "");
       return normalizeFutureSymbol(quote.future_symbol) && Number.isFinite(seen) && seen >= freshnessCutoff && finiteNumber(quote.last_price ?? quote.price) > 0;
     })
     .map((quote) => {
@@ -294,7 +297,7 @@ function freshFormalFutoptRows(checkedAt) {
         future_symbol: futureSymbol,
         underlying_symbol: quote.underlying_symbol || (futureSymbol.startsWith("TXF") ? "TXF" : null),
         underlying_name: quote.underlying_name || null,
-        updated_at: quote.quoteSeenAt || quote.updated_at || cache.updatedAt || checkedAt,
+        updated_at: quote.native_event_at,
         last_price: finiteNumber(quote.last_price ?? quote.price),
         open_price: finiteNumber(quote.open_price),
         high_price: finiteNumber(quote.high_price ?? quote.last_price ?? quote.price),
@@ -310,6 +313,7 @@ function freshFormalFutoptRows(checkedAt) {
           source: "fugle_futopt_websocket_collector:formal_live_mirror",
           quote_seen_at: quote.quoteSeenAt || "",
           collector_checked_at: checkedAt,
+          native_event_at: quote.native_event_at,
           formal_fugle_websocket: true,
         },
       };
