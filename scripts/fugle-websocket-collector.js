@@ -702,54 +702,7 @@ function mergeQuotes(newQuotes) {
 }
 
 function normalizeQuote(payload, requestedCode) {
-  const code = normalizeCode(payload?.symbol || requestedCode);
-  if (!/^\d{4}$/.test(code)) return null;
-  const prevClose = cleanNumber(payload?.previousClose || payload?.referencePrice);
-  const close = cleanNumber(payload?.lastPrice || payload?.closePrice || payload?.lastTrial?.price || payload?.referencePrice || prevClose);
-  if (!close || !prevClose) return null;
-  const bid = Array.isArray(payload?.bids) ? payload.bids[0] : null;
-  const ask = Array.isArray(payload?.asks) ? payload.asks[0] : null;
-  const updatedAt = payload?.lastUpdated || nowIso();
-  // Fugle regular-board stock quote volumes are already expressed in lots.
-  // Do not apply the legacy shares-to-lots magnitude heuristic here.
-  const bidCum = payload?.total?.tradeVolumeAtBid === null || payload?.total?.tradeVolumeAtBid === undefined
-    ? null
-    : cleanNumber(payload.total.tradeVolumeAtBid);
-  const askCum = payload?.total?.tradeVolumeAtAsk === null || payload?.total?.tradeVolumeAtAsk === undefined
-    ? null
-    : cleanNumber(payload.total.tradeVolumeAtAsk);
-  return {
-    code,
-    name: payload?.name || code,
-    close,
-    closeSource: "fugle-rest-collector",
-    change: cleanNumber(payload?.change) || close - prevClose,
-    percent: cleanNumber(payload?.changePercent) || ((close - prevClose) / prevClose) * 100,
-    open: cleanNumber(payload?.openPrice),
-    high: cleanNumber(payload?.highPrice || close),
-    low: cleanNumber(payload?.lowPrice || close),
-    prevClose,
-    tradeVolume: cleanNumber(payload?.total?.tradeVolume || payload?.tradeVolume || payload?.volume),
-    tradeValue: cleanNumber(payload?.total?.tradeValue),
-    bidPrice: cleanNumber(bid?.price),
-    bidSize: cleanNumber(bid?.size),
-    askPrice: cleanNumber(ask?.price),
-    askSize: cleanNumber(ask?.size),
-    cumulativeBidVolume: bidCum,
-    cumulativeAskVolume: askCum,
-    cumulativeBidAskVolume: bidCum !== null && askCum !== null ? bidCum + askCum : null,
-    market: payload?.market || payload?.exchange || "",
-    time: updatedAt,
-    quoteTime: updatedAt,
-    quoteSeenAt: nowIso(),
-    updatedAt,
-    quoteSource: "fugle-rest-collector",
-    realtimeFallback: "fugle-rest-collector",
-    recoveredFromRealtimeFallback: true,
-    isTrial: Boolean(payload?.isTrial),
-    referencePrice: cleanNumber(payload?.referencePrice),
-    trialPrice: cleanNumber(payload?.lastTrial?.price),
-  };
+  return require('../lib/fugle-rest-quote-evidence.cjs').normalize(payload, requestedCode);
 }
 
 function normalizeFinMindQuote(row, today) {
@@ -1512,9 +1465,10 @@ async function runStreamingCollector() {
         nextRotationCursor: selection.nextRotationCursor,
         rotationUniverse: selection.rotationUniverse,
         rotationWindow: selection.rotationWindow,
-        rotationCoverageSeconds: selection.rotationWindow > 0
-          ? Number(((Math.ceil(selection.rotationUniverse / selection.rotationWindow) * STREAMING_RESUBSCRIBE_MS) / 1000).toFixed(3))
-          : 0,
+        rotationCoverageSeconds: null,
+        channelCoverage: require('../lib/collector-channel-coverage.cjs').inspect(selection, {
+          mode: COLLECTOR_ROLE === 'daytrade' ? 'manifest_event_and_session_boundary' : 'periodic',
+        }),
         subscribeChunkSize: STREAMING_SUBSCRIBE_CHUNK_SIZE,
         subscribeChunks: selection.subscriptionCount,
         subscribeChunksSent: chunksSent,
