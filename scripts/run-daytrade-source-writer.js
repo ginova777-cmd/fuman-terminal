@@ -7716,19 +7716,23 @@ async function syncWebSocketFutoptQuotes() {
   const rows = [];
   let stockRows = 0;
   let txfRows = 0;
+  const timingGaps = [];
+  const timingNowMs = Date.now();
   for (const quote of cache.quotes.values()) {
     const futureSymbol = String(quote.future_symbol || "").trim().toUpperCase();
     if (!futureSymbol) continue;
     const price = numberValue(quote.last_price ?? quote.price);
     if (!price) continue;
     const underlyingSymbol = normalizeCode(quote.underlying_symbol) || (futureSymbol.startsWith("TXF") ? "TXF" : null);
+    const timing = require('../lib/daytrade-futures-event-time.cjs').futuresEventTime(quote, timingNowMs);
+    if (!timing.ok) { timingGaps.push({ future_symbol: futureSymbol, reason: timing.reason }); continue; }
     if (/^\d{4}$/.test(String(underlyingSymbol || ""))) stockRows += 1;
     else if (underlyingSymbol === "TXF" || futureSymbol.startsWith("TXF")) txfRows += 1;
     rows.push({
       future_symbol: futureSymbol,
       underlying_symbol: underlyingSymbol,
       underlying_name: quote.underlying_name || null,
-      updated_at: normalizeTimestamp(quote.quoteSeenAt || cache.payload?.updatedAt, nowIso()),
+      updated_at: timing.event_at,
       last_price: price,
       open_price: numberValue(quote.open_price),
       high_price: numberValue(quote.high_price || price),
@@ -7745,16 +7749,20 @@ async function syncWebSocketFutoptQuotes() {
         session: quote.session || "",
         underlying_name: quote.underlying_name || "",
         marketUpdatedAt: quote.updated_at || "",
+        source_event_at: timing.event_at,
+        source_received_at: timing.received_at,
+        source_event_field: timing.source_field,
+        source_time_contract: 'fugle-futures-native-event-time-v1',
         cacheUpdatedAt: cache.payload?.updatedAt || "",
         source: "fugle-futopt-websocket-cache",
       },
     });
   }
   if (!rows.length) {
-    return { written: 0, skipped: true, cacheCount: cache.quotes.size, stockRows: 0, txfRows: 0 };
+    return { written: 0, skipped: true, cacheCount: cache.quotes.size, stockRows: 0, txfRows: 0, timingGaps };
   }
   await supabaseUpsert("fugle_daytrade_futopt_quotes_live", rows, "future_symbol", { batchSize: SLOW_TABLE_BATCH_SIZE, timeoutMs: 30000, retries: 1, retryDelayMs: 1000 });
-  return { written: rows.length, skipped: false, cacheCount: cache.quotes.size, stockRows, txfRows };
+  return { written: rows.length, skipped: false, cacheCount: cache.quotes.size, stockRows, txfRows, timingGaps };
 }
 
 function taipeiClockMinutesFrom(value) {
