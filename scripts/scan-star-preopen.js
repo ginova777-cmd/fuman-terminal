@@ -250,7 +250,7 @@ async function main() {
     fetchStockFutureLiveContracts().catch(() => fetchFutoptStockMappingReady()),
     fetchPreopenSnapshots(),
     fetchSourceStatus().catch((error) => ({ ok: false, error: error?.message || String(error), rows: [] })),
-    fetchStarPreopenReadback().catch((error) => ({ ok: false, error: error?.message || String(error), rows: [] })),
+    fetchStarPreopenReadback({ tradeDate: date }).catch((error) => ({ ok: false, error: error?.message || String(error), rows: [] })),
   ]);
 
   const mappings = (mappingResult.rows || []).map(normalizeMapping).filter((row) => /^\d{4}$/.test(row.code));
