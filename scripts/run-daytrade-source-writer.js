@@ -7963,28 +7963,11 @@ async function captureFutoptPreopenBaseline(futoptRows) {
 }
 
 async function syncMarketCalendarEvidence() {
-  const calendar = await isTwseTradingDay(new Date(), { stateDir: runtimePath("state"), includeEvidence: true });
-  const checkedAt = nowIso();
-  const minutes = taipeiMinutes();
-  const session = minutes < 9 * 60 ? "preopen" : minutes <= 13 * 60 + 30 ? "regular" : "closed";
-  const row = {
-    trade_date: calendar.date || taipeiDate(),
-    market: "TW",
-    is_open: calendar.isTradingDay === true,
-    session,
-    note: calendar.isTradingDay === true ? "TWSE trading day verified by authoritative daytrade writer" : String(calendar.reason || "market_closed"),
-    updated_at: checkedAt,
-    payload: {
-      source: "daytrade-source-writer:twse-trading-day",
-      checked_at: checkedAt,
-      calendar_contract: "market-calendar-contract-v1",
-      calendar_decision: calendar,
-      override: calendar.override === true,
-      reason: calendar.reason || null,
-    },
-  };
-  await supabaseUpsert("market_calendar", [row], "trade_date,market");
-  return row;
+  const rows = await require('../lib/daytrade-calendar-publication.cjs').buildCalendarPublication({
+    now: new Date(), stateDir: runtimePath('state'), days: 10,
+  });
+  await supabaseUpsert('market_calendar', rows, 'trade_date,market', { batchSize: 10 });
+  return rows[0];
 }
 
 async function tick() {
