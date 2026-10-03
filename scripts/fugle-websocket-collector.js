@@ -1344,6 +1344,16 @@ async function runStreamingCollector() {
     return;
   }
 
+  // Shared daily qualification only; existing WebSocket subscriptions remain
+  // unchanged. The host validates the official calendar and persistent pacing.
+  if (COLLECTOR_ROLE === 'daytrade') {
+    const qualificationHost = require('../lib/shared-stock-qualification-host.cjs').createQualificationHost({
+      runtimeDir: RUNTIME_DIR, apiKey, readSymbols,
+      budgetAvailable: now => now >= Math.max(cooldownUntil || 0, Date.parse(readRateState().cooldownUntil || '') || 0),
+      onStatus: status => writeComponentStatus('stockQualification', status),
+    });
+    qualificationHost.start();
+  }
   if (MEMORY_ENABLED && !memoryDetectionHost) {
     memoryDetectionHost = require('../lib/daytrade-collector-detection-host').createCollectorDetectionHost({
       loadWarmup: () => require('./prepare-daytrade-memory-warmup').prepare(),

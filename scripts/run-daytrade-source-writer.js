@@ -8012,6 +8012,13 @@ async function tick() {
   tickStage("active_symbols:start");
   const activeSymbols = await fetchActiveSymbols();
   tickStage("active_symbols:complete", { rows: activeSymbols.length });
+  const qualificationPublication = await require('../lib/publish-stock-qualification.cjs').publishStockQualification({
+    directory: runtimePath('cache','reference','fugle-stock-qualification'), tradeDate: taipeiDate(),
+    stockRows: activeSymbols.sourceEvidence.stock_tickers, apply: APPLY,
+    rpc: (name,body) => supabaseRpc(name,body,{service:true}),
+  });
+  tickStage('stock_qualification:publication', qualificationPublication);
+
   const a16Warmup = {status:'PAUSED',complete:false,reason:'OWNER_REQUESTED_SEQUENTIAL_VALIDATION'};
   tickStage("a16_history_warmup", a16Warmup);
   // Daily volume is independent of the live candle write. Start it before the
