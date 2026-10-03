@@ -1,5 +1,5 @@
 const fs = require("fs");
-const { nativeEventAt, nativePrice } = require("../lib/futopt-native-event-time.cjs");
+const { nativeEventAt, nativePrice, nativeQuoteFields } = require("../lib/futopt-native-event-time.cjs");
 const path = require("path");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 
@@ -300,12 +300,7 @@ function freshFormalFutoptRows(checkedAt) {
         underlying_name: quote.underlying_name || null,
         updated_at: quote.native_event_at,
         last_price: finiteNumber(quote.last_price ?? quote.price),
-        open_price: finiteNumber(quote.open_price),
-        high_price: finiteNumber(quote.high_price ?? quote.last_price ?? quote.price),
-        low_price: finiteNumber(quote.low_price ?? quote.last_price ?? quote.price),
-        previous_close: finiteNumber(quote.previous_close),
-        change_percent: finiteNumber(quote.change_percent),
-        total_volume: finiteNumber(quote.total_volume ?? quote.volume),
+        ...nativeQuoteFields(quote.payload),
         product,
         session: quote.session || "",
         source: "fugle_futopt_websocket_collector:formal_live_mirror",

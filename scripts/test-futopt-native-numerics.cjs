@@ -1,0 +1,35 @@
+'use strict';
+const assert=require('assert/strict'),fs=require('fs'),vm=require('vm');
+const {nativeQuoteFields,nativePrice,nativeEventAt}=require('../lib/futopt-native-event-time.cjs');
+const {normalizeFutoptQuote}=require('../lib/fugle-futopt-websocket');
+const missing={open_price:null,high_price:null,low_price:null,previous_close:null,change_percent:null,total_volume:null};
+assert.deepEqual(nativeQuoteFields({}),missing);
+for(const v of [null,undefined,'100','',false,true,NaN,Infinity]){
+ const fields=nativeQuoteFields({openPrice:v,highPrice:v,lowPrice:v,previousClose:v,changePercent:v,total:{tradeVolume:v}});
+ assert.deepEqual(fields,missing);
+}
+assert.equal(nativeQuoteFields({changePercent:0,total:{tradeVolume:0}}).change_percent,0);
+assert.equal(nativeQuoteFields({changePercent:0,total:{tradeVolume:0}}).total_volume,0);
+assert.equal(nativeQuoteFields({total:{tradeVolume:0},volume:500}).total_volume,0);
+assert.equal(nativeQuoteFields({volume:500,totalVolume:500}).total_volume,null);
+assert.equal(nativeQuoteFields({total:{tradeVolume:-1}}).total_volume,null);
+assert.equal(nativeQuoteFields({total:{tradeVolume:1.5}}).total_volume,null);
+assert.equal(nativeQuoteFields({changePercent:-2}).change_percent,-2);
+const valid={symbol:'TXFJ6',lastPrice:100,openPrice:99,highPrice:101,lowPrice:98,previousClose:97,changePercent:3,total:{tradeVolume:100}};
+assert.equal(normalizeFutoptQuote(valid).total_volume,100);
+const partial=normalizeFutoptQuote({symbol:'TXFJ6',lastPrice:100,volume:9});
+for(const [k,v] of Object.entries(missing))assert.equal(partial[k],v);
+const source=fs.readFileSync(require.resolve('./fugle-futopt-websocket-collector.js'),'utf8');
+const fn=source.match(/function freshFormalFutoptRows\([^]*?\n}/)[0];
+const now=Date.parse('2026-10-02T03:00:00Z');
+let raw={symbol:'TXFJ6',lastPrice:100,lastUpdated:now*1000};
+const q={future_symbol:'TXFJ6',last_price:100,open_price:123,high_price:125,low_price:90,change_percent:9,total_volume:999,payload:raw};
+const ctx={Date:class extends Date{static now(){return now}},nativePrice,nativeEventAt,nativeQuoteFields,readTxfReference:()=>({txf_reference:null}),readJson:()=>({quotes:[q]}),FUGLE_FUTOPT_WS_QUOTES_FILE:'unused',normalizeFutureSymbol:v=>v,finiteNumber:v=>Number(v)||0};
+vm.createContext(ctx);vm.runInContext(fn,ctx);
+let published=ctx.freshFormalFutoptRows(new Date(now).toISOString())[0];
+for(const [k,v] of Object.entries(missing))assert.equal(published[k],v,'cached value must not replace native evidence: '+k);
+q.payload={...raw,...valid,changePercent:0,total:{tradeVolume:0}};
+published=ctx.freshFormalFutoptRows(new Date(now).toISOString())[0];
+assert.equal(published.total_volume,0);assert.equal(published.change_percent,0);
+assert.equal(published.high_price,101);
+console.log('PASS missing, invalid types, false/empty, signed percentage, actual zero, cumulative-only volume and actual mirror raw-evidence mapping');
