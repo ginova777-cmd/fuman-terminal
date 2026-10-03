@@ -425,6 +425,9 @@ async function captureSlotRows(tradeDate, slot, canonicalRows, quoteRows, preope
         run_id: `daytrade_futopt_preopen:${tradeDate.replace(/-/g, "")}`,
         generation_id: `daytrade_futopt_preopen:${tradeDate.replace(/-/g, "")}:${slot}`,
         websocket_quote_seen_at: quote?.observed_at || null,
+        native_open_evidence: require('../lib/futopt-native-open-evidence.cjs').inspect(quote?.payload, {
+          futureSymbol: contract.fut_contract, tradeDate, capturedAt,
+        }),
         preopen_snapshot_updated_at: preopenBySymbol.get(contract.symbol)?.updated_at || null,
         trial_event_at: trial?.trial_event_at || null,
         is_trial: trial?.is_trial === true,
