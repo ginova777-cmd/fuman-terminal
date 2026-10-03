@@ -51,6 +51,7 @@ async function publishReceipt(result) {
       canonical_run_id: result.canonical_run_id,
       verified_at: result.checked_at,
       complete: result.closed_loop_ok,
+      ...(result.snapshot_binding?.receipt_generation_verified ? result.snapshot_binding : {receipt_generation_verified:false}),
       mother_pool_rows: result.components?.mother_pool?.rows || 0,
       failed_checks: result.failed_checks || [],
       first_blocker: result.first_blocker,
@@ -232,6 +233,8 @@ async function main() {
   const industryFastInject = readJson(paths.industryFastInject);
   const futopt0845 = readJson(paths.futopt0845);
   const futopt0850 = readJson(paths.futopt0850);
+  let snapshotBinding=null, snapshotRaw=null;
+  const snapshotPath=path.join(RUNTIME,'state','daytrade-mother-pool-snapshot-latest.json');
   const failures = [];
   const warnings = [];
   const checks = {};
@@ -268,6 +271,14 @@ async function main() {
   check("terminal_union_admitted_to_mother_pool", terminalMissingFromMotherPool.length === 0, `terminal_symbols_not_in_mother_pool:${terminalMissingFromMotherPool.slice(0, 12).join(",")}`);
 
   const motherRows = Array.isArray(motherPool?.rows) ? motherPool.rows : [];
+  try {
+    snapshotRaw=fs.readFileSync(snapshotPath,'utf8');
+    const snapshot=JSON.parse(snapshotRaw);
+    const proof=path.join(RUNTIME,'data','scan-receipts',`mother-pool-snapshot-anon-${clock.compact}-${snapshot.snapshot_sequence}.json`);
+    snapshotBinding=require('../lib/mother-pool-receipt-binding').bindReceipt({snapshotRaw,readbackRaw:fs.readFileSync(proof,'utf8'),tradeDate:clock.tradeDate,canonicalRunId,symbols:motherRows.map(r=>r.symbol)});
+    check('snapshot_generation_bound',true);
+  } catch(error) { check('snapshot_generation_bound',false,'mother_pool_snapshot_binding_failed:'+error.message); }
+
   const motherRowsMissingSourceContract = motherRows.filter((row) => !Array.isArray(row?.source_flags) || row.source_flags.length === 0
     || !Array.isArray(row?.source_run_ids) || row.source_run_ids.length === 0
     || !Array.isArray(row?.priority_reasons) || row.priority_reasons.length === 0
@@ -363,7 +374,12 @@ async function main() {
   ));
   if (futoptRequired && !futoptClosed) warnings.push("futopt_preopen_evidence_fail_closed_rank_without_futopt_weight");
 
+  if(snapshotBinding){
+    try { check('snapshot_generation_unchanged',fs.readFileSync(snapshotPath,'utf8')===snapshotRaw,'mother_pool_snapshot_changed_during_verification'); }
+    catch { check('snapshot_generation_unchanged',false,'mother_pool_snapshot_disappeared_during_verification'); }
+  }
   const result = {
+    snapshot_binding: snapshotBinding,
     ok: failures.length === 0,
     closed_loop_ok: failures.length === 0,
     all_modules_complete: false,
