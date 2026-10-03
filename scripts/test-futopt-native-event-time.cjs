@@ -1,0 +1,15 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('fs'),vm=require('vm');
+const {nativeEventAt}=require('../lib/futopt-native-event-time.cjs');
+const now=Date.parse('2026-10-02T16:00:01Z'),event=Date.parse('2026-10-02T05:44:59.343Z');
+const raw={symbol:'LWFJ6',lastUpdated:event*1000,date:'2026-10-02'};
+const q={future_symbol:'LWFJ6',last_price:275.5,quoteSeenAt:new Date(now).toISOString(),updated_at:new Date(now).toISOString(),payload:raw};
+assert.equal(nativeEventAt(q,now),new Date(event).toISOString());
+for(const patch of [{lastUpdated:undefined},{lastUpdated:null},{lastUpdated:'1790919899343000'},{lastUpdated:(now+1000)*1000},{symbol:'WRONG'},{isSynthetic:true}])assert.equal(nativeEventAt({...q,payload:{...raw,...patch}},now),null);
+const source=fs.readFileSync(require.resolve('./fugle-futopt-websocket-collector.js'),'utf8');const f=source.match(/function freshFormalFutoptRows\([^]*?\n}/)[0];let rows=[q];
+const ctx={Date:class extends Date{static now(){return now}},nativeEventAt,readJson:()=>({quotes:rows,updatedAt:new Date(now).toISOString()}),FUGLE_FUTOPT_WS_QUOTES_FILE:'unused',normalizeFutureSymbol:v=>v,finiteNumber:v=>Number(v)||0};vm.createContext(ctx);vm.runInContext(f,ctx);
+assert.equal(ctx.freshFormalFutoptRows(new Date(now).toISOString()).length,0);
+rows=[{...q,payload:{...raw,lastUpdated:(now-60000)*1000}}];const published=ctx.freshFormalFutoptRows(new Date(now).toISOString())[0];assert.equal(published.updated_at,new Date(now-60000).toISOString());assert.equal(published.payload.quote_seen_at,q.quoteSeenAt);assert.notEqual(published.updated_at,published.payload.collector_checked_at);
+rows=[{...q,payload:{...raw,lastUpdated:(now-180001)*1000}}];assert.equal(ctx.freshFormalFutoptRows(new Date(now).toISOString()).length,0);
+rows=[{...q,payload:{...raw,lastUpdated:(now-180000)*1000}}];assert.equal(ctx.freshFormalFutoptRows(new Date(now).toISOString()).length,1);
+console.log('PASS actual mirror rejects stale midnight replay, missing/future/mismatched evidence; native time retained independently of receipt; 180-second bound unchanged');
