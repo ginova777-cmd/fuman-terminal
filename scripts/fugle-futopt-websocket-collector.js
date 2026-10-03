@@ -1,5 +1,5 @@
 const fs = require("fs");
-const { nativeEventAt } = require("../lib/futopt-native-event-time.cjs");
+const { nativeEventAt, nativePrice } = require("../lib/futopt-native-event-time.cjs");
 const path = require("path");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 
@@ -288,7 +288,7 @@ function freshFormalFutoptRows(checkedAt) {
     .map(quote => ({ ...quote, native_event_at: nativeEventAt(quote, nowMs) }))
     .filter((quote) => {
       const seen = Date.parse(quote.native_event_at || "");
-      return normalizeFutureSymbol(quote.future_symbol) && Number.isFinite(seen) && seen >= freshnessCutoff && finiteNumber(quote.last_price ?? quote.price) > 0;
+      return normalizeFutureSymbol(quote.future_symbol) && Number.isFinite(seen) && seen >= freshnessCutoff && nativePrice(quote.payload) !== null && nativePrice(quote.payload) === quote.last_price;
     })
     .map((quote) => {
       const futureSymbol = normalizeFutureSymbol(quote.future_symbol);
