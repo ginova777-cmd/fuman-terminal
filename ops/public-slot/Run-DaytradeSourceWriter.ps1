@@ -209,6 +209,21 @@ function Invoke-DaytradeWebSocketCollectorSelfHeal {
   $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $latestPath -Encoding utf8
   Write-WrapperLog "WEBSOCKET_SELF_HEAL action=$($receipt.action) heartbeat_age_seconds=$heartbeatAgeSeconds receipt=$receiptPath"
 }
+function Test-FutoptCollectorHealthy {
+  param([object]$Status)
+  if ($null -eq $Status) { return $false }
+  foreach ($field in @('ok','websocketConnected','websocketAuthenticated','formalReady')) {
+    if ($Status.$field -isnot [bool] -or $Status.$field -ne $true) { return $false }
+  }
+  if (-not [string]::IsNullOrWhiteSpace([string]$Status.error)) { return $false }
+  try {
+    if ($Status.updatedAt -is [DateTime]) { $stamp = [DateTimeOffset]::new($Status.updatedAt.ToUniversalTime()) }
+    elseif ($Status.updatedAt -is [DateTimeOffset]) { $stamp = $Status.updatedAt.ToUniversalTime() }
+    else { $stamp = [DateTimeOffset]::Parse([string]$Status.updatedAt).ToUniversalTime() }
+    $age = ([DateTimeOffset]::UtcNow - $stamp).TotalSeconds
+    return ($age -ge 0 -and $age -le 90)
+  } catch { return $false }
+}
 function Invoke-FugleFutoptCollectorReleaseReconcile {
   $statusPath = Join-Path $StateDir "fugle-futopt-websocket-status.json"
   $receiptPath = Join-Path $StateDir "fugle-daytrade-futopt-collector-rotation.json"
@@ -227,6 +242,13 @@ function Invoke-FugleFutoptCollectorReleaseReconcile {
   }
   $receipt = [ordered]@{ contract="fugle_daytrade_futopt_collector_rotation_v1"; checked_at=[DateTimeOffset]::UtcNow.ToString("o"); trade_date=$TradeDate; desired_release=$FutoptCollectorRelease; current_release=$currentRelease; current_pid=$targetProcessId; status="pending"; reason="" }
   if ($alive -and $currentRelease -eq $FutoptCollectorRelease -and -not $streamStale) {
+    if (-not (Test-FutoptCollectorHealthy $current)) {
+      $receipt.status = "blocked"
+      $receipt.reason = "collector_alive_but_health_unverified"
+      $receipt.source_error = [string]$current.error
+      $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $receiptPath -Encoding utf8
+      return $false
+    }
     $receipt.status = "current"
     $receipt.reason = "collector_release_current"
     $receipt | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $receiptPath -Encoding utf8
