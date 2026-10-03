@@ -15,6 +15,7 @@ const {
 } = require("../lib/fugle-futopt-websocket");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const readTxfReference = require('../lib/futopt-txf-reference.cjs').createReader(RUNTIME_DIR);
 const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
 ];
@@ -314,6 +315,7 @@ function freshFormalFutoptRows(checkedAt) {
           quote_seen_at: quote.quoteSeenAt || "",
           collector_checked_at: checkedAt,
           native_event_at: quote.native_event_at,
+          ...readTxfReference(quote.native_event_at, nowMs),
           formal_fugle_websocket: true,
         },
       };
