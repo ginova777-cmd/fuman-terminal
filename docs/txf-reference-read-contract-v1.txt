@@ -1,0 +1,35 @@
+TXF 當日近月映射唯讀契約 v1（本檔需配合部署收據，文件本身不代表已上線）
+POST /rest/v1/rpc/get_fugle_daytrade_txf_reference
+參數：p_trade_date=YYYY-MM-DD，p_session=REGULAR（可省略）。anon/authenticated EXECUTE；無底表 SELECT/寫入。
+回傳單一 JSON 物件，不是陣列。
+頂層：contract=fugle-txf-reference-read-v1、trade_date、product=TXF、session、status、mapping_usable、mapping_count、future_symbol、mapping、data_gap_reason、checked_at、published_at、writer_run_id、calendar、quote_readiness、candles_readiness。
+僅 status=VERIFIED 且 mapping_usable=true、mapping_count=1，且 trade_date/session 相符時可用 future_symbol 呼叫既有 1m RPC。
+quote_readiness/candles_readiness 固定 NOT_EVALUATED；映射正確不能代替行情有效。
+mapping 保留原始 native future_symbol、expiry_date、contract_month、session_open_at、valid_from/valid_until、catalogue_run_id/catalogue_source_hash/catalogue_observed_at、verified_at、source_event_date、source_event_at、raw_contract、candidates、policy_version、rollover_policy。
+contract_month 為富果 endDate 的曆月，不從代號猜月份；expiry_date 直接取原生 endDate，並核對 settlementDate。
+source_event_at=null：目錄只有來源 date，不能拿 downloaded/observed_at 冒充原生發布時間。
+verified_at 是母池驗證時間；published_at 是 DB 寫入時間。
+
+規則 txf-regular-daily-fixed-v1：
+沿用母池完整、同日、來源雜湊相符的 Fugle REGULAR 目錄與既有 TAIFEX 校驗。
+有效集合：product=TXF、原生月合約、contractType=I、type=FUTURE、startDate<=交易日、endDate>=交易日。
+按原生 endDate 升冪；最早到期日有不同代號、同代號不同到期日或同日發布身分矛盾時阻擋，不用成交量或最新 quote 排序。
+當日日盤固定同一份目錄與選定合約。一般日有效至原生13:45；到期當日有效至原生13:30，邊界不含；須與來源 openDatetime/closeDatetime 相符。
+到期日13:30後回 EXPIRED，不在日盤中悄悄更換合約；下一已核實交易日由新目錄重選。夜盤本契約不接受，沒有夜盤日期回推。
+valid_from 為當日目錄觀測時間，盤前可以取得映射；原生開盤時間另存，無開盤行情不影響映射判斷。
+
+狀態：
+CALENDAR_UNVERIFIED：當日TW日曆缺列/契約錯/布林缺失。
+CALENDAR_STALE：日曆發布過期或未來時間。
+MARKET_CLOSED：正式日曆明確休市。
+WAITING_CATALOGUE：無同日已發布映射/當日目錄待取得。
+INVALID：目錄或合約元資料無法驗證，見 data_gap_reason。
+CONFLICT：候選或同日發布衝突，不自動挑一個；DB 同日衝突鎖定需 Owner 調查。
+STALE_TRADE_DATE：歷史交易日不能作今日映射。
+NOT_YET_VALID／EXPIRED：不在映射有效區間。
+VERIFIED：映射可用；K棒仍須另外讀回驗證。
+權限錯誤/HTTP非2xx/逾時不是上述資料狀態；接收端記讀取失敗，停止本輪，不猜合約或查raw table。
+
+來源與負載：Writer 在既有 lease 下發布同一份目錄的投影，不新增行情來源。每次最多1列，內容不變不重寫；DB錯誤拋回既有Writer退避。
+需回測歷史時另保留當時收據；今日RPC狀態不能證明歷史盤中曾可取得。
+自然驗收仍需同日Owner/anon同批比對，以及映射→1m→Scanner至少10分鐘讀回。
