@@ -1,0 +1,25 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {createPipeline}=require('../lib/txf-candle-pipeline.cjs');
+const runtime=fs.mkdtempSync(path.join(os.tmpdir(),'txf-pipeline-'));
+const writeJson=(file,value)=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify(value));};
+const readJson=(file,fallback)=>{try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch(e){if(e.code==='ENOENT')return fallback;throw e;}};
+(async()=>{
+ let clock=Date.parse('2026-10-02T01:00:30Z'),requests=0;
+ const options={runtime,writeJson,readJson,now:()=>clock,fetchImpl:async()=>{requests++;throw Error('network unavailable');}};
+ const pipeline=createPipeline(options);pipeline.configure({symbol:'TXFJ6',tradeDate:'2026-10-02',session:'REGULAR'});
+ assert.equal((await pipeline.recoverOnConnection('test','STARTUP')).status,'failed');
+ const data={symbol:'TXFJ6',date:'2026-10-02T09:00:00+08:00',open:20000,high:20002,low:19999,close:20001,volume:10};
+ assert.equal(pipeline.receive({channel:'candles',data}).accepted,true,'REST failure must not block WS');
+ clock+=60000;
+ assert.equal(pipeline.receive({channel:'candles',data:{...data,date:'2026-10-02T09:01:00+08:00'}}).accepted,true);
+ pipeline.flush();clock+=11*60000;
+ assert.equal(pipeline.receive({channel:'candles',data:{...data,date:'2026-10-02T09:12:00+08:00'}}).accepted,true);
+ pipeline.flush();
+ const file=path.join(runtime,'data/mother-pool/futures-1m/2026-10-02/REGULAR/TXFJ6.json');
+ const saved=readJson(file);assert.equal(saved.count,3);assert.equal(saved.rows[0].candle_time,'2026-10-02T01:00:00.000Z');
+ assert.equal(pipeline.receive({channel:'candles',data:{...data,symbol:'TXFK6'}}).reason,'NOT_SELECTED_TXF');
+ assert.equal(pipeline.receive({channel:'candles',data:{...data,date:'2026-10-03T09:00:00+08:00'}}).accepted,false);
+ assert.equal(requests,1,'WS receives and flushes never poll REST');
+ console.log('PASS: WS survives REST failure, full-day archive retains >10 minutes, exact contract and date guard, no REST polling');
+})().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>fs.rmSync(runtime,{recursive:true,force:true}));

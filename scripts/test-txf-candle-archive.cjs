@@ -1,0 +1,17 @@
+const fs=require('fs'),os=require('os'),path=require('path'),assert=require('assert/strict');
+const {createArchive}=require('../lib/txf-candle-archive.cjs');
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'txf-archive-'));
+let clock=Date.parse('2026-10-02T09:00:10+08:00');
+const ctx=()=>({symbol:'TXFJ6',tradeDate:'2026-10-02',receivedAt:new Date(clock).toISOString(),source:'Fugle:WS:candles'});
+const candle={date:'2026-10-02T09:00:00+08:00',open:100,high:101,low:99,close:100,volume:1};
+let a=createArchive({runtime:root,now:()=>clock});
+assert(a.ingest(candle,ctx()).accepted);assert.equal(a.ingest(candle,ctx()).reason,'DUPLICATE');
+assert.equal(a.flush().files_written,1);clock+=10000;
+assert(a.ingest({...candle,volume:2},ctx()).accepted);assert.equal(a.flush().files_written,0);
+clock+=30000;assert.equal(a.flush().files_written,1);
+a=createArchive({runtime:root,now:()=>clock});assert.equal(a.ingest({...candle,volume:2},ctx()).reason,'DUPLICATE');
+assert(a.ingest(candle,ctx()).conflict);a.flush({force:true});
+const out=JSON.parse(fs.readFileSync(path.join(root,'data/mother-pool/futures-1m/2026-10-02/REGULAR/TXFJ6.json')));
+assert.equal(out.count,1);assert.equal(out.conflict_count,1);assert.equal(out.rows[0].volume_strategy_usable,false);
+assert.equal(fs.readFileSync(path.join(root,'data/mother-pool/futures-1m/2026-10-02/REGULAR/TXFJ6.evidence.jsonl'),'utf8').trim().split('\n').length,3);
+console.log('PASS archive restart, deduplication, coalescing, conflict provenance and per-date retention');

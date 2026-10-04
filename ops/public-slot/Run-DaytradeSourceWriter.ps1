@@ -53,7 +53,7 @@ New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
 $StdoutLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-',''))-$Stamp.stdout.log"
 $StderrLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-',''))-$Stamp.stderr.log"
 $WrapperLog = Join-Path $LogDir "daytrade-source-writer-$($TradeDate.Replace('-','')).wrapper.log"
-$FutoptCollectorRelease = "futopt-formal-live-mirror-v7-daily-catalogue"
+$FutoptCollectorRelease = "futopt-daytrade-candles-v8"
 $MutexName = "Global\FumanFugleDaytradeSourceWriter"
 $CrossSessionLockPath = Join-Path $StateDir "daytrade-source-writer.cross-session.lock"
 $CrossSessionLockStream = $null
@@ -235,9 +235,10 @@ function Invoke-FugleFutoptCollectorReleaseReconcile {
   $alive = $false
   if ($targetProcessId -gt 0) { try { $alive = $null -ne (Get-Process -Id $targetProcessId -ErrorAction Stop) } catch {} }
   $streamStale = $false
-  if ($null -ne $current -and -not [string]::IsNullOrWhiteSpace([string]$current.lastMessageAt)) {
+  $transportStamp = if ($null -ne $current.transportHealth) { $current.transportHealth.last_transport_at } else { $current.lastMessageAt }
+  if ($null -ne $current -and -not [string]::IsNullOrWhiteSpace($transportStamp)) {
     try {
-      $streamStale = (Get-IsoAgeSeconds $current.lastMessageAt) -gt 300
+      $streamStale = (Get-IsoAgeSeconds $transportStamp) -gt 300
     } catch { $streamStale = $true }
   }
   $receipt = [ordered]@{ contract="fugle_daytrade_futopt_collector_rotation_v1"; checked_at=[DateTimeOffset]::UtcNow.ToString("o"); trade_date=$TradeDate; desired_release=$FutoptCollectorRelease; current_release=$currentRelease; current_pid=$targetProcessId; status="pending"; reason="" }
@@ -280,6 +281,7 @@ function Invoke-FugleFutoptCollectorReleaseReconcile {
     return $false
   }
   $env:FUGLE_FUTOPT_STREAMING_CHANNELS = "trades,aggregates,candles"
+  $env:FUGLE_FUTOPT_STREAMING_AFTER_HOURS = "false"
   $env:FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS = "1800"
   $env:FUGLE_FUTOPT_STREAMING_MAX_SYMBOLS = "500"
   $env:FUGLE_FUTOPT_COLLECTOR_RELEASE = $FutoptCollectorRelease

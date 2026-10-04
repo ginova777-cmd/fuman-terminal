@@ -16,6 +16,7 @@ const {
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const readTxfReference = require('../lib/futopt-txf-reference.cjs').createReader(RUNTIME_DIR);
+const txfCandlePipeline = require('../lib/txf-candle-pipeline.cjs').createPipeline({runtime:RUNTIME_DIR,readJson,writeJson});
 const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
 ];
@@ -61,10 +62,11 @@ const STREAMING_AFTER_HOURS = /^(1|true|yes|on)$/.test(STREAMING_AFTER_HOURS_RAW
     : null;
 
 const FORMAL_LIVE_MIRROR_RECEIPT_FILE = path.join(path.dirname(FUGLE_FUTOPT_WS_STATUS_FILE), "fugle-daytrade-futopt-live-mirror.json");
-const COLLECTOR_RELEASE = "futopt-formal-live-mirror-v7-daily-catalogue";
+const COLLECTOR_RELEASE = "futopt-daytrade-candles-v8";
 
 let lastMessageAt = "";
 let formalCatalogue = null;
+let catalogueWait = null;
 const catalogueDate = () => new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 let lastFormalLiveMirrorAt = 0;
 let formalLiveMirrorInFlight = false;
@@ -409,10 +411,22 @@ async function run() {
     return;
   }
 
+  let txfConnectionCount = 0;
+  const archiveTimer = setInterval(() => {
+    try { txfCandlePipeline.flush(); } catch { console.error('TXF_ARCHIVE_STATUS_WRITE_FAILED'); }
+  }, 30000);
+  archiveTimer.unref();
+  process.once('SIGINT', () => { try { txfCandlePipeline.flush(true); } finally { process.exit(0); } });
+  process.once('SIGTERM', () => { try { txfCandlePipeline.flush(true); } finally { process.exit(0); } });
+
   const runOnce = () => new Promise((resolve) => {
-    let selection = selectStreamingTickers();
+    lastMessageAt = '';
+    const reference = readTxfReference(nowIso()).txf_reference;
+    txfCandlePipeline.configure(reference ? {symbol:reference.future_symbol,tradeDate:reference.trade_date,session:STREAMING_AFTER_HOURS === true ? 'AFTERHOURS' : 'REGULAR'} : null);
+    let selection = formalCatalogue ? selectStreamingTickers() : {selectedSymbols:[],selectedRows:[],allRows:[],requestedSymbols:0,tickerCacheFile:null,stockLookupCount:0};
     let chunks = chunkArray(selection.selectedSymbols, STREAMING_SUBSCRIBE_CHUNK_SIZE);
     const tickerBySymbol = new Map(selection.selectedRows.map((row) => [row.future_symbol, row]));
+    const streamHealth = require('../lib/futopt-stream-health.cjs').createHealth({symbols:selection.selectedSymbols,channels:STREAMING_CHANNELS});
     let ws;
     let openedAt = "";
     let authenticated = false;
@@ -426,6 +440,8 @@ async function run() {
     let forbiddenChunks = 0;
     let lastForbiddenAt = "";
     let lastForbiddenMessage = "";
+    let catalogueRefreshInFlight = false;
+    let candleRecoveryStarted = false;
 
     const writeStreamingStatus = (extra = {}) => {
       const messageAgeSeconds = lastMessageAt ? Math.max(0, Math.round((Date.now() - Date.parse(lastMessageAt)) / 1000)) : null;
@@ -435,6 +451,7 @@ async function run() {
         && authenticated
         && formalCatalogue?.trade_date === catalogueDate()
         && requiredChannelsReady
+        && streamHealth.snapshot().subscriptions_ready
         && selection.selectedSymbols.length > 0
         && selection.allRows.length > 0
         && quoteMessages + candleMessages > 0
@@ -450,6 +467,8 @@ async function run() {
             ? "websocket_not_open"
             : !authenticated
               ? "websocket_not_authenticated"
+              : !formalCatalogue
+                ? 'catalogue_waiting_verified_trade_date'
               : !requiredChannelsReady
                 ? "websocket_required_channel_missing"
                 : !lastMessageAt
@@ -462,12 +481,15 @@ async function run() {
       const statusSnapshot = writeStatus({
         websocketConnected: Boolean(ws && ws.readyState === WebSocket.OPEN),
         websocketAuthenticated: authenticated,
+        transportHealth: streamHealth.snapshot(),
+        catalogueRetry: catalogueWait,
         formalReady,
         formalReadyReason,
         streamingOpenedAt: openedAt,
         streamingMessages: messages,
         streamingQuotes: quoteMessages,
         streamingCandles: candleMessages,
+        txfCandleArchive: txfCandlePipeline.status(),
         selectedSymbols: selection.selectedSymbols.length,
         requestedSymbols: selection.requestedSymbols,
         tickerRows: selection.allRows.length,
@@ -495,11 +517,27 @@ async function run() {
         lastMessageAt,
         ...extra,
       });
-      scheduleFormalFutoptLiveMirror(statusSnapshot);
+      if (formalReady) scheduleFormalFutoptLiveMirror(statusSnapshot);
+    };
+
+    const refreshPendingCatalogue = async () => {
+      if (formalCatalogue || catalogueRefreshInFlight || closed) return;
+      catalogueRefreshInFlight = true;
+      try {
+        const result = await refreshCatalogue({runtime:RUNTIME_DIR,tradeDate:catalogueDate(),asOf:nowIso(),key:apiKey});
+        if (closed) return;
+        if (result.status === 'ready') {
+          formalCatalogue = result.catalogue;
+          catalogueWait = null;
+          await subscribe();
+        } else catalogueWait = result.receipt;
+      } catch { catalogueWait = {error:'FUTURES_CATALOGUE_REFRESH_FAILED'}; }
+      finally { catalogueRefreshInFlight = false; }
     };
 
     const subscribe = async () => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      if (!ws || ws.readyState !== WebSocket.OPEN || !authenticated) return;
+      if (!formalCatalogue) { void refreshPendingCatalogue(); return; }
       if(formalCatalogue?.trade_date!==catalogueDate()){ws.close(1000,'catalogue day changed');return;}
       selection = selectStreamingTickers();
       chunks = chunkArray(selection.selectedSymbols, STREAMING_SUBSCRIBE_CHUNK_SIZE);
@@ -513,6 +551,13 @@ async function run() {
         return;
       }
       lastSubscribeSignature = signature;
+      streamHealth.setExpected(selection.selectedSymbols, STREAMING_CHANNELS);
+      const reference = readTxfReference(nowIso()).txf_reference;
+      txfCandlePipeline.configure(reference ? {symbol:reference.future_symbol,tradeDate:reference.trade_date,session:STREAMING_AFTER_HOURS === true ? 'AFTERHOURS' : 'REGULAR'} : null);
+      if (!candleRecoveryStarted) {
+        candleRecoveryStarted = true;
+        void txfCandlePipeline.recoverOnConnection(apiKey, txfConnectionCount++ === 0 ? 'STARTUP' : 'RECONNECT');
+      }
       tickerBySymbol.clear();
       selection.selectedRows.forEach((row) => tickerBySymbol.set(row.future_symbol, row));
       cycles += 1;
@@ -531,7 +576,7 @@ async function run() {
       ws.addEventListener("open", () => {
         openedAt = nowIso();
         ws.send(JSON.stringify({ event: "auth", data: { apikey: apiKey } }));
-        setTimeout(subscribe, 800);
+        // Subscription begins only after the explicit authenticated event.
         writeStreamingStatus();
       });
       ws.addEventListener("message", (event) => {
@@ -539,13 +584,19 @@ async function run() {
         let payload = null;
         try { payload = JSON.parse(String(event.data || "")); } catch {}
         const text = String(event.data || "");
-        if (/authenticated|auth/i.test(text)) authenticated = true;
+        streamHealth.observe(payload);
+        if (payload?.event === 'authenticated' && !authenticated) {
+          authenticated = true;
+          void subscribe().catch(() => ws.close(4000, 'subscription setup failed'));
+        }
         const notice = getNotice(payload, text);
         if (/forbidden|rate.?limit|subscribe.?limit|exceed/i.test(notice.noticeText)) {
           forbiddenChunks += 1;
           lastForbiddenAt = nowIso();
           lastForbiddenMessage = notice.noticeText.slice(0, 600);
         }
+        // Control acknowledgements contain a symbol/channel but no market event.
+        if (!authenticated || !['data', 'snapshot'].includes(payload?.event)) return;
         const data = payload?.data || payload || {};
         const payloadChannel = String(data.channel || payload?.channel || "").toLowerCase();
         const inferredChannel = payloadChannel
@@ -555,7 +606,9 @@ async function run() {
           || STREAMING_CHANNELS[0];
         const futureSymbol = normalizeFutureSymbol(data.symbol || data.future_symbol);
         const ticker = tickerBySymbol.get(futureSymbol) || null;
+        if (!formalCatalogue || !ticker) return;
         if (inferredChannel === "candles") {
+          txfCandlePipeline.receive(payload);
           const candle = normalizeFutoptCandle(payload, ticker);
           if (candle) {
             candleMessages += 1;
@@ -585,12 +638,12 @@ async function run() {
           return;
         }
         writeStreamingStatus();
-        const lastMessageMs = Date.parse(lastMessageAt || "");
-        if (authenticated
-          && Number.isFinite(lastMessageMs)
+        if (!formalCatalogue) void refreshPendingCatalogue();
+        const lastMessageMs = Date.parse(streamHealth.snapshot().last_transport_at || openedAt || "");
+        if (Number.isFinite(lastMessageMs)
           && Date.now() - lastMessageMs > STREAMING_STALE_RECONNECT_MS
           && ws.readyState === WebSocket.OPEN) {
-          ws.close(4000, "stale websocket stream; reconnect required");
+          ws.close(4000, "websocket transport heartbeat timeout");
         }
       }, STREAMING_STATUS_MS);
       const subscribeTimer = setInterval(() => {
@@ -604,11 +657,21 @@ async function run() {
   });
 
   // eslint-disable-next-line no-constant-condition
+  const catalogueRetryFile = path.join(RUNTIME_DIR, 'status', 'futopt-catalogue-retry.json');
+  const refreshCatalogue = require('../lib/futopt-catalogue-retry.cjs').createCatalogueRetry({
+    refresh: require('../lib/mother-pool-futures-catalogue').refresh,
+    readState: () => readJson(catalogueRetryFile, null),
+    writeState: value => writeJson(catalogueRetryFile, value),
+  });
   let reconnectDelayMs = STREAMING_RECONNECT_INITIAL_MS;
   while (true) {
     const runStartedAt = Date.now();
     try {
-      formalCatalogue = await require('../lib/mother-pool-futures-catalogue').refresh({runtime:RUNTIME_DIR,tradeDate:catalogueDate(),asOf:nowIso(),key:apiKey});
+      const catalogueResult = await refreshCatalogue({runtime:RUNTIME_DIR,tradeDate:catalogueDate(),asOf:nowIso(),key:apiKey});
+      if (catalogueResult.status !== 'ready') {
+        formalCatalogue = null;
+        catalogueWait = catalogueResult.receipt;
+      } else { formalCatalogue = catalogueResult.catalogue; catalogueWait = null; }
       await runOnce();
     } catch(error) {
       writeStatus({ok:false,formalReady:false,formalReadyReason:'futures_catalogue_or_stream_blocked',error:error.message});
