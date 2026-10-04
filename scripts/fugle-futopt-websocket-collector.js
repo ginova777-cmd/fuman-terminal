@@ -133,15 +133,9 @@ function selectStreamingTickers() {
   const rows = buildTickerRows();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const byUnderlying = new Map();
-  for (const row of rows) {
-    if (row.product !== "STOCK_FUTURE" || !normalizeCode(row.underlying_symbol)) continue;
-    // Select the nearest still-tradable contract. Picking the nearest first and
-    // filtering expiry later can eliminate an entire underlying after expiry.
-    if (futureEndTime(row) < today.getTime()) continue;
-    const prev = byUnderlying.get(row.underlying_symbol);
-    if (!prev || futureEndTime(row) < futureEndTime(prev)) byUnderlying.set(row.underlying_symbol, row);
-  }
+  const standardSelection = require('../lib/stock-future-standard-runtime.cjs').resolve(formalCatalogue,catalogueDate(),nowIso());
+  const selectedStandard = new Set(standardSelection.resolutions.filter(r=>r.status==='UNIQUE').map(r=>r.selected));
+  const byUnderlying = new Map(rows.filter(r=>selectedStandard.has(r.future_symbol)).map(r=>[r.underlying_symbol,r]));
   const txf = rows
     .filter((row) => row.product === "TXF" && /^TXF/i.test(row.future_symbol) && !/-[FS]$/i.test(row.future_symbol) && futureEndTime(row) >= today.getTime())
     .sort((a, b) => futureEndTime(a) - futureEndTime(b) || a.future_symbol.localeCompare(b.future_symbol))
@@ -659,7 +653,7 @@ async function run() {
   // eslint-disable-next-line no-constant-condition
   const catalogueRetryFile = path.join(RUNTIME_DIR, 'status', 'futopt-catalogue-retry.json');
   const refreshCatalogue = require('../lib/futopt-catalogue-retry.cjs').createCatalogueRetry({
-    refresh: require('../lib/mother-pool-futures-catalogue').refresh,
+    refresh: require('../lib/stock-future-standard-runtime.cjs').refresh,
     readState: () => readJson(catalogueRetryFile, null),
     writeState: value => writeJson(catalogueRetryFile, value),
   });
