@@ -1,0 +1,13 @@
+TXF 1m 原始證據序列化補充契約
+raw_serialization = ecmascript-json-stringify-utf8-v1
+raw_evidence_json = 母池對解析後原生事件物件執行 JSON.stringify(raw) 的精確字串。
+raw_sha256 = SHA256(UTF8(raw_evidence_json))，小寫hex。
+這是母池的證據序列化文字，不宣稱等於富果WebSocket封包的原始線上位元組。
+
+接收端：先解析RPC外層JSON，直接取出raw_evidence_json字串，以UTF8計算SHA256。
+不要再JSON.stringify此字串、加換行、Trim、重排鍵或更改數字/Unicode表示。
+再JSON.parse(raw_evidence_json)，與raw_evidence作忽略物件鍵顺序但保留陣列順序的深度相等檢查，並核對OHLC/volume/date等既有逐根條件。
+raw_evidence仍為JSONB，無法承諾讀回的物件鍵順序；單純保留RPC外層原文不能還原DB寫入前順序。
+未知raw_serialization、缺raw_evidence_json或hash/內容不符：拒用並標示證據缺口，不放寬驗證。
+舊列若無文字欄位會保留null；不從JSONB重造當初字串、不改既有raw_sha256。
+新版正常寫入列才帶上述文字與序列化版本；正式自然讀回仍須交易時段驗收。
