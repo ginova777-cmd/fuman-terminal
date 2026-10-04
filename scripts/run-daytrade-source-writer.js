@@ -8043,6 +8043,12 @@ async function tick() {
     apply:APPLY&&!DRY_RUN,writeJson:writeJsonAtomic,
     leaseValid:()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>Date.now()+15000,
     send:body=>supabaseRpc('publish_fugle_daytrade_stock_future_candidates',body,{service:true}),
+    readback:async pending=>{
+      const query=new URLSearchParams({select:'trade_date,catalogue_run_id,revision,published_at,counts',trade_date:'eq.'+pending.trade_date,catalogue_run_id:'eq.'+pending.catalogue_run_id,revision:'eq.'+pending.revision,limit:'2'});
+      const rows=await supabaseGet('v_fugle_daytrade_stock_future_candidate_publications',query.toString(),{service:true});
+      if(!Array.isArray(rows)||rows.length>1)throw Error('CANDIDATE_READBACK_SHAPE_INVALID');
+      return rows[0]||null;
+    },
   });
   tickStage('stock_future_candidates',stockFutureCandidates);
   const state = readWriterState();
