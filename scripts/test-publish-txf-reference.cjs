@@ -1,0 +1,7 @@
+'use strict';
+const fs=require('fs'),os=require('os'),path=require('path'),assert=require('assert/strict');const {publishReference}=require('../lib/publish-txf-reference.cjs');
+(async()=>{const runtime=fs.mkdtempSync(path.join(os.tmpdir(),'txf-ref-pub-'));fs.mkdirSync(path.join(runtime,'config'));fs.writeFileSync(path.join(runtime,'config','txf-candle-publication.json'),JSON.stringify({contract:'txf-candle-publication-v1',enabled:true,session:'REGULAR'}));let calls=0;const opts={runtime,tradeDate:'2026-10-04',writerRunId:'isolated',apply:true,leaseValid:()=>true,sendBatch:async(t,rows)=>{calls++;assert.equal(rows.length,1);assert.equal(rows[0].status,'WAITING_CATALOGUE')},writeJson:(p,r)=>{fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p,JSON.stringify(r))}};
+assert.equal((await publishReference({...opts,apply:false})).written,0);await assert.rejects(publishReference({...opts,leaseValid:()=>false}),/LEASE_REQUIRED/);assert.equal(calls,0);
+await assert.rejects(publishReference({...opts,sendBatch:async()=>{throw Error('DB_TIMEOUT')}}),/DB_TIMEOUT/);assert.equal(fs.existsSync(path.join(runtime,'state','txf-reference-publication-cursor.json')),false);
+assert.equal((await publishReference(opts)).written,1);assert.equal((await publishReference(opts)).status,'unchanged');assert.equal(calls,1);
+console.log('PASS reference publisher lease, dry-run, one-row publish, unchanged no rewrite, failure no cursor and thrown to existing Writer backoff');})();
