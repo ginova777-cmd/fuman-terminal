@@ -7978,6 +7978,18 @@ async function syncMarketCalendarEvidence() {
     now: new Date(), stateDir: runtimePath('state'), days: 10,
   });
   await supabaseUpsert('market_calendar', rows, 'trade_date,market', { batchSize: 10 });
+  // Historical calendar evidence is published once per day, through this Writer's lease.
+  // A success marker is saved only after the bounded DB batches have succeeded.
+  const historyMarker=runtimePath('state','market-calendar-history-publication.json');
+  const previousHistory=readJson(historyMarker,null);
+  if(previousHistory?.trade_date!==rows[0].trade_date||previousHistory?.contract!=='calendar-history-publication-v1'){
+    let history;
+    try { history=await require('../lib/daytrade-calendar-publication.cjs').buildCalendarPublication({now:new Date(),stateDir:runtimePath('state'),days:1,pastDays:21}); }
+    catch(error) { console.error(JSON.stringify({stage:'calendar_history_source_gap',reason:error.message})); return rows[0]; }
+    await supabaseUpsert('market_calendar',history.slice(1),'trade_date,market',{batchSize:10});
+    const marker={contract:'calendar-history-publication-v1',trade_date:rows[0].trade_date,published_at:nowIso(),rows:history.length-1};
+    writeJsonAtomic(historyMarker,marker);
+  }
   return rows[0];
 }
 
