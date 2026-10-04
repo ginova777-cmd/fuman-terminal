@@ -31,4 +31,10 @@ if($receipt.reason -ne 'collector_alive_but_health_unverified'){throw 'MISSING_B
 $good.pid=123;$good.collector_release='test';$good.lastMessageAt=[DateTimeOffset]::UtcNow.AddSeconds(-5).ToString('o')
 $good|ConvertTo-Json|Set-Content (Join-Path $StateDir 'fugle-futopt-websocket-status.json')
 if(-not(Invoke-FugleFutoptCollectorReleaseReconcile)){throw 'HEALTHY_RECONCILE_REJECTED'}
+$quiet=$good.Clone();$quiet.formalReady=$false;$quiet.lastMessageAt=[DateTimeOffset]::UtcNow.AddMinutes(-20).ToString('o')
+$quiet.transportHealth=@{last_transport_at=[DateTimeOffset]::UtcNow.AddSeconds(-10).ToString('o')}
+$quiet|ConvertTo-Json -Depth 5|Set-Content (Join-Path $StateDir 'fugle-futopt-websocket-status.json')
+if(Invoke-FugleFutoptCollectorReleaseReconcile){throw 'QUIET_DATA_MARKED_FORMALLY_READY'}
+$quietReceipt=Get-Content (Join-Path $StateDir 'fugle-daytrade-futopt-collector-rotation.json') -Raw|ConvertFrom-Json
+if($quietReceipt.reason -ne 'collector_alive_but_health_unverified'){throw 'QUIET_HEALTHY_TRANSPORT_WAS_RESTARTED'}
 Write-Output 'PASS actual reconcile rejects alive-but-failed collector, unknown/string flags, future/stale status; healthy case passes without stop/start'
