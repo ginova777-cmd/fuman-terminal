@@ -235,7 +235,7 @@ function Invoke-FugleFutoptCollectorReleaseReconcile {
   $alive = $false
   if ($targetProcessId -gt 0) { try { $alive = $null -ne (Get-Process -Id $targetProcessId -ErrorAction Stop) } catch {} }
   $streamStale = $false
-  $transportStamp = if ($null -ne $current.transportHealth) { [string]$current.transportHealth.last_transport_at } else { [string]$current.lastMessageAt }
+  $transportStamp = if ($null -ne $current.transportHealth) { $current.transportHealth.last_transport_at } else { $current.lastMessageAt }
   if ($null -ne $current -and -not [string]::IsNullOrWhiteSpace($transportStamp)) {
     try {
       $streamStale = (Get-IsoAgeSeconds $transportStamp) -gt 300
