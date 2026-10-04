@@ -8003,6 +8003,16 @@ async function tick() {
   tickStage("writer_lease:start");
   await ensureWriterLease();
   tickStage("writer_lease:complete");
+  const txfCandlePublication = await require('../lib/publish-txf-candle-archive.cjs').publishTxfArchive({
+    runtime: runtimePath(), tradeDate: taipeiDate(), writerRunId: writerTickIdentity.writer_run_id,
+    apply: APPLY && !DRY_RUN, readJson, writeJson: writeJsonAtomic,
+    leaseValid: () => writerLease.ok === true && writerLease.status === 'claimed' && Date.parse(writerLease.leaseExpiresAt) > Date.now() + 15000,
+    sendBatch: async (table, rows, conflict) => {
+      const result = await supabaseUpsert(table, rows, conflict, {batchSize:50,maxBatchBytes:262144,retries:0,timeoutMs:10000});
+      if (result.written !== rows.length) throw Error('TXF_WRITE_COUNT_MISMATCH');
+    },
+  });
+  tickStage('txf_candle_publication', txfCandlePublication);
   tickStage("market_calendar:start");
   const marketCalendarEvidence = await syncMarketCalendarEvidence();
   tickStage("market_calendar:complete", { trade_date: marketCalendarEvidence.trade_date, is_open: marketCalendarEvidence.is_open, session: marketCalendarEvidence.session });

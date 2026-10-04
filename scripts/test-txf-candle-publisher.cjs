@@ -1,0 +1,20 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {createPublisher}=require('../lib/txf-candle-publisher.cjs');
+const {normalize,hash}=require('../lib/txf-candle-evidence.cjs');
+const {CONTRACT}=require('../lib/txf-candle-archive.cjs');
+(async()=>{
+ let now=Date.parse('2026-10-02T06:00:00Z'),state=null,requests=0,fail=true,validLease=true;
+ const rows=Array.from({length:120},(_,i)=>{const raw={date:new Date(Date.parse('2026-10-02T00:45:00Z')+i*60000).toISOString(),open:100,high:101,low:99,close:100,volume:1};const row=normalize(raw,{symbol:'TXFJ6',tradeDate:'2026-10-02',receivedAt:new Date(now).toISOString(),source:'Fugle:WS:candles',nowMs:now});return {...row,first_available_at:row.available_at,conflict:false,volume_strategy_usable:true};});
+ const snapshot={contract:CONTRACT,trade_date:'2026-10-02',session:'REGULAR',future_symbol:'TXFJ6',run_id:'archive-test',rows,rows_sha256:hash(rows)};
+ const args={writerRunId:'writer-test',apply:true,leaseValid:()=>validLease};
+ const dependencies={now:()=>now,readState:()=>state,writeState:r=>{state=r;},sendBatch:async(table,batch)=>{assert.equal(table,'fugle_daytrade_futopt_intraday_1m');assert(batch.length<=50);requests++;if(fail&&requests===2)throw Error('HTTP_522');}};
+ let publisher=createPublisher(dependencies);
+ let result=await publisher(snapshot,args);assert.equal(result.status,'failed');assert.equal(result.written,50);assert.equal(requests,2);
+ publisher=createPublisher(dependencies);assert.equal((await publisher(snapshot,args)).status,'backoff');assert.equal(requests,2);
+ now+=60000;fail=false;result=await publisher(snapshot,args);assert.equal(result.written,70);assert.equal(result.requests,2);assert.equal(result.db_readback_verified,false);
+ assert.equal((await publisher(snapshot,args)).status,'unchanged');assert.equal(requests,4);
+ const bad=structuredClone(snapshot);bad.rows[0].volume=2;bad.rows_sha256=hash(bad.rows);await assert.rejects(()=>publisher(bad,args),/EVIDENCE_MISMATCH/);
+ validLease=false;assert.equal((await publisher(snapshot,args)).error,'TXF_WRITER_LEASE_REQUIRED');assert.equal(requests,4);
+ console.log('PASS: 50-row batches, partial commit cursor, restart backoff, no unchanged rewrites, native evidence and lease guards');
+})().catch(e=>{console.error(e);process.exitCode=1;});

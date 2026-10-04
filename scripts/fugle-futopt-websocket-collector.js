@@ -16,6 +16,7 @@ const {
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const readTxfReference = require('../lib/futopt-txf-reference.cjs').createReader(RUNTIME_DIR);
+const txfCandlePipeline = require('../lib/txf-candle-pipeline.cjs').createPipeline({runtime:RUNTIME_DIR,readJson,writeJson});
 const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
 ];
@@ -409,10 +410,21 @@ async function run() {
     return;
   }
 
+  let txfConnectionCount = 0;
+  const archiveTimer = setInterval(() => {
+    try { txfCandlePipeline.flush(); } catch { console.error('TXF_ARCHIVE_STATUS_WRITE_FAILED'); }
+  }, 30000);
+  archiveTimer.unref();
+  process.once('SIGINT', () => { try { txfCandlePipeline.flush(true); } finally { process.exit(0); } });
+  process.once('SIGTERM', () => { try { txfCandlePipeline.flush(true); } finally { process.exit(0); } });
+
   const runOnce = () => new Promise((resolve) => {
+    const reference = readTxfReference(nowIso()).txf_reference;
+    txfCandlePipeline.configure(reference ? {symbol:reference.future_symbol,tradeDate:reference.trade_date,session:STREAMING_AFTER_HOURS === true ? 'AFTERHOURS' : 'REGULAR'} : null);
     let selection = selectStreamingTickers();
     let chunks = chunkArray(selection.selectedSymbols, STREAMING_SUBSCRIBE_CHUNK_SIZE);
     const tickerBySymbol = new Map(selection.selectedRows.map((row) => [row.future_symbol, row]));
+    const streamHealth = require('../lib/futopt-stream-health.cjs').createHealth({symbols:selection.selectedSymbols,channels:STREAMING_CHANNELS});
     let ws;
     let openedAt = "";
     let authenticated = false;
@@ -435,6 +447,7 @@ async function run() {
         && authenticated
         && formalCatalogue?.trade_date === catalogueDate()
         && requiredChannelsReady
+        && streamHealth.snapshot().subscriptions_ready
         && selection.selectedSymbols.length > 0
         && selection.allRows.length > 0
         && quoteMessages + candleMessages > 0
@@ -462,12 +475,14 @@ async function run() {
       const statusSnapshot = writeStatus({
         websocketConnected: Boolean(ws && ws.readyState === WebSocket.OPEN),
         websocketAuthenticated: authenticated,
+        transportHealth: streamHealth.snapshot(),
         formalReady,
         formalReadyReason,
         streamingOpenedAt: openedAt,
         streamingMessages: messages,
         streamingQuotes: quoteMessages,
         streamingCandles: candleMessages,
+        txfCandleArchive: txfCandlePipeline.status(),
         selectedSymbols: selection.selectedSymbols.length,
         requestedSymbols: selection.requestedSymbols,
         tickerRows: selection.allRows.length,
@@ -499,7 +514,7 @@ async function run() {
     };
 
     const subscribe = async () => {
-      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+      if (!ws || ws.readyState !== WebSocket.OPEN || !authenticated) return;
       if(formalCatalogue?.trade_date!==catalogueDate()){ws.close(1000,'catalogue day changed');return;}
       selection = selectStreamingTickers();
       chunks = chunkArray(selection.selectedSymbols, STREAMING_SUBSCRIBE_CHUNK_SIZE);
@@ -531,7 +546,7 @@ async function run() {
       ws.addEventListener("open", () => {
         openedAt = nowIso();
         ws.send(JSON.stringify({ event: "auth", data: { apikey: apiKey } }));
-        setTimeout(subscribe, 800);
+        // Subscription begins only after the explicit authenticated event.
         writeStreamingStatus();
       });
       ws.addEventListener("message", (event) => {
@@ -539,7 +554,13 @@ async function run() {
         let payload = null;
         try { payload = JSON.parse(String(event.data || "")); } catch {}
         const text = String(event.data || "");
-        if (/authenticated|auth/i.test(text)) authenticated = true;
+        streamHealth.observe(payload);
+        if (payload?.event === 'authenticated' && !authenticated) {
+          authenticated = true;
+          void subscribe().catch(() => ws.close(4000, 'subscription setup failed'));
+          const reason = txfConnectionCount++ === 0 ? 'STARTUP' : 'RECONNECT';
+          void txfCandlePipeline.recoverOnConnection(apiKey, reason);
+        }
         const notice = getNotice(payload, text);
         if (/forbidden|rate.?limit|subscribe.?limit|exceed/i.test(notice.noticeText)) {
           forbiddenChunks += 1;
@@ -556,6 +577,7 @@ async function run() {
         const futureSymbol = normalizeFutureSymbol(data.symbol || data.future_symbol);
         const ticker = tickerBySymbol.get(futureSymbol) || null;
         if (inferredChannel === "candles") {
+          txfCandlePipeline.receive(payload);
           const candle = normalizeFutoptCandle(payload, ticker);
           if (candle) {
             candleMessages += 1;
@@ -585,12 +607,11 @@ async function run() {
           return;
         }
         writeStreamingStatus();
-        const lastMessageMs = Date.parse(lastMessageAt || "");
-        if (authenticated
-          && Number.isFinite(lastMessageMs)
+        const lastMessageMs = Date.parse(streamHealth.snapshot().last_transport_at || openedAt || "");
+        if (Number.isFinite(lastMessageMs)
           && Date.now() - lastMessageMs > STREAMING_STALE_RECONNECT_MS
           && ws.readyState === WebSocket.OPEN) {
-          ws.close(4000, "stale websocket stream; reconnect required");
+          ws.close(4000, "websocket transport heartbeat timeout");
         }
       }, STREAMING_STATUS_MS);
       const subscribeTimer = setInterval(() => {
@@ -604,11 +625,23 @@ async function run() {
   });
 
   // eslint-disable-next-line no-constant-condition
+  const catalogueRetryFile = path.join(RUNTIME_DIR, 'status', 'futopt-catalogue-retry.json');
+  const refreshCatalogue = require('../lib/futopt-catalogue-retry.cjs').createCatalogueRetry({
+    refresh: require('../lib/mother-pool-futures-catalogue').refresh,
+    readState: () => readJson(catalogueRetryFile, null),
+    writeState: value => writeJson(catalogueRetryFile, value),
+  });
   let reconnectDelayMs = STREAMING_RECONNECT_INITIAL_MS;
   while (true) {
     const runStartedAt = Date.now();
     try {
-      formalCatalogue = await require('../lib/mother-pool-futures-catalogue').refresh({runtime:RUNTIME_DIR,tradeDate:catalogueDate(),asOf:nowIso(),key:apiKey});
+      const catalogueResult = await refreshCatalogue({runtime:RUNTIME_DIR,tradeDate:catalogueDate(),asOf:nowIso(),key:apiKey});
+      if (catalogueResult.status !== 'ready') {
+        writeStatus({ok:false,formalReady:false,formalReadyReason:'catalogue_waiting_verified_trade_date',catalogueRetry:catalogueResult.receipt,error:catalogueResult.receipt.error});
+        await delay(catalogueResult.retry_after_ms);
+        continue;
+      }
+      formalCatalogue = catalogueResult.catalogue;
       await runOnce();
     } catch(error) {
       writeStatus({ok:false,formalReady:false,formalReadyReason:'futures_catalogue_or_stream_blocked',error:error.message});

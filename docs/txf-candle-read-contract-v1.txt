@@ -1,0 +1,57 @@
+TXF 共用 1 分 K 接線契約 v1
+日期：2026-10-04 Asia/Taipei
+狀態：待部署；不可把此文件當成正式入口已存在的證明。
+
+來源與責任
+沿用既有母池期權 WS 的 candles 頻道；各接收端不新增富果訂閱。
+REST 僅在啟動／重連時補缺。原始行情日期與實際取得時間分開保存。
+目前已測試 REGULAR；AFTERHOURS 尚待交易日與時段證據核實，不宣稱已供應。
+
+預定唯讀入口（須以正式部署後 anon 讀回收據啟用）
+POST /rest/v1/rpc/get_fugle_daytrade_futopt_intraday_1m
+權限：anon 或 authenticated 的 EXECUTE；不提供底表寫入權限。
+參數範例：
+{"p_trade_date":"2026-10-02","p_future_symbol":"TXFJ6","p_session":"REGULAR","p_limit":300,"p_before":null}
+上述日期／合約僅為歷史驗證案例，不可寫死為正式每日設定。
+
+每次最多 800 根，時間由新到舊。
+下一頁 p_before 使用上一頁最後一筆 candle_time，採嚴格小於，避免重疊。
+接收端須固定交易日、session 與原生合約代號，不將近月連續代號混成同一合約。
+非 2xx、逾時或無有效 JSON：停止本輪，不改走未驗證 raw table。
+空陣列只表示此範圍尚無已發布資料，不代表沒有成交或策略沒有買點。
+
+逐根欄位
+trade_date / session / future_symbol / timeframe=1
+candle_time：原始分鐘事件時間（UTC ISO 時間）；不是下載時間。
+open / high / low / close / volume：富果原生 K 棒值。
+volume 不可套用股票 shares→lots 換算，亦不可把缺棒補成零量棒。
+source：Fugle:WS:candles 或 Fugle:REST:intraday/candles。
+is_synthetic=false：拒絕合成資料。
+received_at / available_at：母池實際收到此版本的時間。
+first_available_at：母池第一次保存該分鐘的時間。
+closed_at_receipt：該分鐘在收到時是否已結束；不是「永不再修正」的保證。
+conflict / volume_strategy_usable / data_gap_reason：衝突資料不可進量能策略。
+raw_evidence / raw_sha256：原始事件及 SHA256(JSON.stringify(raw_evidence))。
+archive_run_id / writer_run_id：封存與 Writer 批次追溯。
+first_published_at / published_at：DB 首次可見／本版本發布時間，由 DB 設定。
+
+回測可見性
+10/4 補取的 10/2 歷史 K 棒，不能視為 10/2 盤中已可用。
+使用資料前，應依回測模式核對 available_at 及 first_published_at。
+最新版本的盤後修訂不能反向覆蓋當時決策；母池本機另留事件修訂日誌。
+
+供應控制
+Writer 沿用既有寫入鎖；每批最多 50 根，只送有變動的分鐘。
+失敗停止當輪，依 1、2、4、5 分鐘退避；成功批次保存進度。
+正式啟用需先驗證 SQL 遷移、anon RPC、release SHA 與 runtime 設定。
+本次未增加交易訊號、通知、下單或 5 分 K 需求。
+
+已完成的隔離驗證
+300 根真實歷史 K 棒分 6 批寫入本機 PostgreSQL。
+anon RPC 以 137 + 163 根分頁讀回，價格、量、原始雜湊與取得時間一致。
+錯日期為空、limit=801 被拒絕；anon 直接讀底表與刪除均被拒絕。
+
+尚未完成
+正式 SQL／程式部署、正式 anon 跨電腦讀回、夜盤日期證據、
+下一交易時段至少 10 分鐘自然 WS→母池→接收端驗收與負載量測。
+未完成上述事項前，不標示 COMPLETE，不要求接收端啟動實盤。

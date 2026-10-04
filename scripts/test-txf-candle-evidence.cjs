@@ -1,0 +1,11 @@
+const assert=require('node:assert/strict'),{normalize,validateRest}=require('../lib/txf-candle-evidence.cjs');
+const context={symbol:'TXFJ6',tradeDate:'2026-10-02',receivedAt:'2026-10-02T09:01:01+08:00',source:'Fugle:WS:candles',nowMs:Date.parse('2026-10-02T09:02:00+08:00')};
+const raw={symbol:'TXFJ6',type:'FUTURE',exchange:'TAIFEX',date:'2026-10-02T09:00:00+08:00',open:100,high:102,low:99,close:101,volume:0};
+assert.equal(normalize(raw,context).volume,0);
+for(const patch of [{volume:null},{volume:'3'},{volume:-1},{open:0},{high:100},{date:'2026-10-01T09:00:00+08:00'},{date:'2026-10-02T09:00:01+08:00'},{date:'2026-10-02T09:02:00+08:00'},{symbol:'TXFK6'},{isTrial:true},{is_synthetic:true}])assert.throws(()=>normalize({...raw,...patch},context));
+assert.throws(()=>normalize(raw,{...context,session:'AFTERHOURS'}));
+const body={symbol:'TXFJ6',date:'2026-10-02',type:'FUTURE',exchange:'TAIFEX',timeframe:'1',data:[raw]};
+assert.equal(validateRest(body,context).length,1);
+assert.throws(()=>validateRest({...body,data:[raw,raw]},context));
+assert.throws(()=>validateRest({...body,timeframe:5},context));
+console.log('PASS TXF native 1m identity, OHLC, volume, date, future/minute times, duplicate and session guards');
