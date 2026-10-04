@@ -48,6 +48,7 @@ function localRequire(name){
  assert.equal(saved.count,2);assert.equal(restRequests,1);
  const status=readJson(path.join(runtime,'status/collector.json'));
  assert.equal(status.transportHealth.subscriptions_ready,true);
+ assert.equal(status.txfCandleArchive.rejected,0,'subscription ACK and heartbeat must not become invalid candles');
  clock+=121000;intervals.find(t=>t.ms===5000).fn();assert.equal(socket.readyState,3,'missing transport heartbeat must close');
  console.log('PASS actual collector harness: authenticated subscriptions, REST isolation, WS archive, >10 minute retention, heartbeat vs quiet market');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>fs.rmSync(runtime,{recursive:true,force:true}));

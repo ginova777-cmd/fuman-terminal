@@ -567,6 +567,8 @@ async function run() {
           lastForbiddenAt = nowIso();
           lastForbiddenMessage = notice.noticeText.slice(0, 600);
         }
+        // Control acknowledgements contain a symbol/channel but no market event.
+        if (!authenticated || !['data', 'snapshot'].includes(payload?.event)) return;
         const data = payload?.data || payload || {};
         const payloadChannel = String(data.channel || payload?.channel || "").toLowerCase();
         const inferredChannel = payloadChannel
