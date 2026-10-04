@@ -1,0 +1,19 @@
+Mother Pool 七策略雜湊與1分K發布契約 v1
+算法：mother-pool-receipt-hash-bytes-v1；正式函式 lib/mother-pool-receipt-binding.js bindReceipt。
+symbols_sha256：只接受非空陣列、每個元素必須為四碼數字字串。保留前導零；重複/空白/數字型別拒絕，不自動清洗或去重。複製陣列後使用 JavaScript sort() 排序，再 JSON.stringify；UTF-8、無BOM、無末尾換行，SHA256小寫64字元。
+snapshot_sha256：整份 snapshotRaw 字串依UTF-8編碼。snapshot_readback_sha256：整份 readbackRaw 字串依UTF-8編碼。全欄位納入、無排除、無重新排序、無正規化；空白/換行/末尾換行也納入。JSON.parse不接受BOM；不添加BOM。null和缺欄不同；字串與數字不同；中文使用原字元UTF-8；時間保留原始字串精度及時區，等價時間不同寫法仍可能hash不同。
+原始JSON key/array順序必須保留。不可對PostgREST JSONB重新JSON.stringify當作原hash輸入。
+hash_evidence內有 contract 及 symbols/snapshot/snapshot_readback；每項含encoding=UTF-8、base64、byte_length、sha256。base64解碼後直接SHA256，對應receipt同名hash；需再解析snapshot與readback驗證identity/分頁/成員。正式verifyHashEvidence函式可獨立重算。artifact SHA在交付manifest，commit在部署收據。
+同集合重排的symbols hash相同；同集合不同generation的symbols hash仍可相同。snapshot及readback是不同原文，兩者不應要求相等。正確hash不是新鮮度或策略Gate放行證據。
+既有receipt入口追加hash_evidence，不改identity欄位名稱，舊receipt保持null，沒有bytes不能以猜測方式補驗成功。
+14組測試向量為隔離fixture，明確不能代替自然資料；含正常、中文null/缺欄、空/重複/數字symbol、錯日期、單byte竄改、舊receipt、前導零、重排、增減成員、跨generation。
+
+1分K：既有v_fugle_daytrade_intraday_1m_volume_usable欄位保留，追加version_first_written_at timestamptz、publication_revision integer、session_kind text。
+volume_unit：lots或shares。1lot=1000shares；只由既有原生來源轉換器提供。沒有證據保持null，不能以volume_strategy_usable=true推定單位。
+source_received_at：來源快取的sourceCandleSeenAt或REST的source_received_at，非行情事件時間。candle_time是分鐘起點，不假稱最後一筆成交時間。
+db_written_at：DB觸發器clock_timestamp記錄目前版本寫入；交易提交後才可讀，該欄不等於commit時間或首次跨機讀回時間。
+version_first_written_at：目前有記錄版本的首次DB寫入時間；publication_revision由部署後開始記錄。舊行不回填。updated_at或cacheUpdatedAt單獨改變不更新發布時間，客戶端不能偽造伺服器時間。
+既有get_fugle_daytrade_intraday_1m_latest_n回傳形狀不變，payload內提供上述三欄及publication_time_contract=server-row-write-v1。它無trade_date參數，Reader仍須驗證日期；symbols × bars_per_symbol請維持<=800預期列，精確Content-Range由現有讀取流程驗證。
+不保留所有舊revision完整OHLC；僅最終版本無法證明早盤曾可用。回測必須使用當時獨立讀回或封存，不能將本修正視為歷史可見性補齊。
+新增唯讀RPC get_fugle_daytrade_1m_gap_summary(p_trade_date date,p_symbol text)：單檔單日，5秒statement timeout；回傳JSON物件，含raw/usable/quality/synthetic/unit/time統計及分鐘摘要。僅anon/authenticated EXECUTE，無raw table權限。沒有某分鐘的預設分類UNKNOWN_DATA_GAP，不能推定無成交。HTTP/DB錯誤停止本輪，不走raw fallback。
+自然驗收：同日固定membership generation，Owner/anon exact count與差集；至少三輪自然更新及至少10分鐘接收端檢查，另記獨立讀回时间。目前休市不能判NATURAL_PASS。
