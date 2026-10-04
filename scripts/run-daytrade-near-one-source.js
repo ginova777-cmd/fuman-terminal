@@ -215,55 +215,14 @@ function tickerExpiry(row) {
 }
 
 async function readTickerMap(tradeDate) {
-  const catalogue = await require('../lib/mother-pool-futures-catalogue').refresh({
-    runtime:RUNTIME_DIR,tradeDate,asOf:new Date().toISOString(),key:readSecret('fugle-api-key.txt'),
+  const asOf=new Date().toISOString();
+  const catalogue=await require('../lib/stock-future-standard-runtime.cjs').refresh({runtime:RUNTIME_DIR,tradeDate,asOf,key:readSecret('fugle-api-key.txt')});
+  const selection=require('../lib/stock-future-standard-runtime.cjs').resolve(catalogue,tradeDate,new Date().toISOString());
+  const rows=selection.resolutions.filter(r=>r.status==='UNIQUE').map(r=>{
+    const c=selection.candidates.find(c=>c.future_symbol===r.selected);
+    return {trade_date:tradeDate,symbol:r.symbol,fut_contract:c.future_symbol,contract_month:c.contract_month,expiry_date:c.expiry_date,is_near_one:true,resolved_at:selection.generated_at,source:'fugle_daytrade_source:canonical_near_one',payload:{catalogue_run_id:catalogue.run_id,catalogue_source_hash:catalogue.source_hash,ticker_name:c.raw_name,display_name:c.display_name,selection_rule:selection.policy,ticker_payload:c.raw_contract,product_evidence:c.raw_product,product_observed_at:c.evidence_observed_at,selection_status:r.status}};
   });
-  const rows = require('../lib/futopt-collector-catalogue').build(catalogue,tradeDate,new Date().toISOString());  const byUnderlying = new Map();
-  for (const row of rows) {
-    const futureSymbol = normalizeFutureSymbol(row?.future_symbol);
-    const symbol = tickerUnderlying(row) || "";
-    const expiry = tickerExpiry(row);
-    const product = String(row?.product || row?.payload?.product || "").toUpperCase();
-    if (!symbol || !futureSymbol || product === "TXF" || futureSymbol.startsWith("TXF")) continue;
-    const list = byUnderlying.get(symbol) || [];
-    list.push({
-      symbol,
-      fut_contract: futureSymbol,
-      contract_month: contractMonth(row?.contract_month || row?.payload?.contract_month, expiry),
-      expiry_date: expiry,
-      name: row?.name || row?.underlying_name || symbol,
-      product,
-      payload: row?.payload || {},
-    });
-    byUnderlying.set(symbol, list);
-  }
-  const canonical = [];
-  for (const [symbol, candidates] of byUnderlying) {
-    const valid = candidates
-      .filter((row) => row.expiry_date && row.expiry_date >= tradeDate)
-      .sort((a, b) => a.expiry_date.localeCompare(b.expiry_date) || a.fut_contract.localeCompare(b.fut_contract));
-    const selected = valid[0];
-    if (!selected) continue;
-    canonical.push({
-      trade_date: tradeDate,
-      symbol,
-      fut_contract: selected.fut_contract,
-      contract_month: selected.contract_month,
-      expiry_date: selected.expiry_date,
-      is_near_one: true,
-      resolved_at: new Date().toISOString(),
-      source: "fugle_daytrade_source:canonical_near_one",
-      payload: {
-        catalogue_run_id: catalogue.run_id,
-        catalogue_source_hash: catalogue.source_hash,
-        ticker_name: selected.name,
-        candidate_count: candidates.length,
-        selection_rule: "earliest_non_expired_end_date",
-        ticker_payload: selected.payload,
-      },
-    });
-  }
-  return { rows: canonical, tickerRows: rows.length, mappedSymbols: byUnderlying.size };
+  return {rows,tickerRows:selection.candidates.length,mappedSymbols:selection.resolutions.length,selection};
 }
 
 function selectQuote(byFuture, contract, tradeDate) {

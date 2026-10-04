@@ -8038,6 +8038,13 @@ async function tick() {
     },
   });
   tickStage('txf_reference_publication', txfReferencePublication);
+  const stockFutureCandidates = await require('../lib/publish-stock-future-candidates.cjs').publish({
+    root:runtimePath(),tradeDate:taipeiDate(),key:FUGLE_API_KEY,writerRunId:writerTickIdentity.writer_run_id,
+    apply:APPLY&&!DRY_RUN,writeJson:writeJsonAtomic,
+    leaseValid:()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>Date.now()+15000,
+    send:body=>supabaseRpc('publish_fugle_daytrade_stock_future_candidates',body,{service:true}),
+  });
+  tickStage('stock_future_candidates',stockFutureCandidates);
   const state = readWriterState();
   const phase = phaseNow();
   const warmupDataFillActive = taipeiMinutes() >= PREOPEN_WARMUP_START_MINUTES;
