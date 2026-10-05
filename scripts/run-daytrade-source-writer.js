@@ -8420,6 +8420,7 @@ async function tick() {
       try {
         refreshProof=await require('../lib/opening-report-refresh-proof.cjs').capture({
           runtime:runtimePath(),date:taipeiDate(),identity:writerTickIdentity,rows:finalPriorityDbRows,
+          membershipSymbols:priorityRows.filter(isPublishedMotherMember).map(row=>row.symbol),
           snapshot:readJson(MOTHER_POOL_SNAPSHOT_FILE,{}),url:SUPABASE_URL,
           serviceKey:SUPABASE_SERVICE_KEY,anonKey:SUPABASE_READ_KEY,
           events:require('../lib/opening-report-writer-refresh-evidence').readAfter(runtimePath(),taipeiDate(),0),
