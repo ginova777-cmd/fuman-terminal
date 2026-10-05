@@ -1915,6 +1915,16 @@ async function handler(request, response) {
     return;
   }
   try {
+    if (request.query?.ubt === 'page' || request.query?.ubt === 'detail') {
+      const view = await require('../lib/unified-backtest/private-publication.cjs').readPrivatePublication();
+      const {queryView, signalDetail} = require('../lib/unified-backtest/query-view.cjs');
+      const detail = request.query.ubt === 'detail' ? signalDetail(view, String(request.query.signal_id || '')) : null;
+      const result = detail ? {ok:detail.found,detail} : {ok:true,unifiedBacktest:queryView(view,request.query)};
+      const status = detail && !detail.found ? 404 : 200;
+      if (request.method === 'HEAD') response.status(status).end('');
+      else response.status(status).json(result);
+      return;
+    }
     const requestedDate = isoDate(request.query?.date || request.query?.record_date || "");
     const marketCalendar = await buildMarketCalendarContract().catch(() => null);
     const forceLiveSourceReports = scorecardLiveSourceReportsEnabled(request);

@@ -1359,7 +1359,9 @@ function renderHistoryDateOptions(dates) {
 
 function render() {
   if (!payload?.ok) return;
-  UnifiedBacktestView.update(payload.unifiedBacktest || UnifiedBacktestInitial);
+  fetch('/api/scorecard?ubt=page&source=RECOVERED_RECORD', {cache:'no-store'})
+    .then(async response => {const body=await response.json();if(!response.ok||!body.ok)throw Error(body.reason||body.error||'回測資料讀取失敗');UnifiedBacktestView.update(body.unifiedBacktest);})
+    .catch(error => UnifiedBacktestView.blocked('共用歷史回測資料暫時無法讀取：'+error.message));
   const rows = payload.records || [];
   const dates = Array.isArray(payload.historyDates) && payload.historyDates.length ? payload.historyDates : availableDates(rows);
   if (!activeDate || !dates.includes(activeDate)) activeDate = payload.selectedDate || payload.latestDate || dates[0] || "";
