@@ -51,6 +51,7 @@ async function publishReceipt(result) {
       canonical_run_id: result.canonical_run_id,
       verified_at: result.checked_at,
       complete: result.closed_loop_ok,
+      ...Object.fromEntries(["integrity_status", "integrity_verified_at", "integrity_failed_checks", "realtime_status", "realtime_verified_at", "realtime_failed_checks", "session_evidence"].map(key => [key, result[key]])),
       ...(result.snapshot_binding?.receipt_generation_verified ? result.snapshot_binding : {receipt_generation_verified:false}),
       mother_pool_rows: result.components?.mother_pool?.rows || 0,
       failed_checks: result.failed_checks || [],
@@ -181,7 +182,7 @@ function identityOf(value) {
 
 async function main() {
   const clock = taipeiClock();
-  const tradingDay = await isTwseTradingDay(new Date(`${clock.tradeDate}T04:00:00.000Z`), { stateDir: path.join(RUNTIME, "state") });
+  const tradingDay = await isTwseTradingDay(new Date(`${clock.tradeDate}T04:00:00.000Z`), { stateDir: path.join(RUNTIME, "state"), includeEvidence: true });
   if (!tradingDay.isTradingDay) {
     const result = {
       ok: true,
@@ -205,6 +206,7 @@ async function main() {
       publish_allowed_by_observation_sources: false,
       read_only: !WRITE_RECEIPT,
     };
+    Object.assign(result, require('../lib/mother-pool-receipt-assessment.cjs').assess(result, {calendar: tradingDay}));
     if (WRITE_RECEIPT) {
       const receipt = path.join(RUNTIME, "data", "scan-receipts", `daytrade-mother-pool-closed-loop-market-closed-${clock.compact}.json`);
       fs.mkdirSync(path.dirname(receipt), { recursive: true });
@@ -454,6 +456,7 @@ async function main() {
     publish_allowed_by_observation_sources: false,
     read_only: !WRITE_RECEIPT,
   };
+  Object.assign(result, require('../lib/mother-pool-receipt-assessment.cjs').assess(result, {calendar: tradingDay}));
   result.verification_run_id = `mother_pool_v4_1:${clock.compact}:${result.checked_at.replace(/\D/g, "")}`;
 
   if (WRITE_RECEIPT) {
