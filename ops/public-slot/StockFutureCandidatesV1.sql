@@ -36,7 +36,7 @@ grant execute on function public.get_fugle_daytrade_stock_future_candidates(date
 create or replace view public.v_fugle_daytrade_stock_future_candidate_publications as
 select trade_date,catalogue_run_id,revision,writer_run_id,published_at,payload->>'policy' as policy,payload->'counts' as counts
 from public.fugle_daytrade_stock_future_candidates;
-grant select on public.v_fugle_daytrade_stock_future_candidate_publications to anon,authenticated;
+grant select on public.v_fugle_daytrade_stock_future_candidate_publications to anon,authenticated,service_role;
 create or replace function public.publish_fugle_daytrade_stock_future_candidates(p_payload jsonb,p_revision text,p_writer_run_id text)
 returns jsonb language plpgsql security definer set search_path=pg_catalog,public set statement_timeout='5s' as $$
 declare r public.fugle_daytrade_stock_future_candidates%rowtype;
