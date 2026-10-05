@@ -7715,6 +7715,7 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
   };
 }
 async function syncWebSocketFutoptQuotes() {
+  const readTxfReference = require('../lib/futopt-txf-reference.cjs').createReader(runtimePath());
   const cache = readFugleFutoptWebSocketQuotes({ maxAgeMs: FUTOPT_WEBSOCKET_MAX_AGE_MS });
   const rows = [];
   let stockRows = 0;
@@ -7748,6 +7749,7 @@ async function syncWebSocketFutoptQuotes() {
       source: "fugle_daytrade_writer:futopt_websocket",
       payload: {
         ...(quote.payload || {}),
+        ...readTxfReference(timing.event_at, timingNowMs),
         product: quote.product || "",
         session: quote.session || "",
         underlying_name: quote.underlying_name || "",
