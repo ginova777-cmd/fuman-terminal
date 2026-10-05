@@ -333,7 +333,7 @@ function expectedAsiaPositiveLeaderTop3(leaders) {
     .map((row, index) => ({ rank: index + 1, symbol: row.yahoo_symbol, percent: Number(row.percent) }));
 }
 
-function currentReceiptChecks(checks, tradeDate) {
+function currentReceiptChecks(checks, tradeDate, { contentOnly = false } = {}) {
   const ymd = compactDate(tradeDate);
   const paths = {
     preflight: path.join(REPORT_DIR, "opening-report-0830-preflight-receipt-" + ymd + ".json"),
@@ -342,6 +342,8 @@ function currentReceiptChecks(checks, tradeDate) {
     final: path.join(REPORT_DIR, "opening-report-0830-final-receipt-" + ymd + ".json"),
     line: path.join(REPORT_DIR, "line-push-receipt-" + ymd + ".json"),
   };
+
+  if (contentOnly) delete paths.line;
 
   for (const [key, filePath] of Object.entries(paths)) {
     addCheck(checks, "current_receipt_exists:" + key, exists(filePath), filePath);
@@ -353,7 +355,7 @@ function currentReceiptChecks(checks, tradeDate) {
   const leaders = readJson(paths.leaders);
   const snapshot = readJson(paths.snapshot);
   const finalReceipt = readJson(paths.final);
-  const line = readJson(paths.line);
+  const line = contentOnly ? {} : readJson(paths.line);
   addCheck(checks, "current_unified_source_run_identity", !!finalReceipt.run_id && [preflight,leaders,snapshot].every(row => row.run_id === finalReceipt.run_id), "source freeze, snapshot and final must share the unified run");
   const windowStartMs = Date.parse(tradeDate + "T08:00:00+08:00");
   const cutoffMs = Date.parse(morningRecovery.cutoff(tradeDate));
@@ -396,7 +398,7 @@ function currentReceiptChecks(checks, tradeDate) {
 
   addCheck(checks, "current_snapshot_trade_date", snapshot.trade_date === tradeDate || snapshot.tradeDate === tradeDate || snapshot.date === tradeDate, JSON.stringify({ trade_date: snapshot.trade_date, tradeDate: snapshot.tradeDate, date: snapshot.date }));
   addCheck(checks, "current_report_status_is_report_only", ["REPORT_OK", "REPORT_DEGRADED", "COMPLETE", "complete", "WAITING_CANONICAL_VERIFIER"].includes(finalReceipt.report_status), finalReceipt.report_status || finalReceipt.status);
-  addCheck(checks, "current_runner_and_persistence_ready", finalReceipt.contract === "opening_report_0830_complete_v1" && finalReceipt.runner_complete === true && finalReceipt.mother_pool_persistence_ack_ok === true && ((finalReceipt.complete === true && finalReceipt.status === "complete" && finalReceipt.first_blocker == null) || (finalReceipt.complete === false && finalReceipt.status === "waiting_canonical_verifier" && finalReceipt.first_blocker === "canonical_verifier_pending")), JSON.stringify({ contract: finalReceipt.contract, complete: finalReceipt.complete, status: finalReceipt.status, first_blocker: finalReceipt.first_blocker }));
+  if (!contentOnly) addCheck(checks, "current_runner_and_persistence_ready", finalReceipt.contract === "opening_report_0830_complete_v1" && finalReceipt.runner_complete === true && finalReceipt.mother_pool_persistence_ack_ok === true && ((finalReceipt.complete === true && finalReceipt.status === "complete" && finalReceipt.first_blocker == null) || (finalReceipt.complete === false && finalReceipt.status === "waiting_canonical_verifier" && finalReceipt.first_blocker === "canonical_verifier_pending")), JSON.stringify({ contract: finalReceipt.contract, complete: finalReceipt.complete, status: finalReceipt.status, first_blocker: finalReceipt.first_blocker }));
   addCheck(checks, "current_report_observation_only", finalReceipt.watchlist_only === true && Number(finalReceipt.formal_candidates || 0) === 0, JSON.stringify({ watchlist_only: finalReceipt.watchlist_only, formal_candidates: finalReceipt.formal_candidates }));
   addCheck(checks, "current_scan_15_of_15", Number(finalReceipt.expected_industry_count) === 15 && Number(finalReceipt.scanned_industry_count) === 15, JSON.stringify({ expected_industry_count: finalReceipt.expected_industry_count, scanned_industry_count: finalReceipt.scanned_industry_count }));
 
@@ -412,6 +414,7 @@ function currentReceiptChecks(checks, tradeDate) {
 
   const runId = finalReceipt.run_id || finalReceipt.runId;
   const hash = finalReceipt.delivery_content_hash || finalReceipt.content_hash || finalReceipt.contentHash;
+  if (!contentOnly) {
   const lineRunId = line.run_id || line.runId;
   const lineHash = line.delivery_content_hash || line.content_hash || line.contentHash;
   addCheck(checks, "current_line_same_run_id", !runId || !lineRunId || runId === lineRunId, runId + "/" + lineRunId);
@@ -425,6 +428,8 @@ function currentReceiptChecks(checks, tradeDate) {
   const lineAttempted = line.line_push_attempted === true;
   addCheck(checks, "current_notification_policy", require("../lib/opening-report-line-policy").notificationAccepted(line,finalReceipt.run_id,finalReceipt.delivery_content_hash,tradeDate), JSON.stringify({ notification_status:line.notification_status||null, ok: line.ok, line_push_attempted: lineAttempted, target_count: targetCount, delivered_count: deliveredCount, has_user_target: hasUser, has_group_target: hasGroup }));
 
+  }
+
   const terminal = finalReceipt.terminal_briefing_snapshot || {};
   addCheck(checks, "current_terminal_snapshot_ok", terminal.ok === true, JSON.stringify({ ok: terminal.ok, key: terminal.key }));
   addCheck(checks, "current_terminal_same_run_id", terminal.report_run_id === runId, String(terminal.report_run_id || "") + "/" + String(runId || ""));
@@ -435,6 +440,8 @@ function currentReceiptChecks(checks, tradeDate) {
   addCheck(checks, "current_codex_markdown_exists", Boolean(reportText), reportPath);
   addCheck(checks, "current_codex_markdown_same_run_id", Boolean(runId) && reportText.includes("run_id：" + runId), runId || "missing_run_id");
   addCheck(checks, "current_codex_markdown_observation_only", reportText.includes("formal_candidates=0") && reportText.includes("watchlist_only=true"), "Codex Markdown must remain observation-only");
+
+  if (contentOnly) return; // Mother Pool owns bridge, handoff and retention evidence.
 
   const bridgePath = String(finalReceipt.bridge_aggregate_receipt || "");
   const bridge = bridgePath && exists(bridgePath) ? readJson(bridgePath) : null;
@@ -482,7 +489,7 @@ function renderedDeliveryChecks(checks, tradeDate, final) {
   addCheck(checks,"current_rendered_production_origin",receipt?.base_url==="https://fuman-terminal.vercel.app" && /^[a-f0-9]{40}$/.test(receipt?.git_sha||""),"production origin and release identity required");
 }
 
-async function liveDeliveryChecks(checks, tradeDate) {
+async function liveDeliveryChecks(checks, tradeDate, { contentOnly = false } = {}) {
   const finalPath = path.join(REPORT_DIR, "opening-report-0830-final-receipt-" + compactDate(tradeDate) + ".json");
   const final = readJson(finalPath);
   if (!final) return;
@@ -491,8 +498,9 @@ async function liveDeliveryChecks(checks, tradeDate) {
   const nightIssues=morningStages.verifyNight(final.night_futures,{date:tradeDate,runId:final.run_id,cutoff:morningRecovery.cutoff(tradeDate),runtime:process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime"});
   addCheck(checks,"current_night_futures_source",nightIssues.length===0,JSON.stringify(nightIssues));
   const frozen=readJson(path.join(REPORT_DIR,"opening-report-0830-market-snapshot-"+compactDate(tradeDate)+".json"));
-  const line=readJson(path.join(REPORT_DIR,"line-push-receipt-"+compactDate(tradeDate)+".json"));
-  addCheck(checks,"current_night_futures_frozen_line_identity", require("util").isDeepStrictEqual(frozen?.night_futures,final.night_futures) && require("util").isDeepStrictEqual(line?.night_futures,final.night_futures) && line?.night_futures_summary===nightModule.summary(final.night_futures),"same frozen evidence and actual LINE content hash");
+  const line=contentOnly ? null : readJson(path.join(REPORT_DIR,"line-push-receipt-"+compactDate(tradeDate)+".json"));
+  addCheck(checks,"current_night_futures_frozen_identity",require("util").isDeepStrictEqual(frozen?.night_futures,final.night_futures),"same frozen night source");
+  if (!contentOnly) addCheck(checks,"current_night_futures_frozen_line_identity", require("util").isDeepStrictEqual(frozen?.night_futures,final.night_futures) && require("util").isDeepStrictEqual(line?.night_futures,final.night_futures) && line?.night_futures_summary===nightModule.summary(final.night_futures),"same frozen evidence and actual LINE content hash");
   const {contentHash} = require("../lib/opening-report-delivery-contract");
   const expectedHash = contentHash(final.priority_observation_mode, final.display_top3 || [], final.night_futures);
   addCheck(checks,"current_full_content_hash",final.delivery_content_hash === expectedHash,"hash includes full Top3 and A/B mappings");
@@ -516,6 +524,16 @@ function writeReceipt(result, tradeDate) {
 
 async function main() {
   const args = parseArgs();
+  const contentOnly = process.argv.includes("--content-only");
+  if (contentOnly) {
+    if (!process.argv.some(x => x.startsWith("--output="))) throw new Error("content_only_requires_separate_output");
+    const output=path.resolve(process.argv.find(x=>x.startsWith("--output=")).slice(9));
+    const day=compactDate(args.tradeDate);
+    const protectedFiles=["opening-report-0830-final-receipt-"+day+".json",require("../lib/opening-report-receipt-authority").receiptFilename("delivery",day)].map(file=>path.resolve(REPORT_DIR,file).toLowerCase());
+    if(protectedFiles.includes(output.toLowerCase())) throw new Error("content_only_cannot_replace_canonical_receipt");
+    args.requireCurrent = true;
+    args.phase = "content";
+  }
   const checks = [];
 
   const recoveryContextFile=process.env.FUMAN_MORNING_RECOVERY_CONTEXT;
@@ -525,8 +543,16 @@ async function main() {
   if (args.phase === "preflight") {
     currentPreflightReceiptChecks(checks, args.tradeDate);
   } else if (args.requireCurrent) {
-    currentReceiptChecks(checks, args.tradeDate);
-    await liveDeliveryChecks(checks, args.tradeDate);
+    currentReceiptChecks(checks, args.tradeDate, {contentOnly});
+    if (contentOnly) {
+      const final=readJson(path.join(REPORT_DIR,"opening-report-0830-final-receipt-"+compactDate(args.tradeDate)+".json"));
+      const source=readJson(path.join(REPORT_DIR,"opening-report-0830-overseas-leaders-"+compactDate(args.tradeDate)+".json"));
+      const expectedRun=process.argv.find(x=>x.startsWith("--run-id="))?.slice(9);
+      addCheck(checks,"content_expected_identity",Boolean(expectedRun)&&final?.run_id===expectedRun&&final?.date===args.tradeDate,"explicit date and run required");
+      const coverage=require("./verify-opening-report-source-coverage.cjs").verify(source,args.tradeDate,expectedRun);
+      addCheck(checks,"content_independent_source_coverage",coverage.ok===true,JSON.stringify(coverage.failed_checks));
+    }
+    await liveDeliveryChecks(checks, args.tradeDate, {contentOnly});
   }
 
   const failures = checks.filter((check) => !check.ok);
@@ -540,9 +566,9 @@ async function main() {
     trade_date: args.tradeDate,
     require_current: args.requireCurrent,
     phase: args.phase,
-    scope: args.phase === "delivery" ? "stage_delivery" : args.phase === "preflight" ? "source_preflight" : "contract_only",
+    scope: contentOnly ? "morning_source_content_only" : args.phase === "delivery" ? "stage_delivery" : args.phase === "preflight" ? "source_preflight" : "contract_only",
     stage: morningStages.stage().id,
-    run_id: args.phase === "delivery" ? readJson(path.join(REPORT_DIR,"opening-report-0830-final-receipt-"+compactDate(args.tradeDate)+".json"))?.run_id || null : null,
+    run_id: (args.phase === "delivery" || contentOnly) ? readJson(path.join(REPORT_DIR,"opening-report-0830-final-receipt-"+compactDate(args.tradeDate)+".json"))?.run_id || null : null,
     terminal_dir: ROOT,
     runtime_dir: RUNTIME,
     retired_contracts: [RETIRED_TELEGRAM_PACKAGE_KEY],
@@ -559,4 +585,5 @@ async function main() {
   process.exitCode = result.ok ? 0 : 1;
 }
 
-main().catch(error => { console.error(error.stack || error.message); process.exitCode=1; });
+if (require.main === module) main().catch(error => { console.error(error.stack || error.message); process.exitCode=1; });
+module.exports={currentReceiptChecks,liveDeliveryChecks,renderedDeliveryChecks};

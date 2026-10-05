@@ -165,14 +165,18 @@ $run = if ($sourceFreeze.exitCode -ne 0) { [pscustomobject]@{label="runner-skipp
 $currentDataFile = Join-Path $receiptDir "opening-report-0830-final-receipt-$today.json"
 $currentData = if(Test-Path -LiteralPath $currentDataFile){Get-Content -LiteralPath $currentDataFile -Raw|ConvertFrom-Json}else{$null}
 $dataReady = ($sourceFreeze.exitCode -eq 0 -and $null -ne $currentData -and $currentData.run_id -eq $runId -and $currentData.overseas_sources_ok -eq $true -and $currentData.mother_pool_bridge_ok -eq $true -and $currentData.mother_pool_handoff_ack_ok -eq $true -and $currentData.terminal_briefing_snapshot.ok -eq $true)
+$contentReady = ($coverage.exitCode -eq 0 -and $sourceFreeze.exitCode -eq 0 -and $null -ne $currentData -and $currentData.run_id -eq $runId -and $currentData.date -eq $tradeDate -and $currentData.overseas_sources_ok -eq $true -and $currentData.terminal_briefing_snapshot.ok -eq $true)
+$renderedArgs = @("scripts\verify-opening-report-rendered.js", "--trade-date=$tradeDate")
+$rendered = if ($contentReady -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $renderedArgs -Label "rendered-delivery" } else { [pscustomobject]@{label="rendered-delivery";exitCode=-1;stdout="";stderr=""} }
+$contentFile = Join-Path $receiptDir "morning-content-verification-$today.json"
+$contentArgs = @("scripts\verify-opening-report-morning-contract.js", "--content-only", "--trade-date=$tradeDate", "--run-id=$runId", "--output=$contentFile")
+$contentVerification = if ($contentReady -and $rendered.exitCode -eq 0 -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $contentArgs -Label "morning-content-verifier" } else { [pscustomobject]@{label="morning-content-verifier";exitCode=-1;stdout="";stderr=""} }
 $persistenceArgs = @("scripts\verify-opening-report-0830-mother-pool-persistence-ack.js", "--trade-date=$tradeDate", "--report-run-id=$runId")
 if($ResumeEvidence){ $persistenceArgs += "--resume-evidence" }
 $persistence = if ($dataReady -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $persistenceArgs -Label "mother-pool-persistence-ack" } elseif ($run.exitCode -eq 0) { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = 0; stdout = ""; stderr = ""; simulated = $true } } else { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = -1; stdout = ""; stderr = "" } }
-$renderedArgs = @("scripts\verify-opening-report-rendered.js", "--trade-date=$tradeDate")
-$rendered = if ($dataReady -and $persistence.exitCode -eq 0 -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $renderedArgs -Label "rendered-delivery" } else { [pscustomobject]@{label="rendered-delivery";exitCode=-1;stdout="";stderr=""} }
 $verifierArgs = @("scripts\verify-opening-report-morning-contract.js", "--trade-date=$tradeDate")
 if (-not $IsolatedBacktest) { $verifierArgs += "--require-current" }
-$verifier = if ($dataReady -and $persistence.exitCode -eq 0 -and ($IsolatedBacktest -or $rendered.exitCode -eq 0)) { Invoke-NodeStep -NodeArgs $verifierArgs -Label "canonical-verifier" } else { [pscustomobject]@{ label = "canonical-verifier"; exitCode = -1; stdout = ""; stderr = "" } }
+$verifier = if ($dataReady -and $persistence.exitCode -eq 0 -and ($IsolatedBacktest -or ($rendered.exitCode -eq 0 -and $contentVerification.exitCode -eq 0))) { Invoke-NodeStep -NodeArgs $verifierArgs -Label "canonical-verifier" } else { [pscustomobject]@{ label = "canonical-verifier"; exitCode = -1; stdout = ""; stderr = "" } }
 
 $finalFile = Join-Path $receiptDir "opening-report-0830-final-receipt-$today.json"
 $final = if (Test-Path -LiteralPath $finalFile) { Get-Content -LiteralPath $finalFile -Raw | ConvertFrom-Json } else { $null }
@@ -200,12 +204,13 @@ $sourceRows = if ($sourceIdentityOk) { @($sourceReceipt.industries | ForEach-Obj
 $sourceCoverageOk = ($sourceIdentityOk -and $sourceRows.Count -gt 0 -and $null -ne $sourceReceipt.source_gap_leaders -and $sourceReceipt.source_gap_leaders -eq 0 -and @($sourceRows | Where-Object { $_.source_gap -eq $true }).Count -eq 0 -and $sourceRows.Count -eq $sourceReceipt.total_leaders)
 $reportContentReady = ($coverage.exitCode -eq 0 -and $sourceCoverageOk -and $null -ne $final -and $final.run_id -eq $runId -and $final.overseas_sources_ok -eq $true -and $expected -eq 15 -and $scanned -eq 15)
 $componentStatus = [ordered]@{
-  morning_source_content = [ordered]@{status=if($reportContentReady -and $verifierOk -and -not $IsolatedBacktest){"COMPLETE"}elseif($reportContentReady){"READY_FOR_VERIFICATION"}else{"FAILED"};owner="Morning Report";source_identity_ok=$sourceIdentityOk;source_coverage_ok=$sourceCoverageOk;canonical_verified=$verifierOk;artifact=$sourceFile}
+  morning_source_content = [ordered]@{status=if($reportContentReady -and $contentVerification.exitCode -eq 0 -and -not $IsolatedBacktest){"COMPLETE"}elseif($IsolatedBacktest){"SIMULATED"}else{"FAILED"};owner="Morning Report";source_identity_ok=$sourceIdentityOk;source_coverage_ok=$sourceCoverageOk;content_verified=($contentVerification.exitCode -eq 0);canonical_verified=$verifierOk;artifact=$sourceFile;content_receipt=$contentFile}
   mother_pool_handoff = [ordered]@{status=if($handoffAckOk){"COMPLETE"}else{"FAILED"};owner="Mother Pool";receipt=if($null -ne $final){$final.mother_pool_handoff_ack_receipt}else{$null}}
   mother_pool_retention = [ordered]@{status=if($persistenceAckOk -and -not $IsolatedBacktest){"COMPLETE"}elseif($IsolatedBacktest){"SIMULATED"}else{"FAILED"};owner="Mother Pool";receipt=if($null -ne $final){$final.mother_pool_persistence_ack_receipt}else{$null}}
   line_delivery = [ordered]@{personal_delivered=$linePersonalOk;group_delivered=$lineGroupOk;policy_accepted=$notificationAccepted;scope="delivery_only"}
 }
 $receipt = [ordered]@{
+  content_verification_step = $contentVerification
   source_coverage_receipt = $coverageFile
   component_status = $componentStatus
   contract = "opening-report-morning-wrapper-v1"
