@@ -35,12 +35,12 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function observeWriterRefreshes(afterTime, required, timeoutMs, tradeDate, requiredSymbols = []) {
+async function observeWriterRefreshes(afterTime, required, timeoutMs, tradeDate, requiredSymbols = [], reportRunId = null) {
   if(!Array.isArray(requiredSymbols)||new Set(requiredSymbols).size!==requiredSymbols.length||requiredSymbols.some(s=>!/^\d{4}$/.test(s)))throw Error("HANDOFF_SYMBOL_SET_INVALID");
   const started = Date.now();
   let events = [];
   do {
-    events = require('../lib/opening-report-writer-refresh-evidence').readAfter(RUNTIME, tradeDate, afterTime).filter(event=>requiredSymbols.every(symbol=>event.symbols.includes(symbol)));
+    events = require('../lib/opening-report-writer-refresh-evidence').readAfter(RUNTIME, tradeDate, afterTime).filter(event=>requiredSymbols.every(symbol=>event.symbols.includes(symbol))&&require('../lib/opening-report-refresh-proof.cjs').verified(RUNTIME,event,reportRunId));
     if (events.length >= required || Date.now() - started >= timeoutMs) break;
     await sleep(Math.min(5000, Math.max(0, timeoutMs - (Date.now() - started))));
   } while (Date.now() - started <= timeoutMs);
@@ -93,7 +93,7 @@ async function main() {
   const final = readJson(finalPath);
   const handoffTime = Date.parse(String(handoff?.checked_at || ""));
   // Re-read immutable Writer evidence even on resume; old timestamps are not proof.
-  const refreshEvidence = Number.isFinite(handoffTime) ? await observeWriterRefreshes(handoffTime, requiredRefreshes, timeoutMs, tradeDate, handoff?.accepted_symbols) : [];
+  const refreshEvidence = Number.isFinite(handoffTime) ? await observeWriterRefreshes(handoffTime, requiredRefreshes, timeoutMs, tradeDate, handoff?.accepted_symbols, reportRunId) : [];
   const refreshes = refreshEvidence.map(event => event.completed_at);
   const readback = runReadback(tradeDate, reportRunId, bridgeAggregate, readbackOutput);
   const refreshOk = refreshes.length >= requiredRefreshes;
