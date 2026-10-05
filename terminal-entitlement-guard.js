@@ -599,6 +599,13 @@
 
   function reconcileEntitlementState() {
     syncMemberStatusBadge();
+    if (!readAccessToken()) {
+      for (const panel of document.querySelectorAll('[data-morning-scorecard-host], #telegram-detector-audit, #premarket-workflow')) {
+        const body = panel.matches('[data-morning-scorecard-host]') ? panel : panel.querySelector('div');
+        if (body) body.textContent = '請登入已開通權限的會員帳號後查看';
+        for (const key of Object.keys(panel.dataset)) if (key !== 'morningScorecardHost') delete panel.dataset[key];
+      }
+    }
     if (isEntitled()) clearLockedPreview();
   }
 
