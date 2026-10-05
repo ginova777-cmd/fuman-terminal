@@ -4740,11 +4740,16 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
   // the active terminal (strategy chips, institution, industry prewarm and Mother Pool),
   // even when a symbol is not selected into today's formal pool. Retired
   // warrant and CB sources must never be carried forward from an old manifest.
+  const longyueIntake = await require('../lib/longyue-warmup-intake.cjs').receive({
+    runtimeDir: runtimePath(), tradeDate,
+    resolveDay: date => isTwseTradingDay(new Date(date + 'T12:00:00+08:00'), {stateDir:statePath(''), ignoreOverrides:true}),
+  });
   const fullTerminalWarmupSymbols = prependUnique(
     industryPrewarm.symbols,
     [
       ...daytradeMotherPoolSymbols,
       ...bridgeWarmupSymbols,
+      ...longyueIntake.symbols,
     ],
   );
   const nextDaytradeCandlePrioritySymbols = mergeCurrentDayCandlePrioritySymbols({
@@ -4835,6 +4840,7 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     formalPriorityStrategyChip,
     terminalPrioritySymbols: fullTerminalWarmupSymbols,
     terminalPriorityCount: fullTerminalWarmupSymbols.length,
+    longyueWarmupIntake: {status:longyueIntake.status,candidate_version:longyueIntake.candidate_version,list_sha256:longyueIntake.list_sha256,symbols:longyueIntake.symbols},
     terminalWarmupScope: "all_valid_taiwan_symbols_currently_exposed_by_terminal",
     daytradeIndustryPrewarmContract: industryPrewarm.contract,
     daytradeIndustryPrewarmMode: industryPrewarm.mode,
@@ -4874,7 +4880,11 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     || String(existing.daytradePriceGateStatus || "") !== (MOTHER_POOL_MIN_PRICE > 0 ? "minimum_price_enforced" : "no_price_floor")
     || JSON.stringify(existing.daytradePoolPriceBySymbol || {}) !== JSON.stringify(nextPriorityPayload.daytradePoolPriceBySymbol || {});
   const fiveMinuteEvidenceChanged = JSON.stringify(existing.fiveMinutePriorityEvidence) !== JSON.stringify(nextPriorityPayload.fiveMinutePriorityEvidence);
-  if (!sameDailyIdentity || !sameSymbols || JSON.stringify(existing.deepScanAllocation) !== JSON.stringify(nextPriorityPayload.deepScanAllocation) || fiveMinuteEvidenceChanged || !samePriorityCounts || candlePriorityArtifactChanged || openingPriorityArtifactChanged || industryPrewarmArtifactChanged || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
+  require('../lib/longyue-warmup-intake.cjs').publishReceipt(runtimePath(), longyueIntake, {
+    motherPoolRunId: motherPoolSnapshot.run_id, motherSymbols: daytradeMotherPoolSymbols, warmupSymbols: fullTerminalWarmupSymbols,
+  });
+  const longyueIntakeChanged = JSON.stringify(existing.longyueWarmupIntake) !== JSON.stringify(nextPriorityPayload.longyueWarmupIntake);
+  if (longyueIntakeChanged || !sameDailyIdentity || !sameSymbols || JSON.stringify(existing.deepScanAllocation) !== JSON.stringify(nextPriorityPayload.deepScanAllocation) || fiveMinuteEvidenceChanged || !samePriorityCounts || candlePriorityArtifactChanged || openingPriorityArtifactChanged || industryPrewarmArtifactChanged || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
     writeJson(PRIORITY_SYMBOLS_FILE, nextPriorityPayload);
     writeFugleWebSocketSymbols(nextPriorityPayload.symbols, {
       source: "daytrade-dedicated-priority-bridge",
