@@ -321,10 +321,15 @@ async function main() {
   const intradayCandlesRequired = clock.minute >= 9 * 60;
   check("fast_supabase_1m_write_nonempty", !intradayCandlesRequired || Number(fastSync?.candles_written) > 0, "fast_supabase_1m_write_empty");
   const industryReceiptsRequired = clock.minute >= 9 * 60;
-  check("industry_top3_receipt_readable", !industryReceiptsRequired || Boolean(industryTop3), "industry_top3_receipt_missing");
-  check("industry_top3_receipt_complete", !industryReceiptsRequired || industryTop3?.complete === true, "industry_top3_receipt_not_complete");
-  check("industry_top3_scan_executed", !industryReceiptsRequired || industryTop3?.scan_executed === true, "industry_top3_scan_not_executed");
-  check("industry_top3_source_rows_present", !industryReceiptsRequired || Number(industryTop3?.source_rows) > 0, "industry_top3_source_rows_empty");
+  // Morning-report observations keep their failures without blocking core water.
+  const checkMorning = (name, ok, reason) => {
+    checks[name] = Boolean(ok);
+    if (!ok) warnings.push('morning_report:' + reason);
+  };
+  checkMorning("industry_top3_receipt_readable", !industryReceiptsRequired || Boolean(industryTop3), "industry_top3_receipt_missing");
+  checkMorning("industry_top3_receipt_complete", !industryReceiptsRequired || industryTop3?.complete === true, "industry_top3_receipt_not_complete");
+  checkMorning("industry_top3_scan_executed", !industryReceiptsRequired || industryTop3?.scan_executed === true, "industry_top3_scan_not_executed");
+  checkMorning("industry_top3_source_rows_present", !industryReceiptsRequired || Number(industryTop3?.source_rows) > 0, "industry_top3_source_rows_empty");
   check("industry_fast_inject_receipt_readable", !industryReceiptsRequired || Boolean(industryFastInject), "industry_fast_inject_receipt_missing");
   check("industry_fast_inject_receipt_complete", !industryReceiptsRequired || industryFastInject?.complete === true, "industry_fast_inject_receipt_not_complete");
   check("industry_fast_inject_scan_executed", !industryReceiptsRequired || industryFastInject?.scan_executed === true, "industry_fast_inject_scan_not_executed");
@@ -421,8 +426,10 @@ async function main() {
       },
       fast_supabase_sync: { ok: checks.fast_supabase_sync_fresh && checks.fast_supabase_quote_write_nonempty && checks.fast_supabase_1m_write_nonempty, path: paths.fastSync, age_seconds: ageSeconds(fastSync?.completed_at), quotes_written: Number(fastSync?.quotes_written || 0), candles_written: Number(fastSync?.candles_written || 0) },
       industry_top3: {
+        owner: "morning_report",
+        acceptance_scope: "morning_report_independent_of_core_water",
         ok: checks.industry_top3_receipt_complete && checks.industry_top3_scan_executed && checks.industry_top3_source_rows_present,
-        required: industryReceiptsRequired,
+        required: false,
         path: paths.industryTop3,
         source_rows: Number(industryTop3?.source_rows || 0),
         top3_count: Number(industryTop3?.top3_count || 0),
