@@ -100,7 +100,9 @@ function Invoke-MotherPoolReceiptRollover {
     Stop-Process -Id $process.Id -Force -ErrorAction Stop
     $verifyExit = 124
   } else { $verifyExit = [int]$process.ExitCode }
-  $verifyText = ((Get-Content -LiteralPath ($verifyLog + '.stderr') -Raw -ErrorAction SilentlyContinue) -replace "[\r\n]+", " ").Trim()
+  # Empty stderr is normal; force a scalar before applying string methods.
+  [string]$verifyText = Get-Content -LiteralPath ($verifyLog + '.stderr') -Raw -ErrorAction SilentlyContinue
+  $verifyText = ($verifyText -replace "[\r\n]+", " ").Trim()
   if ($verifyText.Length -gt 700) { $verifyText = $verifyText.Substring(0, 700) }
   Write-WrapperLog "MOTHER_POOL_RECEIPT_ROLLOVER exit=$verifyExit output=$verifyText"
 }
