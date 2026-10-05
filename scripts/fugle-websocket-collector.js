@@ -19,8 +19,8 @@ const {
 } = require("../lib/fugle-websocket-quotes");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
-const providerSideJournal = require("../lib/provider-side-journal.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-side-journal"));
-const providerTradeJournal = require("../lib/telegram-detectors/provider-trade-journal.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-trade-journal"));
+const providerSideJournal = require("../lib/provider-journal-background.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-side-journal"), { kind: 'side' });
+const providerTradeJournal = require("../lib/provider-journal-background.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-trade-journal"), { kind: 'trade' });
 const preopenJournal = require('../lib/mother-preopen.cjs').createJournal(path.join(RUNTIME_DIR, 'data', 'mother-pool', 'preopen-raw'));
 const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
@@ -1782,7 +1782,8 @@ async function main() {
 if (COLLECTOR_MODE === "rest") {
   main();
 } else {
-  runStreamingCollector().catch((error) => {
+  runStreamingCollector().catch(async (error) => {
+    await Promise.allSettled([providerSideJournal.close(), providerTradeJournal.close()]);
     writeStatus({
       ok: false,
       mode: "streaming",
