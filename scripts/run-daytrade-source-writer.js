@@ -7683,7 +7683,11 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
   // The checkpoint still advances only after the entire selected set succeeds.
   const rows = require('../lib/daytrade-candle-write-order').latestFirst([...selected.values()]);
   const dbWriteStartedMs = Date.now();
-  await supabaseUpsert('fugle_daytrade_intraday_1m', rows, 'symbol,candle_time', { batchSize: SLOW_TABLE_BATCH_SIZE, timeoutMs: 15000, retries: 1 });
+  const candleDelta = DRY_RUN ? {written: 0, unchanged: 0, not_due: 0} : await require('../lib/daytrade-writer-candle-delta.cjs').sync({
+    file: runtimePath('state', 'daytrade-writer-candle-delta.json'), rows, tradeDate,
+    target: SUPABASE_URL + '/fugle_daytrade_intraday_1m', nowMs: syncNowMs,
+    write: pending => supabaseUpsert('fugle_daytrade_intraday_1m', pending, 'symbol,candle_time', { batchSize: SLOW_TABLE_BATCH_SIZE, timeoutMs: 15000, retries: 1 }),
+  });
   const dbWriteCompletedMs = Date.now();
   if (state && !DRY_RUN && !options.latestOnly) {
     state.daytradeMotherPoolCandleMirror = nextMirror;
@@ -7692,7 +7696,9 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
     writeWriterState(state);
   }
   return {
-    written: rows.length,
+    written: candleDelta.written,
+    unchanged: candleDelta.unchanged,
+    selectedRows: rows.length,
     skipped: false,
     cacheCount: cache.candles.size,
     source: 'fugle_websocket_candles_full_dynamic_mother_pool',
