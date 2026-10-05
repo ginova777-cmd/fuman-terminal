@@ -14,8 +14,10 @@ const row={...s,...member};delete row.symbol_membership;
 const proof={...Object.fromEntries(['trade_date','canonical_run_id','mother_pool_run_id','generation','snapshot_sequence'].map(k=>[k,s[k]])),status:'complete',complete:true,exit_code:0,failed_checks:[],first_blocker:null,verified_at:'2026-09-17T02:01:00Z',read_role:'anon',query_identity:{trade_date:s.trade_date,canonical_run_id:s.canonical_run_id,mother_pool_run_id:run,generation:run,snapshot_sequence:1},pages:[{http_status:200,offset:0,rows:1,content_range:'0-0/1',row_data:[row]}]};
 function bind(snapshot=s,readback=proof,symbols=['2330']){return bindReceipt({snapshotRaw:JSON.stringify(snapshot),readbackRaw:JSON.stringify(readback),tradeDate:s.trade_date,canonicalRunId:s.canonical_run_id,symbols});}
 
-const {isCurrent}=require('../lib/mother-pool-receipt-current.cjs');
-const binding=bind(),receipt={closed_loop_ok:true,complete:true,trade_date:s.trade_date,canonical_run_id:s.canonical_run_id,snapshot_binding:binding};
+const {isCurrent:checkCurrent}=require('../lib/mother-pool-receipt-current.cjs');
+const fixedNow=Date.parse('2026-09-17T02:02:00Z');
+const isCurrent=(r,s,d)=>checkCurrent(r,s,d,{now:fixedNow});
+const binding=bind(),receipt={checked_at:new Date(fixedNow).toISOString(),integrity_status:"PASS",realtime_status:"PASS",closed_loop_ok:true,complete:true,trade_date:s.trade_date,canonical_run_id:s.canonical_run_id,snapshot_binding:binding};
 assert.equal(isCurrent(receipt,JSON.stringify(s),s.trade_date),true);
 for(const patch of [{generation:'next'},{snapshot_sequence:2},{mother_pool_run_id:'next'},{symbols:['2317']},{complete:false}])assert.equal(isCurrent(receipt,JSON.stringify({...s,...patch}),s.trade_date),false);
 assert.equal(isCurrent(receipt,JSON.stringify(s),'2026-09-18'),false);
@@ -27,3 +29,7 @@ console.log('PASS same-count rollover, date, identity, bytes, evidence tampering
 
 const legacy={...receipt}; delete legacy.complete; assert.equal(isCurrent(legacy,JSON.stringify(s),s.trade_date),true);
 assert.equal(isCurrent({...receipt,complete:false},JSON.stringify(s),s.trade_date),false);
+
+for(const patch of [{checked_at:null},{checked_at:'bad'},{checked_at:new Date(fixedNow-120001).toISOString()},{checked_at:new Date(fixedNow+1).toISOString()},{realtime_status:'NOT_DUE'},{realtime_status:'UNKNOWN'},{integrity_status:'FAIL'}])assert.equal(isCurrent({...receipt,...patch},JSON.stringify(s),s.trade_date),false);
+assert.equal(isCurrent({...receipt,checked_at:new Date(fixedNow-120000).toISOString()},JSON.stringify(s),s.trade_date),true);
+console.log('PASS receipt reuse expires after 120 seconds; missing/future/non-PASS assessments reverify');
