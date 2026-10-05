@@ -1,0 +1,80 @@
+{
+  "industries": [
+    {
+      "leaders": [
+        {
+          "yahoo_symbol": "4062.T",
+          "source_evidence": {
+            "symbol": "4062.T",
+            "delay_minutes": 0,
+            "quote_clock": "9:49",
+            "open_time": "2026-10-05T08:00:00+08:00",
+            "price": "12,415",
+            "previous_price": "12,100",
+            "percent": "2.60",
+            "fetched_at": "2026-10-05T00:50:08.477Z",
+            "response_sha256": "17bf556677ba0d8bf62c03d9417773cb5d42751e92775c9f5a0ea694a7d17eeb"
+          }
+        },
+        {
+          "yahoo_symbol": "6787.T",
+          "source_evidence": {
+            "symbol": "6787.T",
+            "delay_minutes": 0,
+            "quote_clock": "9:49",
+            "open_time": "2026-10-05T08:03:00+08:00",
+            "price": "24,780",
+            "previous_price": "23,860",
+            "percent": "3.86",
+            "fetched_at": "2026-10-05T00:50:09.394Z",
+            "response_sha256": "4ca162110807146c8925be75269ce28aab283ea84b7708140b11194ea53a0ddb"
+          }
+        },
+        {
+          "yahoo_symbol": "6981.T",
+          "source_evidence": {
+            "symbol": "6981.T",
+            "delay_minutes": 0,
+            "quote_clock": "9:49",
+            "open_time": "2026-10-05T08:03:00+08:00",
+            "price": "8,718",
+            "previous_price": "8,467",
+            "percent": "2.96",
+            "fetched_at": "2026-10-05T00:50:11.134Z",
+            "response_sha256": "629e359a8fcebdcb0fe95f0cb4d3ce1fd7b3464ab8ce914ed1fc935a04343785"
+          }
+        },
+        {
+          "yahoo_symbol": "6506.T",
+          "source_evidence": {
+            "symbol": "6506.T",
+            "delay_minutes": 0,
+            "quote_clock": "9:49",
+            "open_time": "2026-10-05T08:02:00+08:00",
+            "price": "4,843",
+            "previous_price": "4,806",
+            "percent": "0.77",
+            "fetched_at": "2026-10-05T00:50:14.423Z",
+            "response_sha256": "69b83c68fc490353201259d8b8693eae3e7f0d291978c63caa1880dbd45c7398"
+          }
+        },
+        {
+          "yahoo_symbol": "6273.T",
+          "source_evidence": {
+            "symbol": "6273.T",
+            "delay_minutes": 0,
+            "quote_clock": "9:49",
+            "open_time": "2026-10-05T08:00:00+08:00",
+            "price": "74,760",
+            "previous_price": "73,450",
+            "percent": "1.78",
+            "fetched_at": "2026-10-05T00:50:15.173Z",
+            "response_sha256": "5c1f552bdba8fc6d13dd427cb57bfe8e17a06fb570ad5b7039ccacfa98c24802"
+          }
+        }
+      ]
+    }
+  ],
+  "provenance": "Frozen natural evidence 2026-10-05, parser regression only; not acceptance",
+  "date": "2026-10-05"
+}

@@ -155,6 +155,9 @@ function Invoke-NodeStep {
 # Formal contract: runner -> one canonical verifier -> wrapper receipt.
 # LINE personal/group, terminal output, and Mother Pool bridge remain runner-owned.
 $sourceFreeze = if ($IsolatedBacktest -or $ReuseLineReceipt -or $ResumeEvidence) { [pscustomobject]@{label="source-freeze-existing-or-isolated";exitCode=0;stdout="";stderr="";evidenceOnly=$true} } else { Invoke-NodeStep -NodeArgs @("scripts\run-opening-report-0830-preflight.js", "--wrapper-owned", "--date=$tradeDate", "--run-id=$runId") -Label "source-freeze-0830" }
+$coverageFile = Join-Path $receiptDir "morning-source-coverage-$today.json"
+$coverageInput = Join-Path $receiptDir "opening-report-0830-overseas-leaders-$today.json"
+$coverage = Invoke-NodeStep -NodeArgs @("scripts\verify-opening-report-source-coverage.cjs", "--input=$coverageInput", "--output=$coverageFile", "--date=$tradeDate", "--run-id=$runId") -Label "source-coverage"
 $runnerArgs = @("scripts\run-opening-report-0830-production.js", "--apply-bridge", "--date=$tradeDate", "--run-id=$runId")
 if ($IsolatedBacktest) { $runnerArgs += "--isolated-backtest" }
 if ($ResumeEvidence) { $runnerArgs += "--resume-evidence" } elseif ($ReuseLineReceipt) { $runnerArgs += "--reuse-line-receipt" }
@@ -186,10 +189,25 @@ $handoffAckOk = ($null -ne $final -and $final.mother_pool_handoff_ack_ok -eq $tr
 $persistenceAckOk = if ($IsolatedBacktest) { $true } else { ($persistence.exitCode -eq 0 -and $null -ne $final -and $final.mother_pool_persistence_ack_ok -eq $true -and $final.mother_pool_persistence_ack.complete -eq $true) }
 $expected = if ($null -ne $final -and $null -ne $final.expected_industry_count) { [int]$final.expected_industry_count } else { 0 }
 $scanned = if ($null -ne $final -and $null -ne $final.scanned_industry_count) { [int]$final.scanned_industry_count } else { 0 }
-$ok = ($runnerOk -and $persistenceAckOk -and $verifierOk -and $notificationAccepted -and $terminalOk -and $bridgeOk -and $handoffAckOk -and $expected -eq 15 -and $scanned -eq 15)
-$reasonCode = if ($ok) { "complete" } elseif ($sourceFreeze.exitCode -ne 0) { "source_freeze_0830_failed" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $handoffAckOk) { "mother_pool_handoff_ack_incomplete" } elseif (-not $persistenceAckOk) { "mother_pool_persistence_ack_incomplete" } elseif (-not $IsolatedBacktest -and $rendered.exitCode -ne 0) { "rendered_delivery_failed" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } else { "industry_scan_incomplete" }
+$ok = ($coverage.exitCode -eq 0 -and $runnerOk -and $persistenceAckOk -and $verifierOk -and $notificationAccepted -and $terminalOk -and $bridgeOk -and $handoffAckOk -and $expected -eq 15 -and $scanned -eq 15)
+$reasonCode = if ($ok) { "complete" } elseif ($sourceFreeze.exitCode -ne 0) { "source_freeze_0830_failed" } elseif ($coverage.exitCode -ne 0) { "morning_source_coverage_failed" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $handoffAckOk) { "mother_pool_handoff_ack_incomplete" } elseif (-not $persistenceAckOk) { "mother_pool_persistence_ack_incomplete" } elseif (-not $IsolatedBacktest -and $rendered.exitCode -ne 0) { "rendered_delivery_failed" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } else { "industry_scan_incomplete" }
 
+# Separate component evidence without weakening the canonical completion gate.
+$sourceFile = Join-Path $receiptDir "opening-report-0830-overseas-leaders-$today.json"
+$sourceReceipt = if (Test-Path -LiteralPath $sourceFile) { Get-Content -LiteralPath $sourceFile -Raw | ConvertFrom-Json } else { $null }
+$sourceIdentityOk = ($null -ne $sourceReceipt -and $sourceReceipt.date -eq $tradeDate -and $sourceReceipt.run_id -eq $runId)
+$sourceRows = if ($sourceIdentityOk) { @($sourceReceipt.industries | ForEach-Object { $_.leaders }) } else { @() }
+$sourceCoverageOk = ($sourceIdentityOk -and $sourceRows.Count -gt 0 -and $null -ne $sourceReceipt.source_gap_leaders -and $sourceReceipt.source_gap_leaders -eq 0 -and @($sourceRows | Where-Object { $_.source_gap -eq $true }).Count -eq 0 -and $sourceRows.Count -eq $sourceReceipt.total_leaders)
+$reportContentReady = ($coverage.exitCode -eq 0 -and $sourceCoverageOk -and $null -ne $final -and $final.run_id -eq $runId -and $final.overseas_sources_ok -eq $true -and $expected -eq 15 -and $scanned -eq 15)
+$componentStatus = [ordered]@{
+  morning_source_content = [ordered]@{status=if($reportContentReady -and $verifierOk -and -not $IsolatedBacktest){"COMPLETE"}elseif($reportContentReady){"READY_FOR_VERIFICATION"}else{"FAILED"};owner="Morning Report";source_identity_ok=$sourceIdentityOk;source_coverage_ok=$sourceCoverageOk;canonical_verified=$verifierOk;artifact=$sourceFile}
+  mother_pool_handoff = [ordered]@{status=if($handoffAckOk){"COMPLETE"}else{"FAILED"};owner="Mother Pool";receipt=if($null -ne $final){$final.mother_pool_handoff_ack_receipt}else{$null}}
+  mother_pool_retention = [ordered]@{status=if($persistenceAckOk -and -not $IsolatedBacktest){"COMPLETE"}elseif($IsolatedBacktest){"SIMULATED"}else{"FAILED"};owner="Mother Pool";receipt=if($null -ne $final){$final.mother_pool_persistence_ack_receipt}else{$null}}
+  line_delivery = [ordered]@{personal_delivered=$linePersonalOk;group_delivered=$lineGroupOk;policy_accepted=$notificationAccepted;scope="delivery_only"}
+}
 $receipt = [ordered]@{
+  source_coverage_receipt = $coverageFile
+  component_status = $componentStatus
   contract = "opening-report-morning-wrapper-v1"
       stage = $Stage
       stage_contract = "opening-report-two-stage-v1"
@@ -226,7 +244,7 @@ $receipt = [ordered]@{
   runner_ok = $runnerOk
   canonical_verifier_ok = $verifierOk
   rendered_delivery_ok = ($rendered.exitCode -eq 0)
-  steps = @($sourceFreeze, $run, $persistence, $rendered, $verifier)
+  steps = @($sourceFreeze, $coverage, $run, $persistence, $rendered, $verifier)
   canonical_verifier = "scripts/verify-opening-report-morning-contract.js"
   telegram_enabled = $false
 }
