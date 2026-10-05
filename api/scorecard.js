@@ -1929,18 +1929,23 @@ async function handler(request, response) {
     const { queryView, signalDetail } = require('../lib/unified-backtest/query-view.cjs');
     if (request.query?.ubt === 'detail') {
       const detail = signalDetail(payload.unifiedBacktest, String(request.query.signal_id || ''));
-      response.status(detail.found ? 200 : 404).json({ ok: detail.found, detail });
+      if (request.method === 'HEAD') response.status(detail.found ? 200 : 404).end('');
+      else response.status(detail.found ? 200 : 404).json({ ok: detail.found, detail });
       return;
     }
     if (request.query?.ubt === 'page') {
-      response.status(200).json({ ok: true, unifiedBacktest: queryView(payload.unifiedBacktest, request.query) });
+      const result = queryView(payload.unifiedBacktest, request.query);
+      if (request.method === 'HEAD') response.status(200).end('');
+      else response.status(200).json({ ok: true, unifiedBacktest: result });
       return;
     }
     const responsePayload = payload.unifiedBacktest ? { ...payload, unifiedBacktest: queryView(payload.unifiedBacktest) } : payload;
     if (request.method === "HEAD") response.status(200).end("");
     else response.status(200).json(responsePayload);
   } catch (error) {
-    response.status(503).json({ ok: false, error: "scorecard_unavailable", reason: error?.message || String(error), updatedAt: new Date().toISOString() });
+    const invalidQuery = request.query?.ubt && /^INVALID_(SOURCE_FILTER|DIRECTION_FILTER|DATE_FILTER|DATE_RANGE|PAGE|SIGNAL_ID)$/.test(error?.message || '');
+    if (request.method === 'HEAD') response.status(invalidQuery ? 400 : 503).end('');
+    else response.status(invalidQuery ? 400 : 503).json({ ok: false, error: invalidQuery ? 'invalid_backtest_query' : 'scorecard_unavailable', reason: error?.message || String(error), updatedAt: new Date().toISOString() });
   }
 }
 
