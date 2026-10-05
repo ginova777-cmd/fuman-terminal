@@ -8402,7 +8402,8 @@ async function tick() {
   if (priorityRows.length) {
     try {
       tickStage("priority_pool_write:start", { rows: priorityRows.length });
-      await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
+      const finalPriorityDbRows = priorityPoolDbRows(priorityRows);
+      await supabaseUpsert("fugle_daytrade_priority_pool", finalPriorityDbRows, "symbol", {
         batchSize: SLOW_TABLE_BATCH_SIZE,
         timeoutMs: 30000,
         retries: 1,
@@ -8415,9 +8416,19 @@ async function tick() {
         `updated_at=lt.${encodeURIComponent(priorityRows[0].updated_at)}`,
       );
       tickStage("priority_pool_write:complete", { rows: priorityRows.length });
+      let refreshProof={complete:false,status:'NOT_CAPTURED'};
+      try {
+        refreshProof=await require('../lib/opening-report-refresh-proof.cjs').capture({
+          runtime:runtimePath(),date:taipeiDate(),identity:writerTickIdentity,rows:finalPriorityDbRows,
+          snapshot:readJson(MOTHER_POOL_SNAPSHOT_FILE,{}),url:SUPABASE_URL,
+          serviceKey:SUPABASE_SERVICE_KEY,anonKey:SUPABASE_READ_KEY,
+          events:require('../lib/opening-report-writer-refresh-evidence').readAfter(runtimePath(),taipeiDate(),0),
+        });
+      } catch(error) { refreshProof={complete:false,status:'CAPTURE_FAILED',reason:error?.code||'REFRESH_CAPTURE_FAILED'}; }
+      tickStage('morning_refresh_proof',{ok:refreshProof.complete===true,status:refreshProof.status||'VERIFIED'});
       require('../lib/opening-report-writer-refresh-evidence').record({
         runtime: process.env.FUMAN_RUNTIME_DIR || 'C:/fuman-runtime',
-        date: taipeiDate(), identity: writerTickIdentity, rows: priorityRows,
+        date: taipeiDate(), identity: writerTickIdentity, rows: priorityRows, proof:refreshProof,
       });
     } catch (error) {
       console.error(JSON.stringify({ok:false,stage:'priority_pool_write:failed',checkedAt:nowIso(),writer_run_id:writerTickIdentity.writer_run_id,generation_id:writerTickIdentity.generation_id,error_name:error?.name||'Error',message:String(error?.message||error).slice(0,500)}));
