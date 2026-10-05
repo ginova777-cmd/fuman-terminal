@@ -24,3 +24,6 @@ assert.equal(isCurrent({...receipt,snapshot_binding:{...binding,snapshot_readbac
 assert.equal(isCurrent(receipt,JSON.stringify(s)+' ',s.trade_date),false);
 assert.equal(isCurrent(null,'bad',s.trade_date),false);
 console.log('PASS same-count rollover, date, identity, bytes, evidence tampering and incomplete receipt; no network');
+
+const legacy={...receipt}; delete legacy.complete; assert.equal(isCurrent(legacy,JSON.stringify(s),s.trade_date),true);
+assert.equal(isCurrent({...receipt,complete:false},JSON.stringify(s),s.trade_date),false);
