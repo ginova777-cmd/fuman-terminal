@@ -7,7 +7,7 @@ const {assessLeaderFreshness}=require("../lib/opening-report-asia-freshness");
 const {buildUsEquityMarketCalendar}=require("./us-equity-market-calendar");
 function verify(source,date,runId) {
  const failed=[],rows=[],add=(code,ok)=>{if(!ok)failed.push(code);};
- add("source_identity",source?.date===date&&source?.run_id===runId&&source?.stage===stages.stage().id);
+ add("source_identity",typeof runId==="string"&&runId.length>0&&source?.date===date&&source?.run_id===runId&&source?.stage===stages.stage().id);
  const industries=Array.isArray(source?.industries)?source.industries:[];
  add("industry_set",industries.length===OPENING_REPORT_0830_INDUSTRY_MAP.length&&new Set(industries.map(x=>x.industry)).size===industries.length);
  const us=buildUsEquityMarketCalendar(date);
@@ -20,11 +20,13 @@ function verify(source,date,runId) {
    const issues=[],symbol=row.yahoo_symbol,market=stages.market(symbol),fresh=assessLeaderFreshness(row,date);
    const closed=fresh.market_closed===true || (market==="us"&&us.no_new_us_session===true);
    if(closed){
-    if(row.ok!==false||row.percent!=null||row.close!=null||row.previous_close!=null)issues.push("closed_market_values_not_excluded");
+    if(row.ok!==false||row.percent!=null||(market==="korea"&&(row.close!=null||row.previous_close!=null)))issues.push("closed_market_values_not_excluded");
+    if(market==="us"&&row.reason_code!=="us_market_closed_no_new_session")issues.push("closure_not_classified");
     if(market==="korea"&&row.reason_code!=="korea_market_closed")issues.push("closure_not_classified");
    }else{
     if(row.ok!==true||row.source_gap===true)issues.push("source_unavailable");
     if(!Number.isFinite(Date.parse(row.source_time)))issues.push("source_time_missing");
+    if(market==="us"&&Number.isFinite(Date.parse(row.source_time))&&new Intl.DateTimeFormat("en-CA",{timeZone:"America/New_York",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(row.source_time))!==us.us_session_date)issues.push("us_session_date_mismatch");
     if(fresh.required&&!fresh.fresh)issues.push(fresh.reason_code);
     if(typeof row.percent!=="number"||!Number.isFinite(row.percent))issues.push("percent_missing");
     if(!(typeof row.close==="number"&&row.close>0))issues.push("price_missing");
@@ -45,3 +47,4 @@ if(require.main===module){
  console.log(JSON.stringify(result));process.exitCode=result.ok?0:1;
 }
 module.exports={verify};
+
