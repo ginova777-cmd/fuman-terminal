@@ -7198,6 +7198,7 @@ async function writeStatusAndScorecard(result) {
   result.payload.writer_lease_expires_at = writerLease.leaseExpiresAt || null;
   result.payload.source_authority = "dedicated_daytrade_source_host";
   result.payload.reader_policy = "supabase_read_only_no_writer_no_fugle_fallback";
+  result.payload.quote_coverage_scopes = require('../lib/strategy3-source-coverage-contract.cjs').build(result.payload);
   const sourceRow = {
     source_name: SOURCE_NAME,
     trade_date: tradeDate,
@@ -7261,17 +7262,6 @@ async function writeStatusAndScorecard(result) {
     message: result.message,
     payload: scorecardPayload,
   };
-  try {
-    await traceStatusWrite("speed_scorecard", () => supabaseInsert("fugle_daytrade_source_speed_scorecard", [scorecardRow]));
-  } catch (error) {
-    nonFatalWriteErrors.push(require("../lib/daytrade-diagnostic-errors").encodeDiagnosticError({
-      target: "fugle_daytrade_source_speed_scorecard",
-      message: error?.message || String(error),
-    }));
-    result.payload.nonfatal_write_errors = nonFatalWriteErrors;
-    sourceRow.payload = result.payload;
-  }
-
   const detailJournal=require('../lib/daytrade-source-status-journal');
   const projectedStatus=require('../lib/daytrade-source-status-projection').project(sourceRow,{
     save:row=>detailJournal.prepare(runtimePath('data','source-status-producer-details'),row),
@@ -7288,15 +7278,37 @@ async function writeStatusAndScorecard(result) {
   console.log(JSON.stringify({stage:'source_status_write_size',checkedAt:nowIso(),writer_run_id:sourceRow.payload.writer_run_id,bytes:Buffer.byteLength(JSON.stringify(sourceRow),'utf8'),largest_fields:require('../lib/daytrade-payload-size').inspect(sourceRow.payload)}));
   const sourceStatusJournal=require('../lib/daytrade-source-status-journal');
   let sourceStatusCheckpoint;
-  const sourceStatusAck = await traceStatusWrite("source_status", () => require('../lib/daytrade-source-status-ack').writeWithAcknowledgement({
+  const sourceStatusAck = await require('../lib/source-publication-order.cjs').publishCoreBeforeDiagnostic({
+    publishCore: () => traceStatusWrite("source_status", () => require('../lib/daytrade-source-status-ack').writeWithAcknowledgement({
     row: sourceRow,
     onPrepared: row => {sourceStatusCheckpoint=sourceStatusJournal.prepare(runtimePath('data','source-status-write-intents'),row);console.log(JSON.stringify({stage:'source_status_intent:durable',checkedAt:nowIso(),writer_run_id:row.payload.writer_run_id,...sourceStatusCheckpoint}));},
-    onAcknowledged: ack => sourceStatusJournal.confirm(sourceStatusCheckpoint,ack),
+    // Journal confirmation follows the mandatory independent readback below.
     retryDelaysMs: [5000,10000],
     onMismatch: evidence => console.error(JSON.stringify({stage:'source_status_ack_mismatch',checkedAt:nowIso(),...evidence})),
     write: row => supabaseUpsert("source_status", [row], "source_name"),
     read: row => supabaseGet('source_status',require('../lib/daytrade-source-status-ack').fixedReadQuery(row), {service:true}),
-  }));
+  })),
+    verifyCore: async () => {
+      const verified = await traceStatusWrite('source_status_readback', () => require('../lib/daytrade-source-status-ack').acknowledgeStored({
+        row: sourceRow,
+        read: row => supabaseGet('source_status', require('../lib/daytrade-source-status-ack').fixedReadQuery(row), {service:true})
+      }));
+      sourceStatusJournal.confirm(sourceStatusCheckpoint, verified);
+      return verified;
+    },
+    writeDiagnostic: () => traceStatusWrite("speed_scorecard", () => supabaseInsert("fugle_daytrade_source_speed_scorecard", [scorecardRow])),
+    recordDiagnosticFailure: error => {
+      const failure = require('../lib/daytrade-diagnostic-errors').encodeDiagnosticError({target:'fugle_daytrade_source_speed_scorecard',message:error?.message || String(error)});
+      nonFatalWriteErrors.push(failure);
+      result.payload.nonfatal_write_errors = nonFatalWriteErrors;
+      // Core is already acknowledged. Preserve the diagnostic failure independently.
+      writeJsonAtomic(runtimePath('data','scan-receipts','source-diagnostics',writerTickIdentity.generation_id+'.json'), {
+        trade_date:tradeDate,writer_run_id:writerTickIdentity.writer_run_id,generation_id:writerTickIdentity.generation_id,
+        checked_at:nowIso(),status:'DIAGNOSTIC_FAILED_AFTER_CORE_ACK',complete:false,error:failure
+      });
+      console.error(JSON.stringify({stage:'source_diagnostic_failed_after_core_ack',writer_run_id:writerTickIdentity.writer_run_id,error:failure}));
+    }
+  });
   console.log(JSON.stringify({stage:'source_status_ack',checkedAt:nowIso(),...sourceStatusAck}));
   // Publish today's actual local universe only after the source write is acknowledged.
   // This is a runner artifact, not a module or overall COMPLETE receipt.
