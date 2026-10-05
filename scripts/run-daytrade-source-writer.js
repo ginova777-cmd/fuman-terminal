@@ -706,13 +706,18 @@ async function supabaseGetPaged(resource, query = "", options = {}) {
 
 async function supabaseRpc(resource, body, options = {}) {
   const key = requireSupabaseKey(Boolean(options.service));
-  return require('../lib/daytrade-rpc-observation').invoke({resource,
+  const started=Date.now();
+  const publicationIdentity=resource==='publish_fugle_daytrade_stock_future_candidates'?{revision:body?.p_revision,writer_run_id:body?.p_writer_run_id,catalogue_run_id:body?.p_payload?.catalogue_run_id,request_bytes:Buffer.byteLength(JSON.stringify(body||{}))}:null;
+  if(publicationIdentity)console.log(JSON.stringify({stage:'candidate_publication_rpc:start',...publicationIdentity,checkedAt:nowIso()}));
+  const result=await require('../lib/daytrade-rpc-observation').invoke({resource,
     send:()=>supabaseFetch(`${SUPABASE_URL}/rest/v1/rpc/${resource}`, {
       method:'POST',headers:headers(key),body:JSON.stringify(body || {}),
       signal:AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_READ_TIMEOUT_MS) : undefined,
     }),
-    onFailure:evidence=>console.error(JSON.stringify({...evidence,checkedAt:nowIso()})),
+    onFailure:evidence=>console.error(JSON.stringify({...evidence,...publicationIdentity,checkedAt:nowIso()})),
   });
+  if(publicationIdentity)console.log(JSON.stringify({stage:'candidate_publication_rpc:ack',...publicationIdentity,elapsed_ms:Date.now()-started,status:result?.status,ack_revision:result?.revision,checkedAt:nowIso()}));
+  return result;
 }
 
 function ensureApprovedSourceHost() {
@@ -8047,7 +8052,11 @@ async function tick() {
     },
   });
   tickStage('txf_reference_publication', txfReferencePublication);
-  const stockFutureCandidates = await require('../lib/publish-stock-future-candidates.cjs').publish({
+  const stockFutureCandidates = await require('../lib/stock-future-candidate-isolation.cjs').run({
+    root:runtimePath(),tradeDate:taipeiDate(),writerRunId:writerTickIdentity.writer_run_id,
+    apply:APPLY&&!DRY_RUN,writeJson:writeJsonAtomic,
+    leaseValid:()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>Date.now()+15000,
+    operation:()=>require('../lib/publish-stock-future-candidates.cjs').publish({
     root:runtimePath(),tradeDate:taipeiDate(),key:FUGLE_API_KEY,writerRunId:writerTickIdentity.writer_run_id,
     apply:APPLY&&!DRY_RUN,writeJson:writeJsonAtomic,
     leaseValid:()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>Date.now()+15000,
@@ -8058,8 +8067,9 @@ async function tick() {
       if(!Array.isArray(rows)||rows.length>1)throw Error('CANDIDATE_READBACK_SHAPE_INVALID');
       return rows[0]||null;
     },
+    }),
   });
-  tickStage('stock_future_candidates',stockFutureCandidates);
+  tickStage('stock_future_candidates',{...stockFutureCandidates,ok:stockFutureCandidates.publication_ok===true});
   const state = readWriterState();
   const phase = phaseNow();
   const warmupDataFillActive = taipeiMinutes() >= PREOPEN_WARMUP_START_MINUTES;
@@ -8084,7 +8094,7 @@ async function tick() {
   // admission is built.
   tickStage("daily_volume:start");
   const dailyVolumePromise = fetchDailyVolumeAvg();
-  const nonFatalWriteErrors = [];
+  const nonFatalWriteErrors = stockFutureCandidates.publication_ok === false ? [{target:'stock_future_candidates',message:stockFutureCandidates.reason||stockFutureCandidates.status,status:stockFutureCandidates.status,complete:false,next_retry_at:stockFutureCandidates.next_retry_at||null}] : [];
   // Publish latest natural bars before slow enrichment, under the Writer lease.
   let fullMarketLatestCandles = { complete: false, db_readback_verified: false, status: 'NOT_EXECUTED' };
   tickStage("full_market_latest_candles:start");
@@ -8537,6 +8547,7 @@ async function tick() {
   result.payload.module_readback_capture={status:'PAUSED',complete:false};
   result.payload.module_verifier_runner={status:'PAUSED',complete:false};
   console.log(JSON.stringify({ok:true,stage:'daytrade_tick:preopen_evidence:complete',checkedAt:nowIso()}));
+  result.payload.stock_future_candidate_publication = stockFutureCandidates;
   result.payload.nonfatal_write_errors = fetchResult.errors || [];
   result.payload.websocket_quote_readthrough_written = websocketQuoteReadthroughSync.written || 0;
   result.payload.websocket_quote_readthrough_skipped = Boolean(websocketQuoteReadthroughSync.skipped);
