@@ -72,25 +72,12 @@ function Invoke-MotherPoolReceiptRollover {
   if (-not $Apply -or $FastSyncExitCode -ne 0) { return }
 
   $receiptPath = Join-Path $RuntimeDir "data\scan-receipts\daytrade-mother-pool-closed-loop-$($TradeDate.Replace('-','')).json"
+  $snapshotPath = Join-Path $RuntimeDir "state\daytrade-mother-pool-snapshot-latest.json"
+  $currentScript = Join-Path $RepoRoot "lib\mother-pool-receipt-current.cjs"
   $receiptComplete = $false
-  try {
-    if (Test-Path -LiteralPath $receiptPath) {
-      $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
-      $receiptComplete = (
-        $receipt.closed_loop_ok -eq $true -and
-        [string]$receipt.trade_date -eq $TradeDate -and
-        [string]$receipt.canonical_run_id -eq "fugle_daytrade_source:$($TradeDate.Replace('-','')):canonical"
-      )
-    }
-  } catch {
-    Write-WrapperLog "MOTHER_POOL_RECEIPT_ROLLOVER existing_receipt_unreadable path=$receiptPath error=$($_.Exception.Message)"
-  }
-  # A complete receipt for an earlier pool size must be refreshed after membership changes.
-  if ($receiptComplete) {
-    try {
-      $delta = Get-Content -LiteralPath (Join-Path $RuntimeDir "state\daytrade-mother-pool-delta.json") -Raw | ConvertFrom-Json
-      $receiptComplete = ([string]$delta.trade_date -eq $TradeDate -and [string]$delta.canonical_run_id -eq [string]$receipt.canonical_run_id -and @($delta.rows).Count -eq [int]$receipt.components.mother_pool.rows)
-    } catch { $receiptComplete = $false }
+  if (Test-Path -LiteralPath $currentScript) {
+    & node $currentScript $receiptPath $snapshotPath $TradeDate
+    $receiptComplete = ($LASTEXITCODE -eq 0)
   }
   if ($receiptComplete) {
     Write-WrapperLog "MOTHER_POOL_RECEIPT_ROLLOVER skip=today_complete path=$receiptPath"
@@ -102,9 +89,18 @@ function Invoke-MotherPoolReceiptRollover {
     Write-WrapperLog "MOTHER_POOL_RECEIPT_ROLLOVER skip=verifier_missing path=$verifierScript"
     return
   }
-  $verifyOutput = & node --use-system-ca $verifierScript --write-receipt 2>&1
-  $verifyExit = $LASTEXITCODE
-  $verifyText = (($verifyOutput | Out-String) -replace "[\r\n]+", " ").Trim()
+  $budget = Get-WriterProcessBudget -ElapsedSeconds $WrapperClock.Elapsed.TotalSeconds -MaximumSeconds 60 -ReserveSeconds 5
+  if ($budget -lt 1) {
+    Write-WrapperLog 'MOTHER_POOL_RECEIPT_ROLLOVER pending=WRAPPER_TIME_BUDGET_EXHAUSTED'
+    return
+  }
+  $verifyLog = Join-Path $LogDir "mother-pool-rollover-$Stamp-$PID.log"
+  $process = Start-Process -FilePath (Get-Command node).Source -ArgumentList @('--use-system-ca', ('"' + $verifierScript + '"'), '--write-receipt') -RedirectStandardOutput $verifyLog -RedirectStandardError ($verifyLog + '.stderr') -PassThru -WindowStyle Hidden
+  if (-not $process.WaitForExit($budget * 1000)) {
+    Stop-Process -Id $process.Id -Force -ErrorAction Stop
+    $verifyExit = 124
+  } else { $verifyExit = [int]$process.ExitCode }
+  $verifyText = ((Get-Content -LiteralPath ($verifyLog + '.stderr') -Raw -ErrorAction SilentlyContinue) -replace "[\r\n]+", " ").Trim()
   if ($verifyText.Length -gt 700) { $verifyText = $verifyText.Substring(0, 700) }
   Write-WrapperLog "MOTHER_POOL_RECEIPT_ROLLOVER exit=$verifyExit output=$verifyText"
 }
@@ -575,9 +571,7 @@ if ($Apply -and (-not $runCloseout -or $ClosingWaterOnly)) {
     Write-WrapperLog 'CLOSING_WATER_WRITTEN strategies_started=false independent_readback_pending=true'
     exit 0
   }
-  Invoke-MotherPoolReceiptRollover -FastSyncExitCode $fastSyncExit
 }
-if ($Apply) { Invoke-MotherPoolReceiptRollover -FastSyncExitCode $fastSyncExit }
 try {
   if (Test-Path -LiteralPath $CrossSessionLockPath) {
     $staleLockProbe = $null
@@ -698,6 +692,7 @@ try {
     exit $exitCode
   }
   Update-WriterDatabaseBackoff 'success'
+  Invoke-MotherPoolReceiptRollover -FastSyncExitCode 0
   Invoke-DaytradeSideVolumeCanonicalVerifier
   Write-WrapperLog "DONE ok stdout=$StdoutLog stderr=$StderrLog"
   exit 0
