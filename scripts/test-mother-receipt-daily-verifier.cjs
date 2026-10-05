@@ -1,0 +1,7 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),vm=require('node:vm'),assert=require('node:assert/strict');
+const root=path.resolve(__dirname,'..'),writer=fs.readFileSync(path.join(root,'scripts/run-daytrade-source-writer.js'),'utf8'),collector=fs.readFileSync(path.join(root,'scripts/fugle-websocket-collector.js'),'utf8'),verifier=fs.readFileSync(path.join(root,'scripts/verify-daytrade-priority-daily-rollover-contract.js'),'utf8');
+function run(input){let output='';const processStub={stdout:{write:s=>{output+=s}},exitCode:0};vm.runInNewContext(verifier,{__dirname:path.join(root,'scripts'),process:processStub,require:name=>name==='fs'?{readFileSync:p=>p.endsWith('run-daytrade-source-writer.js')?input:collector}:require(name)});return JSON.parse(output);}
+assert.equal(run(writer).ok,true);
+for(const marker of ['const openingReportWaterSeeds = readOpeningReport0830PrioritySeeds(activeSymbols);','compactDateKey(payload.date) === todayKey','compactDateKey(receipt.date) !== todayKey','String(receipt.run_id || "") !== runId','if (!bridgeReceiptIsValid(receipt, payload, runId, inputPath, receiptPath))']){assert(writer.includes(marker));const result=run(writer.replaceAll(marker,'/* removed guard */'));assert(result.failedChecks.includes('writer_opening_prewarm_uses_current_manifest'),marker);}
+console.log('PASS actual daily verifier accepts validated handoff path; removing reader, payload date, receipt date, run identity or receipt gate fails');
