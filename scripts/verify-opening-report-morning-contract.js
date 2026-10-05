@@ -243,10 +243,11 @@ function staticContractChecks(checks) {
   addCheck(checks,"japan_realtime_five_source_mappings",japanRealtime.SYMBOLS.every(symbol=>sourceMap.some(row=>row.yahoo_symbol===symbol&&row.source_provider===japanRealtime.PROVIDER)),"five approved TSE symbols");
   addCheck(checks,"overseas_market_classifier_contract",detectorModule.classifyLeaderMarket("AAPL")==="us"&&detectorModule.classifyLeaderMarket("6861.T")==="japan"&&detectorModule.classifyLeaderMarket("222800.KQ")==="korea"&&detectorModule.classifyLeaderMarket("000725.SZ")==="other","market boundaries");
   const fixtureDate="2026-09-08",fixtureCutoff=Date.parse(morningStages.cutoff(fixtureDate));
-  const naver = time=>detectorModule.parseNaverKoreaBasic({itemCode:"222800",fluctuationsRatio:"1.11",localTradedAt:new Date(time).toISOString()},{yahoo:"222800.KQ"},fixtureDate);
+  const naver = time=>detectorModule.parseNaverKoreaBasic({itemCode:"222800",closePrice:"10,000",fluctuationsRatio:"1.11",localTradedAt:new Date(time).toISOString()},{yahoo:"222800.KQ"},fixtureDate);
   addCheck(checks,"korea_naver_percent_fixture",naver(fixtureCutoff-1).ok===true&&naver(fixtureCutoff-1).percent===1.11,"KOSDAQ percent and source timestamp");
   addCheck(checks,"korea_naver_after_cutoff_rejected",naver(fixtureCutoff+1).ok===false,"late source rejected");
-  addCheck(checks,"korea_naver_missing_percent_rejected",detectorModule.parseNaverKoreaBasic({itemCode:"222800",fluctuationsRatio:null,localTradedAt:new Date(fixtureCutoff-1).toISOString()},{yahoo:"222800.KQ"},fixtureDate).ok===false,"null is not zero");
+  addCheck(checks,"korea_naver_missing_percent_rejected",detectorModule.parseNaverKoreaBasic({itemCode:"222800",closePrice:"10,000",fluctuationsRatio:null,localTradedAt:new Date(fixtureCutoff-1).toISOString()},{yahoo:"222800.KQ"},fixtureDate).ok===false,"null is not zero");
+  addCheck(checks,"korea_naver_missing_price_rejected",detectorModule.parseNaverKoreaBasic({itemCode:"222800",fluctuationsRatio:"1.11",localTradedAt:new Date(fixtureCutoff-1).toISOString()},{yahoo:"222800.KQ"},fixtureDate).ok===false,"missing price is not valid coverage");
   const calendarModule = require(path.join(ROOT, "scripts", "us-equity-market-calendar.js"));
   const holidayFixture = calendarModule.buildUsEquityMarketCalendar("2026-09-08");
   addCheck(checks, "us_market_labor_day_runtime_switch", holidayFixture.us_market_status === "market_closed" && holidayFixture.no_new_us_session === true && holidayFixture.us_holiday_name === "Labor Day", JSON.stringify(holidayFixture));
