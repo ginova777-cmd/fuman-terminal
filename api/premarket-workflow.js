@@ -1,7 +1,8 @@
 'use strict';
+const {withEntitlementRequired}=require('../lib/server-entitlement-guard');
 const {readSnapshot}=require('../lib/supabase-snapshots');
 const {digest}=require('../lib/telegram-detectors/premarket-plan-contract.cjs');
-module.exports=async function handler(req,res){
+const handler=async function handler(req,res){
  res.setHeader('Cache-Control','no-store');
  const run=String(req.query?.run||new URL(req.url||'/', 'http://localhost').searchParams.get('run')||'');
  if(run&&!/^premarket-validation-[a-f0-9-]{36}$/.test(run))return res.status(400).json({status:'blocked',complete:false,rows:[],first_blocker:'INVALID_RUN_ID'});
@@ -13,3 +14,5 @@ module.exports=async function handler(req,res){
   return res.status(200).json({...p,complete:false,formal_complete:false});
  }catch{return res.status(503).json({status:'blocked',complete:false,rows:[],first_blocker:'VALIDATION_READBACK_FAILED'});}
 };
+
+module.exports=withEntitlementRequired(handler,'scorecard');

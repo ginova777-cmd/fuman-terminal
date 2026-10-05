@@ -1,6 +1,7 @@
 'use strict';
+const {withEntitlementRequired}=require('../lib/server-entitlement-guard');
 const {readSnapshot}=require('../lib/supabase-snapshots');
-module.exports=async function handler(req,res){
+const handler=async function handler(req,res){
  res.setHeader('Cache-Control','no-store');
  try{
   const url=new URL(req.url||'/api/telegram-detectors','https://fuman-terminal.vercel.app'),run=String(req.query?.run||url.searchParams.get('run')||'');
@@ -13,3 +14,5 @@ module.exports=async function handler(req,res){
   return res.status(200).json({...p,acceptance:acceptance?.payload||null});
  }catch{return res.status(503).json({status:'blocked',complete:false,events:[],event_count:0,first_blocker:'三偵測器資料庫讀回失敗'});}
 };
+
+module.exports=withEntitlementRequired(handler,'scorecard');

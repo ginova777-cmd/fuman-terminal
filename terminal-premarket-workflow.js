@@ -54,7 +54,7 @@
   add(body,'p',`盤中事件：${p.observations?.length||0}｜已發送：0`);
  }
  let loaded=false;
- async function load(){if(loaded)return;loaded=true;try{const run=new URLSearchParams(location.search).get('premarket-run')||'';const r=await fetch('/api/premarket-workflow'+(run?'?run='+encodeURIComponent(run):''),{cache:'no-store'});const p=await r.json();if(p.contract&&p.contract!=='telegram_premarket_validation_v1')throw Error('CONTRACT_MISMATCH');paint(p);}catch(e){paint({status:'blocked',first_blocker:e.message,rows:[]});}}
+ async function load(){if(loaded)return;loaded=true;try{const run=new URLSearchParams(location.search).get('premarket-run')||'';const r=await fetch('/api/premarket-workflow'+(run?'?run='+encodeURIComponent(run):''),{cache:'no-store'});if(r.status===401||r.status===403){body.replaceChildren();body.textContent='請登入已開通權限的會員帳號後查看';return;}if(!r.ok)throw Error('資料暫時無法讀取');const p=await r.json();if(p.contract&&p.contract!=='telegram_premarket_validation_v1')throw Error('CONTRACT_MISMATCH');paint(p);}catch(e){paint({status:'blocked',first_blocker:e.message,rows:[]});}}
  panel.addEventListener('toggle',()=>{if(panel.open)load();});
  if(new URLSearchParams(location.search).get('premarket-audit')==='1'){panel.open=true;load();}
 })();
