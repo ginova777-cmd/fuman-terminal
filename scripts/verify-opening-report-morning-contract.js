@@ -379,7 +379,7 @@ function currentReceiptChecks(checks, tradeDate) {
     addCheck(checks,"current_japan_realtime_primary",japan.length===realtime.SYMBOLS.length&&japan.every(row=>row.source_provider===realtime.PROVIDER&&row.source===realtime.SOURCE),"five approved TSE sources");
     addCheck(checks,"current_japan_realtime_evidence",japan.filter(row=>row.ok===true).every(row=>realtime.receiptValid(row,tradeDate)),"timestamp, zero delay, raw fields and numeric consistency");
     const korea=rows.filter(row=>/\.(KS|KQ)$/.test(row.yahoo_symbol));
-    addCheck(checks,"current_korea_uses_naver_primary",korea.length>0&&korea.every(row=>row.source==="Naver Finance KRX basic"),"KRX/KOSDAQ primary source");
+    addCheck(checks,"current_korea_uses_naver_primary",korea.length>0&&korea.every(row=>row.source==="Naver Finance KRX basic" || (require("../lib/opening-report-korea-calendar").closure(tradeDate) && row.source==="KRX holiday calendar" && row.reason_code==="korea_market_closed" && row.ok===false && row.percent==null)),"KRX/KOSDAQ primary source");
     addCheck(checks,"current_naver_korea_primary_valid",korea.filter(row=>row.ok===true).every(row=>row.source_fields?.includes("fluctuationsRatio")&&row.source_fields?.includes("localTradedAt")&&typeof row.percent==="number"&&Number.isFinite(row.percent)),"no null or nonnumeric percentages");
   }
   const usMarket = leaders.us_market || {};

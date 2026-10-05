@@ -184,6 +184,8 @@ function parseNaverKoreaBasic(json, leader, tradeDate, sourceUrl = "") {
   const returnedCode = String(json?.itemCode || "").trim();
   const sourceMs = naverLocalTradedAtMs(json?.localTradedAt);
   const percent = (json?.fluctuationsRatio == null || String(json.fluctuationsRatio).trim() === "" ? NaN : Number(json.fluctuationsRatio));
+  const rawPrice = String(json?.closePrice ?? "").replace(/,/g, "").trim();
+  const close = /^[+]?(?:\d+)(?:\.\d+)?$/.test(rawPrice) ? Number(rawPrice) : NaN;
   const windowStart = Date.parse(`${tradeDate}T08:00:00+08:00`);
   const windowCutoff = cutoffMs(tradeDate);
   const base = {
@@ -192,18 +194,20 @@ function parseNaverKoreaBasic(json, leader, tradeDate, sourceUrl = "") {
     ticker: leader.yahoo,
     selected_time: Number.isFinite(sourceMs) ? new Date(sourceMs).toISOString() : "",
     cutoff: morningRecovery.label(tradeDate),
-    source_fields: ["fluctuationsRatio", "localTradedAt"],
+    source_fields: ["closePrice", "fluctuationsRatio", "localTradedAt"],
     session_contract: "08:00-08:20 Asia/Taipei",
   };
   if (!expectedCode || returnedCode !== expectedCode) return { ...base, ok: false, reason_code: "naver_korea_symbol_mismatch" };
   if (!Number.isFinite(sourceMs)) return { ...base, ok: false, reason_code: "naver_korea_source_time_missing" };
   if (sourceMs < windowStart || sourceMs > windowCutoff) return { ...base, ok: false, reason_code: "naver_korea_outside_stage_window" };
   if (!Number.isFinite(percent)) return { ...base, ok: false, reason_code: "naver_korea_percent_missing" };
+  if (!(close > 0)) return { ...base, ok: false, reason_code: "naver_korea_price_missing" };
   const rounded = Number(percent.toFixed(2));
   const classified = classifyPercent(rounded);
   return {
     ...base,
     ok: true,
+    close,
     percent: rounded,
     direction: classified.direction,
     display: classified.display,
@@ -213,12 +217,14 @@ function parseNaverKoreaBasic(json, leader, tradeDate, sourceUrl = "") {
 
 const naverCache = new Map();
 async function naverKoreaSnapshot(leader, tradeDate) {
+  const closed = require("../lib/opening-report-korea-calendar").closure(tradeDate);
+  if (closed) return {ok:false,source:"KRX holiday calendar",reason_code:"korea_market_closed",attempts:[],market_calendar:closed};
   const code = koreanCode(leader.yahoo);
   const url = `https://m.stock.naver.com/api/stock/${code}/basic`;
   const cacheKey = `${tradeDate}:${code}`;
   if (!naverCache.has(cacheKey)) naverCache.set(cacheKey, fetchJson(url));
   const fetched = await naverCache.get(cacheKey);
-  if (!fetched.ok) return { ok: false, source: "Naver Finance KRX basic", source_url: url, source_fields: ["fluctuationsRatio", "localTradedAt"], reason_code: `naver_korea_http_${fetched.status || 0}`, attempts: fetched.attempts };
+  if (!fetched.ok) return { ok: false, source: "Naver Finance KRX basic", source_url: url, source_fields: ["closePrice", "fluctuationsRatio", "localTradedAt"], reason_code: `naver_korea_http_${fetched.status || 0}`, attempts: fetched.attempts };
   return { ...parseNaverKoreaBasic(fetched.json, leader, tradeDate, url), attempts: fetched.attempts };
 }
 
@@ -337,3 +343,5 @@ if (require.main === module) main().catch((error) => {
 function isRetiredLeader(name, symbol) { return ["5803.T", "000725.SZ"].includes(String(symbol).toUpperCase()) || /^(?:藤倉|FUJIKURA|BOE)$/i.test(String(name).trim()); }
 
 module.exports = { parseNaverKoreaBasic, isRetiredLeader, detectLeader, classifyLeaderMarket, classifyPercent, yahooChartSnapshot, industrySummary };
+
+

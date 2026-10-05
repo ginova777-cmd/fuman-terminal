@@ -43,6 +43,10 @@ async function verifyStage(id){
   const run=final?.run_id,hash=final&&contentHash(final.priority_observation_mode,final.display_top3||[],final.night_futures);
   const add=(name,ok)=>checks.push({name,ok:ok===true});
   add('source',source?.ok===true&&stages.verifyStageIdentity(source,date,id).length===0&&source.run_id===run&&preflight?.ok===true&&preflight.run_id===run&&preflight.date===date);
+  // Recompute source gaps from rows; a summary ok flag cannot prove complete coverage.
+  const sourceRows=Array.isArray(source?.industries)?source.industries.flatMap(i=>Array.isArray(i.leaders)?i.leaders:[]):[];
+  const rowGaps=sourceRows.filter(row=>row.source_gap===true);
+  add('source_coverage_complete',Array.isArray(source?.industries)&&source.industries.length===15&&Number.isInteger(source?.source_gap_leaders)&&source.source_gap_leaders===0&&rowGaps.length===0&&sourceRows.length===source.total_leaders);
   add('runner_identity',final?.stage===id&&final.date===date&&final.overseas_sources_ok===true&&final.mother_pool_bridge_ok===true&&final.delivery_content_hash===hash);
   add('handoff',handoff?.contract==='opening-report-0830-mother-pool-handoff-ack-v2'&&handoff.complete===true&&handoff.db_readback_ok===true&&handoff.report_run_id===run&&handoff.trade_date===date&&handoff.missing_fields?.length===0);
   add('persistence',persistence?.contract==='opening-report-0830-mother-pool-persistence-ack-v1'&&persistence.complete===true&&persistence.db_readback_ok===true&&persistence.report_run_id===run&&persistence.trade_date===date&&persistence.required_writer_refreshes>=2&&persistence.writer_refreshes_observed>=2&&persistence.missing_fields?.length===0);
