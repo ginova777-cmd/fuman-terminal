@@ -1,0 +1,18 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const {sync}=require('../lib/daytrade-writer-candle-delta.cjs');
+(async()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'writer-delta-test-')),file=path.join(dir,'checkpoint.json');
+const row={symbol:'2383',trade_date:'2026-10-05',candle_time:'2026-10-05T01:00:00Z',open:100,high:102,low:99,close:101,volume:30,synthetic:false,payload:{sourceCandleSeenAt:'2026-10-05T01:01:01Z'}};
+const base={file,rows:[row],tradeDate:'2026-10-05',target:'isolated-test',nowMs:Date.parse('2026-10-05T02:00:00Z')};let writes=0;
+const write=async rows=>{writes+=rows.length};
+await assert.rejects(sync({...base,write:async()=>{throw Error('DB failed')}}));assert(!fs.existsSync(file));
+assert.equal((await sync({...base,write})).written,1);
+assert.equal((await sync({...base,write})).unchanged,1);assert.equal(writes,1);
+assert.equal((await sync({...base,rows:[{...row,volume:31}],write})).written,1);
+const saved=fs.readFileSync(file,'utf8');await assert.rejects(sync({...base,rows:[{...row,volume:32}],write:async()=>{throw Error('partial batch failed')}}));assert.equal(fs.readFileSync(file,'utf8'),saved);
+assert.equal((await sync({...base,rows:[{...row,volume:32}],write})).written,1);
+assert.equal((await sync({...base,target:'another-database',write})).written,1);
+fs.writeFileSync(file,'corrupted');assert.equal((await sync({...base,write})).written,1);
+await assert.rejects(sync({...base,rows:[{...row,synthetic:true}],write}));
+console.log('PASS: confirmed unchanged bars skipped; revisions written; failures do not advance; target and checksum enforced; synthetic rejected.');
+})().catch(e=>{console.error(e);process.exitCode=1});
