@@ -19,7 +19,18 @@ check("writer_priority_manifest_has_daily_identity", /tradeDate,\s*canonicalRunI
 check("writer_rejects_cross_day_existing_manifest", /const currentExisting = sameDayArtifact\(existing, tradeDate\)[\s\S]*?existingCanonicalRunId === canonicalRunId[\s\S]*?: \{\}/.test(writer));
 check("writer_rejects_cross_day_bridge_cache", /sameDayArtifact\(cachedBridge, tradeDate\) \? cachedBridge : \{\}/.test(writer));
 check("writer_runtime_seeds_require_daily_identity", /function readRuntimePrioritySeeds[\s\S]*?sameDayArtifact\(rawPayload, tradeDate\)[\s\S]*?=== canonicalRunId/.test(writer));
-check("writer_opening_prewarm_uses_current_manifest", /currentExisting\.openingReport0830PrewarmTradeDate[\s\S]*?currentExisting\.openingReport0830PrewarmSymbols/.test(writer));
+// PR404 routes morning water through verified handoff seeds, not legacy manifest fields.
+const morningSeedStart = writer.indexOf('function readOpeningReport0830PrioritySeeds(');
+const morningSeedEnd = writer.indexOf('\n}', morningSeedStart);
+const morningSeedReader = morningSeedStart >= 0 && morningSeedEnd > morningSeedStart ? writer.slice(morningSeedStart, morningSeedEnd) : '';
+check("writer_opening_prewarm_uses_current_manifest",
+  writer.includes('const openingReportWaterSeeds = readOpeningReport0830PrioritySeeds(activeSymbols);')
+  && writer.includes('openingReportWaterSeeds.symbols')
+  && morningSeedReader.includes('compactDateKey(payload.date) === todayKey')
+  && morningSeedReader.includes('compactDateKey(receipt.date) !== todayKey')
+  && morningSeedReader.includes('String(receipt.run_id || "") !== runId')
+  && morningSeedReader.includes('if (!bridgeReceiptIsValid(receipt, payload, runId, inputPath, receiptPath))'));
+
 check("writer_terminal_priority_uses_current_manifest", writer.includes("const fullTerminalWarmupSymbols = prependUnique(")
   && writer.includes("terminalPrioritySymbols: fullTerminalWarmupSymbols"));
 check("writer_does_not_carry_retired_terminal_sources", !writer.includes('addMany("warrant"')
