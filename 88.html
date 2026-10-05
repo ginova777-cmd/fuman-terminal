@@ -481,7 +481,8 @@
     for(const d of [f.from,f.to])if(d&&(typeof d!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(d)||!Number.isFinite(Date.parse(d))||new Date(d).toISOString().slice(0,10)!==d))throw Error('INVALID_DATE_FILTER');
     if(f.from&&f.to&&f.from>f.to)throw Error('INVALID_DATE_RANGE');
   }
-  function select(data,f){validateFilters(f);return (data.signals||[]).filter(s=>s.run_type!=='SIMULATION'&&(!f.strategy||s.strategy_id===f.strategy)&&(!f.direction||s.direction===f.direction)&&s.source_mode===f.source&&(!f.type||s.candidate_status===f.type)&&(!f.status||(s.outcome?.status||'PENDING')===f.status)&&(!f.from||s.signal_date>=f.from)&&(!f.to||s.signal_date<=f.to));}
+  function isActiveStrategy(value){return !/^(?:strategy[ _-]*2|策略\s*2)(?![0-9])/i.test(String(value||'').trim());}
+  function select(data,f){validateFilters(f);return (data.signals||[]).filter(s=>isActiveStrategy(s.strategy_id)&&s.run_type!=='SIMULATION'&&(!f.strategy||s.strategy_id===f.strategy)&&(!f.direction||s.direction===f.direction)&&s.source_mode===f.source&&(!f.type||s.candidate_status===f.type)&&(!f.status||(s.outcome?.status||'PENDING')===f.status)&&(!f.from||s.signal_date>=f.from)&&(!f.to||s.signal_date<=f.to));}
   function summarize(rows){
     const scored=rows.filter(s=>s.run_type!=='SIMULATION'&&['FORWARD_RECORDED','HISTORICAL_REPLAY'].includes(s.source_mode)&&s.eligible===true&&s.outcome?.status==='COMPLETE'&&typeof s.outcome.metrics?.success==='boolean');
     const wins=scored.filter(s=>s.outcome.metrics.success).length;
@@ -499,7 +500,7 @@
     }
     return [...grouped.values()].map(g=>({...g,rate:g.hits/g.n,MFE:g.MFE/g.n,MAE:g.MAE/g.n}));
   }
-  return {select,summarize,groups,researchGroups,validateFilters};
+  return {isActiveStrategy,select,summarize,groups,researchGroups,validateFilters};
 });
 </script><script>(function(){
   'use strict';
@@ -509,12 +510,13 @@
   const esc=v=>String(v??'待確認').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const pct=v=>Number.isFinite(v)?(v*100).toFixed(1)+'%':'—';
   const num=v=>Number.isFinite(v)?v.toFixed(2)+'%':'—';
+  function signalText(s){return ['日期：'+(s.signal_date||'待確認'),'股票：'+s.symbol+' '+(s.name||''),'方向：'+(s.direction==='LONG'?'多':'空'),'類型：'+(s.candidate_status==='FORMAL_ENTRY'?'正式訊號':'候選紀錄'),'狀態：'+({COMPLETE:'已結算',PENDING:'待結算',DATA_MISSING:'缺資料',UNVERIFIABLE:'待驗證'}[s.outcome?.status]||'待確認'),'參考價：'+(s.reference_price??'尚未確認'),'計入正式勝率：'+(s.eligible?'是':'否')].join('\n');}
   function buttons(key,items){return '<div class="ubt-buttons" role="group" aria-label="'+esc(key)+'">'+items.map(([id,name])=>'<button type="button" data-filter="'+key+'" data-value="'+esc(id)+'" aria-pressed="'+(state[key]===id)+'">'+esc(name)+'</button>').join('')+'</div>';}
   function render(){
     const server=data.contract==='unified-backtest-page-v1',rows=server?data.signals:model.select(data,state),summary=server?data.summary:model.summarize(rows),groups=server?data.groups:model.groups(rows),research=server?data.research:model.researchGroups(rows);
     const pages=server?data.pages:Math.max(1,Math.ceil(rows.length/50));page=server?data.page:Math.min(page,pages-1);const visible=server?rows:rows.slice(page*50,(page+1)*50);
     node.innerHTML='<h2>全策略回測中心</h2><p>'+esc(data.notice||'尚未接上共用封存資料。')+'</p>'+
-      buttons('strategy',[['','全部策略'],...data.strategies.map(s=>[s.id,s.name])])+
+      buttons('strategy',[['','全部策略'],...data.strategies.filter(s=>model.isActiveStrategy(s.id)&&model.isActiveStrategy(s.name)).map(s=>[s.id,s.name])])+
       buttons('direction',[['','全部方向'],['LONG','做多'],['SHORT','做空']])+
       buttons('source',[['FORWARD_RECORDED','當日封存 Forward'],['HISTORICAL_REPLAY','歷史回測 Historical'],['RECOVERED_RECORD','回收紀錄（研究）']])+
       buttons('type',[['','全部訊號類型'],['CANDIDATE','候選'],['FORMAL_ENTRY','正式進場']])+
@@ -523,9 +525,9 @@
       '<h3>全策略總覽</h3><div class="ubt-cards"><span>訊號 <b>'+summary.total+'</b></span><span>有效結果 <b>'+summary.denominator+'</b></span><span>覆蓋率 <b>'+pct(summary.coverage)+'</b></span><span>待結算 <b>'+summary.pending+'</b></span></div><p>不同版本、方向、持有期及成功規則分列比較；不合併成單一勝率。覆蓋率＝可計分筆數／目前篩選訊號數。</p>'+
       '<h3>策略比較</h3><div class="ubt-scroll"><table><thead><tr><th>策略／版本／類型</th><th>方向／持有期／規則</th><th>勝率（成功／分母）</th><th>覆蓋率</th><th>MFE／MAE 平均</th><th>Targets 達標數／分母</th></tr></thead><tbody>'+groups.map(g=>'<tr><td>'+esc(g.strategy_id)+'<br>'+esc(g.version)+'<br>'+esc(g.type)+'</td><td>'+esc(g.direction)+' / '+esc(g.horizon)+'<br>'+esc(g.rule)+'</td><td>'+pct(g.rate)+' ('+g.wins+'/'+g.denominator+')</td><td>'+pct(g.coverage)+'</td><td>'+num(g.MFE)+' / '+num(g.MAE)+'</td><td>'+Object.entries(g.targets).map(([k,t])=>esc(k)+'%：'+t.wins+'/'+t.total).join('<br>')+'</td></tr>').join('')+'</tbody></table>'+(groups.length?'':'<p>這組條件尚無訊號；不是 0% 勝率。</p>')+'</div>'+
       (research.length?'<h3>研究觀察結果（未驗證行情）</h3><p>假設當日開盤價進場、收盤方向判定；不是成交紀錄或已驗證策略勝率。原始日K最終性與當時可用性尚未確認。</p>'+research.map(g=>'<p>'+esc(g.strategy)+'／'+esc(g.direction)+'：方向符合率 '+pct(g.rate)+'（'+g.hits+'/'+g.n+'）；平均 MFE '+num(g.MFE)+'、MAE '+num(g.MAE)+'</p>').join(''):'')+
-      '<h3>逐筆訊號</h3><p>共 '+(server?data.total:rows.length)+' 筆 · 第 '+(page+1)+' / '+pages+' 頁 <button type="button" data-page="prev" '+(page===0?'disabled':'')+'>上一頁</button> <button type="button" data-page="next" '+(page===pages-1?'disabled':'')+'>下一頁</button></p>'+visible.map(s=>'<details '+(server?'data-signal="'+esc(s.signal_id)+'"':'')+'><summary>'+esc(s.signal_date)+' · '+esc(s.symbol)+' · '+esc(s.strategy_id)+' · '+esc(s.outcome?.status||'PENDING')+'</summary><pre>'+esc(JSON.stringify(s,null,2))+'</pre></details>').join('')+
-      '<h3>資料缺口</h3>'+data.strategies.filter(s=>!state.strategy||s.id===state.strategy).map(s=>'<p><strong>'+esc(s.name)+'</strong> · '+esc(s.status)+'<br>'+esc(s.gap)+'</p>').join('')+
-      '<p>以下列出本頁逐筆缺口；統計仍使用全部篩選結果。</p>'+visible.filter(s=>!s.eligible||s.outcome?.status!=='COMPLETE').map(s=>'<p>'+esc(s.symbol)+' / '+esc(s.signal_id)+'：'+esc(s.eligibility_reason||s.outcome?.reason||s.outcome?.status)+'</p>').join('');
+      '<h3>逐筆訊號</h3><p>共 '+(server?data.total:rows.length)+' 筆 · 第 '+(page+1)+' / '+pages+' 頁 <button type="button" data-page="prev" '+(page===0?'disabled':'')+'>上一頁</button> <button type="button" data-page="next" '+(page===pages-1?'disabled':'')+'>下一頁</button></p>'+visible.map(s=>'<details '+(server?'data-signal="'+esc(s.signal_id)+'"':'')+'><summary>'+esc(s.signal_date)+' · '+esc(s.symbol)+' · '+esc(s.strategy_id)+' · '+esc(s.outcome?.status||'PENDING')+'</summary><pre>'+esc(signalText(s))+'</pre></details>').join('')+
+      '<h3>接線狀態</h3>'+data.strategies.filter(s=>model.isActiveStrategy(s.id)&&(!state.strategy||s.id===state.strategy)).map(s=>'<p><strong>'+esc(s.name)+'</strong> · '+(data.signals.some(row=>row.strategy_id===s.id)?'本次查詢有紀錄':'本次查詢無紀錄')+'</p>').join('')+
+      '<p>以下列出本頁逐筆缺口；統計仍使用全部篩選結果。</p>'+visible.filter(s=>!s.eligible||s.outcome?.status!=='COMPLETE').map(s=>'<p>'+esc(s.symbol)+'：'+(s.outcome?.status==='DATA_MISSING'?'缺少行情':s.outcome?.status==='PENDING'?'待結算':'尚未符合正式計分條件')+'</p>').join('');
   }
   let requestNumber=0;
   function showError(text){let message=node.querySelector('[data-filter-error]');if(!message){message=document.createElement('p');message.dataset.filterError='true';message.setAttribute('role','alert');node.prepend(message);}message.textContent=text;}
@@ -544,7 +546,7 @@
   }
   node.addEventListener('click',event=>{const p=event.target.closest('button[data-page]');if(p){page=Math.max(0,page+(p.dataset.page==='next'?1:-1));navigate();return;}const b=event.target.closest('button[data-filter]');if(!b)return;state[b.dataset.filter]=b.dataset.value;page=0;navigate();});
   node.addEventListener('change',event=>{if(event.target.dataset.date){state[event.target.dataset.date]=event.target.value;page=0;navigate();}});
-  node.addEventListener('toggle',async event=>{const d=event.target;if(!d.open||!d.dataset.signal||d.dataset.loaded)return;d.dataset.loaded='loading';try{const response=await fetch('/api/scorecard?'+new URLSearchParams({ubt:'detail',signal_id:d.dataset.signal}),{cache:'no-store'}),body=await response.json();if(!response.ok||!body.ok||!body.detail?.found)throw Error('完整證據暫時無法讀取');d.querySelector('pre').textContent=JSON.stringify(body.detail.signal,null,2);d.dataset.loaded='yes';}catch(error){d.querySelector('pre').textContent=error.message;delete d.dataset.loaded;}},true);
+  node.addEventListener('toggle',async event=>{const d=event.target;if(!d.open||!d.dataset.signal||d.dataset.loaded)return;d.dataset.loaded='loading';try{const response=await fetch('/api/scorecard?'+new URLSearchParams({ubt:'detail',signal_id:d.dataset.signal}),{cache:'no-store'}),body=await response.json();if(!response.ok||!body.ok||!body.detail?.found)throw Error('完整證據暫時無法讀取');d.querySelector('pre').textContent=signalText(body.detail.signal);d.dataset.loaded='yes';}catch(error){d.querySelector('pre').textContent=error.message;delete d.dataset.loaded;}},true);
   window.UnifiedBacktestView={update(value){++requestNumber;data=value||{strategies:[],signals:[]};if(data.contract==='unified-backtest-page-v1')state={strategy:'',direction:'',source:'FORWARD_RECORDED',type:'',status:'',from:'',to:'',...data.filters};node.removeAttribute('aria-busy');render();},blocked(message){++requestNumber;node.removeAttribute('aria-busy');node.textContent=message;}};
   render();
 })();
@@ -1177,7 +1179,7 @@ function sourceStatus(payload, latestDate) {
 
 function sourceReportForStrategy(strategy) {
   const normalized = String(strategy || "").toLowerCase();
-  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
+  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports.filter(row=>UnifiedBacktestModel.isActiveStrategy(row.key||row.strategy||row.label)) : [];
   return reports.find((report) => {
     const keys = [report.key, report.strategy, report.strategyName, report.label]
       .map((value) => String(value || "").toLowerCase());
@@ -1191,7 +1193,7 @@ function sourceReportForStrategy(strategy) {
 }
 
 function sourceReportsStatus(payload) {
-  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports : [];
+  const reports = Array.isArray(payload?.sourceReports) ? payload.sourceReports.filter(row=>UnifiedBacktestModel.isActiveStrategy(row.key||row.strategy||row.label)) : [];
   if (!reports.length) return { qualityStatus: "blocked", text: "sourceReports=missing｜策略來源回讀不可驗" };
   const keyOrder = ["strategy2", "strategy3", "strategy4", "strategy5", "seven_strategy_daily_history", "institution", "cb", "warrant"];
   const byKey = new Map(reports.map((report) => [String(report.key || report.strategy || report.label || "").toLowerCase(), report]));
@@ -1316,7 +1318,7 @@ function renderPerformanceEvaluation() {
   const node = byId("performanceEvaluation");
   if (!node) return;
   const evaluation = payload?.performanceEvaluation || {};
-  const strategies = Array.isArray(evaluation.byStrategy) ? evaluation.byStrategy : [];
+  const strategies = Array.isArray(evaluation.byStrategy) ? evaluation.byStrategy.filter(row=>UnifiedBacktestModel.isActiveStrategy(row.strategy||row.strategyName||row.key)) : [];
   if (!strategies.length) {
     node.innerHTML = `<h2>策略績效與回測狀況</h2><div class="status-line blocked">NOT_EVALUABLE｜目前沒有可核對的成績單歷史樣本</div>`;
     return;
@@ -1362,7 +1364,7 @@ function render() {
   fetch('/api/scorecard?ubt=page&source=RECOVERED_RECORD', {cache:'no-store'})
     .then(async response => {const body=await response.json();if(!response.ok||!body.ok)throw Error(body.reason||body.error||'回測資料讀取失敗');UnifiedBacktestView.update(body.unifiedBacktest);})
     .catch(error => UnifiedBacktestView.blocked('共用歷史回測資料暫時無法讀取：'+error.message));
-  const rows = payload.records || [];
+  const rows = (payload.records || []).filter(row=>UnifiedBacktestModel.isActiveStrategy(row.strategy));
   const dates = Array.isArray(payload.historyDates) && payload.historyDates.length ? payload.historyDates : availableDates(rows);
   if (!activeDate || !dates.includes(activeDate)) activeDate = payload.selectedDate || payload.latestDate || dates[0] || "";
   renderHistoryDateOptions(dates);
