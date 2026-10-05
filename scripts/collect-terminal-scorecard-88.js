@@ -310,6 +310,11 @@ const payload = {
   },
 };
 async function main() {
+  // Read a precomputed shared snapshot only; this collector never runs backtests.
+  if (process.env.FUMAN_UBT_PUBLICATION_FILE) {
+    payload.unifiedBacktest = require('../lib/unified-backtest/publication-snapshot.cjs')
+      .readPublication(process.env.FUMAN_UBT_PUBLICATION_FILE);
+  }
   const publishCurrent = payload.ok === true;
   if (publishCurrent) writeJsonAtomic(outputFile, payload);
   let blob = null;
