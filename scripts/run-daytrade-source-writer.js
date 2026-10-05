@@ -4671,11 +4671,12 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
   const priceEligibleSymbolSet = new Set(formalPoolRows
     .map((row) => normalizeCode(row.symbol))
     .filter((code) => /^\d{4}$/.test(code)));
-  const openingReportCandlePrioritySymbols = compactDateKey(currentExisting.openingReport0830PrewarmTradeDate) === compactDateKey(tradeDate)
-    ? (currentExisting.openingReport0830PrewarmSymbols || [])
-      .map((value) => normalizeCode(value?.symbol || value?.code || value))
-      .filter((code) => priceEligibleSymbolSet.has(code))
-    : [];
+  // The verified morning handoff grants observation water, not trading eligibility.
+  // Read the current receipt-backed seeds instead of a legacy optional prewarm field.
+  const openingReportWaterSeeds = readOpeningReport0830PrioritySeeds(activeSymbols);
+  const openingReportCandlePrioritySymbols = [...new Set(openingReportWaterSeeds.symbols
+    .map((seed) => normalizeCode(seed.symbol))
+    .filter((code) => /^\d{4}$/.test(code)))];
   const fixedUserCasePrefix = [...USER_CASE_SYMBOLS].filter((code) => priceEligibleSymbolSet.has(code));
   const userCaseCandlePrioritySymbols = [...new Set([
     ...fixedUserCasePrefix,
@@ -4745,7 +4746,7 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     manifest: currentExisting,
     tradeDate,
     canonicalRunId,
-    preferredSymbols: prependUnique(fiveMinutePriorityEvidence?.promoted_symbols || [], fullTerminalWarmupSymbols),
+    preferredSymbols: prependUnique([...userCaseCandlePrioritySymbols, ...openingReportCandlePrioritySymbols], prependUnique(fiveMinutePriorityEvidence?.promoted_symbols || [], fullTerminalWarmupSymbols)),
     computedSymbols: daytradeCandlePrioritySymbols,
   });
   const motherPoolSnapshot = await publishMotherPoolSnapshot(
