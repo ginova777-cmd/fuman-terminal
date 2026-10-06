@@ -7639,7 +7639,21 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
   const cache = readFugleWebSocketCandles({ maxAgeMs: WEBSOCKET_CANDLE_HISTORY_MAX_AGE_MS });
   const allowedSymbols = new Set(motherPoolSymbols);
   const bySymbol = new Map();
-  for (const candle of cache.candles.values()) {
+  const addValidatedCandle = (validated) => {
+    const row = { ...validated, source: 'fugle_daytrade_writer:websocket_candles',
+      source_channel: 'candles', candle_origin: 'websocket_candle', websocket_row: true,
+      rest_repair_row: false, intraday_odd_lot: false,
+      payload: { ...validated.payload, cacheUpdatedAt: cache.payload?.updatedAt || '', source: 'fugle-websocket-candles-cache' } };
+    const rows = bySymbol.get(row.symbol) || [];
+    rows.push(row);
+    bySymbol.set(row.symbol, rows);
+  };
+  if (options.latestOnly) {
+    const latest = require('../lib/daytrade-latest-valid-candles.cjs').latestValidCandles(cache.candles.values(), {
+      allowedSymbols, tradeDate, nowMs: syncNowMs, mapNaturalCandle,
+    });
+    for (const row of latest) addValidatedCandle(row);
+  } else for (const candle of cache.candles.values()) {
     const symbol = normalizeCode(candle.symbol || candle.code);
     const candleTime = normalizeTimestamp(candle.candleTime || candle.date);
     if (!symbol || !allowedSymbols.has(symbol) || !candleTime || !numberValue(candle.close)) continue;
@@ -7648,13 +7662,7 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
     // source, completion, timestamp, OHLC or natural-volume evidence checks.
     const validated = mapNaturalCandle(candle, { tradeDate, nowMs: syncNowMs, maxSeenAgeMs: Infinity });
     if (!validated) continue;
-    const row = { ...validated, source: 'fugle_daytrade_writer:websocket_candles',
-      source_channel: 'candles', candle_origin: 'websocket_candle', websocket_row: true,
-      rest_repair_row: false, intraday_odd_lot: false,
-      payload: { ...validated.payload, cacheUpdatedAt: cache.payload?.updatedAt || '', source: 'fugle-websocket-candles-cache' } };
-    const rows = bySymbol.get(symbol) || [];
-    rows.push(row);
-    bySymbol.set(symbol, rows);
+    addValidatedCandle(validated);
   }
   if (!bySymbol.size) return {
     written: 0,
