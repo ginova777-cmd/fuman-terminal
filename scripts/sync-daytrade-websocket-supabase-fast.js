@@ -129,6 +129,8 @@ async function main() {
     fs.writeFileSync(stateFile, JSON.stringify({ ...result, completed_at: new Date().toISOString() }, null, 2) + "\n", "utf8");
   }
   console.log(JSON.stringify(result));
+  return result;
 }
 
-main().catch((error) => { console.error(JSON.stringify({ ok: false, error: error.message })); process.exitCode = 1; });
+module.exports = { runFastSync: main };
+if (require.main === module) main().catch((error) => { console.error(JSON.stringify({ ok: false, error: error.message })); process.exitCode = 1; });
