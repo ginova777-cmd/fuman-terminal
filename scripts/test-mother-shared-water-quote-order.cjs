@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('node:assert/strict');const {createLedger}=require('../lib/mother-shared-water-quote-ledger.cjs');
+const ledger=createLedger({tradeDate:'2026-10-06',writerRunId:'test',target:'https://example.test',enforceEventOrder:true});
+const row={symbol:'1216',trade_date:'2026-10-06',quote_seen_at:'2026-10-06T01:00:05Z',last_trade_time:'2026-10-06T01:00:04Z',price:70};
+ledger.acknowledge([row],'2026-10-06T01:00:06Z');
+assert.equal(ledger.select([row]).pending.length,0);
+assert.throws(()=>ledger.select([{...row,quote_seen_at:'2026-10-06T01:00:03Z',last_trade_time:'2026-10-06T01:00:02Z'}]),/REGRESSION/);
+assert.throws(()=>ledger.select([{...row,last_trade_time:'2026-10-06T01:00:02Z'}]),/REGRESSION/);
+assert.throws(()=>ledger.select([{...row,quote_seen_at:null}]),/TIME_INVALID/);
+assert.equal(ledger.select([{...row,quote_seen_at:'2026-10-06T01:00:07Z'}]).pending.length,1);
+assert.equal(ledger.select([row]).acknowledged[0].write_completed_at,'2026-10-06T01:00:06Z');
+console.log(JSON.stringify({ok:true,cases:6,scope:'same_writer_incremental_quote_ledger',production_writes:0}));

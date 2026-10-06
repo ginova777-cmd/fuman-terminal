@@ -187,6 +187,7 @@ const NO_FETCH = hasFlag("no-fetch") || envFlag("FUMAN_DAYTRADE_WRITER_NO_FETCH"
 let FETCH_ENABLED = false;
 const ONCE = hasFlag("once") || envFlag("FUMAN_DAYTRADE_WRITER_ONCE");
 const MAX_RUN_SECONDS = positiveNumber(argValue("max-seconds", process.env.FUMAN_DAYTRADE_WRITER_MAX_SECONDS || 0), 0);
+const SHARED_WATER_PROCESS_STARTED_AT = Date.now();
 const SUPABASE_READ_TIMEOUT_MS = Math.max(3000, Number(process.env.DAYTRADE_SUPABASE_READ_TIMEOUT_MS || 8000));
 const SUPABASE_WRITE_TIMEOUT_MS = Math.max(5000, Number(process.env.DAYTRADE_SUPABASE_WRITE_TIMEOUT_MS || 12000));
 const SUPABASE_TRANSIENT_RETRIES = Math.max(0, Math.min(4, Number(process.env.DAYTRADE_SUPABASE_TRANSIENT_RETRIES || 2)));
@@ -770,6 +771,9 @@ async function ensureWriterLease() {
 }
 
 async function supabaseUpsert(resource, rows, conflict, options = {}) {
+  if(resource==='fugle_daytrade_quotes_live'&&rows.length&&!DRY_RUN&&process.env.FUMAN_SHARED_WATER_ACCEPTANCE==='1'){
+    return require('../lib/mother-shared-water-quote-lane.cjs').writerLane.run(rows,frozen=>supabaseUpsertUnchecked(resource,frozen,conflict,options));
+  }
   if(resource==='fugle_daytrade_priority_pool'&&rows.length&&!DRY_RUN){
     const guard=supabaseUpsert.priorityRoundGuard||(supabaseUpsert.priorityRoundGuard=require('../lib/daytrade-priority-round-write-guard').create());
     return guard.run(rows,()=>supabaseUpsertUnchecked(resource,rows,conflict,options));
@@ -5769,6 +5773,10 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     rest_fallback_disabled_reason: fetchResult.restFallback?.disabledReason || "",
     priority_symbols: priorityPoolSymbols,
     priority_pool_symbols: priorityPoolSymbols,
+    shared_water_priority_scope: process.env.FUMAN_SHARED_WATER_ACCEPTANCE === '1' && priorityPoolSymbols > 0
+      ? require('../lib/mother-shared-water-priority-scope.cjs').freezeScope([...prioritySet], {
+        tradeDate, writerRunId: writerTickIdentity.writer_run_id, freshSymbols: freshPriority,
+      }) : null,
     priority_pool_min_symbols: 1,
     priority_pool_max_symbols: MOTHER_POOL_MAX_SYMBOLS,
     priority_pool_scope: "dynamic_priority_pool",
@@ -8933,11 +8941,70 @@ async function tick() {
   // Refresh actual data after successful publication, under the same Writer
   // round and deadline, before the wrapper performs independent verification.
   tickStage("final_water_refresh:start");
+  const sharedWaterGuard = require('../lib/mother-shared-water-writer-guard.cjs').createGuard({
+    backoffFile:runtimePath('state','writer-database-backoff.json'),lease:()=>writerLease,tradeDate:taipeiDate(),
+  });
+  const sharedWaterContext = APPLY && !DRY_RUN && process.env.FUMAN_SHARED_WATER_ACCEPTANCE === '1'
+    ? await require('../lib/mother-shared-water-publication-context.cjs').bindPublishedContext({
+      tradeDate:taipeiDate(),producerVersion:recoveryRelease,
+      read:require('../lib/mother-shared-water-source-readback.cjs').createSourceReadback({url:SUPABASE_URL,runtimeRoot:runtimePath(),key:require('../lib/server-supabase-key').anonKey({runtimeDir:runtimePath()})}),
+    }) : null;
+  if(sharedWaterContext&&sharedWaterContext.expected.writer_run_id!==writerTickIdentity.writer_run_id)throw Error('PUBLISHED_WRITER_CONTEXT_MISMATCH');
+  const sharedWaterHooks = APPLY && !DRY_RUN && process.env.FUMAN_SHARED_WATER_ACCEPTANCE === '1'
+    ? require('../lib/mother-shared-water-writer-hooks.cjs').createHooks({
+      runtimeRoot: runtimePath(), writerIdentity: writerTickIdentity,
+      canPublish:sharedWaterGuard,
+      assertPublicationContext:sharedWaterContext.assertCurrent,
+      onVerificationFailure:error=>{
+        const backoff=require('./writer-database-backoff.cjs');
+        if(backoff.transient(String(error?.message||error))){
+          backoff.failure(runtimePath('state','writer-database-backoff.json'),String(error?.message||error));
+          throw Error('SHARED_WATER_DATABASE_FAILURE_STOP_CURRENT_ROUND');
+        }
+      },
+      priorityScope: result.payload.shared_water_priority_scope, priorityCount: result.payload.priority_pool_symbols,
+      producerVersion: recoveryRelease, url: SUPABASE_URL,
+      anonKey: require('../lib/server-supabase-key').anonKey({runtimeDir:runtimePath()}),
+      post: (name, body, options) => {if(!sharedWaterGuard())throw Error('SHARED_WATER_WRITER_GUARD_REJECTED');return require('../lib/daytrade-rpc-observation').invoke({resource:name,send:()=>fetch(SUPABASE_URL+'/rest/v1/rpc/'+name,{
+        method:'POST',headers:headers(requireSupabaseKey(true)),body:JSON.stringify(body),signal:AbortSignal.timeout(options.timeoutMs),
+      })});},
+    }) : null;
+  const sharedWaterLedger=sharedWaterHooks?require('../lib/mother-shared-water-quote-ledger.cjs').createLedger({tradeDate:taipeiDate(),writerRunId:writerTickIdentity.writer_run_id,target:new URL('/rest/v1/fugle_daytrade_quotes_live',SUPABASE_URL).href,enforceEventOrder:true}):null;
   const finalWaterRefresh = await require('../lib/daytrade-final-water-refresh.cjs').refresh({
     apply: APPLY, dryRun: DRY_RUN, tradeDate: taipeiDate(),
-    run: () => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync(),
+    run: () => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync(sharedWaterHooks?{...sharedWaterHooks,quotesOnly:true,recentCandles:true,canPublish:sharedWaterGuard,quoteLedger:sharedWaterLedger}:undefined),
   });
   tickStage("final_water_refresh:complete", finalWaterRefresh);
+  // Opt-in, bounded work inside this existing Writer and wrapper lock. Until
+  // release/capacity acceptance, zero keeps the production schedule unchanged.
+  let sharedWaterCadence = {status:'DISABLED',natural_acceptance:false};
+  const cadenceSeconds=Number(process.env.FUMAN_SHARED_WATER_CADENCE_SECONDS||0);
+  if(APPLY&&!DRY_RUN&&process.env.FUMAN_SHARED_WATER_ACCEPTANCE==='1'&&cadenceSeconds!==0){
+    // Keep this quote-only tail bounded. A longer session requires concurrent
+    // existing minute publication; extending this tail alone would starve K.
+    if(!Number.isInteger(cadenceSeconds)||cadenceSeconds<60||cadenceSeconds>90||MAX_RUN_SECONDS<=0){
+      sharedWaterCadence={status:'BLOCKED',first_blocker:'CADENCE_TIME_BUDGET_CONFIG_INVALID',natural_acceptance:false};
+    }else if(SHARED_WATER_PROCESS_STARTED_AT+MAX_RUN_SECONDS*1000-Date.now()<cadenceSeconds*1000+10000){
+      sharedWaterCadence={status:'BLOCKED',first_blocker:'CADENCE_PROCESS_TIME_BUDGET_INSUFFICIENT',natural_acceptance:false};
+    }else{
+      const quoteLedger=sharedWaterLedger;
+      sharedWaterCadence=await require('../lib/mother-shared-water-cadence.cjs').runWindow({
+        deadline:Math.min(Date.now()+cadenceSeconds*1000,SHARED_WATER_PROCESS_STARTED_AT+MAX_RUN_SECONDS*1000-10000),
+        canPublish:sharedWaterGuard,
+        maxRounds:100,
+        operationBudgetMs:75000,
+        prepareRound:require('../lib/mother-shared-water-writer-guard.cjs').createLeasePreparation({backoffFile:runtimePath('state','writer-database-backoff.json'),lease:()=>writerLease,tradeDate:taipeiDate(),renew:ensureWriterLease}),
+        previousValidUntil:finalWaterRefresh.shared_water_acceptance?.valid_until,
+        run:()=>require('./sync-daytrade-websocket-supabase-fast.js').runFastSync({...sharedWaterHooks,quotesOnly:true,recentCandles:true,canPublish:sharedWaterGuard,quoteLedger}),
+        onFailure:error=>{
+          require('./writer-database-backoff.cjs').failure(runtimePath('state','writer-database-backoff.json'),String(error?.message||error));
+          // A successful outer round must not reset cooldown after this failure.
+          throw Error('SHARED_WATER_PUBLICATION_FAILED');
+        },
+      });
+    }
+    tickStage('shared_water_cadence:complete',sharedWaterCadence);
+  }
   const offSession = Boolean(result.payload.off_session);
   return {
     ok: result.gateGrade === "A" || offSession,
@@ -8955,6 +9022,8 @@ async function tick() {
     gateSpeedOk: Boolean(result.payload.gate_speed_ok),
     openingBoostEffective: Boolean(result.payload.opening_boost_effective),
     openingBoostScope: result.payload.opening_boost_scope,
+    sharedWaterAcceptance: finalWaterRefresh.shared_water_acceptance,
+    sharedWaterCadence,
     priorityPoolSymbols: result.payload.priority_pool_symbols,
     motherPoolSymbols: result.payload.mother_pool_symbols,
     motherPoolTargetMin: MOTHER_POOL_TARGET_MIN_SYMBOLS,

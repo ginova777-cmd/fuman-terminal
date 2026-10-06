@@ -19,6 +19,8 @@ const {
 } = require("../lib/fugle-websocket-quotes");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
+const sharedWaterEnabled = process.env.FUMAN_SHARED_WATER_ACCEPTANCE === '1';
+const sharedWaterCaptureStore = sharedWaterEnabled ? require('../lib/mother-shared-water-capture-store.cjs').createStore(path.join(RUNTIME_DIR, 'state', 'mother-shared-water-capture-latest.json')) : null;
 const providerSideJournal = require("../lib/provider-journal-background.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-side-journal"), { kind: 'side' });
 const providerTradeJournal = require("../lib/provider-journal-background.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-trade-journal"), { kind: 'trade' });
 const preopenJournal = require('../lib/mother-preopen.cjs').createJournal(path.join(RUNTIME_DIR, 'data', 'mother-pool', 'preopen-raw'));
@@ -1342,6 +1344,8 @@ async function runStreamingCollector() {
     let quoteMessages = 0;
     let candleMessages = 0;
     const candleInputDiagnostics = require('../lib/daytrade-candle-input-diagnostics.cjs').create();
+    const sharedWaterCapture = sharedWaterEnabled ? require('../lib/mother-shared-water-capture.cjs').createCapture({connectionId: require('node:crypto').randomUUID()}) : null;
+    const respondSharedWaterCapture = sharedWaterEnabled ? require('../lib/mother-shared-water-capture-request.cjs').createResponder(path.join(RUNTIME_DIR,'state','mother-shared-water-capture-request.json'), {snapshot: (at, options) => sharedWaterCapture.snapshot(at, options), publish: value => sharedWaterCaptureStore.publish(value,{force:true})}) : null;
     const channelMessages = Object.fromEntries(STREAMING_CHANNELS.map((channel) => [channel, 0]));
     const channelQuotes = Object.fromEntries(STREAMING_CHANNELS.map((channel) => [channel, 0]));
     const channelCandles = Object.fromEntries(STREAMING_CHANNELS.map((channel) => [channel, 0]));
@@ -1370,6 +1374,8 @@ async function runStreamingCollector() {
     let deferredSubscriptionTimer;
     let closed = false;
     const writeStreamingStatus = (extra = {}) => {
+      if (respondSharedWaterCapture) void respondSharedWaterCapture().catch(() => {});
+      if (sharedWaterCaptureStore?.due() && selection.priority.symbols.length) sharedWaterCaptureStore.publish(sharedWaterCapture.snapshot(nowIso(), {symbols: selection.priority.symbols}));
       const freshCount = countFreshCachedQuotes(selection.allSymbols);
       const priorityFreshCount = countFreshCachedQuotes(selection.priority.symbols);
       const openedAtMs = openedAt ? Date.parse(openedAt) : 0;
@@ -1576,6 +1582,7 @@ async function runStreamingCollector() {
         const sendSubscription = async (channel, symbol) => {
           if (!ws || ws.readyState !== WebSocket.OPEN) return;
           if (!subscriptionEvidence.request(channel, symbol, nowIso())) return;
+          sharedWaterCapture?.request(channel, symbol);
           ws.send(JSON.stringify({ event: "subscribe", data: { channel, symbol } }));
           chunksSent += 1;
           sent += 1;
@@ -1620,6 +1627,7 @@ async function runStreamingCollector() {
         try { payload = JSON.parse(String(event.data || "")); } catch {}
         const text = String(event.data || "");
         lastTransportMessageAt = nowIso();
+        sharedWaterCapture?.observe(payload, lastTransportMessageAt);
         const eventName = String(payload?.event || payload?.type || payload?.data?.event || "").toLowerCase();
         if (/heartbeat|pong/.test(eventName) || /"(?:event|type)"\s*:\s*"(?:heartbeat|pong)"/i.test(text)) {
           lastWebSocketHeartbeatAt = lastTransportMessageAt;
@@ -1682,9 +1690,13 @@ async function runStreamingCollector() {
         }
       }));
       ws.addEventListener("error", (event) => {
+        sharedWaterCapture?.observe({event:'error'}, nowIso());
+        sharedWaterCaptureStore?.publish(sharedWaterCapture.snapshot(nowIso()), {force:true});
         writeStreamingStatus({ ok: false, websocketError: event?.message || "websocket_error" });
       });
       ws.addEventListener("close", () => {
+        sharedWaterCapture?.close();
+        sharedWaterCaptureStore?.publish(sharedWaterCapture.snapshot(nowIso()), {force:true});
         subscriptionEvidence.close(nowIso());
         authenticated = false;
         closed = true;

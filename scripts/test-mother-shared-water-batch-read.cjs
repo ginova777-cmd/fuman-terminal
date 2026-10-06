@@ -1,0 +1,9 @@
+'use strict';
+const assert=require('node:assert/strict'),{createHash}=require('node:crypto'),{load}=require('../lib/mother-shared-water-remote-evidence.cjs');
+const hash=b=>createHash('sha256').update(b).digest('hex');
+function options(mutate=()=>{}){const blobs=new Map(['a','b','c'].map(x=>[hash(x),Buffer.from(x)])),run='batch-test',text=JSON.stringify({contract:'mother-pool-shared-water-acceptance-v1',verification_run_id:run,evidence_hashes:[...blobs.keys()].sort()});return {url:'https://example.invalid',key:'x.'+Buffer.from('{"role":"anon"}').toString('base64url')+'.x',runId:run,receiptSha256:hash(text),fetchImpl:async(url,opt)=>{if(String(url).endsWith('get_mother_shared_water_receipt'))return Response.json({contract:'mother-shared-water-readback-v1',verification_run_id:run,receipt_utf8:text,receipt_sha256:hash(text)});const q=JSON.parse(opt.body);assert.equal(q.p_requests.length,3);const batch={contract:'mother-shared-water-evidence-batch-v1',verification_run_id:run,chunks:q.p_requests.map(r=>({contract:'mother-shared-water-evidence-chunk-v1',verification_run_id:run,sha256:r.sha256,offset:0,byte_length:1,total_chars:4,base64_chunk:blobs.get(r.sha256).toString('base64'),next_offset:null}))};mutate(batch);return Response.json(batch);}};}
+(async()=>{let cases=0;const r=await load(options(b=>b.chunks.reverse()));assert.equal(r.diagnostics.requests,2);assert.equal(r.diagnostics.evidence_count,3);cases++;
+ for(const mutate of [b=>b.chunks.pop(),b=>b.chunks[1]=b.chunks[0],b=>b.verification_run_id='wrong',b=>b.chunks[0].sha256='f'.repeat(64),b=>b.chunks[0].verification_run_id='wrong',b=>b.chunks[0].base64_chunk='AAAA']){await assert.rejects(()=>load(options(mutate)),/EVIDENCE_/);cases++;}
+ await assert.rejects(()=>load({...options(),batchSize:17}),/BATCH_LIMIT/);cases++;
+ console.log(JSON.stringify({ok:true,cases,mode:'isolated',production_connected:false}));
+})().catch(e=>{console.error(e);process.exitCode=1;});

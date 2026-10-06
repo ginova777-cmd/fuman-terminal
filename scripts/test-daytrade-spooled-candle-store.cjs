@@ -28,6 +28,12 @@ async function main(){
   assert.equal(saved.length,30001);assert.deepEqual(saved.find(r=>r.symbol===revision.symbol&&r.candleTime===revision.candleTime),revision);
   const expected=new Map(rows.map(r=>[r.symbol+'|'+r.candleTime,r]));expected.set(revision.symbol+'|'+revision.candleTime,revision);
   for(const r of saved)assert.deepEqual(r,expected.get(r.symbol+'|'+r.candleTime));
+  if(process.env.FUMAN_SHARED_WATER_ACCEPTANCE==='1'){
+    const recent=JSON.parse(fs.readFileSync(file+'.recent.json'));
+    assert.equal(recovered.status().recentCache.status,'SAVED');assert.equal(recent.full_history_complete,false);
+    assert(recent.count<=recent.symbol_count*3);assert.equal(recent.count,recent.candles.length);
+    for(const r of recent.candles)assert.deepEqual(r,expected.get(r.symbol+'|'+r.candleTime));
+  }
   assert.equal(fs.readdirSync(file+'.pending').length,0);
   const tw=fake(),t=create({file:path.join(root,'timeout.json'),spawn:()=>tw,batchRows:1,saveTimeoutMs:20});
   t.merge([row(0),row(1)]);await sleep(40);assert.equal(t.status().reason,'CANDLE_SAVE_TIMEOUT');

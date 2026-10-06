@@ -1,0 +1,114 @@
+{
+  "contract": "mother-pool-shared-water-acceptance-v1",
+  "contract_version": "1.1.0",
+  "scope_definition_version": "full-priority-fixed-membership-v1",
+  "release_status": "PREPARED_NOT_DEPLOYED",
+  "owner_decision": "2026-10-06: FRESH retains 120-second native event/publication validation; NO_NEW_TRADE additionally requires continuity and no newer unpublished event",
+  "scope": {
+    "name": "full_priority_pool",
+    "producer_mapping": "source_status.payload.shared_water_priority_scope",
+    "origin": "computeStats prioritySet, the exact set used for priority_fresh_quote_coverage_120s",
+    "fixed_before_evidence_checks": true,
+    "unavailable_members_remain_in_denominator": true,
+    "snapshot_membership_is_separate": true,
+    "producer_grade_is_not_scope_acceptance": true
+  },
+  "identity": [
+    "trade_date",
+    "canonical_run_id",
+    "mother_pool_run_id",
+    "writer_run_id",
+    "generation",
+    "snapshot_sequence",
+    "verification_run_id",
+    "producer_version"
+  ],
+  "verification_run_id_rule": "Unique per frozen publication: shared-water:<SHA256 writer_run_id UTF-8>:<UUID>. Exact-run readback reuses that ID. Consumers obtain a same-scope pointer using externally pinned expectedIdentity; deriving the ID from writer_run_id alone is invalid. Discovery is implemented but not deployed.",
+  "hashes": {
+    "requested_symbols_sha256": "SHA256 of UTF-8 JSON.stringify(unique full-priority symbols sorted in ASCII order)",
+    "snapshot_symbols_sha256": "SHA256 of UTF-8 JSON.stringify(unique Snapshot symbols sorted in ASCII order)",
+    "snapshot_bytes_sha256": "SHA256 of exact saved Snapshot bytes",
+    "rows_sha256": "SHA256 of UTF-8 JSON.stringify(rows), ordered by full-priority symbol",
+    "receipt_sha256": "SHA256 of exact UTF-8 receipt text",
+    "payload_sha256": "SHA256 of archived UTF-8 native event envelope; provider field values preserved, not a claim of original socket frame whitespace",
+    "archive_sha256": "SHA256 of compressed archive bytes; each original evidence hash is independently rechecked after decompression"
+  },
+  "time_rules": {
+    "quote_event_at": "native trade time, never replaced by update/read time",
+    "received_at": "original collector receipt time",
+    "write_completed_at": "acknowledged HTTP write completion, not inferred database commit timestamp",
+    "checked_at": "producer verification time",
+    "source_asof": "minimum observation time across accepted evidence rows; not a trade timestamp",
+    "receipt_validity_max_ms": 30000,
+    "fresh_event_max_age_ms": 120000,
+    "fresh_row_validity": "no later than the original trade event plus 120 seconds or receipt expiry",
+    "idle_row_validity": "no later than verified observation end plus 30 seconds; native heartbeat must remain within 45 seconds at verification",
+    "expired_readback": "persistence may be COMMITTED but water_gate_pass must be false"
+  },
+  "proofs": {
+    "common": [
+      "verified",
+      "raw_hash_verified",
+      "identity_verified"
+    ],
+    "FRESH": [
+      "native_event_verified",
+      "publication_verified"
+    ],
+    "NO_NEW_TRADE": [
+      "native_latest_verified",
+      "pipeline_caught_up",
+      "subscription_generation_verified",
+      "continuity_verified",
+      "no_new_trade_verified"
+    ],
+    "limitations": [
+      "native observations do not prove absence of provider-side packet loss",
+      "bounded missing heartbeat/history fails closed",
+      "FRESH does not claim that newer events cannot have arrived after the published event"
+    ]
+  },
+  "draft_endpoints": {
+    "base": "https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/rpc/",
+    "publication": "publish_mother_shared_water_archive",
+    "receipt": "get_mother_shared_water_receipt",
+    "discovery": "find_mother_shared_water_receipt",
+    "discovery_input": "p_expected: trade_date, canonical_run_id, mother_pool_run_id, writer_run_id, generation, snapshot_sequence, requested_symbols_sha256, snapshot_symbols_sha256, snapshot_bytes_sha256, contract_version, scope_definition_version, producer_version",
+    "discovery_rule": "Newest exact-scope receipt, including blocked/expired results. No fallback to an earlier passing receipt. Reader independently checks expiry and receipt identity before loading evidence.",
+    "archive_chunks": "get_mother_shared_water_archive_chunk",
+    "method": "POST",
+    "reader_role": "anon",
+    "publisher_role": "service_role in existing Writer only",
+    "consumer_loader": "lib/mother-shared-water-remote-evidence.cjs:loadArchive",
+    "endpoint_deployment_verified": false,
+    "consumer_expected_builder": "lib/mother-shared-water-consumer.cjs:expectedFromSource({sourceStatus,snapshotBytes,tradeDate,producerVersion}); sourceStatus is independently read source_status row; snapshotBytes are exact independently read complete Snapshot bytes; producerVersion comes from approved release configuration, never the receipt.",
+    "consumer_verified_reader": "lib/mother-shared-water-consumer.cjs:readVerified({url,key,expected,now,fetchImpl}); discovers only the pinned scope, independently verifies native evidence, does not grant scan-ready or entry."
+  },
+  "limits": {
+    "database_logical_payload_budget_bytes": 536870912,
+    "storage_budget_behavior": "Draft cap across receipts, compressed archives and raw blobs; insertion over cap rolls back, exact idempotent publications remain readable. Does not include indexes/WAL/physical storage overhead. No automatic deletion; retention/export remains pending.",
+    "archive_bytes": 3145728,
+    "archive_unpacked_bytes": 16777216,
+    "decoded_evidence_bytes": 8388608,
+    "http_response_bytes": 4194304,
+    "chunk_base64_characters": 131072,
+    "request_timeout_ms": 12000,
+    "reader_deadline_ms": 20000,
+    "reader_retries": 0
+  },
+  "gates": {
+    "water_available_threshold": 0.95,
+    "strategy3_required_k_threshold": 0.9,
+    "water_pass_grants_scan_ready": false,
+    "water_pass_grants_entry_permission": false,
+    "strategy3_formal_reader_switched": false
+  },
+  "remaining_acceptance": [
+    "continuous evidence publication cadence",
+    "storage quota and retention",
+    "approved producer/consumer release SHAs",
+    "formal same-generation anon readback",
+    "at least 10 minutes of natural trading-session evidence",
+    "Strategy3 actual reader and downstream acceptance"
+  ]
+}

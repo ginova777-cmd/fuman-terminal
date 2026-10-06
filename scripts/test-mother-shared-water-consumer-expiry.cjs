@@ -1,0 +1,14 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {isCurrent}=require('../lib/mother-shared-water-consumer.cjs');
+const at=Date.parse('2026-10-06T01:00:00Z');
+const proof={water_gate_pass:true,membership_verified:true,verified_at:new Date(at).toISOString(),valid_until:new Date(at+30000).toISOString()};
+assert.equal(isCurrent(proof,at),true);
+assert.equal(isCurrent(proof,at+29999),true);
+assert.equal(isCurrent(proof,at+30000),false);
+assert.equal(isCurrent(proof,at-1),false);
+assert.equal(isCurrent({...proof,valid_until:null},at),false);
+assert.equal(isCurrent({...proof,membership_verified:false},at),false);
+assert.equal(isCurrent({...proof,water_gate_pass:false},at),false);
+assert.equal(isCurrent(proof,NaN),false);
+console.log(JSON.stringify({ok:true,cases:8,mode:'consumer_expiry_boundary',deployed:false}));
