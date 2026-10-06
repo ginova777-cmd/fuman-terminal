@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('node:assert/strict');const {bindPublishedContext}=require('../lib/mother-shared-water-publication-context.cjs');const {freezeScope}=require('../lib/mother-shared-water-priority-scope.cjs');
+const date='2026-10-06';
+let source={source_name:'fugle_daytrade_source',payload:{trade_date:date,canonical_run_id:'c',mother_pool_run_id:'m',mother_pool_snapshot_sequence:1,writer_run_id:'w',priority_pool_symbols:1,shared_water_priority_scope:freezeScope(['1216'],{tradeDate:date,writerRunId:'w',freshSymbols:[]})}};
+let bytes=Buffer.from(JSON.stringify({status:'complete',complete:true,trade_date:date,canonical_run_id:'c',mother_pool_run_id:'m',generation:'m',snapshot_sequence:1,symbol_count:1,symbols:['1216']}));
+(async()=>{const bound=await bindPublishedContext({read:async()=>({sourceStatus:structuredClone(source),snapshotBytes:Buffer.from(bytes)}),tradeDate:date,producerVersion:'a'.repeat(40)});
+assert.equal(await bound.assertCurrent(),true);bound.expected.writer_run_id='tampered';assert.equal(await bound.assertCurrent(),true,'exported copy cannot mutate internal pin');
+const original=bytes;bytes=Buffer.from(bytes.toString()+' ');await assert.rejects(bound.assertCurrent(),/CONTEXT_CHANGED/);bytes=original;
+source.payload.writer_run_id='changed';await assert.rejects(bound.assertCurrent());
+console.log(JSON.stringify({ok:true,cases:4,mode:'independent_publication_context_pin',production_connected:false}));})().catch(e=>{console.error(e);process.exitCode=1;});

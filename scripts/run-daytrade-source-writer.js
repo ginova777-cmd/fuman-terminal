@@ -771,6 +771,9 @@ async function ensureWriterLease() {
 }
 
 async function supabaseUpsert(resource, rows, conflict, options = {}) {
+  if(resource==='fugle_daytrade_quotes_live'&&rows.length&&!DRY_RUN&&process.env.FUMAN_SHARED_WATER_ACCEPTANCE==='1'){
+    return require('../lib/mother-shared-water-quote-lane.cjs').writerLane.run(rows,frozen=>supabaseUpsertUnchecked(resource,frozen,conflict,options));
+  }
   if(resource==='fugle_daytrade_priority_pool'&&rows.length&&!DRY_RUN){
     const guard=supabaseUpsert.priorityRoundGuard||(supabaseUpsert.priorityRoundGuard=require('../lib/daytrade-priority-round-write-guard').create());
     return guard.run(rows,()=>supabaseUpsertUnchecked(resource,rows,conflict,options));
@@ -8941,10 +8944,17 @@ async function tick() {
   const sharedWaterGuard = require('../lib/mother-shared-water-writer-guard.cjs').createGuard({
     backoffFile:runtimePath('state','writer-database-backoff.json'),lease:()=>writerLease,tradeDate:taipeiDate(),
   });
+  const sharedWaterContext = APPLY && !DRY_RUN && process.env.FUMAN_SHARED_WATER_ACCEPTANCE === '1'
+    ? await require('../lib/mother-shared-water-publication-context.cjs').bindPublishedContext({
+      tradeDate:taipeiDate(),producerVersion:recoveryRelease,
+      read:require('../lib/mother-shared-water-source-readback.cjs').createSourceReadback({url:SUPABASE_URL,runtimeRoot:runtimePath(),key:require('../lib/server-supabase-key').anonKey({runtimeDir:runtimePath()})}),
+    }) : null;
+  if(sharedWaterContext&&sharedWaterContext.expected.writer_run_id!==writerTickIdentity.writer_run_id)throw Error('PUBLISHED_WRITER_CONTEXT_MISMATCH');
   const sharedWaterHooks = APPLY && !DRY_RUN && process.env.FUMAN_SHARED_WATER_ACCEPTANCE === '1'
     ? require('../lib/mother-shared-water-writer-hooks.cjs').createHooks({
       runtimeRoot: runtimePath(), writerIdentity: writerTickIdentity,
       canPublish:sharedWaterGuard,
+      assertPublicationContext:sharedWaterContext.assertCurrent,
       onVerificationFailure:error=>{
         const backoff=require('./writer-database-backoff.cjs');
         if(backoff.transient(String(error?.message||error))){
@@ -8959,7 +8969,7 @@ async function tick() {
         method:'POST',headers:headers(requireSupabaseKey(true)),body:JSON.stringify(body),signal:AbortSignal.timeout(options.timeoutMs),
       })});},
     }) : null;
-  const sharedWaterLedger=sharedWaterHooks?require('../lib/mother-shared-water-quote-ledger.cjs').createLedger({tradeDate:taipeiDate(),writerRunId:writerTickIdentity.writer_run_id,target:new URL('/rest/v1/fugle_daytrade_quotes_live',SUPABASE_URL).href}):null;
+  const sharedWaterLedger=sharedWaterHooks?require('../lib/mother-shared-water-quote-ledger.cjs').createLedger({tradeDate:taipeiDate(),writerRunId:writerTickIdentity.writer_run_id,target:new URL('/rest/v1/fugle_daytrade_quotes_live',SUPABASE_URL).href,enforceEventOrder:true}):null;
   const finalWaterRefresh = await require('../lib/daytrade-final-water-refresh.cjs').refresh({
     apply: APPLY, dryRun: DRY_RUN, tradeDate: taipeiDate(),
     run: () => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync(sharedWaterHooks?{...sharedWaterHooks,quotesOnly:true,recentCandles:true,canPublish:sharedWaterGuard,quoteLedger:sharedWaterLedger}:undefined),

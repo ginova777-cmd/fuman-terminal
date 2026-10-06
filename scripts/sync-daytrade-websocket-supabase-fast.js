@@ -31,6 +31,12 @@ function volumeUnit(q = {}) {
   return "";
 }
 async function upsert(table, rows, conflict, onBatch = () => {}, guard = null, deadline = Infinity, ledger = null) {
+  if(table==='fugle_daytrade_quotes_live'&&rows.length&&process.env.FUMAN_SHARED_WATER_ACCEPTANCE==='1'){
+    return require('../lib/mother-shared-water-quote-lane.cjs').writerLane.run(rows,frozen=>upsertUnchecked(table,frozen,conflict,onBatch,guard,deadline,ledger));
+  }
+  return upsertUnchecked(table,rows,conflict,onBatch,guard,deadline,ledger);
+}
+async function upsertUnchecked(table, rows, conflict, onBatch = () => {}, guard = null, deadline = Infinity, ledger = null) {
   if (table === 'fugle_daytrade_quotes_live') rows = rows.map(require('../lib/daytrade-quote-liquidity-contract').normalizeQuoteLiquidity);
   if(ledger)rows=ledger.select(rows).pending;
   if (!rows.length) return 0;
@@ -68,8 +74,7 @@ async function main({beforeQuoteRead,afterQuoteWrite,quotesOnly=false,recentCand
   // A closed 5-minute candle is verified shortly after its boundary. Keep
   // enough Fugle candle events to include all five source minutes plus normal
   // collector/writer delay; three minutes systematically dropped slots 1-2.
-  const cutoff = Date.now() - 15 * 60 * 1000;
-  const quotes = (quoteCache.quotes || []).filter((q) => Date.parse(q.quoteSeenAt || q.exchangeTime || q.receivedAt) >= cutoff).map((q) => {
+  const quotes = (quoteCache.quotes || []).filter((q) => require('../lib/mother-shared-water-quote-retention.cjs').retainQuote(q,{tradeDate:date,nowMs:now.getTime(),includeSameDayIdle:quotesOnly&&typeof beforeQuoteRead==='function'&&typeof afterQuoteWrite==='function'})).map((q) => {
     const totalVolume = num(q.tradeVolume);
     const totalVolumeUnit = volumeUnit(q);
     const totalVolumeSourceEventAt = iso(q.totalVolumeSourceEventAt || q.exchangeTime || q.quoteSeenAt);

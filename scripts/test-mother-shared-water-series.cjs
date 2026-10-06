@@ -1,0 +1,14 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {verifySeries}=require('../lib/mother-shared-water-series.cjs');
+const start=Date.parse('2026-10-06T01:00:00Z');
+const row=(ms,run)=>({readback_at:new Date(start+ms).toISOString(),loaded:{diagnostics:{run_id:run},transport_complete:true,receipt_bytes:Buffer.from('{}'),resolve:()=>undefined}});
+const r=verifySeries([row(0,'a'),row(600000,'b')],{expected:{}});
+assert.equal(r.evidence_continuity_verified,false);assert.equal(r.natural_acceptance,false);
+assert(r.failed_checks.includes('ROUND_UNVERIFIED:0'));assert(r.failed_checks.includes('PUBLICATION_GAP:1'));
+const duplicate=verifySeries([row(0,'a'),row(600000,'a')],{expected:{}});
+assert(duplicate.failed_checks.includes('DISTINCT_PUBLICATIONS_INSUFFICIENT'));
+const reversed=verifySeries([row(1000,'a'),row(0,'b')],{expected:{}});
+assert(reversed.failed_checks.includes('READBACK_TIME_INVALID:1'));
+assert.throws(()=>verifySeries([row(0,'a'),row(1000,'b')],{minimumDurationMs:1000}));
+console.log(JSON.stringify({ok:true,cases:4,mode:'series_rejects_unproven_history',natural_acceptance:false}));
