@@ -8972,11 +8972,12 @@ async function tick() {
     if(!Number.isInteger(cadenceSeconds)||cadenceSeconds<60||cadenceSeconds>90||MAX_RUN_SECONDS<=0){
       sharedWaterCadence={status:'BLOCKED',first_blocker:'CADENCE_TIME_BUDGET_CONFIG_INVALID',natural_acceptance:false};
     }else{
+      const quoteLedger=require('../lib/mother-shared-water-quote-ledger.cjs').createLedger({tradeDate:taipeiDate(),writerRunId:writerTickIdentity.writer_run_id,target:new URL('/rest/v1/fugle_daytrade_quotes_live',SUPABASE_URL).href});
       sharedWaterCadence=await require('../lib/mother-shared-water-cadence.cjs').runWindow({
         deadline:Math.min(Date.now()+cadenceSeconds*1000,SHARED_WATER_PROCESS_STARTED_AT+MAX_RUN_SECONDS*1000-10000),
         canPublish:sharedWaterGuard,
         previousValidUntil:finalWaterRefresh.shared_water_acceptance?.valid_until,
-        run:()=>require('./sync-daytrade-websocket-supabase-fast.js').runFastSync({...sharedWaterHooks,quotesOnly:true,canPublish:sharedWaterGuard}),
+        run:()=>require('./sync-daytrade-websocket-supabase-fast.js').runFastSync({...sharedWaterHooks,quotesOnly:true,canPublish:sharedWaterGuard,quoteLedger}),
         onFailure:error=>{
           require('./writer-database-backoff.cjs').failure(runtimePath('state','writer-database-backoff.json'),String(error?.message||error));
           // A successful outer round must not reset cooldown after this failure.

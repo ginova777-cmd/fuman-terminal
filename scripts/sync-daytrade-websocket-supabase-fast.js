@@ -30,8 +30,9 @@ function volumeUnit(q = {}) {
   if (q.intradayOddLot === false || ["TSE", "OTC", "TIB"].includes(market)) return "lots";
   return "";
 }
-async function upsert(table, rows, conflict, onBatch = () => {}, guard = null, deadline = Infinity) {
+async function upsert(table, rows, conflict, onBatch = () => {}, guard = null, deadline = Infinity, ledger = null) {
   if (table === 'fugle_daytrade_quotes_live') rows = rows.map(require('../lib/daytrade-quote-liquidity-contract').normalizeQuoteLiquidity);
+  if(ledger)rows=ledger.select(rows).pending;
   if (!rows.length) return 0;
   const key = secret("SUPABASE_SERVICE_ROLE_KEY");
   if (!key) throw new Error("service_role_key_missing");
@@ -48,12 +49,14 @@ async function upsert(table, rows, conflict, onBatch = () => {}, guard = null, d
     });
     if (!response.ok) throw new Error(`${table}_HTTP_${response.status}:${(await response.text()).slice(0, 240)}`);
     written += Math.min(200, rows.length - offset);
+    if(ledger)ledger.acknowledge(rows.slice(offset,offset+200),new Date().toISOString());
     await onBatch(rows.slice(offset, offset + 200));
   }
   return written;
 }
 
-async function main({beforeQuoteRead,afterQuoteWrite,quotesOnly=false,canPublish} = {}) {
+async function main({beforeQuoteRead,afterQuoteWrite,quotesOnly=false,canPublish,quoteLedger} = {}) {
+  if(quoteLedger&&!quotesOnly)throw Error('QUOTE_LEDGER_REQUIRES_QUOTE_ONLY_MODE');
   if (quotesOnly && APPLY && (typeof canPublish !== 'function' || await canPublish() !== true)) throw Error('QUOTE_ONLY_WRITER_GUARD_REQUIRED');
   const now = new Date();
   const date = tradeDate(now);
@@ -95,11 +98,15 @@ async function main({beforeQuoteRead,afterQuoteWrite,quotesOnly=false,canPublish
   }).filter((q) => /^\d{4}$/.test(q.symbol) && q.quote_seen_at);
   async function publishQuotes(result) {
     if (quotesOnly && await canPublish() !== true) throw Error('QUOTE_ONLY_WRITER_GUARD_REJECTED');
-    result.quotes_written = await upsert("fugle_daytrade_quotes_live", quotes, "symbol", undefined, quotesOnly ? canPublish : null, quotesOnly ? Date.now()+20000 : Infinity);
-    result.quote_write_completed_at = new Date().toISOString();
+    const writtenSymbols=[];
+    result.quotes_written = await upsert("fugle_daytrade_quotes_live", quotes, "symbol", batch=>writtenSymbols.push(...batch.map(q=>q.symbol)), quotesOnly ? canPublish : null, quotesOnly ? Date.now()+20000 : Infinity,quoteLedger);
+    const acknowledgements=quoteLedger?quoteLedger.select(quotes.map(require('../lib/daytrade-quote-liquidity-contract').normalizeQuoteLiquidity)).acknowledged:[];
+    result.quote_rows_reused=quoteLedger?acknowledgements.length-result.quotes_written:0;
+    result.quote_write_completed_at = result.quotes_written>0 ? new Date().toISOString() : null;
     if (afterQuoteWrite) result.shared_water_acceptance = await afterQuoteWrite({
       context: quoteEvidenceContext, trade_date: date, quotes_written: result.quotes_written,
-      written_symbols: quotes.map(q=>q.symbol),
+      written_symbols: writtenSymbols,
+      quote_acknowledgements: acknowledgements,
       write_completed_at: result.quote_write_completed_at,
     });
   }

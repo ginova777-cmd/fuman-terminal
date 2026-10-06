@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('node:assert/strict'),{createLedger}=require('../lib/mother-shared-water-quote-ledger.cjs');
+const config={tradeDate:'2026-10-06',writerRunId:'w',target:'isolated'},row={symbol:'1216',trade_date:'2026-10-06',price:70};
+const ledger=createLedger(config),at='2026-10-06T01:00:00Z';
+assert.equal(ledger.select([row]).pending.length,1);assert.equal(ledger.select([row]).pending.length,1);
+ledger.acknowledge([row],at);let result=ledger.select([row]);assert.equal(result.pending.length,0);assert.equal(result.acknowledged[0].write_completed_at,at);
+result.acknowledged[0].write_completed_at='tampered';assert.equal(ledger.select([row]).acknowledged[0].write_completed_at,at);
+assert.equal(ledger.select([{...row,price:71}]).pending.length,1);
+assert.equal(createLedger(config).select([row]).pending.length,1);
+assert.throws(()=>ledger.select([row,row]),/ROW_IDENTITY/);assert.throws(()=>ledger.select([{...row,trade_date:'2026-10-05'}]),/ROW_IDENTITY/);
+assert.throws(()=>ledger.acknowledge([row],'2026-10-06T00:59:59Z'),/REGRESSION/);
+console.log(JSON.stringify({ok:true,cases:8,mode:'isolated',writer_integrated:false}));

@@ -19,6 +19,15 @@ const options={runtimeRoot:'fixture-only',writerIdentity:identity,priorityScope,
  let notified=false;
  hooks=createHooks({...options,onVerificationFailure:async e=>{assert.equal(e.message,'HTTP 503');notified=true;throw Error('STOP_CURRENT_ROUND');}},{capture,run:async()=>{throw Error('HTTP 503');}});
  context=await hooks.beforeQuoteRead();await assert.rejects(()=>hooks.afterQuoteWrite({context,trade_date:identity.trade_date,quotes_written:1,written_symbols:['1216']}),/STOP_CURRENT_ROUND/);assert.equal(notified,true);
- console.log(JSON.stringify({ok:true,cases:8,mode:'isolated_write_boundary',deployed:false}));
+ const url='https://fixture.invalid',ack={symbol:'1216',trade_date:identity.trade_date,writer_run_id:'w',target:url+'/rest/v1/fugle_daytrade_quotes_live'};
+ let retainedCalls=0;
+ hooks=createHooks({...options,url},{capture,run:async value=>{retainedCalls++;assert.equal(value.writeCompletedAt,null);assert.deepEqual(value.writtenSymbols,[]);assert.deepEqual(value.quoteAcknowledgements,[ack]);return {status:'COMMITTED'};}});
+ context=await hooks.beforeQuoteRead();
+ const retained={context,trade_date:identity.trade_date,quotes_written:0,written_symbols:[],write_completed_at:null,quote_acknowledgements:[ack]};
+ r=await hooks.afterQuoteWrite(retained);assert.equal(r.status,'COMMITTED');assert.equal(retainedCalls,1);
+ for(const invalid of [[{...ack,writer_run_id:'other'}],[{...ack,trade_date:'2026-10-05'}],[{...ack,target:'https://other.invalid'}],[ack,ack],[null],null]){
+  r=await hooks.afterQuoteWrite({...retained,quote_acknowledgements:invalid});assert.equal(r.error_code,'QUOTE_ACK_SCOPE_INVALID');assert.equal(retainedCalls,1);
+ }
+ console.log(JSON.stringify({ok:true,cases:15,mode:'isolated_write_boundary',deployed:false}));
 })().catch(e=>{console.error(e);process.exitCode=1;});
 

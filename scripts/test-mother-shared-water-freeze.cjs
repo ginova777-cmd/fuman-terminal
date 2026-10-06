@@ -11,7 +11,11 @@ function args(changeHead=false){
  // v1.1 FRESH may have a newer pending head; its own publication must match.
  r=await freeze(args(true));assert.equal(r.receipt.status,'PASS');assert.equal(r.receipt.rows[0].source_status,'FRESH');
  r=await freeze({...args(),writtenSymbols:[]});assert.equal(r.receipt.status,'BLOCKED');assert.equal(r.receipt.requested_count,1);assert.equal(r.receipt.rows[0].source_status,'UNKNOWN');
+ const retained=args(),row=JSON.parse((await retained.readback()).bytes)[0];
+ const ack={contract:'mother-quote-write-ack-v1',symbol:'1216',trade_date:retained.identity.trade_date,writer_run_id:retained.identity.writer_run_id,target:'isolated',row,row_sha256:require('../lib/mother-shared-water-evidence.cjs').sha(Buffer.from(JSON.stringify(row))),write_completed_at:retained.writeCompletedAt};
+ r=await freeze({...retained,writtenSymbols:[],quoteAcknowledgements:[ack]});assert.equal(r.receipt.status,'PASS');
+ await assert.rejects(()=>freeze({...args(),writtenSymbols:[],quoteAcknowledgements:[{...ack,writer_run_id:'other'}]}),/QUOTE_ACK_IDENTITY/);
  const a=args();a.readback=async()=>({reader_role:'service_role',complete:true,bytes:Buffer.from('[]')});await assert.rejects(()=>freeze(a),/ANON_READBACK_INVALID/);
  const limited=args();limited.maxBundleBytes=5;await assert.rejects(()=>freeze(limited),/BUNDLE_LIMIT/);
- console.log(JSON.stringify({ok:true,cases:5,mode:'isolated',production_connected:false}));
+ console.log(JSON.stringify({ok:true,cases:7,mode:'isolated',production_connected:false}));
 })().catch(e=>{console.error(e);process.exitCode=1;});
