@@ -8929,6 +8929,15 @@ async function tick() {
   // initial publication already carries PAUSED state; do not repeat the same large write.
   if(moduleWorkIds().length) await writeStatusAndScorecard(result);
   tickStage("status_scorecard:complete");
+  // Enrichment may take longer than the 120-second fast-publication contract.
+  // Refresh actual data after successful publication, under the same Writer
+  // round and deadline, before the wrapper performs independent verification.
+  tickStage("final_water_refresh:start");
+  const finalWaterRefresh = await require('../lib/daytrade-final-water-refresh.cjs').refresh({
+    apply: APPLY, dryRun: DRY_RUN, tradeDate: taipeiDate(),
+    run: () => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync(),
+  });
+  tickStage("final_water_refresh:complete", finalWaterRefresh);
   const offSession = Boolean(result.payload.off_session);
   return {
     ok: result.gateGrade === "A" || offSession,
