@@ -30,18 +30,21 @@ function volumeUnit(q = {}) {
   if (q.intradayOddLot === false || ["TSE", "OTC", "TIB"].includes(market)) return "lots";
   return "";
 }
-async function upsert(table, rows, conflict, onBatch = () => {}) {
+async function upsert(table, rows, conflict, onBatch = () => {}, guard = null, deadline = Infinity) {
   if (table === 'fugle_daytrade_quotes_live') rows = rows.map(require('../lib/daytrade-quote-liquidity-contract').normalizeQuoteLiquidity);
   if (!rows.length) return 0;
   const key = secret("SUPABASE_SERVICE_ROLE_KEY");
   if (!key) throw new Error("service_role_key_missing");
   let written = 0;
   for (let offset = 0; offset < rows.length; offset += 200) {
+    if (guard && await guard() !== true) throw Error('QUOTE_ONLY_WRITER_GUARD_REJECTED');
+    const timeoutMs=Math.min(30000,deadline-Date.now());
+    if(timeoutMs<=0)throw Error('QUOTE_ONLY_PUBLICATION_DEADLINE');
     const response = await fetch(`${URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(conflict)}`, {
       method: "POST",
       headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify(rows.slice(offset, offset + 200)),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) throw new Error(`${table}_HTTP_${response.status}:${(await response.text()).slice(0, 240)}`);
     written += Math.min(200, rows.length - offset);
@@ -50,13 +53,14 @@ async function upsert(table, rows, conflict, onBatch = () => {}) {
   return written;
 }
 
-async function main() {
+async function main({beforeQuoteRead,afterQuoteWrite,quotesOnly=false,canPublish} = {}) {
+  if (quotesOnly && APPLY && (typeof canPublish !== 'function' || await canPublish() !== true)) throw Error('QUOTE_ONLY_WRITER_GUARD_REQUIRED');
   const now = new Date();
   const date = tradeDate(now);
   const calendar = await isTwseTradingDay(now, { stateDir: path.join(RUNTIME, "state") });
   if (!calendar.isTradingDay) return console.log(JSON.stringify({ ok: true, skipped: true, reason: "market_calendar_non_trading_day", trade_date: date }));
+  const quoteEvidenceContext = APPLY && beforeQuoteRead ? await beforeQuoteRead() : null;
   const quoteCache = parseCache("fugle-daytrade-ws-quotes-v2.json");
-  const candleCache = parseCache("fugle-daytrade-ws-candles-v2.json");
   // A closed 5-minute candle is verified shortly after its boundary. Keep
   // enough Fugle candle events to include all five source minutes plus normal
   // collector/writer delay; three minutes systematically dropped slots 1-2.
@@ -89,6 +93,23 @@ async function main() {
       },
     };
   }).filter((q) => /^\d{4}$/.test(q.symbol) && q.quote_seen_at);
+  async function publishQuotes(result) {
+    if (quotesOnly && await canPublish() !== true) throw Error('QUOTE_ONLY_WRITER_GUARD_REJECTED');
+    result.quotes_written = await upsert("fugle_daytrade_quotes_live", quotes, "symbol", undefined, quotesOnly ? canPublish : null, quotesOnly ? Date.now()+20000 : Infinity);
+    result.quote_write_completed_at = new Date().toISOString();
+    if (afterQuoteWrite) result.shared_water_acceptance = await afterQuoteWrite({
+      context: quoteEvidenceContext, trade_date: date, quotes_written: result.quotes_written,
+      written_symbols: quotes.map(q=>q.symbol),
+      write_completed_at: result.quote_write_completed_at,
+    });
+  }
+  if (quotesOnly) {
+    const result={ok:true,mode:APPLY?'apply':'dry_run',scope:'quotes_only',trade_date:date,checked_at:now.toISOString(),quote_rows:quotes.length,quote_cache_updated_at:quoteCache.updatedAt,candles_processed:false,candle_backfill_complete:false};
+    if (APPLY) await publishQuotes(result);
+    // Do not overwrite the complete quote+candle sync receipt with a quote-only result.
+    return result;
+  }
+  const candleCache = parseCache("fugle-daytrade-ws-candles-v2.json");
   const { mapNaturalCandle } = require('../lib/daytrade-fast-candle-row');
   // Same-day history can catch up after a write outage. Keep original receive
   // times and require proven natural, closed bars; never mark missing flags true.
@@ -113,7 +134,7 @@ async function main() {
   result.candle_deferred = writePlan.deferred;
   result.candle_backfill_complete = false;
   if (APPLY) {
-    result.quotes_written = await upsert("fugle_daytrade_quotes_live", quotes, "symbol");
+    await publishQuotes(result);
     let acknowledged = delta.checkpoint;
     result.candles_written = await upsert("fugle_daytrade_intraday_1m", writePlan.rows, "symbol,candle_time", batch => {
       const next = deltaStore.acknowledge(acknowledged,batch);

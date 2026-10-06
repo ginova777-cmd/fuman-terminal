@@ -1,0 +1,16 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs/promises'),os=require('node:os'),path=require('node:path');
+const {createStore}=require('../lib/mother-shared-water-capture-store.cjs');
+(async()=>{const dir=await fs.mkdtemp(path.join(os.tmpdir(),'mother-capture-test-')),file=path.join(dir,'latest.json');let now=0;
+ const store=createStore(file,{now:()=>now,maxBytes:1000});
+ assert.equal(store.publish({connection_id:'first',closed:false}),true);await store.drain();
+ assert.equal(JSON.parse(await fs.readFile(file,'utf8')).stored,true);
+ assert.equal(store.publish({connection_id:'first',closed:false}),false);
+ store.publish({connection_id:'first',closed:true},{force:true});
+ store.publish({connection_id:'second',closed:false},{force:true});await store.drain();
+ assert.equal(JSON.parse(await fs.readFile(file,'utf8')).connection_id,'second');
+ now=30001;assert.equal(store.due(),true);
+ assert.equal(store.publish({data:'a'.repeat(1100)}),false);assert.equal(store.health().last_error,'CAPTURE_FILE_LIMIT');
+ assert.equal(JSON.parse(await fs.readFile(file,'utf8')).connection_id,'second');
+ console.log(JSON.stringify({ok:true,cases:5,mode:'isolated_file_io',test_directory:dir,production_connected:false}));
+})().catch(e=>{console.error(e);process.exitCode=1;});
