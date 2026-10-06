@@ -8958,10 +8958,11 @@ async function tick() {
       post: (name, body, options) => {if(!sharedWaterGuard())throw Error('SHARED_WATER_WRITER_GUARD_REJECTED');return require('../lib/daytrade-rpc-observation').invoke({resource:name,send:()=>fetch(SUPABASE_URL+'/rest/v1/rpc/'+name,{
         method:'POST',headers:headers(requireSupabaseKey(true)),body:JSON.stringify(body),signal:AbortSignal.timeout(options.timeoutMs),
       })});},
-    }) : {};
+    }) : null;
+  const sharedWaterLedger=sharedWaterHooks?require('../lib/mother-shared-water-quote-ledger.cjs').createLedger({tradeDate:taipeiDate(),writerRunId:writerTickIdentity.writer_run_id,target:new URL('/rest/v1/fugle_daytrade_quotes_live',SUPABASE_URL).href}):null;
   const finalWaterRefresh = await require('../lib/daytrade-final-water-refresh.cjs').refresh({
     apply: APPLY, dryRun: DRY_RUN, tradeDate: taipeiDate(),
-    run: () => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync(sharedWaterHooks),
+    run: () => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync(sharedWaterHooks?{...sharedWaterHooks,quotesOnly:true,recentCandles:true,canPublish:sharedWaterGuard,quoteLedger:sharedWaterLedger}:undefined),
   });
   tickStage("final_water_refresh:complete", finalWaterRefresh);
   // Opt-in, bounded work inside this existing Writer and wrapper lock. Until
@@ -8976,7 +8977,7 @@ async function tick() {
     }else if(SHARED_WATER_PROCESS_STARTED_AT+MAX_RUN_SECONDS*1000-Date.now()<cadenceSeconds*1000+10000){
       sharedWaterCadence={status:'BLOCKED',first_blocker:'CADENCE_PROCESS_TIME_BUDGET_INSUFFICIENT',natural_acceptance:false};
     }else{
-      const quoteLedger=require('../lib/mother-shared-water-quote-ledger.cjs').createLedger({tradeDate:taipeiDate(),writerRunId:writerTickIdentity.writer_run_id,target:new URL('/rest/v1/fugle_daytrade_quotes_live',SUPABASE_URL).href});
+      const quoteLedger=sharedWaterLedger;
       sharedWaterCadence=await require('../lib/mother-shared-water-cadence.cjs').runWindow({
         deadline:Math.min(Date.now()+cadenceSeconds*1000,SHARED_WATER_PROCESS_STARTED_AT+MAX_RUN_SECONDS*1000-10000),
         canPublish:sharedWaterGuard,

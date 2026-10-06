@@ -216,4 +216,29 @@ create trigger mother_shared_water_publication_budget after insert or delete on 
  for each row execute function public.account_mother_shared_water_storage();
 create trigger mother_shared_water_evidence_budget after insert or delete on public.mother_shared_water_evidence
  for each row execute function public.account_mother_shared_water_storage();
+-- Only retire an expired DB copy after the Writer has independently reopened
+-- and verified its durable local archive. This does not delete local evidence.
+create or replace function public.retire_mother_shared_water_archived(p_archived jsonb)
+returns jsonb language plpgsql security invoker set search_path=pg_catalog,public as $$
+declare item jsonb; removed text[]:='{}'; skipped text[]:='{}'; removed_id text;
+begin
+ if p_archived is null or jsonb_typeof(p_archived)<>'array' or jsonb_array_length(p_archived)>16 then raise exception 'ARCHIVE_RETIRE_BATCH_INVALID';end if;
+ for item in select value from jsonb_array_elements(p_archived) loop
+  if item->>'verification_run_id' is null or length(item->>'verification_run_id') not between 1 and 200
+   or coalesce(item->>'archive_sha256','')!~'^[0-9a-f]{64}$'
+   or coalesce(item->>'receipt_sha256','')!~'^[0-9a-f]{64}$' then raise exception 'ARCHIVE_RETIRE_IDENTITY_INVALID';end if;
+  removed_id:=null;
+  delete from public.mother_shared_water_publications p
+   where p.verification_run_id=item->>'verification_run_id'
+    and p.archive_sha256=item->>'archive_sha256' and p.receipt_sha256=item->>'receipt_sha256'
+    and p.valid_until<clock_timestamp()-interval '1 hour'
+    and p.checked_at<clock_timestamp()-interval '1 hour'
+   returning p.verification_run_id into removed_id;
+  if removed_id is null then skipped:=array_append(skipped,item->>'verification_run_id');
+  else removed:=array_append(removed,removed_id);end if;
+ end loop;
+ return jsonb_build_object('contract','mother-shared-water-retirement-v1','removed',removed,'skipped',skipped,'local_evidence_deleted',false);
+end $$;
+revoke all on function public.retire_mother_shared_water_archived(jsonb) from public,anon,authenticated;
+grant execute on function public.retire_mother_shared_water_archived(jsonb) to service_role;
 commit;
