@@ -1,0 +1,11 @@
+'use strict';
+const assert=require('node:assert/strict'),{assess}=require('../lib/mother-pool-k-coverage.cjs');
+const opts={tradeDate:'2026-10-06',checkedAt:'2026-10-06T04:00:00Z',intraday:true};
+const make=(n,valid)=>Array.from({length:n},(_,i)=>({symbol:String(1000+i),payload:{mother_pool_k_quality_ready:i<valid,data_gap_reason:i<valid?'OK':'NO_1M',candle_count:i<valid?100:0,last_candle_time:i<valid?'2026-10-06T03:59:00Z':''}}));
+let r=assess(make(403,363),opts);assert.equal(r.status,'PASS');assert.equal(r.required_count,363);assert.equal(r.requested_count,403);assert.equal(r.missing_symbols.length,40);assert.equal(r.eligible_symbols.length,363);
+assert.equal(assess(make(403,362),opts).status,'BLOCKED');assert.equal(assess([],opts).status,'BLOCKED');
+const bad=make(10,10);bad[0].payload.last_candle_time='2026-10-05T03:59:00Z';bad[1].payload.last_candle_time='2026-10-06T04:00:00Z';assert.equal(assess(bad,opts).valid_count,8);
+assert.equal(assess([...make(10,10),make(1,1)[0]],opts).passed,false);
+assert.equal(assess(make(10,0),{...opts,intraday:false}).status,'NOT_DUE');
+assert.equal(assess(make(403,403),opts).missing_symbols.length,0);
+console.log('PASS fixed denominator, 363/403 boundary, invalid date/incomplete bar, duplicate, empty, preopen and recovery');

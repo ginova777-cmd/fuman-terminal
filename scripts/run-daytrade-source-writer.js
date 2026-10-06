@@ -706,13 +706,18 @@ async function supabaseGetPaged(resource, query = "", options = {}) {
 
 async function supabaseRpc(resource, body, options = {}) {
   const key = requireSupabaseKey(Boolean(options.service));
-  return require('../lib/daytrade-rpc-observation').invoke({resource,
+  const started=Date.now();
+  const publicationIdentity=resource==='publish_fugle_daytrade_stock_future_candidates'?{revision:body?.p_revision,writer_run_id:body?.p_writer_run_id,catalogue_run_id:body?.p_payload?.catalogue_run_id,request_bytes:Buffer.byteLength(JSON.stringify(body||{}))}:null;
+  if(publicationIdentity)console.log(JSON.stringify({stage:'candidate_publication_rpc:start',...publicationIdentity,checkedAt:nowIso()}));
+  const result=await require('../lib/daytrade-rpc-observation').invoke({resource,
     send:()=>supabaseFetch(`${SUPABASE_URL}/rest/v1/rpc/${resource}`, {
       method:'POST',headers:headers(key),body:JSON.stringify(body || {}),
       signal:AbortSignal.timeout ? AbortSignal.timeout(SUPABASE_READ_TIMEOUT_MS) : undefined,
     }),
-    onFailure:evidence=>console.error(JSON.stringify({...evidence,checkedAt:nowIso()})),
+    onFailure:evidence=>console.error(JSON.stringify({...evidence,...publicationIdentity,checkedAt:nowIso()})),
   });
+  if(publicationIdentity)console.log(JSON.stringify({stage:'candidate_publication_rpc:ack',...publicationIdentity,elapsed_ms:Date.now()-started,status:result?.status,ack_revision:result?.revision,checkedAt:nowIso()}));
+  return result;
 }
 
 function ensureApprovedSourceHost() {
@@ -4541,6 +4546,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
           source_count: Array.isArray(row.sourceFlags) ? row.sourceFlags.length : 0,
         },
         data_gap_reason: row.priorityMetrics?.dataGap?.data_gap_reason || row.priorityMetrics?.dataGap?.status || "OK",
+        mother_pool_k_quality_ready: rowFormal1mReady,
         candle_count: numberValue(row.priorityMetrics?.dataGap?.candle_count),
         first_candle_time: row.priorityMetrics?.dataGap?.first_candle_time || "",
         last_candle_time: row.priorityMetrics?.dataGap?.last_candle_time || "",
@@ -4735,11 +4741,16 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
   // the active terminal (strategy chips, institution, industry prewarm and Mother Pool),
   // even when a symbol is not selected into today's formal pool. Retired
   // warrant and CB sources must never be carried forward from an old manifest.
+  const longyueIntake = await require('../lib/longyue-warmup-intake.cjs').receive({
+    runtimeDir: runtimePath(), tradeDate,
+    resolveDay: date => isTwseTradingDay(new Date(date + 'T12:00:00+08:00'), {stateDir:statePath(''), ignoreOverrides:true}),
+  });
   const fullTerminalWarmupSymbols = prependUnique(
     industryPrewarm.symbols,
     [
       ...daytradeMotherPoolSymbols,
       ...bridgeWarmupSymbols,
+      ...longyueIntake.symbols,
     ],
   );
   const nextDaytradeCandlePrioritySymbols = mergeCurrentDayCandlePrioritySymbols({
@@ -4830,6 +4841,7 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     formalPriorityStrategyChip,
     terminalPrioritySymbols: fullTerminalWarmupSymbols,
     terminalPriorityCount: fullTerminalWarmupSymbols.length,
+    longyueWarmupIntake: {status:longyueIntake.status,candidate_version:longyueIntake.candidate_version,list_sha256:longyueIntake.list_sha256,symbols:longyueIntake.symbols},
     terminalWarmupScope: "all_valid_taiwan_symbols_currently_exposed_by_terminal",
     daytradeIndustryPrewarmContract: industryPrewarm.contract,
     daytradeIndustryPrewarmMode: industryPrewarm.mode,
@@ -4869,7 +4881,11 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     || String(existing.daytradePriceGateStatus || "") !== (MOTHER_POOL_MIN_PRICE > 0 ? "minimum_price_enforced" : "no_price_floor")
     || JSON.stringify(existing.daytradePoolPriceBySymbol || {}) !== JSON.stringify(nextPriorityPayload.daytradePoolPriceBySymbol || {});
   const fiveMinuteEvidenceChanged = JSON.stringify(existing.fiveMinutePriorityEvidence) !== JSON.stringify(nextPriorityPayload.fiveMinutePriorityEvidence);
-  if (!sameDailyIdentity || !sameSymbols || JSON.stringify(existing.deepScanAllocation) !== JSON.stringify(nextPriorityPayload.deepScanAllocation) || fiveMinuteEvidenceChanged || !samePriorityCounts || candlePriorityArtifactChanged || openingPriorityArtifactChanged || industryPrewarmArtifactChanged || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
+  require('../lib/longyue-warmup-intake.cjs').publishReceipt(runtimePath(), longyueIntake, {
+    motherPoolRunId: motherPoolSnapshot.run_id, motherSymbols: daytradeMotherPoolSymbols, warmupSymbols: fullTerminalWarmupSymbols,
+  });
+  const longyueIntakeChanged = JSON.stringify(existing.longyueWarmupIntake) !== JSON.stringify(nextPriorityPayload.longyueWarmupIntake);
+  if (!sameDailyIdentity || !sameSymbols || longyueIntakeChanged || JSON.stringify(existing.deepScanAllocation) !== JSON.stringify(nextPriorityPayload.deepScanAllocation) || fiveMinuteEvidenceChanged || !samePriorityCounts || candlePriorityArtifactChanged || openingPriorityArtifactChanged || industryPrewarmArtifactChanged || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
     writeJson(PRIORITY_SYMBOLS_FILE, nextPriorityPayload);
     writeFugleWebSocketSymbols(nextPriorityPayload.symbols, {
       source: "daytrade-dedicated-priority-bridge",
@@ -5413,6 +5429,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const actualQuoteSpeed = quoteTransport.startsWith("websocket_") && websocketQuoteSpeed > 0
     ? websocketQuoteSpeed
     : restQuoteSpeed;
+  const motherKCoverage = require('../lib/mother-pool-k-coverage.cjs').assess(priorityRows.filter(isPublishedMotherMember), {tradeDate:taipeiDate(),checkedAt:nowIso(),intraday:after0900&&!offSession});
   const intraday1mReadySymbols = [...motherPoolSet].filter((symbol) => intraday1mReadySet.has(symbol)).length;
   const intraday1mReadyCoverage = motherPoolSymbols ? intraday1mReadySymbols / motherPoolSymbols : 0;
   const priorityIntraday1mReadySymbols = [...prioritySet].filter((symbol) => intraday1mReadySet.has(symbol)).length;
@@ -5447,11 +5464,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     ? Math.max(...deepScanIntraday1mFreshAges)
     : 999999;
   const deepScanIntraday1mStaleSeconds = deepScanIntraday1mFreshMaxAgeSeconds;
-  const intraday1mReadyMinSymbols = Math.max(1, Math.ceil(formalScanPoolSymbols * MIN_INTRADAY_1M_READY_COVERAGE));
-  const intraday1mCoverageGateReady = formalScanPoolSymbols > 0
-    && formalScanIntraday1mReadySymbols >= intraday1mReadyMinSymbols
-    && formalScanIntraday1mReadyCoverage >= MIN_INTRADAY_1M_READY_COVERAGE
-    && formalScanIntraday1mFreshMaxAgeSeconds <= MAX_INTRADAY_1M_STALE_SECONDS;
+  const intraday1mReadyMinSymbols = Math.max(1, motherKCoverage.required_count);
+  const intraday1mCoverageGateReady = motherKCoverage.passed;
   const scannerCanRunQuoteOnly = formalScopeQuoteFreshOk
     && rateLimitStatus === "ok";
   const ma20Scope = [...new Set(priorityRows.filter(isPublishedMotherMember).map(row => normalizeCode(row.symbol)))];
@@ -5483,7 +5497,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const strictScannerCanRunOpening = scannerCanRunQuoteOnly
     && dailyVolumeStatus === "ready"
     && readyMa20 >= effectiveMa20Required
-    && (!after0900 || formalScanIntraday1mReadyCoverage >= MIN_INTRADAY_1M_READY_COVERAGE)
+    && (!after0900 || motherKCoverage.passed)
     && opening0901GateOk;
   const scannerCanRunOpening = after0900 ? strictScannerCanRunOpening : warmupGateReady;
   const scannerCanRunPreopen = warmupGateReady;
@@ -5537,7 +5551,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     futoptMapped,
     futoptGateReady,
     intraday1mStaleSeconds,
-    intraday1mReadyCoverage: formalScanIntraday1mReadyCoverage,
+    intraday1mReadyCoverage: motherKCoverage.coverage || 0,
     priorityIntraday1mReadyCoverage,
     scannerCanRunOpening,
     strategyChipCompleteLatestRun,
@@ -5598,8 +5612,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   if (!offSession && after0900 && latestQuoteAge > MAX_QUOTE_AGE_SECONDS) failedChecks.push('quote_stale');
   if (!offSession && dailyVolumeStatus !== 'ready') failedChecks.push('daily_volume_not_ready');
   if (!offSession && after0900 && motherPoolSymbols < MOTHER_POOL_TARGET_MIN_SYMBOLS) discoveryWarnings.push('intraday_1m_mother_pool_discovery_below_target_warning');
-  if (!offSession && after0900 && formalScanIntraday1mReadySymbols < intraday1mReadyMinSymbols) failedChecks.push('intraday_1m_ready_symbols_below_dynamic_min');
-  if (!offSession && after0900 && formalScanIntraday1mReadyCoverage < MIN_INTRADAY_1M_READY_COVERAGE) failedChecks.push('intraday_1m_ready_coverage_below_090');
+  if (!offSession && after0900 && motherKCoverage.valid_count < intraday1mReadyMinSymbols) failedChecks.push('intraday_1m_ready_symbols_below_dynamic_min');
+  if (!offSession && after0900 && !motherKCoverage.passed) failedChecks.push('intraday_1m_ready_coverage_below_090');
 
   if (!offSession && after0900 && intraday1mStaleSeconds > MAX_INTRADAY_1M_STALE_SECONDS) failedChecks.push('intraday_1m_not_ready');
   if (!offSession && opening0901HardRequired && !opening0901GateOk) failedChecks.push('opening_0901_candle_not_ready');
@@ -5772,7 +5786,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     opening_boost_reason: openingBoostReason,
     mother_pool_rule_version: MOTHER_POOL_RULE_VERSION,
     intraday_1m_ready_min_symbols: intraday1mReadyMinSymbols,
-    intraday_1m_ready_coverage_min: MIN_INTRADAY_1M_READY_COVERAGE,
+    intraday_1m_ready_coverage_min: 0.90,
     priority_intraday_1m_ready_coverage_min: MIN_PRIORITY_INTRADAY_1M_READY_COVERAGE,
     indicator_warmup_coverage_min: MIN_INDICATOR_WARMUP_COVERAGE,
     mother_pool_symbols: priorityRows.length,
@@ -5899,7 +5913,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     ready_ge_35_symbols: 0,
     ready_ge_35: 0,
     ready_ma35_continuous_symbols: 0,
-    intraday_1m_ready_symbols: formalScanIntraday1mReadySymbols,
+    intraday_1m_ready_symbols: motherKCoverage.valid_count,
     deep_scan_pool_symbols: deepScanPoolSymbols,
     formal_scan_pool_symbols: formalScanPoolSymbols,
     formal_scan_intraday_1m_ready_symbols: formalScanIntraday1mReadySymbols,
@@ -5913,11 +5927,12 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     deep_scan_intraday_1m_data_gap_status: deepScanIntraday1mDataGapSymbols.length ? 'DATA_GAP' : 'ready',
     deep_scan_intraday_1m_stale_seconds: deepScanIntraday1mStaleSeconds,
     mother_pool_intraday_1m_ready_symbols: intraday1mReadySymbols,
-    intraday_1m_ready_coverage: Number(intraday1mReadyCoverage.toFixed(4)),
+    intraday_1m_ready_coverage: motherKCoverage.coverage,
     priority_intraday_1m_ready_symbols: priorityIntraday1mReadySymbols,
     priority_intraday_1m_ready_coverage: Number(priorityIntraday1mReadyCoverage.toFixed(4)),
+    mother_pool_k_coverage: motherKCoverage,
     intraday_1m_coverage_gate_ready: intraday1mCoverageGateReady,
-    intraday_1m_coverage_status: intraday1mReadyCoverage >= 0.95 ? "ready" : intraday1mReadyCoverage >= 0.85 ? "degraded_ready" : "not_ready",
+    intraday_1m_coverage_status: motherKCoverage.status === "NOT_DUE" ? "not_due" : motherKCoverage.passed ? "ready" : "not_ready",
     today_1m_symbols: today1mSymbols,
     today_1m_rows: today1mRows,
     futopt_stock_mapped: futoptMapped,
@@ -5987,7 +6002,7 @@ function sourceGateA(values) {
     && (!values.after0845 || values.scannerCanRunOpening)
     && (!values.after0845 || values.strategyChipCompleteLatestRun)
     && (!values.after0845 || values.readyMa20 >= (values.effectiveMa20Required || MIN_READY_MA20_CONTINUOUS))
-    && (!values.after0900 || values.intraday1mReadyCoverage >= MIN_INTRADAY_1M_READY_COVERAGE)
+    && (!values.after0900 || values.intraday1mReadyCoverage >= 0.90)
     && (!values.after0900 || values.intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
 }
 
@@ -7193,6 +7208,7 @@ async function writeStatusAndScorecard(result) {
   result.payload.writer_lease_expires_at = writerLease.leaseExpiresAt || null;
   result.payload.source_authority = "dedicated_daytrade_source_host";
   result.payload.reader_policy = "supabase_read_only_no_writer_no_fugle_fallback";
+  result.payload.quote_coverage_scopes = require('../lib/strategy3-source-coverage-contract.cjs').build(result.payload);
   const sourceRow = {
     source_name: SOURCE_NAME,
     trade_date: tradeDate,
@@ -7256,17 +7272,6 @@ async function writeStatusAndScorecard(result) {
     message: result.message,
     payload: scorecardPayload,
   };
-  try {
-    await traceStatusWrite("speed_scorecard", () => supabaseInsert("fugle_daytrade_source_speed_scorecard", [scorecardRow]));
-  } catch (error) {
-    nonFatalWriteErrors.push(require("../lib/daytrade-diagnostic-errors").encodeDiagnosticError({
-      target: "fugle_daytrade_source_speed_scorecard",
-      message: error?.message || String(error),
-    }));
-    result.payload.nonfatal_write_errors = nonFatalWriteErrors;
-    sourceRow.payload = result.payload;
-  }
-
   const detailJournal=require('../lib/daytrade-source-status-journal');
   const projectedStatus=require('../lib/daytrade-source-status-projection').project(sourceRow,{
     save:row=>detailJournal.prepare(runtimePath('data','source-status-producer-details'),row),
@@ -7283,15 +7288,37 @@ async function writeStatusAndScorecard(result) {
   console.log(JSON.stringify({stage:'source_status_write_size',checkedAt:nowIso(),writer_run_id:sourceRow.payload.writer_run_id,bytes:Buffer.byteLength(JSON.stringify(sourceRow),'utf8'),largest_fields:require('../lib/daytrade-payload-size').inspect(sourceRow.payload)}));
   const sourceStatusJournal=require('../lib/daytrade-source-status-journal');
   let sourceStatusCheckpoint;
-  const sourceStatusAck = await traceStatusWrite("source_status", () => require('../lib/daytrade-source-status-ack').writeWithAcknowledgement({
+  const sourceStatusAck = await require('../lib/source-publication-order.cjs').publishCoreBeforeDiagnostic({
+    publishCore: () => traceStatusWrite("source_status", () => require('../lib/daytrade-source-status-ack').writeWithAcknowledgement({
     row: sourceRow,
     onPrepared: row => {sourceStatusCheckpoint=sourceStatusJournal.prepare(runtimePath('data','source-status-write-intents'),row);console.log(JSON.stringify({stage:'source_status_intent:durable',checkedAt:nowIso(),writer_run_id:row.payload.writer_run_id,...sourceStatusCheckpoint}));},
-    onAcknowledged: ack => sourceStatusJournal.confirm(sourceStatusCheckpoint,ack),
+    // Journal confirmation follows the mandatory independent readback below.
     retryDelaysMs: [5000,10000],
     onMismatch: evidence => console.error(JSON.stringify({stage:'source_status_ack_mismatch',checkedAt:nowIso(),...evidence})),
     write: row => supabaseUpsert("source_status", [row], "source_name"),
     read: row => supabaseGet('source_status',require('../lib/daytrade-source-status-ack').fixedReadQuery(row), {service:true}),
-  }));
+  })),
+    verifyCore: async () => {
+      const verified = await traceStatusWrite('source_status_readback', () => require('../lib/daytrade-source-status-ack').acknowledgeStored({
+        row: sourceRow,
+        read: row => supabaseGet('source_status', require('../lib/daytrade-source-status-ack').fixedReadQuery(row), {service:true})
+      }));
+      sourceStatusJournal.confirm(sourceStatusCheckpoint, verified);
+      return verified;
+    },
+    writeDiagnostic: () => traceStatusWrite("speed_scorecard", () => supabaseInsert("fugle_daytrade_source_speed_scorecard", [scorecardRow])),
+    recordDiagnosticFailure: error => {
+      const failure = require('../lib/daytrade-diagnostic-errors').encodeDiagnosticError({target:'fugle_daytrade_source_speed_scorecard',message:error?.message || String(error)});
+      nonFatalWriteErrors.push(failure);
+      result.payload.nonfatal_write_errors = nonFatalWriteErrors;
+      // Core is already acknowledged. Preserve the diagnostic failure independently.
+      writeJsonAtomic(runtimePath('data','scan-receipts','source-diagnostics',writerTickIdentity.generation_id+'.json'), {
+        trade_date:tradeDate,writer_run_id:writerTickIdentity.writer_run_id,generation_id:writerTickIdentity.generation_id,
+        checked_at:nowIso(),status:'DIAGNOSTIC_FAILED_AFTER_CORE_ACK',complete:false,error:failure
+      });
+      console.error(JSON.stringify({stage:'source_diagnostic_failed_after_core_ack',writer_run_id:writerTickIdentity.writer_run_id,error:failure}));
+    }
+  });
   console.log(JSON.stringify({stage:'source_status_ack',checkedAt:nowIso(),...sourceStatusAck}));
   // Publish today's actual local universe only after the source write is acknowledged.
   // This is a runner artifact, not a module or overall COMPLETE receipt.
@@ -7612,7 +7639,21 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
   const cache = readFugleWebSocketCandles({ maxAgeMs: WEBSOCKET_CANDLE_HISTORY_MAX_AGE_MS });
   const allowedSymbols = new Set(motherPoolSymbols);
   const bySymbol = new Map();
-  for (const candle of cache.candles.values()) {
+  const addValidatedCandle = (validated) => {
+    const row = { ...validated, source: 'fugle_daytrade_writer:websocket_candles',
+      source_channel: 'candles', candle_origin: 'websocket_candle', websocket_row: true,
+      rest_repair_row: false, intraday_odd_lot: false,
+      payload: { ...validated.payload, cacheUpdatedAt: cache.payload?.updatedAt || '', source: 'fugle-websocket-candles-cache' } };
+    const rows = bySymbol.get(row.symbol) || [];
+    rows.push(row);
+    bySymbol.set(row.symbol, rows);
+  };
+  if (options.latestOnly) {
+    const latest = require('../lib/daytrade-latest-valid-candles.cjs').latestValidCandles(cache.candles.values(), {
+      allowedSymbols, tradeDate, nowMs: syncNowMs, mapNaturalCandle,
+    });
+    for (const row of latest) addValidatedCandle(row);
+  } else for (const candle of cache.candles.values()) {
     const symbol = normalizeCode(candle.symbol || candle.code);
     const candleTime = normalizeTimestamp(candle.candleTime || candle.date);
     if (!symbol || !allowedSymbols.has(symbol) || !candleTime || !numberValue(candle.close)) continue;
@@ -7621,13 +7662,7 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
     // source, completion, timestamp, OHLC or natural-volume evidence checks.
     const validated = mapNaturalCandle(candle, { tradeDate, nowMs: syncNowMs, maxSeenAgeMs: Infinity });
     if (!validated) continue;
-    const row = { ...validated, source: 'fugle_daytrade_writer:websocket_candles',
-      source_channel: 'candles', candle_origin: 'websocket_candle', websocket_row: true,
-      rest_repair_row: false, intraday_odd_lot: false,
-      payload: { ...validated.payload, cacheUpdatedAt: cache.payload?.updatedAt || '', source: 'fugle-websocket-candles-cache' } };
-    const rows = bySymbol.get(symbol) || [];
-    rows.push(row);
-    bySymbol.set(symbol, rows);
+    addValidatedCandle(validated);
   }
   if (!bySymbol.size) return {
     written: 0,
@@ -8047,7 +8082,11 @@ async function tick() {
     },
   });
   tickStage('txf_reference_publication', txfReferencePublication);
-  const stockFutureCandidates = await require('../lib/publish-stock-future-candidates.cjs').publish({
+  const stockFutureCandidates = await require('../lib/stock-future-candidate-isolation.cjs').run({
+    root:runtimePath(),tradeDate:taipeiDate(),writerRunId:writerTickIdentity.writer_run_id,
+    apply:APPLY&&!DRY_RUN,writeJson:writeJsonAtomic,
+    leaseValid:()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>Date.now()+15000,
+    operation:()=>require('../lib/publish-stock-future-candidates.cjs').publish({
     root:runtimePath(),tradeDate:taipeiDate(),key:FUGLE_API_KEY,writerRunId:writerTickIdentity.writer_run_id,
     apply:APPLY&&!DRY_RUN,writeJson:writeJsonAtomic,
     leaseValid:()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>Date.now()+15000,
@@ -8058,8 +8097,9 @@ async function tick() {
       if(!Array.isArray(rows)||rows.length>1)throw Error('CANDIDATE_READBACK_SHAPE_INVALID');
       return rows[0]||null;
     },
+    }),
   });
-  tickStage('stock_future_candidates',stockFutureCandidates);
+  tickStage('stock_future_candidates',{...stockFutureCandidates,ok:stockFutureCandidates.publication_ok===true});
   const state = readWriterState();
   const phase = phaseNow();
   const warmupDataFillActive = taipeiMinutes() >= PREOPEN_WARMUP_START_MINUTES;
@@ -8084,7 +8124,7 @@ async function tick() {
   // admission is built.
   tickStage("daily_volume:start");
   const dailyVolumePromise = fetchDailyVolumeAvg();
-  const nonFatalWriteErrors = [];
+  const nonFatalWriteErrors = stockFutureCandidates.publication_ok === false ? [{target:'stock_future_candidates',message:stockFutureCandidates.reason||stockFutureCandidates.status,status:stockFutureCandidates.status,complete:false,next_retry_at:stockFutureCandidates.next_retry_at||null}] : [];
   // Publish latest natural bars before slow enrichment, under the Writer lease.
   let fullMarketLatestCandles = { complete: false, db_readback_verified: false, status: 'NOT_EXECUTED' };
   tickStage("full_market_latest_candles:start");
@@ -8392,7 +8432,8 @@ async function tick() {
   if (priorityRows.length) {
     try {
       tickStage("priority_pool_write:start", { rows: priorityRows.length });
-      await supabaseUpsert("fugle_daytrade_priority_pool", priorityPoolDbRows(priorityRows), "symbol", {
+      const finalPriorityDbRows = priorityPoolDbRows(priorityRows);
+      await supabaseUpsert("fugle_daytrade_priority_pool", finalPriorityDbRows, "symbol", {
         batchSize: SLOW_TABLE_BATCH_SIZE,
         timeoutMs: 30000,
         retries: 1,
@@ -8405,9 +8446,20 @@ async function tick() {
         `updated_at=lt.${encodeURIComponent(priorityRows[0].updated_at)}`,
       );
       tickStage("priority_pool_write:complete", { rows: priorityRows.length });
+      let refreshProof={complete:false,status:'NOT_CAPTURED'};
+      try {
+        refreshProof=await require('../lib/opening-report-refresh-proof.cjs').capture({
+          runtime:runtimePath(),date:taipeiDate(),identity:writerTickIdentity,rows:finalPriorityDbRows,
+          membershipSymbols:priorityRows.filter(isPublishedMotherMember).map(row=>row.symbol),
+          snapshot:readJson(MOTHER_POOL_SNAPSHOT_FILE,{}),url:SUPABASE_URL,
+          serviceKey:SUPABASE_SERVICE_KEY,anonKey:SUPABASE_READ_KEY,
+          events:require('../lib/opening-report-writer-refresh-evidence').readAfter(runtimePath(),taipeiDate(),0),
+        });
+      } catch(error) { refreshProof={complete:false,status:'CAPTURE_FAILED',reason:error?.code||'REFRESH_CAPTURE_FAILED'}; }
+      tickStage('morning_refresh_proof',{ok:refreshProof.complete===true,status:refreshProof.status||'VERIFIED'});
       require('../lib/opening-report-writer-refresh-evidence').record({
         runtime: process.env.FUMAN_RUNTIME_DIR || 'C:/fuman-runtime',
-        date: taipeiDate(), identity: writerTickIdentity, rows: priorityRows,
+        date: taipeiDate(), identity: writerTickIdentity, rows: priorityRows, proof:refreshProof,
       });
     } catch (error) {
       console.error(JSON.stringify({ok:false,stage:'priority_pool_write:failed',checkedAt:nowIso(),writer_run_id:writerTickIdentity.writer_run_id,generation_id:writerTickIdentity.generation_id,error_name:error?.name||'Error',message:String(error?.message||error).slice(0,500)}));
@@ -8537,6 +8589,7 @@ async function tick() {
   result.payload.module_readback_capture={status:'PAUSED',complete:false};
   result.payload.module_verifier_runner={status:'PAUSED',complete:false};
   console.log(JSON.stringify({ok:true,stage:'daytrade_tick:preopen_evidence:complete',checkedAt:nowIso()}));
+  result.payload.stock_future_candidate_publication = stockFutureCandidates;
   result.payload.nonfatal_write_errors = fetchResult.errors || [];
   result.payload.websocket_quote_readthrough_written = websocketQuoteReadthroughSync.written || 0;
   result.payload.websocket_quote_readthrough_skipped = Boolean(websocketQuoteReadthroughSync.skipped);
@@ -8876,6 +8929,15 @@ async function tick() {
   // initial publication already carries PAUSED state; do not repeat the same large write.
   if(moduleWorkIds().length) await writeStatusAndScorecard(result);
   tickStage("status_scorecard:complete");
+  // Enrichment may take longer than the 120-second fast-publication contract.
+  // Refresh actual data after successful publication, under the same Writer
+  // round and deadline, before the wrapper performs independent verification.
+  tickStage("final_water_refresh:start");
+  const finalWaterRefresh = await require('../lib/daytrade-final-water-refresh.cjs').refresh({
+    apply: APPLY, dryRun: DRY_RUN, tradeDate: taipeiDate(),
+    run: () => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync(),
+  });
+  tickStage("final_water_refresh:complete", finalWaterRefresh);
   const offSession = Boolean(result.payload.off_session);
   return {
     ok: result.gateGrade === "A" || offSession,
