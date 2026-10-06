@@ -41,10 +41,7 @@ async function publishReceipt(result) {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.FUMAN_SUPABASE_SERVICE_ROLE_KEY
     || readSecret(path.join(RUNTIME, "secrets", "supabase-service-role-key.txt"));
   if (!key) throw new Error("SUPABASE_SERVICE_ROLE_KEY_MISSING_FOR_MOTHER_POOL_RECEIPT");
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/fugle_daytrade_mother_pool_verification_receipts?on_conflict=verification_run_id`, {
-    method: "POST",
-    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
-    body: JSON.stringify({
+  const payload = {
       verification_run_id: result.verification_run_id,
       contract_version: result.mother_pool_contract_version,
       trade_date: result.trade_date,
@@ -56,10 +53,29 @@ async function publishReceipt(result) {
       mother_pool_rows: result.components?.mother_pool?.rows || 0,
       failed_checks: result.failed_checks || [],
       first_blocker: result.first_blocker,
-    }),
-    signal: AbortSignal.timeout(30000),
-  });
-  if (!response.ok) throw new Error(`MOTHER_POOL_RECEIPT_HTTP_${response.status}:${(await response.text()).slice(0, 300)}`);
+    };
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/fugle_daytrade_mother_pool_verification_receipts?on_conflict=verification_run_id`, {
+      method: 'POST', headers: {apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json',Prefer:'resolution=merge-duplicates,return=minimal'},
+      body: JSON.stringify(payload), signal: AbortSignal.timeout(30000),
+    });
+    if (!response.ok) throw new Error('MOTHER_POOL_RECEIPT_HTTP_'+response.status);
+  } catch (originalError) {
+    const confirmation = await require('../lib/mother-pool-publication-confirmation.cjs').confirm(payload, async select => {
+      const readKey=anonKey(); if(!readKey)throw Error('ANON_KEY_MISSING');
+      const query=new URLSearchParams({select,verification_run_id:'eq.'+payload.verification_run_id,limit:'2'});
+      const r=await fetch(SUPABASE_URL+'/rest/v1/v_fugle_daytrade_mother_pool_receipt_v4_1?'+query,{headers:{apikey:readKey,Authorization:'Bearer '+readKey},signal:AbortSignal.timeout(5000)});
+      if(!r.ok)throw Error('READBACK_HTTP_'+r.status);
+      let n=0;const parts=[];for await(const b of r.body){n+=b.length;if(n>65536)throw Error('READBACK_SIZE_LIMIT');parts.push(b);}
+      return JSON.parse(Buffer.concat(parts).toString('utf8'));
+    });
+    const folder=path.join(RUNTIME,'data','scan-receipts','mother-pool-publication-confirmations');
+    fs.mkdirSync(folder,{recursive:true});
+    const name=payload.verification_run_id.replace(/[^a-zA-Z0-9_-]/g,'_')+'-'+Date.now()+'.json';
+    fs.writeFileSync(path.join(folder,name),JSON.stringify(confirmation,null,2)+'\n');
+    console.error(JSON.stringify({stage:'mother_pool_publication_confirmation',status:confirmation.status,verification_run_id:payload.verification_run_id,confirmation_path:path.join(folder,name),original_error_type:originalError.name}));
+    throw originalError; // Preserve failed publication response and original process exit; never resend here.
+  }
 }
 
 function readJson(file) {
