@@ -656,7 +656,7 @@ function isMembershipFailure(response, bodyOrError) {
     bodyOrError?.message,
     String(bodyOrError || ""),
   ].join(" ");
-  return response?.status === 401
+  return response?.status === 403 || response?.status === 401
     || bodyOrError?.protected === true
     || /membership_required|missing_bearer_token|invalid_or_expired_token|membership_not_enabled/i.test(text);
 }
@@ -687,6 +687,7 @@ function renderMembershipLock(reason = "missing_bearer_token") {
   payload = null;
   byId("subtitle").textContent = "此成績單已啟用會員權限；登入並開通後即可讀取完整資料。";
   byId("metrics").innerHTML = "";
+  byId("performanceEvaluation").textContent = "策略績效資料需登入已開通會員後查看。";
   byId("sourceStatus").hidden = true;
   byId("scorecardSourceReports").hidden = true;
   byId("scorecardStrategy4Live").hidden = true;
@@ -1361,9 +1362,6 @@ function renderHistoryDateOptions(dates) {
 
 function render() {
   if (!payload?.ok) return;
-  fetch('/api/scorecard?ubt=page&source=RECOVERED_RECORD', {cache:'no-store'})
-    .then(async response => {const body=await response.json();if(!response.ok||!body.ok)throw Error(body.reason||body.error||'回測資料讀取失敗');UnifiedBacktestView.update(body.unifiedBacktest);})
-    .catch(error => UnifiedBacktestView.blocked('共用歷史回測資料暫時無法讀取：'+error.message));
   const rows = (payload.records || []).filter(row=>UnifiedBacktestModel.isActiveStrategy(row.strategy));
   const dates = Array.isArray(payload.historyDates) && payload.historyDates.length ? payload.historyDates : availableDates(rows);
   if (!activeDate || !dates.includes(activeDate)) activeDate = payload.selectedDate || payload.latestDate || dates[0] || "";
@@ -1446,13 +1444,20 @@ function render() {
   byId("footer").textContent = `來源：${payload.cacheSource || payload.source || "scorecard"}｜qualityStatus ${payload.qualityStatus || "unknown"}｜contract ${payload.contract || "--"}｜runId ${payload.runId || "--"}｜marketDate ${payload.marketDate || latestDate || "--"}｜日期 ${latestDate}｜顯示 ${filtered.length} / ${rows.length} 筆｜歷史日期 ${dates.length} 天`;
 }
 
+function loadUnifiedBacktest() {
+  fetch('/api/scorecard?ubt=page&source=RECOVERED_RECORD', {cache:'no-store'})
+    .then(async response => {const body=await response.json();if(!response.ok||!body.ok)throw Error(body.reason||body.error||'回測資料讀取失敗');UnifiedBacktestView.update(body.unifiedBacktest);})
+    .catch(error => UnifiedBacktestView.blocked('共用歷史回測資料暫時無法讀取：'+error.message));
+}
+
 async function load(date = "") {
+  loadUnifiedBacktest();
   byId("rows").innerHTML = `<tr><td colspan="13" class="empty">載入中...</td></tr>`;
   try {
     const dateQuery = date ? `&date=${encodeURIComponent(date)}` : "";
     const response = await fetch(`/api/scorecard?t=${Date.now()}${dateQuery}`, { cache: "no-store" });
     payload = await response.json();
-    if (!response.ok || !payload.ok) UnifiedBacktestView.blocked("回測資料未載入：請確認登入權限或資料服務狀態。");
+
     if (isMembershipFailure(response, payload)) {
       renderMembershipLock(payload.reason || payload.error || `HTTP ${response.status}`);
       return;
@@ -1461,7 +1466,7 @@ async function load(date = "") {
     activeDate = payload.selectedDate || payload.latestDate || availableDates(payload.records || [])[0] || "";
     render();
   } catch (error) {
-    UnifiedBacktestView.blocked("回測資料讀取失敗，尚無可驗證結果。");
+
     if (isMembershipFailure(null, error)) {
       renderMembershipLock(error.reason || error.message || "membership_required");
       return;
