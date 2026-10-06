@@ -1144,7 +1144,7 @@ function scanAuditStatus(status) {
 function renderScanAudit(payload) {
   const audit = payload?.scanAudit;
   const node = byId("scanAudit");
-  const modules = Array.isArray(audit?.modules) ? audit.modules : [];
+  const modules = Array.isArray(audit?.modules) ? audit.modules.filter(row=>UnifiedBacktestModel.isActiveStrategy(row.key)&&UnifiedBacktestModel.isActiveStrategy(row.label)) : [];
   node.hidden = modules.length === 0;
   if (!modules.length) return;
   node.innerHTML = `
@@ -1386,9 +1386,9 @@ function render() {
 
   byId("metrics").innerHTML = [
     metric("逐筆筆數", count(summary.rows), "", "scorecard-metric-rows"),
-    metric("勝率", `${(summary.winRate || 0).toFixed(1)}%`, "good", "scorecard-metric-winrate"),
-    metric("獲利 / 虧損", `${count(summary.wins)} / ${count(summary.losses)}`, "", "scorecard-metric-wl"),
-    metric("總損益", pnlText(summary.totalPnl), (summary.totalPnl || 0) >= 0 ? "good" : "bad", "scorecard-metric-pnl"),
+    metric("觀察正向率（非正式勝率）", `${(summary.winRate || 0).toFixed(1)}%`, "good", "scorecard-metric-winrate"),
+    metric("觀察正向 / 負向", `${count(summary.wins)} / ${count(summary.losses)}`, "", "scorecard-metric-wl"),
+    metric("觀察價差合計（非已實現）", pnlText(summary.totalPnl), (summary.totalPnl || 0) >= 0 ? "good" : "bad", "scorecard-metric-pnl"),
   ].join("");
 
   const zeroReports = (payload.sourceReports || []).filter(r => r.key === 'strategy3' && r.ok === true && r.publishAllowed === true && r.evidenceStatus === 'complete' && r.fallbackUsed === false && Number(r.resultCount ?? r.count) === 0 && (r.tradeDate || r.date || r.sourceDate) === latestDate && r.runId);
