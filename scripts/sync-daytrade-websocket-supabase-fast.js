@@ -103,14 +103,19 @@ async function main() {
   let checkpoint;
   try { checkpoint=JSON.parse(readText(checkpointPath)); } catch { checkpoint=null; }
   const delta = deltaStore.selectDelta(candles, checkpoint, {tradeDate:date,target:URL+'/fugle_daytrade_intraday_1m',nowMs:now.getTime()});
+  const writePlan = require('../lib/daytrade-fast-write-plan.cjs').plan(delta.pending,{nowMs:now.getTime()});
   const result = { ok: true, mode: APPLY ? "apply" : "dry_run", trade_date: date, checked_at: now.toISOString(), quote_rows: quotes.length, candle_rows: candles.length, quote_cache_updated_at: quoteCache.updatedAt, candle_cache_updated_at: candleCache.updatedAt };
   result.candle_delta_pending = delta.pending.length;
   result.candle_delta_unchanged = delta.unchanged;
   result.candle_not_due = delta.not_due;
+  result.candle_write_mode = writePlan.mode;
+  result.candle_selected = writePlan.rows.length;
+  result.candle_deferred = writePlan.deferred;
+  result.candle_backfill_complete = false;
   if (APPLY) {
     result.quotes_written = await upsert("fugle_daytrade_quotes_live", quotes, "symbol");
     let acknowledged = delta.checkpoint;
-    result.candles_written = await upsert("fugle_daytrade_intraday_1m", delta.pending, "symbol,candle_time", batch => {
+    result.candles_written = await upsert("fugle_daytrade_intraday_1m", writePlan.rows, "symbol,candle_time", batch => {
       const next = deltaStore.acknowledge(acknowledged,batch);
       fs.mkdirSync(path.dirname(checkpointPath),{recursive:true});
       const temporary=checkpointPath+'.'+process.pid+'.tmp';
@@ -118,6 +123,7 @@ async function main() {
       fs.renameSync(temporary,checkpointPath);
       acknowledged=next;
     });
+    result.candle_backfill_complete = writePlan.deferred === 0;
     const stateFile = path.join(RUNTIME, "state", "daytrade-fast-supabase-sync.json");
     fs.mkdirSync(path.dirname(stateFile), { recursive: true });
     fs.writeFileSync(stateFile, JSON.stringify({ ...result, completed_at: new Date().toISOString() }, null, 2) + "\n", "utf8");

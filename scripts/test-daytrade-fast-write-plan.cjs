@@ -1,0 +1,17 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {plan}=require('../lib/daytrade-fast-write-plan.cjs');
+const delta=require('../lib/daytrade-candle-delta');
+const nowMs=Date.parse('2026-10-06T10:00:00+08:00');
+const rows=Array.from({length:1000},(_,i)=>Array.from({length:5},(_,m)=>({symbol:String(1000+i),trade_date:'2026-10-06',candle_time:new Date(Date.parse('2026-10-06T09:00:00+08:00')+m*60000).toISOString(),synthetic:false,close:10,volume:m+1,payload:{}}))).flat();
+const original=JSON.stringify(rows),p=plan(rows,{nowMs});
+assert.equal(p.rows.length,2000);assert.equal(p.deferred,3000);assert.equal(p.latest_changed_symbols_selected,1000);
+assert.equal(p.rows.slice(0,1000).every(r=>r.candle_time.endsWith('01:04:00.000Z')),true);
+assert.equal(p.rows.slice(1000,1500).every(r=>r.candle_time.endsWith('01:00:00.000Z')),true);
+assert.equal(new Set(p.rows.map(r=>r.symbol+'|'+r.candle_time)).size,2000);assert.equal(JSON.stringify(rows),original);
+const opts={tradeDate:'2026-10-06',target:'isolated',nowMs},d=delta.selectDelta(rows,null,opts),cp=delta.acknowledge(d.checkpoint,p.rows.slice(0,200));
+assert.equal(delta.selectDelta(rows,cp,opts).pending.length,4800,'failed later batches and deferred rows remain pending');
+assert.equal(plan(rows,{nowMs:Date.parse('2026-10-06T13:33:00+08:00')}).rows.length,5000);
+assert.equal(plan([],{nowMs}).deferred,0);assert.equal(plan(rows.slice(0,3),{nowMs}).rows.length,3);
+assert.throws(()=>plan(rows,{nowMs,limit:0}),/INVALID/);
+console.log('PASS newest-per-symbol priority, bounded 2000, reserved oldest backfill, no mutation/duplicates, failed batch retained, full closing catchup, small/empty queues');
