@@ -167,7 +167,7 @@ async function main() {
     if (!Number.isInteger(total) || total < 0 || total > ready || total !== selection.resultCount || rows.length !== Math.min(60, total)) issues.push("institution selected result count mismatch");
     for (const row of rows) for (const frame of ["daily"]) {
       const t = row.technicalTrend?.[frame];
-      if (row.technicalTrend?.pass !== true || !t || ![["kdK","kdPrevK"],["kdD","kdPrevD"],["rsi3","rsi3Prev"],["rsi6","rsi6Prev"]].every(([a,b]) => Number.isFinite(t[a]) && Number.isFinite(t[b]) && t[a] > t[b])) issues.push("institution daily trend missing:" + row.code + ":" + frame);
+      if (row.technicalTrend?.pass !== true || !t || ![["kdK","kdPrevK"],["kdD","kdPrevD"],["rsi5","rsi5Prev"],["rsi15","rsi15Prev"]].every(([a,b]) => Number.isFinite(t[a]) && Number.isFinite(t[b]) && t[a] > t[b])) issues.push("institution daily trend missing:" + row.code + ":" + frame);
     }
   } else if (rows.length < MIN_ROWS) {
     issues.push(`institution API must return at least ${MIN_ROWS} rows for field contract verification; rows=${rows.length}`);
