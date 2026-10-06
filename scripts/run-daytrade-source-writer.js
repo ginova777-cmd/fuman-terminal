@@ -4884,7 +4884,7 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     motherPoolRunId: motherPoolSnapshot.run_id, motherSymbols: daytradeMotherPoolSymbols, warmupSymbols: fullTerminalWarmupSymbols,
   });
   const longyueIntakeChanged = JSON.stringify(existing.longyueWarmupIntake) !== JSON.stringify(nextPriorityPayload.longyueWarmupIntake);
-  if (longyueIntakeChanged || !sameDailyIdentity || !sameSymbols || JSON.stringify(existing.deepScanAllocation) !== JSON.stringify(nextPriorityPayload.deepScanAllocation) || fiveMinuteEvidenceChanged || !samePriorityCounts || candlePriorityArtifactChanged || openingPriorityArtifactChanged || industryPrewarmArtifactChanged || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
+  if (!sameDailyIdentity || !sameSymbols || longyueIntakeChanged || JSON.stringify(existing.deepScanAllocation) !== JSON.stringify(nextPriorityPayload.deepScanAllocation) || fiveMinuteEvidenceChanged || !samePriorityCounts || candlePriorityArtifactChanged || openingPriorityArtifactChanged || industryPrewarmArtifactChanged || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
     writeJson(PRIORITY_SYMBOLS_FILE, nextPriorityPayload);
     writeFugleWebSocketSymbols(nextPriorityPayload.symbols, {
       source: "daytrade-dedicated-priority-bridge",
