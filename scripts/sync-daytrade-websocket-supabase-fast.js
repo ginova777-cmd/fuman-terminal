@@ -55,7 +55,8 @@ async function upsert(table, rows, conflict, onBatch = () => {}, guard = null, d
   return written;
 }
 
-async function main({beforeQuoteRead,afterQuoteWrite,quotesOnly=false,canPublish,quoteLedger} = {}) {
+async function main({beforeQuoteRead,afterQuoteWrite,quotesOnly=false,recentCandles=false,canPublish,quoteLedger} = {}) {
+  if(recentCandles&&!quotesOnly)throw Error('RECENT_CANDLES_REQUIRE_INCREMENTAL_MODE');
   if(quoteLedger&&!quotesOnly)throw Error('QUOTE_LEDGER_REQUIRES_QUOTE_ONLY_MODE');
   if (quotesOnly && APPLY && (typeof canPublish !== 'function' || await canPublish() !== true)) throw Error('QUOTE_ONLY_WRITER_GUARD_REQUIRED');
   const now = new Date();
@@ -112,6 +113,23 @@ async function main({beforeQuoteRead,afterQuoteWrite,quotesOnly=false,canPublish
   }
   if (quotesOnly) {
     const result={ok:true,mode:APPLY?'apply':'dry_run',scope:'quotes_only',trade_date:date,checked_at:now.toISOString(),quote_rows:quotes.length,quote_cache_updated_at:quoteCache.updatedAt,candles_processed:false,candle_backfill_complete:false};
+    if(recentCandles){
+      const file=path.join(CACHE,'fugle-daytrade-ws-candles-v2.json.recent.json');
+      const stat=fs.statSync(file);if(!stat.isFile()||stat.size>16*1024*1024)throw Error('RECENT_CANDLE_READ_LIMIT');
+      const text=fs.readFileSync(file,'utf8');if(Buffer.byteLength(text)>16*1024*1024)throw Error('RECENT_CANDLE_READ_LIMIT');
+      const recent=JSON.parse(text),stamp=Date.parse(recent.updatedAt);
+      if(recent.contract!=='daytrade-recent-candle-cache-v1'||!Array.isArray(recent.candles)||recent.candles.length>6000||recent.count!==recent.candles.length||recent.full_history_complete!==false||!Number.isFinite(stamp)||stamp>now.getTime()||tradeDate(new Date(stamp))!==date)throw Error('RECENT_CANDLE_CONTRACT_INVALID');
+      const {mapNaturalCandle}=require('../lib/daytrade-fast-candle-row');
+      const rows=recent.candles.map(c=>mapNaturalCandle(c,{tradeDate:date,nowMs:now.getTime(),maxSeenAgeMs:Infinity})).filter(Boolean).map(row=>({...row,source_channel:'candles',candle_origin:'websocket_candle',websocket_row:true,rest_repair_row:false,intraday_odd_lot:false,payload:{...row.payload,cacheUpdatedAt:recent.updatedAt}}));
+      const deltaStore=require('../lib/daytrade-candle-delta'),checkpointPath=path.join(RUNTIME,'state','daytrade-fast-candle-delta.json');
+      let checkpoint;try{checkpoint=JSON.parse(readText(checkpointPath));}catch{checkpoint=null;}
+      const delta=deltaStore.selectDelta(rows,checkpoint,{tradeDate:date,target:URL+'/fugle_daytrade_intraday_1m',nowMs:now.getTime()});
+      const plan=require('../lib/daytrade-fast-write-plan.cjs').plan(delta.pending,{nowMs:now.getTime()});
+      Object.assign(result,{scope:'quotes_and_recent_candles',candles_processed:true,candle_cache_updated_at:recent.updatedAt,candle_cache_age_ms:now.getTime()-stamp,candle_rows:rows.length,candle_rejected_or_not_due:recent.candles.length-rows.length,candle_selected:plan.rows.length,candle_deferred:plan.deferred,candles_written:0});
+      if(APPLY){let acknowledged=delta.checkpoint;result.candles_written=await upsert('fugle_daytrade_intraday_1m',plan.rows,'symbol,candle_time',batch=>{
+        const next=deltaStore.acknowledge(acknowledged,batch);fs.mkdirSync(path.dirname(checkpointPath),{recursive:true});const temporary=checkpointPath+'.'+process.pid+'.tmp';fs.writeFileSync(temporary,JSON.stringify(next),'utf8');fs.renameSync(temporary,checkpointPath);acknowledged=next;
+      },canPublish,Date.now()+12000);}
+    }
     if (APPLY) await publishQuotes(result);
     // Do not overwrite the complete quote+candle sync receipt with a quote-only result.
     return result;

@@ -8969,15 +8969,22 @@ async function tick() {
   let sharedWaterCadence = {status:'DISABLED',natural_acceptance:false};
   const cadenceSeconds=Number(process.env.FUMAN_SHARED_WATER_CADENCE_SECONDS||0);
   if(APPLY&&!DRY_RUN&&process.env.FUMAN_SHARED_WATER_ACCEPTANCE==='1'&&cadenceSeconds!==0){
+    // Keep this quote-only tail bounded. A longer session requires concurrent
+    // existing minute publication; extending this tail alone would starve K.
     if(!Number.isInteger(cadenceSeconds)||cadenceSeconds<60||cadenceSeconds>90||MAX_RUN_SECONDS<=0){
       sharedWaterCadence={status:'BLOCKED',first_blocker:'CADENCE_TIME_BUDGET_CONFIG_INVALID',natural_acceptance:false};
+    }else if(SHARED_WATER_PROCESS_STARTED_AT+MAX_RUN_SECONDS*1000-Date.now()<cadenceSeconds*1000+10000){
+      sharedWaterCadence={status:'BLOCKED',first_blocker:'CADENCE_PROCESS_TIME_BUDGET_INSUFFICIENT',natural_acceptance:false};
     }else{
       const quoteLedger=require('../lib/mother-shared-water-quote-ledger.cjs').createLedger({tradeDate:taipeiDate(),writerRunId:writerTickIdentity.writer_run_id,target:new URL('/rest/v1/fugle_daytrade_quotes_live',SUPABASE_URL).href});
       sharedWaterCadence=await require('../lib/mother-shared-water-cadence.cjs').runWindow({
         deadline:Math.min(Date.now()+cadenceSeconds*1000,SHARED_WATER_PROCESS_STARTED_AT+MAX_RUN_SECONDS*1000-10000),
         canPublish:sharedWaterGuard,
+        maxRounds:100,
+        operationBudgetMs:75000,
+        prepareRound:require('../lib/mother-shared-water-writer-guard.cjs').createLeasePreparation({backoffFile:runtimePath('state','writer-database-backoff.json'),lease:()=>writerLease,tradeDate:taipeiDate(),renew:ensureWriterLease}),
         previousValidUntil:finalWaterRefresh.shared_water_acceptance?.valid_until,
-        run:()=>require('./sync-daytrade-websocket-supabase-fast.js').runFastSync({...sharedWaterHooks,quotesOnly:true,canPublish:sharedWaterGuard,quoteLedger}),
+        run:()=>require('./sync-daytrade-websocket-supabase-fast.js').runFastSync({...sharedWaterHooks,quotesOnly:true,recentCandles:true,canPublish:sharedWaterGuard,quoteLedger}),
         onFailure:error=>{
           require('./writer-database-backoff.cjs').failure(runtimePath('state','writer-database-backoff.json'),String(error?.message||error));
           // A successful outer round must not reset cooldown after this failure.

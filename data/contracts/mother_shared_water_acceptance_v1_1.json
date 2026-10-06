@@ -13,7 +13,16 @@
     "snapshot_membership_is_separate": true,
     "producer_grade_is_not_scope_acceptance": true
   },
-  "identity": ["trade_date", "canonical_run_id", "mother_pool_run_id", "writer_run_id", "generation", "snapshot_sequence", "verification_run_id", "producer_version"],
+  "identity": [
+    "trade_date",
+    "canonical_run_id",
+    "mother_pool_run_id",
+    "writer_run_id",
+    "generation",
+    "snapshot_sequence",
+    "verification_run_id",
+    "producer_version"
+  ],
   "verification_run_id_rule": "Unique per frozen publication: shared-water:<SHA256 writer_run_id UTF-8>:<UUID>. Exact-run readback reuses that ID. Consumers obtain a same-scope pointer using externally pinned expectedIdentity; deriving the ID from writer_run_id alone is invalid. Discovery is implemented but not deployed.",
   "hashes": {
     "requested_symbols_sha256": "SHA256 of UTF-8 JSON.stringify(unique full-priority symbols sorted in ASCII order)",
@@ -37,10 +46,27 @@
     "expired_readback": "persistence may be COMMITTED but water_gate_pass must be false"
   },
   "proofs": {
-    "common": ["verified", "raw_hash_verified", "identity_verified"],
-    "FRESH": ["native_event_verified", "publication_verified"],
-    "NO_NEW_TRADE": ["native_latest_verified", "pipeline_caught_up", "subscription_generation_verified", "continuity_verified", "no_new_trade_verified"],
-    "limitations": ["native observations do not prove absence of provider-side packet loss", "bounded missing heartbeat/history fails closed", "FRESH does not claim that newer events cannot have arrived after the published event"]
+    "common": [
+      "verified",
+      "raw_hash_verified",
+      "identity_verified"
+    ],
+    "FRESH": [
+      "native_event_verified",
+      "publication_verified"
+    ],
+    "NO_NEW_TRADE": [
+      "native_latest_verified",
+      "pipeline_caught_up",
+      "subscription_generation_verified",
+      "continuity_verified",
+      "no_new_trade_verified"
+    ],
+    "limitations": [
+      "native observations do not prove absence of provider-side packet loss",
+      "bounded missing heartbeat/history fails closed",
+      "FRESH does not claim that newer events cannot have arrived after the published event"
+    ]
   },
   "draft_endpoints": {
     "base": "https://cpmpfhbzutkiecccekfr.supabase.co/rest/v1/rpc/",
@@ -54,7 +80,9 @@
     "reader_role": "anon",
     "publisher_role": "service_role in existing Writer only",
     "consumer_loader": "lib/mother-shared-water-remote-evidence.cjs:loadArchive",
-    "endpoint_deployment_verified": false
+    "endpoint_deployment_verified": false,
+    "consumer_expected_builder": "lib/mother-shared-water-consumer.cjs:expectedFromSource({sourceStatus,snapshotBytes,tradeDate,producerVersion}); sourceStatus is independently read source_status row; snapshotBytes are exact independently read complete Snapshot bytes; producerVersion comes from approved release configuration, never the receipt.",
+    "consumer_verified_reader": "lib/mother-shared-water-consumer.cjs:readVerified({url,key,expected,now,fetchImpl}); discovers only the pinned scope, independently verifies native evidence, does not grant scan-ready or entry."
   },
   "limits": {
     "database_logical_payload_budget_bytes": 536870912,
@@ -70,7 +98,7 @@
   },
   "gates": {
     "water_available_threshold": 0.95,
-    "strategy3_required_k_threshold": 0.90,
+    "strategy3_required_k_threshold": 0.9,
     "water_pass_grants_scan_ready": false,
     "water_pass_grants_entry_permission": false,
     "strategy3_formal_reader_switched": false

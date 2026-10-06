@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('node:assert/strict'),{buildRecent}=require('../lib/daytrade-recent-candle-cache.cjs');
+const rows=Array.from({length:20},(_,i)=>({code:'1216',candleTime:new Date(Date.parse('2026-10-06T01:00:00Z')+60000*i).toISOString(),volume:i,synthetic:i===19,source:'original',payload:{serial:i},candleSeenAt:'2026-10-06T02:00:00Z'}));
+const cache={updatedAt:'2026-10-06T02:00:00Z',source:'existing',channel:'websocket:candles',candles:rows};
+const result=buildRecent(cache);assert.equal(result.count,3);assert.deepEqual(result.candles,rows.slice(-3).reverse());assert.equal(result.candles[0].synthetic,true);assert.equal(result.full_history_complete,false);assert.equal(result.historical_revisions_included,false);
+result.candles[0].payload.serial=0;assert.equal(rows[19].payload.serial,19);
+assert.equal(buildRecent({...cache,candles:[]}).count,0);
+assert.throws(()=>buildRecent(cache,{maxBytes:10}),/BYTE_LIMIT/);
+assert.throws(()=>buildRecent({...cache,candles:[...rows,{...rows[19]}]}),/DUPLICATE/);
+assert.throws(()=>buildRecent({...cache,candles:[...rows,{...rows[0],code:'2330'}]},{maxSymbols:1}),/SYMBOL_LIMIT/);
+assert.throws(()=>buildRecent({...cache,candles:[{code:'bad'}]}),/IDENTITY/);
+console.log(JSON.stringify({ok:true,cases:7,mode:'isolated_existing_cache_projection',runtime_connected:false}));
