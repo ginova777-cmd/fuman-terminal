@@ -526,7 +526,7 @@
       '<h3>策略比較</h3><div class="ubt-scroll"><table><thead><tr><th>策略／版本／類型</th><th>方向／持有期／規則</th><th>勝率（成功／分母）</th><th>覆蓋率</th><th>MFE／MAE 平均</th><th>Targets 達標數／分母</th></tr></thead><tbody>'+groups.map(g=>'<tr><td>'+esc(g.strategy_id)+'<br>'+esc(g.version)+'<br>'+esc(g.type)+'</td><td>'+esc(g.direction)+' / '+esc(g.horizon)+'<br>'+esc(g.rule)+'</td><td>'+pct(g.rate)+' ('+g.wins+'/'+g.denominator+')</td><td>'+pct(g.coverage)+'</td><td>'+num(g.MFE)+' / '+num(g.MAE)+'</td><td>'+Object.entries(g.targets).map(([k,t])=>esc(k)+'%：'+t.wins+'/'+t.total).join('<br>')+'</td></tr>').join('')+'</tbody></table>'+(groups.length?'':'<p>這組條件尚無訊號；不是 0% 勝率。</p>')+'</div>'+
       (research.length?'<h3>研究觀察結果（未驗證行情）</h3><p>假設當日開盤價進場、收盤方向判定；不是成交紀錄或已驗證策略勝率。原始日K最終性與當時可用性尚未確認。</p>'+research.map(g=>'<p>'+esc(g.strategy)+'／'+esc(g.direction)+'：方向符合率 '+pct(g.rate)+'（'+g.hits+'/'+g.n+'）；平均 MFE '+num(g.MFE)+'、MAE '+num(g.MAE)+'</p>').join(''):'')+
       '<h3>逐筆訊號</h3><p>共 '+(server?data.total:rows.length)+' 筆 · 第 '+(page+1)+' / '+pages+' 頁 <button type="button" data-page="prev" '+(page===0?'disabled':'')+'>上一頁</button> <button type="button" data-page="next" '+(page===pages-1?'disabled':'')+'>下一頁</button></p>'+visible.map(s=>'<details '+(server?'data-signal="'+esc(s.signal_id)+'"':'')+'><summary>'+esc(s.signal_date)+' · '+esc(s.symbol)+' · '+esc(s.strategy_id)+' · '+esc(s.outcome?.status||'PENDING')+'</summary><pre>'+esc(signalText(s))+'</pre></details>').join('')+
-      '<h3>接線狀態</h3>'+data.strategies.filter(s=>model.isActiveStrategy(s.id)&&(!state.strategy||s.id===state.strategy)).map(s=>'<p><strong>'+esc(s.name)+'</strong> · '+(data.signals.some(row=>row.strategy_id===s.id)?'本次查詢有紀錄':'本次查詢無紀錄')+'</p>').join('')+
+      '<h3>接線狀態</h3>'+data.strategies.filter(s=>model.isActiveStrategy(s.id)&&(!state.strategy||s.id===state.strategy)).map(s=>'<p><strong>'+esc(s.name)+'</strong> · '+(groups.some(group=>group.strategy_id===s.id&&group.total>0)?'本次查詢有紀錄':'本次查詢無紀錄')+'</p>').join('')+
       '<p>以下列出本頁逐筆缺口；統計仍使用全部篩選結果。</p>'+visible.filter(s=>!s.eligible||s.outcome?.status!=='COMPLETE').map(s=>'<p>'+esc(s.symbol)+'：'+(s.outcome?.status==='DATA_MISSING'?'缺少行情':s.outcome?.status==='PENDING'?'待結算':'尚未符合正式計分條件')+'</p>').join('');
   }
   let requestNumber=0;
@@ -1472,6 +1472,7 @@ async function load(date = "") {
       return;
     }
     byId("subtitle").textContent = "成績單資料暫時無法讀取";
+    byId("performanceEvaluation").textContent = "成績單績效暫時無法讀取，請稍後重新整理。";
     byId("rows").innerHTML = `<tr><td colspan="13" class="empty">${esc(error.message || error)}</td></tr>`;
   }
 }
