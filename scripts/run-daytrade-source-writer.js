@@ -5192,6 +5192,7 @@ async function fetchQuoteBatch(symbols) {
 
 function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dailyVolumeMap, intradayMap, futoptRows, websocketFutoptSync = {}, opening0901Evidence = {}, fetchResult, state, supplementalMaps = {} }) {
   const phase = phaseNow();
+  const offSession = ["closed_before_0600", "after_daytrade_window"].includes(phase);
   const tradeDate = taipeiDate();
   const canonicalRunId = canonicalDaytradeRunId(tradeDate);
   const warmupDataFillActive = taipeiMinutes() >= PREOPEN_WARMUP_START_MINUTES;
@@ -5576,7 +5577,6 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const motherPoolReasonlessRows = priorityRows.filter((row) => !Array.isArray(row.poolReasons) || row.poolReasons.length === 0);
   const stockFutureInitialRows = [...(supplementalMaps.stockFutureInitialMap || new Map()).values()];
   const stockGroupMeta = supplementalMaps.stockGroupContractMap?.meta || { source: "missing", rows: 0 };
-  const offSession = ["closed_before_0600", "after_daytrade_window"].includes(phase);
   const formalEntryWindow = !offSession && after0900;
   const openingBoostActive = ["opening_boost_0845_0859", "opening_detection_0900_0934"].includes(phase)
     && quoteFetchAllowedForPhase(phase)
