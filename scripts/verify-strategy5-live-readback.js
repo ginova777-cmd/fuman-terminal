@@ -59,7 +59,7 @@ async function main() {
       for (const frame of ['daily', 'hourly60']) {
         const stored = row.payload.technicalTrend[frame], now = actual[frame];
         if (frame === 'daily') assert(stored.lastBarTime === now.lastBarTime && stored.previousBarTime === now.previousBarTime && now.trendUp, 'daily source date mismatch');
-        if (stored.available && now.available) for (const field of ['kdK','kdD','kdPrevK','kdPrevD','rsi3','rsi6','rsi3Prev','rsi6Prev']) assert(Math.abs(stored[field] - now[field]) < 1e-7, 'fresh indicator mismatch ' + row.code + ':' + field);
+        if (stored.available && now.available) for (const field of ['kdK','kdD','kdPrevK','kdPrevD','rsi5','rsi15','rsi5Prev','rsi15Prev']) assert(Math.abs(stored[field] - now[field]) < 1e-7, 'fresh indicator mismatch ' + row.code + ':' + field);
       }
     }
     const visible = api.buildPayload(rows, run).matches;

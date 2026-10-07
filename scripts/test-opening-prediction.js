@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),os=require('os'),path=require('path');
 const {VERSION,indicators,completeHours,predict}=require('../lib/opening-prediction');
 const {verify}=require('./verify-opening-prediction');
-const ind={version:VERSION,available:true,k:70,d:65,rsi:60,rsi3:60,rsi6:60,previous_rsi3:55,previous_rsi6:55,previous_k:65,previous_d:60,previous_rsi:55,kd_rsi_up:true};
+const ind={version:VERSION,available:true,k:70,d:65,rsi:60,rsi5:60,rsi15:60,previous_rsi5:55,previous_rsi15:55,previous_k:65,previous_d:60,previous_rsi:55,kd_rsi_up:true};
 const source={daily_indicators:ind,hourly_indicators:ind};
 const slots=['0845','0850'].map(s=>({capture_slot:s,present:true,is_trial:true,natural_schedule_evidence:true,trial_price_source:'fugle_native_trial',has_trial_price:true,trial_price:103,trial_change_pct:3,trial_event_at:`2026-09-11T00:${s.slice(2)}:00Z`}));
 test('long requires strategies, two indicator periods and both native trials',()=>{
@@ -24,7 +24,7 @@ test('missing indicator differs from a non-up indicator',()=>{
  const down=predict({...source,hourly_indicators:{...ind,kd_rsi_up:false}},{slots},null,['s']);
  assert.equal(down.data_gaps.length,0);assert.equal(down.rejections.length,1);
 });
-test('KD uses OHLC range, rolling RSI3/6 and rejects insufficient warmup',()=>{
+test('KD uses OHLC range, rolling RSI5/15 and rejects insufficient warmup',()=>{
  assert.equal(indicators(Array(7).fill({high:11,low:9,close:10})).available,false);
  const i=indicators(Array(30).fill({high:12,low:8,close:10}));
  assert.equal(i.k,50);assert.equal(i.d,50);assert.equal(i.rsi,50);assert.equal(i.kd_rsi_up,false);

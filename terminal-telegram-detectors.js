@@ -34,7 +34,7 @@
    for(const text of [display,symbol,labels[e.event_type]||e.event_type,Number.isFinite(ratio)?ratio.toFixed(2)+'×':'缺資料',gateText,replay?'回放未發送':delivery?.status==='delivered'?`${delivery.confirmed_count}/${delivery.target_count} 已交付`:gate?.eligible===false?'不發送':'未確認']){const c=tr.insertCell();c.textContent=text;c.style.padding='4px 10px 4px 0';}
   }body.append(table);
  }
- async function load(){if(loading||loaded)return;loading=true;body.textContent='正在讀取三偵測器資料…';try{const run=new URLSearchParams(location.search).get('telegram-run'),r=await fetch('/api/telegram-detectors'+(run?'?run='+encodeURIComponent(run):''),{cache:'no-store'});if(r.status===401||r.status===403){body.replaceChildren();body.textContent='請登入已開通權限的會員帳號後查看';return;}if(!r.ok)throw Error('資料暫時無法讀取');const p=await r.json();paint(p);loaded=true;}catch{paint({status:'blocked',first_blocker:'三偵測器資料無法讀取',events:[]});}finally{loading=false;}}
+ async function load(){if(loading||loaded)return;loading=true;body.textContent='正在讀取三偵測器資料…';try{const run=new URLSearchParams(location.search).get('telegram-run'),r=await fetch('/api/telegram-detectors'+(run?'?run='+encodeURIComponent(run):''),{cache:'no-store'});const p=await r.json();paint(p);loaded=true;}catch{paint({status:'blocked',first_blocker:'三偵測器資料無法讀取',events:[]});}finally{loading=false;}}
  box.addEventListener('toggle',()=>{if(box.open)load();});
  if(new URLSearchParams(location.search).get('telegram-audit')==='1'){box.open=true;load();}
 })();

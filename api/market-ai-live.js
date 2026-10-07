@@ -1719,20 +1719,6 @@ function withMarketAiRunTimeSourceSnapshot(payload, clock = taipeiClock(), sessi
 }
 
 module.exports = async function handler(request, response) {
-  const {verifyRequestEntitlement}=require('../lib/server-entitlement-guard');
-  const member=await verifyRequestEntitlement(request,{scope:'scorecard'});
-  if(!member.ok && String(request.query?.briefingOnly || '')==='1') {
-    response.setHeader('Cache-Control','private, no-store');
-    response.setHeader('CDN-Cache-Control','no-store');
-    response.setHeader('Vercel-CDN-Cache-Control','no-store');
-    return response.status(member.status||403).json({ok:false,protected:true,error:member.error});
-  }
-  // The general market overview stays public; the embedded morning report does not.
-  if(!member.ok){
-    const json=response.json.bind(response);
-    const redact=value=>Array.isArray(value)?value.map(redact):value&&typeof value==='object'?Object.fromEntries(Object.entries(value).filter(([key])=>key!=='openingMorningReport').map(([key,v])=>[key,redact(v)])):value;
-    response.json=payload=>json(redact(payload));
-  }
   const requestedMorningStage = String(request.query?.morningStage || "");
   if (requestedMorningStage && !["us_0820", "asia_0850"].includes(requestedMorningStage)) { response.status(400).json({ok:false,reason_code:"morning_stage_invalid"}); return; }
   const clock = taipeiClock();
