@@ -17,6 +17,12 @@ const {
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const readTxfReference = require('../lib/futopt-txf-reference.cjs').createReader(RUNTIME_DIR);
 const txfCandlePipeline = require('../lib/txf-candle-pipeline.cjs').createPipeline({runtime:RUNTIME_DIR,readJson,writeJson});
+const {createControl,hash:stopHash} = require('../lib/futopt-graceful-shutdown.cjs');
+let shutdown, activeSocket=null, acceptedWriteError=null;
+const backgroundWork=new Set(),savedCaches=new Map();
+const acceptedBoundary={events:0,quotes:0,candles:0,last_event:null};
+function track(promise){backgroundWork.add(promise);promise.then(()=>backgroundWork.delete(promise),()=>backgroundWork.delete(promise));return promise;}
+function saveCache(file,payload){writeJson(file,payload);savedCaches.set(file,payload);}
 const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
 ];
@@ -178,7 +184,7 @@ function mergeQuotes(newQuotes) {
   }
   for (const quote of newQuotes) bySymbol.set(quote.future_symbol, quote);
   const quotes = [...bySymbol.values()].sort((a, b) => a.future_symbol.localeCompare(b.future_symbol));
-  writeJson(FUGLE_FUTOPT_WS_QUOTES_FILE, {
+  saveCache(FUGLE_FUTOPT_WS_QUOTES_FILE, {
     source: "fugle-futopt-websocket-streaming",
     channel: `websocket:${STREAMING_CHANNELS.join(",")}`,
     channels: STREAMING_CHANNELS,
@@ -206,7 +212,7 @@ function mergeCandles(newCandles) {
     if (bySymbol) return bySymbol;
     return Date.parse(a.candle_time || "") - Date.parse(b.candle_time || "");
   });
-  writeJson(FUGLE_FUTOPT_WS_CANDLES_FILE, {
+  saveCache(FUGLE_FUTOPT_WS_CANDLES_FILE, {
     source: "fugle-futopt-websocket-streaming",
     channel: "websocket:candles",
     updatedAt: nowIso(),
@@ -385,10 +391,11 @@ async function mirrorFormalFutoptLive() {
 }
 
 function scheduleFormalFutoptLiveMirror() {
+  if(shutdown?.quiescing)return;
   if (formalLiveMirrorInFlight || Date.now() - lastFormalLiveMirrorAt < FORMAL_LIVE_MIRROR_MS) return;
   lastFormalLiveMirrorAt = Date.now();
   formalLiveMirrorInFlight = true;
-  mirrorFormalFutoptLive()
+  track(mirrorFormalFutoptLive()
     .catch((error) => writeJson(FORMAL_LIVE_MIRROR_RECEIPT_FILE, {
       contract: "fugle_daytrade_futopt_formal_live_mirror_v1",
       checked_at: nowIso(),
@@ -396,7 +403,7 @@ function scheduleFormalFutoptLiveMirror() {
       first_blocker: "futopt_formal_live_mirror_exception",
       error: error?.message || String(error),
     }))
-    .finally(() => { formalLiveMirrorInFlight = false; });
+    .finally(() => { formalLiveMirrorInFlight = false; }));
 }
 async function run() {
   const apiKey = readSecret(API_KEY_FILES);
@@ -407,11 +414,13 @@ async function run() {
 
   let txfConnectionCount = 0;
   const archiveTimer = setInterval(() => {
+    if(shutdown.quiescing){clearInterval(archiveTimer);return;}
     try { txfCandlePipeline.flush(); } catch { console.error('TXF_ARCHIVE_STATUS_WRITE_FAILED'); }
   }, 30000);
   archiveTimer.unref();
-  process.once('SIGINT', () => { try { txfCandlePipeline.flush(true); } finally { process.exit(0); } });
-  process.once('SIGTERM', () => { try { txfCandlePipeline.flush(true); } finally { process.exit(0); } });
+  for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{
+    void shutdown.request({...shutdown.identity,request_id:require('node:crypto').randomUUID(),requested_at:nowIso(),signal}).catch(e=>console.error('STOP_REQUEST_REJECTED:'+e.message));
+  });
 
   const runOnce = () => new Promise((resolve) => {
     lastMessageAt = '';
@@ -515,11 +524,11 @@ async function run() {
     };
 
     const refreshPendingCatalogue = async () => {
-      if (formalCatalogue || catalogueRefreshInFlight || closed) return;
+      if (shutdown.quiescing || formalCatalogue || catalogueRefreshInFlight || closed) return;
       catalogueRefreshInFlight = true;
       try {
-        const result = await refreshCatalogue({runtime:RUNTIME_DIR,tradeDate:catalogueDate(),asOf:nowIso(),key:apiKey});
-        if (closed) return;
+        const result = await track(refreshCatalogue({runtime:RUNTIME_DIR,tradeDate:catalogueDate(),asOf:nowIso(),key:apiKey}));
+        if (closed || shutdown.quiescing) return;
         if (result.status === 'ready') {
           formalCatalogue = result.catalogue;
           catalogueWait = null;
@@ -530,7 +539,7 @@ async function run() {
     };
 
     const subscribe = async () => {
-      if (!ws || ws.readyState !== WebSocket.OPEN || !authenticated) return;
+      if (shutdown.quiescing || !ws || ws.readyState !== WebSocket.OPEN || !authenticated) return;
       if (!formalCatalogue) { void refreshPendingCatalogue(); return; }
       if(formalCatalogue?.trade_date!==catalogueDate()){ws.close(1000,'catalogue day changed');return;}
       selection = selectStreamingTickers();
@@ -550,13 +559,14 @@ async function run() {
       txfCandlePipeline.configure(reference ? {symbol:reference.future_symbol,tradeDate:reference.trade_date,session:STREAMING_AFTER_HOURS === true ? 'AFTERHOURS' : 'REGULAR'} : null);
       if (!candleRecoveryStarted) {
         candleRecoveryStarted = true;
-        void txfCandlePipeline.recoverOnConnection(apiKey, txfConnectionCount++ === 0 ? 'STARTUP' : 'RECONNECT');
+        void track(txfCandlePipeline.recoverOnConnection(apiKey, txfConnectionCount++ === 0 ? 'STARTUP' : 'RECONNECT'));
       }
       tickerBySymbol.clear();
       selection.selectedRows.forEach((row) => tickerBySymbol.set(row.future_symbol, row));
       cycles += 1;
       for (const channel of STREAMING_CHANNELS) {
         for (const symbols of chunks) {
+          if(shutdown.quiescing)return;
           ws.send(JSON.stringify(buildSubscribeMessage(channel, symbols)));
           chunksSent += 1;
           await delay(STREAMING_SUBSCRIBE_PACE_MS);
@@ -567,13 +577,16 @@ async function run() {
 
     try {
       ws = new WebSocket(STREAMING_URL);
+      activeSocket=ws;
       ws.addEventListener("open", () => {
+        if(shutdown.quiescing){ws.close();return;}
         openedAt = nowIso();
         ws.send(JSON.stringify({ event: "auth", data: { apikey: apiKey } }));
         // Subscription begins only after the explicit authenticated event.
         writeStreamingStatus();
       });
       ws.addEventListener("message", (event) => {
+        if(shutdown.quiescing)return;
         messages += 1;
         let payload = null;
         try { payload = JSON.parse(String(event.data || "")); } catch {}
@@ -601,6 +614,9 @@ async function run() {
         const futureSymbol = normalizeFutureSymbol(data.symbol || data.future_symbol);
         const ticker = tickerBySymbol.get(futureSymbol) || null;
         if (!formalCatalogue || !ticker) return;
+        acceptedBoundary.events++;
+        acceptedBoundary.last_event={symbol:futureSymbol,channel:inferredChannel,time:data.date||data.time||data.lastUpdated||null,serial:data.serial??null};
+        try {
         if (inferredChannel === "candles") {
           txfCandlePipeline.receive(payload);
           const candle = normalizeFutoptCandle(payload, ticker);
@@ -608,6 +624,7 @@ async function run() {
             candleMessages += 1;
             lastMessageAt = nowIso();
             mergeCandles([candle]);
+            acceptedBoundary.candles++;
           }
           return;
         }
@@ -616,7 +633,9 @@ async function run() {
           quoteMessages += 1;
           lastMessageAt = nowIso();
           mergeQuotes([quote]);
+          acceptedBoundary.quotes++;
         }
+        }catch(e){acceptedWriteError=acceptedWriteError||e.message;console.error('FUTOPT_ACCEPTED_CACHE_SAVE_FAILED');}
       });
       ws.addEventListener("error", (event) => {
         writeStreamingStatus({ ok: false, websocketError: event?.message || "websocket_error" });
@@ -627,7 +646,7 @@ async function run() {
         resolve();
       });
       const statusTimer = setInterval(() => {
-        if (closed) {
+        if (closed || shutdown.quiescing) {
           clearInterval(statusTimer);
           return;
         }
@@ -641,7 +660,7 @@ async function run() {
         }
       }, STREAMING_STATUS_MS);
       const subscribeTimer = setInterval(() => {
-        if (closed) clearInterval(subscribeTimer);
+        if (closed || shutdown.quiescing) clearInterval(subscribeTimer);
         else subscribe();
       }, STREAMING_RESUBSCRIBE_MS);
     } catch (error) {
@@ -658,10 +677,11 @@ async function run() {
     writeState: value => writeJson(catalogueRetryFile, value),
   });
   let reconnectDelayMs = STREAMING_RECONNECT_INITIAL_MS;
-  while (true) {
+  while (!shutdown.quiescing) {
     const runStartedAt = Date.now();
     try {
-      const catalogueResult = await refreshCatalogue({runtime:RUNTIME_DIR,tradeDate:catalogueDate(),asOf:nowIso(),key:apiKey});
+      const catalogueResult = await track(refreshCatalogue({runtime:RUNTIME_DIR,tradeDate:catalogueDate(),asOf:nowIso(),key:apiKey}));
+      if(shutdown.quiescing)return;
       if (catalogueResult.status !== 'ready') {
         formalCatalogue = null;
         catalogueWait = catalogueResult.receipt;
@@ -679,6 +699,25 @@ async function run() {
   }
 }
 
+shutdown=createControl({runtime:RUNTIME_DIR,entry:__filename,
+  pending:()=>txfCandlePipeline.pendingState(),
+  quiesce:()=>{txfCandlePipeline.quiesce();if(activeSocket){try{activeSocket.close(1000,'controlled shutdown');}catch{}}},
+  boundary:()=>({...acceptedBoundary}),
+  save:async()=>{
+    while(backgroundWork.size)await Promise.allSettled([...backgroundWork]);
+    const archive=await txfCandlePipeline.stopAndVerify();
+    if(acceptedWriteError)throw Error('ACCEPTED_CACHE_WRITE_FAILED:'+acceptedWriteError);
+    const caches=[];
+    for(const [file,expected] of savedCaches){
+      const fd=fs.openSync(file,'r+');try{fs.fsyncSync(fd);}finally{fs.closeSync(fd);}
+      const bytes=fs.readFileSync(file),actual=JSON.parse(bytes);
+      if(stopHash(JSON.stringify(actual))!==stopHash(JSON.stringify(expected)))throw Error('FUTOPT_STOP_CACHE_READBACK_MISMATCH');
+      caches.push({file,bytes:bytes.length,sha256:stopHash(bytes),payload_sha256:stopHash(JSON.stringify(expected)),count:expected.count,updatedAt:expected.updatedAt});
+    }
+    return {...archive,caches,preservation_scope:'accepted local cache and TXF archive; not DB mirror acceptance'};
+  }
+});
+shutdown.start();
 writeStatus({ starting: true });
 run().catch((error) => {
   writeStatus({ ok: false, error: error?.message || String(error) });

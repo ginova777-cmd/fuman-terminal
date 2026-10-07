@@ -21,9 +21,10 @@ const readJson=(file,fallback)=>{try{return JSON.parse(fs.readFileSync(file,'utf
 const writeJson=(file,value)=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify(value));};
 const ticker={future_symbol:'TXFJ6',product:'TXF',underlying_symbol:'TXF',end_date:'2026-10-21'};
 function localRequire(name){
+ if(name==='../lib/futopt-graceful-shutdown.cjs')return {createControl:()=>({quiescing:false,start(){}})};
  if(name==='fs')return {...fs,readFileSync:(file,...args)=>String(file).endsWith('fugle-api-key.txt')?'test-only':fs.readFileSync(file,...args)};
  if(name==='../lib/server-supabase-key')return {serverSupabaseKey:()=>'',serverSupabaseUrl:()=>''};
- if(name==='../lib/mother-pool-futures-catalogue')return {refresh:async()=>{catalogueRequests++;if(!catalogueReady)throw Object.assign(Error('FUTURES_CATALOGUE_PROVIDER_DATE_PENDING'),{providerIdentity:{date:'2026-10-01'}});return {trade_date:'2026-10-02',run_id:'test'};}};
+ if(name==='../lib/stock-future-standard-runtime.cjs')return {resolve:()=>({resolutions:[]}),refresh:async()=>{catalogueRequests++;if(!catalogueReady)throw Object.assign(Error('FUTURES_CATALOGUE_PROVIDER_DATE_PENDING'),{providerIdentity:{date:'2026-10-01'}});return {trade_date:'2026-10-02',run_id:'test'};}};
  if(name==='../lib/futopt-catalogue-retry.cjs')return {createCatalogueRetry:options=>realRequire(name).createCatalogueRetry({...options,now:()=>clock})};
  if(name==='../lib/futopt-collector-catalogue')return {build:()=>[ticker]};
  if(name==='../lib/futopt-txf-reference.cjs')return {createReader:()=>()=>({txf_reference:{future_symbol:'TXFJ6',trade_date:'2026-10-02'}})};
@@ -36,7 +37,7 @@ function localRequire(name){
  return realRequire(name);
 }
 (async()=>{
- vm.runInNewContext(fs.readFileSync(script,'utf8'),{require:localRequire,console,Date:ClockDate,Intl,WebSocket:Socket,AbortController,process:{pid:1,env:{FUMAN_RUNTIME_DIR:runtime},once(){},exit(){throw Error('unexpected exit');}},setInterval:(fn,ms)=>{const timer={fn,ms,unref(){}};intervals.push(timer);return timer;},clearInterval(){},setTimeout:fn=>{queueMicrotask(fn);return 1;},clearTimeout(){}});
+ vm.runInNewContext(fs.readFileSync(script,'utf8'),{__filename:script,require:localRequire,console,Date:ClockDate,Intl,WebSocket:Socket,AbortController,process:{pid:1,env:{FUMAN_RUNTIME_DIR:runtime},once(){},on(){},exit(){throw Error('unexpected exit');}},setInterval:(fn,ms)=>{const timer={fn,ms,unref(){}};intervals.push(timer);return timer;},clearInterval(){},setTimeout:fn=>{queueMicrotask(fn);return 1;},clearTimeout(){}});
  await new Promise(setImmediate);assert.ok(socket);socket.emit('open');
  assert.equal(sent.filter(r=>r.event==='subscribe').length,0,'no pre-auth subscription');
  socket.emit('message',{event:'authenticated'});await new Promise(setImmediate);
