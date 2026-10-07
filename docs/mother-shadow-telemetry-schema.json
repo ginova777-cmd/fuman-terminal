@@ -1,0 +1,70 @@
+{
+  "contract": "mother-shadow-parent-telemetry-v1",
+  "format": "append-only JSONL monitoring events; not C2 Evidence",
+  "events": [
+    "DISPATCH",
+    "ORIGINAL_ACK",
+    "SAVE_RESULT",
+    "SAVE_FAILURE",
+    "EVIDENCE_TERMINAL",
+    "MONITOR_GAP",
+    "MONITOR_SESSION_END"
+  ],
+  "identity": {
+    "parent_id": "telemetry epoch + per-store UUID + monotonic dispatch ordinal; independent of optional evidence_parent_id",
+    "original_dispatch_identity": "session, original spool sequence, exact ordered spool_ids",
+    "epoch": "explicit monitor epoch; must match Evidence epoch when enabled"
+  },
+  "fields": {
+    "row_count": "original dispatched input rows including duplicates; not changed count nor cache total",
+    "parent_bytes": "sum original spool file bytes; null for direct input without measured bytes",
+    "started_at": "dispatch UTC wall time",
+    "finished_at": "save-result or later Evidence terminal observation UTC wall time; null when missing",
+    "rows_observed": "prefix observed by telemetry before stop; includes comparison-failure row",
+    "rows_compared": "successfully classified prefix",
+    "changed_events_observed": "INSERT+REVISE+QUALITY_CHANGE known prefix",
+    "duplicate_count": "semantic duplicate count in known prefix",
+    "transport_only_count": "subset of duplicate; transport fields differ",
+    "quality_change_count": "known prefix QUALITY_CHANGE count",
+    "revise_count": "known prefix REVISE count",
+    "insert_count": "known prefix INSERT count",
+    "capture_completed": "true only if all rows classified and observation/evidence capture not stopped",
+    "capture_stopped_at_ordinal": "zero-based first stop/failure position; null on complete",
+    "capture_stop_reason": "Evidence stop, monitoring budget, classification bound or error",
+    "unknown_remaining": "true if incomplete; no imputation of missing suffix",
+    "cache_write_started_at": "wall clock immediately before original cache write; null if no write",
+    "cache_write_finished_at": "wall clock after successful original cache write; null if failed/no write",
+    "cache_write_duration_ms": "monotonic duration original write; not full save or commit latency",
+    "ack_at": "owning spool host receives matching original ACK, before cleanup",
+    "ack_latency_ms": "monotonic dispatch-to-matched-host-ACK, includes IPC/worker queue/merge/write; never commit latency",
+    "evidence_mode": "OFF/ON/BYPASSED/BLOCKED at save result",
+    "dispatch_evidence_mode": "OFF/ON configured at dispatch, immutable comparison cohort; ON includes later blocked/bypassed",
+    "evidence_terminal_status": "RUNNING/PENDING_COMMIT/PARENT_COMPLETE/ZERO_CHANGE/OFF/BYPASSED/BLOCKED/FAILED; pending is not terminal",
+    "evidence_capture_duration_ms": "measured existing observe+seal calls only, distinct from observation_duration_ms",
+    "observation_duration_ms": "known count observer measured cost; cooperative budget, no preemption guarantee",
+    "evidence_continuity": "GAP/CONTINUITY_UNKNOWN for stopped/failed; otherwise no continuity claim"
+  },
+  "bounds": {
+    "counter_budget_ms": 2,
+    "classification_nodes": 4096,
+    "classification_depth": 16,
+    "classification_string_chars": 65536,
+    "classification_total_string_chars": 131072,
+    "sink_records_including_inflight": 256,
+    "sink_bytes": 1048576,
+    "record_bytes": 32768,
+    "terminal_tracking_parents": 2,
+    "sink_worker_oldgen_mib": 32,
+    "default_log_bytes": 16777216,
+    "max_configurable_log_bytes": 67108864,
+    "append_ack_timeout_ms": 2000
+  },
+  "durability": "background OS append, no per-parent fsync; abrupt termination/torn tail is monitor gap; external status must be included in acceptance",
+  "summary": "nearest-rank p=ceil(n*p)-1; n=0 gives null; parent n from DISPATCH once per identity; full and partial counts separate; missing terminal/end marker/sequence flags monitor_gap",
+  "prohibitions": [
+    "No inference from later cache",
+    "No Evidence contract or core changes",
+    "No DB/HTTP",
+    "No runtime auto enable"
+  ]
+}
