@@ -1,6 +1,10 @@
 const fs = require("fs");
 const https = require("https");
 const path = require("path");
+const rsiContractVerifier = require("../lib/verify-rsi-period-contract.cjs");
+// scan-institution-cache -> institution-technical-selection -> institution-daily-indicators.
+// This is local candidate authority, not API-supplied metadata or executable code.
+const rsiProducer = require("../lib/institution-daily-indicators.cjs");
 
 const ROOT = path.resolve(__dirname, "..");
 const EXPECTED_FIELD_CONTRACT_VERSION = "buy-sell-derived-fields-20260629-01";
@@ -112,6 +116,8 @@ async function captureInstitutionApiWithRetry(attempts = Number(process.env.FUMA
 }
 
 async function main() {
+  const authorityIssues = rsiContractVerifier.verifyAuthority(rsiProducer);
+  if (authorityIssues.length) throw new Error(authorityIssues.join(';'));
   requireIncludes("api/institution-latest.js", [
     `const INSTITUTION_FIELD_CONTRACT_VERSION = "${EXPECTED_FIELD_CONTRACT_VERSION}"`,
     "fieldContractVersion: INSTITUTION_FIELD_CONTRACT_VERSION",
@@ -167,6 +173,7 @@ async function main() {
     if (!Number.isInteger(total) || total < 0 || total > ready || total !== selection.resultCount || rows.length !== Math.min(60, total)) issues.push("institution selected result count mismatch");
     for (const row of rows) for (const frame of ["daily"]) {
       const t = row.technicalTrend?.[frame];
+      for (const error of rsiContractVerifier.verifyRow(t, rsiProducer)) issues.push(error + ':' + row.code + ':' + frame);
       if (row.technicalTrend?.pass !== true || !t || ![["kdK","kdPrevK"],["kdD","kdPrevD"],["rsi5","rsi5Prev"],["rsi15","rsi15Prev"]].every(([a,b]) => Number.isFinite(t[a]) && Number.isFinite(t[b]) && t[a] > t[b])) issues.push("institution daily trend missing:" + row.code + ":" + frame);
     }
   } else if (rows.length < MIN_ROWS) {

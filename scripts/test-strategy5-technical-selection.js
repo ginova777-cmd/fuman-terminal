@@ -1,7 +1,7 @@
 const assert = require('assert');
 const { evaluate } = require('../lib/strategy5-technical-selection');
 const date='2000-01-20';
-const bars=[100,102,101,103,102,104,103,105,104,106,105,112].map((close,i)=>({date:new Date(Date.UTC(2000,0,9+i)).toISOString().slice(0,10),high:close+2,low:close-2,open:close-1,close}));
+const bars=[90,92,91,93,92,94,93,95,94,96,95,97,96,98,97,99,98,100,99,101,100,112].map((close,i)=>({date:new Date(Date.UTC(2000,0,-1+i)).toISOString().slice(0,10),high:close+2,low:close-2,open:close-1,close}));
 const rows=Array.from({length:10},(_,i)=>({code:String(2300+i),name:'test',market:'上市',close:112,score:80,matches:[{id:'volume_turnover_breakout',score:80}]}));
 const sources=Object.fromEntries(rows.map(r=>[r.code,{daily:bars,hourly60:[],errors:[]}]));
 let result=evaluate(rows,sources,date);
@@ -20,7 +20,7 @@ console.log('PASS Strategy5 daily up required, optional 60m, unchanged base stra
 {
  const proof = require('../lib/strategy5-technical-selection');
  const assert = require('assert');
- const bars = Array.from({length:12},(_,i)=>({date:'2026-01-'+String(i+9).padStart(2,'0'),open:10+i,high:12+i,low:9+i,close:11+i}));
+ const bars = Array.from({length:18},(_,i)=>({date:'2026-01-'+String(i+3).padStart(2,'0'),open:10+i,high:12+i,low:9+i,close:11+i}));
  const candidate={code:'2330',name:'test',market:'TWSE',close:22,matches:[{id:'volume_turnover_breakout'}]};
  const evaluate=rows=>proof.evaluate([candidate],{'2330':{daily:rows,hourly60:[]}},'2026-01-20');
  assert.equal(evaluate([...bars,{date:'2026-01-03',open:null,high:null,low:null,close:null}]).selectionCoverage.dataCoverage,1,'weekend null placeholder is not a daily candle');

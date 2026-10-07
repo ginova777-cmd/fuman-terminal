@@ -1,4 +1,4 @@
-const { indicatorTrend: sharedTrend } = require("../lib/technical-indicators");
+const { indicatorTrend: sharedTrend } = require("../lib/technical-indicators-rsi515.cjs");
 const cache = new Map();
 const CACHE_MS = 30 * 60 * 1000;
 let tpexDailyCache = null;
@@ -923,9 +923,9 @@ function analyzeRows(rows) {
   const rsi6 = rsi(closes, 6);
   const rsi6Prev = rsi(closes.slice(0, -1), 6);
   const kd5 = kdSnapshot(normalizedRows, 5, 3);
-  const rsi36 = rsiCrossSnapshot(closes, 3, 6);
-  const sharedTechnical = sharedTrend(normalizedRows);
-  const dailyTechnicalGate = {...sharedTechnical, contract: "strategy4_daily_kd_rsi_bonus_v1", indicatorContract: sharedTechnical.contract, mode: "bonus_only", ok: true};
+  const rsi515 = rsiCrossSnapshot(closes, 5, 15);
+  const sharedTechnical = sharedTrend(normalizedRows,"1d");
+  const dailyTechnicalGate = {...sharedTechnical, contract: "strategy4_daily_kd_rsi515_bonus_v2", indicatorContract: sharedTechnical.contract, mode: "bonus_only", ok: true};
   const atr14 = atr(rows, 14);
   const wallet = walletSnapshot(normalizedRows);
   const lookback = normalizedRows.slice(-40);
@@ -980,7 +980,7 @@ function analyzeRows(rows) {
     rsi6,
     rsi6Prev,
     kd5,
-    rsi36,
+    rsi515,
     dailyTechnicalGate,
     atr14,
     wallet,
@@ -1164,7 +1164,7 @@ function scanStrategy4(code, market, rows, priceSource = "", recentVolumeBonus =
     id: "daily_kd_rsi_trend_up",
     short: "日KD/RSI",
     icon: daily.dailyTechnicalGate.kdGoldenCross || daily.dailyTechnicalGate.rsiGoldenCross ? "✦" : "↑",
-    reason: `日K KD(5,3)與RSI趨勢向上；KD K/D ${daily.dailyTechnicalGate.kdK}/${daily.dailyTechnicalGate.kdD}，RSI6 ${daily.dailyTechnicalGate.rsi6Prev}→${daily.dailyTechnicalGate.rsi6}。`,
+    reason: `日K KD(5,3)與RSI趨勢向上；KD K/D ${daily.dailyTechnicalGate.kdK}/${daily.dailyTechnicalGate.kdD}，RSI15 ${daily.dailyTechnicalGate.rsi15Prev}→${daily.dailyTechnicalGate.rsi15}。`,
   });
 
   const aboveMa20 = last.close > daily.ma20;
@@ -1306,7 +1306,7 @@ function scanStrategy4(code, market, rows, priceSource = "", recentVolumeBonus =
       ...(["confirmed", "probable"].includes(elliottWave.status) ? ["elliott_wave"] : []),
       ...(daily.dailyTechnicalGate.trendUp ? ["daily_kd_rsi_trend_up"] : []),
       ...(daily.dailyTechnicalGate.kdGoldenCross ? ["daily_kd_golden_cross"] : []),
-      ...(daily.dailyTechnicalGate.rsiGoldenCross ? ["daily_rsi_4_6_golden_cross"] : []),
+      ...(daily.dailyTechnicalGate.rsiGoldenCross ? ["daily_rsi_5_15_golden_cross"] : []),
     ],
     wallet: {
       mf: Math.round(daily.wallet.mf),
@@ -1347,10 +1347,10 @@ function scanStrategy4(code, market, rows, priceSource = "", recentVolumeBonus =
       kdPrevD: daily.dailyTechnicalGate.kdPrevD,
       kdTrendUp: daily.dailyTechnicalGate.kdTrendUp,
       kdGoldenCross: daily.dailyTechnicalGate.kdGoldenCross,
-      rsi3Prev: daily.dailyTechnicalGate.rsi3Prev,
-      rsi6Prev: daily.dailyTechnicalGate.rsi6Prev,
-      rsi3: daily.dailyTechnicalGate.rsi3,
-      rsi6: daily.dailyTechnicalGate.rsi6,
+      rsi5Prev: daily.dailyTechnicalGate.rsi5Prev,
+      rsi15Prev: daily.dailyTechnicalGate.rsi15Prev,
+      rsi5: daily.dailyTechnicalGate.rsi5,
+      rsi15: daily.dailyTechnicalGate.rsi15,
       rsiTrendUp: daily.dailyTechnicalGate.rsiTrendUp,
       rsiGoldenCross: daily.dailyTechnicalGate.rsiGoldenCross,
       dailyTechnicalGateOk: daily.dailyTechnicalGate.ok,

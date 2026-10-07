@@ -637,9 +637,9 @@ async function staticSourceForSymbol(symbol, tradeDate, token, key, existing) {
     arg("strategy-inspection-only", "false") === "true" ? Promise.resolve([]) : loadIndicatorMinutes(symbol, signalDate, key).catch(() => []),
   ]);
   const dailyCloses = priceRows.filter((row) => String(row.date || "") <= signalDate).sort((a, b) => String(a.date).localeCompare(String(b.date))).map((row) => n(row.close));
-  const dailyIndicators = predictionEngine.indicators(priceRows.filter(row => String(row.date || "") <= signalDate).sort((a,b)=>String(a.date).localeCompare(String(b.date))));
+  const dailyIndicators = predictionEngine.indicators(priceRows.filter(row => String(row.date || "") <= signalDate).sort((a,b)=>String(a.date).localeCompare(String(b.date))),"1d");
   const fullHours = predictionEngine.completeHours(intradayRows, signalDate);
-  const hourlyIndicators = fullHours.at(-1)?.timestamp === `${signalDate}T13` ? { ...predictionEngine.indicators(fullHours), last_bar: fullHours.at(-1) } : { available: false, version: predictionEngine.VERSION };
+  const hourlyIndicators = fullHours.at(-1)?.timestamp === `${signalDate}T13` ? { ...predictionEngine.indicators(fullHours,"60m"), last_bar: fullHours.at(-1) } : { available: false, version: predictionEngine.VERSION };
   return { symbol, trade_date: tradeDate, signal_date: signalDate, fetched_at: new Date().toISOString(), price_rows: priceRows, institutional_rows: institutionalRows, branch_rows: branchRows, overnight, indicator_version: predictionEngine.VERSION, daily_indicators: dailyIndicators, hourly_indicators: hourlyIndicators, daily_kd_rsi_up: dailyIndicators.kd_rsi_up === true, hourly_kd_rsi_up: hourlyIndicators.kd_rsi_up === true };
 }
 

@@ -59,8 +59,8 @@ function technicalEvidence(overrides = {}) {
     ok: true,
     source_ready: true,
     reason: "",
-    hourly60: { ok: true, current_k: 65, previous_k: 60, current_d: 58, previous_d: 54, current_rsi3: 68, previous_rsi3: 63, current_rsi6: 62, previous_rsi6: 59, kd_over_d: true, kd_trend_up: true, rsi3_over_rsi6: true, rsi_trend_up: true, signal_pass: true, bar_count: 18 },
-    daily: { ok: true, current_k: 70, previous_k: 66, current_d: 63, previous_d: 60, current_rsi3: 70, previous_rsi3: 65, current_rsi6: 64, previous_rsi6: 61, kd_over_d: true, kd_trend_up: true, rsi3_over_rsi6: true, rsi_trend_up: true, signal_pass: true, bar_count: 30 },
+    hourly60: { ok: true, current_k: 65, previous_k: 60, current_d: 58, previous_d: 54, current_rsi5: 68, previous_rsi5: 63, current_rsi15: 62, previous_rsi15: 59, kd_over_d: true, kd_trend_up: true, rsi5_over_rsi15: true, rsi_trend_up: true, signal_pass: true, bar_count: 18 },
+    daily: { ok: true, current_k: 70, previous_k: 66, current_d: 63, previous_d: 60, current_rsi5: 70, previous_rsi5: 65, current_rsi15: 64, previous_rsi15: 61, kd_over_d: true, kd_trend_up: true, rsi5_over_rsi15: true, rsi_trend_up: true, signal_pass: true, bar_count: 30 },
     sources: { hourly60: "test:completed_60m", daily: "test:daily" },
     hourly_strategy3_pass: true,
     daily_strategy3_pass: true,
@@ -101,14 +101,14 @@ async function main() {
   gapWater.receipt.symbol_data_gap_rows = 1;
   const isolated = await buildScannerCoreResults(async () => gapWater, readTechnical, readAtrRvol);
   const hourlyKdLagAccepted = await buildScannerCoreResults(async () => water(), async () => technicalEvidence({
-    hourly60: { ok: true, current_k: 55, previous_k: 50, current_d: 57, previous_d: 58, current_rsi3: 64, previous_rsi3: 60, current_rsi6: 58, previous_rsi6: 55, kd_over_d: false, kd_trend_up: false, rsi3_over_rsi6: true, rsi_trend_up: true, signal_pass: false },
+    hourly60: { ok: true, current_k: 55, previous_k: 50, current_d: 57, previous_d: 58, current_rsi5: 64, previous_rsi5: 60, current_rsi15: 58, previous_rsi15: 55, kd_over_d: false, kd_trend_up: false, rsi5_over_rsi15: true, rsi_trend_up: true, signal_pass: false },
     hourly_strategy3_pass: true,
   }), readAtrRvol);
   const hourlyRsiAccepted = await buildScannerCoreResults(async () => water(), async () => technicalEvidence({
     ok: true,
-    hourly60: { ok: true, current_k: 55, previous_k: 60, current_d: 57, previous_d: 58, current_rsi3: 56, previous_rsi3: 58, current_rsi6: 57, previous_rsi6: 59, kd_over_d: false, kd_trend_up: false, rsi3_over_rsi6: false, rsi_trend_up: false, signal_pass: false },
+    hourly60: { ok: true, current_k: 55, previous_k: 60, current_d: 57, previous_d: 58, current_rsi5: 56, previous_rsi5: 58, current_rsi15: 57, previous_rsi15: 59, kd_over_d: false, kd_trend_up: false, rsi5_over_rsi15: false, rsi_trend_up: false, signal_pass: false },
     hourly_strategy3_pass: false,
-    reason: "hourly60_rsi3_over_rsi6_trend_not_up",
+    reason: "hourly60_rsi5_over_rsi15_trend_not_up",
   }), readAtrRvol);
   const dailyGap = await buildScannerCoreResults(async () => water(), async () => technicalEvidence({
     ok: false,
@@ -120,7 +120,7 @@ async function main() {
   const lowerCloseWater = water();
   lowerCloseWater.quoteBySymbol.get(symbol).price = 1;
   const lowerClose = await buildScannerCoreResults(async()=>lowerCloseWater,readTechnical,readAtrRvol);
-  const dailyDown = await buildScannerCoreResults(async()=>water(),async()=>technicalEvidence({ok:false,daily_strategy3_pass:false,daily:{ok:true,current_k:40,previous_k:50,current_d:45,previous_d:48,current_rsi3:30,previous_rsi3:40,current_rsi6:35,previous_rsi6:42}}),readAtrRvol);
+  const dailyDown = await buildScannerCoreResults(async()=>water(),async()=>technicalEvidence({ok:false,daily_strategy3_pass:false,daily:{ok:true,current_k:40,previous_k:50,current_d:45,previous_d:48,current_rsi5:30,previous_rsi5:40,current_rsi15:35,previous_rsi15:42}}),readAtrRvol);
   const lowLocation = await buildScannerCoreResults(async()=>water(),readTechnical,async()=>atrRvolEvidence({ok:false,close_location:0.5}));
   const first = eligible.results[0] || {};
   const verifyBonusRow = require('../lib/strategy3-score-bonuses').verifyBonusRow;
@@ -155,7 +155,7 @@ async function main() {
     hourly_kd_lag_is_not_a_hard_blocker: hourlyKdLagAccepted.results.length === 1,
     hourly_rsi_not_up_is_accepted_without_bonus: hourlyRsiAccepted.results.length === 1 && hourlyRsiAccepted.results[0].hourly60_bonus_points === 0 && hourlyRsiAccepted.technical_trend_gate?.hourly60_required === false,
     daily_indicator_gap_keeps_candidate_without_daily_bonus: dailyGap.results.length === 1 && dailyGap.results[0].daily_bonus_points === 0 && dailyGap.technical_trend_gate?.source_gap_count === 1,
-    candidate_reason_declares_technical_gates: first.reason_codes?.includes("strategy3_v2_60m_rsi_bonus_awarded") && first.hourly60_bonus_points === 5 && first.reason_codes?.includes("strategy3_v2_daily_k_over_d_rsi3_over_rsi6_trend_up") && first.reason_codes?.includes("strategy3_v2_atr_rvol_tail_momentum_confirmed"),
+    candidate_reason_declares_technical_gates: first.reason_codes?.includes("strategy3_v2_60m_rsi_bonus_awarded") && first.hourly60_bonus_points === 5 && first.reason_codes?.includes("strategy3_v2_daily_k_over_d_rsi5_over_rsi15_trend_up") && first.reason_codes?.includes("strategy3_v2_atr_rvol_tail_momentum_confirmed"),
     atr_rvol_history_gap_keeps_candidate_without_bonus: atrRvolGap.results.length === 1 && atrRvolGap.results[0].atr_rvol_bonus_points === 0 && atrRvolGap.atr_rvol_gate?.source_gap_count === 1,
     symbol_data_gap_isolated: isolated.results.length === 0 && isolated.symbol_data_gap_rows === 1,
   };

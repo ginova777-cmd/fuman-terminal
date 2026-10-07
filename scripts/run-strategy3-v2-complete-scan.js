@@ -402,7 +402,7 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
     item.hourly60_bonus_points = bonuses.hourly60.points;
     item.score = Math.min(TREND_CONTRACT.scoreCap, item.base_score + Object.values(bonuses).reduce((sum,x)=>sum+x.points,0));
     if (bonuses.entryContinuation.points) item.reason_codes.push('strategy3_v2_close_above_entry');
-    if (bonuses.daily.points) item.reason_codes.push('strategy3_v2_daily_k_over_d_rsi3_over_rsi6_trend_up');
+    if (bonuses.daily.points) item.reason_codes.push('strategy3_v2_daily_k_over_d_rsi5_over_rsi15_trend_up');
     if (bonuses.atrRvol.points) item.reason_codes.push('strategy3_v2_atr_rvol_tail_momentum_confirmed');
     if (bonuses.hourly60.points) item.reason_codes.push('strategy3_v2_60m_rsi_bonus_awarded');
     item.reason_codes.push('strategy3_v2_optional_bonus_groups_no_exclusion');
@@ -449,8 +449,8 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
       hourly60_required: TREND_CONTRACT.hourly60Required,
       hourly60_bonus_max_points: TREND_CONTRACT.hourly60BonusPoints,
       contract: TREND_CONTRACT.contract,
-      hourly60_rule: "bonus_only_5_points:RSI3>RSI6 AND RSI3>previous_RSI3 AND RSI6>previous_RSI6;missing_or_not_up_does_not_exclude",
-      daily_rule: "K>D AND K>previous_K AND D>previous_D AND RSI3>RSI6 AND RSI3>previous_RSI3 AND RSI6>previous_RSI6",
+      hourly60_rule: "bonus_only_5_points:RSI5>RSI15 AND RSI5>previous_RSI5 AND RSI15>previous_RSI15;missing_or_not_up_does_not_exclude",
+      daily_rule: "K>D AND K>previous_K AND D>previous_D AND RSI5>RSI15 AND RSI5>previous_RSI5 AND RSI15>previous_RSI15",
       evaluated_symbols: candidates.length,
       source_gap_count: technicalSourceGapCount,
       trend_rejected_count: 0,

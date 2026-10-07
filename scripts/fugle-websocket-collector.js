@@ -230,6 +230,7 @@ function writeStatus(extra = {}) {
     tradeDate,
     canonicalRunId: canonicalDaytradeRunId(tradeDate),
     pid: process.pid,
+    changeEvidence: quoteChangeEvidence?.status() || null,
     channel: "rest-quote-collector",
     subscribed: extra.subscribed || 0,
     pending: extra.pending || 0,
@@ -1212,6 +1213,24 @@ function selectStreamingSymbols(rotationCursor = 0) {
   };
 }
 const stageTiming = require('../lib/collector-stage-timing.cjs').create();
+// Opt-in shadow evidence. Never switches a Consumer or the DB publication path.
+const changeEvidenceEnabled = COLLECTOR_ROLE === 'daytrade' && !MEMORY_ONLY && process.env.FUMAN_CHANGE_EVIDENCE_PHASE1 === '1';
+const changeEvidenceRoot = process.env.FUMAN_CHANGE_EVIDENCE_DIR;
+const changeEvidenceVersion = crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex');
+let quoteChangeEvidence = null;
+let candleChangeEvidenceConfig = null;
+if (changeEvidenceEnabled) {
+  if (!changeEvidenceRoot || !path.isAbsolute(changeEvidenceRoot)) {
+    console.error('CHANGE_EVIDENCE_BLOCKED: absolute FUMAN_CHANGE_EVIDENCE_DIR required');
+  } else {
+    try {
+      const config = require('../lib/mother-evidence-startup.cjs').startup({root:changeEvidenceRoot,producerVersion:changeEvidenceVersion,limitsJson:process.env.FUMAN_CHANGE_EVIDENCE_LIMITS_JSON,startJson:process.env.FUMAN_CHANGE_EVIDENCE_C2_START_JSON,quoteCacheFile:FUGLE_WS_QUOTES_FILE,candleCacheFile:FUGLE_WS_CANDLES_FILE});
+      quoteChangeEvidence = require('../lib/mother-evidence-bridge.cjs').createBridge(config.quote);
+      candleChangeEvidenceConfig = config.candle;
+    }
+    catch(error){console.error('CHANGE_EVIDENCE_BLOCKED:',error.message);}
+  }
+}
 let pendingStreamingQuotes = [];
 let streamingQuoteFlushTimer = null;
 function mergeStreamingQuotes(newQuotes, flush = false) {
@@ -1238,19 +1257,35 @@ function mergeStreamingQuotes(newQuotes, flush = false) {
     const code = normalizeCode(row.code);
     if (/^\d{4}$/.test(code) && Number.isFinite(seen) && seen >= cutoff) byCode.set(code, row);
   }
+  const evidenceChanges = [];
   for (const quote of newQuotes) {
     const previous = byCode.get(quote.code) || {};
-    byCode.set(quote.code, mergeFugleQuoteState(previous, quote));
+    const merged = mergeFugleQuoteState(previous, quote);
+    byCode.set(quote.code, merged);
+    if(quoteChangeEvidence&&quoteChangeEvidence.status().state==='RUNNING'){
+      if(evidenceChanges.length<candleChangeEvidenceConfig.limits.maxBatchEvents)evidenceChanges.push({previous,merged});
+      else void quoteChangeEvidence.stop('QUOTE_CAPTURE_LIMIT','BLOCKED');
+    }else if(quoteChangeEvidence)quoteChangeEvidence.bypass(1);
   }
   const quotes = [...byCode.values()].sort((a, b) => String(a.code).localeCompare(String(b.code)));
-  writeJson(FUGLE_WS_QUOTES_FILE, {
+  const quotePayload = {
     source: "fugle-websocket-streaming",
     channel: `websocket:${STREAMING_CHANNEL}`,
     channels: STREAMING_CHANNELS,
     updatedAt: nowIso(),
     count: quotes.length,
     quotes,
-  });
+  };
+  const bridgeTools=require('../lib/mother-evidence-bridge.cjs');
+  let evidenceToken=null,evidenceRows=null;
+  try{
+    evidenceToken=quoteChangeEvidence?.begin(evidenceChanges);
+    if(evidenceToken)evidenceRows=bridgeTools.boundedJson([...new Set(evidenceChanges.map(c=>c.merged.code))].map(code=>byCode.get(code)),candleChangeEvidenceConfig.limits.maxBatchBytes);
+  }catch(error){void quoteChangeEvidence?.stop('QUOTE_CAPTURE_FAILED:'+error.message,'BLOCKED');}
+  const cacheStart=bridgeTools.ns();
+  try{writeJson(FUGLE_WS_QUOTES_FILE, quotePayload);}catch(error){void quoteChangeEvidence?.stop('CACHE_SAVE_FAILED','BLOCKED');throw error;}
+  const cacheEnd=bridgeTools.ns();
+  if(evidenceToken&&evidenceRows)quoteChangeEvidence.confirm(evidenceToken,{ok:true,original_ack:true,cache_file:FUGLE_WS_QUOTES_FILE,cache_started_ns:cacheStart,cache_finished_ns:cacheEnd,rows_json:evidenceRows});
   return quotes.length;
 }
 
@@ -1259,6 +1294,9 @@ const streamingCandleStore = COLLECTOR_ROLE === 'daytrade'
     file: FUGLE_WS_CANDLES_FILE,
     retentionMs: Math.max(QUOTE_TTL_MS, 8 * 60 * 60 * 1000),
     flushDelayMs: 5000,
+    evidence: candleChangeEvidenceConfig,
+    // Optional monitoring only, including Shadow OFF. Never enables Evidence.
+    telemetry: (()=>{if(process.env.FUMAN_SHADOW_TELEMETRY!=='1')return null;const file=process.env.FUMAN_SHADOW_TELEMETRY_FILE,epoch=process.env.FUMAN_SHADOW_TELEMETRY_EPOCH;if(!file||!path.isAbsolute(file)||!epoch){console.error('SHADOW_TELEMETRY_MONITOR_GAP: INVALID_CONFIG');return null;}return {file,epoch};})(),
     onStatus: status => writeComponentStatus('candlePersistence', status),
   })
   : require('../lib/daytrade-candle-store').createCandleStore({
