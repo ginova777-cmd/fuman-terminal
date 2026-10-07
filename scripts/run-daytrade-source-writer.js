@@ -314,7 +314,7 @@ const WEBSOCKET_CANDLE_HISTORY_MAX_AGE_MS = positiveNumber(process.env.DAYTRADE_
 const INTRADAY_MIRROR_BARS_PER_SYMBOL = Math.max(20, Math.min(120, positiveNumber(process.env.DAYTRADE_INTRADAY_MIRROR_BARS_PER_SYMBOL, 20)));
 const FUTOPT_WEBSOCKET_MAX_AGE_MS = positiveNumber(process.env.DAYTRADE_FUTOPT_WEBSOCKET_MAX_AGE_MS, 5 * 60 * 1000);
 const MIN_READY_MA20_CONTINUOUS = positiveNumber(process.env.DAYTRADE_MIN_READY_MA20_CONTINUOUS, 1500);
-const MIN_INTRADAY_1M_READY_COVERAGE = positiveNumber(process.env.DAYTRADE_MIN_INTRADAY_1M_READY_COVERAGE || CONFIG.intraday1m?.minReadyCoverageForA, 0.90);
+const MIN_INTRADAY_1M_READY_COVERAGE = require('../lib/mother-pool-k-coverage.cjs').resolveThreshold(process.env.DAYTRADE_MIN_INTRADAY_1M_READY_COVERAGE, CONFIG.intraday1m?.minReadyCoverageForA);
 const MIN_PRIORITY_INTRADAY_1M_READY_COVERAGE = positiveNumber(process.env.DAYTRADE_MIN_PRIORITY_INTRADAY_1M_READY_COVERAGE || CONFIG.intraday1m?.minPriorityReadyCoverageForA, 0.90);
 // Indicator readiness follows the same scoped 90% tolerance as formal 1m
 // coverage; remaining rows retain per-symbol DATA_GAP instead of blocking all.
@@ -5429,7 +5429,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   const actualQuoteSpeed = quoteTransport.startsWith("websocket_") && websocketQuoteSpeed > 0
     ? websocketQuoteSpeed
     : restQuoteSpeed;
-  const motherKCoverage = require('../lib/mother-pool-k-coverage.cjs').assess(priorityRows.filter(isPublishedMotherMember), {tradeDate:taipeiDate(),checkedAt:nowIso(),intraday:after0900&&!offSession});
+  const motherKCoverage = require('../lib/mother-pool-k-coverage.cjs').assess(priorityRows.filter(isPublishedMotherMember), {tradeDate:taipeiDate(),checkedAt:nowIso(),intraday:after0900&&!offSession,threshold:MIN_INTRADAY_1M_READY_COVERAGE});
   const intraday1mReadySymbols = [...motherPoolSet].filter((symbol) => intraday1mReadySet.has(symbol)).length;
   const intraday1mReadyCoverage = motherPoolSymbols ? intraday1mReadySymbols / motherPoolSymbols : 0;
   const priorityIntraday1mReadySymbols = [...prioritySet].filter((symbol) => intraday1mReadySet.has(symbol)).length;
@@ -5786,7 +5786,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     opening_boost_reason: openingBoostReason,
     mother_pool_rule_version: MOTHER_POOL_RULE_VERSION,
     intraday_1m_ready_min_symbols: intraday1mReadyMinSymbols,
-    intraday_1m_ready_coverage_min: 0.90,
+    intraday_1m_ready_coverage_min: MIN_INTRADAY_1M_READY_COVERAGE,
     priority_intraday_1m_ready_coverage_min: MIN_PRIORITY_INTRADAY_1M_READY_COVERAGE,
     indicator_warmup_coverage_min: MIN_INDICATOR_WARMUP_COVERAGE,
     mother_pool_symbols: priorityRows.length,
@@ -6002,7 +6002,7 @@ function sourceGateA(values) {
     && (!values.after0845 || values.scannerCanRunOpening)
     && (!values.after0845 || values.strategyChipCompleteLatestRun)
     && (!values.after0845 || values.readyMa20 >= (values.effectiveMa20Required || MIN_READY_MA20_CONTINUOUS))
-    && (!values.after0900 || values.intraday1mReadyCoverage >= 0.90)
+    && (!values.after0900 || values.intraday1mReadyCoverage >= MIN_INTRADAY_1M_READY_COVERAGE)
     && (!values.after0900 || values.intraday1mStaleSeconds <= MAX_INTRADAY_1M_STALE_SECONDS);
 }
 
