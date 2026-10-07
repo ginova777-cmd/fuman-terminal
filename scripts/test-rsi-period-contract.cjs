@@ -1,50 +1,16 @@
 'use strict';
-const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const {spawnSync} = require('node:child_process');
-const {verifyAuthority, verifyRow} = require('../lib/verify-rsi-period-contract.cjs');
-const actual = require('../lib/technical-indicators');
-const out = process.argv[2];
-if (!out) throw Error('An isolated output directory is required');
-fs.mkdirSync(out, {recursive:true});
-// Test-only producer executes explicitly selected periods using the existing rolling RSI primitive.
-// It is not substituted into any production module or claimed to be the institution producer.
-function fixtureProducer(fast, slow) {
-  const PARAMETERS = {rsiFast:fast,rsiSlow:slow,rsiMethod:'rolling-gain-loss'};
-  const CONTRACT = `test-only-rsi-${fast}-${slow}`;
-  return {PARAMETERS,CONTRACT,indicatorTrend(bars) {
-    const c=bars.map(b=>b.close), i=c.length-1;
-    return {available:true,contract:CONTRACT,parameters:PARAMETERS,
-      rsi5:actual.rsiAt(c,i,fast),rsi5Prev:actual.rsiAt(c,i-1,fast),
-      rsi15:actual.rsiAt(c,i,slow),rsi15Prev:actual.rsiAt(c,i-1,slow)};
-  }};
-}
-const bars = Array.from({length:41},(_,i)=>({close:100+i*.3+5*Math.sin(i),high:110+i*.3,low:90+i*.3}));
-const good=fixtureProducer(5,15), old=fixtureProducer(3,6);
-const row={...good.indicatorTrend(bars),rsiVerificationBars:bars};
-const renamed={...old.indicatorTrend(bars),contract:good.CONTRACT,parameters:good.PARAMETERS,rsiVerificationBars:bars};
-const cases=[
- ['true5_15',row,good,true],
- ['renamed3_6_even_with_forged_metadata',renamed,good,false],
- ['wrong_metadata',{...row,parameters:old.PARAMETERS},good,false],
- ['missing_period_no_algorithm_evidence',{rsi5:50,rsi15:60},good,false],
- ['matching_authoritative_algorithm_without_metadata',{...row,parameters:undefined},good,true],
- ['metadata_only_no_input',{...row,rsiVerificationBars:undefined},good,false],
- ['producer_contract_mismatch',row,old,false],
- ['wrong_contract',{...row,contract:'wrong'},good,false],
- ['current_real_producer',row,actual,false]
-];
-const results=cases.map(([name,input,producer,pass])=>{
- const errors=verifyRow(input,producer);assert.equal(errors.length===0,pass,name);
- fs.writeFileSync(path.join(out,name+'.fixture.json'),JSON.stringify({input,producerContract:producer.CONTRACT,producerParameters:producer.PARAMETERS,expectedPass:pass,errors},null,2));
- return {name,expectedPass:pass,errors,test:'PASS'};
-});
-assert.deepEqual(verifyAuthority(actual),['RSI_PRODUCER_PERIOD_MISMATCH']);
-// Authority rejection must happen before an API request, including source-unavailable structural fallback.
-const run=spawnSync(process.execPath,[path.join(__dirname,'verify-buy-sell-field-contract.js')],{encoding:'utf8',timeout:10000,env:{SystemRoot:process.env.SystemRoot}});
-fs.writeFileSync(path.join(out,'verifier.stdout.txt'),run.stdout||'');
-fs.writeFileSync(path.join(out,'verifier.stderr.txt'),run.stderr||'');
-assert.equal(run.status,1);assert.match(run.stderr,/RSI_PRODUCER_PERIOD_MISMATCH/);
-fs.writeFileSync(path.join(out,'receipt.json'),JSON.stringify({verificationFixTests:'PASS',D:'BLOCKED',actualProducer:actual.PARAMETERS,actualProducerContract:actual.CONTRACT,results,verifierExitCode:run.status,reason:'Existing institution producer uses RSI3/6; trading algorithm deliberately unchanged'},null,2));
-console.log('PASS '+results.length+' contract cases; actual candidate producer correctly BLOCKED before HTTP');
+const assert=require('node:assert/strict'),fs=require('fs'),path=require('path'),vm=require('vm'),{createRequire}=require('module');
+const p=require('../lib/institution-daily-indicators.cjs'),old=require('../lib/technical-indicators'),sel=require('../lib/institution-technical-selection'),v=require('../lib/verify-rsi-period-contract.cjs');
+const out=process.argv[2];if(!out)throw Error('output required');fs.mkdirSync(out,{recursive:true});
+const closes=[90,92,91,93,92,94,93,95,94,96,95,97,96,98,97,99,98,100,99,101,100,112];
+const bars=closes.map((close,i)=>({date:new Date(Date.UTC(2000,0,20-closes.length+1+i)).toISOString().slice(0,10),high:close+2,low:close-2,close}));
+const good=p.indicatorTrend(bars),legacy=old.indicatorTrend(bars);
+function expected(period,shift=0){const a=closes.slice(0,closes.length-shift);let g=0,l=0;for(let i=a.length-period;i<a.length;i++){const d=a[i]-a[i-1];g+=Math.max(d,0);l+=Math.max(-d,0)}return l===0?(g===0?50:100):100-100/(1+g/l)}
+for(const n of [5,15]){assert.equal(good['rsi'+n],expected(n));assert.equal(good['rsi'+n+'Prev'],expected(n,1));}
+assert.equal(p.MIN_BARS,17);assert.equal(p.indicatorTrend(bars.slice(0,16)).available,false);assert.equal(good.kdK,legacy.kdK);assert.equal(good.kdD,legacy.kdD);assert.deepEqual([old.PARAMETERS.rsiFast,old.PARAMETERS.rsiSlow],[3,6]);assert.equal(sel.timeframeEvidence(bars,'2000-01-20').contract,old.CONTRACT);
+const c={code:'2330',name:'fixture',market:'TSE',foreign:1,trust:1,dealer:1,total:3,foreignStreak:1,trustStreak:1,jointStreak:1,close:112,tradeVolume:100,fiveDayAvgVolume:100};
+const selected=sel.evaluateCandidates([c],{'2330':{daily:bars,hourly60:[],errors:[]}},'2000-01-20');assert.equal(selected.selected.length,1);assert.equal(selected.selected[0].technicalTrend.daily.contract,p.CONTRACT);
+const cases=[['real5_15',good,true],['renamed3_6',{...good,rsi5:legacy.rsi3,rsi15:legacy.rsi6,rsi5Prev:legacy.rsi3Prev,rsi15Prev:legacy.rsi6Prev},false],['wrong_metadata',{...good,parameters:old.PARAMETERS},false],['no_metadata_no_evidence',{...good,parameters:undefined,rsiVerificationBars:undefined},false],['authority_without_metadata',{...good,parameters:undefined},true],['wrong_contract',{...good,contract:old.CONTRACT},false]];
+const f=path.join(__dirname,'verify-buy-sell-field-contract.js'),req=createRequire(f),src=fs.readFileSync(f,'utf8');
+async function run(payload){let exitCode=0;const logs=[],sentinel=Error('TEST_EXIT');const context={require:id=>id==='../api/institution-latest'?(q,r)=>r.status(200).json(payload):id==='https'?{get(){throw Error('NETWORK_FORBIDDEN')}}:req(id),__dirname,process:{env:{},exit(n){exitCode=n;throw sentinel}},console:{log:x=>logs.push(x),warn:x=>logs.push(x),error:x=>logs.push(x)},setTimeout,setImmediate,URL,Buffer};try{await vm.runInNewContext(src.slice(0,src.lastIndexOf('main().catch'))+'main()',context)}catch(e){if(e!==sentinel)throw e}return{exitCode,logs}}
+(async()=>{const results=[];for(const[name,input,pass]of cases){const errors=v.verifyRow(input,p);assert.equal(errors.length===0,pass,name);const row={...selected.selected[0],five_day_avg_volume:100,foreignTrustBuyVolumePct:1,foreignTrustVolumePct:1,institutionBuyVolumePct:1,technicalTrend:{...selected.selected[0].technicalTrend,daily:input}};const payload={ok:true,source:'supabase',fieldContractVersion:'buy-sell-derived-fields-20260629-01',rows:[row],resultCount:1,selectionCoverage:selected.selectionCoverage};const r=await run(payload);assert.equal(r.exitCode,pass?0:1,name);fs.writeFileSync(path.join(out,name+'.fixture.json'),JSON.stringify(payload,null,2));results.push({name,expectedPass:pass,errors,...r})}fs.writeFileSync(path.join(out,'receipt.json'),JSON.stringify({D:'PASS',mode:'ISOLATED_REAL_PRODUCER_MOCK_HTTP',results,parameters:p.PARAMETERS,producerContract:p.CONTRACT,unchangedSharedProducer:old.CONTRACT},null,2));console.log('PASS real producer arithmetic, selection wiring, six complete verifier cases, shared producer unchanged')})().catch(e=>{console.error(e);process.exitCode=1});

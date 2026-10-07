@@ -2,9 +2,9 @@ const fs = require("fs");
 const https = require("https");
 const path = require("path");
 const rsiContractVerifier = require("../lib/verify-rsi-period-contract.cjs");
-// scan-institution-cache -> institution-technical-selection -> technical-indicators.
+// scan-institution-cache -> institution-technical-selection -> institution-daily-indicators.
 // This is local candidate authority, not API-supplied metadata or executable code.
-const rsiProducer = require("../lib/technical-indicators");
+const rsiProducer = require("../lib/institution-daily-indicators.cjs");
 
 const ROOT = path.resolve(__dirname, "..");
 const EXPECTED_FIELD_CONTRACT_VERSION = "buy-sell-derived-fields-20260629-01";
