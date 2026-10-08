@@ -1,0 +1,140 @@
+{
+  "next_owner_decision": "EXACT_FINAL_AND_SEALED_OPERATIONAL_PACKAGE_CUTOVER_GO_WITH_BOUNDED_WINDOW",
+  "production_changed": false,
+  "mutexes": [
+    {
+      "name": "Global\\FumanFugleDaytradeWebSocketCollector",
+      "status": "NOT_PRESENT"
+    },
+    {
+      "name": "Global\\FumanFugleDaytradeSourceWriter",
+      "status": "NOT_PRESENT"
+    }
+  ],
+  "status": "READY_FOR_OWNER_CUTOVER_GO",
+  "dryrun": {
+    "status": "DRY_RUN_PASS",
+    "started_at": "2026-10-08T10:46:34.431Z",
+    "target": "3a21f4c8cc7d704662b0500fdc06a833021a8125",
+    "expected": "513e2e6db9924c398d50fb1c85afbd6d38e84af3",
+    "apply": false,
+    "events": [
+      {
+        "stage": "PREFLIGHT",
+        "at": "2026-10-08T10:46:34.434Z"
+      },
+      {
+        "stage": "LOCKED",
+        "at": "2026-10-08T10:46:35.943Z"
+      },
+      {
+        "stage": "STAGING",
+        "at": "2026-10-08T10:46:42.161Z"
+      },
+      {
+        "stage": "STAGING_VERIFIED",
+        "at": "2026-10-08T10:46:50.077Z"
+      }
+    ],
+    "production_changed": false,
+    "authority_changed": false,
+    "stage": "STAGING_VERIFIED",
+    "lock_owner": {
+      "token": "97f2f4ce-3015-4217-9eee-a01657d50b1b",
+      "pid": 48816,
+      "host": "FUMAN-PC",
+      "target": "3a21f4c8cc7d704662b0500fdc06a833021a8125",
+      "started_at": "2026-10-08T10:46:34.431Z"
+    },
+    "finished_at": "2026-10-08T10:46:50.079Z",
+    "lock_retained": false
+  },
+  "authority_changed": false,
+  "remote_lease": {
+    "content_range": "0-0/1",
+    "rows": [
+      {
+        "source_name": "fugle_daytrade_source",
+        "writer_host_id": "FUMAN-PC",
+        "writer_instance_id": "FUMAN-PC:daytrade-writer",
+        "source_role": "writer",
+        "heartbeat_at": "2026-10-08T13:30:21.54277+08:00",
+        "lease_expires_at": "2026-10-08T13:34:21.54277+08:00",
+        "trade_date": "2026-10-08",
+        "lease_remaining_seconds": 0,
+        "updated_at": "2026-10-08T13:30:21.54277+08:00",
+        "payload": {
+          "source_host_id": "FUMAN-PC",
+          "source_host_role": "writer",
+          "writer_instance_id": "FUMAN-PC:daytrade-writer",
+          "writer_heartbeat_at": "2026-10-08T13:30:21.54277+08:00",
+          "writer_lease_expires_at": "2026-10-08T13:34:21.54277+08:00"
+        }
+      }
+    ],
+    "status": "NO_ACTIVE_LEASE_AT_READ",
+    "http": 200,
+    "checked_at": "2026-10-08T18:44:22.4790861+08:00"
+  },
+  "archive": {
+    "status": "COPIED_BYTES_VERIFIED",
+    "cross_file_atomic": false,
+    "bytes": 41452603,
+    "files": 31,
+    "tail": "LEGACY_TAIL_PERSISTENCE_UNKNOWN"
+  },
+  "admin": "PASS",
+  "runtime_verified": false,
+  "limitations": [
+    "No production Apply or Collector restart; recovery test evidence remains isolated",
+    "Regular-only collector does not subscribe afterHours; not a claim that all futures markets are closed",
+    "Transport health is not TXF catalogue/quality acceptance",
+    "Ownership probes released immediately; no maintenance fence retained",
+    "Archive covers saved bytes only; live tail and cross-file snapshot consistency remain UNKNOWN"
+  ],
+  "manifest": {
+    "status": "PASS_GIT_BLOB_AND_STAGING",
+    "original_failure_retained": true,
+    "initial_checker_error": "LF_GIT_BLOB_COMPARED_TO_CRLF_WORKTREE",
+    "files": 85
+  },
+  "expected": "513e2e6db9924c398d50fb1c85afbd6d38e84af3",
+  "checked_window": "2026-10-08T18:44:09+08:00/2026-10-08T18:46:50+08:00",
+  "window": {
+    "collector_mode": "REGULAR_ONLY",
+    "formal_market_has_night_session": true,
+    "owner_cutover_go": false,
+    "fixed_tomorrow_window_required": false,
+    "afterHours": false,
+    "instant_apply_requires_fresh_checks": true
+  },
+  "inventory": {
+    "exe": "C:\\Program Files\\nodejs\\node.exe",
+    "pid": 33244,
+    "creation_ticks": "639267704666337514",
+    "command_sha256": "baf199ce59a8052094c3d7744d59f556644c8d9a9bc0ea340992bf59356ef75d",
+    "entry_verified": true,
+    "role": "future"
+  },
+  "scope": "READONLY_PREFLIGHT_AT_OBSERVED_TIME",
+  "natural_shadow": "NOT_STARTED",
+  "target": "3a21f4c8cc7d704662b0500fdc06a833021a8125",
+  "file_locks": [
+    {
+      "exists": true,
+      "path": "C:\\fuman-runtime\\state\\writer-database-round.lock",
+      "status": "EXCLUSIVE_READ_PROBE_RELEASED"
+    },
+    {
+      "exists": false,
+      "path": "C:\\fuman-runtime\\state\\daytrade-source-writer.cross-session.lock",
+      "status": "ABSENT"
+    },
+    {
+      "exists": false,
+      "path": "C:\\fuman-runtime\\state\\mother-cutover-maintenance-owner.lock",
+      "status": "ABSENT"
+    }
+  ],
+  "phase234_authorization": "OFFLINE_ONLY"
+}

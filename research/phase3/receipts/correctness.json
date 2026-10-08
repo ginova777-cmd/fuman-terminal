@@ -1,0 +1,112 @@
+{
+  "phase": 3,
+  "generated_at": "2026-10-08T10:51:14.105Z",
+  "scope": "ISOLATED_SYNTHETIC_INPUTS_WITH_ACTUAL_ORIGINAL_BUILD_PRIORITY_POOL",
+  "source": {
+    "path": "C:\\Users\\ginov\\Documents\\Codex\\2026-09-30\\new-chat\\work\\mother-incremental-offline\\scripts\\run-daytrade-source-writer.js",
+    "sha256": "e88de2cc2a0ed54d5049af32444026a5341b6da33eb6ecb47e9841a10919e3a5",
+    "method": "evaluateMemoryPool -> unchanged buildPriorityPool",
+    "harness": "metrics memo hook only; original rules unmodified"
+  },
+  "tests": [
+    {
+      "name": "original function full baseline / all-market denominator",
+      "status": "PASS"
+    },
+    {
+      "name": "12:45 new strength outside original membership admitted by unchanged rules",
+      "status": "PASS"
+    },
+    {
+      "name": "same batch exact replay does not reevaluate or readmit",
+      "status": "PASS"
+    },
+    {
+      "name": "unchanged payload deduplicates",
+      "status": "PASS"
+    },
+    {
+      "name": "exit obeys original price gate",
+      "status": "PASS"
+    },
+    {
+      "name": "re-entry after exit is observable and unique",
+      "status": "PASS"
+    },
+    {
+      "name": "revised derived indicator input invalidates symbol; raw K derivation excluded",
+      "status": "PASS"
+    },
+    {
+      "name": "cross-symbol ranks remain exactly full recomputation",
+      "status": "PASS"
+    },
+    {
+      "name": "clock-only expiry refreshes all symbols rather than stale memo",
+      "status": "PASS"
+    },
+    {
+      "name": "NO_TRADE requires independent resolver and never bypasses original gate",
+      "status": "PASS"
+    },
+    {
+      "name": "sequence gap preserves checkpoint",
+      "status": "PASS"
+    },
+    {
+      "name": "GAP requires full verified baseline; no silent continuation",
+      "status": "PASS"
+    },
+    {
+      "name": "wrong epoch refused",
+      "status": "PASS"
+    },
+    {
+      "name": "out-of-universe change cannot narrow or expand universe silently",
+      "status": "PASS"
+    },
+    {
+      "name": "bounded event count failure is atomic",
+      "status": "PASS"
+    },
+    {
+      "name": "checkpoint crash restart preserves membership and replay dedup",
+      "status": "PASS"
+    },
+    {
+      "name": "corrupt checkpoint refused",
+      "status": "PASS"
+    },
+    {
+      "name": "oracle failure leaves state unchanged",
+      "status": "PASS"
+    },
+    {
+      "name": "STOP does not consume new work",
+      "status": "PASS"
+    },
+    {
+      "name": "offline oracle has no network/process/write side effects",
+      "status": "PASS"
+    },
+    {
+      "name": "equivalent UTC and Taipei admission timestamps",
+      "status": "PASS"
+    },
+    {
+      "name": "cross-date as-of is refused",
+      "status": "PASS"
+    },
+    {
+      "name": "immediate 10:00 admission uses unchanged function",
+      "status": "PASS"
+    },
+    {
+      "name": "deterministic mixed quote/indicator/time replay matches full oracle",
+      "status": "PASS"
+    }
+  ],
+  "passed": 24,
+  "failed": 0,
+  "runtime_verified": false
+}

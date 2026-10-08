@@ -1,0 +1,34 @@
+Phase 1 — Preflight only
+Final target: 3a21f4c8cc7d704662b0500fdc06a833021a8125
+Production/authority/rollback: 513e2e6db9924c398d50fb1c85afbd6d38e84af3
+Read-only checks observed 2026-10-08 18:44–18:46 Asia/Taipei.
+Decision: READY_FOR_OWNER_CUTOVER_GO at observed time, not Apply authorization.
+
+Administrator process inventory, exact single regular-session futures Collector,
+idle stock/Writer, task definitions, mutex/file-lock probes, expired remote lease,
+sealed package, exact 85 Git blobs, staging and original release-core dry-run PASS.
+The only failed new checker compared Git LF blobs to Windows CRLF work files;
+corrected verification follows unchanged deploy-core and independently checks staging.
+Original failed receipt remains saved; no deployed files or manifest content changed.
+31 persisted files, 41,452,603 bytes copied and independently hashed. Volatile tail
+UNKNOWN; files are not a common atomic snapshot. Re-archive after approved fence.
+
+Official session sources:
+https://www.taifex.com.tw/cht/2/stockLists (regular 08:45–13:45; some products have night trading)
+https://www.taifex.com.tw/cht/4/aHIntroduction
+Actual Collector status: afterHours=false, afterHoursMode=regular; source collector
+line230 passes afterHours into subscription. This is not a claim all futures markets
+are closed. Quality formalReady=false remains separate from connected transport.
+
+Operational package stays frozen at SHA256
+24b4ea25e65f45f01fdfd23923e2cff51e8ff04b975c58917cadd05d5e60c209.
+Full evidence (outside Git; preserved on this host):
+C:/Users/ginov/Documents/Codex/2026-09-30/new-chat/outputs/production-bound-owner/preflight-runs/20261008T104409198Z/
+C:/Users/ginov/Documents/Codex/2026-09-30/new-chat/outputs/production-bound-owner/preflight-runs/dryrun-2026-10-08T10-46-34-429Z/
+
+No maintenance owner/fence held, no tasks changed, no process stopped/restarted,
+no production checkout/authority update. No schedule created. User must authorize
+exact target+operational package+bounded window; fresh dynamic checks required
+before any future cutover action. No promise of production rollback timing from
+isolated tests. Existing controlled recovery stays applicable; tail risk unchanged.
+Natural Shadow NOT_STARTED. Phase 2–4 offline work authorized, runtime switch not.

@@ -1,0 +1,24 @@
+[
+  {
+    "dir": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-phase2-x61xbf\\6c6f9835-15bf-4678-baea-0cc446a7313a\\fixed",
+    "kind": "quote",
+    "epoch": "76b899a3-7057-49af-9299-deb4bc4e6522",
+    "tradeDate": "2026-10-06",
+    "continuityProof": {
+      "status": "OFFLINE_FIXED_SEGMENT",
+      "epoch": "76b899a3-7057-49af-9299-deb4bc4e6522",
+      "manifest_hash": "3c20129b613c7dd25136fec6edce624d300e552fab4aa016931c2a7d4ab35b6c"
+    }
+  },
+  {
+    "dir": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-phase2-x61xbf\\f65a6519-e96c-4db1-80fa-1c9cdf1ffe54\\fixed",
+    "kind": "candle",
+    "epoch": "ff10f741-7592-46da-b42a-615b7802d95e",
+    "tradeDate": "2026-10-06",
+    "continuityProof": {
+      "status": "OFFLINE_FIXED_SEGMENT",
+      "epoch": "ff10f741-7592-46da-b42a-615b7802d95e",
+      "manifest_hash": "fbc504bee5ee6b52412264b0a57681b13515b555c09a8ec1f6d3e83fc94c1903"
+    }
+  }
+]

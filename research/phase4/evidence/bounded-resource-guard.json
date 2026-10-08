@@ -1,0 +1,12 @@
+{
+  "only_owned_test_process": true,
+  "pid": 44244,
+  "rss_limit_bytes": 536870912,
+  "elapsed_ms": 462,
+  "exit_code": 0,
+  "status": "PASS",
+  "sampled_peak_rss_bytes": 83222528,
+  "trigger_reason": null,
+  "sampling_ms": 200,
+  "worker_old_generation_mb": 128
+}

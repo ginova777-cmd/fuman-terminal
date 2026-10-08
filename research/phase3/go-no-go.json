@@ -1,0 +1,19 @@
+{
+  "phase": 3,
+  "IMPLEMENTED": "PARTIAL",
+  "OFFLINE_VERIFIED": "COMPONENTS_PASS",
+  "test_passed": 24,
+  "test_failed": 0,
+  "RUNTIME_VERIFIED": false,
+  "status": "BLOCKED",
+  "blockers": [
+    "NATIVE_FEED_NOT_INTEGRATED",
+    "RAW_REVISION_TO_INDICATORS_UNVERIFIED",
+    "GLOBAL_RANK_AND_TIME_INCREMENTAL_OPTIMIZATION_INCOMPLETE",
+    "NATIVE_NO_TRADE_RESOLVER_UNAVAILABLE",
+    "NATURAL_PARITY_NOT_VERIFIED"
+  ],
+  "runtime_enabled": false,
+  "production_mutated": false,
+  "manifest_sha256": "8fabc324bf28e4aeec07f1ddb6352f77928226b4f4eabc6a493fe9f3d18293cf"
+}

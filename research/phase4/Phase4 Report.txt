@@ -1,0 +1,64 @@
+Mother Pool Phase 4 Consumer Incremental — Offline Delivery
+Reference base: 3a21f4c8cc7d704662b0500fdc06a833021a8125
+Implementation scope: research/phase4 only. Final implementation SHA is assigned by the root integration commit.
+
+STATUS
+IMPLEMENTED: isolated normalized-input Consumer, Strategy3 formula adapter, Telegram anomaly + existing level/cross adapter, frozen late-admission backfill, atomic checkpoint/result/dry-outbox transaction, bounded replay, recovery rejection, simulated ordered acknowledgement.
+OFFLINE_VERIFIED: 34 checks PASS; exact original Strategy3 core output and original Telegram natural runner fixture event parity; original plan/level/RSI/KD/MACD gate retained.
+RUNTIME_VERIFIED: NOT_RUN.
+GO/NO-GO: NO_GO_FOR_FORMAL_CONSUMERS. No production reader, DB or notification endpoint exists in this package.
+
+ORIGINAL PATH AND SCOPE
+Strategy3 reference is scripts/run-strategy3-v2-complete-scan.js, candleMinute/round/buildScannerCoreResults (lines 156–476 at the reference base). The exact source text is evaluated in a restricted VM with injected offline water/technical/ATR readers. The full runner is not imported because initialization loads credentials. Source hash and extracted function hash are in the manifest.
+The original 5–8 percent condition, limit-up exclusion, minimum 20 bars, 12:59–13:02 entry window, scoring, optional bonuses and whole-result ranking remain original code. Changed quotes/technical/ATR/K cause per-symbol recomputation; all surviving results are re-ranked globally. Admission set comes from the caller; no fixed 128/411 universe is hard-coded.
+Original reference consumes a caller-supplied water verdict. This package deliberately accepts only mode=OFFLINE_FIXTURE, exact identity/date/as_of. This is not the actual 95 percent source verifier or the 90 percent required-data verifier. Formal readiness/freshness, full source reader field hydration and time-varying global Gate remain BLOCKED, not silently assumed passed.
+Telegram invokes unchanged volume-detector.cjs, price-detector.cjs and independent verify-natural-calculation.cjs. The natural runner latest completed bar 60–120-second gate is retained in the adapter. A changed stock can be any four-digit symbol supplied by the upstream universe; there is no priority-only filter here. No signal formula changes.
+Actual level-cross-gate.cjs executes only new anomaly or pending event contexts. Missing plan is explicit plan=null and cannot default to LONG. Same-bar/three-bar support/crossover logic remains original. Plan fixtures are synthetic offline test evidence, never natural source proof.
+
+INCREMENTAL CONTRACT
+frame: epoch, identity, trade_date, sequence, status=DURABLE_COMMITTED, as_of, events, payload_sha256.
+Hash = SHA256(UTF-8 JSON.stringify(frame without payload_sha256)), retaining field/array order. This is an offline normalized envelope, NOT the C2 wire format. A hash alone does not prove authenticity or persistence.
+event kinds: ADMIT, EXIT, QUOTE, CANDLE, TECHNICAL, ATR, TRANSPORT.
+ADMIT requires injected frozen backfill with symbol/date/identity/complete and data.current/history/pool/quote. Complete=true is an isolated upstream assertion, not independently authenticated natural coverage. Same-as-of source quality must be independently wired before formal use.
+CANDLE identity = symbol plus numeric timestamp; same-minute and older-minute revisions replace that key. Duplicate identical rows do not trigger Discovery. Current bars are ordered and duplicate timestamps (including equivalent timezone representations) are refused. A forming/future bar is refused.
+Quote updates cause Strategy3 re-evaluation but do not rerun candle-only anomaly formulas. Transport-only updates do not rerun anomaly Discovery. Pending deep-analysis states still run/expire with the evaluation clock. All original quote serial/event ordering is an upstream prerequisite; this adapter must not be fed unvalidated raw quotes.
+EXIT removes current result membership. Re-entry backfills a fresh frozen input, preserving event/outbox dedup history. The original universe is neither expanded nor reduced by this adapter.
+GAP, sequence gaps, epoch/date change, integrity conflict or unknown older replay stops without advancing checkpoint. Last 64 exact frame hashes support replay dedup; older unknown replay requires recovery.
+Recovery here means reopening the last atomic offline state or requiring a new independently verified full baseline. It does not implement or bypass C2 recovery.
+
+CHECKPOINT / OUTBOX / CRASH
+Result maps, pending frozen trigger state, dry outbox, sequence and frame digest commit in one temp-file + fsync + rename transaction. Exclusive per-directory offline-owner.lock prevents overlapping transactions; state is independently reloaded after ownership acquisition. A crashed owner lock is not automatically stolen. Before-rename crash retains previous state; after-rename replay deduplicates. This is an offline state simulator, NOT production durable-storage certification; directory fsync / Windows power-loss guarantees have not been asserted.
+Only confirmed original gate events enter DRY_RUN_PENDING outbox. No sender exists. Ordered simulated acknowledgements are persisted and idempotent. Notification exactly-once across a real external send/ACK crash is NOT established; downstream idempotency/reconciliation remains required.
+Original trigger/level evidence is frozen in existing gate state. Later same-key revisions are not used to rewrite an already frozen trigger; revision-after-event is recorded. No retroactive past notification/retraction policy is introduced.
+
+BOUNDARIES / LIMITS
+2500 symbols; 271 current bars/symbol; 5420 historical bars/symbol; 200000 total bars; 5000 events/frame; 4MiB frame; 64MiB serialized state; 20000 dry outbox entries; 64 replay hashes. Exceeding a bound aborts the transaction; no truncated success.
+These are offline envelope limits, not a change to any production Gate or Universe. They do NOT prove capacity for 2500 symbols times 20 full historical days. The test inputs are already allocated JS objects; upstream bounded streaming input is not supplied here.
+Current state is cloned and serialized as a whole on each commit. Thus formula evaluation is incremental, but state persistence I/O is NOT incremental. This limitation is explicit and blocks any production performance claim.
+
+FAULT / CORRECTNESS EVIDENCE
+evidence/tests.json: 34 checks. Includes full-core result parity, global rerank, denied source Gate, wrong date/epoch, hash tamper, replay conflict, gap, missing backfill, duplicate backfill, missing K, crash before/after rename, consumer throw, corrupted checkpoint, STOP, capacity limits, quote/transport-only, older-minute revision, exact duplicate, incomplete/future K, exit/re-entry, original natural runner event parity, missing/valid plan gate, ordered dry acknowledgement, full anomaly-to-confirmed-outbox replay, 0/1/128/129/1024/5000-frame events and rejected 5001, total-row/frame-byte bounds.
+Backfill rows and all signals in these tests are SYNTHETIC FIXTURES. No record is represented as historical real-market delivery.
+
+RESOURCE MEASUREMENTS
+evidence/capacity.json is the preserved initial UNMEMOIZED source-core benchmark. Its PASS_FOR_MEASURED_FIXTURES means formula assertions only, NOT resource readiness.
+2000 symbols x22 bars = 44000 fixture bars, 10 changed symbols: delta 291.46ms, full formula 4757.58ms, state write 23837493 bytes. Process peak RSS 2349308 KiB (~2.24GiB), despite Node old-generation512MiB. HIGH_RSS_RESOURCE_REVIEW_REQUIRED; process exited. Native Intl.DateTimeFormat allocation is a hypothesis supported by the later comparison, not a proven per-allocation profile.
+The offline VM now memoizes at most16 exact locale/options Intl.DateTimeFormat objects. This changes only VM allocation behavior, not original Strategy3 source or formula. Native-vs-memoized exact output parity is tested.
+evidence/bounded-capacity.json: 256 symbols x22 bars, 10 changed. Initial161.05ms, incremental68.29ms, full formula91.55ms, state write3052520 bytes, peak RSS97480KiB (~95.20MiB). Last observed heapUsed28514360 bytes. CPU delta user78000us/system47000us.
+evidence/bounded-resource-guard.json: dedicated owned child only, old-generation128MiB, externalRSS512MiB/60sec guard,200ms sampling. PASS, no trigger. Child exited; no formal process touched. Sampling peak is lower than child's lifetime peak and is not substituted for it.
+Optimized2000-symbol/maximum-history capacity remains UNVERIFIED. Full formula baseline excludes persistence while delta includes whole-state writes; these are not comparable production latency numbers. No hardware disk I/O counters were measured, only exact output bytes.
+
+REMAINING BLOCKERS
+1. Authenticated Phase1 C2 + Phase2 durable commit/parent completeness + Phase3 membership mapping not formally bound to this normalized envelope.
+2. Candle completion/maturity events: a forming saved bar can become complete through passage of time without new WS content. This package requires upstream completed-bar delivery and does not create that clock-driven feed. Changed-only wiring without it would lose evaluation opportunities.
+3. Real same-as-of full source reader validation (including95/90, source freshness, quote ordering, native source/units, field hydration) not wired. Existing result maps must not be treated as a live complete scan until these global/time dependencies are resolved.
+4. Full-history baseline changes/revisions require explicit invalidation; history treated as frozen per provided snapshot. No silently guessed warm-up policy.
+5. Old-minute revisions recompute current eligible latest anomaly and current Strategy3 result, but do not replay every historical affected signal for new notifications. Historical retraction/re-notification remains undefined; original triggers remain frozen.
+6. Full wrapper/verifier, three surfaces, natural receipts, actual delivery and external send/ACK idempotency are outside this offline implementation.
+7. State I/O is still whole-state; optimized2000-symbol/max-history resource acceptance pending.
+
+STOP / ROLLBACK
+Consumer.stop() rejects future work. Fault leaves previous committed offline state. Rollback is to stop the isolated runner and select preserved previous test state/baseline under a new directory; do not rewind a live sequence or delete evidence. There is no formal switch to roll back because no formal path was connected.
+No Collector/Writer/Strategy3/Telegram/runtime/DB/schema/task/subscription was modified. No natural Shadow, no real notification, no order. Implementation can be reviewed independently; formal Consumer GO remains NO_GO.
+
+

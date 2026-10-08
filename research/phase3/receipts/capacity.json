@@ -1,0 +1,318 @@
+{
+  "generated_at": "2026-10-08T10:50:01.718Z",
+  "scope": "synthetic isolated full-universe process comparison",
+  "results": [
+    {
+      "mode": "full",
+      "count": 2000,
+      "iterations": 8,
+      "warmup_ms": 419.5091,
+      "latency_ms": {
+        "n": 7,
+        "p50": 375.5437999999999,
+        "p95": 398.63160000000005,
+        "p99": 398.63160000000005,
+        "max": 398.63160000000005
+      },
+      "metric_calls": [
+        2000,
+        2000,
+        2000,
+        2000,
+        2000,
+        2000,
+        2000,
+        2000
+      ],
+      "cpu_ms": {
+        "user": 2969,
+        "system": 297
+      },
+      "rss_peak_MiB": 368.28515625,
+      "sampled_heap_peak_MiB": 158.08619689941406,
+      "sampled_heap_total_peak_MiB": 239.6796875,
+      "heap_peak_scope": "post-evaluation samples; not continuous heap high-water",
+      "filesystem_blocks_read": 12,
+      "filesystem_blocks_written": 0,
+      "baseline_bytes": 2300461,
+      "update_bytes": [
+        136,
+        680,
+        680,
+        680,
+        680,
+        680,
+        680,
+        680
+      ],
+      "oracle_source_bytes_read": 706261,
+      "limits": {
+        "maxSymbols": 5000,
+        "maxEvents": 5000,
+        "maxBytes": 8388608
+      },
+      "production_data": false
+    },
+    {
+      "mode": "same-asof-memo",
+      "count": 2000,
+      "iterations": 8,
+      "warmup_ms": 451.10970000000003,
+      "latency_ms": {
+        "n": 7,
+        "p50": 130.73180000000002,
+        "p95": 154.0494,
+        "p99": 154.0494,
+        "max": 154.0494
+      },
+      "metric_calls": [
+        2000,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "cpu_ms": {
+        "user": 1422,
+        "system": 203
+      },
+      "rss_peak_MiB": 313.9140625,
+      "sampled_heap_peak_MiB": 150.86835479736328,
+      "sampled_heap_total_peak_MiB": 257.34765625,
+      "heap_peak_scope": "post-evaluation samples; not continuous heap high-water",
+      "filesystem_blocks_read": 12,
+      "filesystem_blocks_written": 0,
+      "baseline_bytes": 2300461,
+      "update_bytes": [
+        136,
+        680,
+        680,
+        680,
+        680,
+        680,
+        680,
+        680
+      ],
+      "oracle_source_bytes_read": 706261,
+      "limits": {
+        "maxSymbols": 5000,
+        "maxEvents": 5000,
+        "maxBytes": 8388608
+      },
+      "production_data": false
+    },
+    {
+      "mode": "clock-change",
+      "count": 2000,
+      "iterations": 8,
+      "warmup_ms": 510.75770000000006,
+      "latency_ms": {
+        "n": 7,
+        "p50": 409.2533000000001,
+        "p95": 448.05369999999994,
+        "p99": 448.05369999999994,
+        "max": 448.05369999999994
+      },
+      "metric_calls": [
+        2000,
+        2000,
+        2000,
+        2000,
+        2000,
+        2000,
+        2000,
+        2000
+      ],
+      "cpu_ms": {
+        "user": 3328,
+        "system": 328
+      },
+      "rss_peak_MiB": 416.6328125,
+      "sampled_heap_peak_MiB": 229.47977447509766,
+      "sampled_heap_total_peak_MiB": 303.1796875,
+      "heap_peak_scope": "post-evaluation samples; not continuous heap high-water",
+      "filesystem_blocks_read": 12,
+      "filesystem_blocks_written": 0,
+      "baseline_bytes": 2300461,
+      "update_bytes": [
+        136,
+        680,
+        680,
+        680,
+        680,
+        680,
+        680,
+        680
+      ],
+      "oracle_source_bytes_read": 706261,
+      "limits": {
+        "maxSymbols": 5000,
+        "maxEvents": 5000,
+        "maxBytes": 8388608
+      },
+      "production_data": false
+    },
+    {
+      "mode": "full",
+      "count": 5000,
+      "iterations": 8,
+      "warmup_ms": 995.1797999999999,
+      "latency_ms": {
+        "n": 7,
+        "p50": 898.8835999999992,
+        "p95": 1350.8519000000001,
+        "p99": 1350.8519000000001,
+        "max": 1350.8519000000001
+      },
+      "metric_calls": [
+        5000,
+        5000,
+        5000,
+        5000,
+        5000,
+        5000,
+        5000,
+        5000
+      ],
+      "cpu_ms": {
+        "user": 7515,
+        "system": 453
+      },
+      "rss_peak_MiB": 582.421875,
+      "sampled_heap_peak_MiB": 332.0951156616211,
+      "sampled_heap_total_peak_MiB": 401.3515625,
+      "heap_peak_scope": "post-evaluation samples; not continuous heap high-water",
+      "filesystem_blocks_read": 12,
+      "filesystem_blocks_written": 0,
+      "baseline_bytes": 5750461,
+      "update_bytes": [
+        136,
+        680,
+        680,
+        680,
+        680,
+        680,
+        680,
+        680
+      ],
+      "oracle_source_bytes_read": 706261,
+      "limits": {
+        "maxSymbols": 5000,
+        "maxEvents": 5000,
+        "maxBytes": 8388608
+      },
+      "production_data": false
+    },
+    {
+      "mode": "same-asof-memo",
+      "count": 5000,
+      "iterations": 8,
+      "warmup_ms": 1009.2846000000001,
+      "latency_ms": {
+        "n": 7,
+        "p50": 277.3769000000002,
+        "p95": 330.7942000000003,
+        "p99": 330.7942000000003,
+        "max": 330.7942000000003
+      },
+      "metric_calls": [
+        5000,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "cpu_ms": {
+        "user": 3531,
+        "system": 250
+      },
+      "rss_peak_MiB": 484.41796875,
+      "sampled_heap_peak_MiB": 302.38880920410156,
+      "sampled_heap_total_peak_MiB": 390.8125,
+      "heap_peak_scope": "post-evaluation samples; not continuous heap high-water",
+      "filesystem_blocks_read": 12,
+      "filesystem_blocks_written": 0,
+      "baseline_bytes": 5750461,
+      "update_bytes": [
+        136,
+        680,
+        680,
+        680,
+        680,
+        680,
+        680,
+        680
+      ],
+      "oracle_source_bytes_read": 706261,
+      "limits": {
+        "maxSymbols": 5000,
+        "maxEvents": 5000,
+        "maxBytes": 8388608
+      },
+      "production_data": false
+    },
+    {
+      "mode": "clock-change",
+      "count": 5000,
+      "iterations": 8,
+      "warmup_ms": 1100.7016999999998,
+      "latency_ms": {
+        "n": 7,
+        "p50": 958.4713000000002,
+        "p95": 1000.6244000000006,
+        "p99": 1000.6244000000006,
+        "max": 1000.6244000000006
+      },
+      "metric_calls": [
+        5000,
+        5000,
+        5000,
+        5000,
+        5000,
+        5000,
+        5000,
+        5000
+      ],
+      "cpu_ms": {
+        "user": 7656,
+        "system": 391
+      },
+      "rss_peak_MiB": 571.671875,
+      "sampled_heap_peak_MiB": 313.7959442138672,
+      "sampled_heap_total_peak_MiB": 395.16015625,
+      "heap_peak_scope": "post-evaluation samples; not continuous heap high-water",
+      "filesystem_blocks_read": 12,
+      "filesystem_blocks_written": 0,
+      "baseline_bytes": 5750461,
+      "update_bytes": [
+        136,
+        680,
+        680,
+        680,
+        680,
+        680,
+        680,
+        680
+      ],
+      "oracle_source_bytes_read": 706261,
+      "limits": {
+        "maxSymbols": 5000,
+        "maxEvents": 5000,
+        "maxBytes": 8388608
+      },
+      "production_data": false
+    }
+  ],
+  "limitations": [
+    "Every update still clones full input state and rebuilds global rank/allocation.",
+    "Time change invalidates every quoteMetrics result; not a claimed every-minute speedup.",
+    "No production I/O or network measured. Filesystem counters are OS blocks, not bytes.",
+    "This is not the formal Collector/Writer performance profile."
+  ]
+}

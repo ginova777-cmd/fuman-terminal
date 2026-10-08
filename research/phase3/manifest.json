@@ -1,0 +1,51 @@
+{
+  "contract": "phase3-offline-delivery-v1",
+  "base_sha": "3a21f4c8cc7d704662b0500fdc06a833021a8125",
+  "files": [
+    {
+      "path": "benchmark.cjs",
+      "bytes": 3301,
+      "sha256": "3963b88119ce8f1383b283aaa2857bd8178e681ed0a76d598ba7eb51847ac995"
+    },
+    {
+      "path": "fixture.cjs",
+      "bytes": 1730,
+      "sha256": "885b93226749fd808376ecc48d0a004ff4ccd370c7ddb99a8338bc0bd9e972d1"
+    },
+    {
+      "path": "incremental-discovery.cjs",
+      "bytes": 5802,
+      "sha256": "e7374be651ad953495c63b0174c6d373cefef13ff058de506da5a381a9d70bd1"
+    },
+    {
+      "path": "original-oracle.cjs",
+      "bytes": 5334,
+      "sha256": "678f1191aceda9c528ff0605bda08e19461941d4c87006c63d8e68bc818179c1"
+    },
+    {
+      "path": "Phase3-Offline-Report.txt",
+      "bytes": 6705,
+      "sha256": "a30b79777a7e85bbd3bf2d58af97f882e16a37dafd4a97e3afd0e3e5dab6bdda"
+    },
+    {
+      "path": "receipts/capacity.json",
+      "bytes": 7429,
+      "sha256": "5139dead070b27ae68264210cf9bad96655baad4941ed9ac6c13f504b99e084a"
+    },
+    {
+      "path": "receipts/correctness.json",
+      "bytes": 3059,
+      "sha256": "d7d54ec18f27af0b2c0047d297fd5e0416e6eaee3c43a3e287f92115da73315b"
+    },
+    {
+      "path": "seal.cjs",
+      "bytes": 1473,
+      "sha256": "cc1d004444e5f66ec3a5b4467347e435a3ed6e82b12d75b4e4de13c4779ab687"
+    },
+    {
+      "path": "test.cjs",
+      "bytes": 8873,
+      "sha256": "0d4ea39fe581763285d5c8fd7c8f9db111b6a6f460eae27a3f626441722d245f"
+    }
+  ]
+}

@@ -1,0 +1,97 @@
+{
+  "status": "PASS_ISOLATED_MAPPING_ONLY",
+  "results": [
+    {
+      "full_cache_rows": 5000,
+      "changed_rows": 32,
+      "materialized_content_parity": true,
+      "runs": [
+        {
+          "mode": "full",
+          "rows": 5000,
+          "input_bytes": 1870001,
+          "output_bytes": 4555001,
+          "elapsed_ms": 30.596199999999996,
+          "cpu_us": {
+            "user": 15000,
+            "system": 15000
+          },
+          "peak_rss_bytes": 73719808,
+          "heap_used_bytes": 16999592,
+          "heap_peak": "UNAVAILABLE",
+          "physical_io": "UNAVAILABLE",
+          "output_fingerprint": "52077541cb6d95e228b936c67928b2fcd03cc48dc395ab9544d08e912b186e3b"
+        },
+        {
+          "mode": "incremental",
+          "rows": 32,
+          "input_bytes": 11969,
+          "output_bytes": 29153,
+          "elapsed_ms": 2.606500000000004,
+          "cpu_us": {
+            "user": 0,
+            "system": 0
+          },
+          "peak_rss_bytes": 50139136,
+          "heap_used_bytes": 5529096,
+          "heap_peak": "UNAVAILABLE",
+          "physical_io": "UNAVAILABLE",
+          "output_fingerprint": "5f7b37ceda374cfde70187d9415f161243e5f61a374dbe619709ffde23d1b5c5"
+        }
+      ]
+    },
+    {
+      "full_cache_rows": 20000,
+      "changed_rows": 32,
+      "materialized_content_parity": true,
+      "runs": [
+        {
+          "mode": "full",
+          "rows": 20000,
+          "input_bytes": 7480001,
+          "output_bytes": 18220001,
+          "elapsed_ms": 112.2784,
+          "cpu_us": {
+            "user": 156000,
+            "system": 78000
+          },
+          "peak_rss_bytes": 138207232,
+          "heap_used_bytes": 40064512,
+          "heap_peak": "UNAVAILABLE",
+          "physical_io": "UNAVAILABLE",
+          "output_fingerprint": "466c47cfda4bcb5b8f61d6836e9b6d7a8dfa5b902f9ec1efa3ebc0e2b6aa3c3d"
+        },
+        {
+          "mode": "incremental",
+          "rows": 32,
+          "input_bytes": 11969,
+          "output_bytes": 29153,
+          "elapsed_ms": 3.1828999999999965,
+          "cpu_us": {
+            "user": 16000,
+            "system": 0
+          },
+          "peak_rss_bytes": 50073600,
+          "heap_used_bytes": 5986480,
+          "heap_peak": "UNAVAILABLE",
+          "physical_io": "UNAVAILABLE",
+          "output_fingerprint": "5f7b37ceda374cfde70187d9415f161243e5f61a374dbe619709ffde23d1b5c5"
+        }
+      ]
+    }
+  ],
+  "scope": "real mapNaturalCandle + writer row wrapper; generated fixtures; not full Writer or natural throughput",
+  "limits": {
+    "child_heap_mb": 128,
+    "child_timeout_ms": 30000
+  },
+  "excluded_costs": [
+    "retained evidence independent audit",
+    "baseline recovery",
+    "DB",
+    "priority/source_status/futopt",
+    "checkpoint fsync",
+    "production cache size 188541"
+  ],
+  "fixture_dir": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-phase2-bench-kha4d5"
+}
