@@ -1,0 +1,40 @@
+Phase 1 Protection and Phase 2–4 Offline Development Receipt
+Date: 2026-10-08
+Status: BLOCKED — PHASE2_4_INTEGRATED_OFFLINE_READY NOT ACHIEVED
+Production: 3a21f4c8cc7d704662b0500fdc06a833021a8125; read-only HEAD/clean verification passed.
+Production was not edited, redeployed, stopped, restarted or rolled back. No DB, schedule, environment or authority changes. Evidence remains OFF under the preceding independently verified handoff; this development run did not enable it. Natural Shadow NOT_STARTED. Formal Consumer activation NOT_AUTHORIZED.
+
+Isolation
+Branch mother-phase234-integration-20261008; base 790e16fb8d90759672ff3a2f4af01817a9cb6c84.
+Only research/ files changed. Existing Phase 1 Recovery/Telemetry/STOP files are unchanged and remain present; no new natural verification claimed.
+
+Implemented this iteration
+research/integration/routing-contract.cjs: explicitly separated active-market Telegram scope from Phase3 membership/Strategy3 scope. Date, epoch-bound source anchors, canonical sorted symbol sets, envelope SHA256 and changed-symbol bounds are checked. Phase3 late-admission output supplies the routing test, rather than a manually invented admission. Quote-only changes do not enter candle-only Telegram Discovery. This is a proposed OFFLINE routing contract; source anchor authenticity and Phase4 execution are not established by this helper.
+research/integration/test-routing.cjs: 9 PASS including late admission, scope preservation, quote-only, mutation, out-of-universe, denominator change, GAP, date, duplicate and anchor constraints grouped into nine checks.
+
+Verification
+Phase2 reader/candle/crash/fallback:26 PASS; quote mapping:7 PASS.
+Phase3 original-formula/discovery/checkpoint:24 PASS.
+Phase4 original-formula/consumer/crash/dedup:34 PASS.
+Existing synthetic cross-boundary tests:4 PASS.
+New routing:9 PASS. Total104 PASS. These are component/boundary checks, not full integrated acceptance.
+Bounded benchmark:256 symbols,5632 bars,10 changed symbols; incremental78.365ms; full formula96.858ms; state write3052520 bytes; lifetime peak RSS103192KiB. External200ms sampling peak80887808 bytes,466ms total,128MiB old-generation,512MiB RSS bound,60s timeout; guard not triggered. Formula full baseline excludes persistence; delta includes persistence, so this is not a production speedup claim.
+
+Remaining offline implementation blockers (owned by this Mother Pool development task)
+B1 Phase2 forming candles require time-driven completion delivery even when no further WS event arrives. Current unmapped row rejection prevents lost checkpoint but does not implement maturity scheduling.
+B2 Quality invalidation must reach an explicit downstream invalidation representation; current rejection is safe but not an integrated recovery path.
+B3 Raw changed candle keys do not yet produce all Phase3 derived resource updates; exact previous/updated quote and supplemental identity mapping remains incomplete.
+B4 Routing output is not yet consumed by separate Strategy3-membership and all-market Telegram execution paths. Current Phase4 simulator combines scopes and cannot be called whole-market integration solely because this routing contract passes.
+B5 No shared transactional cursor links Phase2 sink/readback, Phase3 state and Phase4 result/outbox across interruption/restart. Per-module checkpoints pass independently only.
+B6 History baseline revisions/old-minute revisions do not have complete affected-window replay and invalidation coverage across all phases.
+B7 Phase4 state persistence still clones/serializes full state. Full-market plus historical-window memory/I/O acceptance remains unverified.256-symbol success does not close it.
+B8 Frozen historical-market replay with provenance, and an end-to-end differential oracle over the connected pipeline, remain missing. Synthetic data is labeled and cannot substitute for market replay.
+
+Separate formal-only prerequisites
+Real C2 continuity resolver, natural Shadow acceptance, formal consumers/readback/95-90 gates and actual notification receipts remain unconnected. These require later independent review and Owner GO; no formal enablement requested here.
+
+GO/NO-GO
+Offline component continuation permitted by current Owner instruction.
+Integrated offline readiness: NO_GO/BLOCKED for B1–B8.
+Formal deployment/activation/Evidence ON: NO_GO, not authorized.
+Rollback: stop isolated test commands; preserve test evidence. No production rollback action applies.

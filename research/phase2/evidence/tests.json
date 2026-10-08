@@ -111,7 +111,7 @@
       "status": "PASS"
     }
   ],
-  "fixture_dir": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-phase2-x61xbf",
+  "fixture_dir": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-phase2-kA8OIX",
   "limitations": [
     "C2 has no production continuity proof; fixed offline segment only",
     "Original seeded Writer intentionally differs for historical revisions; Owner review required before integration",

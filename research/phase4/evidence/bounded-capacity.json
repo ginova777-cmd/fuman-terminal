@@ -3,22 +3,22 @@
   "symbols": 256,
   "bars": 5632,
   "changed_symbols": 10,
-  "initial_ms": 161.0538,
-  "incremental_ms": 68.2887,
+  "initial_ms": 171.3963,
+  "incremental_ms": 78.36499999999998,
   "incremental_cpu_us": {
     "user": 78000,
-    "system": 47000
+    "system": 0
   },
-  "full_formula_ms": 91.54769999999996,
+  "full_formula_ms": 96.85750000000002,
   "state_bytes": 3052520,
   "memory": {
-    "rss": 99205120,
-    "heapTotal": 55689216,
-    "heapUsed": 28514360,
+    "rss": 105070592,
+    "heapTotal": 55427072,
+    "heapUsed": 28427416,
     "external": 2083584,
     "arrayBuffers": 28939
   },
-  "peak_rss_kib": 97480,
+  "peak_rss_kib": 103192,
   "memoized_formatter": true,
   "adapter_sha256": "1044dd185251c5985f681fc7aa3902ae56584b3b18909f2c687c287835318b01",
   "native_unmemoized_baseline": "capacity.json",
