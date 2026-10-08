@@ -1,0 +1,21 @@
+'use strict';
+const fs=require('fs'),os=require('os'),path=require('path'),assert=require('node:assert/strict');
+const {OfflineStore}=require('./offline-store.cjs'),{evaluate}=require('./evaluate-routed.cjs'),{bind}=require('./routing-contract.cjs');
+const {IncrementalDiscovery}=require('../phase3/incremental-discovery.cjs'),{createOracle}=require('../phase3/original-oracle.cjs'),{fixture,quote}=require('../phase3/fixture.cjs');const fx=require('../phase4/fixtures.cjs');
+const {strategy3,telegram}=require('../phase4/original-adapters.cjs');
+async function main(){const tests=[];async function test(name,f){await f();tests.push({name,status:'PASS'});}
+const date='2026-10-08',asOf=date+'T13:00:00+08:00',snap=fixture(3);const d=new IncrementalDiscovery({oracle:createOracle()});d.baseline(snap);
+const result=d.process({epoch:snap.epoch,tradeDate:date,sequence:1,continuity:'CONTIGUOUS',asOf,events:snap.activeSymbols.map(({symbol})=>({resource:'quoteMap',symbol,value:quote(symbol,symbol==='1001'?1:106,20000,asOf)}))});
+const binding=bind({trade_date:date,epoch:snap.epoch,activeSymbols:['1000','1001','1002'],prioritySymbols:['1000'],sourceAnchors:{fixture:{epoch:snap.epoch,trade_date:date,sequence:1,commit_hash:'fixture'}}});
+const directory=fs.mkdtempSync(path.join(os.tmpdir(),'mp-routed-')),store=new OfflineStore(directory);
+const base={store,binding,input:{discovery:result,changedSymbols:['1000','1001','1002'],candleSymbols:['1000','1001','1002'],asOf},changes:{},gate:fx.gate(binding.sha256,{date,asOf}),backfill:async s=>({symbol:s,trade_date:date,verified:true,data:fx.data(s,{date})}),sourceCursor:{status:'OFFLINE_FIXED_SEGMENT',epoch:snap.epoch,sequence:1}};
+await test('real Phase3 membership controls Strategy3 but Telegram includes nonmember',async()=>{await evaluate({...base,sequence:1});const root=store.root();assert(!root.strategy['1001']);assert(root.telegram['1001']);assert.equal(Object.keys(root.telegram).length,3);});
+await test('original formula exact per-symbol differential parity',async()=>{const root=store.root();for(const s of Object.keys(root.symbols)){const item=store.get(root.symbols[s]);const state={identity:binding.sha256,trade_date:date,symbols:{[s]:item.data}};assert.deepEqual(store.get(root.telegram[s]),telegram(state,[s],asOf));if(root.strategy[s])assert.deepEqual(store.get(root.strategy[s]),(await strategy3(state,[s],base.gate)).results[0]);}});
+await test('replay after restart produces no new transaction',async()=>assert.equal((await evaluate({...base,store:new OfflineStore(directory),sequence:1})).status,'REPLAY_DEDUP'));
+await test('before root crash keeps previous cross-stage cursor',async()=>{await assert.rejects(evaluate({...base,sequence:2,fault:'BEFORE_ROOT'}),/CRASH/);assert.equal(store.root().sequence,1);});
+await test('before rename crash keeps root and replays frozen inputs',async()=>{await assert.rejects(evaluate({...base,sequence:2,fault:'BEFORE_RENAME'}),/CRASH/);assert.equal(store.root().sequence,1);await evaluate({...base,sequence:2});assert.equal(store.root().sequence,2);});
+await test('after rename crash restart deduplicates committed sequence',async()=>{await assert.rejects(evaluate({...base,sequence:3,fault:'AFTER_RENAME'}),/CRASH/);assert.equal((await evaluate({...base,sequence:3})).status,'REPLAY_DEDUP');});
+await test('GAP preserves committed root',async()=>{await assert.rejects(evaluate({...base,sequence:4,sourceCursor:{...base.sourceCursor,status:'GAP'}}),/CONTINUITY/);assert.equal(store.root().sequence,3);});
+await test('corrupted immutable input stops without advancing root',async()=>{const root=store.root(),file=path.join(directory,'objects',root.symbols['1000']+'.json');fs.appendFileSync(file,' ');await assert.rejects(evaluate({...base,sequence:4}),/OBJECT_HASH/);assert.equal(store.root().sequence,3);});
+fs.writeFileSync(path.join(__dirname,'routed-tests.json'),JSON.stringify({status:'PASS',tests,synthetic:true,full_e2e:false,io:store.io,peak_rss_kib:process.resourceUsage().maxRSS},null,2));console.log(JSON.stringify({status:'PASS',count:tests.length}));}
+main().catch(e=>{console.error(e);process.exitCode=1});

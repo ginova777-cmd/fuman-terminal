@@ -1,0 +1,19 @@
+{
+  "status": "SYNTHETIC_CONNECTED_SLICE_PASS",
+  "forming_to_complete_without_ws": true,
+  "phase2_derived_phase3_routing_phase4": true,
+  "crash_after_phase4_before_phase2_ack_replay": true,
+  "all_market_telegram_preserved": true,
+  "notifications_sent": 0,
+  "full_e2e": false,
+  "limitations": [
+    "frozen invocation replay; no autonomous cross-stage coordinator yet",
+    "quote/supplemental baseline fixtures",
+    "no natural data or historical-arrival proof"
+  ],
+  "peak_rss_kib": 64028,
+  "io": {
+    "read": 5249,
+    "written": 24269
+  }
+}

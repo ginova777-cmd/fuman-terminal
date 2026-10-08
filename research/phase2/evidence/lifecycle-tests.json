@@ -1,0 +1,51 @@
+{
+  "status": "PASS",
+  "tests": [
+    {
+      "name": "forming input freezes independently of caller",
+      "status": "PASS"
+    },
+    {
+      "name": "restart then clock only completes without new WS",
+      "status": "PASS"
+    },
+    {
+      "name": "duplicate raw does not repeat publication",
+      "status": "PASS"
+    },
+    {
+      "name": "older minute revision invalidates then republishes",
+      "status": "PASS"
+    },
+    {
+      "name": "quality loss retracts previous valid candle",
+      "status": "PASS"
+    },
+    {
+      "name": "invalid identity does not advance state",
+      "status": "PASS"
+    },
+    {
+      "name": "before rename crash restarts at prior cursor",
+      "status": "PASS"
+    },
+    {
+      "name": "after rename crash preserves cursor and durable outbox",
+      "status": "PASS"
+    },
+    {
+      "name": "ack removes only existing delivered IDs",
+      "status": "PASS"
+    },
+    {
+      "name": "clock regression rejects",
+      "status": "PASS"
+    }
+  ],
+  "synthetic": true,
+  "limitations": [
+    "single offline owner",
+    "bounded full-state persistence; not runtime incremental storage",
+    "downstream invalidation consumer still required"
+  ]
+}

@@ -1,0 +1,53 @@
+Phase 2–4 Integrated Offline Acceptance Report
+2026-10-08 Asia/Taipei
+Final verdict: BLOCKED. INTEGRATED_OFFLINE_READY is NOT achieved.
+
+Scope / formal protection
+All changes are research/ only on mother-phase234-integration-20261008, parent bafb3130f6a6c46ebfca9a7fdda778c6e8365c3b. No old104 tests rerun. Production HEAD and authority remain3a21f4c8cc7d704662b0500fdc06a833021a8125; clean verifier PASS at12:25:26Z. No formal files, processes, tasks, DB, environment, Gate, Universe, source subscriptions or formulas modified. Evidence/Natural Shadow/Consumer activation was not performed.
+
+B1 — COMPONENT PASS
+CandleLifecycle freezes raw input before scheduling. Clock-only evaluation at bar end matures a stored forming candle through the unchanged mapNaturalCandle validator. Raw candleSeenAt is preserved. Reopen restores pending rows. No synthetic minute or rewritten event time is created. This is an isolated scheduler API, not a new formal timer.
+B2 — COMPONENT PASS; end-to-end invalidation PARTIAL
+Explicit INVALIDATE retracts a previous usable key; old-minute revision emits invalidation plus valid replacement. Invalid quality cannot leave a newly acknowledged valid row. Downstream application must actually remove/invalidate the affected key. The current integrated evaluator accepts frozen replacement symbol data; it does not yet autonomously consume every INVALIDATE outbox event.
+B3 — PARTIAL
+Exact original fetchIntradayStatus/buildGrouped is extracted without top-level Writer initialization. Changed-symbol derived output matches full original grouping subset, preserving input order and all original grouped fields. Raw quote/supplemental independent source versions and every resource mapping are not yet unified. Existing helpers do not justify fabricating missing chip, margin, preopen, futures or technical evidence.
+B6 — PARTIAL
+Old-minute and historical-baseline revision descriptors cover all affected later windows, including recursive indicators. Current-symbol full formula recalculation is supported. Descriptor propagation into an autonomous replay of all affected historical evaluations is not complete. No retroactive notification is authorized or generated.
+B4 — CONNECTED SLICE PASS; whole scope PARTIAL
+New evaluate-routed invokes actual original Strategy3 functions only for Phase3 membership and actual Telegram anomaly functions for full active-market changed candles. Test proves a nonmember still enters Telegram. It also invokes original deep-analysis functions, with missing plans remaining unconfirmed. Clock-only pending confirmation scheduling is not complete.
+B5 — RECOVERY SLICE PASS; coordinator PARTIAL
+Immutable hashed symbol/result/pending/outbox objects plus one atomic root bind source cursor, derived checkpoint hash and outputs. Concurrent-root detection, hash verification and replay conflict checks exist. Tests cover before-root, before-rename and after-rename interruption, replay dedup, corrupted object and GAP. Connected test crashes after Phase4 root and before Phase2 ACK; reopening and replay retain one transaction, then ACK original event ID. This uses frozen invocation replay; a fully persisted autonomous coordinator and complete source-epoch transition recovery remain missing. Tests inject exceptions, not Windows power loss or forced process crash; directory durability under power failure UNKNOWN.
+B7 — STORAGE CAPACITY PASS; total pipeline PARTIAL
+New store avoids full-market K/history clone and serialization. Root copies bounded hash indexes only; touched-symbol objects are rewritten. It does not replace the old Phase4 simulator in production. Lifecycle state still uses bounded whole-state persistence, and a modified symbol's historical object is still whole-object I/O.
+B8 — REAL FINAL-STATE PARITY PASS; REAL E2E BLOCKED
+Read-only existing10/5 delivery:163 stocks33394 rows. All163 exact bytes/hash checks pass against original delivery manifest. Final per-symbol grouped output matches original grouping after key materialization. No source files altered.
+This delivery is a saved final-version snapshot, not complete arrival/revision history. It lacks a frozen all-market active/quote/supplemental same-as-of chain, confirmed history/plan/levels availability, and a Phase1 C2 historical feed. These inputs were not manufactured. Existing candle data is not declared absent; original-time reconstruction remains UNKNOWN.
+
+New tests only
+Lifecycle10 PASS; derived/invalidation5 PASS; routed execution/recovery8 PASS; connected slice1 PASS.24 new checks, plus separate historical final-state differential and storage capacity measurement. Prior104 checks retained without rerun. Synthetic fixture evidence is explicitly labeled and is not substituted for historical E2E.
+
+Connected slice
+Frozen forming K -> clock-only completion -> original candle-derived grouping -> actual Phase3 discovery -> scope router -> actual Strategy3/Telegram/deep-analysis -> atomic offline root -> restart replay -> original event ACK.
+Quote/supplemental baselines in this slice are fixtures. This is not a complete original market replay or formal source Gate acceptance.
+
+Measured CPU / RAM / I/O
+Partition storage fixture:2000 symbols x20 days x271 rows =10840000 rows;5420 per symbol. Fixture dates/times are storage load data, not market-quality inputs.
+Baseline9404.7318ms;1688816111 logical bytes written.
+Delta10 symbols79.6454ms;8591451 logical bytes read and8591451 written.
+Peak RSS177272KiB (~173.12MiB);CPU user4547000us/system2906000us for measured process scope. RSS includes fixture creation. Hardware physical disk I/O UNKNOWN.
+Dedicated owned child:128MiB old-generation;512MiB RSS guard;120s timeout;250ms sampling. PASS at9818ms; sampled peak175198208 bytes. Child exited; no formal process touched. Generated fixture directory preserved in partition-capacity.json.
+Routed correctness process peak70136KiB. Connected slice peak64028KiB, read5249/write24269 logical bytes.
+Historical final-state process peak151136KiB. CPU user500000us/system93000us. No full-strategy historical E2E latency is claimed.
+
+Original differences
+Formulas are reused unchanged. New lifecycle emits explicit invalidation and clock maturation. Original seeded Writer can omit older revisions; offline path keeps them. New result persistence is partitioned; current original simulator persists whole state. No inference that formal latency or strategy coverage improved.
+
+Blocking list / responsibility
+Mother Pool offline development: autonomous lifecycle/invalidation adapter, complete supplemental source binding, recursive historical invalidation execution, clock-only pending gate schedule, durable cross-stage coordinator and full pipeline capacity still pending.
+Historical replay evidence owner/source archives: provide exact same-as-of active/quote/supplemental/history/plan inputs and revision arrival versions. Without these, genuine original-time full E2E remains UNKNOWN. No need to reopen formal interfaces or enable Shadow to bypass this gap.
+
+Recovery / rollback
+Before-root or before-rename failure leaves prior verified root. Unreferenced immutable objects are retained; no automatic GC. After-rename restart checks exact transaction hash and deduplicates. Actual dead-owner lock requires explicit ownership review; no automatic steal. Isolated rollback means use a separate directory initialized from a retained verified root; never silently rewind a committed live cursor. No production rollback applies.
+
+STOP
+No persistent research service or child benchmark remains. Formal activation NO_GO. This report records partial implementation and explicit blockers, not completion of B1–B8 or release authorization.

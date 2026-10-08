@@ -1,0 +1,44 @@
+{
+  "status": "PASS",
+  "tests": [
+    {
+      "name": "real Phase3 membership controls Strategy3 but Telegram includes nonmember",
+      "status": "PASS"
+    },
+    {
+      "name": "original formula exact per-symbol differential parity",
+      "status": "PASS"
+    },
+    {
+      "name": "replay after restart produces no new transaction",
+      "status": "PASS"
+    },
+    {
+      "name": "before root crash keeps previous cross-stage cursor",
+      "status": "PASS"
+    },
+    {
+      "name": "before rename crash keeps root and replays frozen inputs",
+      "status": "PASS"
+    },
+    {
+      "name": "after rename crash restart deduplicates committed sequence",
+      "status": "PASS"
+    },
+    {
+      "name": "GAP preserves committed root",
+      "status": "PASS"
+    },
+    {
+      "name": "corrupted immutable input stops without advancing root",
+      "status": "PASS"
+    }
+  ],
+  "synthetic": true,
+  "full_e2e": false,
+  "io": {
+    "read": 313813,
+    "written": 39115
+  },
+  "peak_rss_kib": 70136
+}
