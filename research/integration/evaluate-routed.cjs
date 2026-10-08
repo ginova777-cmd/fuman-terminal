@@ -18,8 +18,21 @@ async function evaluate({store,binding,input,changes,gate,backfill,sequence,sour
  const pendingSymbols=Object.keys(next.pending).filter(s=>store.get(next.pending[s]).length>0);
  const touched=new Set([...routing.strategy3.changed,...routing.strategy3.admit,...routing.telegram.changed,...Object.keys(changes),...pendingSymbols,...(clockChanged?routing.strategy3.members:[])]);
  for(const s of routing.strategy3.exit)delete next.strategy[s];
- for(const s of touched){const supplied=typeof changes[s]==='string'?store.getItem(changes[s]):changes[s];const old=next.symbols[s]?store.get(next.symbols[s]):supplied||await backfill(s);if(!old||old.trade_date!==binding.payload.trade_date||old.symbol!==s||old.verified!==true)throw Error('BACKFILL_UNVERIFIED');const item=supplied||(old.historyRef?store.getItem(next.symbols[s]):old);
-  if(item.symbol!==s||item.trade_date!==old.trade_date||item.verified!==true)throw Error('SYMBOL_INPUT_IDENTITY');next.symbols[s]=typeof changes[s]==='string'?changes[s]:store.putItem(item);
+ for(const s of touched){
+  // Only unchanged pending work may reuse its hash-verified immutable item.
+  // Current bars/levels remain available; history is not a pending-gate dependency.
+  const pendingOnly=pendingSymbols.includes(s)&&!members.has(s)&&!!next.symbols[s]
+   &&!Object.hasOwn(changes,s)&&!input.changedSymbols.includes(s)
+   &&!routing.telegram.changed.includes(s)&&!(input.revisedSymbols||[]).includes(s)
+   &&prior?.sourceCursor?.epoch===sourceCursor.epoch
+   &&Number.isFinite(Date.parse(prior?.coordinator?.asOf))
+   &&Date.parse(input.asOf)>=Date.parse(prior.coordinator.asOf);
+  const supplied=typeof changes[s]==='string'?store.getItem(changes[s]):changes[s];
+  const old=next.symbols[s]?store.get(next.symbols[s]):supplied||await backfill(s);
+  if(!old||old.trade_date!==binding.payload.trade_date||old.symbol!==s||old.verified!==true)throw Error('BACKFILL_UNVERIFIED');
+  const item=pendingOnly?old:supplied||(old.historyRef?store.getItem(next.symbols[s]):old);
+  if(item.symbol!==s||item.trade_date!==old.trade_date||item.verified!==true)throw Error('SYMBOL_INPUT_IDENTITY');
+  if(!pendingOnly)next.symbols[s]=typeof changes[s]==='string'?changes[s]:store.putItem(item);
   const state={identity:id,trade_date:binding.payload.trade_date,symbols:{[s]:item.data}};
   if(members.has(s)){const r=await strategy3(state,[s],gate);if(r.results.length)next.strategy[s]=store.put(r.results[0]);else delete next.strategy[s];}
   const candleChanged=routing.telegram.changed.includes(s);
