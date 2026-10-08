@@ -1,0 +1,102 @@
+Phase 2–4 Release Boundary Contract — isolated candidate v1
+
+Scope
+Only research/release is added. Existing algorithms, formal entrypoints, authority,
+DB schema, runtime, subscriptions, Universe and gates are unchanged. This is NOT
+authorization to load the adapter in production. Formal ports remain unavailable.
+
+A. Cold recovery design (NOT implemented here)
+Normal incremental processing and recovery are distinct operational states.
+Previous combined cold test exhausted 120 seconds in Phase4 after Phase2 ~14.49s,
+Phase3 ~0.49s and old-minute recomputation ~63.91s. Full index building costs
+~53.10s independently; pending recovery after index readiness costs ~104.06s.
+Separate PASS is not combined PASS. Keep 128MiB old-generation / 512MiB RSS /120s.
+
+Proposed resumable state machine:
+R0 FREEZE: bind trade_date, epoch, baseline root/hash, original intent hash,
+   algorithm and source versions, Universe hash. No live input mixing. Retain
+   old published root. Only verified dead offline owners can be reclaimed.
+R1 INDEX: verify/rebuild each immutable historical reference with existing proof
+   validation. Publish a durable cursor only after proof object and pointer are
+   saved. Restart re-verifies hashes; a cursor is a hint, never proof by itself.
+   Hash/source/time boundary changes invalidate the affected proof.
+R2 PREPARE: persist Phase2 outputs and the whole Phase3 global ranking state in
+   an unpublished namespace. A global rank is not a per-stock partial release.
+R3 REVISE: persist completed per-stock audit objects; key=(intent, symbol,
+   input hash, algorithm version). Keep full recursive RSI/KD/MACD behavior.
+   Resume only from verified whole-symbol results, never half an indicator.
+R4 CONSUME: persist unpublished consumer outputs/pending/outbox revisions with
+   the same identity. Do not send notifications during recovery replay.
+R5 VERIFY: independently read every required output/hash and full expected set.
+R6 COMMIT: one atomic root for all outputs, then ACK the input intent. Crash
+   before root leaves prior publication; crash after root replays ACK only when
+   intent/root identities match. Same idempotency key cannot republish output.
+
+Checkpoint ownership, atomic cursor implementation and resumable R2–R4 are not
+implemented by this change. Existing Coordinator still replays whole intent.
+Do not call this recovery design runtime-ready. Planned workers must yield before
+the 120s deadline at complete object boundaries; oversize indivisible work stays
+BLOCKED. Persisted progress cannot authorize extending an individual guard.
+STOP stops new recovery work, preserves intent/staged data/prior root. Unknown
+owner, epoch, hash, capacity or readback means BLOCKED, not forced recovery.
+
+B. Saved native mapping
+Source contract telegram_actual_open_recovery_v1 is NOT renamed to
+telegram_premarket_plan_v1. The original validator is unchanged.
+project() streams saved bytes, rejects duplicate selected symbols/members and
+trailing JSON, retains source byte hash and exact selected records. It does not
+verify the producer's separate canonical evidence/rows hashes; keep that UNKNOWN.
+
+source -> destination / condition
+trade_date/base_date -> same explicit target/base; reject mismatches.
+rows[].stock_id -> symbol; unique exact selection in both source row arrays.
+rows[].intraday_direction -> declared.direction, not confirmed authorization.
+rows[].strategy_levels -> declared.levels verbatim; no inferred P/S renaming.
+rows[].activated_at -> effective_at; NEVER available_at or 08:59 frozen_at.
+frozen_at -> source_frozen_at verbatim; no preopen timestamp fabrication.
+available_at -> same value, or null/UNKNOWN; never read time or activation time.
+source -> exact value or null/UNKNOWN; contract name is not provider evidence.
+evidence.data.rows[].previous -> preserve date and values. Only matching base_date
+  finite positive close/low enter level_input_candidate previous_close/low.
+actual_open -> declared actual_open. Formal open stays null until raw event proof.
+cost/cost_evidence -> declared values. Formal cost stays null until full branch
+  row proof is independently verified. Selected summary arithmetic alone is not
+  proof that the correct maximum net-buy branch was selected.
+volume units -> retain raw declarations in source resources; absent unit UNKNOWN.
+  Do not borrow a daily lots declaration for websocket minute volume.
+raw_sha256 -> hash of full saved original bytes, independently reproducible.
+
+formal_plan=null; formal_ready=false. Projected candidate validation is diagnostic,
+not a full original rows hash check. Source still needs an approved contract bridge
+for its post-open semantics. No implicit validator exemption or date substitution.
+
+C. Production-bound port design / isolated implementation
+Process-local configuration names: MP_PHASE2_ENABLED, MP_PHASE3_ENABLED,
+MP_PHASE4_ENABLED. Unset or '0'=OFF; only exact '1'=ON, other values fail closed.
+Default constructor does not read global env: a future approved loader must pass
+an explicit filtered process-local configuration. No registry/system env changes.
+Dependencies: P3 requires P2; P4 requires P3. OFF does not instantiate a store or
+invoke a port. Formal mode is refused. Ports must explicitly declare ISOLATED.
+
+Each versioned port:
+prepare(previousPhaseOutput, {input,idempotency_key,phase})
+readback({input,idempotency_key,phase}) -> {
+ epoch, trade_date, sequence, idempotency_key, payload, sha256
+}
+Readback must be an independent persisted read, not echoing the preparation object.
+Hash/date/epoch/sequence must match. Preparation must be idempotent and write only
+an unpublished namespace. This property is verified for offline test ports only;
+future production ports require independent acceptance, bounded deadlines, source
+quality/continuity proof, and no consumer switch before the verified root commits.
+Identity includes input, flags and port versions. Version/flag/epoch changes require
+explicit rebase. Concurrent root changes are rejected; no blind overwrite.
+
+STOP is checked before each prepare and before commit. It does not preempt a port
+already running; future workers require independent deadline/STOP response proof.
+Default OFF leaves the old formal path untouched. Rollback means disable the new
+flags and retain staged receipts; it does NOT revert DB or overwrite newer market
+data. Formal rollback and legacy-path verification remain NATURAL_MARKET_PENDING.
+
+Offline E2E exercises existing CandleLifecycle -> IncrementalDiscovery -> evaluate,
+with independent saved port readback, retry, STOP, and restart dedup. Synthetic
+fixtures test the boundaries, never replace missing B3 native evidence.
