@@ -105,7 +105,20 @@ class Coordinator{
   nextMeta.phase3=this.store.put(d.checkpoint());
   mark('historical_recalculation');
   // Recalculate every affected prefix for audit only; never retroactively notify.
-  for(const [s,from]of revisions){const x=item(s),audit=[];if(x.historyRef&&!x.data.history)x.data.history=this.store.get(x.historyRef);for(let i=0;i<x.data.current.length;i++){const bar=x.data.current[i];if(Date.parse(bar.timestamp)<from)continue;const at=new Date(Date.parse(bar.timestamp)+60000).toISOString();const data={...x.data,current:x.data.current.slice(0,i+1)};audit.push({timestamp:bar.timestamp,target_bar_end_at:at,known_at:frame.asOf,rows:{volume:volumeDetector.detect({stock_id:s,trade_date:frame.trade_date,current:data.current,history:data.history,as_of:frame.asOf}).rows.at(-1),price:priceDetector.detect({stock_id:s,trade_date:frame.trade_date,current:data.current,history:data.history,as_of:frame.asOf,previous_close:data.quote?.prevClose||null}).rows.at(-1)}});}nextMeta.revisionAudits[s]=this.store.put({scope:'CORRECTED_HISTORY_NOT_ORIGINAL_VISIBILITY',from:Number.isFinite(from)?new Date(from).toISOString():'ALL',audit,technical_recalculation:indicatorCalculator.calculate({bars:x.data.current,stock_id:s,trade_date:frame.trade_date,as_of:frame.asOf}),notifications_sent:0});flush(s);}
+  for(const [s,from]of revisions){
+   const x=item(s),history=x.historyRef&&!x.data.history?this.store.get(x.historyRef):x.data.history;
+   const args={stock_id:s,trade_date:frame.trade_date,current:x.data.current,history,as_of:frame.asOf};
+   // These original formulas are causal: a row reads only its minute, earlier
+   // current rows and fixed historical rows. Keep the full recursive indicator
+   // recomputation; RSI/KD/MACD cannot be truncated at a rolling-20 boundary.
+   const ordered=x.data.current.every((b,i)=>i===0||Date.parse(b.timestamp)>Date.parse(x.data.current[i-1].timestamp));
+   const volumeRows=ordered?volumeDetector.detect(args).rows:null,priceRows=ordered?priceDetector.detect({...args,previous_close:x.data.quote?.prevClose||null}).rows:null;
+   const audit=[];for(let i=0;i<x.data.current.length;i++){
+    const bar=x.data.current[i];if(Date.parse(bar.timestamp)<from)continue;
+    audit.push({timestamp:bar.timestamp,target_bar_end_at:new Date(Date.parse(bar.timestamp)+60000).toISOString(),known_at:frame.asOf,rows:{volume:ordered?volumeRows[i]:volumeDetector.detect({...args,current:x.data.current.slice(0,i+1)}).rows.at(-1),price:ordered?priceRows[i]:priceDetector.detect({...args,current:x.data.current.slice(0,i+1),previous_close:x.data.quote?.prevClose||null}).rows.at(-1)}});
+   }
+   nextMeta.revisionAudits[s]=this.store.put({scope:'CORRECTED_HISTORY_NOT_ORIGINAL_VISIBILITY',from:Number.isFinite(from)?new Date(from).toISOString():'ALL',audit,technical_recalculation:indicatorCalculator.calculate({bars:x.data.current,stock_id:s,trade_date:frame.trade_date,as_of:frame.asOf}),notifications_sent:0});flush(s);
+  }
   mark('Phase4');if(fault==='AFTER_PHASE3')throw Error('CRASH_AFTER_PHASE3');
   const result=await evaluate({store:this.store,binding:b.binding,input:{discovery,changedSymbols:Object.keys(changed),candleSymbols:[...candles],revisedSymbols:[...revisions.keys()],asOf:frame.asOf,plan:frame.plan||null},changes:changed,gate:frame.gate,backfill:async s=>this.store.getItem(refs[s]),sequence:frame.sequence,sourceCursor:{status:'OFFLINE_FIXED_SEGMENT',epoch:frame.epoch,intent_hash:digest(frame),sequence:frame.sequence},coordinator:nextMeta,fault});
   mark('committed');fs.renameSync(this.pending,path.join(this.directory,'ack-'+frame.sequence+'.json'));return result;
