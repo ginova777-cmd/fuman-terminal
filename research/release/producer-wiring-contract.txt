@@ -1,0 +1,25 @@
+Producer-to-Phase234 wiring contract — release preparation only
+
+run({asOf,gate,plan}) receives two immutable, approved local C2 snapshot copies.
+quote: existing mother-change-evidence-v2-c2 prepare/saved/commit.
+candle: existing mother-change-evidence-v3-c2-capacity parent/sub-batches/ACK/PARENT_COMPLETE.
+Read/audit through existing readCommittedSegment, not a new validation implementation.
+source descriptors: kind, source_id, epoch, producer_version, directory, manifest_hash.
+Quote producer version must match prepare; candle v3 has no embedded producer version and requires explicit null. This gap is retained, never inferred from current source HEAD.
+Manifest hash = existing canonical SHA256(entries), each entry filename/bytes/raw-file SHA256.
+No live source path, formal runtime mutation, HTTP or DB write. OFF returns before all IO; does not invoke or replace any legacy program.
+
+Frozen source binding (two source IDs/epochs/versions) remains unchanged across frames. Per-kind source cursor {kind,epoch,trade_date,sequence,commit_hash} comes from the existing audited reader. Combined processing sequence is separate from both source sequences.
+Frame stores producer binding, per-kind source manifest, input cursor, output cursor and event IDs; frame hash is stored in the same atomic root through sourceCursor.intent_hash. No separate cursor file can move ahead of publication.
+Final payload per changed key maps to CANDLE/QUOTE with digest(payload); intermediate C2 transitions stay in original source evidence. Coalescing is per exact key, including old minutes, not just latest minute. Never split/drop excess events; existing 5000-event/4MiB frame bound blocks oversized input.
+Clock-only frames advance the processing checkpoint while source cursor stays unchanged. Identical asOf+source cursor+manifest+gate+plan replays exact frozen prior frame. STOP never acknowledges a source cursor.
+Failure retry uses the exact source snapshots and asOf/gate/plan. Conflicting pending input fails closed. Rollback returns existing OFF adapter; source evidence and committed output are retained.
+
+Readiness limitations
+- C2 continuous=false/gap_closed=false remains unchanged. OFFLINE_FIXED_SEGMENT is solely a saved-snapshot test scope, not a production continuity proof.
+- Existing reader snapshots and re-audits a bounded retained segment (64MiB/10000 files). It is not yet an unbounded/live tail reader; sustained natural growth and start/rebase handoff remain unverified.
+- Candle v3 producer version binding needs authoritative deployment/epoch receipt or producer contract enhancement reviewed separately. No generated metadata can fill it.
+- Source-ID descriptor is offline configuration, not an authenticated natural Producer attestation.
+- Baseline is supplied by the existing verified isolated Coordinator initialization. This adapter does not construct formal source baseline or infer coverage.
+- Existing B3 plan validation remains required. actual-open is not premarket-plan.
+- No production callbacks are injected and no Writer/Consumer is redirected.
