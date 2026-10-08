@@ -30,7 +30,7 @@ async function evaluate({store,binding,input,changes,gate,backfill,sequence,sour
   const supplied=typeof changes[s]==='string'?store.getItem(changes[s]):changes[s];
   const old=next.symbols[s]?store.get(next.symbols[s]):supplied||await backfill(s);
   if(!old||old.trade_date!==binding.payload.trade_date||old.symbol!==s||old.verified!==true)throw Error('BACKFILL_UNVERIFIED');
-  const item=pendingOnly?old:supplied||(old.historyRef?store.getItem(next.symbols[s]):old);
+  const item=pendingOnly?old:supplied||(old.historyRef&&next.symbols[s]?store.getItem(next.symbols[s]):old);
   if(item.symbol!==s||item.trade_date!==old.trade_date||item.verified!==true)throw Error('SYMBOL_INPUT_IDENTITY');
   if(!pendingOnly)next.symbols[s]=typeof changes[s]==='string'?changes[s]:store.putItem(item);
   const state={identity:id,trade_date:binding.payload.trade_date,symbols:{[s]:item.data}};

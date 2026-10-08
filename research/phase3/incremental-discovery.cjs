@@ -41,14 +41,18 @@ class IncrementalDiscovery {
       const stamp=Date.parse(batch.asOf);
       if(!Number.isFinite(stamp)||new Date(stamp+28800000).toISOString().slice(0,10)!==next.tradeDate)throw Error('ASOF_DATE_INVALID');
       if(next.lastAsOf && stamp<Date.parse(next.lastAsOf))throw Error('ASOF_REGRESSION');
+      const resourceMaps=new Map();
       for(const event of batch.events) {
         if(!RESOURCES.has(event.resource)||!active.has(event.symbol)) throw Error('RESOURCE_OR_UNIVERSE_INVALID');
         const target=['quoteMap','dailyVolumeMap'].includes(event.resource)?next:next.supplementalMaps;
-        const map=new Map(target[event.resource]||[]);
+        if(!resourceMaps.has(event.resource))resourceMaps.set(event.resource,{target,map:new Map(target[event.resource]||[])});
+        const map=resourceMaps.get(event.resource).map;
         if(digest(map.get(event.symbol)??null)===digest(event.value??null)){duplicates++;continue;}
         if(event.value===null)map.delete(event.symbol);else map.set(event.symbol,clone(event.value));
-        target[event.resource]=[...map]; changed.add(event.symbol);
+        if(!resourceMaps.get(event.resource).dirty)target[event.resource]=target[event.resource]||[];
+        resourceMaps.get(event.resource).dirty=true; changed.add(event.symbol);
       }
+      for(const [resource,{target,map,dirty}]of resourceMaps)if(dirty)target[resource]=[...map];
       // Global rank, leader and allocation dependencies are deliberately rebuilt.
       // A clock change invalidates all metric values, including freshness/volume projection.
       const output=this.oracle.evaluate(this.input(next),{asOf:batch.asOf,changedSymbols:[...changed],invalidateAll:batch.contextChanged===true});
