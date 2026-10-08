@@ -8,30 +8,33 @@ class ProductionAdapter {
  constructor({directory,env={},port,stop=()=>false}){
   this.enabled=flags(env);this.directory=directory;this.port=port;this.stop=stop;
  }
- async runIncremental(frame){
+ bindMode(store,mode){
+  const config={flags:this.enabled,port:this.port,execution_mode:mode,source_version:require('./algorithm-identity.cjs').algorithmIdentity()},file=path.join(store.directory,'adapter-config.json'),b=bytes(config);
+  if(fs.existsSync(file)){if(hash(fs.readFileSync(file))!==hash(b))throw Error('ADAPTER_REBASE_REQUIRED');}
+  else{if(store.root()||fs.existsSync(path.join(store.directory,'pending.json')))throw Error('UNBOUND_STATE_REQUIRES_EXPLICIT_BASELINE');const fd=fs.openSync(file,'wx');try{fs.writeFileSync(fd,b);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}}
+  return config;
+ }
+ async runIncremental(frame,{fault}={}){
   if(!this.enabled.some(Boolean))return {status:'OFF',formal_connected:false};
-  if(!this.enabled.every(Boolean))throw Error('PARTIAL_PHASE_INCREMENTAL_PORT_NOT_WIRED');
   if(this.stop())return {status:'STOPPED',formal_connected:false};
   if(this.port?.scope!=='ISOLATED'||this.port?.contract!=='phase234-file-port-v1'||!this.port.version)throw Error('PORT_NOT_VERIFIED');
-  const c=new Coordinator(this.directory),config={flags:this.enabled,port:this.port},file=path.join(c.directory,'adapter-config.json'),b=bytes(config);
-  if(fs.existsSync(file)){if(hash(fs.readFileSync(file))!==hash(b))throw Error('ADAPTER_REBASE_REQUIRED');}
-  else{const fd=fs.openSync(file,'wx');try{fs.writeFileSync(fd,b);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}}
-  const transaction=c.store.transaction.bind(c.store);
-  c.store.transaction=(build,options)=>{if(this.stop())throw Error('ADAPTER_STOP_BEFORE_PUBLISH');return transaction(build,options);};
+  const c=new Coordinator(this.directory),config=this.bindMode(c.store,'CONTINUOUS_INCREMENTAL');
+  const {ContinuousPorts}=require('./continuous-ports.cjs');
+  const ports=new ContinuousPorts({coordinator:c,phase:this.enabled[2]?4:this.enabled[1]?3:2,sourceVersion:config.source_version,port:this.port,stop:this.stop,fault});
+  const before=c.store.root();if(before)ports.verify(before);
+  ports.wrapPublication();
   try{
-   // Normal incremental path does not enter R0-R6 or rebuild the whole history index.
-   const result=await c.run(frame),root=new OfflineStore(this.directory).root();
+   const result=await c.run(frame,{fault,continuous:ports}),root=new OfflineStore(this.directory).root();
    if(digest(root)!==digest(result.root))throw Error('PORT_ROOT_READBACK');
-   return {...result,execution_mode:'INCREMENTAL',readback_sha256:digest(root),formal_connected:false};
+   const metadata=ports.verify(root);
+   return {...result,execution_mode:'INCREMENTAL',ports:metadata,readback_sha256:digest(root),formal_connected:false};
   }catch(e){if(e.message==='ADAPTER_STOP_BEFORE_PUBLISH')return {status:'STOPPED',published:false,formal_connected:false};throw e;}
  }
  async run(frame,{maxSteps=64}={}){
   if(!this.enabled.some(Boolean))return {status:'OFF',formal_connected:false};
   if(this.stop())return {status:'STOPPED',formal_connected:false};
   if(this.port?.scope!=='ISOLATED'||this.port?.contract!=='phase234-file-port-v1'||!this.port.version)throw Error('PORT_NOT_VERIFIED');
-  const store=new OfflineStore(this.directory),config={flags:this.enabled,port:this.port},file=path.join(store.directory,'adapter-config.json');
-  const b=bytes(config);if(fs.existsSync(file)){if(hash(fs.readFileSync(file))!==hash(b))throw Error('ADAPTER_REBASE_REQUIRED');}
-  else{const fd=fs.openSync(file,'wx');try{fs.writeFileSync(fd,b);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}}
+  const store=new OfflineStore(this.directory);this.bindMode(store,'COLD_RECOVERY');
   const c=new Coordinator(this.directory),target=this.enabled[2]?null:this.enabled[1]?'R2:discovery':'R2';
   const cpFile=path.join(c.directory,'recovery',digest(frame)+'.json');
   // Partial-phase ports resume through the same hash checks. They never publish a Phase4 root.
