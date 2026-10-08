@@ -39,3 +39,5 @@ Offline success does not approve formal deployment or consumer activation.
 Native source prerequisites and future production readback remain independently blocking.
 
 R5 progress is checkpointed in batches of at most64 verified object hashes; no object sampling. Immutable objects are written to a unique temp file, fsynced, then renamed. A process dying mid-write leaves only an unreferenced temp file. Algorithm identity also hashes repository lib/scripts/data-contract source dependencies; drift blocks restart. This does not mutate formal code.
+
+Separate entrypoints: run() is the explicitly requested cold/phase-isolation path. runIncremental() uses the unchanged normal Coordinator with independent readback and STOP before publish; it requires all three phases enabled. Partial-phase incremental ports remain explicitly NOT_WIRED; their cold isolated checkpoint readback is not continuous production publication. OFF remains no-op. Capacity was measured on41bb6900 before adding this normal dispatch entrypoint; recovery computation and persistence files remain unchanged by that addition.

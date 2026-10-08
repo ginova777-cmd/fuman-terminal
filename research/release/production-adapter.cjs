@@ -8,6 +8,23 @@ class ProductionAdapter {
  constructor({directory,env={},port,stop=()=>false}){
   this.enabled=flags(env);this.directory=directory;this.port=port;this.stop=stop;
  }
+ async runIncremental(frame){
+  if(!this.enabled.some(Boolean))return {status:'OFF',formal_connected:false};
+  if(!this.enabled.every(Boolean))throw Error('PARTIAL_PHASE_INCREMENTAL_PORT_NOT_WIRED');
+  if(this.stop())return {status:'STOPPED',formal_connected:false};
+  if(this.port?.scope!=='ISOLATED'||this.port?.contract!=='phase234-file-port-v1'||!this.port.version)throw Error('PORT_NOT_VERIFIED');
+  const c=new Coordinator(this.directory),config={flags:this.enabled,port:this.port},file=path.join(c.directory,'adapter-config.json'),b=bytes(config);
+  if(fs.existsSync(file)){if(hash(fs.readFileSync(file))!==hash(b))throw Error('ADAPTER_REBASE_REQUIRED');}
+  else{const fd=fs.openSync(file,'wx');try{fs.writeFileSync(fd,b);fs.fsyncSync(fd);}finally{fs.closeSync(fd);}}
+  const transaction=c.store.transaction.bind(c.store);
+  c.store.transaction=(build,options)=>{if(this.stop())throw Error('ADAPTER_STOP_BEFORE_PUBLISH');return transaction(build,options);};
+  try{
+   // Normal incremental path does not enter R0-R6 or rebuild the whole history index.
+   const result=await c.run(frame),root=new OfflineStore(this.directory).root();
+   if(digest(root)!==digest(result.root))throw Error('PORT_ROOT_READBACK');
+   return {...result,execution_mode:'INCREMENTAL',readback_sha256:digest(root),formal_connected:false};
+  }catch(e){if(e.message==='ADAPTER_STOP_BEFORE_PUBLISH')return {status:'STOPPED',published:false,formal_connected:false};throw e;}
+ }
  async run(frame,{maxSteps=64}={}){
   if(!this.enabled.some(Boolean))return {status:'OFF',formal_connected:false};
   if(this.stop())return {status:'STOPPED',formal_connected:false};
