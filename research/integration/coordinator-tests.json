@@ -14,7 +14,7 @@
       "status": "PASS"
     },
     {
-      "name": "quality invalidation removes K and downstream stale result",
+      "name": "volume invalidation preserves price K and invalidates volume",
       "status": "PASS"
     },
     {
@@ -74,15 +74,15 @@
   "production": false,
   "notifications_sent": 0,
   "real_history_e2e": false,
-  "peak_rss_kib": 148036,
-  "elapsed_ms": 1515.5592000000001,
+  "peak_rss_kib": 161508,
+  "elapsed_ms": 1429.4554,
   "cpu": {
-    "user": 625000,
-    "system": 547000
+    "user": 562000,
+    "system": 563000
   },
   "io": {
-    "read": 630455,
-    "written": 217763
+    "read": 1087106,
+    "written": 231791
   },
   "limitations": [
     "exception recovery, not OS power loss",

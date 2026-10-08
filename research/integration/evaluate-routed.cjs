@@ -10,18 +10,19 @@ async function evaluate({store,binding,input,changes,gate,backfill,sequence,sour
  if(prior&&prior.identity!==id)throw Error('IDENTITY_RECOVERY_REQUIRED');
  if(prior?.sequence===sequence){if(prior.txHash!==txHash)throw Error('REPLAY_CONFLICT');return {status:'REPLAY_DEDUP',root:prior};}
  if(sequence!==(prior?.sequence||0)+1)throw Error('SEQUENCE_GAP');
- const next={identity:id,sequence,txHash,sourceCursor,coordinator,symbols:{...(prior?.symbols||{})},strategy:{...(prior?.strategy||{})},telegram:{...(prior?.telegram||{})},pending:{...(prior?.pending||{})},outbox:{...(prior?.outbox||{})}};
+ const next={identity:id,sequence,txHash,sourceCursor,coordinator,symbols:{...(prior?.symbols||{})},strategy:{...(prior?.strategy||{})},telegram:{...(prior?.telegram||{})},pending:{...(prior?.pending||{})},outboxRevisions:{...(prior?.outboxRevisions||{})},outbox:{...(prior?.outbox||{})}};
  const active=new Set(routing.telegram.universe),members=new Set(routing.strategy3.members);
  if(Object.keys(changes).some(s=>!active.has(s)))throw Error('CHANGE_OUTSIDE_UNIVERSE');
  const clockChanged=prior?.coordinator?.asOf!==input.asOf;
  const pendingSymbols=Object.keys(next.pending).filter(s=>store.get(next.pending[s]).length>0);
  const touched=new Set([...routing.strategy3.changed,...routing.strategy3.admit,...routing.telegram.changed,...Object.keys(changes),...pendingSymbols,...(clockChanged?routing.strategy3.members:[])]);
  for(const s of routing.strategy3.exit)delete next.strategy[s];
- for(const s of touched){const old=next.symbols[s]?store.get(next.symbols[s]):await backfill(s);if(!old||old.trade_date!==binding.payload.trade_date||old.symbol!==s||old.verified!==true)throw Error('BACKFILL_UNVERIFIED');const item=changes[s]||old;
+ for(const s of touched){const old=next.symbols[s]?store.get(next.symbols[s]):await backfill(s);if(!old||old.trade_date!==binding.payload.trade_date||old.symbol!==s||old.verified!==true)throw Error('BACKFILL_UNVERIFIED');const item=typeof changes[s]==='string'?store.get(changes[s]):changes[s]||old;
   if(item.symbol!==s||item.trade_date!==old.trade_date||item.verified!==true)throw Error('SYMBOL_INPUT_IDENTITY');next.symbols[s]=store.put(item);
   const state={identity:id,trade_date:binding.payload.trade_date,symbols:{[s]:item.data}};
   if(members.has(s)){const r=await strategy3(state,[s],gate);if(r.results.length)next.strategy[s]=store.put(r.results[0]);else delete next.strategy[s];}
   const candleChanged=routing.telegram.changed.includes(s);
+  if((input.revisedSymbols||[]).includes(s)){for(const [key,h] of Object.entries(next.outbox)){const old=store.get(h);if(old.payload.stock_id===s){const revision=store.put({...old,status:'WITHDRAWN_REVALIDATION_REQUIRED',withdrawn_as_of:input.asOf});next.outboxRevisions[key]=[...(next.outboxRevisions[key]||[]),revision];delete next.outbox[key];}}}
   if(candleChanged||pendingSymbols.includes(s)){const t=candleChanged?telegram(state,[s],input.asOf):[];if(candleChanged)next.telegram[s]=store.put(t);
    const events=t.filter(x=>x.hit).map(x=>({...x.row,event_type:x.kind==='volume'?'VOLUME_ANOMALY_EVENT':'PRICE_UP_ANOMALY_EVENT',source_event_at:x.row.timestamp}));
    const deep=deepAnalysis({events,previous:next.pending[s]?store.get(next.pending[s]):[],contexts:{[s]:{bars:item.data.current,levelInput:item.data.levelInput}},now:input.asOf,tradeDate:state.trade_date,plan:input.plan||null});next.pending[s]=store.put(deep.state);

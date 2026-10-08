@@ -11,9 +11,9 @@
     "quote/supplemental baseline fixtures",
     "no natural data or historical-arrival proof"
   ],
-  "peak_rss_kib": 66296,
+  "peak_rss_kib": 66220,
   "io": {
-    "read": 5306,
-    "written": 24288
+    "read": 5369,
+    "written": 24309
   }
 }

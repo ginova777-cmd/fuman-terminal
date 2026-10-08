@@ -2,6 +2,8 @@
 // Offline completion/invalidation scheduler. Frozen input; never fabricates a candle.
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const {mapNaturalCandle}=require('../../lib/daytrade-fast-candle-row.js');
+const {priceOnly}=require('./price-quality.cjs');
+const mapSeparated=(r,o)=>mapNaturalCandle(r,o)||priceOnly(r,o);
 const sha=x=>crypto.createHash('sha256').update(JSON.stringify(x)).digest('hex');
 class CandleLifecycle {
  constructor({directory,tradeDate,epoch,maxRows=200000,maxBytes=128*1024*1024}){
@@ -22,14 +24,14 @@ class CandleLifecycle {
    const key=s+'|'+new Date(t).toISOString(),hash=sha(r),prior=n.rows[key];
    if(prior?.rawHash===hash)continue;
    const due=Math.max(t+60000,Date.parse(r.candleSeenAt));
-   const probe=mapNaturalCandle(r,{tradeDate:n.tradeDate,nowMs:Number.isFinite(due)?Math.max(nowMs,due):nowMs,maxSeenAgeMs:Infinity});
+   const probe=mapSeparated(r,{tradeDate:n.tradeDate,nowMs:Number.isFinite(due)?Math.max(nowMs,due):nowMs,maxSeenAgeMs:Infinity});
    if(!probe){n.rows[key]={raw:r,rawHash:hash,status:'INVALID',publishedHash:null};emit(key,'INVALIDATE',null,'ORIGINAL_QUALITY_VALIDATOR_REJECTED');continue;}
    if(prior?.status==='PUBLISHED'){emit(key,'INVALIDATE',null,'REVISION_PENDING_REVALIDATION');}
    n.rows[key]={raw:r,rawHash:hash,due,status:'PENDING',publishedHash:null};
   }
   if(Object.keys(n.rows).length>this.limits.maxRows)throw Error('ROW_LIMIT');
   for(const [key,x]of Object.entries(n.rows))if(x.status==='PENDING'&&x.due<=nowMs){
-   const row=mapNaturalCandle(x.raw,{tradeDate:n.tradeDate,nowMs,maxSeenAgeMs:Infinity});
+   const row=mapSeparated(x.raw,{tradeDate:n.tradeDate,nowMs,maxSeenAgeMs:Infinity});
    if(!row){x.status='INVALID';emit(key,'INVALIDATE',null,'ORIGINAL_QUALITY_VALIDATOR_REJECTED');continue;}
    x.status='PUBLISHED';x.publishedHash=sha(row);emit(key,'UPSERT',row,null);
   }

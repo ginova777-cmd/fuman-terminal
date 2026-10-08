@@ -12,13 +12,14 @@ const priceDetector=require('../../lib/telegram-detectors/price-detector.cjs');
 const {bind}=require('./routing-contract.cjs'),{evaluate}=require('./evaluate-routed.cjs');
 const RESOURCES=new Set(['dailyVolumeMap','capitalMap','chipMap','marginChangeMap','stockFutureInitialMap','stockGroupContractMap','preopenReferencePriceMap']);
 const DATA_RESOURCES=new Set(['technical','atr','levelInput']);
+const {verifyResource}=require('./resource-provenance.cjs');
 const digest=x=>hash(bytes(x));
 function checkBars(rows,s,date,history=false){
  if(!Array.isArray(rows)||rows.length>(history?5420:271))throw Error('BAR_LIMIT');const seen=new Set();
  for(const b of rows){const ms=Date.parse(b.timestamp);if(b.stock_id!==s||!Number.isFinite(ms)||ms%60000||new Date(ms+28800000).toISOString().slice(0,10)!==b.trade_date||(history?b.trade_date>=date:b.trade_date!==date)||seen.has(ms))throw Error('BAR_IDENTITY');seen.add(ms);}
 }
-function toBar(r){return {stock_id:r.symbol,trade_date:r.trade_date,timestamp:r.candle_time,open:r.open,high:r.high,low:r.low,close:r.close,volume_raw:r.volume,volume_raw_unit:r.payload.volume_unit.toUpperCase(),complete:true,is_synthetic:r.synthetic,source:r.source,available_at:r.updated_at};}
-function derivedRows(item){return item.data.current.map(b=>({symbol:b.stock_id,trade_date:b.trade_date,candle_time:b.timestamp,open:b.open,high:b.high,low:b.low,close:b.close,volume:b.volume_raw})).reverse();}
+function toBar(r){return {stock_id:r.symbol,trade_date:r.trade_date,timestamp:r.candle_time,open:r.open,high:r.high,low:r.low,close:r.close,volume_raw:r.volume,volume_raw_unit:r.payload.volume_unit.toUpperCase(),complete:true,volume_strategy_usable:r.volume_strategy_usable,price_strategy_usable:true,is_synthetic:r.synthetic,source:r.source,available_at:r.updated_at};}
+function derivedRows(item){return item.data.current.filter(b=>b.volume_strategy_usable!==false).map(b=>({symbol:b.stock_id,trade_date:b.trade_date,candle_time:b.timestamp,open:b.open,high:b.high,low:b.low,close:b.close,volume:b.volume_raw})).reverse();}
 class Coordinator{
  constructor(directory){this.directory=path.resolve(directory);this.store=new OfflineStore(this.directory);this.pending=path.join(this.directory,'pending.json');this.baseFile=path.join(this.directory,'baseline.json');}
  initialize({snapshot,items,proof}){
@@ -58,11 +59,12 @@ class Coordinator{
   const refs={...b.symbols,...(prior?.symbols||{})},meta=prior?.coordinator||{lifecycle:{},due:{},asOf:null,revisionAudits:{}},nextMeta={lifecycle:{...meta.lifecycle},due:{...meta.due},asOf:frame.asOf,revisionAudits:{...meta.revisionAudits}};
   if(meta.asOf&&Date.parse(frame.asOf)<Date.parse(meta.asOf))throw Error('CLOCK_REGRESSION');
   const active=new Set(b.binding.payload.active),changed={},candles=new Set(),resourceEvents=[],rawBySymbol=new Map(),revisions=new Map();
-  const item=s=>{if(!active.has(s))throw Error('OUTSIDE_UNIVERSE');return changed[s]||(changed[s]=this.store.get(refs[s]));};
+  const item=s=>{if(!active.has(s))throw Error('OUTSIDE_UNIVERSE');if(typeof changed[s]==='string')changed[s]=this.store.get(changed[s]);return changed[s]||(changed[s]=this.store.get(refs[s]));};
+  const flush=s=>{if(changed[s]&&typeof changed[s]!=='string')changed[s]=this.store.put(changed[s]);};
   const earliest=(s,t)=>revisions.set(s,Math.min(revisions.get(s)??Infinity,t));
   for(const e of frame.events){
    if(!active.has(e.symbol)||e.payload_sha256!==digest(e.payload))throw Error('EVENT_IDENTITY_OR_HASH');
-   const x=item(e.symbol);
+   const x=e.type==='CANDLE'?null:item(e.symbol);
    if(e.type==='CANDLE'){if(!rawBySymbol.has(e.symbol))rawBySymbol.set(e.symbol,[]);rawBySymbol.get(e.symbol).push(e.payload);}
    else if(e.type==='QUOTE'){
     const old=x.rawQuote,raw=e.payload;if(String(raw.symbol||raw.code)!==e.symbol||raw.trade_date!==frame.trade_date)throw Error('QUOTE_IDENTITY');
@@ -74,9 +76,10 @@ class Coordinator{
    }else if(e.type==='SUPPLEMENTAL'){
     if(!RESOURCES.has(e.resource)||e.trade_date!==frame.trade_date||e.epoch!==frame.epoch)throw Error('SUPPLEMENTAL_IDENTITY');resourceEvents.push({resource:e.resource,symbol:e.symbol,value:e.payload});
    }else if(e.type==='DATA_RESOURCE'){
-    if(!DATA_RESOURCES.has(e.resource)||e.trade_date!==frame.trade_date||e.epoch!==frame.epoch)throw Error('DATA_RESOURCE_IDENTITY');x.data[e.resource]=structuredClone(e.payload);
+    if(!DATA_RESOURCES.has(e.resource)||e.trade_date!==frame.trade_date||e.epoch!==frame.epoch)throw Error('DATA_RESOURCE_IDENTITY');x.resourceEvidence={...(x.resourceEvidence||{}),[e.resource]:verifyResource(e,frame)};x.data[e.resource]=structuredClone(e.payload);
    }else if(e.type==='HISTORY_REPLACE'){checkBars(e.payload,e.symbol,frame.trade_date,true);x.data.history=structuredClone(e.payload);candles.add(e.symbol);earliest(e.symbol,-Infinity);}
    else throw Error('EVENT_TYPE');
+   flush(e.symbol);
   }
   for(const [s,due]of Object.entries(meta.due))if(due<=Date.parse(frame.asOf)&&!rawBySymbol.has(s))rawBySymbol.set(s,[]);
   for(const [s,raw]of rawBySymbol){
@@ -92,16 +95,16 @@ class Coordinator{
    x.data.current=[...map.values()].sort((a,c)=>Date.parse(a.timestamp)-Date.parse(c.timestamp));checkBars(x.data.current,s,frame.trade_date);
    const committedLife=structuredClone(life.state);committedLife.outbox=[];nextMeta.lifecycle[s]=this.store.put(committedLife);
    const due=Object.values(committedLife.rows).filter(r=>r.status==='PENDING').map(r=>r.due);if(due.length)nextMeta.due[s]=Math.min(...due);else delete nextMeta.due[s];
-   if(events.length)resourceEvents.push({resource:'intradayMap',symbol:s,value:derive(derivedRows(x),frame.trade_date,frame.asOf)[0]?.[1]||null});
+   if(events.length)resourceEvents.push({resource:'intradayMap',symbol:s,value:derive(derivedRows(x),frame.trade_date,frame.asOf)[0]?.[1]||null});flush(s);
   }
   if(fault==='AFTER_PHASE2')throw Error('CRASH_AFTER_PHASE2');
   const d=new IncrementalDiscovery({oracle:createOracle({memoize:true})});d.restore(this.store.get(prior?.coordinator?.phase3||b.phase3));
   const discovery=d.process({epoch:frame.epoch,tradeDate:frame.trade_date,sequence:frame.sequence,continuity:'CONTIGUOUS',asOf:frame.asOf,events:resourceEvents});if(discovery.status!=='OFFLINE_EVALUATED')throw Error('DISCOVERY:'+discovery.reason);
   nextMeta.phase3=this.store.put(d.checkpoint());
   // Recalculate every affected prefix for audit only; never retroactively notify.
-  for(const [s,from]of revisions){const x=item(s),audit=[];for(let i=0;i<x.data.current.length;i++){const bar=x.data.current[i];if(Date.parse(bar.timestamp)<from)continue;const at=new Date(Date.parse(bar.timestamp)+60000).toISOString();const data={...x.data,current:x.data.current.slice(0,i+1)};audit.push({timestamp:bar.timestamp,target_bar_end_at:at,known_at:frame.asOf,rows:{volume:volumeDetector.detect({stock_id:s,trade_date:frame.trade_date,current:data.current,history:data.history,as_of:frame.asOf}).rows.at(-1),price:priceDetector.detect({stock_id:s,trade_date:frame.trade_date,current:data.current,history:data.history,as_of:frame.asOf,previous_close:data.quote?.prevClose||null}).rows.at(-1)}});}nextMeta.revisionAudits[s]=this.store.put({scope:'CORRECTED_HISTORY_NOT_ORIGINAL_VISIBILITY',from:Number.isFinite(from)?new Date(from).toISOString():'ALL',audit,notifications_sent:0});}
+  for(const [s,from]of revisions){const x=item(s),audit=[];for(let i=0;i<x.data.current.length;i++){const bar=x.data.current[i];if(Date.parse(bar.timestamp)<from)continue;const at=new Date(Date.parse(bar.timestamp)+60000).toISOString();const data={...x.data,current:x.data.current.slice(0,i+1)};audit.push({timestamp:bar.timestamp,target_bar_end_at:at,known_at:frame.asOf,rows:{volume:volumeDetector.detect({stock_id:s,trade_date:frame.trade_date,current:data.current,history:data.history,as_of:frame.asOf}).rows.at(-1),price:priceDetector.detect({stock_id:s,trade_date:frame.trade_date,current:data.current,history:data.history,as_of:frame.asOf,previous_close:data.quote?.prevClose||null}).rows.at(-1)}});}nextMeta.revisionAudits[s]=this.store.put({scope:'CORRECTED_HISTORY_NOT_ORIGINAL_VISIBILITY',from:Number.isFinite(from)?new Date(from).toISOString():'ALL',audit,notifications_sent:0});flush(s);}
   if(fault==='AFTER_PHASE3')throw Error('CRASH_AFTER_PHASE3');
-  const result=await evaluate({store:this.store,binding:b.binding,input:{discovery,changedSymbols:Object.keys(changed),candleSymbols:[...candles],asOf:frame.asOf,plan:frame.plan||null},changes:changed,gate:frame.gate,backfill:async s=>this.store.get(refs[s]),sequence:frame.sequence,sourceCursor:{status:'OFFLINE_FIXED_SEGMENT',epoch:frame.epoch,intent_hash:digest(frame),sequence:frame.sequence},coordinator:nextMeta,fault});
+  const result=await evaluate({store:this.store,binding:b.binding,input:{discovery,changedSymbols:Object.keys(changed),candleSymbols:[...candles],revisedSymbols:[...revisions.keys()],asOf:frame.asOf,plan:frame.plan||null},changes:changed,gate:frame.gate,backfill:async s=>this.store.get(refs[s]),sequence:frame.sequence,sourceCursor:{status:'OFFLINE_FIXED_SEGMENT',epoch:frame.epoch,intent_hash:digest(frame),sequence:frame.sequence},coordinator:nextMeta,fault});
   fs.renameSync(this.pending,path.join(this.directory,'ack-'+frame.sequence+'.json'));return result;
  }
 }

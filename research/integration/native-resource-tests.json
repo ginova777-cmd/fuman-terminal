@@ -1,0 +1,5 @@
+{
+  "status": "PASS",
+  "cases": 3,
+  "scope": "original pure native formulas, empty-source UNKNOWN and source hash/as-of binding; populated source accuracy still requires evidence"
+}

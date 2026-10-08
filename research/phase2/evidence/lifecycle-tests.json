@@ -18,7 +18,7 @@
       "status": "PASS"
     },
     {
-      "name": "quality loss retracts previous valid candle",
+      "name": "volume quality loss retracts volume but preserves price",
       "status": "PASS"
     },
     {

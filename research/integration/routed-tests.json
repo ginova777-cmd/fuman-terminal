@@ -30,6 +30,10 @@
       "status": "PASS"
     },
     {
+      "name": "revision withdraws prior dry outbox while preserving immutable version",
+      "status": "PASS"
+    },
+    {
       "name": "corrupted immutable input stops without advancing root",
       "status": "PASS"
     }
@@ -37,8 +41,8 @@
   "synthetic": true,
   "full_e2e": false,
   "io": {
-    "read": 328585,
-    "written": 39191
+    "read": 400285,
+    "written": 42381
   },
-  "peak_rss_kib": 72380
+  "peak_rss_kib": 75552
 }
