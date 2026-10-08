@@ -1,0 +1,11 @@
+{
+  "sampled_peak_rss_bytes": 332537856,
+  "timeout_seconds": 120,
+  "reason": "OWNED_TEST_TIMEOUT",
+  "elapsed_ms": 120242,
+  "exit_code": -1,
+  "rss_limit_mb": 512,
+  "old_generation_mb": 128,
+  "status": "BLOCKED",
+  "only_owned_test_process": true
+}

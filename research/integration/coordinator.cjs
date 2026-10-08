@@ -1,5 +1,6 @@
 'use strict';
 // Autonomous OFFLINE coordinator. Immutable input intent + one published root.
+const {mark}=require('./profile.cjs');
 const fs=require('fs'),path=require('path');
 const {OfflineStore,hash,bytes}=require('./offline-store.cjs');
 const {CandleLifecycle}=require('../phase2/candle-lifecycle.cjs');
@@ -9,6 +10,7 @@ const {IncrementalDiscovery}=require('../phase3/incremental-discovery.cjs');
 const {createOracle}=require('../phase3/original-oracle.cjs');
 const volumeDetector=require('../../lib/telegram-detectors/volume-detector.cjs');
 const priceDetector=require('../../lib/telegram-detectors/price-detector.cjs');
+const indicatorCalculator=require('../../lib/telegram-detectors/level-cross-indicators.cjs');
 const {bind}=require('./routing-contract.cjs'),{evaluate}=require('./evaluate-routed.cjs');
 const RESOURCES=new Set(['dailyVolumeMap','capitalMap','chipMap','marginChangeMap','stockFutureInitialMap','stockGroupContractMap','preopenReferencePriceMap']);
 const DATA_RESOURCES=new Set(['technical','atr','levelInput']);
@@ -25,14 +27,14 @@ class Coordinator{
  initialize({snapshot,items,proof}){
   if(fs.existsSync(this.baseFile)||this.store.root())throw Error('BASELINE_ALREADY_PRESENT');
   if(proof?.mode!=='OFFLINE_FROZEN_INPUT'||proof.sha256!==digest({snapshot,items}))throw Error('BASELINE_PROOF');
-  const itemRefs={};for(const [symbol,item] of Object.entries(items))itemRefs[symbol]=this.store.put(item);
+  const itemRefs={};for(const [symbol,item] of Object.entries(items))itemRefs[symbol]=this.store.putItem(item);
   return this.initializeReferences({snapshot,itemRefs,proof:{mode:'OFFLINE_FROZEN_REFERENCES',sha256:digest({snapshot,itemRefs})}});
  }
  initializeReferences({snapshot,itemRefs,proof}){
   if(fs.existsSync(this.baseFile)||this.store.root())throw Error('BASELINE_ALREADY_PRESENT');
   if(proof?.mode!=='OFFLINE_FROZEN_REFERENCES'||proof.sha256!==digest({snapshot,itemRefs}))throw Error('BASELINE_PROOF');
   const active=snapshot.activeSymbols.map(x=>x.symbol);if(new Set(active).size!==active.length||active.length>2500)throw Error('UNIVERSE');
-  const refs={};for(const s of active){const item=this.store.get(itemRefs[s]);if(!item||item.symbol!==s||item.trade_date!==snapshot.tradeDate||item.verified!==true)throw Error('BASELINE_ITEM');checkBars(item.data.current,s,snapshot.tradeDate);checkBars(item.data.history,s,snapshot.tradeDate,true);refs[s]=itemRefs[s];}
+  const refs={};for(const s of active){const item=this.store.getItem(itemRefs[s]);if(!item||item.symbol!==s||item.trade_date!==snapshot.tradeDate||item.verified!==true)throw Error('BASELINE_ITEM');checkBars(item.data.current,s,snapshot.tradeDate);checkBars(item.data.history,s,snapshot.tradeDate,true);refs[s]=itemRefs[s];}
   const binding=bind({trade_date:snapshot.tradeDate,epoch:snapshot.epoch,activeSymbols:active,prioritySymbols:[],sourceAnchors:{baseline:{epoch:snapshot.epoch,trade_date:snapshot.tradeDate,sequence:0,commit_hash:proof.sha256}}});
   const d=new IncrementalDiscovery({oracle:createOracle({memoize:true})});d.baseline(snapshot);
   const b={binding,symbols:refs,phase3:this.store.put(d.checkpoint()),baseline_sha256:proof.sha256};const h=this.store.put(b);fs.writeFileSync(this.baseFile,JSON.stringify({hash:h}),{flag:'wx'});return b;
@@ -56,11 +58,11 @@ class Coordinator{
  }
  async recover(options={}){if(!fs.existsSync(this.pending))return {status:'NO_PENDING'};const h=JSON.parse(fs.readFileSync(this.pending)).hash;return this.run(this.store.get(h),options);}
  async execute(frame,b,prior,{fault}){
-  const refs={...b.symbols,...(prior?.symbols||{})},meta=prior?.coordinator||{lifecycle:{},due:{},asOf:null,revisionAudits:{}},nextMeta={lifecycle:{...meta.lifecycle},due:{...meta.due},asOf:frame.asOf,revisionAudits:{...meta.revisionAudits}};
+  mark('Phase2');const refs={...b.symbols,...(prior?.symbols||{})},meta=prior?.coordinator||{lifecycle:{},due:{},asOf:null,revisionAudits:{}},nextMeta={lifecycle:{...meta.lifecycle},due:{...meta.due},asOf:frame.asOf,revisionAudits:{...meta.revisionAudits}};
   if(meta.asOf&&Date.parse(frame.asOf)<Date.parse(meta.asOf))throw Error('CLOCK_REGRESSION');
   const active=new Set(b.binding.payload.active),changed={},candles=new Set(),resourceEvents=[],rawBySymbol=new Map(),revisions=new Map();
-  const item=s=>{if(!active.has(s))throw Error('OUTSIDE_UNIVERSE');if(typeof changed[s]==='string')changed[s]=this.store.get(changed[s]);return changed[s]||(changed[s]=this.store.get(refs[s]));};
-  const flush=s=>{if(changed[s]&&typeof changed[s]!=='string')changed[s]=this.store.put(changed[s]);};
+  const item=s=>{if(!active.has(s))throw Error('OUTSIDE_UNIVERSE');if(typeof changed[s]==='string')changed[s]=this.store.getItem(changed[s],false);return changed[s]||(changed[s]=this.store.getItem(refs[s],false));};
+  const flush=s=>{if(changed[s]&&typeof changed[s]!=='string')changed[s]=this.store.putItem(changed[s]);};
   const earliest=(s,t)=>revisions.set(s,Math.min(revisions.get(s)??Infinity,t));
   for(const e of frame.events){
    if(!active.has(e.symbol)||e.payload_sha256!==digest(e.payload))throw Error('EVENT_IDENTITY_OR_HASH');
@@ -97,15 +99,16 @@ class Coordinator{
    const due=Object.values(committedLife.rows).filter(r=>r.status==='PENDING').map(r=>r.due);if(due.length)nextMeta.due[s]=Math.min(...due);else delete nextMeta.due[s];
    if(events.length)resourceEvents.push({resource:'intradayMap',symbol:s,value:derive(derivedRows(x),frame.trade_date,frame.asOf)[0]?.[1]||null});flush(s);
   }
-  if(fault==='AFTER_PHASE2')throw Error('CRASH_AFTER_PHASE2');
+  mark('Phase3');if(fault==='AFTER_PHASE2')throw Error('CRASH_AFTER_PHASE2');
   const d=new IncrementalDiscovery({oracle:createOracle({memoize:true})});d.restore(this.store.get(prior?.coordinator?.phase3||b.phase3));
   const discovery=d.process({epoch:frame.epoch,tradeDate:frame.trade_date,sequence:frame.sequence,continuity:'CONTIGUOUS',asOf:frame.asOf,events:resourceEvents});if(discovery.status!=='OFFLINE_EVALUATED')throw Error('DISCOVERY:'+discovery.reason);
   nextMeta.phase3=this.store.put(d.checkpoint());
+  mark('historical_recalculation');
   // Recalculate every affected prefix for audit only; never retroactively notify.
-  for(const [s,from]of revisions){const x=item(s),audit=[];for(let i=0;i<x.data.current.length;i++){const bar=x.data.current[i];if(Date.parse(bar.timestamp)<from)continue;const at=new Date(Date.parse(bar.timestamp)+60000).toISOString();const data={...x.data,current:x.data.current.slice(0,i+1)};audit.push({timestamp:bar.timestamp,target_bar_end_at:at,known_at:frame.asOf,rows:{volume:volumeDetector.detect({stock_id:s,trade_date:frame.trade_date,current:data.current,history:data.history,as_of:frame.asOf}).rows.at(-1),price:priceDetector.detect({stock_id:s,trade_date:frame.trade_date,current:data.current,history:data.history,as_of:frame.asOf,previous_close:data.quote?.prevClose||null}).rows.at(-1)}});}nextMeta.revisionAudits[s]=this.store.put({scope:'CORRECTED_HISTORY_NOT_ORIGINAL_VISIBILITY',from:Number.isFinite(from)?new Date(from).toISOString():'ALL',audit,notifications_sent:0});flush(s);}
-  if(fault==='AFTER_PHASE3')throw Error('CRASH_AFTER_PHASE3');
-  const result=await evaluate({store:this.store,binding:b.binding,input:{discovery,changedSymbols:Object.keys(changed),candleSymbols:[...candles],revisedSymbols:[...revisions.keys()],asOf:frame.asOf,plan:frame.plan||null},changes:changed,gate:frame.gate,backfill:async s=>this.store.get(refs[s]),sequence:frame.sequence,sourceCursor:{status:'OFFLINE_FIXED_SEGMENT',epoch:frame.epoch,intent_hash:digest(frame),sequence:frame.sequence},coordinator:nextMeta,fault});
-  fs.renameSync(this.pending,path.join(this.directory,'ack-'+frame.sequence+'.json'));return result;
+  for(const [s,from]of revisions){const x=item(s),audit=[];if(x.historyRef&&!x.data.history)x.data.history=this.store.get(x.historyRef);for(let i=0;i<x.data.current.length;i++){const bar=x.data.current[i];if(Date.parse(bar.timestamp)<from)continue;const at=new Date(Date.parse(bar.timestamp)+60000).toISOString();const data={...x.data,current:x.data.current.slice(0,i+1)};audit.push({timestamp:bar.timestamp,target_bar_end_at:at,known_at:frame.asOf,rows:{volume:volumeDetector.detect({stock_id:s,trade_date:frame.trade_date,current:data.current,history:data.history,as_of:frame.asOf}).rows.at(-1),price:priceDetector.detect({stock_id:s,trade_date:frame.trade_date,current:data.current,history:data.history,as_of:frame.asOf,previous_close:data.quote?.prevClose||null}).rows.at(-1)}});}nextMeta.revisionAudits[s]=this.store.put({scope:'CORRECTED_HISTORY_NOT_ORIGINAL_VISIBILITY',from:Number.isFinite(from)?new Date(from).toISOString():'ALL',audit,technical_recalculation:indicatorCalculator.calculate({bars:x.data.current,stock_id:s,trade_date:frame.trade_date,as_of:frame.asOf}),notifications_sent:0});flush(s);}
+  mark('Phase4');if(fault==='AFTER_PHASE3')throw Error('CRASH_AFTER_PHASE3');
+  const result=await evaluate({store:this.store,binding:b.binding,input:{discovery,changedSymbols:Object.keys(changed),candleSymbols:[...candles],revisedSymbols:[...revisions.keys()],asOf:frame.asOf,plan:frame.plan||null},changes:changed,gate:frame.gate,backfill:async s=>this.store.getItem(refs[s]),sequence:frame.sequence,sourceCursor:{status:'OFFLINE_FIXED_SEGMENT',epoch:frame.epoch,intent_hash:digest(frame),sequence:frame.sequence},coordinator:nextMeta,fault});
+  mark('committed');fs.renameSync(this.pending,path.join(this.directory,'ack-'+frame.sequence+'.json'));return result;
  }
 }
 module.exports={Coordinator,digest,checkBars};

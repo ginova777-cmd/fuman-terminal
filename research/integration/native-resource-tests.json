@@ -1,5 +1,5 @@
 {
   "status": "PASS",
-  "cases": 3,
-  "scope": "original pure native formulas, empty-source UNKNOWN and source hash/as-of binding; populated source accuracy still requires evidence"
+  "cases": 5,
+  "scope": "original pure native formulas, empty-source UNKNOWN and source hash/as-of binding; populated synthetic daily source and null cost retained; formal source coverage remains unverified"
 }

@@ -53,15 +53,22 @@ async function strategy3(state, symbols, gate) {
     async()=>new Map(symbols.map(s=>[s,state.symbols[s].atr || {source_ready:false}])));
   return {results:JSON.parse(JSON.stringify(out.results)), proof:{source_sha256:core.source_sha256,function_sha256:core.function_sha256}};
 }
-function telegram(state, symbols, asOf) {
+function telegram(state, symbols, asOf, {projectHistory=false}={}) {
   const rows = [], now = Date.parse(asOf);
   if (!Number.isFinite(now)) throw Error('INVALID_AS_OF');
   for (const symbol of symbols) {
-    const item=state.symbols[symbol], current=item.current || [], history=(item.history || []).filter(b=>b.stock_id===symbol&&b.trade_date<state.trade_date&&!volume.validate(b,now).reasons.length);
+    const item=state.symbols[symbol], current=item.current || [], fullHistory=(item.history || []).filter(b=>b.stock_id===symbol&&b.trade_date<state.trade_date&&!volume.validate(b,now).reasons.length);
     const latest=current.at(-1); if (!latest) continue;
     const age=(now-Date.parse(latest.timestamp))/1000;
     // Matches original natural runner's 60..120 second completed-minute gate.
     if (age<60 || age>120) continue;
+    let history=fullHistory;
+    if(projectHistory){
+      const minutes=new Set(current.flatMap(b=>[Date.parse(b.timestamp),Date.parse(b.timestamp)-60000]).filter(Number.isFinite).map(t=>new Date(t+28800000).toISOString().slice(11,16)));
+      const days=new Set([...new Set(fullHistory.map(b=>b.trade_date))].sort().slice(-20));
+      const seen=new Set();for(const b of [...current,...fullHistory]){const t=Date.parse(b.timestamp);if(Number.isFinite(t)){if(seen.has(t))throw Error('DUPLICATE_MINUTE');seen.add(t);}}
+      history=fullHistory.filter(b=>days.has(b.trade_date)&&minutes.has(new Date(Date.parse(b.timestamp)+28800000).toISOString().slice(11,16)));
+    }
     const input={stock_id:symbol,trade_date:state.trade_date,current,history,as_of:asOf,previous_close:item.quote?.prevClose || null};
     const vc=current.filter(b=>!volume.validate(b,now).reasons.length);
     const pc=current.filter(b=>['open','high','low','close'].every(k=>typeof b[k]==='number'&&Number.isFinite(b[k])&&b[k]>0)&&b.high>=Math.max(b.open,b.close)&&b.low<=Math.min(b.open,b.close)&&b.high>=b.low);

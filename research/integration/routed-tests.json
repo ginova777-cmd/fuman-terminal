@@ -41,8 +41,8 @@
   "synthetic": true,
   "full_e2e": false,
   "io": {
-    "read": 400285,
-    "written": 42381
+    "read": 511879,
+    "written": 43119
   },
-  "peak_rss_kib": 75552
+  "peak_rss_kib": 75408
 }

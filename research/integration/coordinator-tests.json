@@ -74,15 +74,15 @@
   "production": false,
   "notifications_sent": 0,
   "real_history_e2e": false,
-  "peak_rss_kib": 161508,
-  "elapsed_ms": 1429.4554,
+  "peak_rss_kib": 158460,
+  "elapsed_ms": 1584.7531000000001,
   "cpu": {
-    "user": 562000,
-    "system": 563000
+    "user": 593000,
+    "system": 687000
   },
   "io": {
-    "read": 1087106,
-    "written": 231791
+    "read": 914877,
+    "written": 254561
   },
   "limitations": [
     "exception recovery, not OS power loss",

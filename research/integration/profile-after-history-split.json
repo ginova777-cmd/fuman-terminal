@@ -1,0 +1,29 @@
+{
+  "stage": "Phase4",
+  "stages": {
+    "setup": 54131.5183,
+    "Phase2": 14077.4922,
+    "Phase3": 662.7504999999946,
+    "historical_recalculation": 1.0550999999977648
+  },
+  "calls": {
+    "serialize": {
+      "count": 14008,
+      "ms": 10051.041799999828
+    },
+    "disk_write_fsync": {
+      "count": 8004,
+      "ms": 8114.467500000124
+    },
+    "disk_read": {
+      "count": 6002,
+      "ms": 8468.628199999897
+    },
+    "parse": {
+      "count": 6002,
+      "ms": 6969.049500000412
+    }
+  },
+  "elapsed_ms": 68913.9709,
+  "rss": 330993664
+}

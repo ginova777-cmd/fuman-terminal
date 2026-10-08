@@ -5,13 +5,13 @@
   "archived": [
     {
       "status": "DEAD_OWNER_ARCHIVED",
-      "pid": 39980,
-      "archived": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-coordinator-death-eHLC5R\\coordinator.lock.dead-39980-1791464069184"
+      "pid": 34728,
+      "archived": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-coordinator-death-svbo1X\\coordinator.lock.dead-34728-1791466302192"
     },
     {
       "status": "DEAD_OWNER_ARCHIVED",
-      "pid": 39980,
-      "archived": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-coordinator-death-eHLC5R\\owner.lock.dead-39980-1791464069186"
+      "pid": 34728,
+      "archived": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-coordinator-death-svbo1X\\owner.lock.dead-34728-1791466302194"
     }
   ],
   "scope": "actual process termination at committed root before pending ACK; not power loss"

@@ -1,0 +1,37 @@
+{
+  "status": "PASS",
+  "tests": [
+    {
+      "start": "09:00",
+      "revision": false,
+      "status": "PASS"
+    },
+    {
+      "start": "09:00",
+      "revision": true,
+      "status": "PASS"
+    },
+    {
+      "start": "09:10",
+      "revision": false,
+      "status": "PASS"
+    },
+    {
+      "start": "09:10",
+      "revision": true,
+      "status": "PASS"
+    },
+    {
+      "start": "12:37",
+      "revision": false,
+      "status": "PASS"
+    },
+    {
+      "start": "12:37",
+      "revision": true,
+      "status": "PASS"
+    }
+  ],
+  "full_history_preserved": true,
+  "projection": "current minute-of-day and exact prior minute, original last-20 valid dates; full validation and duplicate detection retained"
+}
