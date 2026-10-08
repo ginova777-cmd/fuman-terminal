@@ -1,0 +1,91 @@
+{
+  "status": "PASS",
+  "tests": [
+    {
+      "name": "complete Phase2 raw quote/candle to Phase3 to Phase4 on autonomous run",
+      "status": "PASS"
+    },
+    {
+      "name": "restart clock only completes forming K and runs full-market Telegram",
+      "status": "PASS"
+    },
+    {
+      "name": "same-price serial quote does not rerun candle detector",
+      "status": "PASS"
+    },
+    {
+      "name": "quality invalidation removes K and downstream stale result",
+      "status": "PASS"
+    },
+    {
+      "name": "old-minute revision propagates every later evaluation prefix",
+      "status": "PASS"
+    },
+    {
+      "name": "historical baseline replacement recalculates all current windows",
+      "status": "PASS"
+    },
+    {
+      "name": "every supplemental resource carries epoch/date and updates actual Phase3 map",
+      "status": "PASS"
+    },
+    {
+      "name": "clock-only refresh retains unmodified original result semantics",
+      "status": "PASS"
+    },
+    {
+      "name": "committed exact input replay dedups after process object restart",
+      "status": "PASS"
+    },
+    {
+      "name": "autonomous pending recovery AFTER_INTENT",
+      "status": "PASS"
+    },
+    {
+      "name": "autonomous pending recovery AFTER_PHASE2",
+      "status": "PASS"
+    },
+    {
+      "name": "autonomous pending recovery AFTER_PHASE3",
+      "status": "PASS"
+    },
+    {
+      "name": "autonomous pending recovery BEFORE_ROOT",
+      "status": "PASS"
+    },
+    {
+      "name": "autonomous pending recovery BEFORE_RENAME",
+      "status": "PASS"
+    },
+    {
+      "name": "autonomous pending recovery AFTER_RENAME",
+      "status": "PASS"
+    },
+    {
+      "name": "epoch/GAP/universe/quote disorder stop without committed cursor advance",
+      "status": "PASS"
+    },
+    {
+      "name": "source tamper and supplemental identity fail closed",
+      "status": "PASS"
+    }
+  ],
+  "mode": "SYNTHETIC_FULL_COORDINATOR_E2E",
+  "production": false,
+  "notifications_sent": 0,
+  "real_history_e2e": false,
+  "peak_rss_kib": 148036,
+  "elapsed_ms": 1515.5592000000001,
+  "cpu": {
+    "user": 625000,
+    "system": 547000
+  },
+  "io": {
+    "read": 630455,
+    "written": 217763
+  },
+  "limitations": [
+    "exception recovery, not OS power loss",
+    "3-symbol formula integration; 2000-symbol long-history capacity is separately storage-only"
+  ]
+}

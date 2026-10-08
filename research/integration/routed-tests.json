@@ -37,8 +37,8 @@
   "synthetic": true,
   "full_e2e": false,
   "io": {
-    "read": 313813,
-    "written": 39115
+    "read": 328585,
+    "written": 39191
   },
-  "peak_rss_kib": 70136
+  "peak_rss_kib": 72380
 }

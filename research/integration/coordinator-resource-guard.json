@@ -1,0 +1,11 @@
+{
+  "sampled_peak_rss_bytes": 259272704,
+  "status": "PASS",
+  "rss_limit_mb": 512,
+  "only_owned_test_process": true,
+  "old_generation_mb": 128,
+  "timeout_seconds": 120,
+  "exit_code": 0,
+  "reason": null,
+  "elapsed_ms": 49539
+}
