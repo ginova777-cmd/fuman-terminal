@@ -40,12 +40,12 @@ class Coordinator{
   const b={binding,symbols:refs,phase3:this.store.put(d.checkpoint()),baseline_sha256:proof.sha256};const h=this.store.put(b);fs.writeFileSync(this.baseFile,JSON.stringify({hash:h}),{flag:'wx'});return b;
  }
  baseline(){return this.store.get(JSON.parse(fs.readFileSync(this.baseFile)).hash);}
- async run(frame,{fault}={}){
+ async run(frame,{fault,recovery}={}){
   const lock=path.join(this.directory,'coordinator.lock');let fd;
-  try{fd=fs.openSync(lock,'wx');fs.writeFileSync(fd,JSON.stringify({pid:process.pid,scope:'OFFLINE_ONLY'}));return await this.runOwned(frame,{fault});}
+  try{fd=fs.openSync(lock,'wx');fs.writeFileSync(fd,JSON.stringify({pid:process.pid,scope:'OFFLINE_ONLY'}));try{return await this.runOwned(frame,{fault,recovery});}catch(e){if(e.code==='RECOVERY_YIELD')return {status:'RECOVERY_PAUSED',stage:e.stage,published:false};throw e;}}
   finally{if(fd!==undefined){fs.closeSync(fd);fs.unlinkSync(lock);}}
  }
- async runOwned(frame,{fault}={}){
+ async runOwned(frame,{fault,recovery}={}){
   const b=this.baseline(),prior=this.store.root();
   if(frame.epoch!==b.binding.payload.epoch||frame.trade_date!==b.binding.payload.trade_date||frame.status!=='OFFLINE_FIXED_SEGMENT')throw Error('SOURCE_IDENTITY_OR_GAP');
   if(!Array.isArray(frame.events)||frame.events.length>5000||bytes(frame).length>4*1024*1024||!Number.isFinite(Date.parse(frame.asOf)))throw Error('INPUT_LIMIT');
@@ -54,16 +54,31 @@ class Coordinator{
   if(frame.sequence!==(prior?.sequence||0)+1)throw Error('SEQUENCE_GAP');
   if(fs.existsSync(this.pending)){if(JSON.parse(fs.readFileSync(this.pending)).hash!==intentHash)throw Error('PENDING_CONFLICT');}else{this.store.put(frame);const fd=fs.openSync(this.pending,'wx');try{fs.writeFileSync(fd,JSON.stringify({hash:intentHash}));fs.fsyncSync(fd);}finally{fs.closeSync(fd);}}
   if(fault==='AFTER_INTENT')throw Error('CRASH_AFTER_INTENT');
-  return this.execute(frame,b,prior,{fault});
+  if(!recovery)return this.execute(frame,b,prior,{fault});
+  const {RecoveryCheckpoint}=require('../release/recovery-checkpoint.cjs');
+  const sourceVersion=require('../release/algorithm-identity.cjs').algorithmIdentity();
+  const cp=new RecoveryCheckpoint(this.store,{intentHash,baseline:digest(b),prior:digest(prior),sourceVersion},recovery);
+  try{if(!cp.get('R0'))cp.save('R0',{intentHash,baseline:digest(b),prior:digest(prior),sourceVersion});
+   const {project}=require('./history-dependency.cjs');
+   const sourceRefs={...b.symbols,...prior?.symbols};
+   for(const symbol of Object.keys(sourceRefs).sort())if(!cp.get('R1:'+symbol)){
+    const item=this.store.getItem(sourceRefs[symbol],false);
+    if(item.historyRef)project(this.store,item.historyRef,symbol,frame.trade_date,item.data.current,frame.asOf,{source_version:item.source_version??null,historyBinding:item.historyBinding??null});
+    cp.save('R1:'+symbol,{ref:sourceRefs[symbol],historyRef:item.historyRef??null});
+   }
+   return await this.execute(frame,b,prior,{fault,checkpoint:cp});
+  }finally{cp.close();}
  }
  async recover(options={}){if(!fs.existsSync(this.pending))return {status:'NO_PENDING'};const h=JSON.parse(fs.readFileSync(this.pending)).hash;return this.run(this.store.get(h),options);}
- async execute(frame,b,prior,{fault}){
+ async execute(frame,b,prior,{fault,checkpoint:cp}){
   mark('Phase2');const refs={...b.symbols,...(prior?.symbols||{})},meta=prior?.coordinator||{lifecycle:{},due:{},asOf:null,revisionAudits:{}},nextMeta={lifecycle:{...meta.lifecycle},due:{...meta.due},asOf:frame.asOf,revisionAudits:{...meta.revisionAudits}};
   if(meta.asOf&&Date.parse(frame.asOf)<Date.parse(meta.asOf))throw Error('CLOCK_REGRESSION');
   const active=new Set(b.binding.payload.active),changed={},candles=new Set(),resourceEvents=[],rawBySymbol=new Map(),revisions=new Map();
+  const savedP2=cp?.get('R2');
   const item=s=>{if(!active.has(s))throw Error('OUTSIDE_UNIVERSE');if(typeof changed[s]==='string')changed[s]=this.store.getItem(changed[s],false);return changed[s]||(changed[s]=this.store.getItem(refs[s],false));};
   const flush=s=>{if(changed[s]&&typeof changed[s]!=='string')changed[s]=this.store.putItem(changed[s]);};
   const earliest=(s,t)=>revisions.set(s,Math.min(revisions.get(s)??Infinity,t));
+  if(!savedP2){
   for(const e of frame.events){
    if(!active.has(e.symbol)||e.payload_sha256!==digest(e.payload))throw Error('EVENT_IDENTITY_OR_HASH');
    const x=e.type==='CANDLE'?null:item(e.symbol);
@@ -99,13 +114,19 @@ class Coordinator{
    const due=Object.values(committedLife.rows).filter(r=>r.status==='PENDING').map(r=>r.due);if(due.length)nextMeta.due[s]=Math.min(...due);else delete nextMeta.due[s];
    if(events.length)resourceEvents.push({resource:'intradayMap',symbol:s,value:derive(derivedRows(x),frame.trade_date,frame.asOf)[0]?.[1]||null});flush(s);
   }
+  if(cp)cp.save('R2',{changed,nextMeta,candles:[...candles],resourceEvents,revisions:[...revisions].map(([s,t])=>[s,Number.isFinite(t)?t:null])});
+  }else{Object.assign(changed,savedP2.changed);Object.assign(nextMeta,savedP2.nextMeta);savedP2.candles.forEach(s=>candles.add(s));resourceEvents.push(...savedP2.resourceEvents);savedP2.revisions.forEach(([s,t])=>revisions.set(s,t===null?-Infinity:t));}
+  if(cp?.phaseLimit==='R2'){const e=Error('RECOVERY_YIELD');e.code='RECOVERY_YIELD';e.stage='R2';throw e;}
   mark('Phase3');if(fault==='AFTER_PHASE2')throw Error('CRASH_AFTER_PHASE2');
-  const d=new IncrementalDiscovery({oracle:createOracle({memoize:true})});d.restore(this.store.get(prior?.coordinator?.phase3||b.phase3));
-  const discovery=d.process({epoch:frame.epoch,tradeDate:frame.trade_date,sequence:frame.sequence,continuity:'CONTIGUOUS',asOf:frame.asOf,events:resourceEvents});if(discovery.status!=='OFFLINE_EVALUATED')throw Error('DISCOVERY:'+discovery.reason);
-  nextMeta.phase3=this.store.put(d.checkpoint());
+  const savedP3=cp?.get('R2:discovery');
+  const d=new IncrementalDiscovery({oracle:createOracle({memoize:true})});if(!savedP3)d.restore(this.store.get(prior?.coordinator?.phase3||b.phase3));
+  const discovery=savedP3?.discovery||d.process({epoch:frame.epoch,tradeDate:frame.trade_date,sequence:frame.sequence,continuity:'CONTIGUOUS',asOf:frame.asOf,events:resourceEvents});if(discovery.status!=='OFFLINE_EVALUATED')throw Error('DISCOVERY:'+discovery.reason);
+  nextMeta.phase3=savedP3?.phase3||this.store.put(d.checkpoint());if(cp&&!savedP3)cp.save('R2:discovery',{discovery,phase3:nextMeta.phase3});
+  if(cp?.phaseLimit==='R2:discovery'){const e=Error('RECOVERY_YIELD');e.code='RECOVERY_YIELD';e.stage='R2:discovery';throw e;}
   mark('historical_recalculation');
   // Recalculate every affected prefix for audit only; never retroactively notify.
   for(const [s,from]of revisions){
+   const savedAudit=cp?.get('R3:'+s);if(savedAudit){nextMeta.revisionAudits[s]=savedAudit.ref;continue;}
    const x=item(s),history=x.historyRef&&!x.data.history?this.store.get(x.historyRef):x.data.history;
    const args={stock_id:s,trade_date:frame.trade_date,current:x.data.current,history,as_of:frame.asOf};
    // These original formulas are causal: a row reads only its minute, earlier
@@ -117,10 +138,10 @@ class Coordinator{
     const bar=x.data.current[i];if(Date.parse(bar.timestamp)<from)continue;
     audit.push({timestamp:bar.timestamp,target_bar_end_at:new Date(Date.parse(bar.timestamp)+60000).toISOString(),known_at:frame.asOf,rows:{volume:ordered?volumeRows[i]:volumeDetector.detect({...args,current:x.data.current.slice(0,i+1)}).rows.at(-1),price:ordered?priceRows[i]:priceDetector.detect({...args,current:x.data.current.slice(0,i+1),previous_close:x.data.quote?.prevClose||null}).rows.at(-1)}});
    }
-   nextMeta.revisionAudits[s]=this.store.put({scope:'CORRECTED_HISTORY_NOT_ORIGINAL_VISIBILITY',from:Number.isFinite(from)?new Date(from).toISOString():'ALL',audit,technical_recalculation:indicatorCalculator.calculate({bars:x.data.current,stock_id:s,trade_date:frame.trade_date,as_of:frame.asOf}),notifications_sent:0});flush(s);
+   nextMeta.revisionAudits[s]=this.store.put({scope:'CORRECTED_HISTORY_NOT_ORIGINAL_VISIBILITY',from:Number.isFinite(from)?new Date(from).toISOString():'ALL',audit,technical_recalculation:indicatorCalculator.calculate({bars:x.data.current,stock_id:s,trade_date:frame.trade_date,as_of:frame.asOf}),notifications_sent:0});flush(s);if(cp)cp.save('R3:'+s,{ref:nextMeta.revisionAudits[s]});
   }
   mark('Phase4');if(fault==='AFTER_PHASE3')throw Error('CRASH_AFTER_PHASE3');
-  const result=await evaluate({store:this.store,binding:b.binding,input:{discovery,changedSymbols:Object.keys(changed),candleSymbols:[...candles],revisedSymbols:[...revisions.keys()],asOf:frame.asOf,plan:frame.plan||null},changes:changed,gate:frame.gate,backfill:async s=>this.store.getItem(refs[s]),sequence:frame.sequence,sourceCursor:{status:'OFFLINE_FIXED_SEGMENT',epoch:frame.epoch,intent_hash:digest(frame),sequence:frame.sequence},coordinator:nextMeta,fault});
+  const result=await evaluate({store:this.store,binding:b.binding,input:{discovery,changedSymbols:Object.keys(changed),candleSymbols:[...candles],revisedSymbols:[...revisions.keys()],asOf:frame.asOf,plan:frame.plan||null},changes:changed,gate:frame.gate,backfill:async s=>this.store.getItem(refs[s]),sequence:frame.sequence,sourceCursor:{status:'OFFLINE_FIXED_SEGMENT',epoch:frame.epoch,intent_hash:digest(frame),sequence:frame.sequence},coordinator:nextMeta,fault,checkpoint:cp});
   mark('committed');fs.renameSync(this.pending,path.join(this.directory,'ack-'+frame.sequence+'.json'));return result;
  }
 }
