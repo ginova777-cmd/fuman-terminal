@@ -1,0 +1,34 @@
+Owner / Baseline Contract — isolated candidate v2
+
+This contract does not install a formal trust root or grant maintenance authority.
+Formal use remains BLOCKED until an Owner-approved public key fingerprint, Windows
+SID, key storage provider and controlled receipt directory are pinned in the release
+manifest. Never accept a public key supplied inside the same untrusted receipt.
+
+Signed bytes: UTF-8 JSON.stringify(payload), preserving the stored property order.
+Signature: Ed25519. Verifier receives the trusted public key separately.
+The expected identity tuple must bind owner_sid, producer_pid,
+producer_creation_date, epoch, candidate/manifest identity and request challenge.
+ACK time must parse, not be future, and be within 30 seconds when accepted.
+Quote and candle hashes must each be 64 lowercase hexadecimal characters.
+Reject malformed time, wrong signature, wrong challenge, wrong expected identity,
+nonzero queue/pending work or an unfrozen producer.
+
+Receipt directory: protected Windows DACL; Owner SID, SYSTEM and Administrators.
+No inherited broad write ACE. Verify owner/DACL after creation. Do not overwrite
+formal ACL or provision a formal signing key as part of isolated acceptance.
+
+Quiescence adapter:
+1. Refuse new writes at the sole producer intake boundary.
+2. Flush the original spooled store and wait for its original successful ACK.
+3. Require no pending/inflight/queued rows and no persistenceGap.
+4. Capture both files and independently hash the originals before/after copying.
+5. Sign the exact epoch, challenge, producer identity, last ACK and both hashes.
+6. Recover and independently verify immutable copies; do not claim continuity.
+
+The isolated adapter uses unchanged production store/worker bytes. It is NOT yet
+connected to the live Collector intake. A live producer not routed through this
+boundary can still mutate cache; a fixture or adapter ACK cannot prove otherwise.
+PREPARED / PREPARED_NOT_STARTED mean baseline preparation only.
+CONTINUITY_UNKNOWN remains until the separately authorized continuity protocol
+establishes and verifies the new epoch. Never reuse an old epoch as fresh proof.

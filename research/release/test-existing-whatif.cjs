@@ -1,0 +1,18 @@
+'use strict';
+const fs=require('fs'),path=require('path'),os=require('os'),cp=require('child_process'),crypto=require('crypto'),assert=require('assert/strict');
+const coreFile='C:/Users/ginov/Documents/Codex/2026-09-30/new-chat/outputs/final-release-deployment-tool/deploy-core.cjs';
+const {run}=require(coreFile),hash=b=>crypto.createHash('sha256').update(b).digest('hex');
+const dir=fs.mkdtempSync(path.join(os.tmpdir(),'mp-existing-whatif-')),source=path.join(dir,'main'),prod=path.join(dir,'prod'),checker=path.join(dir,'checker');fs.mkdirSync(source);
+const git=(root,...a)=>cp.execFileSync('git',['-C',root,...a],{windowsHide:true,timeout:12000});
+const text=(root,...a)=>git(root,...a).toString().trim(),write=(p,v)=>{fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p,v);};
+git(source,'init','-b','main');git(source,'config','user.name','Isolated');git(source,'config','user.email','isolated@invalid.local');write(path.join(source,'v.txt'),'base');git(source,'add','.');git(source,'commit','-m','base');const base=text(source,'rev-parse','HEAD');
+cp.execFileSync('git',['clone','--no-hardlinks',source,prod],{windowsHide:true,timeout:12000});git(prod,'checkout','--detach',base);
+write(path.join(source,'v.txt'),'target');git(source,'commit','-am','target');const target=text(source,'rev-parse','HEAD');git(source,'update-ref','refs/remotes/origin/main',target);
+const verifier=fs.readFileSync('C:/fuman-release-owner/fuman-terminal/scripts/verify-release-root-authority.js');write(path.join(checker,'scripts/verify-release-root-authority.js'),verifier);
+write(path.join(checker,'package.json'),' {"scripts":{"verify:release-root-authority":"node scripts/verify-release-root-authority.js"}}');write(path.join(checker,'scripts/verify-upload-gate.js'),'run("verify:release-root-authority"');write(path.join(checker,'scripts/verify-publish-gate.js'),'["release_root_authority"');write(path.join(checker,'AGENTS.md'),'FAIL_CLOSED: RELEASE_ROOT_DRIFT\nnpm run verify:release-root-authority');
+const original=JSON.parse(fs.readFileSync('C:/fuman-release-owner/fuman-terminal/data/contracts/release_root_authority_v1.json')),authority=path.join(checker,'data/contracts/release_root_authority_v1.json');write(authority,JSON.stringify({...original,sourceRoot:checker,productionRoot:prod,runtimeRoot:path.join(dir,'runtime'),approvedProductionSha:base}));
+const manifest={production_sha:base,final_sha:target,files:[{file:'v.txt',bytes:6,sha256:hash(Buffer.from('target'))}]},verifications=[];
+const r=run({source,prod,authority,target,expected:base,manifest,diffHash:hash(git(source,'diff','--binary',base,target)),out:path.join(dir,'result'),lock:path.join(dir,'deployment.lock'),apply:false,minFreeBytes:1},
+ {isAdmin:()=>true,evidenceOff:()=>true,freeBytes:()=>fs.statfsSync(dir).bavail*fs.statfsSync(dir).bsize,remoteMain:()=>target,verifier:()=>{const v=JSON.parse(cp.execFileSync(process.execPath,[path.join(checker,'scripts/verify-release-root-authority.js'),'--require-production-root'],{encoding:'utf8',timeout:12000,windowsHide:true,env:{...process.env,FUMAN_APPROVED_DEPLOY_SOURCE_ROOT:''}}));assert(v.ok);verifications.push(v);}});
+assert.equal(r.status,'DRY_RUN_PASS');assert.equal(text(prod,'rev-parse','HEAD'),base);assert.equal(JSON.parse(fs.readFileSync(authority)).approvedProductionSha,base);assert(!fs.existsSync(path.join(dir,'deployment.lock')));
+const receipt={status:'PASS',dir,result:r,verifications,core_sha256:hash(fs.readFileSync(coreFile)),verifier_sha256:hash(verifier),admin_and_remote:'ISOLATED_FIXTURE_DEPENDENCIES',formal_apply:false};write(path.join(dir,'test-receipt.json'),JSON.stringify(receipt,null,2));console.log(JSON.stringify({status:'PASS',dir,whatif:r.status,formal_apply:false}));
