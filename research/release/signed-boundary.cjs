@@ -1,0 +1,5 @@
+'use strict';
+const crypto=require('crypto');
+function sign(payload,privateKey){const bytes=Buffer.from(JSON.stringify(payload));return {payload,signature:crypto.sign(null,bytes,privateKey).toString('base64')};}
+function verify(boundary,trustedPublicKey,challenge){if(!boundary||!crypto.verify(null,Buffer.from(JSON.stringify(boundary.payload)),trustedPublicKey,Buffer.from(boundary.signature||'','base64')))throw Error('BOUNDARY_SIGNATURE');const p=boundary.payload;if(p.scope!=='ISOLATED_REVIEW'||p.challenge!==challenge||p.pendingRows!==0||p.queuedFiles!==0||p.frozen!==true||!p.owner_sid||!p.producer_creation_date||!Number.isSafeInteger(p.producer_pid)||!Number.isSafeInteger(p.sequence)||Date.now()-Date.parse(p.ack_at)>30000||Date.parse(p.ack_at)>Date.now())throw Error('BOUNDARY_ACK');return {scope:p.scope,quiescent:true,hashes:p.hashes,owner:p.owner_sid,producer_pid:p.producer_pid,sequence:p.sequence,proof:boundary};}
+module.exports={sign,verify};

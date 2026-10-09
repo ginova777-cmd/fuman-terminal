@@ -4,7 +4,7 @@ const {Worker,isMainThread,parentPort,workerData}=require('worker_threads');
 const {local,sha}=require('./producer-handoff.cjs');
 const {hashFile,inspect}=require('../../lib/mother-evidence-recovery-stream.cjs');
 const {atomic}=require('./technical-control.cjs');
-if(!isMainThread){try{parentPort.postMessage({ok:true,value:inspect(workerData.file,workerData.kind,536870912,workerData.scratch)});}catch(e){parentPort.postMessage({ok:false,error:e.message});}}
+if(!isMainThread){if(workerData.isolatedFault==='HANG'){setInterval(()=>{},1000);}else if(workerData.isolatedFault==='EXIT'){process.exit(7);}else {try{parentPort.postMessage({ok:true,value:inspect(workerData.file,workerData.kind,536870912,workerData.scratch)});}catch(e){parentPort.postMessage({ok:false,error:e.message});}}}
 function guardedInspect(data){return new Promise((resolve,reject)=>{
  const start=Date.now();let done=false,peak=0,min=Infinity;
  const metrics=()=>({rss:process.memoryUsage().rss,available:os.freemem()});
