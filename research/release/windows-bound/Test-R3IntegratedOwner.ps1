@@ -31,7 +31,7 @@ try{
   Export-ScheduledTask -TaskName $name|Set-Content (Join-Path $root ($role+'-original.xml'))
  }
  $binding=@{files=@();tasks=$tasks;locks=@{database_round=(Join-Path $root 'database.lock');stock=('Global\Codex-MP-R3-'+$tag+'-stock');writer=('Global\Codex-MP-R3-'+$tag+'-writer')}}
- $owner=New-ProductionOwner $binding (Join-Path $root 'owner-first.json');Enter-ProductionFence $owner $config $approval
+ $owner=New-ProductionOwner $binding (Join-Path $root 'owner-first.json');Enter-ProductionFence $owner $config $approval { <# Isolated runtime fixture guard; never formal. #> }
  $entry=Join-Path $PSScriptRoot '../test-r3-integrated-runtime.cjs'
  $node=Start-Process -FilePath (Get-Command node).Source -ArgumentList @('--max-old-space-size=128',('"'+$entry+'"'),('"'+$Source+'"'),('"'+$Harness+'"'),('"'+$root+'"')) -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $root 'node.stdout') -RedirectStandardError (Join-Path $root 'node.stderr')
  $last='';$deadline=[DateTime]::UtcNow.AddMinutes(8)
@@ -61,7 +61,7 @@ try{
        do {Start-Sleep -Milliseconds 200;$count=if(Test-Path $roundFile){@(Get-Content $roundFile).Count-$beforeCount}else{0};if([DateTime]::UtcNow -gt $until){throw 'WRITER_ROUNDS_TIMEOUT'}}while($count -lt 3 -or (Get-ScheduledTask -TaskName $tasks[1].binding.name).State -eq 'Running')
        $reply.writer_rounds=$count;$reply.writer_records=@(Get-Content $roundFile|Select-Object -Last 3|ForEach-Object{$_|ConvertFrom-Json})
       }
-      'REFENCE' {$owner=New-ProductionOwner $binding (Join-Path $root ('owner-'+[guid]::NewGuid()+'.json'));Enter-ProductionFence $owner $config $approval;$reply.fenced=$true}
+      'REFENCE' {$owner=New-ProductionOwner $binding (Join-Path $root ('owner-'+[guid]::NewGuid()+'.json'));Enter-ProductionFence $owner $config $approval { <# Isolated runtime fixture guard; never formal. #> };$reply.fenced=$true}
       'RESTORE_FAILURE' {
        $task=$tasks[1].binding;$xml=Get-Content (Join-Path $root 'writer-original.xml') -Raw
        Set-ScheduledTask -TaskName $task.name -Action (New-ScheduledTaskAction -Execute 'C:\Windows\System32\cmd.exe' -Argument '/c exit 3')|Out-Null
@@ -90,3 +90,4 @@ finally{
  if($success){foreach($task in $tasks){Unregister-ScheduledTask -TaskName $task.binding.name -Confirm:$false}}
  # On failure retain exact task definitions/disabled state for explicit recovery; never kill.
 }
+
