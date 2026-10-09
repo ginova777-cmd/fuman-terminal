@@ -68,12 +68,16 @@ function Wait-BoundFuture($Config,$Identity,[int]$Seconds=90) {
  }
  throw ('FUTURE_READBACK_TIMEOUT:'+ $last)
 }
-function Stop-NewBoundFuture($Config,$Identity) {
- $p=Get-BoundProcess $Identity;$p.Dispose()
- $raw=& pwsh -NoProfile -File (Join-Path $Config.prod 'ops/Request-FutoptGracefulStop.ps1') -RuntimeDir $Config.runtime -Request -Confirm:$false -WaitSeconds 90
- if($LASTEXITCODE -ne 0){throw 'NEW_SAFE_STOP_FAILED_NO_CHECKOUT'}
- $r=$raw|ConvertFrom-Json
- if($r.status -ne 'STOP_VERIFIED' -or $r.pid -ne $Identity.pid){throw 'NEW_STOP_RECEIPT_UNVERIFIED'}
+function Invoke-BoundGracefulStop($Config,$Identity,$OwnerGate,$ReceiptPath) {
+ Assert-OnlyBoundFuture $Config $Identity
+ # Decimal ticks remain strings; JSON numbers cannot represent Windows ticks exactly.
+ $requestIdentity=@{pid=[int]$Identity.pid;creation_ticks=[string]$Identity.creation_ticks;exe=$Identity.exe}
+ $identityPath=$ReceiptPath+'.identity.json';Write-CutoverReceipt $identityPath $requestIdentity
+ $raw=& node (Join-Path $PSScriptRoot 'GracefulOperation.cjs') $OwnerGate $identityPath
+ if($LASTEXITCODE -ne 0){throw 'GRACEFUL_STOP_FAILED_NO_FORCE_FALLBACK'}
+ $r=$raw|ConvertFrom-Json -DateKind String
+ if($r.status -ne 'GRACEFUL_STOP_VERIFIED' -or $r.pid -ne $Identity.pid -or !$r.pid_exited){throw 'STOP_RECEIPT_UNVERIFIED'}
+ Write-CutoverReceipt $ReceiptPath $r
  Assert-OnlyBoundFuture $Config $null
  return $r
 }

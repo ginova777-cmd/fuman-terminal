@@ -9,7 +9,7 @@ function Write-CutoverReceipt($Path,$Value){
 }
 function Get-BoundProcess($Expected){
  $p=Get-Process -Id $Expected.pid -ErrorAction Stop
- # Hold this handle through checks and termination; never reopen a recycled numeric PID.
+ # Hold this handle during identity checks; this module performs no process termination.
  $null=$p.Handle
  if($p.StartTime.ToUniversalTime().Ticks -ne [long]$Expected.creation_ticks){$p.Dispose();throw 'CREATION_MISMATCH'}
  if($p.MainModule.FileName -ne $Expected.exe){$p.Dispose();throw 'EXECUTABLE_MISMATCH'}
@@ -38,15 +38,5 @@ function Save-LegacyBoundary($Paths,$Destination){
   }
   $r.status='COPIED_BYTES_VERIFIED'
  }catch{$r.error=$_.Exception.Message;throw}finally{$r.finished_at=[DateTimeOffset]::UtcNow.ToString('o');Write-CutoverReceipt (Join-Path $Destination 'archive-receipt.json') $r}
- return $r
-}
-function Stop-LegacyBoundProcess($Expected,$ArchiveReceipt,$ReceiptPath,[switch]$OwnerStopAuthorized){
- if(!$OwnerStopAuthorized){throw 'OWNER_STOP_NOT_AUTHORIZED'}
- $archive=Get-Content -LiteralPath $ArchiveReceipt -Raw|ConvertFrom-Json -DateKind String
- if($archive.status -ne 'COPIED_BYTES_VERIFIED' -or @($archive.files).Count -eq 0){throw 'ARCHIVE_NOT_VERIFIED'}
- foreach($f in $archive.files){if((Get-Item -LiteralPath $f.copy).Length -ne $f.bytes -or (Get-FileHash -LiteralPath $f.copy).Hash.ToLower() -ne $f.sha256){throw 'ARCHIVE_DRIFT'}}
- $p=Get-BoundProcess $Expected
- $r=[ordered]@{request_id=[guid]::NewGuid().ToString();identity=$Expected;status='STOP_REQUESTED';method='WINDOWS_PROCESS_HANDLE_TERMINATE';graceful_stop=$false;safe_to_stop_proven=$false;tail='LEGACY_TAIL_PERSISTENCE_UNKNOWN';archive_receipt=$ArchiveReceipt;error=$null;started_at=[DateTimeOffset]::UtcNow.ToString('o')}
- try{Write-CutoverReceipt $ReceiptPath $r;$p.Kill();if(!$p.WaitForExit(10000)){throw 'LEGACY_EXIT_TIMEOUT'};$r.status='EXIT_CONFIRMED_TAIL_UNKNOWN';$r.exit_code=$p.ExitCode}catch{$r.status='STOP_FAILED';$r.error=$_.Exception.Message;throw}finally{$r.finished_at=[DateTimeOffset]::UtcNow.ToString('o');Write-CutoverReceipt $ReceiptPath $r;$p.Dispose()}
  return $r
 }

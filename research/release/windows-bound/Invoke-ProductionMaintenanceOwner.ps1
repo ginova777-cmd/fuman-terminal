@@ -13,7 +13,7 @@ Assert-SealedOwnerPackage $config
 if(!$ApprovalFile -or $RequesterPid -le 0 -or $RequesterCreationTicks -le 0){throw 'EXACT_APPROVAL_AND_REQUESTER_IDENTITY_REQUIRED'}
 $approval=Get-Content -LiteralPath $ApprovalFile -Raw|ConvertFrom-Json -AsHashtable
 Assert-OwnerApproval $config $approval
-if(!$approval.legacy_tail_unknown_accepted){throw 'LEGACY_TAIL_ACCEPTANCE_REQUIRED'}
+if(!$approval.graceful_stop_required){throw 'GRACEFUL_STOP_APPROVAL_REQUIRED'}
 $admin=[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
 if(!$admin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){throw 'ADMIN_REQUIRED'}
 $bindingPath=Join-Path $PSScriptRoot 'formal-binding.json'
@@ -21,7 +21,7 @@ if((Get-FileHash -LiteralPath $bindingPath).Hash.ToLower() -ne $config.binding_s
 $binding=Get-Content -LiteralPath $bindingPath -Raw|ConvertFrom-Json -AsHashtable
 $out=Join-Path $PSScriptRoot ('runs/'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ'));New-Item -ItemType Directory $out|Out-Null
 $owner=New-ProductionOwner $binding (Join-Path $out 'maintenance-state.json')
-$ctx=@{legacy=$null;future=$null;proof=$null;archive=$null;release=(Join-Path $out 'release');owner_gate=(Join-Path $out 'owner-gate.json');keep=$false;current_sha=$config.expected}
+ $ctx=@{legacy=$null;future=$null;proof=$null;archive=$null;release=(Join-Path $out 'release');owner_gate=(Join-Path $out 'owner-gate.json');keep=$false;current_sha=$config.expected}
 $ownerLock=Join-Path $config.runtime 'state/mother-cutover-maintenance-owner.lock'
 $lock=[IO.File]::Open($ownerLock,[IO.FileMode]::CreateNew,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
 $identity=@{owner_pid=$PID;creation_ticks=[string](Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks;target=$config.target;token=$owner.token;maintenance_verified=$false;approval_not_before=$approval.not_before;approval_expires_at=$approval.expires_at}
@@ -69,7 +69,7 @@ try{
   }
   stopLegacy={
    Assert-OwnerApproval $config $approval;AssertOutsideStockSession;Assert-OnlyBoundFuture $config $ctx.legacy
-   Stop-LegacyBoundProcess $ctx.legacy (Join-Path $ctx.archive 'archive-receipt.json') (Join-Path $out 'legacy-stop.json') -OwnerStopAuthorized|Out-Null
+   Invoke-BoundGracefulStop $config $ctx.legacy $ctx.owner_gate (Join-Path $out 'graceful-stop.json')|Out-Null
    Assert-OnlyBoundFuture $config $null
   }
   deploy={ReleaseOperation 'apply';Invoke-PairedVerifier $config $config.target|Out-Null;$ctx.current_sha=$config.target}
@@ -94,7 +94,7 @@ try{
    # silently refence a potentially started task; require manual recovery.
    if($owner.stock_handed_back -or !$owner.db -or !$owner.writer){throw 'HANDBACK_STARTED_MANUAL_RECOVERY_REQUIRED'}
   }
-  stopNewSafe={if(!$ctx.future){throw 'PARTIAL_START_IDENTITY_UNKNOWN_NO_CHECKOUT'};Stop-NewBoundFuture $config $ctx.future|Out-Null}
+  stopNewSafe={if(!$ctx.future){throw 'PARTIAL_START_IDENTITY_UNKNOWN_NO_CHECKOUT'};Invoke-BoundGracefulStop $config $ctx.future $ctx.owner_gate (Join-Path $out 'rollback-graceful-stop.json')|Out-Null}
   assertNoUsers={Assert-OnlyBoundFuture $config $null}
   rollback={
    Assert-RollbackNotPreviouslyFailed $ctx.release
