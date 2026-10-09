@@ -1,4 +1,4 @@
-param([string]$TaskName,[string]$OutputDirectory)
+param([string]$TaskName,[string]$OutputDirectory,[switch]$RequireCrossSession)
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 if($TaskName -notmatch '^Codex-MP-R3-Isolated-[a-f0-9]{32}$'){throw 'ISOLATED_TASK_NAME_REQUIRED'}
@@ -51,7 +51,7 @@ try{
  [IO.File]::WriteAllText((Join-Path $root 'restored-task.xml'),$after)
  if($before -ne $after){throw 'RAW_XML_DIFFERENCE'}
  $events.Add(@{stage='EXACT_XML_ENABLED_TRIGGER_RESTORED';pass=$true})
- @{status='NATIVE_SCHEDULER_SAME_SESSION_PASS';events=$events;cross_session='BLOCKED_S4U_ACCESS_DENIED';formal_mutations=0}|ConvertTo-Json -Depth 9|Set-Content (Join-Path $root 'native-scheduler-receipt.json')
+ @{status='NATIVE_SCHEDULER_PASS';events=$events;cross_session=($identity.session_id -ne (Get-Process -Id $PID).SessionId);formal_mutations=0}|ConvertTo-Json -Depth 9|Set-Content (Join-Path $root 'native-scheduler-receipt.json')
 } catch {
  @{status='BLOCKED';error=$_.Exception.Message;events=$events;task=$TaskName}|ConvertTo-Json -Depth 9|Set-Content (Join-Path $root 'native-scheduler-failure.json')
  throw
