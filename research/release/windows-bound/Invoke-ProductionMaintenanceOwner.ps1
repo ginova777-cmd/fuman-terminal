@@ -1,6 +1,7 @@
 [CmdletBinding()]
-param([switch]$Apply,[string]$ApprovalFile,[int]$RequesterPid,[long]$RequesterCreationTicks)
+param([switch]$WhatIf,[switch]$Preflight,[switch]$Apply,[string]$ApprovalFile,[int]$RequesterPid,[long]$RequesterCreationTicks)
 $ErrorActionPreference='Stop'
+if($Apply -and ($WhatIf -or $Preflight)){throw 'READONLY_APPLY_MODE_CONFLICT'}
 if(!$Apply){& (Join-Path $PSScriptRoot 'Read-ProductionBinding.ps1');return}
 . (Join-Path $PSScriptRoot 'ProductionMaintenanceBinding.ps1')
 . (Join-Path $PSScriptRoot 'ProductionRuntimePorts.ps1')

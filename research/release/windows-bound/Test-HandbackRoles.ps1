@@ -6,6 +6,7 @@ $results=[Collections.Generic.List[object]]::new()
 function Assert($ok,$name){if(!$ok){throw $name};$results.Add(@{name=$name;status='PASS'})}
 function MakeBinding($names){@{tasks=@($names|ForEach-Object{@{binding=@{name=$_;path='\';definition_sha256=('a'*64);enabled=if($_ -eq 'disabled-aux'){'false'}else{'true'}}}})}}
 # Every OS mutation port is intercepted. No formal or test mutex is acquired.
+function Get-TaskBinding($Name){(@($b.tasks|Where-Object{$_.binding.name -eq $Name})[0].binding).Clone()}
 function Restore-BoundTask($Expected){$script:restored.Add($Expected)}
 function Exit-BoundMutexes($Held){$script:events.Add('release-'+$Held)}
 function Write-OwnerState($Owner,$Stage){$script:events.Add($Stage)}

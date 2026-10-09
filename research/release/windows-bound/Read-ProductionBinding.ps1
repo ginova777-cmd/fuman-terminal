@@ -2,7 +2,7 @@
 param([string]$ConfigPath=(Join-Path $PSScriptRoot 'release-config.json'))
 $ErrorActionPreference='Stop'
 # Read-only companion. No lock acquisition, task changes, process control or DB writes.
-$r=[ordered]@{contract='maintenance-binding-readonly-v1';checked_at=[DateTimeOffset]::UtcNow.ToString('o');formal_mutations=$false;locks_acquired=$false;apply_authorized=$false;checks=@();blockers=@();status='BLOCKED'}
+$r=[ordered]@{contract='maintenance-binding-readonly-v2';mode='READ_ONLY_PREFLIGHT';mutex_probe='NOT_ACQUIRED';fence_probe='NOT_ACQUIRED';cutover_ready=$false;requires_separate_authorization=@('ACQUIRE_FORMAL_MUTEX','ACQUIRE_DATABASE_ROUND_LOCK','CREATE_OWNER_FENCE','CHANGE_TASK_STATE','STOP_OR_START_RUNTIME','APPLY_OR_ROLLBACK');checked_at=[DateTimeOffset]::UtcNow.ToString('o');formal_mutations=$false;locks_acquired=$false;apply_authorized=$false;checks=@();blockers=@();status='BLOCKED'}
 function Check($Name,[scriptblock]$Probe){try{$value=& $Probe;$r.checks+=@{name=$Name;status='PASS';value=$value}}catch{$r.checks+=@{name=$Name;status='BLOCKED';reason=$_.Exception.Message};$r.blockers+=($Name+':'+$_.Exception.Message)}}
 if(!(Test-Path -LiteralPath $ConfigPath)){$r.blockers+= 'RELEASE_CONFIG_MISSING';$r|ConvertTo-Json -Depth 12;return}
 try{$c=Get-Content -LiteralPath $ConfigPath -Raw|ConvertFrom-Json -AsHashtable}catch{$r.blockers+='RELEASE_CONFIG_INVALID';$r|ConvertTo-Json -Depth 12;return}

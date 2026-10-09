@@ -40,8 +40,11 @@ function Resolve-HandbackTasks($Binding) {
  $stock=@();$writer=@();$remaining=@()
  foreach($item in $Binding.tasks){
   $task=$item.binding
-  if(!$task.name -or !$task.path -or !$task.definition_sha256){throw 'TASK_IDENTITY_INCOMPLETE'}
+  if(!$task.name -or !$task.path -or $task.definition_sha256 -notmatch '^[a-fA-F0-9]{64}$'){throw 'TASK_IDENTITY_INCOMPLETE'}
   if(!$seen.Add($task.path+'|'+$task.name)){throw 'TASK_IDENTITY_DUPLICATE'}
+  $role=if($task.name -eq $stockName){'stock'}elseif($task.name -eq $writerName){'writer'}else{'auxiliary'}
+  if($item -is [Collections.IDictionary]){$declared=$item['role']}else{$prop=$item.PSObject.Properties['role'];$declared=if($prop){$prop.Value}else{$null}}
+  if($null -ne $declared -and $declared -ne $role){throw 'TASK_ROLE_UNKNOWN_OR_MISMATCH'}
   if($task.name -eq $stockName){if($task.path -ne '\'){throw 'STOCK_TASK_PATH_MISMATCH'};$stock+=,$task}
   else {$remaining+=,$task}
   if($task.name -eq $writerName){if($task.path -ne '\'){throw 'WRITER_TASK_PATH_MISMATCH'};$writer+=,$task}
@@ -49,6 +52,10 @@ function Resolve-HandbackTasks($Binding) {
  if($stock.Count -ne 1){throw 'STOCK_TASK_IDENTITY_MISSING_OR_AMBIGUOUS'}
  if($writer.Count -ne 1){throw 'WRITER_TASK_IDENTITY_MISSING_OR_AMBIGUOUS'}
  return @{stock=$stock[0];writer=$writer[0];remaining=$remaining}
+}
+function Assert-HandbackDefinition($Task) {
+ $actual=Get-TaskBinding $Task.name
+ if($actual.path -ne $Task.path -or $actual.definition_sha256 -ne $Task.definition_sha256){throw 'HANDBACK_TASK_DEFINITION_DRIFT'}
 }
 function Assert-ProductionBinding($Binding) {
  $null=Resolve-HandbackTasks $Binding
@@ -97,6 +104,7 @@ function Enter-ProductionFence($Owner,$Config,$Approval) {
 function Release-StockBinding($Owner) {
  if(!$Owner.db -or !$Owner.writer){throw 'WRITER_FENCE_REQUIRED_FOR_STOCK_HANDBACK'}
  $roles=Resolve-HandbackTasks $Owner.binding
+ foreach($task in @($roles.stock)+@($roles.remaining)){Assert-HandbackDefinition $task}
  if($Owner.stock){Exit-BoundMutexes $Owner.stock;$Owner.stock=$null}
  Restore-BoundTask $roles.stock|Out-Null
  $Owner.stock_handed_back=$true;Write-OwnerState $Owner 'STOCK_TASK_RESTORED'
@@ -138,6 +146,7 @@ function Assert-FutoptWriterHandback($Identity,$Status,$ExpectedRelease) {
 function Restore-WriterBinding($Owner,$TransportProof) {
  if(!$Owner.stock_handed_back -or !$TransportProof.transport_identity_pass){throw 'WRITER_HANDBACK_NOT_VERIFIED'}
  $roles=Resolve-HandbackTasks $Owner.binding
+ foreach($task in @($roles.stock)+@($roles.remaining)){Assert-HandbackDefinition $task}
  if($Owner.writer){Exit-BoundMutexes $Owner.writer;$Owner.writer=$null}
  if($Owner.db){$Owner.db.Dispose();$Owner.db=$null}
  foreach($task in $roles.remaining){Restore-BoundTask $task|Out-Null}
