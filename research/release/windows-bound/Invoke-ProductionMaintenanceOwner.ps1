@@ -58,7 +58,7 @@ try{
    Assert-OnlyBoundFuture $config $ctx.legacy
   }
   fence={
-   Enter-ProductionFence $owner $config $approval
+   Enter-ProductionFence $owner $config $approval { Assert-OnlyBoundFuture $config $ctx.legacy }
    Assert-OnlyBoundFuture $config $ctx.legacy
    $identity.maintenance_verified=$true;WriteGate
   }

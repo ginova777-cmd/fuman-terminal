@@ -19,7 +19,7 @@ $proofPath=Join-Path $root 'fence-proof.json'
 $runtimeAttempted=$false
 $runtimePassed=$false
 try{
- Enter-ProductionFence $owner $config $approval
+ Enter-ProductionFence $owner $config $approval { <# Isolated runtime fixture guard; never formal. #> }
  if(!$owner.db -or !$owner.stock -or !$owner.writer){throw 'FENCE_INCOMPLETE'}
  @{scope='ISOLATED_REVIEW';owner_pid=$PID;owner_creation_date=(Get-Process -Id $PID).StartTime.ToUniversalTime().ToString('o');token=$owner.token;stage=$owner.stage;locks=$binding.locks;tasks_disabled=(@($script:taskStates.Values|Where-Object {$_ -eq $true}).Count -eq 0);checked_at=[DateTimeOffset]::UtcNow.ToString('o')}|ConvertTo-Json -Depth 6|Set-Content -LiteralPath $proofPath
  $scriptPath=Join-Path $PSScriptRoot '../test-r3-runtime-e2e.cjs'
@@ -34,7 +34,7 @@ try{
  if(@($script:taskStates.Values|Where-Object {$_ -ne $true}).Count){throw 'TASK_HANDBACK_FAILED'}
  # Failure before any runtime mutation must restore exact task state and all locks.
  $failure=New-ProductionOwner $binding (Join-Path $root 'failure-owner.json')
- Enter-ProductionFence $failure $config $approval
+ Enter-ProductionFence $failure $config $approval { <# Isolated runtime fixture guard; never formal. #> }
  Restore-ProductionFence $failure
  if($failure.db -or $failure.stock -or $failure.writer){throw 'FAILURE_LOCK_REMAINS'}
  @{status='ISOLATED_OWNER_COMPOSITION_PASS';root=$root;runtime=(Get-Content (Join-Path $root 'runtime-output.txt') -Raw|ConvertFrom-Json);task_transport='CMDLET_FIXTURE';mutex_transport='REAL_WINDOWS_LOCAL_MUTEX';database_round='REAL_EXCLUSIVE_FILE';handback='REGISTRATION_RESTORED_NO_FORMAL_TASK_START';failure_restore='PASS';formal_mutations=0}|ConvertTo-Json -Depth 8|Set-Content (Join-Path $root 'receipt.json')
@@ -48,3 +48,4 @@ try{
   }
  }
 }
+

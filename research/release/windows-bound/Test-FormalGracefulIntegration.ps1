@@ -103,10 +103,11 @@ foreach($scenario in @('normal','verify-failure-rollback','stop-rejected')){
  }finally{
  # Only test-created processes and local fences are released. Never force terminate.
  $script:cleanup=$true;$owner.manual_recovery_required=$false
- if(!$owner.db){$owner=New-ProductionOwner $binding (Join-Path $out 'cleanup-owner.json');Enter-ProductionFence $owner $config $approval}
+ if(!$owner.db){$owner=New-ProductionOwner $binding (Join-Path $out 'cleanup-owner.json');Enter-ProductionFence $owner $config $approval { <# Isolated runtime fixture guard; never formal. #> }}
  if($future){Invoke-BoundGracefulStop $config $future $ctx.owner_gate (Join-Path $out 'cleanup-stop.json')|Out-Null}
  Restore-ProductionFence $owner
  }
 }
 @{status='PASS';cases=$results;root=$testRoot;formal_mutations=$false}|ConvertTo-Json -Depth 20|Set-Content (Join-Path $OutputDirectory 'integrated-e2e.json') -Encoding utf8
 Write-Output ('PASS '+$results.Count)
+

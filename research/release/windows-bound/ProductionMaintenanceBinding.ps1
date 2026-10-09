@@ -77,23 +77,47 @@ function New-ProductionOwner($Binding,$Receipt) {
  # A unique receipt path is required; no stale owner takeover.
  if(Test-Path -LiteralPath $Receipt){throw 'OWNER_RECEIPT_EXISTS'}
  $null=Resolve-HandbackTasks $Binding
- @{binding=$Binding;receipt=$Receipt;token=[guid]::NewGuid().ToString();owner_started_at=[DateTimeOffset]::UtcNow.ToString('o');stage='NEW';suspended=[Collections.Generic.List[object]]::new();db=$null;stock=$null;writer=$null;stock_handed_back=$false;writer_handed_back=$false;manual_recovery_required=$false;start_recorded=$false}
+ @{owner_pid=$PID;owner_creation_ticks=(Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks;owner_thread=[Threading.Thread]::CurrentThread.ManagedThreadId;binding=$Binding;receipt=$Receipt;token=[guid]::NewGuid().ToString();owner_started_at=[DateTimeOffset]::UtcNow.ToString('o');stage='NEW';suspended=[Collections.Generic.List[object]]::new();db=$null;stock=$null;writer=$null;stock_handed_back=$false;writer_handed_back=$false;manual_recovery_required=$false;start_recorded=$false}
 }
-function Enter-ProductionFence($Owner,$Config,$Approval) {
+function Assert-FenceOwnerIdentity($Owner) {
+ if($Owner.owner_pid -ne $PID -or $Owner.owner_creation_ticks -ne (Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks -or $Owner.owner_thread -ne [Threading.Thread]::CurrentThread.ManagedThreadId){throw 'FENCE_OWNER_IDENTITY_CHANGED'}
+}
+function Assert-HeldFence($Owner) {
+ Assert-FenceOwnerIdentity $Owner
+ if(!$Owner.db -or $Owner.db.SafeFileHandle.IsClosed -or !$Owner.stock -or !$Owner.writer){throw 'FENCE_NOT_CONTINUOUSLY_HELD'}
+}
+function Enter-ProductionFence($Owner,$Config,$Approval,[scriptblock]$AssertRuntimeExclusive) {
+ if(!$AssertRuntimeExclusive){throw 'RUNTIME_EXCLUSION_GUARD_REQUIRED'}
+ Assert-FenceOwnerIdentity $Owner
  Assert-OwnerApproval $Config $Approval
  Assert-ProductionBinding $Owner.binding
+ & $AssertRuntimeExclusive
  Write-OwnerState $Owner 'FENCE_INTENT'
  try {
-  # Suspend-BoundTask refuses Running. Never stop a running task to obtain idle.
-  foreach($item in $Owner.binding.tasks){
-   # Track intent before mutation so a failed readback still has a restore obligation.
-   $Owner.suspended.Add($item.binding)
-   Suspend-BoundTask $item.binding|Out-Null
-   Write-OwnerState $Owner 'TASK_FENCED'
-  }
+  # Nonblocking acquisition. A busy/abandoned lock fails before any task mutation.
+  # Handles remain on this Owner/thread through STOP/deploy and handback.
   $Owner.db=[IO.File]::Open($Owner.binding.locks.database_round,[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
   $Owner.stock=Enter-BoundMutexes @($Owner.binding.locks.stock)
   $Owner.writer=Enter-BoundMutexes @($Owner.binding.locks.writer)
+  Assert-HeldFence $Owner
+  Assert-OwnerApproval $Config $Approval
+  Assert-ProductionBinding $Owner.binding
+  & $AssertRuntimeExclusive
+  foreach($item in $Owner.binding.tasks){if((Get-TaskBinding $item.binding.name).state -eq 'Running'){throw 'TASK_STILL_RUNNING_BEFORE_SUSPEND'}}
+  Write-OwnerState $Owner 'LOCKS_HELD_BEFORE_TASKS'
+  foreach($item in $Owner.binding.tasks){
+   Assert-HeldFence $Owner
+   Assert-OwnerApproval $Config $Approval
+   & $AssertRuntimeExclusive
+   # Schedule may race to Running: Suspend-BoundTask refuses it; held runtime
+   # locks prevent cooperative launchers from entering their protected work.
+   $Owner.suspended.Add($item.binding)
+   Write-OwnerState $Owner 'TASK_SUSPEND_INTENT'
+   Suspend-BoundTask $item.binding|Out-Null
+   Write-OwnerState $Owner 'TASK_FENCED'
+  }
+  Assert-HeldFence $Owner
+  & $AssertRuntimeExclusive
   Write-OwnerState $Owner 'FENCED'
  } catch {
   $original=$_.Exception.Message
@@ -161,3 +185,4 @@ function Restore-ProductionFence($Owner) {
  foreach($task in $Owner.suspended){Restore-BoundTask $task|Out-Null}
  Write-OwnerState $Owner 'FENCE_RESTORED'
 }
+
