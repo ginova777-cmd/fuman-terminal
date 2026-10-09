@@ -10,6 +10,7 @@ $config=Get-Content (Join-Path $PSScriptRoot 'release-config.json') -Raw|Convert
 # never authorizes a runtime stop, production checkout or schedule fence.
 if(!$config.formal_apply_authorized){throw 'FORMAL_CUTOVER_GO_NOT_GRANTED'}
 Assert-SealedOwnerPackage $config
+Assert-InstalledOwnerTrust $config
 if(!$ApprovalFile -or $RequesterPid -le 0 -or $RequesterCreationTicks -le 0){throw 'EXACT_APPROVAL_AND_REQUESTER_IDENTITY_REQUIRED'}
 $approval=Get-Content -LiteralPath $ApprovalFile -Raw|ConvertFrom-Json -AsHashtable
 Assert-OwnerApproval $config $approval

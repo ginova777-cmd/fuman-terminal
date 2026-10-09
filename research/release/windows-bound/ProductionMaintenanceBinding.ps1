@@ -14,6 +14,14 @@ function Assert-SealedOwnerPackage($Config) {
  foreach($property in $m.config_identity.PSObject.Properties){if($Config[$property.Name] -ne $property.Value){throw ('TOOL_CONFIG_IDENTITY_DRIFT:'+ $property.Name)}}
 }
 
+function Assert-InstalledOwnerTrust($Config) {
+ $expected=[IO.Path]::GetFullPath((Join-Path $env:ProgramFiles ('FumanMaintenanceOwner/'+$Config.target)))
+ if([IO.Path]::GetFullPath($PSScriptRoot) -ne $expected){throw 'PROTECTED_OWNER_INSTALL_REQUIRED'}
+ $dir=Get-Item -LiteralPath $PSScriptRoot
+ if($dir.Attributes -band [IO.FileAttributes]::ReparsePoint){throw 'OWNER_PACKAGE_REPARSE_POINT'}
+ if(!$Config.installed_acl_sddl -or (Get-Acl -LiteralPath $PSScriptRoot).Sddl -ne $Config.installed_acl_sddl){throw 'OWNER_ACL_NOT_ATTESTED'}
+}
+
 # No top-level mutation. Same functions are exercised with isolated Windows ports.
 # A caller must keep this PowerShell thread alive for the lifetime of held mutexes.
 function Assert-OwnerApproval($Config,$Approval) {
@@ -102,7 +110,8 @@ function Assert-FutoptWriterHandback($Identity,$Status,$ExpectedRelease) {
  # catalogue blocker is not converted into a healthy quote source.
  $healthy=$true
  foreach($key in @('ok','formalReady','websocketConnected','websocketAuthenticated')){if($Status.$key -isnot [bool] -or !$Status.$key){$healthy=$false}}
- if(![string]::IsNullOrWhiteSpace([string]$Status.error)){$healthy=$false}
+ $errorValue=if($Status -is [Collections.IDictionary]){$Status['error']}elseif($Status.PSObject.Properties['error']){$Status.error}else{$null}
+ if(![string]::IsNullOrWhiteSpace([string]$errorValue)){$healthy=$false}
  @{transport_identity_pass=$true;quality_gate_pass=$healthy;source_status=$Status}
 }
 function Restore-WriterBinding($Owner,$TransportProof) {
