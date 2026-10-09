@@ -46,7 +46,3 @@ function quoteFixture(){
  }
  console.log(JSON.stringify({status:'PASS',tests,elapsed_ms:Date.now()-begin,peak_rss_kib:process.resourceUsage().maxRSS,scratch,formal:'FORMAL_BLOCKED',natural:'NATURAL_MARKET_PENDING'}));
 })().catch(e=>{console.error(e);process.exitCode=1;});
-
-
-
-

@@ -21,6 +21,3 @@ const required=new Map([...(old?.proofs||[]),...checked].filter(p=>catalogue.seg
  read(){const x=load(this.file);for(const p of x.proofs)if(sha(read(p.file,8*1048576))!==p.sha256)throw Error('SEGMENT_HASH');return x;}
 }
 module.exports={load,atomic,OwnerControl,CataloguePublisher};
-
-
-

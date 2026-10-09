@@ -21,4 +21,3 @@ function verifyHandoff(bundle){
  return {binding:sha(bundle),kind:bundle.kind,epoch:bundle.epoch,trade_date:bundle.trade_date,source_sha:deployment.sha,evidence_version:start.evidence_version,start_hash:bundle.start.sha256,recovery_hash:bundle.recovery.sha256,feed_root:local(bundle.feed_root),cache_path:local(recovery.cache_path),cursor,formal_verified:false,continuity:'FROM_BASELINE_BOUNDARY_ONLY',prior_visibility:'UNKNOWN'};
 }
 module.exports={verifyHandoff,local,read,sha};
-

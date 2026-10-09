@@ -37,4 +37,3 @@ console.log(JSON.stringify({status:'PASS',tests,capacity:metrics,elapsed_ms:Date
 })().catch(e=>{console.error(e);process.exitCode=1});
 
 module.exports={fixture,tail,write};
-
