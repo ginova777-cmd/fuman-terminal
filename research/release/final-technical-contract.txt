@@ -1,0 +1,77 @@
+Final Technical Integration Contract v1 — ISOLATED ONLY
+
+F2 catalogue
+CataloguePublisher serializes publication under publish.lock. A bound LiveTail
+independently verifies all newly exposed complete parents. Exact proof sets and
+hashes must match, existing segments are immutable, and declared ranges contiguous.
+Publication uses fsync of a bounded temporary file then atomic rename/readback.
+Crash before rename leaves old root; after rename leaves new root. Temporary files
+are preserved after failure. No automatic GC or source deletion is implemented.
+Rotation anchor requires independent Consumer root/frame hash readback identifying
+that feed and its committed cursor. Only one declared Consumer's retention proof
+is supported; formal multi-consumer retention requires the slowest registered
+consumer and an Owner-approved registry. Never infer all consumers have read.
+Limits: 256 segments, 800 proof files, 64MiB new validation, at most16 parents per
+publication. Larger unsealed batches are BACKPRESSURE, not truncated publication.
+
+F3 dual feed
+Owner-bound dual-feed-barrier-v1 seals BOTH catalogue raw hashes, handoff bindings,
+target sequence/commit hashes, generation, asOf and trade_date. Both targets must
+be completely verified; a missing/partial side cannot publish a Consumer result.
+This barrier is a proposed isolated producer contract, NOT a formal live output.
+No timestamp maximum, heartbeat or empty page is treated as a producer watermark.
+Total order is QUOTE_THEN_CANDLE_SOURCE_ORDER. Within each feed preserve source
+sequence and event ordinal including same-key revisions. This is deterministic
+logical ordering, not a claim of global exchange event chronology. Formal Owner
+must accept this order and the semantics of sealed cuts before natural operation.
+The immutable Consumer input frame contains BOTH cursors, revision maps and barrier
+identity. The existing single atomic Consumer root references that frame and the
+results. These cursors are authoritative; per-feed standalone cursor files are NOT
+advanced independently. After crash, root+frame readback provides both or neither.
+Consumer commit before returning ACK replays the exact frame without duplicate
+publication. Same generation with another barrier is rejected. Rebase is explicit.
+Bound: <=5,000 events overall, <=16 parents and64MiB per feed, existing4MiB frame
+limit. Exceeding bounds blocks the entire transaction. No queue grows unbounded.
+
+F4 Owner control
+Owner tuple: owner, host, PID, process start time, epoch, nonce, release SHA,
+raw-hash-linked owner-control-authorization-v1. This patch accepts ISOLATED_REVIEW
+scope only. It cannot authenticate a real Windows Owner by a self-written document.
+STOP is bound to exact owner hash. New owner requires a new identity and explicit
+restart; old owner is fenced. Takeover is allowed only with injected verifier
+result CONFIRMED_DEAD_EXACT_IDENTITY, matching identity hash and evidence reference.
+Formal verifier must independently inspect machine, PID AND creation time, exact
+entrypoint/loaded SHA and authorization; unknown/denied/reused PID must block.
+Isolated tests use a fixture resolver; no formal dead-process resolver is installed.
+Takeover archives the old lock and uses exclusive takeover.lock. Unknown locks are
+never unlinked. Crash between archive and new acquire leaves an explicit operational
+block requiring Owner inspection. publish.lock/dual-run.lock after OS death likewise
+remain blocked; this patch does not forcibly reclaim those locks.
+
+Formal evidence checklist / responsibility
+Release Owner: approvedProductionSha from
+C:/fuman-release-owner/fuman-terminal/data/contracts/release_root_authority_v1.json,
+prod81 HEAD/clean status, exact approved manifest and independent runtime file hashes.
+Collector Owner: Windows process PID+CreationDate+ExecutablePath/entrypoint, loaded
+release SHA and role, process-local start configuration (no keys), WS subscription
+identity. Do not infer loaded SHA from repository HEAD alone.
+C2 startup: scripts/fugle-websocket-collector.js -> lib/mother-evidence-startup.cjs;
+FUMAN_CHANGE_EVIDENCE_C2_START_JSON contains mother-evidence-start-v2-c2 epoch and
+quote/candle recovery path+SHA256. FUMAN_CHANGE_EVIDENCE_DIR/<epoch>/quotes and
+/candles identify feeds. Actual configured absolute root must be read from approved
+start receipt; no new runtime path is invented here.
+Recovery Owner: original approved quote/candle baseline bytes/hash/size, independent
+verify receipt, matching cache paths, exact cut sequence/commit and per-key revision
+checkpoint if nonzero. Earliest visibility before cut remains UNKNOWN.
+Producer Owner: immutable committed segment catalogue, no-GAP barrier, cache ACK
+proof and continuity from baseline. Current v3 parent remains unmodified.
+B3 Owners: Longyue plan/direction/levels publisher supplies original same-day plan
+JSON/hash and effective time; Mother Pool/Fugle contract Owner supplies raw minute
+volume unit evidence; broker-cost publisher supplies full original branch rows and
+recomputable cost; Collector/archive Owner supplies first received/available time
+and revisions. Last cache timestamp is not first availability.
+
+All production flags/runners/data remain untouched. Tests are isolated fixtures.
+OFFLINE_READY is limited to tested contracts. FORMAL_BLOCKED and
+NATURAL_MARKET_PENDING remain. Rollback: leave production on existing paths and
+stop invoking isolated entrypoints; preserve source evidence and committed roots.

@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),crypto=require('crypto');
 const {sha}=require('../../lib/mother-change-evidence.cjs');
-function local(file){const p=path.resolve(file);if(/fuman-runtime|fuman-release-owner|prod81/i.test(p))throw Error('FORMAL_PATH_NOT_AUTHORIZED');let q=p;while(fs.existsSync(q)){if(fs.lstatSync(q).isSymbolicLink())throw Error('LINK_NOT_AUTHORIZED');const parent=path.dirname(q);if(parent===q)break;q=parent;}return p;}
+function local(file){const p=path.resolve(file);if(/fuman-runtime|fuman-release-owner|prod81/i.test(p))throw Error('FORMAL_PATH_NOT_AUTHORIZED');let q=p;while(true){if(fs.existsSync(q)&&fs.lstatSync(q).isSymbolicLink())throw Error('LINK_NOT_AUTHORIZED');const parent=path.dirname(q);if(parent===q)break;q=parent;}return p;}
 function read(file,max=1048576){local(file);const s=fs.statSync(file);if(!s.isFile()||s.size>max)throw Error('BOUNDED_FILE_LIMIT');const b=fs.readFileSync(file);if(b.length>max)throw Error('BOUNDED_FILE_LIMIT');return b;}
 function reference(ref){if(!ref||!/^[a-f0-9]{64}$/.test(ref.sha256||''))throw Error('REFERENCE_REQUIRED');const b=read(ref.path);if(sha(b)!==ref.sha256)throw Error('REFERENCE_HASH');return JSON.parse(b);}
 function baselineHash(file,max){local(file);const fd=fs.openSync(file,'r'),h=crypto.createHash('sha256'),buf=Buffer.alloc(65536);let total=0;try{for(let n;(n=fs.readSync(fd,buf,0,buf.length,null));){total+=n;if(total>max)throw Error('BASELINE_LIMIT');h.update(buf.subarray(0,n));}}finally{fs.closeSync(fd);}return {sha256:h.digest('hex'),bytes:total};}
@@ -21,3 +21,4 @@ function verifyHandoff(bundle){
  return {binding:sha(bundle),kind:bundle.kind,epoch:bundle.epoch,trade_date:bundle.trade_date,source_sha:deployment.sha,evidence_version:start.evidence_version,start_hash:bundle.start.sha256,recovery_hash:bundle.recovery.sha256,feed_root:local(bundle.feed_root),cache_path:local(recovery.cache_path),cursor,formal_verified:false,continuity:'FROM_BASELINE_BOUNDARY_ONLY',prior_visibility:'UNKNOWN'};
 }
 module.exports={verifyHandoff,local,read,sha};
+
