@@ -19,7 +19,7 @@ function quoteFixture(){
  const handoff={contract:'producer-handoff-v1',scope:'ISOLATED_REVIEW',kind:'quote',epoch:start.epoch,trade_date:'2026-10-08',feed_root:start.feed.quote,deployment:ref('deployment.json'),start:ref('qstart.json'),recovery:ref('qrecovery.json'),boundary:ref('qboundary.json')};
  return {t:new LiveTail({directory:fs.mkdtempSync(path.join(scratch,'qcursor-')),handoff}),cat:path.join(d,'qcat.json')};
 }
-(async()=>{const tests=[],begin=Date.now();
+(async()=>{const tests=[],evidenceDirectories=[],begin=Date.now();
  for(const stage of ['before','after']){const file=path.join(scratch,'crash-'+stage+'.json');atomic(file,{value:1});const c=require('child_process').spawnSync(process.execPath,[__filename,'crash-child',file,stage]);assert.equal(c.status,79);assert.equal(load(file).value,stage==='before'?1:2);tests.push('OS process exit '+stage+' atomic rename preserves valid published root');}
  const o=ctl(path.join(scratch,'owner'));assert.throws(()=>new OwnerControl(o.dir,owner,()=> 'UNKNOWN').acquire());assert.throws(()=>o.takeover(o.id,{...owner,nonce:'n2'}),/NOT_PROVEN/);assert(fs.existsSync(o.file));tests.push('unknown/live identity cannot reclaim lock');
  o.stop();assert(o.stopped());o.probe=()=> ({status:'CONFIRMED_DEAD_EXACT_IDENTITY',identity_hash:o.id,evidence_ref:'isolated-process-inspection-fixture'});const replacement=o.takeover(o.id,{...owner,nonce:'n2'});assert(!replacement.stopped());assert.throws(()=>o.check(),/CHANGED/);tests.push('exact dead owner takeover preserves retired evidence and fences old owner');
@@ -33,6 +33,7 @@ function quoteFixture(){
  const wrong=fixture(),wt=tail(wrong),wp=wt.poll(wrong.catalogue),wpb=new CataloguePublisher(path.join(scratch,'badpub'),ctl(path.join(scratch,'badowner')));await assert.rejects(Promise.resolve().then(()=>wpb.publish(wrong.cat,[],{reader:wt})),/PROOF_SET/);tests.push('missing complete segment proof set cannot publish');
  for(const phase of [2,3,4]){
   const c=fixture(),ct=tail(c),q=quoteFixture(),s=seed(),control=ctl(path.join(scratch,'dual-owner-'+phase));
+  evidenceDirectories.push({phase,consumer:s.dir,candle:c.dir,quote:path.dirname(q.cat)});
   const env={MP_PHASE2_ENABLED:'1',...(phase>=3?{MP_PHASE3_ENABLED:'1'}:{}),...(phase===4?{MP_PHASE4_ENABLED:'1'}:{})},consumer=new DualFeedConsumer({directory:s.dir,env,control});
   const target=t=>{let cur=t.cursor();for(let i=0;i<2;i++){const view=Object.create(t);view.cursor=()=>cur;const page=view.poll(t===ct?c.catalogue:q.cat);cur=page.page.next;}return {sequence:cur.sequence,commit_hash:cur.commit_hash};};
   const seal={contract:'dual-feed-barrier-v1',owner:control.id,asOf:s.frame.asOf,trade_date:'2026-10-08',generation:1,gap:false,binding:{quote:q.t.identity.binding,candle:ct.identity.binding},targets:{quote:target(q.t),candle:target(ct)},catalogue_hashes:{quote:sha(fs.readFileSync(q.cat)),candle:sha(fs.readFileSync(c.catalogue))}};
@@ -44,5 +45,5 @@ function quoteFixture(){
   atomic(b,{...seal,generation:2,targets:{...seal.targets,candle:{sequence:3,commit_hash:'x'}}});await assert.rejects(consumer.run(args),/CATALOGUE/);assert.equal(s.c.store.root().sequence,1);
   control.stop();assert.equal((await consumer.run(args)).status,'STOPPED');tests.push('Phase '+phase+' dual feed E2E / revision / atomic cursors / crash replay / faster feed blocked / STOP');
  }
- console.log(JSON.stringify({status:'PASS',tests,elapsed_ms:Date.now()-begin,peak_rss_kib:process.resourceUsage().maxRSS,scratch,formal:'FORMAL_BLOCKED',natural:'NATURAL_MARKET_PENDING'}));
+ console.log(JSON.stringify({status:'PASS',tests,elapsed_ms:Date.now()-begin,peak_rss_kib:process.resourceUsage().maxRSS,scratch,evidenceDirectories,formal:'FORMAL_BLOCKED',natural:'NATURAL_MARKET_PENDING'}));
 })().catch(e=>{console.error(e);process.exitCode=1;});
