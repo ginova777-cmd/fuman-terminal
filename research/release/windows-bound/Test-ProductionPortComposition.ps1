@@ -34,7 +34,7 @@ foreach($scenario in @('normal','requester-exit-after-deploy')){
  Set-Content (Join-Path $out 'runtime/cache/intraday/fugle-futopt-ws-candles.json') '{"fixture":true}'
  $id=[guid]::NewGuid().ToString('N');$script:tasks=@{}
  $binding=@{files=@();tasks=@();locks=@{database_round=(Join-Path $out 'database-round.lock');stock=('Local\PboTest-'+$id+'-Stock');writer=('Local\PboTest-'+$id+'-Writer')}}
- foreach($name in @('fixture-stock','fixture-writer','fixture-0835','fixture-1333')){$task=@{name=$name;path='\';enabled='true';state='Ready';definition_sha256=$name};$binding.tasks+=@{binding=$task};$script:tasks[$name]=$task.Clone()}
+ foreach($name in @('Fuman Fugle Daytrade WebSocket Collector 0600-1330','Fuman Daytrade Source Writer 0600-1330','fixture-0835','fixture-1333')){$task=@{name=$name;path='\';enabled='true';state='Ready';definition_sha256=$name};$binding.tasks+=@{binding=$task};$script:tasks[$name]=$task.Clone()}
  $config=@{prod=(Join-Path $out 'prod');runtime=(Join-Path $out 'runtime');target='new';expected='old';release_approved=$true;remote_main_verified=$true;binding_sha256='fixture';package_sha256='fixture'}
  $approval=@{action='CONTROLLED_CUTOVER_APPLY';target='new';binding_sha256='fixture';package_sha256='fixture';not_before=[DateTimeOffset]::UtcNow.AddMinutes(-1).ToString('o');expires_at=[DateTimeOffset]::UtcNow.AddMinutes(5).ToString('o')}
  $ctx=@{legacy=$null;future=$null;proof=$null;archive=$null;release=(Join-Path $out 'release');owner_gate=(Join-Path $out 'owner-gate.json');keep=$false;current_sha='old'}

@@ -32,7 +32,26 @@ function Assert-OwnerApproval($Config,$Approval) {
  if($now -lt [DateTimeOffset]::Parse($Approval.not_before) -or $now -ge [DateTimeOffset]::Parse($Approval.expires_at)){throw 'APPROVAL_WINDOW_NOT_ACTIVE'}
  if(!$Config.release_approved -or !$Config.remote_main_verified){throw 'RELEASE_NOT_APPROVED_OR_MAIN_UNVERIFIED'}
 }
+function Resolve-HandbackTasks($Binding) {
+ # Resolve exact identities, never array order. No scheduler or lock operations.
+ $stockName='Fuman Fugle Daytrade WebSocket Collector 0600-1330'
+ $writerName='Fuman Daytrade Source Writer 0600-1330'
+ $seen=[Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+ $stock=@();$writer=@();$remaining=@()
+ foreach($item in $Binding.tasks){
+  $task=$item.binding
+  if(!$task.name -or !$task.path -or !$task.definition_sha256){throw 'TASK_IDENTITY_INCOMPLETE'}
+  if(!$seen.Add($task.path+'|'+$task.name)){throw 'TASK_IDENTITY_DUPLICATE'}
+  if($task.name -eq $stockName){if($task.path -ne '\'){throw 'STOCK_TASK_PATH_MISMATCH'};$stock+=,$task}
+  else {$remaining+=,$task}
+  if($task.name -eq $writerName){if($task.path -ne '\'){throw 'WRITER_TASK_PATH_MISMATCH'};$writer+=,$task}
+ }
+ if($stock.Count -ne 1){throw 'STOCK_TASK_IDENTITY_MISSING_OR_AMBIGUOUS'}
+ if($writer.Count -ne 1){throw 'WRITER_TASK_IDENTITY_MISSING_OR_AMBIGUOUS'}
+ return @{stock=$stock[0];writer=$writer[0];remaining=$remaining}
+}
 function Assert-ProductionBinding($Binding) {
+ $null=Resolve-HandbackTasks $Binding
  foreach($file in $Binding.files){
   if((Get-FileHash -LiteralPath $file.path -Algorithm SHA256).Hash.ToLower() -ne $file.sha256){throw ('FILE_BINDING_DRIFT:'+ $file.path)}
  }
@@ -50,6 +69,7 @@ function Write-OwnerState($Owner,$Stage) {
 function New-ProductionOwner($Binding,$Receipt) {
  # A unique receipt path is required; no stale owner takeover.
  if(Test-Path -LiteralPath $Receipt){throw 'OWNER_RECEIPT_EXISTS'}
+ $null=Resolve-HandbackTasks $Binding
  @{binding=$Binding;receipt=$Receipt;token=[guid]::NewGuid().ToString();owner_started_at=[DateTimeOffset]::UtcNow.ToString('o');stage='NEW';suspended=[Collections.Generic.List[object]]::new();db=$null;stock=$null;writer=$null;stock_handed_back=$false;writer_handed_back=$false;manual_recovery_required=$false;start_recorded=$false}
 }
 function Enter-ProductionFence($Owner,$Config,$Approval) {
@@ -76,8 +96,9 @@ function Enter-ProductionFence($Owner,$Config,$Approval) {
 }
 function Release-StockBinding($Owner) {
  if(!$Owner.db -or !$Owner.writer){throw 'WRITER_FENCE_REQUIRED_FOR_STOCK_HANDBACK'}
+ $roles=Resolve-HandbackTasks $Owner.binding
  if($Owner.stock){Exit-BoundMutexes $Owner.stock;$Owner.stock=$null}
- Restore-BoundTask $Owner.binding.tasks[0].binding|Out-Null
+ Restore-BoundTask $roles.stock|Out-Null
  $Owner.stock_handed_back=$true;Write-OwnerState $Owner 'STOCK_TASK_RESTORED'
 }
 function Start-BoundStockOnce($Owner,$ResumeEvidence) {
@@ -89,7 +110,7 @@ function Start-BoundStockOnce($Owner,$ResumeEvidence) {
  if($age -lt 0 -or $age -gt 15){throw 'STOCK_INVENTORY_STALE'}
  $tw=[TimeZoneInfo]::ConvertTimeBySystemTimeZoneId($now,'Taipei Standard Time');$minute=$tw.Hour*60+$tw.Minute
  if($tw.ToString('yyyy-MM-dd') -ne $ResumeEvidence.trade_date -or $minute -lt 360 -or $minute -ge 810){throw 'STOCK_RESUME_OUTSIDE_WINDOW'}
- $task=$Owner.binding.tasks[0].binding;$actual=Get-TaskBinding $task.name
+ $task=(Resolve-HandbackTasks $Owner.binding).stock;$actual=Get-TaskBinding $task.name
  if($actual.definition_sha256 -ne $task.definition_sha256 -or $actual.path -ne $task.path -or $actual.enabled -ne 'true' -or $actual.state -eq 'Running'){throw 'STOCK_TASK_CHANGED_OR_ALREADY_RUNNING'}
  $Owner.start_recorded=$true;Write-OwnerState $Owner 'STOCK_START_INTENT'
  Start-ScheduledTask -TaskName $task.name -TaskPath $task.path
@@ -116,9 +137,10 @@ function Assert-FutoptWriterHandback($Identity,$Status,$ExpectedRelease) {
 }
 function Restore-WriterBinding($Owner,$TransportProof) {
  if(!$Owner.stock_handed_back -or !$TransportProof.transport_identity_pass){throw 'WRITER_HANDBACK_NOT_VERIFIED'}
+ $roles=Resolve-HandbackTasks $Owner.binding
  if($Owner.writer){Exit-BoundMutexes $Owner.writer;$Owner.writer=$null}
  if($Owner.db){$Owner.db.Dispose();$Owner.db=$null}
- foreach($item in @($Owner.binding.tasks|Select-Object -Skip 1)){Restore-BoundTask $item.binding|Out-Null}
+ foreach($task in $roles.remaining){Restore-BoundTask $task|Out-Null}
  $Owner.writer_handed_back=$true;Write-OwnerState $Owner 'WRITER_TASKS_RESTORED'
 }
 function Restore-ProductionFence($Owner) {

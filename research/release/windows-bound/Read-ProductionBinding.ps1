@@ -31,7 +31,8 @@ Check 'binding' {
  $b=Get-Content -LiteralPath $p -Raw|ConvertFrom-Json
  if(!$b.files -or !$b.tasks){throw 'BINDING_INCOMPLETE'}
  foreach($file in $b.files){if((Get-FileHash -LiteralPath $file.path -Algorithm SHA256).Hash.ToLower() -ne $file.sha256){throw ('BOUND_FILE_DRIFT:'+ $file.path)}}
- . (Join-Path $PSScriptRoot 'WindowsScheduleBinding.ps1')
+ . (Join-Path $PSScriptRoot 'ProductionMaintenanceBinding.ps1')
+ $null=Resolve-HandbackTasks $b
  foreach($task in $b.tasks){$actual=Get-TaskBinding $task.binding.name;if($actual.path -ne $task.binding.path -or $actual.definition_sha256 -ne $task.binding.definition_sha256 -or $actual.enabled -ne $task.binding.enabled){throw ('TASK_BINDING_DRIFT:'+ $task.binding.name)}}
  'PINNED_FILES_AND_TASKS_MATCH'
 }
