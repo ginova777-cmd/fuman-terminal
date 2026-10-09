@@ -1,0 +1,20 @@
+{
+  "status": "SYNTHETIC_COORDINATOR_CAPACITY_PASS",
+  "scope": "2000-symbol long-history initialization and clock-only Strategy3 membership evaluation; no full-market candle-change storm",
+  "symbols": 2000,
+  "history_rows": 10840000,
+  "synthetic_calendar_days": true,
+  "baseline_ms": 48904.5443,
+  "run_ms": 456.8501999999935,
+  "elapsed_ms": 49361.404800000004,
+  "peak_rss_kib": 270852,
+  "cpu": {
+    "user": 35890000,
+    "system": 8219000
+  },
+  "run_io": {
+    "read": 2463251,
+    "written": 2301740
+  },
+  "directory": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-coordinator-capacity-IvtsDV"
+}

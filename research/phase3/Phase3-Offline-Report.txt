@@ -1,0 +1,107 @@
+Phase 3 Incremental Discovery — Offline Delivery
+Base release: 3a21f4c8cc7d704662b0500fdc06a833021a8125
+Scope: research/phase3 only; implementation commit is the combined parent-agent commit.
+
+Status
+IMPLEMENTED = PARTIAL
+OFFLINE_VERIFIED = COMPONENTS_PASS (24 tests; not whole-phase completion)
+RUNTIME_VERIFIED = false
+GO_NO_GO = BLOCKED
+No production deployment, Collector, Writer, DB, notification or schedule changes.
+
+What is implemented
+- A full active-universe baseline. No 128/411 candidate restriction is introduced.
+- Bounded changed input batches (5,000 events / 8 MiB, 5,000 observed symbols).
+- Atomic in-memory evaluation/checkpoint, replay dedup, gap rejection, checkpoint hash,
+  restart, STOP, admission, late admission, exit and re-entry receipts.
+- Actual unchanged buildPriorityPool admission/scoring/ranking/quality/allocation logic.
+- Reuse of per-symbol quoteMetrics ONLY when as-of is identical and that symbol's
+  complete input dependencies have not changed. A clock change invalidates all metrics.
+- Global ranks, group leaders, membership and allocation always rebuilt from full universe.
+- Missing candle vs independently verified no-trade diagnostic is separate from trading gates.
+  A native proof resolver is required; the tests use an explicit fixture resolver only.
+
+Original logic evidence
+scripts/run-daytrade-source-writer.js
+  quoteFreshnessTime / effectiveQuoteAgeSeconds: 541 / 571
+  evaluateMotherPoolBasePool: 948
+  quoteMetrics: 1767
+  readRuntimePrioritySeeds: 3655
+  buildPriorityPool: 3769
+  evaluateMemoryPool export: 9330 area
+Writer file SHA256: e88de2cc2a0ed54d5049af32444026a5341b6da33eb6ecb47e9841a10919e3a5
+lib/daytrade-intraday-turnover.js and lib/mother-pool-scan-allocation.js are loaded unchanged.
+The oracle loads repository code in a sandbox with fixed test time, isolated empty runtime
+directories, no writes/network/child process/timers. It adds only a metrics memo hook.
+Full reference uses the same real functions without memo; incremental uses memo.
+Every parity check compares all output rows AND enumerable array metadata, including
+turnover ranking, allocation and quality/failure counts. These are synthetic fixtures,
+not captured natural market receipts and not proof of runtime config compatibility.
+
+Important dependency finding
+quoteMetrics includes quote age, volume event age and projected volume based on time.
+buildPriorityPool includes cross-symbol ranks and group leaders; one changed stock can
+alter other stocks' ranks/admission. Global allocation also depends on previous state.
+Therefore a changed-symbol-only calculation that leaves all siblings/time-dependent
+metrics untouched is NOT equivalent. This prototype deliberately recomputes those
+dependencies. It does not claim every-minute full-market processing has been removed.
+
+Verified scenarios
+24 cases in receipts/correctness.json, including 16-frame deterministic mixed replay:
+- Full-universe denominator preserved; 12:45 outside-member stock becomes admitted by
+  actual original rules; 10:00 immediate admission; UTC/+08 label parity.
+- Same batch replay, same content dedup, exit/re-entry, cross-symbol rank movement.
+- Revised intraday indicator input invalidation. Raw old-minute K -> indicator derivation
+  is NOT covered by that test and remains a missing upstream integration.
+- Clock-only stale transition; no-data and no-trade annotation does not relax Gate.
+- Sequence/epoch/date/resource mismatch, overflow, corrupt checkpoint, failed evaluation,
+  restart and STOP; failures preserve prior state and do not publish.
+
+Capacity (isolated fixture, 8 iterations per mode; 7 post-warmup latency samples)
+2,000 symbols:
+  Full original metric evaluation p50 375.54ms; p95 398.63ms; RSS peak 368.29MiB.
+  Same-as-of memo p50 130.73ms; p95 154.05ms; RSS peak 313.91MiB.
+  Clock changes p50 409.25ms; p95 448.05ms; RSS peak 416.63MiB.
+5,000 symbols stress:
+  Full p50 898.88ms; p95 1350.85ms; RSS peak 582.42MiB.
+  Same-as-of memo p50 277.38ms; p95 330.79ms; RSS peak 484.42MiB.
+  Clock changes p50 958.47ms; p95 1000.62ms; RSS peak 571.67MiB.
+See receipts/capacity.json for CPU, heap samples, bytes and filesystem counters.
+RSS is process high-water; heap is post-evaluation sampling, not exact heap high-water.
+No formal runtime memory guard is changed or interpreted as applying to this benchmark.
+The 5,000-symbol result is NOT a capacity approval for production. All updates still clone
+full input state and rebuild global ranks. Same-as-of gain is NOT every-minute speedup.
+Filesystem counters are OS blocks, not byte counts; no DB/HTTP activity occurs.
+
+Remaining blockers
+1. No frozen Phase 1 natural feed/runtime continuity acceptance. No formal reader is wired.
+2. Phase 2 C2/raw candle and quote normalization -> these derived maps not integrated.
+   In particular old-minute revisions need full affected indicator/dependency propagation.
+3. Seed/qualification/calendar/group/supplemental artifacts must be version-bound and
+   invalidated; current prototype takes a full baseline for their replacement.
+4. No independently verified real no-trade proof resolver; diagnostic stays UNKNOWN.
+5. Global rank/time dependency optimization and full-state copy elimination are unfinished.
+   Current semantic fallback is correct in tested fixtures, not the full lightweight target.
+6. No natural payload replay / runtime config / end-to-end consumer parity acceptance.
+
+Interface
+baseline: {epoch,sequence,tradeDate,identity,activeSymbols,quoteMap,dailyVolumeMap,
+           supplementalMaps:{intradayMap,...},artifacts:{basename:payload}}
+Maps are serialized as [key,value] pairs.
+process: {epoch,tradeDate,sequence,continuity:'CONTIGUOUS',asOf,
+          events:[{resource,symbol,value}],contextChanged?}
+Resources: quoteMap,dailyVolumeMap,intradayMap,capitalMap,chipMap,marginChangeMap,
+           stockFutureInitialMap,stockGroupContractMap,preopenReferencePriceMap.
+Output: admissions/exits and output.rows (canonical original pool rows), published=false,
+        formal_entry_authorization=false. This is an OFFLINE normalized interface, not
+        a declaration of direct C2 wire compatibility.
+GAP: BLOCKED, caller supplies a separately verified complete baseline; no synthetic patch.
+
+STOP / rollback
+engine.stop() stops only this isolated evaluator; all formal processes remain unchanged.
+Discard isolated engine and reload verified baseline/checkpoint to restore test state.
+No deployment rollback is needed because nothing is installed or enabled.
+
+Next required decision
+No formal activation GO requested. Finish dependency/mapping work and isolated replay,
+then review the exact new scope. Formal Phase 2/3/4 runtime remains unauthorized.

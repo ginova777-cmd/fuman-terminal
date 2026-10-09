@@ -1,0 +1,11 @@
+'use strict';
+const assert=require('assert/strict'),fs=require('fs'),path=require('path');const {build}=require('./native-resources.cjs'),{verifyResource}=require('./resource-provenance.cjs'),{hash,bytes}=require('./offline-store.cjs');
+const symbol='2330',trade_date='2026-10-08',epoch='test',asOf='2026-10-08T13:00:00+08:00',raw={daily:[],intraday:[],levelInput:null,poolRow:{}};
+const input={symbol,trade_date,epoch,asOf,...raw,sources:{symbol,trade_date,epoch,as_of:asOf,available_at:asOf,sha256:hash(bytes(raw)),source:'OFFLINE_EMPTY_SOURCE',version:'1'}};
+const events=build(input);assert.equal(events.length,2);for(const e of events)verifyResource(e,{epoch,trade_date,asOf});assert.equal(events[0].payload.source_ready,false);
+assert.throws(()=>build({...input,sources:{...input.sources,epoch:'bad'}}),/IDENTITY/);assert.throws(()=>verifyResource({...events[0],payload:{forged:true}},{epoch,trade_date,asOf}),/PROVENANCE/);
+const populated={daily:Array.from({length:30},(_,i)=>({symbol,trade_date:new Date(Date.parse(trade_date)-86400000*(30-i)).toISOString().slice(0,10),open:100+i,high:102+i,low:99+i,close:101+i,volume_lots:1000})),intraday:[],levelInput:{stock_id:symbol,trade_date,available_at:asOf,open:100,previous_close:99,previous_low:98,cost:null},poolRow:{}};
+const supplied={...input,...populated,sources:{...input.sources,sha256:hash(bytes(populated)),source:'OFFLINE_POPULATED_FIXTURE'}};
+const native=build(supplied);assert.equal(native.length,3);for(const e of native)verifyResource(e,{epoch,trade_date,asOf});assert.equal(native.find(e=>e.resource==='levelInput').payload.cost,null);assert(native.find(e=>e.resource==='technical').payload.daily.ok);
+assert.throws(()=>build({...supplied,sources:{...supplied.sources,available_at:'2026-10-09T00:00:00Z'}}),/IDENTITY/);
+fs.writeFileSync(path.join(__dirname,'native-resource-tests.json'),JSON.stringify({status:'PASS',cases:5,scope:'original pure native formulas, empty-source UNKNOWN and source hash/as-of binding; populated synthetic daily source and null cost retained; formal source coverage remains unverified'},null,2));console.log('native source tests PASS');

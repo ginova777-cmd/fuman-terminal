@@ -1,0 +1,35 @@
+{
+  "status": "PARTITION_STORAGE_CAPACITY_PASS",
+  "scope": "Storage only; formula E2E not measured",
+  "synthetic": true,
+  "symbols": 2000,
+  "history_days": 20,
+  "bars_per_symbol": 5420,
+  "total_rows": 10840000,
+  "touched": 10,
+  "baseline": {
+    "elapsed_ms": 9404.7318,
+    "io": {
+      "read": 0,
+      "written": 1688816111
+    }
+  },
+  "delta": {
+    "elapsed_ms": 79.64539999999943,
+    "read_bytes": 8591451,
+    "written_bytes": 8591451
+  },
+  "peak_rss_kib": 177272,
+  "memory": {
+    "rss": 142143488,
+    "heapTotal": 90157056,
+    "heapUsed": 29059352,
+    "external": 16702714,
+    "arrayBuffers": 14678787
+  },
+  "cpu": {
+    "user": 4547000,
+    "system": 2906000
+  },
+  "fixture_directory": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-partition-capacity-LlfqeR"
+}

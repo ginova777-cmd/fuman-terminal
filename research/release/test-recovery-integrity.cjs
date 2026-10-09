@@ -1,0 +1,13 @@
+'use strict';
+const fs=require('fs'),path=require('path'),assert=require('assert/strict');
+const {seed,resume}=require('./test-recovery.cjs'),{hash,bytes}=require('../integration/offline-store.cjs');
+(async()=>{const tests=[];
+ const x=seed();await x.c.run(x.frame,{recovery:{maxSteps:1}});const file=path.join(x.dir,'recovery',hash(bytes(x.frame))+'.json'),e=JSON.parse(fs.readFileSync(file));
+ e.payload.identity.sourceVersion='different-version';e.sha256=hash(bytes(e.payload));fs.writeFileSync(file,JSON.stringify(e));await assert.rejects(resume(x.dir),/SOURCE_DRIFT/);assert.equal(x.c.store.root(),null);tests.push('algorithm version drift rejects even internally consistent checkpoint envelope');
+ const y=seed();await y.c.run(y.frame,{recovery:{maxSteps:5000,fault:key=>{if(key==='R4:1000'){const e=Error('yield');e.code='RECOVERY_YIELD';throw e;}}}});
+ const state=JSON.parse(fs.readFileSync(path.join(y.dir,'recovery',hash(bytes(y.frame))+'.json'))).payload;
+ const record=y.c.store.get(state.steps['R4:1000']);const target=record.value.telegram;
+ assert(target);fs.appendFileSync(path.join(y.dir,'objects',target+'.json'),' ');await assert.rejects(resume(y.dir),/OBJECT_HASH/);assert.equal(y.c.store.root(),null);tests.push('prepared result tampering blocks independent readback');
+ const z=seed();await z.c.run(z.frame,{recovery:{maxSteps:1}});const conflicting={sequence:0,unexpected:'external-root'};z.c.store.transaction(()=>conflicting);await assert.rejects(resume(z.dir),/SOURCE_DRIFT/);assert.deepEqual(z.c.store.root(),conflicting);tests.push('published root drift cannot be overwritten by checkpoint');
+ console.log(JSON.stringify({status:'PASS',tests,peak_rss_kib:process.resourceUsage().maxRSS}));
+})().catch(e=>{console.error(e);process.exitCode=1});

@@ -1,0 +1,22 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const {bind,route}=require('./routing-contract.cjs');
+const {IncrementalDiscovery}=require('../phase3/incremental-discovery.cjs');
+const {createOracle}=require('../phase3/original-oracle.cjs');
+const {fixture,quote}=require('../phase3/fixture.cjs');
+const tests=[];function test(name,f){f();tests.push({name,status:'PASS'});}
+const snapshot=fixture(3),engine=new IncrementalDiscovery({oracle:createOracle()});engine.baseline(snapshot);
+const asOf='2026-10-08T12:45:00+08:00';
+const b=bind({trade_date:snapshot.tradeDate,epoch:snapshot.epoch,activeSymbols:snapshot.activeSymbols.map(r=>r.symbol),prioritySymbols:['1000'],sourceAnchors:{quote:{epoch:snapshot.epoch,trade_date:snapshot.tradeDate,sequence:1,commit_hash:'SYNTHETIC_FIXTURE'}}});
+const d=engine.process({epoch:snapshot.epoch,tradeDate:snapshot.tradeDate,sequence:1,continuity:'CONTIGUOUS',asOf,events:[{resource:'quoteMap',symbol:'1002',value:quote('1002',106,20000,asOf)}]});
+const input={changedSymbols:['1002'],candleSymbols:['1001','1002'],discovery:d,asOf};
+test('original Phase3 output routes late admission without fixed-priority restriction',()=>{assert.equal(d.status,'OFFLINE_EVALUATED');const r=route(b,input);assert(r.strategy3.admit.includes('1002'));assert.equal(r.telegram.universe.length,3);assert.deepEqual(r.telegram.changed,['1001','1002']);assert.equal(r.formal_authorized,false);});
+test('quote-only events do not trigger candle-only Telegram Discovery',()=>assert.deepEqual(route(b,{...input,candleSymbols:[]}).telegram.changed,[]));
+test('scope hash mutation rejects',()=>assert.throws(()=>route({...b,payload:{...b.payload,active:['1000']}},input),/HASH/));
+test('out-of-universe input rejects rather than silently drops',()=>assert.throws(()=>route(b,{...input,candleSymbols:['9999']}),/OUTSIDE/));
+test('full market denominator cannot become priority count',()=>assert.throws(()=>route(b,{...input,discovery:{...d,all_market_observed:1}}),/SCOPE/));
+test('GAP cannot be passed as successful discovery',()=>assert.throws(()=>route(b,{...input,discovery:{...d,status:'BLOCKED'}}),/SCOPE/));
+test('wrong-day clock rejects',()=>assert.throws(()=>route(b,{...input,asOf:'2026-10-09T12:45:00+08:00'}),/ASOF/));
+test('duplicate changed symbol rejects',()=>assert.throws(()=>route(b,{...input,changedSymbols:['1002','1002']}),/SET/));
+test('mismatched epoch source anchor rejects',()=>assert.throws(()=>bind({...b.payload,activeSymbols:b.payload.active,prioritySymbols:b.payload.priority,sourceAnchors:{quote:{...b.payload.sourceAnchors.quote,epoch:'wrong'}}}),/ANCHOR/));
+fs.writeFileSync(path.join(__dirname,'routing-tests.json'),JSON.stringify({status:'PASS',tests,synthetic:true,phase2_to_phase4_pipeline_complete:false},null,2));console.log(JSON.stringify({status:'PASS',count:tests.length}));

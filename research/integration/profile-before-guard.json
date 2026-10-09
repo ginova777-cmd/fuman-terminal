@@ -1,0 +1,11 @@
+{
+  "status": "BLOCKED",
+  "reason": "OWNED_TEST_TIMEOUT",
+  "only_owned_test_process": true,
+  "old_generation_mb": 128,
+  "elapsed_ms": 120151,
+  "sampled_peak_rss_bytes": 300732416,
+  "timeout_seconds": 120,
+  "rss_limit_mb": 512,
+  "exit_code": -1
+}

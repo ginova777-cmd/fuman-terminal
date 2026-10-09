@@ -1,0 +1,196 @@
+{
+  "contract": "phase4_offline_tests_v1",
+  "status": "PASS",
+  "scope": "new isolated consumer; unchanged formula cores; no production runner or sender",
+  "count": 34,
+  "tests": [
+    {
+      "name": "bounded formatter VM produces exact unmodified native-Intl scanner output",
+      "status": "PASS",
+      "duration_ms": 24.074099999999994
+    },
+    {
+      "name": "late admission backfill exact Strategy3 full-core result parity",
+      "status": "PASS",
+      "duration_ms": 12.978200000000001
+    },
+    {
+      "name": "quote change reranks globally and keeps unchanged stock results",
+      "status": "PASS",
+      "duration_ms": 12.653500000000008
+    },
+    {
+      "name": "full scanner water Gate fail closed no commit",
+      "status": "PASS",
+      "duration_ms": 4.865600000000001
+    },
+    {
+      "name": "same frame restart replay dedup",
+      "status": "PASS",
+      "duration_ms": 9.215800000000002
+    },
+    {
+      "name": "same sequence conflicting content refused",
+      "status": "PASS",
+      "duration_ms": 2.150800000000004
+    },
+    {
+      "name": "sequence gap requires recovery",
+      "status": "PASS",
+      "duration_ms": 3.194500000000005
+    },
+    {
+      "name": "C2 GAP never advances checkpoint",
+      "status": "PASS",
+      "duration_ms": 2.3740000000000094
+    },
+    {
+      "name": "epoch and date changes require baseline recovery",
+      "status": "PASS",
+      "duration_ms": 3.258800000000008
+    },
+    {
+      "name": "hash tamper refused",
+      "status": "PASS",
+      "duration_ms": 2.0442999999999927
+    },
+    {
+      "name": "late backfill absent wrong identity or incomplete refuses admission",
+      "status": "PASS",
+      "duration_ms": 2.125699999999995
+    },
+    {
+      "name": "duplicate backfill minutes reject before checkpoint",
+      "status": "PASS",
+      "duration_ms": 0.9314999999999998
+    },
+    {
+      "name": "missing K is recorded not replaced by zero K",
+      "status": "PASS",
+      "duration_ms": 4.652499999999975
+    },
+    {
+      "name": "crash before rename leaves checkpoint old; replay recovers once",
+      "status": "PASS",
+      "duration_ms": 11.034999999999997
+    },
+    {
+      "name": "crash after rename retains result and checkpoint atomicity",
+      "status": "PASS",
+      "duration_ms": 8.549900000000008
+    },
+    {
+      "name": "consumer evaluation failure preserves old checkpoint",
+      "status": "PASS",
+      "duration_ms": 2.8190999999999917
+    },
+    {
+      "name": "checkpoint payload corruption fails closed",
+      "status": "PASS",
+      "duration_ms": 4.662399999999991
+    },
+    {
+      "name": "STOP prevents calculation and commit",
+      "status": "PASS",
+      "duration_ms": 0.8987000000000194
+    },
+    {
+      "name": "limits frame/symbol/history/state/outbox bounded fail closed",
+      "status": "PASS",
+      "duration_ms": 4.878699999999981
+    },
+    {
+      "name": "quote-only and transport-only no Discovery re-evaluation",
+      "status": "PASS",
+      "duration_ms": 13.344399999999979
+    },
+    {
+      "name": "old-minute revision updates current result with exact detector parity",
+      "status": "PASS",
+      "duration_ms": 10.060700000000026
+    },
+    {
+      "name": "same minute duplicate no recalculation",
+      "status": "PASS",
+      "duration_ms": 4.698100000000011
+    },
+    {
+      "name": "future and wrong-day K rejected",
+      "status": "PASS",
+      "duration_ms": 6.446100000000001
+    },
+    {
+      "name": "exit removes results; reentry requires fresh frozen backfill",
+      "status": "PASS",
+      "duration_ms": 10.82759999999999
+    },
+    {
+      "name": "actual natural runner event parity including native source filters fixture",
+      "status": "PASS",
+      "duration_ms": 4.390199999999993
+    },
+    {
+      "name": "deep analysis uses original direction/level/indicator gate and missing plan blocks",
+      "status": "PASS",
+      "duration_ms": 2.096499999999992
+    },
+    {
+      "name": "valid isolated plan exact gate parity; no real notification port exists",
+      "status": "PASS",
+      "duration_ms": 1.5187999999999988
+    },
+    {
+      "name": "dry-run outbox ordering and acknowledgement restart dedup",
+      "status": "PASS",
+      "duration_ms": 11.371200000000016
+    },
+    {
+      "name": "stale or real-mode gate object rejected before any commit",
+      "status": "PASS",
+      "duration_ms": 2.5685000000000002
+    },
+    {
+      "name": "full incremental anomaly -> existing plan/level/cross -> dry outbox replay",
+      "status": "PASS",
+      "duration_ms": 12.855800000000016
+    },
+    {
+      "name": "0/1/128/129/1024/5000 event frame boundaries, 5001 rejected",
+      "status": "PASS",
+      "duration_ms": 37.3271
+    },
+    {
+      "name": "total row budget and frame byte budget reject without checkpoint",
+      "status": "PASS",
+      "duration_ms": 1.8722999999999956
+    },
+    {
+      "name": "overlapping async transactions blocked; stale instance reloads committed state",
+      "status": "PASS",
+      "duration_ms": 10.609100000000012
+    },
+    {
+      "name": "crashed owner marker not automatically stolen",
+      "status": "PASS",
+      "duration_ms": 0.9260999999999626
+    }
+  ],
+  "fixture_directory": "C:\\Users\\ginov\\AppData\\Local\\Temp\\phase4-offline-a62KS5",
+  "process_peak_rss_kib": 71808,
+  "memory": {
+    "rss": 70557696,
+    "heapTotal": 22749184,
+    "heapUsed": 14300376,
+    "external": 2085397,
+    "arrayBuffers": 41327
+  },
+  "natural_verified": false,
+  "production_connected": false,
+  "remaining": [
+    "upstream C2/Phase2/3 authenticated durable commit mapping",
+    "formal 95/90 verifier integration",
+    "real plan/cost/finality availability",
+    "real notification exactly-once impossible without downstream idempotency; dry-run only",
+    "historical event retraction/re-notification policy remains owner decision"
+  ]
+}

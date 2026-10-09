@@ -1,0 +1,33 @@
+{
+  "status": "OFFLINE_BOUNDARY_TESTS_PASS",
+  "count": 4,
+  "tests": [
+    {
+      "name": "missing C2 continuity stops before discovery",
+      "status": "PASS"
+    },
+    {
+      "name": "actual isolated C2 quote changed symbol reaches all-market discovery with replay dedup",
+      "status": "PASS",
+      "mapping": "SYNTHETIC_JOIN_NOT_FORMAL_ADAPTER"
+    },
+    {
+      "name": "explicit offline admission backfill and consumer replay retain one checkpoint",
+      "status": "PASS",
+      "admission_source": "EXPLICIT_FIXTURE_NOT_DISCOVERY_OUTPUT"
+    },
+    {
+      "name": "consumer GAP and discovery epoch mismatch preserve both checkpoints",
+      "status": "PASS"
+    }
+  ],
+  "production_connected": false,
+  "notifications_sent": 0,
+  "integrated_pipeline_complete": false,
+  "blockers": [
+    "C2 real continuity resolver unavailable",
+    "Raw quote/K to discovery resources mapping unapproved",
+    "Discovery admission to Strategy3 and whole-market Telegram consumer scopes require explicit routing"
+  ],
+  "fixture_directory": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-crossphase-zGo09S"
+}

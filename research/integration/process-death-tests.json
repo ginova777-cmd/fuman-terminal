@@ -1,0 +1,30 @@
+{
+  "status": "PASS",
+  "results": [
+    {
+      "point": "TMP_WRITTEN",
+      "status": "PASS",
+      "exit_code": 77,
+      "recovery": {
+        "status": "DEAD_OWNER_ARCHIVED",
+        "pid": 36996,
+        "archived": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-death-S1ZogV\\owner.lock.dead-36996-1791466302337"
+      }
+    },
+    {
+      "point": "ROOT_RENAMED",
+      "status": "PASS",
+      "exit_code": 77,
+      "recovery": {
+        "status": "DEAD_OWNER_ARCHIVED",
+        "pid": 25672,
+        "archived": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-death-fBO72V\\owner.lock.dead-25672-1791466302406"
+      }
+    },
+    {
+      "point": "LIVE_OWNER_REFUSED",
+      "status": "PASS"
+    }
+  ],
+  "scope": "actual child exit without finally at root write/rename; not power loss, coordinator pending recovery remains separately tested"
+}

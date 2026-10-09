@@ -1,0 +1,43 @@
+Contract Addendum — Production Adapter Offline Verification
+
+Scope: isolated research only. MP_PHASE2_ENABLED / MP_PHASE3_ENABLED / MP_PHASE4_ENABLED default OFF.
+Phase3 depends on2; Phase4 depends on3. The port accepts only ISOLATED phase234-file-port-v1.
+No credentials, HTTP client, DB writer, scheduler, notification or order port is included.
+
+Recovery:
+R0 binds input hash, baseline, previous published root, algorithm source digest.
+R1 verifies/rebuilds per-symbol historical index, keeping original raw objects.
+R2 persists Phase2 and Phase3 discovery checkpoints independently. Global discovery ranking remains whole.
+R3 saves one complete old-minute recalculation audit per symbol, retaining original recursive indicator formulas.
+R4 saves unpublicized per-symbol results, pending and dry outbox changes.
+R5 independently reads immutable output objects; R6 atomically publishes one root, then ACKs input.
+Each checkpoint uses content-addressed objects plus fsync/temp/rename metadata.
+Each resume rehashes previously observed input/output dependencies. Source or algorithm drift blocks reuse.
+The limit counts completed durable steps, not candles. maxSteps may be1..5000, default64.
+A yield is RECOVERY_PAUSED, not completion. The previous root remains authoritative through R5.
+A crash after root rename but before input ACK uses existing replay identity to deduplicate and finish ACK.
+A dead coordinator lock requires explicit offline reclaim with ESRCH; live/unknown PID is never reclaimed.
+This is process-death recovery, not proven physical power-loss durability on all Windows filesystems.
+
+Phase-specific port:
+Phase2-only stops at R2 and reads its persisted checkpoint independently.
+Phase2+3 stops at R2:discovery. Neither publishes a Phase4 root.
+Phase2+3+4 uses the whole Coordinator and independent root readback.
+Flags and port version are fixed per isolated directory; drift requires explicit new baseline/directory.
+STOP checks before entry, checkpoints and final publish. It cannot interrupt a synchronous operation midway.
+Rollback returns an OFF adapter and preserves all artifacts. It does not restore old DB data or touch production.
+
+Native mapping:
+actual-open recovery remains its original source contract, not an08:59 premarket plan.
+Preserve source hash, source date, direction, levels and effective time; missing available_at remains null.
+Open consistency is separately checked against saved daily/minute source. It does not certify first availability.
+Unknown volume unit, branch evidence and formal plan are never filled with guessed values.
+An external original formal plan, if supplied, must pass the unchanged validator; source mapping alone grants no notification or trading authority.
+
+Release boundary:
+Offline success does not approve formal deployment or consumer activation.
+Native source prerequisites and future production readback remain independently blocking.
+
+R5 progress is checkpointed in batches of at most64 verified object hashes; no object sampling. Immutable objects are written to a unique temp file, fsynced, then renamed. A process dying mid-write leaves only an unreferenced temp file. Algorithm identity also hashes repository lib/scripts/data-contract source dependencies; drift blocks restart. This does not mutate formal code.
+
+Separate entrypoints: run() is the explicitly requested cold/phase-isolation path. runIncremental() uses the unchanged normal Coordinator with independent readback and STOP before publish; it requires all three phases enabled. Partial-phase incremental ports remain explicitly NOT_WIRED; their cold isolated checkpoint readback is not continuous production publication. OFF remains no-op. Capacity was measured on41bb6900 before adding this normal dispatch entrypoint; recovery computation and persistence files remain unchanged by that addition.

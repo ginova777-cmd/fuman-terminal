@@ -1,0 +1,9 @@
+'use strict';
+// Static evidence only; no formal module is required/executed.
+const fs=require('fs'),path=require('path'),crypto=require('crypto'),M=require('module');
+const root=fs.realpathSync('C:/fuman-release-owner/prod81'),queue=['scripts/fugle-websocket-collector.js','lib/daytrade-candle-save-worker.js','lib/provider-journal-worker.cjs','lib/provider-side-journal.cjs','lib/telegram-detectors/provider-trade-journal.cjs','scripts/mother-preopen-worker.cjs'],files={},edges=[],unknown=[];
+while(queue.length){const rel=queue.shift();if(files[rel])continue;if(Object.keys(files).length>=512)throw Error('GRAPH_BOUND');const full=path.join(root,rel),bytes=fs.readFileSync(full);if(bytes.length>4*1048576)throw Error('FILE_BOUND');files[rel]={bytes:bytes.length,sha256:crypto.createHash('sha256').update(bytes).digest('hex')};const s=bytes.toString('utf8');
+ for(const match of s.matchAll(/require(?:\.resolve)?\(\s*(['"])([^'"]+)\1\s*\)/g)){const request=match[2],line=s.slice(0,match.index).split('\n').length;if(M.isBuiltin(request)){edges.push({from:rel,line,request,builtin:true});continue;}try{const result=M.createRequire(full).resolve(request),target=path.relative(root,result).replaceAll('\\','/');if(target.startsWith('..')||path.isAbsolute(target)){unknown.push({from:rel,line,request,reason:'OUTSIDE_ROOT'});continue;}edges.push({from:rel,line,request,to:target});if(/\.(js|cjs|json)$/.test(target))queue.push(target);else unknown.push({from:rel,line,request,reason:'UNSUPPORTED_FORMAT'});}catch{unknown.push({from:rel,line,request,reason:'UNRESOLVED'});}}
+ for(const match of s.matchAll(/(?:require\(\s*[^'"\s]|import\(|new Worker\(|\.fork\()/g))unknown.push({from:rel,line:s.slice(0,match.index).split('\n').length,expression:match[0],reason:'RUNTIME_PATH_REQUIRES_PROFILE'});
+}
+console.log(JSON.stringify({status:'PARTIAL_STATIC_GRAPH',root,files,edges,unverified_sites:unknown,executed_formal_modules:0},null,2));

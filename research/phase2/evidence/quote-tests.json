@@ -1,0 +1,35 @@
+{
+  "status": "PASS",
+  "tests": [
+    {
+      "name": "exact original quote expression and liquidity bundle known values",
+      "status": "PASS"
+    },
+    {
+      "name": "changed-symbol merge output matches full original mapping subset",
+      "status": "PASS"
+    },
+    {
+      "name": "same-price new serial keeps original freshness and fields",
+      "status": "PASS"
+    },
+    {
+      "name": "old/future/missing trade time remain excluded by unmodified 120s Gate",
+      "status": "PASS"
+    },
+    {
+      "name": "unknown volume evidence stays unavailable despite raw numeric volume",
+      "status": "PASS"
+    },
+    {
+      "name": "non-priority stock not silently admitted by readthrough adapter",
+      "status": "PASS"
+    },
+    {
+      "name": "duplicate raw quote identity rejects",
+      "status": "PASS"
+    }
+  ],
+  "source_hash": "b0fb4d287a65b86005bb4d32dc935203aa21958f26e7140817f1b122c7304059",
+  "scope": "existing quote merge/readthrough expression + actual liquidity module; DB/checkpoint/time aging unconnected"
+}

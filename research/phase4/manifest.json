@@ -1,0 +1,149 @@
+{
+  "contract": "phase4_offline_manifest_v1",
+  "generated_at": "2026-10-08T10:59:03.374Z",
+  "base_sha": "3a21f4c8cc7d704662b0500fdc06a833021a8125",
+  "implementation_commit": "ASSIGNED_BY_ROOT_INTEGRATION",
+  "files": [
+    {
+      "path": "research/phase4/benchmark.cjs",
+      "bytes": 3186,
+      "sha256": "b743c8a5aab3ab2cb9d9795bc73159345eb1a245f7621ab6b15c1ab3520fbe5a"
+    },
+    {
+      "path": "research/phase4/bounded-benchmark.cjs",
+      "bytes": 2388,
+      "sha256": "1bbae19e965d2791c950350a75652e2fd3abb5791590cfe189c23bfa3a6f399b"
+    },
+    {
+      "path": "research/phase4/consumer.cjs",
+      "bytes": 10067,
+      "sha256": "dc01fe6634834e4b8cbfb0e43ecf8d037258851f3e3a87e464bab3aa805d4f4e"
+    },
+    {
+      "path": "research/phase4/evidence/bounded-capacity.json",
+      "bytes": 762,
+      "sha256": "fb0b7d22b027a07cdb1da100e9d1b0acb62d2a19beab3d16b5344d493c7088c9"
+    },
+    {
+      "path": "research/phase4/evidence/bounded-resource-guard.json",
+      "bytes": 278,
+      "sha256": "06e76ef5ef33b32efed88c0c7845c36c64f5b9411320dc1528c240cf61a4e888"
+    },
+    {
+      "path": "research/phase4/evidence/capacity.json",
+      "bytes": 5950,
+      "sha256": "fb02fe8cffd2c083f80eb28ad73b92f4c7c6a7288d836cf888472d2514b37ac8"
+    },
+    {
+      "path": "research/phase4/evidence/tests.json",
+      "bytes": 5876,
+      "sha256": "c8ea5ed661bf066d6f7e4113ed2a8c0ba57ca77a19af512962b8195aebdc0634"
+    },
+    {
+      "path": "research/phase4/fixtures.cjs",
+      "bytes": 1025,
+      "sha256": "8d85b9a6fdca2302bf26fe8fe9aae72d2dfafa237dfaa8e64e5050428cb689dc"
+    },
+    {
+      "path": "research/phase4/original-adapters.cjs",
+      "bytes": 5429,
+      "sha256": "1044dd185251c5985f681fc7aa3902ae56584b3b18909f2c687c287835318b01"
+    },
+    {
+      "path": "research/phase4/Phase4 Report.txt",
+      "bytes": 10717,
+      "sha256": "914309664a858837d4893c7c3adfd6aa7b7293a3e7ddb869b8531d3e590d4e79"
+    },
+    {
+      "path": "research/phase4/Run-BoundedBenchmark.ps1",
+      "bytes": 1395,
+      "sha256": "8dfbae678ceb27634bf43eab95c2153c4f30bee425ee7bdcb71a10dc0920bb7b"
+    },
+    {
+      "path": "research/phase4/test.cjs",
+      "bytes": 16571,
+      "sha256": "ac5ad7493a0d18df3b728573ee495c1ad2ac5d1161728d66164b938fcd15c469"
+    },
+    {
+      "path": "research/phase4/write-manifest.cjs",
+      "bytes": 1826,
+      "sha256": "c76d1c6e8f1a773e935e8b74992454c071ca5f9ee3c7dcdcfc8121d5446c5c67"
+    }
+  ],
+  "original_dependencies": [
+    {
+      "path": "scripts/run-strategy3-v2-complete-scan.js",
+      "bytes": 32126,
+      "sha256": "10c0c0ea8fff6f3a65a826f794f11d043bcbf01da119f13c90245e59469b3666",
+      "modified": false
+    },
+    {
+      "path": "scripts/strategy3-v2-contract.js",
+      "bytes": 3890,
+      "sha256": "c34f4455be08c528c36b27318e615ec99377ea72caddcd1f867671f72b514309",
+      "modified": false
+    },
+    {
+      "path": "lib/strategy3-score-bonuses.js",
+      "bytes": 2775,
+      "sha256": "affe38f9132f88a9462a410ddb4130dfa7388d5824d238dc74b0b52497ba5262",
+      "modified": false
+    },
+    {
+      "path": "data/contracts/strategy3_technical_trend_v2.json",
+      "bytes": 883,
+      "sha256": "3e777047a83d310044d1889bb454545471e082d7e605b5ca0bd407b4352f3c61",
+      "modified": false
+    },
+    {
+      "path": "lib/telegram-detectors/natural-source-runner.cjs",
+      "bytes": 5563,
+      "sha256": "4da84a8bb7c023474b9a4641fc0b8ef3488d54a371bb08354c5bb36f2181cacf",
+      "modified": false
+    },
+    {
+      "path": "lib/telegram-detectors/volume-detector.cjs",
+      "bytes": 5404,
+      "sha256": "5f0ca5bef148bc5bc402a0f81a48d39f6d0f3a4b466c40bcd67c07d14a8fb0eb",
+      "modified": false
+    },
+    {
+      "path": "lib/telegram-detectors/price-detector.cjs",
+      "bytes": 5553,
+      "sha256": "cd1f4e3b47db2a26e9c8feb43edc547648da44aa91507487836f5c76ae09a7bd",
+      "modified": false
+    },
+    {
+      "path": "lib/telegram-detectors/verify-natural-calculation.cjs",
+      "bytes": 3151,
+      "sha256": "e5a5dfa526759d0e564e78e9ee69a9461f78687a4ab6817572cfb00ef0b797b7",
+      "modified": false
+    },
+    {
+      "path": "lib/telegram-detectors/level-cross-gate.cjs",
+      "bytes": 5722,
+      "sha256": "6d8e52cf2f0ec2f487baae4fcafa0a856a7b5458dad0a90b765aa2a24104ac9c",
+      "modified": false
+    },
+    {
+      "path": "lib/telegram-detectors/level-cross-indicators.cjs",
+      "bytes": 5155,
+      "sha256": "633a1891acf8a4f0d3c61ede8b514b6c1c7ce044770b5ba34d7d058e2b4278fe",
+      "modified": false
+    },
+    {
+      "path": "lib/telegram-detectors/premarket-plan-contract.cjs",
+      "bytes": 6005,
+      "sha256": "1b56659c8335cf68b16a3cba01e80c69719f1b63d57c22fd021465b4e7d0f8ce",
+      "modified": false
+    }
+  ],
+  "strategy_core_function_sha256": "fcf86a3cda0aff92ff7970b0f62207afb05b18755963b392c8580052e491f88d",
+  "implemented": "PARTIAL_OFFLINE_CONSUMER",
+  "offline_tests": "PASS_34",
+  "runtime_verified": false,
+  "formal_go": "NO_GO",
+  "production_modified": false,
+  "notifications_sent": 0,
+  "capacity": "BOUNDED_256_FIXTURE_PASS_2000_OPTIMIZED_UNVERIFIED"
+}

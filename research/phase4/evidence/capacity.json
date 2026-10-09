@@ -1,0 +1,241 @@
+{
+  "status": "PASS_FOR_MEASURED_FIXTURES",
+  "fixture_only": true,
+  "rows": [
+    {
+      "symbols": 1,
+      "bars_per_symbol": 22,
+      "stored_bars": 22,
+      "changed_symbols": 1,
+      "initial_ms": 22.3355,
+      "incremental_ms": 7.348800000000004,
+      "full_formula_ms": 5.025499999999994,
+      "incremental_cpu_us": {
+        "user": 0,
+        "system": 0
+      },
+      "full_formula_cpu_us": {
+        "user": 0,
+        "system": 0
+      },
+      "state_bytes": 12381,
+      "delta_state_bytes_written": 12381,
+      "formula_parity": "PASS"
+    },
+    {
+      "symbols": 128,
+      "bars_per_symbol": 22,
+      "stored_bars": 2816,
+      "changed_symbols": 10,
+      "initial_ms": 327.6677,
+      "incremental_ms": 43.941599999999994,
+      "full_formula_ms": 304.0196,
+      "incremental_cpu_us": {
+        "user": 47000,
+        "system": 0
+      },
+      "full_formula_cpu_us": {
+        "user": 375000,
+        "system": 15000
+      },
+      "state_bytes": 1525996,
+      "delta_state_bytes_written": 1525996,
+      "formula_parity": "PASS"
+    },
+    {
+      "symbols": 500,
+      "bars_per_symbol": 22,
+      "stored_bars": 11000,
+      "changed_symbols": 10,
+      "initial_ms": 1239.141,
+      "incremental_ms": 89.58179999999993,
+      "full_formula_ms": 1158.1756999999998,
+      "incremental_cpu_us": {
+        "user": 93000,
+        "system": 16000
+      },
+      "full_formula_cpu_us": {
+        "user": 954000,
+        "system": 187000
+      },
+      "state_bytes": 5959492,
+      "delta_state_bytes_written": 5959492,
+      "formula_parity": "PASS"
+    },
+    {
+      "symbols": 2000,
+      "bars_per_symbol": 22,
+      "stored_bars": 44000,
+      "changed_symbols": 10,
+      "initial_ms": 5305.5599,
+      "incremental_ms": 291.45690000000104,
+      "full_formula_ms": 4757.5838,
+      "incremental_cpu_us": {
+        "user": 250000,
+        "system": 31000
+      },
+      "full_formula_cpu_us": {
+        "user": 4312000,
+        "system": 484000
+      },
+      "state_bytes": 23837493,
+      "delta_state_bytes_written": 23837493,
+      "formula_parity": "PASS"
+    }
+  ],
+  "memory": [
+    {
+      "stage": "before_1",
+      "rss": 43892736,
+      "heapTotal": 7020544,
+      "heapUsed": 5797072,
+      "external": 1998160,
+      "arrayBuffers": 28959,
+      "max_rss_kib": 42872
+    },
+    {
+      "stage": "admitted_1",
+      "rss": 51585024,
+      "heapTotal": 8855552,
+      "heapUsed": 6191640,
+      "external": 2052614,
+      "arrayBuffers": 41270,
+      "max_rss_kib": 50376
+    },
+    {
+      "stage": "delta_1",
+      "rss": 52969472,
+      "heapTotal": 11476992,
+      "heapUsed": 6487248,
+      "external": 2052700,
+      "arrayBuffers": 41356,
+      "max_rss_kib": 51928
+    },
+    {
+      "stage": "full_1",
+      "rss": 53878784,
+      "heapTotal": 11739136,
+      "heapUsed": 7220568,
+      "external": 2052700,
+      "arrayBuffers": 41356,
+      "max_rss_kib": 52616
+    },
+    {
+      "stage": "before_128",
+      "rss": 53886976,
+      "heapTotal": 11739136,
+      "heapUsed": 7297448,
+      "external": 2083418,
+      "arrayBuffers": 41356,
+      "max_rss_kib": 52624
+    },
+    {
+      "stage": "admitted_128",
+      "rss": 69922816,
+      "heapTotal": 22134784,
+      "heapUsed": 13402560,
+      "external": 3596812,
+      "arrayBuffers": 1554750,
+      "max_rss_kib": 164176
+    },
+    {
+      "stage": "delta_128",
+      "rss": 83640320,
+      "heapTotal": 31309824,
+      "heapUsed": 18889824,
+      "external": 3597033,
+      "arrayBuffers": 1554971,
+      "max_rss_kib": 164176
+    },
+    {
+      "stage": "full_128",
+      "rss": 78274560,
+      "heapTotal": 30613504,
+      "heapUsed": 16695336,
+      "external": 2071037,
+      "arrayBuffers": 28975,
+      "max_rss_kib": 232352
+    },
+    {
+      "stage": "before_500",
+      "rss": 78544896,
+      "heapTotal": 30613504,
+      "heapUsed": 17297520,
+      "external": 2071037,
+      "arrayBuffers": 28975,
+      "max_rss_kib": 232352
+    },
+    {
+      "stage": "admitted_500",
+      "rss": 123609088,
+      "heapTotal": 65601536,
+      "heapUsed": 42680808,
+      "external": 8030272,
+      "arrayBuffers": 5988210,
+      "max_rss_kib": 568860
+    },
+    {
+      "stage": "delta_500",
+      "rss": 135208960,
+      "heapTotal": 66285568,
+      "heapUsed": 47778720,
+      "external": 8030493,
+      "arrayBuffers": 5988431,
+      "max_rss_kib": 568860
+    },
+    {
+      "stage": "full_500",
+      "rss": 160784384,
+      "heapTotal": 100343808,
+      "heapUsed": 51253000,
+      "external": 2071001,
+      "arrayBuffers": 28939,
+      "max_rss_kib": 720376
+    },
+    {
+      "stage": "before_2000",
+      "rss": 159850496,
+      "heapTotal": 100343808,
+      "heapUsed": 53415696,
+      "external": 2071001,
+      "arrayBuffers": 28939,
+      "max_rss_kib": 720376
+    },
+    {
+      "stage": "admitted_2000",
+      "rss": 331771904,
+      "heapTotal": 236388352,
+      "heapUsed": 144612712,
+      "external": 25908273,
+      "arrayBuffers": 23866211,
+      "max_rss_kib": 2347100
+    },
+    {
+      "stage": "delta_2000",
+      "rss": 341835776,
+      "heapTotal": 238596096,
+      "heapUsed": 156933200,
+      "external": 25908494,
+      "arrayBuffers": 23866432,
+      "max_rss_kib": 2347100
+    },
+    {
+      "stage": "full_2000",
+      "rss": 316309504,
+      "heapTotal": 210182144,
+      "heapUsed": 89419048,
+      "external": 2071001,
+      "arrayBuffers": 28939,
+      "max_rss_kib": 2349308
+    }
+  ],
+  "peak_rss_kib": 2349308,
+  "heap_peak_sampled": 156933200,
+  "limitations": [
+    "full-formula baseline excludes persistence; incremental includes entire atomic state write, not like-for-like runtime benchmark",
+    "22 bars/symbol; no claim for 2500 symbols x 20-day history",
+    "no disk hardware I/O counters; exact state bytes written only",
+    "timings single samples; no natural production latency claim"
+  ],
+  "fixture_directory": "C:\\Users\\ginov\\AppData\\Local\\Temp\\phase4-capacity-aB0udm"
+}

@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "actual_process_exit": 78,
+  "pending_recovery": true,
+  "archived": [
+    {
+      "status": "DEAD_OWNER_ARCHIVED",
+      "pid": 34728,
+      "archived": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-coordinator-death-svbo1X\\coordinator.lock.dead-34728-1791466302192"
+    },
+    {
+      "status": "DEAD_OWNER_ARCHIVED",
+      "pid": 34728,
+      "archived": "C:\\Users\\ginov\\AppData\\Local\\Temp\\mp-coordinator-death-svbo1X\\owner.lock.dead-34728-1791466302194"
+    }
+  ],
+  "scope": "actual process termination at committed root before pending ACK; not power loss"
+}

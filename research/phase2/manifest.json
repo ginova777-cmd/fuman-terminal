@@ -1,0 +1,70 @@
+{
+  "base_sha": "3a21f4c8cc7d704662b0500fdc06a833021a8125",
+  "scope": "research/phase2 only",
+  "files": [
+    {
+      "path": "benchmark.cjs",
+      "bytes": 3314,
+      "sha256": "bfe6cdc3d99c786ea6805d839cce1faff76c924a765d2eddbccaf60ac1bb6984"
+    },
+    {
+      "path": "evidence/capacity.json",
+      "bytes": 2904,
+      "sha256": "850cbf619ab8e176d7a7e7f00c72a2b913a484c0a15bd0409fd66f58236c3762"
+    },
+    {
+      "path": "evidence/integration-fixtures.json",
+      "bytes": 897,
+      "sha256": "2c241bc8a41b00f5030828f49eed8947759fc6092a18840ad91bc6a61f483bf8"
+    },
+    {
+      "path": "evidence/quote-tests.json",
+      "bytes": 1046,
+      "sha256": "81364ed7b5faf06b483358a654148467c845842bc69ef37c456e659ae9f15fd8"
+    },
+    {
+      "path": "evidence/tests.json",
+      "bytes": 3499,
+      "sha256": "3cb2703ca7d8801a2fa652c6f57eb94c47ff5144bbcd451e7722b716d5f73e97"
+    },
+    {
+      "path": "incremental-writer.cjs",
+      "bytes": 7748,
+      "sha256": "2fa981e6266ad8fc68311512bf2bc1a3454e685b978f2cdbe16158df968985b0"
+    },
+    {
+      "path": "quote-adapter.cjs",
+      "bytes": 2967,
+      "sha256": "908bedc847a22aefb5cf185e313a48d742249288938d78fee30281448966b4e7"
+    },
+    {
+      "path": "REPORT.txt",
+      "bytes": 6442,
+      "sha256": "e814dbd04325c6e09ec2e9cad0b5792d6ad5adae7e03f6bf42a62f40b1ea9e41"
+    },
+    {
+      "path": "seal.cjs",
+      "bytes": 750,
+      "sha256": "d042e2cba582aa0fbdbbfaf3f2c99398b6ad69c797268a87627c3de18be1ad25"
+    },
+    {
+      "path": "test-quotes.cjs",
+      "bytes": 3324,
+      "sha256": "2dc29cb73f4709c45d6fa837989b653745f418337d08227123ffe4a14805ec6d"
+    },
+    {
+      "path": "test.cjs",
+      "bytes": 11666,
+      "sha256": "fe95c5f7f6ff58cfb4b87d2ba574876b54b26ffed354fdb0139f0f8d4dffbebc"
+    },
+    {
+      "path": "writer-oracle.cjs",
+      "bytes": 2448,
+      "sha256": "a67d664d4aa75751629b99a81df0c32f72e1c6df6c34f32282c887817a104275"
+    }
+  ],
+  "production_written": false,
+  "db_written": false,
+  "runtime_written": false,
+  "formal_switch_authorized": false
+}

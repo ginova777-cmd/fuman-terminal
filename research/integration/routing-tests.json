@@ -1,0 +1,43 @@
+{
+  "status": "PASS",
+  "tests": [
+    {
+      "name": "original Phase3 output routes late admission without fixed-priority restriction",
+      "status": "PASS"
+    },
+    {
+      "name": "quote-only events do not trigger candle-only Telegram Discovery",
+      "status": "PASS"
+    },
+    {
+      "name": "scope hash mutation rejects",
+      "status": "PASS"
+    },
+    {
+      "name": "out-of-universe input rejects rather than silently drops",
+      "status": "PASS"
+    },
+    {
+      "name": "full market denominator cannot become priority count",
+      "status": "PASS"
+    },
+    {
+      "name": "GAP cannot be passed as successful discovery",
+      "status": "PASS"
+    },
+    {
+      "name": "wrong-day clock rejects",
+      "status": "PASS"
+    },
+    {
+      "name": "duplicate changed symbol rejects",
+      "status": "PASS"
+    },
+    {
+      "name": "mismatched epoch source anchor rejects",
+      "status": "PASS"
+    }
+  ],
+  "synthetic": true,
+  "phase2_to_phase4_pipeline_complete": false
+}

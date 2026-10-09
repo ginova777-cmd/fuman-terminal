@@ -1,0 +1,3 @@
+'use strict';
+const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
+const dir=__dirname,files=[];function scan(p){for(const n of fs.readdirSync(p)){const f=path.join(p,n);if(fs.statSync(f).isDirectory())scan(f);else if(n!=='manifest.json')files.push({path:path.relative(dir,f).replaceAll('\\','/'),bytes:fs.statSync(f).size,sha256:crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex')});}}scan(dir);files.sort((a,b)=>a.path.localeCompare(b.path));fs.writeFileSync(path.join(dir,'manifest.json'),JSON.stringify({base_sha:'3a21f4c8cc7d704662b0500fdc06a833021a8125',scope:'research/phase2 only',files,production_written:false,db_written:false,runtime_written:false,formal_switch_authorized:false},null,2));

@@ -1,0 +1,15 @@
+'use strict';
+const fs=require('fs'),path=require('path'),os=require('os'),cp=require('child_process'),crypto=require('crypto'),assert=require('assert');
+const adapter=require('./junction-graceful-stop-adapter.cjs');
+const repo=path.resolve(__dirname,'../..'),root=fs.mkdtempSync(path.join(os.tmpdir(),'mp-junction-e2e-')),alias=path.join(root,'release-alias'),runtime=path.join(root,'runtime');fs.symlinkSync(repo,alias,'junction');fs.mkdirSync(path.join(runtime,'secrets'),{recursive:true});fs.writeFileSync(path.join(runtime,'secrets/fugle-api-key.txt'),'offline-fixture-only');
+const entry=path.join(alias,'scripts/fugle-futopt-websocket-collector.js'),physical=path.join(repo,'scripts/fugle-futopt-websocket-collector.js'),h=b=>crypto.createHash('sha256').update(b).digest('hex');
+const p=cp.spawn(process.execPath,['--require',path.join(repo,'scripts/fixtures/futopt-shutdown-preload.cjs'),entry],{windowsHide:true,env:{SystemRoot:process.env.SystemRoot,PATH:process.env.PATH,FUMAN_RUNTIME_DIR:runtime,FUMAN_CACHE_DIR:path.join(runtime,'cache'),FUMAN_STATE_DIR:path.join(runtime,'state'),FUGLE_FUTOPT_STREAMING_AFTER_HOURS:'false',FUMAN_CHANGE_EVIDENCE_PHASE1:'0'},stdio:['ignore','pipe','pipe']});p.stdout.resume();let err='',exited=false;p.stderr.on('data',b=>err=(err+b).slice(-2000));p.on('exit',()=>exited=true);
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+(async()=>{const file=path.join(runtime,'state/futopt-shutdown/owner.json'),end=Date.now()+20000;while(!fs.existsSync(file)){if(exited||Date.now()>end)throw Error('START_FAILED:'+err);await wait(100);}await wait(500);
+ const original=fs.readFileSync(file),c={scope:'ISOLATED_REVIEW',runtime,approvedRoot:alias,approvedHash:h(fs.readFileSync(physical))};
+ assert.throws(()=>adapter.prepare({...c,scope:'FORMAL'}),/SCOPE/);
+ assert.throws(()=>adapter.prepare({...c,approvedHash:'0'.repeat(64)}),/MISMATCH/);
+ const drift=adapter.prepare(c);await assert.rejects(()=>adapter.stop(c,{...drift,epoch:'00000000-0000-0000-0000-000000000000'}),/DRIFT/);assert(!fs.existsSync(path.join(drift.control,'request.json')));
+ const frozen=adapter.prepare(c);const result=await adapter.stop(c,frozen);assert.equal(result.pid,p.pid);assert(fs.readFileSync(file).equals(original));
+ console.log(JSON.stringify({status:'PASS',provider:'FIXTURE_NO_NETWORK',os_identity:'REAL_WINDOWS_CIM_AND_PROCESS',checks:['scope_reject','hash_reject','epoch_drift_no_request','original_ACK','artifact_hashes','PID_exit','owner_unchanged'],result,runtime,formal_mutations:false}));
+})().catch(e=>{console.log(JSON.stringify({status:'BLOCKED',error:e.stack,runtime,pid:p.pid,automatic_kill:false}));process.exitCode=1;});

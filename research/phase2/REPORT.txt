@@ -1,0 +1,50 @@
+Phase 2 Writer Incremental — Offline Component Delivery
+Base: 3a21f4c8cc7d704662b0500fdc06a833021a8125
+Final implementation commit: assigned by combined branch Owner; exact file hashes in manifest.json.
+
+IMPLEMENTED = PARTIAL (offline committed-segment reader and candle sink adapter)
+OFFLINE_VERIFIED = COMPONENT_PASS (26 reader/candle/fault cases + 7 quote mapping cases)
+RUNTIME_VERIFIED = false
+BLOCKED = true (whole Writer integration and production continuity)
+NO_GO for formal Writer switch. No DB/network/runtime/production operations.
+
+Implemented
+1. Original C2 candle v3 parent audit and quote v2 batch audit, including original ACK, frozen intent, hashes, sequence/revision and parent-complete checks.
+2. Bounded fixed evidence segment, unchanged manifest before/after read; changed symbols and symbol+minute keys; final coalesced payload; old-minute revisions retained.
+3. Per-kind/date/epoch sequence checkpoint anchored to commit hash. Sink success precedes checkpoint fsync+rename. Replay requires idempotent sink, never claims exactly-once DB effects.
+4. Recognized fsynced pending checkpoint is compared to exact next value, sink replayed, then rename. Unknown/corrupt pending artifacts preserved and block. Corrupt installed checkpoint blocks.
+5. GAP/UNKNOWN/hash/partial evidence -> verified complete isolated snapshot fallback. Fallback never closes continuity gap or invents intent. Unverified snapshot or failing loader returns BLOCKED.
+6. STOP prevents reading and fallback. No scheduler or runtime consumer imports this directory.
+
+Original path comparison
+scripts/run-daytrade-source-writer.js syncWebSocketIntraday1mCandles (around 7610–7757) is extracted unchanged, not copied into a second oracle algorithm. Its top-level module is NOT evaluated. VM injects fixed clock, isolated cache, no-op state and capture-only sink.
+lib/daytrade-fast-candle-row.js mapNaturalCandle, daytrade-candle-write-order.js latestFirst and daytrade-candle-delta.js are the actual modules reused.
+Exact tested parity: initial eligible candle selection/row fields, source metadata, units, updated_at, payload and write order; invalid source, OHLC, odd-lot and future-bar filtering.
+Intentional NON-parity: existing seeded Writer chooses latest plus candles newer than prior.lastCandleTime, and omits a revision to an older minute. This adapter preserves that changed key. Test records difference; it does not claim whole Writer output equivalence.
+
+Remaining blockers
+1. C2 receipts explicitly continuous=false. OFFLINE_FIXED_SEGMENT proof is a generated test-only frozen-directory seal, not a production continuity resolver. No live reader authorization exists.
+2. Reader currently independently audits and hashes the entire bounded retained segment before extracting cursor delta. It is NOT an optimized growing-history reader. Logical read_bytes reports only manifest passes; audit and JSON reads add I/O. No end-to-end I/O reduction claim.
+3. Quote changed-symbol decoding and exact existing merge/readthrough/liquidity mapping now work in quote-adapter.cjs. Seven additional tests verify known fields and changed-symbol subset parity against the same original full-cache mapping, 120s exclusion, missing-volume semantics and no implicit admission. Original priority list must be supplied explicitly; it is not recomputed. Quote publication/checkpoint remains blocked: no sink receipt/readback, previous DB quote snapshot identity or time-driven freshness re-evaluation binding exists. Other Writer stages (priority, source_status, daily volume, futures, snapshot, qualification, readback/lease) remain untouched and unverified.
+4. Forming candles can become complete without another WS revision. No maturity scheduler is implemented. Publishing such rows blocks without advancing checkpoint rather than silently losing them.
+5. Quality invalidation requires an explicit downstream invalidation/tombstone policy; mapping failure blocks rather than leaving a stale good row acknowledged.
+6. Full fallback snapshot completeness is caller-provided and validated by fixed hash/key/date; real recovery reference/epoch binding remains unconnected.
+7. Single offline caller only; no concurrent checkpoint owner/fencing. No DB transaction/readback, formal crash kill or natural trading data claims.
+
+Tests and faults
+26 PASS in evidence/tests.json: real C2 workers create quote and candle evidence inside temp directories. Missing parent/commit, mutation, date/epoch/hash conflict, event budget, temp partial evidence, duplicate snapshot keys, sink failure, post-write crash, post-fsync interruption/restart, corrupt checkpoint, unknown pending artifact, STOP and faulty fallback verified. Seven quote cases PASS in evidence/quote-tests.json. The quote adapter extracts unchanged mergeWebSocketQuoteCache, helpers and the exact websocketQuoteRows expression, then calls original normalizeQuoteLiquidity. No top-level Writer loading or DB call.
+Production code/cache/DB are never invoked. Local worker stop applies only to fixture worker, not Collector.
+
+Capacity and resources
+evidence/capacity.json: serial child processes with 128 MiB V8 heap, 30s timeout; generated 5,000 and 20,000 row snapshots, 32 changed rows.
+5,000 full mapping: 30.5962 ms, max RSS 73,719,808 bytes, read 1,870,001 bytes.
+32-row mapping: 2.6065 ms, max RSS 50,139,136 bytes, read 11,969 bytes.
+20,000 full mapping: 112.2784 ms, max RSS 138,207,232 bytes, read 7,480,001 bytes.
+32-row mapping: 3.1829 ms, max RSS 50,073,600 bytes, read 11,969 bytes.
+Final materialized row content hashes match full re-mapping. These are mapping-only measurements, excluding C2 audit/recovery/checkpoint/DB/other Writer stages. Heap peak and physical disk I/O UNKNOWN. This is not a benchmark of the real 188,541-row cache or whole Writer, and does not predict a deployed speedup.
+
+STOP / rollback
+All work lives in research/phase2. Stop invoking offline scripts; retain receipts/temp fixtures for diagnosis. No production rollback is necessary because nothing was switched. Existing Writer remains authoritative. No deleting evidence, cache or table.
+
+Next necessary Owner decision
+No formal switch approval requested yet. First resolve continuity-to-checkpoint binding, quote/other stage parity, maturity and invalidation semantics, then end-to-end offline original Writer equivalence. Natural Shadow and production must pass their separate authorization/verification stages.

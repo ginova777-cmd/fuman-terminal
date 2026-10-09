@@ -1,0 +1,32 @@
+Continuous Ports v1 — isolated integration contract
+
+Entry points
+- ProductionAdapter.runIncremental(frame): normal continuous processing. Phase 2, Phase 2+3, or Phase 2+3+4. Does not call R0-R6 or create recovery/.
+- ProductionAdapter.run(frame, {maxSteps}): existing cold recovery entry. R0-R6 algorithms unchanged.
+- adapter-config.json freezes mode, flags, port contract/version and algorithm identity. Mixing modes, changing flags/source version or importing unbound existing roots is refused. This version does not silently migrate previously written adapter directories.
+- Feature flags default OFF. Phase3 requires Phase2; Phase4 requires Phase3. OFF creates no state. Each enabled scope uses a fresh verified isolated baseline.
+
+Publication
+- One coordinator lock protects a frame. One atomic root is the committed checkpoint for the enabled scope. Intermediate phase records are immutable objects and are NOT publication on their own.
+- Phase2 record binds changed symbols, actual lifecycle changed minute keys/kinds/event IDs/payload hashes, symbol refs, completion clock state, supplemental events and revision scope.
+- Phase3 record chains Phase2 hash, its discovery result and checkpoint, and the same change keys.
+- Phase4 record chains Phase3 hash and binds pre-envelope result hash plus source cursor and change keys. Only dry results/outbox; never sends notifications.
+- Every record binds epoch/date/sequence/input hash/baseline hash/previous root hash/source algorithm/port identity.
+- Independent file-store instances read record bytes and dependencies before returning; restart verifies committed chain. No HTTP or DB port is enabled.
+- Partial-phase roots are ISOLATED_PHASE_COMMITTED. They never claim Phase4 ran.
+
+Failures
+- STOP checked before stage records and root publication. Pending input stays available, no cursor advance. Resume by runIncremental with the EXACT frozen frame.
+- Before root rename: immutable objects may exist but are unpublished. Retry re-evaluates the same input from previous committed state.
+- After root rename/before ACK: restart verifies root/chain, deduplicates exact sequence/input and completes ACK without another publication.
+- Sequence gaps, conflicts, epoch/date/port/source/baseline/hash drift fail closed. No guessed cursor advance or automatic source rebase.
+- Actual dead-process lock reclaim requires existing explicit PID proof; never auto-unlock a live or unknown owner.
+- rollback() provides OFF adapter and preserves all evidence; it is not a production rollback or state rewind.
+
+Scope/limits
+- Existing per-frame 5000 events/4 MiB, object 8 MiB, root 4 MiB limits retained. Phase envelope may fail OBJECT_LIMIT rather than truncate data.
+- Normal path retains existing candle lifecycle and original formulas. Older-minute changes are included; Phase4 causal re-evaluation stays unchanged.
+- Quote-only updates do not become changed candles. Pending candle completion can occur on a clock-only frame.
+- History replacement retains explicit revision scope; this is not a claim of a live producer feed or source availability.
+- Cold capacity acceptance is preserved from the previous report; no repeat R0-R6 capacity benchmark. Existing source-version-bound cold checkpoints are not silently adopted under a changed candidate.
+- No formal production, authority, Collector, Writer, consumer, database or schedule activation.

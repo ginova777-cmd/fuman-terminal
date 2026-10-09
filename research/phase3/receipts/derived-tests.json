@@ -1,0 +1,28 @@
+{
+  "status": "PASS",
+  "tests": [
+    {
+      "name": "exact original grouped mapper retains supplied ordering and full fields",
+      "status": "PASS"
+    },
+    {
+      "name": "per-symbol update equals full-market original recomputation subset",
+      "status": "PASS"
+    },
+    {
+      "name": "invalidation removes contribution instead of retaining old good K",
+      "status": "PASS"
+    },
+    {
+      "name": "older-minute revision invalidates recursive indicators through current end",
+      "status": "PASS"
+    },
+    {
+      "name": "history revision invalidates all current historical-dependent windows",
+      "status": "PASS"
+    }
+  ],
+  "source_hash": "b1b3aa2703520f7542acfddca1477eed04d190b557879f7ccc6ef71454a7b622",
+  "synthetic": true,
+  "scope": "Candle-derived original grouping and invalidation descriptors; all supplemental resources require their own frozen evidence"
+}
