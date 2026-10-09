@@ -1,0 +1,54 @@
+Producer Continuity / Live Tail review contract v1
+Scope: isolated implementation only. FORMAL_BLOCKED / NATURAL_MARKET_PENDING.
+
+Handoff (producer-handoff-v1)
+Deployment receipt raw SHA256 -> Collector start receipt (loaded SHA, PID, role,
+started_at, entrypoint, epoch, cache/feed paths) -> independent recovery reference
+and baseline raw bytes/hash -> explicit boundary sequence/commit hash.
+A nonzero boundary requires a per-key revision checkpoint. Continuity starts only
+at that boundary. Prior availability remains UNKNOWN. Hash linkage verifies
+supplied bytes, not process authenticity or release authority. Formal Owners must
+supply independently verified deployment/start/recovery evidence.
+
+Catalogue (tail-segment-catalogue-v1)
+A bounded external sidecar declares contiguous sequence ranges and immutable
+segment directories, published_through, handoff binding and optional acknowledged
+rotation anchor. This is a NEW isolated interface, not an existing formal
+Collector output. No original v3 parent format or producer_version is changed.
+Catalogue publisher, atomic publication and formal source authentication remain
+release blockers. Declared committed missing files are GAP; unpublished incomplete
+parents wait. Segment rotation must retain everything needed by unacked cursors.
+
+Reader
+Only known files for the next complete parent are read. Verify prepare/saved/commit,
+parent root, sub-chain, completion, ACK/cache binding, original differences and
+per-key revision history before returning a page. Older-minute revisions are keys,
+not discarded by a latest-minute watermark. STOP and backpressure never advance
+cursor. Limits: 800 files / 64 MiB / 20,000 events per poll; 8 MiB per file;
+256 segments; 50,000 revision keys; default one parent. Limits are safety bounds,
+not capacity guarantees. A parent is never truncated to fit.
+Baseline raw bytes are streamed once per reader construction/restart. Per-poll
+revision state is bounded but copied; this is not a zero-cost operation.
+
+Consumer commit / ACK
+Consumer result root and saved input frame must be independently read and hashed.
+Only then can source cursor atomically advance. Replay after consumer commit but
+before source ACK reuses the exact saved frame. Existing production adapter flags
+remain OFF by default. One stream binding per consumer root is supported here;
+combined quote/candle ordering into one live root remains unverified.
+
+Recovery limits
+Fault injection covers cursor before/after rename and consumer-before-ACK replay.
+This is not OS power-loss durability certification. Stale lock takeover after
+hard process termination has not been implemented or verified by this patch.
+No source GAP can be filled from a later cache or called continuous.
+
+Hashes
+Referenced files: SHA256 of original bytes. Protocol objects use the existing
+mother-change-evidence canonical sha function. Consumer frame/root hashes retain
+OfflineStore JSON serialization semantics. Do not substitute these algorithms.
+
+Formal controls
+No production entrypoint references these modules in this change. No DB, runtime
+configuration, scheduler, Collector, Writer, Strategy3 or Telegram changes.
+Formal switching, Evidence ON and Natural Shadow require separate authorization.
