@@ -9,10 +9,14 @@ function validateAck(a,q,i){
  if(times.some(t=>!Number.isFinite(t))||times.some((t,n)=>n&&t<times[n-1]))fail('ACK_TIME_ORDER');
  if(a.requested_at!==q.requested_at)fail('ACK_REQUEST_TIME');
  if(!a.proof||a.proof.preservation_scope!==SCOPE||a.proof.prior_error)fail('ACK_SAVE_SCOPE');
- for(const obj of [a.pending,a.proof.pending])for(const k of ['groups','dirty_groups','pending_records'])if(!Number.isSafeInteger(obj?.[k])||obj[k]!==0)fail('ACK_PENDING');
+ for(const obj of [a.pending,a.proof.pending]){
+  if(!Number.isSafeInteger(obj?.groups)||obj.groups<0)fail('ACK_GROUPS');
+  for(const k of ['dirty_groups','pending_records'])if(!Number.isSafeInteger(obj?.[k])||obj[k]!==0)fail('ACK_PENDING');
+ }
  if(!Array.isArray(a.proof.files)||!Array.isArray(a.proof.caches))fail('ACK_ARTIFACT_ARRAYS');
  const artifacts=[...a.proof.files,...a.proof.caches];
  if(!artifacts.length){
+  if(a.pending.groups!==0||a.proof.pending.groups!==0)fail('ZERO_GROUPS_UNPROVEN');
   for(const v of [a.boundary?.events,a.boundary?.quotes,a.boundary?.candles,a.proof.accepted,a.proof.rejected,a.proof.conflicts,a.proof.publication?.files_written,a.proof.publication?.bars_published,a.proof.publication?.bytes_written])if(!Number.isSafeInteger(v)||v!==0)fail('ZERO_COUNTS_UNPROVEN');
   if(a.boundary.last_event!==null)fail('ZERO_HISTORY_CONFLICT');
   return {kind:'ZERO_ACCEPTED_IN_BOUND_EPOCH',scope:SCOPE,artifacts:0,all_historical_cache_verified:false};
