@@ -2,6 +2,7 @@
 // Formal use requires a sealed, live Maintenance Owner authorization callback.
 const fs=require('fs'),path=require('path'),cp=require('child_process'),crypto=require('crypto');
 const {validate,revalidate}=require('./junction-stop-identity.cjs');
+const {validateAck}=require('./stop-ack-contract.cjs');
 const h=b=>crypto.createHash('sha256').update(b).digest('hex'),wait=ms=>new Promise(r=>setTimeout(r,ms));
 function local(p){const q=fs.realpathSync.native(p);if(/fuman-runtime|fuman-release-owner|prod81/i.test(p+' '+q))throw Error('FORMAL_OPERATION_NOT_AUTHORIZED');return q;}
 function read(p){const s=fs.statSync(p);if(s.size>1048576)throw Error('CONTROL_LIMIT');return JSON.parse(fs.readFileSync(p,'utf8').replace(/^\uFEFF/,''));}
@@ -38,9 +39,11 @@ async function stop(c,frozen){
  const receipt=path.join(o.control,'receipts',id+'.json'),deadline=Date.now()+20000;let ack;
  while(Date.now()<deadline){if(fs.existsSync(receipt)){ack=read(receipt);if(ack.status==='SAFE_STOP_FAILED')throw Error('ORIGINAL_SAVE_FAILED:'+ack.error);if(ack.status==='SAFE_STOP_SAVED')break;}await wait(100);}
  if(!ack||ack.status!=='SAFE_STOP_SAVED'||ack.safe_to_stop!==true||ack.request_id!==id||ack.pid!==frozen.pid||ack.epoch!==frozen.epoch||ack.creation_time!==frozen.creation_time||ack.entry!==frozen.owner_entry||ack.executable!==frozen.executable||ack.pending?.dirty_groups!==0||ack.pending?.pending_records!==0)throw Error('ORIGINAL_ACK_INVALID');
- const artifacts=[...(ack.proof?.files||[]),...(ack.proof?.caches||[])];if(!artifacts.length)throw Error('ACK_PROOF_EMPTY');
+ const ackContract=validateAck(ack,req,{pid:frozen.pid,creation_time:frozen.creation_time,epoch:frozen.epoch,entry:frozen.owner_entry,executable:frozen.executable});
+ const artifacts=[...ack.proof.files,...ack.proof.caches];
  for(const a of artifacts){const p=within(o.runtime,a.file),bytes=fs.readFileSync(p);if(bytes.length!==a.bytes||h(bytes)!==a.sha256)throw Error('ACK_ARTIFACT_MISMATCH');}
- while(Date.now()<deadline){const live=osProcess(frozen.pid);if(!live)return {status:c.scope==='FORMAL_OWNER'?'GRACEFUL_STOP_VERIFIED':'ISOLATED_GRACEFUL_STOP_VERIFIED',receipt,ack_status:ack.status,artifacts:artifacts.length,pid:frozen.pid,pid_exited:true,request_id:id};if(live.creation_time!==frozen.creation_time)throw Error('PID_REUSED');await wait(200);}
+ while(Date.now()<deadline){const live=osProcess(frozen.pid);if(!live)return {status:c.scope==='FORMAL_OWNER'?'GRACEFUL_STOP_VERIFIED':'ISOLATED_GRACEFUL_STOP_VERIFIED',receipt,ack_status:ack.status,ack_contract:ackContract,artifacts:artifacts.length,pid:frozen.pid,pid_exited:true,request_id:id};if(live.creation_time!==frozen.creation_time)throw Error('PID_REUSED');await wait(200);}
  throw Error('PID_EXIT_TIMEOUT');
 }
 module.exports={prepare,stop,osProcess};
+

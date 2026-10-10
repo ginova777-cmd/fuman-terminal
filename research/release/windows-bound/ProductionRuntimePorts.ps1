@@ -74,7 +74,16 @@ function Invoke-BoundGracefulStop($Config,$Identity,$OwnerGate,$ReceiptPath) {
  $requestIdentity=@{pid=[int]$Identity.pid;creation_ticks=[string]$Identity.creation_ticks;exe=$Identity.exe}
  $identityPath=$ReceiptPath+'.identity.json';Write-CutoverReceipt $identityPath $requestIdentity
  $raw=& node (Join-Path $PSScriptRoot 'GracefulOperation.cjs') $OwnerGate $identityPath
- if($LASTEXITCODE -ne 0){throw 'GRACEFUL_STOP_FAILED_NO_FORCE_FALLBACK'}
+ if($LASTEXITCODE -ne 0){
+  $failure=$null
+  try{$failure=$raw|ConvertFrom-Json -DateKind String -AsHashtable}catch{}
+  $ex=[InvalidOperationException]::new('GRACEFUL_STOP_FAILED_NO_FORCE_FALLBACK')
+  if($failure -and $failure.status -eq 'GRACEFUL_STOP_BLOCKED' -and $failure.stop_not_requested -is [bool] -and $failure.stop_not_requested -eq $true){
+   Write-CutoverReceipt $ReceiptPath $failure
+   $ex.Data['StopNotRequested']=$true
+  }
+  throw $ex
+ }
  $r=$raw|ConvertFrom-Json -DateKind String
  if($r.status -ne 'GRACEFUL_STOP_VERIFIED' -or $r.pid -ne $Identity.pid -or !$r.pid_exited){throw 'STOP_RECEIPT_UNVERIFIED'}
  Write-CutoverReceipt $ReceiptPath $r

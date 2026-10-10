@@ -3,6 +3,8 @@ const fs=require('fs'),path=require('path'),cp=require('child_process');
 const adapter=require('./junction-graceful-stop-adapter.cjs');
 const {guardOwner}=require('./OwnerAuthorization.cjs');
 async function execute(c,expected,authorize){
+ let stopMayHaveBeenRequested=false;
+ try {
  const config={scope:'FORMAL_OWNER',runtime:c.runtime,approvedRoot:c.prod,approvedHash:c.collector_entry_sha256,authorize};
  const frozen=adapter.prepare(config);
  if(frozen.pid!==expected.pid||frozen.executable.toLowerCase()!==expected.exe.toLowerCase())throw Error('BOUND_PID_MISMATCH');
@@ -11,11 +13,18 @@ async function execute(c,expected,authorize){
  // Refresh the short-lived identity proof after the extra Windows read.
  const fresh=adapter.prepare(config);
  if(fresh.owner_hash!==frozen.owner_hash||fresh.pid!==frozen.pid)throw Error('OWNER_DRIFT');
- return adapter.stop(config,fresh);
+ // From this boundary onward a request may exist. Never infer no STOP from
+ // a live PID, a timeout, missing stdout, or a missing receipt.
+ stopMayHaveBeenRequested=true;
+ return await adapter.stop(config,fresh);
+ } catch(e) {
+  e.stop_not_requested=!stopMayHaveBeenRequested;
+  throw e;
+ }
 }
 if(require.main===module){
  const [ownerFile,expectedFile]=process.argv.slice(2);
  const c=JSON.parse(fs.readFileSync(path.join(__dirname,'release-config.json'),'utf8'));
- execute(c,JSON.parse(fs.readFileSync(expectedFile,'utf8').replace(/^\uFEFF/,'')),()=>guardOwner(__dirname,c,ownerFile,'stop')).then(r=>console.log(JSON.stringify(r))).catch(e=>{console.error(JSON.stringify({status:'GRACEFUL_STOP_BLOCKED',error:e.message,force_fallback:false}));process.exitCode=1;});
+ execute(c,JSON.parse(fs.readFileSync(expectedFile,'utf8').replace(/^\uFEFF/,'')),()=>guardOwner(__dirname,c,ownerFile,'stop')).then(r=>console.log(JSON.stringify(r))).catch(e=>{console.log(JSON.stringify({status:'GRACEFUL_STOP_BLOCKED',error:e.message,stop_not_requested:e.stop_not_requested===true,force_fallback:false}));process.exitCode=1;});
 }
 module.exports={execute};
