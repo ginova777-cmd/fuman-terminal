@@ -6,6 +6,8 @@ if(!$Apply){& (Join-Path $PSScriptRoot 'Read-ProductionBinding.ps1');return}
 . (Join-Path $PSScriptRoot 'ProductionMaintenanceBinding.ps1')
 . (Join-Path $PSScriptRoot 'ProductionRuntimePorts.ps1')
 . (Join-Path $PSScriptRoot 'CutoverSequence.ps1')
+. (Join-Path $PSScriptRoot 'ManualRecovery.ps1')
+. (Join-Path $PSScriptRoot 'RecoveryRuntimePorts.ps1')
 $config=Get-Content (Join-Path $PSScriptRoot 'release-config.json') -Raw|ConvertFrom-Json -AsHashtable
 # This remains false in the delivered preparation package. Merge approval alone
 # never authorizes a runtime stop, production checkout or schedule fence.
@@ -21,14 +23,18 @@ if(!$admin.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)){thr
 $bindingPath=Join-Path $PSScriptRoot 'formal-binding.json'
 if((Get-FileHash -LiteralPath $bindingPath).Hash.ToLower() -ne $config.binding_sha256){throw 'FROZEN_BINDING_DRIFT'}
 $binding=Get-Content -LiteralPath $bindingPath -Raw|ConvertFrom-Json -AsHashtable
+Assert-RecoveryTaskSnapshot $binding
 $out=Join-Path $PSScriptRoot ('runs/'+[DateTime]::UtcNow.ToString('yyyyMMddTHHmmssfffZ'));New-Item -ItemType Directory $out|Out-Null
 $owner=New-ProductionOwner $binding (Join-Path $out 'maintenance-state.json')
  $ctx=@{legacy=$null;future=$null;proof=$null;archive=$null;release=(Join-Path $out 'release');owner_gate=(Join-Path $out 'owner-gate.json');keep=$false;current_sha=$config.expected}
 $ownerLock=Join-Path $config.runtime 'state/mother-cutover-maintenance-owner.lock'
-$lock=[IO.File]::Open($ownerLock,[IO.FileMode]::CreateNew,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+$lock=[IO.File]::Open($ownerLock,[IO.FileMode]::CreateNew,[IO.FileAccess]::ReadWrite,[IO.FileShare]::Read)
 $identity=@{owner_pid=$PID;creation_ticks=[string](Get-Process -Id $PID).StartTime.ToUniversalTime().Ticks;target=$config.target;token=$owner.token;maintenance_verified=$false;approval_not_before=$approval.not_before;approval_expires_at=$approval.expires_at}
 try{
  $bytes=[Text.Encoding]::UTF8.GetBytes(($identity|ConvertTo-Json));$lock.Write($bytes,0,$bytes.Length);$lock.Flush($true)
+ $recoveryDirectory=Initialize-RecoveryContext $out $config $binding $identity $approval
+ $ctx.stop_state='NOT_REQUESTED';$ctx.stop_identity=$null
+ Save-RecoveryCheckpoint $recoveryDirectory $ctx 'OWNER_CREATED' $ctx.stop_state
  function WriteGate {Write-CutoverReceipt $ctx.owner_gate $identity}
  function ReleaseOperation($Action){
   $raw=& node (Join-Path $PSScriptRoot 'ReleaseOperation.cjs') $Action $ctx.release $ctx.owner_gate
@@ -56,6 +62,7 @@ try{
    if($all.Count -ne 1 -or $all[0].role -ne 'future' -or !$all[0].entry_verified){throw 'REQUIRE_UNIQUE_FUTURE_AND_IDLE_SHARED_RUNTIME'}
    $ctx.legacy=$all[0];$ctx.legacy.entry=Join-Path $config.prod 'scripts/fugle-futopt-websocket-collector.js'
    Assert-OnlyBoundFuture $config $ctx.legacy
+   Save-RecoveryCheckpoint $recoveryDirectory $ctx 'PREFLIGHT' $ctx.stop_state
   }
   fence={
    Enter-ProductionFence $owner $config $approval { Assert-OnlyBoundFuture $config $ctx.legacy }
@@ -71,8 +78,18 @@ try{
   }
   stopLegacy={
    Assert-OwnerApproval $config $approval;AssertOutsideStockSession;Assert-OnlyBoundFuture $config $ctx.legacy
-   Invoke-BoundGracefulStop $config $ctx.legacy $ctx.owner_gate (Join-Path $out 'graceful-stop.json')|Out-Null
+   $ctx.stop_identity=Get-Content (Join-Path $config.runtime 'state/futopt-shutdown/owner.json') -Raw|ConvertFrom-Json -AsHashtable -DateKind String
+   if($ctx.stop_identity.pid -ne $ctx.legacy.pid){throw 'RECOVERY_STOP_IDENTITY_DRIFT'}
+   $ctx.stop_state='MAY_HAVE_BEEN_REQUESTED'
+   Save-RecoveryCheckpoint $recoveryDirectory $ctx 'BEFORE_STOP' $ctx.stop_state
+   try{Invoke-BoundGracefulStop $config $ctx.legacy $ctx.owner_gate (Join-Path $out 'graceful-stop.json')|Out-Null}
+   catch{
+    if($_.Exception.Data['StopNotRequested'] -ceq $true){$ctx.stop_state='NOT_REQUESTED';Save-RecoveryCheckpoint $recoveryDirectory $ctx 'STOP_NOT_REQUESTED' $ctx.stop_state}
+    throw
+   }
    Assert-OnlyBoundFuture $config $null
+   $ctx.legacy_stop_receipt_hash=Get-RecoveryHash (Join-Path $out 'graceful-stop.json')
+   Save-RecoveryCheckpoint $recoveryDirectory $ctx 'LEGACY_STOP_VERIFIED' $ctx.stop_state
   }
   deploy={ReleaseOperation 'apply';Invoke-PairedVerifier $config $config.target|Out-Null;$ctx.current_sha=$config.target}
   startFuture={$ctx.future=Start-BoundFuture $config $out}
@@ -90,6 +107,14 @@ try{
    Restore-WriterBinding $owner $ctx.proof
   }
   restore={Restore-ProductionFence $owner}
+  assertUnstoppedLegacy={
+   # Used only after the child explicitly proves it never entered adapter.stop.
+   # It is not an escape hatch for a timeout or partially delivered STOP.
+   if($owner.stock_handed_back -or !$owner.db -or !$owner.writer){throw 'ORIGINAL_FENCE_NOT_HELD'}
+   Invoke-PairedVerifier $config $config.expected|Out-Null
+   Assert-OnlyBoundFuture $config $ctx.legacy
+   Test-EvidenceOff $config
+  }
   assertNoStockOrWriter={Assert-OnlyBoundFuture $config $ctx.future}
   refence={
    # Before handback the original fences remain held. Once handed back, do not
@@ -110,9 +135,11 @@ try{
  }
  $r=Invoke-CutoverSequence $ports
  if($r.status -eq 'MANUAL_RECOVERY_REQUIRED'){
-  # No automatic unlock/exit: a live owner keeps the OS fences. Owner recovery
-  # requires a separate explicit instruction; requester exit does not release it.
-  while($true){Start-Sleep -Seconds 30;Write-OwnerState $owner 'MANUAL_RECOVERY_REQUIRED'}
+  Save-RecoveryCheckpoint $recoveryDirectory $ctx 'MANUAL_RECOVERY_REQUIRED' $ctx.stop_state
+  $recoveryPorts=New-RecoveryRuntimePorts $config $recoveryDirectory $identity $ownerLock
+  $recovered=Wait-ControlledOwnerRecovery $recoveryDirectory $owner $recoveryPorts
+  if($recovered.status -eq 'MANUAL_RECOVERY_VERIFIED'){$ctx.keep=$false}
+  $recovered|ConvertTo-Json -Depth 12
  }
  $r|ConvertTo-Json -Depth 12
 }finally{

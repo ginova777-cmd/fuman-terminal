@@ -2,10 +2,20 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 function Write-CutoverReceipt($Path,$Value){
  $tmp=$Path+'.tmp-'+[guid]::NewGuid().ToString('N')
- $bytes=[Text.Encoding]::UTF8.GetBytes(($Value|ConvertTo-Json -Depth 20))
- $f=[IO.File]::Open($tmp,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
- try{$f.Write($bytes,0,$bytes.Length);$f.Flush($true)}finally{$f.Dispose()}
- [IO.File]::Move($tmp,$Path,$true)
+ $bytes=[Text.Encoding]::UTF8.GetBytes(($Value|ConvertTo-Json -Depth 30))
+ $phase='CREATE_TEMP';$published=$false
+ try{
+  $f=[IO.File]::Open($tmp,'CreateNew','Write','None')
+  try{$phase='WRITE_FLUSH';$f.Write($bytes);$f.Flush($true)}finally{$f.Dispose()}
+  $phase='ATOMIC_PUBLISH'
+  if(Test-Path -LiteralPath $Path){[IO.File]::Replace($tmp,$Path,[System.Management.Automation.Language.NullString]::Value)}else{[IO.File]::Move($tmp,$Path,$false)}
+  $published=$true;$phase='READBACK'
+  if((Get-FileHash -LiteralPath $Path).Hash -cne [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))){throw 'HASH_MISMATCH'}
+ }catch{
+  $e=[IO.IOException]::new(('RECEIPT_WRITE_FAILED:'+ $phase),$_.Exception)
+  $e.Data['phase']=$phase;$e.Data['path']=$Path;$e.Data['temporary']=$tmp;$e.Data['published']=$published;$e.Data['cause']=$_.Exception.Message
+  throw $e
+ }
 }
 function Get-BoundProcess($Expected){
  $p=Get-Process -Id $Expected.pid -ErrorAction Stop
@@ -40,3 +50,4 @@ function Save-LegacyBoundary($Paths,$Destination){
  }catch{$r.error=$_.Exception.Message;throw}finally{$r.finished_at=[DateTimeOffset]::UtcNow.ToString('o');Write-CutoverReceipt (Join-Path $Destination 'archive-receipt.json') $r}
  return $r
 }
+

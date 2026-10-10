@@ -22,7 +22,15 @@ function Invoke-CutoverSequence($Ports) {
   & $Ports.restore;$fenced=$false;$r.status='CUTOVER_CONTROL_FLOW_VERIFIED_RUNTIME_ACCEPTANCE_PENDING'
  }catch{
   $r.error=$_.Exception.Message
-  if($legacyStopAttempted){
+  if($legacyStopAttempted -and !$deployAttempted -and $_.Exception.Data['StopNotRequested'] -ceq $true){
+   try{
+    & $Ports.assertUnstoppedLegacy
+    Stage 'NO_STOP_REQUEST_OLD_RUNTIME_REVERIFIED'
+    & $Ports.restore;$fenced=$false;$r.status='ABORTED_BEFORE_STOP_ORIGINAL_TASKS_RESTORED'
+   }catch{
+    $r.recovery_error=$_.Exception.Message;$r.status='MANUAL_RECOVERY_REQUIRED'; & $Ports.retain
+   }
+  }elseif($legacyStopAttempted){
    try{
     if($stockHandbackAttempted){& $Ports.assertNoStockOrWriter}
     & $Ports.refence;Stage 'RECOVERY_FENCED'

@@ -22,6 +22,8 @@ function execute(c,action,out,dep){
  const original=fs.readFileSync(path.join(out,'authority-before.bin'));
  const before=JSON.parse(fs.readFileSync(path.join(out,'production-before.json')));
  if(hash(original)!==before.authority_sha256)throw Error('ROLLBACK_BACKUP_DRIFT');
+ const manifest=JSON.parse(manifestBytes);
+ if(before.head!==c.expected||JSON.parse(original).approvedProductionSha!==c.expected||manifest.production_sha!==c.expected||manifest.final_sha!==c.target)throw Error('ROLLBACK_EXACT_IDENTITY_DRIFT');
  const current=fs.readFileSync(c.authority),auth=JSON.parse(original);auth.approvedProductionSha=c.target;
  if(!current.equals(original)&&!current.equals(Buffer.from(JSON.stringify(auth,null,2))))throw Error('ROLLBACK_AUTHORITY_DRIFT');
  if(text(c.prod,'status','--porcelain','--untracked-files=all')||![c.expected,c.target].includes(text(c.prod,'rev-parse','HEAD')))throw Error('ROLLBACK_PRODUCTION_DRIFT');
