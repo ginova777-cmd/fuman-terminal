@@ -1,0 +1,36 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('fs'),path=require('path'),os=require('os'),vm=require('vm');
+const counts=require('../lib/strategy3-scan-counts.cjs'),{normalize}=require('../lib/tom-acceptance.cjs'),{assess}=require('../lib/strategy-natural-evidence'),{ready,finalize}=require('./verify-institution-natural-origin.cjs');
+const root=path.resolve(__dirname,'..'),tmp=fs.mkdtempSync(path.join(os.tmpdir(),'tom-contract-'));
+let passed=0;const names=[];function check(name,fn){fn();names.push(name);passed++;}
+const c={contract:'strategy3-scan-counts-v1',runId:'s3',tradeDate:'2026-10-12',universe:100,visited:100,qualified:90,requiredRatio:.9};
+const r={tradeDate:c.tradeDate,runId:'s3',status:'complete',complete:true,exitCode:0,triSurfaceStatus:'complete',desktopRunId:'s3',mobileRunId:'s3',scorecardRunId:'s3',naturalSlotComplete:true,scanCounts:c};
+const norm=x=>normalize('strategy3',{...r,...x},{date:c.tradeDate});
+check('full traversal with exactly 90% eligible passes',()=>assert.equal(norm({}).complete,true));
+for(const [name,change] of [['below 90',{qualified:89}],['partial walk',{visited:99}],['wrong run',{runId:'other'}],['wrong date',{tradeDate:'2026-10-08'}],['invalid count',{qualified:NaN}],['qualified exceeds walked',{qualified:101}],['zero universe',{universe:0}],['lowered threshold',{requiredRatio:.89}],['stricter threshold respected',{requiredRatio:.95}]])check(name,()=>assert.equal(norm({scanCounts:{...c,...change}}).complete,false));
+check('legacy qualified count cannot masquerade as traversal',()=>assert.equal(norm({scanCounts:undefined,scanned:100,total:100,scannedCount:90,expectedTotal:100}).complete,false));
+check('stale embedded valid flag not trusted',()=>assert.equal(norm({scanCounts:{...c,qualified:1,valid:true}}).complete,false));
+check('recovery never natural',()=>assert.equal(norm({recoveryReplay:true}).verification,'RECOVERY_COMPLETE'));
+check('failed business not rescued by counts',()=>assert.equal(norm({status:'failed',complete:false}).complete,false));
+check('producer and consumer share schema',()=>assert.equal(counts.fromScan({run_id:'s3',trade_date:c.tradeDate,scanner_summary:{formal_ready_target:100,visited_symbols:100,ready_20_candle_symbols:90,minimum_mother_pool_coverage_ratio:.9}}).valid,true));
+// Exercise the actual producer loop prefix: data-gap and insufficient-K branches still count visits.
+const source=fs.readFileSync(path.join(root,'scripts/run-strategy3-v2-complete-scan.js'),'utf8');
+const begin=source.indexOf('for (const code of poolSymbols) {'),end=source.indexOf('    const entry = entryCandles[0];',begin);
+check('actual scanner loop counts gaps without fabricating qualified bars',()=>{const ctx={poolSymbols:['a','b','c'],visitedCount:0,ready20Count:0,entryWindowCount:0,water:{symbolDataGaps:new Set(['a']),poolBySymbol:new Map(),quoteBySymbol:new Map(),candleRowsBySymbol:new Map([['b',Array.from({length:20},()=>({candle_time:'2026-10-12T05:00:00Z'}))]])},candleMinute:()=>13*60};vm.runInNewContext(source.slice(begin,end)+'\n}',ctx);assert.equal(ctx.visitedCount,3);assert.equal(ctx.ready20Count,1);});
+const task='\\Fuman 買賣超 Cache 2100',instance='{natural}',script='C:/fuman-release-owner/prod81/run-institution.ps1',exe='C:/Program Files/PowerShell/7/pwsh.exe';
+const base={strategy:'institution',formalComplete:true,recovery:false,scan:{runId:'institution-20261012-20261012130002',marketDate:'20261012',startedAt:'2026-10-12T13:00:02Z'},release:{ok:true,scriptPath:script},observation:{ok:true,runnerPid:101,parentPid:101,runnerStartedAt:'2026-10-12T13:00:01Z',commandLine:`pwsh -File "${script}"`,taskName:task,executablePath:exe,runnerOwnerSid:'S-1-fixture',taskPrincipalSid:'S-1-fixture',actions:[{Execute:exe,Arguments:`-File "${script}"`}],events:[{id:107,recordId:1,time:'2026-10-12T13:00:00Z',fields:{TaskName:task,InstanceId:instance}},{id:200,recordId:2,time:'2026-10-12T13:00:01Z',fields:{TaskName:task,TaskInstanceId:instance,EnginePID:'101',ActionName:exe}}]}};
+check('Institution bound time trigger passes',()=>assert.equal(assess(base).naturalSlotComplete,true));
+for(const [name,mutate] of [['manual trigger',x=>x.observation.events[0].id=110],['recovery',x=>x.recovery=true],['RecoveryReplay command',x=>x.observation.commandLine+=' -RecoveryReplay'],['cross day',x=>x.scan.marketDate='20261008'],['wrong run',x=>x.scan.runId='institution-20261008-old'],['missing event',x=>x.observation.events=[]],['wrong PID',x=>x.observation.parentPid=2],['wrong SID',x=>x.observation.runnerOwnerSid='other'],['missing SID',x=>delete x.observation.runnerOwnerSid],['wrong exe',x=>x.observation.executablePath='other'],['unapproved release',x=>x.release.ok=false],['child failed',x=>x.formalComplete=false]])check('origin rejects '+name,()=>{const x=structuredClone(base);mutate(x);assert.equal(assess(x).naturalSlotComplete,false);});
+const file=path.join(tmp,'institution.json'),ir={...r,runId:base.scan.runId,marketDate:'20261012',startedAt:base.scan.startedAt,total:100,scanned:100,recoveryReplay:false};for(const k of ['desktopRunId','mobileRunId','scorecardRunId'])ir[k]=ir.runId;
+check('closure rejects different run',()=>assert.equal(ready(ir,'other'),false));
+check('closure rejects incomplete scan',()=>assert.equal(ready({...ir,scanned:99},ir.runId),false));
+check('missing proof resets stale natural true',()=>{fs.writeFileSync(file,JSON.stringify(ir));finalize({file,run:ir.runId,root,runtime:tmp,collect:()=>({naturalSlotComplete:false,recoveryReplay:false,naturalEvidenceStatus:'TRIGGER_IDENTITY_UNVERIFIED'})});assert.equal(JSON.parse(fs.readFileSync(file)).naturalSlotComplete,false);});
+check('latest switch cannot be overwritten',()=>{fs.writeFileSync(file,JSON.stringify(ir));assert.throws(()=>finalize({file,run:ir.runId,root,runtime:tmp,collect:()=>{fs.writeFileSync(file,JSON.stringify({...ir,runId:'new'}));return {};}}),/changed_during/);assert.equal(JSON.parse(fs.readFileSync(file)).runId,'new');});
+check('recovery proof stays recovery',()=>{fs.writeFileSync(file,JSON.stringify({...ir,recoveryReplay:true}));finalize({file,run:ir.runId,root,runtime:tmp,collect:args=>{assert.equal(args.recovery,true);return {recoveryReplay:true,naturalSlotComplete:false};}});assert.equal(JSON.parse(fs.readFileSync(file)).executionMode,'recovery_replay');});
+const policy=JSON.parse(fs.readFileSync(path.join(root,'ops/tom-manifest-policy.candidate.json'),'utf8').replace(/^\uFEFF/,''));
+for(const key of ['strategy3','strategy4','strategy5','institution'])check('policy '+key+' points to prod81',()=>{const p=policy.strategies[key];assert.match(p.expectedArguments,/prod81/);assert.equal(p.expectedWorkingDirectory,'C:\\fuman-release-owner\\prod81');});
+check('policy remains isolation-only',()=>assert.equal(policy.approvalScope,'isolated_release_candidate_only'));
+const runner=fs.readFileSync(path.join(root,'run-institution.ps1'),'utf8');
+check('origin runs only after tri-surface update',()=>assert.ok(runner.indexOf('scripts/verify-institution-natural-origin.cjs')>runner.indexOf('Update-PostScanReceiptEvidence')));
+check('recovery entry refuses before runtime writes',()=>assert.ok(runner.indexOf('if ($RecoveryReplay)')<runner.indexOf('New-Item')));
+console.log(JSON.stringify({ok:true,passed,failed:0,names,scope:'isolated_fixtures_no_production_no_network',evidenceDirectory:tmp}));
