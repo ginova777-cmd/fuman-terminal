@@ -11,7 +11,7 @@ $assignment=$ast.Find({param($n) $n -is [Management.Automation.Language.Assignme
 $table=[scriptblock]::Create($assignment.Extent.Text)
 $testRoot=Join-Path ([IO.Path]::GetTempPath()) ('mp-safe-composition-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $testRoot,$OutputDirectory -Force|Out-Null
-$target=(& git -C $repo rev-parse HEAD).Trim();$base='3a21f4c8cc7d704662b0500fdc06a833021a8125'
+$target=(& git -C $repo rev-parse HEAD).Trim();$base='db55758a6de8c1896390fc8573b6eab0eacce9bf'
 $results=@()
 # Windows scheduler is a bounded isolated state model. No real task API is called.
 # Exact Owner ports, Windows mutex/file fencing, real Collector/ACK and Git are used.
@@ -42,7 +42,7 @@ function Invoke-BoundGracefulStop($Config,$Identity,$OwnerGate,$ReceiptPath){
  Assert-OnlyBoundFuture $Config $Identity
  if(!$owner.db -or !$owner.stock -or !$owner.writer){throw 'TEST_OWNER_FENCE_MISSING'}
  $request=@{config=$Config;identity=$Identity;owner_gate=$OwnerGate;isolated_root=$testRoot;operation='stop';out=$ReceiptPath}
- if($scenario -eq 'stop-rejected' -and !$script:cleanup){$request.config=$Config.Clone();$request.config.collector_entry_sha256='0'*64}
+ if($scenario -eq 'stop-rejected' -and !$script:cleanup){$request.config=$Config.Clone();$request.config.collector_bindings_sha256='0'*64}
  $requestFile=$ReceiptPath+'.input.json';Write-CutoverReceipt $requestFile $request
  $raw=& node (Join-Path $PSScriptRoot 'test-formal-graceful-helper.cjs') $requestFile
  if($LASTEXITCODE -ne 0){throw 'EXPECTED_GRACEFUL_BLOCK_NO_FORCE'}
@@ -74,6 +74,10 @@ foreach($scenario in @('normal','verify-failure-rollback','stop-rejected')){
  & git -C (Join-Path $out 'physical') checkout -q --detach $base
  $null=New-Item -ItemType Junction -Path (Join-Path $out 'release-alias') -Target (Join-Path $out 'physical')
  $config=@{prod=(Join-Path $out 'release-alias');runtime=(Join-Path $out 'runtime');source=(Join-Path $out 'source');target=$target;expected=$base;authority=(Join-Path $out 'authority.json');lock=(Join-Path $out 'deploy.lock');minFreeBytes=1;conflictingLocks=@();release_approved=$true;remote_main_verified=$true;binding_sha256='fixture';package_sha256='fixture';collector_entry_sha256=(Get-FileHash (Join-Path $out 'physical/scripts/fugle-futopt-websocket-collector.js')).Hash.ToLower()}
+ $dual=& node (Join-Path $PSScriptRoot 'test-formal-graceful-helper.cjs') --bindings $config.prod $config.source $base $target
+ if($LASTEXITCODE){throw 'BINDINGS_FAILED'}
+ $dual=$dual|ConvertFrom-Json -AsHashtable
+ $config.collector_release_bindings=$dual.bindings;$config.collector_bindings_sha256=$dual.sha256
  Write-CutoverReceipt $config.authority @{productionRoot=$config.prod;approvedProductionSha=$base}
  & node (Join-Path $PSScriptRoot 'test-formal-graceful-helper.cjs') --manifest $config.source $base $target $out
  if($LASTEXITCODE){throw 'MANIFEST_FAILED'}

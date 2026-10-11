@@ -4,7 +4,11 @@ const fs=require('fs'),path=require('path'),cp=require('child_process'),assert=r
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 const {execute}=require('./ReleaseOperation.cjs'),{execute:stop}=require('./GracefulOperation.cjs');
 const {git,text}=require('./release-package/deploy-core.cjs');
-if(process.argv[2]==='--manifest'){
+if(process.argv[2]==='--bindings'){
+ const [prod,source,base,target]=process.argv.slice(3),entry='scripts/fugle-futopt-websocket-collector.js';
+ const bindings={expected:{release_sha:base,entry,blob_sha256:hash(git(prod,'show',base+':'+entry)),runtime_sha256:hash(fs.readFileSync(path.join(prod,entry)))},target:{release_sha:target,entry,blob_sha256:hash(git(source,'show',target+':'+entry)),runtime_sha256:hash(fs.readFileSync(path.join(source,entry)))}};
+ console.log(JSON.stringify({bindings,sha256:hash(JSON.stringify(bindings))}));
+}else if(process.argv[2]==='--manifest'){
  const [root,base,target,out]=process.argv.slice(3);const files=text(root,'diff','--name-only',base,target).split(/\r?\n/).filter(Boolean).map(file=>{const b=git(root,'show',target+':'+file);return {file,bytes:b.length,sha256:hash(b)}});
  fs.writeFileSync(path.join(out,'manifest.json'),JSON.stringify({production_sha:base,final_sha:target,files},null,2));fs.writeFileSync(path.join(out,'exact.diff'),git(root,'diff','--binary',base,target));
 }else{
