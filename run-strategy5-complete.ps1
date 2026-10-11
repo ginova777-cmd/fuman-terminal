@@ -8,6 +8,8 @@ $nodeExe = "C:\Program Files\nodejs\node.exe"
 if (-not (Test-Path -LiteralPath $nodeExe)) { $nodeExe = "node.exe" }
 $pwshExe = (Get-Process -Id $PID).Path
 $env:FUMAN_REPLAY_TRADE_DATE = $ReplayTradeDate
+$env:FUMAN_STRATEGY5_EXECUTION_MODE = $Mode
+$env:FUMAN_STRATEGY_RUNNER_PID = [string]$PID
 $env:FUMAN_STRATEGY5_REPLAY_VALIDATED = '0'
 if ($Mode -eq "Status") { & $nodeExe "scripts\verify-strategy5-complete.js"; exit $LASTEXITCODE }
 . "$PSScriptRoot\schedule-guard.ps1"
@@ -36,6 +38,7 @@ try {
   }
   Invoke-FumanWeekdayGuard -Label "Strategy5 complete" -LogPath ($log + '.calendar.log') -AllowAfterFormalSourceWindow
   Invoke-CompleteStep 'release-authority' $nodeExe @('scripts/verify-release-root-authority.js','--require-production-root')
+  Invoke-CompleteStep 'retirement-preflight' $nodeExe @('scripts/verify-strategy5-retirement.js')
   if ($Mode -eq 'Recovery') {
     $script:step = 'exact-run-recovery'
     $scan = Get-Content (Join-Path $runtime 'data/scan-receipts/strategy5.json') -Raw | ConvertFrom-Json
@@ -76,9 +79,17 @@ try {
 } finally {
   $scanNow = $null
   try { $scanNow = Get-Content (Join-Path $runtime 'data/scan-receipts/strategy5.json') -Raw | ConvertFrom-Json } catch {}
+  $canonicalNow = $null
+  if ($resultExit -eq 0) {
+    try { $canonicalNow = Get-Content (Join-Path $runtime 'data/scan-receipts/strategy5-complete.json') -Raw | ConvertFrom-Json } catch {}
+  }
+  $originVerified = ($resultExit -eq 0 -and $canonicalNow.complete -eq $true -and $canonicalNow.runId -eq $ExpectedRunId -and $canonicalNow.naturalSlotComplete -eq $true)
   $attempt = @{
     contract='strategy5-complete-attempt-v1'; mode=$Mode; startedAt=$startedAt; finishedAt=(Get-Date).ToString('o')
     expectedRunId=$ExpectedRunId; runId=$scanNow.runId; sourceTradeDate=$scanNow.marketDate; step=$script:step
+    recoveryReplay=[bool]($Mode -eq 'Recovery' -or $ReplayTradeDate); naturalSlotComplete=[bool]$originVerified
+    naturalEvidenceStatus=$(if ($Mode -eq 'Recovery' -or $ReplayTradeDate) {'RECOVERY_NOT_NATURAL'} elseif ($originVerified) {'NATURAL_TRIGGER_VERIFIED'} else {'TRIGGER_IDENTITY_UNVERIFIED'})
+    naturalEvidencePath=$canonicalNow.naturalEvidencePath; naturalEvidenceSha256=$canonicalNow.naturalEvidenceSha256
     status=$(if ($resultExit -eq 0) {'complete'} else {'failed'}); complete=($resultExit -eq 0); exitCode=$resultExit
     firstBlocker=$(if ($resultExit -eq 0) {$null} else {$failureReason}); log=$log
   }
