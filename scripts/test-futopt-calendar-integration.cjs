@@ -116,13 +116,15 @@ async function collector(scenario,date='2026-10-12'){
   await assert.rejects(resolver(input()),/OFFLINE_FAILURE/);assert.equal(calls,4);
   await assert.rejects(resolver(input()),/BACKOFF/);assert.equal(calls,4);assert.equal(saved.length,1);
  });
- for(const fault of ['pdf_hash','index_version','empty_notice','new_ambiguous_notice','wrong_source','oversize','save_failure','year_boundary'])await test('resolver_'+fault,async()=>{
+ for(const fault of ['pdf_hash','index_version','index_revision','empty_notice','truncated_notice','new_ambiguous_notice','wrong_source','oversize','save_failure','year_boundary'])await test('resolver_'+fault,async()=>{
   const date=fault==='year_boundary'?'2027-01-01':'2026-10-11';let calls=0;
   const resolver=createResolver({now:()=>Date.parse(date+'T02:00:00Z'),saveEvidence:()=>{if(fault==='save_failure')throw Error('SAVE_FAILED');},fetchImpl:async url=>{
    calls++;let bytes=url===INDEX?index:url===ANNOUNCEMENTS?notices:pdf;
    if(fault==='pdf_hash'&&url===policy.source_url)bytes=Buffer.from('wrong');
    if(fault==='index_version'&&url===INDEX)bytes=Buffer.from('new version');
+   if(fault==='index_revision'&&url===INDEX)bytes=Buffer.concat([index,Buffer.from('<a href="/file/taifex/CHINESE/4/2026Calendar_v2.pdf">revision</a>')]);
    if(fault==='empty_notice'&&url===ANNOUNCEMENTS)bytes=Buffer.from('<html>empty</html>');
+   if(fault==='truncated_notice'&&url===ANNOUNCEMENTS)bytes=Buffer.from('<table class="table_c table-fixed td-wrap"><thead><tr><th>日期</th><th>標題</th></tr></thead><tr><td>2026/10/08</td><td><a href="newsDetail?newsType=1&idx=1">一般公告</a></td></tr></table>');
    if(fault==='new_ambiguous_notice'&&url===ANNOUNCEMENTS)bytes=Buffer.from(notices.toString().replace('</thead>','</thead><tr><td>2026/10/11</td><td><a href="newsDetail?newsType=1&idx=77777">颱風影響開休市將另行公告</a></td></tr>'));
    if(fault==='oversize')bytes=Buffer.alloc(3*1024*1024);
    const r=response(bytes,url);if(fault==='wrong_source')Object.defineProperty(r,'url',{value:'https://example.com/'});return r;
