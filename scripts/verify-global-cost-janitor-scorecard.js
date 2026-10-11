@@ -208,12 +208,15 @@ function checkTasks(issues, warnings) {
   return evidence;
 }
 
-function checkStatusFiles(issues, warnings) {
+function checkStatusFiles(issues, warnings, contexts = {}) {
   const now = Date.now();
   const maxAgeMs = MAX_STATUS_AGE_HOURS * 3600000;
   const evidence = {};
   for (const item of STATUS_FILES) {
     const stat = fs.existsSync(item.file) ? fs.statSync(item.file) : null;
+    const context = contexts[item.key];
+    const freshness = require('../lib/tom-cleanup-freshness.cjs').classify({...item,observedSha256:stat ? require('crypto').createHash('sha256').update(fs.readFileSync(item.file)).digest('hex') : null},stat ? readJson(item.file) : null,context);
+    if(['PAUSED_BY_USER','NOT_DUE'].includes(freshness)){evidence[item.key]={file:item.file,freshness};continue;}
     if (!stat) {
       issues.push({ issue: "status_file_missing", key: item.key, file: item.file, description: item.description });
       evidence[item.key] = { file: item.file, missing: true };
@@ -224,13 +227,16 @@ function checkStatusFiles(issues, warnings) {
     const status = payload.status || (payload.ok === true ? "ok" : "unknown");
     evidence[item.key] = {
       file: item.file,
+      freshness,
       mtime: stat.mtime.toISOString(),
       ageHours: Number((ageMs / 3600000).toFixed(2)),
       ok: payload.ok,
       status,
       payload,
     };
-    if (ageMs > maxAgeMs) {
+    if (['FAILED','DATA_GAP'].includes(freshness)) issues.push({issue:'status_freshness_failed',key:item.key,freshness});
+    if (freshness === 'UNVERIFIED') issues.push({issue:'status_freshness_policy_unverified',key:item.key,file:item.file});
+    if (freshness === 'STALE' || (freshness === 'UNVERIFIED' && ageMs > maxAgeMs)) {
       issues.push({ issue: "status_file_stale", key: item.key, file: item.file, ageHours: evidence[item.key].ageHours, maxAgeHours: MAX_STATUS_AGE_HOURS });
     }
     if (payload.__readError) {
@@ -301,7 +307,7 @@ async function main() {
   const warnings = [];
   const evidence = {
     tasks: checkTasks(issues, warnings),
-    statusFiles: checkStatusFiles(issues, warnings),
+    statusFiles: checkStatusFiles(issues, warnings, loadFreshnessContext()),
     commands: {},
   };
 
@@ -372,7 +378,7 @@ async function main() {
   if (issues.length > 0) process.exit(1);
 }
 
-main().catch(async (error) => {
+if(require.main===module) main().catch(async (error) => {
   const payload = {
     ok: false,
     status: "critical",
@@ -388,3 +394,9 @@ main().catch(async (error) => {
   console.error(JSON.stringify(payload, null, 2));
   process.exit(1);
 });
+
+module.exports={checkStatusFiles};
+
+
+function loadFreshnessContext(){const file=path.join(RUNTIME_ROOT,'config/tom-cleanup-freshness.json');if(!fs.existsSync(file))return {};if(fs.statSync(file).size>65536)throw Error('cleanup_context_too_large');const c=readJson(file);if(c.asOfDate!==taipeiNowIso().slice(0,10))return {};return c.tasks||{};} 
+

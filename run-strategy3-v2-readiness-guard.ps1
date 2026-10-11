@@ -24,6 +24,7 @@ $receiptPath = Join-Path $receiptDir ("strategy3-v2-readiness-guard-{0}-{1}.json
 $logPath = Join-Path $logDir ("strategy3-v2-readiness-guard-{0}-{1}.log" -f $Phase, (Get-Date -Format yyyyMMdd-HHmmss))
 $startedAt = (Get-Date).ToString("yyyy-MM-ddTHH:mm:sszzz")
 
+$guardRunId="strategy3-readiness-$compactDate-$Phase-$([guid]::NewGuid().ToString('N'))"
 try {
   $output = & $nodeExe "--use-system-ca" "scripts\check-strategy3-v2-readiness.js" ("--trade-date={0}" -f (Get-Date -Format yyyy-MM-dd)) 2>&1
   $exitCode = $LASTEXITCODE
@@ -35,8 +36,10 @@ try {
   if ($start -ge 0 -and $end -gt $start) {
     try { $readiness = $jsonText.Substring($start, $end - $start + 1) | ConvertFrom-Json } catch { $readiness = $null }
   }
+  $blocker = if ($null -eq $readiness) { 'readiness_output_invalid' } elseif ($readiness.issues -and @($readiness.issues).Count -gt 0 -and $readiness.issues[0].code) { [string]$readiness.issues[0].code } elseif ($readiness.reason_code) { [string]$readiness.reason_code } else { 'readiness_not_ready' }
   $result = [ordered]@{
     contract = "strategy3-v2-readiness-guard-wrapper-v1"
+    guard_run_id = $guardRunId
     ok = ($exitCode -eq 0 -and $readiness.ok -eq $true)
     status = if ($exitCode -eq 0 -and $readiness.ok -eq $true) { "STRATEGY3_V2_READINESS_READY" } else { "STRATEGY3_V2_READINESS_FAIL_CLOSED" }
     trade_date = Get-Date -Format yyyy-MM-dd
@@ -51,13 +54,14 @@ try {
     readiness_exit_code = $exitCode
     readiness_status = [string]$readiness.status
     reason_code = if ($exitCode -eq 0 -and $readiness.ok -eq $true) { "strategy3_v2_readiness_ready" } else { [string]$readiness.reason_code }
-    first_blocker = if ($exitCode -eq 0 -and $readiness.ok -eq $true) { $null } else { [string]$readiness.issues[0].code }
+    first_blocker = if ($exitCode -eq 0 -and $readiness.ok -eq $true) { $null } else { [string]$blocker }
     readiness = $readiness
     log = $logPath
   }
 } catch {
   $result = [ordered]@{
     contract = "strategy3-v2-readiness-guard-wrapper-v1"
+    guard_run_id = $guardRunId
     ok = $false
     status = "STRATEGY3_V2_READINESS_GUARD_EXCEPTION"
     trade_date = Get-Date -Format yyyy-MM-dd
@@ -78,4 +82,6 @@ try {
 
 $result | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $receiptPath -Encoding utf8
 $result | ConvertTo-Json -Depth 12
-exit 0
+if ($result.ok -eq $true) { exit 0 }
+exit 1
+
