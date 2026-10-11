@@ -21,6 +21,8 @@ function Restore-BoundTask($Expected){$tasks[$Expected.name].enabled=$Expected.e
 function AssertOutsideStockSession {}
 function CheckRequester {return $false}
 function WriteGate {Write-CutoverReceipt $ctx.owner_gate $identity}
+function Save-RecoveryCheckpoint($Directory,$Context,$Stage,$StopState){Write-CutoverReceipt (Join-Path $out ('checkpoint-'+$Stage+'.json')) @{stage=$Stage;stop_state=$StopState}}
+function Get-RecoveryHash($File){return (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLower()}
 function Test-EvidenceOff($Config){if($env:FUMAN_CHANGE_EVIDENCE_PHASE1 -eq '1'){throw 'TEST_ENABLE_PRESENT'}}
 function Invoke-PairedVerifier($Config,$Sha){$a=Get-Content $config.authority -Raw|ConvertFrom-Json;if((& git -C $config.prod rev-parse HEAD).Trim() -ne $Sha -or $a.approvedProductionSha -ne $Sha){throw 'PAIRED_VERIFY_FAILED'};return @{ok=$true}}
 function Get-RuntimeInventory($Config){if($script:future){$p=Get-Process -Id $script:future.pid -ErrorAction SilentlyContinue;if($p){return $script:future}}}
@@ -86,7 +88,7 @@ foreach($scenario in @('normal','verify-failure-rollback','stop-rejected')){
  foreach($name in @('Fuman Fugle Daytrade WebSocket Collector 0600-1330','Fuman Daytrade Source Writer 0600-1330','recovery','closing')){$t=@{name=$name;path='\';enabled=$(if($name -eq 'recovery'){'false'}else{'true'});state='Ready';definition_sha256=([Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($name))).ToLower())};$binding.tasks+=@{binding=$t};$tasks[$name]=$t.Clone()}
  $approval=@{action='CONTROLLED_CUTOVER_APPLY';target=$target;binding_sha256='fixture';package_sha256='fixture';not_before=[DateTimeOffset]::UtcNow.AddMinutes(-1).ToString('o');expires_at=[DateTimeOffset]::UtcNow.AddMinutes(15).ToString('o')}
  $owner=New-ProductionOwner $binding (Join-Path $out 'owner.json');$identity=@{maintenance_verified=$false;owner_pid=$PID}
- $ctx=@{legacy=$null;future=$null;proof=$null;archive=$null;release=(Join-Path $out 'release');owner_gate=(Join-Path $out 'owner-gate.json');keep=$false;current_sha=$base}
+ $recoveryDirectory=Join-Path $out 'recovery';$ctx=@{stop_state='NOT_REQUESTED';stop_identity=$null;legacy=$null;future=$null;proof=$null;archive=$null;release=(Join-Path $out 'release');owner_gate=(Join-Path $out 'owner-gate.json');keep=$false;current_sha=$base}
  $script:future=$null;$script:cleanup=$false;$script:injected=$false
  $null=Start-BoundFuture $config $out
  . $table
@@ -106,7 +108,7 @@ foreach($scenario in @('normal','verify-failure-rollback','stop-rejected')){
  $results+=@{scenario=$scenario;status='PASS';root=$out;result=$r;task_model='ISOLATED_NO_SYSTEM_TASKS';ack='ORIGINAL_COLLECTOR';git='REAL_LOCAL_CLONES';locks='REAL_LOCAL_WINDOWS_MUTEX_AND_FILE';final_sha=(& git -C $config.prod rev-parse HEAD).Trim()}
  }finally{
  # Only test-created processes and local fences are released. Never force terminate.
- $script:cleanup=$true;$owner.manual_recovery_required=$false
+ $script:cleanup=$true;$owner.manual_recovery_required=$false;$identity.maintenance_verified=$true;WriteGate
  if(!$owner.db){$owner=New-ProductionOwner $binding (Join-Path $out 'cleanup-owner.json');Enter-ProductionFence $owner $config $approval { <# Isolated runtime fixture guard; never formal. #> }}
  if($future){Invoke-BoundGracefulStop $config $future $ctx.owner_gate (Join-Path $out 'cleanup-stop.json')|Out-Null}
  Restore-ProductionFence $owner
