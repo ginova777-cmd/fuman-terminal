@@ -5,10 +5,14 @@ const { spawnSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
-const FORMAL_ROOT = "C:\\fuman-release-owner\\fuman-terminal";
-const FORMAL_ROOT_PATTERN = /^C:\\fuman-release-owner\\fuman-terminal(?:-release-\d{8}-git)?$/i;
-function isFormalRoot(value) { return FORMAL_ROOT_PATTERN.test(String(value || "").trim()); }
-function actionUsesFormalRoot(value) { return /C:\\fuman-release-owner\\fuman-terminal(?:-release-\d{8}-git)?(?:\\|\b)/i.test(String(value || "")); }
+const queryEvidence = require('../lib/schedule-query-evidence.cjs');
+const authority = JSON.parse(fs.readFileSync(path.join(__dirname,'../data/contracts/release_root_authority_v1.json'),'utf8').replace(/^\uFEFF/,''));
+const authorityResult = spawnSync(process.execPath,[path.join(__dirname,'verify-release-root-authority.js'),'--require-production-root'],{encoding:'utf8',timeout:15000,windowsHide:true,maxBuffer:1048576});
+const authorityGate = JSON.parse(queryEvidence.checkedText(authorityResult,'release-root-authority'));
+const roots = queryEvidence.rootPolicy(authority,authorityGate);
+const FORMAL_ROOT = authority.sourceRoot;
+const isFormalRoot = roots.isRoot;
+const actionUsesFormalRoot = roots.actionUsesRoot;
 const expected = [
   ["Fuman Terminal Autonomous Root Monitor", "run-terminal-master-control.ps1", ["06:00", "06:05", "07:00", "07:08", "08:20", "08:29", "08:30", "08:35", "08:36", "08:40", "08:45", "08:50", "08:55", "09:00", "12:30", "12:40", "12:50", "12:55", "13:00", "13:15", "13:30", "15:35", "16:00", "17:00", "17:10", "17:40", "18:10", "18:40", "19:10", "20:05", "21:00", "21:10", "21:15", "21:40", "22:00", "23:10"]],
   ["Fuman Daytrade Source Writer 0600-1330", "Run-DaytradeSourceWriter", ["06:00"], { allowRuntimeAction: true }],
@@ -39,15 +43,13 @@ const expected = [
 ];
 
 function powershellJson(command) {
-  const utf8Command = "$OutputEncoding=[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false);" + command;
+  const utf8Command = "$ErrorActionPreference='Stop';$OutputEncoding=[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new($false);" + command;
   const result = spawnSync("C:\\Program Files\\PowerShell\\7\\pwsh.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", utf8Command], {
     encoding: "utf8",
     timeout: 20000,
     windowsHide: true,
   });
-  if (result.status !== 0) throw new Error(String(result.stderr || result.stdout || "schedule_query_failed").trim());
-  const text = String(result.stdout || "").trim();
-  return text ? JSON.parse(text) : [];
+  return queryEvidence.rows(result,'Get-ScheduledTask');
 }
 
 function rows() {

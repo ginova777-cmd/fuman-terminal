@@ -60,10 +60,13 @@ for (const [name, time] of definitions) {
   const allowed = registry.policy.allowedResults[name] || [];
   if (!allowed.includes(0) || !allowed.includes(3) || !allowed.includes(4)) issues.push(`registry_allowed_results_missing:${name}`);
 }
+const queryEvidence=require('../lib/schedule-query-evidence.cjs');
+const queryFailures=new Set();
 const live = definitions.flatMap(([name]) => {
   const query = spawnSync("schtasks", ["/Query", "/TN", name, "/XML"], { encoding: "utf8", timeout: 15000, windowsHide: true });
-  if (query.status !== 0) return [];
-  const xml = String(query.stdout || "");
+  let xml;
+  try {xml=queryEvidence.checkedText(query,'schtasks:'+name); if(!/<Task[\s>]/i.test(xml)||!/<\/Task>/i.test(xml))throw Error('SCHEDULE_QUERY_INVALID_XML:'+name);}
+  catch(error){queryFailures.add(name);issues.push(error.message);return [];}
   return [{
     name,
     enabled: !/<Enabled>false<\/Enabled>/i.test(xml),
@@ -73,6 +76,7 @@ const live = definitions.flatMap(([name]) => {
   }];
 });
 for (const [name, time] of definitions) {
+  if(queryFailures.has(name))continue;
   const row = live.find((item) => item.name === name);
   if (name.includes('Strategy2') && isStrategy2Paused()) {
     if (!row || row.enabled !== false) issues.push('paused_task_not_disabled:'+name);
