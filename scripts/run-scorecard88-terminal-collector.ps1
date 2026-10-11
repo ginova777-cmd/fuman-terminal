@@ -7,6 +7,10 @@ param(
   [string]$RecoveryReason = ''
 )
 $ErrorActionPreference = 'Stop'
+if ($Slot -eq '12:40') {
+  & node (Join-Path $PSScriptRoot 'assert-strategy2-execution-allowed.cjs')
+  if ($LASTEXITCODE -ne 0) { throw 'STRATEGY2_PAUSED_BY_USER' }
+}
 $env:FUMAN_RUNTIME_ROOT = $RuntimeRoot
 $env:FUMAN_RUNTIME_DIR = $RuntimeRoot
 if ($Recovery -and $ExpectedRunId -match '^strategy5-\d{8}-\d{14}$' -and $env:FUMAN_STRATEGY5_REPLAY_VALIDATED -eq '1') {
