@@ -8878,7 +8878,7 @@
     if (clearEmptyUnifiedFilter(route, cards)) cards = unifiedRunCards(route, allRows, payloadMeta);
     let rows = (Array.isArray(canvasState.filtered) ? canvasState.filtered : [])
       .filter((row) => row && typeof row === "object")
-      .slice(0, (isStrategy3Route(route) || isChipTradeRoute(route)) ? 2000 : 160);
+      .slice(0, isStrategy4Route(route) ? undefined : (isStrategy3Route(route) || isChipTradeRoute(route)) ? 2000 : 160);
     if (isStrategy5Route(route) && canvasState.signalFilter === "multi_strategy_confluence") {
       rows = strategy5TerminalConfluenceRows(allRows).slice(0, 160);
     }
