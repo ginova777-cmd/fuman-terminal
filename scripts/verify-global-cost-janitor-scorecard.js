@@ -398,5 +398,10 @@ if(require.main===module) main().catch(async (error) => {
 module.exports={checkStatusFiles};
 
 
-function loadFreshnessContext(){const file=path.join(RUNTIME_ROOT,'config/tom-cleanup-freshness.json');if(!fs.existsSync(file))return {};if(fs.statSync(file).size>65536)throw Error('cleanup_context_too_large');const c=readJson(file);if(c.asOfDate!==taipeiNowIso().slice(0,10))return {};return c.tasks||{};} 
+function loadFreshnessContext(){
+ const x=spawnSync(process.execPath,[path.join(ROOT,'scripts/build-tom-manifest.cjs'),RUNTIME_ROOT],{encoding:'utf8',windowsHide:true,timeout:25000,maxBuffer:1048576});
+ if(x.status!==0)throw Error('cleanup_manifest_generation_failed');
+ const bundle=JSON.parse(x.stdout);if(bundle.cleanup.asOfDate!==taipeiNowIso().slice(0,10))throw Error('cleanup_manifest_date_mismatch');
+ return bundle.cleanup.tasks;
+}
 
