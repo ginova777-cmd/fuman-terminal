@@ -22,6 +22,7 @@ function Invoke-CutoverSequence($Ports) {
   & $Ports.restore;$fenced=$false;$r.status='CUTOVER_CONTROL_FLOW_VERIFIED_RUNTIME_ACCEPTANCE_PENDING'
  }catch{
   $r.error=$_.Exception.Message
+  if($_.Exception.Data.Contains('RuntimeOccupancyEvidence')){$r['runtime_occupancy_evidence']=$_.Exception.Data['RuntimeOccupancyEvidence']}
   if($legacyStopAttempted -and !$deployAttempted -and $_.Exception.Data['StopNotRequested'] -ceq $true){
    try{
     & $Ports.assertUnstoppedLegacy

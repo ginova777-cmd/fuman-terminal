@@ -12,14 +12,33 @@ function Get-RuntimeInventory($Config) {
   $role=if($command -match 'fugle-futopt-websocket-collector\.js'){'future'}elseif($command -match 'fugle-websocket-collector\.js'){'stock'}elseif($command -match 'run-daytrade-source-writer\.js|Run-DaytradeSourceWriter\.ps1'){'writer'}elseif($command -match $prodPattern){'other-production'}else{continue}
   $live=Get-Process -Id $p.ProcessId -ErrorAction Stop
   $entry=(Join-Path $Config.prod ('scripts\'+$(if($role -eq 'future'){'fugle-futopt-websocket-collector.js'}else{'fugle-websocket-collector.js'}))).Replace('/','\')
-  $records+=@{pid=[int]$p.ProcessId;creation_ticks=$live.StartTime.ToUniversalTime().Ticks;exe=$p.ExecutablePath;role=$role;command_sha256=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($p.CommandLine))).ToLower();entry_verified=($command -match ('(?:^|[\s"])'+[regex]::Escape($entry)+'(?=$|[\s"])'))}
+  $records+=@{pid=[int]$p.ProcessId;parent_pid=[int]$p.ParentProcessId;entry=$entry;creation_ticks=$live.StartTime.ToUniversalTime().Ticks;exe=$p.ExecutablePath;role=$role;command_sha256=[Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($p.CommandLine))).ToLower();entry_verified=($command -match ('(?:^|[\s"])'+[regex]::Escape($entry)+'(?=$|[\s"])'))}
  }
  return $records
 }
+function Throw-RuntimeOccupancyFailure($Code,$Expected,$All,$Offending) {
+ $differences=@()
+ if($null -ne $Offending){
+  if(!$Expected){$differences+=@{field='expected';expected=$null;actual='occupant_present'}}
+  else {
+   foreach($field in @('role','pid','creation_ticks','exe','entry_verified')) {
+    $wanted=if($field -eq 'role'){'future'}elseif($field -eq 'entry_verified'){$true}else{$Expected[$field]}
+    if($Offending[$field] -ne $wanted){$differences+=@{field=$field;expected=[string]$wanted;actual=[string]$Offending[$field]}}
+   }
+  }
+ }else{$differences+=@{field='count';expected=1;actual=$All.Count}}
+ $e=[InvalidOperationException]::new($Code)
+ # JSON ticks are strings so downstream readers do not round Windows identity.
+ $snapshot=@($All|ForEach-Object { $copy=@{};foreach($k in $_.Keys){$copy[$k]=$_[$k]};$copy.creation_ticks=[string]$copy['creation_ticks'];$copy })
+ $expectedCopy=$null
+ if($Expected){$expectedCopy=@{};foreach($k in $Expected.Keys){$expectedCopy[$k]=$Expected[$k]};$expectedCopy.creation_ticks=[string]$expectedCopy.creation_ticks}
+ $e.Data['RuntimeOccupancyEvidence']=@{schema='runtime_occupancy_failure_v1';observed_at=[DateTimeOffset]::UtcNow.ToString('o');code=$Code;expected=$expectedCopy;inventory=$snapshot;first_mismatch_pid=$(if($null -ne $Offending){$Offending.pid}else{$null});differences=$differences}
+ throw $e
+}
 function Assert-OnlyBoundFuture($Config,$Expected) {
  $all=@(Get-RuntimeInventory $Config)
- foreach($p in $all){if(!$Expected -or $p.role -ne 'future' -or $p.pid -ne $Expected.pid -or $p.creation_ticks -ne $Expected.creation_ticks -or $p.exe -ne $Expected.exe -or !$p.entry_verified){throw 'RUNTIME_OCCUPANCY_NOT_EXCLUSIVELY_BOUND'}}
- if($Expected -and $all.Count -ne 1){throw 'BOUND_FUTURE_NOT_UNIQUE'}
+ foreach($p in $all){if(!$Expected -or $p.role -ne 'future' -or $p.pid -ne $Expected.pid -or $p.creation_ticks -ne $Expected.creation_ticks -or $p.exe -ne $Expected.exe -or !$p.entry_verified){Throw-RuntimeOccupancyFailure 'RUNTIME_OCCUPANCY_NOT_EXCLUSIVELY_BOUND' $Expected $all $p}}
+ if($Expected -and $all.Count -ne 1){Throw-RuntimeOccupancyFailure 'BOUND_FUTURE_NOT_UNIQUE' $Expected $all $null}
 }
 function Test-EvidenceOff($Config) {
  foreach($scope in @('Process','User','Machine')){if([Environment]::GetEnvironmentVariable('FUMAN_CHANGE_EVIDENCE_PHASE1',$scope) -eq '1'){throw 'EVIDENCE_ENABLE_PRESENT'}}
