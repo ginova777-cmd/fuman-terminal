@@ -1,0 +1,117 @@
+{
+  "contract": "taifex-regular-calendar-policy-v1",
+  "year": 2026,
+  "source_url": "https://www.taifex.com.tw/file/taifex/CHINESE/4/2026Calendar.pdf",
+  "source_sha256": "8619b50dd46e4c2b817010cfa0774de3a2301181babf0117b1d28755df09d475",
+  "refresh_ms": 60000,
+  "failure_backoff_ms": 60000,
+  "policy_status": "CANDIDATE_REVIEW_REQUIRED",
+  "closed_weekdays": [
+    "2026-01-01",
+    "2026-02-12",
+    "2026-02-13",
+    "2026-02-16",
+    "2026-02-17",
+    "2026-02-18",
+    "2026-02-19",
+    "2026-02-20",
+    "2026-02-27",
+    "2026-04-03",
+    "2026-04-06",
+    "2026-05-01",
+    "2026-06-19",
+    "2026-09-25",
+    "2026-09-28",
+    "2026-10-09",
+    "2026-10-26",
+    "2026-12-25"
+  ],
+  "reviewed_announcements": [
+    {
+      "href": "https://www.taifex.com.tw/file/taifex/CHINESE/11/attach/台期交字第1150201963號函.pdf",
+      "title": "公告115年10月10日國慶日適逢星期六及10月25日臺灣光復暨金門古寧頭大捷紀念日適逢星期日，依規定於115年10月9 日(星期五)及10月26日(星期一)補假2日，本公司期貨集中交易市場配合休市2日。",
+      "hash": "7bbc45fba3b0ef0e9084f1dbbe8bc63537440da76ba2e4fb4d21e8f61d775241",
+      "closed_dates": [
+        "2026-10-09",
+        "2026-10-26"
+      ]
+    },
+    {
+      "href": "https://www.taifex.com.tw/file/taifex/CHINESE/11/attach/台期交字第1150201642號函.pdf",
+      "title": "公告榮成期貨（契約代號：OS）自115年8月13日起恢復交易。",
+      "hash": "4f1c428f3faf9a5ec78d3d86054a51bfd58704877c745c54a80dce9de858a413",
+      "closed_dates": []
+    },
+    {
+      "href": "https://www.taifex.com.tw/file/taifex/CHINESE/11/attach/台期交字第1150002443號.pdf",
+      "title": "公告中光電期貨(代號NMF)契約自115年8月11日起停止加掛新月份契約，並自115年8月24日起停止交易。",
+      "hash": "41e1c2d0d94630195d253511691e5c08d1c054a57912cd851cb06c4497bc4497",
+      "closed_dates": []
+    },
+    {
+      "href": "newsDetail?newsType=1&idx=17137",
+      "title": "因巴威颱風來襲，115年7月10日(星期五)臺灣期貨交易所集中交易市場休市1日(包含一般交易時段及盤後交易時段)，店頭集中結算業務暫停營業1日。本公司115年7月10日到期結算之臺指選擇權週五到期契約，其最後交易日及最後結算日順延至最近之次一營業日，另本公司115年7月到期東證期貨最後結算日順延至最近之次一營業日。原定於 7 月 10 日契約調整的4檔股票期貨及1檔股票選擇權，將同步順延至次一營業日。",
+      "hash": "ec196581a1e24b94816fd229384e52e83faf9db59f60cbac52ebfc6e5a0535ed",
+      "closed_dates": [
+        "2026-07-10"
+      ]
+    },
+    {
+      "href": "https://www.taifex.com.tw/file/taifex/CHINESE/11/attach/台期交字第1150201113號函.pdf",
+      "title": "公告貿聯-KY期貨（契約代號：VE）及小型貿聯-KY期貨（契 約代號：VF）自115年6月11日起恢復交易。",
+      "hash": "ab977a9fcda100dedc79196fc50a8695dddfe711ecddd853804e9d7fc332f537",
+      "closed_dates": []
+    },
+    {
+      "href": "https://www.taifex.com.tw/file/taifex/CHINESE/11/attach/公告貿聯期貨及小型貿聯期貨暫停交易.pdf",
+      "title": "公告貿聯-KY期貨（契約代號：VE）及小型貿聯-KY期貨（契約代號：VF）自115年6月10日起暫停交易。",
+      "hash": "c21e7ee76943a555bb54149d7b270aba9aad2d2ab79e8058693f76db5c24117c",
+      "closed_dates": []
+    },
+    {
+      "href": "https://www.taifex.com.tw/file/taifex/CHINESE/11/attach/台期交字第1150201003號函.pdf",
+      "title": "公告本公司期貨集中交易市場115年6月19日(星期五)端午節休市1日。",
+      "hash": "ad4872c3b7dab7478d840f1d3dadaaf62023dae80a605ce89f8c94f43cf16177",
+      "closed_dates": [
+        "2026-06-19"
+      ]
+    },
+    {
+      "href": "https://www.taifex.com.tw/file/taifex/CHINESE/11/attach/台期交字第1150200874號函.pdf",
+      "title": "公告正崴期貨（契約代號：GL）自115年5月14日起恢復交易。",
+      "hash": "f05c63ee3dac697086478260ffea9766fe17b3d5b6e0ee725251a2df3a572886",
+      "closed_dates": []
+    },
+    {
+      "href": "https://www.taifex.com.tw/file/taifex/CHINESE/11/attach/台期交字第1150200871號.pdf",
+      "title": "公告正崴期貨（契約代號：GL）自115年5月13日起暫停交易。",
+      "hash": "455d3a88801d80db7ca34c6002e9627d6b4b1bb4ec1cae54101517a4841cdb27",
+      "closed_dates": []
+    },
+    {
+      "href": "https://www.taifex.com.tw/file/taifex/CHINESE/11/attach/台期交字第1150200726號函.pdf",
+      "title": "公告本公司期貨集中交易市場115年5月1日(星期五)勞動節休市1日。",
+      "hash": "c6c914bf9e4f81f109d5c3ae86fe1fcf4c9428a622d9d1e6086720168b6f8cf5",
+      "closed_dates": [
+        "2026-05-01"
+      ]
+    },
+    {
+      "href": "https://www.taifex.com.tw/file/taifex/CHINESE/11/attach/台期交字第1150200471號函.pdf",
+      "title": "公告115年4月4日兒童節適逢星期六及4月5日清明節適逢星期日，依規定於115年4月3日(星期五)及4月6日(星期一)補假2日，本公司期貨集中交易市場配合休市2日。",
+      "hash": "40e390160608896f32a7532310879e653e2239347835a8dc9614289d8ac814c0",
+      "closed_dates": [
+        "2026-04-03",
+        "2026-04-06"
+      ]
+    },
+    {
+      "href": "https://www.taifex.com.tw/file/taifex/CHINESE/11/attach/台期交字第1150200266號函.pdf",
+      "title": "公告115年2月28日(星期六)為和平紀念日，依規定於115年2 月27日(星期五)補假一日，本公司期貨集中交易市場配合休市1日。",
+      "hash": "f8f17b3278a2903207518b564af4f3d812a3f859d4eeb5514f8b715d27a96309",
+      "closed_dates": [
+        "2026-02-27"
+      ]
+    }
+  ]
+}
