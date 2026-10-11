@@ -1,3 +1,4 @@
+const {isStrategy2Paused}=require("../lib/strategy2-pause-policy.cjs");
 "use strict";
 const fs = require("fs");
 const path = require("path");
@@ -53,16 +54,19 @@ if (!wrapper.includes("collect-scorecard88-terminal-surface-evidence.js") || wra
 if (!wrapper.includes("verify-scorecard88-collection.js") || wrapper.indexOf("collect-terminal-scorecard-88.js") > wrapper.indexOf("verify-scorecard88-collection.js")) issues.push("canonical_collection_verifier_not_run_after_collector");
 if (!master.includes("verify-scorecard88-fixed-collection-contract.js") || !master.includes("scorecard88ContractExitCode")) issues.push("master_checkpoint_missing_scorecard88_contract");
 for (const [name, time] of definitions) {
-  if (!registry.policy.activeTasks.includes(name)) issues.push(`registry_active_missing:${name}`);
+  if (!(name.includes("Strategy2") && isStrategy2Paused() ? registry.policy.expectedDisabledTasks : registry.policy.activeTasks).includes(name)) issues.push(`registry_active_missing:${name}`);
   const def = registry.tasks.find((row) => row.displayName === name);
   if (!def || JSON.stringify(def.expectedTriggers) !== JSON.stringify([time])) issues.push(`registry_trigger_mismatch:${name}`);
   const allowed = registry.policy.allowedResults[name] || [];
   if (!allowed.includes(0) || !allowed.includes(3) || !allowed.includes(4)) issues.push(`registry_allowed_results_missing:${name}`);
 }
+const queryEvidence=require('../lib/schedule-query-evidence.cjs');
+const queryFailures=new Set();
 const live = definitions.flatMap(([name]) => {
   const query = spawnSync("schtasks", ["/Query", "/TN", name, "/XML"], { encoding: "utf8", timeout: 15000, windowsHide: true });
-  if (query.status !== 0) return [];
-  const xml = String(query.stdout || "");
+  let xml;
+  try {xml=queryEvidence.checkedText(query,'schtasks:'+name); if(!/<Task[\s>]/i.test(xml)||!/<\/Task>/i.test(xml))throw Error('SCHEDULE_QUERY_INVALID_XML:'+name);}
+  catch(error){queryFailures.add(name);issues.push(error.message);return [];}
   return [{
     name,
     enabled: !/<Enabled>false<\/Enabled>/i.test(xml),
@@ -72,7 +76,12 @@ const live = definitions.flatMap(([name]) => {
   }];
 });
 for (const [name, time] of definitions) {
+  if(queryFailures.has(name))continue;
   const row = live.find((item) => item.name === name);
+  if (name.includes('Strategy2') && isStrategy2Paused()) {
+    if (!row || row.enabled !== false) issues.push('paused_task_not_disabled:'+name);
+    continue;
+  }
   if (!row || row.enabled === false) { issues.push(`live_task_missing_or_disabled:${name}`); continue; }
   if (!String(row.arguments).includes("run-scorecard88-terminal-collector.ps1") || !String(row.arguments).includes(`-Slot \"${time}\"`)) issues.push(`live_task_action_mismatch:${name}`);
   if (!Array.isArray(row.triggers) || !row.triggers.includes(time)) issues.push(`live_task_trigger_mismatch:${name}`);

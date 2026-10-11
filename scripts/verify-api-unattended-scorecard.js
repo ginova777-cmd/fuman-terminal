@@ -1,3 +1,4 @@
+const {monitorEnabled}=require("../lib/strategy2-pause-policy.cjs");
 "use strict";
 
 const fs = require("fs");
@@ -68,7 +69,7 @@ const RETIRED_STRATEGY_KEYS = new Set(["strategy1", "realtime-radar", "heatmap",
 const MASTER_CONTROL_CONTRACT = Object.freeze({
   contract: "fuman-master-control-v1",
   timezone: "Asia/Taipei",
-  activeStrategies: ["strategy2", "strategy3", "strategy4", "strategy5", "institution", "institution-battle"],
+  activeStrategies: ["strategy2", "strategy3", "strategy4", "strategy5", "institution", "institution-battle"].filter(monitorEnabled),
   retiredStrategies: ["cb", "warrant"],
   deadlines: { strategy2: "12:20", strategy3: "13:15", strategy4: "17:00", strategy5: "21:40", institution: "21:40" },
   telegram: { window: "09:00-12:30", scope: "strategy2_mother_pool_only", transport: "telegram_only", eventDriven: true, createsStrategyRun: false },
@@ -1349,13 +1350,17 @@ function writeOutputs(scorecard) {
 
 async function main() {
   if (CONTRACT_ONLY) {
-    const selected = STRATEGIES.filter((strategy) => !RETIRED_STRATEGY_KEYS.has(String(strategy.key || "").toLowerCase())).map((strategy) => strategy.key);
+    const selected = STRATEGIES.filter((strategy) => monitorEnabled(strategy.key) && !RETIRED_STRATEGY_KEYS.has(String(strategy.key || "").toLowerCase())).map((strategy) => strategy.key);
     const issues = [];
-    for (const key of ["strategy2", "strategy3", "strategy4", "strategy5", "institution"]) if (!selected.includes(key)) issues.push(`active_strategy_missing:${key}`);
+    for (const key of ["strategy2", "strategy3", "strategy4", "strategy5", "institution"]) if (monitorEnabled(key) && !selected.includes(key)) issues.push(`active_strategy_missing:${key}`);
     for (const key of ["cb", "warrant"]) if (selected.includes(key)) issues.push(`retired_strategy_active:${key}`);
     const payload = { ok: issues.length === 0, unattendedStatus: issues.length ? "NO" : "YES", checkedAt: CHECKED_AT.toISOString(), taipeiCheckedAt: taipeiStamp(CHECKED_AT), masterControlContract: MASTER_CONTROL_CONTRACT, selectedStrategies: selected, blockers: issues, warnings: [], strategies: [], writesRuntime: false, outputFile: null, markdownFile: null };
     console.log(`[api-unattended] contract-only status=${payload.unattendedStatus} blockers=${issues.length}`);
     if (issues.length && !NO_FAIL) process.exitCode = 1;
+    return;
+  }
+  if (STRATEGY_FILTER.length && STRATEGY_FILTER.every(key => key === 'strategy2') && !monitorEnabled('strategy2')) {
+    console.log(JSON.stringify({status:'PAUSED_BY_USER',complete:false,due:false,excludedFromDailyDenominator:true,writesRuntime:false}));
     return;
   }
   const now = CHECKED_AT;
@@ -1365,7 +1370,7 @@ async function main() {
   const releaseIdentity = await fetchReleaseIdentity();
   const strategies = [];
   const selectedStrategies = STRATEGIES
-    .filter((strategy) => !RETIRED_STRATEGY_KEYS.has(String(strategy.key || "").toLowerCase()))
+    .filter((strategy) => monitorEnabled(strategy.key) && !RETIRED_STRATEGY_KEYS.has(String(strategy.key || "").toLowerCase()))
     .filter(strategyMatchesFilter);
   if (!selectedStrategies.length) {
     throw new Error(`No strategy matched --strategy=${STRATEGY_FILTER.join(",")}`);

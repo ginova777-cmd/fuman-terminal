@@ -3,6 +3,8 @@ param(
   [string]$TaskName = "Fuman Strategy2 Unified 0845-1230",
   [string]$UserId = "$env:USERDOMAIN\$env:USERNAME"
 )
+& node (Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts/assert-strategy2-execution-allowed.cjs')
+if ($LASTEXITCODE -ne 0) { throw 'STRATEGY2_PAUSED_BY_USER' }
 $ErrorActionPreference = "Stop"
 $pwsh = (Get-Command pwsh -ErrorAction SilentlyContinue).Source
 if (-not $pwsh) { $pwsh = (Get-Command powershell.exe -ErrorAction Stop).Source }
