@@ -6,6 +6,7 @@ function guardOwner(root,c,ownerFile,action){
  const mbytes=fs.readFileSync(path.join(root,'tool-manifest.json'));
  if(hash(mbytes)!==c.package_sha256)throw Error('TOOL_MANIFEST_DRIFT');
  const m=JSON.parse(mbytes);
+ if(!m.config_identity.collector_bindings_sha256||hash(JSON.stringify(c.collector_release_bindings))!==m.config_identity.collector_bindings_sha256)throw Error('COLLECTOR_BINDINGS_UNSEALED');
  for(const [k,v] of Object.entries(m.config_identity))if(c[k]!==v)throw Error('CONFIG_IDENTITY_DRIFT:'+k);
  for(const f of m.files){const full=path.resolve(root,f.path),rel=path.relative(root,full);if(rel.startsWith('..')||path.isAbsolute(rel))throw Error('PACKAGE_PATH');const b=fs.readFileSync(full);if(b.length!==f.bytes||hash(b)!==f.sha256)throw Error('TOOL_FILE_DRIFT:'+f.path);}
  const o=JSON.parse(fs.readFileSync(ownerFile,'utf8').replace(/^\uFEFF/,''));

@@ -38,6 +38,12 @@ function Start-BoundFuture($Config,$LogDir) {
  Assert-OnlyBoundFuture $Config $null
  Test-EvidenceOff $Config
  $entry=Join-Path $Config.prod 'scripts/fugle-futopt-websocket-collector.js'
+ # Verify the paired release, Git blob and checkout bytes before any START.
+ $bindingInput=Join-Path $LogDir 'collector-start-binding-config.json'
+ Write-CutoverReceipt $bindingInput $Config
+ $bindingRaw=& node (Join-Path $PSScriptRoot 'collector-release-binding.cjs') $bindingInput
+ if($LASTEXITCODE -ne 0){throw 'COLLECTOR_START_RELEASE_UNVERIFIED'}
+ $releaseBinding=$bindingRaw|ConvertFrom-Json
  $start=[Diagnostics.ProcessStartInfo]::new();$start.FileName=(Get-Command node).Source;$start.WorkingDirectory=Split-Path $entry
  $start.UseShellExecute=$false;$start.CreateNoWindow=$true
  $start.ArgumentList.Add('--use-system-ca');$start.ArgumentList.Add($entry)
@@ -50,7 +56,7 @@ function Start-BoundFuture($Config,$LogDir) {
  if($start.Environment.ContainsKey('NODE_OPTIONS') -and $start.Environment['NODE_OPTIONS']){throw 'NODE_OPTIONS_REQUIRE_REVIEW'}
  $p=[Diagnostics.Process]::Start($start)
  $null=$p.Handle
- $identity=@{pid=$p.Id;creation_ticks=$p.StartTime.ToUniversalTime().Ticks;exe=$start.FileName;entry=$entry;started_at=[DateTimeOffset]::UtcNow.ToString('o')}
+ $identity=@{pid=$p.Id;creation_ticks=$p.StartTime.ToUniversalTime().Ticks;exe=$start.FileName;entry=$entry;started_at=[DateTimeOffset]::UtcNow.ToString('o');release_sha=$releaseBinding.release_sha;runtime_sha256=$releaseBinding.runtime_sha256}
  Write-CutoverReceipt (Join-Path $LogDir 'future-start.json') $identity
  return $identity
 }
@@ -72,6 +78,7 @@ function Invoke-BoundGracefulStop($Config,$Identity,$OwnerGate,$ReceiptPath) {
  Assert-OnlyBoundFuture $Config $Identity
  # Decimal ticks remain strings; JSON numbers cannot represent Windows ticks exactly.
  $requestIdentity=@{pid=[int]$Identity.pid;creation_ticks=[string]$Identity.creation_ticks;exe=$Identity.exe}
+ if($Identity.ContainsKey('release_sha')){$requestIdentity.release_sha=$Identity.release_sha}
  $identityPath=$ReceiptPath+'.identity.json';Write-CutoverReceipt $identityPath $requestIdentity
  $raw=& node (Join-Path $PSScriptRoot 'GracefulOperation.cjs') $OwnerGate $identityPath
  if($LASTEXITCODE -ne 0){

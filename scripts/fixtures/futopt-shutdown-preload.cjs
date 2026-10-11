@@ -3,6 +3,7 @@
 const Module=require('node:module'),original=Module._load;
 const yesterday=new Date(Date.now()-86400000).toISOString().slice(0,10);
 Module._load=function(name,parent,isMain){
+ if(name.endsWith('taifex-regular-calendar.cjs'))return {createResolver:()=>async({date,exchange,session})=>({verified:true,date,exchange,session,state:'OPEN',verified_at:new Date().toISOString(),valid_until:new Date(Date.now()+60000).toISOString(),evidence_sha256:'a'.repeat(64),evidence_ref:'isolated-calendar'})};
  if(name.endsWith('futopt-catalogue-retry.cjs'))return {createCatalogueRetry:()=>async()=>({status:'ready',catalogue:{trade_date:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei'}).format(new Date())}})};
  if(name.endsWith('stock-future-standard-runtime.cjs'))return {refresh:async()=>({}),resolve:()=>({resolutions:[]})};
  if(name.endsWith('futopt-collector-catalogue'))return {build:()=>[{future_symbol:'TXFJ6',underlying_symbol:'TXF',product:'TXF',end_date:'2099-10-30',underlying_name:'fixture'}]};

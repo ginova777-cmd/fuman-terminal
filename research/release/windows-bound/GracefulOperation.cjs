@@ -2,10 +2,15 @@
 const fs=require('fs'),path=require('path'),cp=require('child_process');
 const adapter=require('./junction-graceful-stop-adapter.cjs');
 const {guardOwner}=require('./OwnerAuthorization.cjs');
+const releaseBinding=require('./collector-release-binding.cjs');
 async function execute(c,expected,authorize){
  let stopMayHaveBeenRequested=false;
  try {
- const config={scope:'FORMAL_OWNER',runtime:c.runtime,approvedRoot:c.prod,approvedHash:c.collector_entry_sha256,authorize};
+ authorize();
+ const release=releaseBinding.select(c);
+ if(expected.release_sha&&expected.release_sha!==release.release_sha)throw Error('BOUND_RELEASE_MISMATCH');
+ const boundAuthorize=()=>{authorize();releaseBinding.revalidate(c,release);};
+ const config={scope:'FORMAL_OWNER',runtime:c.runtime,approvedRoot:c.prod,approvedHash:release.runtime_sha256,authorize:boundAuthorize};
  const frozen=adapter.prepare(config);
  if(frozen.pid!==expected.pid||frozen.executable.toLowerCase()!==expected.exe.toLowerCase())throw Error('BOUND_PID_MISMATCH');
  const ticks=cp.execFileSync('pwsh',['-NoProfile','-Command',`(Get-Process -Id ${frozen.pid}).StartTime.ToUniversalTime().Ticks`],{encoding:'utf8',windowsHide:true,timeout:10000}).trim();
@@ -16,7 +21,8 @@ async function execute(c,expected,authorize){
  // From this boundary onward a request may exist. Never infer no STOP from
  // a live PID, a timeout, missing stdout, or a missing receipt.
  stopMayHaveBeenRequested=true;
- return await adapter.stop(config,fresh);
+ const receipt=await adapter.stop(config,fresh);
+ return {...receipt,collector_release:release};
  } catch(e) {
   e.stop_not_requested=!stopMayHaveBeenRequested;
   throw e;

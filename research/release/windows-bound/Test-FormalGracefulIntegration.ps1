@@ -11,7 +11,7 @@ $assignment=$ast.Find({param($n) $n -is [Management.Automation.Language.Assignme
 $table=[scriptblock]::Create($assignment.Extent.Text)
 $testRoot=Join-Path ([IO.Path]::GetTempPath()) ('mp-safe-composition-'+[guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory $testRoot,$OutputDirectory -Force|Out-Null
-$target=(& git -C $repo rev-parse HEAD).Trim();$base='3a21f4c8cc7d704662b0500fdc06a833021a8125'
+$target=(& git -C $repo rev-parse HEAD).Trim();$base='db55758a6de8c1896390fc8573b6eab0eacce9bf'
 $results=@()
 # Windows scheduler is a bounded isolated state model. No real task API is called.
 # Exact Owner ports, Windows mutex/file fencing, real Collector/ACK and Git are used.
@@ -21,6 +21,8 @@ function Restore-BoundTask($Expected){$tasks[$Expected.name].enabled=$Expected.e
 function AssertOutsideStockSession {}
 function CheckRequester {return $false}
 function WriteGate {Write-CutoverReceipt $ctx.owner_gate $identity}
+function Save-RecoveryCheckpoint($Directory,$Context,$Stage,$StopState){Write-CutoverReceipt (Join-Path $out ('checkpoint-'+$Stage+'.json')) @{stage=$Stage;stop_state=$StopState}}
+function Get-RecoveryHash($File){return (Get-FileHash -LiteralPath $File -Algorithm SHA256).Hash.ToLower()}
 function Test-EvidenceOff($Config){if($env:FUMAN_CHANGE_EVIDENCE_PHASE1 -eq '1'){throw 'TEST_ENABLE_PRESENT'}}
 function Invoke-PairedVerifier($Config,$Sha){$a=Get-Content $config.authority -Raw|ConvertFrom-Json;if((& git -C $config.prod rev-parse HEAD).Trim() -ne $Sha -or $a.approvedProductionSha -ne $Sha){throw 'PAIRED_VERIFY_FAILED'};return @{ok=$true}}
 function Get-RuntimeInventory($Config){if($script:future){$p=Get-Process -Id $script:future.pid -ErrorAction SilentlyContinue;if($p){return $script:future}}}
@@ -42,7 +44,7 @@ function Invoke-BoundGracefulStop($Config,$Identity,$OwnerGate,$ReceiptPath){
  Assert-OnlyBoundFuture $Config $Identity
  if(!$owner.db -or !$owner.stock -or !$owner.writer){throw 'TEST_OWNER_FENCE_MISSING'}
  $request=@{config=$Config;identity=$Identity;owner_gate=$OwnerGate;isolated_root=$testRoot;operation='stop';out=$ReceiptPath}
- if($scenario -eq 'stop-rejected' -and !$script:cleanup){$request.config=$Config.Clone();$request.config.collector_entry_sha256='0'*64}
+ if($scenario -eq 'stop-rejected' -and !$script:cleanup){$request.config=$Config.Clone();$request.config.collector_bindings_sha256='0'*64}
  $requestFile=$ReceiptPath+'.input.json';Write-CutoverReceipt $requestFile $request
  $raw=& node (Join-Path $PSScriptRoot 'test-formal-graceful-helper.cjs') $requestFile
  if($LASTEXITCODE -ne 0){throw 'EXPECTED_GRACEFUL_BLOCK_NO_FORCE'}
@@ -74,15 +76,19 @@ foreach($scenario in @('normal','verify-failure-rollback','stop-rejected')){
  & git -C (Join-Path $out 'physical') checkout -q --detach $base
  $null=New-Item -ItemType Junction -Path (Join-Path $out 'release-alias') -Target (Join-Path $out 'physical')
  $config=@{prod=(Join-Path $out 'release-alias');runtime=(Join-Path $out 'runtime');source=(Join-Path $out 'source');target=$target;expected=$base;authority=(Join-Path $out 'authority.json');lock=(Join-Path $out 'deploy.lock');minFreeBytes=1;conflictingLocks=@();release_approved=$true;remote_main_verified=$true;binding_sha256='fixture';package_sha256='fixture';collector_entry_sha256=(Get-FileHash (Join-Path $out 'physical/scripts/fugle-futopt-websocket-collector.js')).Hash.ToLower()}
+ $dual=& node (Join-Path $PSScriptRoot 'test-formal-graceful-helper.cjs') --bindings $config.prod $config.source $base $target
+ if($LASTEXITCODE){throw 'BINDINGS_FAILED'}
+ $dual=$dual|ConvertFrom-Json -AsHashtable
+ $config.collector_release_bindings=$dual.bindings;$config.collector_bindings_sha256=$dual.sha256
  Write-CutoverReceipt $config.authority @{productionRoot=$config.prod;approvedProductionSha=$base}
  & node (Join-Path $PSScriptRoot 'test-formal-graceful-helper.cjs') --manifest $config.source $base $target $out
  if($LASTEXITCODE){throw 'MANIFEST_FAILED'}
  $config.manifestPath=Join-Path $out 'manifest.json';$config.diffPath=Join-Path $out 'exact.diff';$config.manifest_sha256=(Get-FileHash $config.manifestPath).Hash.ToLower();$config.diff_sha256=(Get-FileHash $config.diffPath).Hash.ToLower()
  $id=[guid]::NewGuid().ToString('N');$script:tasks=@{};$binding=@{files=@();tasks=@();locks=@{database_round=(Join-Path $out 'db-round.lock');stock=('Local\SafeE2E-'+$id+'-Stock');writer=('Local\SafeE2E-'+$id+'-Writer')}}
- foreach($name in @('stock','writer','recovery','closing')){$t=@{name=$name;path='\';enabled=$(if($name -eq 'recovery'){'false'}else{'true'});state='Ready';definition_sha256=$name};$binding.tasks+=@{binding=$t};$tasks[$name]=$t.Clone()}
+ foreach($name in @('Fuman Fugle Daytrade WebSocket Collector 0600-1330','Fuman Daytrade Source Writer 0600-1330','recovery','closing')){$t=@{name=$name;path='\';enabled=$(if($name -eq 'recovery'){'false'}else{'true'});state='Ready';definition_sha256=([Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([Text.Encoding]::UTF8.GetBytes($name))).ToLower())};$binding.tasks+=@{binding=$t};$tasks[$name]=$t.Clone()}
  $approval=@{action='CONTROLLED_CUTOVER_APPLY';target=$target;binding_sha256='fixture';package_sha256='fixture';not_before=[DateTimeOffset]::UtcNow.AddMinutes(-1).ToString('o');expires_at=[DateTimeOffset]::UtcNow.AddMinutes(15).ToString('o')}
  $owner=New-ProductionOwner $binding (Join-Path $out 'owner.json');$identity=@{maintenance_verified=$false;owner_pid=$PID}
- $ctx=@{legacy=$null;future=$null;proof=$null;archive=$null;release=(Join-Path $out 'release');owner_gate=(Join-Path $out 'owner-gate.json');keep=$false;current_sha=$base}
+ $recoveryDirectory=Join-Path $out 'recovery';$ctx=@{stop_state='NOT_REQUESTED';stop_identity=$null;legacy=$null;future=$null;proof=$null;archive=$null;release=(Join-Path $out 'release');owner_gate=(Join-Path $out 'owner-gate.json');keep=$false;current_sha=$base}
  $script:future=$null;$script:cleanup=$false;$script:injected=$false
  $null=Start-BoundFuture $config $out
  . $table
@@ -102,7 +108,7 @@ foreach($scenario in @('normal','verify-failure-rollback','stop-rejected')){
  $results+=@{scenario=$scenario;status='PASS';root=$out;result=$r;task_model='ISOLATED_NO_SYSTEM_TASKS';ack='ORIGINAL_COLLECTOR';git='REAL_LOCAL_CLONES';locks='REAL_LOCAL_WINDOWS_MUTEX_AND_FILE';final_sha=(& git -C $config.prod rev-parse HEAD).Trim()}
  }finally{
  # Only test-created processes and local fences are released. Never force terminate.
- $script:cleanup=$true;$owner.manual_recovery_required=$false
+ $script:cleanup=$true;$owner.manual_recovery_required=$false;$identity.maintenance_verified=$true;WriteGate
  if(!$owner.db){$owner=New-ProductionOwner $binding (Join-Path $out 'cleanup-owner.json');Enter-ProductionFence $owner $config $approval { <# Isolated runtime fixture guard; never formal. #> }}
  if($future){Invoke-BoundGracefulStop $config $future $ctx.owner_gate (Join-Path $out 'cleanup-stop.json')|Out-Null}
  Restore-ProductionFence $owner
