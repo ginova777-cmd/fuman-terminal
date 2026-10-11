@@ -14,6 +14,7 @@ check('different run date',x=>x.scan.runId='strategy4-20261008-old',false);
 check('old scan cannot be borrowed',x=>x.scan.startedAt='2026-10-11T08:00:00Z',false);
 check('different parent process',x=>x.observation.parentPid=2345,false);
 check('different runner action',x=>x.observation.commandLine='pwsh -File old.ps1',false);
+check('script filename suffix is not a match',x=>x.observation.commandLine=`pwsh -File "${script}.bak"`,false);
 check('Recovery argument overrides nominal mode',x=>x.observation.commandLine+=' -Recovery',false);
 check('different configured action',x=>x.observation.actions[0].Arguments='-File old.ps1',false);
 check('manual task start',x=>x.observation.events[0].id=110,false);
