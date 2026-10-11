@@ -16,6 +16,7 @@ async function collector(scenario,date='2026-10-12'){
  const root=fs.mkdtempSync(path.join(os.tmpdir(),'futopt-calendar-e2e-'));
  fs.mkdirSync(path.join(root,'secrets'),{recursive:true});fs.writeFileSync(path.join(root,'secrets/fugle-api-key.txt'),'isolated-key');
  let clock=Date.parse(date+'T01:00:00Z'),quiescing=false,ack=true,noticeBytes=notices;
+ let holdIndex=false,releaseIndex=null,failIndex=false;
  const intervals=[],timeouts=[],sockets=[],calls=[],errors=[],writes=[];
  const modules=new Map(),sourceRoot=path.resolve(__dirname,'..');
  class Clock extends Date {constructor(...args){super(...(args.length?args:[clock]));}static now(){return clock;}}
@@ -30,7 +31,7 @@ async function collector(scenario,date='2026-10-12'){
  }
  const fetchMock=async url=>{
   calls.push(url);
-  if(url===INDEX)return response(index,url);
+  if(url===INDEX){if(holdIndex)await new Promise(r=>{releaseIndex=r;});if(failIndex)throw Error('ISOLATED_SOURCE_FAILURE');return response(index,url);}
   if(url===policy.source_url)return response(pdf,url);
   if(url===ANNOUNCEMENTS)return response(noticeBytes,url);
   if(url.includes('/intraday/tickers?'))return response(JSON.stringify({date:scenario==='stale'?'2026-10-08':scenario==='future'?'2026-10-13':date,type:'FUTURE',exchange:'TAIFEX',session:'REGULAR',data:[
@@ -93,8 +94,46 @@ async function collector(scenario,date='2026-10-12'){
    }
    if(scenario==='emergency'){
     const notice='<tr><td>2026/10/12</td><td><a href="newsDetail?newsType=1&idx=99999">因颱風，115年10月12日集中交易市場休市1日(包含一般交易時段及盤後交易時段)</a></td></tr>';
-    noticeBytes=Buffer.from(notices.toString().replace('</thead>','</thead>'+notice));clock+=61000;await tick();
+    noticeBytes=Buffer.from(notices.toString().replace('</thead>','</thead>'+notice));clock+=10000;await tick();
     assert.equal(status().formalReady,false);assert.equal(status().formalReadyReason,'taifex_regular_market_closed');assert.equal(ws.readyState,3);
+   }
+   if(['continuity','refresh_failure','refresh_expiry','refresh_midnight'].includes(scenario)){
+    const subscribeCount=()=>ws.sent.filter(m=>m.event==='subscribe').length;
+    const subscriptions=subscribeCount();const start=clock;
+    const send=async serial=>{
+     const file=load(path.join(sourceRoot,'lib/fugle-futopt-websocket.js')).FUGLE_FUTOPT_WS_QUOTES_FILE;
+     const before=fs.readFileSync(file,'utf8');
+     ws.emit('message',{...quote,data:{...quote.data,serial,price:23000+serial,time:clock*1000}});await pump();
+     const after=fs.readFileSync(file,'utf8');return before===after?0:1;
+    };
+    const sendCandle=async()=>{
+     const file=load(path.join(sourceRoot,'lib/fugle-futopt-websocket.js')).FUGLE_FUTOPT_WS_CANDLES_FILE;
+     const before=fs.existsSync(file)?fs.readFileSync(file,'utf8'):null;
+     ws.emit('message',{event:'data',channel:'candles',data:{symbol:'TXFJ6',date:new Date(clock).toISOString(),open:23000,high:23010,low:22990,close:23005,volume:12}});await pump();
+     const after=fs.existsSync(file)?fs.readFileSync(file,'utf8'):null;return before===after?0:1;
+    };
+    for(let round=0;round<(scenario==='continuity'?8:1);round++){
+     const old=status().catalogueCalendar;holdIndex=true;clock+=10000;await tick();assert(releaseIndex);
+     assert.equal(status().formalReady,true);assert(await send(10+round)>0,'quote must persist during refresh');
+     assert(await sendCandle()>0,'candle must persist during refresh');
+     assert.equal(subscribeCount(),subscriptions);assert.equal(ws.readyState,1);
+     if(scenario==='refresh_expiry')clock=Date.parse(old.valid_until)+10000;
+     if(scenario==='refresh_midnight')clock=Date.parse('2026-10-13T00:00:00+08:00');
+     if(['refresh_expiry','refresh_midnight'].includes(scenario)){
+      assert.equal(await send(30),0,'expired/day-changed evidence must reject quote immediately');await tick();assert.equal(status().formalReady,false);
+      assert.equal(await sendCandle(),0,'expired/day-changed evidence must reject candle');
+     }else clock+=5000;
+     failIndex=scenario==='refresh_failure';holdIndex=false;releaseIndex();releaseIndex=null;await pump();await tick();
+     if(scenario==='continuity'){
+      assert.equal(status().formalReady,true);assert.notEqual(status().catalogueCalendar.evidence_sha256,old.evidence_sha256);
+      assert(await send(20+round)>0);assert.equal(subscribeCount(),subscriptions);assert.equal(ws.readyState,1);
+     }else if(scenario==='refresh_failure'){
+      assert.equal(status().formalReady,true);assert.equal(status().catalogueCalendar.valid_until,old.valid_until);
+      assert(await send(40)>0);const callsAtFailure=calls.length;clock=start+59999;await tick();assert.equal(calls.length,callsAtFailure);
+      assert.equal(status().formalReady,true);clock=start+60000;assert.equal(await send(41),0);await tick();
+      assert.equal(status().formalReady,false);assert.equal(ws.readyState,3);assert.equal(calls.length,callsAtFailure);
+     }else {assert.equal(status().formalReady,false);assert.equal(ws.readyState,3);}
+    }
    }
   }
   assert.equal(errors.length,0,errors.join('\n'));
@@ -116,6 +155,18 @@ async function collector(scenario,date='2026-10-12'){
   await assert.rejects(resolver(input()),/OFFLINE_FAILURE/);assert.equal(calls,4);
   await assert.rejects(resolver(input()),/BACKOFF/);assert.equal(calls,4);assert.equal(saved.length,1);
  });
+ await test('resolver_early_failure_original_expiry_and_exact_60s_backoff',async()=>{
+  const start=Date.parse('2026-10-12T01:00:00Z');let clock=start,calls=0,fail=false;
+  const resolver=createResolver({now:()=>clock,fetchImpl:async url=>{calls++;if(fail)throw Error('TEMPORARY_FAILURE');return response(url===INDEX?index:url===ANNOUNCEMENTS?notices:pdf,url);}});
+  const input=()=>({date:'2026-10-12',asOf:new Date(clock).toISOString(),exchange:'TAIFEX',session:'REGULAR'});
+  const original=await resolver(input());clock+=10000;fail=true;
+  assert.equal(await resolver(input()),original);assert.equal(calls,4);
+  clock=start+59999;assert.equal(await resolver(input()),original);assert.equal(calls,4);
+  clock=start+60000;await assert.rejects(resolver(input()),/BACKOFF/);assert.equal(calls,4);
+  fail=false;clock=start+69999;await assert.rejects(resolver(input()),/BACKOFF/);assert.equal(calls,4);
+  clock++;const recovered=await resolver(input());assert.equal(calls,7);assert.notEqual(recovered.evidence_sha256,original.evidence_sha256);
+  assert.equal(Date.parse(original.valid_until),start+60000);assert.equal(Date.parse(recovered.valid_until),clock+60000);
+ });
  for(const fault of ['pdf_hash','index_version','index_revision','empty_notice','truncated_notice','new_ambiguous_notice','wrong_source','oversize','save_failure','year_boundary'])await test('resolver_'+fault,async()=>{
   const date=fault==='year_boundary'?'2027-01-01':'2026-10-11';let calls=0;
   const resolver=createResolver({now:()=>Date.parse(date+'T02:00:00Z'),saveEvidence:()=>{if(fault==='save_failure')throw Error('SAVE_FAILED');},fetchImpl:async url=>{
@@ -133,7 +184,7 @@ async function collector(scenario,date='2026-10-12'){
   assert(calls<=3);
  });
  await test('official_saved_announcement_schema',()=>assert.equal(parseAnnouncements(notices.toString()).length,245));
- for(const scenario of ['closed','open','stale','future','mapping','ack_failure','rollover','emergency'])await test('collector_'+scenario,async()=>{
+ for(const scenario of ['closed','open','stale','future','mapping','ack_failure','rollover','emergency','continuity','refresh_failure','refresh_expiry','refresh_midnight'])await test('collector_'+scenario,async()=>{
   const r=await collector(scenario,scenario==='closed'?'2026-10-11':'2026-10-12');console.log(JSON.stringify(r));
  });
  console.log(JSON.stringify({status:'COLLECTOR_CALENDAR_ISOLATED_E2E_PASS',cases,formal_execution:false,
