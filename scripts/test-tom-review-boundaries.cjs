@@ -23,6 +23,7 @@ check(()=>assert.equal(observed.complete,true));
 check(()=>assert.equal(observed.rows[1].receiptRead,false));
 check(()=>assert.equal(observed.rows[1].verification,'REMOTE_UNVERIFIED'));
 check(()=>assert.equal(observed.rows[1].complete,false));
+check(()=>assert.equal(observed.rows[1].first_blocker,null));
 fs.writeFileSync(receipt,JSON.stringify({...good,first_blocker:'local_failure'}));
 check(()=>assert.equal(observe().complete,false));
 fs.writeFileSync(receipt,JSON.stringify({...good,recoveryReplay:true}));
