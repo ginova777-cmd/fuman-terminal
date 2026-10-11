@@ -2,6 +2,8 @@ param(
   [string]$FumanRoot = (Split-Path -Parent $PSScriptRoot),
   [string]$RuntimeDir = "C:\fuman-runtime"
 )
+& node (Join-Path (Split-Path -Parent $PSScriptRoot) 'scripts/assert-strategy2-execution-allowed.cjs')
+if ($LASTEXITCODE -ne 0) { throw 'STRATEGY2_PAUSED_BY_USER' }
 $ErrorActionPreference = "Continue"
 $node = (Get-Command node -ErrorAction Stop).Source
 $stateDir = Join-Path $RuntimeDir "state"

@@ -27,10 +27,8 @@
       "Fuman Opening Limit Order Morning Readonly 0840",
       "Fuman Morning Report 0830 Complete",
       "Fuman Scorecard88 Collect Evening 2140",
-      "Fuman Scorecard88 Collect Strategy2 1240",
       "Fuman Scorecard88 Collect Strategy3 1315",
       "Fuman Scorecard88 Collect Strategy4 1700",
-      "Fuman Strategy2 Unified 0845-1230",
       "Fuman Strategy3 V2 Complete Scan 1300",
       "Fuman Strategy3 V2 Daily Closure Verify 1310",
       "Fuman Strategy3 V2 First Attempt 1255",
@@ -53,7 +51,9 @@
       "Fuman Opening Limit Order 0831 Prewarm Readonly",
       "Fuman Strategy3 Complete Scan 1300",
       "Fuman Strategy3 Readiness Guard 1230",
-      "Fuman Strategy3 Readiness Guard 1250"
+      "Fuman Strategy3 Readiness Guard 1250",
+      "Fuman Strategy2 Unified 0845-1230",
+      "Fuman Scorecard88 Collect Strategy2 1240"
     ],
     "retiredTasks": [
       "Fuman 即時雷達",

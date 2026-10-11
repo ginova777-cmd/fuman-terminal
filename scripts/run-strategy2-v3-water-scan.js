@@ -1,3 +1,4 @@
+require('../lib/strategy2-pause-policy.cjs').assertStrategy2ExecutionAllowed();
 "use strict";
 
 // Strategy2 reads its formal shared-water contract from Supabase. The source
