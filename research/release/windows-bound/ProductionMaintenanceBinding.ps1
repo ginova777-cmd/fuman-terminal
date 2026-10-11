@@ -120,9 +120,15 @@ function Enter-ProductionFence($Owner,$Config,$Approval,[scriptblock]$AssertRunt
   & $AssertRuntimeExclusive
   Write-OwnerState $Owner 'FENCED'
  } catch {
-  $original=$_.Exception.Message
-  try {Restore-ProductionFence $Owner} catch { $Owner.manual_recovery_required=$true;Write-OwnerState $Owner 'MANUAL_RECOVERY_REQUIRED';throw ('FENCE_FAILED_AND_RESTORE_FAILED:'+ $original+';'+$_.Exception.Message) }
-  throw $original
+  $originalException=$_.Exception
+  try {Restore-ProductionFence $Owner} catch {
+   $restoreException=$_.Exception
+   $Owner.manual_recovery_required=$true;Write-OwnerState $Owner 'MANUAL_RECOVERY_REQUIRED'
+   $failure=[InvalidOperationException]::new(('FENCE_FAILED_AND_RESTORE_FAILED:'+ $originalException.Message+';'+$restoreException.Message),$originalException)
+   if($originalException.Data.Contains('RuntimeOccupancyEvidence')){$failure.Data['RuntimeOccupancyEvidence']=$originalException.Data['RuntimeOccupancyEvidence']}
+   throw $failure
+  }
+  throw $originalException
  }
 }
 function Release-StockBinding($Owner) {
