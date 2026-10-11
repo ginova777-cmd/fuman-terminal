@@ -40,23 +40,7 @@ if (!publisherSource.includes("const sourceRecords = Array.isArray(source.record
   || publisherSource.includes("if (currentDate !== EXPECTED_DATE)")) issues.push("strategy5_scorecard_date_advance_contract_missing");
 if (!watchdogSource.includes('"--summary-fields=runId,complete,count,updatedAt"')
   || !protectedReaderSource.includes('arg("summary-fields")')) issues.push("strategy5_watchdog_compact_json_contract_missing");
-const retiredVerifiers = [
-  "run-strategy5-battle-verify.ps1",
-  "scripts/verify-strategy5-battle-state.js",
-  "scripts/verify-strategy5-alert-path.js",
-  "scripts/verify-strategy5-prewater-static-fields.js",
-  "scripts/verify-strategy5-prewater-fixtures.js",
-  "scripts/verify-strategy5-prewater-formal-payloads.js",
-  "scripts/verify-strategy5-business-fields.js",
-  "scripts/verify-strategy5-post-restore-readonly.js",
-  "scripts/strategy5-live-bad-source-drill.js",
-];
-for (const retired of retiredVerifiers) {
-  if (fs.existsSync(path.join(root, retired))) issues.push(`retired_verifier_returned:${retired}`);
-}
-for (const retiredScript of ["verify:strategy5-alert-path", "verify:strategy5-prewater", "verify:strategy5-business-fields", "verify:strategy5-formal-payloads", "verify:strategy5-live-bad-source-drill", "verify:strategy5-post-restore-readonly"]) {
-  if (packageSource.includes(`"${retiredScript}"`)) issues.push(`retired_verifier_package_reference_returned:${retiredScript}`);
-}
+issues.push(...require("./verify-strategy5-retirement").retirementIssues(root));
 if (source?.complete !== true || source?.status !== "complete" || Number(source?.exitCode) !== 0) issues.push("chip_source_sync_not_complete");
 if (source?.fallback === true) issues.push("chip_source_fallback_disallowed");
 if (Array.isArray(source?.warnings) && source.warnings.length > 0) issues.push("chip_source_warnings_not_empty");
@@ -79,7 +63,9 @@ const scorecardReport = (Array.isArray(scorecard?.sourceReports) ? scorecard.sou
 if (scorecard?.contract !== "scorecard88-terminal-canonical-collector-v1") issues.push("strategy5_scorecard88_contract_not_canonical");
 if (String(scorecardReport?.runId || "") !== String(scan?.runId || "")) issues.push("strategy5_scorecard88_run_id_mismatch");
 if (scorecardReport?.ok !== true || Number(scorecardReport?.count || scorecardReport?.resultCount || 0) <= 0) issues.push("strategy5_scorecard88_report_not_complete");
-const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "strategy5", tradeDate: date,
+const recoveryReplay = process.env.FUMAN_STRATEGY5_EXECUTION_MODE === "Recovery" || Boolean(process.env.FUMAN_REPLAY_TRADE_DATE);
+const natural = process.argv.includes('--write-receipt') ? require('../lib/strategy-natural-evidence').collect({strategy:'strategy5',scan,formalComplete:issues.length===0,recovery:recoveryReplay,root,runtime}) : {recoveryReplay,naturalSlotComplete:false,naturalEvidenceStatus:recoveryReplay?'RECOVERY_NOT_NATURAL':'TRIGGER_IDENTITY_UNVERIFIED'};
+const payload = { ...natural, executionMode:process.env.FUMAN_STRATEGY5_EXECUTION_MODE || "UNKNOWN", contract: "strategy-runner-verifier-receipt-v1", strategy: "strategy5", tradeDate: date,
   checkedAt: new Date().toISOString(), rankingBonusVerified: live?.rankingBonusVerified === true, rankingBonusContract: live?.rankingBonusContract || null, selectionCoverage: live?.selectionCoverage || null, liveReadbackReceipt: liveFile, renderedReceipt: renderedFile, marketMode: process.env.FUMAN_REPLAY_TRADE_DATE ? 'strategy_revision_replay' : 'scheduled', status: issues.length ? "failed" : "complete", complete: issues.length === 0,
   exitCode: issues.length ? 1 : 0, runId: scan?.runId || "", count: Number(scan?.matches || 0),
   scanned: Number(scan?.scanned || 0), total: Number(scan?.total || 0), triSurfaceStatus: scan?.triSurfaceStatus || "",
