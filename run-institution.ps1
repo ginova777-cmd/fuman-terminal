@@ -1,9 +1,12 @@
+param([switch]$RecoveryReplay)
+if ($RecoveryReplay) { throw 'Recovery execution requires its separately approved runner; natural Institution receipt must be preserved' }
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 . "${PSScriptRoot}\legacy-entrypoint-guard.ps1" -Label "run-institution.ps1"
 
 $runtime = "C:\fuman-runtime"
 $env:FUMAN_RUNTIME_DIR = $runtime
+$env:FUMAN_STRATEGY_RUNNER_PID = [string]$PID
 $env:FUMAN_DATA_DIR = Join-Path $runtime "data"
 $env:FUMAN_CACHE_DIR = Join-Path $runtime "cache"
 $env:FUMAN_STATE_DIR = Join-Path $runtime "state"
@@ -77,6 +80,9 @@ function Write-InstitutionReceipt($Status, $ExitCode, $Complete, $Matches, $RunI
   $evidenceStatus = if ($publishAllowed) { "complete" } else { "insufficient" }
   $unattendedStatus = if ($publishAllowed) { "YES" } else { "NO" }
   $receipt = [ordered]@{
+    recoveryReplay = [bool]$RecoveryReplay
+    naturalSlotComplete = $false
+    naturalEvidenceStatus = if ($RecoveryReplay) { "RECOVERY_NOT_NATURAL" } else { "TRIGGER_IDENTITY_UNVERIFIED" }
     strategy = "institution"
     label = "institution raw refresh"
     tier = "critical"
@@ -440,6 +446,8 @@ try {
 }
 Write-InstitutionReceipt "complete" 0 $true ([int]$verifiedPayload.count) ([string]$verifiedPayload.runId)
 Update-PostScanReceiptEvidence -RuntimeRoot $env:FUMAN_RUNTIME_DIR -Route "institution" -RunId ([string]$verifiedPayload.runId) -ExpectedDate (Get-PostScanExpectedDateKey) -Row $triSurfaceRow
+& $nodeExe (Join-Path $PSScriptRoot 'scripts/verify-institution-natural-origin.cjs') "--expect-run-id=$($verifiedPayload.runId)"
+if ($LASTEXITCODE -ne 0) { throw 'INSTITUTION_ORIGIN_RECEIPT_FAILED' }
 Write-FumanFlowHealth -Scope institution -Status ok -Message "Institution scan completed through API-only terminal pipeline" -Detail @{ log = $log; runId = [string]$verifiedPayload.runId }
 "Institution API-only: slim generation, local mirror, and cache sync are disabled; terminal reads Supabase/API plus desktop snapshot." >> $log
 "=== Institution scan end $(Get-Date) ===" >> $log

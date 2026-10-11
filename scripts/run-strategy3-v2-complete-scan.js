@@ -194,6 +194,7 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
   });
   const poolSymbols = [...water.poolBySymbol.keys()];
   const candidates = [];
+  let visitedCount = 0;
   let ready20Count = 0;
   let entryWindowCount = 0;
   let belowChangeRangeCount = 0;
@@ -210,6 +211,7 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
         symbol_count: poolSymbols.length,
       },
       same_day_candle_symbols: water.candleRowsBySymbol.size,
+      visited_symbols: 0,
       ready_20_candle_symbols: 0,
       entry_window_symbols: 0,
       symbol_data_gap_rows: water.symbolDataGaps.size,
@@ -218,6 +220,7 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
   }
 
   for (const code of poolSymbols) {
+    visitedCount += 1; // Count every visited symbol, including explicit data-gap exclusions.
     if (water.symbolDataGaps.has(code)) continue;
     const pool = water.poolBySymbol.get(code) || {};
     const quote = water.quoteBySymbol.get(code) || {};
@@ -432,6 +435,7 @@ async function buildScannerCoreResults(readWater = readCanonicalDaytradeWater, r
       valid_symbols: water.receipt?.intraday_1m_valid_rows || 0,
     },
     same_day_candle_symbols: water.candleRowsBySymbol.size,
+    visited_symbols: visitedCount,
     ready_20_candle_symbols: ready20Count,
     entry_window_symbols: entryWindowCount,
     change_percent_gate: {
@@ -563,6 +567,7 @@ async function main() {
           universe_scope: "daytrade_mother_pool_only",
           mother_pool: scanner.mother_pool,
           same_day_candle_symbols: scanner.same_day_candle_symbols,
+          visited_symbols: scanner.visited_symbols,
           ready_20_candle_symbols: scanner.ready_20_candle_symbols,
           entry_window_symbols: scanner.entry_window_symbols,
           change_percent_gate: scanner.change_percent_gate,
@@ -598,6 +603,7 @@ async function main() {
           universe_scope: "daytrade_mother_pool_only",
           mother_pool: scanner.mother_pool,
           same_day_candle_symbols: scanner.same_day_candle_symbols,
+          visited_symbols: scanner.visited_symbols,
           ready_20_candle_symbols: scanner.ready_20_candle_symbols,
           entry_window_symbols: scanner.entry_window_symbols,
           change_percent_gate: scanner.change_percent_gate,

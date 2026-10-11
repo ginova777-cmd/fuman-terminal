@@ -59,10 +59,11 @@ if (deliveryVerifier?.ok !== true || deliveryVerifier?.runId !== scan?.run_id ||
   delivery.firstBlocker ||= "delivery_verifier_missing_or_mismatched";
 }
 const failureReason = process.argv.find(x => x.startsWith("--failure-reason="))?.slice(17) || "";
-const complete = !recordFailure && delivery.ok && (recoveryReplay ? recoveryComplete : (baseComplete && triComplete));
-const awaitingScorecard = !recordFailure && requestedAwaitingScorecard && baseComplete && !triComplete;
+const scanCounts = require('../lib/strategy3-scan-counts.cjs').fromScan(scan);
+const complete = scanCounts.valid && !recordFailure && delivery.ok && (recoveryReplay ? recoveryComplete : (baseComplete && triComplete));
+const awaitingScorecard = scanCounts.valid && !recordFailure && requestedAwaitingScorecard && baseComplete && !triComplete;
 const status = complete ? "complete" : awaitingScorecard ? "awaiting_scorecard_1315" : "failed";
-const blockingReason = complete ? "" : failureReason || delivery.firstBlocker || (recoveryReplay ? "strategy3_recovery_replay_closure_not_complete" : awaitingScorecard ? "scorecard_collection_pending_1315" : !baseComplete ? "strategy3_base_closure_not_complete" : "strategy3_tri_surface_scorecard_not_complete");
+const blockingReason = complete ? "" : failureReason || (!scanCounts.valid ? scanCounts.reason : "") || delivery.firstBlocker || (recoveryReplay ? "strategy3_recovery_replay_closure_not_complete" : awaitingScorecard ? "scorecard_collection_pending_1315" : !baseComplete ? "strategy3_base_closure_not_complete" : "strategy3_tri_surface_scorecard_not_complete");
 const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "strategy3", tradeDate: date,
   startedAt: scan?.started_at || null, finishedAt: scan?.finished_at || scan?.checked_at || null,
   lineStatus: acceptedLineException ? "SKIPPED_QUOTA_EXHAUSTED" : (line?.status || "missing"),
@@ -72,6 +73,7 @@ const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "st
   blockingReason, fallback: false, recoveryReplay, completionKind: recoveryReplay ? "recovery_replay" : "natural_slot", naturalSlotComplete: !recoveryReplay && complete, warnings: [], triSurfaceStatus: triComplete && delivery.ok ? "complete" : "pending", failed_checks: delivery.issues, first_blocker: blockingReason || null,
   desktopRunId: tri?.desktopRunId || null, mobileRunId: tri?.mobileRunId || null, scorecardRunId: tri?.scorecardRunId || null,
   runId: scan?.run_id || null, count: Number(scan?.result_count || 0), matches: Number(scan?.result_count || 0), resultCount: Number(scan?.result_count || 0),
+  scanCounts,
   scannedCount: Number(scan?.scanner_summary?.ready_20_candle_symbols || 0), expectedTotal: Number(scan?.scanner_summary?.formal_ready_target || 0), runner: "run-strategy3-v2-complete-scan.ps1",
   consumerName: "strategy3_v2", sourceContractVersion: scan?.source_contract_version || "4.1.0", canonicalRunId: scan?.canonical_run_id || null,
   motherPoolRows: Number(scan?.mother_pool_rows || 0), motherPoolPages: Number(scan?.mother_pool_pages || 0), uniqueSymbols: Number(scan?.unique_symbols || 0),

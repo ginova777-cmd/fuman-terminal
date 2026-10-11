@@ -1,0 +1,73 @@
+{
+  "contract": "tom-manifest-policy-v1",
+  "approved": true,
+  "strategies": {
+    "strategy3": {
+      "taskName": "Fuman Strategy3 V2 Complete Scan 1300",
+      "expectedArguments": "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File \"C:\\fuman-release-owner\\prod81\\run-strategy3-v2-complete-scan.ps1\" -PushLine",
+      "approvedSlot": "13:00",
+      "calendar": "trading",
+      "expectedExecute": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "expectedWorkingDirectory": "C:\\fuman-release-owner\\prod81"
+    },
+    "strategy4": {
+      "taskName": "Fuman Strategy4 Cache 1600",
+      "expectedArguments": "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File \"C:\\fuman-release-owner\\prod81\\run-strategy4.ps1\"",
+      "approvedSlot": "16:00",
+      "calendar": "trading",
+      "expectedExecute": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "expectedWorkingDirectory": "C:\\fuman-release-owner\\prod81"
+    },
+    "strategy5": {
+      "taskName": "Fuman Strategy5 Cache 2100",
+      "expectedArguments": "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File \"C:\\fuman-release-owner\\prod81\\run-strategy5-complete.ps1\" -Mode Complete",
+      "approvedSlot": "21:00",
+      "calendar": "trading",
+      "expectedExecute": "\"C:\\Program Files\\PowerShell\\7\\pwsh.exe\"",
+      "expectedWorkingDirectory": "C:\\fuman-release-owner\\prod81"
+    },
+    "institution": {
+      "taskName": "Fuman 買賣超 Cache 2100",
+      "expectedArguments": "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File \"C:\\fuman-release-owner\\prod81\\run-institution.ps1\"",
+      "approvedSlot": "21:00",
+      "calendar": "trading",
+      "expectedExecute": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "expectedWorkingDirectory": "C:\\fuman-release-owner\\prod81"
+    }
+  },
+  "cleanup": {
+    "apiOnlyRetiredCleanup": {
+      "kind": "daily",
+      "taskName": "Fuman API-Only Retired Artifact Cleanup 1535",
+      "expectedArguments": "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File \"C:\\fuman-release-owner\\fuman-terminal\\run-api-only-retired-cleanup.ps1\"",
+      "expectedExecute": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "expectedWorkingDirectory": "C:\\fuman-release-owner\\fuman-terminal",
+      "approvedSlot": "17:10",
+      "calendar": "trading"
+    },
+    "supabaseVercelHistoryCleanup": {
+      "kind": "daily",
+      "taskName": "Fuman Supabase Vercel History Cleanup 1545",
+      "expectedArguments": "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File \"C:\\fuman-release-owner\\fuman-terminal\\run-history-retention-cleanup.ps1\" -Apply",
+      "expectedExecute": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "expectedWorkingDirectory": "C:\\fuman-release-owner\\fuman-terminal",
+      "approvedSlot": "17:40",
+      "calendar": "trading"
+    },
+    "vercelCostHealth": {
+      "kind": "daily",
+      "taskName": "Fuman Vercel Cost Health Monitor 2115",
+      "expectedArguments": "-NoProfile -ExecutionPolicy Bypass -File \"C:\\fuman-release-owner\\fuman-terminal\\run-vercel-cost-health-monitor.ps1\" -ProjectRoot \"C:\\fuman-release-owner\\fuman-terminal\" -ProductionMirrorRoot \"C:\\fuman-terminal\"",
+      "expectedExecute": "powershell.exe",
+      "expectedWorkingDirectory": "C:\\fuman-release-owner\\fuman-terminal",
+      "approvedSlot": "21:15",
+      "calendar": "calendar_day"
+    },
+    "duplicateIndexes": {
+      "kind": "once",
+      "expectedReceiptSha256": "2d686737ba89e29282327ed25d4293b97b004358b3795ce4bd4840e64232c105"
+    }
+  },
+  "notes": "Isolated candidate only; aligned to saved 2026-10-11 scheduler evidence. Revalidate exact entries before separately approved runtime installation.",
+  "approvalScope": "isolated_release_candidate_only"
+}

@@ -19,6 +19,7 @@ $gitPath = "C:\Program Files\Git\cmd"
 $env:Path = "$gitPath;C:\Program Files\nodejs;" + $env:Path
 $env:NODE_OPTIONS = "--use-system-ca"
 $env:FUMAN_RUNTIME_DIR = $runtime
+$env:FUMAN_STRATEGY_RUNNER_PID = [string]$PID
 $env:FUMAN_DATA_DIR = Join-Path $runtime "data"
 $env:FUMAN_CACHE_DIR = Join-Path $runtime "cache"
 $env:FUMAN_STATE_DIR = Join-Path $runtime "state"
@@ -63,8 +64,10 @@ function Write-Strategy4Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     strategy = "strategy4"
     label = "strategy4 full scan"
     tier = "critical"
-    executionMode = if ($ReplayTradeDate) { 'recovery_replay' } elseif ($ResumePublishedRunId) { 'recovery_same_run' } else { 'natural' }
+    executionMode = if ($ReplayTradeDate) { 'recovery_replay' } elseif ($Recovery -or $ResumeReplay -or $ResumePublishedRunId) { 'recovery_same_run' } else { 'natural' }
     naturalSlotComplete = $false
+    recoveryReplay = [bool]($Recovery -or $ResumeReplay -or $ReplayTradeDate -or $ResumePublishedRunId)
+    naturalEvidenceStatus = if ($Recovery -or $ResumeReplay -or $ReplayTradeDate -or $ResumePublishedRunId) { "RECOVERY_NOT_NATURAL" } else { "TRIGGER_IDENTITY_UNVERIFIED" }
     startedAt = $scanStartedAt
     marketDate = $runDateStamp
     tradeDate = if ($runDateStamp.Length -eq 8) { "$($runDateStamp.Substring(0,4))-$($runDateStamp.Substring(4,2))-$($runDateStamp.Substring(6,2))" } else { "" }
@@ -319,7 +322,7 @@ function Invoke-Strategy4ClosureAndLine {
     line_push_ok = [bool]$lineReceipt.line_push_ok
     first_blocker = $null
   } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $lineWrapperFile -Encoding utf8
-  & $nodeExe "scripts\verify-strategy4-complete.js" "--expect-run-id=$RunId"
+  & $nodeExe "scripts\verify-strategy4-complete.js" "--expect-run-id=$RunId" *>&1 | Tee-Object -FilePath $log -Append
   if ($LASTEXITCODE -ne 0) { throw "Strategy4 final receipt evidence rejected" }
   Write-Log "Strategy4 LINE closure complete runId=$RunId count=$ExpectedCount"
 }
@@ -613,7 +616,7 @@ try {
     }
     Write-Strategy4Receipt "delivering" 0 $false ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) $postScanWarnings "" ([int]$dbVerify.scannedCount) ([int]$dbVerify.expectedTotal)
     Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId ([string]$dbVerify.runId) -ExpectedDate ($strategy4Stamp) -Row $triSurfaceRow
-    try { Invoke-Strategy4ClosureAndLine ([string]$dbVerify.runId) ([int]$dbVerify.resultCount) } catch { $reason = "critical scan failed during Strategy4 LINE closure: $($_.Exception.Message)"; Write-Log $reason; Write-Strategy4Receipt "failed" 1 $false 0 "" @($postScanWarnings + $reason) $reason; exit 1 }
+    try { Invoke-Strategy4ClosureAndLine ([string]$dbVerify.runId) ([int]$dbVerify.resultCount) } catch { $reason = "critical scan failed during Strategy4 LINE closure: $($_.Exception.Message)"; Write-Log $reason; Write-Strategy4Receipt "failed" 1 $false ([int]$dbVerify.resultCount) ([string]$dbVerify.runId) @($postScanWarnings + $reason) $reason ([int]$dbVerify.scannedCount) ([int]$dbVerify.expectedTotal); exit 1 }
     Write-Log "Strategy4 DB readback verification ok after API verification failure: runId=$($dbVerify.runId) resultCount=$($dbVerify.resultCount) readbackCount=$($dbVerify.readbackCount)"
     Write-Log "=== Strategy4 full scan end $(Get-Date) ==="
     exit 0
@@ -641,5 +644,5 @@ try {
 
 Write-Strategy4Receipt "delivering" 0 $false ([int]$strategy4Output.count) ([string]$strategy4Output.runId) $postScanWarnings "" ([int]$strategy4Output.scannedCount) ([int]$strategy4Output.total)
 Update-PostScanReceiptEvidence -RuntimeRoot $RuntimeRoot -Route "strategy4" -RunId ([string]$strategy4Output.runId) -ExpectedDate ($strategy4Stamp) -Row $triSurfaceRow
-try { Invoke-Strategy4ClosureAndLine ([string]$strategy4Output.runId) ([int]$strategy4Output.count) } catch { $reason = "critical scan failed during Strategy4 LINE closure: $($_.Exception.Message)"; Write-Log $reason; Write-Strategy4Receipt "failed" 1 $false 0 "" @($postScanWarnings + $reason) $reason; exit 1 }
+try { Invoke-Strategy4ClosureAndLine ([string]$strategy4Output.runId) ([int]$strategy4Output.count) } catch { $reason = "critical scan failed during Strategy4 LINE closure: $($_.Exception.Message)"; Write-Log $reason; Write-Strategy4Receipt "failed" 1 $false ([int]$strategy4Output.count) ([string]$strategy4Output.runId) @($postScanWarnings + $reason) $reason ([int]$strategy4Output.scannedCount) ([int]$strategy4Output.total); exit 1 }
 Write-Log "=== Strategy4 full scan end $(Get-Date) ==="

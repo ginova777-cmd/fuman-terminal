@@ -15,7 +15,10 @@ $definitions = @(
   @{ Name='Fuman Scorecard88 Collect Strategy4 1700'; At='17:00'; Slot='17:00' },
   @{ Name='Fuman Scorecard88 Collect Evening 2140'; At='21:40'; Slot='21:40' }
 )
+$policy = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'terminal-active-module-registry.json') -Raw | ConvertFrom-Json
+$strategy2Paused = @($policy.paused | Where-Object { $_.key -eq 'strategy2' -and $_.usage_policy -eq 'PAUSED_BY_USER' }).Count -eq 1
 foreach ($definition in $definitions) {
+  if ($definition.Slot -eq '12:40' -and $strategy2Paused) { continue }
   $args = "-NoProfile -ExecutionPolicy Bypass -File `"$runner`" -Slot `"$($definition.Slot)`" -ProjectRoot `"$ProjectRoot`" -RuntimeRoot `"$RuntimeRoot`""
   $action = New-ScheduledTaskAction -Execute $pwsh -Argument $args
   $trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At $definition.At
