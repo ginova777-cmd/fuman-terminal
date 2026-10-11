@@ -112,15 +112,6 @@
       "status": "WIRED"
     },
     {
-      "key": "strategy2",
-      "dueTime": "09:00",
-      "requiredForUnattended": true,
-      "class": "strategy",
-      "requirementState": "required",
-      "wired": true,
-      "status": "WIRED"
-    },
-    {
       "key": "strategy3",
       "dueTime": "13:05",
       "requiredForUnattended": true,
@@ -295,6 +286,28 @@
       "key": "daily_ohlcv",
       "retired": true,
       "reason": "replaced_by_strategy4_owned_target_date_coverage"
+    }
+  ],
+  "paused": [
+    {
+      "key": "strategy2",
+      "dueTime": "09:00",
+      "requiredForUnattended": false,
+      "class": "strategy",
+      "requirementState": "disabled",
+      "wired": true,
+      "status": "PAUSED_BY_USER",
+      "usage_policy": "PAUSED_BY_USER",
+      "policyConfirmedAt": "2026-10-11",
+      "historicalConfiguration": {
+        "key": "strategy2",
+        "dueTime": "09:00",
+        "requiredForUnattended": true,
+        "class": "strategy",
+        "requirementState": "required",
+        "wired": true,
+        "status": "WIRED"
+      }
     }
   ]
 }

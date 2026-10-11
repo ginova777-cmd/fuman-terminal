@@ -97,7 +97,9 @@ try {
     $telegramVerifierExit = [int]$LASTEXITCODE
   }
   $strategy2Task = Get-ScheduledTask -TaskName 'Fuman Strategy2 Unified 0845-1230' -ErrorAction Stop
-  $strategy2Paused = ([string]$strategy2Task.State -eq 'Disabled')
+  $modulePolicy = Get-Content -LiteralPath (Join-Path $ProjectRoot 'scripts/terminal-active-module-registry.json') -Raw | ConvertFrom-Json
+  $strategy2Paused = @($modulePolicy.paused | Where-Object { $_.key -eq 'strategy2' -and $_.usage_policy -eq 'PAUSED_BY_USER' }).Count -eq 1
+  if ($strategy2Paused -and [string]$strategy2Task.State -ne 'Disabled') { throw 'STRATEGY2_PAUSED_TASK_ENABLED' }
   $strategy2VerifierDue = (-not $strategy2Paused -and $marketOpenToday -and ($startedAt.TimeOfDay -ge [TimeSpan]::Parse("12:30")))
   $strategy2VerifierExit = $null
   $strategy2VerifierReceipt = Join-Path $receiptDir "strategy2-tri-surface-canonical-latest.json"
@@ -170,6 +172,7 @@ try {
     chipSourceVerifierReceipt = $chipSourceVerifierReceipt
     telegramVerifierDue = $telegramVerifierDue
     telegramVerifierExitCode = $telegramVerifierExit
+    strategy2UsagePolicy = $(if ($strategy2Paused) { 'PAUSED_BY_USER' } else { 'ACTIVE' })
     strategy2VerifierDue = $strategy2VerifierDue
     strategy2VerifierExitCode = $strategy2VerifierExit
     scheduleAlignmentExitCode = $scheduleAlignmentExit

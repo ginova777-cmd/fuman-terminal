@@ -1,3 +1,4 @@
+const {isStrategy2Paused}=require("../lib/strategy2-pause-policy.cjs");
 "use strict";
 
 const { spawnSync } = require("child_process");
@@ -67,6 +68,11 @@ for (const [name, marker, expectedTimes, options = {}] of expected) {
   // Formal schedule identity is the exact task name.  Runner-marker fallback is
   // ambiguous when several canonical slots intentionally share one wrapper.
   const task = tasks.find((row) => row.name === name);
+  if (name === 'Fuman Strategy2 Unified 0845-1230' && isStrategy2Paused()) {
+    if (!task || task.state !== 'Disabled') issues.push('paused_task_not_disabled:'+name);
+    evidence.push({name,state:task?.state||'missing',usage_policy:'PAUSED_BY_USER'});
+    continue;
+  }
   const action = `${task?.execute || ""} ${task?.arguments || ""}`;
   const active = task && ["Ready", "Running", "Queued"].includes(String(task.state || ""));
   const actionRootOk = actionUsesFormalRoot(action) || (options.allowRuntimeAction === true && action.toLowerCase().includes("c:\\fuman-runtime\\ops"));
@@ -119,7 +125,7 @@ const strategy2TimelineChecks = {
   installerRetiresLegacy1210Name: strategy2Installer.includes('"Fuman Strategy2 Unified 0845-1210"'),
 };
 for (const [check, ok] of Object.entries(strategy2TimelineChecks)) {
-  if (!ok) issues.push(`strategy2_timeline_drift:${check}`);
+  if (!isStrategy2Paused() && !ok) issues.push(`strategy2_timeline_drift:${check}`);
 }
 const report = {
   ok: issues.length === 0,

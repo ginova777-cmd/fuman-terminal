@@ -44,6 +44,7 @@ function main() {
     trade_date: tradeDate,
     scope: "full_unattended_final_audit",
     module_registry_file: moduleRegistryFile,
+    paused_modules: moduleRegistry.paused || [],
     active_modules: Array.isArray(moduleRegistry.active) ? moduleRegistry.active : [],
     retired_modules: Array.isArray(moduleRegistry.retired) ? moduleRegistry.retired : [],
     modules: FULL_MODULES.map((module) => {
