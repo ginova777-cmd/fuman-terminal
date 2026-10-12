@@ -9,6 +9,7 @@ function atomic(file,bytes){const tmp=file+'.release-tmp-'+crypto.randomUUID();c
 function check(ok,reason){if(!ok)throw Error(reason);}
 function inspect(root){return {head:text(root,'rev-parse','HEAD'),tree:text(root,'rev-parse','HEAD^{tree}'),status:text(root,'status','--porcelain','--untracked-files=all')};}
 function verifyManifest(c,root){
+ require('../ReleaseTargetContract.cjs').validateManifest(c,c.manifest);
  const names=text(root,'diff','--name-only',c.expected,c.target).split(/\r?\n/).filter(Boolean).sort();
  const declared=c.manifest.files.map(f=>f.file).sort();
  check(new Set(declared).size===declared.length,'MANIFEST_DUPLICATES');
@@ -30,8 +31,15 @@ function run(c,dep){
   try{fd=fs.openSync(c.lock,'wx');}catch(e){throw Error('DEPLOY_LOCK_CONTENTION');}
   owner={token:crypto.randomUUID(),pid:process.pid,host:require('os').hostname(),target:c.target,started_at:r.started_at};fs.writeFileSync(fd,JSON.stringify(owner));fs.fsyncSync(fd);
   r.lock_owner=owner;event('LOCKED');
-  check(text(c.source,'branch','--show-current')==='main','SOURCE_NOT_MAIN');
-  const src=inspect(c.source);check(!src.status,'SOURCE_DIRTY');check(src.head===c.target&&text(c.source,'rev-parse','origin/main')===c.target,'MAIN_TARGET_DRIFT');check(dep.remoteMain()===c.target,'REMOTE_MAIN_DRIFT');
+  const contract=require('../ReleaseTargetContract.cjs');
+  const src=inspect(c.source);check(!src.status,'SOURCE_DIRTY');
+  const verifySource=()=>{
+   if(contract.mode(c)==='main'){
+    check(text(c.source,'branch','--show-current')==='main','SOURCE_NOT_MAIN');
+    check(text(c.source,'rev-parse','HEAD')===c.target&&text(c.source,'rev-parse','origin/main')===c.target,'MAIN_TARGET_DRIFT');check(dep.remoteMain()===c.target,'REMOTE_MAIN_DRIFT');
+   }else contract.verifySource(c,text,()=>dep.remoteHotfix());
+  };
+  verifySource();
   before=inspect(c.prod);check(before.head===c.expected,'WRONG_CURRENT_SHA');check(!before.status,'PRODUCTION_DIRTY');
   original=fs.readFileSync(c.authority);const auth=JSON.parse(original);check(auth.approvedProductionSha===c.expected,'AUTHORITY_MISMATCH');
   check(fs.realpathSync(auth.productionRoot)===fs.realpathSync(c.prod),'AUTHORITY_PRODUCTION_ROOT_MISMATCH');
@@ -42,13 +50,18 @@ function run(c,dep){
   event('STAGING');const stage=path.join(c.out,'staging');check(!fs.existsSync(stage),'STAGING_ALREADY_EXISTS');
   command('git',['clone','--no-hardlinks','--no-checkout',c.source,stage]);git(stage,'checkout','--detach',c.target);check(inspect(stage).head===c.target&&!inspect(stage).status,'STAGING_INVALID');verifyManifest(c,stage);
   const hashes=files.map(f=>({file:f.file,sha256:hash(fs.readFileSync(path.join(stage,f.file)))}));json(path.join(c.out,'staging-working-hashes.json'),hashes);
+  if(contract.mode(c)!=='main')check(hashes.length===1&&hashes[0].sha256===c.hotfix_checkout_sha256,'HOTFIX_CHECKOUT_HASH_MISMATCH');
   event('STAGING_VERIFIED');
   if(!c.apply){r.status='DRY_RUN_PASS';return r;}
   check(!inspect(c.prod).status&&inspect(c.prod).head===c.expected&&fs.readFileSync(c.authority).equals(original),'PRECOMMIT_DRIFT');
   check(dep.evidenceOff(),'EVIDENCE_CHANGED');check(dep.freeBytes(c.prod)>=c.minFreeBytes,'FREE_DISK_GUARD');
   // Same paired update/rollback model as existing release-owner tools; never edits tracked production files directly.
-  event('IMPORT_TARGET');git(c.prod,'fetch','--no-tags',stage,c.target);check(text(c.prod,'rev-parse','FETCH_HEAD')===c.target,'IMPORTED_TARGET_MISMATCH');
-  changed=true;event('UPDATE_PRODUCTION');git(c.prod,'checkout','--detach',c.target);r.production_changed=true;event('AFTER_PRODUCTION');
+  event('IMPORT_TARGET');check(JSON.parse(fs.readFileSync(c.lock)).token===owner.token,'LOCK_OWNER_CHANGED');
+  if(contract.mode(c)!=='main'){check(!inspect(c.source).status,'SOURCE_DIRTY');verifySource();}
+  git(c.prod,'fetch','--no-tags',stage,c.target);check(text(c.prod,'rev-parse','FETCH_HEAD')===c.target,'IMPORTED_TARGET_MISMATCH');
+  event('UPDATE_PRODUCTION');check(JSON.parse(fs.readFileSync(c.lock)).token===owner.token,'LOCK_OWNER_CHANGED');
+  check(!inspect(c.prod).status&&inspect(c.prod).head===c.expected&&fs.readFileSync(c.authority).equals(original),'PRECHECKOUT_DRIFT');
+  changed=true;git(c.prod,'checkout','--detach',c.target);r.production_changed=true;event('AFTER_PRODUCTION');
   check(fs.readFileSync(c.authority).equals(original),'AUTHORITY_CHANGED_DURING_UPDATE');
   check(JSON.parse(fs.readFileSync(c.lock)).token===owner.token,'LOCK_OWNER_CHANGED');
   auth.approvedProductionSha=c.target;updatedAuthority=Buffer.from(JSON.stringify(auth,null,2));atomic(c.authority,updatedAuthority);r.authority_changed=true;event('AFTER_AUTHORITY');
@@ -69,7 +82,7 @@ function run(c,dep){
   return r;
  }finally{
   r.finished_at=new Date().toISOString();r.lock_retained=hold;
-  if(fd!==undefined){fs.closeSync(fd);if(!hold){try{check(JSON.parse(fs.readFileSync(c.lock)).token===owner.token,'LOCK_OWNER_CHANGED');fs.unlinkSync(c.lock);}catch(e){r.status='DEPLOYMENT_FAILED';r.lock_error=e.message;}}}
+  if(fd!==undefined){fs.closeSync(fd);if(!hold){try{check(JSON.parse(fs.readFileSync(c.lock)).token===owner.token,'LOCK_OWNER_CHANGED');fs.unlinkSync(c.lock);}catch(e){r.status='DEPLOYMENT_FAILED';r.lock_error=e.message;r.lock_retained=true;}}}
   json(path.join(c.out,'deployment-receipt.json'),r);
  }
 }
