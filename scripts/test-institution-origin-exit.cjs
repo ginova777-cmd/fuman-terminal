@@ -1,0 +1,18 @@
+'use strict';
+const assert=require('assert/strict'),fs=require('fs'),path=require('path'),cp=require('child_process');
+const {fixture}=require('./institution-origin-test-fixture.cjs');
+const f=fixture(),runtime=path.join(f.tmp,'runtime'),dir=path.join(runtime,'data','scan-receipts');
+fs.mkdirSync(dir,{recursive:true});
+const file=path.join(dir,'institution.json'),before=JSON.stringify(f.r);
+fs.writeFileSync(file,before);
+const env={...process.env,FUMAN_RUNTIME_DIR:runtime,FUMAN_STRATEGY_RUNNER_PID:''};
+const result=cp.spawnSync(process.execPath,[path.join(__dirname,'verify-institution-natural-origin.cjs'),'--expect-run-id='+f.r.runId],{env,encoding:'utf8',timeout:10000});
+assert.equal(result.error,undefined);
+const body=JSON.parse(result.stdout);
+assert.equal(body.naturalSlotComplete,false);
+assert.equal(result.status,1,'unverified origin must fail the actual CLI');
+assert.equal(body.ok,false);
+assert.equal(fs.readFileSync(file,'utf8'),before);
+assert.equal(fs.readdirSync(path.join(dir,'institution-origin-attempts')).length,1);
+assert.equal(fs.existsSync(path.join(dir,'institution-origin')),false);
+console.log(JSON.stringify({ok:true,scope:'actual CLI isolated runtime, missing runner PID; no collector or formal writes'}));
