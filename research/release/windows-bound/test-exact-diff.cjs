@@ -21,4 +21,5 @@ const bad=structuredClone(c);bad.manifest.files[0].sha256='0'.repeat(64);check((
 const missing=structuredClone(c);missing.manifest.files.pop();check(()=>assert.throws(()=>verifyManifest(missing,source),/MANIFEST_SCOPE_MISMATCH/));
 const duplicate=structuredClone(c);duplicate.manifest.files.push(duplicate.manifest.files[0]);check(()=>assert.throws(()=>verifyManifest(duplicate,source),/MANIFEST_DUPLICATES/));
 git(replica,'config','diff.noprefix','true');git(replica,'config','diff.algorithm','histogram');git(replica,'config','diff.context','20');git(replica,'config','color.ui','always');check(()=>assert.ok(a.equals(git(replica,...exactDiffArgs(expected,target)))));
+const order=path.join(lab,'order.txt');fs.writeFileSync(order,'text.txt\nbinary.dat\n');git(replica,'config','diff.orderFile',order);check(()=>assert.ok(a.equals(git(replica,...exactDiffArgs(expected,target)))));
 console.log(JSON.stringify({passed,lab,scope:'isolated real Git repositories; no production or Apply'}));
