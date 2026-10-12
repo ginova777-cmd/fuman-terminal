@@ -1,6 +1,7 @@
 const scanStrategy4 = require("../api/scan-strategy4");
 const fs = require("fs");
 const path = require("path");
+const { RESULT_CONTRACT, GATE_CONTRACT } = require("../lib/strategy4-v4-evidence");
 
 const DEFAULT_CODES = ["2330", "2317", "2382", "2454", "3017", "3037", "5274", "6446"];
 const MIN_MATCHES = Number(process.env.STRATEGY4_CONTRACT_MIN_MATCHES || 0);
@@ -69,10 +70,10 @@ function verifyStaticContracts() {
   const root = path.resolve(__dirname, "..");
   const cacheSource = fs.readFileSync(path.join(root, "scripts", "scan-strategy4-cache.js"), "utf8");
   const apiSource = fs.readFileSync(path.join(root, "api", "scan-strategy4.js"), "utf8");
-  if (!cacheSource.includes("strategy4_actionable_patterns_avg5_3000_daily_kd_rsi_bonus_v4")) {
-    fail("Strategy4 cache runner is not using daily KD/RSI v3 result contract");
+  if (!cacheSource.includes(RESULT_CONTRACT)) {
+    fail("Strategy4 cache runner is not using daily KD/RSI v4 result contract");
   }
-  if (!apiSource.includes("strategy4_daily_kd_rsi_bonus_v1") || !apiSource.includes("dailyTechnicalGate")) {
+  if (!apiSource.includes(GATE_CONTRACT) || !apiSource.includes("dailyTechnicalGate")) {
     fail("Strategy4 API missing daily KD/RSI technical gate");
   }
 }
