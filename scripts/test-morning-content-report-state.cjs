@@ -1,0 +1,11 @@
+'use strict';
+const assert=require('assert/strict');
+const {reportStateAccepted:accept}=require('../lib/morning-content-report-state.cjs');
+const waiting={contract:'opening_report_0830_complete_v1',report_status:'WAITING_PERSISTENCE_ACK',runner_complete:true,complete:false,status:'waiting_persistence_ack',first_blocker:'mother_pool_persistence_ack_pending'};
+assert.equal(accept(waiting,true),true);
+assert.equal(accept(waiting,false),false);
+assert.equal(accept(waiting),false);
+for(const [key,value] of Object.entries({contract:'wrong',runner_complete:false,complete:true,status:'failed',first_blocker:'source_invalid',report_status:'FAIL_CLOSED'})) assert.equal(accept({...waiting,[key]:value},true),false,key);
+assert.equal(accept({...waiting,report_status:'UNKNOWN'},true),false);
+for(const status of ['REPORT_OK','REPORT_DEGRADED','COMPLETE','complete','WAITING_CANONICAL_VERIFIER']) assert.equal(accept({report_status:status},false),true);
+console.log(JSON.stringify({passed:15,scope:'content-only waiting state; full acceptance unchanged'}));

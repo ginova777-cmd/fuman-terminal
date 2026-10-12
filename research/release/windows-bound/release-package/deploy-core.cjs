@@ -14,7 +14,7 @@ function verifyManifest(c,root){
  check(new Set(declared).size===declared.length,'MANIFEST_DUPLICATES');
  check(JSON.stringify(names)===JSON.stringify(declared),'MANIFEST_SCOPE_MISMATCH');
  const files=c.manifest.files.map(f=>{check(!path.isAbsolute(f.file)&&!f.file.split(/[\\/]/).includes('..'),'MANIFEST_PATH_INVALID');const b=git(root,'show',c.target+':'+f.file);check(b.length===f.bytes&&hash(b)===f.sha256,'MANIFEST_HASH_MISMATCH:'+f.file);return f;});
- check(hash(git(root,'diff','--binary',c.expected,c.target))===c.diffHash,'EXACT_DIFF_MISMATCH');return files;
+ check(hash(git(root,...require('./exact-diff.cjs').exactDiffArgs(c.expected,c.target)))===c.diffHash,'EXACT_DIFF_MISMATCH');return files;
 }
 // Dependencies are injected only by the isolated test harness. The formal CLI has no fixture/fault switches.
 function run(c,dep){
@@ -73,4 +73,4 @@ function run(c,dep){
   json(path.join(c.out,'deployment-receipt.json'),r);
  }
 }
-module.exports={run,git,text,hash};
+module.exports={run,git,text,hash,verifyManifest};
