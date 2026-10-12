@@ -1,0 +1,43 @@
+Strategy4 exact hotfix — isolated release tooling
+
+Status: isolation-tested candidate only. This document grants no publication,
+installation, maintenance window, runtime stop, deployment or replay authority.
+
+Application changes and release-tool changes have separate commit identities.
+The application must be one direct child of the approved production base and
+must differ only in scripts/verify-strategy4-contract.js (regular file).
+The tool commit is independently reviewed and sealed in config_identity.
+
+build-owner-package.cjs retains its original main arguments. A fourth optional
+argument supplies a JSON hotfix request with these required fields:
+source, target, releaseToolSha, repository, ref, pr, blob_sha256, checkout_sha256.
+The base remains the third argument. Do not invent a PR number while preparing
+an application that has no Review PR. Both repositories must be clean.
+
+repository is restricted to ginova777-cmd/fuman-terminal; the branch must match
+refs/heads/agent/strategy4-contract-<suffix>. An approved hotfix must have an open,
+non-draft PR against main from the same repository. The live ref and PR head
+must equal the exact application SHA. Failure or drift is blocking; no cached
+fallback. main approval flags cannot be used to impersonate hotfix approval.
+
+Git blob SHA256 and checkout SHA256 are distinct. Windows CRLF conversion may
+make them different. The builder checks both; the deployment core checks the
+staged checkout before import and compares deployed bytes with staging.
+
+Prepared packages have formal_apply_authorized=false, release_approved=false,
+hotfix_approved=false, release_tool_approved_sha=null, remote_main_verified=false
+and final_sha_after_merge=null. No approval resealer or executable deployment
+instruction is provided here. Release Owner must separately review and reseal
+the exact package, tool SHA, application SHA, source mapping and rollback plan.
+
+The existing protected installation, ACL, parent process creation identity,
+approval window, task fence, Collector graceful stop, runtime occupancy checks,
+authority verifier and paired rollback remain required. The isolated hotfix
+authorization does not grant permission to stop Mother Pool/Collector/Writer.
+
+Tests:
+test-strategy4-hotfix.cjs uses new temporary Git repos and injected observations.
+The remote observations are fixtures, not GitHub verification. PowerShell tests
+exercise shared approval parsing without invoking the maintenance Owner.
+test-exact-diff.cjs and Test-FenceOrdering.ps1 cover existing diff/locking paths.
+Natural Strategy4 scanning and DB/API/desktop/mobile/88 acceptance are separate.

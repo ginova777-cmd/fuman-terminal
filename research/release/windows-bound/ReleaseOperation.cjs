@@ -14,7 +14,7 @@ function execute(c,action,out,dep){
  const verifier=()=>dep.verify();
  if(action==='apply'){
   return run({...c,out,manifest:JSON.parse(manifestBytes),diffHash:c.diff_sha256,apply:true}, {
-   isAdmin:()=>dep.admin(),evidenceOff:()=>dep.evidenceOff(),freeBytes:()=>dep.freeBytes(),remoteMain:()=>dep.remoteMain(),verifier,
+   isAdmin:()=>dep.admin(),evidenceOff:()=>dep.evidenceOff(),freeBytes:()=>dep.freeBytes(),remoteMain:()=>dep.remoteMain(),remoteHotfix:()=>dep.remoteHotfix(),verifier,
    fault:stage=>{if(stage==='IMPORT_TARGET'||stage==='UPDATE_PRODUCTION'||stage==='ROLLBACK'){dep.guard();dep.noUsers();}}
   });
  }
@@ -39,7 +39,7 @@ function execute(c,action,out,dep){
 }
 if(require.main===module){
  const [action,out,ownerFile]=process.argv.slice(2),c=JSON.parse(fs.readFileSync(path.join(__dirname,'release-config.json')));
- if(!c.release_approved||!c.formal_apply_authorized||!c.final_sha_after_merge||c.target!==c.final_sha_after_merge)throw Error('OWNER_FINAL_RELEASE_APPROVAL_REQUIRED');
+ require('./ReleaseTargetContract.cjs').validate(c,true);
  const owner=JSON.parse(fs.readFileSync(ownerFile));
  if(owner.owner_pid!==process.ppid||owner.target!==c.target||!owner.token||owner.maintenance_verified!==true||typeof owner.creation_ticks!=='string'||!/^\d+$/.test(owner.creation_ticks))throw Error('INDEPENDENT_OWNER_REQUIRED');
  c.manifestPath=path.join(__dirname,'release-package/manifest.json');c.diffPath=path.join(__dirname,'release-package/exact.diff');
@@ -52,6 +52,7 @@ if(require.main===module){
   evidenceOff:()=>{ps(common+'Test-EvidenceOff $c');return true;},
   freeBytes:()=>Number(ps('(Get-PSDrive C).Free')),
   remoteMain:()=>cp.execFileSync('gh',['api','repos/ginova777-cmd/fuman-terminal/git/ref/heads/main','--jq','.object.sha'],{encoding:'utf8',timeout:30000,windowsHide:true}).trim(),
+  remoteHotfix:()=>require('./ReleaseTargetContract.cjs').observeRemote(c),
   verify:()=>{const r=cp.spawnSync(process.execPath,[c.verifier,'--require-production-root'],{encoding:'utf8',windowsHide:true,timeout:120000});if(r.status!==0||r.error||!JSON.parse(r.stdout).ok)throw Error('FORMAL_AUTHORITY_VERIFIER_FAILED');}
  };
  const result=execute(c,action,out,dep);console.log(JSON.stringify(result));if(!['CODE_DEPLOYMENT_VERIFIED_RUNTIME_PENDING','RESTORED'].includes(result.status))process.exitCode=1;

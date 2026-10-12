@@ -30,7 +30,12 @@ function Assert-OwnerApproval($Config,$Approval) {
     $Approval.package_sha256 -ne $Config.package_sha256){throw 'EXACT_OWNER_APPLY_APPROVAL_REQUIRED'}
  $now=[DateTimeOffset]::UtcNow
  if($now -lt [DateTimeOffset]::Parse($Approval.not_before) -or $now -ge [DateTimeOffset]::Parse($Approval.expires_at)){throw 'APPROVAL_WINDOW_NOT_ACTIVE'}
- if(!$Config.release_approved -or !$Config.remote_main_verified){throw 'RELEASE_NOT_APPROVED_OR_MAIN_UNVERIFIED'}
+ if($Config.ContainsKey('release_mode') -and $Config.release_mode -ne 'main'){
+  # Feed the in-memory sealed config through stdin; no temporary approval files.
+  $raw=$Config|ConvertTo-Json -Depth 40 -Compress
+  $raw | & node (Join-Path $PSScriptRoot 'ReleaseTargetApproval.cjs')
+  if($LASTEXITCODE -ne 0){throw 'HOTFIX_OWNER_APPROVAL_REJECTED'}
+ }elseif(!$Config.release_approved -or !$Config.remote_main_verified){throw 'RELEASE_NOT_APPROVED_OR_MAIN_UNVERIFIED'}
 }
 function Resolve-HandbackTasks($Binding) {
  # Resolve exact identities, never array order. No scheduler or lock operations.
