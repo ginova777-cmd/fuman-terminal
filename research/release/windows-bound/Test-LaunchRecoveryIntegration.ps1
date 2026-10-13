@@ -46,9 +46,7 @@ function Test-EvidenceOff($Config){if($env:FUMAN_CHANGE_EVIDENCE_PHASE1 -eq '1')
 function Invoke-PairedVerifier($Config,$Sha){$a=Get-Content $config.authority -Raw|ConvertFrom-Json;if((& git -C $config.prod rev-parse HEAD).Trim() -ne $Sha -or $a.approvedProductionSha -ne $Sha){throw 'PAIRED_VERIFY_FAILED'};return @{ok=$true}}
 function Get-RuntimeInventory($Config){if($script:future){$p=Get-Process -Id $script:future.pid -ErrorAction SilentlyContinue;if($p){return $script:future}}}
 function Start-BoundFuture($Config,$LogDir){
- $launchDir=Join-Path $LogDir ('launch-'+[guid]::NewGuid().ToString('N'))
- New-Item -ItemType Directory $launchDir|Out-Null
- $started=& $realStart $Config $launchDir
+ $started=& $realStart $Config $LogDir
  $script:future=@{pid=$started.pid;creation_ticks=[string]$started.creation_ticks;exe=$started.exe;entry=$started.entry;entry_verified=$true;role='future'}
  $limit=[DateTimeOffset]::UtcNow.AddSeconds(20)
  do{Start-Sleep -Milliseconds 100;$f=Join-Path $Config.runtime 'state/futopt-shutdown/owner.json';if(Test-Path $f){$o=Get-Content $f -Raw|ConvertFrom-Json;if($o.pid -eq $started.pid){return $script:future}}}while([DateTimeOffset]::UtcNow -lt $limit)

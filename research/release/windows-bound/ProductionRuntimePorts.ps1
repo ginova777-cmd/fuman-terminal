@@ -73,6 +73,9 @@ function Start-BoundFuture($Config,$LogDir) {
  }.GetEnumerator()){$start.Environment[$pair.Key]=[string]$pair.Value}
  # Refuse inherited preload flags. Never carry an offline fixture into production.
  if($start.Environment.ContainsKey('NODE_OPTIONS') -and $start.Environment['NODE_OPTIONS']){throw 'NODE_OPTIONS_REQUIRE_REVIEW'}
+ # Preserve every attempt when start and recovery share the same Owner run.
+ $LogDir=Join-Path $LogDir ('collector-launch-'+[guid]::NewGuid().ToString('N'))
+ New-Item -ItemType Directory -Path $LogDir -ErrorAction Stop|Out-Null
  $launchReceipt=Join-Path $LogDir 'collector-launch-receipt.json'
  $launchSpec=Join-Path $LogDir 'collector-launch-spec.json'
  $envMap=@{};foreach($key in @('FUMAN_RUNTIME_DIR','FUMAN_CACHE_DIR','FUMAN_STATE_DIR','FUGLE_FUTOPT_STREAMING_CHANNELS','FUGLE_FUTOPT_STREAMING_AFTER_HOURS','FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS','FUGLE_FUTOPT_STREAMING_MAX_SYMBOLS','FUGLE_FUTOPT_COLLECTOR_RELEASE','FUMAN_CHANGE_EVIDENCE_PHASE1')){$envMap[$key]=$start.Environment[$key]}
