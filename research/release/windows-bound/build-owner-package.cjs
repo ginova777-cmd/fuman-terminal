@@ -11,7 +11,7 @@ const write=(f,b)=>{const dest=path.join(out,f);fs.mkdirSync(path.dirname(dest),
 const full=git('diff','--name-only',base,target).toString().trim().split(/\r?\n/).map(file=>{const b=git('show',target+':'+file);return {file,bytes:b.length,sha256:hash(b)}});
 write('release-package/manifest.json',{production_sha:base,final_sha:target,files:full});write('release-package/exact.diff',git(...require('./release-package/exact-diff.cjs').exactDiffArgs(base,target)));
 const names=['Invoke-ProductionMaintenanceOwner.ps1','ProductionMaintenanceBinding.ps1','ProductionRuntimePorts.ps1','WindowsScheduleBinding.ps1','LegacyBoundary.ps1','CutoverSequence.ps1','Read-ProductionBinding.ps1','ReleaseOperation.cjs','OwnerAuthorization.cjs','GracefulOperation.cjs','junction-graceful-stop-adapter.cjs','junction-stop-identity.cjs','release-package/deploy-core.cjs'];
-names.push('RuntimePair.cjs','stop-ack-contract.cjs','Invoke-ManualRecovery.ps1','ManualRecovery.ps1','RecoveryHost.ps1','RecoveryPreflight.ps1','RecoveryRelease.ps1','RecoveryRuntimePorts.ps1','R3OwnerRecoveryGuard.ps1');
+names.push('Start-IsolatedHandleCollector.ps1','RuntimePair.cjs','stop-ack-contract.cjs','Invoke-ManualRecovery.ps1','ManualRecovery.ps1','RecoveryHost.ps1','RecoveryPreflight.ps1','RecoveryRelease.ps1','RecoveryRuntimePorts.ps1','R3OwnerRecoveryGuard.ps1');
 names.push('release-package/exact-diff.cjs','collector-release-binding.cjs');
 for(const name of names)write(name,git('show',target+':research/release/windows-bound/'+name));
 const runtimeFiles=['MotherPoolReceiptCatchup.ps1','Run-DaytradeSourceWriter.ps1'].map(name=>{const b=fs.readFileSync(path.join(repo,'ops',name));write('runtime-payload/'+name,b);return {name,bytes:b.length,sha256:hash(b)};});
@@ -45,3 +45,4 @@ if(localMissing.length)throw Error('MISSING_DEPENDENCIES:'+JSON.stringify(localM
 const inv=[];function inventory(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const f=path.join(dir,e.name);if(e.isDirectory())inventory(f);else{const b=fs.readFileSync(f);inv.push({path:path.relative(out,f).replaceAll('\\','/'),bytes:b.length,sha256:hash(b)})}}}inventory(out);
 fs.writeFileSync(out+'.inventory.json',JSON.stringify({target,base,files:inv,localMissing,package_sha256:cfg.package_sha256,formal_apply_authorized:false},null,2));
 console.log(JSON.stringify({status:'COMPLETE_TOOL_PACKAGE_PREPARED',target,changed_files:full.length,tool_files:names.length,package_files:inv.length,package_sha256:cfg.package_sha256,out}));
+
