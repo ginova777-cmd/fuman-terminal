@@ -18,22 +18,29 @@ const inspect=f=>{try{return require('../lib/daytrade-shared-evidence.cjs').insp
 const dates=[tradeDate,tradeDate.replaceAll('-','')];
 const files=fs.readdirSync(dir).filter(x=>x.endsWith('.json')&&(!scoped||(requested.includes('B18')&&x.startsWith('closeout-input-'))||(dates.some(d=>x.includes(d))&&requested.some(id=>x.toLowerCase().startsWith(id.toLowerCase()+'-'))))).map(x=>({file:path.join(dir,x),value:x.startsWith('closeout-input-')?read(path.join(dir,x)):inspect(path.join(dir,x))}));
 const results=[];
-for(const moduleId of requested){
+const children=new Set();
+process.once('SIGTERM',()=>{for(const child of children)child.kill();process.exit(143);});
+function runChild(args){return new Promise(resolve=>{
+ let child;try{child=require('node:child_process').execFile(process.execPath,args,{encoding:'utf8',windowsHide:true,timeout:30000,maxBuffer:1024*1024},(error,stdout,stderr)=>{
+  children.delete(child);resolve({pid:child.pid,status:error?(Number.isInteger(error.code)?error.code:null):0,signal:error?.signal||null,error:error&&!Number.isInteger(error.code)?error:null,stdout,stderr});
+ });children.add(child);}catch(error){resolve({status:null,error,stdout:'',stderr:''});}
+});}
+async function verifyOne(moduleId){
  if(moduleId==='B18'){
   const entry=files.filter(x=>x.value?.type==='mother_pool_closeout_inputs_v1'&&x.value.trade_date===tradeDate&&x.value.canonical_run_id===canonical).sort((a,b)=>Date.parse(b.value.created_at)-Date.parse(a.value.created_at))[0]?.value;
-  if(!entry){results.push({module_id:moduleId,status:'pending',complete:false,reason:'CLOSEOUT_ARTIFACT_REQUIRED'});continue;}
+  if(!entry){return {module_id:moduleId,status:'pending',complete:false,reason:'CLOSEOUT_ARTIFACT_REQUIRED'};}
   const out=path.join(dir,`b18-verified-${tradeDate}-${attempt}.json`);
   const p=spawnSync(process.execPath,[path.join(__dirname,'verify-mother-pool-closeout.js'),'--closeout='+entry.closeout,'--round1='+entry.round1,'--round2='+entry.round2,'--natural-verification='+entry.natural_verification,'--out='+out],{encoding:'utf8',windowsHide:true,timeout:30000});
   const receipt=read(out),complete=p.status===0&&receipt?.complete===true&&receipt?.exit_code===0;
-  results.push({module_id:moduleId,status:complete?'complete':'blocked',complete,out,exit_code:p.status,reason:receipt?.first_blocker||p.stderr||null});continue;
+  return {module_id:moduleId,status:complete?'complete':'blocked',complete,out,exit_code:p.status,reason:receipt?.first_blocker||p.stderr||null};
  }
 
  const list=files.filter(({value:v})=>v?.module_id===moduleId&&v.contract===registry.modules[moduleId]&&v.trade_date===tradeDate&&v.canonical_run_id===canonical&&v.db_readback&&v.anon_readback&&!v.rounds_verified).sort((a,b)=>Date.parse(b.value.observed_at)-Date.parse(a.value.observed_at));
  const selected=require('../lib/mother-pool-select-verifier-rounds').select(list,process.env.MOTHER_POOL_REQUIRED_WRITER_RUN_ID);
- if(selected.length<2){results.push({module_id:moduleId,status:'pending',complete:false,reason:'TWO_DISTINCT_ROUNDS_REQUIRED'});continue;}
+ if(selected.length<2){return {module_id:moduleId,status:'pending',complete:false,reason:'TWO_DISTINCT_ROUNDS_REQUIRED'};}
  const out=path.join(dir,`${moduleId.toLowerCase()}-verified-${tradeDate}-${attempt}.json`);
  const started=process.hrtime.bigint();
- const p=spawnSync(process.execPath,[path.join(__dirname,'verify-daytrade-module-receipt.js'),'--summary',`--module=${moduleId}`,`--round1=${selected[0].file}`,`--round2=${selected[1].file}`,`--out=${out}`],{encoding:'utf8',windowsHide:true,timeout:30000});
+ const p=await runChild([path.join(__dirname,'verify-daytrade-module-receipt.js'),'--summary',`--module=${moduleId}`,`--round1=${selected[0].file}`,`--round2=${selected[1].file}`,`--out=${out}`]);
  let receipt=null,validationError=null;
  try{
   receipt=JSON.parse(p.stdout||'{}');
@@ -41,8 +48,14 @@ for(const moduleId of requested){
   require('../lib/daytrade-shared-evidence.cjs').verifyProcessBytes(out,runtime,receipt.content_sha256);
  }catch(e){validationError=e.message;readErrors.push({file:out,reason:e.message});}
  const complete=!validationError&&!p.error&&p.status===0&&receipt?.complete===true&&receipt?.status==='complete'&&receipt?.exit_code===0;
- results.push({module_id:moduleId,status:complete?'complete':'blocked',complete,out,exit_code:p.status,pid:p.pid,elapsed_ms:Number(process.hrtime.bigint()-started)/1e6,signal:p.signal,error:p.error?{code:p.error.code,message:p.error.message}:null,stdout:p.stdout||'',stderr:p.stderr||'',reason:validationError||receipt?.first_blocker||p.error?.message||null});
+ return {module_id:moduleId,status:complete?'complete':'blocked',complete,out,exit_code:p.status,pid:p.pid,elapsed_ms:Number(process.hrtime.bigint()-started)/1e6,signal:p.signal,error:p.error?{code:p.error.code,message:p.error.message}:null,stdout:p.stdout||'',stderr:p.stderr||'',reason:validationError||receipt?.first_blocker||p.error?.message||null};
 }
+async function main(){
+ // At most two existing independent verifier processes. Keep result order,
+ // child timeout, byte validation and the caller's 45-second deadline.
+ let cursor=0;async function worker(){while(cursor<requested.length){const i=cursor++;results[i]=await verifyOne(requested[i]);}}
+ await Promise.all([worker(),worker()]);
+
 const index=path.join(dir,`module-verification-attempt-${tradeDate}-${attempt}.json`);
 fs.writeFileSync(index,JSON.stringify({trade_date:tradeDate,canonical_run_id:canonical,results},null,2),{flag:'wx'});
 if(scoped){
@@ -57,3 +70,6 @@ const blocked=results.some(x=>x.status==='blocked')||total.error||(!receipt);
 const status=complete?'complete':blocked?'blocked':'pending';
 console.log(JSON.stringify({execution_status:total.error?'failed':'finished',acceptance_status:status,status,complete,ok:complete,trade_date:tradeDate,canonical_run_id:canonical,results,total:{out,exit_code:total.status,stdout:total.stdout||'',stderr:total.stderr||''},first_blocker:complete?null:receipt?.first_blocker||'TOTAL_VERIFIER_FAILED',exit_code:complete?0:blocked?1:2},null,2));
 process.exitCode=complete?0:blocked?1:2;
+
+}
+main().catch(error=>{console.error(error);process.exitCode=1;});
