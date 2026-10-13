@@ -10,7 +10,7 @@ function Assert-RecoveryReleaseJournal($Config,$Directory,$Bundle,$Request){
  if([IO.Path]::GetFullPath($release) -cne [IO.Path]::GetFullPath((Join-Path (Split-Path $Directory) 'release'))){throw 'RECOVERY_RELEASE_PATH_MISMATCH'}
  Assert-RecoveryNoReparse (Split-Path $Directory) $release
  $hashes=@{}
- foreach($name in @('authority-before.bin','production-before.json','deployment-receipt.json','rollback-receipt.json')){
+ foreach($name in @('authority-before.bin','production-before.json','deployment-receipt.json','rollback-receipt.json','runtime-pair-journal.json','runtime-before-0.bin','runtime-before-1.bin')){
   $p=Join-Path $release $name
   if(Test-Path $p){Assert-RecoveryNoReparse $release $p;$hashes[$name]=Get-RecoveryHash $p}
  }

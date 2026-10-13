@@ -4,6 +4,7 @@
 const fs=require('fs'),path=require('path'),cp=require('child_process'),crypto=require('crypto');
 const {run,git,text,hash}=require('./release-package/deploy-core.cjs');
 const {guardOwner}=require('./OwnerAuthorization.cjs');
+const {create:createRuntimePair}=require('./RuntimePair.cjs');
 function ps(code){const r=cp.spawnSync('pwsh',['-NoProfile','-Command',code],{encoding:'utf8',windowsHide:true,timeout:120000});if(r.status!==0||r.error)throw Error('OWNER_OS_CHECK_FAILED');return r.stdout.trim();}
 const q=s=>"'"+s.replaceAll("'","''")+"'";
 function atomic(file,bytes){const tmp=file+'.tmp-'+crypto.randomUUID();const f=fs.openSync(tmp,'wx');try{fs.writeFileSync(f,bytes);fs.fsyncSync(f);}finally{fs.closeSync(f);}fs.renameSync(tmp,file);}
@@ -11,11 +12,18 @@ function execute(c,action,out,dep){
  const manifestBytes=fs.readFileSync(c.manifestPath),diff=fs.readFileSync(c.diffPath);
  if(hash(manifestBytes)!==c.manifest_sha256||hash(diff)!==c.diff_sha256)throw Error('SEALED_RELEASE_PACKAGE_DRIFT');
  dep.guard();
+ const pair=c.runtime_pair_sha256?createRuntimePair(c,out,dep):null;
  const verifier=()=>dep.verify();
  if(action==='apply'){
   return run({...c,out,manifest:JSON.parse(manifestBytes),diffHash:c.diff_sha256,apply:true}, {
    isAdmin:()=>dep.admin(),evidenceOff:()=>dep.evidenceOff(),freeBytes:()=>dep.freeBytes(),remoteMain:()=>dep.remoteMain(),verifier,
-   fault:stage=>{if(stage==='IMPORT_TARGET'||stage==='UPDATE_PRODUCTION'||stage==='ROLLBACK'){dep.guard();dep.noUsers();}}
+   fault:stage=>{
+    if(['IMPORT_TARGET','UPDATE_PRODUCTION','ROLLBACK','VERIFY','ROLLBACK_VERIFY'].includes(stage)){dep.guard();dep.noUsers();}
+    if(pair&&stage==='IMPORT_TARGET')pair.prepare();
+    if(pair&&stage==='VERIFY')pair.apply();
+    if(pair&&stage==='ROLLBACK_VERIFY'&&pair.exists())pair.restore();
+    dep.fault?.(stage);
+   }
   });
  }
  if(action!=='rollback')throw Error('UNKNOWN_RELEASE_OPERATION');
@@ -32,7 +40,9 @@ function execute(c,action,out,dep){
   fs.writeFileSync(fd,JSON.stringify({pid:process.pid,action:'rollback'}));fs.fsyncSync(fd);
   dep.noUsers();git(c.prod,'checkout','--detach',c.expected);
   if(!fs.readFileSync(c.authority).equals(current))throw Error('ROLLBACK_CONCURRENT_AUTHORITY_CHANGE');
-  atomic(c.authority,original);dep.verify();
+  atomic(c.authority,original);
+  if(pair){if(!pair.exists())throw Error('RUNTIME_RECOVERY_JOURNAL_MISSING');pair.restore();}
+  dep.verify();
   if(text(c.prod,'rev-parse','HEAD')!==c.expected||text(c.prod,'status','--porcelain','--untracked-files=all')||!fs.readFileSync(c.authority).equals(original))throw Error('ROLLBACK_READBACK_FAILED');
   pass=true;return {status:'RESTORED',sha:c.expected};
  }finally{fs.closeSync(fd);if(pass)fs.unlinkSync(c.lock);}
@@ -40,6 +50,8 @@ function execute(c,action,out,dep){
 if(require.main===module){
  const [action,out,ownerFile]=process.argv.slice(2),c=JSON.parse(fs.readFileSync(path.join(__dirname,'release-config.json')));
  if(!c.release_approved||!c.formal_apply_authorized||!c.final_sha_after_merge||c.target!==c.final_sha_after_merge)throw Error('OWNER_FINAL_RELEASE_APPROVAL_REQUIRED');
+ if(!c.runtime_pair_sha256)throw Error('RUNTIME_PAIR_BINDING_REQUIRED');
+ c.packageRoot=__dirname;
  const owner=JSON.parse(fs.readFileSync(ownerFile));
  if(owner.owner_pid!==process.ppid||owner.target!==c.target||!owner.token||owner.maintenance_verified!==true||typeof owner.creation_ticks!=='string'||!/^\d+$/.test(owner.creation_ticks))throw Error('INDEPENDENT_OWNER_REQUIRED');
  c.manifestPath=path.join(__dirname,'release-package/manifest.json');c.diffPath=path.join(__dirname,'release-package/exact.diff');

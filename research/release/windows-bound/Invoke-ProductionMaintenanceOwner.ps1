@@ -126,7 +126,10 @@ try{
   rollback={
    Assert-RollbackNotPreviouslyFailed $ctx.release
    $head=(& git -C $config.prod rev-parse HEAD).Trim()
-   if($head -eq $config.expected){Invoke-PairedVerifier $config $config.expected|Out-Null}
+   if($head -eq $config.expected){
+    if(Test-Path (Join-Path $ctx.release 'runtime-pair-journal.json')){ReleaseOperation 'rollback'}
+    Invoke-PairedVerifier $config $config.expected|Out-Null
+   }
    elseif($head -eq $config.target){ReleaseOperation 'rollback'}else{throw 'ROLLBACK_HEAD_UNKNOWN'}
    $ctx.current_sha=$config.expected
   }
