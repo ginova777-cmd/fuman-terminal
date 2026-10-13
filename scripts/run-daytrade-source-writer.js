@@ -8034,6 +8034,12 @@ async function syncMarketCalendarEvidence() {
     now: new Date(), stateDir: runtimePath('state'), days: 10,
   });
   await supabaseUpsert('market_calendar', rows, 'trade_date,market', { batchSize: 10 });
+  // Historical publication must obey the same read-only boundary as the upsert above.
+  // Do not construct its service-role adapter or save publication success in dry-run.
+  if (DRY_RUN) {
+    a04CalendarHistory={contract:'a04_verified_calendar_v1',status:'SKIPPED_READ_ONLY',reason:'DRY_RUN',trade_date:rows[0].trade_date,session_dates:[],checks:[],complete:false};
+    return rows[0];
+  }
   const historyFile=runtimePath('state','a04-calendar-history-v1.json');
   const cached=readJson(historyFile,null);
   const calendarDeadline=Math.min(Date.now()+20000,Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Infinity);
