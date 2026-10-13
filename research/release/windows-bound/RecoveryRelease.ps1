@@ -1,6 +1,14 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 function Get-RecoveryReleaseLock { 'C:/fuman-release-owner/final-release-deployment.lock' }
+function Assert-RecoveryReleaseLockIdentity($Raw,$Config){
+ if($Raw['pid'] -isnot [long] -and $Raw['pid'] -isnot [int] -or $Raw.pid -le 0){throw 'RECOVERY_RELEASE_LOCK_IDENTITY_UNKNOWN'}
+ if($Raw['action'] -ceq 'rollback'){return}
+ # deploy-core Apply locks predate the action field. Accept only the exact reviewed target-bound shape.
+ if($Raw.Contains('action') -or $Raw['target'] -cne $Config.target -or $Raw['token'] -isnot [string] -or $Raw.token -notmatch '^[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}$' -or $Raw['host'] -isnot [string] -or !$Raw.host -or $Raw['started_at'] -isnot [string]){throw 'RECOVERY_RELEASE_LOCK_IDENTITY_UNKNOWN'}
+ $stamp=[DateTimeOffset]::MinValue
+ if(![DateTimeOffset]::TryParse($Raw.started_at,[ref]$stamp)){throw 'RECOVERY_RELEASE_LOCK_IDENTITY_UNKNOWN'}
+}
 function Assert-RecoveryWindow {
  $tw=[TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow,'Taipei Standard Time')
  if(($tw.Hour*60+$tw.Minute) -ge 360 -and ($tw.Hour*60+$tw.Minute) -lt 812){throw 'RECOVERY_LIVE_STOCK_WINDOW_BLOCKED'}
@@ -31,7 +39,7 @@ function Invoke-RecoveryRollback($Config,$Directory,$Bundle,$Request,$Gate){
  if(Test-Path $lockPath){
   if(!$Request['failed_release_lock_sha256'] -or (Get-RecoveryHash $lockPath) -cne $Request.failed_release_lock_sha256){throw 'RECOVERY_RELEASE_LOCK_UNKNOWN'}
   $raw=Get-Content $lockPath -Raw|ConvertFrom-Json -AsHashtable
-  if($raw['action'] -cne 'rollback' -or $raw['pid'] -isnot [long] -and $raw['pid'] -isnot [int] -or $raw.pid -le 0){throw 'RECOVERY_RELEASE_LOCK_IDENTITY_UNKNOWN'}
+  Assert-RecoveryReleaseLockIdentity $raw $Config
   if(Get-Process -Id $raw.pid -ErrorAction SilentlyContinue){throw 'RECOVERY_RELEASE_LOCK_OWNER_ALIVE'}
   # Archive exactly the reviewed failed rollback marker. Unknown locks stay put.
   $archive="$Directory/attempts/$($Request.request_id)/failed-release-lock.json"
