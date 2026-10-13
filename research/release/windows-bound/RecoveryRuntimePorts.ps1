@@ -37,7 +37,8 @@ function New-RecoveryRuntimePorts($Config,$Directory,$Identity,$OwnerLock){
    $head=(& git -C $Config.prod rev-parse HEAD).Trim();$working.head=$head
    if($head -notin @($Config.expected,$Config.target)){throw 'RECOVERY_PRODUCTION_UNKNOWN'}
    Invoke-PairedVerifier $Config $head|Out-Null
-   $working.needsRollback=($head -eq $Config.target -or (Test-Path (Get-RecoveryReleaseLock)))
+   # Git/authority may already be restored while the paired runtime journal still needs readback.
+   $working.needsRollback=($head -eq $Config.target -or (Test-Path (Get-RecoveryReleaseLock)) -or (Test-Path (Join-Path $b.state.release 'runtime-pair-journal.json')))
    if($working.needsRollback){$null=Assert-RecoveryReleaseJournal $Config $Directory $b $q}
    if(!$b.state.legacy){throw 'RECOVERY_ORIGINAL_RUNTIME_IDENTITY_MISSING'}
    if($working.pendingStop){
