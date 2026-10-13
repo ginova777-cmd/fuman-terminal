@@ -73,7 +73,24 @@ function Start-BoundFuture($Config,$LogDir) {
  }.GetEnumerator()){$start.Environment[$pair.Key]=[string]$pair.Value}
  # Refuse inherited preload flags. Never carry an offline fixture into production.
  if($start.Environment.ContainsKey('NODE_OPTIONS') -and $start.Environment['NODE_OPTIONS']){throw 'NODE_OPTIONS_REQUIRE_REVIEW'}
- $p=[Diagnostics.Process]::Start($start)
+ # Preserve every attempt when start and recovery share the same Owner run.
+ $LogDir=Join-Path $LogDir ('collector-launch-'+[guid]::NewGuid().ToString('N'))
+ New-Item -ItemType Directory -Path $LogDir -ErrorAction Stop|Out-Null
+ $launchReceipt=Join-Path $LogDir 'collector-launch-receipt.json'
+ $launchSpec=Join-Path $LogDir 'collector-launch-spec.json'
+ $envMap=@{};foreach($key in @('FUMAN_RUNTIME_DIR','FUMAN_CACHE_DIR','FUMAN_STATE_DIR','FUGLE_FUTOPT_STREAMING_CHANNELS','FUGLE_FUTOPT_STREAMING_AFTER_HOURS','FUGLE_FUTOPT_STREAMING_MAX_TOTAL_SUBSCRIPTIONS','FUGLE_FUTOPT_STREAMING_MAX_SYMBOLS','FUGLE_FUTOPT_COLLECTOR_RELEASE','FUMAN_CHANGE_EVIDENCE_PHASE1')){$envMap[$key]=$start.Environment[$key]}
+ Write-CutoverReceipt $launchSpec @{exe=$start.FileName;entry=$entry;entry_hash=$releaseBinding.runtime_sha256;environment=$envMap;receipt=$launchReceipt}
+ $launch=[Diagnostics.ProcessStartInfo]::new();$launch.FileName=(Get-Command pwsh).Source
+ $launch.UseShellExecute=$true;$launch.WindowStyle=[Diagnostics.ProcessWindowStyle]::Hidden
+ $helper=Join-Path $PSScriptRoot 'Start-IsolatedHandleCollector.ps1'
+ $launch.Arguments='-NoProfile -File "'+$helper+'" -Spec "'+$launchSpec+'" -SpecHash '+(Get-FileHash $launchSpec).Hash
+ $broker=[Diagnostics.Process]::Start($launch)
+ if(!$broker.WaitForExit(15000)){throw 'LAUNCHER_TIMEOUT_REQUIRES_REVIEW'}
+ if($broker.ExitCode -ne 0 -or !(Test-Path $launchReceipt)){throw 'LAUNCHER_FAILED_REQUIRES_REVIEW'}
+ $la=Get-Content $launchReceipt -Raw|ConvertFrom-Json
+ if($la.spec_hash -ne (Get-FileHash $launchSpec).Hash -or $la.entry -ne $entry -or $la.entry_hash -ne $releaseBinding.runtime_sha256){throw 'LAUNCH_RECEIPT_DRIFT'}
+ $p=Get-Process -Id $la.pid -ErrorAction Stop
+ if([string]$p.StartTime.ToUniversalTime().Ticks -ne $la.creation_ticks){throw 'LAUNCH_PID_RECYCLED'}
  $null=$p.Handle
  $identity=@{pid=$p.Id;creation_ticks=$p.StartTime.ToUniversalTime().Ticks;exe=$start.FileName;entry=$entry;started_at=[DateTimeOffset]::UtcNow.ToString('o');release_sha=$releaseBinding.release_sha;runtime_sha256=$releaseBinding.runtime_sha256}
  Write-CutoverReceipt (Join-Path $LogDir 'future-start.json') $identity
@@ -104,6 +121,7 @@ function Invoke-BoundGracefulStop($Config,$Identity,$OwnerGate,$ReceiptPath) {
   $failure=$null
   try{$failure=$raw|ConvertFrom-Json -DateKind String -AsHashtable}catch{}
   $ex=[InvalidOperationException]::new('GRACEFUL_STOP_FAILED_NO_FORCE_FALLBACK')
+  Write-CutoverReceipt $ReceiptPath @{status='GRACEFUL_STOP_FAILED';exit_code=$LASTEXITCODE;raw_output=@($raw);failure=$failure;force_fallback=$false}
   if($failure -and $failure.status -eq 'GRACEFUL_STOP_BLOCKED' -and $failure.stop_not_requested -is [bool] -and $failure.stop_not_requested -eq $true){
    Write-CutoverReceipt $ReceiptPath $failure
    $ex.Data['StopNotRequested']=$true
@@ -123,3 +141,5 @@ function Assert-RollbackNotPreviouslyFailed($ReleaseDirectory) {
   if($r.status -eq 'FAILED'){throw 'PRIOR_ROLLBACK_FAILED_NO_AUTOMATIC_RETRY'}
  }
 }
+
+
