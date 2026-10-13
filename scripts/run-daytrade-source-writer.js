@@ -8073,9 +8073,8 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
     readJson(runtimePath('config','daytrade-module-recovery-policy.json'),null), recoveryRegistry,
     {trade_date:taipeiDate(),release_sha:recoveryRelease});
   if(!/^[a-f0-9]{40}$/.test(recoveryRelease||'')) moduleRecovery={status:'PAUSED',enabled:[],probe:null,paused:Object.keys(recoveryRegistry.modules),reason:'MODULE_RELEASE_UNVERIFIED'};
-  // Only A01 has a scoped producer path in this first recovery release.
-  // Additional modules require reviewed dependency isolation before probing.
-  if(moduleWorkIds().some(id=>id!=='A01')) moduleRecovery={status:'PAUSED',enabled:[],probe:null,paused:Object.keys(recoveryRegistry.modules),reason:'MODULE_ISOLATION_NOT_IMPLEMENTED'};
+  // Restrict validated formal policy to implemented routes; isolated jobs keep their explicit test scope.
+  if(!isolatedModules) moduleRecovery=require('../lib/daytrade-formal-module-route.cjs').restrict(moduleRecovery,recoveryRegistry);
   console.log(JSON.stringify({ stage: 'writer_round_identity', checkedAt: nowIso(), pid: process.pid, parent_pid: process.ppid, entrypoint: __filename, ...writerTickIdentity }));
   const tickStage = (stage, extra = {}) => console.log(JSON.stringify({
     ok: true,
@@ -8826,25 +8825,25 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
       const sessionCandles=needsCandles?require('../lib/mother-pool-session-candles').select({payload:cache.payload,tradeDate:identity.trade_date,asOf:sideAsOf}):[];
       const inputs=[require('../lib/mother-pool-identity-source').collect({identity,symbols:snapshot.symbols,calendar:marketCalendarEvidence,lease:writerLease,asOf:nowIso()})];
       if(moduleWorkIds().some(id=>id!=='A01')){
-      inputs.push(require('../lib/mother-pool-eligibility-source').collect({identity,evidence:activeSymbols.sourceEvidence,asOf:sideAsOf}));
-      inputs.push(require('../lib/mother-pool-a03-integration.cjs').dispatchForWriter({
+      if(moduleWorkIds().some(id=>["A02"].includes(id))) inputs.push(require('../lib/mother-pool-eligibility-source').collect({identity,evidence:activeSymbols.sourceEvidence,asOf:sideAsOf}));
+      if(moduleWorkIds().some(id=>["A03"].includes(id))) inputs.push(require('../lib/mother-pool-a03-integration.cjs').dispatchForWriter({
         legacyCollect:()=>require('../lib/mother-pool-warmup-union')[isolatedModules?'collectV11':'collect']({identity,symbols:snapshot.symbols,bridge:readJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE,null),asOf:sideAsOf}),
         isolated:Boolean(isolatedModules)&&process.env.A03_ISOLATED_INTEGRATION_TEST==='1',
         candidateInput:isolatedModules&&process.env.A03_ISOLATED_INTEGRATION_TEST==='1'?readJson(process.env.A03_ISOLATED_INPUT_FILE,null):null,
         identity,asOf:sideAsOf,snapshotSymbols:snapshot.symbols
       }));
-      inputs.push(require('../lib/mother-pool-historical-volume-price').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,asOf:nowIso()}));
-      inputs.push(require('../lib/mother-pool-daytrade-ratio').collect({identity,symbols:snapshot.symbols,activeSymbols,dailyVolumeMap,officialSource:officialDaytradeSource,asOf:nowIso()}));
+      if(moduleWorkIds().some(id=>["A04"].includes(id))) inputs.push(require('../lib/mother-pool-historical-volume-price').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,asOf:nowIso()}));
+      if(moduleWorkIds().some(id=>["A05"].includes(id))) inputs.push(require('../lib/mother-pool-daytrade-ratio').collect({identity,symbols:snapshot.symbols,activeSymbols,dailyVolumeMap,officialSource:officialDaytradeSource,asOf:nowIso()}));
       const collectorStatus=readJson(FUGLE_WS_STATUS_FILE,null);
-      inputs.push(require('../lib/mother-pool-websocket-source').collect({identity,symbols:snapshot.symbols,status:collectorStatus,asOf:nowIso()}));
-      inputs.push(require('../lib/mother-pool-previous-ohlc').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,asOf:sideAsOf,lockDirectory:runtimePath('data','mother-pool-a15',identity.trade_date)}));
-      inputs.push(require('../lib/mother-pool-a16-module').collect({identity,symbols:snapshot.symbols,asOf:sideAsOf,runtime:runtimePath()}));
-      if(sideMinutes>=530)inputs.push(...require('../lib/mother-pool-morning-module').collect({identity,symbols:snapshot.symbols,asOf:sideAsOf,runtime:runtimePath()}));
-      if(sideMinutes>=525)inputs.push(require('../lib/mother-pool-natural-trial').collect({identity,symbols:snapshot.symbols,history:preopenTrialHistory,asOf:sideAsOf}));
-      if(sideMinutes>=539)inputs.push(require('../lib/mother-pool-trial-trajectory').collect({identity,symbols:snapshot.symbols,history:preopenTrialHistory,asOf:sideAsOf}));
+      if(moduleWorkIds().some(id=>["A06"].includes(id))) inputs.push(require('../lib/mother-pool-websocket-source').collect({identity,symbols:snapshot.symbols,status:collectorStatus,asOf:nowIso()}));
+      if(moduleWorkIds().some(id=>["A15"].includes(id))) inputs.push(require('../lib/mother-pool-previous-ohlc').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,asOf:sideAsOf,lockDirectory:runtimePath('data','mother-pool-a15',identity.trade_date)}));
+      if(moduleWorkIds().some(id=>["A16"].includes(id))) inputs.push(require('../lib/mother-pool-a16-module').collect({identity,symbols:snapshot.symbols,asOf:sideAsOf,runtime:runtimePath()}));
+      if(sideMinutes>=530&&moduleWorkIds().some(id=>['A11','A12'].includes(id)))inputs.push(...require('../lib/mother-pool-morning-module').collect({identity,symbols:snapshot.symbols,asOf:sideAsOf,runtime:runtimePath()}));
+      if(sideMinutes>=525&&moduleWorkIds().includes('A13'))inputs.push(require('../lib/mother-pool-natural-trial').collect({identity,symbols:snapshot.symbols,history:preopenTrialHistory,asOf:sideAsOf}));
+      if(sideMinutes>=539&&moduleWorkIds().includes('A17'))inputs.push(require('../lib/mother-pool-trial-trajectory').collect({identity,symbols:snapshot.symbols,history:preopenTrialHistory,asOf:sideAsOf}));
       if(sideMinutes<540){
-        inputs.push(require('../lib/mother-pool-preopen-history').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,quoteMap,activeSymbols,rawEvidence:intradayMap.preopenRawEvidence,asOf:sideAsOf}));
-        try { inputs.push(...require('../lib/mother-pool-preopen-ma20').collect({
+        if(moduleWorkIds().includes('A07')) inputs.push(require('../lib/mother-pool-preopen-history').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,quoteMap,activeSymbols,rawEvidence:intradayMap.preopenRawEvidence,asOf:sideAsOf}));
+        if(moduleWorkIds().some(id=>['A08','A09'].includes(id))) try { inputs.push(...require('../lib/mother-pool-preopen-ma20').collect({
           identity,symbols:snapshot.symbols,snapshot,calendar:marketCalendarEvidence,
           rawEvidence:intradayMap.preopenRawEvidence,asOf:sideAsOf,
         })); } catch(error) { result.payload.module_persistence_errors.push({modules:['A08','A09'],error:String(error.message||error)}); }
