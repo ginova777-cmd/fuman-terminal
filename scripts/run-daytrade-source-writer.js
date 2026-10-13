@@ -9092,10 +9092,13 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
     result.payload.final_water_refresh = finalWaterRefresh;
     result.payload.formal_entry_allowed = false;
     result.payload.latest_update_allowed = false;
+    console.log(JSON.stringify({stage:'writer_natural_pending',identity:writerTickIdentity,
+      checked_at:nowIso(),calendar:marketCalendarEvidence,refresh:finalWaterRefresh}));
   }
   const offSession = Boolean(result.payload.off_session);
   return {
     ok: finalWaterRefresh.status !== 'NATURAL_PENDING' && (result.gateGrade === "A" || offSession),
+    naturalPending: finalWaterRefresh.status === 'NATURAL_PENDING',
     mode: APPLY ? "apply" : "dry-run",
     fetchEnabled: FETCH_ENABLED,
     sourceName: SOURCE_NAME,
@@ -9375,6 +9378,7 @@ async function main() {
       const started = Date.now();
       const result = await tick();
       console.log(JSON.stringify(result, null, 2));
+      if (result.naturalPending === true) { process.exitCode = 75; break; }
       if (ONCE) break;
       if (maxRunReached || (MAX_RUN_SECONDS > 0 && (Date.now() - runStartedAt) / 1000 >= MAX_RUN_SECONDS)) break;
       const elapsed = Math.ceil((Date.now() - started) / 1000);
