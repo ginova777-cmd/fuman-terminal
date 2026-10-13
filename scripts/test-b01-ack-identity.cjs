@@ -3,7 +3,7 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
 const repo=path.resolve(__dirname,'..'),out=path.resolve(process.env.B01_TEST_OUTPUT||''),guard=process.env.B01_TEST_GUARD;
 if(!guard||!process.env.B01_TEST_OUTPUT)throw Error('ISOLATED_OUTPUT_AND_GUARD_REQUIRED');
-const {identityFields,reconcile}=require('../lib/mother-pool-module-write-set');
+const {identityFields,reconcile}=require('../lib/mother-pool-stock-module-write-set');
 const verify=require('../lib/verify-mother-pool-module-round').createVerifier('B01').validRound;
 const shared=require('../lib/daytrade-shared-evidence.cjs');
 const rounds=[1,2].map(i=>JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/b01-ack/ack-round'+i+'.json'))));

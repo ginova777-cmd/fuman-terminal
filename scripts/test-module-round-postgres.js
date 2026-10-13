@@ -2,7 +2,7 @@
 // Explicit isolated server only; no runtime credentials are loaded.
 const assert=require('node:assert/strict'),{spawnSync}=require('node:child_process');
 const {persistModuleRound}=require('../lib/persist-mother-pool-module-round');
-const {reconcile}=require('../lib/mother-pool-module-write-set');
+const {reconcile}=require('../lib/mother-pool-stock-module-write-set');
 const psql=process.env.MP_TEST_PSQL||'C:/Program Files/PostgreSQL/17/bin/psql.exe';
 function query(sql,role='service_role') {
  const r=spawnSync(psql,['-X','-A','-t','-v','ON_ERROR_STOP=1','-h','127.0.0.1','-p','55439','-U','mp_test','-d','postgres'],{input:`SET ROLE ${role};\n${sql}`,encoding:'utf8',windowsHide:true,timeout:10000});

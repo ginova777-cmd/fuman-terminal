@@ -73,11 +73,7 @@ const COLLECTOR_RELEASE = "futopt-daytrade-candles-v8";
 let lastMessageAt = "";
 let formalCatalogue = null;
 let catalogueWait = null;
-let catalogueCalendar = null;
 const catalogueDate = () => new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
-const calendarAllowsCatalogue = () => catalogueCalendar?.verified === true
-  && catalogueCalendar.state === 'OPEN' && catalogueCalendar.date === catalogueDate()
-  && Date.now() < Date.parse(catalogueCalendar.valid_until);
 let lastFormalLiveMirrorAt = 0;
 let formalLiveMirrorInFlight = false;
 
@@ -454,7 +450,6 @@ async function run() {
       const messageAgeSeconds = lastMessageAt ? Math.max(0, Math.round((Date.now() - Date.parse(lastMessageAt)) / 1000)) : null;
       const requiredChannelsReady = ["trades", "aggregates", "candles"].every((channel) => STREAMING_CHANNELS.includes(channel));
       const formalReady = extra.ok !== false
-        && calendarAllowsCatalogue()
         && Boolean(ws && ws.readyState === WebSocket.OPEN)
         && authenticated
         && formalCatalogue?.trade_date === catalogueDate()
@@ -469,9 +464,6 @@ async function run() {
         && forbiddenChunks === 0;
       const formalReadyReason = formalReady
         ? "streaming_authenticated_required_channels_and_subscription_ready"
-        : !calendarAllowsCatalogue()
-          ? catalogueCalendar?.state === 'CLOSED' && catalogueCalendar.date === catalogueDate() && Date.now() < Date.parse(catalogueCalendar.valid_until)
-            ? 'taifex_regular_market_closed' : 'taifex_regular_calendar_unverified'
         : extra.ok === false
           ? "websocket_status_error"
           : !ws || ws.readyState !== WebSocket.OPEN
@@ -494,7 +486,6 @@ async function run() {
         websocketAuthenticated: authenticated,
         transportHealth: streamHealth.snapshot(),
         catalogueRetry: catalogueWait,
-        catalogueCalendar,
         formalReady,
         formalReadyReason,
         streamingOpenedAt: openedAt,
@@ -533,40 +524,22 @@ async function run() {
     };
 
     const refreshPendingCatalogue = async () => {
-      if (shutdown.quiescing || catalogueRefreshInFlight || closed) return;
+      if (shutdown.quiescing || formalCatalogue || catalogueRefreshInFlight || closed) return;
       catalogueRefreshInFlight = true;
       try {
         const result = await track(refreshCatalogue({runtime:RUNTIME_DIR,tradeDate:catalogueDate(),asOf:nowIso(),key:apiKey}));
         if (closed || shutdown.quiescing) return;
-        catalogueCalendar = result.calendar || null;
         if (result.status === 'ready') {
-          const needsSubscribe = !formalCatalogue || formalCatalogue.trade_date !== result.catalogue.trade_date;
           formalCatalogue = result.catalogue;
           catalogueWait = null;
-          if (needsSubscribe) await subscribe();
-        } else {
-          formalCatalogue = null;
-          catalogueWait = result.receipt;
-          if (selection.selectedSymbols.length) {
-            selection = {selectedSymbols:[],selectedRows:[],allRows:[],requestedSymbols:0};
-            tickerBySymbol.clear(); chunks = []; streamHealth.setExpected([], STREAMING_CHANNELS);
-            ws.close(1000, 'calendar or catalogue no longer verified');
-          }
-        }
-      } catch {
-        catalogueCalendar = null; formalCatalogue = null; catalogueWait = {error:'FUTURES_CATALOGUE_REFRESH_FAILED'};
-        if (selection.selectedSymbols.length) {
-          selection = {selectedSymbols:[],selectedRows:[],allRows:[],requestedSymbols:0};
-          tickerBySymbol.clear(); chunks = []; streamHealth.setExpected([], STREAMING_CHANNELS);
-          ws.close(1000, 'calendar refresh failed');
-        }
-      }
+          await subscribe();
+        } else catalogueWait = result.receipt;
+      } catch { catalogueWait = {error:'FUTURES_CATALOGUE_REFRESH_FAILED'}; }
       finally { catalogueRefreshInFlight = false; }
     };
 
     const subscribe = async () => {
       if (shutdown.quiescing || !ws || ws.readyState !== WebSocket.OPEN || !authenticated) return;
-      if (!calendarAllowsCatalogue()) { void refreshPendingCatalogue(); return; }
       if (!formalCatalogue) { void refreshPendingCatalogue(); return; }
       if(formalCatalogue?.trade_date!==catalogueDate()){ws.close(1000,'catalogue day changed');return;}
       selection = selectStreamingTickers();
@@ -593,7 +566,7 @@ async function run() {
       cycles += 1;
       for (const channel of STREAMING_CHANNELS) {
         for (const symbols of chunks) {
-          if(shutdown.quiescing || !calendarAllowsCatalogue())return;
+          if(shutdown.quiescing)return;
           ws.send(JSON.stringify(buildSubscribeMessage(channel, symbols)));
           chunksSent += 1;
           await delay(STREAMING_SUBSCRIBE_PACE_MS);
@@ -640,7 +613,7 @@ async function run() {
           || STREAMING_CHANNELS[0];
         const futureSymbol = normalizeFutureSymbol(data.symbol || data.future_symbol);
         const ticker = tickerBySymbol.get(futureSymbol) || null;
-        if (!calendarAllowsCatalogue() || formalCatalogue?.trade_date !== catalogueDate() || !ticker) return;
+        if (!formalCatalogue || !ticker) return;
         acceptedBoundary.events++;
         acceptedBoundary.last_event={symbol:futureSymbol,channel:inferredChannel,time:data.date||data.time||data.lastUpdated||null,serial:data.serial??null};
         try {
@@ -678,7 +651,7 @@ async function run() {
           return;
         }
         writeStreamingStatus();
-        void refreshPendingCatalogue();
+        if (!formalCatalogue) void refreshPendingCatalogue();
         const lastMessageMs = Date.parse(streamHealth.snapshot().last_transport_at || openedAt || "");
         if (Number.isFinite(lastMessageMs)
           && Date.now() - lastMessageMs > STREAMING_STALE_RECONNECT_MS
@@ -698,27 +671,8 @@ async function run() {
 
   // eslint-disable-next-line no-constant-condition
   const catalogueRetryFile = path.join(RUNTIME_DIR, 'status', 'futopt-catalogue-retry.json');
-  const resolveSession = require('../lib/taifex-regular-calendar.cjs').createResolver({
-    saveEvidence: (hash, evidence, raw) => {
-      const root = path.join(RUNTIME_DIR, 'data', 'taifex-regular-calendar');
-      fs.mkdirSync(root, {recursive:true});
-      raw.forEach((bytes, i) => {
-        const file = path.join(root, evidence.hashes[i] + '.bin');
-        if (!fs.existsSync(file)) fs.writeFileSync(file, bytes, {flag:'wx'});
-        if (stopHash(fs.readFileSync(file)) !== evidence.hashes[i]) throw Error('TAIFEX_EVIDENCE_READBACK');
-      });
-      const file = path.join(root, hash + '.json');
-      writeJson(file, evidence);
-      if (stopHash(JSON.stringify(readJson(file))) !== hash) throw Error('TAIFEX_RECEIPT_READBACK');
-    },
-  });
-  const refreshCatalogue = require('../lib/futopt-calendar-catalogue.cjs').createCalendarCatalogueRetry({
-    resolveSession: request => {
-      if (STREAMING_AFTER_HOURS === true) throw Error('TAIFEX_AFTERHOURS_NOT_SUPPORTED');
-      return resolveSession(request);
-    },
-    refresh: options => formalCatalogue?.trade_date === options.tradeDate
-      ? formalCatalogue : require('../lib/stock-future-standard-runtime.cjs').refresh(options),
+  const refreshCatalogue = require('../lib/futopt-catalogue-retry.cjs').createCatalogueRetry({
+    refresh: require('../lib/stock-future-standard-runtime.cjs').refresh,
     readState: () => readJson(catalogueRetryFile, null),
     writeState: value => writeJson(catalogueRetryFile, value),
   });
@@ -728,7 +682,6 @@ async function run() {
     try {
       const catalogueResult = await track(refreshCatalogue({runtime:RUNTIME_DIR,tradeDate:catalogueDate(),asOf:nowIso(),key:apiKey}));
       if(shutdown.quiescing)return;
-      catalogueCalendar = catalogueResult.calendar || null;
       if (catalogueResult.status !== 'ready') {
         formalCatalogue = null;
         catalogueWait = catalogueResult.receipt;
