@@ -8632,6 +8632,8 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
   let preopenTrialHistory = null;
   if(isolatedModules && moduleWorkIds().some(id=>['A13','A17','A18','A19'].includes(id))){
     result.payload.preopen_a15_a19_evidence=await buildPreopenA15A19Evidence(activeSymbols,quoteMap,taipeiDate(),history=>{preopenTrialHistory=history;});
+  } else if(moduleWorkIds().includes('A13')) {
+    result.payload.preopen_trial_source=await buildPreopenA15A19Evidence(activeSymbols,quoteMap,taipeiDate(),history=>{preopenTrialHistory=history;},{trialOnly:true});
   }
   console.log(JSON.stringify({ok:true,stage:'daytrade_tick:preopen_evidence:start',checkedAt:nowIso()}));
   result.payload.preopen_a15_a19_evidence ||= {status:'PAUSED',complete:false,reason:'OWNER_REQUESTED_SEQUENTIAL_VALIDATION'};
@@ -9133,9 +9135,9 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
   };
 }
 
-async function buildPreopenA15A19Evidence(activeSymbols, quoteMap, tradeDate, onTrialHistory) {
+async function buildPreopenA15A19Evidence(activeSymbols, quoteMap, tradeDate, onTrialHistory, {trialOnly=false}={}) {
   const rows = Array.isArray(activeSymbols) ? activeSymbols : [];
-  const a15Rows = rows.map((r) => preopenA15A19.a15({ symbol: r.symbol, prev_open: r.prev_open ?? r.previous_open, prev_high: r.prev_high ?? r.previous_high, prev_low: r.prev_low ?? r.previous_low, prev_close: r.prev_close ?? r.previous_close, prev_vwap: r.prev_vwap ?? null }));
+  const a15Rows = trialOnly ? [] : rows.map((r) => preopenA15A19.a15({ symbol: r.symbol, prev_open: r.prev_open ?? r.previous_open, prev_high: r.prev_high ?? r.previous_high, prev_low: r.prev_low ?? r.previous_low, prev_close: r.prev_close ?? r.previous_close, prev_vwap: r.prev_vwap ?? null }));
   const asOf = nowIso();
   let a17Samples = [], trialReadback = { status: 'NOT_DUE', pages: [], source: 'fugle_preopen_snapshot_history' };
   if (taipeiMinutes() >= PREOPEN_CAPTURE_START_MINUTES) {
@@ -9165,6 +9167,7 @@ async function buildPreopenA15A19Evidence(activeSymbols, quoteMap, tradeDate, on
       trialReadback.status = 'BLOCKED'; trialReadback.reason = error.message;
     }
   }
+  if(trialOnly)return {source:'fugle_preopen_snapshot_history',trade_date:tradeDate,readback:trialReadback,complete:false};
   // Canonical A16 producer owns history and fixed-generation anon readback.
   // Writer only references the current day's verified summary; no raw-values fallback.
   const a16 = a16Writer.readReferences({ runtime: runtimePath(), tradeDate, symbols: rows });
