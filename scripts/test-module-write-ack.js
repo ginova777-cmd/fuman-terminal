@@ -11,7 +11,7 @@ const end=src.indexOf('\n            },',start);
 const code='callback=async body=>{'+src.slice(start+'persist:async body=>{'.length,end)+'\n}';
 async function run(alter=()=>{},mode='timeout'){
  let writes=0,reads=0;const rounds=JSON.parse(JSON.stringify([round])),rows=JSON.parse(JSON.stringify([row]));alter(rounds,rows);
- const ctx={require,JSON,Buffer,recordModule:()=>{},URLSearchParams,AbortSignal,DRY_RUN:false,SUPABASE_URL:'https://isolated.invalid',SUPABASE_WRITE_TIMEOUT_MS:10,headers:()=>({}),requireSupabaseKey:()=> 'isolated',
+ const ctx={require,JSON,Buffer,input:{module_id:'A01'},moduleWorkIds:()=>['A01'],recordModule:()=>{},URLSearchParams,AbortSignal,DRY_RUN:false,SUPABASE_URL:'https://isolated.invalid',SUPABASE_WRITE_TIMEOUT_MS:10,headers:()=>({}),requireSupabaseKey:()=> 'isolated',
   fetch:async()=>{writes++;if(mode==='http')return {ok:false,status:503,text:async()=> 'failed'};throw Object.assign(Error('timeout'),{name:'TimeoutError'});},
   supabaseGetPaged:async(resource,query,options)=>{reads++;const q=new URLSearchParams(query);assert.equal(q.get('writer_run_id'),'eq.w');assert.equal(q.get('trade_date'),'eq.2026-09-29');assert.equal(options.pageSize,500);assert.equal(options.requireExactCount,true);return resource.endsWith('round_v2')?rounds:rows;}};
  vm.runInNewContext(code,ctx);
@@ -19,8 +19,8 @@ async function run(alter=()=>{},mode='timeout'){
 }
 (async()=>{
  let result=await run();assert.equal(result.ack.committed,true);assert.equal(result.writes,1);assert.equal(result.reads,2);
- for(const change of [(r)=>r.splice(0),(r)=>r.push(r[0]),(r)=>{r[0].document.generation_id='new';},(_r,x)=>x.splice(0),(_r,x)=>x.push(x[0]),(_r,x)=>{x[0].evidence.value=8;},(_r,x)=>{x[0].writer_run_id='new';},r=>{r[0].committed_at='invalid';}]){
-  result=await run(change);assert(result.error);assert.equal(result.writes,1);assert.equal(result.reads,2);
+ let caseIndex=0;for(const change of [(r)=>r.splice(0),(r)=>r.push(r[0]),(r)=>{r[0].document.generation_id='new';},(_r,x)=>x.splice(0),(_r,x)=>x.push(x[0]),(_r,x)=>{x[0].evidence.value=8;},(_r,x)=>{x[0].writer_run_id='new';},r=>{r[0].committed_at='invalid';}]){
+  result=await run(change);assert(result.error);assert.equal(result.writes,1);assert.equal(result.reads,caseIndex++===0?5:2);
  }
  result=await run(()=>{},'http');assert(result.error);assert.equal(result.writes,1);assert.equal(result.reads,0);
  console.log('PASS actual Writer module RPC timeout exact readback; missing/duplicate/mismatched rows, generation and commit time fail; one POST only; HTTP503 never replayed. Isolated no network.');

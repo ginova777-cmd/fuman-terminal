@@ -18,6 +18,7 @@ const {isCurrent:checkCurrent}=require('../lib/mother-pool-receipt-current.cjs')
 const fixedNow=Date.parse('2026-09-17T02:02:00Z');
 const isCurrent=(r,s,d)=>checkCurrent(r,s,d,{now:fixedNow});
 const binding=bind(),receipt={checked_at:new Date(fixedNow).toISOString(),integrity_status:"PASS",realtime_status:"PASS",closed_loop_ok:true,complete:true,trade_date:s.trade_date,canonical_run_id:s.canonical_run_id,snapshot_binding:binding};
+Object.assign(receipt,{ok:true,verifier_ok:true,receipt_written:true,failed_checks:[],first_blocker:null,verification_run_id:'isolated-verification',publication:{status:'POST_ACKNOWLEDGED',verification_run_id:'isolated-verification',generation:binding.generation,snapshot_sha256:binding.snapshot_sha256,acknowledged_at:new Date(fixedNow).toISOString()}});
 assert.equal(isCurrent(receipt,JSON.stringify(s),s.trade_date),true);
 for(const patch of [{generation:'next'},{snapshot_sequence:2},{mother_pool_run_id:'next'},{symbols:['2317']},{complete:false}])assert.equal(isCurrent(receipt,JSON.stringify({...s,...patch}),s.trade_date),false);
 assert.equal(isCurrent(receipt,JSON.stringify(s),'2026-09-18'),false);

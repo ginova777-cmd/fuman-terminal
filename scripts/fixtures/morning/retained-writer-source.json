@@ -1,0 +1,2481 @@
+{
+  "scope": "ISOLATED_TEST_ONLY",
+  "source": {
+    "us_0820": {
+      "handoff": {
+        "contract": "opening-report-0830-mother-pool-handoff-ack-v2",
+        "complete": true,
+        "exitCode": 0,
+        "db_readback_ok": true,
+        "trade_date": "2026-10-12",
+        "report_run_id": "opening-report-0830-20261012-us_0820-fixture",
+        "checked_at": "2026-10-12T00:51:00Z",
+        "accepted_symbols": [
+          "2049",
+          "2308"
+        ],
+        "accepted_readback_symbols": [
+          "2049",
+          "2308"
+        ],
+        "source_evidence": {
+          "contract": "opening_report_handoff_raw_evidence_v1",
+          "stage": "us_0820",
+          "readback_role": "anon",
+          "aggregate": {
+            "run_id": "opening-report-0830-20261012-us_0820-fixture",
+            "status": "BRIDGE_OK",
+            "industry_count": 1,
+            "priority_observation_mode": "positive_industry_top3"
+          },
+          "industry_payloads": [
+            {
+              "date": "2026-10-12",
+              "report_time": "08:20",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-ROBOTICS_AUTOMATION",
+              "source": "opening_report_0830",
+              "mode": "priority_bias_only",
+              "industry": "ROBOTICS_AUTOMATION",
+              "display_name": "機器人／自動化",
+              "priority_observation_basis": "positive_industry_top3",
+              "priority_observation_rank": 1,
+              "priority_overseas_leaders": [
+                {
+                  "rank": 1,
+                  "symbol": "AAPL",
+                  "percent": 1,
+                  "source_time": "2026-10-12T00:00:00Z"
+                }
+              ],
+              "mapped_symbols_a": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                }
+              ],
+              "mapped_symbols_b": [
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "mapped_symbols": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                },
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "bias": "neutral_mixed",
+              "confidence": 0.8,
+              "evidence_summary": "fixture",
+              "mapping_contract": "opening-report-0830-industry-map-v2",
+              "mapping_reviewed_at": "2026-09-09",
+              "mapping_evidence_authorities": [
+                "MOPS",
+                "ISSUER"
+              ],
+              "allowed_action": "boost_scan_priority_only",
+              "forbidden_action": "publish_formal_candidate_without_taiwan_evidence",
+              "overseas_return_1d_pct": 0.26,
+              "overseas_leader_detection": {
+                "industry": "ROBOTICS_AUTOMATION",
+                "leader_count": 1,
+                "valid_count": 1,
+                "unavailable_count": 0,
+                "average_percent": 0.26,
+                "leaders": [
+                  {
+                    "yahoo_symbol": "AAPL",
+                    "ok": true,
+                    "percent": 0.26,
+                    "source": "isolated",
+                    "source_time": "2026-10-12T00:00:00Z"
+                  }
+                ]
+              },
+              "positive_return_rank": 1
+            }
+          ],
+          "bridges": [
+            {
+              "receipt": {
+                "contract": "opening-report-0830-priority-bias-bridge-v1",
+                "ok": true,
+                "received": true,
+                "source": "opening_report_0830",
+                "mode": "priority_bias_only",
+                "status": "priority_scan",
+                "reason_code": "opening_report_0830_industry_bias",
+                "forbidden_publish_guard": true,
+                "formal_candidate_count": 0,
+                "formal_candidate_allowed": false,
+                "publish_allowed": false,
+                "opening_report_status_unchanged": true,
+                "run_id": "opening-report-0830-20261012-us_0820-fixture-ROBOTICS_AUTOMATION",
+                "validation": {
+                  "ok": true
+                },
+                "accepted_symbols": [
+                  "2049",
+                  "2308"
+                ],
+                "rejected_symbols": []
+              }
+            }
+          ],
+          "rows": [
+            {
+              "symbol": "2049",
+              "market": "TWSE",
+              "priority_reason": "writer_priority",
+              "source": "fugle_daytrade_source",
+              "payload": {
+                "openingReport0830IndustryBias": {
+                  "date": "2026-10-12",
+                  "report_time": "08:20",
+                  "stage": "us_0820",
+                  "report_run_id": "opening-report-0830-20261012-us_0820-fixture",
+                  "run_id": "opening-report-0830-20261012-us_0820-fixture",
+                  "source": "opening_report_0830",
+                  "mode": "priority_bias_only",
+                  "industry": "ROBOTICS_AUTOMATION",
+                  "linked_industries": [
+                    "ROBOTICS_AUTOMATION"
+                  ],
+                  "observations": [
+                    {
+                      "industry": "ROBOTICS_AUTOMATION",
+                      "run_id": "opening-report-0830-20261012-us_0820-fixture-ROBOTICS_AUTOMATION",
+                      "priority_observation_rank": 1,
+                      "priority_overseas_leaders": [
+                        {
+                          "rank": 1,
+                          "symbol": "AAPL",
+                          "percent": 1,
+                          "source_time": "2026-10-12T00:00:00Z"
+                        }
+                      ]
+                    }
+                  ],
+                  "highest_industry_rank": 1,
+                  "boost_once": true,
+                  "reason_code": "opening_report_0830_industry_bias",
+                  "status": "watchlist_boosted",
+                  "formal_candidate": false,
+                  "formal_candidate_allowed": false,
+                  "forbidden_publish_guard": true
+                }
+              }
+            },
+            {
+              "symbol": "2308",
+              "market": "TWSE",
+              "priority_reason": "writer_priority",
+              "source": "fugle_daytrade_source",
+              "payload": {
+                "openingReport0830IndustryBias": {
+                  "date": "2026-10-12",
+                  "report_time": "08:20",
+                  "stage": "us_0820",
+                  "report_run_id": "opening-report-0830-20261012-us_0820-fixture",
+                  "run_id": "opening-report-0830-20261012-us_0820-fixture",
+                  "source": "opening_report_0830",
+                  "mode": "priority_bias_only",
+                  "industry": "ROBOTICS_AUTOMATION",
+                  "linked_industries": [
+                    "ROBOTICS_AUTOMATION"
+                  ],
+                  "observations": [
+                    {
+                      "industry": "ROBOTICS_AUTOMATION",
+                      "run_id": "opening-report-0830-20261012-us_0820-fixture-ROBOTICS_AUTOMATION",
+                      "priority_observation_rank": 1,
+                      "priority_overseas_leaders": [
+                        {
+                          "rank": 1,
+                          "symbol": "AAPL",
+                          "percent": 1,
+                          "source_time": "2026-10-12T00:00:00Z"
+                        }
+                      ]
+                    }
+                  ],
+                  "highest_industry_rank": 1,
+                  "boost_once": true,
+                  "reason_code": "opening_report_0830_industry_bias",
+                  "status": "watchlist_boosted",
+                  "formal_candidate": false,
+                  "formal_candidate_allowed": false,
+                  "forbidden_publish_guard": true
+                }
+              }
+            }
+          ],
+          "rows_sha256": "8f04505c0f3460d704ed559f4a6e777535cb5f60afc70cda6924d794c8fb9c9c",
+          "requests": [
+            {
+              "http_status": 200,
+              "role": "anon",
+              "row_count": 2
+            }
+          ],
+          "all_industry_payloads": [
+            {
+              "industry": "AI_GPU_CLOUD",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-AI_GPU_CLOUD",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "AWS_AI_DATACENTER",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-AWS_AI_DATACENTER",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "FOUNDRY_ADVANCED_PROCESS",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-FOUNDRY_ADVANCED_PROCESS",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "IC_DESIGN",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-IC_DESIGN",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "MEMORY",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-MEMORY",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "ABF_SUBSTRATE",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-ABF_SUBSTRATE",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "PCB_CCL",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-PCB_CCL",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "PASSIVE_COMPONENTS",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-PASSIVE_COMPONENTS",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "THERMAL_POWER",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-THERMAL_POWER",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "NETWORK_HIGH_SPEED",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-NETWORK_HIGH_SPEED",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "OPTICAL_COMM",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-OPTICAL_COMM",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "III_V_OPTICAL",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-III_V_OPTICAL",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "date": "2026-10-12",
+              "report_time": "08:20",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-ROBOTICS_AUTOMATION",
+              "source": "opening_report_0830",
+              "mode": "priority_bias_only",
+              "industry": "ROBOTICS_AUTOMATION",
+              "display_name": "機器人／自動化",
+              "priority_observation_basis": "positive_industry_top3",
+              "priority_observation_rank": 1,
+              "priority_overseas_leaders": [
+                {
+                  "rank": 1,
+                  "symbol": "AAPL",
+                  "percent": 1,
+                  "source_time": "2026-10-12T00:00:00Z"
+                }
+              ],
+              "mapped_symbols_a": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                }
+              ],
+              "mapped_symbols_b": [
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "mapped_symbols": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                },
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "bias": "neutral_mixed",
+              "confidence": 0.8,
+              "evidence_summary": "fixture",
+              "mapping_contract": "opening-report-0830-industry-map-v2",
+              "mapping_reviewed_at": "2026-09-09",
+              "mapping_evidence_authorities": [
+                "MOPS",
+                "ISSUER"
+              ],
+              "allowed_action": "boost_scan_priority_only",
+              "forbidden_action": "publish_formal_candidate_without_taiwan_evidence",
+              "overseas_return_1d_pct": 0.26,
+              "overseas_leader_detection": {
+                "industry": "ROBOTICS_AUTOMATION",
+                "leader_count": 1,
+                "valid_count": 1,
+                "unavailable_count": 0,
+                "average_percent": 0.26,
+                "leaders": [
+                  {
+                    "yahoo_symbol": "AAPL",
+                    "ok": true,
+                    "percent": 0.26,
+                    "source": "isolated",
+                    "source_time": "2026-10-12T00:00:00Z"
+                  }
+                ]
+              },
+              "positive_return_rank": 1
+            },
+            {
+              "industry": "PANEL",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-PANEL",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "APPLE_CONSUMER",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-APPLE_CONSUMER",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            }
+          ],
+          "all_industry_payloads_sha256": "ba433a1bb5f268a8307cd9749876be28ebc8719dfa4b0fe8b67ae742cc22626e"
+        }
+      },
+      "readback": {
+        "contract": "opening-report-0830-mother-pool-handoff-ack-v2",
+        "complete": true,
+        "exitCode": 0,
+        "db_readback_ok": true,
+        "trade_date": "2026-10-12",
+        "report_run_id": "opening-report-0830-20261012-us_0820-fixture",
+        "checked_at": "2026-10-12T02:05:00Z",
+        "accepted_symbols": [
+          "2049",
+          "2308"
+        ],
+        "accepted_readback_symbols": [
+          "2049",
+          "2308"
+        ],
+        "source_evidence": {
+          "contract": "opening_report_handoff_raw_evidence_v1",
+          "stage": "us_0820",
+          "readback_role": "anon",
+          "aggregate": {
+            "run_id": "opening-report-0830-20261012-us_0820-fixture",
+            "status": "BRIDGE_OK",
+            "industry_count": 1,
+            "priority_observation_mode": "positive_industry_top3"
+          },
+          "industry_payloads": [
+            {
+              "date": "2026-10-12",
+              "report_time": "08:20",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-ROBOTICS_AUTOMATION",
+              "source": "opening_report_0830",
+              "mode": "priority_bias_only",
+              "industry": "ROBOTICS_AUTOMATION",
+              "display_name": "機器人／自動化",
+              "priority_observation_basis": "positive_industry_top3",
+              "priority_observation_rank": 1,
+              "priority_overseas_leaders": [
+                {
+                  "rank": 1,
+                  "symbol": "AAPL",
+                  "percent": 1,
+                  "source_time": "2026-10-12T00:00:00Z"
+                }
+              ],
+              "mapped_symbols_a": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                }
+              ],
+              "mapped_symbols_b": [
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "mapped_symbols": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                },
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "bias": "neutral_mixed",
+              "confidence": 0.8,
+              "evidence_summary": "fixture",
+              "mapping_contract": "opening-report-0830-industry-map-v2",
+              "mapping_reviewed_at": "2026-09-09",
+              "mapping_evidence_authorities": [
+                "MOPS",
+                "ISSUER"
+              ],
+              "allowed_action": "boost_scan_priority_only",
+              "forbidden_action": "publish_formal_candidate_without_taiwan_evidence",
+              "overseas_return_1d_pct": 0.26,
+              "overseas_leader_detection": {
+                "industry": "ROBOTICS_AUTOMATION",
+                "leader_count": 1,
+                "valid_count": 1,
+                "unavailable_count": 0,
+                "average_percent": 0.26,
+                "leaders": [
+                  {
+                    "yahoo_symbol": "AAPL",
+                    "ok": true,
+                    "percent": 0.26,
+                    "source": "isolated",
+                    "source_time": "2026-10-12T00:00:00Z"
+                  }
+                ]
+              },
+              "positive_return_rank": 1
+            }
+          ],
+          "bridges": [
+            {
+              "receipt": {
+                "contract": "opening-report-0830-priority-bias-bridge-v1",
+                "ok": true,
+                "received": true,
+                "source": "opening_report_0830",
+                "mode": "priority_bias_only",
+                "status": "priority_scan",
+                "reason_code": "opening_report_0830_industry_bias",
+                "forbidden_publish_guard": true,
+                "formal_candidate_count": 0,
+                "formal_candidate_allowed": false,
+                "publish_allowed": false,
+                "opening_report_status_unchanged": true,
+                "run_id": "opening-report-0830-20261012-us_0820-fixture-ROBOTICS_AUTOMATION",
+                "validation": {
+                  "ok": true
+                },
+                "accepted_symbols": [
+                  "2049",
+                  "2308"
+                ],
+                "rejected_symbols": []
+              }
+            }
+          ],
+          "rows": [
+            {
+              "symbol": "2049",
+              "market": "TWSE",
+              "priority_reason": "writer_priority",
+              "source": "fugle_daytrade_source",
+              "payload": {
+                "openingReport0830IndustryBias": {
+                  "date": "2026-10-12",
+                  "report_time": "08:20",
+                  "stage": "us_0820",
+                  "report_run_id": "opening-report-0830-20261012-us_0820-fixture",
+                  "run_id": "opening-report-0830-20261012-us_0820-fixture",
+                  "source": "opening_report_0830",
+                  "mode": "priority_bias_only",
+                  "industry": "ROBOTICS_AUTOMATION",
+                  "linked_industries": [
+                    "ROBOTICS_AUTOMATION"
+                  ],
+                  "observations": [
+                    {
+                      "industry": "ROBOTICS_AUTOMATION",
+                      "run_id": "opening-report-0830-20261012-us_0820-fixture-ROBOTICS_AUTOMATION",
+                      "priority_observation_rank": 1,
+                      "priority_overseas_leaders": [
+                        {
+                          "rank": 1,
+                          "symbol": "AAPL",
+                          "percent": 1,
+                          "source_time": "2026-10-12T00:00:00Z"
+                        }
+                      ]
+                    }
+                  ],
+                  "highest_industry_rank": 1,
+                  "boost_once": true,
+                  "reason_code": "opening_report_0830_industry_bias",
+                  "status": "watchlist_boosted",
+                  "formal_candidate": false,
+                  "formal_candidate_allowed": false,
+                  "forbidden_publish_guard": true
+                }
+              }
+            },
+            {
+              "symbol": "2308",
+              "market": "TWSE",
+              "priority_reason": "writer_priority",
+              "source": "fugle_daytrade_source",
+              "payload": {
+                "openingReport0830IndustryBias": {
+                  "date": "2026-10-12",
+                  "report_time": "08:20",
+                  "stage": "us_0820",
+                  "report_run_id": "opening-report-0830-20261012-us_0820-fixture",
+                  "run_id": "opening-report-0830-20261012-us_0820-fixture",
+                  "source": "opening_report_0830",
+                  "mode": "priority_bias_only",
+                  "industry": "ROBOTICS_AUTOMATION",
+                  "linked_industries": [
+                    "ROBOTICS_AUTOMATION"
+                  ],
+                  "observations": [
+                    {
+                      "industry": "ROBOTICS_AUTOMATION",
+                      "run_id": "opening-report-0830-20261012-us_0820-fixture-ROBOTICS_AUTOMATION",
+                      "priority_observation_rank": 1,
+                      "priority_overseas_leaders": [
+                        {
+                          "rank": 1,
+                          "symbol": "AAPL",
+                          "percent": 1,
+                          "source_time": "2026-10-12T00:00:00Z"
+                        }
+                      ]
+                    }
+                  ],
+                  "highest_industry_rank": 1,
+                  "boost_once": true,
+                  "reason_code": "opening_report_0830_industry_bias",
+                  "status": "watchlist_boosted",
+                  "formal_candidate": false,
+                  "formal_candidate_allowed": false,
+                  "forbidden_publish_guard": true
+                }
+              }
+            }
+          ],
+          "rows_sha256": "8f04505c0f3460d704ed559f4a6e777535cb5f60afc70cda6924d794c8fb9c9c",
+          "requests": [
+            {
+              "http_status": 200,
+              "role": "anon",
+              "row_count": 2
+            }
+          ],
+          "all_industry_payloads": [
+            {
+              "industry": "AI_GPU_CLOUD",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-AI_GPU_CLOUD",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "AWS_AI_DATACENTER",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-AWS_AI_DATACENTER",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "FOUNDRY_ADVANCED_PROCESS",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-FOUNDRY_ADVANCED_PROCESS",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "IC_DESIGN",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-IC_DESIGN",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "MEMORY",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-MEMORY",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "ABF_SUBSTRATE",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-ABF_SUBSTRATE",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "PCB_CCL",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-PCB_CCL",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "PASSIVE_COMPONENTS",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-PASSIVE_COMPONENTS",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "THERMAL_POWER",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-THERMAL_POWER",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "NETWORK_HIGH_SPEED",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-NETWORK_HIGH_SPEED",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "OPTICAL_COMM",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-OPTICAL_COMM",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "III_V_OPTICAL",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-III_V_OPTICAL",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "date": "2026-10-12",
+              "report_time": "08:20",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-ROBOTICS_AUTOMATION",
+              "source": "opening_report_0830",
+              "mode": "priority_bias_only",
+              "industry": "ROBOTICS_AUTOMATION",
+              "display_name": "機器人／自動化",
+              "priority_observation_basis": "positive_industry_top3",
+              "priority_observation_rank": 1,
+              "priority_overseas_leaders": [
+                {
+                  "rank": 1,
+                  "symbol": "AAPL",
+                  "percent": 1,
+                  "source_time": "2026-10-12T00:00:00Z"
+                }
+              ],
+              "mapped_symbols_a": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                }
+              ],
+              "mapped_symbols_b": [
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "mapped_symbols": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                },
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "bias": "neutral_mixed",
+              "confidence": 0.8,
+              "evidence_summary": "fixture",
+              "mapping_contract": "opening-report-0830-industry-map-v2",
+              "mapping_reviewed_at": "2026-09-09",
+              "mapping_evidence_authorities": [
+                "MOPS",
+                "ISSUER"
+              ],
+              "allowed_action": "boost_scan_priority_only",
+              "forbidden_action": "publish_formal_candidate_without_taiwan_evidence",
+              "overseas_return_1d_pct": 0.26,
+              "overseas_leader_detection": {
+                "industry": "ROBOTICS_AUTOMATION",
+                "leader_count": 1,
+                "valid_count": 1,
+                "unavailable_count": 0,
+                "average_percent": 0.26,
+                "leaders": [
+                  {
+                    "yahoo_symbol": "AAPL",
+                    "ok": true,
+                    "percent": 0.26,
+                    "source": "isolated",
+                    "source_time": "2026-10-12T00:00:00Z"
+                  }
+                ]
+              },
+              "positive_return_rank": 1
+            },
+            {
+              "industry": "PANEL",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-PANEL",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "APPLE_CONSUMER",
+              "date": "2026-10-12",
+              "stage": "us_0820",
+              "run_id": "opening-report-0830-20261012-us_0820-fixture-APPLE_CONSUMER",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            }
+          ],
+          "all_industry_payloads_sha256": "ba433a1bb5f268a8307cd9749876be28ebc8719dfa4b0fe8b67ae742cc22626e"
+        }
+      },
+      "persistence": {
+        "contract": "opening-report-0830-mother-pool-persistence-ack-v1",
+        "complete": true,
+        "exitCode": 0,
+        "trade_date": "2026-10-12",
+        "report_run_id": "opening-report-0830-20261012-us_0820-fixture",
+        "checked_at": "2026-10-12T02:05:01Z"
+      },
+      "refresh_files": [
+        {
+          "file": "C:\\Users\\ginov\\Documents\\Codex\\2026-09-30\\new-chat\\outputs\\unified-semantic-merge-20261013\\lab\\runs\\normal_terminal\\state\\opening-report-writer-refreshes\\2026-10-12\\893d4e8499151a3ce1cc59eae3263589c9cc732d4613d9a3c1bcdf60cbd125e4.json",
+          "text": "{\n  \"contract\": \"opening-report-writer-pool-refresh-v1\",\n  \"trade_date\": \"2026-10-12\",\n  \"generation_id\": \"cde2861b-04cb-427d-a97e-627773fc9e9f\",\n  \"writer_run_id\": \"OFFLINE_ONLY:daytrade-writer:20261012:cde2861b-04cb-427d-a97e-627773fc9e9f\",\n  \"completed_at\": \"2026-10-12T02:00:07.164Z\",\n  \"operation\": \"priority_pool_upsert_and_prune\",\n  \"write_complete\": true,\n  \"symbols\": [\n    \"1000\",\n    \"1001\",\n    \"1002\",\n    \"1003\",\n    \"1004\",\n    \"1005\",\n    \"1006\",\n    \"1007\",\n    \"1008\",\n    \"1009\",\n    \"1010\",\n    \"1011\",\n    \"1012\",\n    \"1013\",\n    \"1014\",\n    \"1015\",\n    \"1016\",\n    \"1017\",\n    \"1018\",\n    \"1019\",\n    \"1020\",\n    \"1021\",\n    \"1022\",\n    \"1023\",\n    \"1024\",\n    \"1025\",\n    \"1026\",\n    \"1027\",\n    \"1028\",\n    \"1029\",\n    \"1030\",\n    \"1031\",\n    \"1032\",\n    \"1033\",\n    \"1034\",\n    \"1035\",\n    \"1036\",\n    \"1037\",\n    \"1038\",\n    \"1039\",\n    \"1040\",\n    \"1041\",\n    \"1042\",\n    \"1043\",\n    \"1044\",\n    \"1045\",\n    \"1046\",\n    \"1047\",\n    \"1048\",\n    \"1049\",\n    \"1050\",\n    \"1051\",\n    \"1052\",\n    \"1053\",\n    \"1054\",\n    \"1055\",\n    \"1056\",\n    \"1057\",\n    \"1058\",\n    \"1059\",\n    \"1060\",\n    \"1061\",\n    \"1062\",\n    \"1063\",\n    \"1064\",\n    \"1065\",\n    \"1066\",\n    \"1067\",\n    \"1068\",\n    \"1069\",\n    \"1070\",\n    \"1071\",\n    \"1072\",\n    \"1073\",\n    \"1074\",\n    \"1075\",\n    \"1076\",\n    \"1077\",\n    \"1078\",\n    \"1079\",\n    \"1080\",\n    \"1081\",\n    \"1082\",\n    \"1083\",\n    \"1084\",\n    \"1085\",\n    \"1086\",\n    \"1087\",\n    \"1088\",\n    \"1089\",\n    \"1090\",\n    \"1091\",\n    \"1092\",\n    \"1093\",\n    \"1094\",\n    \"1095\",\n    \"1096\",\n    \"1097\",\n    \"1098\",\n    \"1099\",\n    \"1100\",\n    \"1101\",\n    \"1102\",\n    \"1103\",\n    \"1104\",\n    \"1105\",\n    \"1106\",\n    \"1107\",\n    \"1108\",\n    \"1109\",\n    \"1110\",\n    \"1111\",\n    \"1112\",\n    \"1113\",\n    \"1114\",\n    \"1115\",\n    \"1116\",\n    \"1117\",\n    \"1118\",\n    \"1119\",\n    \"1120\",\n    \"1121\",\n    \"1122\",\n    \"1123\",\n    \"1124\",\n    \"1125\",\n    \"1126\",\n    \"1127\",\n    \"1128\",\n    \"1129\",\n    \"1130\",\n    \"1131\",\n    \"1132\",\n    \"1133\",\n    \"1134\",\n    \"1135\",\n    \"1136\",\n    \"1137\",\n    \"1138\",\n    \"1139\",\n    \"1140\",\n    \"1141\",\n    \"1142\",\n    \"1143\",\n    \"1144\",\n    \"1145\",\n    \"1146\",\n    \"1147\",\n    \"1148\",\n    \"1149\",\n    \"1150\",\n    \"1151\",\n    \"1152\",\n    \"1153\",\n    \"1154\",\n    \"1155\",\n    \"1156\",\n    \"1157\",\n    \"1158\",\n    \"1159\",\n    \"1160\",\n    \"1161\",\n    \"1162\",\n    \"1163\",\n    \"1164\",\n    \"1165\",\n    \"1166\",\n    \"1167\",\n    \"1168\",\n    \"1169\",\n    \"1170\",\n    \"1171\",\n    \"1172\",\n    \"1173\",\n    \"1174\",\n    \"1175\",\n    \"1176\",\n    \"1177\",\n    \"1178\",\n    \"1179\",\n    \"1180\",\n    \"1181\",\n    \"1182\",\n    \"1183\",\n    \"1184\",\n    \"1185\",\n    \"1186\",\n    \"1187\",\n    \"1188\",\n    \"1189\",\n    \"1190\",\n    \"1191\",\n    \"1192\",\n    \"1193\",\n    \"1194\",\n    \"1195\",\n    \"1196\",\n    \"1197\",\n    \"1198\",\n    \"1199\",\n    \"1200\",\n    \"1201\",\n    \"1202\",\n    \"1203\",\n    \"1204\",\n    \"1205\",\n    \"1206\",\n    \"1207\",\n    \"1208\",\n    \"1209\",\n    \"1210\",\n    \"1211\",\n    \"1212\",\n    \"1213\",\n    \"1214\",\n    \"1215\",\n    \"1216\",\n    \"1217\",\n    \"1218\",\n    \"1219\",\n    \"1220\",\n    \"1221\",\n    \"1222\",\n    \"1223\",\n    \"1224\",\n    \"1225\",\n    \"1226\",\n    \"1227\",\n    \"1228\",\n    \"1229\",\n    \"1230\",\n    \"1231\",\n    \"1232\",\n    \"1233\",\n    \"1234\",\n    \"1235\",\n    \"1236\",\n    \"1237\",\n    \"1238\",\n    \"1239\",\n    \"1240\",\n    \"1241\",\n    \"1242\",\n    \"1243\",\n    \"1244\",\n    \"1245\",\n    \"1246\",\n    \"1247\",\n    \"1248\",\n    \"1249\",\n    \"1250\",\n    \"1251\",\n    \"1252\",\n    \"1253\",\n    \"1254\",\n    \"1255\",\n    \"1256\",\n    \"1257\",\n    \"1258\",\n    \"1259\",\n    \"1260\",\n    \"1261\",\n    \"1262\",\n    \"1263\",\n    \"1264\",\n    \"1265\",\n    \"1266\",\n    \"1267\",\n    \"1268\",\n    \"1269\",\n    \"1270\",\n    \"1271\",\n    \"1272\",\n    \"1273\",\n    \"1274\",\n    \"1275\",\n    \"1276\",\n    \"1277\",\n    \"1278\",\n    \"1279\",\n    \"1280\",\n    \"1281\",\n    \"1282\",\n    \"1283\",\n    \"1284\",\n    \"1285\",\n    \"1286\",\n    \"1287\",\n    \"1288\",\n    \"1289\",\n    \"1290\",\n    \"1291\",\n    \"1292\",\n    \"1293\",\n    \"1294\",\n    \"1295\",\n    \"1296\",\n    \"1297\",\n    \"1298\",\n    \"1299\",\n    \"1300\",\n    \"1301\",\n    \"1302\",\n    \"1303\",\n    \"1304\",\n    \"1305\",\n    \"1306\",\n    \"1307\",\n    \"1308\",\n    \"1309\",\n    \"1310\",\n    \"1311\",\n    \"1312\",\n    \"1313\",\n    \"1314\",\n    \"1315\",\n    \"1316\",\n    \"1317\",\n    \"1318\",\n    \"1319\",\n    \"1320\",\n    \"1321\",\n    \"1322\",\n    \"1323\",\n    \"1324\",\n    \"1325\",\n    \"1326\",\n    \"1327\",\n    \"1328\",\n    \"1329\",\n    \"1330\",\n    \"1331\",\n    \"1332\",\n    \"1333\",\n    \"1334\",\n    \"1335\",\n    \"1336\",\n    \"1337\",\n    \"1338\",\n    \"1339\",\n    \"1340\",\n    \"1341\",\n    \"1342\",\n    \"1343\",\n    \"1344\",\n    \"1345\",\n    \"1346\",\n    \"1347\",\n    \"1348\",\n    \"1349\",\n    \"1350\",\n    \"1351\",\n    \"1352\",\n    \"1353\",\n    \"1354\",\n    \"1355\",\n    \"1356\",\n    \"1357\",\n    \"1358\",\n    \"1359\",\n    \"1360\",\n    \"1361\",\n    \"1362\",\n    \"1363\",\n    \"1364\",\n    \"1365\",\n    \"1366\",\n    \"1367\",\n    \"1368\",\n    \"1369\",\n    \"1370\",\n    \"1371\",\n    \"1372\",\n    \"1373\",\n    \"1374\",\n    \"1375\",\n    \"1376\",\n    \"1377\",\n    \"1378\",\n    \"1379\",\n    \"1380\",\n    \"1381\",\n    \"1382\",\n    \"1383\",\n    \"1384\",\n    \"1385\",\n    \"1386\",\n    \"1387\",\n    \"1388\",\n    \"1389\",\n    \"1390\",\n    \"1391\",\n    \"1392\",\n    \"1393\",\n    \"1394\",\n    \"1504\",\n    \"1590\",\n    \"1597\",\n    \"2049\",\n    \"2308\",\n    \"2345\",\n    \"2356\",\n    \"2359\",\n    \"2371\",\n    \"2455\",\n    \"2464\"\n  ],\n  \"symbol_count\": 406,\n  \"db_readback_verified\": false,\n  \"readback_proof\": {\n    \"status\": \"NOT_REQUIRED\",\n    \"complete\": false\n  }\n}",
+          "expected_sha256": "4b65361285f8ecd9e220931187845498722e22dba5698948d90927bfecd0f1bc"
+        },
+        {
+          "file": "C:\\Users\\ginov\\Documents\\Codex\\2026-09-30\\new-chat\\outputs\\unified-semantic-merge-20261013\\lab\\runs\\normal_final\\state\\opening-report-writer-refreshes\\2026-10-12\\55fc174630981b452d9c5a783b31515fd428da1bef80fb4e5cfc0ec3a7ba88bb.json",
+          "text": "{\n  \"contract\": \"opening-report-writer-pool-refresh-v1\",\n  \"trade_date\": \"2026-10-12\",\n  \"generation_id\": \"1fd439ea-3436-4848-9cdc-521cae2aab52\",\n  \"writer_run_id\": \"OFFLINE_ONLY:daytrade-writer:20261012:1fd439ea-3436-4848-9cdc-521cae2aab52\",\n  \"completed_at\": \"2026-10-12T02:00:06.802Z\",\n  \"operation\": \"priority_pool_upsert_and_prune\",\n  \"write_complete\": true,\n  \"symbols\": [\n    \"1000\",\n    \"1001\",\n    \"1002\",\n    \"1003\",\n    \"1004\",\n    \"1005\",\n    \"1006\",\n    \"1007\",\n    \"1008\",\n    \"1009\",\n    \"1010\",\n    \"1011\",\n    \"1012\",\n    \"1013\",\n    \"1014\",\n    \"1015\",\n    \"1016\",\n    \"1017\",\n    \"1018\",\n    \"1019\",\n    \"1020\",\n    \"1021\",\n    \"1022\",\n    \"1023\",\n    \"1024\",\n    \"1025\",\n    \"1026\",\n    \"1027\",\n    \"1028\",\n    \"1029\",\n    \"1030\",\n    \"1031\",\n    \"1032\",\n    \"1033\",\n    \"1034\",\n    \"1035\",\n    \"1036\",\n    \"1037\",\n    \"1038\",\n    \"1039\",\n    \"1040\",\n    \"1041\",\n    \"1042\",\n    \"1043\",\n    \"1044\",\n    \"1045\",\n    \"1046\",\n    \"1047\",\n    \"1048\",\n    \"1049\",\n    \"1050\",\n    \"1051\",\n    \"1052\",\n    \"1053\",\n    \"1054\",\n    \"1055\",\n    \"1056\",\n    \"1057\",\n    \"1058\",\n    \"1059\",\n    \"1060\",\n    \"1061\",\n    \"1062\",\n    \"1063\",\n    \"1064\",\n    \"1065\",\n    \"1066\",\n    \"1067\",\n    \"1068\",\n    \"1069\",\n    \"1070\",\n    \"1071\",\n    \"1072\",\n    \"1073\",\n    \"1074\",\n    \"1075\",\n    \"1076\",\n    \"1077\",\n    \"1078\",\n    \"1079\",\n    \"1080\",\n    \"1081\",\n    \"1082\",\n    \"1083\",\n    \"1084\",\n    \"1085\",\n    \"1086\",\n    \"1087\",\n    \"1088\",\n    \"1089\",\n    \"1090\",\n    \"1091\",\n    \"1092\",\n    \"1093\",\n    \"1094\",\n    \"1095\",\n    \"1096\",\n    \"1097\",\n    \"1098\",\n    \"1099\",\n    \"1100\",\n    \"1101\",\n    \"1102\",\n    \"1103\",\n    \"1104\",\n    \"1105\",\n    \"1106\",\n    \"1107\",\n    \"1108\",\n    \"1109\",\n    \"1110\",\n    \"1111\",\n    \"1112\",\n    \"1113\",\n    \"1114\",\n    \"1115\",\n    \"1116\",\n    \"1117\",\n    \"1118\",\n    \"1119\",\n    \"1120\",\n    \"1121\",\n    \"1122\",\n    \"1123\",\n    \"1124\",\n    \"1125\",\n    \"1126\",\n    \"1127\",\n    \"1128\",\n    \"1129\",\n    \"1130\",\n    \"1131\",\n    \"1132\",\n    \"1133\",\n    \"1134\",\n    \"1135\",\n    \"1136\",\n    \"1137\",\n    \"1138\",\n    \"1139\",\n    \"1140\",\n    \"1141\",\n    \"1142\",\n    \"1143\",\n    \"1144\",\n    \"1145\",\n    \"1146\",\n    \"1147\",\n    \"1148\",\n    \"1149\",\n    \"1150\",\n    \"1151\",\n    \"1152\",\n    \"1153\",\n    \"1154\",\n    \"1155\",\n    \"1156\",\n    \"1157\",\n    \"1158\",\n    \"1159\",\n    \"1160\",\n    \"1161\",\n    \"1162\",\n    \"1163\",\n    \"1164\",\n    \"1165\",\n    \"1166\",\n    \"1167\",\n    \"1168\",\n    \"1169\",\n    \"1170\",\n    \"1171\",\n    \"1172\",\n    \"1173\",\n    \"1174\",\n    \"1175\",\n    \"1176\",\n    \"1177\",\n    \"1178\",\n    \"1179\",\n    \"1180\",\n    \"1181\",\n    \"1182\",\n    \"1183\",\n    \"1184\",\n    \"1185\",\n    \"1186\",\n    \"1187\",\n    \"1188\",\n    \"1189\",\n    \"1190\",\n    \"1191\",\n    \"1192\",\n    \"1193\",\n    \"1194\",\n    \"1195\",\n    \"1196\",\n    \"1197\",\n    \"1198\",\n    \"1199\",\n    \"1200\",\n    \"1201\",\n    \"1202\",\n    \"1203\",\n    \"1204\",\n    \"1205\",\n    \"1206\",\n    \"1207\",\n    \"1208\",\n    \"1209\",\n    \"1210\",\n    \"1211\",\n    \"1212\",\n    \"1213\",\n    \"1214\",\n    \"1215\",\n    \"1216\",\n    \"1217\",\n    \"1218\",\n    \"1219\",\n    \"1220\",\n    \"1221\",\n    \"1222\",\n    \"1223\",\n    \"1224\",\n    \"1225\",\n    \"1226\",\n    \"1227\",\n    \"1228\",\n    \"1229\",\n    \"1230\",\n    \"1231\",\n    \"1232\",\n    \"1233\",\n    \"1234\",\n    \"1235\",\n    \"1236\",\n    \"1237\",\n    \"1238\",\n    \"1239\",\n    \"1240\",\n    \"1241\",\n    \"1242\",\n    \"1243\",\n    \"1244\",\n    \"1245\",\n    \"1246\",\n    \"1247\",\n    \"1248\",\n    \"1249\",\n    \"1250\",\n    \"1251\",\n    \"1252\",\n    \"1253\",\n    \"1254\",\n    \"1255\",\n    \"1256\",\n    \"1257\",\n    \"1258\",\n    \"1259\",\n    \"1260\",\n    \"1261\",\n    \"1262\",\n    \"1263\",\n    \"1264\",\n    \"1265\",\n    \"1266\",\n    \"1267\",\n    \"1268\",\n    \"1269\",\n    \"1270\",\n    \"1271\",\n    \"1272\",\n    \"1273\",\n    \"1274\",\n    \"1275\",\n    \"1276\",\n    \"1277\",\n    \"1278\",\n    \"1279\",\n    \"1280\",\n    \"1281\",\n    \"1282\",\n    \"1283\",\n    \"1284\",\n    \"1285\",\n    \"1286\",\n    \"1287\",\n    \"1288\",\n    \"1289\",\n    \"1290\",\n    \"1291\",\n    \"1292\",\n    \"1293\",\n    \"1294\",\n    \"1295\",\n    \"1296\",\n    \"1297\",\n    \"1298\",\n    \"1299\",\n    \"1300\",\n    \"1301\",\n    \"1302\",\n    \"1303\",\n    \"1304\",\n    \"1305\",\n    \"1306\",\n    \"1307\",\n    \"1308\",\n    \"1309\",\n    \"1310\",\n    \"1311\",\n    \"1312\",\n    \"1313\",\n    \"1314\",\n    \"1315\",\n    \"1316\",\n    \"1317\",\n    \"1318\",\n    \"1319\",\n    \"1320\",\n    \"1321\",\n    \"1322\",\n    \"1323\",\n    \"1324\",\n    \"1325\",\n    \"1326\",\n    \"1327\",\n    \"1328\",\n    \"1329\",\n    \"1330\",\n    \"1331\",\n    \"1332\",\n    \"1333\",\n    \"1334\",\n    \"1335\",\n    \"1336\",\n    \"1337\",\n    \"1338\",\n    \"1339\",\n    \"1340\",\n    \"1341\",\n    \"1342\",\n    \"1343\",\n    \"1344\",\n    \"1345\",\n    \"1346\",\n    \"1347\",\n    \"1348\",\n    \"1349\",\n    \"1350\",\n    \"1351\",\n    \"1352\",\n    \"1353\",\n    \"1354\",\n    \"1355\",\n    \"1356\",\n    \"1357\",\n    \"1358\",\n    \"1359\",\n    \"1360\",\n    \"1361\",\n    \"1362\",\n    \"1363\",\n    \"1364\",\n    \"1365\",\n    \"1366\",\n    \"1367\",\n    \"1368\",\n    \"1369\",\n    \"1370\",\n    \"1371\",\n    \"1372\",\n    \"1373\",\n    \"1374\",\n    \"1375\",\n    \"1376\",\n    \"1377\",\n    \"1378\",\n    \"1379\",\n    \"1380\",\n    \"1381\",\n    \"1382\",\n    \"1383\",\n    \"1384\",\n    \"1385\",\n    \"1386\",\n    \"1387\",\n    \"1388\",\n    \"1389\",\n    \"1390\",\n    \"1391\",\n    \"1392\",\n    \"1393\",\n    \"1394\",\n    \"1504\",\n    \"1590\",\n    \"1597\",\n    \"2049\",\n    \"2308\",\n    \"2345\",\n    \"2356\",\n    \"2359\",\n    \"2371\",\n    \"2455\",\n    \"2464\"\n  ],\n  \"symbol_count\": 406,\n  \"db_readback_verified\": false,\n  \"readback_proof\": {\n    \"status\": \"NOT_REQUIRED\",\n    \"complete\": false\n  }\n}",
+          "expected_sha256": "9f59d88c02b8e1c0ad86dd0e30d00f9324dd8c51a12e18e29668b8b1204ee616"
+        }
+      ],
+      "writer_terminals": [
+        {
+          "contract": "mother_pool_writer_terminal_v11",
+          "input": {
+            "identity": {
+              "trade_date": "2026-10-12",
+              "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+              "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:cde2861b-04cb-427d-a97e-627773fc9e9f",
+              "generation_id": "cde2861b-04cb-427d-a97e-627773fc9e9f",
+              "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_sequence": 1
+            },
+            "startedAt": "2026-10-12T02:00:03.648Z",
+            "completedAt": "2026-10-12T02:00:19.832Z",
+            "exitCode": 0,
+            "status": "SUCCESS",
+            "verifier": {
+              "success": true,
+              "identity": {
+                "trade_date": "2026-10-12",
+                "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+                "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:cde2861b-04cb-427d-a97e-627773fc9e9f",
+                "generation_id": "cde2861b-04cb-427d-a97e-627773fc9e9f",
+                "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_sequence": 1
+              },
+              "completed_at": "2026-10-12T02:00:19.473Z",
+              "payload": {
+                "raw_sha256": "9116176d652464a3bc25f13f2c3d6b8b07edef861d27e8f776938dff40276c1c",
+                "verification_run_id": "mother_pool_v4_1:20261012:20261012020019236",
+                "snapshot_sha256": "3e38ee4fb79f09b6dfa572d1f98da3b76cc8f5a45361e709076dce76726faf05",
+                "ok": true
+              },
+              "hash": "f738b035a55272ee23d22636ac352c58984bc5bb76bd3faa5e9c9bcbe4c46da3"
+            },
+            "refresh": {
+              "success": true,
+              "identity": {
+                "trade_date": "2026-10-12",
+                "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+                "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:cde2861b-04cb-427d-a97e-627773fc9e9f",
+                "generation_id": "cde2861b-04cb-427d-a97e-627773fc9e9f",
+                "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_sequence": 1
+              },
+              "completed_at": "2026-10-12T02:00:17.286Z",
+              "payload": {
+                "raw_sha256": "9909461aed15d4932aa9923b1717e1f757713f5fb2254801ef51fc080a2a3aeb",
+                "wrapper_run_id": "fugle_daytrade_source-writer-20261012020001-25996",
+                "ok": true
+              },
+              "hash": "7a1d51a0778a4415b39f81aee4730e4801993350c357671efc12e98e5188949b"
+            }
+          },
+          "receipt": {
+            "success": true,
+            "identity": {
+              "trade_date": "2026-10-12",
+              "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+              "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:cde2861b-04cb-427d-a97e-627773fc9e9f",
+              "generation_id": "cde2861b-04cb-427d-a97e-627773fc9e9f",
+              "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_sequence": 1
+            },
+            "completed_at": "2026-10-12T02:00:19.832Z",
+            "payload": {
+              "status": "SUCCESS",
+              "started_at": "2026-10-12T02:00:03.648Z",
+              "completed_at": "2026-10-12T02:00:19.832Z",
+              "verifier_hash": "f738b035a55272ee23d22636ac352c58984bc5bb76bd3faa5e9c9bcbe4c46da3",
+              "refresh_hash": "7a1d51a0778a4415b39f81aee4730e4801993350c357671efc12e98e5188949b"
+            },
+            "hash": "1cd61df0751de6a1c75115a195dd675c3f070bf7632b69bd293d232b6b559efe"
+          },
+          "wrapper_run_id": "fugle_daytrade_source-writer-20261012020001-25996",
+          "formal_modules_complete": false
+        },
+        {
+          "contract": "mother_pool_writer_terminal_v11",
+          "input": {
+            "identity": {
+              "trade_date": "2026-10-12",
+              "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+              "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:1fd439ea-3436-4848-9cdc-521cae2aab52",
+              "generation_id": "1fd439ea-3436-4848-9cdc-521cae2aab52",
+              "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_sequence": 1
+            },
+            "startedAt": "2026-10-12T02:00:03.304Z",
+            "completedAt": "2026-10-12T02:00:46.987Z",
+            "exitCode": 0,
+            "status": "SUCCESS",
+            "verifier": {
+              "success": true,
+              "identity": {
+                "trade_date": "2026-10-12",
+                "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+                "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:1fd439ea-3436-4848-9cdc-521cae2aab52",
+                "generation_id": "1fd439ea-3436-4848-9cdc-521cae2aab52",
+                "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_sequence": 1
+              },
+              "completed_at": "2026-10-12T02:00:46.613Z",
+              "payload": {
+                "raw_sha256": "5495f99acac9a03362e794c450939369bdd44a197a8fcee0beab0a5fc5ad20f1",
+                "verification_run_id": "mother_pool_v4_1:20261012:20261012020046377",
+                "snapshot_sha256": "bdead99417cbc38f6b892c3978bb91777eff49778b199cf8471ecb8f5d24aa8f",
+                "ok": true
+              },
+              "hash": "ac4d4f507a3145a02568fd27904f029ed25fe4a9145547d1d6af3d7e9ac1f8b5"
+            },
+            "refresh": {
+              "success": true,
+              "identity": {
+                "trade_date": "2026-10-12",
+                "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+                "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:1fd439ea-3436-4848-9cdc-521cae2aab52",
+                "generation_id": "1fd439ea-3436-4848-9cdc-521cae2aab52",
+                "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_sequence": 1
+              },
+              "completed_at": "2026-10-12T02:00:44.632Z",
+              "payload": {
+                "raw_sha256": "ac6db403da86bd1cc6f1f00b3d934e54270709edccd8fdbb619249ebe1701b6e",
+                "wrapper_run_id": "fugle_daytrade_source-writer-20261012020001-36272",
+                "ok": true
+              },
+              "hash": "56f2c176debc4501f4cc421fda7846ad8d0bf5fb180f8b16228f212fb4cc14d1"
+            }
+          },
+          "receipt": {
+            "success": true,
+            "identity": {
+              "trade_date": "2026-10-12",
+              "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+              "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:1fd439ea-3436-4848-9cdc-521cae2aab52",
+              "generation_id": "1fd439ea-3436-4848-9cdc-521cae2aab52",
+              "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_sequence": 1
+            },
+            "completed_at": "2026-10-12T02:00:46.987Z",
+            "payload": {
+              "status": "SUCCESS",
+              "started_at": "2026-10-12T02:00:03.304Z",
+              "completed_at": "2026-10-12T02:00:46.987Z",
+              "verifier_hash": "ac4d4f507a3145a02568fd27904f029ed25fe4a9145547d1d6af3d7e9ac1f8b5",
+              "refresh_hash": "56f2c176debc4501f4cc421fda7846ad8d0bf5fb180f8b16228f212fb4cc14d1"
+            },
+            "hash": "850584171b947a5482adc05c10c41362f22abfa299247245aa4e8efa612cabea"
+          },
+          "wrapper_run_id": "fugle_daytrade_source-writer-20261012020001-36272",
+          "formal_modules_complete": false
+        }
+      ]
+    },
+    "asia_0850": {
+      "handoff": {
+        "contract": "opening-report-0830-mother-pool-handoff-ack-v2",
+        "complete": true,
+        "exitCode": 0,
+        "db_readback_ok": true,
+        "trade_date": "2026-10-12",
+        "report_run_id": "opening-report-0830-20261012-asia_0850-fixture",
+        "checked_at": "2026-10-12T00:51:00Z",
+        "accepted_symbols": [
+          "2049",
+          "2308"
+        ],
+        "accepted_readback_symbols": [
+          "2049",
+          "2308"
+        ],
+        "source_evidence": {
+          "contract": "opening_report_handoff_raw_evidence_v1",
+          "stage": "asia_0850",
+          "readback_role": "anon",
+          "aggregate": {
+            "run_id": "opening-report-0830-20261012-asia_0850-fixture",
+            "status": "BRIDGE_OK",
+            "industry_count": 1,
+            "priority_observation_mode": "positive_industry_top3"
+          },
+          "industry_payloads": [
+            {
+              "date": "2026-10-12",
+              "report_time": "08:50",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-ROBOTICS_AUTOMATION",
+              "source": "opening_report_0830",
+              "mode": "priority_bias_only",
+              "industry": "ROBOTICS_AUTOMATION",
+              "display_name": "機器人／自動化",
+              "priority_observation_basis": "positive_industry_top3",
+              "priority_observation_rank": 1,
+              "priority_overseas_leaders": [
+                {
+                  "rank": 1,
+                  "symbol": "7203.T",
+                  "percent": 1,
+                  "source_time": "2026-10-12T00:00:00Z"
+                }
+              ],
+              "mapped_symbols_a": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                }
+              ],
+              "mapped_symbols_b": [
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "mapped_symbols": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                },
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "bias": "neutral_mixed",
+              "confidence": 0.8,
+              "evidence_summary": "fixture",
+              "mapping_contract": "opening-report-0830-industry-map-v2",
+              "mapping_reviewed_at": "2026-09-09",
+              "mapping_evidence_authorities": [
+                "MOPS",
+                "ISSUER"
+              ],
+              "allowed_action": "boost_scan_priority_only",
+              "forbidden_action": "publish_formal_candidate_without_taiwan_evidence",
+              "overseas_return_1d_pct": 0.26,
+              "overseas_leader_detection": {
+                "industry": "ROBOTICS_AUTOMATION",
+                "leader_count": 1,
+                "valid_count": 1,
+                "unavailable_count": 0,
+                "average_percent": 0.26,
+                "leaders": [
+                  {
+                    "yahoo_symbol": "7203.T",
+                    "ok": true,
+                    "percent": 0.26,
+                    "source": "isolated",
+                    "source_time": "2026-10-12T00:00:00Z"
+                  }
+                ]
+              },
+              "positive_return_rank": 1
+            }
+          ],
+          "bridges": [
+            {
+              "receipt": {
+                "contract": "opening-report-0830-priority-bias-bridge-v1",
+                "ok": true,
+                "received": true,
+                "source": "opening_report_0830",
+                "mode": "priority_bias_only",
+                "status": "priority_scan",
+                "reason_code": "opening_report_0830_industry_bias",
+                "forbidden_publish_guard": true,
+                "formal_candidate_count": 0,
+                "formal_candidate_allowed": false,
+                "publish_allowed": false,
+                "opening_report_status_unchanged": true,
+                "run_id": "opening-report-0830-20261012-asia_0850-fixture-ROBOTICS_AUTOMATION",
+                "validation": {
+                  "ok": true
+                },
+                "accepted_symbols": [
+                  "2049",
+                  "2308"
+                ],
+                "rejected_symbols": []
+              }
+            }
+          ],
+          "rows": [
+            {
+              "symbol": "2049",
+              "market": "TWSE",
+              "priority_reason": "writer_priority",
+              "source": "fugle_daytrade_source",
+              "payload": {
+                "openingReport0830IndustryBias": {
+                  "date": "2026-10-12",
+                  "report_time": "08:50",
+                  "stage": "asia_0850",
+                  "report_run_id": "opening-report-0830-20261012-asia_0850-fixture",
+                  "run_id": "opening-report-0830-20261012-asia_0850-fixture",
+                  "source": "opening_report_0830",
+                  "mode": "priority_bias_only",
+                  "industry": "ROBOTICS_AUTOMATION",
+                  "linked_industries": [
+                    "ROBOTICS_AUTOMATION"
+                  ],
+                  "observations": [
+                    {
+                      "industry": "ROBOTICS_AUTOMATION",
+                      "run_id": "opening-report-0830-20261012-asia_0850-fixture-ROBOTICS_AUTOMATION",
+                      "priority_observation_rank": 1,
+                      "priority_overseas_leaders": [
+                        {
+                          "rank": 1,
+                          "symbol": "7203.T",
+                          "percent": 1,
+                          "source_time": "2026-10-12T00:00:00Z"
+                        }
+                      ]
+                    }
+                  ],
+                  "highest_industry_rank": 1,
+                  "boost_once": true,
+                  "reason_code": "opening_report_0830_industry_bias",
+                  "status": "watchlist_boosted",
+                  "formal_candidate": false,
+                  "formal_candidate_allowed": false,
+                  "forbidden_publish_guard": true
+                }
+              }
+            },
+            {
+              "symbol": "2308",
+              "market": "TWSE",
+              "priority_reason": "writer_priority",
+              "source": "fugle_daytrade_source",
+              "payload": {
+                "openingReport0830IndustryBias": {
+                  "date": "2026-10-12",
+                  "report_time": "08:50",
+                  "stage": "asia_0850",
+                  "report_run_id": "opening-report-0830-20261012-asia_0850-fixture",
+                  "run_id": "opening-report-0830-20261012-asia_0850-fixture",
+                  "source": "opening_report_0830",
+                  "mode": "priority_bias_only",
+                  "industry": "ROBOTICS_AUTOMATION",
+                  "linked_industries": [
+                    "ROBOTICS_AUTOMATION"
+                  ],
+                  "observations": [
+                    {
+                      "industry": "ROBOTICS_AUTOMATION",
+                      "run_id": "opening-report-0830-20261012-asia_0850-fixture-ROBOTICS_AUTOMATION",
+                      "priority_observation_rank": 1,
+                      "priority_overseas_leaders": [
+                        {
+                          "rank": 1,
+                          "symbol": "7203.T",
+                          "percent": 1,
+                          "source_time": "2026-10-12T00:00:00Z"
+                        }
+                      ]
+                    }
+                  ],
+                  "highest_industry_rank": 1,
+                  "boost_once": true,
+                  "reason_code": "opening_report_0830_industry_bias",
+                  "status": "watchlist_boosted",
+                  "formal_candidate": false,
+                  "formal_candidate_allowed": false,
+                  "forbidden_publish_guard": true
+                }
+              }
+            }
+          ],
+          "rows_sha256": "363bdbe7cb193958e9f4338589d8906ab22e9fafaa31a8c025002593cb106b41",
+          "requests": [
+            {
+              "http_status": 200,
+              "role": "anon",
+              "row_count": 2
+            }
+          ],
+          "all_industry_payloads": [
+            {
+              "industry": "AI_GPU_CLOUD",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-AI_GPU_CLOUD",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "AWS_AI_DATACENTER",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-AWS_AI_DATACENTER",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "FOUNDRY_ADVANCED_PROCESS",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-FOUNDRY_ADVANCED_PROCESS",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "IC_DESIGN",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-IC_DESIGN",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "MEMORY",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-MEMORY",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "ABF_SUBSTRATE",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-ABF_SUBSTRATE",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "PCB_CCL",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-PCB_CCL",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "PASSIVE_COMPONENTS",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-PASSIVE_COMPONENTS",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "THERMAL_POWER",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-THERMAL_POWER",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "NETWORK_HIGH_SPEED",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-NETWORK_HIGH_SPEED",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "OPTICAL_COMM",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-OPTICAL_COMM",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "III_V_OPTICAL",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-III_V_OPTICAL",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "date": "2026-10-12",
+              "report_time": "08:50",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-ROBOTICS_AUTOMATION",
+              "source": "opening_report_0830",
+              "mode": "priority_bias_only",
+              "industry": "ROBOTICS_AUTOMATION",
+              "display_name": "機器人／自動化",
+              "priority_observation_basis": "positive_industry_top3",
+              "priority_observation_rank": 1,
+              "priority_overseas_leaders": [
+                {
+                  "rank": 1,
+                  "symbol": "7203.T",
+                  "percent": 1,
+                  "source_time": "2026-10-12T00:00:00Z"
+                }
+              ],
+              "mapped_symbols_a": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                }
+              ],
+              "mapped_symbols_b": [
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "mapped_symbols": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                },
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "bias": "neutral_mixed",
+              "confidence": 0.8,
+              "evidence_summary": "fixture",
+              "mapping_contract": "opening-report-0830-industry-map-v2",
+              "mapping_reviewed_at": "2026-09-09",
+              "mapping_evidence_authorities": [
+                "MOPS",
+                "ISSUER"
+              ],
+              "allowed_action": "boost_scan_priority_only",
+              "forbidden_action": "publish_formal_candidate_without_taiwan_evidence",
+              "overseas_return_1d_pct": 0.26,
+              "overseas_leader_detection": {
+                "industry": "ROBOTICS_AUTOMATION",
+                "leader_count": 1,
+                "valid_count": 1,
+                "unavailable_count": 0,
+                "average_percent": 0.26,
+                "leaders": [
+                  {
+                    "yahoo_symbol": "7203.T",
+                    "ok": true,
+                    "percent": 0.26,
+                    "source": "isolated",
+                    "source_time": "2026-10-12T00:00:00Z"
+                  }
+                ]
+              },
+              "positive_return_rank": 1
+            },
+            {
+              "industry": "PANEL",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-PANEL",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "APPLE_CONSUMER",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-APPLE_CONSUMER",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            }
+          ],
+          "all_industry_payloads_sha256": "12fc535d14fcedb4e0f214058c7e7cb849495a199f38d892d9b76527f7de484e"
+        }
+      },
+      "readback": {
+        "contract": "opening-report-0830-mother-pool-handoff-ack-v2",
+        "complete": true,
+        "exitCode": 0,
+        "db_readback_ok": true,
+        "trade_date": "2026-10-12",
+        "report_run_id": "opening-report-0830-20261012-asia_0850-fixture",
+        "checked_at": "2026-10-12T02:05:00Z",
+        "accepted_symbols": [
+          "2049",
+          "2308"
+        ],
+        "accepted_readback_symbols": [
+          "2049",
+          "2308"
+        ],
+        "source_evidence": {
+          "contract": "opening_report_handoff_raw_evidence_v1",
+          "stage": "asia_0850",
+          "readback_role": "anon",
+          "aggregate": {
+            "run_id": "opening-report-0830-20261012-asia_0850-fixture",
+            "status": "BRIDGE_OK",
+            "industry_count": 1,
+            "priority_observation_mode": "positive_industry_top3"
+          },
+          "industry_payloads": [
+            {
+              "date": "2026-10-12",
+              "report_time": "08:50",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-ROBOTICS_AUTOMATION",
+              "source": "opening_report_0830",
+              "mode": "priority_bias_only",
+              "industry": "ROBOTICS_AUTOMATION",
+              "display_name": "機器人／自動化",
+              "priority_observation_basis": "positive_industry_top3",
+              "priority_observation_rank": 1,
+              "priority_overseas_leaders": [
+                {
+                  "rank": 1,
+                  "symbol": "7203.T",
+                  "percent": 1,
+                  "source_time": "2026-10-12T00:00:00Z"
+                }
+              ],
+              "mapped_symbols_a": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                }
+              ],
+              "mapped_symbols_b": [
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "mapped_symbols": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                },
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "bias": "neutral_mixed",
+              "confidence": 0.8,
+              "evidence_summary": "fixture",
+              "mapping_contract": "opening-report-0830-industry-map-v2",
+              "mapping_reviewed_at": "2026-09-09",
+              "mapping_evidence_authorities": [
+                "MOPS",
+                "ISSUER"
+              ],
+              "allowed_action": "boost_scan_priority_only",
+              "forbidden_action": "publish_formal_candidate_without_taiwan_evidence",
+              "overseas_return_1d_pct": 0.26,
+              "overseas_leader_detection": {
+                "industry": "ROBOTICS_AUTOMATION",
+                "leader_count": 1,
+                "valid_count": 1,
+                "unavailable_count": 0,
+                "average_percent": 0.26,
+                "leaders": [
+                  {
+                    "yahoo_symbol": "7203.T",
+                    "ok": true,
+                    "percent": 0.26,
+                    "source": "isolated",
+                    "source_time": "2026-10-12T00:00:00Z"
+                  }
+                ]
+              },
+              "positive_return_rank": 1
+            }
+          ],
+          "bridges": [
+            {
+              "receipt": {
+                "contract": "opening-report-0830-priority-bias-bridge-v1",
+                "ok": true,
+                "received": true,
+                "source": "opening_report_0830",
+                "mode": "priority_bias_only",
+                "status": "priority_scan",
+                "reason_code": "opening_report_0830_industry_bias",
+                "forbidden_publish_guard": true,
+                "formal_candidate_count": 0,
+                "formal_candidate_allowed": false,
+                "publish_allowed": false,
+                "opening_report_status_unchanged": true,
+                "run_id": "opening-report-0830-20261012-asia_0850-fixture-ROBOTICS_AUTOMATION",
+                "validation": {
+                  "ok": true
+                },
+                "accepted_symbols": [
+                  "2049",
+                  "2308"
+                ],
+                "rejected_symbols": []
+              }
+            }
+          ],
+          "rows": [
+            {
+              "symbol": "2049",
+              "market": "TWSE",
+              "priority_reason": "writer_priority",
+              "source": "fugle_daytrade_source",
+              "payload": {
+                "openingReport0830IndustryBias": {
+                  "date": "2026-10-12",
+                  "report_time": "08:50",
+                  "stage": "asia_0850",
+                  "report_run_id": "opening-report-0830-20261012-asia_0850-fixture",
+                  "run_id": "opening-report-0830-20261012-asia_0850-fixture",
+                  "source": "opening_report_0830",
+                  "mode": "priority_bias_only",
+                  "industry": "ROBOTICS_AUTOMATION",
+                  "linked_industries": [
+                    "ROBOTICS_AUTOMATION"
+                  ],
+                  "observations": [
+                    {
+                      "industry": "ROBOTICS_AUTOMATION",
+                      "run_id": "opening-report-0830-20261012-asia_0850-fixture-ROBOTICS_AUTOMATION",
+                      "priority_observation_rank": 1,
+                      "priority_overseas_leaders": [
+                        {
+                          "rank": 1,
+                          "symbol": "7203.T",
+                          "percent": 1,
+                          "source_time": "2026-10-12T00:00:00Z"
+                        }
+                      ]
+                    }
+                  ],
+                  "highest_industry_rank": 1,
+                  "boost_once": true,
+                  "reason_code": "opening_report_0830_industry_bias",
+                  "status": "watchlist_boosted",
+                  "formal_candidate": false,
+                  "formal_candidate_allowed": false,
+                  "forbidden_publish_guard": true
+                }
+              }
+            },
+            {
+              "symbol": "2308",
+              "market": "TWSE",
+              "priority_reason": "writer_priority",
+              "source": "fugle_daytrade_source",
+              "payload": {
+                "openingReport0830IndustryBias": {
+                  "date": "2026-10-12",
+                  "report_time": "08:50",
+                  "stage": "asia_0850",
+                  "report_run_id": "opening-report-0830-20261012-asia_0850-fixture",
+                  "run_id": "opening-report-0830-20261012-asia_0850-fixture",
+                  "source": "opening_report_0830",
+                  "mode": "priority_bias_only",
+                  "industry": "ROBOTICS_AUTOMATION",
+                  "linked_industries": [
+                    "ROBOTICS_AUTOMATION"
+                  ],
+                  "observations": [
+                    {
+                      "industry": "ROBOTICS_AUTOMATION",
+                      "run_id": "opening-report-0830-20261012-asia_0850-fixture-ROBOTICS_AUTOMATION",
+                      "priority_observation_rank": 1,
+                      "priority_overseas_leaders": [
+                        {
+                          "rank": 1,
+                          "symbol": "7203.T",
+                          "percent": 1,
+                          "source_time": "2026-10-12T00:00:00Z"
+                        }
+                      ]
+                    }
+                  ],
+                  "highest_industry_rank": 1,
+                  "boost_once": true,
+                  "reason_code": "opening_report_0830_industry_bias",
+                  "status": "watchlist_boosted",
+                  "formal_candidate": false,
+                  "formal_candidate_allowed": false,
+                  "forbidden_publish_guard": true
+                }
+              }
+            }
+          ],
+          "rows_sha256": "363bdbe7cb193958e9f4338589d8906ab22e9fafaa31a8c025002593cb106b41",
+          "requests": [
+            {
+              "http_status": 200,
+              "role": "anon",
+              "row_count": 2
+            }
+          ],
+          "all_industry_payloads": [
+            {
+              "industry": "AI_GPU_CLOUD",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-AI_GPU_CLOUD",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "AWS_AI_DATACENTER",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-AWS_AI_DATACENTER",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "FOUNDRY_ADVANCED_PROCESS",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-FOUNDRY_ADVANCED_PROCESS",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "IC_DESIGN",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-IC_DESIGN",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "MEMORY",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-MEMORY",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "ABF_SUBSTRATE",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-ABF_SUBSTRATE",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "PCB_CCL",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-PCB_CCL",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "PASSIVE_COMPONENTS",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-PASSIVE_COMPONENTS",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "THERMAL_POWER",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-THERMAL_POWER",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "NETWORK_HIGH_SPEED",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-NETWORK_HIGH_SPEED",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "OPTICAL_COMM",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-OPTICAL_COMM",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "III_V_OPTICAL",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-III_V_OPTICAL",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "date": "2026-10-12",
+              "report_time": "08:50",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-ROBOTICS_AUTOMATION",
+              "source": "opening_report_0830",
+              "mode": "priority_bias_only",
+              "industry": "ROBOTICS_AUTOMATION",
+              "display_name": "機器人／自動化",
+              "priority_observation_basis": "positive_industry_top3",
+              "priority_observation_rank": 1,
+              "priority_overseas_leaders": [
+                {
+                  "rank": 1,
+                  "symbol": "7203.T",
+                  "percent": 1,
+                  "source_time": "2026-10-12T00:00:00Z"
+                }
+              ],
+              "mapped_symbols_a": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                }
+              ],
+              "mapped_symbols_b": [
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "mapped_symbols": [
+                {
+                  "symbol": "2049",
+                  "name": "上銀",
+                  "tier": "A",
+                  "mapping_grade": "A",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "direct_product_or_revenue_exposure",
+                  "mapping_reason": "上銀（2049）：傳動元件為直接產品",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2049",
+                    "https://example.test/issuer/2049"
+                  ]
+                },
+                {
+                  "symbol": "2308",
+                  "name": "台達電",
+                  "tier": "B",
+                  "mapping_grade": "B",
+                  "mapping_status": "reviewed",
+                  "mapping_industry": "ROBOTICS_AUTOMATION",
+                  "relationship_type": "adjacent_supply_chain_or_end_demand",
+                  "mapping_reason": "台達電（2308）：控制器為相鄰供應鏈",
+                  "evidence_authorities": [
+                    "MOPS",
+                    "ISSUER"
+                  ],
+                  "evidence_urls": [
+                    "https://example.test/mops/2308",
+                    "https://example.test/issuer/2308"
+                  ]
+                }
+              ],
+              "bias": "neutral_mixed",
+              "confidence": 0.8,
+              "evidence_summary": "fixture",
+              "mapping_contract": "opening-report-0830-industry-map-v2",
+              "mapping_reviewed_at": "2026-09-09",
+              "mapping_evidence_authorities": [
+                "MOPS",
+                "ISSUER"
+              ],
+              "allowed_action": "boost_scan_priority_only",
+              "forbidden_action": "publish_formal_candidate_without_taiwan_evidence",
+              "overseas_return_1d_pct": 0.26,
+              "overseas_leader_detection": {
+                "industry": "ROBOTICS_AUTOMATION",
+                "leader_count": 1,
+                "valid_count": 1,
+                "unavailable_count": 0,
+                "average_percent": 0.26,
+                "leaders": [
+                  {
+                    "yahoo_symbol": "7203.T",
+                    "ok": true,
+                    "percent": 0.26,
+                    "source": "isolated",
+                    "source_time": "2026-10-12T00:00:00Z"
+                  }
+                ]
+              },
+              "positive_return_rank": 1
+            },
+            {
+              "industry": "PANEL",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-PANEL",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            },
+            {
+              "industry": "APPLE_CONSUMER",
+              "date": "2026-10-12",
+              "stage": "asia_0850",
+              "run_id": "opening-report-0830-20261012-asia_0850-fixture-APPLE_CONSUMER",
+              "overseas_return_1d_pct": 0,
+              "positive_return_rank": null
+            }
+          ],
+          "all_industry_payloads_sha256": "12fc535d14fcedb4e0f214058c7e7cb849495a199f38d892d9b76527f7de484e"
+        }
+      },
+      "persistence": {
+        "contract": "opening-report-0830-mother-pool-persistence-ack-v1",
+        "complete": true,
+        "exitCode": 0,
+        "trade_date": "2026-10-12",
+        "report_run_id": "opening-report-0830-20261012-asia_0850-fixture",
+        "checked_at": "2026-10-12T02:05:01Z"
+      },
+      "refresh_files": [
+        {
+          "file": "C:\\Users\\ginov\\Documents\\Codex\\2026-09-30\\new-chat\\outputs\\unified-semantic-merge-20261013\\lab\\runs\\normal_terminal\\state\\opening-report-writer-refreshes\\2026-10-12\\893d4e8499151a3ce1cc59eae3263589c9cc732d4613d9a3c1bcdf60cbd125e4.json",
+          "text": "{\n  \"contract\": \"opening-report-writer-pool-refresh-v1\",\n  \"trade_date\": \"2026-10-12\",\n  \"generation_id\": \"cde2861b-04cb-427d-a97e-627773fc9e9f\",\n  \"writer_run_id\": \"OFFLINE_ONLY:daytrade-writer:20261012:cde2861b-04cb-427d-a97e-627773fc9e9f\",\n  \"completed_at\": \"2026-10-12T02:00:07.164Z\",\n  \"operation\": \"priority_pool_upsert_and_prune\",\n  \"write_complete\": true,\n  \"symbols\": [\n    \"1000\",\n    \"1001\",\n    \"1002\",\n    \"1003\",\n    \"1004\",\n    \"1005\",\n    \"1006\",\n    \"1007\",\n    \"1008\",\n    \"1009\",\n    \"1010\",\n    \"1011\",\n    \"1012\",\n    \"1013\",\n    \"1014\",\n    \"1015\",\n    \"1016\",\n    \"1017\",\n    \"1018\",\n    \"1019\",\n    \"1020\",\n    \"1021\",\n    \"1022\",\n    \"1023\",\n    \"1024\",\n    \"1025\",\n    \"1026\",\n    \"1027\",\n    \"1028\",\n    \"1029\",\n    \"1030\",\n    \"1031\",\n    \"1032\",\n    \"1033\",\n    \"1034\",\n    \"1035\",\n    \"1036\",\n    \"1037\",\n    \"1038\",\n    \"1039\",\n    \"1040\",\n    \"1041\",\n    \"1042\",\n    \"1043\",\n    \"1044\",\n    \"1045\",\n    \"1046\",\n    \"1047\",\n    \"1048\",\n    \"1049\",\n    \"1050\",\n    \"1051\",\n    \"1052\",\n    \"1053\",\n    \"1054\",\n    \"1055\",\n    \"1056\",\n    \"1057\",\n    \"1058\",\n    \"1059\",\n    \"1060\",\n    \"1061\",\n    \"1062\",\n    \"1063\",\n    \"1064\",\n    \"1065\",\n    \"1066\",\n    \"1067\",\n    \"1068\",\n    \"1069\",\n    \"1070\",\n    \"1071\",\n    \"1072\",\n    \"1073\",\n    \"1074\",\n    \"1075\",\n    \"1076\",\n    \"1077\",\n    \"1078\",\n    \"1079\",\n    \"1080\",\n    \"1081\",\n    \"1082\",\n    \"1083\",\n    \"1084\",\n    \"1085\",\n    \"1086\",\n    \"1087\",\n    \"1088\",\n    \"1089\",\n    \"1090\",\n    \"1091\",\n    \"1092\",\n    \"1093\",\n    \"1094\",\n    \"1095\",\n    \"1096\",\n    \"1097\",\n    \"1098\",\n    \"1099\",\n    \"1100\",\n    \"1101\",\n    \"1102\",\n    \"1103\",\n    \"1104\",\n    \"1105\",\n    \"1106\",\n    \"1107\",\n    \"1108\",\n    \"1109\",\n    \"1110\",\n    \"1111\",\n    \"1112\",\n    \"1113\",\n    \"1114\",\n    \"1115\",\n    \"1116\",\n    \"1117\",\n    \"1118\",\n    \"1119\",\n    \"1120\",\n    \"1121\",\n    \"1122\",\n    \"1123\",\n    \"1124\",\n    \"1125\",\n    \"1126\",\n    \"1127\",\n    \"1128\",\n    \"1129\",\n    \"1130\",\n    \"1131\",\n    \"1132\",\n    \"1133\",\n    \"1134\",\n    \"1135\",\n    \"1136\",\n    \"1137\",\n    \"1138\",\n    \"1139\",\n    \"1140\",\n    \"1141\",\n    \"1142\",\n    \"1143\",\n    \"1144\",\n    \"1145\",\n    \"1146\",\n    \"1147\",\n    \"1148\",\n    \"1149\",\n    \"1150\",\n    \"1151\",\n    \"1152\",\n    \"1153\",\n    \"1154\",\n    \"1155\",\n    \"1156\",\n    \"1157\",\n    \"1158\",\n    \"1159\",\n    \"1160\",\n    \"1161\",\n    \"1162\",\n    \"1163\",\n    \"1164\",\n    \"1165\",\n    \"1166\",\n    \"1167\",\n    \"1168\",\n    \"1169\",\n    \"1170\",\n    \"1171\",\n    \"1172\",\n    \"1173\",\n    \"1174\",\n    \"1175\",\n    \"1176\",\n    \"1177\",\n    \"1178\",\n    \"1179\",\n    \"1180\",\n    \"1181\",\n    \"1182\",\n    \"1183\",\n    \"1184\",\n    \"1185\",\n    \"1186\",\n    \"1187\",\n    \"1188\",\n    \"1189\",\n    \"1190\",\n    \"1191\",\n    \"1192\",\n    \"1193\",\n    \"1194\",\n    \"1195\",\n    \"1196\",\n    \"1197\",\n    \"1198\",\n    \"1199\",\n    \"1200\",\n    \"1201\",\n    \"1202\",\n    \"1203\",\n    \"1204\",\n    \"1205\",\n    \"1206\",\n    \"1207\",\n    \"1208\",\n    \"1209\",\n    \"1210\",\n    \"1211\",\n    \"1212\",\n    \"1213\",\n    \"1214\",\n    \"1215\",\n    \"1216\",\n    \"1217\",\n    \"1218\",\n    \"1219\",\n    \"1220\",\n    \"1221\",\n    \"1222\",\n    \"1223\",\n    \"1224\",\n    \"1225\",\n    \"1226\",\n    \"1227\",\n    \"1228\",\n    \"1229\",\n    \"1230\",\n    \"1231\",\n    \"1232\",\n    \"1233\",\n    \"1234\",\n    \"1235\",\n    \"1236\",\n    \"1237\",\n    \"1238\",\n    \"1239\",\n    \"1240\",\n    \"1241\",\n    \"1242\",\n    \"1243\",\n    \"1244\",\n    \"1245\",\n    \"1246\",\n    \"1247\",\n    \"1248\",\n    \"1249\",\n    \"1250\",\n    \"1251\",\n    \"1252\",\n    \"1253\",\n    \"1254\",\n    \"1255\",\n    \"1256\",\n    \"1257\",\n    \"1258\",\n    \"1259\",\n    \"1260\",\n    \"1261\",\n    \"1262\",\n    \"1263\",\n    \"1264\",\n    \"1265\",\n    \"1266\",\n    \"1267\",\n    \"1268\",\n    \"1269\",\n    \"1270\",\n    \"1271\",\n    \"1272\",\n    \"1273\",\n    \"1274\",\n    \"1275\",\n    \"1276\",\n    \"1277\",\n    \"1278\",\n    \"1279\",\n    \"1280\",\n    \"1281\",\n    \"1282\",\n    \"1283\",\n    \"1284\",\n    \"1285\",\n    \"1286\",\n    \"1287\",\n    \"1288\",\n    \"1289\",\n    \"1290\",\n    \"1291\",\n    \"1292\",\n    \"1293\",\n    \"1294\",\n    \"1295\",\n    \"1296\",\n    \"1297\",\n    \"1298\",\n    \"1299\",\n    \"1300\",\n    \"1301\",\n    \"1302\",\n    \"1303\",\n    \"1304\",\n    \"1305\",\n    \"1306\",\n    \"1307\",\n    \"1308\",\n    \"1309\",\n    \"1310\",\n    \"1311\",\n    \"1312\",\n    \"1313\",\n    \"1314\",\n    \"1315\",\n    \"1316\",\n    \"1317\",\n    \"1318\",\n    \"1319\",\n    \"1320\",\n    \"1321\",\n    \"1322\",\n    \"1323\",\n    \"1324\",\n    \"1325\",\n    \"1326\",\n    \"1327\",\n    \"1328\",\n    \"1329\",\n    \"1330\",\n    \"1331\",\n    \"1332\",\n    \"1333\",\n    \"1334\",\n    \"1335\",\n    \"1336\",\n    \"1337\",\n    \"1338\",\n    \"1339\",\n    \"1340\",\n    \"1341\",\n    \"1342\",\n    \"1343\",\n    \"1344\",\n    \"1345\",\n    \"1346\",\n    \"1347\",\n    \"1348\",\n    \"1349\",\n    \"1350\",\n    \"1351\",\n    \"1352\",\n    \"1353\",\n    \"1354\",\n    \"1355\",\n    \"1356\",\n    \"1357\",\n    \"1358\",\n    \"1359\",\n    \"1360\",\n    \"1361\",\n    \"1362\",\n    \"1363\",\n    \"1364\",\n    \"1365\",\n    \"1366\",\n    \"1367\",\n    \"1368\",\n    \"1369\",\n    \"1370\",\n    \"1371\",\n    \"1372\",\n    \"1373\",\n    \"1374\",\n    \"1375\",\n    \"1376\",\n    \"1377\",\n    \"1378\",\n    \"1379\",\n    \"1380\",\n    \"1381\",\n    \"1382\",\n    \"1383\",\n    \"1384\",\n    \"1385\",\n    \"1386\",\n    \"1387\",\n    \"1388\",\n    \"1389\",\n    \"1390\",\n    \"1391\",\n    \"1392\",\n    \"1393\",\n    \"1394\",\n    \"1504\",\n    \"1590\",\n    \"1597\",\n    \"2049\",\n    \"2308\",\n    \"2345\",\n    \"2356\",\n    \"2359\",\n    \"2371\",\n    \"2455\",\n    \"2464\"\n  ],\n  \"symbol_count\": 406,\n  \"db_readback_verified\": false,\n  \"readback_proof\": {\n    \"status\": \"NOT_REQUIRED\",\n    \"complete\": false\n  }\n}",
+          "expected_sha256": "4b65361285f8ecd9e220931187845498722e22dba5698948d90927bfecd0f1bc"
+        },
+        {
+          "file": "C:\\Users\\ginov\\Documents\\Codex\\2026-09-30\\new-chat\\outputs\\unified-semantic-merge-20261013\\lab\\runs\\normal_final\\state\\opening-report-writer-refreshes\\2026-10-12\\55fc174630981b452d9c5a783b31515fd428da1bef80fb4e5cfc0ec3a7ba88bb.json",
+          "text": "{\n  \"contract\": \"opening-report-writer-pool-refresh-v1\",\n  \"trade_date\": \"2026-10-12\",\n  \"generation_id\": \"1fd439ea-3436-4848-9cdc-521cae2aab52\",\n  \"writer_run_id\": \"OFFLINE_ONLY:daytrade-writer:20261012:1fd439ea-3436-4848-9cdc-521cae2aab52\",\n  \"completed_at\": \"2026-10-12T02:00:06.802Z\",\n  \"operation\": \"priority_pool_upsert_and_prune\",\n  \"write_complete\": true,\n  \"symbols\": [\n    \"1000\",\n    \"1001\",\n    \"1002\",\n    \"1003\",\n    \"1004\",\n    \"1005\",\n    \"1006\",\n    \"1007\",\n    \"1008\",\n    \"1009\",\n    \"1010\",\n    \"1011\",\n    \"1012\",\n    \"1013\",\n    \"1014\",\n    \"1015\",\n    \"1016\",\n    \"1017\",\n    \"1018\",\n    \"1019\",\n    \"1020\",\n    \"1021\",\n    \"1022\",\n    \"1023\",\n    \"1024\",\n    \"1025\",\n    \"1026\",\n    \"1027\",\n    \"1028\",\n    \"1029\",\n    \"1030\",\n    \"1031\",\n    \"1032\",\n    \"1033\",\n    \"1034\",\n    \"1035\",\n    \"1036\",\n    \"1037\",\n    \"1038\",\n    \"1039\",\n    \"1040\",\n    \"1041\",\n    \"1042\",\n    \"1043\",\n    \"1044\",\n    \"1045\",\n    \"1046\",\n    \"1047\",\n    \"1048\",\n    \"1049\",\n    \"1050\",\n    \"1051\",\n    \"1052\",\n    \"1053\",\n    \"1054\",\n    \"1055\",\n    \"1056\",\n    \"1057\",\n    \"1058\",\n    \"1059\",\n    \"1060\",\n    \"1061\",\n    \"1062\",\n    \"1063\",\n    \"1064\",\n    \"1065\",\n    \"1066\",\n    \"1067\",\n    \"1068\",\n    \"1069\",\n    \"1070\",\n    \"1071\",\n    \"1072\",\n    \"1073\",\n    \"1074\",\n    \"1075\",\n    \"1076\",\n    \"1077\",\n    \"1078\",\n    \"1079\",\n    \"1080\",\n    \"1081\",\n    \"1082\",\n    \"1083\",\n    \"1084\",\n    \"1085\",\n    \"1086\",\n    \"1087\",\n    \"1088\",\n    \"1089\",\n    \"1090\",\n    \"1091\",\n    \"1092\",\n    \"1093\",\n    \"1094\",\n    \"1095\",\n    \"1096\",\n    \"1097\",\n    \"1098\",\n    \"1099\",\n    \"1100\",\n    \"1101\",\n    \"1102\",\n    \"1103\",\n    \"1104\",\n    \"1105\",\n    \"1106\",\n    \"1107\",\n    \"1108\",\n    \"1109\",\n    \"1110\",\n    \"1111\",\n    \"1112\",\n    \"1113\",\n    \"1114\",\n    \"1115\",\n    \"1116\",\n    \"1117\",\n    \"1118\",\n    \"1119\",\n    \"1120\",\n    \"1121\",\n    \"1122\",\n    \"1123\",\n    \"1124\",\n    \"1125\",\n    \"1126\",\n    \"1127\",\n    \"1128\",\n    \"1129\",\n    \"1130\",\n    \"1131\",\n    \"1132\",\n    \"1133\",\n    \"1134\",\n    \"1135\",\n    \"1136\",\n    \"1137\",\n    \"1138\",\n    \"1139\",\n    \"1140\",\n    \"1141\",\n    \"1142\",\n    \"1143\",\n    \"1144\",\n    \"1145\",\n    \"1146\",\n    \"1147\",\n    \"1148\",\n    \"1149\",\n    \"1150\",\n    \"1151\",\n    \"1152\",\n    \"1153\",\n    \"1154\",\n    \"1155\",\n    \"1156\",\n    \"1157\",\n    \"1158\",\n    \"1159\",\n    \"1160\",\n    \"1161\",\n    \"1162\",\n    \"1163\",\n    \"1164\",\n    \"1165\",\n    \"1166\",\n    \"1167\",\n    \"1168\",\n    \"1169\",\n    \"1170\",\n    \"1171\",\n    \"1172\",\n    \"1173\",\n    \"1174\",\n    \"1175\",\n    \"1176\",\n    \"1177\",\n    \"1178\",\n    \"1179\",\n    \"1180\",\n    \"1181\",\n    \"1182\",\n    \"1183\",\n    \"1184\",\n    \"1185\",\n    \"1186\",\n    \"1187\",\n    \"1188\",\n    \"1189\",\n    \"1190\",\n    \"1191\",\n    \"1192\",\n    \"1193\",\n    \"1194\",\n    \"1195\",\n    \"1196\",\n    \"1197\",\n    \"1198\",\n    \"1199\",\n    \"1200\",\n    \"1201\",\n    \"1202\",\n    \"1203\",\n    \"1204\",\n    \"1205\",\n    \"1206\",\n    \"1207\",\n    \"1208\",\n    \"1209\",\n    \"1210\",\n    \"1211\",\n    \"1212\",\n    \"1213\",\n    \"1214\",\n    \"1215\",\n    \"1216\",\n    \"1217\",\n    \"1218\",\n    \"1219\",\n    \"1220\",\n    \"1221\",\n    \"1222\",\n    \"1223\",\n    \"1224\",\n    \"1225\",\n    \"1226\",\n    \"1227\",\n    \"1228\",\n    \"1229\",\n    \"1230\",\n    \"1231\",\n    \"1232\",\n    \"1233\",\n    \"1234\",\n    \"1235\",\n    \"1236\",\n    \"1237\",\n    \"1238\",\n    \"1239\",\n    \"1240\",\n    \"1241\",\n    \"1242\",\n    \"1243\",\n    \"1244\",\n    \"1245\",\n    \"1246\",\n    \"1247\",\n    \"1248\",\n    \"1249\",\n    \"1250\",\n    \"1251\",\n    \"1252\",\n    \"1253\",\n    \"1254\",\n    \"1255\",\n    \"1256\",\n    \"1257\",\n    \"1258\",\n    \"1259\",\n    \"1260\",\n    \"1261\",\n    \"1262\",\n    \"1263\",\n    \"1264\",\n    \"1265\",\n    \"1266\",\n    \"1267\",\n    \"1268\",\n    \"1269\",\n    \"1270\",\n    \"1271\",\n    \"1272\",\n    \"1273\",\n    \"1274\",\n    \"1275\",\n    \"1276\",\n    \"1277\",\n    \"1278\",\n    \"1279\",\n    \"1280\",\n    \"1281\",\n    \"1282\",\n    \"1283\",\n    \"1284\",\n    \"1285\",\n    \"1286\",\n    \"1287\",\n    \"1288\",\n    \"1289\",\n    \"1290\",\n    \"1291\",\n    \"1292\",\n    \"1293\",\n    \"1294\",\n    \"1295\",\n    \"1296\",\n    \"1297\",\n    \"1298\",\n    \"1299\",\n    \"1300\",\n    \"1301\",\n    \"1302\",\n    \"1303\",\n    \"1304\",\n    \"1305\",\n    \"1306\",\n    \"1307\",\n    \"1308\",\n    \"1309\",\n    \"1310\",\n    \"1311\",\n    \"1312\",\n    \"1313\",\n    \"1314\",\n    \"1315\",\n    \"1316\",\n    \"1317\",\n    \"1318\",\n    \"1319\",\n    \"1320\",\n    \"1321\",\n    \"1322\",\n    \"1323\",\n    \"1324\",\n    \"1325\",\n    \"1326\",\n    \"1327\",\n    \"1328\",\n    \"1329\",\n    \"1330\",\n    \"1331\",\n    \"1332\",\n    \"1333\",\n    \"1334\",\n    \"1335\",\n    \"1336\",\n    \"1337\",\n    \"1338\",\n    \"1339\",\n    \"1340\",\n    \"1341\",\n    \"1342\",\n    \"1343\",\n    \"1344\",\n    \"1345\",\n    \"1346\",\n    \"1347\",\n    \"1348\",\n    \"1349\",\n    \"1350\",\n    \"1351\",\n    \"1352\",\n    \"1353\",\n    \"1354\",\n    \"1355\",\n    \"1356\",\n    \"1357\",\n    \"1358\",\n    \"1359\",\n    \"1360\",\n    \"1361\",\n    \"1362\",\n    \"1363\",\n    \"1364\",\n    \"1365\",\n    \"1366\",\n    \"1367\",\n    \"1368\",\n    \"1369\",\n    \"1370\",\n    \"1371\",\n    \"1372\",\n    \"1373\",\n    \"1374\",\n    \"1375\",\n    \"1376\",\n    \"1377\",\n    \"1378\",\n    \"1379\",\n    \"1380\",\n    \"1381\",\n    \"1382\",\n    \"1383\",\n    \"1384\",\n    \"1385\",\n    \"1386\",\n    \"1387\",\n    \"1388\",\n    \"1389\",\n    \"1390\",\n    \"1391\",\n    \"1392\",\n    \"1393\",\n    \"1394\",\n    \"1504\",\n    \"1590\",\n    \"1597\",\n    \"2049\",\n    \"2308\",\n    \"2345\",\n    \"2356\",\n    \"2359\",\n    \"2371\",\n    \"2455\",\n    \"2464\"\n  ],\n  \"symbol_count\": 406,\n  \"db_readback_verified\": false,\n  \"readback_proof\": {\n    \"status\": \"NOT_REQUIRED\",\n    \"complete\": false\n  }\n}",
+          "expected_sha256": "9f59d88c02b8e1c0ad86dd0e30d00f9324dd8c51a12e18e29668b8b1204ee616"
+        }
+      ],
+      "writer_terminals": [
+        {
+          "contract": "mother_pool_writer_terminal_v11",
+          "input": {
+            "identity": {
+              "trade_date": "2026-10-12",
+              "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+              "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:cde2861b-04cb-427d-a97e-627773fc9e9f",
+              "generation_id": "cde2861b-04cb-427d-a97e-627773fc9e9f",
+              "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_sequence": 1
+            },
+            "startedAt": "2026-10-12T02:00:03.648Z",
+            "completedAt": "2026-10-12T02:00:19.832Z",
+            "exitCode": 0,
+            "status": "SUCCESS",
+            "verifier": {
+              "success": true,
+              "identity": {
+                "trade_date": "2026-10-12",
+                "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+                "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:cde2861b-04cb-427d-a97e-627773fc9e9f",
+                "generation_id": "cde2861b-04cb-427d-a97e-627773fc9e9f",
+                "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_sequence": 1
+              },
+              "completed_at": "2026-10-12T02:00:19.473Z",
+              "payload": {
+                "raw_sha256": "9116176d652464a3bc25f13f2c3d6b8b07edef861d27e8f776938dff40276c1c",
+                "verification_run_id": "mother_pool_v4_1:20261012:20261012020019236",
+                "snapshot_sha256": "3e38ee4fb79f09b6dfa572d1f98da3b76cc8f5a45361e709076dce76726faf05",
+                "ok": true
+              },
+              "hash": "f738b035a55272ee23d22636ac352c58984bc5bb76bd3faa5e9c9bcbe4c46da3"
+            },
+            "refresh": {
+              "success": true,
+              "identity": {
+                "trade_date": "2026-10-12",
+                "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+                "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:cde2861b-04cb-427d-a97e-627773fc9e9f",
+                "generation_id": "cde2861b-04cb-427d-a97e-627773fc9e9f",
+                "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_sequence": 1
+              },
+              "completed_at": "2026-10-12T02:00:17.286Z",
+              "payload": {
+                "raw_sha256": "9909461aed15d4932aa9923b1717e1f757713f5fb2254801ef51fc080a2a3aeb",
+                "wrapper_run_id": "fugle_daytrade_source-writer-20261012020001-25996",
+                "ok": true
+              },
+              "hash": "7a1d51a0778a4415b39f81aee4730e4801993350c357671efc12e98e5188949b"
+            }
+          },
+          "receipt": {
+            "success": true,
+            "identity": {
+              "trade_date": "2026-10-12",
+              "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+              "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:cde2861b-04cb-427d-a97e-627773fc9e9f",
+              "generation_id": "cde2861b-04cb-427d-a97e-627773fc9e9f",
+              "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_sequence": 1
+            },
+            "completed_at": "2026-10-12T02:00:19.832Z",
+            "payload": {
+              "status": "SUCCESS",
+              "started_at": "2026-10-12T02:00:03.648Z",
+              "completed_at": "2026-10-12T02:00:19.832Z",
+              "verifier_hash": "f738b035a55272ee23d22636ac352c58984bc5bb76bd3faa5e9c9bcbe4c46da3",
+              "refresh_hash": "7a1d51a0778a4415b39f81aee4730e4801993350c357671efc12e98e5188949b"
+            },
+            "hash": "1cd61df0751de6a1c75115a195dd675c3f070bf7632b69bd293d232b6b559efe"
+          },
+          "wrapper_run_id": "fugle_daytrade_source-writer-20261012020001-25996",
+          "formal_modules_complete": false
+        },
+        {
+          "contract": "mother_pool_writer_terminal_v11",
+          "input": {
+            "identity": {
+              "trade_date": "2026-10-12",
+              "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+              "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:1fd439ea-3436-4848-9cdc-521cae2aab52",
+              "generation_id": "1fd439ea-3436-4848-9cdc-521cae2aab52",
+              "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_sequence": 1
+            },
+            "startedAt": "2026-10-12T02:00:03.304Z",
+            "completedAt": "2026-10-12T02:00:46.987Z",
+            "exitCode": 0,
+            "status": "SUCCESS",
+            "verifier": {
+              "success": true,
+              "identity": {
+                "trade_date": "2026-10-12",
+                "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+                "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:1fd439ea-3436-4848-9cdc-521cae2aab52",
+                "generation_id": "1fd439ea-3436-4848-9cdc-521cae2aab52",
+                "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_sequence": 1
+              },
+              "completed_at": "2026-10-12T02:00:46.613Z",
+              "payload": {
+                "raw_sha256": "5495f99acac9a03362e794c450939369bdd44a197a8fcee0beab0a5fc5ad20f1",
+                "verification_run_id": "mother_pool_v4_1:20261012:20261012020046377",
+                "snapshot_sha256": "bdead99417cbc38f6b892c3978bb91777eff49778b199cf8471ecb8f5d24aa8f",
+                "ok": true
+              },
+              "hash": "ac4d4f507a3145a02568fd27904f029ed25fe4a9145547d1d6af3d7e9ac1f8b5"
+            },
+            "refresh": {
+              "success": true,
+              "identity": {
+                "trade_date": "2026-10-12",
+                "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+                "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:1fd439ea-3436-4848-9cdc-521cae2aab52",
+                "generation_id": "1fd439ea-3436-4848-9cdc-521cae2aab52",
+                "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+                "snapshot_sequence": 1
+              },
+              "completed_at": "2026-10-12T02:00:44.632Z",
+              "payload": {
+                "raw_sha256": "ac6db403da86bd1cc6f1f00b3d934e54270709edccd8fdbb619249ebe1701b6e",
+                "wrapper_run_id": "fugle_daytrade_source-writer-20261012020001-36272",
+                "ok": true
+              },
+              "hash": "56f2c176debc4501f4cc421fda7846ad8d0bf5fb180f8b16228f212fb4cc14d1"
+            }
+          },
+          "receipt": {
+            "success": true,
+            "identity": {
+              "trade_date": "2026-10-12",
+              "canonical_run_id": "fugle_daytrade_source:20261012:canonical",
+              "writer_run_id": "OFFLINE_ONLY:daytrade-writer:20261012:1fd439ea-3436-4848-9cdc-521cae2aab52",
+              "generation_id": "1fd439ea-3436-4848-9cdc-521cae2aab52",
+              "mother_pool_run_id": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_generation": "fugle_daytrade_source:20261012:canonical:mother_pool_snapshot:0001",
+              "snapshot_sequence": 1
+            },
+            "completed_at": "2026-10-12T02:00:46.987Z",
+            "payload": {
+              "status": "SUCCESS",
+              "started_at": "2026-10-12T02:00:03.304Z",
+              "completed_at": "2026-10-12T02:00:46.987Z",
+              "verifier_hash": "ac4d4f507a3145a02568fd27904f029ed25fe4a9145547d1d6af3d7e9ac1f8b5",
+              "refresh_hash": "56f2c176debc4501f4cc421fda7846ad8d0bf5fb180f8b16228f212fb4cc14d1"
+            },
+            "hash": "850584171b947a5482adc05c10c41362f22abfa299247245aa4e8efa612cabea"
+          },
+          "wrapper_run_id": "fugle_daytrade_source-writer-20261012020001-36272",
+          "formal_modules_complete": false
+        }
+      ]
+    }
+  },
+  "terminal_files": [
+    {
+      "file": "C:\\Users\\ginov\\Documents\\Codex\\2026-09-30\\new-chat\\outputs\\unified-semantic-merge-20261013\\lab\\runs\\normal_terminal\\data\\writer-terminals\\2026-10-12\\eef31f598301340dd37b470f4c92aa7d81a3fa489fc059c50d39611904482315.json",
+      "sha256": "db93147ca0976d454c098357afed4059d143d319a5f35cd7e6b79d52fc17c4a5"
+    },
+    {
+      "file": "C:\\Users\\ginov\\Documents\\Codex\\2026-09-30\\new-chat\\outputs\\unified-semantic-merge-20261013\\lab\\runs\\normal_final\\data\\writer-terminals\\2026-10-12\\380467ee15034d2a0b371501e41bc9fb498c26edcf1492bff8a6890c32609f99.json",
+      "sha256": "f0bc118a62bcaf790ef25d45279784e07187fa29451f4e701e89f059d257fd0a"
+    }
+  ],
+  "refresh_files": [
+    {
+      "file": "C:\\Users\\ginov\\Documents\\Codex\\2026-09-30\\new-chat\\outputs\\unified-semantic-merge-20261013\\lab\\runs\\normal_terminal\\state\\opening-report-writer-refreshes\\2026-10-12\\893d4e8499151a3ce1cc59eae3263589c9cc732d4613d9a3c1bcdf60cbd125e4.json",
+      "sha256": "4b65361285f8ecd9e220931187845498722e22dba5698948d90927bfecd0f1bc"
+    },
+    {
+      "file": "C:\\Users\\ginov\\Documents\\Codex\\2026-09-30\\new-chat\\outputs\\unified-semantic-merge-20261013\\lab\\runs\\normal_final\\state\\opening-report-writer-refreshes\\2026-10-12\\55fc174630981b452d9c5a783b31515fd428da1bef80fb4e5cfc0ec3a7ba88bb.json",
+      "sha256": "9f59d88c02b8e1c0ad86dd0e30d00f9324dd8c51a12e18e29668b8b1204ee616"
+    }
+  ]
+}

@@ -115,7 +115,7 @@ function readTradingDayOverride(stateDir, key) {
   return null;
 }
 
-async function fetchHolidayRows(stateDir, year) {
+async function fetchHolidayRows(stateDir, year, deadlineMs) {
   const cacheKey = `${stateDir}|${year}`;
   const memory = HOLIDAY_MEMORY_CACHE.get(cacheKey);
   const memoryAge = memory ? Date.now() - memory.fetchedAt : Infinity;
@@ -131,18 +131,28 @@ async function fetchHolidayRows(stateDir, year) {
 
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), HOLIDAY_FETCH_TIMEOUT_MS);
-    let response;
+    const bounded=Number.isFinite(deadlineMs);
+    const remaining=bounded?Math.min(HOLIDAY_FETCH_TIMEOUT_MS,deadlineMs-Date.now()):HOLIDAY_FETCH_TIMEOUT_MS;
+    if(remaining<=0)throw Error('CALENDAR_BUDGET_EXHAUSTED');
+    const timer = setTimeout(() => controller.abort(), remaining);
+    let response, boundedRows;
     try {
       response = await fetch(HOLIDAY_API_URL, {
       headers: { "User-Agent": "FumanRealtimeRadarTradingDay/1.0" },
         signal: controller.signal,
       });
+      if(bounded){
+        if(!response.ok)throw Error(`HTTP ${response.status}`);
+        const chunks=[];let bytes=0;
+        for await(const chunk of response.body){bytes+=chunk.length;if(bytes>2*1024*1024){controller.abort();throw Error('CALENDAR_BODY_BOUND');}chunks.push(Buffer.from(chunk));}
+        boundedRows=JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        if(Date.now()>=deadlineMs)throw Error('CALENDAR_BUDGET_EXHAUSTED');
+      }
     } finally {
       clearTimeout(timer);
     }
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const rows = await response.json();
+    const rows = bounded?boundedRows:await response.json();
     if (!Array.isArray(rows)) throw new Error("unexpected TWSE holiday response");
     writeJson(cacheFile, { cachedAt: new Date().toISOString(), rows });
     const value = { rows, source: "twse", fetched_at: new Date().toISOString() };
@@ -168,7 +178,7 @@ async function isTwseTradingDay(date = new Date(), options = {}) {
   if (override && options.ignoreOverrides !== true) return override;
   const rocKey = rocDateKey(parts);
   const weekend = isWeekend(parts);
-  const { rows, source, error, fetched_at } = await fetchHolidayRows(stateDir, parts.year);
+  const { rows, source, error, fetched_at } = await fetchHolidayRows(stateDir, parts.year, options.deadlineMs);
   const evidence = options.includeEvidence === true ? { calendar_evidence: { rows, source, fetched_at: fetched_at || null, source_url: HOLIDAY_API_URL, year: Number(parts.year) } } : {};
   const row = rows.find((item) => String(item?.Date || "") === rocKey);
 

@@ -20,7 +20,8 @@ const {
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const providerSideJournal = require("../lib/provider-journal-background.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-side-journal"), { kind: 'side' });
-const providerTradeJournal = require("../lib/provider-journal-background.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-trade-journal"), { kind: 'trade' });
+// Test harness may inject a lifecycle only in this isolated candidate; no runtime enable switch.
+const providerTradeJournal = globalThis.__isolatedTradeJournalLifecycle || require("../lib/provider-journal-background.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-trade-journal"), { kind: 'trade' });
 const preopenJournal = require('../lib/mother-preopen.cjs').createJournal(path.join(RUNTIME_DIR, 'data', 'mother-pool', 'preopen-raw'));
 const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
@@ -559,6 +560,10 @@ function readPrioritySymbols(symbols) {
     counts[key] = count;
   };
 
+  const a04Warmup = COLLECTOR_ROLE === "daytrade"
+    ? require('../lib/a04-warmup-consumer.cjs').read(payload, { now: new Date().toISOString() })
+    : { symbols: [], candidates: [], scope: 'WARMUP_ONLY', complete: false };
+  addMany("a04WarmupOnly", a04Warmup.symbols, { priority: true });
   addMany("daytradeCandlePriority", payload.daytradeCandlePrioritySymbols, { priority: true });
   // The writer publishes the canonical Mother Pool membership separately from
   // the legacy strategy-priority fields. Keep that membership on the formal
@@ -589,6 +594,7 @@ function readPrioritySymbols(symbols) {
   return {
     symbols: priorityOrdered.length ? priorityOrdered : ordered,
     allSymbols: ordered,
+    a04WarmupOnly: { ...a04Warmup, symbols: a04Warmup.symbols.filter(s => universe.has(s)), candidates: a04Warmup.candidates.filter(c => universe.has(c.symbol)) },
     counts,
     updatedAt: payload.updatedAt || "",
     source: payload.source || "",
@@ -1643,8 +1649,9 @@ async function runStreamingCollector() {
 
     try {
       ws = new WebSocket(STREAMING_URL);
-      ws.addEventListener("open", () => {
+      ws.addEventListener("open", async () => {
         openedAt = nowIso();
+        if (providerTradeJournal.open) await providerTradeJournal.open(subscriptionEvidence.snapshot().connection_id, openedAt);
         runLastMessageAt = "";
         staleRecoveryTriggered = false;
         ws.send(JSON.stringify({ event: "auth", data: { apikey: apiKey } }));
@@ -1722,10 +1729,12 @@ async function runStreamingCollector() {
       ws.addEventListener("error", (event) => {
         writeStreamingStatus({ ok: false, websocketError: event?.message || "websocket_error" });
       });
-      ws.addEventListener("close", () => {
+      ws.addEventListener("close", async () => {
         subscriptionEvidence.close(nowIso());
+        if (providerTradeJournal.open) await providerTradeJournal.close(nowIso());
         authenticated = false;
         closed = true;
+        if (providerTradeJournal.open) await providerTradeJournal.close(nowIso());
         clearInterval(statusTimer);
         clearInterval(subscribeTimer);
         clearInterval(pingTimer);
@@ -1832,7 +1841,3 @@ if (COLLECTOR_MODE === "rest") {
     process.exit(1);
   });
 }
-
-
-
-

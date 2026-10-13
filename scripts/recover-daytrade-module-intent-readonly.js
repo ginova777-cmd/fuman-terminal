@@ -3,10 +3,12 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const {verify}=require('../lib/daytrade-module-write-ack');
 const {writeExclusive}=require('../lib/daytrade-durable-json');
 const {hash,identityFields}=require('../lib/mother-pool-module-write-set');
-async function recover({file,sha256,out,url,key,guard,fetchImpl=fetch}){
+async function recover({file,sha256,out,url,key,guard,fetchImpl=fetch,runtime=process.env.FUMAN_RUNTIME||process.env.FUMAN_RUNTIME_DIR||'C:/fuman-runtime'}){
  const bytes=fs.readFileSync(file);
  if(!/^[a-f0-9]{64}$/.test(sha256||'')||crypto.createHash('sha256').update(bytes).digest('hex')!==sha256)throw Error('MODULE_INTENT_FILE_HASH_MISMATCH');
- const document=JSON.parse(bytes);
+ const serialized=JSON.parse(bytes);
+ const document=serialized.storage_contract===require('../lib/daytrade-shared-evidence.cjs').CONTRACT
+   ? require('../lib/daytrade-shared-evidence.cjs').read(file,runtime) : serialized;
  if(document.contract!=='mother_pool_module_write_set_v1'||document.ack||document.plan_hash!==hash(document.plan)||identityFields.some(k=>document[k]==null||document[k]===''))throw Error('MODULE_INTENT_INVALID');
  if(!require('../data/contracts/mother-pool-a01-b24-module-registry-v1.json').modules[document.module_id])throw Error('MODULE_ID_INVALID');
  if(path.resolve(file)===path.resolve(out)||fs.existsSync(out))throw Error('RECOVERY_OUTPUT_ALREADY_EXISTS');

@@ -1,7 +1,7 @@
 'use strict';
 const assert=require('node:assert/strict'),{refresh}=require('../lib/daytrade-final-water-refresh.cjs');
 (async()=>{
- let calls=0;const good={ok:true,mode:'apply',trade_date:'2026-10-06',quotes_written:410,candles_written:1000,candle_deferred:20};
+ let calls=0;const good={ok:true,mode:'apply',trade_date:'2026-10-06',quotes_written:410,candles_written:1000,candle_deferred:0,candle_pending_after:0,final_content_readback_verified:true};
  const opts={apply:true,dryRun:false,tradeDate:good.trade_date,run:async()=>{calls++;return good;}};
  const r=await refresh(opts);assert.equal(r.status,'WRITTEN_PENDING_VERIFICATION');assert.equal(r.complete,false);assert.equal(calls,1);
  await refresh({...opts,apply:false});await refresh({...opts,dryRun:true});assert.equal(calls,1);

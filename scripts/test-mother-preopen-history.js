@@ -10,7 +10,16 @@ function fixture(){
 }
 let checks=0;
 const f=fixture(),p=collect(f),r={...f.identity,observed_at:f.asOf};assert(p.rows.every(row=>verify(row,r)));assert.equal(p.rows[0].reference_turnover_pct,10);assert.equal(p.rows[0].avg_volume3_lots,1000);assert.equal(p.rows[0].quote_mode,'previous_session_reference');assert.equal(p.rows[0].today_1m_requirement,'NOT_DUE_IN_PREOPEN');checks++;
-for(const mutate of [x=>x.quoteMap.clear(),x=>x.rawEvidence.rows.splice(0),x=>x.rawEvidence.rows[0].synthetic=true,x=>x.rawEvidence.rows[0].volume=null,x=>x.rawEvidence.rows.push(x.rawEvidence.rows[0]),x=>x.dailyVolumeMap.get('2330').daily_volume_evidence.rows.pop(),x=>x.activeSymbols[0].turnoverMaster.official_issued_common_shares=0,x=>x.activeSymbols[0].turnoverMaster.stock_master_source='unproven',x=>x.asOf='2026-09-18T09:00:00+08:00',x=>x.rawEvidence.rows[0].payload.sourceCandleSeenAt='2026-09-17T13:29:30+08:00']){
+// Approved history/live split: absent or invalid live quote does not invent live readiness.
+for(const mutate of [x=>x.quoteMap.clear(),x=>x.quoteMap.get('2330').price=-1]){
+ const x=fixture();mutate(x);const row=collect(x).rows[0];
+ assert.equal(row.status,'READY');assert.equal(row.history_state,'HISTORY_READY');
+ assert.equal(row.legacy_status,'DATA_GAP');assert.equal(row.readiness_scope,'PREOPEN_HISTORY_ONLY');
+ assert.equal(row.live_state,'LIVE_NOT_DUE');assert.equal(row.formal_candidate_allowed,false);assert.equal(row.publish_allowed,false);
+ assert(verify(row,{...x.identity,observed_at:x.asOf}));checks++;
+ x.rawEvidence.rows=[];assert.equal(collect(x).rows[0].status,'DATA_GAP');checks++;
+}
+for(const mutate of [x=>x.rawEvidence.rows.splice(0),x=>x.rawEvidence.rows[0].synthetic=true,x=>x.rawEvidence.rows[0].volume=null,x=>x.rawEvidence.rows.push(x.rawEvidence.rows[0]),x=>x.dailyVolumeMap.get('2330').daily_volume_evidence.rows.pop(),x=>x.activeSymbols[0].turnoverMaster.official_issued_common_shares=0,x=>x.activeSymbols[0].turnoverMaster.stock_master_source='unproven',x=>x.asOf='2026-09-18T09:00:00+08:00',x=>x.rawEvidence.rows[0].payload.sourceCandleSeenAt='2026-09-17T13:29:30+08:00']){
  const x=fixture();mutate(x);const row=collect(x).rows[0];assert.equal(row.status,'DATA_GAP');assert(!verify(row,{...x.identity,observed_at:x.asOf}));checks++;
 }
 for(const field of ['avg_volume3_lots','reference_turnover_pct','amplitude_pct','quote_age_seconds','history_bar_count']){const row=structuredClone(p.rows[0]);row[field]=999;assert(!verify(row,r));checks++;}

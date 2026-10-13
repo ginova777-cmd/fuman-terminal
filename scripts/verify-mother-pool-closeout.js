@@ -21,9 +21,10 @@ async function verify({closeout,rounds,naturalVerification}){
   verified_by:'verify-mother-pool-closeout.js',checked_at:new Date().toISOString()};
 }
 if(require.main===module){(async()=>{
- const read=n=>JSON.parse(fs.readFileSync(arg(n),'utf8'));
+ const runtime=process.env.FUMAN_RUNTIME||process.env.FUMAN_RUNTIME_DIR||'C:/fuman-runtime';
+ const read=n=>require('../lib/daytrade-shared-evidence.cjs').read(arg(n),runtime);
  const result=await verify({closeout:read('closeout'),rounds:[read('round1'),read('round2')],naturalVerification:read('natural-verification')});
- const out=arg('out');fs.mkdirSync(path.dirname(out),{recursive:true});fs.writeFileSync(out,JSON.stringify(result,null,2),{flag:'wx'});
+ const out=arg('out');require('../lib/daytrade-shared-evidence.cjs').write(out,result,runtime);
  console.log(JSON.stringify({status:result.status,complete:result.complete,first_blocker:result.first_blocker,out}));process.exitCode=result.exit_code;
 })().catch(e=>{console.error(e);process.exitCode=1;});}
 module.exports={verify};

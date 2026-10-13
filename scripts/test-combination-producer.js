@@ -3,7 +3,8 @@ const assert=require('node:assert/strict'),{collect}=require('../lib/mother-pool
 const identity={trade_date:'2026-09-18',canonical_run_id:'fugle_daytrade_source:20260918:canonical',writer_run_id:'isolated-b24',generation_id:'g',mother_pool_run_id:'s',snapshot_generation:'s',snapshot_sequence:1};
 const plan=collect({identity,symbols:['2330','2317'],parents:{},side:null,asOf:'2026-09-18T10:00:00+08:00'});
 assert.deepEqual(plan.requested_symbols,['2330','2317']);
-assert(plan.rows.every(r=>r.status==='DATA_GAP'&&r.data_gaps.length===8));
+assert(plan.rows.every(r=>r.status==='DATA_GAP'&&r.data_gaps.length===6));
+for(const row of plan.rows)assert.deepEqual(row.data_gaps.map(g=>g.module_id),['B12','B13','B19','B21','B22','B23']);
 assert(plan.rows.every(r=>r.event_count===0&&r.combination_count===0&&r.data_gap_reason));
 assert(plan.rows.every(r=>r.formal_candidate_allowed===false&&r.publish_allowed===false));
 assert.equal(require('../lib/verify-mother-pool-module-round').createVerifier('B24').validRound({...plan,status:'verified',complete:true}),false);

@@ -4,17 +4,22 @@ const fs=require('fs'),path=require('path'),cp=require('child_process'),crypto=r
 const repo=path.resolve(__dirname,'../../..'),out=path.resolve(process.argv[2]||''),binding=path.resolve(process.argv[3]||'');
 if(!process.argv[2]||!process.argv[3]||fs.existsSync(out)||/fuman-runtime|fuman-release-owner|program files/i.test(out))throw Error('NEW_ISOLATED_OUTPUT_REQUIRED');
 const git=(...a)=>cp.execFileSync('git',['-C',repo,...a],{maxBuffer:64*1024*1024,windowsHide:true});
-const hash=b=>crypto.createHash('sha256').update(b).digest('hex'),target=git('rev-parse','HEAD').toString().trim(),base=process.argv[4]||'db55758a6de8c1896390fc8573b6eab0eacce9bf';
+const hash=b=>crypto.createHash('sha256').update(b).digest('hex'),target=git('rev-parse','HEAD').toString().trim(),base=process.argv[4];
+if(!/^[a-f0-9]{40}$/.test(base||'')||git('rev-parse',base+'^{commit}').toString().trim()!==base)throw Error('EXPLICIT_REVIEWED_BASE_REQUIRED');
 if(git('status','--porcelain').toString().trim())throw Error('DIRTY_SOURCE');
 const write=(f,b)=>{const dest=path.join(out,f);fs.mkdirSync(path.dirname(dest),{recursive:true});fs.writeFileSync(dest,Buffer.isBuffer(b)||typeof b==='string'?b:JSON.stringify(b,null,2)+'\n')};
 const full=git('diff','--name-only',base,target).toString().trim().split(/\r?\n/).map(file=>{const b=git('show',target+':'+file);return {file,bytes:b.length,sha256:hash(b)}});
 write('release-package/manifest.json',{production_sha:base,final_sha:target,files:full});write('release-package/exact.diff',git(...require('./release-package/exact-diff.cjs').exactDiffArgs(base,target)));
-const names=['Invoke-ProductionMaintenanceOwner.ps1','ProductionMaintenanceBinding.ps1','ProductionRuntimePorts.ps1','WindowsScheduleBinding.ps1','LegacyBoundary.ps1','CutoverSequence.ps1','Read-ProductionBinding.ps1','ReleaseOperation.cjs','OwnerAuthorization.cjs','GracefulOperation.cjs','junction-graceful-stop-adapter.cjs','junction-stop-identity.cjs','release-package/deploy-core.cjs','release-package/exact-diff.cjs','collector-release-binding.cjs','stop-ack-contract.cjs','Invoke-ManualRecovery.ps1','ManualRecovery.ps1','RecoveryHost.ps1','RecoveryPreflight.ps1','RecoveryRelease.ps1','RecoveryRuntimePorts.ps1'];
+const names=['Invoke-ProductionMaintenanceOwner.ps1','ProductionMaintenanceBinding.ps1','ProductionRuntimePorts.ps1','WindowsScheduleBinding.ps1','LegacyBoundary.ps1','CutoverSequence.ps1','Read-ProductionBinding.ps1','ReleaseOperation.cjs','OwnerAuthorization.cjs','GracefulOperation.cjs','junction-graceful-stop-adapter.cjs','junction-stop-identity.cjs','release-package/deploy-core.cjs'];
+names.push('RuntimePair.cjs','stop-ack-contract.cjs','Invoke-ManualRecovery.ps1','ManualRecovery.ps1','RecoveryHost.ps1','RecoveryPreflight.ps1','RecoveryRelease.ps1','RecoveryRuntimePorts.ps1','R3OwnerRecoveryGuard.ps1');
+names.push('release-package/exact-diff.cjs','collector-release-binding.cjs');
 for(const name of names)write(name,git('show',target+':research/release/windows-bound/'+name));
+const runtimeFiles=['MotherPoolReceiptCatchup.ps1','Run-DaytradeSourceWriter.ps1'].map(name=>{const b=fs.readFileSync(path.join(repo,'ops',name));write('runtime-payload/'+name,b);return {name,bytes:b.length,sha256:hash(b)};});
+write('runtime-pair.json',{target,expected:base,files:runtimeFiles});
 write('formal-binding.json',fs.readFileSync(binding));
 const flags=Object.fromEntries(['FUMAN_CHANGE_EVIDENCE_PHASE1','FUMAN_SHADOW_TELEMETRY','MP_PHASE2_ENABLED','MP_PHASE3_ENABLED','MP_PHASE4_ENABLED','MP_RELEASE_PREP_PUBLISHER'].map(x=>[x,'0']));
 const cfg={target,expected:base,rollback:base,source:repo,prod:'C:/fuman-release-owner/prod81',authority:'C:/fuman-release-owner/fuman-terminal/data/contracts/release_root_authority_v1.json',verifier:'C:/fuman-release-owner/fuman-terminal/scripts/verify-release-root-authority.js',runtime:'C:/fuman-runtime',flags,formal_apply_authorized:false,release_approved:false,remote_main_verified:false,final_sha_after_merge:null,installed_acl_sddl:null,binding_sha256:hash(fs.readFileSync(binding)),manifest_sha256:hash(fs.readFileSync(path.join(out,'release-package/manifest.json'))),diff_sha256:hash(fs.readFileSync(path.join(out,'release-package/exact.diff'))),collector_entry_sha256:hash(git('show',base+':scripts/fugle-futopt-websocket-collector.js'))};
-
+cfg.runtime_pair_sha256=hash(fs.readFileSync(path.join(out,'runtime-pair.json')));
 // STOP validates executable working bytes, not Git's LF-normalized blob.
 const prodGit=(...a)=>cp.execFileSync('git',['-C',cfg.prod,...a],{encoding:'utf8',windowsHide:true});
 if(prodGit('rev-parse','HEAD').trim()!==base||prodGit('status','--porcelain').trim())throw Error('READONLY_PRODUCTION_BASE_DRIFT');
@@ -29,6 +34,7 @@ cfg.collector_release_bindings={expected:{release_sha:base,entry,blob_sha256:cfg
 cfg.collector_bindings_sha256=hash(JSON.stringify(cfg.collector_release_bindings));
 const tools=[];function walk(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const f=path.join(dir,e.name);if(e.isDirectory())walk(f);else{const b=fs.readFileSync(f);tools.push({path:path.relative(out,f).replaceAll('\\','/'),bytes:b.length,sha256:hash(b)})}}}walk(out);
 const identity={target,expected:base,rollback:base,source:cfg.source,prod:cfg.prod,runtime:cfg.runtime,authority:cfg.authority,verifier:cfg.verifier,collector_entry_sha256:cfg.collector_entry_sha256,binding_sha256:cfg.binding_sha256,manifest_sha256:cfg.manifest_sha256,diff_sha256:cfg.diff_sha256,formal_apply_authorized:false,release_approved:false,remote_main_verified:false,final_sha_after_merge:null,installed_acl_sddl:null};
+identity.runtime_pair_sha256=cfg.runtime_pair_sha256;
 identity.collector_bindings_sha256=cfg.collector_bindings_sha256;
 write('tool-manifest.json',{contract:'complete-maintenance-owner-package-v2',config_identity:identity,files:tools});cfg.package_sha256=hash(fs.readFileSync(path.join(out,'tool-manifest.json')));write('release-config.json',cfg);
 write('owner-approval-template.json',{action:'CONTROLLED_CUTOVER_APPLY',target,rollback:base,package_sha256:cfg.package_sha256,binding_sha256:cfg.binding_sha256,graceful_stop_required:true,not_before:null,expires_at:null,status:'NOT_AUTHORIZED'});

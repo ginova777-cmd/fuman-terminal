@@ -1,14 +1,16 @@
 {
   "contract": "mother_pool_a01_b24_module_registry_v1",
-  "scope": "A01-A09+A11-A19+B01-B14+B16-B24",
+  "scope": "A01-A09+A11-A19+B01-B13+B15-B19+B21-B24",
   "excluded": [
     "A10",
     "B25",
-    "B15"
+    "B14",
+    "B20"
   ],
   "exclusion_reason": {
     "A10": "User removed 5-minute preopen warmup on 2026-09-29",
-    "B15": "Owner retired all 5M collection and storage on 2026-09-30"
+    "B20": "Owner removed dynamic inside/outside modules 2026-10-12",
+    "B14": "Owner removed dynamic inside/outside modules 2026-10-12"
   },
   "modules": {
     "A01": "preopen_a01_identity_receipt_v1",
@@ -42,15 +44,14 @@
     "B11": "mother_pool_snapshot_generation_anon_readback_v1",
     "B12": "intraday_volume_spike_detector_v1",
     "B13": "intraday_price_spike_up_detector_v1",
-    "B14": "intraday_outside_strength_v2_v1",
     "B16": "telegram_delivery_separation_v1",
     "B17": "daytrade_mother_pool_closed_loop_v1",
     "B18": "daytrade_closeout_v1",
     "B19": "intraday_price_spike_down_v1",
-    "B20": "intraday_inside_strength_v2_v1",
     "B21": "intraday_vwap_v1",
-    "B22": "intraday_opening_range_v1",
+    "B22": "intraday_tongzi_0901_v1",
     "B23": "intraday_point_in_time_extremes_v1",
-    "B24": "intraday_event_combination_v1"
+    "B24": "intraday_event_combination_v1",
+    "B15": "intraday_natural_1m_kd_rsi_macd_v1"
   }
 }
