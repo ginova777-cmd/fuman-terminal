@@ -9084,12 +9084,18 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
   tickStage("final_water_refresh:start");
   const finalWaterRefresh = await require('../lib/daytrade-final-water-refresh.cjs').refresh({
     apply: APPLY, dryRun: DRY_RUN, tradeDate: taipeiDate(),
+    calendar: marketCalendarEvidence,
     run: control => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync(control),
   });
   tickStage("final_water_refresh:complete", finalWaterRefresh);
+  if (finalWaterRefresh.status === 'NATURAL_PENDING') {
+    result.payload.final_water_refresh = finalWaterRefresh;
+    result.payload.formal_entry_allowed = false;
+    result.payload.latest_update_allowed = false;
+  }
   const offSession = Boolean(result.payload.off_session);
   return {
-    ok: result.gateGrade === "A" || offSession,
+    ok: finalWaterRefresh.status !== 'NATURAL_PENDING' && (result.gateGrade === "A" || offSession),
     mode: APPLY ? "apply" : "dry-run",
     fetchEnabled: FETCH_ENABLED,
     sourceName: SOURCE_NAME,
@@ -9231,8 +9237,9 @@ function writeModuleProducerReceipts(result, tradeDate) {
     if (!moduleSession.allowed(moduleId)) continue;
     const existing = result.payload?.module_receipt_status?.[moduleId] || {};
     if(!moduleWorkIds().includes(moduleId)){
-      existing.status='PAUSED';existing.failed_checks=['OWNER_REQUESTED_SEQUENTIAL_VALIDATION'];
-      existing.first_blocker='OWNER_REQUESTED_SEQUENTIAL_VALIDATION';
+      const pauseReason = moduleRecovery.reason || 'POLICY_NOT_LOADED';
+      existing.status='PAUSED';existing.failed_checks=[pauseReason];
+      existing.first_blocker=pauseReason;
     }
     const receipt = {
       module_id: moduleId,
