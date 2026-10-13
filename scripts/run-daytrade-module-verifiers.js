@@ -11,11 +11,12 @@ const canonical=process.env.MOTHER_POOL_CANONICAL||`fugle_daytrade_source:${trad
 const dir=path.join(runtime,'data','scan-receipts','modules');
 const attempt=randomUUID();fs.mkdirSync(dir,{recursive:true});
 const readErrors=[];
-const read=f=>{try{if(fs.statSync(f).size>16*1024*1024){readErrors.push({file:f,reason:'RECEIPT_SIZE_LIMIT'});return null;}return JSON.parse(fs.readFileSync(f,'utf8'));}catch{return null;}};
+const read=f=>{try{if(fs.statSync(f).size>16*1024*1024){readErrors.push({file:f,reason:'RECEIPT_SIZE_LIMIT'});return null;}return require('../lib/daytrade-shared-evidence.cjs').read(f,runtime);}catch(e){readErrors.push({file:f,reason:e.message});return null;}};
+const inspect=f=>{try{return require('../lib/daytrade-shared-evidence.cjs').inspect(f,runtime);}catch(e){readErrors.push({file:f,reason:e.message});return null;}};
 // Scoped validation must not parse unrelated modules or historical receipts.
 // The payload identity checks below still decide whether a receipt is eligible.
 const dates=[tradeDate,tradeDate.replaceAll('-','')];
-const files=fs.readdirSync(dir).filter(x=>x.endsWith('.json')&&(!scoped||(requested.includes('B18')&&x.startsWith('closeout-input-'))||(dates.some(d=>x.includes(d))&&requested.some(id=>x.toLowerCase().startsWith(id.toLowerCase()+'-'))))).map(x=>({file:path.join(dir,x),value:read(path.join(dir,x))}));
+const files=fs.readdirSync(dir).filter(x=>x.endsWith('.json')&&(!scoped||(requested.includes('B18')&&x.startsWith('closeout-input-'))||(dates.some(d=>x.includes(d))&&requested.some(id=>x.toLowerCase().startsWith(id.toLowerCase()+'-'))))).map(x=>({file:path.join(dir,x),value:x.startsWith('closeout-input-')?read(path.join(dir,x)):inspect(path.join(dir,x))}));
 const results=[];
 for(const moduleId of requested){
  if(moduleId==='B18'){
@@ -31,15 +32,22 @@ for(const moduleId of requested){
  const selected=require('../lib/mother-pool-select-verifier-rounds').select(list,process.env.MOTHER_POOL_REQUIRED_WRITER_RUN_ID);
  if(selected.length<2){results.push({module_id:moduleId,status:'pending',complete:false,reason:'TWO_DISTINCT_ROUNDS_REQUIRED'});continue;}
  const out=path.join(dir,`${moduleId.toLowerCase()}-verified-${tradeDate}-${attempt}.json`);
+ const started=process.hrtime.bigint();
  const p=spawnSync(process.execPath,[path.join(__dirname,'verify-daytrade-module-receipt.js'),'--summary',`--module=${moduleId}`,`--round1=${selected[0].file}`,`--round2=${selected[1].file}`,`--out=${out}`],{encoding:'utf8',windowsHide:true,timeout:30000});
- const receipt=read(out);const complete=p.status===0&&receipt?.complete===true&&receipt?.status==='complete'&&receipt?.exit_code===0;
- results.push({module_id:moduleId,status:complete?'complete':'blocked',complete,out,exit_code:p.status,stdout:p.stdout||'',stderr:p.stderr||'',reason:receipt?.first_blocker||p.error?.message||null});
+ let receipt=null,validationError=null;
+ try{
+  receipt=JSON.parse(p.stdout||'{}');
+  if(receipt.module_id!==moduleId||receipt.contract!==registry.modules[moduleId]||receipt.trade_date!==tradeDate||receipt.canonical_run_id!==canonical||receipt.out!==out||JSON.stringify(receipt.writer_run_ids)!==JSON.stringify(selected.map(x=>x.value.writer_run_id)))throw Error('VERIFIER_PROCESS_IDENTITY');
+  require('../lib/daytrade-shared-evidence.cjs').verifyProcessBytes(out,runtime,receipt.content_sha256);
+ }catch(e){validationError=e.message;readErrors.push({file:out,reason:e.message});}
+ const complete=!validationError&&!p.error&&p.status===0&&receipt?.complete===true&&receipt?.status==='complete'&&receipt?.exit_code===0;
+ results.push({module_id:moduleId,status:complete?'complete':'blocked',complete,out,exit_code:p.status,pid:p.pid,elapsed_ms:Number(process.hrtime.bigint()-started)/1e6,signal:p.signal,error:p.error?{code:p.error.code,message:p.error.message}:null,stdout:p.stdout||'',stderr:p.stderr||'',reason:validationError||receipt?.first_blocker||p.error?.message||null});
 }
 const index=path.join(dir,`module-verification-attempt-${tradeDate}-${attempt}.json`);
 fs.writeFileSync(index,JSON.stringify({trade_date:tradeDate,canonical_run_id:canonical,results},null,2),{flag:'wx'});
 if(scoped){
  const passed=results.length===requested.length&&results.every(x=>x.complete===true)&&readErrors.length===0;
- console.log(JSON.stringify({scope:'selected_modules',requested,complete:false,overall_acceptance:'NOT_EVALUATED',selected_modules_passed:passed,results,read_errors:readErrors,index,exit_code:passed?0:2},null,2));
+ console.log(JSON.stringify({scope:'selected_modules',requested,required_writer_run_id:process.env.MOTHER_POOL_REQUIRED_WRITER_RUN_ID||null,complete:false,overall_acceptance:'NOT_EVALUATED',selected_modules_passed:passed,results,read_errors:readErrors,index,exit_code:passed?0:2},null,2));
  process.exit(passed?0:2);
 }
 const out=path.join(runtime,'data','scan-receipts',`mother-pool-a01-b24-total-${tradeDate}-${attempt}.json`);

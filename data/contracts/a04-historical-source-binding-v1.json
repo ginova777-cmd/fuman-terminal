@@ -1,0 +1,11 @@
+{
+  "contract": "a04_historical_source_binding_v1",
+  "status": "UNBOUND",
+  "owner_decision": "MP-A04-OWNER-DECISION-20261013",
+  "source": "strategy4_daily_ohlcv_view",
+  "source_contract": null,
+  "source_version": null,
+  "approval_reference": null,
+  "row_sources": [],
+  "note": "Source Owner must supply the historical source contract and provenance. No production source is enabled by this candidate."
+}

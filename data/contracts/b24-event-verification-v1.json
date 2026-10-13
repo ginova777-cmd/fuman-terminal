@@ -1,0 +1,18 @@
+{
+  "contract": "b24_event_evidence_v1",
+  "status": "ISOLATED_CANDIDATE_ONLY",
+  "scope": "TEST_ONLY",
+  "required": ["symbol", "epoch", "trade_date", "canonical_run_id", "writer_run_id", "generation_id", "mother_pool_run_id", "snapshot_generation", "snapshot_sequence", "events", "sources", "received_at", "sources_ready_at"],
+  "events": {"count": 2, "required": ["event_id", "module_id", "type", "direction", "symbol", "trade_date", "canonical_run_id", "event_timestamp", "event_price", "source_contract", "source_contract_ok", "calculation_evidence"]},
+  "source_reference": {"required": ["write_set", "db", "anon", "checkpoint", "proof", "revision"], "file_reference": ["file", "bytes", "sha256"]},
+  "dependencies": {"B13": ["B13"], "B19": ["B19"], "B21": ["B21", "B23"], "B22": ["B22"], "B23": ["B23"]},
+  "receipt": {"contract": "b24_event_verified_v1", "required": ["scope", "status", "bundle_ref", "epoch", "identity", "symbol", "occurrence_id", "events", "combination", "verified_at", "full_market_acceptance"]},
+  "source_freshness_ms": 120000,
+  "event_window_ms": 180000,
+  "cooldown_ms": 180000,
+  "formal_proof_mapping": "NOT_IMPLEMENTED",
+  "original_writer_format_isolated_mapping": "B13_B22_FULL_WRITER_E2E_VERIFIED",
+  "unmapped_native_inputs": ["prior_day_history", "aggregate_volume_value"],
+  "full_market_acceptance": "NOT_EVALUATED",
+  "notifications_enabled": false
+}

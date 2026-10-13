@@ -11,9 +11,15 @@ const APPLY = process.argv.includes("--apply");
 
 function readText(file) { try { return fs.readFileSync(file, "utf8"); } catch { return ""; } }
 function secret(name) { return String(process.env[name] || readText(path.join(RUNTIME, "secrets", name.toLowerCase().replace(/_/g, "-") + ".txt"))).trim(); }
-function parseCache(name) {
+function parseCache(name, context = null) {
   for (const file of [path.join(CACHE, name), path.join(CACHE, name + ".bak")]) {
-    try { return JSON.parse(readText(file)); } catch { /* retry stable backup */ }
+    try {
+      const raw=readText(file),sha=require('node:crypto').createHash('sha256').update(raw).digest('hex');
+      if(context && context.cacheSha===sha && context.cacheFile===file)return context.cache;
+      const value=JSON.parse(raw);
+      if(context){context.cacheSha=sha;context.cacheFile=file;context.cache=value;context.mapped=null;}
+      return value;
+    } catch { /* retry stable backup */ }
   }
   throw new Error(`cache_unreadable:${name}`);
 }
@@ -30,18 +36,19 @@ function volumeUnit(q = {}) {
   if (q.intradayOddLot === false || ["TSE", "OTC", "TIB"].includes(market)) return "lots";
   return "";
 }
-async function upsert(table, rows, conflict, onBatch = () => {}) {
+async function upsert(table, rows, conflict, onBatch = () => {}, control = null) {
   if (table === 'fugle_daytrade_quotes_live') rows = rows.map(require('../lib/daytrade-quote-liquidity-contract').normalizeQuoteLiquidity);
   if (!rows.length) return 0;
   const key = secret("SUPABASE_SERVICE_ROLE_KEY");
   if (!key) throw new Error("service_role_key_missing");
   let written = 0;
   for (let offset = 0; offset < rows.length; offset += 200) {
+    if(control && (Date.now()>=control.deadline || !control.canWrite())) throw Error('QUOTE_CHECKPOINT_WRITE_GUARD');
     const response = await fetch(`${URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(conflict)}`, {
       method: "POST",
       headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify(rows.slice(offset, offset + 200)),
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(control ? Math.max(1, Math.min(30000, control.deadline-Date.now())) : 30000),
     });
     if (!response.ok) throw new Error(`${table}_HTTP_${response.status}:${(await response.text()).slice(0, 240)}`);
     written += Math.min(200, rows.length - offset);
@@ -50,13 +57,26 @@ async function upsert(table, rows, conflict, onBatch = () => {}) {
   return written;
 }
 
-async function main() {
+function mapCandleCache(candleCache,date,nowMs) {
+  const { mapNaturalCandle } = require('../lib/daytrade-fast-candle-row');
+  // Same-day history can catch up after a write outage. Keep original receive
+  // times and require proven natural, closed bars; never mark missing flags true.
+  return (candleCache.candles || []).map(c => {
+    const row = mapNaturalCandle(c, { tradeDate: date, nowMs: nowMs, maxSeenAgeMs: Infinity });
+    return row ? { ...row, source_channel: 'candles', candle_origin: 'websocket_candle', websocket_row: true,
+      rest_repair_row: false, intraday_odd_lot: false,
+      payload: { ...row.payload, cacheUpdatedAt: candleCache.updatedAt } } : null;
+  }).filter(Boolean);
+}
+
+async function main(options = {}) {
   const now = new Date();
   const date = tradeDate(now);
-  const calendar = await isTwseTradingDay(now, { stateDir: path.join(RUNTIME, "state") });
+  if(options.quoteOnly === true && (!options.calendar || options.calendar.trade_date !== date || typeof options.calendar.isTradingDay !== 'boolean')) throw Error('QUOTE_CHECKPOINT_CALENDAR_REQUIRED');
+  const calendar = options.quoteOnly === true ? options.calendar : await isTwseTradingDay(now, { stateDir: path.join(RUNTIME, "state") });
   if (!calendar.isTradingDay) return console.log(JSON.stringify({ ok: true, skipped: true, reason: "market_calendar_non_trading_day", trade_date: date }));
   const quoteCache = parseCache("fugle-daytrade-ws-quotes-v2.json");
-  const candleCache = parseCache("fugle-daytrade-ws-candles-v2.json");
+  const candleCache = options.quoteOnly === true ? null : parseCache("fugle-daytrade-ws-candles-v2.json",options.drainContext);
   // A closed 5-minute candle is verified shortly after its boundary. Keep
   // enough Fugle candle events to include all five source minutes plus normal
   // collector/writer delay; three minutes systematically dropped slots 1-2.
@@ -89,20 +109,44 @@ async function main() {
       },
     };
   }).filter((q) => /^\d{4}$/.test(q.symbol) && q.quote_seen_at);
-  const { mapNaturalCandle } = require('../lib/daytrade-fast-candle-row');
-  // Same-day history can catch up after a write outage. Keep original receive
-  // times and require proven natural, closed bars; never mark missing flags true.
-  const candles = (candleCache.candles || []).map(c => {
-    const row = mapNaturalCandle(c, { tradeDate: date, nowMs: now.getTime(), maxSeenAgeMs: Infinity });
-    return row ? { ...row, source_channel: 'candles', candle_origin: 'websocket_candle', websocket_row: true,
-      rest_repair_row: false, intraday_odd_lot: false,
-      payload: { ...row.payload, cacheUpdatedAt: candleCache.updatedAt } } : null;
-  }).filter(Boolean);
+  if(options.quoteOnly === true) {
+    if(options.apply !== true) return {ok:true,mode:'dry_run',quote_only:true,trade_date:date,quotes_written:0};
+    if(!Number.isFinite(options.deadline) || typeof options.canWrite!=='function') throw Error('QUOTE_CHECKPOINT_CONTROL_REQUIRED');
+    const quotes_written=await upsert('fugle_daytrade_quotes_live',quotes,'symbol',()=>{},options);
+    return {ok:true,mode:'apply',quote_only:true,trade_date:date,quotes_written,quote_cache_updated_at:quoteCache.updatedAt};
+  }
+  const deadline = Number(options.deadline) || Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS) || Date.now()+300000;
+  const writeControl = {deadline,canWrite:()=>Date.now()<deadline};
+  const context = options.drainContext;
+  const candles = context?.mapped && context.mappedDate===date && now.getTime()<context.nextEligibility
+    ? context.mapped : mapCandleCache(candleCache,date,now.getTime());
+  if(context && context.mapped!==candles){
+    context.mapped=candles;context.mappedDate=date;context.nextEligibility=Infinity;
+    for(const c of candleCache.candles||[])for(const t of [Date.parse(c.candleTime||c.date)+60000,Date.parse(c.candleSeenAt)])if(t>now.getTime())context.nextEligibility=Math.min(context.nextEligibility,t);
+  }
   const deltaStore = require('../lib/daytrade-candle-delta');
   const checkpointPath = path.join(RUNTIME, 'state', 'daytrade-fast-candle-delta.json');
+  const bytesHash = raw => require('node:crypto').createHash('sha256').update(raw).digest('hex');
+  const cacheHash=context?.cacheSha || bytesHash(JSON.stringify(candleCache));
+  const snapshotFile=path.join(RUNTIME,'state/daytrade-mother-pool-snapshot-latest.json');
+  const boundSnapshotRaw=readText(snapshotFile);
+  const sourceHash = bytesHash(JSON.stringify({date,target:URL,round:process.env.FUMAN_CANDLE_SYNC_RUN_ID||null,cacheHash,count:candles.length,snapshotHash:bytesHash(boundSnapshotRaw)}));
+  const checkpointRaw=readText(checkpointPath);
+  const checkpointHash = bytesHash(checkpointRaw);
+  const reused = Boolean(context && context.sourceHash === sourceHash && context.checkpointHash === checkpointHash);
   let checkpoint;
-  try { checkpoint=JSON.parse(readText(checkpointPath)); } catch { checkpoint=null; }
-  const delta = deltaStore.selectDelta(candles, checkpoint, {tradeDate:date,target:URL+'/fugle_daytrade_intraday_1m',nowMs:now.getTime()});
+  if(reused&&context.checkpoint)checkpoint=context.checkpoint;
+  else try { checkpoint=JSON.parse(checkpointRaw); } catch { checkpoint=null; }
+  if(APPLY && !reused){
+    const store=require('../lib/mother-pool-receipt-current.cjs');
+    store.atomicJson(path.join(RUNTIME,'state/daytrade-fast-supabase-sync.json'),{ok:false,status:'FINAL_CONTENT_CHECK_IN_PROGRESS'});
+
+    const matches=await require('../lib/daytrade-candle-content-readback.cjs').readback({rows:candles,url:URL+'/rest/v1/fugle_daytrade_intraday_1m',headers:{apikey:secret('SUPABASE_SERVICE_ROLE_KEY'),Authorization:'Bearer '+secret('SUPABASE_SERVICE_ROLE_KEY')},deadline});
+    if(checkpoint?.hashes)for(const row of candles){const k=row.symbol+'|'+row.candle_time;if(!matches.has(k)){delete checkpoint.hashes[k];if(checkpoint.save_evidence)delete checkpoint.save_evidence[k];}}
+  }
+  const delta = reused && context.pending
+    ? {pending:context.pending,unchanged:candles.length-context.pending.length,not_due:0,checkpoint:{contract:deltaStore.CONTRACT,trade_date:date,target:URL+'/fugle_daytrade_intraday_1m',hashes:{...checkpoint.hashes}}}
+    : deltaStore.selectDelta(candles, checkpoint, {tradeDate:date,target:URL+'/fugle_daytrade_intraday_1m',nowMs:now.getTime()});
   const writePlan = require('../lib/daytrade-fast-write-plan.cjs').plan(delta.pending,{nowMs:now.getTime()});
   const result = { ok: true, mode: APPLY ? "apply" : "dry_run", trade_date: date, checked_at: now.toISOString(), quote_rows: quotes.length, candle_rows: candles.length, quote_cache_updated_at: quoteCache.updatedAt, candle_cache_updated_at: candleCache.updatedAt };
   result.candle_delta_pending = delta.pending.length;
@@ -112,25 +156,67 @@ async function main() {
   result.candle_selected = writePlan.rows.length;
   result.candle_deferred = writePlan.deferred;
   result.candle_backfill_complete = false;
+  result.drain_initial_readback_reused = reused;
   if (APPLY) {
-    result.quotes_written = await upsert("fugle_daytrade_quotes_live", quotes, "symbol");
+    const proofStore=require('../lib/mother-pool-receipt-current.cjs');
+    const syncId=require('node:crypto').randomUUID(),roundId=process.env.FUMAN_CANDLE_SYNC_RUN_ID || syncId;
+    const target=URL+'/fugle_daytrade_intraday_1m';
+    const evidence=checkpoint?.trade_date===date && checkpoint?.target===target ? {...checkpoint.save_evidence} : {};
+    result.sync_id=syncId;result.wrapper_run_id=roundId;
+    const stateFile=path.join(RUNTIME,'state','daytrade-fast-supabase-sync.json');
+    proofStore.atomicJson(stateFile,{...result,ok:false,status:'IN_PROGRESS'});
+    result.quotes_written = await upsert("fugle_daytrade_quotes_live", quotes, "symbol",()=>{},writeControl);
     let acknowledged = delta.checkpoint;
+    require('../lib/daytrade-candle-write-intent.cjs').beforeWrite({runtime:RUNTIME,rows:writePlan.rows,writer:'fast-sync'});
     result.candles_written = await upsert("fugle_daytrade_intraday_1m", writePlan.rows, "symbol,candle_time", batch => {
-      const next = deltaStore.acknowledge(acknowledged,batch);
+      // This map is owned by this invocation. Avoid cloning all prior hashes
+      // for every 200-row ACK; durable replacement still occurs for every batch.
+      // Any persistence failure propagates before context/Proof publication.
+      const next = acknowledged;
+      for(const row of batch)next.hashes[row.symbol+'|'+row.candle_time]=deltaStore.fingerprint(row);
+      // Only a successful HTTP ACK may create this provenance; legacy hashes alone do not.
+      for(const row of batch) evidence[row.symbol+'|'+row.candle_time]={hash:deltaStore.fingerprint(row),trade_date:date,target,
+        sync_id:syncId,wrapper_run_id:roundId,acknowledged_at:new Date().toISOString(),status:'HTTP_ACKNOWLEDGED'};
+      next.save_evidence=evidence;
       fs.mkdirSync(path.dirname(checkpointPath),{recursive:true});
       const temporary=checkpointPath+'.'+process.pid+'.tmp';
       fs.writeFileSync(temporary,JSON.stringify(next),'utf8');
       fs.renameSync(temporary,checkpointPath);
       acknowledged=next;
-    });
+    },writeControl);
     result.candle_backfill_complete = writePlan.deferred === 0;
-    const stateFile = path.join(RUNTIME, "state", "daytrade-fast-supabase-sync.json");
+    const committedKeys=new Set();
+    for(const row of writePlan.rows){const k=row.symbol+'|'+row.candle_time;if(acknowledged.hashes[k]!==deltaStore.fingerprint(row))throw Error('CANDLE_ACK_INCOMPLETE');committedKeys.add(k);}
+    const remaining={pending:delta.pending.filter(row=>!committedKeys.has(row.symbol+'|'+row.candle_time))};
+    result.candle_pending_after=remaining.pending.length;
+    // Deferred batches cannot publish a verified Proof. Read the complete fixed
+    // source once all real ACKs are durable, rather than after every partial pass.
+    const finalMatches=remaining.pending.length===0&&writePlan.deferred===0
+      ? await require('../lib/daytrade-candle-content-readback.cjs').readback({rows:candles,url:URL+'/rest/v1/fugle_daytrade_intraday_1m',headers:{apikey:secret('SUPABASE_SERVICE_ROLE_KEY'),Authorization:'Bearer '+secret('SUPABASE_SERVICE_ROLE_KEY')},deadline})
+      : new Map();
+    if (context) {
+      context.sourceHash = sourceHash;
+      context.checkpointHash = bytesHash(readText(checkpointPath));
+      context.checkpoint = {...acknowledged,save_evidence:evidence};
+      context.pending = remaining.pending;
+    }
+    if(remaining.pending.length===0&&writePlan.deferred===0&&finalMatches.size!==candles.length)throw Error('CANDLE_FINAL_CONTENT_MISMATCH');
+    if(context && remaining.pending.length===0 && bytesHash(readText(context.cacheFile))!==context.cacheSha)throw Error('CANDLE_SOURCE_CHANGED_DURING_FINAL_READBACK');
+    if(remaining.pending.length===0 && readText(snapshotFile)!==boundSnapshotRaw)throw Error('CANDLE_SNAPSHOT_CHANGED_DURING_FINAL_READBACK');
+    result.final_content_readback_verified=remaining.pending.length===0&&writePlan.deferred===0&&finalMatches.size===candles.length;
+    let snapshotRaw='';try{snapshotRaw=fs.readFileSync(path.join(RUNTIME,'state','daytrade-mother-pool-snapshot-latest.json'),'utf8')}catch{}
+    const proof=proofStore.makeCandleProof({rows:candles,evidence,tradeDate:date,target,snapshotRaw,roundId,syncId,
+      pending:remaining.pending.length,deferred:writePlan.deferred,now:Date.now()});
+    const proofRaw=JSON.stringify(proof);const hash=proofStore.hashBytes(proofRaw);
+    const proofFile=path.join(RUNTIME,'state','candle-save-proofs',hash+'.json');
+    proofStore.atomicJson(proofFile,proof);
+    result.candle_save_proof={sha256:hash,status:proof.status,reason:proof.reason};
     fs.mkdirSync(path.dirname(stateFile), { recursive: true });
-    fs.writeFileSync(stateFile, JSON.stringify({ ...result, completed_at: new Date().toISOString() }, null, 2) + "\n", "utf8");
+    proofStore.atomicJson(stateFile,{ ...result, completed_at: new Date().toISOString() });
   }
   console.log(JSON.stringify(result));
   return result;
 }
 
-module.exports = { runFastSync: main };
+module.exports = { mapCandleCache, runFastSync: main, runQuoteSync: control => main({...control,quoteOnly:true}) };
 if (require.main === module) main().catch((error) => { console.error(JSON.stringify({ ok: false, error: error.message })); process.exitCode = 1; });

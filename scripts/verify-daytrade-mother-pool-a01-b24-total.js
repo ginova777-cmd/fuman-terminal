@@ -9,7 +9,7 @@ const tradeDate=arg('trade-date',new Date().toISOString().slice(0,10));
 const out=arg('out',path.join(runtime,'data','scan-receipts',`mother-pool-a01-b24-total-${tradeDate}.json`));
 const registry=JSON.parse(fs.readFileSync(path.join(__dirname,'..','data','contracts','mother-pool-a01-b24-module-registry-v1.json'),'utf8'));
 const IDS=Object.keys(registry.modules);
-const readJson=f=>{try{return JSON.parse(fs.readFileSync(f,'utf8'));}catch{return null;}};
+const readJson=f=>{try{return require('../lib/daytrade-shared-evidence.cjs').read(f,runtime);}catch{return null;}};
 const resultIndex=arg('module-results',null);
 const index=resultIndex?readJson(resultIndex):null;
 const canonical=arg('canonical',`fugle_daytrade_source:${tradeDate.replaceAll('-','')}:canonical`);

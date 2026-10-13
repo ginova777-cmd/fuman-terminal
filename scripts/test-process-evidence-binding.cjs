@@ -1,0 +1,21 @@
+'use strict';
+const fs=require('fs'),path=require('path'),os=require('os'),assert=require('assert');
+const store=require('../lib/daytrade-shared-evidence.cjs');
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'process-evidence-')),file=path.join(root,'receipt.json');
+const value={writer_run_id:'w',generation_id:'g',complete:true,rows:[{source_version:'v',data:'x'.repeat(8192)}]};
+value.rows.push(value.rows[0]);
+const env=store.write(file,value,root),bytes=fs.readFileSync(file);let passed=0;
+function test(name,fn){fn();passed++;console.log('PASS '+name);}
+test('process hash binds every logical byte',()=>assert.equal(store.verifyProcessBytes(file,root,env.sha256).sha256,env.sha256));
+test('wrong process hash rejected',()=>assert.throws(()=>store.verifyProcessBytes(file,root,'0'.repeat(64)),/RESULT_DRIFT/));
+test('missing process hash rejected',()=>assert.throws(()=>store.verifyProcessBytes(file,root,null),/HASH_REQUIRED/));
+test('legacy success summary cannot replace full receipt',()=>{fs.writeFileSync(file,JSON.stringify(value));assert.throws(()=>store.verifyProcessBytes(file,root,env.sha256),/CONTRACT_REQUIRED/);fs.writeFileSync(file,bytes);});
+const ref=env.pieces.find(x=>typeof x!=='string'),blob=path.join(root,'data/shared-evidence',ref.file),original=fs.readFileSync(blob);
+test('missing evidence rejected',()=>{fs.renameSync(blob,blob+'.hold');assert.throws(()=>store.verifyProcessBytes(file,root,env.sha256),/ENOENT/);fs.renameSync(blob+'.hold',blob);});
+test('modified evidence rejected',()=>{fs.writeFileSync(blob,Buffer.alloc(original.length,32));assert.throws(()=>store.verifyProcessBytes(file,root,env.sha256),/HASH_DRIFT/);fs.writeFileSync(blob,original);});
+test('removed piece rejected',()=>{const e=JSON.parse(bytes);e.pieces.pop();fs.writeFileSync(file,JSON.stringify(e));assert.throws(()=>store.verifyProcessBytes(file,root,env.sha256),/CONTENT_DRIFT/);fs.writeFileSync(file,bytes);});
+test('stream preserves Unicode split across pieces',()=>{const f=path.join(root,'unicode.json'),e=store.write(f,{text:'a😀b'},root),raw=JSON.stringify({text:'a😀b'}),i=raw.indexOf('😀')+1;e.pieces=[raw.slice(0,i),raw.slice(i)];fs.writeFileSync(f,JSON.stringify(e));assert.equal(store.verifyProcessBytes(f,root,e.sha256).sha256,e.sha256);});
+const fixture=require('./test-combination-independent').fixture(),collect=require('../lib/mother-pool-combination-producer').collect;
+test('unrelated parent does not inflate B24 or change result',()=>{const expected=collect(fixture);fixture.parents.B15={data:'unrelated'};const actual=collect(fixture);assert.deepStrictEqual(actual,expected);assert.deepStrictEqual(Object.keys(actual.source_evidence.parents).sort(),['B12','B13','B19','B21','B22','B23']);});
+test('required parent remains fail closed',()=>{delete fixture.parents.B12;assert.equal(collect(fixture).rows[0].status,'DATA_GAP');});
+console.log(JSON.stringify({passed,formal_execution:false}));

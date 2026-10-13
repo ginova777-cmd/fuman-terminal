@@ -337,7 +337,20 @@ async function main() {
   check("fast_supabase_quote_write_nonempty", Number(fastSync?.quotes_written) > 0, "fast_supabase_quote_write_empty");
   // Current-session candles are not a preopen warmup requirement.
   const intradayCandlesRequired = clock.minute >= 9 * 60;
-  check("fast_supabase_1m_write_nonempty", !intradayCandlesRequired || Number(fastSync?.candles_written) > 0, "fast_supabase_1m_write_empty");
+  let candleSaveEvidence={ok:false,reason:'PROOF_NOT_READ'};
+  try {
+    const proofHash=fastSync?.candle_save_proof?.sha256;
+    if(!/^[a-f0-9]{64}$/.test(proofHash||''))throw Error('PROOF_MISSING');
+    const candleCache=JSON.parse(fs.readFileSync(path.join(RUNTIME,'cache','intraday','fugle-daytrade-ws-candles-v2.json'),'utf8'));
+    const rows=require('./sync-daytrade-websocket-supabase-fast').mapCandleCache(candleCache,clock.tradeDate,Date.now());
+    candleSaveEvidence=require('../lib/mother-pool-receipt-current.cjs').verifyCandleProof({receipt:fastSync,
+      proofRaw:fs.readFileSync(path.join(RUNTIME,'state','candle-save-proofs',proofHash+'.json'),'utf8'),snapshotRaw,rows,
+      tradeDate:clock.tradeDate,target:String(process.env.SUPABASE_URL||process.env.FUMAN_SUPABASE_URL||'https://cpmpfhbzutkiecccekfr.supabase.co').replace(/\/+$/,'')+'/fugle_daytrade_intraday_1m',
+      roundId:process.env.FUMAN_CANDLE_SYNC_RUN_ID});
+  }catch(error){candleSaveEvidence={ok:false,reason:error.message};}
+  // Keep the persistence check and real write count; zero writes need positive ACK evidence.
+  check("fast_supabase_1m_write_nonempty", !intradayCandlesRequired || Number(fastSync?.candles_written) > 0 || candleSaveEvidence.ok, "fast_supabase_1m_write_empty");
+  check('fast_supabase_1m_saved_content_verified', !intradayCandlesRequired || candleSaveEvidence.ok, 'fast_supabase_1m_save_evidence_invalid:'+candleSaveEvidence.reason);
   const industryReceiptsRequired = clock.minute >= 9 * 60;
   // Morning-report observations keep their failures without blocking core water.
   const checkMorning = (name, ok, reason) => {
@@ -403,6 +416,7 @@ async function main() {
   }
   const result = {
     snapshot_binding: snapshotBinding,
+    candle_save_evidence: candleSaveEvidence,
     ok: failures.length === 0,
     closed_loop_ok: failures.length === 0,
     all_modules_complete: false,
@@ -482,6 +496,11 @@ async function main() {
     result.receipt_path = receipt;
     await publishReceipt(result);
     result.supabase_receipt_view = "public.v_fugle_daytrade_mother_pool_receipt_v4_1";
+    result.publication = {status:'POST_ACKNOWLEDGED', verification_run_id:result.verification_run_id,
+      generation:result.snapshot_binding?.generation, snapshot_sha256:result.snapshot_binding?.snapshot_sha256,
+      acknowledged_at:new Date().toISOString()};
+    // Failure before this write leaves the assessment non-reusable. No automatic resend.
+    fs.writeFileSync(receipt, JSON.stringify(result, null, 2) + "\n", "utf8");
   }
   console.log(JSON.stringify(result, null, 2));
   if (!result.ok) process.exitCode = 1;

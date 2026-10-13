@@ -7,7 +7,7 @@ const source=fs.readFileSync(require.resolve('./run-daytrade-source-writer.js'),
  assert(start>=0&&end>start);
  let publications=0;
  const result={payload:{}};
- const context={result,moduleWorkIds:()=>[],sideMinutes:600,require:name=>{assert.equal(name,'./module-persistence-circuit.cjs');return require(name);},publishInitialSource:async()=>{publications++;}};
+ const context={result,isolatedModules:null,isolatedTradeJournal:null,moduleWorkIds:()=>[],sideMinutes:600,require:name=>{assert.equal(name,'./module-persistence-circuit.cjs');return require(name);},publishInitialSource:async()=>{publications++;}};
  // Execute the real phase. Any collector, disk, or DB operation would fail:
  // none of those dependencies are supplied to this paused-path fixture.
  await vm.runInNewContext('(async()=>{'+source.slice(start,end)+'})()',context);
