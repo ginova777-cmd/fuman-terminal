@@ -8834,12 +8834,12 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
       const inputs=[require('../lib/mother-pool-identity-source').collect({identity,symbols:snapshot.symbols,calendar:marketCalendarEvidence,lease:writerLease,asOf:nowIso()})];
       if(moduleWorkIds().some(id=>id!=='A01')){
       if(moduleWorkIds().some(id=>["A02"].includes(id))) inputs.push(require('../lib/mother-pool-eligibility-source').collect({identity,evidence:activeSymbols.sourceEvidence,asOf:sideAsOf}));
-      if(moduleWorkIds().some(id=>["A03"].includes(id))) inputs.push(require('../lib/mother-pool-a03-integration.cjs').dispatchForWriter({
+      if(moduleWorkIds().some(id=>["A03"].includes(id))) try { inputs.push(require('../lib/mother-pool-a03-integration.cjs').dispatchForWriter({
         legacyCollect:()=>require('../lib/mother-pool-warmup-union')[isolatedModules?'collectV11':'collect']({identity,symbols:snapshot.symbols,bridge:readJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE,null),asOf:sideAsOf}),
         isolated:Boolean(isolatedModules)&&process.env.A03_ISOLATED_INTEGRATION_TEST==='1',
         candidateInput:isolatedModules&&process.env.A03_ISOLATED_INTEGRATION_TEST==='1'?readJson(process.env.A03_ISOLATED_INPUT_FILE,null):null,
         identity,asOf:sideAsOf,snapshotSymbols:snapshot.symbols
-      }));
+      })); } catch(error) { result.payload.module_persistence_errors.push({modules:['A03'],error:String(error.message||error)}); }
       if(moduleWorkIds().some(id=>["A04"].includes(id))) inputs.push(require('../lib/mother-pool-historical-volume-price').collect({identity,symbols:snapshot.symbols,dailyVolumeMap,asOf:nowIso()}));
       if(moduleWorkIds().some(id=>["A05"].includes(id))) inputs.push(require('../lib/mother-pool-daytrade-ratio').collect({identity,symbols:snapshot.symbols,activeSymbols,dailyVolumeMap,officialSource:officialDaytradeSource,asOf:nowIso()}));
       const collectorStatus=readJson(FUGLE_WS_STATUS_FILE,null);

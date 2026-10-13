@@ -167,6 +167,7 @@ async function main(options = {}) {
     proofStore.atomicJson(stateFile,{...result,ok:false,status:'IN_PROGRESS'});
     result.quotes_written = await upsert("fugle_daytrade_quotes_live", quotes, "symbol",()=>{},writeControl);
     let acknowledged = delta.checkpoint;
+    const checkpointJson=require('../lib/daytrade-checkpoint-json.cjs').create(acknowledged,evidence);
     require('../lib/daytrade-candle-write-intent.cjs').beforeWrite({runtime:RUNTIME,rows:writePlan.rows,writer:'fast-sync'});
     result.candles_written = await upsert("fugle_daytrade_intraday_1m", writePlan.rows, "symbol,candle_time", batch => {
       // This map is owned by this invocation. Avoid cloning all prior hashes
@@ -180,7 +181,7 @@ async function main(options = {}) {
       next.save_evidence=evidence;
       fs.mkdirSync(path.dirname(checkpointPath),{recursive:true});
       const temporary=checkpointPath+'.'+process.pid+'.tmp';
-      fs.writeFileSync(temporary,JSON.stringify(next),'utf8');
+      fs.writeFileSync(temporary,checkpointJson(batch.map(row=>row.symbol+'|'+row.candle_time)),'utf8');
       fs.renameSync(temporary,checkpointPath);
       acknowledged=next;
     },writeControl);
