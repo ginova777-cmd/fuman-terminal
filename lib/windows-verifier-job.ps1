@@ -28,6 +28,8 @@ public static class VerifierJob {
   if(!AssignProcessToJobObject(handle,GetCurrentProcess()))throw new Win32Exception();
  }
  public static uint Active(){Accounting a;if(!QueryInformationJobObject(handle,1,out a,(uint)Marshal.SizeOf(typeof(Accounting)),IntPtr.Zero))throw new Win32Exception();return a.active;}
+ [DllImport("kernel32.dll",EntryPoint="QueryInformationJobObject",SetLastError=true)] static extern bool QueryIds(IntPtr job,int cls,IntPtr info,uint bytes,IntPtr length);
+ public static long[] Members(){IntPtr b=Marshal.AllocHGlobal(8192);try{if(!QueryIds(handle,3,b,8192,IntPtr.Zero))throw new Win32Exception();int assigned=Marshal.ReadInt32(b,0),n=Marshal.ReadInt32(b,4);if(n<0||n>1023||assigned!=n)throw new InvalidOperationException("JOB_MEMBERS_INCOMPLETE");var ids=new long[n];for(int i=0;i<n;i++)ids[i]=Marshal.ReadIntPtr(b,8+i*IntPtr.Size).ToInt64();return ids;}finally{Marshal.FreeHGlobal(b);}}
  public static void Abort(){if(!TerminateJobObject(handle,125))throw new Win32Exception();}
 }
 '@
@@ -45,9 +47,22 @@ try {
  $null=$child.Handle
  $started=$child.StartTime.ToUniversalTime().ToString('o')
  $child.WaitForExit();$code=$child.ExitCode
- $active=[VerifierJob]::Active()
+ # WaitForExit may precede Job accounting removal of that same child.
+ # Reconcile only the known exited child; unknown descendants never get grace.
+ # This bound is inside the caller's unchanged 30-second process timeout.
+ $accounting=[Diagnostics.Stopwatch]::StartNew();$samples=@();$settled=$false
+ do {
+  $active=[VerifierJob]::Active();$members=@([VerifierJob]::Members())
+  $samples+=@{active=$active;members=$members;child_exited=$child.HasExited}
+  $unknown=@($members|Where-Object {$_ -ne $PID -and $_ -ne $child.Id})
+  if($unknown.Count -gt 0){break}
+  if($active -eq 1 -and $members.Count -eq 1 -and $members[0] -eq $PID -and $child.HasExited){$settled=$true;break}
+  if(-not $child.HasExited -or $accounting.ElapsedMilliseconds -ge 100){break}
+  [Threading.Thread]::Sleep(5)
+ } while($true)
+ [Console]::Error.WriteLine(('WINDOWS_VERIFIER_JOB_ACCOUNTING '+(@{samples=$samples;settled=$settled;elapsed_ms=$accounting.ElapsedMilliseconds}|ConvertTo-Json -Depth 5 -Compress)))
  [Console]::Error.WriteLine(('WINDOWS_VERIFIER_JOB '+(@{host_pid=$PID;child_pid=$child.Id;child_started_at=$started;finished_at=[DateTimeOffset]::UtcNow.ToString('o');child_exit=$code;active_processes=$active}|ConvertTo-Json -Compress)))
- if($active -ne 1){[Console]::Error.WriteLine('VERIFIER_DESCENDANTS_REMAIN');[VerifierJob]::Abort();exit 125}
+ if(-not $settled){[Console]::Error.WriteLine('VERIFIER_DESCENDANTS_REMAIN');[VerifierJob]::Abort();exit 125}
  [Threading.Tasks.Task]::WhenAll([Threading.Tasks.Task[]]@($stdoutCopy,$stderrCopy)).GetAwaiter().GetResult()
  $child.Dispose()
  exit $code
