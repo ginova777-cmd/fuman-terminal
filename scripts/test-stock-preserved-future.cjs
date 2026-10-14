@@ -1,0 +1,14 @@
+'use strict';
+const fs=require('fs'),path=require('path'),os=require('os'),assert=require('assert/strict'),guard=require('../research/release/windows-bound/stock-preserved-future.cjs');
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'stock-preservation-'));fs.writeFileSync(path.join(root,'entry.js'),'old future bytes\r\n');
+const identity={pid:12,creation_ticks:'638000000000000001',exe:'node.exe',entry:'entry.js',command_sha256:'a'.repeat(64)};
+const actual={...identity,role:'future',entry_verified:true},baseline=guard.capture(root,['entry.js']);let n=0;const test=(name,f)=>{f();n++;console.log('PASS '+name);};
+test('exact bytes and identity',()=>assert.equal(guard.verify(root,baseline,identity,[actual]).source_quality,'NOT_EVALUATED'));
+test('same PID different creation rejected',()=>assert.throws(()=>guard.verify(root,baseline,identity,[{...actual,creation_ticks:'638000000000000002'}]),/IDENTITY/));
+test('extra writer blocks',()=>assert.throws(()=>guard.verify(root,baseline,identity,[actual,{role:'writer'}]),/UNIQUE/));
+test('missing identity blocks',()=>assert.throws(()=>guard.verify(root,baseline,identity,[]),/UNIQUE/));
+test('command drift blocks',()=>assert.throws(()=>guard.verify(root,baseline,identity,[{...actual,command_sha256:'b'.repeat(64)}]),/IDENTITY/));
+test('raw line ending drift blocks',()=>{fs.writeFileSync(path.join(root,'entry.js'),'old future bytes\n');assert.throws(()=>guard.verify(root,baseline,identity,[actual]),/BYTES_CHANGED/);});
+test('path escape blocks',()=>assert.throws(()=>guard.capture(root,['../outside']),/PATH_INVALID/));
+test('duplicate manifest blocks',()=>assert.throws(()=>guard.capture(root,['entry.js','entry.js']),/FILES_REQUIRED/));
+console.log(JSON.stringify({status:'ISOLATED_PRESERVATION_GUARD_PASS',passed:n,root,formal_execution:false}));
