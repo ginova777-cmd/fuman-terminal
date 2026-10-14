@@ -675,9 +675,9 @@ try {
     exit $closeoutExit
   }
 
-  if ($Apply -and -not (Invoke-FugleFutoptCollectorReleaseReconcile)) {
-    Write-WrapperLog "WARN futopt collector reconcile blocked; canonical gate remains fail-closed"
-  }
+  # This stock-only release preserves the existing futures process.
+  # Futures quality gates remain independent; no automatic retire/start here.
+  if ($Apply) { Write-WrapperLog "FUTOPT_PROCESS_PRESERVED stock-only release; no reconcile requested" }
 
   $attempts = if ($env:FUMAN_DAYTRADE_WRAPPER_ATTEMPTS) { [int]$env:FUMAN_DAYTRADE_WRAPPER_ATTEMPTS } else { 1 }
   if ($attempts -lt 1) { $attempts = 1 }

@@ -1,0 +1,59 @@
+$ErrorActionPreference='Stop'
+. (Join-Path $PSScriptRoot 'ProductionMaintenanceBinding.ps1')
+. (Join-Path $PSScriptRoot 'ProductionRuntimePorts.ps1')
+. (Join-Path $PSScriptRoot 'StockOnlyCutoverSequence.ps1')
+. (Join-Path $PSScriptRoot 'StockOnlyRuntimePorts.ps1')
+$tokens=$null;$errors=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $PSScriptRoot 'Invoke-StockOnlyMaintenanceOwner.ps1'),[ref]$tokens,[ref]$errors)
+if($errors.Count){throw 'ENTRY_PARSE_ERROR'}
+$assignment=$ast.Find({param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq '$ports'},$true)
+if(!$assignment){throw 'FORMAL_PORT_TABLE_MISSING'}
+$portScript=[scriptblock]::Create($assignment.Extent.Text)
+$results=@()
+# The exact formal port table is executed; scheduler/process/release commands are
+# intercepted. Local mutex, DB-round file fencing, archive and receipts are real.
+function Get-TaskBinding($Name){$script:tasks[$Name].Clone()}
+function Suspend-BoundTask($Expected){if($tasks[$Expected.name].enabled -ne $Expected.enabled){throw 'FIXTURE_TASK_DRIFT'};$tasks[$Expected.name].enabled='false'}
+function Restore-BoundTask($Expected){$tasks[$Expected.name].enabled=$Expected.enabled}
+function Get-RuntimeInventory($Config){if($script:future){return $script:future}}
+function Invoke-PairedVerifier($Config,$Sha){if($script:sha -ne $Sha){throw 'FIXTURE_AUTHORITY_MISMATCH'};return @{ok=$true}}
+function Test-EvidenceOff($Config){}
+function AssertOutsideStockSession {}
+function CheckRequester {return ($scenario -eq 'requester-exit-after-deploy' -and $script:sha -eq $config.target)}
+function WriteGate {Write-CutoverReceipt $ctx.owner_gate $identity}
+function Invoke-BoundGracefulStop($Config,$Expected,$OwnerGate,$ReceiptPath){
+ if($Expected.pid -ne $script:future.pid){throw 'STOP_IDENTITY'}
+ $script:future=$null;Write-CutoverReceipt $ReceiptPath @{status='GRACEFUL_STOP_VERIFIED';pid=$Expected.pid;pid_exited=$true;fixture=$true}
+}
+function ReleaseOperation($Action){if(!$script:future -or $script:future.pid -ne 99){throw 'PRESERVED_FUTURE_CHANGED'};if($Action -eq 'apply'){$script:sha=$config.target}else{$script:sha=$config.expected};New-Item -ItemType Directory $ctx.release -Force|Out-Null;[IO.File]::WriteAllText((Join-Path $ctx.release 'authority-before.bin'),'fixture');Write-CutoverReceipt (Join-Path $ctx.release 'rollback-receipt.json') @{status='NOT_NEEDED'}}
+function Start-BoundFuture($Config,$LogDir){if($script:future){throw 'DUPLICATE_START'};$script:nextPid++;$script:future=@{pid=$script:nextPid;creation_ticks=$script:nextPid;exe='fixture.exe';role='future';entry_verified=$true;entry=(Join-Path $Config.prod 'scripts/fugle-futopt-websocket-collector.js')};return $script:future}
+function Wait-BoundFuture($Config,$Identity){if(!$script:future -or $script:future.pid -ne $Identity.pid){throw 'FUTURE_NOT_FOUND'};return @{transport_identity_pass=$true;quality_gate_pass=$false}}
+function git {param($C,$Root,$Rev,$Head);$script:sha}
+function Assert-StockOnlyApproval($Config,$Approval){Assert-OwnerApproval $Config $Approval}
+function Assert-PreservedStockFuture($Config,$Identity,$Out){Assert-OnlyBoundFuture $Config $Identity;if($script:future.pid -ne 99){throw 'FUTURE_CHANGED'}}
+foreach($scenario in @('normal','requester-exit-after-deploy')){
+ $out=Join-Path ([IO.Path]::GetTempPath()) ('production-ports-test-'+[guid]::NewGuid().ToString('N'));New-Item -ItemType Directory (Join-Path $out 'runtime/cache/intraday') -Force|Out-Null
+ Set-Content (Join-Path $out 'runtime/cache/intraday/fugle-futopt-ws-quotes.json') '{"fixture":true}'
+ Set-Content (Join-Path $out 'runtime/cache/intraday/fugle-futopt-ws-candles.json') '{"fixture":true}'
+ $id=[guid]::NewGuid().ToString('N');$script:tasks=@{}
+ $binding=@{files=@();tasks=@();locks=@{database_round=(Join-Path $out 'database-round.lock');stock=('Local\PboTest-'+$id+'-Stock');writer=('Local\PboTest-'+$id+'-Writer')}}
+ foreach($name in @('Fuman Fugle Daytrade WebSocket Collector 0600-1330','Fuman Daytrade Source Writer 0600-1330','fixture-0835','fixture-1333')){$task=@{name=$name;path='\';enabled='true';state='Ready';definition_sha256=('a'*64)};$binding.tasks+=@{binding=$task};$script:tasks[$name]=$task.Clone()}
+ $config=@{prod=(Join-Path $out 'prod');runtime=(Join-Path $out 'runtime');target='new';expected='old';release_approved=$true;remote_main_verified=$true;binding_sha256='fixture';package_sha256='fixture';stock_preservation_sha256=('a'*64)}
+ $approval=@{action='CONTROLLED_CUTOVER_APPLY';target='new';binding_sha256='fixture';package_sha256='fixture';not_before=[DateTimeOffset]::UtcNow.AddMinutes(-1).ToString('o');expires_at=[DateTimeOffset]::UtcNow.AddMinutes(5).ToString('o')}
+ $ctx=@{legacy=$null;future=$null;proof=$null;archive=$null;release=(Join-Path $out 'release');owner_gate=(Join-Path $out 'owner-gate.json');keep=$false;current_sha='old'}
+ $owner=New-ProductionOwner $binding (Join-Path $out 'owner.json');$identity=@{maintenance_verified=$false;preserved_future_file=(Join-Path $out 'preserved-future-identity.json')}
+ $script:sha='old';$script:nextPid=100;$script:future=@{pid=99;creation_ticks=99;exe='fixture.exe';role='future';entry_verified=$true}
+ . $portScript
+ $ports.formal=$false
+ try{
+  $r=Invoke-StockOnlyCutoverSequence $ports
+  $expected=if($scenario -eq 'normal'){'STOCK_CUTOVER_CONTROL_VERIFIED_NATURAL_PENDING'}else{'STOCK_RELEASE_RECOVERED'}
+  if($r.status -ne $expected){throw ('COMPOSITION_FAILED:'+ $r.error+':'+$r.recovery_error)}
+  if($owner.db -or $owner.stock -or $owner.writer){throw 'FENCE_NOT_RELEASED'}
+  if(@($tasks.Values|Where-Object enabled -ne 'true').Count){throw 'TASK_NOT_RESTORED'}
+  if($r.natural_acceptance -ne 'NOT_OBSERVED'){throw 'QUALITY_FABRICATED'}
+  $results+=@{scenario=$scenario;status='PASS';root=$out;result=$r;final_sha=$script:sha;formal_port_table_sha256=(Get-FileHash (Join-Path $PSScriptRoot 'Invoke-StockOnlyMaintenanceOwner.ps1')).Hash}
+ }finally{if($owner.db -or $owner.stock -or $owner.writer){$owner.manual_recovery_required=$false;Restore-ProductionFence $owner}}
+}
+@{status='PASS';cases=$results.Count;results=$results;scope='EXACT_STOCK_FORMAL_PORT_TABLE_SIMULATED_PROCESSES_TASKS_RELEASE_REAL_LOCAL_LOCKS_RECEIPTS';formal_mutations=$false}|ConvertTo-Json -Depth 12|Set-Content (Join-Path ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../../../..'))) 'stock-port-composition-tests.json') -Encoding utf8
+Write-Output ('PASS '+$results.Count)

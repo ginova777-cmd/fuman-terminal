@@ -1,6 +1,7 @@
 'use strict';
 // Writes only a new isolated output directory. Never installs, pushes or executes Owner.
 const fs=require('fs'),path=require('path'),cp=require('child_process'),crypto=require('crypto');
+const stockOnly=process.argv.includes('--stock-only');
 const repo=path.resolve(__dirname,'../../..'),out=path.resolve(process.argv[2]||''),binding=path.resolve(process.argv[3]||'');
 if(!process.argv[2]||!process.argv[3]||fs.existsSync(out)||/fuman-runtime|fuman-release-owner|program files/i.test(out))throw Error('NEW_ISOLATED_OUTPUT_REQUIRED');
 const git=(...a)=>cp.execFileSync('git',['-C',repo,...a],{maxBuffer:64*1024*1024,windowsHide:true});
@@ -13,6 +14,7 @@ write('release-package/manifest.json',{production_sha:base,final_sha:target,file
 const names=['Invoke-ProductionMaintenanceOwner.ps1','ProductionMaintenanceBinding.ps1','ProductionRuntimePorts.ps1','WindowsScheduleBinding.ps1','LegacyBoundary.ps1','CutoverSequence.ps1','Read-ProductionBinding.ps1','ReleaseOperation.cjs','OwnerAuthorization.cjs','GracefulOperation.cjs','junction-graceful-stop-adapter.cjs','junction-stop-identity.cjs','release-package/deploy-core.cjs'];
 names.push('Start-IsolatedHandleCollector.ps1','RuntimePair.cjs','stop-ack-contract.cjs','Invoke-ManualRecovery.ps1','ManualRecovery.ps1','RecoveryHost.ps1','RecoveryPreflight.ps1','RecoveryRelease.ps1','RecoveryRuntimePorts.ps1','R3OwnerRecoveryGuard.ps1');
 names.push('release-package/exact-diff.cjs','collector-release-binding.cjs');
+names.push('Invoke-StockOnlyMaintenanceOwner.ps1','StockOnlyRuntimePorts.ps1','StockOnlyCutoverSequence.ps1','StockPreservationOperation.cjs','stock-preserved-future.cjs','Invoke-StockOnlyRecovery.ps1');
 for(const name of names)write(name,git('show',target+':research/release/windows-bound/'+name));
 const runtimeFiles=['MotherPoolReceiptCatchup.ps1','Run-DaytradeSourceWriter.ps1'].map(name=>{const b=fs.readFileSync(path.join(repo,'ops',name));write('runtime-payload/'+name,b);return {name,bytes:b.length,sha256:hash(b)};});
 write('runtime-pair.json',{target,expected:base,files:runtimeFiles});
@@ -32,12 +34,30 @@ cp.execFileSync('git',['clone','--no-hardlinks','--no-checkout',repo,checkout],{
 cp.execFileSync('git',['-C',checkout,'checkout','--detach',target],{windowsHide:true});
 cfg.collector_release_bindings={expected:{release_sha:base,entry,blob_sha256:cfg.collector_blob_sha256,runtime_sha256:cfg.collector_entry_sha256},target:{release_sha:target,entry,blob_sha256:hash(git('show',target+':'+entry)),runtime_sha256:hash(fs.readFileSync(path.join(checkout,entry)))}};
 cfg.collector_bindings_sha256=hash(JSON.stringify(cfg.collector_release_bindings));
+if(stockOnly){
+ const bound=JSON.parse(fs.readFileSync(binding));
+ const taskNames=bound.tasks.map(x=>x.binding.name).sort();
+ if(JSON.stringify(taskNames)!==JSON.stringify(['Fuman Daytrade Source Writer 0600-1330','Fuman Fugle Daytrade WebSocket Collector 0600-1330']))throw Error('STOCK_ONLY_TWO_TASK_BINDING_REQUIRED');
+ const all=new Set(git('ls-tree','-r','--name-only',base).toString().trim().split(/\r?\n/));
+ const queue=['scripts/fugle-futopt-websocket-collector.js','package.json','package-lock.json'],seen=new Set(),preserved=[];
+ while(queue.length){const file=queue.shift();if(seen.has(file))continue;seen.add(file);const old=git('show',base+':'+file),next=git('show',target+':'+file);if(!old.equals(next))throw Error('FUTURES_DEPENDENCY_CHANGED:'+file);
+  const raw=fs.readFileSync(path.join(cfg.prod,file)),staged=fs.readFileSync(path.join(checkout,file));if(!raw.equals(staged))throw Error('FUTURES_RAW_CHECKOUT_MISMATCH:'+file);
+  preserved.push({file,bytes:raw.length,sha256:hash(raw),git_sha256:hash(old)});
+  if(/\.(?:js|cjs)$/.test(file))for(const m of old.toString().matchAll(/require\(\s*['"]([^'"]+)['"]\s*\)/g)){
+   if(!m[1].startsWith('.'))continue;const r=path.posix.normalize(path.posix.join(path.posix.dirname(file),m[1]));const resolved=[r,r+'.js',r+'.cjs',r+'.json',r+'/index.js'].find(x=>all.has(x));if(!resolved)throw Error('UNRESOLVED_FUTURE_DEPENDENCY:'+file);queue.push(resolved);
+  }
+ }
+ write('stock-preservation.json',{contract:'stock_futures_preservation_v1',expected:base,target,files:preserved,scope:'Exact reviewed local source closure and package manifests; installed external packages remain untouched'});
+ cfg.cutover_scope='STOCK_ONLY_PRESERVE_FUTURES';cfg.stock_preservation_sha256=hash(fs.readFileSync(path.join(out,'stock-preservation.json')));
+}
+
 const tools=[];function walk(dir){for(const e of fs.readdirSync(dir,{withFileTypes:true})){const f=path.join(dir,e.name);if(e.isDirectory())walk(f);else{const b=fs.readFileSync(f);tools.push({path:path.relative(out,f).replaceAll('\\','/'),bytes:b.length,sha256:hash(b)})}}}walk(out);
 const identity={target,expected:base,rollback:base,source:cfg.source,prod:cfg.prod,runtime:cfg.runtime,authority:cfg.authority,verifier:cfg.verifier,collector_entry_sha256:cfg.collector_entry_sha256,binding_sha256:cfg.binding_sha256,manifest_sha256:cfg.manifest_sha256,diff_sha256:cfg.diff_sha256,formal_apply_authorized:false,release_approved:false,remote_main_verified:false,final_sha_after_merge:null,installed_acl_sddl:null};
 identity.runtime_pair_sha256=cfg.runtime_pair_sha256;
 identity.collector_bindings_sha256=cfg.collector_bindings_sha256;
+if(stockOnly){identity.cutover_scope=cfg.cutover_scope;identity.stock_preservation_sha256=cfg.stock_preservation_sha256;}
 write('tool-manifest.json',{contract:'complete-maintenance-owner-package-v2',config_identity:identity,files:tools});cfg.package_sha256=hash(fs.readFileSync(path.join(out,'tool-manifest.json')));write('release-config.json',cfg);
-write('owner-approval-template.json',{action:'CONTROLLED_CUTOVER_APPLY',target,rollback:base,package_sha256:cfg.package_sha256,binding_sha256:cfg.binding_sha256,graceful_stop_required:true,not_before:null,expires_at:null,status:'NOT_AUTHORIZED'});
+write('owner-approval-template.json',{action:'CONTROLLED_CUTOVER_APPLY',target,rollback:base,package_sha256:cfg.package_sha256,binding_sha256:cfg.binding_sha256,graceful_stop_required:!stockOnly,...(stockOnly?{cutover_scope:cfg.cutover_scope,batch_id:'Batch 0',stock_preservation_sha256:cfg.stock_preservation_sha256,future_stop_allowed:false,future_start_allowed:false}:{}),not_before:null,expires_at:null,status:'NOT_AUTHORIZED'});
 write('README.txt',`Complete reviewable Maintenance Owner tool package. Candidate ${target}.\nNo fixture/test runner is included. All local JS/PS tool dependencies are included. External prerequisites: Windows PowerShell 7, Node.js, Git, gh, approved paired authority verifier, clean approved source main and existing deployed Collector graceful protocol.\nInvoke-ProductionMaintenanceOwner -WhatIf or -Preflight performs READ_ONLY_PREFLIGHT only: no mutex acquisition, fence, scheduler mutation or process control. Both reject combination with -Apply. Missing mutex ACL/live handback/window evidence remains BLOCKED; this is not an Apply rehearsal. Read-ProductionBinding remains available without Apply. Apply is false and installed trust/merge approval/window are absent.\nSTOP path: Owner fence -> GracefulOperation -> original Collector request/ACK hashes -> PID exit -> ReleaseOperation. No force termination fallback. Rollback uses same graceful stop and refuses occupied production.\nInstall destination proposal: C:/Program Files/FumanMaintenanceOwner/${target}\nApproval/installed ACL/source-main binding must be reviewed and resealed after remote integration. No install/apply authority is granted by this package.\nRuntime Collector/lib dependencies come from the verified release root; they are not copied into this tool folder. No API keys or runtime data included.\n`);
 const localMissing=[];for(const name of names.filter(x=>x.endsWith('.cjs'))){const text=fs.readFileSync(path.join(out,name),'utf8');for(const m of text.matchAll(/require\(['"](\.[^'"]+)['"]\)/g)){const f=path.resolve(out,path.dirname(name),m[1]);if(!fs.existsSync(f))localMissing.push({from:name,to:m[1]});}}
 for(const name of names.filter(x=>x.endsWith('.ps1'))){const text=fs.readFileSync(path.join(out,name),'utf8');for(const m of text.matchAll(/Join-Path \$PSScriptRoot '([^']+\.(?:ps1|cjs|json))'/g)){if(!fs.existsSync(path.join(out,m[1])))localMissing.push({from:name,to:m[1]})}}
