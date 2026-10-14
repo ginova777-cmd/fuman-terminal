@@ -13,7 +13,7 @@ assert.deepEqual(gate.select(policy,at('13:30:00')).enabled,[]);
 const source=fs.readFileSync(require.resolve('./run-daytrade-source-writer.js'),'utf8');
 const start=source.indexOf('const moduleWorkIds = () => {'),end=source.indexOf('\n};',start)+3;
 let time=at('08:59:59');
-const context={moduleRecovery:policy,moduleSession:{select:p=>gate.select(p,time)}};
+const context={isolatedModuleIds:null,moduleRecovery:policy,moduleSession:{select:p=>gate.select(p,time),allowed:id=>gate.allowed(id,time)}};
 vm.runInNewContext(source.slice(start,end)+'; this.ids=moduleWorkIds;',context);
 assert.deepEqual(Array.from(context.ids()),['A01','A19','A02']);time=at('09:00:00');
 assert.deepEqual(Array.from(context.ids()),['B01','B24']);

@@ -675,9 +675,9 @@ try {
     exit $closeoutExit
   }
 
-  if ($Apply -and -not (Invoke-FugleFutoptCollectorReleaseReconcile)) {
-    Write-WrapperLog "WARN futopt collector reconcile blocked; canonical gate remains fail-closed"
-  }
+  # This stock-only release preserves the existing futures process.
+  # Futures quality gates remain independent; no automatic retire/start here.
+  if ($Apply) { Write-WrapperLog "FUTOPT_PROCESS_PRESERVED stock-only release; no reconcile requested" }
 
   $attempts = if ($env:FUMAN_DAYTRADE_WRAPPER_ATTEMPTS) { [int]$env:FUMAN_DAYTRADE_WRAPPER_ATTEMPTS } else { 1 }
   if ($attempts -lt 1) { $attempts = 1 }
@@ -707,13 +707,19 @@ try {
     } else {
       $exitCode = [int]$nodeProcess.ExitCode
     }
-    if ($exitCode -eq 0) { break }
+    if ($exitCode -in @(0,75)) { break }
     $stderrText = if (Test-Path -LiteralPath $StderrLog) { Get-Content -LiteralPath $StderrLog -Raw -ErrorAction SilentlyContinue } else { "" }
     $stdoutText = if (Test-Path -LiteralPath $StdoutLog) { Get-Content -LiteralPath $StdoutLog -Raw -ErrorAction SilentlyContinue } else { "" }
     $transient = "$stderrText`n$stdoutText" -match "fetch failed|ENOTFOUND|EAI_AGAIN|ECONNRESET|ETIMEDOUT|timeout|aborted|HTTP 5\d\d|502|503|504|521|522|429"
     if (-not $transient -or $attempt -ge $attempts) { break }
     Write-WrapperLog "RETRY transient_exit_$exitCode attempt=$attempt/$attempts"
     if ($retrySeconds -gt 0) { Start-Sleep -Seconds $retrySeconds }
+  }
+  if ($exitCode -eq 75) {
+    & node (Join-Path $FumanRoot 'scripts/verify-writer-natural-pending.cjs') $RuntimeDir $StdoutLog $RunId
+    if ($LASTEXITCODE -ne 75) { throw 'NATURAL_PENDING_VERIFICATION_FAILED' }
+    Write-WrapperLog 'DONE pending reason=PREOPEN_NO_NATURAL_QUOTES complete=false'
+    exit 75
   }
   if ($exitCode -ne 0) {
     $diagnostic = (($stderrText + " " + $stdoutText) -replace "[\r\n]+", " ").Trim()

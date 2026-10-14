@@ -59,7 +59,15 @@ if(require.main===module){
  const common=`. ${q(path.join(__dirname,'ProductionMaintenanceBinding.ps1'))}; . ${q(path.join(__dirname,'ProductionRuntimePorts.ps1'))}; $c=Get-Content ${q(path.join(__dirname,'release-config.json'))} -Raw|ConvertFrom-Json;`;
  const dep={
   guard:()=>guardOwner(__dirname,c,ownerFile,action),
-  noUsers:()=>ps(common+'Assert-OnlyBoundFuture $c $null'),
+  noUsers:()=>{
+   if(c.cutover_scope==='STOCK_ONLY_PRESERVE_FUTURES'){
+    const o=JSON.parse(fs.readFileSync(ownerFile,'utf8').replace(/^\uFEFF/,''));
+    const expectedFile=path.join(path.dirname(ownerFile),'preserved-future-identity.json');
+    if(o.preserved_future_file!==expectedFile)throw Error('PRESERVATION_IDENTITY_PATH');
+    const inventory=JSON.parse(ps(common+'ConvertTo-Json -Depth 8 -InputObject @(Get-RuntimeInventory $c | ForEach-Object {$_.creation_ticks=[string]$_.creation_ticks;$_})'));
+    require('./StockPreservationOperation.cjs').check(__dirname,c,JSON.parse(fs.readFileSync(expectedFile,'utf8').replace(/^\uFEFF/,'')),inventory);
+   }else ps(common+'Assert-OnlyBoundFuture $c $null');
+  },
   admin:()=>ps('[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)')==='True',
   evidenceOff:()=>{ps(common+'Test-EvidenceOff $c');return true;},
   freeBytes:()=>Number(ps('(Get-PSDrive C).Free')),

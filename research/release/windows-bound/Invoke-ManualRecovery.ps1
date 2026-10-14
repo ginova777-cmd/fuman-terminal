@@ -8,6 +8,7 @@ $ErrorActionPreference='Stop'
 . "$PSScriptRoot/ManualRecovery.ps1"
 . "$PSScriptRoot/RecoveryRuntimePorts.ps1"
 $config=Get-Content "$PSScriptRoot/release-config.json" -Raw|ConvertFrom-Json -AsHashtable
+if($config['cutover_scope'] -eq 'STOCK_ONLY_PRESERVE_FUTURES'){throw 'STOCK_ONLY_RECOVERY_ENTRY_REQUIRED'}
 $bundle=Read-RecoveryBundle $RecoveryDirectory
 Assert-RecoveryPackageContext $config $bundle
 Assert-RecoveryNoReparse $PSScriptRoot $RecoveryDirectory

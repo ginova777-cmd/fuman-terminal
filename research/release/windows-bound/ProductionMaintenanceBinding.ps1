@@ -6,6 +6,7 @@ function Assert-SealedOwnerPackage($Config) {
  $file=Join-Path $PSScriptRoot 'tool-manifest.json'
  if((Get-FileHash -LiteralPath $file).Hash.ToLower() -ne $Config.package_sha256){throw 'TOOL_MANIFEST_DRIFT'}
  $m=Get-Content -LiteralPath $file -Raw|ConvertFrom-Json
+ if($Config['cutover_scope'] -eq 'STOCK_ONLY_PRESERVE_FUTURES' -and ($m.config_identity.cutover_scope -ne $Config.cutover_scope -or $m.config_identity.stock_preservation_sha256 -ne $Config.stock_preservation_sha256 -or !$Config.stock_preservation_sha256)){throw 'STOCK_SCOPE_UNSEALED'}
  foreach($item in $m.files){
   $path=[IO.Path]::GetFullPath((Join-Path $PSScriptRoot $item.path))
   if(!$path.StartsWith($PSScriptRoot.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'TOOL_PATH_OUTSIDE_PACKAGE'}

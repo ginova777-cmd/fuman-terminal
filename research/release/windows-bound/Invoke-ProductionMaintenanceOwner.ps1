@@ -11,6 +11,7 @@ if(!$Apply){& (Join-Path $PSScriptRoot 'Read-ProductionBinding.ps1');return}
 $config=Get-Content (Join-Path $PSScriptRoot 'release-config.json') -Raw|ConvertFrom-Json -AsHashtable
 # This remains false in the delivered preparation package. Merge approval alone
 # never authorizes a runtime stop, production checkout or schedule fence.
+if($config['cutover_scope'] -eq 'STOCK_ONLY_PRESERVE_FUTURES'){& (Join-Path $PSScriptRoot 'Invoke-StockOnlyMaintenanceOwner.ps1') -Apply -ApprovalFile $ApprovalFile -RequesterPid $RequesterPid -RequesterCreationTicks $RequesterCreationTicks;return}
 if(!$config.formal_apply_authorized){throw 'FORMAL_CUTOVER_GO_NOT_GRANTED'}
 Assert-SealedOwnerPackage $config
 Assert-InstalledOwnerTrust $config
