@@ -34,7 +34,8 @@ function gateRow(tradeDate, overrides = {}) {
 }
 
 function candles(tradeDate, symbol, count = 61) {
-  const latest = Date.now() - 60000;
+  // The fixture must represent completed minute bars, not wall-clock seconds.
+  const latest = Math.floor(Date.now() / 60000) * 60000 - 60000;
   return Array.from({ length: count }, (_, index) => ({
     symbol,
     market: "TSE",
