@@ -1,0 +1,56 @@
+Phase 2-4 incremental Consumer candidate; ISOLATED_REVIEW only.
+
+Entry: ConsumerEntry(config).run(existing DualFeedConsumer arguments).
+Reuse: existing LiveTail -> dual barrier -> DualFeedConsumer -> ProductionAdapter
+-> Coordinator -> ContinuousPorts -> single Atomic Root. No second Writer.
+
+Config: scope=ISOLATED_REVIEW; directory=existing isolated seeded coordinator;
+env=explicit MP_PHASE2_ENABLED/3/4; control=existing OwnerControl;
+epoch/trade_date=baseline; sourceBinding={quote:handoff binding,candle:handoff binding};
+readers=[{id,role,cursorDirectory}]. Require writer for P2, membership for P3,
+strategy3 AND telegram for P4. Existing flags enforce 2 -> 3 -> 4.
+Every ID must be unique. State cannot overlap the source directory.
+IDs, paths, flags and bindings freeze on first run; change requires explicit rebase.
+
+writer reads P2 changed-symbol/minute refs and lifecycle checkpoint;
+membership reads P3 discovery and checkpoint;
+strategy3 reads root.strategy; telegram reads root.telegram/pending/outbox.
+All use existing immutable phase receipts and verify the complete phase chain.
+Frame, baseline snapshots, root snapshots, algorithm identity, source bindings,
+date/epoch and content hashes are checked before readback ACK.
+No Strategy3 ranking/formula or Telegram delivery logic is introduced.
+
+Each reader has an independent {id}.json ACK/cursor; quote/candle cursors stay
+paired in the existing Frame. Consumer sequence is distinct from feed sequence.
+ACK is ISOLATED_READBACK_ONLY, NOT DB persistence or Telegram delivery evidence.
+Projection is available from ConsumerReader.read(); downstream business effects
+are intentionally not wired before formal authorization.
+Entry drains the previous committed root before publishing the next root.
+Missing sequence requires rebase: this candidate does not invent backlog history.
+Root success before ACK replays that root; atomic ACK rename prevents partial state.
+Explicit recoverConsumerLock archives a lock only for the exact expected dead PID;
+unknown, alive or inaccessible PID remains blocked. No automatic lock eviction.
+
+OFF returns before IO; STOP retains prior root/ACK. rollback switches readerFor(old)
+back to the supplied legacy Reader object; it does not invoke or replace production.
+Do not bypass Entry with another adapter publisher against the same directory.
+No formal caller, scheduler, DB client, notification sender or Registry is installed.
+
+Tests:
+node research/release/test-consumer-readers.cjs
+node research/release/test-consumer-entry.cjs
+node research/release/test-continuous-ports.cjs
+Entry test adapts the existing test-final-technical fixture. It retains that test's
+local archived quote/candle fixture dependencies under 2026-09-30/new-chat/outputs;
+it is not a portable fresh-machine natural-market test. Reader tests self-seed.
+Tests use synthetic isolated inputs. Real process exits test ACK rename recovery;
+they do not simulate power loss. No performance or natural acceptance claim.
+
+Formal gates still required: release approval/current SHA, actual producer start,
+epoch/recovery/boundary, immutable deployment/source binding, unique Writer lease,
+production consumer identity/path/ACK ownership, retention/replay and storage limits,
+natural dual-feed acceptance and measured cost/latency, authorized cutover window.
+Snapshot verification reads all baseline/root references per reader; real full-market
+cost remains unmeasured. Do not infer latency improvement from correctness tests.
+Adding these files changes existing algorithmIdentity: never reuse a prior baseline
+adapter config without explicit rebase and revalidation.
