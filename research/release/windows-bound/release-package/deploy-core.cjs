@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('node:fs'), path=require('node:path'), cp=require('node:child_process'), crypto=require('node:crypto');
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
-function command(exe,args,cwd){const r=cp.spawnSync(exe,args,{cwd,encoding:null,windowsHide:true,maxBuffer:64*1024*1024,timeout:120000});if(r.error||r.status!==0)throw Error(`COMMAND_FAILED:${path.basename(exe)}:${r.error?.code||r.status}`);return r.stdout;}
+function command(exe,args,cwd){const r=cp.spawnSync(exe,args,{cwd,encoding:null,windowsHide:true,maxBuffer:64*1024*1024,timeout:120000});if(r.error||r.status!==0){const e=Error(`COMMAND_FAILED:${path.basename(exe)}:${r.error?.code||r.status}`);e.command_failure={executable:path.basename(exe),exit:r.status,signal:r.signal,error:r.error?.code||null,stderr:String(r.stderr||'').slice(-16384)};throw e;}return r.stdout;}
 function git(root,...args){return command('git',['-c',`safe.directory=${root.replace(/\\/g,'/')}`,'-c','core.fsmonitor=false','-C',root,...args]);}
 const text=(root,...args)=>git(root,...args).toString('utf8').trim();
 function json(file,data){atomic(file,Buffer.from(JSON.stringify(data,null,2)));}
@@ -40,7 +40,7 @@ function run(c,dep){
   fs.writeFileSync(path.join(c.out,'authority-before.bin'),original);json(path.join(c.out,'production-before.json'),{...before,authority_sha256:hash(original)});
   const files=verifyManifest(c,c.source);json(path.join(c.out,'manifest-verification.json'),{status:'PASS',files,diff_sha256:c.diffHash});
   event('STAGING');const stage=path.join(c.out,'staging');check(!fs.existsSync(stage),'STAGING_ALREADY_EXISTS');
-  command('git',['clone','--no-hardlinks','--no-checkout',c.source,stage]);git(stage,'checkout','--detach',c.target);check(inspect(stage).head===c.target&&!inspect(stage).status,'STAGING_INVALID');verifyManifest(c,stage);
+  command('git',['-c',`safe.directory=${path.resolve(c.source).replace(/\\/g,'/')}`,'-c',`safe.directory=${path.resolve(c.source,'.git').replace(/\\/g,'/')}`,'-c','core.fsmonitor=false','clone','--no-hardlinks','--no-checkout',c.source,stage]);git(stage,'checkout','--detach',c.target);check(inspect(stage).head===c.target&&!inspect(stage).status,'STAGING_INVALID');verifyManifest(c,stage);
   const hashes=files.map(f=>({file:f.file,sha256:hash(fs.readFileSync(path.join(stage,f.file)))}));json(path.join(c.out,'staging-working-hashes.json'),hashes);
   event('STAGING_VERIFIED');
   if(!c.apply){r.status='DRY_RUN_PASS';return r;}
@@ -57,7 +57,7 @@ function run(c,dep){
   for(const h of hashes)check(hash(fs.readFileSync(path.join(c.prod,h.file)))===h.sha256,'DEPLOYED_WORKING_HASH_MISMATCH:'+h.file);
   event('VERIFY');dep.verifier('after');check(dep.evidenceOff(),'EVIDENCE_CHANGED');
   r.status='CODE_DEPLOYMENT_VERIFIED_RUNTIME_PENDING';r.production_after=after;json(path.join(c.out,'rollback-receipt.json'),{status:'NOT_NEEDED'});return r;
- }catch(e){r.error=e.message;
+ }catch(e){r.error=e.message;if(e.command_failure)r.command_failure=e.command_failure;
   if(changed){const rb={status:'FAILED',started_at:new Date().toISOString()};try{
     event('ROLLBACK');const current=inspect(c.prod);check([c.expected,c.target].includes(current.head)&&!current.status,'ROLLBACK_EXTERNAL_DRIFT');
     const a=fs.readFileSync(c.authority);check(a.equals(original)||(updatedAuthority&&a.equals(updatedAuthority)),'ROLLBACK_AUTHORITY_DRIFT');
