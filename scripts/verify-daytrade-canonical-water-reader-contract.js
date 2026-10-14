@@ -1,6 +1,10 @@
 "use strict";
 
 process.env.SUPABASE_ANON_KEY = "contract-test-anon";
+const fs = require('node:fs'), path = require('node:path'), os = require('node:os');
+// Never read or write the host's runtime while exercising synthetic contracts.
+process.env.FUMAN_RUNTIME_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'canonical-contract-'));
+fs.mkdirSync(path.join(process.env.FUMAN_RUNTIME_DIR, 'state'));
 
 const { readCanonicalDaytradeWater, taipeiDate, canonicalRunId } = require("../lib/daytrade-canonical-water-reader");
 
@@ -34,7 +38,8 @@ function gateRow(tradeDate, overrides = {}) {
 }
 
 function candles(tradeDate, symbol, count = 61) {
-  const latest = Date.now() - 60000;
+  // The fixture must represent completed minute bars, not wall-clock seconds.
+  const latest = Math.floor(Date.now() / 60000) * 60000 - 60000;
   return Array.from({ length: count }, (_, index) => ({
     symbol,
     market: "TSE",
@@ -63,6 +68,8 @@ function v41PoolRow(tradeDate, overrides = {}) {
     priority_reason: "test", priority_reasons: ["test"], mother_reason: "test", mother_source: "writer", pool_source: "terminal_union", pool_layer: "warmup",
     source_flags: ["test_source"], source_run_ids: [canonicalRunId(tradeDate)], mother_readiness_status: "ready", is_formal_entry_eligible: true,
     price: 100, open_price: 99, previous_close: 98, high_price: 101, low_price: 97, change_percent: 2, total_volume: 1000, trade_value: 100000,
+    total_volume_unit: 'shares', total_volume_available: true, is_synthetic: false,
+    total_volume_source: 'fugle_websocket_aggregates', total_volume_source_event_at: now,
     avg_volume5: 900, quote_trade_date: tradeDate, quote_seen_at: now, quote_age_seconds: 1, last_trade_time: now, last_trade_age_seconds: 1,
     latest_candle_time: now, intraday_1m_stale_seconds: 1, mother_updated_at: now, pool_updated_trade_date: tradeDate,
     sector_name: "半導體", sector_strength_score: 80, sector_member_active_count: 10, industry_signal_fast_injected: false,
@@ -72,6 +79,20 @@ function v41PoolRow(tradeDate, overrides = {}) {
 }
 
 function installFetch(tradeDate, options = {}) {
+  const poolRows = options.poolRows || [v41PoolRow(tradeDate)];
+  const symbols = [...new Set(poolRows.map(row => row.symbol))];
+  const snapshot = {
+    contract: 'daytrade_mother_pool_snapshot_v1', contract_version: '4.1.0',
+    trade_date: tradeDate, canonical_run_id: canonicalRunId(tradeDate),
+    mother_pool_run_id: `pool-${tradeDate}`, generation: `generation-${tradeDate}`,
+    snapshot_sequence: 1, snapshot_type: 'test', effective_at: new Date().toISOString(),
+    complete: true, status: 'complete', exit_code: 0, first_blocker: null,
+    symbols, symbol_count: symbols.length, removed_symbols: [],
+  };
+  snapshot.symbol_membership = symbols.map(symbol => ({symbol,
+    mother_pool_run_id: snapshot.mother_pool_run_id, mother_pool_snapshot_sequence: 1,
+    membership_effective_at: snapshot.effective_at, membership_status: 'ACTIVE'}));
+  fs.writeFileSync(path.join(process.env.FUMAN_RUNTIME_DIR, 'state/daytrade-mother-pool-snapshot-latest.json'), JSON.stringify(snapshot));
   const calls = [];
   calls.quoteQueries = [];
   calls.poolQueries = [];
@@ -79,6 +100,7 @@ function installFetch(tradeDate, options = {}) {
     const url = new URL(String(input));
     const target = url.pathname.split("/").pop();
     calls.push(target);
+    if (target === 'v_fugle_daytrade_mother_pool_snapshot_v4_1') return response(symbols.map(symbol => ({...snapshot, symbol, membership_status: 'ACTIVE'})));
     if (target === "market_calendar") return response([{ market: "TW", trade_date: tradeDate, is_open: true, calendar_contract: "market-calendar-contract-v1", updated_at: new Date().toISOString() }]);
     if (target === "source_status") return response([{ ...gateRow(tradeDate, { status: "ok" }), payload: gateRow(tradeDate, options.sourceOverrides) }]);
     if (target === "v_fugle_daytrade_canonical_gate") return response([gateRow(tradeDate, options.canonicalOverrides)]);
