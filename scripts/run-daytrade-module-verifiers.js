@@ -21,13 +21,17 @@ const files=fs.readdirSync(dir).filter(x=>x.endsWith('.json')&&(!scoped||(reques
 const results=[];
 const children=new Set();
 process.once('SIGTERM',()=>{for(const child of children)child.kill();process.exit(143);});
-function runChild(args){return new Promise(resolve=>{
+function runChild(args,onProcessExit=()=>{}){return new Promise(resolve=>{
  const command=verifierCommand(process.execPath,args);
  let child;try{child=require('node:child_process').execFile(command.file,command.args,{encoding:'utf8',windowsHide:true,timeout:30000,maxBuffer:1024*1024},(error,stdout,stderr)=>{
-  children.delete(child);resolve({pid:child.pid,status:error?(Number.isInteger(error.code)?error.code:null):0,signal:error?.signal||null,error:error&&!Number.isInteger(error.code)?error:null,stdout,stderr});
+  children.delete(child);onProcessExit();resolve({pid:child.pid,status:error?(Number.isInteger(error.code)?error.code:null):0,signal:error?.signal||null,error:error&&!Number.isInteger(error.code)?error:null,stdout,stderr});
  });children.add(child);}catch(error){resolve({status:null,error,stdout:'',stderr:''});}
 });}
-async function verifyOne(moduleId){
+function selectRounds(moduleId){
+ const list=files.filter(({value:v})=>v?.module_id===moduleId&&v.contract===registry.modules[moduleId]&&v.trade_date===tradeDate&&v.canonical_run_id===canonical&&v.db_readback&&v.anon_readback&&!v.rounds_verified);
+ return require('../lib/mother-pool-select-verifier-rounds').select(list,process.env.MOTHER_POOL_REQUIRED_WRITER_RUN_ID);
+}
+async function verifyOne(moduleId,onProcessExit=()=>{}){
  if(moduleId==='B18'){
   const entry=files.filter(x=>x.value?.type==='mother_pool_closeout_inputs_v1'&&x.value.trade_date===tradeDate&&x.value.canonical_run_id===canonical).sort((a,b)=>Date.parse(b.value.created_at)-Date.parse(a.value.created_at))[0]?.value;
   if(!entry){return {module_id:moduleId,status:'pending',complete:false,reason:'CLOSEOUT_ARTIFACT_REQUIRED'};}
@@ -38,12 +42,11 @@ async function verifyOne(moduleId){
   return {module_id:moduleId,status:complete?'complete':'blocked',complete,out,exit_code:p.status,reason:receipt?.first_blocker||p.stderr||null};
  }
 
- const list=files.filter(({value:v})=>v?.module_id===moduleId&&v.contract===registry.modules[moduleId]&&v.trade_date===tradeDate&&v.canonical_run_id===canonical&&v.db_readback&&v.anon_readback&&!v.rounds_verified).sort((a,b)=>Date.parse(b.value.observed_at)-Date.parse(a.value.observed_at));
- const selected=require('../lib/mother-pool-select-verifier-rounds').select(list,process.env.MOTHER_POOL_REQUIRED_WRITER_RUN_ID);
+ const selected=selectRounds(moduleId);
  if(selected.length<2){return {module_id:moduleId,status:'pending',complete:false,reason:'TWO_DISTINCT_ROUNDS_REQUIRED'};}
  const out=path.join(dir,`${moduleId.toLowerCase()}-verified-${tradeDate}-${attempt}.json`);
  const started=process.hrtime.bigint();
- const p=await runChild([path.join(__dirname,'verify-daytrade-module-receipt.js'),'--summary',`--module=${moduleId}`,`--round1=${selected[0].file}`,`--round2=${selected[1].file}`,`--out=${out}`]);
+ const p=await runChild([path.join(__dirname,'verify-daytrade-module-receipt.js'),'--summary',`--module=${moduleId}`,`--round1=${selected[0].file}`,`--round2=${selected[1].file}`,`--out=${out}`],onProcessExit);
  let receipt=null,validationError=null;
  try{
   receipt=JSON.parse(p.stdout||'{}');
@@ -56,8 +59,17 @@ async function verifyOne(moduleId){
 async function main(){
  // At most two existing independent verifier processes. Keep result order,
  // child timeout, byte validation and the caller's 45-second deadline.
- let cursor=0;async function worker(){while(cursor<requested.length){const i=cursor++;results[i]=await verifyOne(requested[i]);}}
- await Promise.all([worker(),worker()]);
+ // Release a process slot after exit, before independent parent readback.
+ // All validation promises still settle before any acceptance decision.
+ const order=requested.map((id,index)=>({index,bytes:selectRounds(id).reduce((n,x)=>n+fs.statSync(x.file).size,0)})).sort((a,b)=>b.bytes-a.bytes||a.index-b.index);
+ let cursor=0,active=0;const pending=[];
+ function pump(){while(active<2&&cursor<order.length){const i=order[cursor++].index;active++;let released=false;
+  const release=()=>{if(released)return;released=true;active--;pump();};
+  const task=verifyOne(requested[i],release).then(value=>{results[i]=value;}).finally(release);
+  pending.push(task);
+ }}
+ pump();
+ for(let i=0;i<pending.length;i++)await pending[i];
 
 const index=path.join(dir,`module-verification-attempt-${tradeDate}-${attempt}.json`);
 fs.writeFileSync(index,JSON.stringify({trade_date:tradeDate,canonical_run_id:canonical,results},null,2),{flag:'wx'});
