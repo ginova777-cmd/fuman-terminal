@@ -58,7 +58,7 @@ try {
   rollback={
    $receipt=Join-Path $ctx.release 'rollback-receipt.json'
    if((Test-Path $receipt) -and (Get-Content $receipt -Raw|ConvertFrom-Json).status -eq 'FAILED'){throw 'PREVIOUS_ROLLBACK_FAILED_NO_RETRY'}
-   if(!(Test-Path (Join-Path $ctx.release 'authority-before.bin'))){Invoke-PairedVerifier $config $config.expected|Out-Null;Assert-ProductionBinding $binding;return}
+   if(!(Test-Path (Join-Path $ctx.release 'authority-before.bin'))){Invoke-PairedVerifier $config $config.expected|Out-Null;foreach($f in $binding.files){if((Get-FileHash $f.path).Hash.ToLower() -ne $f.sha256){throw 'PREDEPLOY_FILE_DRIFT'}};foreach($t in $binding.tasks){Assert-HandbackDefinition $t.binding};return}
    ReleaseOperation 'rollback'
   }
   verifyRollback={Invoke-PairedVerifier $config $config.expected|Out-Null}

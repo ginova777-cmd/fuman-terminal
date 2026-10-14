@@ -25,13 +25,13 @@ function Invoke-BoundGracefulStop($Config,$Expected,$OwnerGate,$ReceiptPath){
  if($Expected.pid -ne $script:future.pid){throw 'STOP_IDENTITY'}
  $script:future=$null;Write-CutoverReceipt $ReceiptPath @{status='GRACEFUL_STOP_VERIFIED';pid=$Expected.pid;pid_exited=$true;fixture=$true}
 }
-function ReleaseOperation($Action){if(!$script:future -or $script:future.pid -ne 99){throw 'PRESERVED_FUTURE_CHANGED'};if($Action -eq 'apply'){$script:sha=$config.target}else{$script:sha=$config.expected};New-Item -ItemType Directory $ctx.release -Force|Out-Null;[IO.File]::WriteAllText((Join-Path $ctx.release 'authority-before.bin'),'fixture');Write-CutoverReceipt (Join-Path $ctx.release 'rollback-receipt.json') @{status='NOT_NEEDED'}}
+function ReleaseOperation($Action){if($scenario -eq 'deploy-before-change' -and $Action -eq 'apply'){throw 'BEFORE_CHECKOUT'};if(!$script:future -or $script:future.pid -ne 99){throw 'PRESERVED_FUTURE_CHANGED'};if($Action -eq 'apply'){$script:sha=$config.target}else{$script:sha=$config.expected};New-Item -ItemType Directory $ctx.release -Force|Out-Null;[IO.File]::WriteAllText((Join-Path $ctx.release 'authority-before.bin'),'fixture');Write-CutoverReceipt (Join-Path $ctx.release 'rollback-receipt.json') @{status='NOT_NEEDED'}}
 function Start-BoundFuture($Config,$LogDir){if($script:future){throw 'DUPLICATE_START'};$script:nextPid++;$script:future=@{pid=$script:nextPid;creation_ticks=$script:nextPid;exe='fixture.exe';role='future';entry_verified=$true;entry=(Join-Path $Config.prod 'scripts/fugle-futopt-websocket-collector.js')};return $script:future}
 function Wait-BoundFuture($Config,$Identity){if(!$script:future -or $script:future.pid -ne $Identity.pid){throw 'FUTURE_NOT_FOUND'};return @{transport_identity_pass=$true;quality_gate_pass=$false}}
 function git {param($C,$Root,$Rev,$Head);$script:sha}
 function Assert-StockOnlyApproval($Config,$Approval){Assert-OwnerApproval $Config $Approval}
 function Assert-PreservedStockFuture($Config,$Identity,$Out){Assert-OnlyBoundFuture $Config $Identity;if($script:future.pid -ne 99){throw 'FUTURE_CHANGED'}}
-foreach($scenario in @('normal','requester-exit-after-deploy')){
+foreach($scenario in @('normal','requester-exit-after-deploy','deploy-before-change')){
  $out=Join-Path ([IO.Path]::GetTempPath()) ('production-ports-test-'+[guid]::NewGuid().ToString('N'));New-Item -ItemType Directory (Join-Path $out 'runtime/cache/intraday') -Force|Out-Null
  Set-Content (Join-Path $out 'runtime/cache/intraday/fugle-futopt-ws-quotes.json') '{"fixture":true}'
  Set-Content (Join-Path $out 'runtime/cache/intraday/fugle-futopt-ws-candles.json') '{"fixture":true}'
