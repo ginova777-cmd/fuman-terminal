@@ -5,10 +5,11 @@ const testFile=path.join(__dirname,'test-stock-runtime-pair-release.cjs');const 
 const fixtureRoot=path.join(lab,'actual-release');
 // Reuse the already verified real Git/runtime pair fixture, without running its suite again.
 const helper=path.join(__dirname,'temporary-stock-recovery-fixture-'+process.pid+'.cjs');
-const code=prefix+`\nconst c=setup('recovery');const r=execute(c,'apply',c.out,deps(c));assert.equal(r.status,'CODE_DEPLOYMENT_VERIFIED_RUNTIME_PENDING');console.log(JSON.stringify(c));`;
+const crash=process.argv[3]==='crash';
+const code=prefix+`\nconst c=setup('recovery');if(${crash}){const r=cp.spawnSync(process.execPath,[${JSON.stringify(testFile)},'child',path.dirname(c.out)+'/config.json'],{encoding:'utf8',timeout:120000});fs.writeFileSync(path.dirname(c.out)+'/crash-output.txt',r.stdout+'\\n'+r.stderr);assert.equal(r.status,73);}else{const r=execute(c,'apply',c.out,deps(c));assert.equal(r.status,'CODE_DEPLOYMENT_VERIFIED_RUNTIME_PENDING');}console.log(JSON.stringify(c));`;
 try{fs.writeFileSync(helper,code,{flag:'wx'});const result=cp.execFileSync(process.execPath,[helper,fixtureRoot],{encoding:'utf8',timeout:120000});const c=JSON.parse(result.trim().split(/\r?\n/).at(-1));
  const original=JSON.parse(fs.readFileSync(path.join(lab,'release-config.json')));
- const out=path.join(lab,'runs/old/release');fs.cpSync(c.out,out,{recursive:true});
+ const out=path.join(lab,'runs/old/release');fs.cpSync(c.out,out,{recursive:true});if(crash)fs.copyFileSync(c.lock,path.join(lab,'isolated-release.lock'));
  fs.mkdirSync(path.join(lab,'release-package'),{recursive:true});
  for(const [from,to] of [[c.manifestPath,'release-package/manifest.json'],[c.diffPath,'release-package/exact.diff'],[path.join(c.packageRoot,'runtime-pair.json'),'runtime-pair.json']])fs.copyFileSync(from,path.join(lab,to));
  fs.cpSync(path.join(c.packageRoot,'runtime-payload'),path.join(lab,'runtime-payload'),{recursive:true});

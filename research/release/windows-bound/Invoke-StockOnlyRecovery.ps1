@@ -49,6 +49,16 @@ try {
  $release=Join-Path $run 'release';$backup=Join-Path $release 'authority-before.bin'
  if(Test-Path $backup){
   $rb=Join-Path $release 'rollback-receipt.json';if((Test-Path $rb) -and (Get-Content $rb -Raw|ConvertFrom-Json).status -eq 'FAILED'){throw 'FAILED_ROLLBACK_REQUIRES_SEPARATE_REPAIR'}
+  $deploymentLock='C:/fuman-release-owner/final-release-deployment.lock'
+  if(Test-Path -LiteralPath $deploymentLock){
+   $deadLockHash=(Get-FileHash $deploymentLock).Hash.ToLower()
+   $deadLock=Get-Content $deploymentLock -Raw|ConvertFrom-Json -AsHashtable
+   $deploymentReceipt=Get-Content (Join-Path $release 'deployment-receipt.json') -Raw|ConvertFrom-Json -AsHashtable
+   if($a.release_lock_sha256 -ne $deadLockHash -or $deadLock.target -ne $c.target -or !$deadLock.token -or $deadLock.token -ne $deploymentReceipt.lock_owner.token -or $deadLock.pid -ne $deploymentReceipt.lock_owner.pid -or (Get-Process -Id $deadLock.pid -ErrorAction SilentlyContinue)){throw 'DEAD_RELEASE_LOCK_UNVERIFIED'}
+   Assert-PreservedStockFuture $c $future $run
+   if((Get-FileHash $deploymentLock).Hash.ToLower() -ne $deadLockHash){throw 'DEAD_RELEASE_LOCK_CHANGED'}
+   [IO.File]::Move($deploymentLock,(Join-Path $readback 'dead-release-lock.json'),$false)
+  }
   $raw=& node (Join-Path $PSScriptRoot 'ReleaseOperation.cjs') rollback $release $gate
   if($LASTEXITCODE -ne 0 -or ($raw|ConvertFrom-Json).status -ne 'RESTORED'){throw 'STOCK_RECOVERY_ROLLBACK_FAILED'}
  }else{Invoke-PairedVerifier $c $c.expected|Out-Null;foreach($f in $binding.files){if((Get-FileHash $f.path).Hash.ToLower() -ne $f.sha256){throw 'PREDEPLOY_RUNTIME_DRIFT'}}}
