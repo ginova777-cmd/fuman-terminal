@@ -3445,15 +3445,7 @@ function mergeStrategyPriorityBridgeIntoRuntimeFile(bridge) {
   const changed = JSON.stringify(existing) !== JSON.stringify(next);
   if (!changed) return false;
   writeJson(PRIORITY_SYMBOLS_FILE, next);
-  try {
-    writeFugleWebSocketSymbols(next.symbols || [], {
-      source: "daytrade-strategy-chip-priority-bridge",
-      prioritySource: "daytrade-strategy-chip-priority-bridge",
-      strategyPriorityBridgeStatus: bridge.status,
-      tradeDate,
-      canonicalRunId,
-    });
-  } catch {}
+  // Strategy groups do not own the Collector transport universe.
   return true;
 }
 
@@ -4638,6 +4630,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
 }
 
 async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
+  if (!APPLY || DRY_RUN) return { status: 'READ_ONLY', written: false };
   const existing = readJson(PRIORITY_SYMBOLS_FILE, {});
   const tradeDate = taipeiDate();
   const canonicalRunId = canonicalDaytradeRunId(tradeDate);
@@ -8154,6 +8147,14 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
   tickStage("active_symbols:start");
   const activeSymbols = await fetchActiveSymbols();
   tickStage("active_symbols:complete", { rows: activeSymbols.length });
+  const collectorBootstrap = require('../lib/daytrade-collector-bootstrap.cjs').publish({
+    apply: APPLY, dryRun: DRY_RUN, calendar: marketCalendarEvidence,
+    tradeDate: taipeiDate(), canonicalRunId: canonicalDaytradeRunId(taipeiDate()), rows: activeSymbols,
+    leaseValid: () => writerLease.ok === true && writerLease.status === 'claimed'
+      && Date.parse(writerLease.leaseExpiresAt) > Date.now() + 5000,
+    write: (symbols, meta) => writeJsonAtomic(require('../lib/fugle-websocket-quotes').FUGLE_WS_SYMBOLS_FILE, { updatedAt: nowIso(), symbols, count: symbols.length, ...meta }),
+  });
+  tickStage('collector_universe_bootstrap', collectorBootstrap);
   const qualificationPublication = await require('../lib/publish-stock-qualification.cjs').publishStockQualification({
     directory: runtimePath('cache','reference','fugle-stock-qualification'), tradeDate: taipeiDate(),
     stockRows: activeSymbols.sourceEvidence.stock_tickers, apply: APPLY,
