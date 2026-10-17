@@ -35,6 +35,14 @@ function execute(c,action,out,dep){
  const current=fs.readFileSync(c.authority),auth=JSON.parse(original);auth.approvedProductionSha=c.target;
  if(!current.equals(original)&&!current.equals(Buffer.from(JSON.stringify(auth,null,2))))throw Error('ROLLBACK_AUTHORITY_DRIFT');
  if(text(c.prod,'status','--porcelain','--untracked-files=all')||![c.expected,c.target].includes(text(c.prod,'rev-parse','HEAD')))throw Error('ROLLBACK_PRODUCTION_DRIFT');
+ if(pair&&!pair.exists()){
+  const receipt=JSON.parse(fs.readFileSync(path.join(out,'deployment-receipt.json')));
+  const rollback=JSON.parse(fs.readFileSync(path.join(out,'rollback-receipt.json')));
+  if(receipt.status!=='DEPLOYMENT_FAILED'||receipt.expected!==c.expected||receipt.target!==c.target||receipt.production_changed!==false||receipt.authority_changed!==false||receipt.lock_retained!==false||!['LOCKED','STAGING','STAGING_VERIFIED'].includes(receipt.stage)||!Array.isArray(receipt.events)||receipt.events.some(x=>!['PREFLIGHT','LOCKED','STAGING','STAGING_VERIFIED'].includes(x.stage))||rollback.status!=='NOT_REQUIRED_NO_CHECKOUT')throw Error('PRECOMMIT_RECOVERY_UNPROVEN');
+  if(text(c.prod,'rev-parse','HEAD')!==c.expected||text(c.prod,'rev-parse','HEAD^{tree}')!==before.tree||!current.equals(original)||fs.existsSync(c.lock))throw Error('PRECOMMIT_RECOVERY_DRIFT');
+  dep.guard();dep.noUsers();dep.verifyUnchangedRuntime();dep.verify();
+  return {status:'RESTORED',sha:c.expected,mode:'VERIFIED_UNCHANGED_NO_CHECKOUT',runtime_writes:false};
+ }
  dep.noUsers();const fd=fs.openSync(c.lock,'wx');let pass=false;
  try{
   fs.writeFileSync(fd,JSON.stringify({pid:process.pid,action:'rollback'}));fs.fsyncSync(fd);
@@ -68,6 +76,7 @@ if(require.main===module){
     require('./StockPreservationOperation.cjs').check(__dirname,c,JSON.parse(fs.readFileSync(expectedFile,'utf8').replace(/^\uFEFF/,'')),inventory);
    }else ps(common+'Assert-OnlyBoundFuture $c $null');
   },
+  verifyUnchangedRuntime:()=>{const bytes=fs.readFileSync(path.join(__dirname,'formal-binding.json'));if(hash(bytes)!==c.binding_sha256)throw Error('FORMAL_BINDING_DRIFT');const b=JSON.parse(bytes);if(!Array.isArray(b.files)||!b.files.length)throw Error('RUNTIME_BINDING_MISSING');for(const f of b.files){if(hash(fs.readFileSync(f.path))!==f.sha256)throw Error('UNCHANGED_RUNTIME_REQUIRED');}},
   admin:()=>ps('[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)')==='True',
   evidenceOff:()=>{ps(common+'Test-EvidenceOff $c');return true;},
   freeBytes:()=>Number(ps('(Get-PSDrive C).Free')),

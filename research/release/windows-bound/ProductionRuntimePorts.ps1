@@ -1,10 +1,36 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'LegacyBoundary.ps1')
+function Get-RuntimeNativeProcessPresent([int]$ProcessId) {
+ $p=$null
+ try {$p=[Diagnostics.Process]::GetProcessById($ProcessId); return $true}
+ catch [ArgumentException] {return $false}
+ finally {if($p){$p.Dispose()}}
+}
 function Get-RuntimeInventory($Config) {
  $items=@(Get-CimInstance Win32_Process | Where-Object {$_.Name -match '^(node|pwsh|powershell)\.exe$'})
  $unknown=@($items|Where-Object {!$_.CommandLine -or !$_.ExecutablePath})
- if($unknown.Count){throw 'PROCESS_INVENTORY_INCOMPLETE_ADMIN_REQUIRED'}
+ $excluded=@();$probes=@()
+ foreach($p in $unknown){
+  $probe=@{pid=[int]$p.ProcessId;created=$p.CreationDate;parent_pid=[int]$p.ParentProcessId;at=[DateTimeOffset]::Now.ToString('o');status='UNRESOLVED'}
+  try {
+   $again=@(Get-CimInstance Win32_Process -Filter ('ProcessId = '+[int]$p.ProcessId) -ErrorAction Stop)
+   $probe.cim_count=$again.Count
+   if($again.Count -eq 0){
+    $probe.native_present=Get-RuntimeNativeProcessPresent ([int]$p.ProcessId)
+    if($probe.native_present -ceq $false){$probe.status='EXIT_CONFIRMED';$excluded+=,[int]$p.ProcessId}
+   }
+  }catch{$probe.error=$_.Exception.Message}
+  $probes+=,$probe
+ }
+ $script:RuntimeVisibilityExitChecks=$probes
+ $items=@($items|Where-Object {$_.ProcessId -notin $excluded})
+ $unknown=@($unknown|Where-Object {$_.ProcessId -notin $excluded})
+ if($unknown.Count){
+  $e=[InvalidOperationException]::new('PROCESS_INVENTORY_INCOMPLETE_ADMIN_REQUIRED')
+  $e.Data['runtime_visibility_snapshot']=(@{at=[DateTimeOffset]::Now.ToString('o');unknown=@($unknown|ForEach-Object {@{pid=[int]$_.ProcessId;parent_pid=[int]$_.ParentProcessId;name=$_.Name;created=$_.CreationDate;command_missing=(!$_.CommandLine);executable_missing=(!$_.ExecutablePath)}});process_count=$items.Count}|ConvertTo-Json -Depth 6 -Compress)
+  throw $e
+ }
  $prodPattern=[regex]::Escape($Config.prod.Replace('/','\').TrimEnd('\')+'\')
  $records=@()
  foreach($p in $items){

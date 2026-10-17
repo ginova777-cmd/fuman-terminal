@@ -3445,15 +3445,7 @@ function mergeStrategyPriorityBridgeIntoRuntimeFile(bridge) {
   const changed = JSON.stringify(existing) !== JSON.stringify(next);
   if (!changed) return false;
   writeJson(PRIORITY_SYMBOLS_FILE, next);
-  try {
-    writeFugleWebSocketSymbols(next.symbols || [], {
-      source: "daytrade-strategy-chip-priority-bridge",
-      prioritySource: "daytrade-strategy-chip-priority-bridge",
-      strategyPriorityBridgeStatus: bridge.status,
-      tradeDate,
-      canonicalRunId,
-    });
-  } catch {}
+  // Strategy groups do not own the Collector transport universe.
   return true;
 }
 
@@ -4638,6 +4630,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
 }
 
 async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) {
+  if (!APPLY || DRY_RUN) return { status: 'READ_ONLY', written: false };
   const existing = readJson(PRIORITY_SYMBOLS_FILE, {});
   const tradeDate = taipeiDate();
   const canonicalRunId = canonicalDaytradeRunId(tradeDate);
@@ -8154,6 +8147,14 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
   tickStage("active_symbols:start");
   const activeSymbols = await fetchActiveSymbols();
   tickStage("active_symbols:complete", { rows: activeSymbols.length });
+  const collectorBootstrap = require('../lib/daytrade-collector-bootstrap.cjs').publish({
+    apply: APPLY, dryRun: DRY_RUN, calendar: marketCalendarEvidence,
+    tradeDate: taipeiDate(), canonicalRunId: canonicalDaytradeRunId(taipeiDate()), rows: activeSymbols,
+    leaseValid: () => writerLease.ok === true && writerLease.status === 'claimed'
+      && Date.parse(writerLease.leaseExpiresAt) > Date.now() + 5000,
+    write: (symbols, meta) => writeJsonAtomic(require('../lib/fugle-websocket-quotes').FUGLE_WS_SYMBOLS_FILE, { updatedAt: nowIso(), symbols, count: symbols.length, ...meta }),
+  });
+  tickStage('collector_universe_bootstrap', collectorBootstrap);
   const qualificationPublication = await require('../lib/publish-stock-qualification.cjs').publishStockQualification({
     directory: runtimePath('cache','reference','fugle-stock-qualification'), tradeDate: taipeiDate(),
     stockRows: activeSymbols.sourceEvidence.stock_tickers, apply: APPLY,
@@ -9036,7 +9037,7 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
     for(const args of groups){const capture=spawnSync(process.execPath,args,{encoding:'utf8',windowsHide:true,timeout:120000,env:{...process.env,SUPABASE_SERVICE_ROLE_KEY:SUPABASE_SERVICE_KEY,SUPABASE_ANON_KEY:SUPABASE_READ_KEY===SUPABASE_SERVICE_KEY?'':SUPABASE_READ_KEY,MOTHER_POOL_B14_VIEW:'v_daytrade_minute_side_readback_v1',MOTHER_POOL_B20_VIEW:'v_daytrade_minute_side_b20_readback_v1'}});captures.push({status:capture.status,stdout:capture.stdout||'',stderr:capture.stderr||'',error:capture.error?.message||null});}
     if(moduleWorkIds().some(id=>['A14','A19'].includes(id)) && persistModuleInput && sideMinutes>=530 && sideMinutes<810){
       const closureIdentity={trade_date:taipeiDate(),canonical_run_id:sideSnapshot.canonical_run_id,writer_run_id:result.payload.writer_run_id,generation_id:result.payload.generation_id,mother_pool_run_id:sideSnapshot.mother_pool_run_id,snapshot_generation:sideSnapshot.generation,snapshot_sequence:sideSnapshot.snapshot_sequence};
-      const closureCaptures=await require('../lib/run-preopen-closure-stages').run({identity:closureIdentity,symbols:sideSnapshot.symbols,captures,persist:persistModuleInput,runtime:runtimePath(),stageInputCheckpoint:result.payload.module_input_checkpoint,capture:async(id,saved)=>{
+      const closureCaptures=await require('../lib/run-preopen-closure-stages').run({identity:closureIdentity,selectedModules:moduleWorkIds().filter(id=>['A14','A19'].includes(id)),symbols:sideSnapshot.symbols,captures,persist:persistModuleInput,runtime:runtimePath(),stageInputCheckpoint:result.payload.module_input_checkpoint,capture:async(id,saved)=>{
         const indexFile=runtimePath('data','scan-receipts','modules',`closure-write-set-${require('node:crypto').randomUUID()}.json`);
         require('../lib/daytrade-shared-evidence.cjs').write(indexFile,{modules:{[id]:saved}},runtimePath());
         const args=captureArgs.map(x=>x.startsWith('--modules=')?'--modules='+id:x.startsWith('--write-set-index=')?'--write-set-index='+indexFile:x);
