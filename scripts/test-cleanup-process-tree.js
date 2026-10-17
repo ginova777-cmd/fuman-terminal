@@ -1,5 +1,15 @@
 'use strict';
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),path=require('path'),os=require('os'),cp=require('child_process');
+test('formal wrapper retains direct runner parent while isolated dependencies are substituted',()=>{
+ const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cleanup-entry-test-'));fs.mkdirSync(path.join(dir,'scripts'));fs.mkdirSync(path.join(dir,'state'));
+ // Only execution-root/lease location and target body are fixtures; preserve the invocation itself.
+ const wrapper=fs.readFileSync(path.join(__dirname,'../run-api-only-retired-cleanup.ps1'),'utf8').replace("'C:\\fuman-runtime\\state'","'"+path.join(dir,'state').replaceAll("'","''")+"'");
+ fs.writeFileSync(path.join(dir,'entry.ps1'),wrapper);
+ fs.writeFileSync(path.join(dir,'scripts/cleanup-execution-root.ps1'),'function Assert-FumanCleanupExecutionRoot { param([string]$ExecutionRoot) if(-not(Test-Path -LiteralPath $ExecutionRoot)){throw "fixture missing"} }');
+ fs.copyFileSync(path.join(__dirname,'cleanup-writer-lock.ps1'),path.join(dir,'scripts/cleanup-writer-lock.ps1'));
+ fs.writeFileSync(path.join(dir,'scripts/run-cleanup-maintenance.js'),"console.log(JSON.stringify({parent:process.ppid,runner:Number(process.env.FUMAN_STRATEGY_RUNNER_PID),started:Number(process.env.FUMAN_CLEANUP_STARTED_AT),args:process.argv.slice(2)}))");
+ const r=cp.spawnSync('pwsh.exe',['-NoProfile','-File',path.join(dir,'entry.ps1')],{encoding:'utf8',windowsHide:true,timeout:15000});assert.equal(r.status,0,r.stderr);const result=JSON.parse(r.stdout.trim());assert.equal(result.parent,result.runner);assert(result.started>0&&result.started<=Date.now());assert.deepEqual(result.args,['--scheduled','--apply']);
+});
 test('Windows Job Object stops descendants before releasing the stage',async()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'cleanup-job-test-'));
  const fixture=path.join(dir,'tree.cjs'),out=path.join(dir,'result.json');
