@@ -13,7 +13,7 @@ declare
 begin
   if p_apply and jsonb_typeof(p_archive) is distinct from 'object' then raise exception 'cleanup_archive_required'; end if;
   if p_apply and (now() at time zone 'Asia/Taipei')::time < time '16:15' then return jsonb_build_object('ok',false,'reasonCode','source_observability_retention_before_window','allowedAction','wait_until_1615_taipei'); end if;
-  v_locked := pg_try_advisory_lock(2026081425);
+  v_locked := pg_try_advisory_xact_lock(2026081425);
   if not v_locked then return jsonb_build_object('ok',false,'reasonCode','source_observability_retention_lock_contended','allowedAction','wait_then_retry_once'); end if;
   foreach v_table in array array['fugle_daytrade_source_scorecard','fugle_daytrade_source_speed_scorecard','fugle_daytrade_gate_scorecard','fugle_source_coverage'] loop
     v_deleted := 0; v_archived_deleted := jsonb_set(v_archived_deleted,ARRAY[v_table],'[]'::jsonb,true);
@@ -30,9 +30,8 @@ begin
     insert into public.fuman_retention_cleanup_log(table_name,keep_from_date,deleted_rows,mode,note,keep_policy,audit_payload) values(v_table,v_keep_from_date,v_deleted,case when p_apply then 'apply' else 'dry_run' end,'source observability retention; formal readers use newest records','keep 15 calendar days',jsonb_build_object('contract','source-observability-retention-15d-v1','batchSize',v_batch_size,'maxBatches',v_max_batches));
     v_rows := v_rows || jsonb_build_array(jsonb_build_object('table',v_table,'deletedRows',v_deleted));
   end loop;
-  perform pg_advisory_unlock(2026081425);
   return jsonb_build_object('ok',true,'contract','source-observability-retention-15d-v1','archiveBudgetContract','cleanup-archive-multiset-v1','archivedDeleted',v_archived_deleted,'applied',p_apply,'keepDays',15,'keepFromDate',v_keep_from_date,'deletedRows',v_total,'tables',v_rows,'checkedAt',now());
-exception when others then if v_locked then perform pg_advisory_unlock(2026081425); end if; raise; end;
+end;
 $function$
 ;
 CREATE OR REPLACE FUNCTION public.fuman_cleanup_source_observability_15d_once(p_apply boolean DEFAULT false,p_batch_size integer DEFAULT 5000,p_max_batches_per_table integer DEFAULT 10) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path TO pg_catalog,public AS $function$ BEGIN IF p_apply THEN RAISE EXCEPTION 'cleanup_archive_required'; END IF; RETURN public.fuman_cleanup_source_observability_15d_once(false,p_batch_size,p_max_batches_per_table,NULL::jsonb); END $function$;
