@@ -3,7 +3,8 @@ const fs=require('fs'),path=require('path'),{spawn}=require('child_process');
 const context=require('./cleanup-maintenance-context');
 const arg=name=>process.argv.find(x=>x.startsWith(`--${name}=`))?.slice(name.length+3);
 const save=(file,data)=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify(data,null,2)+'\n');};
-let roundDeadline;
+const processStartedAt=Date.now();
+let roundDeadline, unsafeProcessStop=false;
 function command(file,args,log,env={}) {
   return new Promise(resolve=>{
     const remaining=Math.min(20*60*1000,roundDeadline-Date.now());
@@ -11,11 +12,13 @@ function command(file,args,log,env={}) {
     const fd=fs.openSync(log,'w');let settled=false,timedOut=false,timer;
     const finish=value=>{if(settled)return;settled=true;clearTimeout(timer);fs.closeSync(fd);resolve({...value,timedOut});};
     let child;
-    try{child=spawn(file,args,{cwd:context.ROOT,env:{...process.env,...env},windowsHide:true,stdio:['ignore',fd,fd]});}
+    const stopFile=log+'.process.json';
+    const wrapper=path.join(__dirname,'Invoke-CleanupProcess.ps1');
+    try{child=spawn('pwsh.exe',['-NoProfile','-File',wrapper,'-Executable',file,'-ArgumentsBase64',Buffer.from(JSON.stringify(args)).toString('base64'),'-WorkingDirectory',context.ROOT,'-TimeoutMilliseconds',String(Math.floor(remaining)),'-DeadlineEpochMilliseconds',String(roundDeadline),'-ResultFile',stopFile],{cwd:context.ROOT,env:{...process.env,...env},windowsHide:true,stdio:['ignore',fd,fd]});}
     catch(error){finish({exitCode:1,error:error.message});return;}
-    timer=setTimeout(()=>{timedOut=true;child.kill();},remaining);
+    timer=setTimeout(()=>{timedOut=true;child.kill();},remaining+10000);
     child.once('error',error=>finish({exitCode:1,error:error.message}));
-    child.once('close',(code,signal)=>finish({exitCode:timedOut?1:(code??1),signal}));
+    child.once('close',(code,signal)=>{let stop;try{stop=JSON.parse(fs.readFileSync(stopFile,'utf8').replace(/^\uFEFF/,''));}catch{}unsafeProcessStop=unsafeProcessStop||stop?.treeStopped!==true;timedOut=timedOut||stop?.timedOut===true;finish({exitCode:stop?.treeStopped!==true||timedOut?1:(code??1),signal,processEvidence:stopFile,processEvidenceSha256:fs.existsSync(stopFile)?context.hash(stopFile):null,treeStopped:stop?.treeStopped===true});});
   });
 }
 function protectedFiles(){
@@ -41,16 +44,19 @@ async function main(){
     save(authorizationFile,{contract:'cleanup-scheduled-context-v1',scope:context.scopedPolicy.scope,authorizedBy:'release-policy',authorizationText:'Approved deployed single-start policy; this is execution context, not user approval',date:context.date(),runId,keepDays:15,preserveWorkdaySchedule:true,sourceRoot:context.SOURCE_ROOT,executionRoot:context.ROOT,runtimeRoot:context.RUNTIME,issuedAt,expiresAt:new Date(Date.now()+20*60*1000).toISOString()});
   }
   const auth=context.authorization(authorizationFile);
-  roundDeadline=Math.min(Date.parse(auth.expiresAt),Date.now()+20*60*1000);
+  const outerStarted=Number(process.env.FUMAN_CLEANUP_STARTED_AT||processStartedAt);
+  if(!Number.isFinite(outerStarted)||outerStarted>processStartedAt)throw Error('cleanup_outer_start_invalid');
+  roundDeadline=Math.min(Date.parse(auth.expiresAt),outerStarted+17*60*1000);
   if(!Number.isFinite(roundDeadline))throw Error('cleanup_round_deadline_missing');
   if(fs.existsSync(auth.journalFile))throw Error('cleanup_maintenance_run_already_exists_use_read_only_verifier');
   const protectionBefore=protectedFiles();
   const lock=path.join(context.RUNTIME,'locks/cleanup-maintenance.lock');fs.mkdirSync(path.dirname(lock),{recursive:true});const lockFd=fs.openSync(lock,'wx');
-  const j={contract:'cleanup-maintenance-execution-v1',runId:auth.runId,authorizationSha256:auth.sha256,deadlineAt:new Date(roundDeadline).toISOString(),executionMode:auth.executionMode||"authorized_maintenance",completionScope:auth.scope,deferredItems:context.scopedPolicy && auth.scope===context.scopedPolicy.scope?context.scopedPolicy.deferredItems:[],startedAt:new Date().toISOString(),steps:[],protection:{before:protectionBefore}};
+  const j={contract:'cleanup-maintenance-execution-v1',outerStartedAt:new Date(outerStarted).toISOString(),runId:auth.runId,authorizationSha256:auth.sha256,deadlineAt:new Date(roundDeadline).toISOString(),executionMode:auth.executionMode||"authorized_maintenance",completionScope:auth.scope,deferredItems:context.scopedPolicy && auth.scope===context.scopedPolicy.scope?context.scopedPolicy.deferredItems:[],startedAt:new Date().toISOString(),steps:[],protection:{before:protectionBefore}};
   const logDir=path.join(context.RUNTIME,'logs',auth.runId);
   const saveTotal=receipt=>{const archive=path.join(context.RUNTIME,'status/cleanup-totals',auth.runId+'.json');fs.mkdirSync(path.dirname(archive),{recursive:true});fs.writeFileSync(archive,JSON.stringify(receipt,null,2)+'\n',{flag:'wx'});save(totalFile,receipt);};
   const totalFile=path.join(context.RUNTIME,'status',`cleanup-total-${auth.date.replaceAll('-','')}.json`);fs.mkdirSync(logDir,{recursive:true});save(auth.journalFile,j);
   let executionError;
+  try {
   try {
     const preflight=await command(process.execPath,['scripts/supabase-incident-guard.js','check','--class=guard','--action=authorized-cleanup-maintenance'],path.join(logDir,'incident.log'));
     if(preflight.exitCode)throw Error('supabase_incident_blocked');
@@ -73,7 +79,7 @@ async function main(){
       const row={name,script,startedAt:new Date().toISOString(),logFile:path.join(logDir,`${name}.log`),receipts:[]};j.steps.push(row);save(auth.journalFile,j);
       Object.assign(row,await command(process.execPath,['--use-system-ca',`scripts/${script}`,...args],row.logFile,{FUMAN_CLEANUP_CONTEXT_FILE:auth.file,FUMAN_HISTORY_CLEANUP_ENABLE_VERCEL_CLI:'1',FUMAN_PRODUCTION_MIRROR_ROOT:'C:\\fuman-terminal'}));
       row.finishedAt=new Date().toISOString();
-      row.receipts=(context.receipts()[name]||[]).filter(f=>fs.existsSync(f)).map(file=>({file,sha256:context.hash(file)}));save(auth.journalFile,j);
+      row.receipts=(context.receipts()[name]||[]).filter(f=>fs.existsSync(f)).map((sourceFile,index)=>{const file=path.join(context.RUNTIME,'status/cleanup-stage-receipts',auth.runId,name,index+'.json');fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,fs.readFileSync(sourceFile),{flag:'wx'});return {sourceFile,file,sha256:context.hash(file)};});save(auth.journalFile,j);
       // Do not initiate another stage after an unsuccessful or uncertain operation.
       // Record the failure before finally closes this run and releases its lock.
       const log=fs.readFileSync(row.logFile,'utf8');
@@ -87,7 +93,7 @@ async function main(){
   } catch(error) {
     executionError=error;j.firstFailure=j.firstFailure||{reason:error.message};
   } finally {
-    j.finishedAt=new Date().toISOString();j.protection.changed=j.protection.before.filter(x=>!fs.existsSync(x.file)||context.hash(x.file)!==x.sha256);j.protection.ok=j.protection.changed.length===0;save(auth.journalFile,j);fs.closeSync(lockFd);fs.unlinkSync(lock);
+    j.finishedAt=new Date().toISOString();j.protection.changed=j.protection.before.filter(x=>!fs.existsSync(x.file)||context.hash(x.file)!==x.sha256);j.protection.ok=j.protection.changed.length===0;save(auth.journalFile,j);
   }
   try {
   if(executionError)throw executionError;
@@ -104,5 +110,6 @@ async function main(){
   save(auth.journalFile,j);receipt.journalSha256=context.hash(auth.journalFile);saveTotal(receipt);
   }catch(error){j.firstFailure=j.firstFailure||{reason:error.message};save(auth.journalFile,j);saveTotal({contract:'cleanup-total-v1',runId:auth.runId,tradeDate:auth.date,executionMode:j.executionMode,completionScope:auth.scope,deferredItems:j.deferredItems,status:'failed',complete:false,fullSuiteComplete:false,exitCode:1,first_blocker:error.message,failed_checks:[error.message],journalFile:auth.journalFile,checkedAt:new Date().toISOString()});throw error;}
   console.log(JSON.stringify({ok:true,runId:auth.runId,journalFile:auth.journalFile,next:'Root Monitor CleanupMaintenance read-only acceptance'},null,2));
+  } finally {fs.closeSync(lockFd);if(!unsafeProcessStop)fs.unlinkSync(lock);else save(lock,{runId:auth.runId,status:'PROTECTED_STOP_UNVERIFIED',journalFile:auth.journalFile,reason:'process_tree_stop_evidence_missing'});}
 }
 main().catch(e=>{console.error(e.stack);process.exitCode=1;});

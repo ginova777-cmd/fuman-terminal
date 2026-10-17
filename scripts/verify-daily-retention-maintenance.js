@@ -108,6 +108,8 @@ async function main() {
     const auth=maintenanceContext.authorization(total.contextFile,{readOnly:true});
     if(total.journalFile!==auth.journalFile||auth.sha256!==total.contextSha256||total.runId!==auth.runId||maintenanceContext.hash(total.journalFile)!==total.journalSha256)throw Error('cleanup_scoped_identity_drift');
     const journal=maintenanceContext.verifyJournal(auth);maintenanceContext.verifyScopedItems(journal);
+    if(!maintenanceArg&&journal.executionMode!=='scheduled_workday')throw Error('cleanup_natural_execution_required');
+    if(maintenanceArg&&maintenance.runId!==auth.runId)throw Error('cleanup_maintenance_run_mismatch');
     if(journal.executionMode==='scheduled_workday'&&journal.naturalOrigin?.naturalSlotComplete!==true)throw Error('cleanup_natural_origin_missing');
     const schedule=scheduledTasks();
     if(!schedule.ok||schedule.rows.length!==5)throw Error('cleanup_task_readback_failed');

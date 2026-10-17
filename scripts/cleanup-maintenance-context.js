@@ -27,12 +27,27 @@ function verifyJournal(auth) {
   if(j.contract!=='cleanup-maintenance-execution-v1'||j.runId!==auth.runId||j.authorizationSha256!==auth.sha256||!j.finishedAt||Date.parse(j.startedAt)<Date.parse(auth.issuedAt)||Date.parse(j.finishedAt)>Date.now()||j.protection?.ok!==true) throw Error('cleanup_maintenance_execution_invalid');
   const expectedSteps=requiredSteps(auth);
   if(auth.scope===scopedPolicy.scope && (j.completionScope!==scopedPolicy.scope||JSON.stringify(j.deferredItems)!==JSON.stringify(scopedPolicy.deferredItems)))throw Error('cleanup_scope_drift');
+  if(auth.scope===scopedPolicy.scope){
+    if(j.executionMode!==auth.executionMode)throw Error('cleanup_execution_mode_drift');
+    const outer=Date.parse(j.outerStartedAt),deadline=Date.parse(j.deadlineAt);
+    if(!Number.isFinite(outer)||!Number.isFinite(deadline)||outer>Date.parse(j.startedAt)||deadline>outer+17*60*1000||Date.parse(j.finishedAt)>outer+18*60*1000)throw Error('cleanup_execution_budget_invalid');
+  }
   if(j.firstFailure || j.steps.length!==expectedSteps.length || j.steps.some((r,i)=>r.name!==expectedSteps[i]))throw Error('cleanup_maintenance_step_set_invalid');
   for(const step of expectedSteps) {
     const row=j.steps.find(x=>x.name===step);
     if(!row||row.exitCode!==0||!row.finishedAt||row.receipts.length!==receipts()[step].length) throw Error(`cleanup_maintenance_step_failed:${step}`);
-    for(const file of receipts()[step]) {
-      const evidence=row.receipts.find(x=>x.file===file), payload=JSON.parse(fs.readFileSync(file,'utf8'));
+    if(auth.scope===scopedPolicy.scope){
+      if(row.treeStopped!==true||row.timedOut!==false||row.processEvidence!==path.join(RUNTIME,'logs',auth.runId,step+'.log.process.json')||!row.processEvidenceSha256||hash(row.processEvidence)!==row.processEvidenceSha256)throw Error('cleanup_process_evidence_invalid:'+step);
+      const stop=JSON.parse(fs.readFileSync(row.processEvidence,'utf8').replace(/^\uFEFF/,''));
+      if(stop.treeStopped!==true||stop.timedOut!==false||stop.activeProcesses!==0||stop.exitCode!==0)throw Error('cleanup_process_not_complete:'+step);
+    }
+    for(const [index,sourceFile] of receipts()[step].entries()) {
+      const evidence=row.receipts.find(x=>x.sourceFile===sourceFile||x.file===sourceFile);
+      const file=evidence?.file;
+      if(!file)throw Error('cleanup_stage_receipt_missing');
+      if(auth.scope===scopedPolicy.scope&&evidence.sourceFile!==sourceFile)throw Error('cleanup_stage_archive_required');
+      if(evidence.sourceFile&&file!==path.join(RUNTIME,'status/cleanup-stage-receipts',auth.runId,step,index+'.json'))throw Error('cleanup_stage_archive_path');
+      const payload=JSON.parse(fs.readFileSync(file,'utf8'));
       if(step==='retired'||step==='history')assertRetiredReference(payload,auth);
       const checked=Date.parse(payload.checkedAt||payload.finishedAt);
       if(!Number.isFinite(checked)||!Number.isFinite(Date.parse(row.startedAt))||!Number.isFinite(Date.parse(row.finishedAt))||Date.parse(row.finishedAt)<Date.parse(row.startedAt)||!evidence||hash(file)!==evidence.sha256||payload.ok!==true||checked<Date.parse(row.startedAt)||checked>Date.parse(row.finishedAt)||(!['cost','janitor'].includes(step)&&!(payload.applied===true||payload.dryRun===false))) throw Error(`cleanup_maintenance_receipt_invalid:${step}`);
