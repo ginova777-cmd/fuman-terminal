@@ -12,9 +12,14 @@ function command(file,args,log,env={}) {
     const fd=fs.openSync(log,'w');let settled=false,timedOut=false,timer;
     const finish=value=>{if(settled)return;settled=true;clearTimeout(timer);fs.closeSync(fd);resolve({...value,timedOut});};
     let child;
+    const childEnv={...process.env,...env};
+    const gitConfigCount=Number(childEnv.GIT_CONFIG_COUNT||0);
+    if(!Number.isSafeInteger(gitConfigCount)||gitConfigCount<0||gitConfigCount>100){finish({exitCode:1,error:'cleanup_git_environment_invalid'});return;}
+    // A finite cleanup stage must not create a detached Git fsmonitor daemon.
+    childEnv.GIT_CONFIG_COUNT=String(gitConfigCount+1);childEnv['GIT_CONFIG_KEY_'+gitConfigCount]='core.fsmonitor';childEnv['GIT_CONFIG_VALUE_'+gitConfigCount]='false';
     const stopFile=log+'.process.json';
     const wrapper=path.join(__dirname,'Invoke-CleanupProcess.ps1');
-    try{child=spawn('pwsh.exe',['-NoProfile','-File',wrapper,'-Executable',file,'-ArgumentsBase64',Buffer.from(JSON.stringify(args)).toString('base64'),'-WorkingDirectory',context.ROOT,'-TimeoutMilliseconds',String(Math.floor(remaining)),'-DeadlineEpochMilliseconds',String(roundDeadline),'-ResultFile',stopFile],{cwd:context.ROOT,env:{...process.env,...env},windowsHide:true,stdio:['ignore',fd,fd]});}
+    try{child=spawn('pwsh.exe',['-NoProfile','-File',wrapper,'-Executable',file,'-ArgumentsBase64',Buffer.from(JSON.stringify(args)).toString('base64'),'-WorkingDirectory',context.ROOT,'-TimeoutMilliseconds',String(Math.floor(remaining)),'-DeadlineEpochMilliseconds',String(roundDeadline),'-ResultFile',stopFile],{cwd:context.ROOT,env:childEnv,windowsHide:true,stdio:['ignore',fd,fd]});}
     catch(error){finish({exitCode:1,error:error.message});return;}
     timer=setTimeout(()=>{timedOut=true;child.kill();},remaining+10000);
     child.once('error',error=>finish({exitCode:1,error:error.message}));
@@ -106,6 +111,7 @@ async function main(){
     j.naturalOrigin=require('../lib/strategy-natural-evidence').collect({strategy:'cleanup',scan:{runId:auth.runId,tradeDate:auth.date,startedAt:auth.issuedAt},formalComplete:true,recovery:false,root:context.ROOT,runtime:context.RUNTIME});
     if(j.naturalOrigin.naturalSlotComplete!==true)throw Error('cleanup_natural_completion_unverified');
   }
+  if(Date.now()>outerStarted+18*60*1000)throw Error('cleanup_finalization_deadline_exceeded');
   const receipt={contract:'cleanup-total-v1',runId:auth.runId,tradeDate:auth.date,executionMode:j.executionMode,completionScope:auth.scope,deferredItems:j.deferredItems,complete:true,fullSuiteComplete:false,status:'complete',exitCode:0,first_blocker:null,failed_checks:[],journalFile:auth.journalFile,contextFile:auth.file,contextSha256:auth.sha256,checkedAt:new Date().toISOString()};
   save(auth.journalFile,j);receipt.journalSha256=context.hash(auth.journalFile);saveTotal(receipt);
   }catch(error){j.firstFailure=j.firstFailure||{reason:error.message};save(auth.journalFile,j);saveTotal({contract:'cleanup-total-v1',runId:auth.runId,tradeDate:auth.date,executionMode:j.executionMode,completionScope:auth.scope,deferredItems:j.deferredItems,status:'failed',complete:false,fullSuiteComplete:false,exitCode:1,first_blocker:error.message,failed_checks:[error.message],journalFile:auth.journalFile,checkedAt:new Date().toISOString()});throw error;}

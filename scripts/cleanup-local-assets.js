@@ -14,7 +14,7 @@ function files(root){
   visit(root);return out;
 }
 function fingerprint(p){return files(p).sort().map(f=>{const s=fs.statSync(f);const sha256=hash(fs.readFileSync(f));const after=fs.statSync(f);if(s.size!==after.size||s.mtimeMs!==after.mtimeMs)throw Error('file_changed:'+f);return {path:path.relative(p,f).replaceAll('\\','/'),bytes:s.size,sha256};});}
-function git(root,args){return cp.execFileSync('git',['-c','maintenance.auto=false','-c','gc.auto=0','-C',root,...args],{encoding:'utf8',windowsHide:true}).trim();}
+function git(root,args){return cp.execFileSync('git',['-c','core.fsmonitor=false','-c','maintenance.auto=false','-c','gc.auto=0','-C',root,...args],{encoding:'utf8',windowsHide:true}).trim();}
 function activity(){
   const script="$ErrorActionPreference='Stop'; $p=@(Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine); $t=@(Get-ScheduledTask | ForEach-Object {foreach($a in $_.Actions){[pscustomobject]@{execute=$a.Execute;arguments=$a.Arguments;workingDirectory=$a.WorkingDirectory}}}); @{processes=$p;tasks=$t}|ConvertTo-Json -Depth 5 -Compress";
   const r=cp.spawnSync('powershell.exe',['-NoProfile','-Command',script],{encoding:'utf8',windowsHide:true,timeout:60000,maxBuffer:16*1024*1024});
