@@ -111,7 +111,7 @@ async function main() {
     if(journal.executionMode==='scheduled_workday'&&journal.naturalOrigin?.naturalSlotComplete!==true)throw Error('cleanup_natural_origin_missing');
     const schedule=scheduledTasks();
     if(!schedule.ok||schedule.rows.length!==5)throw Error('cleanup_task_readback_failed');
-    for(const task of TASKS){const row=schedule.rows.find(r=>r.name===task.name);const active=task===TASKS[0];if(!row||row.enabled!==active||(active&&(!row.action.includes(path.join(ROOT,task.script))||!row.triggerTimes?.includes('17:10'))))throw Error('cleanup_single_start_task_drift:'+task.name);}
+      for(const task of TASKS){const row=schedule.rows.find(r=>r.name===task.name);const active=task===TASKS[0];if(!row||row.enabled!==active||(active&&(!row.action.includes(path.join(ROOT,task.script))||JSON.stringify(row.triggerTimes)!==JSON.stringify(['17:10'])||row.logonType!=='S4U'||row.runLevel!=='Highest'||row.startWhenAvailable!==true||row.multipleInstances!=='IgnoreNew'||row.executionTimeLimit!=='PT20M'||row.restartCount!==0||row.batteryStartBlocked||row.batteryStop)))throw Error('cleanup_single_start_task_drift:'+task.name);}
     const result={...total,contract:'daily-retention-maintenance-v1',checkedAt:new Date().toISOString(),independentRootReadback:true,totalReceiptSha256:maintenanceContext.hash(file),deferredItems:maintenanceContext.scopedPolicy.deferredItems};
     fs.writeFileSync(path.join(STATUS,'daily-retention-maintenance-verifier-'+date.id+'.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));return;
   }

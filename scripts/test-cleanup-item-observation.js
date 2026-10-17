@@ -13,7 +13,7 @@ test('C01-C08 real isolated runner writes eight independently reconciled observa
  const ctx=load('cleanup-api-only-retired-artifacts.js',runtime,auth),front=vm.runInContext('RUNTIME_STALE_FRONT_PAGE_FILES[0]',ctx);put(path.join(runtime,front),'{}');
  await vm.runInContext('main()',ctx);
  const r=JSON.parse(fs.readFileSync(path.join(runtime,'status/api-only-retired-cleanup-status.json')));assert.equal(r.ok,true);assert.equal(r.cleanupItems.length,8);
- for(const item of r.cleanupItems){assert.equal(proof.verify(item).status,'complete');assert(item.deleted>=1,item.id+' had no positive deletion');assert.equal(item.remaining,0);}
+ for(const item of r.cleanupItems){assert.equal(proof.verify(item).status,'complete');if(['C06','C07','C08'].includes(item.id)){assert.equal(item.deleted,0);assert(item.protectedExclusions.length>0);}else assert(item.deleted>=1,item.id+' had no positive deletion');assert.equal(item.remaining,0);}
  assert.equal(sha(fs.readFileSync(protectedFile)),protectedHash);
  console.log(JSON.stringify({scope:'C01-C08 isolated execution',receipt:path.join(runtime,'status/api-only-retired-cleanup-status.json')}));
 });
@@ -21,6 +21,9 @@ test('raw observation detects retained-data corruption, missing candidates and f
  const h=sha('a'),p={contract:'cleanup-item-observation-v1',id:'C01',runId:'isolation',inventoryComplete:true,readbackComplete:true,before:[{key:'old',sha256:h},{key:'protected',sha256:h}],after:[{key:'protected',sha256:h}],candidates:['old']};
  assert.equal(proof.reconcile(p).deleted,1);assert.throws(()=>proof.reconcile({...p,after:[]}),/protected_changed/);assert.throws(()=>proof.reconcile({...p,candidates:['unknown']}),/candidates_invalid/);
  const item=proof.persist(path.join(base,'raw.json'),p);assert.equal(proof.verify(item).deleted,1);assert.throws(()=>proof.verify({...item,deleted:900}),/summary_mismatch/);
+ assert.throws(()=>proof.reconcile({...p,protectedExclusions:[{key:'old',reason:'claimed hold'}]}),/exclusions_invalid/);
+ assert.throws(()=>proof.reconcile({...p,protectedExclusions:[{key:'not-in-inventory',reason:'unknown'}]}),/exclusions_invalid/);
+ assert.throws(()=>proof.verify({...item,scanned:0}),/summary_mismatch/);
 });
 test('C17 C18 runner protects held evidence and independently reads eligible file removal',async()=>{
  const runtime=path.join(base,'runtime'),auth={runId:'isolated-runtime-'+crypto.randomUUID(),sha256:'fixture',issuedAt:new Date().toISOString()};
@@ -31,7 +34,8 @@ test('C17 C18 runner protects held evidence and independently reads eligible fil
  put(path.join(runtime,'cache/fugle/expired.json'),'{}');put(path.join(runtime,'cache/fugle/current.json'),'current',false);
  const ctx=load('cleanup-runtime-retention.js',runtime,auth,{'./run-cleanup-local-assets':{run:async()=>({ok:true,candidates:[],processed:[]})},'./cleanup-extended-retention':{referenceInventory:async()=>({files:[],contains:()=>false})}});
  await vm.runInContext('main()',ctx);const file=fs.readdirSync(path.join(runtime,'status')).find(f=>f.startsWith('runtime-retention-'));const receipt=JSON.parse(fs.readFileSync(path.join(runtime,'status',file)));
- assert.equal(receipt.ok,true);assert.deepEqual(receipt.cleanupItems.map(i=>[i.id,proof.verify(i).deleted]),[['C17',1],['C18',1]]);
+ assert.equal(receipt.ok,true);assert.deepEqual(receipt.cleanupItems.map(i=>[i.id,proof.verify(i).deleted]),[['C17',1],['C18',0]]);
+ const cache=proof.verify(receipt.cleanupItems.find(i=>i.id==='C18'));assert.equal(cache.scanned,2);assert.equal(cache.protectedExclusions.length,1);assert.equal(cache.protectedSet.length,2);assert.equal(cache.protectedExclusions[0].reason,'lab_reference_or_safety_unverified');
  console.log(JSON.stringify({scope:'C17 C18 isolated execution; local-assets excluded',receipt:path.join(runtime,'status',file)}));
 });
 test('C09-C15 actual history runner with paginated isolated service and independent readback',async()=>{
@@ -50,7 +54,7 @@ test('C09-C15 actual history runner with paginated isolated service and independ
  ctx.deployments=Array.from({length:12},(_,i)=>({uid:'preview-'+i,target:'preview',createdAt:Date.now()-(50+i)*86400000,url:'fixture-'+i,alias:[],state:'READY'}));ctx.deployments.push({uid:'production',target:'production',createdAt:Date.now()-100*86400000,url:'production',alias:['fuman-terminal.vercel.app'],state:'READY'});
  vm.runInContext(`vercelProject=()=>({projectId:'fixture',orgId:'fixture'});vercelRequest=async(route,token,method)=>{if(method==='DELETE'){const id=route.split('/').at(-1);deployments=deployments.filter(d=>d.uid!==id);return {};}if(route.startsWith('/v13/'))return deployments.find(d=>d.uid===route.split('/').at(-1).split('?')[0]);const u=new URL('https://isolation.invalid'+route),i=Number(u.searchParams.get('until')||0);return {deployments:deployments.slice(i,i+2),pagination:{next:i+2<deployments.length?i+2:null}};};`,ctx);
  await vm.runInContext('main()',ctx);
- const file=path.join(runtime,'status/supabase-vercel-history-cleanup-status.json'),receipt=JSON.parse(fs.readFileSync(file));assert.equal(receipt.ok,true,JSON.stringify(receipt));assert.equal(receipt.cleanupItems.length,7);for(const item of receipt.cleanupItems){assert.equal(proof.verify(item).status,'complete');assert(item.deleted>0,item.id);}
+ const file=path.join(runtime,'status/supabase-vercel-history-cleanup-status.json'),receipt=JSON.parse(fs.readFileSync(file));assert.equal(receipt.ok,true,JSON.stringify(receipt));assert.equal(receipt.cleanupItems.length,7);for(const item of receipt.cleanupItems){assert.equal(proof.verify(item).status,'complete');if(['C09','C10'].includes(item.id)){assert.equal(item.deleted,0);assert(item.protectedExclusions.length>0);}else assert(item.deleted>0,item.id);}
  assert(reads>100);assert(deletes>0);console.log(JSON.stringify({scope:'C09-C15 isolated service; not formal DB',receipt:file,reads,deletes}));
 });
 test('N01-N05 actual local-assets runner verifies delete gzip and Git retirement',async()=>{
@@ -73,8 +77,8 @@ test('N01-N05 actual local-assets runner verifies delete gzip and Git retirement
  // Import path does not invoke CLI; explicit call executes the actual existing run function.
  const receipt=await vm.runInContext("module.exports.run({apply:true,maintenanceAuthorization:'fixture'})",ctx);
  assert.equal(receipt.ok,true,JSON.stringify(receipt.errors));assert.equal(receipt.cleanupItems.length,5);
- for(const item of receipt.cleanupItems){assert.equal(proof.verify(item).status,'complete');assert(item.deleted>0,item.id);}
- assert.equal(fs.readFileSync(held,'utf8'),'preserve');assert.equal(git(mirror,['worktree','list','--porcelain']).includes(worktree.replaceAll('\\','/')),false);
+ for(const item of receipt.cleanupItems){assert.equal(proof.verify(item).status,'complete');if(['N01','N04'].includes(item.id)){assert.equal(item.deleted,0);assert.equal(item.protectedExclusions.length,1);assert.equal(item.scanned,1);}else assert(item.deleted>0,item.id);}
+ assert.equal(fs.readFileSync(held,'utf8'),'preserve');assert.equal(git(mirror,['worktree','list','--porcelain']).includes(worktree.replaceAll('\\','/')),true);
  assert.equal(L.verify(receipt).ok,true);fs.writeFileSync(held,'damaged');assert.equal(L.verify(receipt).ok,false);fs.writeFileSync(held,'preserve');
  console.log(JSON.stringify({scope:'N01-N05 isolated filesystem and Git',receipt:receipt.receiptFile}));
 });

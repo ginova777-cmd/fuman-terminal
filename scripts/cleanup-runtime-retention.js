@@ -51,6 +51,7 @@ function findDirs(root, allow, days, list) {
 const crypto = require("crypto");
 const { classifyEvidence, buildEvidenceReview } = require("./cleanup-evidence-protection");
 const evidenceDecisions = [];
+const cacheDecisions = [];
 let evidenceReview;
 async function listCandidates() {
   const list = [];
@@ -64,7 +65,11 @@ async function listCandidates() {
     if(!decision.eligible)list.splice(i,1); else item.sha256=sha256;
   }
   // Sealed logs are owned by cleanup-local-assets, with retirement and reference evidence.
-  findFiles(path.join(RUNTIME, "cache", "fugle"), () => true, 7, list);
+  // LAB intake is deferred. Age alone proves neither retirement nor reader safety.
+  // Inventory every expired candidate, but retain it until its consumers are known.
+  const cacheCandidates=[];
+  findFiles(path.join(RUNTIME, "cache", "fugle"), () => true, 7, cacheCandidates);
+  for(const item of cacheCandidates)cacheDecisions.push({...item,eligible:false,reason:'lab_reference_or_safety_unverified',sha256:crypto.createHash('sha256').update(fs.readFileSync(item.path)).digest('hex')});
   // Test outputs and final-audit directories require explicit retirement evidence.
   return list;
 }
@@ -86,13 +91,13 @@ if (apply) for (const item of candidates) {
   try { const allowedRoot = [RUNTIME, TERMINAL, PUBLISH_SYNC].find(root => item.path.toLowerCase().startsWith(root.toLowerCase() + path.sep)); if (!allowedRoot) throw Error("cleanup_root_not_allowed"); assertTree(allowedRoot,item.path); if(item.sha256 && crypto.createHash("sha256").update(fs.readFileSync(item.path)).digest("hex")!==item.sha256) throw Error("evidence_changed_before_delete"); fs.rmSync(item.path, { recursive: item.kind === "directory", force: true }); deleted.push(item); }
   catch (error) { failures.push({ path: item.path, error: error.message }); }
 }
-for(const d of evidenceDecisions){if(!d.eligible && (!fs.existsSync(d.path)||crypto.createHash('sha256').update(fs.readFileSync(d.path)).digest('hex')!==d.sha256))failures.push({path:d.path,error:'protected_evidence_readback_failed'});}
+for(const d of [...evidenceDecisions,...cacheDecisions]){if(!d.eligible && (!fs.existsSync(d.path)||crypto.createHash('sha256').update(fs.readFileSync(d.path)).digest('hex')!==d.sha256))failures.push({path:d.path,error:'protected_evidence_readback_failed'});}
 for(const d of deleted){if(fs.existsSync(d.path))failures.push({path:d.path,error:'deleted_file_readback_failed'});}
 const payload = {
-  evidenceReview, independentReadback: {protectedFiles:evidenceDecisions.filter(d=>!d.eligible).length,deletedFiles:deleted.length,ok:failures.length===0},
-  evidenceDecisions, evidenceReviewComplete: evidenceDecisions.every(d=>!['protection_evidence_missing_or_stale','reference_review_not_current','incident_or_success_unknown','retention_start_invalid','formal_or_rollback_policy_unknown'].includes(d.reason)),
+  evidenceReview, independentReadback: {protectedFiles:[...evidenceDecisions,...cacheDecisions].filter(d=>!d.eligible).length,deletedFiles:deleted.length,ok:failures.length===0},
+  evidenceDecisions, cacheDecisions, evidenceReviewComplete: evidenceDecisions.every(d=>!['protection_evidence_missing_or_stale','reference_review_not_current','incident_or_success_unknown','retention_start_invalid','formal_or_rollback_policy_unknown'].includes(d.reason)),
   maintenanceRunId:maintenance?.runId||null,maintenanceAuthorizationSha256:maintenance?.sha256||null,
-  localAssets, ok: failures.length === 0 && evidenceDecisions.every(d=>!['protection_evidence_missing_or_stale','reference_review_not_current','incident_or_success_unknown','retention_start_invalid','formal_or_rollback_policy_unknown'].includes(d.reason)), applied: apply, dryRun: !apply, checkedAt: new Date().toISOString(), contract: "runtime-retention-v1",
+  localAssets, ok: failures.length === 0, applied: apply, dryRun: !apply, checkedAt: new Date().toISOString(), contract: "runtime-retention-v1",
   retention: { watchdogEvidenceDays: 15, datedLogsDays: 30, fugleCacheDays: 7, testOutputsDays: 30, retiredVersionsDays: 45, terminatedTempDays: 7 },
   protected: ["cache/intraday/fugle-daytrade-ws-candles.json", "daily OHLCV and volume", "Strategy3/4 results", "/88, mobile and latest scorecard", "newest 15 days of formal evidence", "production-health.jsonl"],
   candidates: candidates.length + localAssets.candidates.length, candidateBytes: [...candidates,...localAssets.candidates].reduce((n, item) => n + item.bytes, 0),
@@ -103,7 +108,8 @@ if(apply && maintenance){
  payload.cleanupItems=[];
  for(const id of ['C17','C18']){
   const keys=new Set(before[id].map(r=>r.key));
-  const observation={contract:'cleanup-item-observation-v1',id,runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before:before[id],after:inventoryFor(id),candidates:candidates.filter(c=>keys.has(c.path)).map(c=>c.path),checkedAt:new Date().toISOString()};
+  const decisions=id==='C17'?evidenceDecisions:cacheDecisions;
+  const observation={contract:'cleanup-item-observation-v1',id,runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before:before[id],after:inventoryFor(id),candidates:candidates.filter(c=>keys.has(c.path)).map(c=>c.path),protectedExclusions:decisions.filter(d=>!d.eligible).map(d=>({key:d.path,reason:d.reason})),checkedAt:new Date().toISOString()};
   const proofFile=path.join(RUNTIME,'status','cleanup-items',maintenance.runId,id+'.json');
   payload.cleanupItems.push(require('./cleanup-item-observation').persist(proofFile,observation));
  }

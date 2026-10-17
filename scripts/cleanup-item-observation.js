@@ -14,10 +14,12 @@ function reconcile(p){
  const before=index(p.before,'before'),after=index(p.after,'after');
  if(!Array.isArray(p.candidates)||new Set(p.candidates).size!==p.candidates.length||p.candidates.some(k=>!before.has(k)))throw Error('item_candidates_invalid');
  const candidates=new Set(p.candidates),protectedSet=[...before.values()].filter(r=>!candidates.has(r.key));
+ const exclusions=p.protectedExclusions||[];
+ if(!Array.isArray(exclusions)||new Set(exclusions.map(e=>e.key)).size!==exclusions.length||exclusions.some(e=>!before.has(e.key)||candidates.has(e.key)||typeof e.reason!=='string'||!e.reason.trim()))throw Error('item_protected_exclusions_invalid');
  for(const r of protectedSet)if(after.get(r.key)?.sha256!==r.sha256)throw Error('item_protected_changed:'+r.key);
  const unknown=[...after.keys()].filter(k=>!before.has(k));if(unknown.length)throw Error('item_unexpected_new_members');
  const remaining=p.candidates.filter(k=>after.has(k));
- return {id:p.id,runId:p.runId,status:remaining.length?'failed':'complete',inventoryComplete:true,readbackVerified:remaining.length===0,protectedReadbackVerified:true,deleted:p.candidates.length-remaining.length,remaining:remaining.length,protectedSet};
+ return {id:p.id,runId:p.runId,status:remaining.length?'failed':'complete',inventoryComplete:true,readbackVerified:remaining.length===0,protectedReadbackVerified:true,deleted:p.candidates.length-remaining.length,remaining:remaining.length,protectedSet,scanned:before.size,eligibleCandidates:p.candidates.length,protectedExclusions:exclusions};
 }
 function persist(file,observation){
  const item=reconcile(observation);fs.mkdirSync(path.dirname(file),{recursive:true});
@@ -28,7 +30,7 @@ function verify(item){
  const observations=(item.evidence||[]).map(e=>{const bytes=fs.readFileSync(e.file);if(hash(bytes)!==e.sha256)throw Error('item_observation_hash');return JSON.parse(bytes);});
  if(observations.length!==1)throw Error('item_observation_count');
  const actual=reconcile(observations[0]);
- for(const k of ['id','runId','status','inventoryComplete','readbackVerified','protectedReadbackVerified','deleted','remaining','protectedSet'])if(JSON.stringify(item[k])!==JSON.stringify(actual[k]))throw Error('item_observation_summary_mismatch:'+k);
+ for(const k of ['id','runId','status','inventoryComplete','readbackVerified','protectedReadbackVerified','deleted','remaining','protectedSet','scanned','eligibleCandidates','protectedExclusions'])if(JSON.stringify(item[k])!==JSON.stringify(actual[k]))throw Error('item_observation_summary_mismatch:'+k);
  return actual;
 }
 function files(paths){

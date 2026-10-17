@@ -44,7 +44,11 @@ async function run({apply=false,noStatus=false,maintenanceAuthorization=null}={}
       if(!entry||typeof entry.path!=='string'){receipt.errors.push('manifest_entry_path_missing');continue;}
       if(seen.has(lib.key(entry.path))){receipt.errors.push('duplicate_manifest_path:'+entry.path);continue;}seen.add(lib.key(entry.path));
       if(!fs.existsSync(entry.path)){receipt.preserved.push({path:entry.path,reason:'already_absent'});continue;}
-      try{const item=lib.validate(entry,ctx);receipt.candidates.push(item);
+      try{
+        // Owner deferred LAB integration: no cache/worktree deletion without consumer safety.
+        // Existing retirement evidence does not establish complete LAB reader exclusion.
+        if(['retired_cache','retired_worktree','retired_backup'].includes(entry.category))throw Error('lab_reference_or_safety_unverified');
+        const item=lib.validate(entry,ctx);receipt.candidates.push(item);
         if(apply){try{ctx.activity=lib.activity();ctx.now=Date.now();refs=await require('./cleanup-extended-retention').referenceInventory(false,excluded);const current=lib.validate(entry,ctx);if(current.treeSha256!==item.treeSha256)throw Error('changed_after_preview');receipt.pendingAction={path:current.path,action:current.action,treeSha256:current.treeSha256};progress();receipt.processed.push(lib.applyOne(current));receipt.pendingAction=null;progress();}catch(error){receipt.errors.push("apply_failed:"+entry.path+":"+error.message);progress();}}
       }catch(error){const files=lib.fingerprint(entry.path);receipt.preserved.push({path:entry.path,category:entry.category,reason:error.message,files,treeSha256:lib.hash(JSON.stringify(files))});}
     }
@@ -59,7 +63,8 @@ async function run({apply=false,noStatus=false,maintenanceAuthorization=null}={}
         const after=listed.filter(e=>fs.existsSync(e.path)).map(e=>({key:e.path,sha256:lib.hash(JSON.stringify(lib.fingerprint(e.path)))}));
         const candidates=receipt.candidates.filter(e=>categories.includes(e.category)).map(e=>e.path);
         const archives=receipt.processed.filter(e=>categories.includes(e.category)&&e.archive).map(e=>({file:e.archive,sha256:e.archiveSha256,originalSha256:e.originalSha256,index:e.index}));
-        receipt.cleanupItems.push(require('./cleanup-item-observation').persist(path.join(RUNTIME,'status/cleanup-items',maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before,after,candidates,archives,checkedAt:new Date().toISOString()}));
+        const protectedExclusions=receipt.preserved.filter(e=>categories.includes(e.category)&&inventoryBefore.has(e.path)).map(e=>({key:e.path,reason:e.reason}));
+        receipt.cleanupItems.push(require('./cleanup-item-observation').persist(path.join(RUNTIME,'status/cleanup-items',maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before,after,candidates,archives,protectedExclusions,checkedAt:new Date().toISOString()}));
       }
     }
     receipt.finishedAt=new Date().toISOString();

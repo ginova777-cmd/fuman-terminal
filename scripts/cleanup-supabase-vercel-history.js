@@ -257,13 +257,17 @@ async function cleanupRunPair(config, args) {
   const latestComplete = rows.find(row => row.complete === true && row.status === "complete");
   if (latestComplete) keepIds.add(latestComplete.run_id);
   if (rows.length && !latestComplete) throw new Error(config.key + ": latest_complete_protection_unproven");
-  const candidates = rows
+  const ageCandidates = rows
     .filter((row) => !keepIds.has(row.run_id))
     .filter((row) => {
       const at = rowTime(row, config);
       return Number.isFinite(at) && at < cutoffMs;
     })
     .map((row) => row.run_id);
+  // keepRuns/latest-complete alone cannot establish cross-system reference safety.
+  // Preserve the fully inventoried historical runs until that evidence exists.
+  const protectedRunIds=ageCandidates;
+  const candidates=[];
 
   let deletedResults = 0;
   let deletedRuns = 0;
@@ -286,6 +290,8 @@ async function cleanupRunPair(config, args) {
     keepRuns,
     scannedRuns: rows.length,
     candidateRunIds: candidates,
+    protectedRunIds,
+    protectionReason:'cross_system_reference_safety_unverified',
     candidateRuns: candidates.length,
     deletedRuns,
     deletedResults,
@@ -523,7 +529,7 @@ async function cleanupSupabase(args) {
  const sections=[],cleanupItems=[];
  const groups={C09:RUN_TABLES.filter(c=>c.key!=='strategy2').map(c=>({config:c,type:'run'})),C10:RUN_TABLES.filter(c=>c.key==='strategy2').map(c=>({config:c,type:'run'})),C11:EVENT_TABLES.map(c=>({config:c,type:'event'})),C12:SNAPSHOT_TABLES.map(c=>({config:c,type:'snapshot'})),C13:[{config:DATE_RETENTION_TABLES[0],type:'date'}],C14:[{config:DATE_RETENTION_TABLES[1],type:'date'}]};
  for(const [id,entries] of Object.entries(groups)){
-  const before=[],after=[],candidates=[];let complete=true;
+  const before=[],after=[],candidates=[],protectedExclusions=[];let complete=true;
   for(const {config:c,type} of entries){
    try{
     const tables=type==='run'?[c.runsTable,c.resultsTable]:[c.table];
@@ -535,13 +541,14 @@ async function cleanupSupabase(args) {
      for(const row of rows){
       const eligible=type==='run'?r.candidateRunIds.includes(row.run_id)&&(!c.strategy||(table===c.resultsTable&&c.resultsStrategy===false)||row.strategy===c.strategy):row[c.dateColumn]!=null&&String(row[c.dateColumn])<r.cutoff&&(type!=='snapshot'||/^__fuman_/.test(row.symbol||''));
       if(eligible)candidates.push(rowEvidence(table,row).key);
+      if(type==='run'&&r.protectedRunIds.includes(row.run_id))protectedExclusions.push({key:rowEvidence(table,row).key,reason:r.protectionReason});
      }
      after.push(...(await fullTable(table,type==='run'?'run_id.asc':c.dateColumn+'.asc')).map(row=>rowEvidence(table,row)));
     }
    }catch(error){complete=false;sections.push({key:c.key,ok:false,error:error.message});break;}
   }
   if(complete&&args.apply&&args.maintenance){
-   try{cleanupItems.push(require('./cleanup-item-observation').persist(path.join(STATUS_DIR,'cleanup-items',args.maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:args.maintenance.runId,inventoryComplete:true,readbackComplete:true,before,after,candidates,checkedAt:new Date().toISOString()}));}
+   try{cleanupItems.push(require('./cleanup-item-observation').persist(path.join(STATUS_DIR,'cleanup-items',args.maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:args.maintenance.runId,inventoryComplete:true,readbackComplete:true,before,after,candidates,protectedExclusions,checkedAt:new Date().toISOString()}));}
    catch(error){sections.push({key:id,ok:false,error:error.message});}
   }
   if(sections.some(s=>s.ok===false))break;

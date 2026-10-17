@@ -19,8 +19,15 @@ const expectedTables=['fugle_daytrade_source_scorecard','fugle_daytrade_source_s
 function validStatus(s){return s?.ok===true&&s.keepDays===15&&Array.isArray(s.tables)&&s.tables.length===expectedTables.length&&new Set(s.tables.map(t=>t.table)).size===expectedTables.length&&s.tables.every(t=>expectedTables.includes(t.table)&&typeof t.hasOldRows==='boolean'&&typeof t.hasProtectedRows==='boolean');}
 function oldRows(status) { return (status.tables || []).some((row) => row.hasOldRows === true); }
 async function main() {
+  const contextFile=process.env.FUMAN_CLEANUP_CONTEXT_FILE;
+  const maintenance=contextFile?require('./cleanup-maintenance-context').authorization(contextFile):null;
+  const observation=require('./cleanup-database-observation');
+  const capture=async()=>{const result=[];for(const table of expectedTables){const rows=await observation.inventory(table,'trade_date.asc',{url:serverSupabaseUrl(),headers:headers(),fetch});for(const value of rows)result.push({table,value,...observation.row(table,value)});}return result;};
   const before = await rpc("fuman_source_observability_retention_status", { p_keep_days: 15 });
   if(!validStatus(before))throw Error('observability_inventory_incomplete');
+  const rawBefore=maintenance?await capture():null;
+  if(maintenance&&!/^\d{4}-\d{2}-\d{2}$/.test(before.keepFromDate||''))throw Error('observability_cutoff_missing');
+  const candidates=rawBefore?.filter(r=>r.value.trade_date!=null&&String(r.value.trade_date)<before.keepFromDate).map(r=>r.key);
   if(apply && before.tables.some(t=>t.hasOldRows && !t.hasProtectedRows))throw Error('observability_protected_window_missing');
   const cleanup = apply ? await rpc("fuman_cleanup_source_observability_15d_once", { p_apply: true, p_batch_size: 5000, p_max_batches_per_table: 10 }) : {ok:true,applied:false,deletedRows:0,previewOnly:true};
   let after = await rpc("fuman_source_observability_retention_status", { p_keep_days: 15 });
@@ -38,6 +45,12 @@ async function main() {
     reasonCode: cleanup.reasonCode || (oldRows(after) ? "source_observability_retention_draining" : "ok"),
     allowedAction: cleanup.allowedAction || (oldRows(after) ? "continue_next_after_close_window" : "retention_complete"),
   };
+  if(apply&&maintenance){
+    const rawAfter=await capture();
+    const item=require('./cleanup-item-observation').persist(path.join(RUNTIME,'status/cleanup-items',maintenance.runId,'C20.json'),{contract:'cleanup-item-observation-v1',id:'C20',runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before:rawBefore.map(({key,sha256})=>({key,sha256})),after:rawAfter.map(({key,sha256})=>({key,sha256})),candidates,checkedAt:new Date().toISOString()});
+    payload.cleanupItems=[item];payload.maintenanceRunId=maintenance.runId;
+    if(item.deleted!==payload.deletedRows)throw Error('observability_deleted_count_mismatch');
+  }
   const dir = path.join(RUNTIME, "status"); fs.mkdirSync(dir, { recursive: true });
   payload.receiptFile = path.join(dir, `source-observability-retention-${dateId()}.json`);
   fs.writeFileSync(payload.receiptFile, `${JSON.stringify(payload, null, 2)}\n`);

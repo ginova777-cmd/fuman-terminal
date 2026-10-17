@@ -648,9 +648,13 @@ async function main() {
   const runtimeResult={root:args.runtimeRoot,deleted:[],skipped:[]};
   function observed(id,paths,operation){
     const before=proof.files(paths),preview=operation(true),planned=preview.deleted||[];
-    const candidates=before.filter(r=>planned.some(p=>r.key===p||r.key.startsWith(p+path.sep))).map(r=>r.key);
-    const result=args.dryRun?preview:operation(false);
-    if(maintenance&&!args.dryRun)cleanupItems.push(proof.persist(path.join(args.runtimeRoot,'status/cleanup-items',maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before,after:proof.files(paths),candidates,checkedAt:new Date().toISOString()}));
+      const aged=before.filter(r=>planned.some(p=>r.key===p||r.key.startsWith(p+path.sep))).map(r=>r.key);
+      // These legacy predicates prove age/name only, not incident, rollback or consumer safety.
+      const hold=['C06','C07','C08'].includes(id);
+      const candidates=hold?[]:aged;
+      const protectedExclusions=hold?aged.map(key=>({key,reason:'incident_rollback_or_consumer_safety_unverified'})):[];
+      const result=hold?{...preview,deleted:[],skipped:[...(preview.skipped||[]),...protectedExclusions]}:args.dryRun?preview:operation(false);
+      if(maintenance&&!args.dryRun)cleanupItems.push(proof.persist(path.join(args.runtimeRoot,'status/cleanup-items',maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before,after:proof.files(paths),candidates,protectedExclusions,checkedAt:new Date().toISOString()}));
     return result;
   }
   const rootPaths=args.roots.flatMap(root=>[...EXACT_RETIRED,...listRetiredDataFiles(root),...RETIRED_DIRECTORIES,...RESERVED_ROUTE_ARTIFACTS].map(rel=>path.join(root,rel)));

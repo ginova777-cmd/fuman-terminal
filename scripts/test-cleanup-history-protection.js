@@ -6,7 +6,7 @@ const ctx={module:{exports:{}},require:createRequire(file),__dirname,process:{en
 (async()=>{
  vm.runInContext(`fetchRunRows=async()=>[{run_id:'new-failed',strategy:'s',status:'failed',complete:false,finished_at:'2026-09-11'},{run_id:'latest-good',strategy:'s',status:'complete',complete:true,finished_at:'2020-01-01'},{run_id:'old-good',strategy:'s',status:'complete',complete:true,finished_at:'2019-01-01'}]; deleteRows=async(table,query,apply)=>{ if(query.includes('latest-good')) throw Error('protected run deleted'); return {deleted:0}; };`,ctx);
  const r=await vm.runInContext(`cleanupRunPair({key:'s',runsTable:'runs',resultsTable:'results',dateColumn:'finished_at',strategy:'s'},{referenceMs:Date.now(),supabaseRetentionDays:45,keepRuns:1,batchSize:80,apply:true})`,ctx);
- assert.equal(r.candidateRuns,1);console.log('PASS latest complete protected even outside retention and keep-count');
+ assert.equal(r.candidateRuns,0);assert.deepEqual(Array.from(r.protectedRunIds),['old-good']);console.log('PASS latest complete and unknown consumer references protected; aged candidates remain explicit');
  vm.runInContext(`fetchRunRows=async()=>[{run_id:'failed',status:'failed',complete:false,finished_at:'2020-01-01'}]`,ctx);
  await assert.rejects(vm.runInContext(`cleanupRunPair({key:'s',dateColumn:'finished_at'},{referenceMs:Date.now(),supabaseRetentionDays:45,keepRuns:1,batchSize:80,apply:true})`,ctx),/latest_complete_protection_unproven/);
  console.log('PASS missing latest complete blocks deletion');

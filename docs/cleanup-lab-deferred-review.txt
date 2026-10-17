@@ -1,0 +1,31 @@
+清理員 LAB 暫緩整合：隔離修正審查
+基底：5fa8334bad583293829f9aee30f71a67565cf1d5
+判定：ISOLATED_PARTIAL / RELEASE_NO_GO。不是 29 項同批端到端完成。
+
+本輪實作
+1. C18 全量盤點 Fugle 快取；逾期但無法證明引用安全的候選持續保護。
+2. N01、N04 不把退役證據誤認為 LAB Reader 已解除引用；候選保留並雜湊讀回。
+3. C06～C08 原先只有檔名／年齡條件；C09～C10 原先只有年齡／keepRuns／latestComplete。缺少完整事故、回滾或跨系統引用安全時，列明保護排除，保留實際盤點數量。這是保守候選，未部署；不是宣稱所有歷史資料已無需清理。
+4. 分項原始證據新增 scanned、eligibleCandidates、protectedExclusions；Verifier 重新計算、拒絕虛報零盤點及保護／刪除集合重疊。
+5. C17 不完整引用政策資料仍保護；完整檔案盤點及保護讀回成功可合法零刪除，不冒稱 reference review 已齊備。
+6. C20 使用完整、限頁、exact count 的逐列讀回；保留原 SQL 判斷與執行，新增同 runId 原始證據。
+7. C21～C23 新增隔離 SQL 候選：保留正式函式原刪除條件、鎖及保留天數，增加刪除前 candidateRows／candidateResults 與總輸出容量上限。Runner 對照完整 REST 盤點及獨立讀回。舊 RPC 缺 observationContract 時，在 apply 前拒絕。
+8. C25 Supabase 未證明安全的物件維持保護，完整分頁及第二次讀回；Blob 已具備證據者沿用原刪除機制。Hash scope 僅 provider identity/metadata，尚不是內容逐位元驗證。
+9. Root 單次入口分支補核對 S4U、Highest、IgnoreNew、20 分鐘、重試數、電池及唯一 17:10 時間，未更動正式 Task。
+
+證據限制與剩餘工作
+29 項目前各有分項隔離證據，但仍為不同 runId。不能拼接或改寫為同批總 Receipt。
+17:10 單次入口至八個內部 stage 的正向全鏈尚未完成；現有 orchestrator 測試證明缺項時拒絕完成。
+23:10 Root 已有舊日期、缺項、錯誤日曆拒絕測試，正向同批總 Receipt 讀回尚未完成。
+Writer kernel lease 雙程序互斥已實測；逾時時完整子程序樹停止尚未驗證，不能宣稱整輪超時安全完成。
+LAB 不再是上述工程缺口的等待理由；責任為 TOM 隔離整合端。
+C16：DEFERRED、20 日曆日、未執行 RPC、未列入 29 項分母。
+
+正式切換候選方案（未授權、不可執行）
+先補完同批全鏈及逾時測試，再凍結精確 SHA 並獨立審查；SQL 候選需與 Runner 同版本審查。
+Release Owner 核對當時現行 authority/prod81、clean、差異 scope、備份及 SQL 原函式；不得使用本歷史基底冒充現行正式版本。
+使用者另行核准後才可依正式 release 工具部署。單一 17:10 啟動沿用既有 installer，先停用從屬觸發、最後啟用主入口；18:40 保持 Disabled，23:10 Root 保留。
+回滾須還原核准前精確程式、SQL 函式／ACL 與 Task XML。資料刪除不可用 Git 回滾；正式刪除前須已驗證備份或明確不可逆範圍。
+部署通過不等於自然成功；連續五個適用工作日需逐日同批證據，未達前不得穩定結案。
+
+本輪沒有修改正式 Production、DB、Windows Task、排程，沒有正式刪除、推送、合併或部署。
