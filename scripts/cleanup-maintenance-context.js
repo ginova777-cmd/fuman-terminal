@@ -21,6 +21,7 @@ function assertRetiredReference(payload,auth) {
 function verifyJournal(auth) {
   const j=JSON.parse(fs.readFileSync(auth.journalFile,'utf8'));
   if(j.contract!=='cleanup-maintenance-execution-v1'||j.runId!==auth.runId||j.authorizationSha256!==auth.sha256||!j.finishedAt||Date.parse(j.startedAt)<Date.parse(auth.issuedAt)||Date.parse(j.finishedAt)>Date.now()||j.protection?.ok!==true) throw Error('cleanup_maintenance_execution_invalid');
+  if(j.firstFailure || j.steps.length!==steps.length || j.steps.some((r,i)=>r.name!==steps[i]))throw Error('cleanup_maintenance_step_set_invalid');
   for(const step of steps) {
     const row=j.steps.find(x=>x.name===step);
     if(!row||row.exitCode!==0||!row.finishedAt||row.receipts.length!==receipts()[step].length) throw Error(`cleanup_maintenance_step_failed:${step}`);
@@ -28,7 +29,7 @@ function verifyJournal(auth) {
       const evidence=row.receipts.find(x=>x.file===file), payload=JSON.parse(fs.readFileSync(file,'utf8'));
       if(step==='retired'||step==='history')assertRetiredReference(payload,auth);
       const checked=Date.parse(payload.checkedAt||payload.finishedAt);
-      if(!evidence||hash(file)!==evidence.sha256||payload.ok!==true||checked<Date.parse(row.startedAt)||checked>Date.parse(row.finishedAt)||(!['cost','janitor'].includes(step)&&!(payload.applied===true||payload.dryRun===false))) throw Error(`cleanup_maintenance_receipt_invalid:${step}`);
+      if(!Number.isFinite(checked)||!Number.isFinite(Date.parse(row.startedAt))||!Number.isFinite(Date.parse(row.finishedAt))||Date.parse(row.finishedAt)<Date.parse(row.startedAt)||!evidence||hash(file)!==evidence.sha256||payload.ok!==true||checked<Date.parse(row.startedAt)||checked>Date.parse(row.finishedAt)||(!['cost','janitor'].includes(step)&&!(payload.applied===true||payload.dryRun===false))) throw Error(`cleanup_maintenance_receipt_invalid:${step}`);
     }
   }
   return j;

@@ -49,12 +49,13 @@ function findDirs(root, allow, days, list) {
   }
 }
 const crypto = require("crypto");
-const { classifyEvidence } = require("./cleanup-evidence-protection");
+const { classifyEvidence, buildEvidenceReview } = require("./cleanup-evidence-protection");
 const evidenceDecisions = [];
-function listCandidates() {
+let evidenceReview;
+async function listCandidates() {
   const list = [];
   findFiles(path.join(RUNTIME, "state"), (name) => /^daytrade-unattended-gate-(?:watchdog|0700|0845|0900|0910|0935)-evidence-.*\.json$/i.test(name), 15, list);
-  let review; try { review=JSON.parse(fs.readFileSync(path.join(RUNTIME,'config','cleanup-evidence-protection.json'),'utf8')); } catch { review=null; }
+  const review=evidenceReview=await buildEvidenceReview(list,{runtime:RUNTIME,referenceInventory:require('./cleanup-extended-retention').referenceInventory});
   for(let i=list.length-1;i>=0;i--){
     const item=list[i]; const sha256=crypto.createHash('sha256').update(fs.readFileSync(item.path)).digest('hex');
     const row=review?.contract==='cleanup-evidence-protection-v1'?review.entries?.find(r=>r.path===item.path):null;
@@ -70,16 +71,19 @@ function listCandidates() {
 async function main() {
 const localAssets = await require("./run-cleanup-local-assets").run({apply,noStatus:process.argv.includes("--no-status"),maintenanceAuthorization:process.argv.find(x=>x.startsWith("--maintenance-authorization="))?.slice("--maintenance-authorization=".length)});
 if (!localAssets.ok) throw Error("local_assets_failed");
-const candidates = listCandidates();
+const candidates = await listCandidates();
 const deleted = [];
 const failures = [];
 if (apply) for (const item of candidates) {
   try { const allowedRoot = [RUNTIME, TERMINAL, PUBLISH_SYNC].find(root => item.path.toLowerCase().startsWith(root.toLowerCase() + path.sep)); if (!allowedRoot) throw Error("cleanup_root_not_allowed"); assertTree(allowedRoot,item.path); if(item.sha256 && crypto.createHash("sha256").update(fs.readFileSync(item.path)).digest("hex")!==item.sha256) throw Error("evidence_changed_before_delete"); fs.rmSync(item.path, { recursive: item.kind === "directory", force: true }); deleted.push(item); }
   catch (error) { failures.push({ path: item.path, error: error.message }); }
 }
+for(const d of evidenceDecisions){if(!d.eligible && (!fs.existsSync(d.path)||crypto.createHash('sha256').update(fs.readFileSync(d.path)).digest('hex')!==d.sha256))failures.push({path:d.path,error:'protected_evidence_readback_failed'});}
+for(const d of deleted){if(fs.existsSync(d.path))failures.push({path:d.path,error:'deleted_file_readback_failed'});}
 const payload = {
-  evidenceDecisions, evidenceReviewComplete: evidenceDecisions.every(d=>!['protection_evidence_missing_or_stale','reference_review_not_current','incident_or_success_unknown','retention_start_invalid'].includes(d.reason)),
-  localAssets, ok: failures.length === 0 && evidenceDecisions.every(d=>!['protection_evidence_missing_or_stale','reference_review_not_current','incident_or_success_unknown','retention_start_invalid'].includes(d.reason)), applied: apply, dryRun: !apply, checkedAt: new Date().toISOString(), contract: "runtime-retention-v1",
+  evidenceReview, independentReadback: {protectedFiles:evidenceDecisions.filter(d=>!d.eligible).length,deletedFiles:deleted.length,ok:failures.length===0},
+  evidenceDecisions, evidenceReviewComplete: evidenceDecisions.every(d=>!['protection_evidence_missing_or_stale','reference_review_not_current','incident_or_success_unknown','retention_start_invalid','formal_or_rollback_policy_unknown'].includes(d.reason)),
+  localAssets, ok: failures.length === 0 && evidenceDecisions.every(d=>!['protection_evidence_missing_or_stale','reference_review_not_current','incident_or_success_unknown','retention_start_invalid','formal_or_rollback_policy_unknown'].includes(d.reason)), applied: apply, dryRun: !apply, checkedAt: new Date().toISOString(), contract: "runtime-retention-v1",
   retention: { watchdogEvidenceDays: 15, datedLogsDays: 30, fugleCacheDays: 7, testOutputsDays: 30, retiredVersionsDays: 45, terminatedTempDays: 7 },
   protected: ["cache/intraday/fugle-daytrade-ws-candles.json", "daily OHLCV and volume", "Strategy3/4 results", "/88, mobile and latest scorecard", "newest 15 days of formal evidence", "production-health.jsonl"],
   candidates: candidates.length + localAssets.candidates.length, candidateBytes: [...candidates,...localAssets.candidates].reduce((n, item) => n + item.bytes, 0),

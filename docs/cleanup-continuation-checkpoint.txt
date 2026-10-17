@@ -1,0 +1,7 @@
+清理員隔離續辦檢查點（非發布候選）
+承接 1feca6ecde88827bbd81b8dadaed91cc6fe62c26。
+本輪：舊 installer 轉呼叫五段 installer；C16 Registry Disabled；C17 現有引用與事故來源讀取、未知保護、刪除前 hash 與保護檔獨立讀回；Storage 遞迴分頁及 Blob 保護讀回；maintenance 整輪 deadline；journal 缺失時間/階段集合拒絕；歷史清理缺 referenceMs 拒絕。
+50 個 node:test 結果通過（其中 local-assets 檔案內包含既有 23 checks；不可重複加總為不同整合驗收）。fixture network / fixture filesystem，不代表正式資料或自然排程。
+ISOLATED_PARTIAL。尚未完成：全部 C/N 項目的實際五段同批 E2E、自然觸發 instance 身分、Writer/匯出共用互斥、19:10/21:15/23:10 完整鏈路、C17 正式保護來源完整性與併發變更協議、Storage 退役綁定及刪除流程。
+C16 20 日曆日 RESTORE_NO_GO：完整分鐘封存、版本集合、Reader ACK、保護與併發證據缺失。LAB 現有日K封存和09點研究入口不足以簽認。
+此檢查點不可部署，不代表所有可獨立工程已完成。正式 DB、Task、Production、排程未改，無正式刪除。

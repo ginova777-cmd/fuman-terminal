@@ -1,5 +1,6 @@
 param(
   [string]$ProjectRoot = 'C:\fuman-release-owner\prod81',
+  [string]$OnlyTask = '',
   [string]$UserId = "$env:USERDOMAIN\$env:USERNAME"
 )
 
@@ -19,6 +20,10 @@ $specs = @(
   @{ Name='Fuman Daily Retention Maintenance 1625'; At='19:10'; Runner='run-daily-retention-maintenance.ps1'; Extra=' -Apply'; Purpose='stage 5/5 runtime/cache/observability cleanup and final verifier' }
 )
 
+if ($OnlyTask) {
+  $specs = @($specs | Where-Object { $_.Name -eq $OnlyTask })
+  if ($specs.Count -ne 1) { throw 'Unknown cleanup task selector' }
+}
 $rows = foreach ($spec in $specs) {
   $runner = Join-Path $ProjectRoot $spec.Runner
   if (-not (Test-Path -LiteralPath $runner)) { throw "Missing cleanup runner: $runner" }

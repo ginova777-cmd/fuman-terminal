@@ -1179,9 +1179,9 @@
     {
       "taskName": "\\Fuman Daytrade Intraday Retention 1605",
       "displayName": "Fuman Daytrade Intraday Retention 1605",
-      "description": "Observed production Windows Task Scheduler entry.",
+      "description": "C16 RESTORE_NO_GO pending archive, Reader ACK and protected SQL acceptance; 20 calendar day policy.",
       "time": "18:40",
-      "expectedState": "Ready",
+      "expectedState": "Disabled",
       "expectedTriggers": [
         "18:40"
       ]

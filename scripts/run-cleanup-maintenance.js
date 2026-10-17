@@ -3,7 +3,8 @@ const fs=require('fs'),path=require('path'),{spawn}=require('child_process');
 const context=require('./cleanup-maintenance-context');
 const arg=name=>process.argv.find(x=>x.startsWith(`--${name}=`))?.slice(name.length+3);
 const save=(file,data)=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify(data,null,2)+'\n');};
-function command(file,args,log,env={}) {return new Promise(resolve=>{const fd=fs.openSync(log,'w');const child=spawn(file,args,{cwd:context.ROOT,env:{...process.env,...env},windowsHide:true,stdio:['ignore',fd,fd]});const timeout=setTimeout(()=>child.kill(),20*60*1000);child.on('error',error=>{clearTimeout(timeout);fs.closeSync(fd);resolve({exitCode:1,error:error.message});});child.on('exit',(code,signal)=>{clearTimeout(timeout);fs.closeSync(fd);resolve({exitCode:code??1,signal});});});}
+let roundDeadline;
+function command(file,args,log,env={}) {return new Promise(resolve=>{const remaining=Math.min(20*60*1000,roundDeadline-Date.now());if(!(remaining>0)){resolve({exitCode:1,error:'cleanup_round_deadline_exceeded'});return;}const fd=fs.openSync(log,'w');const child=spawn(file,args,{cwd:context.ROOT,env:{...process.env,...env},windowsHide:true,stdio:['ignore',fd,fd]});const timeout=setTimeout(()=>child.kill(),remaining);child.on('error',error=>{clearTimeout(timeout);fs.closeSync(fd);resolve({exitCode:1,error:error.message});});child.on('exit',(code,signal)=>{clearTimeout(timeout);fs.closeSync(fd);resolve({exitCode:code??1,signal});});});}
 function protectedFiles(){
   const files=[path.join(context.RUNTIME,'cache/intraday/fugle-daytrade-ws-candles.json'),path.join(context.RUNTIME,'logs/production-health.jsonl')];
   const dir=path.join(context.RUNTIME,'data/scan-receipts');
@@ -13,9 +14,11 @@ function protectedFiles(){
 async function main(){
   if(!process.argv.includes('--apply'))throw Error('explicit_apply_required');
   const auth=context.authorization(arg('authorization'));
+  roundDeadline=Math.min(Date.parse(auth.expiresAt),Date.now()+20*60*1000);
+  if(!Number.isFinite(roundDeadline))throw Error('cleanup_round_deadline_missing');
   if(fs.existsSync(auth.journalFile))throw Error('cleanup_maintenance_run_already_exists_use_read_only_verifier');
   const lock=path.join(context.RUNTIME,'locks/cleanup-maintenance.lock');fs.mkdirSync(path.dirname(lock),{recursive:true});const lockFd=fs.openSync(lock,'wx');
-  const j={contract:'cleanup-maintenance-execution-v1',runId:auth.runId,authorizationSha256:auth.sha256,startedAt:new Date().toISOString(),steps:[],protection:{before:protectedFiles()}};
+  const j={contract:'cleanup-maintenance-execution-v1',runId:auth.runId,authorizationSha256:auth.sha256,deadlineAt:new Date(roundDeadline).toISOString(),executionMode:"authorized_maintenance",startedAt:new Date().toISOString(),steps:[],protection:{before:protectedFiles()}};
   const logDir=path.join(context.RUNTIME,'logs',auth.runId);fs.mkdirSync(logDir,{recursive:true});save(auth.journalFile,j);
   try {
     const preflight=await command(process.execPath,['scripts/supabase-incident-guard.js','check','--class=guard','--action=authorized-cleanup-maintenance'],path.join(logDir,'incident.log'));
@@ -35,10 +38,11 @@ async function main(){
     const plan=[['retired','cleanup-api-only-retired-artifacts.js',['--root','C:\\fuman-terminal','--runtime-root',context.RUNTIME,'--json',`--maintenance-authorization=${auth.file}`]],['history','cleanup-supabase-vercel-history.js',['--apply','--json','--maintenance-authorization='+auth.file]],['intraday','cleanup-daytrade-intraday-retention.js',['--apply','--max-batches=60','--json']],['runtime','cleanup-runtime-retention.js',['--apply','--json',"--maintenance-authorization="+auth.file]],['priority','cleanup-daytrade-stale-priority-cache.js',['--apply','--json',`--reference-trade-date=${referenceTradeDate}`]],['observability','cleanup-source-observability-retention.js',['--apply','--json']],['extended','cleanup-extended-retention.js',['--apply',`--maintenance-authorization=${auth.file}`]],['cost','monitor-vercel-cost-health.js',[]],['janitor','verify-global-cost-janitor-scorecard.js',[]]];
     for(const [name,script,args] of plan){
       context.authorization(auth.file);
+      if(Date.now()>=roundDeadline)throw Error('cleanup_round_deadline_exceeded');
       const row={name,script,startedAt:new Date().toISOString(),logFile:path.join(logDir,`${name}.log`),receipts:[]};j.steps.push(row);save(auth.journalFile,j);
       Object.assign(row,await command(process.execPath,['--use-system-ca',`scripts/${script}`,...args],row.logFile,{FUMAN_HISTORY_CLEANUP_ENABLE_VERCEL_CLI:'1',FUMAN_PRODUCTION_MIRROR_ROOT:'C:\\fuman-terminal'}));
       row.finishedAt=new Date().toISOString();
-      row.receipts=context.receipts()[name].filter(f=>fs.existsSync(f)).map(file=>({file,sha256:context.hash(file)}));save(auth.journalFile,j);
+      row.receipts=(context.receipts()[name]||[]).filter(f=>fs.existsSync(f)).map(file=>({file,sha256:context.hash(file)}));save(auth.journalFile,j);
       // Do not initiate another stage after an unsuccessful or uncertain operation.
       // Record the failure before finally closes this run and releases its lock.
       const log=fs.readFileSync(row.logFile,'utf8');

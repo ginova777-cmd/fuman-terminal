@@ -1,36 +1,5 @@
-param(
-  [string]$TaskName = "Fuman Global Cost Janitor Scorecard 1555",
-  [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
-  [string]$At = "18:10",
-  [switch]$RunNow,
-  [switch]$Uninstall
-)
-
-$ErrorActionPreference = "Stop"
-
-if ($Uninstall) {
-  Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
-  Write-Host "[global-cost-janitor-task] uninstalled $TaskName"
-  exit 0
-}
-
-$runner = Join-Path $ProjectRoot "run-global-cost-janitor-scorecard.ps1"
-if (!(Test-Path -LiteralPath $runner)) {
-  throw "Missing runner: $runner"
-}
-
-$action = New-ScheduledTaskAction `
-  -Execute "powershell.exe" `
-  -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$runner`" -ProjectRoot `"$ProjectRoot`"" `
-  -WorkingDirectory $ProjectRoot
-
-$trigger = New-ScheduledTaskTrigger -Daily -At $At
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
-
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
-Write-Host "[global-cost-janitor-task] registered $TaskName at $At"
-
-if ($RunNow) {
-  Start-ScheduledTask -TaskName $TaskName
-  Write-Host "[global-cost-janitor-task] started $TaskName"
-}
+param([string]$TaskName='Fuman Global Cost Janitor Scorecard 1555',[string]$At='18:10',[switch]$RunNow)
+$ErrorActionPreference='Stop'
+if ($RunNow) { throw 'Installer does not authorize a cleanup run' }
+if ($TaskName -ne 'Fuman Global Cost Janitor Scorecard 1555' -or $At -ne '18:10') { throw 'Cleanup schedule drift' }
+& (Join-Path $PSScriptRoot 'install-five-stage-cleanup-task.ps1') -OnlyTask $TaskName

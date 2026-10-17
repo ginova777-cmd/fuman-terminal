@@ -242,6 +242,7 @@ function rowTime(row, config) {
 }
 
 async function cleanupRunPair(config, args) {
+  if(!Number.isFinite(args.referenceMs))throw Error('retention_reference_missing');
   const retentionDays = config.retentionDays ?? args.supabaseRetentionDays;
   const keepRuns = config.keepRuns ?? args.keepRuns;
   const cutoffMs = args.referenceMs - retentionDays * 86400000;
