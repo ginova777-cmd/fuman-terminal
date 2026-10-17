@@ -68,7 +68,15 @@ async function listCandidates() {
   // Test outputs and final-audit directories require explicit retirement evidence.
   return list;
 }
+function inventoryFor(id){
+ const root=path.join(RUNTIME,id==='C17'?'state':'cache/fugle'),out=[];
+ function visit(dir){if(!fs.existsSync(dir))return;for(const entry of fs.readdirSync(dir,{withFileTypes:true})){const file=path.join(dir,entry.name);assertTree(root,file);if(entry.isDirectory())visit(file);else if(id==='C18'||/^daytrade-unattended-gate-(?:watchdog|0700|0845|0900|0910|0935)-evidence-.*\.json$/i.test(entry.name)){const bytes=fs.readFileSync(file);out.push({key:file,sha256:crypto.createHash('sha256').update(bytes).digest('hex')});}}}
+ visit(root);return out.sort((a,b)=>a.key.localeCompare(b.key));
+}
 async function main() {
+const authorizationFile=process.argv.find(x=>x.startsWith('--maintenance-authorization='))?.slice('--maintenance-authorization='.length);
+const maintenance=authorizationFile?require('./cleanup-maintenance-context').authorization(authorizationFile):null;
+const before={C17:inventoryFor('C17'),C18:inventoryFor('C18')};
 const localAssets = await require("./run-cleanup-local-assets").run({apply,noStatus:process.argv.includes("--no-status"),maintenanceAuthorization:process.argv.find(x=>x.startsWith("--maintenance-authorization="))?.slice("--maintenance-authorization=".length)});
 if (!localAssets.ok) throw Error("local_assets_failed");
 const candidates = await listCandidates();
@@ -83,6 +91,7 @@ for(const d of deleted){if(fs.existsSync(d.path))failures.push({path:d.path,erro
 const payload = {
   evidenceReview, independentReadback: {protectedFiles:evidenceDecisions.filter(d=>!d.eligible).length,deletedFiles:deleted.length,ok:failures.length===0},
   evidenceDecisions, evidenceReviewComplete: evidenceDecisions.every(d=>!['protection_evidence_missing_or_stale','reference_review_not_current','incident_or_success_unknown','retention_start_invalid','formal_or_rollback_policy_unknown'].includes(d.reason)),
+  maintenanceRunId:maintenance?.runId||null,maintenanceAuthorizationSha256:maintenance?.sha256||null,
   localAssets, ok: failures.length === 0 && evidenceDecisions.every(d=>!['protection_evidence_missing_or_stale','reference_review_not_current','incident_or_success_unknown','retention_start_invalid','formal_or_rollback_policy_unknown'].includes(d.reason)), applied: apply, dryRun: !apply, checkedAt: new Date().toISOString(), contract: "runtime-retention-v1",
   retention: { watchdogEvidenceDays: 15, datedLogsDays: 30, fugleCacheDays: 7, testOutputsDays: 30, retiredVersionsDays: 45, terminatedTempDays: 7 },
   protected: ["cache/intraday/fugle-daytrade-ws-candles.json", "daily OHLCV and volume", "Strategy3/4 results", "/88, mobile and latest scorecard", "newest 15 days of formal evidence", "production-health.jsonl"],
@@ -90,6 +99,15 @@ const payload = {
   candidateItems: process.argv.includes("--list") ? candidates : undefined,
   deleted: deleted.length + localAssets.processed.length, deletedBytes: [...deleted,...localAssets.processed].reduce((n, item) => n + item.bytes, 0), failures,
 };
+if(apply && maintenance){
+ payload.cleanupItems=[];
+ for(const id of ['C17','C18']){
+  const keys=new Set(before[id].map(r=>r.key));
+  const observation={contract:'cleanup-item-observation-v1',id,runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before:before[id],after:inventoryFor(id),candidates:candidates.filter(c=>keys.has(c.path)).map(c=>c.path),checkedAt:new Date().toISOString()};
+  const proofFile=path.join(RUNTIME,'status','cleanup-items',maintenance.runId,id+'.json');
+  payload.cleanupItems.push(require('./cleanup-item-observation').persist(proofFile,observation));
+ }
+}
 const status = path.join(RUNTIME, "status");
 fs.mkdirSync(status, { recursive: true });
 payload.receiptFile = path.join(status, `runtime-retention-${taipeiDate()}.json`);

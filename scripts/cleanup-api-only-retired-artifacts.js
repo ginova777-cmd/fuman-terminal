@@ -644,21 +644,30 @@ async function main() {
   const startedAt = new Date();
   const maintenance = args.maintenanceAuthorization ? require("./cleanup-maintenance-context").authorization(args.maintenanceAuthorization) : null;
   retentionReferenceMs = maintenance ? Date.parse(maintenance.issuedAt) : startedAt.getTime();
-  const rootResults = args.roots.map((root) => cleanupRoot(root, args));
-  const runtimeResult = { root: args.runtimeRoot, deleted: [], skipped: [] };
-  pruneOldFiles(path.join(args.runtimeRoot, "archive", "strategy2-intraday", "static-latest"), RUNTIME_RETENTION_DAYS, runtimeResult, args.dryRun);
-  pruneOldFiles(path.join(args.runtimeRoot, "archive", "strategy2-intraday", "history"), RUNTIME_HISTORY_RETENTION_DAYS, runtimeResult, args.dryRun);
-  pruneMatchingDirectories(path.join(args.runtimeRoot, "cache", "fugle"), (name) => /^historical-legacy-mixed-units-/i.test(name), runtimeResult, args.dryRun);
-  // Logs now belong to the manifest-based local-assets runner (sealed gzip archives).
-  // Temporary files require terminated-job evidence in the local-assets runner.
-  pruneRetiredDataFiles(path.join(args.runtimeRoot, "data", "retired"), RUNTIME_RETIRED_RETENTION_DAYS, runtimeResult, args.dryRun);
-  pruneOldFilesWhere(path.join(args.runtimeRoot, "data", "scan-receipts"), RUNTIME_SCAN_RECEIPT_RETENTION_DAYS, isPrunableScanReceipt, runtimeResult, args.dryRun);
-  pruneOldFilesWhere(path.join(args.runtimeRoot, "data"), RUNTIME_BACKUP_RETENTION_DAYS, isBackupLikeRuntimeFile, runtimeResult, args.dryRun);
-  pruneOldFilesWhere(path.join(args.runtimeRoot, "cache"), RUNTIME_BACKUP_RETENTION_DAYS, isBackupLikeRuntimeFile, runtimeResult, args.dryRun);
-  pruneStaleRuntimeFrontPageFiles(args.runtimeRoot, runtimeResult, args.dryRun);
+  const proof=require('./cleanup-item-observation'),cleanupItems=[],rootResults=[];
+  const runtimeResult={root:args.runtimeRoot,deleted:[],skipped:[]};
+  function observed(id,paths,operation){
+    const before=proof.files(paths),preview=operation(true),planned=preview.deleted||[];
+    const candidates=before.filter(r=>planned.some(p=>r.key===p||r.key.startsWith(p+path.sep))).map(r=>r.key);
+    const result=args.dryRun?preview:operation(false);
+    if(maintenance&&!args.dryRun)cleanupItems.push(proof.persist(path.join(args.runtimeRoot,'status/cleanup-items',maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before,after:proof.files(paths),candidates,checkedAt:new Date().toISOString()}));
+    return result;
+  }
+  const rootPaths=args.roots.flatMap(root=>[...EXACT_RETIRED,...listRetiredDataFiles(root),...RETIRED_DIRECTORIES,...RESERVED_ROUTE_ARTIFACTS].map(rel=>path.join(root,rel)));
+  observed('C01',rootPaths,dryRun=>{const rows=args.roots.map(root=>cleanupRoot(root,{...args,dryRun}));if(dryRun&&rows.some(r=>r.issues.length))throw Error('retired_root_inventory_issues');if(dryRun===args.dryRun)rootResults.push(...rows);return {deleted:rows.flatMap(r=>r.deleted)};});
+  function runtimeStep(id,paths,fn){const result=observed(id,paths,dryRun=>{const r={deleted:[],skipped:[]};fn(r,dryRun);return r;});runtimeResult.deleted.push(...result.deleted);runtimeResult.skipped.push(...result.skipped);}
+  const at=(...parts)=>path.join(args.runtimeRoot,...parts);
+  runtimeStep('C02',[at('archive','strategy2-intraday','static-latest')],(r,d)=>pruneOldFiles(at('archive','strategy2-intraday','static-latest'),RUNTIME_RETENTION_DAYS,r,d));
+  runtimeStep('C03',[at('archive','strategy2-intraday','history')],(r,d)=>pruneOldFiles(at('archive','strategy2-intraday','history'),RUNTIME_HISTORY_RETENTION_DAYS,r,d));
+  runtimeStep('C04',[at('cache','fugle')],(r,d)=>pruneMatchingDirectories(at('cache','fugle'),name=>/^historical-legacy-mixed-units-/i.test(name),r,d));
+  runtimeStep('C05',[at('data','retired')],(r,d)=>pruneRetiredDataFiles(at('data','retired'),RUNTIME_RETIRED_RETENTION_DAYS,r,d));
+  runtimeStep('C06',[at('data','scan-receipts')],(r,d)=>pruneOldFilesWhere(at('data','scan-receipts'),RUNTIME_SCAN_RECEIPT_RETENTION_DAYS,isPrunableScanReceipt,r,d));
+  runtimeStep('C07',[at('data'),at('cache')],(r,d)=>{pruneOldFilesWhere(at('data'),RUNTIME_BACKUP_RETENTION_DAYS,isBackupLikeRuntimeFile,r,d);pruneOldFilesWhere(at('cache'),RUNTIME_BACKUP_RETENTION_DAYS,isBackupLikeRuntimeFile,r,d);});
+  runtimeStep('C08',RUNTIME_STALE_FRONT_PAGE_FILES.map(rel=>at(rel)),(r,d)=>pruneStaleRuntimeFrontPageFiles(args.runtimeRoot,r,d));
 
   const payload = {
-    ok: true,
+    ok: rootResults.every(r=>r.issues.length===0),
+    cleanupItems,
     dryRun: args.dryRun,
     startedAt: startedAt.toISOString(),
     finishedAt: new Date().toISOString(),
@@ -671,6 +680,7 @@ async function main() {
     runtime: runtimeResult,
     deletedCount: rootResults.reduce((sum, item) => sum + item.deleted.length, 0) + runtimeResult.deleted.length,
   };
+  if(!payload.ok)process.exitCode=1;
   if (args.writeStatus && !args.dryRun) writeStatus(args.runtimeRoot, payload);
   if (args.json) console.log(JSON.stringify(payload, null, 2));
   else {

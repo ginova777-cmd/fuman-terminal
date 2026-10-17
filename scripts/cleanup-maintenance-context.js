@@ -23,6 +23,7 @@ function assertRetiredReference(payload,auth) {
 }
 function verifyJournal(auth) {
   const j=JSON.parse(fs.readFileSync(auth.journalFile,'utf8'));
+  if(!Number.isFinite(Date.parse(j.startedAt))||!Number.isFinite(Date.parse(j.finishedAt))||Date.parse(j.finishedAt)<Date.parse(j.startedAt))throw Error('cleanup_execution_time_invalid');
   if(j.contract!=='cleanup-maintenance-execution-v1'||j.runId!==auth.runId||j.authorizationSha256!==auth.sha256||!j.finishedAt||Date.parse(j.startedAt)<Date.parse(auth.issuedAt)||Date.parse(j.finishedAt)>Date.now()||j.protection?.ok!==true) throw Error('cleanup_maintenance_execution_invalid');
   const expectedSteps=requiredSteps(auth);
   if(auth.scope===scopedPolicy.scope && (j.completionScope!==scopedPolicy.scope||JSON.stringify(j.deferredItems)!==JSON.stringify(scopedPolicy.deferredItems)))throw Error('cleanup_scope_drift');
@@ -46,6 +47,7 @@ function verifyScopedItems(j){
  for(const i of items){
   if(i.runId!==j.runId||i.status!=='complete'||i.inventoryComplete!==true||i.readbackVerified!==true||i.protectedReadbackVerified!==true||!Number.isSafeInteger(i.deleted)||i.deleted<0||i.remaining!==0||!Array.isArray(i.protectedSet)||!Array.isArray(i.evidence)||!i.evidence.length)throw Error('cleanup_item_evidence_incomplete:'+i.id);
   for(const e of i.evidence)if(!e.file||!e.sha256||hash(e.file)!==e.sha256)throw Error('cleanup_item_evidence_changed:'+i.id);
+  require('./cleanup-item-observation').verify(i);
  }
  return items;
 }

@@ -4,11 +4,24 @@ const context=require('./cleanup-maintenance-context');
 const arg=name=>process.argv.find(x=>x.startsWith(`--${name}=`))?.slice(name.length+3);
 const save=(file,data)=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify(data,null,2)+'\n');};
 let roundDeadline;
-function command(file,args,log,env={}) {return new Promise(resolve=>{const remaining=Math.min(20*60*1000,roundDeadline-Date.now());if(!(remaining>0)){resolve({exitCode:1,error:'cleanup_round_deadline_exceeded'});return;}const fd=fs.openSync(log,'w');const child=spawn(file,args,{cwd:context.ROOT,env:{...process.env,...env},windowsHide:true,stdio:['ignore',fd,fd]});const timeout=setTimeout(()=>child.kill(),remaining);child.on('error',error=>{clearTimeout(timeout);fs.closeSync(fd);resolve({exitCode:1,error:error.message});});child.on('exit',(code,signal)=>{clearTimeout(timeout);fs.closeSync(fd);resolve({exitCode:code??1,signal});});});}
+function command(file,args,log,env={}) {
+  return new Promise(resolve=>{
+    const remaining=Math.min(20*60*1000,roundDeadline-Date.now());
+    if(!(remaining>0)){resolve({exitCode:1,error:'cleanup_round_deadline_exceeded'});return;}
+    const fd=fs.openSync(log,'w');let settled=false,timedOut=false,timer;
+    const finish=value=>{if(settled)return;settled=true;clearTimeout(timer);fs.closeSync(fd);resolve({...value,timedOut});};
+    let child;
+    try{child=spawn(file,args,{cwd:context.ROOT,env:{...process.env,...env},windowsHide:true,stdio:['ignore',fd,fd]});}
+    catch(error){finish({exitCode:1,error:error.message});return;}
+    timer=setTimeout(()=>{timedOut=true;child.kill();},remaining);
+    child.once('error',error=>finish({exitCode:1,error:error.message}));
+    child.once('close',(code,signal)=>finish({exitCode:timedOut?1:(code??1),signal}));
+  });
+}
 function protectedFiles(){
   const files=[path.join(context.RUNTIME,'cache/intraday/fugle-daytrade-ws-candles.json'),path.join(context.RUNTIME,'logs/production-health.jsonl')];
   const dir=path.join(context.RUNTIME,'data/scan-receipts');
-  for(const e of fs.readdirSync(dir,{withFileTypes:true})) if(e.isFile() && (/latest/i.test(e.name)||!/(?:20\d{2}[-]?\d{2}[-]?\d{2})/.test(e.name)) && !/^(?:daytrade-priority-cache-stale-rejected|cleanup-maintenance)/.test(e.name)) files.push(path.join(dir,e.name));
+  for(const e of (fs.existsSync(dir)?fs.readdirSync(dir,{withFileTypes:true}):[])) if(e.isFile() && (/latest/i.test(e.name)||!/(?:20\d{2}[-]?\d{2}[-]?\d{2})/.test(e.name)) && !/^(?:daytrade-priority-cache-stale-rejected|cleanup-maintenance)/.test(e.name)) files.push(path.join(dir,e.name));
   return files.filter(f=>fs.existsSync(f)).map(file=>({file,sha256:context.hash(file)}));
 }
 async function main(){
@@ -35,7 +48,9 @@ async function main(){
   const lock=path.join(context.RUNTIME,'locks/cleanup-maintenance.lock');fs.mkdirSync(path.dirname(lock),{recursive:true});const lockFd=fs.openSync(lock,'wx');
   const j={contract:'cleanup-maintenance-execution-v1',runId:auth.runId,authorizationSha256:auth.sha256,deadlineAt:new Date(roundDeadline).toISOString(),executionMode:auth.executionMode||"authorized_maintenance",completionScope:auth.scope,deferredItems:context.scopedPolicy && auth.scope===context.scopedPolicy.scope?context.scopedPolicy.deferredItems:[],startedAt:new Date().toISOString(),steps:[],protection:{before:protectionBefore}};
   const logDir=path.join(context.RUNTIME,'logs',auth.runId);
+  const saveTotal=receipt=>{const archive=path.join(context.RUNTIME,'status/cleanup-totals',auth.runId+'.json');fs.mkdirSync(path.dirname(archive),{recursive:true});fs.writeFileSync(archive,JSON.stringify(receipt,null,2)+'\n',{flag:'wx'});save(totalFile,receipt);};
   const totalFile=path.join(context.RUNTIME,'status',`cleanup-total-${auth.date.replaceAll('-','')}.json`);fs.mkdirSync(logDir,{recursive:true});save(auth.journalFile,j);
+  let executionError;
   try {
     const preflight=await command(process.execPath,['scripts/supabase-incident-guard.js','check','--class=guard','--action=authorized-cleanup-maintenance'],path.join(logDir,'incident.log'));
     if(preflight.exitCode)throw Error('supabase_incident_blocked');
@@ -56,7 +71,7 @@ async function main(){
       context.authorization(auth.file);
       if(Date.now()>=roundDeadline)throw Error('cleanup_round_deadline_exceeded');
       const row={name,script,startedAt:new Date().toISOString(),logFile:path.join(logDir,`${name}.log`),receipts:[]};j.steps.push(row);save(auth.journalFile,j);
-      Object.assign(row,await command(process.execPath,['--use-system-ca',`scripts/${script}`,...args],row.logFile,{FUMAN_HISTORY_CLEANUP_ENABLE_VERCEL_CLI:'1',FUMAN_PRODUCTION_MIRROR_ROOT:'C:\\fuman-terminal'}));
+      Object.assign(row,await command(process.execPath,['--use-system-ca',`scripts/${script}`,...args],row.logFile,{FUMAN_CLEANUP_CONTEXT_FILE:auth.file,FUMAN_HISTORY_CLEANUP_ENABLE_VERCEL_CLI:'1',FUMAN_PRODUCTION_MIRROR_ROOT:'C:\\fuman-terminal'}));
       row.finishedAt=new Date().toISOString();
       row.receipts=(context.receipts()[name]||[]).filter(f=>fs.existsSync(f)).map(file=>({file,sha256:context.hash(file)}));save(auth.journalFile,j);
       // Do not initiate another stage after an unsuccessful or uncertain operation.
@@ -69,18 +84,25 @@ async function main(){
         throw Error(`${j.firstFailure.reason}:${name}`);
       }
     }
+  } catch(error) {
+    executionError=error;j.firstFailure=j.firstFailure||{reason:error.message};
   } finally {
     j.finishedAt=new Date().toISOString();j.protection.changed=j.protection.before.filter(x=>!fs.existsSync(x.file)||context.hash(x.file)!==x.sha256);j.protection.ok=j.protection.changed.length===0;save(auth.journalFile,j);fs.closeSync(lockFd);fs.unlinkSync(lock);
   }
   try {
+  if(executionError)throw executionError;
   context.verifyJournal(auth);
   if(context.scopedPolicy && auth.scope===context.scopedPolicy.scope){
     j.items=j.steps.flatMap(step=>step.receipts.flatMap(e=>{const payload=JSON.parse(fs.readFileSync(e.file,'utf8'));return payload.cleanupItems||[];}));
     context.verifyScopedItems(j);
   }
+  if(j.executionMode==='scheduled_workday'){
+    j.naturalOrigin=require('../lib/strategy-natural-evidence').collect({strategy:'cleanup',scan:{runId:auth.runId,tradeDate:auth.date,startedAt:auth.issuedAt},formalComplete:true,recovery:false,root:context.ROOT,runtime:context.RUNTIME});
+    if(j.naturalOrigin.naturalSlotComplete!==true)throw Error('cleanup_natural_completion_unverified');
+  }
   const receipt={contract:'cleanup-total-v1',runId:auth.runId,tradeDate:auth.date,executionMode:j.executionMode,completionScope:auth.scope,deferredItems:j.deferredItems,complete:true,fullSuiteComplete:false,status:'complete',exitCode:0,first_blocker:null,failed_checks:[],journalFile:auth.journalFile,contextFile:auth.file,contextSha256:auth.sha256,checkedAt:new Date().toISOString()};
-  save(auth.journalFile,j);receipt.journalSha256=context.hash(auth.journalFile);save(totalFile,receipt);
-  }catch(error){j.firstFailure=j.firstFailure||{reason:error.message};save(auth.journalFile,j);save(totalFile,{contract:'cleanup-total-v1',runId:auth.runId,tradeDate:auth.date,executionMode:j.executionMode,completionScope:auth.scope,deferredItems:j.deferredItems,status:'failed',complete:false,fullSuiteComplete:false,exitCode:1,first_blocker:error.message,failed_checks:[error.message],journalFile:auth.journalFile,checkedAt:new Date().toISOString()});throw error;}
+  save(auth.journalFile,j);receipt.journalSha256=context.hash(auth.journalFile);saveTotal(receipt);
+  }catch(error){j.firstFailure=j.firstFailure||{reason:error.message};save(auth.journalFile,j);saveTotal({contract:'cleanup-total-v1',runId:auth.runId,tradeDate:auth.date,executionMode:j.executionMode,completionScope:auth.scope,deferredItems:j.deferredItems,status:'failed',complete:false,fullSuiteComplete:false,exitCode:1,first_blocker:error.message,failed_checks:[error.message],journalFile:auth.journalFile,checkedAt:new Date().toISOString()});throw error;}
   console.log(JSON.stringify({ok:true,runId:auth.runId,journalFile:auth.journalFile,next:'Root Monitor CleanupMaintenance read-only acceptance'},null,2));
 }
 main().catch(e=>{console.error(e.stack);process.exitCode=1;});

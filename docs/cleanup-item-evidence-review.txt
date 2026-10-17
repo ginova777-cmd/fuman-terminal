@@ -1,0 +1,34 @@
+Cleanup 29-item continuation review — 2026-10-17
+
+Base: 7cdef6fd7e97060bec172397b2faac534cfca4db
+Status: ISOLATED_PARTIAL / RELEASE_NO_GO / POLICY_CONFLICT_REVIEW_REQUIRED.
+C16 remains DEFERRED. No production deletion, database change, deployment or Task change.
+
+Implemented candidate changes:
+- C01-C15, C17-C19, C24-C25 and N01-N05 can attach per-item source observations to their receipts when an execution context is supplied. Observations retain before/after membership and hashes, planned candidates, removed and remaining counts. The verifier recalculates the summary rather than accepting true flags alone.
+- Retired-root preview errors stop before mutation. History service failure stops the subsequent deployment cleanup. Missing deployment inventory is not overall success.
+- N receipts bind to the parent maintenance run; preserved candidates and unregistered local assets get content readback. Gzip evidence independently decompresses to the original hash.
+- Early orchestration failure writes a failed total; per-run totals are archived separately from the daily pointer. Scheduled completion rechecks natural origin after the business checks.
+- Root rejects an invalid calendar and a total pointing at a different journal.
+- The candidate PowerShell entry holds the same Windows exclusive file lease as the known Writer wrapper. Two isolated processes verify exclusion and release. This is not proof of all Reader/exporter exclusion or of descendant-process cancellation.
+
+Validation:
+67 Node test entries passed; existing local-assets script reports 23 internal assertions, not 23 additional Node tests. The new observations are real isolated filesystem/Git mutations and stateful service fixtures, not production operations. C20-C23 copied PostgreSQL evidence is retained without rerunning those unchanged database functions. Installer test uses a mocked Task Scheduler. Windows lease test uses a temporary file only. JavaScript syntax, PowerShell parse and diff checks passed.
+
+Not achieved:
+No positive single-run 17:10 -> all 29 -> total -> independent 23:10 Root result exists. C20-C23 do not yet produce the new same-run per-item observation contract. Existing SQL evidence must not be relabelled as a new run. The 67 test entries are not 29-item complete acceptance.
+
+New Owner evidence requires policy review:
+LAB reports 1,967 historical source-file references under C:/fuman-runtime/cache/fugle/historical/, which C18 currently includes in its seven-day cleanup. The LAB reader also discovers historical files dynamically. Individual batch.lock/publish.lock files do not establish a shared cleanup lease. LAB reports 4,843 references under C:/fuman-release-owner; these need exact intersection with N retirement manifests. The passing small C18 fixture does not cover this real protection conflict and must not be used for release approval.
+
+Proposed resolution, not applied as a retention policy change:
+Hold LAB historical sources and exact referenced assets regardless of age; incorporate versioned LAB source manifests into protection inventory; reject changed/incomplete reference inventories; define a common Reader/export lease or a validated immutable-source handoff before permitting concurrent cleanup. C16 is outside this decision.
+
+Other review requirements:
+Audit cross-item protections for dated formal receipts (C06), rollback-like backups (C07), run/results references (C09/C10), and N01/N04 retirement paths. C25 evidence hashes provider identity/metadata, not every protected object's body. Do not claim whole-body verification.
+
+Formal switch remains a proposal only:
+After the policy decision and a true 29-item same-run positive result, freeze and independently review the exact candidate SHA, reconcile release authority and production drift, obtain deployment approval, save pre-change code/Task XML, deploy through the existing release contract, keep C16 disabled, disable subordinate triggers before enabling the sole 17:10 entry, retain 21:15 cost and 23:10 Root monitoring. Any failed gate prevents activation.
+Rollback must restore the exact approved predecessor and Task XML. Do not reset a dirty authority checkout, delete new receipt evidence, or assume a code rollback restores deleted data. Retain immutable per-run evidence and stop cleanup while rollback is assessed.
+
+Stopped for the user's standing instruction to discuss policy conflicts before proceeding. This checkpoint is reviewable work in progress, not a deployment candidate approval or a complete handoff.

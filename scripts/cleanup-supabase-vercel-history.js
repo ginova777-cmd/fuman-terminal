@@ -285,6 +285,7 @@ async function cleanupRunPair(config, args) {
     retentionDays,
     keepRuns,
     scannedRuns: rows.length,
+    candidateRunIds: candidates,
     candidateRuns: candidates.length,
     deletedRuns,
     deletedResults,
@@ -410,7 +411,7 @@ async function cleanupVercelDeployments(args) {
   }
   const authMode = token ? "token" : "vercel-cli";
   const {allCursorPages}=require('./cleanup-history-pagination');
-  const inventory=await allCursorPages(async cursor=>{
+  const readInventory=()=>allCursorPages(async cursor=>{
     const query=new URLSearchParams({projectId:project.projectId,limit:'100'});
     if(project.orgId)query.set('teamId',project.orgId);
     if(cursor!==undefined)query.set('until',String(cursor));
@@ -420,6 +421,7 @@ async function cleanupVercelDeployments(args) {
     if(result.error||result.status!==0)throw Error('vercel inventory page failed: '+(result.error?.message||result.stderr||result.stdout).slice(0,300));
     return parseVercelJson(result.stdout);
   });
+  const inventory=await readInventory();
   const deployments=inventory.rows.map(item=>({...item,target:item.target===null ? "preview" : item.target}));
   const cutoffMs = args.referenceMs - args.vercelRetentionDays * 86400000;
   const byTarget = new Map();
@@ -476,8 +478,17 @@ async function cleanupVercelDeployments(args) {
     }
     deleted.push({ id, name: item.name || "", target: item.target || "", url: item.url || "", createdAt: item.createdAt || 0 });
   }
+  let itemEvidence;
+  if(args.apply){
+    const after=await readInventory();
+    const projectRow=item=>{const value={id:item.uid||item.id||item.url,target:item.target===null?'preview':item.target,createdAt:item.createdAt,url:item.url,alias:item.alias};return {key:String(value.id),sha256:require('crypto').createHash('sha256').update(JSON.stringify(stable(value))).digest('hex')};};
+    const observation={contract:'cleanup-item-observation-v1',id:'C15',runId:args.maintenance?.runId||'unscoped',inventoryComplete:inventory.complete,readbackComplete:after.complete,before:deployments.map(projectRow),after:after.rows.map(projectRow),candidates:candidates.map(i=>String(i.uid||i.id||i.url)),checkedAt:new Date().toISOString()};
+    require('./cleanup-item-observation').reconcile(observation);
+    if(args.maintenance)itemEvidence=require('./cleanup-item-observation').persist(path.join(STATUS_DIR,'cleanup-items',args.maintenance.runId,'C15.json'),observation);
+  }
   return {
     ok: true,
+    itemEvidence,
     project,
     scannedDeployments: deployments.length,
     inventoryComplete: inventory.complete,
@@ -489,29 +500,53 @@ async function cleanupVercelDeployments(args) {
     keepPerTarget: args.vercelKeepPerTarget,
     candidateDeployments: candidates.length,
     deletedDeployments: args.apply ? deleted.length : 0,
-    candidates: deleted.slice(0, 20),
+    candidates: deleted,
     dryRun: !args.apply,
   };
 }
 
+function stable(value){return value&&typeof value==='object'?(Array.isArray(value)?value.map(stable):Object.fromEntries(Object.keys(value).sort().map(k=>[k,stable(value[k])]))):value;}
+function rowEvidence(table,row){const sha256=require('crypto').createHash('sha256').update(JSON.stringify(stable(row))).digest('hex');return {key:table+':'+sha256,sha256};}
+async function fullTable(table,order){
+ const rows=[],seen=new Set();let count;
+ for(let page=0;page<100;page++){
+  const r=await supabaseFetch(`${table}?select=*&order=${encodeURIComponent(order)}&limit=1000&offset=${rows.length}`);
+  if(count===undefined)count=r.count;else if(count!==r.count)throw Error('history_inventory_count_drift:'+table);
+  for(const row of r.rows){const key=rowEvidence(table,row).key;if(seen.has(key))throw Error('history_inventory_duplicate:'+table);seen.add(key);rows.push(row);}
+  if(rows.length>count)throw Error('history_inventory_count_exceeded:'+table);
+  if(rows.length===count)return rows;
+  if(!r.rows.length)throw Error('history_inventory_incomplete:'+table);
+ }
+ throw Error('history_inventory_bound:'+table);
+}
 async function cleanupSupabase(args) {
-  const sections = [];
-  for (const config of EVENT_TABLES) {
-    sections.push(await cleanupEventTable({ ...config, retentionDays: config.key === "mobile_update_events" ? args.eventRetentionDays : config.retentionDays }, args).catch((error) => ({ key: config.key, ok: false, error: error.message })));
+ const sections=[],cleanupItems=[];
+ const groups={C09:RUN_TABLES.filter(c=>c.key!=='strategy2').map(c=>({config:c,type:'run'})),C10:RUN_TABLES.filter(c=>c.key==='strategy2').map(c=>({config:c,type:'run'})),C11:EVENT_TABLES.map(c=>({config:c,type:'event'})),C12:SNAPSHOT_TABLES.map(c=>({config:c,type:'snapshot'})),C13:[{config:DATE_RETENTION_TABLES[0],type:'date'}],C14:[{config:DATE_RETENTION_TABLES[1],type:'date'}]};
+ for(const [id,entries] of Object.entries(groups)){
+  const before=[],after=[],candidates=[];let complete=true;
+  for(const {config:c,type} of entries){
+   try{
+    const tables=type==='run'?[c.runsTable,c.resultsTable]:[c.table];
+    const snapshots=[];
+    for(const table of tables){const rows=await fullTable(table,type==='run'?'run_id.asc':c.dateColumn+'.asc');snapshots.push({table,rows});before.push(...rows.map(r=>rowEvidence(table,r)));}
+    const r=type==='run'?await cleanupRunPair(c,args):type==='event'?await cleanupEventTable({...c,retentionDays:args.eventRetentionDays},args):type==='snapshot'?await cleanupSnapshotTable(c,args):await cleanupDateRetentionTable({...c,retentionDays:args.dailyHistoryRetentionDays},args);
+    sections.push(r);
+    for(const {table,rows} of snapshots){
+     for(const row of rows){
+      const eligible=type==='run'?r.candidateRunIds.includes(row.run_id)&&(!c.strategy||(table===c.resultsTable&&c.resultsStrategy===false)||row.strategy===c.strategy):row[c.dateColumn]!=null&&String(row[c.dateColumn])<r.cutoff&&(type!=='snapshot'||/^__fuman_/.test(row.symbol||''));
+      if(eligible)candidates.push(rowEvidence(table,row).key);
+     }
+     after.push(...(await fullTable(table,type==='run'?'run_id.asc':c.dateColumn+'.asc')).map(row=>rowEvidence(table,row)));
+    }
+   }catch(error){complete=false;sections.push({key:c.key,ok:false,error:error.message});break;}
   }
-  for (const config of SNAPSHOT_TABLES) {
-    sections.push(await cleanupSnapshotTable(config, args).catch((error) => ({ key: config.key, ok: false, error: error.message })));
+  if(complete&&args.apply&&args.maintenance){
+   try{cleanupItems.push(require('./cleanup-item-observation').persist(path.join(STATUS_DIR,'cleanup-items',args.maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:args.maintenance.runId,inventoryComplete:true,readbackComplete:true,before,after,candidates,checkedAt:new Date().toISOString()}));}
+   catch(error){sections.push({key:id,ok:false,error:error.message});}
   }
-  for (const config of DATE_RETENTION_TABLES) {
-    sections.push(await cleanupDateRetentionTable({ ...config, retentionDays: args.dailyHistoryRetentionDays }, args).catch((error) => ({ key: config.key, ok: false, error: error.message })));
-  }
-  for (const config of RUN_TABLES) {
-    sections.push(await cleanupRunPair(config, args).catch((error) => ({ key: config.key, ok: false, error: error.message })));
-  }
-  return {
-    ok: sections.every((item) => item.ok !== false),
-    sections,
-  };
+  if(sections.some(s=>s.ok===false))break;
+ }
+ return {ok:sections.every(s=>s.ok!==false),sections,cleanupItems};
 }
 
 function writeStatus(payload) {
@@ -536,9 +571,11 @@ async function main() {
     maintenanceAuthorizationSha256: args.maintenance?.sha256 || null,
     source: "supabase-vercel-history-cleanup",
     supabase: args.skipSupabase ? { skipped: true } : await cleanupSupabase(args),
-    vercel: args.skipVercel ? { skipped: true } : await cleanupVercelDeployments(args).catch((error) => ({ ok: false, error: error.message })),
+    vercel: null,
   };
-  payload.ok = payload.supabase?.ok !== false && payload.vercel?.ok !== false;
+  payload.vercel=payload.supabase.ok!==true?{ok:false,skipped:true,reason:'supabase_stage_failed_stop'}:args.skipVercel?{skipped:true}:await cleanupVercelDeployments(args).catch(error=>({ok:false,error:error.message}));
+  payload.cleanupItems=[...(payload.supabase.cleanupItems||[]),...(payload.vercel.itemEvidence?[payload.vercel.itemEvidence]:[])];
+  payload.ok = payload.supabase?.ok === true && payload.vercel?.ok === true && !payload.supabase.skipped && !payload.vercel.skipped;
   if (args.status) {
     const statusWrite = writeStatus(payload);
     if (!statusWrite.ok) payload.statusWriteWarning = statusWrite.error;

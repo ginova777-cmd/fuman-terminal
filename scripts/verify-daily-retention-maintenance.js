@@ -72,6 +72,7 @@ async function main() {
   const maintenance = maintenanceArg ? maintenanceContext.authorization(maintenanceArg.slice('--maintenance-authorization='.length)) : null;
   const execution = maintenance ? maintenanceContext.verifyJournal(maintenance) : null;
   const tradingDay = await isTwseTradingDay(new Date(`${date.iso}T04:00:00.000Z`), { stateDir: path.join(RUNTIME, "state") });
+  if(tradingDay.error||tradingDay.source==='weekend_fallback'||typeof tradingDay.isTradingDay!=='boolean')throw Error('cleanup_calendar_unverified');
   if (!tradingDay.isTradingDay && !maintenance) {
     const payload = {
       ok: true,
@@ -105,7 +106,7 @@ async function main() {
     const total=readJson(file).value;
     if(!total||total.contract!=='cleanup-total-v1'||total.tradeDate!==date.iso||total.complete!==true||total.status!=='complete'||total.exitCode!==0||total.completionScope!==maintenanceContext.scopedPolicy.scope||total.fullSuiteComplete!==false||total.failed_checks?.length!==0||total.first_blocker!==null)throw Error('cleanup_scoped_total_not_complete');
     const auth=maintenanceContext.authorization(total.contextFile,{readOnly:true});
-    if(auth.sha256!==total.contextSha256||total.runId!==auth.runId||maintenanceContext.hash(total.journalFile)!==total.journalSha256)throw Error('cleanup_scoped_identity_drift');
+    if(total.journalFile!==auth.journalFile||auth.sha256!==total.contextSha256||total.runId!==auth.runId||maintenanceContext.hash(total.journalFile)!==total.journalSha256)throw Error('cleanup_scoped_identity_drift');
     const journal=maintenanceContext.verifyJournal(auth);maintenanceContext.verifyScopedItems(journal);
     if(journal.executionMode==='scheduled_workday'&&journal.naturalOrigin?.naturalSlotComplete!==true)throw Error('cleanup_natural_origin_missing');
     const schedule=scheduledTasks();

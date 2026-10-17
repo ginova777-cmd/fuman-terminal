@@ -96,6 +96,15 @@ function unique(items) {
   return output;
 }
 
+function evidenceRows(cache){
+ const rows=[],hash=value=>require('crypto').createHash('sha256').update(JSON.stringify(value)).digest('hex');
+ for(const [key,value]of Object.entries(cache||{})){
+  if(['lastStaleCacheCleanupAt','lastStaleCacheCleanupTradeDate','staleCacheRejectedCount'].includes(key))continue;
+  if(STALE_CACHE_KEYS.includes(key)&&Array.isArray(value)){const counts=new Map();for(const item of value){const digest=hash(item),n=counts.get(digest)||0;counts.set(digest,n+1);rows.push({key:key+':'+digest+':'+n,sha256:digest});}}
+  else rows.push({key,sha256:hash(value)});
+ }
+ return rows;
+}
 function main() {
   const date = taipeiDateParts();
   const tradeDate = arg("trade-date", date.iso);
@@ -104,6 +113,10 @@ function main() {
   const referenceTradeDateId = compactDate(referenceTradeDate);
   if (!referenceTradeDateId || referenceTradeDateId > tradeDateId) throw Error("invalid_reference_trade_date");
   const cache = readJson(CACHE_PATH, null);
+  const observationBefore=evidenceRows(cache);
+  const authFile=arg('maintenance-authorization',process.env.FUMAN_CLEANUP_CONTEXT_FILE||'');
+  const maintenance=authFile?require('./cleanup-maintenance-context').authorization(authFile):null;
+  const candidateKeys=[];
   const failures = [];
   const rejected = [];
   const touchedKeys = [];
@@ -121,12 +134,15 @@ function main() {
 
       const kept = [];
       let changed = false;
+      const seen=new Map();
       for (const item of original) {
+        const digest=require('crypto').createHash('sha256').update(JSON.stringify(item)).digest('hex'),occurrence=seen.get(digest)||0;seen.set(digest,occurrence+1);
         const symbol = symbolOf(item);
         const price = n(priceBySymbol[symbol], NaN);
         const lowPrice = Number.isFinite(price) && price > 0 && price < 50;
         if (staleWholeCache || lowPrice) {
           changed = true;
+          candidateKeys.push(key+':'+digest+':'+occurrence);
           rejected.push({
             key,
             symbol,
@@ -182,6 +198,10 @@ function main() {
     protected: ["formal candidates", "strategy results", "daily OHLCV", "formal 1m evidence tables", "latest scorecards"],
   };
 
+  if(apply&&maintenance){
+    if(!cache)throw Error('priority_cache_inventory_unavailable');
+    payload.cleanupItems=[require('./cleanup-item-observation').persist(path.join(STATUS_DIR,'cleanup-items',maintenance.runId,'C19.json'),{contract:'cleanup-item-observation-v1',id:'C19',runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before:observationBefore,after:evidenceRows(JSON.parse(fs.readFileSync(CACHE_PATH,'utf8'))),candidates:candidateKeys,checkedAt:new Date().toISOString()})];
+  }
   const statusFile = path.join(STATUS_DIR, `daytrade-stale-priority-cache-cleanup-${tradeDateId}.json`);
   const latestReceipt = path.join(RECEIPT_DIR, "daytrade-priority-cache-stale-rejected-latest.json");
   const datedReceipt = path.join(RECEIPT_DIR, `daytrade-priority-cache-stale-rejected-${tradeDateId}.json`);

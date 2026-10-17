@@ -1,7 +1,7 @@
 "use strict";
 const fs=require('fs'),path=require('path');
 const lib=require('./cleanup-local-assets');
-const RUNTIME='C:/fuman-runtime';
+const RUNTIME=process.env.FUMAN_RUNTIME_DIR||'C:/fuman-runtime';
 function read(p){return JSON.parse(fs.readFileSync(p,'utf8').replace(/^\uFEFF/,''));}
 function save(p,v){fs.mkdirSync(path.dirname(p),{recursive:true});const temp=p+'.'+process.pid+'.tmp';fs.writeFileSync(temp,JSON.stringify(v,null,2)+'\n',{flag:'wx'});fs.renameSync(temp,p);}
 function date(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()).replaceAll('-','');}
@@ -14,16 +14,19 @@ async function run({apply=false,noStatus=false,maintenanceAuthorization=null}={}
     if(maintenanceAuthorization)require('./cleanup-maintenance-context').authorization(maintenanceAuthorization);
     else {const calendar=await require('./twse-trading-day').isTwseTradingDay(new Date(),{stateDir:path.join(RUNTIME,'state'),ignoreOverrides:true});if(calendar.error||calendar.source==='weekend_fallback'||!calendar.isTradingDay)throw Error('local_assets_non_trading_day_apply_rejected');}
   }
+  const maintenance=maintenanceAuthorization?require('./cleanup-maintenance-context').authorization(maintenanceAuthorization):null;
   const manifest=path.join(RUNTIME,lib.policy.manifest);
   const entries=fs.existsSync(manifest)?read(manifest):{contract:'cleanup-local-assets-manifest-v1',entries:[]};
   if(entries.contract!=='cleanup-local-assets-manifest-v1'||!Array.isArray(entries.entries))throw Error('local_assets_manifest_invalid');
-  const receipt={contract:lib.policy.contract,runId:require('crypto').randomUUID(),checkedAt:new Date().toISOString(),applied:apply,ok:false,manifestPresent:fs.existsSync(manifest),categories:Object.keys(lib.policy.categories),candidates:[],processed:[],preserved:[],errors:[],protectedEvidence:[],inventory:[]};
+  const inventoryBefore=new Map(entries.entries.filter(e=>e&&typeof e.path==='string'&&fs.existsSync(e.path)).map(e=>[e.path,lib.fingerprint(e.path)]));
+  const receipt={contract:lib.policy.contract,runId:require('crypto').randomUUID(),checkedAt:new Date().toISOString(),applied:apply,ok:false,maintenanceRunId:maintenance?.runId||null,maintenanceAuthorizationSha256:maintenance?.sha256||null,manifestPresent:fs.existsSync(manifest),categories:Object.keys(lib.policy.categories),candidates:[],processed:[],preserved:[],errors:[],protectedEvidence:[],inventory:[]};
   const journal=path.join(RUNTIME,'status/cleanup-local-assets-runs',receipt.runId+'.json');
   const progress=()=>{if(apply)save(journal,receipt);};
   // Only catalog sizes; absence of retirement evidence is an explicit preservation reason.
   for(const root of ['outputs','logs','tmp']){
     const p=path.join(RUNTIME,root);if(!fs.existsSync(p))continue;
     const all=lib.files(p);receipt.inventory.push({root:p,files:all.length,bytes:all.reduce((n,f)=>n+fs.statSync(f).size,0),reason:'unregistered_assets_preserved'});
+    for(const file of all.filter(f=>!entries.entries.some(e=>typeof e?.path==='string'&&lib.inside(e.path,f)))){const bytes=fs.readFileSync(file);receipt.protectedEvidence.push({path:file,sha256:lib.hash(bytes),bytes:bytes.length,appendAllowed:path.basename(file)==='production-health.jsonl'});}
   }
   const lock=path.join(RUNTIME,'locks/cleanup-local-assets.lock');let fd;
   if(apply){fs.mkdirSync(path.dirname(lock),{recursive:true});fd=fs.openSync(lock,'wx');fs.writeSync(fd,JSON.stringify({pid:process.pid,startedAt:receipt.checkedAt}));}
@@ -43,10 +46,22 @@ async function run({apply=false,noStatus=false,maintenanceAuthorization=null}={}
       if(!fs.existsSync(entry.path)){receipt.preserved.push({path:entry.path,reason:'already_absent'});continue;}
       try{const item=lib.validate(entry,ctx);receipt.candidates.push(item);
         if(apply){try{ctx.activity=lib.activity();ctx.now=Date.now();refs=await require('./cleanup-extended-retention').referenceInventory(false,excluded);const current=lib.validate(entry,ctx);if(current.treeSha256!==item.treeSha256)throw Error('changed_after_preview');receipt.pendingAction={path:current.path,action:current.action,treeSha256:current.treeSha256};progress();receipt.processed.push(lib.applyOne(current));receipt.pendingAction=null;progress();}catch(error){receipt.errors.push("apply_failed:"+entry.path+":"+error.message);progress();}}
-      }catch(error){receipt.preserved.push({path:entry.path,category:entry.category,reason:error.message});}
+      }catch(error){const files=lib.fingerprint(entry.path);receipt.preserved.push({path:entry.path,category:entry.category,reason:error.message,files,treeSha256:lib.hash(JSON.stringify(files))});}
     }
     receipt.ok=receipt.errors.length===0;
     if(apply){receipt.readback=lib.verify(receipt);receipt.ok=receipt.ok&&receipt.readback.ok;}
+    if(apply&&maintenance){
+      receipt.cleanupItems=[];
+      const groups={N01:['retired_cache'],N02:['test_artifact'],N03:['sealed_log'],N04:['retired_worktree','retired_backup'],N05:['interrupted_temp']};
+      for(const [id,categories] of Object.entries(groups)){
+        const listed=entries.entries.filter(e=>categories.includes(e.category)&&inventoryBefore.has(e.path));
+        const before=listed.map(e=>({key:e.path,sha256:lib.hash(JSON.stringify(inventoryBefore.get(e.path)))}));
+        const after=listed.filter(e=>fs.existsSync(e.path)).map(e=>({key:e.path,sha256:lib.hash(JSON.stringify(lib.fingerprint(e.path)))}));
+        const candidates=receipt.candidates.filter(e=>categories.includes(e.category)).map(e=>e.path);
+        const archives=receipt.processed.filter(e=>categories.includes(e.category)&&e.archive).map(e=>({file:e.archive,sha256:e.archiveSha256,originalSha256:e.originalSha256,index:e.index}));
+        receipt.cleanupItems.push(require('./cleanup-item-observation').persist(path.join(RUNTIME,'status/cleanup-items',maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before,after,candidates,archives,checkedAt:new Date().toISOString()}));
+      }
+    }
     receipt.finishedAt=new Date().toISOString();
     progress();
     if(!noStatus){receipt.receiptFile=path.join(RUNTIME,'status',`cleanup-local-assets-${date()}.json`);save(receipt.receiptFile,receipt);}

@@ -84,6 +84,10 @@ function verify(receipt){
   const planned=receipt.candidates||[],processed=receipt.processed||[];
   if(planned.length!==processed.length||new Set(processed.map(p=>key(p.path))).size!==processed.length||processed.some(p=>!planned.some(c=>key(c.path)===key(p.path)&&c.treeSha256===p.treeSha256&&c.action===p.action)))issues.push('planned_processed_mismatch');
   for(const item of receipt.processed||[]){if(fs.existsSync(item.path))issues.push('source_remaining:'+item.path);if(item.archive){try{const b=fs.readFileSync(item.archive);if(hash(b)!==item.archiveSha256||hash(zlib.gunzipSync(b))!==item.originalSha256||read(item.index).sourceSha256!==item.originalSha256)issues.push('archive_invalid:'+item.archive);}catch{issues.push('archive_missing:'+item.archive);}}}
+  for(const item of receipt.preserved||[]){
+    if(item.reason==='already_absent'){if(fs.existsSync(item.path))issues.push('preserved_absence_changed:'+item.path);continue;}
+    try{if(!item.treeSha256||!Array.isArray(item.files)||hash(JSON.stringify(item.files))!==item.treeSha256||!fs.existsSync(item.path)||hash(JSON.stringify(fingerprint(item.path)))!==item.treeSha256)issues.push('preserved_asset_changed:'+item.path);}catch{issues.push('preserved_asset_unreadable:'+item.path);}
+  }
   for(const item of receipt.protectedEvidence||[]){try{const b=fs.readFileSync(item.path);if(item.appendAllowed===true){if(!Number.isSafeInteger(item.bytes)||b.length<item.bytes||hash(b.subarray(0,item.bytes))!==item.sha256)issues.push('protected_file_changed:'+item.path);}else if(hash(b)!==item.sha256)issues.push('protected_file_changed:'+item.path);}catch{issues.push('protected_file_missing:'+item.path);}}
   if((receipt.errors||[]).length)issues.push('runner_errors');return {contract:'cleanup-local-assets-readback-v1',ok:issues.length===0,issues,checkedAt:new Date().toISOString(),processed:(receipt.processed||[]).length};
 }
