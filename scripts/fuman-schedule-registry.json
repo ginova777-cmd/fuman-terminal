@@ -8,8 +8,6 @@
       "Fuman 買賣超 Watchdog 2115",
       "Fuman API-Only Retired Artifact Cleanup 1535",
       "Fuman Chip Source Sync 2005",
-      "Fuman Daily Retention Maintenance 1625",
-      "Fuman Daytrade Intraday Retention 1605",
       "Fuman Daytrade 5m Candidate Verification",
       "Fuman Daytrade Preopen Snapshot 0845-0859",
       "Fuman Daytrade Futopt Collector Recovery 0835",
@@ -20,7 +18,6 @@
       "Fuman Daytrade Source Gate 0700",
       "Fuman Daytrade Source Writer 0600-1330",
       "Fuman Fugle Daytrade WebSocket Collector 0600-1330",
-      "Fuman Global Cost Janitor Scorecard 1555",
       "Fuman Buy Sell Complete 2110",
       "Fuman Market Calendar Auto Update 1900-0830",
       "Fuman Mother Pool Telegram 0900-1230",
@@ -40,7 +37,6 @@
       "Fuman Strategy4 Source Prewarm 1535",
       "Fuman Strategy5 Cache 2100",
       "Fuman Strategy5 Watchdog 2130",
-      "Fuman Supabase Vercel History Cleanup 1545",
       "Fuman Terminal Autonomous Root Monitor",
       "Fuman Vercel Cost Health Monitor 2115",
       "Fuman Morning Report Asia 0850 Complete"
@@ -53,7 +49,11 @@
       "Fuman Opening Limit Order 0831 Prewarm Readonly",
       "Fuman Strategy3 Complete Scan 1300",
       "Fuman Strategy3 Readiness Guard 1230",
-      "Fuman Strategy3 Readiness Guard 1250"
+      "Fuman Strategy3 Readiness Guard 1250",
+      "Fuman Supabase Vercel History Cleanup 1545",
+      "Fuman Global Cost Janitor Scorecard 1555",
+      "Fuman Daily Retention Maintenance 1625",
+      "Fuman Daytrade Intraday Retention 1605"
     ],
     "retiredTasks": [
       "Fuman 即時雷達",
@@ -581,9 +581,9 @@
     {
       "taskName": "\\Fuman Global Cost Janitor Scorecard 1555",
       "displayName": "Fuman Global Cost Janitor Scorecard 1555",
-      "description": "Read-only global cost janitor scorecard covering Supabase retention, local retired artifacts, Supabase/Vercel history cleanup, and Vercel cost guards.",
+      "description": "Single-start cleanup: internal stage; standalone trigger disabled. C16 deferred.",
       "time": "18:10",
-      "expectedState": "Ready",
+      "expectedState": "Disabled",
       "expectedTriggers": [
         "18:10"
       ]
@@ -767,9 +767,9 @@
     {
       "taskName": "\\Fuman Supabase Vercel History Cleanup 1545",
       "displayName": "Fuman Supabase Vercel History Cleanup 1545",
-      "description": "Supabase/Vercel history cleanup.",
+      "description": "Single-start cleanup: internal stage; standalone trigger disabled. C16 deferred.",
       "time": "17:40",
-      "expectedState": "Ready",
+      "expectedState": "Disabled",
       "expectedTriggers": [
         "17:40"
       ]
@@ -1095,9 +1095,9 @@
     {
       "taskName": "\\Fuman Daily Retention Maintenance 1625",
       "displayName": "Fuman Daily Retention Maintenance 1625",
-      "description": "Observed production Windows Task Scheduler entry.",
+      "description": "Single-start cleanup: internal stage; standalone trigger disabled. C16 deferred.",
       "time": "19:10",
-      "expectedState": "Ready",
+      "expectedState": "Disabled",
       "expectedTriggers": [
         "19:10"
       ]
@@ -1179,7 +1179,7 @@
     {
       "taskName": "\\Fuman Daytrade Intraday Retention 1605",
       "displayName": "Fuman Daytrade Intraday Retention 1605",
-      "description": "C16 RESTORE_NO_GO pending archive, Reader ACK and protected SQL acceptance; 20 calendar day policy.",
+      "description": "Single-start cleanup: internal stage; standalone trigger disabled. C16 deferred.",
       "time": "18:40",
       "expectedState": "Disabled",
       "expectedTriggers": [

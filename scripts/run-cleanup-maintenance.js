@@ -13,13 +13,29 @@ function protectedFiles(){
 }
 async function main(){
   if(!process.argv.includes('--apply'))throw Error('explicit_apply_required');
-  const auth=context.authorization(arg('authorization'));
+  let authorizationFile=arg('authorization');
+  if(process.argv.includes('--scheduled')){
+    const cp=require('child_process');
+    const gate=cp.spawnSync(process.execPath,['scripts/verify-release-root-authority.js','--require-production-root'],{cwd:context.ROOT,encoding:'utf8',windowsHide:true,timeout:60000});
+    if(gate.status!==0)throw Error('release_root_drift');
+    const calendar=await require('./twse-trading-day').isTwseTradingDay(new Date(),{stateDir:path.join(context.RUNTIME,'state'),ignoreOverrides:true});
+    if(calendar.error||calendar.source==='weekend_fallback')throw Error('calendar_unverified');
+    if(!calendar.isTradingDay){console.log(JSON.stringify({status:'SKIPPED',complete:false,reason:'non_applicable_day'}));return;}
+    const issuedAt=new Date().toISOString(),runId='cleanup-'+context.date().replaceAll('-','')+'-'+require('crypto').randomUUID();
+    const origin=require('../lib/strategy-natural-evidence').collect({strategy:'cleanup',scan:{runId,tradeDate:context.date(),startedAt:issuedAt},formalComplete:false,originOnly:true,recovery:false,root:context.ROOT,runtime:context.RUNTIME});
+    if(origin.naturalTriggerVerified!==true)throw Error('scheduled_trigger_unverified_before_cleanup');
+    authorizationFile=path.join(context.RUNTIME,'status','cleanup-contexts',runId+'.json');
+    save(authorizationFile,{contract:'cleanup-scheduled-context-v1',scope:context.scopedPolicy.scope,authorizedBy:'release-policy',authorizationText:'Approved deployed single-start policy; this is execution context, not user approval',date:context.date(),runId,keepDays:15,preserveWorkdaySchedule:true,sourceRoot:context.SOURCE_ROOT,executionRoot:context.ROOT,runtimeRoot:context.RUNTIME,issuedAt,expiresAt:new Date(Date.now()+20*60*1000).toISOString()});
+  }
+  const auth=context.authorization(authorizationFile);
   roundDeadline=Math.min(Date.parse(auth.expiresAt),Date.now()+20*60*1000);
   if(!Number.isFinite(roundDeadline))throw Error('cleanup_round_deadline_missing');
   if(fs.existsSync(auth.journalFile))throw Error('cleanup_maintenance_run_already_exists_use_read_only_verifier');
+  const protectionBefore=protectedFiles();
   const lock=path.join(context.RUNTIME,'locks/cleanup-maintenance.lock');fs.mkdirSync(path.dirname(lock),{recursive:true});const lockFd=fs.openSync(lock,'wx');
-  const j={contract:'cleanup-maintenance-execution-v1',runId:auth.runId,authorizationSha256:auth.sha256,deadlineAt:new Date(roundDeadline).toISOString(),executionMode:"authorized_maintenance",startedAt:new Date().toISOString(),steps:[],protection:{before:protectedFiles()}};
-  const logDir=path.join(context.RUNTIME,'logs',auth.runId);fs.mkdirSync(logDir,{recursive:true});save(auth.journalFile,j);
+  const j={contract:'cleanup-maintenance-execution-v1',runId:auth.runId,authorizationSha256:auth.sha256,deadlineAt:new Date(roundDeadline).toISOString(),executionMode:auth.executionMode||"authorized_maintenance",completionScope:auth.scope,deferredItems:context.scopedPolicy && auth.scope===context.scopedPolicy.scope?context.scopedPolicy.deferredItems:[],startedAt:new Date().toISOString(),steps:[],protection:{before:protectionBefore}};
+  const logDir=path.join(context.RUNTIME,'logs',auth.runId);
+  const totalFile=path.join(context.RUNTIME,'status',`cleanup-total-${auth.date.replaceAll('-','')}.json`);fs.mkdirSync(logDir,{recursive:true});save(auth.journalFile,j);
   try {
     const preflight=await command(process.execPath,['scripts/supabase-incident-guard.js','check','--class=guard','--action=authorized-cleanup-maintenance'],path.join(logDir,'incident.log'));
     if(preflight.exitCode)throw Error('supabase_incident_blocked');
@@ -36,7 +52,7 @@ async function main(){
     if(!referenceTradeDate)throw Error('maintenance_reference_trade_date_missing');
     j.referenceTradeDate=referenceTradeDate;save(auth.journalFile,j);
     const plan=[['retired','cleanup-api-only-retired-artifacts.js',['--root','C:\\fuman-terminal','--runtime-root',context.RUNTIME,'--json',`--maintenance-authorization=${auth.file}`]],['history','cleanup-supabase-vercel-history.js',['--apply','--json','--maintenance-authorization='+auth.file]],['intraday','cleanup-daytrade-intraday-retention.js',['--apply','--max-batches=60','--json']],['runtime','cleanup-runtime-retention.js',['--apply','--json',"--maintenance-authorization="+auth.file]],['priority','cleanup-daytrade-stale-priority-cache.js',['--apply','--json',`--reference-trade-date=${referenceTradeDate}`]],['observability','cleanup-source-observability-retention.js',['--apply','--json']],['extended','cleanup-extended-retention.js',['--apply',`--maintenance-authorization=${auth.file}`]],['cost','monitor-vercel-cost-health.js',[]],['janitor','verify-global-cost-janitor-scorecard.js',[]]];
-    for(const [name,script,args] of plan){
+    for(const [name,script,args] of plan.filter(([name])=>context.requiredSteps?context.requiredSteps(auth).includes(name):true)){
       context.authorization(auth.file);
       if(Date.now()>=roundDeadline)throw Error('cleanup_round_deadline_exceeded');
       const row={name,script,startedAt:new Date().toISOString(),logFile:path.join(logDir,`${name}.log`),receipts:[]};j.steps.push(row);save(auth.journalFile,j);
@@ -56,7 +72,15 @@ async function main(){
   } finally {
     j.finishedAt=new Date().toISOString();j.protection.changed=j.protection.before.filter(x=>!fs.existsSync(x.file)||context.hash(x.file)!==x.sha256);j.protection.ok=j.protection.changed.length===0;save(auth.journalFile,j);fs.closeSync(lockFd);fs.unlinkSync(lock);
   }
+  try {
   context.verifyJournal(auth);
+  if(context.scopedPolicy && auth.scope===context.scopedPolicy.scope){
+    j.items=j.steps.flatMap(step=>step.receipts.flatMap(e=>{const payload=JSON.parse(fs.readFileSync(e.file,'utf8'));return payload.cleanupItems||[];}));
+    context.verifyScopedItems(j);
+  }
+  const receipt={contract:'cleanup-total-v1',runId:auth.runId,tradeDate:auth.date,executionMode:j.executionMode,completionScope:auth.scope,deferredItems:j.deferredItems,complete:true,fullSuiteComplete:false,status:'complete',exitCode:0,first_blocker:null,failed_checks:[],journalFile:auth.journalFile,contextFile:auth.file,contextSha256:auth.sha256,checkedAt:new Date().toISOString()};
+  save(auth.journalFile,j);receipt.journalSha256=context.hash(auth.journalFile);save(totalFile,receipt);
+  }catch(error){j.firstFailure=j.firstFailure||{reason:error.message};save(auth.journalFile,j);save(totalFile,{contract:'cleanup-total-v1',runId:auth.runId,tradeDate:auth.date,executionMode:j.executionMode,completionScope:auth.scope,deferredItems:j.deferredItems,status:'failed',complete:false,fullSuiteComplete:false,exitCode:1,first_blocker:error.message,failed_checks:[error.message],journalFile:auth.journalFile,checkedAt:new Date().toISOString()});throw error;}
   console.log(JSON.stringify({ok:true,runId:auth.runId,journalFile:auth.journalFile,next:'Root Monitor CleanupMaintenance read-only acceptance'},null,2));
 }
 main().catch(e=>{console.error(e.stack);process.exitCode=1;});

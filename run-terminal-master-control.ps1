@@ -100,7 +100,7 @@ try {
   if ($cleanupVerifierDue) {
     # Final-only and read-only: this reads cleanup receipts and protected windows.
     # It never starts cleanup, a strategy scan, a retry, or a deployment.
-    & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-daily-retention-maintenance.js")
+    & node --use-system-ca (Join-Path $ProjectRoot "scripts\verify-daily-retention-maintenance.js") --single-start
     $cleanupVerifierExit = [int]$LASTEXITCODE
   }
   $contractFailure = (($verifierExit -ne 0) -or ($scheduleAuthorityExit -ne 0) -or ($scheduleAlignmentExit -ne 0) -or ($scorecard88ContractExit -ne 0))

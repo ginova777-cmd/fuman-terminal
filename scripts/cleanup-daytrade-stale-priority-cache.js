@@ -156,6 +156,8 @@ function main() {
     }
   }
 
+  let independentReadback=null;
+  if(apply && cache){const actual=JSON.parse(fs.readFileSync(CACHE_PATH,'utf8'));independentReadback={ok:JSON.stringify(actual)===JSON.stringify(cache),sha256:require('crypto').createHash('sha256').update(fs.readFileSync(CACHE_PATH)).digest('hex')};if(!independentReadback.ok)failures.push({code:'priority_cache_readback_mismatch'});}
   const now = new Date().toISOString();
   const payload = {
     ok: failures.length === 0,
@@ -173,7 +175,8 @@ function main() {
     touched_keys: unique(touchedKeys),
     stale_cache_rejected_count: rejected.length,
     low_price_rejected_count: rejected.filter((item) => item.reason === "low_price_priority_cache_rejected").length,
-    stale_cache_rejected: unique(rejected).slice(0, 500),
+    stale_cache_rejected: unique(rejected),
+    independentReadback,
     failures,
     reason_code: failures[0]?.code || (rejected.length ? "stale_cache_rejected_daily_cleanup" : "no_stale_cache_rejected"),
     protected: ["formal candidates", "strategy results", "daily OHLCV", "formal 1m evidence tables", "latest scorecards"],

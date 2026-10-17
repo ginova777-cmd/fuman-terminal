@@ -100,6 +100,20 @@ async function main() {
     console.log(JSON.stringify(payload, null, 2));
     return;
   }
+  if(process.argv.includes('--single-start')){
+    const file=path.join(STATUS,'cleanup-total-'+date.id+'.json');
+    const total=readJson(file).value;
+    if(!total||total.contract!=='cleanup-total-v1'||total.tradeDate!==date.iso||total.complete!==true||total.status!=='complete'||total.exitCode!==0||total.completionScope!==maintenanceContext.scopedPolicy.scope||total.fullSuiteComplete!==false||total.failed_checks?.length!==0||total.first_blocker!==null)throw Error('cleanup_scoped_total_not_complete');
+    const auth=maintenanceContext.authorization(total.contextFile,{readOnly:true});
+    if(auth.sha256!==total.contextSha256||total.runId!==auth.runId||maintenanceContext.hash(total.journalFile)!==total.journalSha256)throw Error('cleanup_scoped_identity_drift');
+    const journal=maintenanceContext.verifyJournal(auth);maintenanceContext.verifyScopedItems(journal);
+    if(journal.executionMode==='scheduled_workday'&&journal.naturalOrigin?.naturalSlotComplete!==true)throw Error('cleanup_natural_origin_missing');
+    const schedule=scheduledTasks();
+    if(!schedule.ok||schedule.rows.length!==5)throw Error('cleanup_task_readback_failed');
+    for(const task of TASKS){const row=schedule.rows.find(r=>r.name===task.name);const active=task===TASKS[0];if(!row||row.enabled!==active||(active&&(!row.action.includes(path.join(ROOT,task.script))||!row.triggerTimes?.includes('17:10'))))throw Error('cleanup_single_start_task_drift:'+task.name);}
+    const result={...total,contract:'daily-retention-maintenance-v1',checkedAt:new Date().toISOString(),independentRootReadback:true,totalReceiptSha256:maintenanceContext.hash(file),deferredItems:maintenanceContext.scopedPolicy.deferredItems};
+    fs.writeFileSync(path.join(STATUS,'daily-retention-maintenance-verifier-'+date.id+'.json'),JSON.stringify(result,null,2));console.log(JSON.stringify(result));return;
+  }
   const tasks = scheduledTasks();
   if (!tasks.ok) issues.push("scheduled_task_query_failed");
   const schedule = TASKS.map((expected) => {

@@ -1,13 +1,13 @@
-param([ValidateSet('strategy4','strategy5','institution')][string]$Strategy, [int]$RunnerProcessId, [int]$VerifierProcessId)
+param([ValidateSet('strategy4','strategy5','institution','cleanup')][string]$Strategy, [int]$RunnerProcessId, [int]$VerifierProcessId)
 $ErrorActionPreference = 'Stop'
 try {
   $runner = Get-CimInstance Win32_Process -Filter "ProcessId=$RunnerProcessId"
   $verifier = Get-CimInstance Win32_Process -Filter "ProcessId=$VerifierProcessId"
   if (-not $runner -or -not $verifier -or $verifier.ParentProcessId -ne $RunnerProcessId) { throw 'runner_parent_mismatch' }
-  $taskName = if ($Strategy -eq 'institution') { 'Fuman 買賣超 Cache 2100' } elseif ($Strategy -eq 'strategy4') { 'Fuman Strategy4 Cache 1600' } else { 'Fuman Strategy5 Cache 2100' }
+  $taskName = if ($Strategy -eq 'cleanup') { 'Fuman API-Only Retired Artifact Cleanup 1535' } elseif ($Strategy -eq 'institution') { 'Fuman 買賣超 Cache 2100' } elseif ($Strategy -eq 'strategy4') { 'Fuman Strategy4 Cache 1600' } else { 'Fuman Strategy5 Cache 2100' }
   $task = Get-ScheduledTask -TaskName $taskName
   $runnerOwnerSid = $null; $taskPrincipalSid = $null
-  if ($Strategy -eq 'institution') {
+  if ($Strategy -in @('institution','cleanup')) {
     $owner = Invoke-CimMethod -InputObject $runner -MethodName GetOwnerSid
     if ($owner.ReturnValue -ne 0) { throw 'runner_owner_unreadable' }
     $runnerOwnerSid = $owner.Sid

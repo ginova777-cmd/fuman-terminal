@@ -15,13 +15,14 @@ const EXPECTED_TASKS = [
   {
     name: "\\Fuman API-Only Retired Artifact Cleanup 1535",
     purpose: "local retired API/static/runtime artifact cleanup",
-    allowedResults: [0],
+    allowedResults: [0,267009],
     expectedTime: "17:10",
     requireS4U: true,
   },
   {
     name: "\\Fuman Supabase Vercel History Cleanup 1545",
-    purpose: "Supabase/Vercel history retention cleanup",
+    disabled: true,
+    purpose: "Supabase/Vercel history retention cleanup (internal stage)",
     allowedResults: [0],
     expectedTime: "17:40",
     requireS4U: true,
@@ -35,7 +36,8 @@ const EXPECTED_TASKS = [
   },
   {
     name: "\\Fuman Global Cost Janitor Scorecard 1555",
-    purpose: "global cost janitor read-only scorecard",
+    disabled: true,
+    purpose: "global cost janitor read-only scorecard (internal stage)",
     allowedResults: [0, 267009],
     expectedTime: "18:10",
     requireS4U: true,
@@ -189,12 +191,12 @@ function checkTasks(issues, warnings) {
       triggerTimes: Array.isArray(row.TriggerTimes) ? row.TriggerTimes : row.TriggerTimes ? [row.TriggerTimes] : [],
       purpose: expected.purpose,
     };
-    if (!["Ready", "Running"].includes(row.Status)) {
+    if (!(expected.disabled ? ["Disabled"] : ["Ready", "Running"]).includes(row.Status)) {
       issues.push({ issue: "scheduled_task_bad_status", taskName: expected.name, status: row.Status });
     }
-    if (!allowed) {
+    if (!expected.disabled && !allowed) {
       issues.push({ issue: "scheduled_task_bad_last_result", taskName: expected.name, lastResult, allowed: expected.allowedResults });
-    } else if (lastResult === 267009) {
+    } else if (!expected.disabled && lastResult === 267009) {
       warnings.push({ warning: "scheduled_task_currently_running", taskName: expected.name, lastResult });
     }
     if (expected.requireS4U && String(row.LogonType || "").toLowerCase() !== "s4u") {

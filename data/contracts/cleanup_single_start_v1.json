@@ -1,0 +1,90 @@
+{
+  "contract": "cleanup-single-start-v1",
+  "scope": "cleanup-29-c16-deferred",
+  "start": "17:10",
+  "timezone": "Asia/Taipei",
+  "rootIndependentTime": "23:10",
+  "requiredItems": [
+    "C01",
+    "C02",
+    "C03",
+    "C04",
+    "C05",
+    "C06",
+    "C07",
+    "C08",
+    "C09",
+    "C10",
+    "C11",
+    "C12",
+    "C13",
+    "C14",
+    "C15",
+    "C17",
+    "C18",
+    "C19",
+    "C20",
+    "C21",
+    "C22",
+    "C23",
+    "C24",
+    "C25",
+    "N01",
+    "N02",
+    "N03",
+    "N04",
+    "N05"
+  ],
+  "deferredItems": [
+    {
+      "id": "C16",
+      "status": "DEFERRED",
+      "keepCalendarDays": 20,
+      "execute": false,
+      "reason": "archive_reader_ack_and_protection_not_verified"
+    }
+  ],
+  "stages": {
+    "retired": [
+      "C01",
+      "C02",
+      "C03",
+      "C04",
+      "C05",
+      "C06",
+      "C07",
+      "C08"
+    ],
+    "history": [
+      "C09",
+      "C10",
+      "C11",
+      "C12",
+      "C13",
+      "C14",
+      "C15"
+    ],
+    "runtime": [
+      "C17",
+      "C18",
+      "N01",
+      "N02",
+      "N03",
+      "N04",
+      "N05"
+    ],
+    "priority": [
+      "C19"
+    ],
+    "observability": [
+      "C20"
+    ],
+    "extended": [
+      "C21",
+      "C22",
+      "C23",
+      "C24",
+      "C25"
+    ]
+  }
+}

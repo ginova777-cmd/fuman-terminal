@@ -1,0 +1,7 @@
+2026-10-17 單次啟動續辦檢查點，非完整交付／非發布候選。
+使用者新版：17:10單一Task；C16 DEFERRED，其他29項必須全部驗收；23:10 Root獨立保留。
+完成：既有orchestrator支援29項scope、略過C16並跑完其餘stage；scheduled context取消每天手動核准檔；沿用OS事件/PID/instance來源驗證，執行前驗trigger且不冒稱completion；總Receipt拒絕缺項；Root單次模式獨立讀回入口；installer先停舊獨立觸發再註冊單入口，僅供未來核准切換。Registry及guard同步。
+完成：C20 preview不呼叫會寫log的cleanup false分支；四表欄位/保護窗口/剩餘檢查、有限續批。C21～C23完整17 sections、有限續批直到獨立讀回零候選，不把每段5000當完整總數。C19移除500列回執截斷並讀回cache。
+驗證：62 node:test通過；PowerShell mock installer單啟動順序通過；Root靜態guard通過；隔離PostgreSQL執行正式SQL原件，C20真實runner→SQL→status→receipt通過，C21～23真實databaseCleanup→兩批SQL→17section零候選且引用/latest保護通過。
+未完成：所有29項producer cleanupItems逐項原始證據輸出及完整保護集合同批連結；完整單入口至Root正向E2E；跨Writer/歷史匯出互斥實證；完整Storage退役對照。現在總驗收會因缺item proofs拒絕，不是可部署狀態。不得將fixture成功套用正式資料。
+未修改正式Task/DB/Production，未正式刪除或部署。隔離SQL執行器只安裝於outputs測試目錄，不進正式依賴。

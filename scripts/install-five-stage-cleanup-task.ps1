@@ -1,6 +1,7 @@
 param(
   [string]$ProjectRoot = 'C:\fuman-release-owner\prod81',
   [string]$OnlyTask = '',
+  [switch]$EnableSingleStart,
   [string]$UserId = "$env:USERDOMAIN\$env:USERNAME"
 )
 
@@ -20,6 +21,14 @@ $specs = @(
   @{ Name='Fuman Daily Retention Maintenance 1625'; At='19:10'; Runner='run-daily-retention-maintenance.ps1'; Extra=' -Apply'; Purpose='stage 5/5 runtime/cache/observability cleanup and final verifier' }
 )
 
+# Disable subordinate triggers before registering the single entry.
+$specs = @($specs | Where-Object { $_.Name -ne 'Fuman API-Only Retired Artifact Cleanup 1535' }) + @($specs | Where-Object { $_.Name -eq 'Fuman API-Only Retired Artifact Cleanup 1535' })
+if ($OnlyTask -eq 'Fuman API-Only Retired Artifact Cleanup 1535') {
+  foreach ($other in $specs | Where-Object { $_.Name -ne $OnlyTask }) {
+    $live = Get-ScheduledTask -TaskName $other.Name -ErrorAction SilentlyContinue
+    if ($live -and $live.Settings.Enabled) { throw 'Single-entry install requires full installer to disable legacy triggers first' }
+  }
+}
 if ($OnlyTask) {
   $specs = @($specs | Where-Object { $_.Name -eq $OnlyTask })
   if ($specs.Count -ne 1) { throw 'Unknown cleanup task selector' }
@@ -32,7 +41,8 @@ $rows = foreach ($spec in $specs) {
   $existingTask = Get-ScheduledTask -TaskName $spec.Name -ErrorAction SilentlyContinue
   # Preserve disabled state atomically in the registered definition; no enabled interval.
   $settings.Enabled = [bool]($existingTask -and $existingTask.Settings.Enabled)
-  if ($spec.Name -eq 'Fuman Daytrade Intraday Retention 1605') { $settings.Enabled = $false }
+  if ($EnableSingleStart -and $spec.Name -eq 'Fuman API-Only Retired Artifact Cleanup 1535') { $settings.Enabled = $true }
+  if ($spec.Name -ne 'Fuman API-Only Retired Artifact Cleanup 1535') { $settings.Enabled = $false }
   Register-ScheduledTask -TaskName $spec.Name -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Five-stage cleanup $($spec.Purpose); actual trigger $($spec.At) Asia/Taipei." -Force | Out-Null
   $task = Get-ScheduledTask -TaskName $spec.Name
   $info = Get-ScheduledTaskInfo -TaskName $spec.Name
@@ -42,7 +52,9 @@ $rows = foreach ($spec in $specs) {
 $receipt = [ordered]@{
   ok = $true
   checkedAt = (Get-Date).ToString('o')
-  contract = 'five-stage-cleanup-after-strategy4-v1'
+  contract = 'cleanup-single-start-v1'
+  deferredItems = @('C16')
+  completionScope = 'cleanup-29-c16-deferred'
   strategy4Closure = '17:00'
   strategy5Start = '21:00'
   noAutomaticRetry = $true
