@@ -12,6 +12,7 @@ function reconcile(p){
  if(p.contract!=='cleanup-item-observation-v1'||!p.runId||!/^C\d{2}$|^N\d{2}$/.test(p.id)||p.id==='C16'||p.inventoryComplete!==true||p.readbackComplete!==true)throw Error('item_observation_incomplete');
  for(const a of p.archives||[]){const bytes=fs.readFileSync(a.file);const original=require('zlib').gunzipSync(bytes);if(hash(bytes)!==a.sha256||hash(original)!==a.originalSha256||JSON.parse(fs.readFileSync(a.index,'utf8')).sourceSha256!==a.originalSha256)throw Error('item_archive_readback_failed');}
  const before=index(p.before,'before'),after=index(p.after,'after');
+ if(p.recoveryArchives){const restored=new Map();for(const a of p.recoveryArchives){const data=require('./cleanup-recovery-archive').verify(a.index,a);if(data.runId!==p.runId||hash(fs.readFileSync(a.file))!==a.sha256)throw Error('recovery_run_mismatch');for(const [table,rows]of Object.entries(data.tables))for(const value of rows){const r=require('./cleanup-database-observation').row(table,value);restored.set(r.key,r.sha256);}}for(const r of before.values())if(restored.get(r.key)!==r.sha256)throw Error('recovery_payload_incomplete');}
  if(!Array.isArray(p.candidates)||new Set(p.candidates).size!==p.candidates.length||p.candidates.some(k=>!before.has(k)))throw Error('item_candidates_invalid');
  const candidates=new Set(p.candidates),protectedSet=[...before.values()].filter(r=>!candidates.has(r.key));
  const exclusions=p.protectedExclusions||[];

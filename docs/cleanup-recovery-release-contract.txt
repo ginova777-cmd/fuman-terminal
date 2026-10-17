@@ -1,0 +1,19 @@
+Cleanup recovery release candidate — 2026-10-17
+Scope: cleanup-29-c16-deferred. C16 remains Disabled, no RPC. LAB unknown/known references protected.
+
+Install SQL only after explicit release approval, in a single transaction:
+1. ops/public-slot/CleanupArchiveBudget_20261017.sql
+2. ops/public-slot/CleanupHistoryRecoveryBound_20261017.sql
+3. ops/public-slot/CleanupObservabilityArchive_20261017.sql
+4. ops/public-slot/CleanupExtendedObservation_20261017.sql
+Required runner signatures: history(text,timestamptz,jsonb); observability(boolean,integer,integer,jsonb); extended(boolean,text[],jsonb).
+Old apply signatures deliberately reject missing archives. Never enable new SQL with old scheduled runners still able to apply. Pause only approved cleanup triggers within the cutover transaction plan; never change Writer/LAB.
+Read-only inventory/preview is not deletion authorization. The old observability preview also writes audit logs and must not be used as a read-only production probe.
+
+Every DB deleting run writes full row payload and hash-bound index under runtime/archive/cleanup-recovery/<runId> before delete; fsync and independent readback are mandatory. These archives have no expiry rule in this release. Root revalidates them. Preserve schema/function export hashes alongside the release package. They are local recovery evidence, not PITR or off-host backup.
+History and observability/extended SQL acquire write-conflicting table locks, compare typed row contents and multiplicities against archived payload, then delete. Unknown FK/DELETE-trigger effects fail closed. New/changed unarchived candidates abort the transaction. Existing retention predicates remain; no unsafe records are relabelled zero candidates.
+
+Recovery: stop subsequent approved cleanup execution on failure; retain original failed receipts and archived payload. Program/Task rollback does not restore rows. An authorized DB recovery must use the exact schema and archives, restore parent run rows before child results, preserve triggers/FKs, reconcile all rows and sequence next values, then independently verify protected data. Never automatically overwrite newer conflicting rows. Such conflict requires explicit bounded recovery approval.
+The isolated restore evidence uses bounded production samples plus explicitly synthetic rows for empty tables; it proves schema/type/trigger/FK compatibility, not full production backup. Actual per-run full payload, protected set, inventory and independent readback remain mandatory runtime gates.
+
+Deployment: freeze exact SHA and Review PR, preserve current main, approved release-root check, clean prod81, SQL/runner gate and backed-up Task XML. Register only the single weekday17:10 main entry, disable replaced subordinate triggers, preserve C16 Disabled,21:15cost,23:10Root. Read back Task actions/settings and production SHA. Never use isolated PASS as a natural execution receipt.

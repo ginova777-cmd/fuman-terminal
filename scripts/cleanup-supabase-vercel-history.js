@@ -457,7 +457,14 @@ async function cleanupVercelDeployments(args) {
       && aliases.length === 0
       && !aliases.includes(productionHost);
   });
-  const candidates=[], protectedAliases=[];
+  const candidates=[], protectedAliases=[],protectedExclusions=[];
+  const deploymentProtection=require('./cleanup-deployment-protection.cjs');
+  const retirement=deploymentProtection.inventoryBindings(RUNTIME_DIR,args.referenceMs);
+  let references=null,referencedIds=null,referenceIssue=null;
+  try{
+    references=await require('./cleanup-extended-retention').referenceInventory(false,retirement.exclude);
+    referencedIds=await deploymentProtection.idReferences(references,possibleCandidates.map(item=>String(item.uid||item.id||item.url)));
+  }catch(error){referenceIssue=error.message;}
   async function inspectCandidate(item){
     let detail;
     if(token){
@@ -471,7 +478,9 @@ async function cleanupVercelDeployments(args) {
       detail=parseVercelJson(result.stdout);
     }
     if(!Array.isArray(detail.aliases))throw Error('deployment_alias_readback_missing');
-    if(detail.target!=='preview'||detail.aliases.length){protectedAliases.push({id:item.uid||item.id||item.url,target:detail.target,aliases:detail.aliases});return;}
+    if(detail.target!=='preview'||detail.aliases.length){protectedAliases.push({id:item.uid||item.id||item.url,target:detail.target,aliases:detail.aliases});protectedExclusions.push({key:String(item.uid||item.id||item.url),reason:'deployment_alias_or_target_protected'});return;}
+    const reason=referenceIssue?'deployment_reference_inventory_unknown':deploymentProtection.protectionReason(item,detail,retirement,references,referencedIds);
+    if(reason){protectedExclusions.push({key:String(item.uid||item.id||item.url),reason});return;}
     candidates.push({...item,alias:detail.aliases});
   }
   for(const batch of chunks(possibleCandidates,4))await Promise.all(batch.map(inspectCandidate));
@@ -486,9 +495,11 @@ async function cleanupVercelDeployments(args) {
   }
   let itemEvidence;
   if(args.apply){
+    const recoveryReadback=deploymentProtection.inventoryBindings(RUNTIME_DIR,args.referenceMs);
+    for(const item of candidates){const id=String(item.uid||item.id||item.url),actual=recoveryReadback.bindings.get(id);if(!actual||actual.reason||actual.evidenceSha256!==retirement.bindings.get(id)?.evidenceSha256)throw Error('deployment_recovery_evidence_changed_after_cleanup:'+id);}
     const after=await readInventory();
     const projectRow=item=>{const value={id:item.uid||item.id||item.url,target:item.target===null?'preview':item.target,createdAt:item.createdAt,url:item.url,alias:item.alias};return {key:String(value.id),sha256:require('crypto').createHash('sha256').update(JSON.stringify(stable(value))).digest('hex')};};
-    const observation={contract:'cleanup-item-observation-v1',id:'C15',runId:args.maintenance?.runId||'unscoped',inventoryComplete:inventory.complete,readbackComplete:after.complete,before:deployments.map(projectRow),after:after.rows.map(projectRow),candidates:candidates.map(i=>String(i.uid||i.id||i.url)),checkedAt:new Date().toISOString()};
+    const observation={contract:'cleanup-item-observation-v1',id:'C15',runId:args.maintenance?.runId||'unscoped',inventoryComplete:inventory.complete,readbackComplete:after.complete,before:deployments.map(projectRow),after:after.rows.map(projectRow),candidates:candidates.map(i=>String(i.uid||i.id||i.url)),protectedExclusions,checkedAt:new Date().toISOString()};
     require('./cleanup-item-observation').reconcile(observation);
     if(args.maintenance)itemEvidence=require('./cleanup-item-observation').persist(path.join(STATUS_DIR,'cleanup-items',args.maintenance.runId,'C15.json'),observation);
   }
@@ -500,6 +511,10 @@ async function cleanupVercelDeployments(args) {
     inventoryComplete: inventory.complete,
     inventoryPages: inventory.pageCount,
     protectedAliasDeployments: protectedAliases.length,
+    retentionAgeCandidates:possibleCandidates.length,
+    protectedExclusions,
+    referenceIssue,
+    referenceEvidence:references?.files||[],
     targetCounts: deployments.reduce((counts,item)=>{counts[item.target || "unknown"]=(counts[item.target || "unknown"]||0)+1;return counts;},{}),
     authMode,
     retentionDays: args.vercelRetentionDays,
@@ -525,21 +540,38 @@ async function fullTable(table,order){
  }
  throw Error('history_inventory_bound:'+table);
 }
+function historyOlder(value,cutoff,type){if(value==null)return false;if(type==='date'){if(!/^\d{4}-\d{2}-\d{2}$/.test(String(value)))throw Error('history_date_invalid');return String(value)<cutoff;}const time=Date.parse(value);if(!Number.isFinite(time))throw Error('history_timestamp_invalid');return time<Date.parse(cutoff);}
+async function cleanupArchivedHistory(c,type,args,rows) {
+ const days=type==='event'?args.eventRetentionDays:type==='snapshot'?c.retentionDays:args.dailyHistoryRetentionDays;
+ const cutoff=type==='date'?dateCutoff(days,args.referenceMs):isoCutoff(days,args.referenceMs);
+ const candidates=rows.filter(r=>historyOlder(r[c.dateColumn],cutoff,type)&&(type!=='snapshot'||/^__fuman_/.test(r.symbol||'')));
+ if(!args.apply)return {key:c.key,table:c.table,cutoff,candidates:candidates.length,deleted:0,dryRun:true};
+ if(!args.maintenance)throw Error('history_recovery_authorization_missing');
+ const {url,key}=supabaseCredentials();
+ const response=await fetch(url.replace(/\/$/,'')+'/rest/v1/rpc/fuman_cleanup_history_recovery_bound_v1',{method:'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:JSON.stringify({p_table:c.table,p_cutoff:cutoff,p_archived_rows:rows}),signal:AbortSignal.timeout(60000)});
+ if(!response.ok)throw Error('history_recovery_bound_HTTP_'+response.status);
+ const result=JSON.parse(await response.text());
+ if(result.ok!==true||result.contract!=='history-recovery-bound-v1'||result.table!==c.table||result.deleted!==candidates.length||!Array.isArray(result.deletedRows)||result.deletedRows.length!==result.deleted)throw Error('history_recovery_result_invalid');
+ const expected=new Set(candidates.map(r=>rowEvidence(c.table,r).key));
+ if(result.deletedRows.some(r=>!expected.delete(rowEvidence(c.table,r).key))||expected.size)throw Error('history_recovery_set_mismatch');
+ return {key:c.key,table:c.table,cutoff,candidates:candidates.length,deleted:result.deleted,dryRun:false};
+}
 async function cleanupSupabase(args) {
  const sections=[],cleanupItems=[];
  const groups={C09:RUN_TABLES.filter(c=>c.key!=='strategy2').map(c=>({config:c,type:'run'})),C10:RUN_TABLES.filter(c=>c.key==='strategy2').map(c=>({config:c,type:'run'})),C11:EVENT_TABLES.map(c=>({config:c,type:'event'})),C12:SNAPSHOT_TABLES.map(c=>({config:c,type:'snapshot'})),C13:[{config:DATE_RETENTION_TABLES[0],type:'date'}],C14:[{config:DATE_RETENTION_TABLES[1],type:'date'}]};
  for(const [id,entries] of Object.entries(groups)){
-  const before=[],after=[],candidates=[],protectedExclusions=[];let complete=true;
+  const before=[],after=[],candidates=[],protectedExclusions=[],recoveryArchives=[];let complete=true;
   for(const {config:c,type} of entries){
    try{
     const tables=type==='run'?[c.runsTable,c.resultsTable]:[c.table];
     const snapshots=[];
     for(const table of tables){const rows=await fullTable(table,type==='run'?'run_id.asc':c.dateColumn+'.asc');snapshots.push({table,rows});before.push(...rows.map(r=>rowEvidence(table,r)));}
-    const r=type==='run'?await cleanupRunPair(c,args):type==='event'?await cleanupEventTable({...c,retentionDays:args.eventRetentionDays},args):type==='snapshot'?await cleanupSnapshotTable(c,args):await cleanupDateRetentionTable({...c,retentionDays:args.dailyHistoryRetentionDays},args);
+    if(args.apply&&args.maintenance)recoveryArchives.push(require('./cleanup-recovery-archive').seal(RUNTIME_DIR,args.maintenance.runId,id+'-'+c.key,Object.fromEntries(snapshots.map(s=>[s.table,s.rows]))));
+    const r=type==='run'?await cleanupRunPair(c,args):await cleanupArchivedHistory(c,type,args,snapshots[0].rows);
     sections.push(r);
     for(const {table,rows} of snapshots){
      for(const row of rows){
-      const eligible=type==='run'?r.candidateRunIds.includes(row.run_id)&&(!c.strategy||(table===c.resultsTable&&c.resultsStrategy===false)||row.strategy===c.strategy):row[c.dateColumn]!=null&&String(row[c.dateColumn])<r.cutoff&&(type!=='snapshot'||/^__fuman_/.test(row.symbol||''));
+      const eligible=type==='run'?r.candidateRunIds.includes(row.run_id)&&(!c.strategy||(table===c.resultsTable&&c.resultsStrategy===false)||row.strategy===c.strategy):historyOlder(row[c.dateColumn],r.cutoff,type)&&(type!=='snapshot'||/^__fuman_/.test(row.symbol||''));
       if(eligible)candidates.push(rowEvidence(table,row).key);
       if(type==='run'&&r.protectedRunIds.includes(row.run_id))protectedExclusions.push({key:rowEvidence(table,row).key,reason:r.protectionReason});
      }
@@ -548,7 +580,7 @@ async function cleanupSupabase(args) {
    }catch(error){complete=false;sections.push({key:c.key,ok:false,error:error.message});break;}
   }
   if(complete&&args.apply&&args.maintenance){
-   try{cleanupItems.push(require('./cleanup-item-observation').persist(path.join(STATUS_DIR,'cleanup-items',args.maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:args.maintenance.runId,inventoryComplete:true,readbackComplete:true,before,after,candidates,protectedExclusions,checkedAt:new Date().toISOString()}));}
+   try{cleanupItems.push(require('./cleanup-item-observation').persist(path.join(STATUS_DIR,'cleanup-items',args.maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:args.maintenance.runId,inventoryComplete:true,readbackComplete:true,before,after,candidates,protectedExclusions,recoveryArchives,checkedAt:new Date().toISOString()}));}
    catch(error){sections.push({key:id,ok:false,error:error.message});}
   }
   if(sections.some(s=>s.ok===false))break;

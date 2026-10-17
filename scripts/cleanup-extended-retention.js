@@ -84,13 +84,18 @@ async function databaseCleanup(apply,refs,maintenance=null){
  const planned={C21:[],C22:[],C23:[]};
  const checkObservation=r=>{
   if(r.observationContract!=='extended-cleanup-candidates-v1')throw Error('extended_candidate_identity_missing');
+  if(r.archiveBudgetContract!=='cleanup-archive-multiset-v1')throw Error('extended_archive_contract_missing');
   for(const section of r.sections){if(!Array.isArray(section.candidateRows)||section.candidateRows.length!==section.candidateCount)throw Error('extended_candidate_identity_count');if(section.category==='failed_runs'&&(!Array.isArray(section.candidateResults)||section.resultTable!==section.table.replace(/_runs$/,'_results')))throw Error('extended_result_identity_missing');}
+  if(r.applied)for(const section of r.sections){if(!Array.isArray(section.archivedRows)||section.archivedRows.length!==section.candidateRows.length||section.category==='failed_runs'&&(!Array.isArray(section.archivedResults)||section.archivedResults.length!==section.candidateResults.length))throw Error('extended_archived_identity_missing');}
  };
  const before=await request('rpc/fuman_extended_cleanup_v1',{p_apply:false,p_protected_run_ids:refs.ids});let remaining=validateDatabaseResult(before),after=before;const batches=[];
  if(maintenance)checkObservation(before);
+ const recoveryArchives=apply&&maintenance?[require('./cleanup-recovery-archive').seal(RUNTIME,maintenance.runId,'C21-C23',snapshot)]:[];
+ const archiveBudget=require('./cleanup-archive-budget.cjs'),sealedPayload=apply?archiveBudget.fromArchive(recoveryArchives[0]):null;
  if(apply)for(let round=0;remaining>0&&round<100;round++){
-  const execution=await request('rpc/fuman_extended_cleanup_v1',{p_apply:true,p_protected_run_ids:refs.ids});validateDatabaseResult(execution);batches.push(execution);
-  if(maintenance){checkObservation(execution);for(const s of execution.sections){const id=s.category==='failed_runs'?'C21':s.category==='orphan_results'?'C22':'C23';planned[id].push(...s.candidateRows.map(r=>observation.row(s.table,r).key));if(id==='C21')planned[id].push(...s.candidateResults.map(r=>observation.row(s.resultTable,r).key));}}
+  const execution=await request('rpc/fuman_extended_cleanup_v1',{p_apply:true,p_protected_run_ids:refs.ids,p_archive:sealedPayload});validateDatabaseResult(execution);checkObservation(execution);batches.push(execution);
+  for(const section of execution.sections){archiveBudget.consume(sealedPayload,{[section.table]:section.archivedRows});if(section.category==='failed_runs')archiveBudget.consume(sealedPayload,{[section.resultTable]:section.archivedResults});}
+  if(maintenance){checkObservation(execution);for(const s of execution.sections){const id=s.category==='failed_runs'?'C21':s.category==='orphan_results'?'C22':'C23';planned[id].push(...s.archivedRows.map(r=>observation.row(s.table,r).key));if(id==='C21')planned[id].push(...s.archivedResults.map(r=>observation.row(s.resultTable,r).key));}}
   after=await request('rpc/fuman_extended_cleanup_v1',{p_apply:false,p_protected_run_ids:refs.ids});remaining=validateDatabaseResult(after);
   if(maintenance)checkObservation(after);
   if(remaining && execution.sections.reduce((n,s)=>n+Number(s.deletedRows||0)+Number(s.deletedRuns||0),0)===0)throw Error('extended_database_no_progress');
@@ -104,7 +109,7 @@ async function databaseCleanup(apply,refs,maintenance=null){
    for(const r of rows)groups[group(r)].push(observation.row(table,r));
    for(const r of readback[table])afterGroups[group(r)].push(observation.row(table,r));
   }
-  for(const id of Object.keys(groups))cleanupItems.push(require('./cleanup-item-observation').persist(path.join(RUNTIME,'status/cleanup-items',maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before:groups[id],after:afterGroups[id],candidates:planned[id],checkedAt:new Date().toISOString()}));
+  for(const id of Object.keys(groups))cleanupItems.push(require('./cleanup-item-observation').persist(path.join(RUNTIME,'status/cleanup-items',maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before:groups[id],after:afterGroups[id],candidates:planned[id],recoveryArchives,checkedAt:new Date().toISOString()}));
  }
  return {ok:remaining===0,cleanupItems,remaining,remainingCountKind:remaining===0?'exact_zero':'bounded_candidate_count',initialCountKind:'bounded_candidate_count',before,batches,after};
 }

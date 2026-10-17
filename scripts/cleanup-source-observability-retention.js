@@ -28,13 +28,17 @@ async function main() {
   const rawBefore=maintenance?await capture():null;
   if(maintenance&&!/^\d{4}-\d{2}-\d{2}$/.test(before.keepFromDate||''))throw Error('observability_cutoff_missing');
   const candidates=rawBefore?.filter(r=>r.value.trade_date!=null&&String(r.value.trade_date)<before.keepFromDate).map(r=>r.key);
+  const recoveryArchives=apply&&maintenance?[require('./cleanup-recovery-archive').seal(RUNTIME,maintenance.runId,'C20',Object.fromEntries(expectedTables.map(t=>[t,rawBefore.filter(r=>r.table===t).map(r=>r.value)])))]:[];
+  const archiveBudget=require('./cleanup-archive-budget.cjs'),sealedPayload=apply?archiveBudget.fromArchive(recoveryArchives[0]):null;
+  if(apply)for(const table of expectedTables)sealedPayload[table]=sealedPayload[table].filter(row=>row.trade_date!=null&&String(row.trade_date)<before.keepFromDate);
+  const applyArchived=async()=>{const result=await rpc('fuman_cleanup_source_observability_15d_once',{p_apply:true,p_batch_size:5000,p_max_batches_per_table:10,p_archive:sealedPayload});if(result.archiveBudgetContract!=='cleanup-archive-multiset-v1')throw Error('observability_archive_contract_missing');archiveBudget.consume(sealedPayload,result.archivedDeleted);return result;};
   if(apply && before.tables.some(t=>t.hasOldRows && !t.hasProtectedRows))throw Error('observability_protected_window_missing');
-  const cleanup = apply ? await rpc("fuman_cleanup_source_observability_15d_once", { p_apply: true, p_batch_size: 5000, p_max_batches_per_table: 10 }) : {ok:true,applied:false,deletedRows:0,previewOnly:true};
+  const cleanup = apply ? await applyArchived() : {ok:true,applied:false,deletedRows:0,previewOnly:true};
   let after = await rpc("fuman_source_observability_retention_status", { p_keep_days: 15 });
   const batches=apply?[cleanup]:[];
   for(let n=1;apply && validStatus(after) && oldRows(after) && n<20;n++){
     if(batches.at(-1).ok!==true||!(batches.at(-1).deletedRows>0))throw Error('observability_cleanup_no_progress');
-    batches.push(await rpc('fuman_cleanup_source_observability_15d_once',{p_apply:true,p_batch_size:5000,p_max_batches_per_table:10}));
+    batches.push(await applyArchived());
     after=await rpc('fuman_source_observability_retention_status',{p_keep_days:15});
   }
   const payload = {
@@ -47,7 +51,7 @@ async function main() {
   };
   if(apply&&maintenance){
     const rawAfter=await capture();
-    const item=require('./cleanup-item-observation').persist(path.join(RUNTIME,'status/cleanup-items',maintenance.runId,'C20.json'),{contract:'cleanup-item-observation-v1',id:'C20',runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before:rawBefore.map(({key,sha256})=>({key,sha256})),after:rawAfter.map(({key,sha256})=>({key,sha256})),candidates,checkedAt:new Date().toISOString()});
+    const item=require('./cleanup-item-observation').persist(path.join(RUNTIME,'status/cleanup-items',maintenance.runId,'C20.json'),{contract:'cleanup-item-observation-v1',id:'C20',runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before:rawBefore.map(({key,sha256})=>({key,sha256})),after:rawAfter.map(({key,sha256})=>({key,sha256})),candidates,recoveryArchives,checkedAt:new Date().toISOString()});
     payload.cleanupItems=[item];payload.maintenanceRunId=maintenance.runId;
     if(item.deleted!==payload.deletedRows)throw Error('observability_deleted_count_mismatch');
   }

@@ -62,6 +62,7 @@ function verifyScopedItems(j){
  for(const i of items){
   if(i.runId!==j.runId||i.status!=='complete'||i.inventoryComplete!==true||i.readbackVerified!==true||i.protectedReadbackVerified!==true||!Number.isSafeInteger(i.deleted)||i.deleted<0||i.remaining!==0||!Array.isArray(i.protectedSet)||!Array.isArray(i.evidence)||!i.evidence.length)throw Error('cleanup_item_evidence_incomplete:'+i.id);
   for(const e of i.evidence)if(!e.file||!e.sha256||hash(e.file)!==e.sha256)throw Error('cleanup_item_evidence_changed:'+i.id);
+  if(['C09','C10','C11','C12','C13','C14','C20','C21','C22','C23'].includes(i.id)&&!i.evidence.every(e=>{const p=JSON.parse(fs.readFileSync(e.file,'utf8'));return Array.isArray(p.recoveryArchives)&&p.recoveryArchives.length>0;}))throw Error('cleanup_recovery_archive_missing:'+i.id);
   require('./cleanup-item-observation').verify(i);
  }
  return items;
