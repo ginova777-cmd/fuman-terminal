@@ -37,7 +37,7 @@ function verify(root, tasks) {
         need(task.name!==RETIRED_TASK&&!/run-terminal-unattended-final-audit\.js|run-terminal-autonomous-root\.ps1|install-terminal-full-unattended-final-audit-task\.ps1/i.test(action),'retired_scheduled_entry:'+task.name);
         if(/run-terminal-master-control\.ps1/i.test(action)){
           need(task.name==='Fuman Terminal Autonomous Root Monitor','duplicate_master_task:'+task.name);
-          need(action.includes('C:\\fuman-release-owner\\fuman-terminal\\run-terminal-master-control.ps1')&&/-RequireProtectedReadback\b/i.test(action),'canonical_root_action_drift');
+          need(action.includes('C:\\fuman-release-owner\\prod81\\run-terminal-master-control.ps1')&&/-RequireProtectedReadback\b/i.test(action),'canonical_root_action_drift');
         }
       }
       need(/run-terminal-master-control\.ps1/i.test(rootTasks[0]?.action||''),'canonical_root_runner_drift');

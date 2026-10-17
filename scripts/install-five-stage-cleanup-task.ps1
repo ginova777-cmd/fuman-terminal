@@ -1,9 +1,11 @@
 param(
-  [string]$ProjectRoot = (Split-Path -Parent $PSScriptRoot),
+  [string]$ProjectRoot = 'C:\fuman-release-owner\prod81',
   [string]$UserId = "$env:USERDOMAIN\$env:USERNAME"
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'cleanup-execution-root.ps1')
+Assert-FumanCleanupExecutionRoot -ExecutionRoot $ProjectRoot
 $pwsh = 'C:\Program Files\PowerShell\7\pwsh.exe'
 if (-not (Test-Path -LiteralPath $pwsh)) { $pwsh = 'pwsh.exe' }
 $principal = New-ScheduledTaskPrincipal -UserId $UserId -LogonType S4U -RunLevel Highest
@@ -22,6 +24,10 @@ $rows = foreach ($spec in $specs) {
   if (-not (Test-Path -LiteralPath $runner)) { throw "Missing cleanup runner: $runner" }
   $action = New-ScheduledTaskAction -Execute $pwsh -Argument "-WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File `"$runner`"$($spec.Extra)" -WorkingDirectory $ProjectRoot
   $trigger = New-ScheduledTaskTrigger -Weekly -WeeksInterval 1 -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At $spec.At
+  $existingTask = Get-ScheduledTask -TaskName $spec.Name -ErrorAction SilentlyContinue
+  # Preserve disabled state atomically in the registered definition; no enabled interval.
+  $settings.Enabled = [bool]($existingTask -and $existingTask.Settings.Enabled)
+  if ($spec.Name -eq 'Fuman Daytrade Intraday Retention 1605') { $settings.Enabled = $false }
   Register-ScheduledTask -TaskName $spec.Name -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description "Five-stage cleanup $($spec.Purpose); actual trigger $($spec.At) Asia/Taipei." -Force | Out-Null
   $task = Get-ScheduledTask -TaskName $spec.Name
   $info = Get-ScheduledTaskInfo -TaskName $spec.Name

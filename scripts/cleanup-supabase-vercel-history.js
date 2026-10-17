@@ -163,6 +163,7 @@ async function supabaseFetch(pathname, options = {}) {
       ...(options.headers || {}),
     },
     body: options.body,
+    signal: AbortSignal.timeout(90000),
   });
   const text = await response.text();
   if (!response.ok) throw new Error(`${pathname} HTTP ${response.status} ${text.slice(0, 240)}`.trim());
@@ -172,6 +173,8 @@ async function supabaseFetch(pathname, options = {}) {
   }
   const countHeader = response.headers.get("content-range") || "";
   const exactCount = /\/(\d+|\*)$/.exec(countHeader)?.[1];
+  if (!Array.isArray(rows)) throw Error('supabase_response_rows_missing');
+  if (!exactCount || exactCount === '*') throw Error('supabase_exact_count_missing');
   return {
     ok: true,
     status: response.status,
@@ -226,7 +229,9 @@ async function fetchRunRows(config, limit = 5000, includeStrategy = true) {
   for(let page=0;page<100;page++){
     const result=await supabaseFetch(`${config.runsTable}?${filters}&offset=${rows.length}`);
     for(const row of result.rows){if(!row?.run_id||ids.has(row.run_id))throw Error(config.key+': run_pagination_duplicate');ids.add(row.run_id);rows.push(row);}
-    if(rows.length>=result.count)return rows;
+    if(rows.length>result.count)throw Error(config.key+': run_count_drift');
+      if(rows.length===result.count)return rows;
+      if(!result.rows.length)throw Error(config.key+': run_pagination_stalled');
     if(!result.rows.length)throw Error(config.key+': run_pagination_not_advancing');
   }
   throw Error(config.key+': run_pagination_bound_reached');

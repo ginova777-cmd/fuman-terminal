@@ -5,7 +5,7 @@ const {parseArgs,isoCutoff,dateCutoff}=require('./cleanup-supabase-vercel-histor
 const context=require('./cleanup-maintenance-context');
 test('authorized apply and later readback use one cutoff across an expiry boundary',()=>{
   const now=Date.now(),file=path.join(fs.mkdtempSync(path.join(os.tmpdir(),'cleanup-history-reference-')),'authorization.json');
-  const authorization={contract:'cleanup-maintenance-authorization-v1',scope:'five-stage-cleanup',authorizedBy:'user',date:context.date(),authorizationText:'Test fixture only',runId:'cleanup-history-reference-test',keepDays:15,preserveWorkdaySchedule:true,sourceRoot:context.ROOT,runtimeRoot:context.RUNTIME,issuedAt:new Date(now).toISOString(),expiresAt:new Date(now+3600000).toISOString()};
+  const authorization={contract:'cleanup-maintenance-authorization-v1',scope:'five-stage-cleanup',authorizedBy:'user',date:context.date(),authorizationText:'Test fixture only',runId:'cleanup-history-reference-test',keepDays:15,preserveWorkdaySchedule:true,sourceRoot:context.SOURCE_ROOT,executionRoot:context.ROOT,runtimeRoot:context.RUNTIME,issuedAt:new Date(now).toISOString(),expiresAt:new Date(now+3600000).toISOString()};
   fs.writeFileSync(file,JSON.stringify(authorization));
   const apply=parseArgs(['--apply','--maintenance-authorization='+file]);
   const originalNow=Date.now;

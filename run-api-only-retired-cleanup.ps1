@@ -4,6 +4,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
+. (Join-Path $root 'scripts\cleanup-execution-root.ps1')
+Assert-FumanCleanupExecutionRoot -ExecutionRoot $root
 $runtimeRoot = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
 $logDir = Join-Path $runtimeRoot "logs"
 $lockFile = Join-Path $runtimeRoot "locks\api-only-retired-cleanup.lock"

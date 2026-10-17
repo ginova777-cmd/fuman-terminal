@@ -5,7 +5,7 @@ const path = require("path");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
-const KEEP_DAYS = 15;
+const KEEP_DAYS = 20;
 
 function taipeiDate() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -38,13 +38,16 @@ async function main() {
   if (Number(status?.keepDays) !== KEEP_DAYS) issues.push("keep_days_mismatch");
   if (!status?.latestTradeDate || Number(status?.protectedRows || 0) <= 0) issues.push("protected_window_missing");
   if (!payload) issues.push("today_receipt_missing");
-  if (payload && payload.contract !== "daytrade-intraday-retention-15d-v1") issues.push("receipt_contract_mismatch");
+  if (payload && payload.contract !== "daytrade-intraday-retention-20d-v2") issues.push("receipt_contract_mismatch");
   if (payload && payload.ok !== true) issues.push("receipt_pre_or_postcheck_failed");
+  if (typeof status?.hasOldRows !== "boolean") issues.push("old_rows_status_missing");
+  if (status?.ok !== true) issues.push("status_not_ok");
+  if (payload && payload.applied !== true) issues.push("receipt_not_applied");
   if (status?.hasOldRows === true) issues.push("old_rows_remaining");
   const result = {
     ok: issues.length === 0,
     checkedAt: new Date().toISOString(),
-    contract: "daytrade-intraday-retention-15d-v1",
+    contract: "daytrade-intraday-retention-20d-v2",
     formalTable: "fugle_daytrade_intraday_1m",
     keepDays: KEEP_DAYS,
     receiptFile: file,

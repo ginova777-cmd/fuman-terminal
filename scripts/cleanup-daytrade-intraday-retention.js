@@ -5,7 +5,7 @@ const path = require("path");
 const { serverSupabaseKey, serverSupabaseUrl } = require("../lib/server-supabase-key");
 
 const RUNTIME = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
-const KEEP_DAYS = 15;
+const KEEP_DAYS = 20;
 const MAX_BATCH_SIZE = 5000;
 const apply = process.argv.includes("--apply");
 const json = process.argv.includes("--json");
@@ -41,12 +41,16 @@ async function rpc(name, body) {
 }
 
 function assertProtectedWindow(status, phase) {
+  if(status?.ok !== true || typeof status?.hasOldRows !== "boolean") throw Error(`${phase}: status_incomplete`);
   if (status?.table !== "fugle_daytrade_intraday_1m") throw new Error(`${phase}: formal table mismatch`);
   if (Number(status?.keepDays) !== KEEP_DAYS) throw new Error(`${phase}: keepDays mismatch`);
   if (!status?.latestTradeDate || Number(status?.protectedRows || 0) <= 0) throw new Error(`${phase}: protected latest trade date missing`);
 }
 
 async function main() {
+  // The installed legacy RPC hardcodes 15 days and even dry-run writes its log.
+  // Keep this release blocked until archive/hold/readback SQL is independently verified.
+  throw Error('C16_RESTORE_NO_GO_SQL_ARCHIVE_PROTECTION_NOT_VERIFIED');
   const before = await rpc("fuman_daytrade_intraday_retention_status", { p_keep_days: KEEP_DAYS });
   assertProtectedWindow(before, "before");
 
@@ -56,6 +60,7 @@ async function main() {
     const result = await rpc("fuman_cleanup_daytrade_intraday_1m_15d_once", {
       p_apply: apply, p_batch_size: MAX_BATCH_SIZE,
     });
+    if (!Number.isSafeInteger(result?.deletedRows) || result.deletedRows < 0 || typeof result?.hasCandidateRowsBefore !== 'boolean' || !Number.isSafeInteger(result?.remainingCandidateRowsEstimate) || result.remainingCandidateRowsEstimate < 0) throw Error('cleanup_batch_fields_missing');
     batches.push(result);
     const deleted = Number(result?.deletedRows || 0);
     deletedRows += deleted;
@@ -71,7 +76,7 @@ async function main() {
     applied: apply,
     dryRun: !apply,
     checkedAt: new Date().toISOString(),
-    contract: "daytrade-intraday-retention-15d-v1",
+    contract: "daytrade-intraday-retention-20d-v2",
     formalTable: "fugle_daytrade_intraday_1m",
     keepDays: KEEP_DAYS,
     maxBatchSize: MAX_BATCH_SIZE,
@@ -98,7 +103,7 @@ main().catch((error) => {
   fs.mkdirSync(dir, { recursive: true });
   const payload = {
     ok: false, applied: apply, dryRun: !apply, checkedAt: new Date().toISOString(),
-    contract: "daytrade-intraday-retention-15d-v1", formalTable: "fugle_daytrade_intraday_1m",
+    contract: "daytrade-intraday-retention-20d-v2", formalTable: "fugle_daytrade_intraday_1m",
     keepDays: KEEP_DAYS, maxBatchSize: MAX_BATCH_SIZE, requestedMaxBatches,
     protectedLatestTradeDateRequired: true, reasonCode: "retention_cleanup_failed",
     allowedAction: "fail_closed_investigate", error: error.message,

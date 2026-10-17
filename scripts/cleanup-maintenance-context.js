@@ -1,13 +1,14 @@
 "use strict";
 const fs = require('fs'), path = require('path'), crypto = require('crypto');
 const RUNTIME = 'C:\\fuman-runtime';
-const ROOT = 'C:\\fuman-release-owner\\fuman-terminal';
+const SOURCE_ROOT = 'C:\\fuman-release-owner\\fuman-terminal';
+const ROOT = 'C:\\fuman-release-owner\\prod81';
 const steps = ['retired','history','intraday','runtime','priority','observability','extended','cost','janitor'];
 const date = () => new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 function authorization(file) {
   const value = JSON.parse(fs.readFileSync(file,'utf8').replace(/^\uFEFF/,''));
-  if (value.contract !== 'cleanup-maintenance-authorization-v1' || value.scope !== 'five-stage-cleanup' || value.authorizedBy !== 'user' || value.date !== date() || !value.authorizationText || !/^[a-z0-9-]{8,90}$/.test(value.runId) || value.keepDays !== 15 || value.preserveWorkdaySchedule !== true || value.sourceRoot !== ROOT || value.runtimeRoot !== RUNTIME || !(Date.parse(value.issuedAt) <= Date.now() && Date.now() < Date.parse(value.expiresAt)) || date() !== new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value.issuedAt))) throw Error('cleanup_maintenance_authorization_invalid_or_expired');
+  if (value.contract !== 'cleanup-maintenance-authorization-v1' || value.scope !== 'five-stage-cleanup' || value.authorizedBy !== 'user' || value.date !== date() || !value.authorizationText || !/^[a-z0-9-]{8,90}$/.test(value.runId) || value.keepDays !== 15 || value.preserveWorkdaySchedule !== true || value.sourceRoot !== SOURCE_ROOT || value.executionRoot !== ROOT || value.runtimeRoot !== RUNTIME || !(Date.parse(value.issuedAt) <= Date.now() && Date.now() < Date.parse(value.expiresAt)) || date() !== new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(value.issuedAt))) throw Error('cleanup_maintenance_authorization_invalid_or_expired');
   return {...value, file:path.resolve(file), sha256:hash(file), journalFile:path.join(RUNTIME,'status',`cleanup-maintenance-${value.runId}.json`)};
 }
 function receipts() {
@@ -32,4 +33,4 @@ function verifyJournal(auth) {
   }
   return j;
 }
-module.exports={RUNTIME,ROOT,date,hash,authorization,receipts,steps,verifyJournal,assertRetiredReference};
+module.exports={RUNTIME,ROOT,SOURCE_ROOT,date,hash,authorization,receipts,steps,verifyJournal,assertRetiredReference};

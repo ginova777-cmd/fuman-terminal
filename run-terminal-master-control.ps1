@@ -8,6 +8,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'scripts\cleanup-execution-root.ps1')
+Assert-FumanCleanupExecutionRoot -ExecutionRoot $ProjectRoot
 $startedAt = Get-Date
 $effectiveMode = $Mode
 if ($effectiveMode -eq "Auto") {

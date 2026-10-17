@@ -7,6 +7,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
+. (Join-Path $root 'scripts\cleanup-execution-root.ps1')
+Assert-FumanCleanupExecutionRoot -ExecutionRoot $root
 $node = "node"
 $script = Join-Path $root "scripts\cleanup-supabase-vercel-history.js"
 if (-not (Test-Path -LiteralPath $script)) {

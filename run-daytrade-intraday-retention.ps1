@@ -5,6 +5,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = $PSScriptRoot
+. (Join-Path $root 'scripts\cleanup-execution-root.ps1')
+Assert-FumanCleanupExecutionRoot -ExecutionRoot $root
 $script = Join-Path $root "scripts\cleanup-daytrade-intraday-retention.js"
 $runtimeRoot = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
 $statusDir = Join-Path $runtimeRoot "status"
@@ -40,7 +42,7 @@ catch {
     $failure = [ordered]@{
       ok = $false
       checkedAt = (Get-Date).ToUniversalTime().ToString("o")
-      contract = "daytrade-intraday-retention-15d-v1"
+      contract = "daytrade-intraday-retention-20d-v2"
       stage = "wrapper_startup"
       reasonCode = "retention_wrapper_failed_before_canonical_receipt"
       error = $_.Exception.Message

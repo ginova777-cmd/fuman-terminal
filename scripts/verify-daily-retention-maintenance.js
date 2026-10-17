@@ -115,7 +115,7 @@ async function main() {
     receiptCheck("stage1_retired_artifacts", "", path.join(STATUS,"api-only-retired-cleanup-status.json"), {source:"api-only-retired-artifact-cleanup",legacyDryRun:true}),
     receiptCheck("stage2_history", "", path.join(STATUS,"supabase-vercel-history-cleanup-status.json"), {source:"supabase-vercel-history-cleanup",history:true}),
     receiptCheck("stage3_cost_janitor", "global-cost-janitor-scorecard-v1", path.join(STATUS,"global-cost-janitor-scorecard.json"), {readOnly:true}),
-    receiptCheck("formal_intraday_1m", "daytrade-intraday-retention-15d-v1", path.join(STATUS, `daytrade-intraday-retention-${date.id}.json`)),
+    receiptCheck("formal_intraday_1m", "daytrade-intraday-retention-20d-v2", path.join(STATUS, `daytrade-intraday-retention-${date.id}.json`)),
     receiptCheck("runtime_artifacts", "runtime-retention-v1", path.join(STATUS, `runtime-retention-${date.id}.json`)),
     receiptCheck("daytrade_stale_priority_cache", "daytrade-stale-priority-cache-cleanup-v1", path.join(STATUS, `daytrade-stale-priority-cache-cleanup-${date.id}.json`)),
     receiptCheck("source_observability", "source-observability-retention-15d-v1", path.join(STATUS, `source-observability-retention-${date.id}.json`)),
@@ -135,10 +135,12 @@ async function main() {
   };
   if (maintenance) liveChecks.remainingCleanup = run(process.execPath, ['--use-system-ca','scripts/verify-cleanup-maintenance-readback.js',`--maintenance-authorization=${maintenance.file}`], 20*60*1000);
   for (const [name, result] of Object.entries(liveChecks)) if (!result.ok) issues.push(`live_verifier_failed:${name}`);
+  const phase = !maintenance && currentMinutes < 21*60+15 ? 'stage' : 'final';
   const complete = issues.length === 0 && warnings.length === 0;
   const payload = {
     ok: issues.length === 0,
-    status: complete ? "complete" : (issues.length ? "failed" : "degraded"),
+    status: complete ? "complete" : (issues.length ? "failed" : phase === "stage" ? "waiting_dependency" : "degraded"),
+    phase,
     complete,
     exitCode: issues.length === 0 ? 0 : 1,
     unattendedReady: complete && !maintenance,
@@ -152,7 +154,7 @@ async function main() {
     issues, warnings, reasonCode: issues[0] || warnings[0] || "ok",
     allowedAction: issues.length ? "fail_closed_investigate" : (warnings.length ? "wait_for_next_natural_schedule_then_reverify" : (maintenance ? "authorized_maintenance_complete" : "daily_retention_unattended_yes")),
   };
-  const output = path.join(STATUS, maintenance ? `cleanup-maintenance-complete-${maintenance.runId}.json` : `daily-retention-maintenance-verifier-${date.id}.json`);
+  const output = path.join(STATUS, maintenance ? `cleanup-maintenance-complete-${maintenance.runId}.json` : `daily-retention-maintenance-${phase === "stage" ? "stage" : "verifier"}-${date.id}.json`);
   fs.mkdirSync(STATUS, { recursive: true }); fs.writeFileSync(output, `${JSON.stringify(payload, null, 2)}\n`);
   payload.receiptFile = output; console.log(JSON.stringify(payload, null, 2));
   if (!payload.ok) process.exitCode = 1;

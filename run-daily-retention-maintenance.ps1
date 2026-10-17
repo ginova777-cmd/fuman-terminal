@@ -2,6 +2,8 @@ param([switch]$Apply)
 
 $ErrorActionPreference = 'Stop'
 $root = $PSScriptRoot
+. (Join-Path $root 'scripts\cleanup-execution-root.ps1')
+Assert-FumanCleanupExecutionRoot -ExecutionRoot $root
 $node = (Get-Command node -ErrorAction Stop).Source
 $suffix = if ($Apply) { @('--apply', '--json') } else { @('--json') }
 if ($Apply) {

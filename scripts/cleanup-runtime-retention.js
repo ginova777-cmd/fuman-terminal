@@ -3,7 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const RUNTIME = "C:\\fuman-runtime";
+const RUNTIME = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const TERMINAL = "C:\\fuman-terminal";
 const PUBLISH_SYNC = "C:\\fuman-terminal-publish-sync";
 const { assertTree, treeExpired } = require('./cleanup-path-protection');
@@ -48,9 +48,20 @@ function findDirs(root, allow, days, list) {
     if (treeExpired(full, Date.now() - days * DAY)) list.push({ path: full, bytes: dirBytes(full), kind: "directory" });
   }
 }
+const crypto = require("crypto");
+const { classifyEvidence } = require("./cleanup-evidence-protection");
+const evidenceDecisions = [];
 function listCandidates() {
   const list = [];
   findFiles(path.join(RUNTIME, "state"), (name) => /^daytrade-unattended-gate-(?:watchdog|0700|0845|0900|0910|0935)-evidence-.*\.json$/i.test(name), 15, list);
+  let review; try { review=JSON.parse(fs.readFileSync(path.join(RUNTIME,'config','cleanup-evidence-protection.json'),'utf8')); } catch { review=null; }
+  for(let i=list.length-1;i>=0;i--){
+    const item=list[i]; const sha256=crypto.createHash('sha256').update(fs.readFileSync(item.path)).digest('hex');
+    const row=review?.contract==='cleanup-evidence-protection-v1'?review.entries?.find(r=>r.path===item.path):null;
+    const decision=classifyEvidence(row,Date.now(),sha256);
+    evidenceDecisions.push({path:item.path,sha256,...decision});
+    if(!decision.eligible)list.splice(i,1); else item.sha256=sha256;
+  }
   // Sealed logs are owned by cleanup-local-assets, with retirement and reference evidence.
   findFiles(path.join(RUNTIME, "cache", "fugle"), () => true, 7, list);
   // Test outputs and final-audit directories require explicit retirement evidence.
@@ -63,11 +74,12 @@ const candidates = listCandidates();
 const deleted = [];
 const failures = [];
 if (apply) for (const item of candidates) {
-  try { const allowedRoot = [RUNTIME, TERMINAL, PUBLISH_SYNC].find(root => item.path.toLowerCase().startsWith(root.toLowerCase() + path.sep)); if (!allowedRoot) throw Error("cleanup_root_not_allowed"); assertTree(allowedRoot,item.path); fs.rmSync(item.path, { recursive: item.kind === "directory", force: true }); deleted.push(item); }
+  try { const allowedRoot = [RUNTIME, TERMINAL, PUBLISH_SYNC].find(root => item.path.toLowerCase().startsWith(root.toLowerCase() + path.sep)); if (!allowedRoot) throw Error("cleanup_root_not_allowed"); assertTree(allowedRoot,item.path); if(item.sha256 && crypto.createHash("sha256").update(fs.readFileSync(item.path)).digest("hex")!==item.sha256) throw Error("evidence_changed_before_delete"); fs.rmSync(item.path, { recursive: item.kind === "directory", force: true }); deleted.push(item); }
   catch (error) { failures.push({ path: item.path, error: error.message }); }
 }
 const payload = {
-  localAssets, ok: failures.length === 0, applied: apply, dryRun: !apply, checkedAt: new Date().toISOString(), contract: "runtime-retention-v1",
+  evidenceDecisions, evidenceReviewComplete: evidenceDecisions.every(d=>!['protection_evidence_missing_or_stale','reference_review_not_current','incident_or_success_unknown','retention_start_invalid'].includes(d.reason)),
+  localAssets, ok: failures.length === 0 && evidenceDecisions.every(d=>!['protection_evidence_missing_or_stale','reference_review_not_current','incident_or_success_unknown','retention_start_invalid'].includes(d.reason)), applied: apply, dryRun: !apply, checkedAt: new Date().toISOString(), contract: "runtime-retention-v1",
   retention: { watchdogEvidenceDays: 15, datedLogsDays: 30, fugleCacheDays: 7, testOutputsDays: 30, retiredVersionsDays: 45, terminatedTempDays: 7 },
   protected: ["cache/intraday/fugle-daytrade-ws-candles.json", "daily OHLCV and volume", "Strategy3/4 results", "/88, mobile and latest scorecard", "newest 15 days of formal evidence", "production-health.jsonl"],
   candidates: candidates.length + localAssets.candidates.length, candidateBytes: [...candidates,...localAssets.candidates].reduce((n, item) => n + item.bytes, 0),
