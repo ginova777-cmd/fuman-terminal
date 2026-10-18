@@ -18,7 +18,7 @@ const head = g('rev-parse', 'HEAD');
 const env = { FUMAN_PUBLISH_SCOPE: PROFILE, FUMAN_RELEASE_SHA: head };
 const cases = [];
 function test(name, fn) { fn(); cases.push({ name, status: 'PASS' }); }
-test('exact_reviewed_tree', () => assert.deepEqual(assess(repo, env).notApplicable, ['buySellFieldContractGuard', 'terminal_water_root']));
+test('exact_reviewed_tree', () => assert.deepEqual(assess(repo, env).notApplicable, ['buySellFieldContractGuard', 'terminal_water_root', 'daytrade_source_host_role']));
 test('default_full_scope', () => assert.deepEqual(assess(repo, {}).notApplicable, []));
 test('unknown_scope_blocks', () => assert.throws(() => assess(repo, { ...env, FUMAN_PUBLISH_SCOPE: 'morning' }), /UNKNOWN_PUBLISH_SCOPE/));
 test('wrong_sha_blocks', () => assert.throws(() => assess(repo, { ...env, FUMAN_RELEASE_SHA: REVIEWED }), /SHA_MISMATCH/));
@@ -40,7 +40,7 @@ test('scoped_coordinator_receipt', () => {
   const { result, called } = chain('scoped', env);
   assert.equal(result.ok, true);
   assert(!called.some(x => /verify-buy-sell-field-contract|verify-terminal-water-root\.js/.test(x)));
-  assert.equal(result.checks.filter(x => x.status === 'NOT_APPLICABLE' && x.exitCode === null && x.executed === false).length, 2);
+  assert.equal(result.checks.filter(x => x.status === 'NOT_APPLICABLE' && x.exitCode === null && x.executed === false).length, 3);
   for (const name of ['release_root_authority', 'release_handoff_freeze', 'morning_contract', 'morning_regressions', 'membership_e2e_layering', 'scorecard_no_rollback']) assert(result.checks.find(x => x.name === name)?.executed);
 });
 test('full_scope_still_runs_unrelated_live_gates', () => { const { called } = chain('full', {}); assert(called.some(x => x.includes('verify-buy-sell-field-contract'))); assert(called.some(x => x.includes('verify-terminal-water-root.js'))); });
