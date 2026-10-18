@@ -3,18 +3,36 @@ const fs = require('fs');
 const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 const { assess } = require('../lib/morning-publish-applicability.cjs');
-const applicability = assess(ROOT);
-const rehearsal = require('../lib/morning-release-rehearsal.cjs').inspect(ROOT);
+let applicability = {};
+let rehearsal = null;
 const results = [];
+const runId = require('node:crypto').randomUUID();
+const startedAt = new Date().toISOString();
+let complete = false;
+let firstBlocker = null;
+const expectedCount = 16 + (process.env.FUMAN_MORNING_WEB_ARTIFACT_ROOT ? 6 : 0);
 function save() {
   const out = path.join(ROOT, 'outputs/morning-full-release-chain-20261018');
   fs.mkdirSync(out, { recursive: true });
   fs.writeFileSync(path.join(out, 'real-predeploy.json'), JSON.stringify({
     scope: rehearsal ? 'isolated_real_predeploy' : 'formal_predeploy',
-    head: applicability.head || null, results,
-    ok: results.every(x => x.status !== 'FAILED'), deploymentPerformed: false,
+    runId, startedAt, checkedAt: new Date().toISOString(),
+    head: applicability.head || process.env.FUMAN_RELEASE_SHA || null, results, expectedCount,
+    complete, firstBlocker,
+    status: firstBlocker || results.some(x => x.status === 'FAILED') ? 'FAILED' : complete ? 'COMPLETE' : 'RUNNING',
+    ok: complete && !firstBlocker && results.length === expectedCount && results.every(x => x.status !== 'FAILED'), deploymentPerformed: false,
   }, null, 2));
 }
+save();
+process.on('uncaughtException', error => {
+  firstBlocker = error.message;
+  complete = false;
+  save();
+  console.error(error.stack);
+  process.exitCode = 1;
+});
+applicability = assess(ROOT);
+rehearsal = require('../lib/morning-release-rehearsal.cjs').inspect(ROOT);
 
 function run(label, command, cwd = ROOT) {
   if (label === 'Telegram code contract (natural acceptance remains post-deploy)' && applicability.status === 'SCOPED') {
@@ -80,5 +98,7 @@ if (process.env.FUMAN_MORNING_WEB_ARTIFACT_ROOT) {
   }
 }
 
-if (results.some(x => x.status === 'FAILED')) process.exitCode = 1;
+complete = results.length === expectedCount;
+save();
+if (!complete || results.some(x => x.status === 'FAILED')) process.exitCode = 1;
 else console.log("[prepare-deploy] ok");
