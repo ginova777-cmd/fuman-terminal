@@ -18,4 +18,9 @@ for(const mutate of [x=>x.evidence.us_0820.wrapper.execution_mode='resume_existi
 const holiday=day('2026-10-24','2026-10-23');holiday.calendar.is_trading_day=false;assert.equal(s.recordNaturalDay(ledger,holiday).consecutive,5);
 const unknown=day('2026-10-26','2026-10-23');unknown.calendar.verified=false;assert.equal(s.recordNaturalDay(ledger,unknown).pending_reason,'official_calendar_unverified');
 const changed=day('2026-10-26','2026-10-23');changed.git_sha='c'.repeat(40);for(const e of Object.values(changed.evidence))e.wrapper.git_sha=changed.git_sha;assert.equal(s.recordNaturalDay(ledger,changed).consecutive,1);
+for(const mutate of [e=>e.content=null,e=>e.content.run_id='other-run',e=>e.canonical.delivery_content_hash='other-content']){
+  const x=day('2026-10-26','2026-10-23');mutate(x.evidence.us_0820);
+  assert.notEqual(s.stageResult(x.date,'us_0820',x.evidence.us_0820).delivery_status,'COMPLETE');
+  assert.equal(s.recordNaturalDay(ledger,x).consecutive,0);
+}
 console.log(JSON.stringify({scope:'isolated_supervision_unit_test',complete:true,real_natural_days:0,real_notifications_sent:0}));
