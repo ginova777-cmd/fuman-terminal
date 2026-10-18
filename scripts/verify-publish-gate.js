@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const { loadActiveModuleRegistry } = require("../lib/terminal-active-module-registry");
+const { assess } = require("../lib/morning-publish-applicability.cjs");
 
 const ROOT = path.resolve(__dirname, "..");
 const OUTPUT_DIR = path.join(ROOT, "outputs", "terminal-dream-publish-gate");
@@ -38,8 +39,19 @@ function tail(text, lineCount) {
   return String(text || "").split(/\r?\n/).slice(-lineCount).join("\n").trim();
 }
 
-function main() {
+function main(options = {}) {
+  const execute = options.execute || run;
+  const outputDir = options.outputDir || OUTPUT_DIR;
   const issues = [];
+  let applicability;
+  try { applicability = assess(options.root || ROOT, options.env || process.env); }
+  catch (error) {
+    const failure = { ok: false, status: "BLOCKED", first_blocker: error.message, checks: [], failedChecks: ["publish_scope_applicability"] };
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.writeFileSync(path.join(outputDir, "terminal-dream-publish-gate.json"), JSON.stringify(failure, null, 2) + "\n");
+    if (require.main === module) process.exitCode = 1;
+    return failure;
+  }
   let registry = null;
   try {
     registry = loadActiveModuleRegistry();
@@ -89,18 +101,26 @@ function main() {
     ["terminal_ui_state_acceptance", node, ["scripts/verify-terminal-ui-state-acceptance.js"]],
   ];
 
-  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  fs.mkdirSync(outputDir, { recursive: true });
   const results = [];
   for (const [name, command, args] of checks) {
-    const result = run(command, args);
+    if (applicability.notApplicable.includes(name)) {
+      const item = { name, status: "NOT_APPLICABLE", exitCode: null, executed: false, reason: applicability.reason };
+      results.push(item);
+      fs.writeFileSync(path.join(outputDir, name + ".log"), JSON.stringify(item, null, 2) + "\n");
+      continue;
+    }
+    const result = execute(command, args);
     const log = [result.stdout, result.stderr].filter(Boolean).join("\n").trim();
-    fs.writeFileSync(path.join(OUTPUT_DIR, name + ".log"), log + "\n");
+    fs.writeFileSync(path.join(outputDir, name + ".log"), log + "\n");
     const item = {
       name,
       command: result.command,
       exitCode: result.exitCode,
       signal: result.signal,
       error: result.error,
+      status: result.exitCode === 0 ? "PASS" : "FAILED",
+      executed: true,
     };
     results.push(item);
     console.log("[dream-gate] " + name + " exit=" + result.exitCode);
@@ -111,11 +131,12 @@ function main() {
     }
   }
 
-  const failedChecks = results.filter((row) => row.exitCode !== 0).map((row) => row.name);
+  const failedChecks = results.filter((row) => row.executed && row.exitCode !== 0).map((row) => row.name);
   const payload = {
     ok: issues.length === 0 && failedChecks.length === 0,
     contract: "terminal-dream-publish-gate-v1",
     checkedAt: new Date().toISOString(),
+    applicability,
     activeModuleRegistry: registry && registry.contract || "",
     activeModules,
     retiredModules,
@@ -135,11 +156,13 @@ function main() {
       uiStatesRequired: [],
     },
   };
-  fs.writeFileSync(path.join(OUTPUT_DIR, "terminal-dream-publish-gate.json"), JSON.stringify(payload, null, 2) + "\n");
+  fs.writeFileSync(path.join(outputDir, "terminal-dream-publish-gate.json"), JSON.stringify(payload, null, 2) + "\n");
   console.log(JSON.stringify(payload, null, 2));
-  if (!payload.ok) process.exitCode = 1;
+  if (!payload.ok && require.main === module) process.exitCode = 1;
+  return payload;
 }
 
-main();
+if (require.main === module) main();
+module.exports = { main };
 
 
