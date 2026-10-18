@@ -1,28 +1,46 @@
 const { spawnSync } = require("child_process");
 const fs = require("fs");
+const path = require('node:path');
 if (process.env.FUMAN_RELEASE_REHEARSAL === '1') throw new Error('REHEARSAL_UPLOAD_FORBIDDEN');
 
 function run(command, args, options = {}) {
+  const receipt = process.env.FUMAN_DEPLOY_RESULT_FILE;
+  const attempt = receipt ? receipt + '.' + require('node:crypto').randomUUID() : null;
+  if (receipt) {
+    fs.mkdirSync(path.dirname(receipt), { recursive: true });
+    if (fs.existsSync(receipt)) fs.renameSync(receipt, attempt + '.previous.json');
+  }
   const result = spawnSync(command, args, {
-    stdio: process.env.FUMAN_DEPLOY_RESULT_FILE ? ["inherit", "pipe", "inherit"] : "inherit",
+    stdio: receipt ? ["inherit", "pipe", "pipe"] : "inherit",
     encoding: "utf8",
     shell: process.platform === "win32",
     env: process.env,
     ...options,
   });
+  if (receipt) {
+    fs.writeFileSync(attempt + '.stdout.txt', String(result.stdout || ''));
+    fs.writeFileSync(attempt + '.stderr.txt', String(result.stderr || ''));
+    fs.writeFileSync(attempt + '.process.json', JSON.stringify({ status: result.status, signal: result.signal,
+      error: result.error?.message || null, releaseSha: process.env.FUMAN_RELEASE_SHA, at: new Date().toISOString() }, null, 2));
+    process.stdout.write(String(result.stdout || ''));
+    process.stderr.write(String(result.stderr || ''));
+  }
   if (result.error) {
     console.error(`[deploy-release-env] ${command} failed: ${result.error.message}`);
     process.exit(1);
   }
   if (result.status !== 0) process.exit(result.status || 1);
   if (process.env.FUMAN_DEPLOY_RESULT_FILE) {
-    const urls = String(result.stdout || "").trim().split(/\s+/).filter(x => /^https:\/\/[a-z0-9-]+\.vercel\.app\/?$/i.test(x));
-    if (urls.length !== 1) throw new Error("deployment_result_url_ambiguous");
+    const { identify } = require('../lib/deployment-result.cjs');
+    const { inspectDeployment } = require('../lib/morning-web-release-runtime.cjs');
+    const { CONTRACT } = require('../lib/morning-web-release-contract.cjs');
+    const identified = identify(result.stdout, result.stderr,
+      url => inspectDeployment(url, path.resolve(__dirname, '..')), CONTRACT);
+    fs.writeFileSync(attempt + '.inspect.json', JSON.stringify(identified.deployment, null, 2));
     fs.writeFileSync(process.env.FUMAN_DEPLOY_RESULT_FILE, JSON.stringify({
-      deploymentUrl: urls[0].replace(/^https:\/\//, "").replace(/\/$/, ""),
+      deploymentUrl: identified.deploymentUrl, deploymentId: identified.deploymentId, evidencePrefix: attempt,
       releaseSha: process.env.FUMAN_RELEASE_SHA, uploadedAt: new Date().toISOString(),
     }, null, 2));
-    console.log(result.stdout);
   }
 }
 
