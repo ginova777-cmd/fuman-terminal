@@ -1,5 +1,6 @@
 const { spawnSync } = require("child_process");
 const fs = require("fs");
+if (process.env.FUMAN_RELEASE_REHEARSAL === '1') throw new Error('REHEARSAL_UPLOAD_FORBIDDEN');
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {

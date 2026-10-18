@@ -115,7 +115,9 @@ function verifyStatic() {
   assert(display.includes("window.FUMAN_TERMINAL_DISPLAY_V2"), "terminal-display-v2 missing debug export");
   assert(display.includes("route.snapshot"), "terminal-display-v2 must call the snapshot path during route activation");
   assert(pkg.includes('"verify:terminal-display-snapshot"'), "package.json missing verify:terminal-display-snapshot script");
-  assert(pkg.includes("npm run verify:terminal-display-snapshot -- --retry"), "postdeploy must run terminal-display-snapshot live verifier");
+  const postdeploy = JSON.parse(pkg).scripts.postdeploy;
+  const wiredPostdeploy = postdeploy === 'node scripts/postdeploy-dispatch.cjs' ? read('scripts/postdeploy-dispatch.cjs') : postdeploy;
+  assert(wiredPostdeploy.includes("npm run verify:terminal-display-snapshot -- --retry"), "full postdeploy must run terminal-display-snapshot live verifier");
   assert(publishGate.includes("terminal_display_snapshot"), "publish gate missing terminal_display_snapshot check");
   assert(sync.includes("scripts/verify-terminal-display-snapshot.js"), "sync-main-deploy-source missing verifier script");
   assert(sourceSync.includes("scripts/verify-terminal-display-snapshot.js"), "verify-source-sync missing verifier script");

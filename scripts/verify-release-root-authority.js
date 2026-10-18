@@ -64,6 +64,9 @@ function main() {
 
   let deployCloneEvidence = null;
   if (runningFromApprovedDeployClone && !runningFromSourceAuthority) {
+    let rehearsal = null;
+    try { rehearsal = require('../lib/morning-release-rehearsal.cjs').inspect(ROOT); }
+    catch (error) { issues.push(error.message); }
     const branch = git(ROOT, ["branch", "--show-current"]);
     const head = git(ROOT, ["rev-parse", "HEAD"]);
     const originMain = git(ROOT, ["rev-parse", "origin/main"]);
@@ -74,9 +77,10 @@ function main() {
       head: head.value.toLowerCase(),
       originMain: originMain.value.toLowerCase(),
       clean: status.ok ? status.value === "" : false,
+      rehearsal,
     };
-    if (!branch.ok || branch.value !== "main") issues.push("approved_deploy_clone_not_main");
-    if (!head.ok || !originMain.ok || head.value.toLowerCase() !== originMain.value.toLowerCase()) {
+    if (!branch.ok || (!rehearsal && branch.value !== "main")) issues.push("approved_deploy_clone_not_main");
+    if (!head.ok || !originMain.ok || (!rehearsal && head.value.toLowerCase() !== originMain.value.toLowerCase())) {
       issues.push("approved_deploy_clone_not_origin_main");
     }
     if (!status.ok || status.value) issues.push("approved_deploy_clone_dirty");

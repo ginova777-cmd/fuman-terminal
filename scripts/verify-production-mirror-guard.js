@@ -72,7 +72,10 @@ if (!fs.existsSync(MIRROR_ROOT)) {
 } else {
   const branch = gitText(["branch", "--show-current"]);
   if (!branch.ok) fail(`cannot read mirror branch: ${branch.stderr}`);
-  if (REQUIRE_MAIN && branch.stdout !== "main") {
+  let rehearsal = null;
+  try { rehearsal = require('../lib/morning-release-rehearsal.cjs').inspect(MIRROR_ROOT); }
+  catch (error) { fail(error.message); }
+  if (REQUIRE_MAIN && !rehearsal && branch.stdout !== "main") {
     fail(`production mirror must stay on main; current=${branch.stdout || "(detached)"}`);
   }
 

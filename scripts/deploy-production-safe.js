@@ -142,6 +142,14 @@ if (!/^[0-9a-f]{40}$/i.test(releaseSha)) {
 
 async function main() {
 try {
+  if (process.env.FUMAN_RELEASE_REHEARSAL === '1') {
+    const rehearsal = require('../lib/morning-release-rehearsal.cjs').inspect(ROOT);
+    for (const script of ['verify-sync-hard-gate.js', 'verify-release-root-authority.js', 'verify-vercel-cost-guard.js', 'verify-vercel-project-inventory.js']) {
+      run(script, [process.execPath, 'scripts/' + script]);
+    }
+    console.log(JSON.stringify({ ...rehearsal, status: 'PREFLIGHT_ONLY', upload: 'NOT_RUN', productionSwitch: 'NOT_RUN' }));
+    return;
+  }
   assertApprovedProductionWindow();
   assertSupabaseIncidentClear("deploy-production-safe");
   acquireLock(releaseSha);
@@ -177,7 +185,7 @@ try {
   console.error(`[deploy-safe] failed: ${error.message}`);
   process.exitCode = 1;
 } finally {
-  releaseLock();
+  if (process.env.FUMAN_RELEASE_REHEARSAL !== '1') releaseLock();
 }
 }
 main();

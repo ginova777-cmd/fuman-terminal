@@ -76,6 +76,11 @@ function assertCleanWorktree() {
 }
 
 function assertBranchAndSync() {
+  if (process.env.FUMAN_RELEASE_REHEARSAL === '1') {
+    try { console.log(JSON.stringify(require('../lib/morning-release-rehearsal.cjs').inspect(ROOT))); }
+    catch (error) { fail(error.message); }
+    return;
+  }
   const branch = git(["branch", "--show-current"]);
   if (!branch.ok || !branch.stdout) {
     fail(`cannot detect current branch: ${branch.stderr || "(detached HEAD)"}`);

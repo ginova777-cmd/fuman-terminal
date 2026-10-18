@@ -1,5 +1,10 @@
 'use strict';
 const { spawnSync } = require('node:child_process');
+if (process.env.FUMAN_RELEASE_REHEARSAL === '1') {
+  require('../lib/morning-release-rehearsal.cjs').inspect(process.cwd());
+  console.log(JSON.stringify({ status: 'NOT_RUN', reason: 'isolated predeploy performs no upload or live postdeploy', naturalAcceptance: false }));
+  process.exit(0);
+}
 const bounded = Boolean(process.env.FUMAN_MORNING_WEB_ARTIFACT_ROOT);
 const r = bounded
   ? spawnSync(process.execPath, ['scripts/verify-morning-web-live-release.cjs'], { stdio: 'inherit', windowsHide: true })
