@@ -17,6 +17,7 @@ $env:FUMAN_RUNTIME_DIR = $RuntimeDir
 $env:FUMAN_DATA_DIR = if ($env:FUMAN_DATA_DIR) { $env:FUMAN_DATA_DIR } else { Join-Path $RuntimeDir "data" }
 $env:FUMAN_STATE_DIR = if ($env:FUMAN_STATE_DIR) { $env:FUMAN_STATE_DIR } else { Join-Path $RuntimeDir "state" }
 $env:NODE_OPTIONS = "--use-system-ca"
+$releaseSha = $null
 
 $logDir = Join-Path $RuntimeDir "logs"
 $receiptDir = Join-Path $RuntimeDir "data\opening-report-stages\$Stage"
@@ -129,6 +130,8 @@ if (-not $IsolatedBacktest) {
 if (-not $IsolatedBacktest) {
   & "C:\Program Files\nodejs\node.exe" "scripts\verify-opening-report-release.js"
   if ($LASTEXITCODE -ne 0) { throw "RELEASE_ROOT_DRIFT" }
+  $releaseSha = (& git -C $Root rev-parse HEAD | Out-String).Trim()
+  if ($LASTEXITCODE -ne 0 -or $releaseSha -notmatch '^[a-f0-9]{40}$') { throw "RELEASE_SHA_UNAVAILABLE" }
   & "C:\Program Files\nodejs\node.exe" "scripts\supabase-incident-guard.js" check "--class=guard" "--action=opening-report-complete"
   if ($LASTEXITCODE -ne 0) { throw "morning_source_incident_blocked" }
 }
@@ -171,12 +174,14 @@ $rendered = if ($contentReady -and -not $IsolatedBacktest) { Invoke-NodeStep -No
 $contentFile = Join-Path $receiptDir "morning-content-verification-$today.json"
 $contentArgs = @("scripts\verify-opening-report-morning-contract.js", "--content-only", "--trade-date=$tradeDate", "--run-id=$runId", "--output=$contentFile")
 $contentVerification = if ($contentReady -and $rendered.exitCode -eq 0 -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $contentArgs -Label "morning-content-verifier" } else { [pscustomobject]@{label="morning-content-verifier";exitCode=-1;stdout="";stderr=""} }
+$contentIdentity = if ($contentVerification.exitCode -eq 0) { Invoke-NodeStep -NodeArgs @("scripts\verify-morning-local-receipt.js", "--file=$contentFile", "--date=$tradeDate", "--stage=$Stage", "--run-id=$runId", "--hash=$($currentData.delivery_content_hash)") -Label "content-receipt-identity" } else { [pscustomobject]@{exitCode=-1} }
+$contentVerified = ($contentVerification.exitCode -eq 0 -and $contentIdentity.exitCode -eq 0 -and -not $IsolatedBacktest)
 $persistenceArgs = @("scripts\verify-opening-report-0830-mother-pool-persistence-ack.js", "--trade-date=$tradeDate", "--report-run-id=$runId")
 if($ResumeEvidence){ $persistenceArgs += "--resume-evidence" }
-$persistence = if ($dataReady -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $persistenceArgs -Label "mother-pool-persistence-ack" } elseif ($run.exitCode -eq 0) { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = 0; stdout = ""; stderr = ""; simulated = $true } } else { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = -1; stdout = ""; stderr = "" } }
+$persistence = if ($dataReady -and -not $IsolatedBacktest) { Invoke-NodeStep -NodeArgs $persistenceArgs -Label "mother-pool-persistence-ack" } elseif ($IsolatedBacktest -and $run.exitCode -eq 0) { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = 0; stdout = ""; stderr = ""; simulated = $true } } else { [pscustomobject]@{ label = "mother-pool-persistence-ack"; exitCode = -1; stdout = ""; stderr = "" } }
 $verifierArgs = @("scripts\verify-opening-report-morning-contract.js", "--trade-date=$tradeDate")
 if (-not $IsolatedBacktest) { $verifierArgs += "--require-current" }
-$verifier = if ($dataReady -and $persistence.exitCode -eq 0 -and ($IsolatedBacktest -or ($rendered.exitCode -eq 0 -and $contentVerification.exitCode -eq 0))) { Invoke-NodeStep -NodeArgs $verifierArgs -Label "canonical-verifier" } else { [pscustomobject]@{ label = "canonical-verifier"; exitCode = -1; stdout = ""; stderr = "" } }
+$verifier = if ($dataReady -and $persistence.exitCode -eq 0 -and ($IsolatedBacktest -or ($rendered.exitCode -eq 0 -and $contentVerified))) { Invoke-NodeStep -NodeArgs $verifierArgs -Label "canonical-verifier" } else { [pscustomobject]@{ label = "canonical-verifier"; exitCode = -1; stdout = ""; stderr = "" } }
 
 $finalFile = Join-Path $receiptDir "opening-report-0830-final-receipt-$today.json"
 $final = if (Test-Path -LiteralPath $finalFile) { Get-Content -LiteralPath $finalFile -Raw | ConvertFrom-Json } else { $null }
@@ -184,16 +189,18 @@ $lineFile = Join-Path $receiptDir "line-push-receipt-$today.json"
 $line = if (Test-Path -LiteralPath $lineFile) { Get-Content -LiteralPath $lineFile -Raw | ConvertFrom-Json } else { $null }
 $runnerOk = ($run.exitCode -eq 0 -and $null -ne $final -and $final.runner_complete -eq $true -and $final.run_id -eq $runId -and $final.date -eq $tradeDate)
 $verifierOk = ($verifier.exitCode -eq 0)
-$linePersonalOk = ($null -ne $line -and $line.line_push_ok -eq $true -and $line.has_user_target -eq $true)
-$lineGroupOk = ($null -ne $line -and $line.line_push_ok -eq $true -and $line.has_group_target -eq $true)
-$notificationAccepted = ($linePersonalOk -and $lineGroupOk) -or ($null -ne $final -and $final.notification_accepted -eq $true -and ($null -ne $final.line_quota_exception -or ($final.notification_status -eq 'paused_by_user' -and $final.completion_scope -eq 'tri_surface')) -and $verifierOk)
+$lineIdentityOk = ($null -ne $line -and $line.report_run_id -eq $runId -and $line.trade_date -eq $tradeDate -and $line.delivery_content_hash -eq $final.delivery_content_hash)
+$linePersonalOk = ($lineIdentityOk -and $null -ne $line -and $line.line_push_ok -eq $true -and $line.has_user_target -eq $true)
+$lineGroupOk = ($lineIdentityOk -and $null -ne $line -and $line.line_push_ok -eq $true -and $line.has_group_target -eq $true)
+$notificationPolicy = Invoke-NodeStep -NodeArgs @("scripts\verify-morning-local-receipt.js", "--notification", "--file=$lineFile", "--date=$tradeDate", "--stage=$Stage", "--run-id=$runId", "--hash=$($final.delivery_content_hash)") -Label "notification-policy"
+$notificationAccepted = ($notificationPolicy.exitCode -eq 0)
 $terminalOk = ($null -ne $final -and $final.terminal_briefing_snapshot.ok -eq $true)
 $bridgeOk = ($null -ne $final -and $final.mother_pool_bridge_attempted -eq $true -and $final.mother_pool_bridge_ok -eq $true)
 $handoffAckOk = ($null -ne $final -and $final.mother_pool_handoff_ack_ok -eq $true -and $final.mother_pool_handoff_ack.complete -eq $true)
 $persistenceAckOk = if ($IsolatedBacktest) { $true } else { ($persistence.exitCode -eq 0 -and $null -ne $final -and $final.mother_pool_persistence_ack_ok -eq $true -and $final.mother_pool_persistence_ack.complete -eq $true) }
 $expected = if ($null -ne $final -and $null -ne $final.expected_industry_count) { [int]$final.expected_industry_count } else { 0 }
 $scanned = if ($null -ne $final -and $null -ne $final.scanned_industry_count) { [int]$final.scanned_industry_count } else { 0 }
-$ok = ($coverage.exitCode -eq 0 -and $runnerOk -and $persistenceAckOk -and $verifierOk -and $notificationAccepted -and $terminalOk -and $bridgeOk -and $handoffAckOk -and $expected -eq 15 -and $scanned -eq 15)
+$ok = (($IsolatedBacktest -or $contentVerified) -and $coverage.exitCode -eq 0 -and $runnerOk -and $persistenceAckOk -and $verifierOk -and $notificationAccepted -and $terminalOk -and $bridgeOk -and $handoffAckOk -and $expected -eq 15 -and $scanned -eq 15)
 $reasonCode = if ($ok) { "complete" } elseif ($sourceFreeze.exitCode -ne 0) { "source_freeze_0830_failed" } elseif ($coverage.exitCode -ne 0) { "morning_source_coverage_failed" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $handoffAckOk) { "mother_pool_handoff_ack_incomplete" } elseif (-not $persistenceAckOk) { "mother_pool_persistence_ack_incomplete" } elseif (-not $IsolatedBacktest -and $rendered.exitCode -ne 0) { "rendered_delivery_failed" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } else { "industry_scan_incomplete" }
 
 # Separate component evidence without weakening the canonical completion gate.
@@ -204,12 +211,14 @@ $sourceRows = if ($sourceIdentityOk) { @($sourceReceipt.industries | ForEach-Obj
 $sourceCoverageOk = ($sourceIdentityOk -and $sourceRows.Count -gt 0 -and $null -ne $sourceReceipt.source_gap_leaders -and $sourceReceipt.source_gap_leaders -eq 0 -and @($sourceRows | Where-Object { $_.source_gap -eq $true }).Count -eq 0 -and $sourceRows.Count -eq $sourceReceipt.total_leaders)
 $reportContentReady = ($coverage.exitCode -eq 0 -and $sourceCoverageOk -and $null -ne $final -and $final.run_id -eq $runId -and $final.overseas_sources_ok -eq $true -and $expected -eq 15 -and $scanned -eq 15)
 $componentStatus = [ordered]@{
-  morning_source_content = [ordered]@{status=if($reportContentReady -and $contentVerification.exitCode -eq 0 -and -not $IsolatedBacktest){"COMPLETE"}elseif($IsolatedBacktest){"SIMULATED"}else{"FAILED"};owner="Morning Report";source_identity_ok=$sourceIdentityOk;source_coverage_ok=$sourceCoverageOk;content_verified=($contentVerification.exitCode -eq 0);canonical_verified=$verifierOk;artifact=$sourceFile;content_receipt=$contentFile}
+  morning_source_content = [ordered]@{status=if($reportContentReady -and $contentVerified){"COMPLETE"}elseif($IsolatedBacktest){"SIMULATED"}else{"FAILED"};owner="Morning Report";source_identity_ok=$sourceIdentityOk;source_coverage_ok=$sourceCoverageOk;content_verified=$contentVerified;canonical_verified=$verifierOk;artifact=$sourceFile;content_receipt=$contentFile}
   mother_pool_handoff = [ordered]@{status=if($handoffAckOk){"COMPLETE"}else{"FAILED"};owner="Mother Pool";receipt=if($null -ne $final){$final.mother_pool_handoff_ack_receipt}else{$null}}
   mother_pool_retention = [ordered]@{status=if($persistenceAckOk -and -not $IsolatedBacktest){"COMPLETE"}elseif($IsolatedBacktest){"SIMULATED"}else{"FAILED"};owner="Mother Pool";receipt=if($null -ne $final){$final.mother_pool_persistence_ack_receipt}else{$null}}
   line_delivery = [ordered]@{personal_delivered=$linePersonalOk;group_delivered=$lineGroupOk;policy_accepted=$notificationAccepted;scope="delivery_only"}
 }
 $receipt = [ordered]@{
+  git_sha = $releaseSha
+  morning_complete = ($reportContentReady -and $contentVerified)
   content_verification_step = $contentVerification
   source_coverage_receipt = $coverageFile
   component_status = $componentStatus
@@ -266,7 +275,7 @@ if ($null -ne $final -and $final.run_id -eq $runId) {
   $final.first_blocker = if ($final.complete) { $null } else { $reasonCode }
   $final | Add-Member -Force -NotePropertyName canonical_verifier_ok -NotePropertyValue $verifierOk
   # Preserve hashed source timestamps exactly; PowerShell JSON date conversion changes their bytes.
-  $finalPatch = [ordered]@{complete=$final.complete;status=$final.status;report_status=$final.report_status;exitCode=$final.exitCode;first_blocker=$final.first_blocker;canonical_verifier_ok=$verifierOk} | ConvertTo-Json -Compress
+  $finalPatch = [ordered]@{morning_complete=($reportContentReady -and $contentVerified);morning_status=$(if($reportContentReady -and $contentVerified){"COMPLETE"}else{"FAILED"});morning_content_receipt=$contentFile;complete=$final.complete;status=$final.status;report_status=$final.report_status;exitCode=$final.exitCode;first_blocker=$final.first_blocker;canonical_verifier_ok=$verifierOk} | ConvertTo-Json -Compress
   & "C:\Program Files\nodejs\node.exe" -e 'const fs=require("fs");const p=process.argv[1];const v=JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,""));Object.assign(v,JSON.parse(process.argv[2]));fs.writeFileSync(p,JSON.stringify(v,null,2));' $finalFile $finalPatch
   if ($LASTEXITCODE -ne 0) { throw "final_receipt_serialization_failed" }
 }

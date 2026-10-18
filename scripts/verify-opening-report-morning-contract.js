@@ -478,15 +478,15 @@ function renderedDeliveryChecks(checks, tradeDate, final) {
   const file=path.join(REPORT_DIR,"rendered",compactDate(tradeDate),"opening-report-rendered.json");
   let receipt=null;
   try { receipt=readJson(file); } catch { /* Missing or invalid evidence remains a failed check. */ }
-  addCheck(checks,"current_rendered_receipt",receipt?.contract==="opening-report-rendered-v1" && receipt.complete===true && receipt.diagnostic===false && receipt.run_id===final.run_id && receipt.trade_date===tradeDate && receipt.delivery_content_hash===final.delivery_content_hash && receipt.full_content_hash_ok===true,"same-run live desktop/mobile required");
+  addCheck(checks,"current_rendered_receipt",receipt?.contract==="opening-report-rendered-v1" && receipt.complete===true && receipt.diagnostic===false && receipt.run_id===final.run_id && receipt.trade_date===tradeDate && receipt.stage===morningStages.stage().id && receipt.delivery_content_hash===final.delivery_content_hash && receipt.full_content_hash_ok===true,"same-run live desktop/mobile required");
   const age=Date.now()-Date.parse(receipt?.checked_at||"");
   addCheck(checks,"current_rendered_receipt_fresh",age>=0 && age<30*60*1000,"rendered evidence within 30 minutes");
   const rows=receipt?.results||[];
-  addCheck(checks,"current_rendered_surfaces",["desktop","mobile-portrait","mobile-landscape","scorecard88"].every(surface=>rows.some(row=>row.surface===surface && row.ok===true && row.run_id===final.run_id && row.hash===final.delivery_content_hash && row.screenshot && exists(row.screenshot) && require("crypto").createHash("sha256").update(fs.readFileSync(row.screenshot)).digest("hex")===row.screenshot_sha256)),"actual rendered surfaces and original screenshots");
-  addCheck(checks,"current_rendered_night_futures",rows.length===4 && rows.every(row=>row.night_text===require("../lib/opening-report-night-futures").summary(final.night_futures) && row.night_visible===true),"night futures visible on all three layouts");
+  addCheck(checks,"current_rendered_surfaces",["desktop","mobile-portrait","mobile-landscape"].every(surface=>rows.some(row=>row.surface===surface && row.ok===true && row.run_id===final.run_id && row.hash===final.delivery_content_hash && row.screenshot && exists(row.screenshot) && require("crypto").createHash("sha256").update(fs.readFileSync(row.screenshot)).digest("hex")===row.screenshot_sha256)),"actual rendered surfaces and original screenshots");
+  addCheck(checks,"current_rendered_night_futures",rows.length===3 && rows.every(row=>row.night_text===require("../lib/opening-report-night-futures").summary(final.night_futures) && row.night_visible===true),"night futures visible on all three layouts");
   const expected=require("./verify-opening-report-rendered").expectedRows(final).map(row=>({...row,percent:Number(row.percent.toFixed(2))}));
   const actualRows=row=>(row.rows||[]).map(item=>({...item,a:(item.a||[]).map(({symbol,name})=>({symbol,name})),b:(item.b||[]).map(({symbol,name})=>({symbol,name}))}));
-  addCheck(checks,"current_rendered_full_A_B",rows.length===4 && rows.every(row=>JSON.stringify(actualRows(row))===JSON.stringify(expected) && row.industryCount===15 && (expected.length>0||row.zero===true)),"independent full A/B comparison against runner");
+  addCheck(checks,"current_rendered_full_A_B",rows.length===3 && rows.every(row=>JSON.stringify(actualRows(row))===JSON.stringify(expected) && row.industryCount===15 && (expected.length>0||row.zero===true)),"independent full A/B comparison against runner");
   addCheck(checks,"current_rendered_production_origin",receipt?.base_url==="https://fuman-terminal.vercel.app" && /^[a-f0-9]{40}$/.test(receipt?.git_sha||""),"production origin and release identity required");
 }
 
@@ -570,6 +570,7 @@ async function main() {
     scope: contentOnly ? "morning_source_content_only" : args.phase === "delivery" ? "stage_delivery" : args.phase === "preflight" ? "source_preflight" : "contract_only",
     stage: morningStages.stage().id,
     run_id: (args.phase === "delivery" || contentOnly) ? readJson(path.join(REPORT_DIR,"opening-report-0830-final-receipt-"+compactDate(args.tradeDate)+".json"))?.run_id || null : null,
+    delivery_content_hash: (args.phase === "delivery" || contentOnly) ? readJson(path.join(REPORT_DIR,"opening-report-0830-final-receipt-"+compactDate(args.tradeDate)+".json"))?.delivery_content_hash || null : null,
     terminal_dir: ROOT,
     runtime_dir: RUNTIME,
     retired_contracts: [RETIRED_TELEGRAM_PACKAGE_KEY],

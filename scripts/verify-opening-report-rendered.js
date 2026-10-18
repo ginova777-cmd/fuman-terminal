@@ -26,6 +26,14 @@ function readyForReport(runId) {
   const node=document.querySelector('[data-opening-report-0830-briefing]');
   return {ok:!!node && node.dataset.runId===runId && ["ready","zero","degraded"].includes(node.dataset.openingReportState)};
 }
+async function captureReport(cdp) {
+        // Capture the complete report, not the potentially unbounded desktop document.
+        await cdp.send("Page.bringToFront",{},10000);
+        const clip=await ui.evaluate(cdp,()=>{const n=document.querySelector('[data-opening-report-0830-briefing]');if(!n)return null;const r=n.getBoundingClientRect();return {x:Math.max(0,r.left+scrollX),y:Math.max(0,r.top+scrollY),width:Math.ceil(r.width),height:Math.ceil(r.height),scale:1};});
+        if(!clip || clip.width<=0 || clip.height<=0 || clip.width>16384 || clip.height>16384 || clip.width*clip.height>32000000) throw Error("morning_capture_bounds_invalid:"+JSON.stringify(clip));
+        const shot=await cdp.send("Page.captureScreenshot",{format:"png",fromSurface:true,captureBeyondViewport:true,clip},30000);
+  return {shot,clip};
+}
 async function main(){
   fs.mkdirSync(out,{recursive:true});
   const final=read(path.join(reportDir,`opening-report-0830-final-receipt-${compact}.json`));
@@ -34,15 +42,15 @@ async function main(){
   const manifest=await fetch(base+"/api/release-manifest",{signal:AbortSignal.timeout(15000)}).then(r=>r.json());
   try{
     browser=await ui.launchBrowser();
-    for(const mode of [{key:"desktop",width:1440,height:1000,mobile:false},{key:"mobile-portrait",width:390,height:844,mobile:true},{key:"mobile-landscape",width:844,height:390,mobile:true},{key:"scorecard88",width:1440,height:1000,mobile:false,scorecard:true}]){
+    for(const mode of [{key:"desktop",width:1440,height:1000,mobile:false},{key:"mobile-portrait",width:390,height:844,mobile:true},{key:"mobile-landscape",width:844,height:390,mobile:true}]){
       const cdp=await ui.createTab(browser);let actual;
       try{
         await ui.setViewport(cdp,mode);
-        await ui.navigate(cdp,base+(mode.scorecard?"/88?":mode.mobile?"/api/mobile-page?":"/?desktop=1&")+"morningStage="+morningStages.stage().id,{stopLoading:false});
+        await ui.navigate(cdp,base+(mode.mobile?"/api/mobile-page?":"/?desktop=1&")+"morningStage="+morningStages.stage().id,{stopLoading:false});
         if(mode.mobile){
           await ui.waitFor(cdp,()=>({ok:typeof self.FUMAN_MOBILE_MEMBER_OPENED==="function"&&self.FUMAN_MOBILE_MEMBER_OPENED()}),null,45000);
           await ui.clickSelectorByDom(cdp,'#tabs button[data-fragment="morning"]');
-        }else if(!mode.scorecard){
+        }else{
           await ui.waitForSelector(cdp,'aside.sidebar a[data-view="market"]',45000);
           await ui.activateDesktopRoute(cdp,{key:"market-ai",selector:'aside.sidebar a[data-view="market"]',postClickSelector:'#market-view .market-mode-tabs [data-market-mode="ai"]',expectedPanelId:"market-view",expectedRouteKey:"market|市場總覽"});
         }
@@ -54,17 +62,20 @@ async function main(){
         const checks={night:actual.night_visible===true && actual.night_text===require("../lib/opening-report-night-futures").summary(final.night_futures),cutoff:actual.cutoff===require("../lib/opening-report-recovery").label(date),rendered:actual.ok,run:actual.run_id===final.run_id,date:actual.date===date,hash:actual.hash===final.delivery_content_hash,rows:JSON.stringify(rows)===JSON.stringify(expectedRounded),allSymbolsVisible:symbolsVisible,industries:actual.industryCount===15,zero:expected.length>0||actual.zero,layout:actual.overflow<=8,state:["ready","zero","degraded"].includes(actual.state)};
         actual={...actual,checks,ok:Object.values(checks).every(Boolean)};
       }catch(error){actual={ok:false,error:error.message,...(await ui.evaluate(cdp,collect).catch(()=>({})))};actual.ok=false;}
-      const shot=await cdp.send("Page.captureScreenshot",{format:"png",fromSurface:true,captureBeyondViewport:true},30000).catch(()=>null);
-      if(shot?.data){const file=path.join(out,mode.key+".png"),bytes=Buffer.from(shot.data,"base64");fs.writeFileSync(file,bytes);actual.screenshot=file;actual.screenshot_sha256=sha(bytes);}else{actual.ok=false;actual.screenshot_error="capture_failed";}
+      let shot;
+      try {
+        const captured=await captureReport(cdp);shot=captured.shot;actual.screenshot_bounds=captured.clip;
+      } catch(error) { actual.screenshot_error=String(error.message||error); }
+      if(shot?.data){const file=path.join(out,mode.key+".png"),bytes=Buffer.from(shot.data,"base64");fs.writeFileSync(file,bytes);actual.screenshot=file;actual.screenshot_sha256=sha(bytes);}else{actual.ok=false;actual.screenshot_error=actual.screenshot_error||"capture_returned_no_data";}
       results.push({surface:mode.key,...actual});cdp.close();
       console.log(JSON.stringify({surface:mode.key,ok:actual.ok,checks:actual.checks,error:actual.error}));
     }
   }finally{if(browser){try{browser.child.kill();}catch{}}}
-  const ok=results.length===4&&results.every(x=>x.ok)&&final.delivery_content_hash===fullHash;
-  const receipt={contract:"opening-report-rendered-v1",checked_at:new Date().toISOString(),trade_date:date,run_id:final.run_id,delivery_content_hash:final.delivery_content_hash,full_content_hash_ok:final.delivery_content_hash===fullHash,base_url:base,git_sha:manifest.gitSha||manifest.git_sha||"",diagnostic,complete:ok&&!diagnostic,status:diagnostic?"diagnostic":ok?"complete":"failed",exitCode:ok?0:1,results};
+  const ok=results.length===3&&results.every(x=>x.ok)&&final.delivery_content_hash===fullHash;
+  const receipt={contract:"opening-report-rendered-v1",checked_at:new Date().toISOString(),trade_date:date,stage:morningStages.stage().id,run_id:final.run_id,delivery_content_hash:final.delivery_content_hash,full_content_hash_ok:final.delivery_content_hash===fullHash,base_url:base,git_sha:manifest.gitSha||manifest.git_sha||"",diagnostic,complete:ok&&!diagnostic,status:diagnostic?"diagnostic":ok?"complete":"failed",exitCode:ok?0:1,results};
   const file=path.join(out,"opening-report-rendered.json");fs.writeFileSync(file,JSON.stringify(receipt,null,2));
   console.log(JSON.stringify({receipt:file,complete:receipt.complete,full_content_hash_ok:receipt.full_content_hash_ok}));
   process.exitCode=ok?0:1;
 }
 if(require.main===module)main().catch(error=>{console.error(error.stack||error);process.exitCode=1;});
-module.exports={expectedRows};
+module.exports={expectedRows,collect,readyForReport,captureReport};

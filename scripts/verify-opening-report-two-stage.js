@@ -28,7 +28,15 @@ function save(result){
   const temp=outputFile+'.'+process.pid+'.tmp';fs.writeFileSync(temp,JSON.stringify(result,null,2)+'\n');fs.renameSync(temp,outputFile);
   console.log(JSON.stringify({...result,receipt_path:outputFile},null,2));process.exitCode=result.exitCode;
 }
-function inputs(){return Object.fromEntries(Object.keys(stages.STAGES).map(id=>{const dir=stages.directory(runtime,id);return [id,{final:read(path.join(dir,`opening-report-0830-final-receipt-${day}.json`)),wrapper:read(path.join(dir,`opening-report-0830-wrapper-receipt-${day}.json`))}];}));}
+function inputs(){return Object.fromEntries(Object.keys(stages.STAGES).map(id=>{
+  const dir=stages.directory(runtime,id);
+  const files=[`opening-report-0830-final-receipt-${day}.json`,`opening-report-0830-wrapper-receipt-${day}.json`,`morning-content-verification-${day}.json`,`opening-report-0830-overseas-leaders-${day}.json`,`opening-report-0830-preflight-receipt-${day}.json`,`opening-report-0830-market-snapshot-${day}.json`,`opening-report-morning-contract-verifier-${day}.json`,`line-push-receipt-${day}.json`,`rendered/${day}/opening-report-rendered.json`,`scan-receipts/opening-report-0830-mother-pool-handoff-ack-${day}.json`,`scan-receipts/opening-report-0830-mother-pool-persistence-ack-${day}.json`].map(f=>path.join(dir,f));
+  const rendered=read(path.join(dir,`rendered/${day}/opening-report-rendered.json`));
+  for(const row of rendered?.results||[])if(row.screenshot)files.push(row.screenshot);
+  const hashes=Object.fromEntries(files.map(file=>{try{return [file,sha(fs.readFileSync(file))];}catch{return [file,null];}}));
+  return [id,{final:read(files[0]),wrapper:read(files[1]),artifact_hashes:hashes}];
+}));}
+
 async function verifyStage(id){
   const dir=stages.directory(runtime,id),checks=[];
   const final=read(path.join(dir,`opening-report-0830-final-receipt-${day}.json`));
@@ -40,6 +48,7 @@ async function verifyStage(id){
   const line=read(path.join(dir,`line-push-receipt-${day}.json`));
   const canonical=read(path.join(dir,`opening-report-morning-contract-verifier-${day}.json`));
   const wrapper=read(path.join(dir,`opening-report-0830-wrapper-receipt-${day}.json`));
+  const content=read(path.join(dir,`morning-content-verification-${day}.json`));
   const run=final?.run_id,hash=final&&contentHash(final.priority_observation_mode,final.display_top3||[],final.night_futures);
   const add=(name,ok)=>checks.push({name,ok:ok===true});
   add('source',source?.ok===true&&stages.verifyStageIdentity(source,date,id).length===0&&source.run_id===run&&preflight?.ok===true&&preflight.run_id===run&&preflight.date===date);
@@ -47,15 +56,18 @@ async function verifyStage(id){
   const sourceRows=Array.isArray(source?.industries)?source.industries.flatMap(i=>Array.isArray(i.leaders)?i.leaders:[]):[];
   const rowGaps=sourceRows.filter(row=>row.source_gap===true);
   add('source_coverage_complete',Array.isArray(source?.industries)&&source.industries.length===15&&Number.isInteger(source?.source_gap_leaders)&&source.source_gap_leaders===0&&rowGaps.length===0&&sourceRows.length===source.total_leaders);
-  add('runner_identity',final?.stage===id&&final.date===date&&final.overseas_sources_ok===true&&final.mother_pool_bridge_ok===true&&final.delivery_content_hash===hash);
+  add('runner_identity',final?.stage===id&&final.date===date&&final.overseas_sources_ok===true&&final.delivery_content_hash===hash);
+  add('bridge',final?.mother_pool_bridge_ok===true);
   add('handoff',handoff?.contract==='opening-report-0830-mother-pool-handoff-ack-v2'&&handoff.complete===true&&handoff.db_readback_ok===true&&handoff.report_run_id===run&&handoff.trade_date===date&&handoff.missing_fields?.length===0);
   add('persistence',persistence?.contract==='opening-report-0830-mother-pool-persistence-ack-v1'&&persistence.complete===true&&persistence.db_readback_ok===true&&persistence.report_run_id===run&&persistence.trade_date===date&&persistence.required_writer_refreshes>=2&&persistence.writer_refreshes_observed>=2&&persistence.missing_fields?.length===0);
   const renderedRows=rendered?.results||[];
   const shotsValid=renderedRows.every(row=>{try{return row.screenshot_sha256===sha(fs.readFileSync(row.screenshot));}catch{return false;}});
-  add('rendered',rendered?.complete===true&&rendered.diagnostic===false&&rendered.trade_date===date&&rendered.run_id===run&&rendered.delivery_content_hash===hash&&rendered.full_content_hash_ok===true&&rendered.base_url==='https://fuman-terminal.vercel.app'&&['desktop','mobile-portrait','mobile-landscape','scorecard88'].every(surface=>renderedRows.some(row=>row.surface===surface&&row.ok===true&&row.run_id===run&&row.hash===hash))&&shotsValid);
+  add('rendered',rendered?.complete===true&&rendered.diagnostic===false&&rendered.trade_date===date&&rendered.stage===id&&rendered.run_id===run&&rendered.delivery_content_hash===hash&&rendered.full_content_hash_ok===true&&rendered.base_url==='https://fuman-terminal.vercel.app'&&['desktop','mobile-portrait','mobile-landscape'].every(surface=>renderedRows.some(row=>row.surface===surface&&row.ok===true&&row.run_id===run&&row.hash===hash))&&shotsValid);
   const db=await readSnapshot('opening_report_0830_terminal_briefing_'+id,{tradeDate:date,allowLatestFallback:false,timeoutMs:5000,maxAttempts:2}).catch(()=>null);
   const p=db?.payload;
   add('stage_db_readback',p?.ok===true&&p.run_id===run&&p.date===date&&p.stage===id&&p.delivery_content_hash===hash&&require('util').isDeepStrictEqual(p.display_top3,final?.display_top3)&&require('util').isDeepStrictEqual(p.night_futures,final?.night_futures));
+  add('content_receipt',require('../lib/opening-report-receipt-authority').contentReceiptMatches(content,date,id,run,hash));
+  const morningComplete=checks.filter(x=>!['bridge','handoff','persistence'].includes(x.name)).every(x=>x.ok);
   const dataComplete=checks.every(x=>x.ok);
   // Historical closure verifies the existing canonical decision at its real timestamp;
   // it must not renew quota evidence or pretend a previous day is current delivery.
@@ -66,7 +78,7 @@ async function verifyStage(id){
   add('canonical_receipt',require('../lib/opening-report-receipt-authority').deliveryReceiptMatches(canonical,date,id,run));
   add('final_receipt',final?.complete===true&&final.status==='complete'&&final.exitCode===0&&wrapper?.complete===true&&wrapper.run_id===run&&wrapper.exitCode===0);
   const paused=require('../lib/opening-report-line-policy').paused(line,run,hash,date);
-  return {stage:id,run_id:run||null,data_complete:dataComplete,complete:checks.every(x=>x.ok),completion_scope:paused?'tri_surface':'stage_delivery',notification_status:paused?'paused_by_user':line?.line_push_ok===true?'delivered':line?.quota_exception?'quota_exhausted_not_delivered':'failed',checks,source_count:source?.valid_leaders||0,received_symbols:handoff?.received_symbols||0,delivery:{ok:line?.line_push_ok===true,delivered:line?.line_push_ok===true,quota_exception:line?.quota_exception||null,delivered_count:line?.delivered_count||0,target_count:line?.target_count||0,error:line?.line_error_detail||null},receipt_directory:dir};
+  return {stage:id,run_id:run||null,morning_complete:morningComplete,data_complete:dataComplete,complete:checks.every(x=>x.ok),completion_scope:paused?'tri_surface':'stage_delivery',notification_status:paused?'paused_by_user':line?.line_push_ok===true?'delivered':line?.quota_exception?'quota_exhausted_not_delivered':'failed',checks,source_count:source?.valid_leaders||0,received_symbols:handoff?.received_symbols||0,delivery:{ok:line?.line_push_ok===true,delivered:line?.line_push_ok===true,quota_exception:line?.quota_exception||null,delivered_count:line?.delivered_count||0,target_count:line?.target_count||0,error:line?.line_error_detail||null},receipt_directory:dir};
 }
 (async()=>{
   if(!acquire()){console.log(JSON.stringify({status:'waiting',complete:false,reason_code:'aggregate_verifier_active',lock:lockFile}));process.exitCode=2;return;}
@@ -78,7 +90,7 @@ async function verifyStage(id){
   const results=[];for(const id of Object.keys(stages.STAGES))results.push(await verifyStage(id));
   if(JSON.stringify(before)!==JSON.stringify(inputs())){save({contract:stages.CONTRACT,trade_date:date,checked_at:new Date().toISOString(),status:'blocked',complete:false,data_complete:false,exitCode:1,blocking_reasons:['stage_evidence_changed_during_verification'],stages:results});return;}
   const complete=results.every(row=>row.complete),dataComplete=results.every(row=>row.data_complete);
-  const result={contract:stages.CONTRACT,trade_date:date,checked_at:new Date().toISOString(),verification_mode:historical?'historical_existing_evidence':'current',new_source_fetch:false,new_notification_sent:false,status:complete?'complete':'blocked',complete,data_complete:dataComplete,exitCode:complete?0:1,stages:results,blocking_reasons:results.flatMap(row=>row.checks.filter(x=>!x.ok).map(x=>row.stage+':'+x.name))};
+  const result={contract:stages.CONTRACT,trade_date:date,checked_at:new Date().toISOString(),verification_mode:historical?'historical_existing_evidence':'current',new_source_fetch:false,new_notification_sent:false,status:complete?'complete':'blocked',complete,morning_complete:results.every(row=>row.morning_complete),data_complete:dataComplete,exitCode:complete?0:1,stages:results,blocking_reasons:results.flatMap(row=>row.checks.filter(x=>!x.ok).map(x=>row.stage+':'+x.name))};
   result.completion_scope=results.some(r=>r.completion_scope==='tri_surface')?'tri_surface':'stage_delivery';
   result.notification_status=results.every(r=>r.notification_status==='paused_by_user')?'paused_by_user':results.every(r=>r.delivery.delivered)?'delivered':'not_fully_delivered';
   result.line_delivered=results.every(r=>r.delivery.delivered);

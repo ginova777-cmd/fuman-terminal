@@ -1,0 +1,14 @@
+'use strict';
+const assert=require('assert/strict'),fs=require('fs'),policy=require('../lib/opening-report-line-policy');
+const d='2026-10-18',r='us_0820-test',h='test-hash';
+const paused=policy.pausedReceipt(r,h,d);
+assert(policy.notificationAccepted(paused,r,h,d));
+assert.equal(policy.notificationAccepted({...paused,line_push_attempted:true,line_push_ok:true,has_user_target:true,has_group_target:true,delivered_count:2},r,h,d),false);
+assert.equal(policy.notificationAccepted(paused,'stale',h,d),false);
+assert.equal(policy.notificationAccepted(paused,r,'stale',d),false);
+const wrapper=fs.readFileSync(require('path').join(__dirname,'../run-opening-report-0830-production-wrapper.ps1'),'utf8');
+assert(wrapper.includes('$ok = (($IsolatedBacktest -or $contentVerified)'));
+assert(wrapper.includes('($rendered.exitCode -eq 0 -and $contentVerified)))'));
+assert(wrapper.includes('$linePersonalOk = ($lineIdentityOk'));
+assert(wrapper.includes('$lineGroupOk = ($lineIdentityOk'));
+console.log(JSON.stringify({scope:'notification_policy_and_wiring_regression',complete:true,natural:false}));

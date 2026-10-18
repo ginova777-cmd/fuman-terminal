@@ -1,0 +1,23 @@
+'use strict';
+const fs=require('fs'),path=require('path'),assert=require('assert/strict');
+const stage=process.argv[2],out=path.resolve(process.argv[3]);assert(['us_0820','asia_0850'].includes(stage));assert(out.includes('morning-contract-20261018'));
+process.env.FUMAN_RUNTIME_DIR=path.join(out,'runtime');process.env.FUMAN_MORNING_STAGE=stage;
+global.fetch=async()=>{throw Error('ISOLATION_NETWORK_FORBIDDEN');};
+const date='2026-10-16',dir=path.join(out,'runtime/data/opening-report-stages',stage);
+const read=n=>JSON.parse(fs.readFileSync(path.join(dir,n+'-20261016.json'),'utf8'));
+const final=read('opening-report-0830-final-receipt'),source=read('opening-report-0830-overseas-leaders');
+const checks=[];require('./verify-opening-report-morning-contract').currentReceiptChecks(checks,date,{contentOnly:true});
+const coverage=require('./verify-opening-report-source-coverage.cjs').verify(source,date,final.run_id);
+assert.equal(coverage.ok,true,JSON.stringify(coverage.failed_checks));
+assert.deepEqual(checks.filter(c=>!c.ok),[]);
+const state=require('../lib/morning-content-report-state.cjs').reportStateAccepted;
+for(const key of ['content_ready','overseas_sources_ok','positive_top3_contract_ok','priority_observation_contract_ok'])assert.equal(state({...final,[key]:false},true),false,key);
+assert.equal(state({...final,scanned_industry_count:14},true),false);
+const authority=require('../lib/opening-report-receipt-authority');
+const receipt={contract:'opening-report-morning-single-verifier-v1',scope:'morning_source_content_only',phase:'content',require_current:true,trade_date:date,stage,run_id:final.run_id,delivery_content_hash:final.delivery_content_hash,canonical_verifier:authority.CONTRACT.canonical_command,complete:true,status:'complete',exitCode:0,failed_checks:[],first_blocker:null};
+// Synthetic receipt is used only for authority negative tests, never persisted as a real ACK.
+assert(authority.contentReceiptMatches(receipt,date,stage,final.run_id,final.delivery_content_hash));
+for(const patch of [{run_id:'old'},{stage:'wrong'},{trade_date:'2026-10-15'},{scope:'stage_delivery'},{delivery_content_hash:'wrong'},{complete:false},{exitCode:1},{failed_checks:['gap']},{first_blocker:'gap'}])assert.equal(authority.contentReceiptMatches({...receipt,...patch},date,stage,final.run_id,final.delivery_content_hash),false);
+assert.equal(authority.deliveryReceiptMatches(receipt,date,stage,final.run_id),false);
+const result={scope:'isolated_content_and_identity_regression',stage,run_id:final.run_id,complete:true,coverage,checks,receipt_negative_cases:9,natural:false};
+fs.writeFileSync(path.join(out,stage+'-content-regression.json'),JSON.stringify(result,null,2));console.log(JSON.stringify({stage,checks:checks.length,coverage:coverage.ok,complete:true}));

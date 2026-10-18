@@ -797,6 +797,9 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   final.positive_industry_count = positiveIndustryRows.length;
   final.priority_observation_contract_ok = priorityObservationContractOk;
   final.priority_observation_count = displayTop3.length;
+  final.content_ready = final.overseas_sources_ok === true && final.expected_industry_count === 15 &&
+    final.scanned_industry_count === 15 && terminalBriefingSnapshot.ok === true &&
+    final.positive_top3_contract_ok === true && priorityObservationContractOk;
   const runnerComplete = final.ok === true && final.expected_industry_count === 15 && final.scanned_industry_count === final.expected_industry_count && final.mother_pool_bridge_ok === true && final.mother_pool_handoff_ack_ok === true && final.notification_accepted === true && terminalBriefingSnapshot.ok === true && final.positive_top3_contract_ok === true && priorityObservationContractOk;
   final.runner_complete = runnerComplete;
   final.complete = false;
@@ -809,7 +812,7 @@ const mock = hasFlag("--self-test") || hasFlag("--mock-overseas") || hasFlag("--
   if (!runnerComplete) process.exitCode = 1;
 }
 
-module.exports={lineReportText,lineReportFlex,markdownReport};
+module.exports={main,lineReportText,lineReportFlex,markdownReport};
 if(require.main===module) main().catch((error) => {
   console.error(JSON.stringify({ ok: false, reason_code: "opening_report_0830_runner_error", error: error?.stack || error?.message || String(error) }, null, 2));
   process.exitCode = 1;
