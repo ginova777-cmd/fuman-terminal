@@ -45,7 +45,7 @@ async function scenario({ bounded = true, fail = '', prepareFail = false, wrongM
   assert.equal(fs.existsSync(env.FUMAN_DEPLOY_LOCK_FILE), false);
   return { calls, code: fakeProcess.exitCode, last: fs.existsSync(env.FUMAN_DEPLOY_LAST_FILE) };
 }
-async function readbackScenario({ wrongAlias = false, wrongManifest = false, wrongAsset = false } = {}) {
+async function readbackScenario({ wrongAlias = false, wrongManifest = false, wrongAsset = false, wrongBinding = false, wrongListing = false } = {}) {
   const fresh = { id: 'dpl_TEST_NEW', name: 'fuman-terminal', url: 'fuman-terminal-test.vercel.app',
     contextName: 'ginova777-9771s-projects', target: 'production', readyState: 'READY', aliases: [c.alias] };
   const uploaded = { deploymentUrl: fresh.url, releaseSha: c.candidate, uploadedAt: new Date().toISOString() };
@@ -59,7 +59,12 @@ async function readbackScenario({ wrongAlias = false, wrongManifest = false, wro
     require: name => name === 'node:fs' ? fakeFs
       : name === 'node:child_process' ? { execFileSync: (cmd, args) => args.includes('rev-parse') ? c.candidate : 'FIXTURE_ASSET' }
       : name === '../lib/morning-web-release-runtime.cjs' ? { inspectDeployment: identity =>
-        wrongAlias && identity === c.alias ? { ...fresh, id: 'dpl_OTHER' } : fresh }
+        wrongAlias && identity === c.alias ? { ...fresh, id: 'dpl_OTHER' } : fresh,
+        inspectAliasBinding: () => ({
+          binding: { alias: c.alias, deploymentId: wrongBinding ? 'dpl_OTHER' : fresh.id,
+            projectId: c.projectId, deployment: { id: fresh.id, url: fresh.url } },
+          listing: { aliases: wrongListing ? [] : [{ alias: c.alias, redirect: null }] },
+        }) }
       : name === '../lib/morning-web-release-contract.cjs' ? { CONTRACT: c } : require(name) };
   vm.createContext(ctx);
   vm.runInContext(fs.readFileSync(path.join(__dirname, 'verify-morning-web-live-release.cjs'), 'utf8')
@@ -90,10 +95,10 @@ async function readbackScenario({ wrongAlias = false, wrongManifest = false, wro
   assert.equal(full.code, 0);
   assert(!full.calls.some(x => x.args.some(a => a.includes('verify-morning-web-live-release'))));
   assert.equal((await readbackScenario()).code, 0);
-  for (const flags of [{ wrongAlias: true }, { wrongManifest: true }, { wrongAsset: true }]) {
+  for (const flags of [{ wrongAlias: true }, { wrongManifest: true }, { wrongAsset: true }, { wrongBinding: true }, { wrongListing: true }]) {
     const result = await readbackScenario(flags);
     assert.equal(result.code, 1); assert.equal(result.saved.length, 0);
   }
   console.log(JSON.stringify({ ok: true, scope: 'isolated_actual_entry_with_process_and_cloud_fixtures',
-    approvalNegativeCases: 9, orchestrationScenarios: 14, postdeployScenarios: 4, productionDeployment: false }));
+    approvalNegativeCases: 9, orchestrationScenarios: 14, postdeployScenarios: 6, productionDeployment: false }));
 })().catch(e => { console.error(e); process.exitCode = 1; });
