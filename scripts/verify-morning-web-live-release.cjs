@@ -4,7 +4,8 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { execFileSync } = require('node:child_process');
 const { CONTRACT: c } = require('../lib/morning-web-release-contract.cjs');
-const { inspectDeployment } = require('../lib/morning-web-release-runtime.cjs');
+const { inspectDeployment, inspectAliasBinding } = require('../lib/morning-web-release-runtime.cjs');
+const { verifyAliasBinding } = require('../lib/morning-alias-binding.cjs');
 async function main() {
   const root = process.env.FUMAN_MORNING_WEB_ARTIFACT_ROOT;
   if (!root) throw new Error('morning_artifact_root_missing');
@@ -18,7 +19,10 @@ async function main() {
   if (!created.id || created.id === c.deploymentId || aliased.id !== created.id ||
       aliased.url !== uploaded.deploymentUrl || aliased.name !== 'fuman-terminal' ||
       aliased.contextName !== 'ginova777-9771s-projects' || aliased.target !== 'production' ||
-      aliased.readyState !== 'READY' || !aliased.aliases?.includes(c.alias)) throw new Error('new_deployment_alias_mismatch');
+      aliased.readyState !== 'READY') throw new Error('new_deployment_alias_mismatch');
+  const aliasEvidence = inspectAliasBinding(c.alias, created.id, process.cwd());
+  verifyAliasBinding({ alias: c.alias, deploymentId: created.id, deploymentUrl: uploaded.deploymentUrl,
+    projectId: c.projectId, ...aliasEvidence });
   const read = async route => {
     const r = await fetch(`https://${c.alias}${route}`, { cache: 'no-store', signal: AbortSignal.timeout(30000) });
     if (!r.ok) throw new Error(`readback_http_${r.status}:${route}`);
@@ -36,7 +40,7 @@ async function main() {
   }
   const dir = path.resolve('outputs/morning-bounded-release', new Date().toISOString().replace(/[:.]/g, '-'));
   fs.mkdirSync(dir, { recursive: true });
-  const result = { ok: true, scope: 'website_release_identity_and_assets_only', manifest, deployment: aliased, hashes,
+  const result = { ok: true, scope: 'website_release_identity_and_assets_only', manifest, deployment: aliased, aliasEvidence, hashes,
     naturalScanVerified: false, motherPoolVerified: false, checkedAt: new Date().toISOString() };
   fs.writeFileSync(path.join(dir, 'live-readback.json'), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
