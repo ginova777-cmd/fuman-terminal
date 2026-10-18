@@ -26,7 +26,7 @@ function run(label, command, cwd = ROOT) {
   console.log(`[prepare-deploy] ${label}`);
   const result = spawnSync(command[0], command.slice(1), {
     stdio: "inherit",
-    shell: process.platform === "win32",
+    shell: process.platform === "win32" && /^(npm|npm.cmd)$/i.test(command[0]),
     cwd,
   });
   results.push({ label, command, cwd, executed: true, exitCode: result.status, error: result.error?.message || '',
