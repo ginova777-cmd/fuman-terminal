@@ -45,7 +45,7 @@ function Invoke-MorningAggregate {
 
 trap {
   if ($wrapperReceipt) {
-    [ordered]@{contract="opening-report-morning-wrapper-v1"; status="failed"; complete=$false; exitCode=1; first_blocker=$_.Exception.Message; trade_date=$tradeDate; run_id=$runId; checked_at=(Get-Date).ToString("o"); execution_mode=if($RecoveryContext){"authorized_same_day_recovery"}else{"scheduled"}} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8
+    [ordered]@{contract="opening-report-morning-wrapper-v1"; stage=$Stage; mode=if($IsolatedBacktest){"isolated_backtest"}else{"production"}; recovery=($FinalizeExisting.IsPresent -or $ResumeEvidence.IsPresent -or [bool]$RecoveryContext); status="failed"; complete=$false; exitCode=1; first_blocker=$_.Exception.Message; trade_date=$tradeDate; run_id=$runId; checked_at=(Get-Date).ToString("o"); execution_mode=if($RecoveryContext){"authorized_same_day_recovery"}else{"scheduled"}} | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $wrapperReceipt -Encoding UTF8
   }
   if (-not $IsolatedBacktest) { Invoke-MorningAggregate }
   Write-Error $_ -ErrorAction Continue
@@ -106,6 +106,10 @@ if (-not $IsolatedBacktest) {
       ok = $false
       complete = $false
       reason_code = "market_calendar_guard_failed"
+      first_blocker = "market_calendar_guard_failed"
+      exitCode = 1
+      recovery = ($FinalizeExisting.IsPresent -or $ResumeEvidence.IsPresent -or [bool]$RecoveryContext)
+      execution_mode = if($RecoveryContext){"authorized_same_day_recovery"}elseif($ResumeEvidence){"resume_existing_evidence"}else{"scheduled"}
       mode = "production"
       date = $today
       trade_date = $tradeDate
@@ -201,7 +205,7 @@ $persistenceAckOk = if ($IsolatedBacktest) { $true } else { ($persistence.exitCo
 $expected = if ($null -ne $final -and $null -ne $final.expected_industry_count) { [int]$final.expected_industry_count } else { 0 }
 $scanned = if ($null -ne $final -and $null -ne $final.scanned_industry_count) { [int]$final.scanned_industry_count } else { 0 }
 $ok = (($IsolatedBacktest -or $contentVerified) -and $coverage.exitCode -eq 0 -and $runnerOk -and $persistenceAckOk -and $verifierOk -and $notificationAccepted -and $terminalOk -and $bridgeOk -and $handoffAckOk -and $expected -eq 15 -and $scanned -eq 15)
-$reasonCode = if ($ok) { "complete" } elseif ($sourceFreeze.exitCode -ne 0) { "source_freeze_0830_failed" } elseif ($coverage.exitCode -ne 0) { "morning_source_coverage_failed" } elseif (-not $runnerOk) { "runner_failed" } elseif (-not $handoffAckOk) { "mother_pool_handoff_ack_incomplete" } elseif (-not $persistenceAckOk) { "mother_pool_persistence_ack_incomplete" } elseif (-not $IsolatedBacktest -and $rendered.exitCode -ne 0) { "rendered_delivery_failed" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } else { "industry_scan_incomplete" }
+$reasonCode = if ($ok) { "complete" } elseif ($sourceFreeze.exitCode -ne 0) { "source_freeze_0830_failed" } elseif ($coverage.exitCode -ne 0) { "morning_source_coverage_failed" } elseif (-not $runnerOk) { if($null -ne $final -and $final.run_id -eq $runId -and $final.first_blocker){[string]$final.first_blocker}else{"runner_failed"} } elseif (-not $handoffAckOk) { "mother_pool_handoff_ack_incomplete" } elseif (-not $persistenceAckOk) { "mother_pool_persistence_ack_incomplete" } elseif (-not $IsolatedBacktest -and $rendered.exitCode -ne 0) { "rendered_delivery_failed" } elseif (-not $verifierOk) { "canonical_verifier_failed" } elseif (-not ($linePersonalOk -and $lineGroupOk)) { "line_delivery_incomplete" } elseif (-not $terminalOk) { "terminal_delivery_incomplete" } elseif (-not $bridgeOk) { "mother_pool_bridge_incomplete" } else { "industry_scan_incomplete" }
 
 # Separate component evidence without weakening the canonical completion gate.
 $sourceFile = Join-Path $receiptDir "opening-report-0830-overseas-leaders-$today.json"

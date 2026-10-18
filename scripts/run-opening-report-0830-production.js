@@ -322,9 +322,11 @@ function runBridge(inputPath, receiptPath, tradeDate) {
   const result = spawnSync(process.execPath, [BRIDGE_SCRIPT, `--input=${inputPath}`, `--receipt=${receiptPath}`, `--expected-date=${tradeDate.replace(/\D/g, "")}`], {
     encoding: "utf8",
     windowsHide: true,
+    timeout: 30000,
+    maxBuffer: 4 * 1024 * 1024,
     cwd: path.resolve(__dirname, "..")
   });
-  return { exitCode: result.status, stdout: result.stdout, stderr: result.stderr };
+  return { exitCode: result.error || result.signal ? 1 : result.status, stdout: result.stdout, stderr: result.stderr, process_error_code: result.error?.code || null, signal: result.signal || null };
 }
 
 function runMotherPoolHandoffAck(tradeDate, runId, bridgeAggregatePath, isolatedBacktest) {
