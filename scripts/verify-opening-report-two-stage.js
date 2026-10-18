@@ -30,7 +30,7 @@ function save(result){
 }
 function inputs(){return Object.fromEntries(Object.keys(stages.STAGES).map(id=>{
   const dir=stages.directory(runtime,id);
-  const files=[`opening-report-0830-final-receipt-${day}.json`,`opening-report-0830-wrapper-receipt-${day}.json`,`morning-content-verification-${day}.json`,`opening-report-0830-overseas-leaders-${day}.json`,`opening-report-0830-preflight-receipt-${day}.json`,`opening-report-0830-market-snapshot-${day}.json`,`opening-report-morning-contract-verifier-${day}.json`,`line-push-receipt-${day}.json`,`rendered/${day}/opening-report-rendered.json`,`scan-receipts/opening-report-0830-mother-pool-handoff-ack-${day}.json`,`scan-receipts/opening-report-0830-mother-pool-persistence-ack-${day}.json`].map(f=>path.join(dir,f));
+  const files=[`opening-report-0830-final-receipt-${day}.json`,`opening-report-0830-wrapper-receipt-${day}.json`,`morning-content-verification-${day}.json`,`opening-report-0830-overseas-leaders-${day}.json`,`opening-report-0830-preflight-receipt-${day}.json`,`overseas-preflight-${day}.json`,`opening-report-0830-market-snapshot-${day}.json`,`opening-report-morning-contract-verifier-${day}.json`,`line-push-receipt-${day}.json`,`rendered/${day}/opening-report-rendered.json`,`scan-receipts/opening-report-0830-mother-pool-handoff-ack-${day}.json`,`scan-receipts/opening-report-0830-mother-pool-persistence-ack-${day}.json`].map(f=>path.join(dir,f));
   const rendered=read(path.join(dir,`rendered/${day}/opening-report-rendered.json`));
   for(const row of rendered?.results||[])if(row.screenshot)files.push(row.screenshot);
   const hashes=Object.fromEntries(files.map(file=>{try{return [file,sha(fs.readFileSync(file))];}catch{return [file,null];}}));
