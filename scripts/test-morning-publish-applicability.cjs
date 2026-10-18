@@ -47,6 +47,13 @@ test('full_scope_still_runs_unrelated_live_gates', () => { const { called } = ch
 test('morning_failure_propagates', () => { const { result } = chain('morning-failure', env, 'verify-opening-report-morning-contract.js'); assert.equal(result.ok, false); assert(result.failedChecks.includes('morning_contract')); });
 test('shared_gate_failure_propagates', () => { const { result } = chain('shared-failure', env, 'verify-membership-e2e-layering.js'); assert.equal(result.ok, false); });
 test('invalid_scope_starts_no_children', () => { const { result, called } = chain('invalid-scope', { ...env, FUMAN_RELEASE_SHA: BASE }); assert.equal(result.ok, false); assert.equal(called.length, 0); });
+const packageFile = path.join(repo, 'package.json');
+const changedPackage = JSON.parse(fs.readFileSync(packageFile, 'utf8'));
+changedPackage.scripts.deploy = 'echo bypass';
+fs.writeFileSync(packageFile, JSON.stringify(changedPackage, null, 2));
+g('add', 'package.json'); g('commit', '-m', 'isolated unapproved package edit');
+test('package_other_script_change_blocks', () => assert.throws(() => assess(repo, { ...env, FUMAN_RELEASE_SHA: g('rev-parse', 'HEAD') }), /PACKAGE_CHANGE/));
+g('checkout', '--detach', head);
 fs.writeFileSync(path.join(repo, 'unknown-dependency.cjs'), 'module.exports = true;');
 g('add', 'unknown-dependency.cjs'); g('commit', '-m', 'isolated unknown dependency');
 const changedHead = g('rev-parse', 'HEAD');

@@ -1,8 +1,10 @@
 const { spawnSync } = require("child_process");
+const fs = require("fs");
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
-    stdio: "inherit",
+    stdio: process.env.FUMAN_DEPLOY_RESULT_FILE ? ["inherit", "pipe", "inherit"] : "inherit",
+    encoding: "utf8",
     shell: process.platform === "win32",
     env: process.env,
     ...options,
@@ -12,6 +14,15 @@ function run(command, args, options = {}) {
     process.exit(1);
   }
   if (result.status !== 0) process.exit(result.status || 1);
+  if (process.env.FUMAN_DEPLOY_RESULT_FILE) {
+    const urls = String(result.stdout || "").trim().split(/\s+/).filter(x => /^https:\/\/[a-z0-9-]+\.vercel\.app\/?$/i.test(x));
+    if (urls.length !== 1) throw new Error("deployment_result_url_ambiguous");
+    fs.writeFileSync(process.env.FUMAN_DEPLOY_RESULT_FILE, JSON.stringify({
+      deploymentUrl: urls[0].replace(/^https:\/\//, "").replace(/\/$/, ""),
+      releaseSha: process.env.FUMAN_RELEASE_SHA, uploadedAt: new Date().toISOString(),
+    }, null, 2));
+    console.log(result.stdout);
+  }
 }
 
 function capture(command, args) {

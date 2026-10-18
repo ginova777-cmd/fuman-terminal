@@ -52,12 +52,12 @@ function assertApprovedProductionWindow() {
   if (head !== main) throw new Error(`approved_deploy_source_not_origin_main head=${head.slice(0, 8)} main=${main.slice(0, 8)}`);
 }
 
-function run(label, args) {
+function run(label, args, options = {}) {
   console.log(`[deploy-safe] ${label}`);
   const result = spawnSync(args[0], args.slice(1), {
-    cwd: ROOT,
+    cwd: options.cwd || ROOT,
     stdio: "inherit",
-    env: process.env,
+    env: options.env || process.env,
     windowsHide: true,
   });
   if (result.error) throw result.error;
@@ -103,7 +103,7 @@ function acquireLock(releaseSha) {
     host: os.hostname(),
     createdAt: new Date(now).toISOString(),
     createdAtMs: now,
-  }, null, 2));
+  }, null, 2), { flag: "wx" });
 }
 
 function releaseLock() {
@@ -140,6 +140,7 @@ if (!/^[0-9a-f]{40}$/i.test(releaseSha)) {
   process.exit(1);
 }
 
+async function main() {
 try {
   assertApprovedProductionWindow();
   assertSupabaseIncidentClear("deploy-production-safe");
@@ -149,7 +150,27 @@ try {
   run("verify-vercel-project-inventory.js", [process.execPath, "scripts/verify-vercel-project-inventory.js"]);
   assertNoDuplicateDeploy(releaseSha);
   run("require-version-bump-approval.js", [process.execPath, "scripts/require-version-bump-approval.js", "vercel", "--prod"]);
-  run("deploy-production-with-release-env.js", [process.execPath, "scripts/deploy-production-with-release-env.js"]);
+  if (process.env.FUMAN_MORNING_WEB_ARTIFACT_ROOT) {
+    if (process.env.FUMAN_PUBLISH_SCOPE !== "morning-reviewed-8019-v1") throw new Error("morning_publish_scope_required");
+    run("verify-release-root-authority.js", [process.execPath, "scripts/verify-release-root-authority.js"]);
+    run("verify-publish-gate.js", [process.execPath, "scripts/verify-publish-gate.js"]);
+    const { prepare, validateApproval } = require("../lib/morning-web-release-runtime.cjs");
+    const artifact = await prepare(ROOT, process.env.FUMAN_MORNING_WEB_ARTIFACT_ROOT,
+      process.env.FUMAN_MORNING_WEB_APPROVAL_FILE || "");
+    console.log(`[deploy-safe] bounded website artifact ${artifact.websiteSha}; evidence=${artifact.stage}`);
+    validateApproval(artifact.approval, git(["rev-parse", "HEAD"]));
+    const deployResult = path.join(ROOT, "outputs/morning-bounded-release/last-upload.json");
+    ensureDir(deployResult);
+    run("deploy-production-with-release-env.js", [process.execPath, path.join(ROOT, "scripts/deploy-production-with-release-env.js")], {
+      cwd: artifact.payload,
+      env: { ...process.env, FUMAN_RELEASE_SHA: artifact.websiteSha, FUMAN_DEPLOY_SHA: artifact.websiteSha,
+        FUMAN_RELEASE_BRANCH: "agent/morning-web-minimal-20261018", FUMAN_DEPLOY_ID: `release-${artifact.websiteSha.slice(0, 12)}`,
+        FUMAN_DEPLOY_RESULT_FILE: deployResult },
+    });
+    run("morning website post-deploy readback", [process.execPath, "scripts/verify-morning-web-live-release.cjs"]);
+  } else {
+    run("deploy-production-with-release-env.js", [process.execPath, "scripts/deploy-production-with-release-env.js"]);
+  }
   writeLastDeploy(releaseSha);
   console.log(`[deploy-safe] ok releaseSha=${releaseSha}`);
 } catch (error) {
@@ -158,3 +179,5 @@ try {
 } finally {
   releaseLock();
 }
+}
+main();
