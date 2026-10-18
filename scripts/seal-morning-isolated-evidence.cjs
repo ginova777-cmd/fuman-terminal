@@ -1,0 +1,12 @@
+'use strict';
+const fs=require('fs'),path=require('path'),crypto=require('crypto'),cp=require('child_process'),assert=require('assert/strict');
+const root=path.resolve(__dirname,'..'),out=path.resolve(process.argv[2]);assert(out.startsWith(path.join(root,'outputs/morning-contract-20261018')+path.sep));
+const sha=b=>crypto.createHash('sha256').update(b).digest('hex'),read=f=>JSON.parse(fs.readFileSync(f,'utf8').replace(/^\uFEFF/,''));
+const aggregate=read(path.join(out,'runtime/data/opening-report-stages/morning-two-stage-receipt-20261016.json'));
+assert.equal(aggregate.complete,true);assert.equal(aggregate.morning_complete,true);assert.equal(aggregate.line_delivered,false);
+const wrappers=['us_0820','asia_0850'].map(stage=>read(path.join(out,'runtime/data/opening-report-stages',stage,'opening-report-0830-wrapper-receipt-20261016.json')));
+assert(wrappers.every(w=>w.mode==='isolated_e2e'&&w.morning_complete&&w.complete));assert.equal(new Set(wrappers.map(w=>w.run_id)).size,2);
+const files=[];function walk(dir){for(const entry of fs.readdirSync(dir,{withFileTypes:true})){const file=path.join(dir,entry.name);if(entry.isDirectory())walk(file);else if(entry.isFile()&&!entry.name.startsWith('sealed-manifest-')){const bytes=fs.readFileSync(file);files.push({path:file,bytes:bytes.length,sha256:sha(bytes)});}}}walk(out);
+const source=cp.execFileSync('git',['diff','--name-only','d28956a29809e75bbd3c93c9bedd402929f6d47b','HEAD'],{cwd:root,encoding:'utf8'}).trim().split(/\r?\n/).filter(Boolean).map(relative=>({path:relative,sha256:sha(fs.readFileSync(path.join(root,relative)))}));
+const result={contract:'morning-isolated-evidence-manifest-v1',scope:'isolated_morning_consumer_chain',candidate_sha:cp.execFileSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).trim(),checked_at:new Date().toISOString(),status:'ISOLATED_CONSUMER_CHAIN_PASS',formal_acceptance:false,natural_success_days:0,real_notifications_sent:0,mother_pool_acceptance:'NOT_VERIFIED_RESPONSE_FIXTURES_ONLY',excluded_guards:['formal_calendar','release_authority','production_incident_guard'],origin_binding:read(path.join(out,'route-origin.json')),stage_runs:wrappers.map(w=>({stage:w.stage,run_id:w.run_id})),source,artifacts:files};
+const file=path.join(out,'sealed-manifest-'+Date.now()+'.json');fs.writeFileSync(file,JSON.stringify(result,null,2),{flag:'wx'});console.log(JSON.stringify({manifest:file,sha256:sha(fs.readFileSync(file)),status:result.status}));

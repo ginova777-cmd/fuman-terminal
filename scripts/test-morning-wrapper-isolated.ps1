@@ -40,5 +40,5 @@ $file=Join-Path $Root 'run-opening-report-0830-production-wrapper.ps1'
 $text=[IO.File]::ReadAllText($file)
 $body=$text.Substring($text.IndexOf('# Formal contract: runner ->'))
 $body=$body.Replace('mode = if ($IsolatedBacktest) { "isolated_backtest" } else { "production" }','mode = "isolated_e2e"')
-[ordered]@{scope='isolated_wrapper_body';source=$file;sha256=(Get-FileHash $file -Algorithm SHA256).Hash;excluded='formal calendar/release/incident entry guards';source_transport='historical frozen';render_transport='real loopback route receipt';mother_transport='timeout failure fixture'}|ConvertTo-Json|Set-Content (Join-Path $logDir 'test-boundary.json')
+[ordered]@{scope='isolated_wrapper_body';source=$file;sha256=(Get-FileHash $file -Algorithm SHA256).Hash;excluded='formal calendar/release/incident entry guards';source_transport='historical frozen';render_transport='real loopback route receipt';mother_transport=$(if($env:FUMAN_ISOLATED_MOTHER -eq 'ready'){'ready upstream response fixture; not Mother Pool acceptance'}else{'timeout failure fixture'})}|ConvertTo-Json|Set-Content (Join-Path $logDir 'test-boundary.json')
 & ([ScriptBlock]::Create($body))
