@@ -4,6 +4,7 @@ const { spawnSync } = require("child_process");
 
 const { assertTree } = require('./cleanup-path-protection');
 let retentionReferenceMs = Date.now();
+let failureContext;
 const REPO_ROOT = path.resolve(__dirname, "..");
 const DEFAULT_ROOTS = [
   process.env.FUMAN_TERMINAL_ROOT || "C:\\fuman-terminal",
@@ -612,8 +613,13 @@ function scanRetiredStrategy1Markers(root, result) {
     const target = path.join(root, rel);
     if (!fs.existsSync(target) || !fs.statSync(target).isFile()) continue;
     const content = fs.readFileSync(target, "utf8");
+    // The mobile origin resolver's fallback host is not a retired Strategy1 source.
+    // Exempt only this exact resolver; other occurrences remain blocking.
+    const inspected = rel === "api/mobile-fragment.js"
+      ? content.replace(/function originFrom\(request\) \{\r?\n  const host = request\.headers\["x-forwarded-host"\] \|\| request\.headers\.host \|\| "fuman-terminal\.vercel\.app";\r?\n  const proto = request\.headers\["x-forwarded-proto"\] \|\| "https";\r?\n  return `\$\{proto\}:\/\/\$\{host\}`;\r?\n\}/, "")
+      : content;
     for (const marker of RETIRED_STRATEGY1_MARKERS) {
-      if (content.includes(marker)) {
+      if (inspected.includes(marker)) {
         result.issues.push({ path: target, marker, reason: "retired-strategy1-static-or-gate-marker" });
       }
     }
@@ -644,6 +650,7 @@ async function main() {
   const startedAt = new Date();
   const maintenance = args.maintenanceAuthorization ? require("./cleanup-maintenance-context").authorization(args.maintenanceAuthorization) : null;
   retentionReferenceMs = maintenance ? Date.parse(maintenance.issuedAt) : startedAt.getTime();
+  failureContext = { args, maintenance, startedAt: startedAt.toISOString() };
   const proof=require('./cleanup-item-observation'),cleanupItems=[],rootResults=[];
   const runtimeResult={root:args.runtimeRoot,deleted:[],skipped:[]};
   function observed(id,paths,operation){
@@ -658,7 +665,7 @@ async function main() {
     return result;
   }
   const rootPaths=args.roots.flatMap(root=>[...EXACT_RETIRED,...listRetiredDataFiles(root),...RETIRED_DIRECTORIES,...RESERVED_ROUTE_ARTIFACTS].map(rel=>path.join(root,rel)));
-  observed('C01',rootPaths,dryRun=>{const rows=args.roots.map(root=>cleanupRoot(root,{...args,dryRun}));if(dryRun&&rows.some(r=>r.issues.length))throw Error('retired_root_inventory_issues');if(dryRun===args.dryRun)rootResults.push(...rows);return {deleted:rows.flatMap(r=>r.deleted)};});
+  observed('C01',rootPaths,dryRun=>{const rows=args.roots.map(root=>cleanupRoot(root,{...args,dryRun}));if(dryRun&&rows.some(r=>r.issues.length)){const error=Error('retired_root_inventory_issues');error.rootIssues=rows;throw error;}if(dryRun===args.dryRun)rootResults.push(...rows);return {deleted:rows.flatMap(r=>r.deleted)};});
   function runtimeStep(id,paths,fn){const result=observed(id,paths,dryRun=>{const r={deleted:[],skipped:[]};fn(r,dryRun);return r;});runtimeResult.deleted.push(...result.deleted);runtimeResult.skipped.push(...result.skipped);}
   const at=(...parts)=>path.join(args.runtimeRoot,...parts);
   runtimeStep('C02',[at('archive','strategy2-intraday','static-latest')],(r,d)=>pruneOldFiles(at('archive','strategy2-intraday','static-latest'),RUNTIME_RETENTION_DAYS,r,d));
@@ -695,6 +702,18 @@ async function main() {
 }
 
 main().catch((error) => {
+  if (failureContext?.maintenance && failureContext.args.writeStatus && !failureContext.args.dryRun) {
+    const {args, maintenance, startedAt} = failureContext;
+    try {
+      writeStatus(args.runtimeRoot, {ok:false, complete:false, status:"failed", exitCode:1,
+        dryRun:false, startedAt, finishedAt:new Date().toISOString(),
+        retentionReferenceTime:new Date(retentionReferenceMs).toISOString(),
+        maintenanceRunId:maintenance.runId, maintenanceAuthorizationSha256:maintenance.sha256,
+        source:"api-only-retired-artifact-cleanup", first_blocker:error.message,
+        roots:error.rootIssues || [], cleanupItems:[], deletedCount:null,
+        deletionCountVerified:false});
+    } catch (writeError) { console.error(`cleanup_failure_receipt_write_failed: ${writeError.message}`); }
+  }
   console.error(`[api-only-cleanup] failed: ${error?.stack || error?.message || error}`);
   process.exit(1);
 });
