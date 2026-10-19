@@ -5,6 +5,13 @@ const arg=name=>process.argv.find(x=>x.startsWith(`--${name}=`))?.slice(name.len
 const save=(file,data)=>{fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,JSON.stringify(data,null,2)+'\n');};
 const processStartedAt=Date.now();
 let roundDeadline, unsafeProcessStop=false;
+let startupAuth;
+function recordStartupFailure(error) {
+  if(!startupAuth || fs.existsSync(startupAuth.journalFile))return;
+  const file=path.join(context.RUNTIME,'status/cleanup-startup-failures',startupAuth.runId+'.json');
+  fs.mkdirSync(path.dirname(file),{recursive:true});
+  fs.writeFileSync(file,JSON.stringify({contract:'cleanup-startup-failure-v1',runId:startupAuth.runId,tradeDate:startupAuth.date,executionMode:startupAuth.executionMode,completionScope:startupAuth.scope,status:'failed',complete:false,exitCode:1,first_blocker:error.message,errorCode:error.code||null,checkedAt:new Date().toISOString(),contextFile:startupAuth.file,contextSha256:startupAuth.sha256,stageExecutionStarted:false},null,2)+'\n',{flag:'wx'});
+}
 function command(file,args,log,env={}) {
   return new Promise(resolve=>{
     const remaining=Math.min(20*60*1000,roundDeadline-Date.now());
@@ -49,13 +56,16 @@ async function main(){
     save(authorizationFile,{contract:'cleanup-scheduled-context-v1',scope:context.scopedPolicy.scope,authorizedBy:'release-policy',authorizationText:'Approved deployed single-start policy; this is execution context, not user approval',date:context.date(),runId,keepDays:15,preserveWorkdaySchedule:true,sourceRoot:context.SOURCE_ROOT,executionRoot:context.ROOT,runtimeRoot:context.RUNTIME,issuedAt,expiresAt:new Date(Date.now()+20*60*1000).toISOString()});
   }
   const auth=context.authorization(authorizationFile);
+  startupAuth=auth;
   const outerStarted=Number(process.env.FUMAN_CLEANUP_STARTED_AT||processStartedAt);
   if(!Number.isFinite(outerStarted)||outerStarted>processStartedAt)throw Error('cleanup_outer_start_invalid');
   roundDeadline=Math.min(Date.parse(auth.expiresAt),outerStarted+17*60*1000);
   if(!Number.isFinite(roundDeadline))throw Error('cleanup_round_deadline_missing');
   if(fs.existsSync(auth.journalFile))throw Error('cleanup_maintenance_run_already_exists_use_read_only_verifier');
   const protectionBefore=protectedFiles();
-  const lock=path.join(context.RUNTIME,'locks/cleanup-maintenance.lock');fs.mkdirSync(path.dirname(lock),{recursive:true});const lockFd=fs.openSync(lock,'wx');
+  const lock=path.join(context.RUNTIME,'locks/cleanup-maintenance.lock');fs.mkdirSync(path.dirname(lock),{recursive:true});let lockFd;
+  try { lockFd=fs.openSync(lock,'wx'); }
+  catch(error){if(error.code==='EEXIST'){const blocked=Error('cleanup_maintenance_lock_exists_owner_review_required');blocked.code=error.code;throw blocked;}throw error;}
   const j={contract:'cleanup-maintenance-execution-v1',outerStartedAt:new Date(outerStarted).toISOString(),runId:auth.runId,authorizationSha256:auth.sha256,deadlineAt:new Date(roundDeadline).toISOString(),executionMode:auth.executionMode||"authorized_maintenance",completionScope:auth.scope,deferredItems:context.scopedPolicy && auth.scope===context.scopedPolicy.scope?context.scopedPolicy.deferredItems:[],startedAt:new Date().toISOString(),steps:[],protection:{before:protectionBefore}};
   const logDir=path.join(context.RUNTIME,'logs',auth.runId);
   const saveTotal=receipt=>{const archive=path.join(context.RUNTIME,'status/cleanup-totals',auth.runId+'.json');fs.mkdirSync(path.dirname(archive),{recursive:true});fs.writeFileSync(archive,JSON.stringify(receipt,null,2)+'\n',{flag:'wx'});save(totalFile,receipt);};
@@ -118,4 +128,4 @@ async function main(){
   console.log(JSON.stringify({ok:true,runId:auth.runId,journalFile:auth.journalFile,next:'Root Monitor CleanupMaintenance read-only acceptance'},null,2));
   } finally {fs.closeSync(lockFd);if(!unsafeProcessStop)fs.unlinkSync(lock);else save(lock,{runId:auth.runId,status:'PROTECTED_STOP_UNVERIFIED',journalFile:auth.journalFile,reason:'process_tree_stop_evidence_missing'});}
 }
-main().catch(e=>{console.error(e.stack);process.exitCode=1;});
+main().catch(e=>{try{recordStartupFailure(e);}catch(writeError){console.error('cleanup_startup_failure_receipt_write_failed: '+writeError.message);}console.error(e.stack);process.exitCode=1;});
