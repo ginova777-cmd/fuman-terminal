@@ -128,6 +128,11 @@ async function main(options = {}) {
     for(const c of candleCache.candles||[])for(const t of [Date.parse(c.candleTime||c.date)+60000,Date.parse(c.candleSeenAt)])if(t>now.getTime())context.nextEligibility=Math.min(context.nextEligibility,t);
   }
   const deltaStore = require('../lib/daytrade-candle-delta');
+  return require('../lib/daytrade-history-write-guard.cjs').withSnapshot(RUNTIME,candles,deltaStore.fingerprint,async historyGuard=>{
+  const guardedProgress=async()=>{if(options.progress)await options.progress();historyGuard.assertCurrent();};
+  const originalCanWrite=writeControl.canWrite;
+  writeControl.canWrite=()=>{historyGuard.assertCurrent();return originalCanWrite();};
+  writeControl.progress=guardedProgress;
   const checkpointPath = path.join(RUNTIME, 'state', 'daytrade-fast-candle-delta.json');
   const bytesHash = raw => require('node:crypto').createHash('sha256').update(raw).digest('hex');
   const cacheHash=context?.cacheSha || bytesHash(JSON.stringify(candleCache));
@@ -144,7 +149,7 @@ async function main(options = {}) {
     const store=require('../lib/mother-pool-receipt-current.cjs');
     store.atomicJson(path.join(RUNTIME,'state/daytrade-fast-supabase-sync.json'),{ok:false,status:'FINAL_CONTENT_CHECK_IN_PROGRESS'});
 
-    const matches=await require('../lib/daytrade-candle-content-readback.cjs').readback({rows:candles,url:URL+'/rest/v1/fugle_daytrade_intraday_1m',headers:{apikey:secret('SUPABASE_SERVICE_ROLE_KEY'),Authorization:'Bearer '+secret('SUPABASE_SERVICE_ROLE_KEY')},deadline,progress:options.progress});
+    const matches=await require('../lib/daytrade-candle-content-readback.cjs').readback({rows:candles,url:URL+'/rest/v1/fugle_daytrade_intraday_1m',headers:{apikey:secret('SUPABASE_SERVICE_ROLE_KEY'),Authorization:'Bearer '+secret('SUPABASE_SERVICE_ROLE_KEY')},deadline,progress:guardedProgress});
     if(checkpoint?.hashes)for(const row of candles){const k=row.symbol+'|'+row.candle_time;if(!matches.has(k)){delete checkpoint.hashes[k];if(checkpoint.save_evidence)delete checkpoint.save_evidence[k];}}
   }
   const delta = reused && context.pending
@@ -197,7 +202,7 @@ async function main(options = {}) {
     // Deferred batches cannot publish a verified Proof. Read the complete fixed
     // source once all real ACKs are durable, rather than after every partial pass.
     const finalMatches=remaining.pending.length===0&&writePlan.deferred===0
-      ? await require('../lib/daytrade-candle-content-readback.cjs').readback({rows:candles,url:URL+'/rest/v1/fugle_daytrade_intraday_1m',headers:{apikey:secret('SUPABASE_SERVICE_ROLE_KEY'),Authorization:'Bearer '+secret('SUPABASE_SERVICE_ROLE_KEY')},deadline,progress:options.progress})
+      ? await require('../lib/daytrade-candle-content-readback.cjs').readback({rows:candles,url:URL+'/rest/v1/fugle_daytrade_intraday_1m',headers:{apikey:secret('SUPABASE_SERVICE_ROLE_KEY'),Authorization:'Bearer '+secret('SUPABASE_SERVICE_ROLE_KEY')},deadline,progress:guardedProgress})
       : new Map();
     if (context) {
       context.sourceHash = sourceHash;
@@ -219,8 +224,10 @@ async function main(options = {}) {
     fs.mkdirSync(path.dirname(stateFile), { recursive: true });
     proofStore.atomicJson(stateFile,{ ...result, completed_at: new Date().toISOString() });
   }
+  historyGuard.assertCurrent();
   console.log(JSON.stringify(result));
   return result;
+  });
 }
 
 
@@ -236,6 +243,7 @@ async function runLatestCandleSync(control) {
   if(Number.isNaN(minimum))throw Error('LATEST_CANDLE_FRONTIER_INVALID');
   const rows=[...latest.values()].filter(r=>Date.parse(r.candle_time)>=minimum);
   if(!rows.length)return {status:'WAITING_NATURAL_CANDLES',complete:false,missing_symbols:[...wanted].filter(symbol=>!latest.has(symbol)),no_new_completed_minute_symbols:[...wanted].filter(symbol=>latest.has(symbol))};
+  require('../lib/daytrade-history-write-guard.cjs').beforeLiveWrite(RUNTIME,rows);
   const writeStartedAt=new Date().toISOString();
   require('../lib/daytrade-candle-write-intent.cjs').beforeWrite({runtime:RUNTIME,rows,writer:'writer'});
   const written=await upsert('fugle_daytrade_intraday_1m',rows,'symbol,candle_time',()=>{},control);

@@ -841,6 +841,7 @@ async function supabaseUpsertUnchecked(resource, rows, conflict, options = {}) {
     // Checkpoint persistence is outside HTTP retry: never retry a write for an ACK storage error.
     if (options.acknowledgeBatch) await options.acknowledgeBatch(chunk);
     if(liveCandleProgress)await liveCandleProgress('write_batch:'+resource);
+    require('../lib/daytrade-history-write-guard.cjs').assertCurrent(runtimePath());
   }
   return { written };
 }
@@ -7724,8 +7725,8 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
       nextMirror.symbols[symbol] = { seeded: ready, lastCandleTime: latestCandleTime, availableCandleCount: rows.length };
       continue;
     }
-    const priorTime = Date.parse(prior.lastCandleTime || '');
-    const newRows = rows.filter((row) => !Number.isFinite(priorTime) || Date.parse(row.candle_time) > priorTime);
+    // Reconsider late and revised minutes; durable content hashes skip unchanged rows.
+    const newRows = rows;
     for (const row of newRows) selectRow(row);
     incrementalRows += newRows.length;
     nextMirror.symbols[symbol] = { seeded: true, lastCandleTime: latestCandleTime, availableCandleCount: rows.length };
@@ -7734,14 +7735,15 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
   // Emit one latest completed candle per symbol before any historical seed rows.
   // Each confirmed HTTP batch advances the ACK checkpoint; the seed mirror waits for all batches.
   const rows = require('../lib/daytrade-candle-write-order').latestFirst([...selected.values()]);
+  return require('../lib/daytrade-history-write-guard.cjs').withSnapshot(runtimePath(),rows,require('../lib/daytrade-candle-delta').fingerprint,async()=>{
   const dbWriteStartedMs = Date.now();
   const candleDelta = DRY_RUN ? {written: 0, unchanged: 0, not_due: 0} : await require('../lib/daytrade-writer-candle-delta.cjs').sync({
     file: runtimePath('state', 'daytrade-writer-candle-delta.json'), rows, tradeDate,
-    target: SUPABASE_URL + '/fugle_daytrade_intraday_1m', nowMs: syncNowMs,
+    target: SUPABASE_URL + '/fugle_daytrade_intraday_1m', nowMs: syncNowMs, maxRows: 2000,
     write: (pending, acknowledgeBatch) => { require('../lib/daytrade-candle-write-intent.cjs').beforeWrite({runtime:runtimePath(),rows:pending,writer:'writer'}); return supabaseUpsert('fugle_daytrade_intraday_1m', pending, 'symbol,candle_time', { batchSize: SLOW_TABLE_BATCH_SIZE, timeoutMs: 15000, retries: 1, acknowledgeBatch }); },
   }).catch(cause => { throw Object.assign(new Error('CANDLE_PERSISTENCE_FAILED: ' + (cause?.message || String(cause)), {cause}), {code: 'CANDLE_PERSISTENCE_FAILED'}); });
   const dbWriteCompletedMs = Date.now();
-  if (state && !DRY_RUN && !options.latestOnly) {
+  if (state && !DRY_RUN && !options.latestOnly && candleDelta.deferred === 0) {
     state.daytradeMotherPoolCandleMirror = nextMirror;
     // Persist the expensive seed checkpoint immediately. A later non-critical
     // stage must not make the next task re-upload the entire candle history.
@@ -7749,6 +7751,8 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
   }
   return {
     written: candleDelta.written,
+    deferred: candleDelta.deferred,
+    seed_checkpoint_advanced: !DRY_RUN && !options.latestOnly && candleDelta.deferred === 0,
     unchanged: candleDelta.unchanged,
     selectedRows: rows.length,
     skipped: false,
@@ -7764,14 +7768,15 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
       timing_scope: 'writer_local_clock; cache artifact time is not a natural event timestamp',
     },
     latestRows: bySymbol.size,
-    latest_candle_evidence: require('../lib/daytrade-latest-candle-evidence').latestCandleEvidence(motherPoolSymbols, rows, Date.now()),
+    latest_candle_evidence: require('../lib/daytrade-latest-candle-evidence').latestCandleEvidence(motherPoolSymbols, candleDelta.acknowledgedRows || [], Date.now()),
     motherPoolSymbols: motherPoolSymbols.length,
-    seededSymbols,
+    seededSymbols: candleDelta.deferred === 0 ? seededSymbols : 0,
     seedAttempts,
     maxSeedSymbolsPerTick,
     incrementalRows,
     notReadySymbols,
   };
+  });
 }
 async function syncWebSocketFutoptQuotes() {
   const readTxfReference = require('../lib/futopt-txf-reference.cjs').createReader(runtimePath());
@@ -8128,7 +8133,7 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
     leaseValid:deadline=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>deadline+5000,
     run:control=>require('./sync-daytrade-websocket-supabase-fast.js').runLatestCandleSync({apply:APPLY&&!DRY_RUN,...control})});
   let liveProgressBusy=false;
-  liveCandleProgress=async stage=>{if(liveProgressBusy)return;liveProgressBusy=true;try{const live=await candleCheckpoint(stage);if(!['NOT_DUE','BUSY','SKIPPED_READ_ONLY'].includes(live.status)){tickStage('latest_candle_publication',live);if(live.status==='LATEST_ROWS_READBACK_VERIFIED')tickStage('txf_candle_publication',{checkpoint:stage,...await publishLiveTxfCandles()});}}finally{liveProgressBusy=false;}};
+  liveCandleProgress=async stage=>{if(liveProgressBusy)return;liveProgressBusy=true;try{const quote=await quoteCheckpoint.checkpoint(stage);if(quote.status!=='NOT_DUE')tickStage('quote_publication_checkpoint',quote);const live=await candleCheckpoint(stage);if(!['NOT_DUE','BUSY','SKIPPED_READ_ONLY'].includes(live.status)){tickStage('latest_candle_publication',live);if(live.status==='LATEST_ROWS_READBACK_VERIFIED')tickStage('txf_candle_publication',{checkpoint:stage,...await publishLiveTxfCandles()});}}finally{liveProgressBusy=false;}};
   const txfReferencePublication = await require('../lib/publish-txf-reference.cjs').publishReference({
     runtime: runtimePath(), tradeDate: taipeiDate(), writerRunId: writerTickIdentity.writer_run_id,
     apply: APPLY && !DRY_RUN, writeJson: writeJsonAtomic,
