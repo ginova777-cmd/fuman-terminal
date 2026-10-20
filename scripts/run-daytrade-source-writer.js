@@ -5251,6 +5251,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   let lastQuoteAt = "";
   const priorityAges = [];
   const freshPriorityAges = [];
+  const priorityQuoteAssessments = [];
   for (const symbol of activeSet) {
     const quote = quoteMap.get(symbol);
     const quoteTime = quoteFreshnessTime(quote);
@@ -5265,7 +5266,10 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     const quote = quoteMap.get(symbol);
     const quoteAge = effectiveQuoteAgeSeconds(quote);
     priorityAges.push(isFugleQuote(quote) ? quoteAge : 999999);
-    if (isFreshWebSocketQuote(quote)) {
+    const quoteAccepted = isFreshWebSocketQuote(quote);
+    priorityQuoteAssessments.push(require('../lib/daytrade-priority-quote-assessment.cjs').item(symbol,quote,
+      {tradeDate,checkedAt:nowIso(),accepted:quoteAccepted,ageSeconds:quoteAge}));
+    if (quoteAccepted) {
       freshPriority.push(symbol);
       freshPriorityAges.push(quoteAge);
     }
@@ -5999,6 +6003,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     fetched_this_loop: fetchResult.fetched,
     attempted_this_loop: fetchResult.attempted,
   };
+  payload.priority_quote_assessment = require('../lib/daytrade-priority-quote-assessment.cjs').build(priorityQuoteAssessments,
+    {tradeDate,canonicalRunId});
   return { phase, gateGrade, status, message, payload };
 }
 
@@ -8548,6 +8554,8 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
   if (priorityRows.length) {
     const postFetchQuoteMap = new Map(quoteMap);
     mergeWebSocketQuoteCache(postFetchQuoteMap);
+    require('../lib/daytrade-priority-quote-assessment.cjs').reconcile(quoteMap,postFetchQuoteMap,
+      priorityRows.map(row=>normalizeCode(row.symbol)));
     const postFetchWebsocketQuoteRows = priorityRows
       .map((row) => postFetchQuoteMap.get(normalizeCode(row.symbol)))
       .filter((quote) => quote && effectiveQuoteAgeSeconds(quote) <= WINDOW_SECONDS)

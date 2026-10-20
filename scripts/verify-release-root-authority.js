@@ -22,8 +22,9 @@ function git(cwd, args) {
     if (/^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$/.test(key)) delete env[key];
   }
   const safeDirectory = normalize(cwd) === normalize("C:\\fuman-release-owner\\prod81") ? "C:/fuman-release-owner/prod81" : null;
-  const gitArgs = safeDirectory ? ["-c", `safe.directory=${safeDirectory}`, "-C", cwd, ...args] : ["-C", cwd, ...args];
+  const gitArgs = safeDirectory ? ["-c", `safe.directory=${safeDirectory}`, ...args] : [...args];
   const result = spawnSync("git", gitArgs, {
+    cwd,
     encoding: "utf8",
     windowsHide: true,
     env,
