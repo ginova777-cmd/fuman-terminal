@@ -232,8 +232,10 @@ async function runLatestCandleSync(control) {
   if(snapshot.trade_date!==date||snapshot.complete!==true||!Array.isArray(snapshot.symbols)||!snapshot.run_id)throw Error('LATEST_CANDLE_SNAPSHOT_REQUIRED');
   const wanted=new Set(snapshot.symbols),latest=new Map(),cache=parseCache('fugle-daytrade-ws-candles-v2.json');
   for(const raw of cache.candles||[]){if(!wanted.has(String(raw.symbol||raw.code||'')))continue;for(const row of mapCandleCache({updatedAt:cache.updatedAt,candles:[raw]},date,now)){if(!latest.has(row.symbol)||row.candle_time>latest.get(row.symbol).candle_time)latest.set(row.symbol,row);}}
-  const rows=[...latest.values()];
-  if(!rows.length)return {status:'WAITING_NATURAL_CANDLES',complete:false,missing_symbols:[...wanted]};
+  const minimum=control.minimumClosedMinute?Date.parse(control.minimumClosedMinute):-Infinity;
+  if(Number.isNaN(minimum))throw Error('LATEST_CANDLE_FRONTIER_INVALID');
+  const rows=[...latest.values()].filter(r=>Date.parse(r.candle_time)>=minimum);
+  if(!rows.length)return {status:'WAITING_NATURAL_CANDLES',complete:false,missing_symbols:[...wanted].filter(symbol=>!latest.has(symbol)),no_new_completed_minute_symbols:[...wanted].filter(symbol=>latest.has(symbol))};
   const writeStartedAt=new Date().toISOString();
   require('../lib/daytrade-candle-write-intent.cjs').beforeWrite({runtime:RUNTIME,rows,writer:'writer'});
   const written=await upsert('fugle_daytrade_intraday_1m',rows,'symbol,candle_time',()=>{},control);
@@ -242,7 +244,7 @@ async function runLatestCandleSync(control) {
   const matches=await require('../lib/daytrade-candle-content-readback.cjs').readback({rows,url:URL+'/rest/v1/fugle_daytrade_intraday_1m',headers:{apikey:key,Authorization:'Bearer '+key},deadline:control.deadline,onRows:(actual,at)=>{for(const row of actual)publication.set(row.symbol+'|'+new Date(row.candle_time).toISOString(),{db_written_at:row.payload?.db_written_at||null,version_first_written_at:row.payload?.version_first_written_at||null,readback_completed_at:at});}});
   if(written!==rows.length||matches.size!==rows.length)throw Error('LATEST_CANDLE_READBACK_MISMATCH');
   const latestTime=rows.map(r=>r.candle_time).sort().at(-1);
-  return {status:'LATEST_ROWS_READBACK_VERIFIED',scope:'latest_natural_closed_minute_per_snapshot_symbol',mother_pool_run_id:snapshot.run_id,requested_symbols:wanted.size,written,latest_closed_candle_time:latestTime,readback_completed_at:new Date().toISOString(),timings:rows.map(r=>({symbol:r.symbol,candle_time:r.candle_time,bar_end_at:new Date(Date.parse(r.candle_time)+60000).toISOString(),source_received_at:r.payload.sourceCandleSeenAt,writer_selected_at:new Date(now).toISOString(),write_started_at:writeStartedAt,write_acknowledged_at:writeAcknowledgedAt,readback_started_at:readbackStartedAt,...publication.get(r.symbol+'|'+r.candle_time)})),missing_symbols:[...wanted].filter(symbol=>!latest.has(symbol)),complete:false};
+  return {status:'LATEST_ROWS_READBACK_VERIFIED',scope:control.minimumClosedMinute?'new_natural_completed_frontier_per_snapshot_symbol':'latest_natural_closed_minute_per_snapshot_symbol',mother_pool_run_id:snapshot.run_id,requested_symbols:wanted.size,written,no_new_completed_minute_symbols:[...wanted].filter(symbol=>latest.has(symbol)&&Date.parse(latest.get(symbol).candle_time)<minimum),latest_closed_candle_time:latestTime,readback_completed_at:new Date().toISOString(),timings:rows.map(r=>({symbol:r.symbol,candle_time:r.candle_time,bar_end_at:new Date(Date.parse(r.candle_time)+60000).toISOString(),source_received_at:r.payload.sourceCandleSeenAt,writer_selected_at:new Date(now).toISOString(),write_started_at:writeStartedAt,write_acknowledged_at:writeAcknowledgedAt,readback_started_at:readbackStartedAt,...publication.get(r.symbol+'|'+r.candle_time)})),missing_symbols:[...wanted].filter(symbol=>!latest.has(symbol)),complete:false};
 }
 
 module.exports = { runLatestCandleSync, mapCandleCache, runFastSync: main, runQuoteSync: control => main({...control,quoteOnly:true}) };
