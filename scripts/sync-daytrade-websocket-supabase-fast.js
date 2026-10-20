@@ -150,7 +150,7 @@ async function main(options = {}) {
   const delta = reused && context.pending
     ? {pending:context.pending,unchanged:candles.length-context.pending.length,not_due:0,checkpoint:{contract:deltaStore.CONTRACT,trade_date:date,target:URL+'/fugle_daytrade_intraday_1m',hashes:{...checkpoint.hashes}}}
     : deltaStore.selectDelta(candles, checkpoint, {tradeDate:date,target:URL+'/fugle_daytrade_intraday_1m',nowMs:now.getTime()});
-  const writePlan = require('../lib/daytrade-fast-write-plan.cjs').plan(delta.pending,{nowMs:now.getTime()});
+  const writePlan = require('../lib/daytrade-fast-write-plan.cjs').plan(delta.pending,{nowMs:now.getTime(),bounded:options.boundedHistory===true});
   const result = { ok: true, mode: APPLY ? "apply" : "dry_run", trade_date: date, checked_at: now.toISOString(), quote_rows: quotes.length, candle_rows: candles.length, quote_cache_updated_at: quoteCache.updatedAt, candle_cache_updated_at: candleCache.updatedAt };
   if(context?.boundSource)result.candle_source_snapshot=context.boundSource;
   result.candle_delta_pending = delta.pending.length;

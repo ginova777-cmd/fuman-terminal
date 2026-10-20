@@ -9104,7 +9104,7 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
     apply: APPLY, dryRun: DRY_RUN, tradeDate: taipeiDate(),
     calendar: marketCalendarEvidence,
     historyControl,
-    run: control => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync({...control,canWrite:()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>Date.now()+5000,progress:()=>liveCandleProgress?.('history_progress')}),
+    run: control => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync({...control,boundedHistory:intradayHistory,canWrite:()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>Date.now()+5000,progress:()=>liveCandleProgress?.('history_progress')}),
     refreshLive: async () => {
       const deadline=Math.min(Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Infinity,Date.now()+20000);
       const canWrite=()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>deadline+5000;
