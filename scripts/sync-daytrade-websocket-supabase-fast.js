@@ -46,12 +46,12 @@ async function upsert(table, rows, conflict, onBatch = () => {}, control = null)
   let written = 0;
   for (let offset = 0; offset < rows.length; offset += 200) {
     if(control && (Date.now()>=control.deadline || !control.canWrite())) throw Error('QUOTE_CHECKPOINT_WRITE_GUARD');
-    const response = await fetch(`${URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(conflict)}`, {
+    const response = await require('../lib/writer-operation-trace.cjs').request(`${URL}/rest/v1/${table}?on_conflict=${encodeURIComponent(conflict)}`, {
       method: "POST",
       headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
       body: JSON.stringify(rows.slice(offset, offset + 200)),
       signal: AbortSignal.timeout(control ? Math.max(1, Math.min(30000, control.deadline-Date.now())) : 30000),
-    });
+    },{step:table === 'fugle_daytrade_quotes_live'?'live_quote_write':'stock_candle_write',deadline:control?.deadline||Date.now()+30000,symbolCount:new Set(rows.slice(offset,offset+200).map(r=>r.symbol)).size,fetchImpl:fetch});
     if (!response.ok) throw new Error(`${table}_HTTP_${response.status}:${(await response.text()).slice(0, 240)}`);
     written += Math.min(200, rows.length - offset);
     await onBatch(rows.slice(offset, offset + 200));
@@ -254,3 +254,5 @@ async function runCli() {
     deadline,canWrite:()=>Date.now()<deadline});
 }
 if (require.main === module) runCli().catch((error) => { console.error(JSON.stringify({ ok: false, error: error.message })); process.exitCode = 1; });
+
+
