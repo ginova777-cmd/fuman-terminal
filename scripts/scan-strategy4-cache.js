@@ -1593,7 +1593,7 @@ function buildSupabaseRunRow(output, runId) {
       ...buildRunTimeSourceSnapshotFields({
         strategy: "strategy4",
         runId,
-        payload: output,
+        payload: { ...output, acceptedTargetDateCompleteRun: output.complete === true && publishAllowed },
         startedAt: String(output.startedAt || output.generatedAt || output.updatedAt || new Date().toISOString()),
         finishedAt: scanTime,
         expectedTotal: cleanNumber(output.total),
