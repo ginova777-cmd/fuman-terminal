@@ -236,7 +236,11 @@ async function runLatestCandleSync(control) {
   if(control.apply!==true)return {status:'SKIPPED_READ_ONLY',complete:false};
   if(!Number.isFinite(control.deadline)||control.deadline<=now||typeof control.canWrite!=='function'||!control.canWrite())throw Error('LATEST_CANDLE_WRITE_GUARD');
   const snapshot=JSON.parse(fs.readFileSync(path.join(RUNTIME,'state/daytrade-mother-pool-snapshot-latest.json'),'utf8'));
-  if(snapshot.trade_date!==date||snapshot.complete!==true||!Array.isArray(snapshot.symbols)||!snapshot.run_id)throw Error('LATEST_CANDLE_SNAPSHOT_REQUIRED');
+  if(snapshot.complete!==true||!Array.isArray(snapshot.symbols)||!snapshot.run_id)throw Error('LATEST_CANDLE_SNAPSHOT_REQUIRED');
+  if(snapshot.trade_date!==date){
+    if(/^\d{4}-\d{2}-\d{2}$/.test(snapshot.trade_date)&&snapshot.trade_date<date)return {status:'WAITING_CURRENT_MOTHER_POOL_SNAPSHOT',complete:false,snapshot_trade_date:snapshot.trade_date,trade_date:date,written:0};
+    throw Error('LATEST_CANDLE_SNAPSHOT_REQUIRED');
+  }
   const wanted=new Set(snapshot.symbols),latest=new Map(),cache=parseCache('fugle-daytrade-ws-candles-v2.json');
   for(const raw of cache.candles||[]){if(!wanted.has(String(raw.symbol||raw.code||'')))continue;for(const row of mapCandleCache({updatedAt:cache.updatedAt,candles:[raw]},date,now)){if(!latest.has(row.symbol)||row.candle_time>latest.get(row.symbol).candle_time)latest.set(row.symbol,row);}}
   const minimum=control.minimumClosedMinute?Date.parse(control.minimumClosedMinute):-Infinity;
@@ -268,3 +272,4 @@ async function runCli() {
     deadline,canWrite:()=>Date.now()<deadline});
 }
 if (require.main === module) runCli().catch((error) => { console.error(JSON.stringify({ ok: false, error: error.message })); process.exitCode = 1; });
+
