@@ -544,7 +544,7 @@ if ($Apply -and (-not $runCloseout -or $ClosingWaterOnly)) {
   $fastSyncScript = Join-Path $RepoRoot "scripts\sync-daytrade-websocket-supabase-fast.js"
   if (Test-Path -LiteralPath $fastSyncScript) {
     $fastSyncStartedAt = [DateTimeOffset]::UtcNow
-    $fastSyncOutput = & node --use-system-ca $fastSyncScript --apply 2>&1
+    $fastSyncOutput = & node --use-system-ca $fastSyncScript --apply --quote-only 2>&1
     $fastSyncExit = $LASTEXITCODE
     $fastSyncText = (($fastSyncOutput | Out-String) -replace "[\r\n]+", " ").Trim()
     if ($fastSyncText.Length -gt 700) { $fastSyncText = $fastSyncText.Substring(0, 700) }

@@ -220,4 +220,15 @@ async function main(options = {}) {
 }
 
 module.exports = { mapCandleCache, runFastSync: main, runQuoteSync: control => main({...control,quoteOnly:true}) };
-if (require.main === module) main().catch((error) => { console.error(JSON.stringify({ ok: false, error: error.message })); process.exitCode = 1; });
+async function runCli() {
+  if (!process.argv.includes('--quote-only')) return main();
+  // The minute wrapper publishes fresh native quote fields before the main Writer.
+  // Full candle backlog drain remains a separate explicit mode; never run it in
+  // front of the same round's primary candle/status publication budget.
+  const now = new Date();
+  const calendar = await isTwseTradingDay(now, { stateDir: path.join(RUNTIME, 'state') });
+  const deadline = Date.now() + 15000;
+  return main({quoteOnly:true,apply:APPLY,calendar:{trade_date:tradeDate(now),isTradingDay:calendar.isTradingDay},
+    deadline,canWrite:()=>Date.now()<deadline});
+}
+if (require.main === module) runCli().catch((error) => { console.error(JSON.stringify({ ok: false, error: error.message })); process.exitCode = 1; });
