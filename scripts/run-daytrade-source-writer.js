@@ -8095,8 +8095,12 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
   const refreshQuoteCheckpoint = async stage => {
     const receipt = await quoteCheckpoint.checkpoint(stage);
     if(receipt.status !== 'NOT_DUE') tickStage('quote_publication_checkpoint', receipt);
+    if(receipt.status==='WRITTEN_PENDING_VERIFICATION' && (Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Infinity)>Date.now()+15000){
+      const txf=await publishLiveTxfCandles();
+      tickStage('txf_candle_publication',{checkpoint:stage,...txf});
+    }
   };
-  const txfCandlePublication = await require('../lib/publish-txf-candle-archive.cjs').publishTxfArchive({
+  const publishLiveTxfCandles = () => require('../lib/publish-txf-candle-archive.cjs').publishTxfArchive({
     runtime: runtimePath(), tradeDate: taipeiDate(), writerRunId: writerTickIdentity.writer_run_id,
     apply: APPLY && !DRY_RUN, readJson, writeJson: writeJsonAtomic,
     leaseValid: () => writerLease.ok === true && writerLease.status === 'claimed' && Date.parse(writerLease.leaseExpiresAt) > Date.now() + 15000,
@@ -8105,6 +8109,7 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
       if (result.written !== rows.length) throw Error('TXF_WRITE_COUNT_MISMATCH');
     },
   });
+  const txfCandlePublication = await publishLiveTxfCandles();
   tickStage('txf_candle_publication', txfCandlePublication);
   tickStage("market_calendar:start");
   const marketCalendarEvidence = await syncMarketCalendarEvidence();
