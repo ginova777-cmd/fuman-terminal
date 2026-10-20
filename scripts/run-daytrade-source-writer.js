@@ -333,6 +333,7 @@ const INTRADAY_STATUS_CACHE_SYNC_INTERVAL_MS = Math.max(
 let lastIntradayStatusCacheSyncAt = 0;
 let writerTickIdentity = null;
 let writerLease = { ok: !APPLY, status: APPLY ? "not_claimed" : "dry_run", leaseExpiresAt: "" };
+let liveCandleProgress=null;
 
 function hasFlag(name) {
   return process.argv.includes(`--${name}`);
@@ -700,6 +701,7 @@ async function supabaseGetPaged(resource, query = "", options = {}) {
     if (Array.isArray(options.pageEvidence)) options.pageEvidence.push({offset,requested:pageSize,http_status:response.status,rows:Array.isArray(page)?page.length:null,content_range:response.headers.get('content-range'),...(options.captureRows?{row_data:page}:{})});
     if (!Array.isArray(page) || page.length === 0) break;
     rows.push(...page);
+    if(liveCandleProgress)await liveCandleProgress('paged_read:'+resource);
     if (options.requireExactCount && rows.length === exactTotal) break;
     if (page.length < pageSize) break;
   }
@@ -838,6 +840,7 @@ async function supabaseUpsertUnchecked(resource, rows, conflict, options = {}) {
     if (lastError) throw lastError;
     // Checkpoint persistence is outside HTTP retry: never retry a write for an ACK storage error.
     if (options.acknowledgeBatch) await options.acknowledgeBatch(chunk);
+    if(liveCandleProgress)await liveCandleProgress('write_batch:'+resource);
   }
   return { written };
 }
@@ -2234,9 +2237,11 @@ async function fetchIntradayStatus(activeSymbols = []) {
   };
   const buildGrouped = (rows, tradeDate) => {
     const grouped = new Map();
+    const assessmentMs=Date.now();
     for (const row of rows) {
       const symbol = normalizeCode(row.symbol);
       if (!symbol) continue;
+      if(!require('../lib/daytrade-completed-candle.cjs').isCompleted(normalizeTimestamp(row.candle_time || row.updated_at),assessmentMs))continue;
       const current = grouped.get(symbol) || {
         symbol,
         market: row.market || "",
@@ -8056,6 +8061,7 @@ async function syncMarketCalendarEvidence() {
 }
 
 async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
+  liveCandleProgress=null;
   isolatedModuleIds=null;
   if(isolatedModules){
     const lab=path.resolve(isolatedModules.root||'');
@@ -8096,13 +8102,7 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
   const refreshQuoteCheckpoint = async stage => {
     const receipt = await quoteCheckpoint.checkpoint(stage);
     if(receipt.status !== 'NOT_DUE') tickStage('quote_publication_checkpoint', receipt);
-    if(receipt.status==='WRITTEN_PENDING_VERIFICATION' && (Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Infinity)>Date.now()+15000){
-      const candleDeadline=Math.min(Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Infinity,Date.now()+15000);
-      const latest=await require('./sync-daytrade-websocket-supabase-fast.js').runLatestCandleSync({apply:APPLY&&!DRY_RUN,deadline:candleDeadline,canWrite:()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>candleDeadline+5000});
-      tickStage('latest_candle_publication',latest);
-      const txf=await publishLiveTxfCandles();
-      tickStage('txf_candle_publication',{checkpoint:stage,...txf});
-    }
+    if(liveCandleProgress)await liveCandleProgress(stage);
   };
   const publishLiveTxfCandles = () => require('../lib/publish-txf-candle-archive.cjs').publishTxfArchive({
     runtime: runtimePath(), tradeDate: taipeiDate(), writerRunId: writerTickIdentity.writer_run_id,
@@ -8118,6 +8118,11 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
   tickStage("market_calendar:start");
   const marketCalendarEvidence = await syncMarketCalendarEvidence();
   tickStage("market_calendar:complete", { trade_date: marketCalendarEvidence.trade_date, is_open: marketCalendarEvidence.is_open, session: marketCalendarEvidence.session });
+  const candleCheckpoint=require('../lib/daytrade-live-candle-checkpoint.cjs').create({apply:APPLY&&!DRY_RUN&&marketCalendarEvidence.is_open===true,roundDeadline:Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Infinity,
+    leaseValid:deadline=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>deadline+5000,
+    run:control=>require('./sync-daytrade-websocket-supabase-fast.js').runLatestCandleSync({apply:APPLY&&!DRY_RUN,...control})});
+  let liveProgressBusy=false;
+  liveCandleProgress=async stage=>{if(liveProgressBusy)return;liveProgressBusy=true;try{const live=await candleCheckpoint(stage);if(!['NOT_DUE','BUSY','SKIPPED_READ_ONLY'].includes(live.status)){tickStage('latest_candle_publication',live);if(live.status==='LATEST_ROWS_READBACK_VERIFIED')tickStage('txf_candle_publication',{checkpoint:stage,...await publishLiveTxfCandles()});}}finally{liveProgressBusy=false;}};
   const txfReferencePublication = await require('../lib/publish-txf-reference.cjs').publishReference({
     runtime: runtimePath(), tradeDate: taipeiDate(), writerRunId: writerTickIdentity.writer_run_id,
     apply: APPLY && !DRY_RUN, writeJson: writeJsonAtomic,
@@ -9093,13 +9098,13 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
   await refreshQuoteCheckpoint("final_water_refresh:start");
   tickStage("final_water_refresh:start");
   const historyBackoffFile=runtimePath('state','writer-history-backoff.json');
-  const intradayHistory=APPLY&&!DRY_RUN&&marketCalendarEvidence.is_open===true&&require('../lib/daytrade-module-session.cjs').session()==='INTRADAY';
+  const intradayHistory=APPLY&&!DRY_RUN&&marketCalendarEvidence.is_open===true&&marketCalendarEvidence.session==='regular';
   const historyControl=intradayHistory?{cooldown:require('./writer-database-backoff.cjs').check(historyBackoffFile).blocked}:null;
   const finalWaterRefresh = await require('../lib/daytrade-final-water-refresh.cjs').refresh({
     apply: APPLY, dryRun: DRY_RUN, tradeDate: taipeiDate(),
     calendar: marketCalendarEvidence,
     historyControl,
-    run: control => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync(control),
+    run: control => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync({...control,canWrite:()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>Date.now()+5000,progress:()=>liveCandleProgress?.('history_progress')}),
     refreshLive: async () => {
       const deadline=Math.min(Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Infinity,Date.now()+20000);
       const canWrite=()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>deadline+5000;
@@ -9420,6 +9425,7 @@ async function main() {
     } while (true);
   } finally {
     if (maxRunTimer) clearTimeout(maxRunTimer);
+    liveCandleProgress=null;
   }
 }
 
