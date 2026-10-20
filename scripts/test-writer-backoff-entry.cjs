@@ -14,5 +14,6 @@ assert.equal(run().status,75);assert.equal(fs.existsSync(marker),false);
 b.success(state);assert.equal(run().status,0);assert.equal(fs.existsSync(marker),true);
 fs.unlinkSync(marker);fs.writeFileSync(state,'invalid');assert.equal(run().status,1);assert.equal(fs.existsSync(marker),false);
 assert(source.indexOf('Update-WriterDatabaseBackoff \'failure\' $fastSyncText')<source.indexOf('exit 9010'));
-assert(source.includes("Update-WriterDatabaseBackoff 'failure' ($stderrText + ' ' + $stdoutText)"));
+assert(source.includes("Update-WriterDatabaseBackoff 'failure' $stderrText"));
 console.log('PASS: actual PowerShell entry blocks downstream during cooldown and corrupt state; allows success-reset round; no network');
+

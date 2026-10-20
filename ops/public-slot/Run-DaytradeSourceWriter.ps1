@@ -685,10 +685,16 @@ try {
     Write-WrapperLog "RETRY transient_exit_$exitCode attempt=$attempt/$attempts"
     if ($retrySeconds -gt 0) { Start-Sleep -Seconds $retrySeconds }
   }
+  if ($exitCode -eq 76) {
+    & node (Join-Path $FumanRoot 'scripts/verify-writer-backfill-pending.cjs') $RuntimeDir $RunId
+    if ($LASTEXITCODE -ne 76) { throw 'BACKFILL_PENDING_VERIFICATION_FAILED' }
+    Write-WrapperLog 'DONE partial reason=BACKFILL_PENDING complete=false global_database_backoff_unchanged=true'
+    exit 76
+  }
   if ($exitCode -ne 0) {
     $diagnostic = (($stderrText + " " + $stdoutText) -replace "[\r\n]+", " ").Trim()
     if ($diagnostic.Length -gt 500) { $diagnostic = $diagnostic.Substring(0, 500) }
-    Update-WriterDatabaseBackoff 'failure' ($stderrText + ' ' + $stdoutText)
+    Update-WriterDatabaseBackoff 'failure' $stderrText
     Write-FailureArtifact $exitCode "writer_exit_$exitCode detail=$diagnostic"
     Write-WrapperLog "FAIL writer_exit_$exitCode detail=$diagnostic stdout=$StdoutLog stderr=$StderrLog"
     exit $exitCode

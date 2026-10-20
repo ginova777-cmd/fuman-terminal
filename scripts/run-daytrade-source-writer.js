@@ -9091,20 +9091,33 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
   // round and deadline, before the wrapper performs independent verification.
   await refreshQuoteCheckpoint("final_water_refresh:start");
   tickStage("final_water_refresh:start");
+  const historyBackoffFile=runtimePath('state','writer-history-backoff.json');
+  const intradayHistory=APPLY&&!DRY_RUN&&marketCalendarEvidence.is_open===true&&require('../lib/daytrade-module-session.cjs').session()==='INTRADAY';
+  const historyControl=intradayHistory?{cooldown:require('./writer-database-backoff.cjs').check(historyBackoffFile).blocked}:null;
   const finalWaterRefresh = await require('../lib/daytrade-final-water-refresh.cjs').refresh({
     apply: APPLY, dryRun: DRY_RUN, tradeDate: taipeiDate(),
     calendar: marketCalendarEvidence,
+    historyControl,
     run: control => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync(control),
     refreshLive: async () => {
       const deadline=Math.min(Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Infinity,Date.now()+20000);
       const canWrite=()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>deadline+5000;
       const sync=require('./sync-daytrade-websocket-supabase-fast.js');
-      await sync.runQuoteSync({apply:APPLY&&!DRY_RUN,calendar:{trade_date:marketCalendarEvidence.trade_date,isTradingDay:marketCalendarEvidence.is_open},deadline,canWrite});
-      await sync.runLatestCandleSync({apply:APPLY&&!DRY_RUN,deadline,canWrite});
-      await publishLiveTxfCandles();
+      const quotes=await sync.runQuoteSync({apply:APPLY&&!DRY_RUN,calendar:{trade_date:marketCalendarEvidence.trade_date,isTradingDay:marketCalendarEvidence.is_open},deadline,canWrite});
+      const latest=await sync.runLatestCandleSync({apply:APPLY&&!DRY_RUN,deadline,canWrite});
+      const txf=await publishLiveTxfCandles();
+      const live={quotes_acknowledged:quotes?.ok===true&&quotes.quotes_written>0,stock_candles_verified:latest.status==='LATEST_ROWS_READBACK_VERIFIED',quotes_written:quotes.quotes_written,stock_candles_written:latest.written,txf,checked_at:nowIso()};
+      tickStage('history_live_refresh',live);
+      return live;
     },
   });
   tickStage("final_water_refresh:complete", finalWaterRefresh);
+  if(finalWaterRefresh.status==='BACKFILL_PENDING'){
+    if(finalWaterRefresh.reason==='HISTORY_READBACK_TIMEOUT')require('./writer-database-backoff.cjs').failure(historyBackoffFile,'TimeoutError');
+    const pending={contract:'writer-backfill-pending-v1',run_id:process.env.FUMAN_CANDLE_SYNC_RUN_ID,checked_at:nowIso(),...finalWaterRefresh};
+    writeJsonAtomic(runtimePath('state','writer-backfill-pending.json'),pending);
+    return {ok:false,complete:false,backfillPending:true,formalEntryAllowed:false,gateGrade:result.gateGrade,finalWaterRefresh};
+  }
   if (finalWaterRefresh.status === 'NATURAL_PENDING') {
     result.payload.final_water_refresh = finalWaterRefresh;
     result.payload.formal_entry_allowed = false;
@@ -9395,6 +9408,7 @@ async function main() {
       const started = Date.now();
       const result = await tick();
       console.log(JSON.stringify(result, null, 2));
+      if (result.backfillPending === true) { process.exitCode = 76; break; }
       if (result.naturalPending === true) { process.exitCode = 75; break; }
       if (ONCE) break;
       if (maxRunReached || (MAX_RUN_SECONDS > 0 && (Date.now() - runStartedAt) / 1000 >= MAX_RUN_SECONDS)) break;
