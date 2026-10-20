@@ -1,4 +1,4 @@
-param([switch]$Recovery, [string]$ReplayTradeDate = "", [string]$ReplayRuntime = "", [switch]$ResumeReplay, [switch]$SkipNotifications, [string]$ResumePublishedRunId = "")
+param([switch]$Recovery, [string]$ReplayTradeDate = "", [string]$ReplayRuntime = "", [switch]$ResumeReplay, [switch]$SkipNotifications, [string]$ResumePublishedRunId = "", [string]$FixedUniverseFile = "")
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
@@ -22,6 +22,11 @@ $env:FUMAN_RUNTIME_DIR = $runtime
 $env:FUMAN_DATA_DIR = Join-Path $runtime "data"
 $env:FUMAN_CACHE_DIR = Join-Path $runtime "cache"
 $env:FUMAN_STATE_DIR = Join-Path $runtime "state"
+if ($FixedUniverseFile) {
+  $fixedUniversePath = [IO.Path]::GetFullPath($FixedUniverseFile)
+  if (-not (Test-Path -LiteralPath $fixedUniversePath -PathType Leaf)) { throw "Fixed universe file not found: $fixedUniversePath" }
+  $env:STRATEGY4_FIXED_UNIVERSE_FILE = $fixedUniversePath
+}
 
 Set-Location $repo
 

@@ -2,6 +2,7 @@ const { CONTRACT: VOLUME_WINDOW_CONTRACT, evaluateVolumeWindow, recentTradingDat
 let strategy4ExpectedVolumeDates = [];
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const { spawnSync } = require("child_process");
 const scanStrategy4 = require("../api/scan-strategy4");
 const fetchStocks = require("../stocks");
@@ -43,6 +44,36 @@ const FINMIND_DAILY_SOURCE = "supabase:finmind_daily_ohlcv";
 const VOLUME_CACHE_UNIT = "lots-v2";
 const ALLOW_FILTER_RULE_DROP = process.env.STRATEGY4_ALLOW_FILTER_RULE_DROP !== "0";
 const ALLOW_LEGACY_VOLUME_FALLBACK = process.env.STRATEGY4_ALLOW_LEGACY_VOLUME_FALLBACK === "1";
+const FIXED_UNIVERSE_FILE = process.env.STRATEGY4_FIXED_UNIVERSE_FILE || "";
+const FIXED_UNIVERSE_REQUIRED_SHA = "3588d7c97604cc3569812592f3a62120e94e8afd4f411b8b855b4db9745c8403";
+const FIXED_UNIVERSE_REQUIRED_COUNT = 1943;
+let activeFixedUniverse = null;
+
+function loadApprovedFixedUniverse() {
+  if (!FIXED_UNIVERSE_FILE) return null;
+  const file = path.resolve(FIXED_UNIVERSE_FILE);
+  if (!fs.existsSync(file)) throw new Error(`strategy4_fixed_universe_missing:${file}`);
+  let contract;
+  try { contract = JSON.parse(fs.readFileSync(file, "utf8")); }
+  catch (error) { throw new Error(`strategy4_fixed_universe_invalid_json:${error.message}`); }
+  const symbols = Array.isArray(contract.symbols) ? contract.symbols.map(normalizeCode) : [];
+  const canonical = JSON.stringify(symbols);
+  const sha = crypto.createHash("sha256").update(canonical, "utf8").digest("hex");
+  if (contract.trade_date !== process.env.FUMAN_SCANNER_TARGET_TRADE_DATE && process.env.FUMAN_SCANNER_TARGET_TRADE_DATE) {
+    throw new Error(`strategy4_fixed_universe_trade_date_mismatch:${contract.trade_date}`);
+  }
+  if (symbols.length !== FIXED_UNIVERSE_REQUIRED_COUNT || contract.requested_count !== FIXED_UNIVERSE_REQUIRED_COUNT) {
+    throw new Error(`strategy4_fixed_universe_count_mismatch:${symbols.length}/${contract.requested_count}`);
+  }
+  if (sha !== FIXED_UNIVERSE_REQUIRED_SHA || contract.symbols_sha256 !== FIXED_UNIVERSE_REQUIRED_SHA) {
+    throw new Error(`strategy4_fixed_universe_sha_mismatch:${sha}/${contract.symbols_sha256}`);
+  }
+  const unique = new Set(symbols);
+  if (unique.size !== symbols.length || symbols.some((code) => !/^\d{4}$/.test(code))) {
+    throw new Error("strategy4_fixed_universe_symbols_invalid");
+  }
+  return { file, contract, symbols, sha, count: symbols.length };
+}
 const FUGLE_HISTORY_CACHE_DIR = process.env.FUGLE_HISTORY_CACHE_DIR || path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "fugle", "historical");
 const STRATEGY4_VOLUME_CACHE_FILE = path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "strategy4-volume-avg5.json");
 const STRATEGY4_PRIORITY_FILE = path.join(process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime", "cache", "intraday", "fugle-daytrade-ws-priority-symbols.json");
@@ -1082,6 +1113,8 @@ async function fetchSupabaseUniverse() {
 }
 
 async function fetchUniverse() {
+  const fixedUniverse = loadApprovedFixedUniverse();
+  activeFixedUniverse = fixedUniverse ? { file: fixedUniverse.file, tradeDate: fixedUniverse.contract.trade_date, count: fixedUniverse.count, sha256: fixedUniverse.sha } : null;
   let parsed = [];
   try {
     parsed = await fetchSupabaseUniverse();
@@ -1114,6 +1147,15 @@ async function fetchUniverse() {
     byCode.set(stock.code, stock);
   });
   parsed = [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code));
+  if (fixedUniverse) {
+    const available = new Map(parsed.map((stock) => [stock.code, stock]));
+    const missing = fixedUniverse.symbols.filter((code) => !available.has(code));
+    if (missing.length) {
+      throw new Error(`strategy4_fixed_universe_source_missing:${missing.length}:${missing.slice(0, 20).join(",")}`);
+    }
+    parsed = fixedUniverse.symbols.map((code) => available.get(code));
+    console.log(`strategy4 fixed universe accepted: ${fixedUniverse.count}, sha=${fixedUniverse.sha}`);
+  }
   console.log(`strategy4 universe after exclusions: ${parsed.length}, excluded ${excludedCount}, blacklist ${excludedCodes.size}`);
   if (parsed.length < MIN_UNIVERSE_SIZE) {
     throw new Error(`Strategy4 stock universe too small: ${parsed.length}/${MIN_UNIVERSE_SIZE}`);
@@ -2220,6 +2262,13 @@ async function main() {
     hardGate: false,
     strategy2Dependency: false,
     strategy2FallbackAllowed: false,
+  };
+  output.fixedUniverse = activeFixedUniverse || {
+    enabled: false,
+    contract: "strategy4_user_approved_fixed_universe_v1",
+    requiredCount: FIXED_UNIVERSE_REQUIRED_COUNT,
+    requiredSha256: FIXED_UNIVERSE_REQUIRED_SHA,
+    reason: "STRATEGY4_FIXED_UNIVERSE_FILE_not_set",
   };
 
   if(process.env.STRATEGY4_REPLAY_TRADE_DATE) {
