@@ -799,7 +799,8 @@ async function supabaseUpsertUnchecked(resource, rows, conflict, options = {}) {
       const started = Date.now();
       if(tracePriority)console.log(JSON.stringify({stage:'priority_pool_batch:start',...batchEvidence,attempt}));
       try {
-        const response = await fetch(`${SUPABASE_URL}/rest/v1/${resource}?on_conflict=${encodeURIComponent(conflict)}`, {
+        const tracedFetch=options.traceStep?(url,init)=>require('../lib/writer-operation-trace.cjs').request(url,init,{step:options.traceStep,deadline:Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Date.now()+writeTimeoutMs,timeoutMs:writeTimeoutMs,symbolCount:new Set(chunk.map(r=>r.symbol||r.future_symbol)).size}):fetch;
+        const response = await tracedFetch(`${SUPABASE_URL}/rest/v1/${resource}?on_conflict=${encodeURIComponent(conflict)}`, {
           method: "POST",
           headers: {
             ...headers(key),
@@ -8108,7 +8109,7 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
     apply: APPLY && !DRY_RUN, readJson, writeJson: writeJsonAtomic,
     leaseValid: () => writerLease.ok === true && writerLease.status === 'claimed' && Date.parse(writerLease.leaseExpiresAt) > Date.now() + 15000,
     sendBatch: async (table, rows, conflict) => {
-      const result = await supabaseUpsert(table, rows, conflict, {batchSize:50,maxBatchBytes:262144,retries:0,timeoutMs:10000});
+      const result = await supabaseUpsert(table, rows, conflict, {batchSize:50,maxBatchBytes:262144,retries:0,timeoutMs:10000,traceStep:'txf_candle_write'});
       if (result.written !== rows.length) throw Error('TXF_WRITE_COUNT_MISMATCH');
     },
   });
