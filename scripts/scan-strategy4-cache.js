@@ -1140,7 +1140,10 @@ async function fetchUniverse() {
   const excludedCodes = loadExcludedCodes();
   let excludedCount = 0;
   parsed.forEach((stock) => {
-    if (isExcludedStock(stock, excludedCodes)) {
+    // A user-approved fixed universe is already the eligibility contract.
+    // Do not apply the legacy heuristic exclusions to it; only deduplicate
+    // and fail closed if a contracted symbol is absent from the source.
+    if (!fixedUniverse && isExcludedStock(stock, excludedCodes)) {
       excludedCount += 1;
       return;
     }
