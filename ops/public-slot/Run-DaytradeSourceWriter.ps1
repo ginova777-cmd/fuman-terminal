@@ -35,9 +35,9 @@ if ($ClosingWaterOnly -and -not (Test-ClosingWaterWindow -Now ([DateTimeOffset]:
 $WrapperClock = [Diagnostics.Stopwatch]::StartNew()
 
 function Get-WriterProcessBudget {
-  param([double]$ElapsedSeconds, [int]$MaximumSeconds = 285, [int]$ReserveSeconds = 15)
+  param([double]$ElapsedSeconds, [int]$MaximumSeconds = 585, [int]$ReserveSeconds = 15)
   if ([double]::IsNaN($ElapsedSeconds) -or [double]::IsInfinity($ElapsedSeconds) -or $ElapsedSeconds -lt 0 -or $MaximumSeconds -lt 1 -or $ReserveSeconds -lt 5) { throw 'WRITER_TIME_BUDGET_INVALID' }
-  return [int][Math]::Max(0, [Math]::Min($MaximumSeconds, [Math]::Floor(300 - $ReserveSeconds - $ElapsedSeconds)))
+  return [int][Math]::Max(0, [Math]::Min($MaximumSeconds, [Math]::Floor(600 - $ReserveSeconds - $ElapsedSeconds)))
 }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -665,9 +665,9 @@ try {
     Write-WrapperLog "NODE_ATTEMPT $attempt/$attempts stdout=$StdoutLog stderr=$StderrLog"
     # The task's five-minute ceiling includes calendar, fast sync and setup.
     # Keep cleanup time; never add a fresh per-child five-minute allowance.
-    $requestedTimeout = if ($env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS) { [int]$env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS } else { 285 }
+    $requestedTimeout = if ($env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS) { [int]$env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS } else { 585 }
     $nodeTimeoutSeconds = Get-WriterProcessBudget -ElapsedSeconds $WrapperClock.Elapsed.TotalSeconds -MaximumSeconds $requestedTimeout
-    Write-WrapperLog "NODE_BUDGET seconds=$nodeTimeoutSeconds elapsed_seconds=$([Math]::Round($WrapperClock.Elapsed.TotalSeconds)) task_limit_seconds=300"
+    Write-WrapperLog "NODE_BUDGET seconds=$nodeTimeoutSeconds elapsed_seconds=$([Math]::Round($WrapperClock.Elapsed.TotalSeconds)) task_limit_seconds=600"
     if ($nodeTimeoutSeconds -lt 1) { throw 'WRAPPER_TIME_BUDGET_EXHAUSTED:writer' }
     $nodeProcess = Start-Process -FilePath $node -ArgumentList $args -RedirectStandardOutput $StdoutLog -RedirectStandardError $StderrLog -PassThru -WindowStyle Hidden
     if (-not $nodeProcess.WaitForExit($nodeTimeoutSeconds * 1000)) {

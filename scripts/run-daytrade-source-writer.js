@@ -8096,6 +8096,9 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
     const receipt = await quoteCheckpoint.checkpoint(stage);
     if(receipt.status !== 'NOT_DUE') tickStage('quote_publication_checkpoint', receipt);
     if(receipt.status==='WRITTEN_PENDING_VERIFICATION' && (Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Infinity)>Date.now()+15000){
+      const candleDeadline=Math.min(Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Infinity,Date.now()+15000);
+      const latest=await require('./sync-daytrade-websocket-supabase-fast.js').runLatestCandleSync({apply:APPLY&&!DRY_RUN,deadline:candleDeadline,canWrite:()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>candleDeadline+5000});
+      tickStage('latest_candle_publication',latest);
       const txf=await publishLiveTxfCandles();
       tickStage('txf_candle_publication',{checkpoint:stage,...txf});
     }
@@ -9092,6 +9095,14 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
     apply: APPLY, dryRun: DRY_RUN, tradeDate: taipeiDate(),
     calendar: marketCalendarEvidence,
     run: control => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync(control),
+    refreshLive: async () => {
+      const deadline=Math.min(Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Infinity,Date.now()+20000);
+      const canWrite=()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>deadline+5000;
+      const sync=require('./sync-daytrade-websocket-supabase-fast.js');
+      await sync.runQuoteSync({apply:APPLY&&!DRY_RUN,calendar:{trade_date:marketCalendarEvidence.trade_date,isTradingDay:marketCalendarEvidence.is_open},deadline,canWrite});
+      await sync.runLatestCandleSync({apply:APPLY&&!DRY_RUN,deadline,canWrite});
+      await publishLiveTxfCandles();
+    },
   });
   tickStage("final_water_refresh:complete", finalWaterRefresh);
   if (finalWaterRefresh.status === 'NATURAL_PENDING') {

@@ -12,12 +12,14 @@ const APPLY = process.argv.includes("--apply");
 function readText(file) { try { return fs.readFileSync(file, "utf8"); } catch { return ""; } }
 function secret(name) { return String(process.env[name] || readText(path.join(RUNTIME, "secrets", name.toLowerCase().replace(/_/g, "-") + ".txt"))).trim(); }
 function parseCache(name, context = null) {
+  if(context?.fixedSource && context.cache)return context.cache;
   for (const file of [path.join(CACHE, name), path.join(CACHE, name + ".bak")]) {
     try {
       const raw=readText(file),sha=require('node:crypto').createHash('sha256').update(raw).digest('hex');
       if(context && context.cacheSha===sha && context.cacheFile===file)return context.cache;
       const value=JSON.parse(raw);
       if(context){context.cacheSha=sha;context.cacheFile=file;context.cache=value;context.mapped=null;}
+      if(context?.fixedSource)context.boundSource=require('../lib/daytrade-candle-bound-source.cjs').capture(RUNTIME,raw,Date.now());
       return value;
     } catch { /* retry stable backup */ }
   }
@@ -118,8 +120,8 @@ async function main(options = {}) {
   const deadline = Number(options.deadline) || Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS) || Date.now()+300000;
   const writeControl = {deadline,canWrite:()=>Date.now()<deadline};
   const context = options.drainContext;
-  const candles = context?.mapped && context.mappedDate===date && now.getTime()<context.nextEligibility
-    ? context.mapped : mapCandleCache(candleCache,date,now.getTime());
+  const candles = context?.mapped && context.mappedDate===date && (context.fixedSource || now.getTime()<context.nextEligibility)
+    ? context.mapped : mapCandleCache(candleCache,date,context?.boundSource?Date.parse(context.boundSource.as_of):now.getTime());
   if(context && context.mapped!==candles){
     context.mapped=candles;context.mappedDate=date;context.nextEligibility=Infinity;
     for(const c of candleCache.candles||[])for(const t of [Date.parse(c.candleTime||c.date)+60000,Date.parse(c.candleSeenAt)])if(t>now.getTime())context.nextEligibility=Math.min(context.nextEligibility,t);
@@ -149,6 +151,7 @@ async function main(options = {}) {
     : deltaStore.selectDelta(candles, checkpoint, {tradeDate:date,target:URL+'/fugle_daytrade_intraday_1m',nowMs:now.getTime()});
   const writePlan = require('../lib/daytrade-fast-write-plan.cjs').plan(delta.pending,{nowMs:now.getTime()});
   const result = { ok: true, mode: APPLY ? "apply" : "dry_run", trade_date: date, checked_at: now.toISOString(), quote_rows: quotes.length, candle_rows: candles.length, quote_cache_updated_at: quoteCache.updatedAt, candle_cache_updated_at: candleCache.updatedAt };
+  if(context?.boundSource)result.candle_source_snapshot=context.boundSource;
   result.candle_delta_pending = delta.pending.length;
   result.candle_delta_unchanged = delta.unchanged;
   result.candle_not_due = delta.not_due;
@@ -202,7 +205,7 @@ async function main(options = {}) {
       context.pending = remaining.pending;
     }
     if(remaining.pending.length===0&&writePlan.deferred===0&&finalMatches.size!==candles.length)throw Error('CANDLE_FINAL_CONTENT_MISMATCH');
-    if(context && remaining.pending.length===0 && bytesHash(readText(context.cacheFile))!==context.cacheSha)throw Error('CANDLE_SOURCE_CHANGED_DURING_FINAL_READBACK');
+    if(context && remaining.pending.length===0 && bytesHash(context.boundSource?require('../lib/daytrade-candle-bound-source.cjs').read(RUNTIME,context.boundSource):readText(context.cacheFile))!==context.cacheSha)throw Error('CANDLE_SOURCE_CHANGED_DURING_FINAL_READBACK');
     if(remaining.pending.length===0 && readText(snapshotFile)!==boundSnapshotRaw)throw Error('CANDLE_SNAPSHOT_CHANGED_DURING_FINAL_READBACK');
     result.final_content_readback_verified=remaining.pending.length===0&&writePlan.deferred===0&&finalMatches.size===candles.length;
     let snapshotRaw='';try{snapshotRaw=fs.readFileSync(path.join(RUNTIME,'state','daytrade-mother-pool-snapshot-latest.json'),'utf8')}catch{}
@@ -219,7 +222,26 @@ async function main(options = {}) {
   return result;
 }
 
-module.exports = { mapCandleCache, runFastSync: main, runQuoteSync: control => main({...control,quoteOnly:true}) };
+
+async function runLatestCandleSync(control) {
+  const now=Date.now(),date=tradeDate();
+  if(control.apply!==true)return {status:'SKIPPED_READ_ONLY',complete:false};
+  if(!Number.isFinite(control.deadline)||control.deadline<=now||typeof control.canWrite!=='function'||!control.canWrite())throw Error('LATEST_CANDLE_WRITE_GUARD');
+  const snapshot=JSON.parse(fs.readFileSync(path.join(RUNTIME,'state/daytrade-mother-pool-snapshot-latest.json'),'utf8'));
+  if(snapshot.trade_date!==date||snapshot.complete!==true||!Array.isArray(snapshot.symbols)||!snapshot.run_id)throw Error('LATEST_CANDLE_SNAPSHOT_REQUIRED');
+  const wanted=new Set(snapshot.symbols),latest=new Map(),cache=parseCache('fugle-daytrade-ws-candles-v2.json');
+  for(const row of mapCandleCache(cache,date,now)){if(wanted.has(row.symbol)&&(!latest.has(row.symbol)||row.candle_time>latest.get(row.symbol).candle_time))latest.set(row.symbol,row);}
+  const rows=[...latest.values()];
+  if(!rows.length)return {status:'WAITING_NATURAL_CANDLES',complete:false,missing_symbols:[...wanted]};
+  require('../lib/daytrade-candle-write-intent.cjs').beforeWrite({runtime:RUNTIME,rows,writer:'writer'});
+  const written=await upsert('fugle_daytrade_intraday_1m',rows,'symbol,candle_time',()=>{},control);
+  const key=secret('SUPABASE_SERVICE_ROLE_KEY');
+  const matches=await require('../lib/daytrade-candle-content-readback.cjs').readback({rows,url:URL+'/rest/v1/fugle_daytrade_intraday_1m',headers:{apikey:key,Authorization:'Bearer '+key},deadline:control.deadline});
+  if(written!==rows.length||matches.size!==rows.length)throw Error('LATEST_CANDLE_READBACK_MISMATCH');
+  return {status:'LATEST_ROWS_READBACK_VERIFIED',scope:'latest_natural_closed_minute_per_snapshot_symbol',mother_pool_run_id:snapshot.run_id,requested_symbols:wanted.size,written,missing_symbols:[...wanted].filter(symbol=>!latest.has(symbol)),complete:false};
+}
+
+module.exports = { runLatestCandleSync, mapCandleCache, runFastSync: main, runQuoteSync: control => main({...control,quoteOnly:true}) };
 async function runCli() {
   if (!process.argv.includes('--quote-only')) return main();
   // The minute wrapper publishes fresh native quote fields before the main Writer.
