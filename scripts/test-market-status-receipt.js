@@ -10,6 +10,8 @@ let r = run(["--stage=strategy4", "--trade-date=2026-10-23", "--execution-mode=n
 const first = JSON.parse(r.stdout); r = run(["--stage=strategy5", "--trade-date=2026-10-23", "--execution-mode=diagnostic", "--run-id=other-run"]); assert.equal(r.status, 10); const second = JSON.parse(r.stdout); assert.equal(first.receiptPath, second.receiptPath); assert.equal(first.evidenceSha256, second.evidenceSha256);
 for (const stage of ["morning-us_0820", "strategy3", "strategy4", "strategy5", "buy-sell", "scorecard"]) { const p = run([`--stage=${stage}`, "--trade-date=2026-10-23", "--execution-mode=natural"]); assert.equal(p.status, 10); const payload = JSON.parse(p.stdout); assert.equal(payload.receiptPath, first.receiptPath); }
 r = run(["--stage=strategy4", "--trade-date=2026-10-24", "--execution-mode=natural"]); assert.equal(r.status, 10); assert.match(r.stdout, /MARKET_CLOSED/);
+assert.ok(!/[^\x00-\x7f]/.test(r.stdout), "stdout protocol must be ASCII-safe across Windows codepages");
+assert.ok(JSON.stringify(JSON.parse(r.stdout)).includes("市場無交易"), "escaped protocol must preserve Chinese evidence");
 for (const stage of ["morning-us_0820", "strategy3", "strategy4", "strategy5", "buy-sell", "scorecard-1315"]) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const guard = require("child_process").spawnSync("pwsh.exe", ["-NoProfile", "-File", path.join(root, "scripts/invoke-market-status-guard.ps1"), "-Stage", stage, "-TradeDate", "2026-10-23"], { env, encoding: "utf8" });

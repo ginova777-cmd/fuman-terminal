@@ -6,6 +6,9 @@ const { isTwseTradingDay, taipeiDateParts, dateKey } = require("./twse-trading-d
 function arg(name, fallback = "") { const hit = process.argv.find((v) => v === `--${name}` || v.startsWith(`--${name}=`)); return hit ? (hit.includes("=") ? hit.slice(hit.indexOf("=") + 1) : "true") : fallback; }
 function compactDate(value) { const s = String(value || "").replace(/\D/g, ""); return s.length >= 8 ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : ""; }
 function sha256(value) { return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex"); }
+// Console code pages must not corrupt JSON delimiters adjacent to Chinese text.
+// Receipt files remain UTF-8; the process protocol uses lossless ASCII escapes.
+function wireJson(value) { return JSON.stringify(value).replace(/[\u007f-\uffff]/g, c => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`); }
 function classify(day) {
   if (!day || typeof day.isTradingDay !== "boolean" || day.error || ["stale_cache", "weekend_fallback"].includes(day.source)) return { status: "BLOCKED", reason: "MARKET_STATUS_UNVERIFIED", exitCode: 2 };
   if (day.isTradingDay) return { status: "OPEN", reason: "TRADING_DAY", exitCode: 0 };
@@ -46,6 +49,6 @@ async function main() {
       if (prior.marketReceipt !== out || prior.status !== scanReceipt.status || prior.exitCode !== scanReceipt.exitCode) throw Error("WRAPPER_RECEIPT_CONFLICT");
     }
   }
-  console.log(JSON.stringify({ ok: verdict.status === "OPEN", receiptPath: out, ...receipt, wrapperRunId: runId, wrapperStage: stage, wrapperExecutionMode: executionMode })); process.exitCode = verdict.exitCode;
+  console.log(wireJson({ ok: verdict.status === "OPEN", receiptPath: out, ...receipt, wrapperRunId: runId, wrapperStage: stage, wrapperExecutionMode: executionMode })); process.exitCode = verdict.exitCode;
 }
-main().catch((error) => { console.error(JSON.stringify({ ok: false, status: "BLOCKED", skipReason: "MARKET_STATUS_UNVERIFIED", error: error.message })); process.exitCode = 2; });
+main().catch((error) => { console.error(wireJson({ ok: false, status: "BLOCKED", skipReason: "MARKET_STATUS_UNVERIFIED", error: error.message })); process.exitCode = 2; });
