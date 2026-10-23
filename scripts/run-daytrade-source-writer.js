@@ -775,6 +775,12 @@ async function ensureWriterLease() {
 }
 
 async function supabaseUpsert(resource, rows, conflict, options = {}) {
+  if(resource==='fugle_daytrade_quotes_live'&&!DRY_RUN&&require('../lib/supply-round-context.cjs').active()){
+    if(conflict!=='symbol')throw Error('QUOTE_CONFLICT_KEY_CHANGED');
+    const normalized=rows.map(require('../lib/daytrade-quote-liquidity-contract').normalizeQuoteLiquidity);
+    return require('../lib/supply-round-context.cjs').write({sink:SUPABASE_URL.replace(/\/+$/,'')+'/rest/v1/fugle_daytrade_quotes_live',rows:normalized,guard:()=>{require('../lib/daytrade-history-write-guard.cjs').assertCurrent(runtimePath());return writerLease?.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>Date.now()+5000;},
+      send:batch=>supabaseUpsertUnchecked(resource,batch,conflict,options)});
+  }
   if(resource==='fugle_daytrade_priority_pool'&&rows.length&&!DRY_RUN){
     const guard=supabaseUpsert.priorityRoundGuard||(supabaseUpsert.priorityRoundGuard=require('../lib/daytrade-priority-round-write-guard').create());
     return guard.run(rows,()=>supabaseUpsertUnchecked(resource,rows,conflict,options));
@@ -8071,7 +8077,12 @@ async function syncMarketCalendarEvidence() {
   return rows[0];
 }
 
-async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
+async function tick(options={}) {
+  if(!require('../lib/supply-round-switch.cjs').enabled(runtimePath()))return tickUnshared(options);
+  if(process.env.FUMAN_CANDLE_CONFIRMATION_FILE||process.env.FUMAN_DAYTRADE_C2_INPUT_FILE)throw Error('SUPPLY_OPTIMIZATION_C2_MODE_CONFLICT');
+  return require('../lib/supply-round-context.cjs').run({runId:require('node:crypto').randomUUID(),tradeDate:taipeiDate(),sink:SUPABASE_URL.replace(/\/+$/,'')+'/rest/v1/fugle_daytrade_quotes_live'},()=>tickUnshared(options),counts=>console.log(JSON.stringify({stage:'supply_round_efficiency',...counts})));
+}
+async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={}) {
   liveCandleProgress=null;
   isolatedModuleIds=null;
   if(isolatedModules){
@@ -8111,6 +8122,7 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
       calendar:{trade_date:marketCalendarEvidence.trade_date,isTradingDay:marketCalendarEvidence.is_open}}),
   });
   const refreshQuoteCheckpoint = async stage => {
+    require('../lib/supply-round-context.cjs').refresh();
     const receipt = await quoteCheckpoint.checkpoint(stage);
     if(receipt.status !== 'NOT_DUE') tickStage('quote_publication_checkpoint', receipt);
     if(liveCandleProgress)await liveCandleProgress(stage);
@@ -8561,6 +8573,7 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
     mergeWebSocketQuoteCache(postFetchQuoteMap);
     require('../lib/daytrade-priority-quote-assessment.cjs').reconcile(quoteMap,postFetchQuoteMap,
       priorityRows.map(row=>normalizeCode(row.symbol)));
+    require('../lib/supply-round-context.cjs').refresh();
     const postFetchWebsocketQuoteRows = priorityRows
       .map((row) => postFetchQuoteMap.get(normalizeCode(row.symbol)))
       .filter((quote) => quote && effectiveQuoteAgeSeconds(quote) <= WINDOW_SECONDS)
@@ -9125,7 +9138,7 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
       const quotes=await sync.runQuoteSync({apply:APPLY&&!DRY_RUN,calendar:{trade_date:marketCalendarEvidence.trade_date,isTradingDay:marketCalendarEvidence.is_open},deadline,canWrite});
       const latest=await sync.runLatestCandleSync({apply:APPLY&&!DRY_RUN,deadline,canWrite});
       const txf=await publishLiveTxfCandles();
-      const live={quotes_acknowledged:quotes?.ok===true&&quotes.quotes_written>0,stock_candles_verified:latest.status==='LATEST_ROWS_READBACK_VERIFIED',quotes_written:quotes.quotes_written,stock_candles_written:latest.written,txf,checked_at:nowIso()};
+      const live={quotes_acknowledged:quotes?.ok===true&&require('../lib/supply-round-context.cjs').acknowledged(quotes)>0,stock_candles_verified:latest.status==='LATEST_ROWS_READBACK_VERIFIED',quotes_written:quotes.quotes_written,stock_candles_written:latest.written,txf,checked_at:nowIso()};
       tickStage('history_live_refresh',live);
       return live;
     },
