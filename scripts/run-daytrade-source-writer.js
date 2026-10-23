@@ -3580,6 +3580,7 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
   let inputFilesValid = 0;
   let bridgeReceiptsAccepted = 0;
   let bridgeReceiptsRejected = 0;
+  const handoffRejected = [];
   let latestUpdatedAt = "";
   const bridgeReceiptIsValid = (receipt, payload, runId, inputPath, receiptPath) => {
     if (!receipt
@@ -3635,6 +3636,14 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
       rejectedFiles += 1;
       continue;
     }
+    const handoffPath = runtimePath('data', 'opening-report-stages', payload.stage || 'us_0820', 'scan-receipts', 'opening-report-0830-mother-pool-handoff-ack-' + todayKey + '.json');
+    const admission = require('../lib/opening-report-warmup-admission.cjs').admit({ack:readJson(handoffPath),payload,tradeDate:taipeiDate(),stage:payload.stage || 'us_0820',verifyHandoff:require('../lib/mother-pool-morning-evidence').verifyHandoff});
+    if (!admission.ok) {
+      bridgeReceiptsRejected += 1;
+      rejectedFiles += 1;
+      handoffRejected.push({run_id:runId,industry:payload.industry,reason:admission.reason});
+      continue;
+    }
     bridgeReceiptsAccepted += 1;
     acceptedFiles += 1;
     let fileUpdatedAt = receipt.checked_at || nowIso();
@@ -3645,7 +3654,7 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
     if (!latestUpdatedAt || Date.parse(fileUpdatedAt) > Date.parse(latestUpdatedAt)) latestUpdatedAt = fileUpdatedAt;
     for (const value of payload.mapped_symbols) {
       const symbol = normalizeCode(value?.symbol || value?.code || value);
-      if (!symbol || !receipt.accepted_symbols.includes(symbol)) continue;
+      if (!symbol || !receipt.accepted_symbols.includes(symbol) || !admission.symbols.includes(symbol)) continue;
       const inputPrice = numberValue(value?.price ?? value?.last_price ?? value?.lastPrice ?? value?.close);
       const previous = bySymbol.get(symbol) || { symbol, sources: [], score: 0, openingReport0830: true, reports: [] };
       previous.name = value.name || symbol;
@@ -3664,6 +3673,7 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
     source: "opening_report_0830_industry_bias_bridge_verified",
     status: acceptedFiles > 0 ? "ready" : "missing",
     bridgeReceiptStatus: acceptedFiles > 0 ? "ready" : "fail_closed",
+    handoffRejected,
   };
 }
 function readRuntimePrioritySeeds(activeSymbols) {
