@@ -35,6 +35,10 @@ if ($RecoveryContext) {
 }
 $wrapperReceipt = Join-Path $receiptDir "opening-report-0830-wrapper-receipt-$today.json"
 
+if (-not $IsolatedBacktest -and -not $RecoveryContext) {
+  & (Join-Path $Root "scripts\invoke-market-status-guard.ps1") -Stage "morning-$Stage" -TradeDate $tradeDate -ExecutionMode "natural"
+  if ($LASTEXITCODE -eq 10 -or $LASTEXITCODE -eq 2) { exit $LASTEXITCODE }
+}
 function Invoke-MorningAggregate {
   if ($IsolatedBacktest) { return }
   & "C:\Program Files\nodejs\node.exe" "scripts\verify-opening-report-two-stage.js" "--date=$tradeDate" "--if-ready"

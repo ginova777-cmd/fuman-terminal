@@ -4,6 +4,11 @@ $PSNativeCommandUseErrorActionPreference = $false
 Set-Location -LiteralPath $PSScriptRoot
 $runtime = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
 $env:FUMAN_RUNTIME_DIR = $runtime
+$marketMode = if ($ReplayTradeDate) { "recovery_replay" } elseif ($Mode -eq "Recovery") { "recovery" } else { "natural" }
+if (-not $ReplayTradeDate) {
+  & (Join-Path $PSScriptRoot "scripts\invoke-market-status-guard.ps1") -Stage "strategy5" -TradeDate "" -ExecutionMode $marketMode
+  if ($LASTEXITCODE -eq 10 -or $LASTEXITCODE -eq 2) { exit $LASTEXITCODE }
+}
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 if (-not (Test-Path -LiteralPath $nodeExe)) { $nodeExe = "node.exe" }
 $pwshExe = (Get-Process -Id $PID).Path
