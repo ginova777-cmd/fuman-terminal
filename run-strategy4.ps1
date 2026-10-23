@@ -29,7 +29,8 @@ if ($FixedUniverseFile) {
 }
 $marketMode = if ($Recovery) { "recovery" } else { "natural" }
 & (Join-Path $repo "scripts\invoke-market-status-guard.ps1") -Stage "strategy4" -TradeDate "" -ExecutionMode $marketMode
-if ($LASTEXITCODE -eq 10 -or $LASTEXITCODE -eq 2) { exit $LASTEXITCODE }
+if ($LASTEXITCODE -eq 10) { exit 0 }
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Set-Location $repo
 

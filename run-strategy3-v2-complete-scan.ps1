@@ -25,7 +25,8 @@ if (-not (Test-Path -LiteralPath $nodeExe)) { $nodeExe = "node.exe" }
 $marketMode = if ($RecoveryReplay) { "recovery_replay" } elseif ($Recovery) { "recovery" } else { "natural" }
 if (-not $RecoveryReplay) {
   & (Join-Path $PSScriptRoot "scripts\invoke-market-status-guard.ps1") -Stage "strategy3" -TradeDate "" -ExecutionMode $marketMode
-  if ($LASTEXITCODE -eq 10 -or $LASTEXITCODE -eq 2) { exit $LASTEXITCODE }
+  if ($LASTEXITCODE -eq 10) { exit 0 }
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 $pwshExe = (Get-Process -Id $PID).Path
 $logDir = Join-Path $runtime "logs"

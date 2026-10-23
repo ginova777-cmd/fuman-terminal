@@ -37,7 +37,8 @@ $wrapperReceipt = Join-Path $receiptDir "opening-report-0830-wrapper-receipt-$to
 
 if (-not $IsolatedBacktest -and -not $RecoveryContext) {
   & (Join-Path $Root "scripts\invoke-market-status-guard.ps1") -Stage "morning-$Stage" -TradeDate $tradeDate -ExecutionMode "natural"
-  if ($LASTEXITCODE -eq 10 -or $LASTEXITCODE -eq 2) { exit $LASTEXITCODE }
+  if ($LASTEXITCODE -eq 10) { exit 0 }
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 function Invoke-MorningAggregate {
   if ($IsolatedBacktest) { return }

@@ -24,18 +24,20 @@ async function main() {
       day = emergency.isTradingDay ? { ...day, emergencyEvidence: emergency } : emergency;
     } catch (error) { day = { ...day, error: error.message }; }
   }
-  const verdict = classify(day); const stage = arg("stage", "unknown"); const executionMode = arg("execution-mode", "natural"); const runId = arg("run-id", `market-status-${requested.replace(/-/g, "")}`);
+  const verdict = classify(day); const stage = arg("stage", "unknown"); const executionMode = arg("execution-mode", "natural"); const runId = arg("run-id", `market-status-${requested.replace(/-/g, "")}-${crypto.randomUUID()}`);
   const evidence = { date: requested, day, source: day?.source || "", sourceUrl: day?.calendar_evidence?.source_url || day?.row?.sourceUrl || day?.row?.source_url || "", announcementDate: day?.row?.announcementDate || day?.row?.Date || "", row: day?.row || null };
   const receipt = { contract: "market-status-receipt-v1", receiptType: "market_status", tradeDate: requested, runId, stage, executionMode, checkedAt: new Date().toISOString(), status: verdict.status, skipReason: verdict.reason, complete: verdict.status !== "BLOCKED", exitCode: verdict.exitCode, marketOpen: day?.isTradingDay === true, source: day?.source || "", sourceVerified: verdict.status !== "BLOCKED" && day?.source !== "weekend_fallback", evidenceSha256: sha256(evidence), evidence, override: day?.override === true, overrideFile: day?.overrideFile || "" };
+  receipt.runId = `market-decision-${requested}-${receipt.evidenceSha256}`;
+  receipt.stage = 'market'; receipt.executionMode = 'decision';
   const outDir = path.join(runtime, "data", "market-status"); fs.mkdirSync(outDir, { recursive: true }); const out = path.join(outDir, `market-status-${requested.replace(/-/g, "")}-${receipt.evidenceSha256}.json`);
   if (fs.existsSync(out)) {
     const existing = JSON.parse(fs.readFileSync(out, "utf8"));
-    if (existing.tradeDate !== requested || existing.contract !== "market-status-receipt-v1") throw Error("MARKET_STATUS_RECEIPT_CONFLICT");
+    if (existing.tradeDate !== requested || existing.contract !== "market-status-receipt-v1" || existing.evidenceSha256 !== sha256(existing.evidence) || existing.evidenceSha256 !== receipt.evidenceSha256 || existing.status !== verdict.status || existing.exitCode !== verdict.exitCode || existing.marketOpen !== receipt.marketOpen || existing.sourceVerified !== receipt.sourceVerified) throw Error("MARKET_STATUS_RECEIPT_CONFLICT");
     receipt.checkedAt = existing.checkedAt; receipt.runId = existing.runId; receipt.status = existing.status; receipt.skipReason = existing.skipReason; receipt.complete = existing.complete; receipt.exitCode = existing.exitCode; receipt.marketOpen = existing.marketOpen; receipt.source = existing.source; receipt.sourceVerified = existing.sourceVerified; receipt.evidenceSha256 = existing.evidenceSha256; receipt.evidence = existing.evidence; receipt.override = existing.override; receipt.overrideFile = existing.overrideFile;
   } else fs.writeFileSync(out, `${JSON.stringify(receipt, null, 2)}\n`, { encoding: "utf8", flag: "wx" });
   if (verdict.status === "SKIPPED") {
     const scanDir = path.join(runtime, "data", "scan-receipts"); fs.mkdirSync(scanDir, { recursive: true });
-    const scanReceipt = { contract: "market-status-wrapper-skip-v1", strategy: stage, tradeDate: requested, runId, stage, executionMode, marketReceipt: out, skipReason: verdict.reason, status: "SKIPPED", complete: true, exitCode: verdict.exitCode, checkedAt: receipt.checkedAt };
+    const scanReceipt = { contract: "market-status-wrapper-skip-v1", strategy: stage, tradeDate: requested, runId, stage, executionMode, marketReceipt: out, skipReason: verdict.reason, status: "SKIPPED", complete: false, evaluationComplete: true, scanExecuted: false, exitCode: 0, decisionExitCode: verdict.exitCode, checkedAt: receipt.checkedAt };
     const skipPath = path.join(scanDir, `${stage}-market-closed-${requested.replace(/-/g, "")}-${receipt.evidenceSha256}-${sha256({runId, executionMode})}.json`);
     try { fs.writeFileSync(skipPath, `${JSON.stringify(scanReceipt, null, 2)}\n`, { encoding: "utf8", flag: "wx" }); }
     catch (error) {
@@ -44,6 +46,6 @@ async function main() {
       if (prior.marketReceipt !== out || prior.status !== scanReceipt.status || prior.exitCode !== scanReceipt.exitCode) throw Error("WRAPPER_RECEIPT_CONFLICT");
     }
   }
-  console.log(JSON.stringify({ ok: verdict.status === "OPEN", receiptPath: out, ...receipt })); process.exitCode = verdict.exitCode;
+  console.log(JSON.stringify({ ok: verdict.status === "OPEN", receiptPath: out, ...receipt, wrapperRunId: runId, wrapperStage: stage, wrapperExecutionMode: executionMode })); process.exitCode = verdict.exitCode;
 }
 main().catch((error) => { console.error(JSON.stringify({ ok: false, status: "BLOCKED", skipReason: "MARKET_STATUS_UNVERIFIED", error: error.message })); process.exitCode = 2; });

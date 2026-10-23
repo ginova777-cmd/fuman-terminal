@@ -70,7 +70,8 @@ $effectiveAllowPreviousTradeDate = $AllowPreviousTradeDate -or [string]::IsNullO
 
 $guardRoot = if (Test-Path -LiteralPath (Join-Path $ProjectRoot "scripts\invoke-market-status-guard.ps1")) { $ProjectRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 & (Join-Path $guardRoot "scripts\invoke-market-status-guard.ps1") -Stage "scorecard" -TradeDate $ExpectedDate -ExecutionMode "natural"
-if ($LASTEXITCODE -eq 10 -or $LASTEXITCODE -eq 2) { exit $LASTEXITCODE }
+if ($LASTEXITCODE -eq 10) { exit 0 }
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 if (-not (Test-Path -LiteralPath $coreRunner)) {
   throw "scorecard core runner missing: $coreRunner"

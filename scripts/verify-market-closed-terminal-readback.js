@@ -65,7 +65,7 @@ async function fetchWithTimeout(path, as = "json") {
 }
 
 function isMembershipRequiredPayload(payload) {
-  return Boolean(payload && ((payload.protected === true && payload.error === "membership_required") || payload.marketStatus === "membership_locked"));
+  return Boolean(payload && payload.protected === true && payload.error === "membership_required");
 }
 
 function validClosedReason(reason) {
@@ -94,20 +94,13 @@ function inspectMarketCalendarPayload(name, payload, expectedOpen = null) {
   const openMode = expectedOpen === null ? payload.marketOpen !== false : expectedOpen === true;
   if (openMode) {
     if (payload.marketOpen !== true) issues.push(`marketOpen expected true got ${JSON.stringify(payload.marketOpen)}`);
-    const afterFormalWindow = payload.marketStatus === "after_formal_source_window";
-    if (payload.marketStatus !== "open" && !afterFormalWindow) issues.push(`marketStatus expected open got ${JSON.stringify(payload.marketStatus)}`);
+    if (payload.marketStatus !== "open") issues.push(`marketStatus expected open got ${JSON.stringify(payload.marketStatus)}`);
     if (payload.closedReason) issues.push(`closedReason expected empty got ${JSON.stringify(payload.closedReason)}`);
-    if (afterFormalWindow) {
-      if (payload.formalScanSkipped !== true) issues.push("formalScanSkipped must be true after formal source window");
-      if (payload.sourceFreshnessRequired !== false) issues.push("sourceFreshnessRequired must be false after formal source window");
-      if (name === "market-calendar" && payload.scannerAction !== "skip_formal_scan") issues.push(`scannerAction expected skip_formal_scan after formal source window got ${JSON.stringify(payload.scannerAction)}`);
-    } else {
-      if (payload.formalScanSkipped === true) issues.push("formalScanSkipped must be false during formal source window");
-      if (payload.sourceFreshnessRequired === false) issues.push("sourceFreshnessRequired must be true during formal source window");
-      if (name === "market-calendar" && payload.preservePreviousGood === true) issues.push("market calendar preservePreviousGood must not remain true during formal source window");
-    }
+    if (payload.formalScanSkipped === true) issues.push("formalScanSkipped must be false after market reopens");
+    if (payload.sourceFreshnessRequired === false) issues.push("sourceFreshnessRequired must be true after market reopens");
+    if (name === "market-calendar" && payload.preservePreviousGood === true) issues.push("market calendar preservePreviousGood must not remain true after reopen");
     if (String(payload.skipReason || "").includes("market_closed")) issues.push(`skipReason still contains market_closed after reopen: ${JSON.stringify(payload.skipReason)}`);
-    if (name === "market-calendar" && !afterFormalWindow && payload.scannerAction !== "allow_formal_scan") issues.push(`scannerAction expected allow_formal_scan got ${JSON.stringify(payload.scannerAction)}`);
+    if (name === "market-calendar" && payload.scannerAction !== "allow_formal_scan") issues.push(`scannerAction expected allow_formal_scan got ${JSON.stringify(payload.scannerAction)}`);
     if (!validDisplayTradeDate(payload.displayTradeDate || payload.marketDate || payload.requestedDate)) issues.push(`displayTradeDate expected valid current trade date got ${JSON.stringify(payload.displayTradeDate || payload.marketDate || payload.requestedDate)}`);
     return issues;
   }

@@ -11,6 +11,7 @@ $env:FUMAN_RUNTIME_ROOT = $RuntimeRoot
 $env:FUMAN_RUNTIME_DIR = $RuntimeRoot
 if (-not $Recovery) {
   & (Join-Path $PSScriptRoot 'invoke-market-status-guard.ps1') -Stage "scorecard-$($Slot.Replace(':',''))" -ExecutionMode 'natural'
+  if ($LASTEXITCODE -eq 10) { exit 0 }
   if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 if ($Recovery -and $ExpectedRunId -match '^strategy5-\d{8}-\d{14}$' -and $env:FUMAN_STRATEGY5_REPLAY_VALIDATED -eq '1') {

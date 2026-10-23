@@ -10,7 +10,8 @@ $env:FUMAN_INSTITUTION_REPLAY_VALIDATED = "0"
 $marketMode = if ($ReplayTradeDate) { "recovery_replay" } elseif ($Mode -eq "Recovery") { "recovery" } else { "natural" }
 if (-not $ReplayTradeDate) {
   & (Join-Path $PSScriptRoot "scripts\invoke-market-status-guard.ps1") -Stage "buy-sell" -TradeDate "" -ExecutionMode $marketMode
-  if ($LASTEXITCODE -eq 10 -or $LASTEXITCODE -eq 2) { exit $LASTEXITCODE }
+  if ($LASTEXITCODE -eq 10) { exit 0 }
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 $env:NODE_OPTIONS = "--use-system-ca"
 $nodeExe = "C:\Program Files\nodejs\node.exe"

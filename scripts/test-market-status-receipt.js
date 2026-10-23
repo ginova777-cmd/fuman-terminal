@@ -15,6 +15,12 @@ for (const stage of ["morning-us_0820", "strategy3", "strategy4", "strategy5", "
     const guard = require("child_process").spawnSync("pwsh.exe", ["-NoProfile", "-File", path.join(root, "scripts/invoke-market-status-guard.ps1"), "-Stage", stage, "-TradeDate", "2026-10-23"], { env, encoding: "utf8" });
     assert.equal(guard.status, 10, `${stage}: ${guard.stderr} ${guard.stdout}`);
     assert.equal(JSON.parse(guard.stdout).status, "SKIPPED");
+    assert.equal(JSON.parse(guard.stdout).complete, false);
+    assert.equal(JSON.parse(guard.stdout).scanExecuted, false);
   }
 }
-console.log("PASS market-status receipt: typhoon, weekend, immutable per-run paths; six PowerShell guards repeated twice");
+const forged = JSON.parse(fs.readFileSync(first.receiptPath, 'utf8')); forged.status='OPEN'; forged.exitCode=0;
+fs.writeFileSync(first.receiptPath, JSON.stringify(forged));
+r=run(['--stage=strategy4','--trade-date=2026-10-23']);
+assert.equal(r.status,2); assert.match(r.stderr,/RECEIPT_CONFLICT/);
+console.log("PASS market-status receipt: typhoon, weekend, immutable per-run paths; six PowerShell guards repeated twice; tampered receipt rejected");
