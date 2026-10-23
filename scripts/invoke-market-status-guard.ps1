@@ -8,7 +8,8 @@ $nodeArgs = @("--use-system-ca", (Join-Path $PSScriptRoot "write-market-status-r
 if ($TradeDate) { $nodeArgs += "--trade-date=$TradeDate" }
 $out = & $node @nodeArgs 2>&1
 $code = if ($null -eq $LASTEXITCODE) { 0 } else { [int]$LASTEXITCODE }
-$json = $null; try { $text = ($out | ForEach-Object { [string]$_ }) -join "`n"; $m = [regex]::Match($text, '"receiptPath":"([^"]+)"'); if ($m.Success -and (Test-Path -LiteralPath $m.Groups[1].Value)) { $json = Get-Content -LiteralPath $m.Groups[1].Value -Raw | ConvertFrom-Json } } catch {}
+$json = $null; try { $text = ($out | ForEach-Object { [string]$_ }) -join "`n"; $json = $text | ConvertFrom-Json; if (-not $json.receiptPath -or -not (Test-Path -LiteralPath $json.receiptPath)) { $json = $null } } catch {}
+if ($null -eq $json -or [int]$json.exitCode -ne $code) { Write-Output 'MARKET_STATUS_UNVERIFIED'; exit 2 }
 $reportedCode = if ($null -ne $json -and $json.exitCode -ne $null) { [int]$json.exitCode } else { $code }
 if ($reportedCode -eq 0) { exit 0 }
 if ($code -eq 10 -or $reportedCode -eq 10) {
