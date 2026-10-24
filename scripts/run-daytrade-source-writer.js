@@ -3450,6 +3450,7 @@ function mergeStrategyPriorityBridgeIntoRuntimeFile(bridge) {
       groups: bridge.groups,
       counts: bridge.counts,
       terminalHandoff: bridge.terminalHandoff,
+      previousSourceDate: bridge.previousSourceDate,
       scorecardSource: bridge.scorecardSource,
     },
     formalPriorityStrategyChip: buildFormalStrategyChipArtifact(
@@ -4678,7 +4679,7 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
   // source writer has just replaced the priority shell.
   const existingBridge = objectPayload(currentExisting.priorityBridge);
   const cachedBridge = objectPayload(readJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE, {}));
-  const bridgePayload = sameDayArtifact(existingBridge, tradeDate)
+  const bridgePayload = sameDayArtifact(existingBridge, tradeDate) && Boolean(existingBridge.previousSourceDate)
     ? existingBridge
     : (sameDayArtifact(cachedBridge, tradeDate) ? cachedBridge : {});
   const activeBridgeSourceKeys = new Set(STRATEGY_PRIORITY_BRIDGE_SOURCES.map((source) => source.key));
@@ -4767,9 +4768,8 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     }
     return out;
   };
-  const bridgeWarmupSymbols = Object.values(bridgeGroups).flatMap((group) => (
-    Array.isArray(group?.symbols) ? group.symbols : []
-  ));
+  const threeSourceWarmup = require('../lib/mother-pool-three-source-warmup.cjs').collect({bridge:bridgePayload,tradeDate,asOf:nowIso()});
+  const bridgeWarmupSymbols = [...threeSourceWarmup.symbols,...Object.entries(bridgeGroups).filter(([key])=>!require('../lib/mother-pool-three-source-warmup.cjs').SOURCES.includes(key)).flatMap(([,group])=>Array.isArray(group?.symbols)?group.symbols:[])];
   const industryPrewarm = buildDaytradeIndustryPrewarm(
     DAYTRADE_INDUSTRY_PREWARM_CONFIG,
     activeUniverseSymbols,
@@ -4878,6 +4878,7 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     strategy2FormalWaterCount: strategy2FormalWaterSymbols.length,
     strategy2FormalWaterSource: "daytrade_deep_scan_pool",
     formalPriorityStrategyChip,
+    threeSourceWarmup: require('../lib/mother-pool-three-source-warmup.cjs').admission(threeSourceWarmup,fullTerminalWarmupSymbols,nextDaytradeCandlePrioritySymbols),
     terminalPrioritySymbols: fullTerminalWarmupSymbols,
     terminalPriorityCount: fullTerminalWarmupSymbols.length,
     longyueWarmupIntake: {status:longyueIntake.status,candidate_version:longyueIntake.candidate_version,list_sha256:longyueIntake.list_sha256,symbols:longyueIntake.symbols},
@@ -4924,7 +4925,7 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     motherPoolRunId: motherPoolSnapshot.run_id, motherSymbols: daytradeMotherPoolSymbols, warmupSymbols: fullTerminalWarmupSymbols,
   });
   const longyueIntakeChanged = JSON.stringify(existing.longyueWarmupIntake) !== JSON.stringify(nextPriorityPayload.longyueWarmupIntake);
-  if (!sameDailyIdentity || !sameSymbols || longyueIntakeChanged || JSON.stringify(existing.deepScanAllocation) !== JSON.stringify(nextPriorityPayload.deepScanAllocation) || fiveMinuteEvidenceChanged || !samePriorityCounts || candlePriorityArtifactChanged || openingPriorityArtifactChanged || industryPrewarmArtifactChanged || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
+  if (JSON.stringify({...existing.threeSourceWarmup,checked_at:null})!==JSON.stringify({...nextPriorityPayload.threeSourceWarmup,checked_at:null}) || !sameDailyIdentity || !sameSymbols || longyueIntakeChanged || JSON.stringify(existing.deepScanAllocation) !== JSON.stringify(nextPriorityPayload.deepScanAllocation) || fiveMinuteEvidenceChanged || !samePriorityCounts || candlePriorityArtifactChanged || openingPriorityArtifactChanged || industryPrewarmArtifactChanged || bridgeChanged || formalPriorityArtifactChanged || strategy2FormalWaterArtifactChanged || priceGateArtifactChanged) {
     writeJson(PRIORITY_SYMBOLS_FILE, nextPriorityPayload);
     writeFugleWebSocketSymbols(nextPriorityPayload.symbols, {
       source: "daytrade-dedicated-priority-bridge",
