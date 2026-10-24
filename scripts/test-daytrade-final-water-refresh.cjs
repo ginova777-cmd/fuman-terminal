@@ -9,7 +9,8 @@ const assert=require('node:assert/strict'),{refresh}=require('../lib/daytrade-fi
  let failedCalls=0;await assert.rejects(refresh({...opts,run:async()=>{failedCalls++;throw Error('HTTP_503');}}),/HTTP_503/);assert.equal(failedCalls,1);
  // Requiring the CLI for reuse must not launch a write or read.
  const fs=require('fs');const source=fs.readFileSync(require.resolve('./sync-daytrade-websocket-supabase-fast.js'),'utf8');
- assert(source.includes('if (require.main === module) main()'));
+ assert(source.includes('if (require.main === module) runCli()'));
  assert.equal(typeof require('./sync-daytrade-websocket-supabase-fast.js').runFastSync,'function');
  console.log('PASS: acknowledged writes only, date/mode validation, read-only skip, errors propagate without retries, import has no execution');
 })().catch(e=>{console.error(e);process.exitCode=1;});
+

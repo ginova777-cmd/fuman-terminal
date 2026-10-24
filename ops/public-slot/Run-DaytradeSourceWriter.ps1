@@ -35,9 +35,9 @@ if ($ClosingWaterOnly -and -not (Test-ClosingWaterWindow -Now ([DateTimeOffset]:
 $WrapperClock = [Diagnostics.Stopwatch]::StartNew()
 
 function Get-WriterProcessBudget {
-  param([double]$ElapsedSeconds, [int]$MaximumSeconds = 285, [int]$ReserveSeconds = 15)
+  param([double]$ElapsedSeconds, [int]$MaximumSeconds = 585, [int]$ReserveSeconds = 15)
   if ([double]::IsNaN($ElapsedSeconds) -or [double]::IsInfinity($ElapsedSeconds) -or $ElapsedSeconds -lt 0 -or $MaximumSeconds -lt 1 -or $ReserveSeconds -lt 5) { throw 'WRITER_TIME_BUDGET_INVALID' }
-  return [int][Math]::Max(0, [Math]::Min($MaximumSeconds, [Math]::Floor(300 - $ReserveSeconds - $ElapsedSeconds)))
+  return [int][Math]::Max(0, [Math]::Min($MaximumSeconds, [Math]::Floor(600 - $ReserveSeconds - $ElapsedSeconds)))
 }
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -544,7 +544,7 @@ if ($Apply -and (-not $runCloseout -or $ClosingWaterOnly)) {
   $fastSyncScript = Join-Path $RepoRoot "scripts\sync-daytrade-websocket-supabase-fast.js"
   if (Test-Path -LiteralPath $fastSyncScript) {
     $fastSyncStartedAt = [DateTimeOffset]::UtcNow
-    $fastSyncOutput = & node --use-system-ca $fastSyncScript --apply 2>&1
+    $fastSyncOutput = & node --use-system-ca $fastSyncScript --apply --quote-only 2>&1
     $fastSyncExit = $LASTEXITCODE
     $fastSyncText = (($fastSyncOutput | Out-String) -replace "[\r\n]+", " ").Trim()
     if ($fastSyncText.Length -gt 700) { $fastSyncText = $fastSyncText.Substring(0, 700) }
@@ -665,9 +665,9 @@ try {
     Write-WrapperLog "NODE_ATTEMPT $attempt/$attempts stdout=$StdoutLog stderr=$StderrLog"
     # The task's five-minute ceiling includes calendar, fast sync and setup.
     # Keep cleanup time; never add a fresh per-child five-minute allowance.
-    $requestedTimeout = if ($env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS) { [int]$env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS } else { 285 }
+    $requestedTimeout = if ($env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS) { [int]$env:FUMAN_DAYTRADE_WRITER_NODE_TIMEOUT_SECONDS } else { 585 }
     $nodeTimeoutSeconds = Get-WriterProcessBudget -ElapsedSeconds $WrapperClock.Elapsed.TotalSeconds -MaximumSeconds $requestedTimeout
-    Write-WrapperLog "NODE_BUDGET seconds=$nodeTimeoutSeconds elapsed_seconds=$([Math]::Round($WrapperClock.Elapsed.TotalSeconds)) task_limit_seconds=300"
+    Write-WrapperLog "NODE_BUDGET seconds=$nodeTimeoutSeconds elapsed_seconds=$([Math]::Round($WrapperClock.Elapsed.TotalSeconds)) task_limit_seconds=600"
     if ($nodeTimeoutSeconds -lt 1) { throw 'WRAPPER_TIME_BUDGET_EXHAUSTED:writer' }
     $nodeProcess = Start-Process -FilePath $node -ArgumentList $args -RedirectStandardOutput $StdoutLog -RedirectStandardError $StderrLog -PassThru -WindowStyle Hidden
     if (-not $nodeProcess.WaitForExit($nodeTimeoutSeconds * 1000)) {
@@ -685,10 +685,16 @@ try {
     Write-WrapperLog "RETRY transient_exit_$exitCode attempt=$attempt/$attempts"
     if ($retrySeconds -gt 0) { Start-Sleep -Seconds $retrySeconds }
   }
+  if ($exitCode -eq 76) {
+    & node (Join-Path $FumanRoot 'scripts/verify-writer-backfill-pending.cjs') $RuntimeDir $RunId
+    if ($LASTEXITCODE -ne 76) { throw 'BACKFILL_PENDING_VERIFICATION_FAILED' }
+    Write-WrapperLog 'DONE partial reason=BACKFILL_PENDING complete=false global_database_backoff_unchanged=true'
+    exit 76
+  }
   if ($exitCode -ne 0) {
     $diagnostic = (($stderrText + " " + $stdoutText) -replace "[\r\n]+", " ").Trim()
     if ($diagnostic.Length -gt 500) { $diagnostic = $diagnostic.Substring(0, 500) }
-    Update-WriterDatabaseBackoff 'failure' ($stderrText + ' ' + $stdoutText)
+    Update-WriterDatabaseBackoff 'failure' $stderrText
     Write-FailureArtifact $exitCode "writer_exit_$exitCode detail=$diagnostic"
     Write-WrapperLog "FAIL writer_exit_$exitCode detail=$diagnostic stdout=$StdoutLog stderr=$StderrLog"
     exit $exitCode
