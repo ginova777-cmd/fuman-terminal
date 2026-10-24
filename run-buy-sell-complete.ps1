@@ -1,4 +1,4 @@
-param([ValidateSet("Complete", "Status", "Recovery")][string]$Mode = "Complete", [string]$ExpectedRunId = "", [string]$ReplayTradeDate = "")
+param([ValidateSet("Complete", "Status", "Recovery", "ResumeVerification")][string]$Mode = "Complete", [string]$ExpectedRunId = "", [string]$ReplayTradeDate = "", [string]$ResumeVerificationLog = "")
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 Set-Location -LiteralPath $PSScriptRoot
@@ -41,7 +41,10 @@ if ($Mode -eq "Status") {
 Invoke-FumanWeekdayGuard -Label "Buy/sell complete" -LogPath $log -AllowAfterFormalSourceWindow
 try {
   Invoke-Required "release root authority" { & $nodeExe "scripts\verify-release-root-authority.js" "--require-production-root" }
-  if ($Mode -eq "Recovery") {
+  if ($Mode -eq 'ResumeVerification') {
+    if (-not $ExpectedRunId -or -not $ReplayTradeDate -or -not $ResumeVerificationLog) { throw 'resume_verification_identity_required' }
+    Invoke-Required 'resume existing scan verification' { & $pwshExe -NoProfile -File '.\run-institution.ps1' -ResumeVerificationRunId $ExpectedRunId -ResumeVerificationLog $ResumeVerificationLog }
+  } elseif ($Mode -eq "Recovery") {
     $existing = Get-Content -LiteralPath (Join-Path $runtime "data\scan-receipts\institution.json") -Raw | ConvertFrom-Json
     if (-not $ExpectedRunId -or $existing.runId -ne $ExpectedRunId -or $existing.complete -ne $true -or $existing.status -ne "complete" -or $existing.fallbackUsed -eq $true) { throw "recovery_requires_exact_complete_nonfallback_run" }
     Invoke-Required "recovery authoritative live readback" { & $nodeExe "--use-system-ca" "scripts\verify-institution-live-readback.js" }

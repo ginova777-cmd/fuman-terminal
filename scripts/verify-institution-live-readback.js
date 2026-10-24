@@ -6,7 +6,8 @@ const {readTechnicalSources,evaluateCandidates,CONTRACT:SELECTION_CONTRACT}=requ
 const root=path.resolve(__dirname,".."),runtime=process.env.FUMAN_RUNTIME_DIR||"C:/fuman-runtime";
 const out=path.join(root,"outputs/institution-live-acceptance");
 const read=p=>JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,""));
-const receipt=read(path.join(runtime,"data/scan-receipts/institution.json"));
+const receiptArg=process.argv.find(a=>a.startsWith('--verification-input='));
+const receipt=read(receiptArg?receiptArg.slice('--verification-input='.length):path.join(runtime,"data/scan-receipts/institution.json"));
 const url=fs.readFileSync(path.join(runtime,"secrets/supabase-url.txt"),"utf8").trim();
 const key=fs.readFileSync(path.join(runtime,"secrets/supabase-service-role-key.txt"),"utf8").trim();
 async function get(q){const r=await fetch(url+"/rest/v1/"+q,{headers:{apikey:key,Authorization:"Bearer "+key},signal:AbortSignal.timeout(30000)});assert(r.ok,"database readback HTTP "+r.status);return r.json()}
