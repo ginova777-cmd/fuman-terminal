@@ -1013,6 +1013,7 @@ function evaluateMotherPoolBasePool(row, metrics) {
     || explicitFalse(payload.daytrade_eligible);
   if (row.isActive === false) failedChecks.push("inactive");
   if (row.isBlacklisted === true) failedChecks.push("blacklisted");
+  if (require("../lib/mother-pool-blacklist.cjs").blocked(row.symbol)) failedChecks.push(require("../lib/mother-pool-blacklist.cjs").reason);
   if (row.isSuspended === true || row.isHalted === true) failedChecks.push("halted_or_suspended");
   const allowedMarket = ["twse", "tse", "tpex", "otc", "\u4e0a\u5e02", "\u4e0a\u6ac3"].some((term) => market.includes(term));
   if (!market || !allowedMarket) failedChecks.push("market_not_twse_otc");
@@ -3021,7 +3022,7 @@ function motherPoolSnapshotType(sequence, effectiveAt) {
 function buildMotherPoolSnapshot(priorityRows, symbols, tradeDate, canonicalRunId, generatedAt) {
   const cleanSymbols = [...new Set((symbols || [])
     .map((symbol) => normalizeCode(symbol))
-    .filter((symbol) => /^\d{4}$/.test(symbol)))].sort();
+    .filter((symbol) => /^\d{4}$/.test(symbol) && !require("../lib/mother-pool-blacklist.cjs").blocked(symbol)))].sort();
   const previous = readJson(MOTHER_POOL_SNAPSHOT_FILE, {});
   const previousSameDay = String(previous.trade_date || previous.tradeDate || "").slice(0, 10) === tradeDate
     && String(previous.canonical_run_id || previous.canonicalRunId || "") === canonicalRunId;
@@ -4761,7 +4762,7 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     const out = [];
     for (const value of [...preferred, ...(Array.isArray(values) ? values : [])]) {
       const code = normalizeCode(value?.symbol || value?.code || value);
-      if (/^\d{4}$/.test(code) && !seen.has(code)) {
+      if (/^\d{4}$/.test(code) && !seen.has(code) && !require("../lib/mother-pool-blacklist.cjs").blocked(code)) {
         seen.add(code);
         out.push(code);
       }
@@ -4796,7 +4797,7 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     canonicalRunId,
     preferredSymbols: prependUnique([...userCaseCandlePrioritySymbols, ...openingReportCandlePrioritySymbols], prependUnique(fiveMinutePriorityEvidence?.promoted_symbols || [], fullTerminalWarmupSymbols)),
     computedSymbols: daytradeCandlePrioritySymbols,
-  });
+  }).filter(symbol => !require("../lib/mother-pool-blacklist.cjs").blocked(symbol));
   const motherPoolSnapshot = await publishMotherPoolSnapshot(
     priceEligiblePriorityRows,
     daytradeMotherPoolSymbols,

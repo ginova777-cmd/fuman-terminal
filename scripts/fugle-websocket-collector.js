@@ -189,7 +189,7 @@ function readSymbols() {
 }
 
 function normalizeSymbolList(values) {
-  return [...new Set((Array.isArray(values) ? values : []).map((value) => normalizeCode(value?.symbol || value?.code || value)).filter((code) => /^\d{4}$/.test(code) && !code.startsWith("00")))];
+  return [...new Set((Array.isArray(values) ? values : []).map((value) => normalizeCode(value?.symbol || value?.code || value)).filter((code) => /^\d{4}$/.test(code) && !code.startsWith("00") && (COLLECTOR_ROLE !== "daytrade" || !require("../lib/mother-pool-blacklist.cjs").blocked(code))))];
 }
 
 function readDaytradeSymbolBootstrap() {
