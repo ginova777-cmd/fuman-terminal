@@ -8940,6 +8940,8 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
         inputs.push(...await require('../lib/mother-pool-writer-trade-plans.cjs').collect({
           candles:sessionCandles,identity,symbols:snapshot.symbols,asOf:sideAsOf,
           tradeJournal:isolatedTradeJournal,deadlineMs:Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)}));
+      }else if(moduleWorkIds().includes('B22')){
+        inputs.push(...await require('../lib/mother-pool-formal-trade-plans.cjs').collect({candles:sessionCandles,identity,symbols:snapshot.symbols,asOf:sideAsOf,runtime:runtimePath(),status:collectorStatus?.providerTradeJournal,releaseSha:recoveryRelease}));
       }else{
         inputs.push(...require('../lib/mother-pool-candle-module-producer').collect({
           candles:sessionCandles,identity,symbols:snapshot.symbols,asOf:sideAsOf}));
@@ -8955,6 +8957,7 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
       if(moduleWorkIds().includes('B05'))try{inputs.push(require('../lib/mother-pool-industry-mapping-producer').collect({identity,discovery:result.payload.same_round_industry_discovery,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B05'],error:String(error.message||error)});}
       if(moduleWorkIds().includes('B04'))inputs.push({module_id:'B04',build:async()=>require('../lib/daytrade-dependency-readback.cjs').guard({moduleId:'B04',identity,asOf:sideAsOf,readParent:async()=>{const ref=previousB02Readback;return ref?require('../lib/daytrade-shared-evidence.cjs').read(ref.file,runtimePath()):null;},build:parents=>require('../lib/mother-pool-discovery-producer').collect({identity,symbols:intradaySignalEvidence.requested_symbols,sources:discoverySourceRows,candles:sessionCandles,previous:parents.B02,asOf:sideAsOf})})});
       if(moduleWorkIds().some(id=>['B10'].includes(id)))try{inputs.push(require('../lib/mother-pool-allocation-producer').collect({identity,allocation:result.payload.deep_scan_allocation,snapshot,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B10'],error:String(error.message||error)});}
+      if(moduleWorkIds().includes('B16'))inputs.push(await require('../lib/mother-pool-b16-receipt-source.cjs').collect({identity,symbols:snapshot.symbols,asOf:sideAsOf,runtime:runtimePath(),readSnapshot:async key=>{if(!SUPABASE_READ_KEY||SUPABASE_READ_KEY===SUPABASE_SERVICE_KEY)throw Error('B16_ANON_READBACK_KEY_REQUIRED');return (await readSnapshot(key,{key:SUPABASE_READ_KEY,maxAttempts:1,timeoutMs:SUPABASE_WRITE_TIMEOUT_MS}))?.payload;}}));
       // B15 restored for natural completed 1m only; no 5M API or tables.
       if(moduleWorkIds().includes('B15'))inputs.push(require('../lib/mother-pool-one-minute-indicators').collect({identity,symbols:snapshot.symbols,candles:sessionCandles,asOf:sideAsOf}));
       }

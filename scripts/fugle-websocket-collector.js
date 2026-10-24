@@ -21,7 +21,7 @@ const {
 const RUNTIME_DIR = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const providerSideJournal = require("../lib/provider-journal-background.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-side-journal"), { kind: 'side' });
 // Test harness may inject a lifecycle only in this isolated candidate; no runtime enable switch.
-const providerTradeJournal = globalThis.__isolatedTradeJournalLifecycle || require("../lib/provider-journal-background.cjs").createJournal(path.join(RUNTIME_DIR, "data", "provider-trade-journal"), { kind: 'trade' });
+const providerTradeJournal = globalThis.__isolatedTradeJournalLifecycle || require('../lib/mother-pool-live-trade-capture.cjs').configured({runtime:RUNTIME_DIR,repo:path.resolve(__dirname,'..')});
 const preopenJournal = require('../lib/mother-preopen.cjs').createJournal(path.join(RUNTIME_DIR, 'data', 'mother-pool', 'preopen-raw'));
 const API_KEY_FILES = [
   path.join(RUNTIME_DIR, "secrets", "fugle-api-key.txt"),
