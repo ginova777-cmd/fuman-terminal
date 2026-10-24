@@ -47,7 +47,7 @@ const moduleSession = require('../lib/daytrade-module-session.cjs');
 const moduleWorkIds = () => {
   if(isolatedModuleIds)return isolatedModuleIds.filter(id=>moduleSession.allowed(id));
   const current = moduleSession.select(moduleRecovery);
-  return [...current.enabled, ...(current.probe ? [current.probe] : [])].filter(id => !['B14','B20'].includes(id));
+  return [...new Set([...current.enabled,...(current.supply_only||[]), ...(current.probe ? [current.probe] : [])])].filter(id => !['B14','B20'].includes(id));
 };
 const { resolveStrategyHandoff, SOURCE_REGISTRY, previousCompletedTradingDate } = require("../lib/terminal-strategy-morning-handoff");
 
@@ -8953,7 +8953,7 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
       if(moduleWorkIds().some(id=>['B07'].includes(id)))try{inputs.push(require('../lib/mother-pool-industry-delta-producer').collect({identity,discovery:result.payload.same_round_industry_discovery,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B07'],error:String(error.message||error)});}
       if(moduleWorkIds().some(id=>['B06','B08'].includes(id)))try{inputs.push(...require('../lib/mother-pool-industry-flow-producer').collect({identity,discovery:result.payload.same_round_industry_discovery,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B06','B08'],error:String(error.message||error)});}
       if(moduleWorkIds().includes('B05'))try{inputs.push(require('../lib/mother-pool-industry-mapping-producer').collect({identity,discovery:result.payload.same_round_industry_discovery,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B05'],error:String(error.message||error)});}
-      if(moduleWorkIds().includes('B04'))try{const previous=readJson(statePath('daytrade-b02-module-latest.json'),null);inputs.push(require('../lib/mother-pool-discovery-producer').collect({identity,symbols:intradaySignalEvidence.requested_symbols,sources:discoverySourceRows,candles:sessionCandles,previous,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B04'],error:String(error.message||error)});}
+      if(moduleWorkIds().includes('B04'))inputs.push({module_id:'B04',build:async()=>require('../lib/daytrade-dependency-readback.cjs').guard({moduleId:'B04',identity,asOf:sideAsOf,readParent:async()=>{const ref=previousB02Readback;return ref?require('../lib/daytrade-shared-evidence.cjs').read(ref.file,runtimePath()):null;},build:parents=>require('../lib/mother-pool-discovery-producer').collect({identity,symbols:intradaySignalEvidence.requested_symbols,sources:discoverySourceRows,candles:sessionCandles,previous:parents.B02,asOf:sideAsOf})})});
       if(moduleWorkIds().some(id=>['B10'].includes(id)))try{inputs.push(require('../lib/mother-pool-allocation-producer').collect({identity,allocation:result.payload.deep_scan_allocation,snapshot,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B10'],error:String(error.message||error)});}
       // B15 restored for natural completed 1m only; no 5M API or tables.
       if(moduleWorkIds().includes('B15'))inputs.push(require('../lib/mother-pool-one-minute-indicators').collect({identity,symbols:snapshot.symbols,candles:sessionCandles,asOf:sideAsOf}));
@@ -8961,7 +8961,7 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
 
       }
       const dir=runtimePath('data','module-write-sets');fs.mkdirSync(dir,{recursive:true});
-      if(sideMinutes>=540)inputs.push({module_id:'B09',build:()=>require('../lib/mother-pool-discovery-union-producer').collect({identity,parents:{B04:result.payload.module_write_sets.B04,B08:result.payload.module_write_sets.B08},asOf:nowIso()})});
+      if(sideMinutes>=540)inputs.push({module_id:'B09',build:async()=>require('../lib/daytrade-dependency-readback.cjs').guard({moduleId:'B09',identity,asOf:nowIso(),readParent:async id=>dependencyReadbacks[id],build:parents=>require('../lib/mother-pool-discovery-union-producer').collect({identity,parents,asOf:nowIso()})})});
       if(sideMinutes>=540)inputs.push({module_id:'B24',build:()=>{
         const sideFile=result.payload.mother_pool_minute_side_persist?.write_set_file;
         return require('../lib/mother-pool-combination-producer').collect({identity,symbols:snapshot.symbols,
@@ -9019,17 +9019,26 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
           return saved;
           } catch(error) {moduleCircuit.record(error);recordModule({stage:'failed',error_name:error?.name||'Error',reason:String(error.message||error).split(':')[0]});throw error;}
       };
+      const dependencyReadbacks={};
+      const previousB02Readback=readJson(statePath('daytrade-b02-readback-latest.json'),null);
+      let dependencyFailed=false;
       for(const queued of inputs){
         if (!moduleWorkIds().includes(queued.module_id)) continue;
         let input=typeof queued.build==='function'?queued:frozenModuleInputs.find(value=>value.module_id===queued.module_id);
         try {
-          if(typeof input.build==='function')input=input.build();
+          if(dependencyFailed&&['B04','B09'].includes(queued.module_id))throw Error('PARENT_SUPPLY_FAILED');
+          if(typeof input.build==='function')input=await input.build();
           if(input.module_id==='A13' && input.rows.length && input.rows.every(row=>row.status==='NOT_DUE')){
             result.payload.module_not_due ||= {};result.payload.module_not_due.A13=input.v11_evidence;continue;
           }
           const saved=await persistModuleInput(input);
           if(input.module_id==='B02')writeJson(statePath('daytrade-b02-module-latest.json'),saved);
-        }catch(error){result.payload.module_persistence_errors.push({module_id:input.module_id,error:String(error.message||error)});if(moduleCircuit.blocked)break;}
+          if(['B02','B04','B08'].includes(input.module_id)&&moduleWorkIds().some(id=>['B04','B09'].includes(id))){
+            const captured=require('../lib/daytrade-dependency-capture.cjs').capture({moduleId:input.module_id,writeSet:saved,identity,runtime:runtimePath(),script:path.join(__dirname,'capture-daytrade-module-readbacks.js'),env:{...process.env,SUPABASE_SERVICE_ROLE_KEY:SUPABASE_SERVICE_KEY,SUPABASE_ANON_KEY:SUPABASE_READ_KEY===SUPABASE_SERVICE_KEY?'':SUPABASE_READ_KEY}});
+            dependencyReadbacks[input.module_id]=captured.artifact;
+            if(input.module_id==='B02')writeJson(statePath('daytrade-b02-readback-latest.json'),{file:captured.file,writer_run_id:identity.writer_run_id});
+          }
+        }catch(error){if(['B02','B04','B08'].includes(queued.module_id))dependencyFailed=true;result.payload.module_persistence_errors.push({module_id:queued.module_id,error:String(error.message||error)});if(moduleCircuit.blocked)break;}
       }
       const sideFile=result.payload.mother_pool_minute_side_persist?.write_set_file;
       if(moduleWorkIds().includes('B24')&&sideMinutes>=540)result.payload.b24_source_coverage=require('../lib/mother-pool-combination-sources').inspect({
