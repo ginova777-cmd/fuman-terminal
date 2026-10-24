@@ -1,12 +1,12 @@
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
-. "${PSScriptRoot}\legacy-entrypoint-guard.ps1" -Label "run-strategy5-watchdog.ps1"
 Set-Location "${PSScriptRoot}"
 
 $runtimeDir = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
 & (Join-Path $PSScriptRoot 'scripts\invoke-market-status-guard.ps1') -Stage 'strategy5-watchdog' -ExecutionMode 'recovery'
 if ($LASTEXITCODE -eq 10) { exit 0 }
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+. "${PSScriptRoot}\legacy-entrypoint-guard.ps1" -Label "run-strategy5-watchdog.ps1"
 $logDir = Join-Path $runtimeDir "logs"
 $stateDir = Join-Path $runtimeDir "state"
 New-Item -ItemType Directory -Force -Path $logDir, $stateDir | Out-Null
