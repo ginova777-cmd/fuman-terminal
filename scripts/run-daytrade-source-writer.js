@@ -8965,11 +8965,13 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
       }
       const dir=runtimePath('data','module-write-sets');fs.mkdirSync(dir,{recursive:true});
       if(sideMinutes>=540)inputs.push({module_id:'B09',build:async()=>require('../lib/daytrade-dependency-readback.cjs').guard({moduleId:'B09',identity,asOf:nowIso(),readParent:async id=>dependencyReadbacks[id],build:parents=>require('../lib/mother-pool-discovery-union-producer').collect({identity,parents,asOf:nowIso()})})});
-      if(sideMinutes>=540)inputs.push({module_id:'B24',build:()=>{
+      if(sideMinutes>=540)inputs.push({module_id:'B17',build:async()=>require('../lib/mother-pool-b17-closure.cjs').collect({identity,parents:dependencyReadbacks,asOf:nowIso(),releaseSha:recoveryRelease,run:()=>{const child=spawnSync(process.execPath,[path.join(__dirname,'verify-daytrade-mother-pool-closed-loop.js')],{encoding:'utf8',windowsHide:true,maxBuffer:8388608,env:{...process.env,FUMAN_RUNTIME:runtimePath(),FUMAN_PRODUCTION_SHA:recoveryRelease}});if(child.error||child.status!==0)throw Error('B17_CORE_CHECK_FAILED:'+String(child.error?.code||child.status));return JSON.parse(child.stdout);}})});
+      if(sideMinutes>=540)inputs.push({module_id:'B24',build:async()=>require('../lib/daytrade-dependency-readback.cjs').guard({moduleId:'B24',identity,asOf:nowIso(),readParent:async id=>dependencyReadbacks[id],build:parents=>{
         const sideFile=result.payload.mother_pool_minute_side_persist?.write_set_file;
-        return require('../lib/mother-pool-combination-producer').collect({identity,symbols:snapshot.symbols,
-          parents:result.payload.module_write_sets,side:sideFile?readJson(sideFile,null):null,asOf:nowIso()});
-      }});
+        const plan=require('../lib/mother-pool-combination-producer').collect({identity,symbols:snapshot.symbols,
+          parents,side:sideFile?readJson(sideFile,null):null,asOf:nowIso()});
+        plan.source_evidence.parent_readbacks=Object.fromEntries(require('../lib/mother-pool-combination-sources').MODULES.map(id=>[id,dependencyReadbacks[id]]));return plan;
+      }})});
       // A18 is persisted after parent independent readbacks.
       }
       const dir=runtimePath('data','module-write-sets');fs.mkdirSync(dir,{recursive:true});
@@ -9029,19 +9031,19 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
         if (!moduleWorkIds().includes(queued.module_id)) continue;
         let input=typeof queued.build==='function'?queued:frozenModuleInputs.find(value=>value.module_id===queued.module_id);
         try {
-          if(dependencyFailed&&['B04','B09'].includes(queued.module_id))throw Error('PARENT_SUPPLY_FAILED');
+          if(dependencyFailed&&['B04','B09','B17','B24'].includes(queued.module_id))throw Error('PARENT_SUPPLY_FAILED');
           if(typeof input.build==='function')input=await input.build();
           if(input.module_id==='A13' && input.rows.length && input.rows.every(row=>row.status==='NOT_DUE')){
             result.payload.module_not_due ||= {};result.payload.module_not_due.A13=input.v11_evidence;continue;
           }
           const saved=await persistModuleInput(input);
           if(input.module_id==='B02')writeJson(statePath('daytrade-b02-module-latest.json'),saved);
-          if(['B02','B04','B08'].includes(input.module_id)&&moduleWorkIds().some(id=>['B04','B09'].includes(id))){
+          if(require('../lib/daytrade-closure-dependencies.cjs').needsCapture(input.module_id,moduleWorkIds())){
             const captured=require('../lib/daytrade-dependency-capture.cjs').capture({moduleId:input.module_id,writeSet:saved,identity,runtime:runtimePath(),script:path.join(__dirname,'capture-daytrade-module-readbacks.js'),env:{...process.env,SUPABASE_SERVICE_ROLE_KEY:SUPABASE_SERVICE_KEY,SUPABASE_ANON_KEY:SUPABASE_READ_KEY===SUPABASE_SERVICE_KEY?'':SUPABASE_READ_KEY}});
             dependencyReadbacks[input.module_id]=captured.artifact;
             if(input.module_id==='B02')writeJson(statePath('daytrade-b02-readback-latest.json'),{file:captured.file,writer_run_id:identity.writer_run_id});
           }
-        }catch(error){if(['B02','B04','B08'].includes(queued.module_id))dependencyFailed=true;result.payload.module_persistence_errors.push({module_id:queued.module_id,error:String(error.message||error)});if(moduleCircuit.blocked)break;}
+        }catch(error){if(require('../lib/daytrade-closure-dependencies.cjs').needsCapture(queued.module_id,moduleWorkIds()))dependencyFailed=true;result.payload.module_persistence_errors.push({module_id:queued.module_id,error:String(error.message||error)});if(moduleCircuit.blocked)break;}
       }
       const sideFile=result.payload.mother_pool_minute_side_persist?.write_set_file;
       if(moduleWorkIds().includes('B24')&&sideMinutes>=540)result.payload.b24_source_coverage=require('../lib/mother-pool-combination-sources').inspect({
@@ -9112,7 +9114,7 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
     const snapshotGeneration = sideSnapshot.generation;
     const captureArgs = [path.join(__dirname, 'capture-daytrade-module-readbacks.js'), `--trade-date=${taipeiDate()}`, `--canonical=${result.payload?.canonical_run_id || `${SOURCE_NAME}:${String(taipeiDate()).replace(/-/g, '')}:canonical`}`, `--writer-run-id=${result.payload?.writer_run_id || result.run_id || ''}`, `--writer-generation-id=${result.payload?.generation_id || ''}`, `--snapshot-generation=${snapshotGeneration}`, `--mother-pool-run-id=${snapshotRun}`, `--snapshot-sequence=${result.payload?.mother_pool_snapshot_sequence || ''}`, `--modules=${Object.keys(moduleRegistry.modules || {}).join(',')}`];
     const captures=[];
-    const nonSide=moduleWorkIds().filter(id=>!['B14','B20','A14','A19','A18'].includes(id));
+    const nonSide=moduleWorkIds().filter(id=>!['B14','B20','A14','A19','A18','B18'].includes(id));
     const writeSetIndexFile=runtimePath('data','scan-receipts','modules',`writer-write-set-index-${require('node:crypto').randomUUID()}.json`);
     require('../lib/daytrade-shared-evidence.cjs').write(writeSetIndexFile,{modules:result.payload.module_write_sets||{}},runtimePath());
     captureArgs.push('--write-set-index='+writeSetIndexFile);
@@ -9371,7 +9373,7 @@ function writeModuleProducerReceipts(result, tradeDate) {
   for (const [moduleId, contract] of Object.entries(registry.modules || {})) {
     // Keep completed preopen receipts available; intraday rounds must not
     // generate replacement A receipts or repeat their producer work.
-    if (!moduleSession.allowed(moduleId)) continue;
+    if (moduleId==='B18'||!moduleSession.allowed(moduleId)) continue;
     const existing = result.payload?.module_receipt_status?.[moduleId] || {};
     if(!moduleWorkIds().includes(moduleId)){
       const pauseReason = moduleRecovery.reason || 'POLICY_NOT_LOADED';
