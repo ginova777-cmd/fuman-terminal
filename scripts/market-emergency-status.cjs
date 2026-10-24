@@ -9,17 +9,29 @@ function assess(html, requested) {
   if (!match) throw Error('EMERGENCY_ANNOUNCEMENT_DATE_MISSING');
   const year = Number(match[1]) + (match[1].length === 3 ? 1911 : 0);
   const announcementDate = `${year}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`;
-  if (announcementDate !== requested) throw Error('EMERGENCY_ANNOUNCEMENT_DATE_MISMATCH');
+  const nextDate = new Date(Date.parse(`${announcementDate}T00:00:00Z`) + 86400000).toISOString().slice(0,10);
+  if (announcementDate !== requested && nextDate !== requested) throw Error('EMERGENCY_ANNOUNCEMENT_DATE_MISMATCH');
   const rows = parsed.statuses.filter(r => r.county === '臺北市');
   if (rows.length !== 1) throw Error('EMERGENCY_TAIPEI_STATUS_AMBIGUOUS');
-  const text = rows[0].statusText.split('明天')[0].trim();
+  const text = (announcementDate === requested ? rows[0].statusText.split('明天')[0] : (rows[0].statusText.includes('明天') ? '明天' + rows[0].statusText.split('明天')[1] : '')).trim();
+  if (!text) throw Error('EMERGENCY_ANNOUNCEMENT_DATE_MISMATCH');
   // Partial districts and ambiguous time windows require independent review.
   if (/區|里|部分|學校|除外/.test(text)) throw Error('EMERGENCY_PARTIAL_AREA_UNVERIFIED');
-  const closed = /^今天(?:全天|上午)?停止上班/.test(text);
-  const open = /^今天照常上班/.test(text);
+  const closed = /^(?:今天|明天)(?:全天|上午)?停止上班(?:[、，及]|。|$)/.test(text) || /^(?:今天|明天)已達停止上班及上課標準[。.]?$/.test(text);
+  const open = /^(?:今天|明天)照常上班(?:[、，及]|。|$)/.test(text) || /^(?:今天|明天)未達停止上班及上課標準[。.]?$/.test(text);
   if (!closed && !open) throw Error('EMERGENCY_TAIPEI_STATUS_UNVERIFIED');
   return { isTradingDay: !closed, date: requested, source: 'dgpa_twse_rule', reason: closed ? 'typhoon_holiday' : 'official_normal_work',
-    row: { sourceUrl: SOURCE_URL, ruleUrl: RULE, announcementDate, effectiveAt: `${requested}T00:00:00+08:00`, sourceSha256: crypto.createHash('sha256').update(html).digest('hex'), statusText: text, updateLine: parsed.updateLine } };
+    row: { evidenceContract: 'dgpa-market-evidence-v2', sourceUrl: SOURCE_URL, ruleUrl: RULE, announcementDate, effectiveAt: `${requested}T00:00:00+08:00`, sourceSha256: crypto.createHash('sha256').update(html).digest('hex'), statusText: text, updateLine: parsed.updateLine, rawHtml: html } };
+}
+function verify(day) {
+  const r = day?.row;
+  if (!r || r.evidenceContract !== 'dgpa-market-evidence-v2' || r.sourceUrl !== SOURCE_URL || r.ruleUrl !== RULE || typeof r.rawHtml !== 'string') throw Error('EMERGENCY_EVIDENCE_MISSING');
+  const actual = assess(r.rawHtml, day.date);
+  for (const key of ['announcementDate','effectiveAt','sourceSha256','statusText','updateLine']) {
+    if (r[key] !== actual.row[key]) throw Error(`EMERGENCY_EVIDENCE_MISMATCH:${key}`);
+  }
+  if (day.isTradingDay !== actual.isTradingDay) throw Error('EMERGENCY_DECISION_MISMATCH');
+  return actual;
 }
 async function check(requested) {
   const response = await fetch(SOURCE_URL, { signal: AbortSignal.timeout(10000), headers: { 'Cache-Control': 'no-cache' } });
@@ -27,4 +39,4 @@ async function check(requested) {
   if (new URL(response.url).hostname !== 'www.dgpa.gov.tw') throw Error('EMERGENCY_SOURCE_IDENTITY');
   return assess(await response.text(), requested);
 }
-module.exports = { assess, check };
+module.exports = { assess, check, verify, SOURCE_URL };
