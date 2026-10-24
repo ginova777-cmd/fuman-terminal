@@ -12,5 +12,5 @@ function show(p){
  n.dataset.calendarState=known?'closed':'unverified';
  n.textContent=known?(p.closedReasonText||'市場休市')+'｜休市保護啟動，顯示最後交易日 '+p.displayTradeDate+'；不掃描、不寫空結果、不覆蓋 previous good。':'市場日曆待確認｜最後交易日尚未驗證；保留各模組原資料，不代表今日掃描成功。';
 }
-fetch('/api/market-calendar?t='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.json():null).then(show).catch(()=>show(null));
+async function load(){for(let attempt=0;attempt<3;attempt++){try{const r=await fetch('/api/market-calendar?t='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(8000)});if(!r.ok)throw Error('calendar unavailable');const p=await r.json();show(p);return;}catch{if(attempt<2)await new Promise(resolve=>setTimeout(resolve,500));}}show(null);}load();
 })();
