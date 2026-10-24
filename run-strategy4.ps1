@@ -1,4 +1,4 @@
-param([switch]$Recovery, [string]$ReplayTradeDate = "", [string]$ReplayRuntime = "", [switch]$ResumeReplay, [switch]$SkipNotifications, [string]$ResumePublishedRunId = "")
+param([switch]$Recovery, [string]$ReplayTradeDate = "", [string]$ReplayRuntime = "", [switch]$ResumeReplay, [switch]$SkipNotifications, [string]$ResumePublishedRunId = "", [string]$FixedUniverseFile = "")
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
 
@@ -22,6 +22,17 @@ $env:FUMAN_RUNTIME_DIR = $runtime
 $env:FUMAN_DATA_DIR = Join-Path $runtime "data"
 $env:FUMAN_CACHE_DIR = Join-Path $runtime "cache"
 $env:FUMAN_STATE_DIR = Join-Path $runtime "state"
+if ($FixedUniverseFile) {
+  $fixedUniversePath = [IO.Path]::GetFullPath($FixedUniverseFile)
+  if (-not (Test-Path -LiteralPath $fixedUniversePath -PathType Leaf)) { throw "Fixed universe file not found: $fixedUniversePath" }
+  $env:STRATEGY4_FIXED_UNIVERSE_FILE = $fixedUniversePath
+}
+$marketMode = if ($ReplayTradeDate) { 'recovery_replay' } elseif ($Recovery -or $ResumePublishedRunId) { "recovery" } else { "natural" }
+if (-not $ReplayTradeDate) {
+  & (Join-Path $repo "scripts\invoke-market-status-guard.ps1") -Stage "strategy4" -TradeDate "" -ExecutionMode $marketMode
+  if ($LASTEXITCODE -eq 10) { exit 0 }
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 
 Set-Location $repo
 
@@ -31,6 +42,15 @@ $log = Join-Path $logDir ("strategy4-{0}.log" -f (Get-Date -Format yyyyMMdd-HHmm
 $receiptDir = Join-Path $env:FUMAN_DATA_DIR "scan-receipts"
 New-Item -ItemType Directory -Force -Path $receiptDir | Out-Null
 $scanStartedAt = (Get-Date).ToString("o")
+$naturalSlotEvidence = $null
+if (-not $ReplayTradeDate -and -not $Recovery -and -not $ResumePublishedRunId) {
+  try {
+    $slotTask = Get-ScheduledTask -TaskName 'Fuman Strategy4 Cache 1600' -ErrorAction Stop
+    $slotInfo = $slotTask | Get-ScheduledTaskInfo -ErrorAction Stop
+    $slotAction = ($slotTask.Actions | ForEach-Object { $_.Arguments }) -join ' '
+    $naturalSlotEvidence = @{taskName=$slotTask.TaskName;state=[string]$slotTask.State;enabled=[bool]$slotTask.Settings.Enabled;lastRunTime=$slotInfo.LastRunTime.ToString('o');runnerPath=$(if ($slotAction -match 'C:\\fuman-release-owner\\prod81\\run-strategy4\.ps1') {'C:\fuman-release-owner\prod81\run-strategy4.ps1'} else {''})}
+  } catch { $naturalSlotEvidence = @{readError=$_.Exception.Message} }
+}
 function Normalize-Strategy4DateStamp($value) {
   $raw = [string]$value
   if ([string]::IsNullOrWhiteSpace($raw)) { return "" }
@@ -63,8 +83,11 @@ function Write-Strategy4Receipt($Status, $ExitCode, $Complete, $Matches, $RunId,
     strategy = "strategy4"
     label = "strategy4 full scan"
     tier = "critical"
-    executionMode = if ($ReplayTradeDate) { 'recovery_replay' } elseif ($ResumePublishedRunId) { 'recovery_same_run' } else { 'natural' }
+    executionMode = if ($ReplayTradeDate) { 'recovery_replay' } elseif ($ResumePublishedRunId -or $Recovery) { 'recovery_same_run' } elseif ($naturalSlotEvidence.state -eq 'Running') { 'natural' } else { 'authorized_maintenance' }
     naturalSlotComplete = $false
+    naturalSlotEvidence = $naturalSlotEvidence
+    universeEvidence = if ($dbVerify) { $dbVerify.universeEvidence } else { $null }
+    scannedSymbols = if ($dbVerify) { $dbVerify.scannedSymbols } else { @() }
     startedAt = $scanStartedAt
     marketDate = $runDateStamp
     tradeDate = if ($runDateStamp.Length -eq 8) { "$($runDateStamp.Substring(0,4))-$($runDateStamp.Substring(4,2))-$($runDateStamp.Substring(6,2))" } else { "" }

@@ -1,0 +1,18 @@
+'use strict';
+const assert=require('node:assert/strict'),a=require('../lib/daytrade-priority-quote-assessment.cjs');
+const checkedAt='2026-10-20T04:57:00.000Z',tradeDate='2026-10-20',canonicalRunId='fugle_daytrade_source:20261020:canonical';
+const q={symbol:'2330',source:'fugle-websocket',trade_date:tradeDate,last_trade_time:'2026-10-20T04:55:00.000Z'};
+const decision=(quote,accepted)=>a.item('2330',quote,{tradeDate,checkedAt,accepted,ageSeconds:120});
+assert.deepEqual(decision(q,true).reasons,[]);
+assert.deepEqual(decision({...q,last_trade_time:'2026-10-20T04:54:59.000Z'},false).reasons,['QUOTE_STALE_120S']);
+assert.deepEqual(decision({...q,last_trade_time:'2026-10-20T04:57:00.001Z'},false).reasons,['FUTURE_EVENT']);
+assert(decision({...q,trade_date:'2026-10-19'},false).reasons.includes('TRADE_DATE_MISMATCH'));
+assert(decision({...q,last_trade_time:null},false).reasons.includes('NATIVE_TRADE_EVENT_MISSING'));
+assert.deepEqual(decision(null,false).reasons,['NOT_RETURNED']);
+const entries=Array.from({length:255},(_,i)=>({...decision(q,i<240),symbol:String(1000+i)}));
+const receipt=a.build(entries,{tradeDate,canonicalRunId});assert.equal(receipt.fresh_count,240);assert.equal(receipt.missing_symbols.length,15);assert.equal(receipt.required_count,243);assert.equal(receipt.complete,false);
+assert.throws(()=>a.build([entries[0],entries[0]],{tradeDate,canonicalRunId}),/DUPLICATE/);
+const old=new Map([['2330',q]]),newer={...q,last_trade_time:'2026-10-20T04:57:00.001Z'};
+a.reconcile(old,new Map([['2330',newer]]),['2330']);assert.equal(old.get('2330'),newer);assert.equal(decision(old.get('2330'),false).reasons[0],'FUTURE_EVENT');
+assert.equal(q.last_trade_time,'2026-10-20T04:55:00.000Z');
+console.log('PASS: existing predicate evidence, exact 255/240/15 counts, inclusive 120s, future/date/missing rejection; latest invalid observation never retains older good quote. No gate authorization.');

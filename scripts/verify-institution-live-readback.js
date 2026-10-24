@@ -1,11 +1,13 @@
 "use strict";
 const fs=require("fs"),path=require("path"),assert=require("assert"),cp=require("child_process");
 const crypto=require("crypto");
+const indicatorContract=require('../lib/institution-indicator-contract.cjs');
 const {readTechnicalSources,evaluateCandidates,CONTRACT:SELECTION_CONTRACT}=require("../lib/institution-technical-selection");
 const root=path.resolve(__dirname,".."),runtime=process.env.FUMAN_RUNTIME_DIR||"C:/fuman-runtime";
 const out=path.join(root,"outputs/institution-live-acceptance");
 const read=p=>JSON.parse(fs.readFileSync(p,"utf8").replace(/^\uFEFF/,""));
-const receipt=read(path.join(runtime,"data/scan-receipts/institution.json"));
+const receiptArg=process.argv.find(a=>a.startsWith('--verification-input='));
+const receipt=read(receiptArg?receiptArg.slice('--verification-input='.length):path.join(runtime,"data/scan-receipts/institution.json"));
 const url=fs.readFileSync(path.join(runtime,"secrets/supabase-url.txt"),"utf8").trim();
 const key=fs.readFileSync(path.join(runtime,"secrets/supabase-service-role-key.txt"),"utf8").trim();
 async function get(q){const r=await fetch(url+"/rest/v1/"+q,{headers:{apikey:key,Authorization:"Bearer "+key},signal:AbortSignal.timeout(30000)});assert(r.ok,"database readback HTTP "+r.status);return r.json()}
@@ -25,6 +27,8 @@ async function main(){
  const today=process.env.FUMAN_REPLAY_TRADE_DATE||new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Taipei"}).format(new Date());assert(run.scan_date===today,"run not current trading date");
  const source=run.payload.source_status_at_run;assert(source.sourceDates.twse===today.replaceAll("-","")&&source.sourceDates.tpex===today.replaceAll("-",""),"official source dates mismatch");
  const coverage=run.payload.selectionCoverage;assert(coverage?.contract===SELECTION_CONTRACT&&coverage.ok&&coverage.dataCoverage>=.9,"candidate coverage below 90% or wrong contract");
+ assert(indicatorContract.checkCoverage(coverage)&&indicatorContract.checkCoverage(receipt.selectionCoverage),'institution_indicator_contract_mismatch');
+ for(const row of rows)assert(indicatorContract.checkTrend(row.payload?.technicalTrend),'institution_indicator_evidence_mismatch:'+row.code);
  assert.deepStrictEqual(receipt.selectionCoverage,coverage,"runner coverage mismatch");
  const evidencePath=path.resolve(run.payload.technicalSourceReceipt||"");assert(evidencePath.startsWith(path.resolve(runtime,"data/institution-technical-source")+path.sep),"invalid technical source evidence path");
  const evidenceRaw=fs.readFileSync(evidencePath,"utf8");assert(crypto.createHash("sha256").update(evidenceRaw).digest("hex")===run.payload.technicalSourceHash,"technical evidence hash mismatch");
