@@ -19,6 +19,7 @@ $gitPath = "C:\Program Files\Git\cmd"
 $env:Path = "$gitPath;C:\Program Files\nodejs;" + $env:Path
 $env:NODE_OPTIONS = "--use-system-ca"
 $env:FUMAN_RUNTIME_DIR = $runtime
+$env:FUMAN_RUNTIME_ROOT = $runtime
 $env:FUMAN_DATA_DIR = Join-Path $runtime "data"
 $env:FUMAN_CACHE_DIR = Join-Path $runtime "cache"
 $env:FUMAN_STATE_DIR = Join-Path $runtime "state"

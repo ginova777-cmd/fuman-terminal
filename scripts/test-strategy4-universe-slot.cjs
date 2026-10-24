@@ -7,6 +7,12 @@ process.env.STRATEGY4_USE_MIS='0';
 process.env.FUMAN_SCANNER_TARGET_TRADE_DATE='2026-10-22';
 process.env.STRATEGY4_FIXED_UNIVERSE_FILE=file;
 const scanner=require('./scan-strategy4-cache');
+test('runner binds both runtime aliases for scorecard collector and same-run recovery',()=>{
+ const runner=fs.readFileSync(path.join(__dirname,'../run-strategy4.ps1'),'utf8');
+ assert(runner.includes('$env:FUMAN_RUNTIME_DIR = $runtime'));
+ assert(runner.includes('$env:FUMAN_RUNTIME_ROOT = $runtime'));
+ assert(runner.indexOf('$env:FUMAN_RUNTIME_ROOT = $runtime')<runner.indexOf('invoke-market-status-guard.ps1'));
+});
 test('real scanner universe path keeps all approved symbols despite runtime blacklist',async()=>{
  const result=await scanner.fetchUniverse(async()=>rows);
  assert.equal(result.length,1943);assert.equal(u.digest(result.map(r=>r.code)),u.SHA);
