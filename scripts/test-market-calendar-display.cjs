@@ -25,8 +25,8 @@ test('resumed open date recalculates session using request time',()=>{
 async function render(p,fail=false){
  let banner;const body={dataset:{},prepend:n=>banner=n},document={body,documentElement:{dataset:{}},querySelector:()=>null,getElementById:()=>banner,createElement:()=>({dataset:{},setAttribute(){},style:{},remove(){banner=null;}})};
  const window={dispatchEvent(){}};
- vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../market-calendar-banner.js'),'utf8'),{window,document,CustomEvent:function(){},setTimeout:()=>{},fetch:async()=>{if(fail)throw Error('offline');return{ok:true,json:async()=>p};},Date});
- await new Promise(r=>setImmediate(r));return {banner,document};
+ vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../market-calendar-banner.js'),'utf8'),{window,document,CustomEvent:function(){},AbortSignal,setTimeout:fn=>setImmediate(fn),fetch:async()=>{if(fail)throw Error('offline');return{ok:true,json:async()=>p};},Date});
+ for(let i=0;i<5;i++)await new Promise(r=>setImmediate(r));return {banner,document};
 }
 test('desktop/mobile shared renderer: closure, unavailable, open',async()=>{
  const p=publicPayload(fixture(),now);a.match((await render(p)).banner.textContent,/2026-10-22/);
