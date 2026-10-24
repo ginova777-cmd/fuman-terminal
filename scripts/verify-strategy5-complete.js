@@ -21,9 +21,11 @@ const packageSource = readText(path.join(root, "package.json"));
 const auditFile = scan?.runId ? path.join(runtime, "outputs", "post-scan-tri-surface", "strategy5", scan.runId, "terminal-resource-chain-audit.json") : "";
 const audit = auditFile ? read(auditFile) : null;
 const issues = [];
+const indicatorContract = require('../lib/strategy5-technical-selection').INDICATOR_CONTRACT;
 const liveFile = path.join(root, 'outputs/strategy5-live-acceptance/readback.json');
 const renderedFile = path.join(root, 'outputs/strategy5-live-acceptance/rendered/terminal-ui-e2e-report.json');
 const live = read(liveFile), rendered = read(renderedFile);
+if (live?.selectionCoverage?.indicatorContract !== indicatorContract) issues.push('strategy5_rsi_v2_contract_not_verified');
 const mobileViews = (rendered?.results || []).filter(r => r.routeKey === 'strategy5' && r.kind === 'mobile');
 if (mobileViews.length < 2 || mobileViews.some(r => !r.identity?.checks?.length || r.identity.checks.some(c => c.authorityOk !== true))) issues.push('strategy5_mobile_display_authority_not_verified');
 if (!live?.ok || live.runId !== scan?.runId || live.tradeDate !== date || live.readbackCount !== Number(scan?.matches) || !live.technicalFreshReadback || live.selectionCoverage?.contract !== 'strategy5-candidate90-daily-up-hourly60-bonus-v1' || live.selectionCoverage?.ok !== true) issues.push('strategy5_daily_trend_full_readback_not_verified');
@@ -79,7 +81,7 @@ const scorecardReport = (Array.isArray(scorecard?.sourceReports) ? scorecard.sou
 if (scorecard?.contract !== "scorecard88-terminal-canonical-collector-v1") issues.push("strategy5_scorecard88_contract_not_canonical");
 if (String(scorecardReport?.runId || "") !== String(scan?.runId || "")) issues.push("strategy5_scorecard88_run_id_mismatch");
 if (scorecardReport?.ok !== true || Number(scorecardReport?.count || scorecardReport?.resultCount || 0) <= 0) issues.push("strategy5_scorecard88_report_not_complete");
-const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "strategy5", tradeDate: date,
+const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "strategy5", tradeDate: date, indicatorContract,
   checkedAt: new Date().toISOString(), rankingBonusVerified: live?.rankingBonusVerified === true, rankingBonusContract: live?.rankingBonusContract || null, selectionCoverage: live?.selectionCoverage || null, liveReadbackReceipt: liveFile, renderedReceipt: renderedFile, marketMode: process.env.FUMAN_REPLAY_TRADE_DATE ? 'strategy_revision_replay' : 'scheduled', status: issues.length ? "failed" : "complete", complete: issues.length === 0,
   exitCode: issues.length ? 1 : 0, runId: scan?.runId || "", count: Number(scan?.matches || 0),
   scanned: Number(scan?.scanned || 0), total: Number(scan?.total || 0), triSurfaceStatus: scan?.triSurfaceStatus || "",
