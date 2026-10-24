@@ -2399,7 +2399,11 @@ async function fetchIntradayStatus(activeSymbols = []) {
     return grouped;
   };
   const tradeDate = taipeiDateFrom(nowIso());
-  const finalizeIntradayMap = async (rows, readinessSource) => toMap(rows, readinessSource);
+  let preopenAcquisition = null;
+  const finalizeIntradayMap = async (rows, readinessSource) => {
+    const map = toMap(rows, readinessSource);
+    return preopenAcquisition ? require('../lib/daytrade-preopen-raw-evidence').attach(map, preopenAcquisition) : map;
+  };
   // The authenticated Fugle candle cache is the lowest-latency formal source.
   // Build readiness locally before querying Supabase views that can time out under load.
   try {
@@ -2427,6 +2431,8 @@ async function fetchIntradayStatus(activeSymbols = []) {
       const symbols = [...new Set((activeSymbols || []).map((row) => normalizeCode(row.symbol || row)).filter(Boolean))];
       const rows = [];
       const rawWarmupRows = [], warmupPages = [];
+      preopenAcquisition = {tradeDate, requestedSymbols:symbols, pages:warmupPages, rows:rawWarmupRows,
+        observedAt:nowIso(), acquisitionStatus:'INCOMPLETE', failureCode:null};
       for (let index = 0; index < symbols.length; index += 40) {
         const page = await supabaseRpc(
           "get_fugle_daytrade_intraday_1m_latest_n",
@@ -2438,19 +2444,25 @@ async function fetchIntradayStatus(activeSymbols = []) {
         warmupPages.push({page_index: warmupPages.length, requested_symbols: symbols.slice(index, index + 40), row_count: page.length});
         rows.push(...page.filter((row) => row.synthetic !== true && row.is_synthetic !== true));
       }
+      preopenAcquisition.observedAt = nowIso();
+      preopenAcquisition.acquisitionStatus = 'COMPLETE';
       const grouped = buildGrouped(rows, tradeDate);
       const naturalWarmupRows = [...grouped.values()].filter((row) =>
         numberValue(row.continuous_candle_count) >= 20
         && numberValue(row.latest_candle_age_seconds, 999999) <= 7 * 24 * 60 * 60
       );
       if (naturalWarmupRows.length) {
-        const map = await finalizeIntradayMap(naturalWarmupRows, "dedicated_daytrade_intraday_1m_latest_25_batched_natural_warmup");
-        return require('../lib/daytrade-preopen-raw-evidence').attach(map, {
-          tradeDate, requestedSymbols: symbols, pages: warmupPages, rows: rawWarmupRows, observedAt: nowIso(),
-        });
+        return finalizeIntradayMap(naturalWarmupRows, "dedicated_daytrade_intraday_1m_latest_25_batched_natural_warmup");
       }
-    } catch {
-      // Fall through to persisted status-cache warmup without weakening quality checks.
+    } catch (error) {
+      if (preopenAcquisition) {
+        preopenAcquisition.observedAt = nowIso();
+        preopenAcquisition.acquisitionStatus = 'FAILED';
+        // Preserve a bounded category; raw HTTP text may contain credentials.
+        preopenAcquisition.failureCode = error?.message === 'PREOPEN_HISTORY_RPC_ROWS_INVALID'
+          ? 'PREOPEN_HISTORY_RPC_ROWS_INVALID' : 'PREOPEN_HISTORY_RPC_REQUEST_FAILED';
+      }
+      // Existing fallback remains available, but cannot erase the failed history acquisition.
     }
   }
 
@@ -2533,11 +2545,11 @@ async function fetchIntradayStatus(activeSymbols = []) {
     const grouped = buildGrouped(rows, tradeDate);
     if (grouped.size) return finalizeIntradayMap([...grouped.values()], "dedicated_daytrade_intraday_1m_direct_warmup");
   } catch {
-    const failed = toMap([], "dedicated_daytrade_intraday_1m_read_failed");
+    const failed = await finalizeIntradayMap([], "dedicated_daytrade_intraday_1m_read_failed");
     failed.readError = true;
     return failed;
   }
-  const empty = toMap([], "dedicated_daytrade_intraday_1m_empty");
+  const empty = await finalizeIntradayMap([], "dedicated_daytrade_intraday_1m_empty");
   empty.readError = false;
   return empty;
 }
