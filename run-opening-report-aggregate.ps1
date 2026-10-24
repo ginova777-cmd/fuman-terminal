@@ -6,6 +6,9 @@ Set-Location $Root
 $env:NODE_OPTIONS = '--use-system-ca'
 if (-not $TradeDate) { $TradeDate = [TimeZoneInfo]::ConvertTimeBySystemTimeZoneId((Get-Date), 'Taipei Standard Time').ToString('yyyy-MM-dd') }
 if ($TradeDate -notmatch '^\d{4}-\d{2}-\d{2}$') { throw 'invalid_trade_date' }
+& (Join-Path $Root 'scripts\invoke-market-status-guard.ps1') -Stage 'morning-aggregate' -TradeDate $TradeDate -ExecutionMode 'recovery'
+if ($LASTEXITCODE -eq 10) { exit 0 }
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 & 'C:\Program Files\nodejs\node.exe' scripts\verify-opening-report-release.js
 if ($LASTEXITCODE -ne 0) { exit 1 }
 & 'C:\Program Files\nodejs\node.exe' scripts\check-market-calendar-action.js "--date=$TradeDate" '--label=Morning-aggregate'

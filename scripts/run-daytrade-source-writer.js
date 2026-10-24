@@ -333,6 +333,7 @@ const INTRADAY_STATUS_CACHE_SYNC_INTERVAL_MS = Math.max(
 let lastIntradayStatusCacheSyncAt = 0;
 let writerTickIdentity = null;
 let writerLease = { ok: !APPLY, status: APPLY ? "not_claimed" : "dry_run", leaseExpiresAt: "" };
+let liveCandleProgress=null;
 
 function hasFlag(name) {
   return process.argv.includes(`--${name}`);
@@ -700,6 +701,7 @@ async function supabaseGetPaged(resource, query = "", options = {}) {
     if (Array.isArray(options.pageEvidence)) options.pageEvidence.push({offset,requested:pageSize,http_status:response.status,rows:Array.isArray(page)?page.length:null,content_range:response.headers.get('content-range'),...(options.captureRows?{row_data:page}:{})});
     if (!Array.isArray(page) || page.length === 0) break;
     rows.push(...page);
+    if(liveCandleProgress)await liveCandleProgress('paged_read:'+resource);
     if (options.requireExactCount && rows.length === exactTotal) break;
     if (page.length < pageSize) break;
   }
@@ -773,6 +775,12 @@ async function ensureWriterLease() {
 }
 
 async function supabaseUpsert(resource, rows, conflict, options = {}) {
+  if(resource==='fugle_daytrade_quotes_live'&&!DRY_RUN&&require('../lib/supply-round-context.cjs').active()){
+    if(conflict!=='symbol')throw Error('QUOTE_CONFLICT_KEY_CHANGED');
+    const normalized=rows.map(require('../lib/daytrade-quote-liquidity-contract').normalizeQuoteLiquidity);
+    return require('../lib/supply-round-context.cjs').write({sink:SUPABASE_URL.replace(/\/+$/,'')+'/rest/v1/fugle_daytrade_quotes_live',rows:normalized,guard:()=>{require('../lib/daytrade-history-write-guard.cjs').assertCurrent(runtimePath());return writerLease?.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>Date.now()+5000;},
+      send:batch=>supabaseUpsertUnchecked(resource,batch,conflict,options)});
+  }
   if(resource==='fugle_daytrade_priority_pool'&&rows.length&&!DRY_RUN){
     const guard=supabaseUpsert.priorityRoundGuard||(supabaseUpsert.priorityRoundGuard=require('../lib/daytrade-priority-round-write-guard').create());
     return guard.run(rows,()=>supabaseUpsertUnchecked(resource,rows,conflict,options));
@@ -799,7 +807,8 @@ async function supabaseUpsertUnchecked(resource, rows, conflict, options = {}) {
       const started = Date.now();
       if(tracePriority)console.log(JSON.stringify({stage:'priority_pool_batch:start',...batchEvidence,attempt}));
       try {
-        const response = await fetch(`${SUPABASE_URL}/rest/v1/${resource}?on_conflict=${encodeURIComponent(conflict)}`, {
+        const tracedFetch=options.traceStep?(url,init)=>require('../lib/writer-operation-trace.cjs').request(url,init,{step:options.traceStep,deadline:Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Date.now()+writeTimeoutMs,timeoutMs:writeTimeoutMs,symbolCount:new Set(chunk.map(r=>r.symbol||r.future_symbol)).size}):fetch;
+        const response = await tracedFetch(`${SUPABASE_URL}/rest/v1/${resource}?on_conflict=${encodeURIComponent(conflict)}`, {
           method: "POST",
           headers: {
             ...headers(key),
@@ -837,6 +846,8 @@ async function supabaseUpsertUnchecked(resource, rows, conflict, options = {}) {
     if (lastError) throw lastError;
     // Checkpoint persistence is outside HTTP retry: never retry a write for an ACK storage error.
     if (options.acknowledgeBatch) await options.acknowledgeBatch(chunk);
+    if(liveCandleProgress)await liveCandleProgress('write_batch:'+resource);
+    require('../lib/daytrade-history-write-guard.cjs').assertCurrent(runtimePath());
   }
   return { written };
 }
@@ -2233,9 +2244,11 @@ async function fetchIntradayStatus(activeSymbols = []) {
   };
   const buildGrouped = (rows, tradeDate) => {
     const grouped = new Map();
+    const assessmentMs=Date.now();
     for (const row of rows) {
       const symbol = normalizeCode(row.symbol);
       if (!symbol) continue;
+      if(!require('../lib/daytrade-completed-candle.cjs').isCompleted(normalizeTimestamp(row.candle_time || row.updated_at),assessmentMs))continue;
       const current = grouped.get(symbol) || {
         symbol,
         market: row.market || "",
@@ -2386,7 +2399,11 @@ async function fetchIntradayStatus(activeSymbols = []) {
     return grouped;
   };
   const tradeDate = taipeiDateFrom(nowIso());
-  const finalizeIntradayMap = async (rows, readinessSource) => toMap(rows, readinessSource);
+  let preopenAcquisition = null;
+  const finalizeIntradayMap = async (rows, readinessSource) => {
+    const map = toMap(rows, readinessSource);
+    return preopenAcquisition ? require('../lib/daytrade-preopen-raw-evidence').attach(map, preopenAcquisition) : map;
+  };
   // The authenticated Fugle candle cache is the lowest-latency formal source.
   // Build readiness locally before querying Supabase views that can time out under load.
   try {
@@ -2414,6 +2431,8 @@ async function fetchIntradayStatus(activeSymbols = []) {
       const symbols = [...new Set((activeSymbols || []).map((row) => normalizeCode(row.symbol || row)).filter(Boolean))];
       const rows = [];
       const rawWarmupRows = [], warmupPages = [];
+      preopenAcquisition = {tradeDate, requestedSymbols:symbols, pages:warmupPages, rows:rawWarmupRows,
+        observedAt:nowIso(), acquisitionStatus:'INCOMPLETE', failureCode:null};
       for (let index = 0; index < symbols.length; index += 40) {
         const page = await supabaseRpc(
           "get_fugle_daytrade_intraday_1m_latest_n",
@@ -2425,19 +2444,25 @@ async function fetchIntradayStatus(activeSymbols = []) {
         warmupPages.push({page_index: warmupPages.length, requested_symbols: symbols.slice(index, index + 40), row_count: page.length});
         rows.push(...page.filter((row) => row.synthetic !== true && row.is_synthetic !== true));
       }
+      preopenAcquisition.observedAt = nowIso();
+      preopenAcquisition.acquisitionStatus = 'COMPLETE';
       const grouped = buildGrouped(rows, tradeDate);
       const naturalWarmupRows = [...grouped.values()].filter((row) =>
         numberValue(row.continuous_candle_count) >= 20
         && numberValue(row.latest_candle_age_seconds, 999999) <= 7 * 24 * 60 * 60
       );
       if (naturalWarmupRows.length) {
-        const map = await finalizeIntradayMap(naturalWarmupRows, "dedicated_daytrade_intraday_1m_latest_25_batched_natural_warmup");
-        return require('../lib/daytrade-preopen-raw-evidence').attach(map, {
-          tradeDate, requestedSymbols: symbols, pages: warmupPages, rows: rawWarmupRows, observedAt: nowIso(),
-        });
+        return finalizeIntradayMap(naturalWarmupRows, "dedicated_daytrade_intraday_1m_latest_25_batched_natural_warmup");
       }
-    } catch {
-      // Fall through to persisted status-cache warmup without weakening quality checks.
+    } catch (error) {
+      if (preopenAcquisition) {
+        preopenAcquisition.observedAt = nowIso();
+        preopenAcquisition.acquisitionStatus = 'FAILED';
+        // Preserve a bounded category; raw HTTP text may contain credentials.
+        preopenAcquisition.failureCode = error?.message === 'PREOPEN_HISTORY_RPC_ROWS_INVALID'
+          ? 'PREOPEN_HISTORY_RPC_ROWS_INVALID' : 'PREOPEN_HISTORY_RPC_REQUEST_FAILED';
+      }
+      // Existing fallback remains available, but cannot erase the failed history acquisition.
     }
   }
 
@@ -2520,11 +2545,11 @@ async function fetchIntradayStatus(activeSymbols = []) {
     const grouped = buildGrouped(rows, tradeDate);
     if (grouped.size) return finalizeIntradayMap([...grouped.values()], "dedicated_daytrade_intraday_1m_direct_warmup");
   } catch {
-    const failed = toMap([], "dedicated_daytrade_intraday_1m_read_failed");
+    const failed = await finalizeIntradayMap([], "dedicated_daytrade_intraday_1m_read_failed");
     failed.readError = true;
     return failed;
   }
-  const empty = toMap([], "dedicated_daytrade_intraday_1m_empty");
+  const empty = await finalizeIntradayMap([], "dedicated_daytrade_intraday_1m_empty");
   empty.readError = false;
   return empty;
 }
@@ -3567,6 +3592,7 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
   let inputFilesValid = 0;
   let bridgeReceiptsAccepted = 0;
   let bridgeReceiptsRejected = 0;
+  const handoffRejected = [];
   let latestUpdatedAt = "";
   const bridgeReceiptIsValid = (receipt, payload, runId, inputPath, receiptPath) => {
     if (!receipt
@@ -3622,6 +3648,14 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
       rejectedFiles += 1;
       continue;
     }
+    const handoffPath = runtimePath('data', 'opening-report-stages', payload.stage || 'us_0820', 'scan-receipts', 'opening-report-0830-mother-pool-handoff-ack-' + todayKey + '.json');
+    const admission = require('../lib/opening-report-warmup-admission.cjs').admit({ack:readJson(handoffPath),payload,tradeDate:taipeiDate(),stage:payload.stage || 'us_0820',verifyHandoff:require('../lib/mother-pool-morning-evidence').verifyHandoff});
+    if (!admission.ok) {
+      bridgeReceiptsRejected += 1;
+      rejectedFiles += 1;
+      handoffRejected.push({run_id:runId,industry:payload.industry,reason:admission.reason});
+      continue;
+    }
     bridgeReceiptsAccepted += 1;
     acceptedFiles += 1;
     let fileUpdatedAt = receipt.checked_at || nowIso();
@@ -3632,7 +3666,7 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
     if (!latestUpdatedAt || Date.parse(fileUpdatedAt) > Date.parse(latestUpdatedAt)) latestUpdatedAt = fileUpdatedAt;
     for (const value of payload.mapped_symbols) {
       const symbol = normalizeCode(value?.symbol || value?.code || value);
-      if (!symbol || !receipt.accepted_symbols.includes(symbol)) continue;
+      if (!symbol || !receipt.accepted_symbols.includes(symbol) || !admission.symbols.includes(symbol)) continue;
       const inputPrice = numberValue(value?.price ?? value?.last_price ?? value?.lastPrice ?? value?.close);
       const previous = bySymbol.get(symbol) || { symbol, sources: [], score: 0, openingReport0830: true, reports: [] };
       previous.name = value.name || symbol;
@@ -3651,6 +3685,7 @@ function readOpeningReport0830PrioritySeeds(activeSymbols) {
     source: "opening_report_0830_industry_bias_bridge_verified",
     status: acceptedFiles > 0 ? "ready" : "missing",
     bridgeReceiptStatus: acceptedFiles > 0 ? "ready" : "fail_closed",
+    handoffRejected,
   };
 }
 function readRuntimePrioritySeeds(activeSymbols) {
@@ -5245,6 +5280,7 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
   let lastQuoteAt = "";
   const priorityAges = [];
   const freshPriorityAges = [];
+  const priorityQuoteAssessments = [];
   for (const symbol of activeSet) {
     const quote = quoteMap.get(symbol);
     const quoteTime = quoteFreshnessTime(quote);
@@ -5259,7 +5295,10 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     const quote = quoteMap.get(symbol);
     const quoteAge = effectiveQuoteAgeSeconds(quote);
     priorityAges.push(isFugleQuote(quote) ? quoteAge : 999999);
-    if (isFreshWebSocketQuote(quote)) {
+    const quoteAccepted = isFreshWebSocketQuote(quote);
+    priorityQuoteAssessments.push(require('../lib/daytrade-priority-quote-assessment.cjs').item(symbol,quote,
+      {tradeDate,checkedAt:nowIso(),accepted:quoteAccepted,ageSeconds:quoteAge}));
+    if (quoteAccepted) {
       freshPriority.push(symbol);
       freshPriorityAges.push(quoteAge);
     }
@@ -5993,6 +6032,8 @@ function computeStats({ activeSymbols, priorityRows, quoteMap, fetchedRows, dail
     fetched_this_loop: fetchResult.fetched,
     attempted_this_loop: fetchResult.attempted,
   };
+  payload.priority_quote_assessment = require('../lib/daytrade-priority-quote-assessment.cjs').build(priorityQuoteAssessments,
+    {tradeDate,canonicalRunId});
   return { phase, gateGrade, status, message, payload };
 }
 
@@ -7712,8 +7753,8 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
       nextMirror.symbols[symbol] = { seeded: ready, lastCandleTime: latestCandleTime, availableCandleCount: rows.length };
       continue;
     }
-    const priorTime = Date.parse(prior.lastCandleTime || '');
-    const newRows = rows.filter((row) => !Number.isFinite(priorTime) || Date.parse(row.candle_time) > priorTime);
+    // Reconsider late and revised minutes; durable content hashes skip unchanged rows.
+    const newRows = rows;
     for (const row of newRows) selectRow(row);
     incrementalRows += newRows.length;
     nextMirror.symbols[symbol] = { seeded: true, lastCandleTime: latestCandleTime, availableCandleCount: rows.length };
@@ -7722,14 +7763,15 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
   // Emit one latest completed candle per symbol before any historical seed rows.
   // Each confirmed HTTP batch advances the ACK checkpoint; the seed mirror waits for all batches.
   const rows = require('../lib/daytrade-candle-write-order').latestFirst([...selected.values()]);
+  return require('../lib/daytrade-history-write-guard.cjs').withSnapshot(runtimePath(),rows,require('../lib/daytrade-candle-delta').fingerprint,async()=>{
   const dbWriteStartedMs = Date.now();
   const candleDelta = DRY_RUN ? {written: 0, unchanged: 0, not_due: 0} : await require('../lib/daytrade-writer-candle-delta.cjs').sync({
     file: runtimePath('state', 'daytrade-writer-candle-delta.json'), rows, tradeDate,
-    target: SUPABASE_URL + '/fugle_daytrade_intraday_1m', nowMs: syncNowMs,
+    target: SUPABASE_URL + '/fugle_daytrade_intraday_1m', nowMs: syncNowMs, maxRows: 2000,
     write: (pending, acknowledgeBatch) => { require('../lib/daytrade-candle-write-intent.cjs').beforeWrite({runtime:runtimePath(),rows:pending,writer:'writer'}); return supabaseUpsert('fugle_daytrade_intraday_1m', pending, 'symbol,candle_time', { batchSize: SLOW_TABLE_BATCH_SIZE, timeoutMs: 15000, retries: 1, acknowledgeBatch }); },
   }).catch(cause => { throw Object.assign(new Error('CANDLE_PERSISTENCE_FAILED: ' + (cause?.message || String(cause)), {cause}), {code: 'CANDLE_PERSISTENCE_FAILED'}); });
   const dbWriteCompletedMs = Date.now();
-  if (state && !DRY_RUN && !options.latestOnly) {
+  if (state && !DRY_RUN && !options.latestOnly && candleDelta.deferred === 0) {
     state.daytradeMotherPoolCandleMirror = nextMirror;
     // Persist the expensive seed checkpoint immediately. A later non-critical
     // stage must not make the next task re-upload the entire candle history.
@@ -7737,6 +7779,8 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
   }
   return {
     written: candleDelta.written,
+    deferred: candleDelta.deferred,
+    seed_checkpoint_advanced: !DRY_RUN && !options.latestOnly && candleDelta.deferred === 0,
     unchanged: candleDelta.unchanged,
     selectedRows: rows.length,
     skipped: false,
@@ -7752,14 +7796,15 @@ async function syncWebSocketIntraday1mCandles(motherPoolRows, state, options = {
       timing_scope: 'writer_local_clock; cache artifact time is not a natural event timestamp',
     },
     latestRows: bySymbol.size,
-    latest_candle_evidence: require('../lib/daytrade-latest-candle-evidence').latestCandleEvidence(motherPoolSymbols, rows, Date.now()),
+    latest_candle_evidence: require('../lib/daytrade-latest-candle-evidence').latestCandleEvidence(motherPoolSymbols, candleDelta.acknowledgedRows || [], Date.now()),
     motherPoolSymbols: motherPoolSymbols.length,
-    seededSymbols,
+    seededSymbols: candleDelta.deferred === 0 ? seededSymbols : 0,
     seedAttempts,
     maxSeedSymbolsPerTick,
     incrementalRows,
     notReadySymbols,
   };
+  });
 }
 async function syncWebSocketFutoptQuotes() {
   const readTxfReference = require('../lib/futopt-txf-reference.cjs').createReader(runtimePath());
@@ -8054,7 +8099,13 @@ async function syncMarketCalendarEvidence() {
   return rows[0];
 }
 
-async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
+async function tick(options={}) {
+  if(!require('../lib/supply-round-switch.cjs').enabled(runtimePath()))return tickUnshared(options);
+  if(process.env.FUMAN_CANDLE_CONFIRMATION_FILE||process.env.FUMAN_DAYTRADE_C2_INPUT_FILE)throw Error('SUPPLY_OPTIMIZATION_C2_MODE_CONFLICT');
+  return require('../lib/supply-round-context.cjs').run({runId:require('node:crypto').randomUUID(),tradeDate:taipeiDate(),sink:SUPABASE_URL.replace(/\/+$/,'')+'/rest/v1/fugle_daytrade_quotes_live'},()=>tickUnshared(options),counts=>console.log(JSON.stringify({stage:'supply_round_efficiency',...counts})));
+}
+async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={}) {
+  liveCandleProgress=null;
   isolatedModuleIds=null;
   if(isolatedModules){
     const lab=path.resolve(isolatedModules.root||'');
@@ -8093,22 +8144,30 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
       calendar:{trade_date:marketCalendarEvidence.trade_date,isTradingDay:marketCalendarEvidence.is_open}}),
   });
   const refreshQuoteCheckpoint = async stage => {
+    require('../lib/supply-round-context.cjs').refresh();
     const receipt = await quoteCheckpoint.checkpoint(stage);
     if(receipt.status !== 'NOT_DUE') tickStage('quote_publication_checkpoint', receipt);
+    if(liveCandleProgress)await liveCandleProgress(stage);
   };
-  const txfCandlePublication = await require('../lib/publish-txf-candle-archive.cjs').publishTxfArchive({
+  const publishLiveTxfCandles = () => require('../lib/publish-txf-candle-archive.cjs').publishTxfArchive({
     runtime: runtimePath(), tradeDate: taipeiDate(), writerRunId: writerTickIdentity.writer_run_id,
     apply: APPLY && !DRY_RUN, readJson, writeJson: writeJsonAtomic,
     leaseValid: () => writerLease.ok === true && writerLease.status === 'claimed' && Date.parse(writerLease.leaseExpiresAt) > Date.now() + 15000,
     sendBatch: async (table, rows, conflict) => {
-      const result = await supabaseUpsert(table, rows, conflict, {batchSize:50,maxBatchBytes:262144,retries:0,timeoutMs:10000});
+      const result = await supabaseUpsert(table, rows, conflict, {batchSize:50,maxBatchBytes:262144,retries:0,timeoutMs:10000,traceStep:'txf_candle_write'});
       if (result.written !== rows.length) throw Error('TXF_WRITE_COUNT_MISMATCH');
     },
   });
+  const txfCandlePublication = await publishLiveTxfCandles();
   tickStage('txf_candle_publication', txfCandlePublication);
   tickStage("market_calendar:start");
   const marketCalendarEvidence = await syncMarketCalendarEvidence();
   tickStage("market_calendar:complete", { trade_date: marketCalendarEvidence.trade_date, is_open: marketCalendarEvidence.is_open, session: marketCalendarEvidence.session });
+  const candleCheckpoint=require('../lib/daytrade-live-candle-checkpoint.cjs').create({apply:APPLY&&!DRY_RUN&&marketCalendarEvidence.is_open===true,roundDeadline:Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Infinity,
+    leaseValid:deadline=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>deadline+5000,
+    run:control=>require('./sync-daytrade-websocket-supabase-fast.js').runLatestCandleSync({apply:APPLY&&!DRY_RUN,...control})});
+  let liveProgressBusy=false;
+  liveCandleProgress=async stage=>{if(liveProgressBusy)return;liveProgressBusy=true;try{const quote=await quoteCheckpoint.checkpoint(stage);if(quote.status!=='NOT_DUE')tickStage('quote_publication_checkpoint',quote);const live=await candleCheckpoint(stage);if(!['NOT_DUE','BUSY','SKIPPED_READ_ONLY'].includes(live.status)){tickStage('latest_candle_publication',live);if(live.status==='LATEST_ROWS_READBACK_VERIFIED')tickStage('txf_candle_publication',{checkpoint:stage,...await publishLiveTxfCandles()});}}finally{liveProgressBusy=false;}};
   const txfReferencePublication = await require('../lib/publish-txf-reference.cjs').publishReference({
     runtime: runtimePath(), tradeDate: taipeiDate(), writerRunId: writerTickIdentity.writer_run_id,
     apply: APPLY && !DRY_RUN, writeJson: writeJsonAtomic,
@@ -8534,6 +8593,9 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
   if (priorityRows.length) {
     const postFetchQuoteMap = new Map(quoteMap);
     mergeWebSocketQuoteCache(postFetchQuoteMap);
+    require('../lib/daytrade-priority-quote-assessment.cjs').reconcile(quoteMap,postFetchQuoteMap,
+      priorityRows.map(row=>normalizeCode(row.symbol)));
+    require('../lib/supply-round-context.cjs').refresh();
     const postFetchWebsocketQuoteRows = priorityRows
       .map((row) => postFetchQuoteMap.get(normalizeCode(row.symbol)))
       .filter((quote) => quote && effectiveQuoteAgeSeconds(quote) <= WINDOW_SECONDS)
@@ -8639,7 +8701,7 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
   let preopenTrialHistory = null;
   if(isolatedModules && moduleWorkIds().some(id=>['A13','A17','A18','A19'].includes(id))){
     result.payload.preopen_a15_a19_evidence=await buildPreopenA15A19Evidence(activeSymbols,quoteMap,taipeiDate(),history=>{preopenTrialHistory=history;});
-  } else if(moduleWorkIds().includes('A13')) {
+  } else if(moduleWorkIds().some(id=>['A13','A17'].includes(id))) {
     result.payload.preopen_trial_source=await buildPreopenA15A19Evidence(activeSymbols,quoteMap,taipeiDate(),history=>{preopenTrialHistory=history;},{trialOnly:true});
   }
   console.log(JSON.stringify({ok:true,stage:'daytrade_tick:preopen_evidence:start',checkedAt:nowIso()}));
@@ -9083,12 +9145,33 @@ async function tick({isolatedTradeJournal=null,isolatedModules=null}={}) {
   // round and deadline, before the wrapper performs independent verification.
   await refreshQuoteCheckpoint("final_water_refresh:start");
   tickStage("final_water_refresh:start");
+  const historyBackoffFile=runtimePath('state','writer-history-backoff.json');
+  const intradayHistory=APPLY&&!DRY_RUN&&marketCalendarEvidence.is_open===true&&marketCalendarEvidence.session==='regular';
+  const historyControl=intradayHistory?{cooldown:require('./writer-database-backoff.cjs').check(historyBackoffFile).blocked}:null;
   const finalWaterRefresh = await require('../lib/daytrade-final-water-refresh.cjs').refresh({
     apply: APPLY, dryRun: DRY_RUN, tradeDate: taipeiDate(),
     calendar: marketCalendarEvidence,
-    run: control => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync(control),
+    historyControl,
+    run: control => require('./sync-daytrade-websocket-supabase-fast.js').runFastSync({...control,boundedHistory:intradayHistory,canWrite:()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>Date.now()+5000,progress:()=>liveCandleProgress?.('history_progress')}),
+    refreshLive: async () => {
+      const deadline=Math.min(Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS)||Infinity,Date.now()+20000);
+      const canWrite=()=>writerLease.ok===true&&writerLease.status==='claimed'&&Date.parse(writerLease.leaseExpiresAt)>deadline+5000;
+      const sync=require('./sync-daytrade-websocket-supabase-fast.js');
+      const quotes=await sync.runQuoteSync({apply:APPLY&&!DRY_RUN,calendar:{trade_date:marketCalendarEvidence.trade_date,isTradingDay:marketCalendarEvidence.is_open},deadline,canWrite});
+      const latest=await sync.runLatestCandleSync({apply:APPLY&&!DRY_RUN,deadline,canWrite});
+      const txf=await publishLiveTxfCandles();
+      const live={quotes_acknowledged:quotes?.ok===true&&require('../lib/supply-round-context.cjs').acknowledged(quotes)>0,stock_candles_verified:latest.status==='LATEST_ROWS_READBACK_VERIFIED',quotes_written:quotes.quotes_written,stock_candles_written:latest.written,txf,checked_at:nowIso()};
+      tickStage('history_live_refresh',live);
+      return live;
+    },
   });
   tickStage("final_water_refresh:complete", finalWaterRefresh);
+  if(finalWaterRefresh.status==='BACKFILL_PENDING'){
+    if(finalWaterRefresh.reason==='HISTORY_READBACK_TIMEOUT')require('./writer-database-backoff.cjs').failure(historyBackoffFile,'TimeoutError');
+    const pending={contract:'writer-backfill-pending-v1',run_id:process.env.FUMAN_CANDLE_SYNC_RUN_ID,checked_at:nowIso(),...finalWaterRefresh};
+    writeJsonAtomic(runtimePath('state','writer-backfill-pending.json'),pending);
+    return {ok:false,complete:false,backfillPending:true,formalEntryAllowed:false,gateGrade:result.gateGrade,finalWaterRefresh};
+  }
   if (finalWaterRefresh.status === 'NATURAL_PENDING') {
     result.payload.final_water_refresh = finalWaterRefresh;
     result.payload.formal_entry_allowed = false;
@@ -9379,6 +9462,7 @@ async function main() {
       const started = Date.now();
       const result = await tick();
       console.log(JSON.stringify(result, null, 2));
+      if (result.backfillPending === true) { process.exitCode = 76; break; }
       if (result.naturalPending === true) { process.exitCode = 75; break; }
       if (ONCE) break;
       if (maxRunReached || (MAX_RUN_SECONDS > 0 && (Date.now() - runStartedAt) / 1000 >= MAX_RUN_SECONDS)) break;
@@ -9389,6 +9473,7 @@ async function main() {
     } while (true);
   } finally {
     if (maxRunTimer) clearTimeout(maxRunTimer);
+    liveCandleProgress=null;
   }
 }
 

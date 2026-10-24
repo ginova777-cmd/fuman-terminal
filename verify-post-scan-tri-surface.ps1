@@ -211,7 +211,9 @@ function Assert-PostScanTriSurfaceClosure {
       Pop-Location
     }
     try {
-      $report = Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json
+      # Source payloads may legitimately contain both date and Date. Preserve
+      # case-sensitive JSON keys rather than coercing them into PSObject members.
+      $report = Get-Content -LiteralPath $reportPath -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
       $row = @($report.results | Where-Object { $_.key -eq $Route }) | Select-Object -First 1
       if ($verifyExit -eq 0 -and $report.ok -eq $true -and $null -ne $row -and $row.ok -eq $true -and [string]$row.supabase.runId -eq $RunId) {
         Write-PostScanTriSurfaceReceipt -RuntimeRoot $runtimeRoot -Route $Route -RunId $RunId -ExpectedDate $expectedDate -LogPath $LogPath -ReportPath $reportPath -Status "complete" -Attempts $attempt -Row $row
