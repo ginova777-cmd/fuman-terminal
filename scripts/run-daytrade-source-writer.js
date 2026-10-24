@@ -8771,6 +8771,19 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
   await refreshQuoteCheckpoint("status_scorecard:start");
   tickStage("status_scorecard:start");
   const sideSnapshot=readJson(MOTHER_POOL_SNAPSHOT_FILE,{});
+      if(moduleWorkIds().includes('A16')&&APPLY&&!DRY_RUN){
+        try { if(!require('../lib/daytrade-mother-pool-snapshot').inspectSnapshot(sideSnapshot,taipeiDate()).ok)throw Error('A16_SNAPSHOT_INVALID');
+        result.payload.a16_warmup = await require('../lib/mother-pool-a16-round.cjs').run({
+          selected:()=>{
+            if(isolatedModules)return moduleWorkIds();
+            const current=require('../lib/daytrade-module-recovery-policy.cjs').evaluate(readJson(runtimePath('config','daytrade-module-recovery-policy.json'),null),recoveryRegistry,{trade_date:taipeiDate(),release_sha:recoveryRelease});
+            const selected=moduleSession.select(require('../lib/daytrade-formal-module-route.cjs').restrict(current,recoveryRegistry));
+            return [...selected.enabled,...(selected.probe?[selected.probe]:[])];
+          },apply:true,identity:{trade_date:taipeiDate(),canonical_run_id:sideSnapshot.canonical_run_id},symbols:sideSnapshot.symbols,runtime:runtimePath(),lease:()=>writerLease,
+          deadline:Number(process.env.FUMAN_DAYTRADE_WRITER_DEADLINE_MS),
+          runWarmup:options=>require('./warm-mother-pool-a16.js').run(options)
+        }); } catch(error) { result.payload.a16_warmup={status:'BLOCKED',complete:false,first_blocker:String(error.message||error)}; }
+      }
   const sideAsOf = nowIso();
   const sideMinutes = taipeiClockMinutesFrom(sideAsOf);
   if (moduleWorkIds().some(id=>['B12','B13','B14','B19','B20'].includes(id)) && sideMinutes >= 9 * 60 && sideMinutes < 13 * 60 + 30) {
