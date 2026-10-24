@@ -14,17 +14,25 @@ function classify(day) {
   if (day.isTradingDay) return { status: "OPEN", reason: "TRADING_DAY", exitCode: 0 };
   const text = `${day.reason || ""} ${day.row?.Name || ""} ${day.row?.Description || ""}`;
   const typhoon = /typhoon|颱風|停班|停課/i.test(text);
-  if (typhoon && (!day.source || !(day.row?.sourceUrl || day.row?.source_url) || !(day.row?.announcementDate || day.row?.Date) || !(day.row?.effectiveAt || day.row?.effective_at) || !(day.row?.sourceSha256 || day.row?.evidenceSha256))) return { status: "BLOCKED", reason: "MARKET_STATUS_UNVERIFIED", exitCode: 2 };
+  if (typhoon) {
+    try { require('./market-emergency-status.cjs').verify(day); }
+    catch { return { status: "BLOCKED", reason: "MARKET_STATUS_UNVERIFIED", exitCode: 2 }; }
+  }
   return { status: "SKIPPED", reason: typhoon ? "MARKET_CLOSED_TY" : "MARKET_CLOSED", exitCode: 10 };
 }
 async function main() {
   const now = new Date(); const runtime = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime"; const stateDir = process.env.FUMAN_STATE_DIR || path.join(runtime, "state");
   const requested = compactDate(arg("trade-date")) || dateKey(taipeiDateParts(now));
   let day = await isTwseTradingDay(new Date(`${requested}T04:00:00+00:00`), { stateDir, includeEvidence: true });
-  if (day.isTradingDay === true && !day.error) {
+  if ((day.isTradingDay === true && !day.error) || day.source === 'dgpa_auto_update') {
     try {
       const emergency = await require('./market-emergency-status.cjs').check(requested);
-      day = emergency.isTradingDay ? { ...day, emergencyEvidence: emergency } : emergency;
+      // Re-read automatic overrides from the official source, including legacy
+      // rows. Never manufacture missing evidence or trust an obsolete closure.
+      if (emergency.isTradingDay && day.source === 'dgpa_auto_update') {
+        const calendar = await isTwseTradingDay(new Date(`${requested}T04:00:00+00:00`), { stateDir, includeEvidence: true, ignoreOverrides: true });
+        day = { ...calendar, emergencyEvidence: emergency };
+      } else day = emergency.isTradingDay ? { ...day, emergencyEvidence: emergency } : emergency;
     } catch (error) { day = { ...day, error: error.message }; }
   }
   const verdict = classify(day); const stage = arg("stage", "unknown"); const executionMode = arg("execution-mode", "natural"); const runId = arg("run-id", `market-status-${requested.replace(/-/g, "")}-${crypto.randomUUID()}`);
