@@ -373,6 +373,8 @@ if ($ResumeVerificationRunId) {
   if ($LASTEXITCODE -ne 0) { throw 'resume_independent_database_verification_failed' }
   $originalLines[0] | Out-File $log -Append -Encoding utf8
   . "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
+  $script:InstitutionSourceUniverseCount = [int]$metadata.sourceRows
+  Write-InstitutionReceipt 'verifying' 0 $false ([int]$metadata.resultCount) $ResumeVerificationRunId
   $row = Assert-PostScanTriSurfaceClosure -Route institution -RunId $ResumeVerificationRunId -LogPath $log -SkipPublication
   Write-InstitutionReceipt 'complete' 0 $true ([int]$metadata.resultCount) $ResumeVerificationRunId
   Update-PostScanReceiptEvidence -RuntimeRoot $runtime -Route institution -RunId $ResumeVerificationRunId -ExpectedDate (Get-PostScanExpectedDateKey) -Row $row
