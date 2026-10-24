@@ -4624,7 +4624,7 @@ function buildPriorityPool(activeSymbols, dailyVolumeMap, quoteMap = new Map(), 
   output.sourceSeedCounts = seeds.counts;
   output.sourceSeedAudit = seeds.sourceAudit;
   output.moduleRequestedUniverse = turnoverUniverse.map(row=>row.symbol);
-  output.volumeValueRanking = intradayTurnoverActive && moduleWorkIds().includes('B02')
+  output.volumeValueRanking = intradayTurnoverActive && moduleWorkIds().some(id=>['B02','B03','B21'].includes(id))
     ? require('../lib/daytrade-volume-value-ranking').buildRanking(turnoverUniverse.map(row => {
       const payload = quoteMap.get(row.symbol)?.payload || {};
       return {symbol:row.symbol,volume:payload.turnoverVolumeEvidence || {},amount:payload.tradeValueEvidence || {}};
@@ -8904,7 +8904,7 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
       const identity={trade_date:taipeiDate(),canonical_run_id:snapshot.canonical_run_id,
         writer_run_id:result.payload.writer_run_id||result.run_id,generation_id:result.payload.generation_id,
         mother_pool_run_id:snapshot.mother_pool_run_id,snapshot_generation:snapshot.generation,snapshot_sequence:snapshot.snapshot_sequence};
-      const needsCandles=moduleWorkIds().some(id=>id!=='A01')&&sideMinutes>=540;
+      const needsCandles=moduleWorkIds().some(id=>!['A01','B02','B03','B21'].includes(id))&&sideMinutes>=540;
       const cache=needsCandles?readFugleWebSocketCandles({maxAgeMs:90*60*1000}):null;
       const sessionCandles=needsCandles?require('../lib/mother-pool-session-candles').select({payload:cache.payload,tradeDate:identity.trade_date,asOf:sideAsOf}):[];
       const inputs=[require('../lib/mother-pool-identity-source').collect({identity,symbols:snapshot.symbols,calendar:marketCalendarEvidence,lease:writerLease,asOf:nowIso()})];
@@ -8935,6 +8935,7 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
       if(sideMinutes>=540){
       if(moduleWorkIds().some(id=>['A08','A09'].includes(id)))try{inputs.push(...require('../lib/mother-pool-ma20-producer').collect({identity,snapshot,symbols:snapshot.symbols,candles:sessionCandles,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['A08','A09'],error:String(error.message||error)});}
       // BEGIN_ISOLATED_TRADE_TICK_INPUT: no CLI/env activation; main calls tick().
+      if(moduleWorkIds().some(id=>['B01','B22','B23'].includes(id))){
       if(isolatedTradeJournal){
         inputs.push(...await require('../lib/mother-pool-writer-trade-plans.cjs').collect({
           candles:sessionCandles,identity,symbols:snapshot.symbols,asOf:sideAsOf,
@@ -8943,8 +8944,10 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
         inputs.push(...require('../lib/mother-pool-candle-module-producer').collect({
           candles:sessionCandles,identity,symbols:snapshot.symbols,asOf:sideAsOf}));
       }
+      }
       // END_ISOLATED_TRADE_TICK_INPUT
-      try{inputs.push(...require('../lib/mother-pool-liquidity-module-producer').collect({identity,symbols:result.payload.module_requested_universe,volumeValue:result.payload.volume_value_ranking,turnover:result.payload.intraday_turnover_ranking,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B02','B03','B21'],error:String(error.message||error)});}
+      if(moduleWorkIds().some(id=>['B02','B03','B21'].includes(id)))try{inputs.push(...require('../lib/mother-pool-liquidity-module-producer').collect({identity,symbols:result.payload.module_requested_universe,volumeValue:result.payload.volume_value_ranking,turnover:result.payload.intraday_turnover_ranking,asOf:sideAsOf,modules:moduleWorkIds().filter(id=>["B02","B03","B21"].includes(id))}));}catch(error){result.payload.module_persistence_errors.push({modules:['B02','B03','B21'],error:String(error.message||error)});}
+      if(moduleWorkIds().some(id=>!['A01','B01','B02','B03','B21'].includes(id))){
       try{inputs.push(...require('../lib/mother-pool-anomaly-module-producer').collect({identity,symbols:snapshot.symbols,evidence:result.payload.mother_pool_price_volume_evidence,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B12','B13','B19'],error:String(error.message||error)});}
       try{const receipt=readJson(path.join(MOTHER_POOL_SNAPSHOT_RECEIPT_DIR,`mother-pool-snapshot-anon-${compactDateKey(taipeiDate())}-${snapshot.snapshot_sequence}.json`),null);inputs.push(require('../lib/mother-pool-snapshot-module-producer').collect({identity,snapshot,receipt,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B11'],error:String(error.message||error)});}
       try{inputs.push(require('../lib/mother-pool-industry-delta-producer').collect({identity,discovery:result.payload.same_round_industry_discovery,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B07'],error:String(error.message||error)});}
@@ -8954,6 +8957,7 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
       try{inputs.push(require('../lib/mother-pool-allocation-producer').collect({identity,allocation:result.payload.deep_scan_allocation,snapshot,asOf:sideAsOf}));}catch(error){result.payload.module_persistence_errors.push({modules:['B10'],error:String(error.message||error)});}
       // B15 restored for natural completed 1m only; no 5M API or tables.
       inputs.push(require('../lib/mother-pool-one-minute-indicators').collect({identity,symbols:snapshot.symbols,candles:sessionCandles,asOf:sideAsOf}));
+      }
 
       }
       const dir=runtimePath('data','module-write-sets');fs.mkdirSync(dir,{recursive:true});
