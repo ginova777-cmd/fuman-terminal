@@ -8963,7 +8963,7 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
         return require('../lib/mother-pool-combination-producer').collect({identity,symbols:snapshot.symbols,
           parents:result.payload.module_write_sets,side:sideFile?readJson(sideFile,null):null,asOf:nowIso()});
       }});
-      if(sideMinutes>=539)inputs.push({module_id:'A18',build:()=>require('../lib/mother-pool-preopen-quality').collect({identity,symbols:snapshot.symbols,parents:result.payload.module_write_sets,asOf:nowIso()})});
+      // A18 is persisted after parent independent readbacks.
       }
       const dir=runtimePath('data','module-write-sets');fs.mkdirSync(dir,{recursive:true});
       result.payload.module_input_checkpoint=require('../lib/mother-pool-module-input-checkpoint').save({
@@ -9096,7 +9096,7 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
     const snapshotGeneration = sideSnapshot.generation;
     const captureArgs = [path.join(__dirname, 'capture-daytrade-module-readbacks.js'), `--trade-date=${taipeiDate()}`, `--canonical=${result.payload?.canonical_run_id || `${SOURCE_NAME}:${String(taipeiDate()).replace(/-/g, '')}:canonical`}`, `--writer-run-id=${result.payload?.writer_run_id || result.run_id || ''}`, `--writer-generation-id=${result.payload?.generation_id || ''}`, `--snapshot-generation=${snapshotGeneration}`, `--mother-pool-run-id=${snapshotRun}`, `--snapshot-sequence=${result.payload?.mother_pool_snapshot_sequence || ''}`, `--modules=${Object.keys(moduleRegistry.modules || {}).join(',')}`];
     const captures=[];
-    const nonSide=moduleWorkIds().filter(id=>!['B14','B20','A14','A19'].includes(id));
+    const nonSide=moduleWorkIds().filter(id=>!['B14','B20','A14','A19','A18'].includes(id));
     const writeSetIndexFile=runtimePath('data','scan-receipts','modules',`writer-write-set-index-${require('node:crypto').randomUUID()}.json`);
     require('../lib/daytrade-shared-evidence.cjs').write(writeSetIndexFile,{modules:result.payload.module_write_sets||{}},runtimePath());
     captureArgs.push('--write-set-index='+writeSetIndexFile);
@@ -9110,6 +9110,27 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
         '--snapshot-generation='+id.snapshot_generation,'--snapshot-sequence='+id.snapshot_sequence]);
     }else if(moduleWorkIds().some(id=>['B14','B20'].includes(id))) captures.push({status:1,stderr:'MINUTE_SIDE_WRITE_SET_MISSING'});
     for(const args of groups){const capture=spawnSync(process.execPath,args,{encoding:'utf8',windowsHide:true,timeout:120000,env:{...process.env,SUPABASE_SERVICE_ROLE_KEY:SUPABASE_SERVICE_KEY,SUPABASE_ANON_KEY:SUPABASE_READ_KEY===SUPABASE_SERVICE_KEY?'':SUPABASE_READ_KEY,MOTHER_POOL_B14_VIEW:'v_daytrade_minute_side_readback_v1',MOTHER_POOL_B20_VIEW:'v_daytrade_minute_side_b20_readback_v1'}});captures.push({status:capture.status,stdout:capture.stdout||'',stderr:capture.stderr||'',error:capture.error?.message||null});}
+    // A18 runs only after parent DB/anon captures; it never enables its parents.
+    if(moduleWorkIds().includes('A18') && persistModuleInput && APPLY && !DRY_RUN){
+      const a18Identity={trade_date:taipeiDate(),canonical_run_id:sideSnapshot.canonical_run_id,writer_run_id:result.payload.writer_run_id,generation_id:result.payload.generation_id,mother_pool_run_id:sideSnapshot.mother_pool_run_id,snapshot_generation:sideSnapshot.generation,snapshot_sequence:sideSnapshot.snapshot_sequence};
+      result.payload.a18_continuation=await require('../lib/run-a18-dependent-stage.cjs').run({
+        identity:a18Identity,symbols:sideSnapshot.symbols,captures,runtime:runtimePath(),
+        selected:()=>{
+          if(isolatedModules)return moduleWorkIds();
+          const current=require('../lib/daytrade-module-recovery-policy.cjs').evaluate(readJson(runtimePath('config','daytrade-module-recovery-policy.json'),null),recoveryRegistry,{trade_date:taipeiDate(),release_sha:recoveryRelease});
+          const selected=moduleSession.select(require('../lib/daytrade-formal-module-route.cjs').restrict(current,recoveryRegistry));
+          return [...selected.enabled,...(selected.probe?[selected.probe]:[])];
+        },persist:persistModuleInput,capture:async(id,saved)=>{
+          const indexFile=runtimePath('data','scan-receipts','modules','a18-write-set-'+require('node:crypto').randomUUID()+'.json');
+          require('../lib/daytrade-shared-evidence.cjs').write(indexFile,{modules:{[id]:saved}},runtimePath());
+          const args=captureArgs.map(x=>x.startsWith('--modules=')?'--modules='+id:x.startsWith('--write-set-index=')?'--write-set-index='+indexFile:x);
+          const c=spawnSync(process.execPath,args,{encoding:'utf8',windowsHide:true,timeout:120000,env:{...process.env,SUPABASE_SERVICE_ROLE_KEY:SUPABASE_SERVICE_KEY,SUPABASE_ANON_KEY:SUPABASE_READ_KEY===SUPABASE_SERVICE_KEY?'':SUPABASE_READ_KEY}});
+          return {module_id:id,status:c.status,stdout:c.stdout||'',stderr:c.stderr||'',error:c.error?.message||null};
+        }
+      });
+      if(result.payload.a18_continuation.capture)captures.push(result.payload.a18_continuation.capture);
+      if(result.payload.a18_continuation.status!=='A18_ROUND_VERIFIED_PENDING_FORMAL_ACCEPTANCE')captures.push({status:1,module_id:'A18',stderr:result.payload.a18_continuation.first_blocker||result.payload.a18_continuation.status});
+    }
     if(moduleWorkIds().some(id=>['A14','A19'].includes(id)) && persistModuleInput && sideMinutes>=530 && sideMinutes<810){
       const closureIdentity={trade_date:taipeiDate(),canonical_run_id:sideSnapshot.canonical_run_id,writer_run_id:result.payload.writer_run_id,generation_id:result.payload.generation_id,mother_pool_run_id:sideSnapshot.mother_pool_run_id,snapshot_generation:sideSnapshot.generation,snapshot_sequence:sideSnapshot.snapshot_sequence};
       const closureCaptures=await require('../lib/run-preopen-closure-stages').run({identity:closureIdentity,selectedModules:moduleWorkIds().filter(id=>['A14','A19'].includes(id)),symbols:sideSnapshot.symbols,captures,persist:persistModuleInput,runtime:runtimePath(),stageInputCheckpoint:result.payload.module_input_checkpoint,capture:async(id,saved)=>{
