@@ -8701,7 +8701,7 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
   let preopenTrialHistory = null;
   if(isolatedModules && moduleWorkIds().some(id=>['A13','A17','A18','A19'].includes(id))){
     result.payload.preopen_a15_a19_evidence=await buildPreopenA15A19Evidence(activeSymbols,quoteMap,taipeiDate(),history=>{preopenTrialHistory=history;});
-  } else if(moduleWorkIds().includes('A13')) {
+  } else if(moduleWorkIds().some(id=>['A13','A17'].includes(id))) {
     result.payload.preopen_trial_source=await buildPreopenA15A19Evidence(activeSymbols,quoteMap,taipeiDate(),history=>{preopenTrialHistory=history;},{trialOnly:true});
   }
   console.log(JSON.stringify({ok:true,stage:'daytrade_tick:preopen_evidence:start',checkedAt:nowIso()}));
