@@ -1,0 +1,3 @@
+const assert=require('assert/strict'),{plan}=require('../lib/daytrade-fast-write-plan.cjs');
+const clock=Date.parse('2026-10-20T13:31:00+08:00'),rows=Array.from({length:2101},(_,i)=>({symbol:String(1000+i%2000),candle_time:new Date(clock-Math.floor(i/2000)*60000-120000).toISOString()}));
+assert.equal(plan(rows,{nowMs:clock}).rows.length,2101);const bounded=plan(rows,{nowMs:clock,bounded:true});assert.equal(bounded.rows.length,2000);assert.equal(bounded.deferred,101);assert.equal(bounded.mode,'BOUNDED_LATEST_AND_BACKFILL');assert.equal(new Set(bounded.rows).size,2000);console.log('PASS a regular-session round crossing 13:30 stays bounded; explicit off-session full catchup remains unchanged');

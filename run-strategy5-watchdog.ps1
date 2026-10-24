@@ -4,6 +4,9 @@ $PSNativeCommandUseErrorActionPreference = $false
 Set-Location "${PSScriptRoot}"
 
 $runtimeDir = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\fuman-runtime" }
+& (Join-Path $PSScriptRoot 'scripts\invoke-market-status-guard.ps1') -Stage 'strategy5-watchdog' -ExecutionMode 'recovery'
+if ($LASTEXITCODE -eq 10) { exit 0 }
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $logDir = Join-Path $runtimeDir "logs"
 $stateDir = Join-Path $runtimeDir "state"
 New-Item -ItemType Directory -Force -Path $logDir, $stateDir | Out-Null
