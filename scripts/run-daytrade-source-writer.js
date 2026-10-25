@@ -2751,6 +2751,13 @@ async function fetchStockFutureInitialMap() {
 }
 function addGroupContractRow(map, row, source) {
   const symbol = normalizeCode(row?.symbol || row?.code);
+  // Official evidence belongs to the exact original code; never truncate a TDR
+  // identifier or let a malformed cached row replace another company's data.
+  if(row?.officialEvidence){
+    const rawCode=String(row.officialEvidence.raw_row?.['公司代號']||'').trim();
+    const key=String(row?.symbol||row?.code||'').trim();
+    if(!/^\d{4}$/.test(rawCode)||rawCode!==key||rawCode!==symbol)return;
+  }
   if (!symbol) return;
   const themes = Array.isArray(row?.themes)
     ? row.themes
@@ -2897,7 +2904,8 @@ async function fetchMopsOfficialIndustryMap() {
   for (const result of results) {
     if (result.status !== "fulfilled") continue;
     for (const row of result.value.rows) {
-      const symbol = normalizeCode(row["公司代號"]);
+      const symbol = String(row["公司代號"]||"").trim();
+      if(!/^\d{4}$/.test(symbol))continue;
       const rawIndustry = firstText(row["產業別"]);
       const officialIndustry = MOPS_INDUSTRY_NAMES[rawIndustry] || rawIndustry;
       if (symbol && officialIndustry) addGroupContractRow(map, { symbol, officialIndustry, source: "mops_open_data", confidence: "high", updatedAt: result.value.fetched_at, officialEvidence:{source_url:result.value.source_url,response_sha256:result.value.response_sha256,fetched_at:result.value.fetched_at,raw_row:row} }, "mops_open_data");
