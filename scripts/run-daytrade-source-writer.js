@@ -9041,6 +9041,13 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
           if(input.module_id==='A13' && input.rows.length && input.rows.every(row=>row.status==='NOT_DUE')){
             result.payload.module_not_due ||= {};result.payload.module_not_due.A13=input.v11_evidence;continue;
           }
+          if(['A07','A15'].includes(input.module_id)&&input.requested_symbols.length===0){
+            const scope=input.source_evidence?.volume_eligibility;
+            if(!scope||!scope.input_symbols.length||scope.excluded_symbols.length!==scope.input_symbols.length)throw Error('EMPTY_VOLUME_SCOPE_INVALID');
+            result.payload.module_scope_exclusions ||= {};
+            result.payload.module_scope_exclusions[input.module_id]={status:'NO_ELIGIBLE_SYMBOLS',formal_acceptance:false,...scope};
+            continue;
+          }
           const saved=await persistModuleInput(input);
           if(input.module_id==='B02')writeJson(statePath('daytrade-b02-module-latest.json'),saved);
           if(require('../lib/daytrade-closure-dependencies.cjs').needsCapture(input.module_id,moduleWorkIds())){
