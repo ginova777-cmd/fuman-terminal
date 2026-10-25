@@ -8234,6 +8234,15 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
   // admission is built.
   tickStage("daily_volume:start");
   const dailyVolumePromise = fetchDailyVolumeAvg();
+  // Passive daily annotation, overlapping existing candle work. Failure never stops supply.
+  const dispositionPromise=dailyVolumePromise.then(async map=>{
+    const helper=require('../lib/mother-pool-disposition.cjs'),day=taipeiDate();
+    const calendar=[...map.values()].find(row=>row.daily_volume_evidence?.calendar)?.daily_volume_evidence.calendar;
+    let previous=null;try{previous=require('../lib/mother-pool-daily-volume-baseline').datesFromCalendar(calendar,day,1).at(-1);}catch{}
+    const current=await helper.read({runtime:runtimePath(),date:day,observedDate:day});
+    const prior=previous&&previous!==day?await helper.read({runtime:runtimePath(),date:previous,observedDate:day}):current;
+    return {current,prior};
+  }).catch(error=>({error:String(error.message||error),current:null,prior:null}));
   const nonFatalWriteErrors = stockFutureCandidates.publication_ok === false ? [{target:'stock_future_candidates',message:stockFutureCandidates.reason||stockFutureCandidates.status,status:stockFutureCandidates.status,complete:false,next_retry_at:stockFutureCandidates.next_retry_at||null}] : [];
   // Publish latest natural bars before slow enrichment, under the Writer lease.
   let fullMarketLatestCandles = { complete: false, db_readback_verified: false, status: 'NOT_EXECUTED' };
@@ -8274,11 +8283,13 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
   tickStage("strategy_priority_bridge:complete");
   const dailyVolumeMap = await dailyVolumePromise;
   tickStage("daily_volume:complete", { rows: dailyVolumeMap.size });
+  const dispositionSources=await dispositionPromise;
   let officialDaytradeSource;
   try {
     const calendar=[...dailyVolumeMap.values()].find(row=>row.daily_volume_evidence?.calendar)?.daily_volume_evidence.calendar;
     officialDaytradeSource=await require('../lib/mother-pool-official-daytrade-source').read({tradeDate:taipeiDate(),calendar,runtime:runtimePath()});
   } catch(error) { officialDaytradeSource={source_date:null,reports:{},error:String(error.message||error)}; }
+  officialDaytradeSource.disposition=dispositionSources.prior;
   const preopenReferencePriceMap = taipeiMinutes() < 9 * 60
     ? await fetchPreopenReferencePriceMap()
     : new Map();
@@ -8914,7 +8925,7 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
       const sessionCandles=needsCandles?require('../lib/mother-pool-session-candles').select({payload:cache.payload,tradeDate:identity.trade_date,asOf:sideAsOf}):[];
       const inputs=[require('../lib/mother-pool-identity-source').collect({identity,symbols:snapshot.symbols,calendar:marketCalendarEvidence,lease:writerLease,asOf:nowIso()})];
       if(moduleWorkIds().some(id=>id!=='A01')){
-      if(moduleWorkIds().some(id=>["A02"].includes(id))) inputs.push(require('../lib/mother-pool-eligibility-source').collect({identity,evidence:activeSymbols.sourceEvidence,asOf:sideAsOf}));
+      if(moduleWorkIds().some(id=>["A02"].includes(id))) inputs.push(require('../lib/mother-pool-eligibility-source').collect({identity,evidence:activeSymbols.sourceEvidence,asOf:sideAsOf,dispositionSource:dispositionSources.current}));
       if(moduleWorkIds().some(id=>["A03"].includes(id))) try { inputs.push(require('../lib/mother-pool-a03-integration.cjs').dispatchForWriter({
         legacyCollect:()=>require('../lib/mother-pool-warmup-union')[isolatedModules?'collectV11':'collect']({identity,symbols:snapshot.symbols,bridge:readJson(STRATEGY_PRIORITY_BRIDGE_CACHE_FILE,null),asOf:sideAsOf}),
         isolated:Boolean(isolatedModules)&&process.env.A03_ISOLATED_INTEGRATION_TEST==='1',
