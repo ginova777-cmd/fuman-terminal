@@ -6302,10 +6302,13 @@ function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quo
   const candleCacheBySymbol = buildIntradayBurstCandleCacheBySymbol(tradeDate);
   const staticIndustryMap = readHeatmapStaticGroupMap();
   const officialIndustryMap = readMopsOfficialIndustryCacheMap();
-  const classificationFallback = (symbol) => ({
-    ...(staticIndustryMap.get(symbol) || {}),
-    ...(officialIndustryMap.get(symbol) || {}),
-  });
+  const classificationFallback = (symbol) => {
+    const merged = new Map();
+    // Preserve detailed mapping evidence when the official source has empty fields.
+    addGroupContractRow(merged, staticIndustryMap.get(symbol), "api/heatmap.js:BB_HEATMAP_GROUPS");
+    addGroupContractRow(merged, officialIndustryMap.get(symbol), "mops_open_data_cache");
+    return merged.get(symbol) || {};
+  };
   const events = [];
   const technicalIndicatorReadback = [];
   const rejectedReasonCounts = {};
