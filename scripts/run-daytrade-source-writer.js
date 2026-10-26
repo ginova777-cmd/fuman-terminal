@@ -3343,7 +3343,10 @@ async function readStrategyPriorityBridgeSource(source) {
   ].join("&");
   const pages = [];
   const rows = await supabaseGetPaged(source.resultsResource, query, { service: true, requireExactCount: true, captureRows: true, pageEvidence: pages });
-  const reconciliation = require('../lib/mother-pool-strategy-bridge-rows').inspect({ run, rows, runId: validation.runId, sourceDate: validation.scanDate });
+  let countedRun;
+  try { countedRun = require('../lib/mother-pool-three-source-warmup.cjs').sourceReceiptWithCount(source.key,run,rows,pages); }
+  catch(error){return {...base,status:'blocked',reason:error.message,sourceRows:rows,pages};}
+  const reconciliation = require('../lib/mother-pool-strategy-bridge-rows').inspect({ run:countedRun, rows, runId: validation.runId, sourceDate: validation.scanDate });
   if (!reconciliation.ok) return { ...base, status: 'blocked', reason: reconciliation.first_blocker, sourceRows: rows, pages, reconciliation };
   const symbols = [];
   const seen = new Set();
@@ -4777,8 +4780,8 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     }
     return out;
   };
-  const threeSourceWarmup = require('../lib/mother-pool-three-source-warmup.cjs').collect({bridge:bridgePayload,tradeDate,asOf:nowIso()});
-  const bridgeWarmupSymbols = [...threeSourceWarmup.symbols,...Object.entries(bridgeGroups).filter(([key])=>!require('../lib/mother-pool-three-source-warmup.cjs').SOURCES.includes(key)).flatMap(([,group])=>Array.isArray(group?.symbols)?group.symbols:[])];
+  const threeSourceWarmup = require('../lib/mother-pool-three-source-warmup.cjs').collect({bridge:bridgePayload,tradeDate,asOf:nowIso(),sourceKeys:['strategy3','strategy4','strategy5','institution']});
+  const bridgeWarmupSymbols = [...threeSourceWarmup.symbols,...Object.entries(bridgeGroups).filter(([key])=>!threeSourceWarmup.scope.includes(key)).flatMap(([,group])=>Array.isArray(group?.symbols)?group.symbols:[])];
   const industryPrewarm = buildDaytradeIndustryPrewarm(
     DAYTRADE_INDUSTRY_PREWARM_CONFIG,
     activeUniverseSymbols,
@@ -4890,7 +4893,7 @@ async function publishDaytradePrioritySymbols(priorityRows, activeSymbols = []) 
     threeSourceWarmup: require('../lib/mother-pool-three-source-warmup.cjs').admission(threeSourceWarmup,fullTerminalWarmupSymbols,nextDaytradeCandlePrioritySymbols),
     terminalPrioritySymbols: fullTerminalWarmupSymbols,
     terminalPriorityCount: fullTerminalWarmupSymbols.length,
-    longyueWarmupIntake: {status:longyueIntake.status,candidate_version:longyueIntake.candidate_version,list_sha256:longyueIntake.list_sha256,symbols:longyueIntake.symbols},
+    longyueWarmupIntake: {status:longyueIntake.status,candidate_version:longyueIntake.candidate_version,list_sha256:longyueIntake.list_sha256,symbols:longyueIntake.symbols,trade_date:longyueIntake.trade_date,base_date:longyueIntake.base_date,failed_checks:longyueIntake.failed_checks,original_source:longyueIntake.original_source||null,warmup_complete:false},
     terminalWarmupScope: "all_valid_taiwan_symbols_currently_exposed_by_terminal",
     daytradeIndustryPrewarmContract: industryPrewarm.contract,
     daytradeIndustryPrewarmMode: industryPrewarm.mode,
