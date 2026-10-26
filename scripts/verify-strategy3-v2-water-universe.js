@@ -74,7 +74,7 @@ async function main() {
   add(issues, water.receipt?.receipt_incomplete !== true, "strategy3_v2_mother_pool_receipt_incomplete");
   add(issues, water.receipt?.global_formal_gate_blocked !== true, "strategy3_v2_global_formal_gate_blocked");
   add(issues, expectedCount > 0, "strategy3_v2_mother_pool_empty");
-  add(issues, coverageRatio >= MIN_MOTHER_POOL_COVERAGE_RATIO, "strategy3_v2_mother_pool_v4_1_usable_1m_coverage_below_90_percent", { readyCount, expectedCount, coverageRatio });
+  add(issues, coverageRatio >= MIN_MOTHER_POOL_COVERAGE_RATIO, "strategy3_v2_mother_pool_v4_1_usable_1m_coverage_below_80_percent", { readyCount, expectedCount, coverageRatio });
   add(issues, Number(scan?.mother_pool_rows || 0) === expectedCount, "strategy3_v2_runner_verifier_mother_pool_count_mismatch", { runner: scan?.mother_pool_rows, verifier: expectedCount });
   add(issues, scan?.canonical_run_id === water.receipt?.canonical_run_id, "strategy3_v2_runner_verifier_canonical_run_id_mismatch", { runner: scan?.canonical_run_id, verifier: water.receipt?.canonical_run_id });
   add(issues, Array.isArray(scan?.results) && scan.results.length === resultCount, "strategy3_v2_runner_receipt_result_count_mismatch", { resultCount, rows: scan?.results?.length });

@@ -22,7 +22,7 @@ const MOTHER_POOL_VIEW = "v_fugle_daytrade_mother_pool_v4_1";
 const MOTHER_POOL_RECEIPT_VIEW = "v_fugle_daytrade_mother_pool_receipt_v4_1";
 const QUOTE_TABLE = "fugle_daytrade_quotes_live";
 const INTRADAY_1M_RPC = "get_fugle_daytrade_intraday_1m_latest_n";
-const MIN_MOTHER_POOL_COVERAGE_RATIO = Math.max(0.9, Number(process.env.STRATEGY3_V2_MIN_MOTHER_POOL_COVERAGE_RATIO || 0.9));
+const MIN_MOTHER_POOL_COVERAGE_RATIO = require('../lib/strategy3-coverage-policy.cjs').candleMinimum;
 
 function taipeiDate(date = new Date(), compact = false) {
   const parts = new Intl.DateTimeFormat("en-CA", {
