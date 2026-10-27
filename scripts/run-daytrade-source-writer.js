@@ -1143,14 +1143,14 @@ async function fetchRecentThreeDayAverageVolume() {
   const tradeDate = taipeiDate();
   if (recentThreeDayVolumeCache.tradeDate === tradeDate && Date.now() - recentThreeDayVolumeCache.loadedAt <= 30 * 60 * 1000) {
     for(const value of recentThreeDayVolumeCache.bySymbol.values()){
-      value.a04_daily_evidence={...value.historical_daily_evidence,calendar:a04CalendarHistory||{status:'BLOCKED',trade_date:tradeDate,checks:[]}};
+      value.a04_daily_evidence={...(value.a04_daily_evidence||value.historical_daily_evidence),calendar:a04CalendarHistory||{status:'BLOCKED',trade_date:tradeDate,checks:[]}};
     }
     return recentThreeDayVolumeCache;
   }
   const calendar=await require('../lib/mother-pool-historical-sessions').selectSessions({tradeDate,resolveDay:date=>require('./twse-trading-day').isTwseTradingDay(date,{stateDir:statePath(''),ignoreOverrides:true})});
   const dates=require('../lib/mother-pool-daily-volume-baseline').datesFromCalendar(calendar,tradeDate);
   const historyDates=require('../lib/mother-pool-daily-volume-baseline').datesFromCalendar(calendar,tradeDate,15);
-  const historyQuery=`select=symbol,trade_date,volume_lots,open,high,low,close&trade_date=gte.${historyDates[0]}&trade_date=lt.${tradeDate}&order=trade_date.desc,symbol.asc`;
+  const historyQuery=`select=symbol,trade_date,volume_lots,open,high,low,close,source,updated_at,payload&trade_date=gte.${historyDates[0]}&trade_date=lt.${tradeDate}&order=trade_date.desc,symbol.asc`;
   const historyCache=require('../lib/daytrade-historical-read-cache');
   const historyCacheFile=runtimePath('data','historical-read-cache','daily-ohlcv-'+tradeDate+'.json');
   const historyScope={tradeDate,source:'strategy4_daily_ohlcv_view',query:historyQuery,sessionDates:calendar.session_dates};
@@ -1159,18 +1159,22 @@ async function fetchRecentThreeDayAverageVolume() {
   const rows=cachedHistory?.rows||await supabaseGetPaged('strategy4_daily_ohlcv_view',historyQuery,{service:true,pageSize:500,maxRows:60000,requireExactCount:true});
   if(!cachedHistory){try{historyCache.save(historyCacheFile,historyScope,rows,dailyReadAt);}catch(error){console.error(JSON.stringify({stage:'historical_cache_save_failed',message:error.message}));}}
   console.log(JSON.stringify({stage:'historical_daily_read',cache_hit:Boolean(cachedHistory),source_read_at:dailyReadAt,rows:rows.length,trade_date:tradeDate}));
+  let a04Readback=[];
+  if(rows.some(r=>r.payload?.a04_original)){try{a04Readback=await supabaseGetPaged('strategy4_daily_ohlcv_view',historyQuery,{service:false,pageSize:500,maxRows:60000,requireExactCount:true});}catch{console.error(JSON.stringify({stage:'a04_independent_readback',status:'UNKNOWN'}));}}
   const bySymbol=new Map(),rowsBySymbol=new Map();
   for(const row of rows){if(!rowsBySymbol.has(row.symbol))rowsBySymbol.set(row.symbol,[]);rowsBySymbol.get(row.symbol).push(row);}
   for(const symbol of new Set(rows.map(r=>normalizeCode(r.symbol)).filter(Boolean))){
     const symbolRows=rowsBySymbol.get(symbol)||[];
     const evidence=require('../lib/mother-pool-daily-volume-baseline').build({symbol,tradeDate,rows:symbolRows,calendar});
     const historicalEvidence={symbol,trade_date:tradeDate,source:'strategy4_daily_ohlcv_view',volume_unit:'LOTS',dates:historyDates,calendar,rows:symbolRows.filter(r=>historyDates.includes(r.trade_date))};
+    const a04Bound=require('../lib/a04-retained-provenance.cjs').bind({rows:historicalEvidence.rows,readback:a04Readback.filter(r=>r.symbol===symbol&&historyDates.includes(r.trade_date)),symbol,tradeDate,calendar:a04CalendarHistory||{status:'BLOCKED'},readAt:dailyReadAt,runtime:runtimePath(),binding:require('../data/contracts/a04-historical-source-binding-v1.json')});
     const historicalVolume=require('../lib/mother-pool-historical-volume').evaluate({symbol,tradeDate,evidence:historicalEvidence});
     const recentDates=dates.slice(-3),recent=symbolRows.filter(r=>recentDates.includes(r.trade_date));
     const validThree=recentDates.every(d=>recent.filter(r=>r.trade_date===d).length===1)&&recent.every(r=>typeof r.volume_lots==='number'&&Number.isFinite(r.volume_lots)&&r.volume_lots>=0);
     bySymbol.set(symbol,{avg_volume5:evidence.avg_volume5,daily_volume_evidence:evidence,daily_ohlcv_read_at:dailyReadAt,
       historical_daily_evidence:historicalEvidence,historical_volume_evidence:historicalVolume,
-      a04_daily_evidence:{...historicalEvidence,calendar:a04CalendarHistory||{status:'BLOCKED',trade_date:tradeDate,checks:[]}},
+      historical_source_evidence:a04Bound.proof,a04_source_status:a04Bound.status,a04_source_gap:a04Bound.reason||null,
+      a04_daily_evidence:{...historicalEvidence,rows:a04Bound.rows,calendar:a04CalendarHistory||{status:'BLOCKED',trade_date:tradeDate,checks:[]}},
       avg_volume3:validThree?recent.reduce((n,r)=>n+r.volume_lots,0)/3:null,avg_volume3_sample_days:validThree?3:0,
       avg_volume3_dates:recentDates,avg_volume3_source:'strategy4_daily_ohlcv_view:prior_3_trading_days'});
   }
@@ -9854,3 +9858,4 @@ module.exports.evaluateMemoryState = function(input){
    required_fields:['existing_computeStats','existing_sourceGateA'],source_mode:'volatile_memory'}};
  }finally{writerTickIdentity=previousIdentity;memoryReadJson=previousRead;}
 };
+
