@@ -6282,7 +6282,7 @@ function finalizeIntradayIndustryHeatmap(accumulator, checkedAt) {
 function writeIntradayBurstTelegramOutbox(rows, tradeDate, checkedAt, runId, quoteMap = new Map(), heatmapUniverseRows = rows, discoveryOnly = false) {
   const inputRows = Array.isArray(rows) ? rows : [];
   const heatmapRows = Array.isArray(heatmapUniverseRows) ? heatmapUniverseRows : inputRows;
-  const priorOutbox = readJson(INTRADAY_BURST_TELEGRAM_OUTBOX_FILE, null);
+  const priorOutbox = readJson(discoveryOnly ? INDUSTRY_SIGNAL_FAST_INJECT_FILE : INTRADAY_BURST_TELEGRAM_OUTBOX_FILE, null);
   const canonicalRunId = canonicalDaytradeRunId(tradeDate);
   const previousOutbox = priorOutbox?.trade_date === tradeDate
     && (priorOutbox.canonical_run_id || priorOutbox.run_id) === canonicalRunId ? priorOutbox : null;
@@ -8379,7 +8379,7 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
     // Long enrichment reads must not leave the formal source writeback on an older map.
     const writebackQuoteMap = new Map(quoteMap);
     mergeWebSocketQuoteCache(writebackQuoteMap);
-    const websocketQuoteRows = priorityRows
+    let websocketQuoteRows = priorityRows
       .map((row) => writebackQuoteMap.get(normalizeCode(row.symbol)))
       .filter((quote) => quote && effectiveQuoteAgeSeconds(quote) <= WINDOW_SECONDS)
       .map((quote) => ({
@@ -8413,6 +8413,9 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
         payload: quote.payload || {},
       }))
       .filter((quote) => quote.symbol && /^\d{4}-\d{2}-\d{2}$/.test(quote.trade_date));
+    const websocketQuoteRowsAdmission = require('../lib/daytrade-current-quote-admission.cjs').select(websocketQuoteRows,taipeiDate());
+    websocketQuoteRows = websocketQuoteRowsAdmission.rows;
+    if(websocketQuoteRowsAdmission.rejected.length)tickStage('quote_source_date_admission',{entry:'websocketQuoteRows',received:websocketQuoteRowsAdmission.received,accepted:websocketQuoteRowsAdmission.accepted,rejected:websocketQuoteRowsAdmission.rejected,complete:false});
     if (websocketQuoteRows.length) {
       try {
         tickStage("websocket_quote_readthrough:start", { rows: websocketQuoteRows.length });
@@ -8548,6 +8551,12 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
     intervalSeconds: REST_FALLBACK_INTERVAL_SECONDS,
     disabledReason: fetchResult.disabledReason || "",
   };
+  const restQuoteAdmission = require('../lib/daytrade-current-quote-admission.cjs').select(fetchResult.rows,taipeiDate());
+  fetchResult.received = fetchResult.fetched;
+  fetchResult.rows = restQuoteAdmission.rows;
+  fetchResult.fetched = restQuoteAdmission.accepted;
+  fetchResult.quoteDateAdmission = {received:restQuoteAdmission.received,accepted:restQuoteAdmission.accepted,rejected:restQuoteAdmission.rejected,complete:restQuoteAdmission.complete};
+  if(restQuoteAdmission.rejected.length)tickStage('quote_source_date_admission',{entry:'rest_fallback',...fetchResult.quoteDateAdmission});
   fetchResult.errors = [...(fetchResult.errors || []), ...nonFatalWriteErrors];
   if (fetchResult.rows.length) {
     await supabaseUpsert("fugle_daytrade_quotes_live", fetchResult.rows, "symbol");
@@ -8623,7 +8632,7 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
     require('../lib/daytrade-priority-quote-assessment.cjs').reconcile(quoteMap,postFetchQuoteMap,
       priorityRows.map(row=>normalizeCode(row.symbol)));
     require('../lib/supply-round-context.cjs').refresh();
-    const postFetchWebsocketQuoteRows = priorityRows
+    let postFetchWebsocketQuoteRows = priorityRows
       .map((row) => postFetchQuoteMap.get(normalizeCode(row.symbol)))
       .filter((quote) => quote && effectiveQuoteAgeSeconds(quote) <= WINDOW_SECONDS)
       .map((quote) => ({
@@ -8657,6 +8666,9 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
         payload: quote.payload || {},
       }))
       .filter((quote) => quote.symbol && /^\d{4}-\d{2}-\d{2}$/.test(quote.trade_date));
+    const postFetchWebsocketQuoteRowsAdmission = require('../lib/daytrade-current-quote-admission.cjs').select(postFetchWebsocketQuoteRows,taipeiDate());
+    postFetchWebsocketQuoteRows = postFetchWebsocketQuoteRowsAdmission.rows;
+    if(postFetchWebsocketQuoteRowsAdmission.rejected.length)tickStage('quote_source_date_admission',{entry:'postFetchWebsocketQuoteRows',received:postFetchWebsocketQuoteRowsAdmission.received,accepted:postFetchWebsocketQuoteRowsAdmission.accepted,rejected:postFetchWebsocketQuoteRowsAdmission.rejected,complete:false});
     if (postFetchWebsocketQuoteRows.length) {
       try {
         tickStage('final_mother_quotes:start',{rows:postFetchWebsocketQuoteRows.length,bytes:Buffer.byteLength(JSON.stringify(postFetchWebsocketQuoteRows)),max_batch_bytes:256*1024});
@@ -9171,7 +9183,7 @@ async function tickUnshared({isolatedTradeJournal=null,isolatedModules=null}={})
           if(isolatedModules)return moduleWorkIds();
           const current=require('../lib/daytrade-module-recovery-policy.cjs').evaluate(readJson(runtimePath('config','daytrade-module-recovery-policy.json'),null),recoveryRegistry,{trade_date:taipeiDate(),release_sha:recoveryRelease});
           const selected=moduleSession.select(require('../lib/daytrade-formal-module-route.cjs').restrict(current,recoveryRegistry));
-          return [...selected.enabled,...(selected.probe?[selected.probe]:[])];
+          return [...selected.enabled,...(selected.supply_only||[]),...(selected.probe?[selected.probe]:[])];
         },persist:persistModuleInput,capture:async(id,saved)=>{
           const indexFile=runtimePath('data','scan-receipts','modules','a18-write-set-'+require('node:crypto').randomUUID()+'.json');
           require('../lib/daytrade-shared-evidence.cjs').write(indexFile,{modules:{[id]:saved}},runtimePath());
