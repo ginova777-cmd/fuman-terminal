@@ -11,6 +11,17 @@ function assess(html, requested) {
   const announcementDate = `${year}-${match[2].padStart(2,'0')}-${match[3].padStart(2,'0')}`;
   const nextDate = new Date(Date.parse(`${announcementDate}T00:00:00Z`) + 86400000).toISOString().slice(0,10);
   if (announcementDate !== requested && nextDate !== requested) throw Error('EMERGENCY_ANNOUNCEMENT_DATE_MISMATCH');
+  // Official daily pages can explicitly announce no closures without city rows.
+  // Accept only today's dated, unambiguous status table, never missing data.
+  const tables = [...html.matchAll(/<table\b[^>]*\bid\s*=\s*["']Table["'][^>]*>[\s\S]*?<\/table>/gi)];
+  const emptyRows = tables.length === 1 ? [...tables[0][0].matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr>/gi)].filter(m => /<td\b/i.test(m[1]) && m[1].replace(/<[^>]*>/g, '').trim() === '無停班停課訊息。') : [];
+  if (emptyRows.length) {
+    const updated = parsed.updateLine.match(/更新時間[：:]\s*(\d{4})\/(\d{1,2})\/(\d{1,2})\s+\d{2}:\d{2}:\d{2}/);
+    const updatedDate = updated && `${updated[1]}-${updated[2].padStart(2,'0')}-${updated[3].padStart(2,'0')}`;
+    if (emptyRows.length !== 1 || parsed.statuses.length !== 0 || announcementDate !== requested || updatedDate !== requested) throw Error('EMERGENCY_EMPTY_NOTICE_UNVERIFIED');
+    return { isTradingDay: true, date: requested, source: 'dgpa_twse_rule', reason: 'official_no_closure_announcements',
+      row: { evidenceContract: 'dgpa-market-evidence-v2', sourceUrl: SOURCE_URL, ruleUrl: RULE, announcementDate, effectiveAt: `${requested}T00:00:00+08:00`, sourceSha256: crypto.createHash('sha256').update(html).digest('hex'), statusText: '無停班停課訊息。', updateLine: parsed.updateLine, rawHtml: html } };
+  }
   const rows = parsed.statuses.filter(r => r.county === '臺北市');
   if (rows.length !== 1) throw Error('EMERGENCY_TAIPEI_STATUS_AMBIGUOUS');
   const text = (announcementDate === requested ? rows[0].statusText.split('明天')[0] : (rows[0].statusText.includes('明天') ? '明天' + rows[0].statusText.split('明天')[1] : '')).trim();
