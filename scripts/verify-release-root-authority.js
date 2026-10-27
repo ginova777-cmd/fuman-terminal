@@ -14,6 +14,7 @@ function normalize(value) {
 }
 
 function git(cwd, args) {
+  const resolvedCwd = fs.realpathSync(cwd);
   const env = { ...process.env };
   // The desktop sandbox injects source-only safe.directory entries.  They make
   // child git calls against the detached production worktree fail as
@@ -21,8 +22,8 @@ function git(cwd, args) {
   for (const key of Object.keys(env)) {
     if (/^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+)$/.test(key)) delete env[key];
   }
-  const safeDirectory = normalize(cwd) === normalize("C:\\fuman-release-owner\\prod81") ? "C:/fuman-release-owner/prod81" : null;
-  const gitArgs = safeDirectory ? ["-c", `safe.directory=${safeDirectory}`, "-C", cwd, ...args] : ["-C", cwd, ...args];
+  const safeDirectory = normalize(cwd) === normalize("C:\\fuman-release-owner\\prod81") ? resolvedCwd.replace(/\\/g, "/") : null;
+  const gitArgs = ["-c", "core.fsmonitor=false", ...(safeDirectory ? ["-c", `safe.directory=${safeDirectory}`] : []), "-C", resolvedCwd, ...args];
   const result = spawnSync("git", gitArgs, {
     encoding: "utf8",
     windowsHide: true,
@@ -125,12 +126,14 @@ function main() {
   let productionHead = "";
   let productionStatus = "";
   let productionTopLevel = "";
+  let productionReadback = null;
   if (!productionExists) {
     if (REQUIRE_PRODUCTION_ROOT) issues.push("production_root_missing");
   } else {
     const head = git(productionRoot, ["rev-parse", "HEAD"]);
     const status = git(productionRoot, ["status", "--porcelain"]);
     const topLevel = git(productionRoot, ["rev-parse", "--show-toplevel"]);
+    productionReadback = { head, status, topLevel };
     productionHead = head.value.toLowerCase();
     productionStatus = status.value;
     productionTopLevel = topLevel.value;
@@ -155,7 +158,8 @@ function main() {
     approvedProductionSha,
     productionRootPresent: productionExists,
     productionHead,
-    productionClean: productionExists ? productionStatus === "" : null,
+    productionClean: productionReadback?.status.ok ? productionStatus === "" : null,
+    productionReadback,
     productionGitTopLevel: productionTopLevel,
     productionValidationRequired: REQUIRE_PRODUCTION_ROOT,
     executionRoot: ROOT,

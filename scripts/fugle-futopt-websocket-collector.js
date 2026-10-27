@@ -618,7 +618,8 @@ async function run() {
         acceptedBoundary.last_event={symbol:futureSymbol,channel:inferredChannel,time:data.date||data.time||data.lastUpdated||null,serial:data.serial??null};
         try {
         if (inferredChannel === "candles") {
-          txfCandlePipeline.receive(payload);
+          const txfReceipt=txfCandlePipeline.receive(payload);
+          if(txfReceipt.accepted)void track(txfCandlePipeline.recoverClosedOnBoundary(apiKey,payload));
           const candle = normalizeFutoptCandle(payload, ticker);
           if (candle) {
             candleMessages += 1;

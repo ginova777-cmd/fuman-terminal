@@ -84,23 +84,11 @@ function parseDgpaDailyHtml(html) {
   return { titleLine, updateLine, statuses, rawText: text };
 }
 
-function todayFullStop(statusText) {
-  const text = String(statusText || "");
-  if (!/今天/.test(text)) return false;
-  if (/照常上班|照常辦公/.test(text)) return false;
-  if (/下午|晚上|\d{1,2}:\d{2}起/.test(text) && !/今天停止上班/.test(text)) return false;
-  return /停止上班|停止辦公/.test(text);
-}
-
-function tomorrowFullStop(statusText) {
-  const text = String(statusText || "");
-  if (!/明天/.test(text)) return false;
-  if (/明天照常上班|明天照常辦公/.test(text)) return false;
-  return /明天.*(停止上班|停止辦公|已達停止上班)/.test(text);
-}
-
-function buildOverride({ date, source, matchedAreas, updateLine, titleLine, generatedBy = "dgpa_auto_update" }) {
+function buildOverride({ date, source, matchedAreas, updateLine, titleLine, html, generatedBy = "dgpa_auto_update" }) {
+  const assessed = require('./market-emergency-status.cjs').assess(html, date);
+  if (assessed.isTradingDay) throw Error('EMERGENCY_NOT_CLOSED');
   return {
+    ...assessed.row,
     date,
     marketOpen: false,
     closedReason: "typhoon_holiday",
@@ -123,6 +111,14 @@ function readJson(file, fallback = null) {
 
 function writeJson(file, payload) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
+  if (fs.existsSync(file)) {
+    const prior = fs.readFileSync(file);
+    const digest = require('crypto').createHash('sha256').update(prior).digest('hex');
+    const history = path.join(path.dirname(file), 'history');
+    fs.mkdirSync(history, { recursive: true });
+    const archive = path.join(history, `${path.basename(file, '.json')}-${digest}.json`);
+    if (!fs.existsSync(archive)) fs.writeFileSync(archive, prior, { flag: 'wx' });
+  }
   fs.writeFileSync(file, `${JSON.stringify(payload, null, 2)}\n`);
 }
 
@@ -145,8 +141,10 @@ async function loadSource() {
   const fixture = argValue("--fixture", "");
   if (fixture) return { source: fixture, html: fs.readFileSync(fixture, "utf8") };
   const url = argValue("--url", DGPA_DAILY_URL);
-  const response = await fetch(url, { headers: { "User-Agent": "FumanMarketCalendarAutoUpdate/1.0" } });
+  if (url !== require('./market-emergency-status.cjs').SOURCE_URL) throw Error('DGPA_SOURCE_IDENTITY');
+  const response = await fetch(url, { signal: AbortSignal.timeout(10000), headers: { "User-Agent": "FumanMarketCalendarAutoUpdate/2.0", "Cache-Control": "no-cache" } });
   if (!response.ok) throw new Error(`DGPA HTTP ${response.status}`);
+  if (new URL(response.url).hostname !== 'www.dgpa.gov.tw') throw Error('DGPA_SOURCE_IDENTITY');
   return { source: url, html: await response.text() };
 }
 
@@ -163,14 +161,18 @@ async function main() {
   const { source, html } = await loadSource();
   const parsed = parseDgpaDailyHtml(html);
   const targetRows = parsed.statuses.filter((row) => areas.includes(row.county));
-  const todayStopped = targetRows.filter((row) => todayFullStop(row.statusText));
-  const tomorrowStopped = targetRows.filter((row) => tomorrowFullStop(row.statusText));
-  const targetDate = tomorrowStopped.length ? tomorrow : today;
-  const matchedAreas = tomorrowStopped.length ? tomorrowStopped : todayStopped;
-  const shouldClose = matchedAreas.length > 0;
-  const override = shouldClose ? buildOverride({ date: targetDate, source, matchedAreas, updateLine: parsed.updateLine, titleLine: parsed.titleLine }) : null;
+  if (areas.length !== 1 || areas[0] !== '臺北市') throw Error('DGPA_MARKET_AREA_UNVERIFIED');
+  // One shared dated assessor: never relabel yesterday's announcement as today,
+  // or infer a closure from another county / an afternoon-only suspension.
+  const assessed = require('./market-emergency-status.cjs').assess(html, today);
+  const nextAssessment = targetRows.some(row => row.statusText.includes('明天')) ? require('./market-emergency-status.cjs').assess(html, tomorrow) : null;
+  const targetDate = nextAssessment?.isTradingDay === false ? tomorrow : today;
+  const shouldClose = targetDate === tomorrow || !assessed.isTradingDay;
+  const matchedAreas = shouldClose ? targetRows : [];
+  const override = shouldClose ? buildOverride({ date: targetDate, source, matchedAreas, updateLine: parsed.updateLine, titleLine: parsed.titleLine, html }) : null;
   let wroteOverride = false;
   if (apply && override) {
+    if (targetDate === tomorrow && !assessed.isTradingDay) upsertOverride(overrideFile, buildOverride({ date: today, source, matchedAreas, updateLine: parsed.updateLine, titleLine: parsed.titleLine, html }));
     upsertOverride(overrideFile, override);
     wroteOverride = true;
   }
@@ -198,11 +200,11 @@ async function main() {
   console.log(JSON.stringify(receipt, null, 2));
 }
 
+module.exports = { parseDgpaDailyHtml, buildOverride };
+
 if (require.main === module) {
   main().catch((error) => {
     console.error(JSON.stringify({ ok: false, contract: "market-calendar-auto-update-v1", error: error?.message || String(error), checkedAt: new Date().toISOString() }, null, 2));
     process.exit(1);
   });
 }
-
-module.exports = { parseDgpaDailyHtml, todayFullStop, tomorrowFullStop, buildOverride };

@@ -5,6 +5,9 @@ $runtimeDir = if ($env:FUMAN_RUNTIME_DIR) { $env:FUMAN_RUNTIME_DIR } else { "C:\
 $env:FUMAN_RUNTIME_DIR = $runtimeDir
 $env:NODE_OPTIONS = "--use-system-ca"
 $nodeExe = "C:\Program Files\nodejs\node.exe"
+& (Join-Path $PSScriptRoot 'scripts\invoke-market-status-guard.ps1') -Stage 'strategy3-first-attempt' -ExecutionMode 'natural'
+if ($LASTEXITCODE -eq 10) { exit 0 }
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label "Strategy3 V2 first attempt 1255"
