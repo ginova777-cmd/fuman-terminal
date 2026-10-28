@@ -31,3 +31,6 @@ module.exports.readCompact=readCompact;module.exports.sharedDictionary=sharedDic
 const compactDictionaries=new WeakMap();function compactDictionaryCount(ref){if(compactDictionaries.has(ref.bytes))return compactDictionaries.get(ref.bytes);if(!Number.isSafeInteger(ref.count)||ref.count<0)return sharedDictionary(ref).length;if(hash(Buffer.from(ref.bytes))!==ref.sha256)throw Error('reference_dictionary_hash');compactDictionaries.set(ref.bytes,ref.count);return ref.count;}
 
 function expand(row){if(!row.dictionary)return row;const {dictionary,...result}=row,values=sharedDictionary(dictionary);const decode=items=>items.map(i=>{if(!Number.isSafeInteger(i)||i<0||i>=values.length)throw Error('reference_dictionary_index');return values[i];});result.ids=decode(row.ids);result.references=decode(row.references);return result;}module.exports.expand=expand;
+
+// Internal worker output dictionary: references only validated, freshly hashed rows.
+function liveDictionary(values){const descriptor={bytes:{},sha256:'live:'+crypto.randomUUID(),count:values.length};dictionaries.set(descriptor.bytes,values);return descriptor;}module.exports.liveDictionary=liveDictionary;
