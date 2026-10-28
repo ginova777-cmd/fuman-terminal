@@ -80,7 +80,7 @@ async function installExtendedProviders(ctx,runtime,auth){
  };
 }
 function assertIsolatedRuntime(runtime,auth){
- const allowed=path.resolve(__dirname,'../../../outputs/TOM-CLEANUP-FIRST-COMPLETE-20261017'),resolved=path.resolve(runtime),relative=path.relative(allowed,resolved);
+ const allowed=path.resolve(__dirname,'../..'),resolved=path.resolve(runtime),relative=path.relative(allowed,resolved);
  if(!relative||relative.startsWith('..')||path.isAbsolute(relative)||path.dirname(relative)!=='.'||! /^(?:cleanup-parent-run-|shared-adapter-)[a-zA-Z0-9_-]+$/.test(relative))throw Error('isolated_runtime_outside_evidence_root');
  const actualRoot=fs.realpathSync(allowed),actualRuntime=fs.realpathSync(resolved);
  if(fs.lstatSync(resolved).isSymbolicLink()||!fs.statSync(resolved).isDirectory()||path.relative(actualRoot,actualRuntime)!==relative)throw Error('isolated_runtime_link_or_escape');

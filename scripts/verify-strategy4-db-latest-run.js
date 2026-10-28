@@ -78,6 +78,8 @@ async function main() {
   const latestRun = await supabase(`/rest/v1/${RUNS_TABLE}?${query({ select: "*", strategy: "eq.strategy4", ...(expectedRunId ? {run_id: `eq.${expectedRunId}`} : {status: "eq.complete"}), order: "updated_at.desc", limit: 1 })}`);
   const row = Array.isArray(latestRun.json) ? latestRun.json[0] : null;
   if (!row?.run_id) throw new Error("missing latest complete Strategy4 run");
+  const universeEvidence=row.payload?.fixedUniverse,scannedSymbols=row.payload?.scannedCodes;
+  if(!require('../lib/strategy4-universe-contract.cjs').validateEvidence(universeEvidence,scannedSymbols,String(row.scan_date).slice(0,10)))throw Error('strategy4_universe_readback_mismatch');
   const countResp = await supabase(`/rest/v1/${RESULTS_TABLE}?${query({ select: "run_id", run_id: `eq.${row.run_id}` })}`, { headers: { Prefer: "count=exact", Range: "0-0" } });
   const range = countResp.response.headers.get("content-range") || "";
   const match = range.match(/\/(\d+)$/);
@@ -146,7 +148,7 @@ async function main() {
   const dataGapCodesComplete = dataGapCount === 0 || dataGapCodes.length === dataGapCount;
   const dataGapsExcluded = displayedDataGapCodes.length === 0;
   const ok = v3Issues.length === 0 && row.complete === true && qualityAccepted && expectedTotal > 0 && scannedCount === expectedTotal && resultCount > 0 && readbackCount === resultCount && errorCount === 0 && dataGapCodesComplete && dataGapsExcluded;
-  console.log(JSON.stringify({ ok, resultContract: row.payload?.resultContract, v3Issues, runId: row.run_id, updatedAt: row.updated_at || row.finished_at || "", expectedTotal, scannedCount, resultCount, readbackCount, qualityStatus, qualityAccepted, complete: row.complete === true, noDataCount, dataGapCount, dataGapCodes, dataGapCodesComplete, dataGapsExcluded, displayedDataGapCodes, errorCount, sourceSnapshotCapturedAt: row.payload?.source_snapshot_captured_at || row.payload?.generatedAt || row.generated_at || "", supabaseCoverage: coverage }, null, 2));
+  console.log(JSON.stringify({ ok, universeEvidence, scannedSymbols, resultContract: row.payload?.resultContract, v3Issues, runId: row.run_id, updatedAt: row.updated_at || row.finished_at || "", expectedTotal, scannedCount, resultCount, readbackCount, qualityStatus, qualityAccepted, complete: row.complete === true, noDataCount, dataGapCount, dataGapCodes, dataGapCodesComplete, dataGapsExcluded, displayedDataGapCodes, errorCount, sourceSnapshotCapturedAt: row.payload?.source_snapshot_captured_at || row.payload?.generatedAt || row.generated_at || "", supabaseCoverage: coverage }, null, 2));
   if (!ok) process.exitCode = 1;
 }
 main().catch((error) => { console.error(JSON.stringify({ ok: false, error: error.message }, null, 2)); process.exit(1); });

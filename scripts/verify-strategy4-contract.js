@@ -72,7 +72,7 @@ function verifyStaticContracts() {
   if (!cacheSource.includes("strategy4_actionable_patterns_avg5_3000_daily_kd_rsi_bonus_v4")) {
     fail("Strategy4 cache runner is not using daily KD/RSI v3 result contract");
   }
-  if (!apiSource.includes("strategy4_daily_kd_rsi_bonus_v1") || !apiSource.includes("dailyTechnicalGate")) {
+  if (!apiSource.includes("strategy4_daily_kd_rsi515_bonus_v2") || !apiSource.includes("dailyTechnicalGate")) {
     fail("Strategy4 API missing daily KD/RSI technical gate");
   }
 }

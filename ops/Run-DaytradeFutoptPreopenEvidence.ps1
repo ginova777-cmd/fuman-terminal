@@ -1,7 +1,6 @@
 param(
-  [Parameter(Mandatory = $true)]
-  [ValidateSet("0845", "0850", "0855", "0859")]
   [string]$Slot,
+  [switch]$IntermediateMinute,
   [string]$RuntimeDir = "C:\fuman-runtime",
   [string]$TerminalDir = (Split-Path -Parent $PSScriptRoot)
 )
@@ -31,6 +30,17 @@ New-Item -ItemType Directory -Force -Path $receiptDir, $logDir | Out-Null
 $taipeiNow = [System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([DateTimeOffset]::UtcNow, "Taipei Standard Time")
 $tradeDate = $taipeiNow.ToString("yyyy-MM-dd")
 $actualSlot = $taipeiNow.ToString("HHmm")
+# Intermediate task has only the eleven non-verification triggers.
+# Reject a delayed launch that lands in one of the four verification slots.
+$verificationSlots = @("0845", "0850", "0855", "0859")
+if ($IntermediateMinute) {
+  if ($Slot -or $actualSlot -notmatch '^08(4[6-9]|5[1-4]|5[6-8])$') {
+    throw 'INTERMEDIATE_SLOT_INVALID_NO_PRODUCER'
+  }
+  $Slot = $actualSlot
+} elseif ($Slot -notin $verificationSlots) {
+  throw 'EXACT_VERIFICATION_SLOT_REQUIRED'
+}
 $compactDate = $tradeDate.Replace("-", "")
 $receiptPath = Join-Path $receiptDir "daytrade-futopt-preopen-evidence-$Slot-$compactDate.json"
 $logPath = Join-Path $logDir "daytrade-futopt-preopen-evidence-$compactDate.log"
@@ -184,6 +194,25 @@ try { $payload = (($producerOutput | Out-String).Trim() | ConvertFrom-Json) } ca
 if ($payload.ok -ne $true -or $payload.naturalScheduleEvidence -ne $true) {
   Write-Receipt $false "producer_evidence_incomplete" "evidence_incomplete" $producerExit $false $collectorHealth
   exit 1
+}
+if ($IntermediateMinute) {
+  # Producer success is capture only; no formal verification claim.
+  $captureReceipt = [ordered]@{
+    status = "NATURAL_INTERMEDIATE_CAPTURED_PENDING_VERIFICATION"
+    complete = $false
+    trade_date = $tradeDate
+    capture_slot = $Slot
+    checked_at = [DateTimeOffset]::UtcNow.ToString("o")
+    release_sha = $release.productionHead
+    producer_ok = $true
+    producer_exit = $producerExit
+    source_result = $payload
+    formal_candidate_allowed = $false
+    publish_allowed = $false
+  }
+  $captureReceipt | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath $receiptPath -Encoding utf8
+  $captureReceipt | ConvertTo-Json -Depth 12
+  exit 0
 }
 $verifierOutput = & $node --use-system-ca $canonicalVerifier "--slot=$Slot" "--trade-date=$tradeDate" --publish 2>&1
 $verifierExit = $LASTEXITCODE

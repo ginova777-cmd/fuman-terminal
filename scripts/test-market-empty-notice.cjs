@@ -1,0 +1,11 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {assess,verify}=require('./market-emergency-status.cjs');
+const header='115年 10月 27日 天然災害停止上班及上課情形<br>更新時間：2026/10/27 08:17:14<br>';
+const table='<TABLE id="Table"><tr><th>縣市名稱</th><th>是否停止上班上課情形</th></tr><tbody><tr><td headers="city_Name" colspan="2"><h2>無停班停課訊息。</h2></td></tr></tbody></TABLE>';
+const page=header+table;
+const d=assess(page,'2026-10-27');assert.equal(d.isTradingDay,true);assert.deepEqual(verify(d),d);
+for(const bad of [page.replace('2026/10/27','2026/10/26'),page+ '<br>臺北市 今天停止上班。',page+table,header+'無停班停課訊息。',header+'<table id="Table"></table>',page.replace('無停班停課訊息。',''),page.replace('id="Table"','id="Other"'),page.replace('115年 10月 27日','115年 10月 26日')]) assert.throws(()=>assess(bad,'2026-10-27'));
+assert.throws(()=>assess(page,'2026-10-28'));
+assert.throws(()=>verify({...d,row:{...d.row,statusText:'tampered'}}));
+console.log('PASS explicit same-day empty official table; stale/tomorrow/missing/conflicting/duplicate/tampered evidence rejected');

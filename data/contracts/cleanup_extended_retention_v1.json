@@ -10,7 +10,7 @@
     "failedRuns": {"keepDays":15,"terminalStatuses":["failed","error","aborted","cancelled"],"protectLatestComplete":true,"protectRecentRuns":20,"strategy2ProtectRecentRuns":60,"protectRecoveryAndReferences":true},
     "orphanResults": {"keepDays":45,"requireMissingParent":true,"requireNoReferences":true},
     "duplicateSnapshots": {"keepDays":15,"equality":"entire row including source, run, timestamps and payload except surrogate id","keepOne":true,"protectReferences":true,"primaryKeyProtectedSources":["market_snapshots","finmind_chip_raw"]},
-    "notificationBodies": {"keepDays":30,"only":"sent claim bodies","preserve":["idempotencyKey","payloadHash","channel","target","status","recordedAt","pending/failed claims","active outbox","canonical receipts"]},
+    "notificationBodies": {"keepDays":7,"timeZone":"Asia/Taipei","calendarDays":true,"only":"sent claim bodies","preserve":["idempotencyKey","payloadHash","channel","target","status","recordedAt","pending/failed claims","active outbox","canonical receipts"]},
     "cloudAssets": {"keepDays":30,"manifest":"C:\\fuman-runtime\\config\\cleanup-retired-assets.json","allowPrefixes":["tests/","test-exports/","temporary-exports/"],"requireRetirementAndReferenceAudit":true,"protectPrefixes":["scorecard88/"]},
     "previewDeployments": {"runner":"scripts/cleanup-supabase-vercel-history.js","inventory":"all cursor pages plus live deployment detail","protect":["production","active aliases","rollback versions"],"aliasRetirement":"requires explicit retirement and no-use evidence; age alone never authorizes alias removal"},
     "repeatedExecution": {"audit":"enabled Windows action/trigger duplicates and Vercel cron configuration","disableWithoutVerifiedCanonicalReplacement":false},

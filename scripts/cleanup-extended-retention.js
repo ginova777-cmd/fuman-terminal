@@ -1,31 +1,30 @@
 "use strict";
 const fs=require('fs'),path=require('path'),crypto=require('crypto'),{spawnSync}=require('child_process');
 const {serviceRoleKey,terminalSupabaseUrl}=require('../lib/server-supabase-key');
-const {assertTree}=require('./cleanup-path-protection');
+const {assertTree,assertEntry}=require('./cleanup-path-protection');
 const ROOT=path.resolve(__dirname,'..'),RUNTIME=process.env.FUMAN_RUNTIME_DIR||'C:\\fuman-runtime',DAY=86400000;
 const hash=x=>crypto.createHash('sha256').update(x).digest('hex');
 const date=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
 function read(p){return JSON.parse(fs.readFileSync(p,'utf8').replace(/^\uFEFF/,''));}
 function save(p,v){fs.mkdirSync(path.dirname(p),{recursive:true});const t=p+'.'+process.pid+'.tmp';const fd=fs.openSync(t,'wx');try{fs.writeFileSync(fd,JSON.stringify(v,null,2)+'\n');fs.fsyncSync(fd);}finally{fs.closeSync(fd);}fs.renameSync(t,p);}
-function walk(root,visit){if(!fs.existsSync(root))return;for(const e of fs.readdirSync(root,{withFileTypes:true})){const p=path.join(root,e.name);assertTree(root,p);if(e.isDirectory())walk(p,visit);else if(e.isFile())visit(p);}}
-async function referenceInventory(persist=false,excludePaths=[]){const ids=new Set(),files=[],paths=[],references=new Set(),cachePath=path.join(RUNTIME,'state/cleanup-extended-reference-index.json');let cache={};try{cache=read(cachePath);}catch{}const next={};
+function walk(root,visit){if(!fs.existsSync(root))return;for(const e of fs.readdirSync(root,{withFileTypes:true})){const p=path.join(root,e.name);assertEntry(root,p);if(e.isDirectory())walk(p,visit);else if(e.isFile())visit(p);}}
+async function referenceInventory(persist=false,excludePaths=[],options={}){
+ const cacheModule=require('./cleanup-reference-cache.cjs'),paths=[],state=path.join(RUNTIME,'state'),cachePath=path.join(state,'cleanup-extended-reference-index.json'),sealPath=path.join(state,'cleanup-extended-reference-seal.json');let cache={};
+ if(options.cacheFile)cache=await cacheModule.index(options.cacheFile,options.cacheSeal);
+ else if(fs.existsSync(sealPath)){const seal=read(sealPath);if(seal.contract!=='cleanup-reference-cache-v2'||path.dirname(path.resolve(seal.file))!==path.resolve(state)||!/^cleanup-extended-reference-[a-f0-9-]+\.jsonl$/.test(path.basename(seal.file)))throw Error('reference_cache_seal_path');cache=await cacheModule.index(seal.file,seal);}
+ else{try{cache=read(cachePath);}catch{}}
  for(const dir of ['state','data','status','config'])walk(path.join(RUNTIME,dir),p=>{if(/\.json$/i.test(p)&&!/notification-guard[\\/]claims/.test(p)&&!/cleanup-(?:extended|maintenance)/.test(path.basename(p)))paths.push(p);});
- // Stream every JSON string, including large historical evidence; no first-page/size-based omission.
- for(const p of paths.filter(p=>!excludePaths.some(x=>path.resolve(x).toLowerCase()===path.resolve(p).toLowerCase()))){const before=fs.statSync(p),entry=cache[p];if(entry&&entry.size===before.size&&entry.mtimeMs===before.mtimeMs){const h=crypto.createHash('sha256');for await(const chunk of fs.createReadStream(p,{encoding:'utf8'}))h.update(chunk);const digest=h.digest('hex'),after=fs.statSync(p);if(digest===entry.sha256&&after.size===before.size&&after.mtimeMs===before.mtimeMs){entry.ids.forEach(v=>ids.add(v));entry.references.forEach(v=>references.add(v));files.push({file:p,sha256:digest});next[p]=entry;continue;}}
-  const digest=crypto.createHash('sha256'),localIds=new Set(),localReferences=new Set();let quoted=false,escaped=false,token='',last='',key='';
-  for await(const chunk of fs.createReadStream(p,{encoding:'utf8'})){digest.update(chunk);for(const char of chunk){
-   if(quoted){token+=char;if(escaped){escaped=false;continue;}if(char==='\\'){escaped=true;continue;}if(char==='"'){quoted=false;last=JSON.parse(token);if(/run.?id/i.test(key)&&last){ids.add(last);localIds.add(last);}if(/(?:https?:|[\\/]|\.json|\.png|\.jpg|\.pdf)|^[a-f0-9]{64}$/i.test(last)){references.add(last);localReferences.add(last);}key='';token='';}if(token.length>64*1024*1024)throw Error('reference_string_over_bound:'+p);
-   }else if(char==='"'){quoted=true;token='"';}else if(char===':'){key=last;}else if(char===','||char==='}'||char===']'){key='';}
-  }}if(quoted)throw Error('reference_string_incomplete:'+p);const after=fs.statSync(p);if(before.size!==after.size||before.mtimeMs!==after.mtimeMs)throw Error('reference_changed_during_inventory:'+p);const sha256=digest.digest('hex');files.push({file:p,sha256});next[p]={size:before.size,mtimeMs:before.mtimeMs,sha256,ids:[...localIds],references:[...localReferences]};
- }
- if(persist)save(cachePath,next);return {ids:[...ids].sort(),files,contains:s=>!!s&&[...references].some(v=>v.toLowerCase().replaceAll('\\','/').includes(s.toLowerCase().replaceAll('\\','/')))};}
+ if(options.onProgress)options.onProgress({stage:'enumeration_complete',totalFiles:paths.length,memory:process.memoryUsage()});const excluded=new Set(excludePaths.map(p=>path.resolve(p).toLowerCase())),sink=persist?cacheModule.writer(state):null;
+ try{const result=await require('./cleanup-reference-inventory.cjs').collect(paths.filter(p=>!excluded.has(path.resolve(p).toLowerCase())),cache,false,{...options,compactRows:true,onRow:row=>{if(sink)sink.write(row);if(options.onRow)options.onRow(options.compactRows===true?row:cacheModule.expand(row));}});if(sink)save(sealPath,sink.seal());delete result.next;return result;}finally{if(sink)sink.abort();}
+}
+
 async function request(route,body,storage=false){const key=serviceRoleKey({root:ROOT,runtimeDir:RUNTIME}),url=terminalSupabaseUrl({root:ROOT,runtimeDir:RUNTIME});if(!key||!url)throw Error('supabase_credentials_missing');const r=await fetch(url+(storage?'/storage/v1/':'/rest/v1/')+route,{method:body===undefined?'GET':'POST',headers:{apikey:key,Authorization:'Bearer '+key,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(60000)});const t=await r.text();if(!r.ok)throw Error('cleanup_api_HTTP_'+r.status+':'+t.slice(0,160));return t?JSON.parse(t):null;}
 function compactNotification(record,now=Date.now()){
  const at=Date.parse(record.recordedAt||record.sent_at||record.sentAt||'');
- if(record.status!=='sent'||!record.idempotencyKey||!record.payloadHash||!Number.isFinite(at)||at>=now-30*DAY)return null;
+ if(record.status!=='sent'||!record.idempotencyKey||!record.payloadHash||!Number.isFinite(at)||at>=require('./cleanup-local-calendar').cutoff(now))return null;
  const out={...record},removed={};for(const k of ['payload','message','messageBody','body','flexMessage','rawResponse'])if(Object.hasOwn(out,k)){removed[k]=out[k];delete out[k];}
  if(!Object.keys(removed).length)return null;
- out.retention={contract:'notification-body-retention-30d-v1',compactedAt:new Date(now).toISOString(),removedBodySha256:hash(JSON.stringify(removed))};return out;
+ out.retention={contract:'notification-body-retention-7-calendar-days-v1',compactedAt:new Date(now).toISOString(),removedBodySha256:hash(JSON.stringify(removed))};return out;
 }
 function notificationCleanup(apply,refs,dir=path.join(RUNTIME,'state/notification-guard/claims'),maintenance=null){
  const capture=()=>{const rows=[];walk(dir,p=>{if(!p.endsWith('.json'))return;const bytes=fs.readFileSync(p);let value;try{value=JSON.parse(bytes);}catch{rows.push({key:p,sha256:hash(bytes)});return;}if(!value||typeof value!=='object'||Array.isArray(value)){rows.push({key:p,sha256:hash(bytes)});return;}for(const [key,v]of Object.entries(value))if(key!=='retention')rows.push({key:p+'#'+key,sha256:hash(JSON.stringify(v))});});return rows;};
@@ -47,7 +46,7 @@ const items=[],protectedUnreadable=[];let candidates=0,savedBytes=0,scanned=0;
  });
  for(const item of protectedUnreadable)if(!fs.existsSync(item.file)||fs.statSync(item.file).size!==item.bytes||hash(fs.readFileSync(item.file))!==item.sha256)throw Error('protected_unreadable_claim_changed:'+item.file);
  const itemEvidence=apply&&maintenance?require('./cleanup-item-observation').persist(path.join(RUNTIME,'status/cleanup-items',maintenance.runId,'C24.json'),{contract:'cleanup-item-observation-v1',id:'C24',runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before:observationBefore,after:capture(),candidates:observationCandidates,checkedAt:new Date().toISOString()}):null;
- return {ok:true,itemEvidence,category:'notification_bodies',protectedUnreadable,protectedUnreadableCount:protectedUnreadable.length,protectedReadbackOk:true,scanned,candidates,compacted:apply?candidates:0,savedBytes,keepDays:30,items,protected:['active outbox','pending/failed claims','dedup identities','canonical delivery receipts','sent-notifications.jsonl']};}
+ return {ok:true,itemEvidence,category:'notification_bodies',protectedUnreadable,protectedUnreadableCount:protectedUnreadable.length,protectedReadbackOk:true,scanned,candidates,compacted:apply?candidates:0,savedBytes,keepDays:7,items,protected:['active outbox','pending/failed claims','dedup identities','canonical delivery receipts','sent-notifications.jsonl']};}
 async function blobInventory(){const {list}=require('@vercel/blob');const token=fs.readFileSync(path.join(RUNTIME,'secrets/vercel-blob-read-write-token.txt'),'utf8').trim();let cursor;const rows=[],seen=new Set();for(let page=0;page<100;page++){const p=await list({token,limit:1000,cursor});if(!Array.isArray(p.blobs)||typeof p.hasMore!=='boolean')throw Error('blob_pagination_metadata_missing');for(const b of p.blobs){if(typeof b.pathname!=='string'||!b.pathname||typeof b.url!=='string'||!Number.isFinite(b.size)||b.size<0||!Number.isFinite(Date.parse(b.uploadedAt)))throw Error('blob_object_fields_missing');if(seen.has(b.pathname))throw Error('blob_duplicate_page');seen.add(b.pathname);rows.push(b);}if(p.hasMore===false)return {rows,pages:page+1};if(!p.cursor||p.cursor===cursor)throw Error('blob_pagination_stalled');cursor=p.cursor;}throw Error('blob_inventory_bound');}
 function eligibleAsset(asset,entry,refs,now=Date.now()){
  if(!entry||entry.owner!=='cleanup-managed-test-assets'||entry.status!=='retired'||entry.formalEvidence!==false||entry.rollbackRequired!==false||entry.referenceAuditComplete!==true)return false;
