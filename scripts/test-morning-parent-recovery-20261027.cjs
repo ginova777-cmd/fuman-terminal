@@ -1,0 +1,15 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('fs'),os=require('os'),path=require('path');
+process.env.FUMAN_MORNING_STAGE='asia_0850';
+const {verifyNight}=require('../lib/opening-report-stage-contract');
+const root=fs.mkdtempSync(path.join(os.tmpdir(),'morning-parent-')),dir=path.join(root,'data/opening-report-stages/us_0820');fs.mkdirSync(dir,{recursive:true});
+const original='C:/fuman-runtime/data/opening-report-stages/us_0820/';
+const frozen=JSON.parse(fs.readFileSync(original+'opening-report-0830-market-snapshot-20261027.json','utf8').replace(/^\uFEFF/,''));
+const preflight=JSON.parse(fs.readFileSync(original+'opening-report-0830-preflight-receipt-20261027.json','utf8').replace(/^\uFEFF/,''));
+fs.writeFileSync(path.join(dir,'opening-report-0830-preflight-receipt-20261027.json'),JSON.stringify(preflight));
+const file=path.join(dir,'opening-report-0830-market-snapshot-20261027.json');
+const check=x=>{fs.writeFileSync(file,JSON.stringify(x));return verifyNight(frozen.night_futures,{date:'2026-10-27',runId:'child',runtime:root});};
+assert.deepEqual(check(frozen),[]);
+for(const patch of [{authorization:'unapproved'},{trade_date:'2026-10-28'},{stage:'asia_0850'},{run_id:'other'},{cutoff_at:frozen.recovery.started_at}])assert(check({...frozen,recovery:{...frozen.recovery,...patch}}).includes('night_parent_recovery_invalid'));
+assert(check({...frozen,night_futures:{...frozen.night_futures,close:0}}).includes('night_parent_evidence_mismatch'));
+console.log('PASS retained real night evidence, dated recovery parent accepted; unauthorized/date/stage/run/cutoff/tamper rejected. Isolated copies only.');

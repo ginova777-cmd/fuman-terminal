@@ -5,7 +5,7 @@ const {createRecovery}=require('../lib/txf-candle-recovery.cjs');
  let clock=Date.parse('2026-10-02T06:00:00Z'),state=null,calls=0,ingests=0,flushes=0,fail=true;
  const raw={date:'2026-10-02T08:45:00+08:00',open:20000,high:20001,low:19999,close:20000,volume:5};
  let body={symbol:'TXFJ6',date:'2026-10-02',type:'FUTURE',exchange:'TAIFEX',timeframe:'1',data:[raw]};
- const options={archive:{ingest(){ingests++;return {accepted:true};},flush(){flushes++;return {files_written:1};}},now:()=>clock,readState:()=>state,writeState:r=>{state=r;},fetchImpl:async url=>{assert.equal(new URL(url).searchParams.get('session'),'REGULAR');calls++;return {ok:!fail,status:429,json:async()=>body};}};
+ const options={archive:{ingest(){ingests++;return {accepted:true};},flush(){flushes++;return {files_written:1};}},now:()=>clock,readState:()=>state,writeState:r=>{state=r;},fetchImpl:async url=>{assert.equal(new URL(url).searchParams.get('session'),null);calls++;return {ok:!fail,status:429,json:async()=>body};}};
  const args={symbol:'TXFJ6',tradeDate:'2026-10-02',reason:'STARTUP',apiKey:'test-only'};
  let recovery=createRecovery(options);
  for(const delay of [60000,120000,240000,300000]){

@@ -12,6 +12,9 @@ $env:FUMAN_RUNTIME_DIR = $runtimeDir
 $env:NODE_OPTIONS = "--use-system-ca"
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 if (-not (Test-Path -LiteralPath $nodeExe)) { $nodeExe = "node.exe" }
+& (Join-Path $PSScriptRoot 'scripts\invoke-market-status-guard.ps1') -Stage "strategy3-readiness-$Phase" -ExecutionMode 'natural'
+if ($LASTEXITCODE -eq 10) { exit 0 }
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 . "${PSScriptRoot}\schedule-guard.ps1"
 Invoke-FumanWeekdayGuard -Label ("Strategy3 V2 readiness guard {0}" -f $Phase)

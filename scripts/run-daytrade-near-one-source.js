@@ -452,6 +452,10 @@ async function runOnce() {
   result.websocketFreshRows = activeQuotes.length;
   if (!activeQuotes.length) result.failedChecks.push("websocket_quote_source_missing");
   const preopenRows = await readPreopenRows(tickerResult.rows.map((row) => row.symbol), tradeDate, slot);
+  if (captureSlot() !== slot || taipeiDate() !== tradeDate) {
+    result.naturalScheduleEvidence = false;
+    throw new Error("PREOPEN_SLOT_CHANGED_NO_FURTHER_WRITES");
+  }
   const snapshotRows = slot ? await captureSlotRows(tradeDate, slot, tickerResult.rows, [...dedicatedRows, ...cacheRows], preopenRows) : [];
   result.snapshotRows = snapshotRows.length;
   result.snapshotCompleteRows = snapshotRows.filter((row) => row.fut_price !== null
@@ -482,7 +486,15 @@ async function runOnce() {
     result.retryRefreshRows = snapshotRows.filter((row) => existingSymbols.has(row.underlying_symbol)).length;
   }
   if (APPLY && result.naturalScheduleEvidence) {
+  if (captureSlot() !== slot || taipeiDate() !== tradeDate) {
+    result.naturalScheduleEvidence = false;
+    throw new Error("PREOPEN_SLOT_CHANGED_NO_FURTHER_WRITES");
+  }
     await supabaseUpsert("fugle_daytrade_canonical_near_one_contracts", tickerResult.rows, "trade_date,symbol");
+  if (captureSlot() !== slot || taipeiDate() !== tradeDate) {
+    result.naturalScheduleEvidence = false;
+    throw new Error("PREOPEN_SLOT_CHANGED_NO_FURTHER_WRITES");
+  }
     if (pendingSnapshotRows.length) await supabaseUpsert(
       "fugle_daytrade_preopen_futopt_snapshots",
       pendingSnapshotRows,

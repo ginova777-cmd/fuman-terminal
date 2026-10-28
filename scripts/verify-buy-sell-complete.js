@@ -1,6 +1,7 @@
 "use strict";
 const fs = require("fs");
 const path = require("path");
+const indicatorContract = require('../lib/institution-indicator-contract.cjs');
 const runtime = process.env.FUMAN_RUNTIME_DIR || "C:/fuman-runtime";
 const root = path.resolve(__dirname, "..");
 const today = process.env.FUMAN_REPLAY_TRADE_DATE || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
@@ -90,6 +91,7 @@ if (Number(snapshotSummary.count || 0) !== effectiveCount) issues.push("institut
 const liveFile = path.join(root, "outputs/institution-live-acceptance/readback.json");
 const renderedFile = path.join(root, "outputs/institution-live-acceptance/rendered/terminal-ui-e2e-report.json");
 const live = readJson(liveFile), rendered = readJson(renderedFile);
+if (!indicatorContract.checkCoverage(institution?.selectionCoverage) || !indicatorContract.checkCoverage(live?.selectionCoverage)) issues.push('institution_indicator_contract_mismatch');
 if (live?.rankingBonusContract !== require('../lib/institution-ranking-bonuses').CONTRACT || live?.rankingBonusVerified !== true) issues.push('institution_ranking_bonus_not_verified');
 if (live?.selectionCoverage?.contract !== "institution-candidate90-daily-up-hourly60-bonus-v1" || live?.selectionCoverage?.ok !== true || live?.selectionCoverage?.dataCoverage < 0.9 || live?.technicalFreshReadback !== true) issues.push("institution_90pct_daily_trend_not_verified");
 if (!live?.ok || live.runId !== effectiveRunId || live.resultCount !== effectiveCount || live.readbackCount !== effectiveCount || live.blankTotal !== 0) issues.push("institution_live_readback_not_complete");
@@ -103,7 +105,7 @@ const payload = { contract: "strategy-runner-verifier-receipt-v1", strategy: "in
   marketMode: process.env.FUMAN_REPLAY_TRADE_DATE ? "strategy_revision_replay" : marketClosedWeekend ? "weekend_previous_good" : "trading_day_current_run", status: issues.length ? "failed" : "complete",
   complete: issues.length === 0, exitCode: issues.length ? 1 : 0, runId: effectiveRunId,
   notificationRequirement: 'not_required',
-  selectionCoverage: live?.selectionCoverage || null, indicatorContract: "technical-kd5-3-rsi3-6-v1",
+  selectionCoverage: live?.selectionCoverage || null, indicatorContract: indicatorContract.CONTRACT,
   triSurfaceStatus: issues.length ? "incomplete" : "complete", blockingReason: issues.join("; "),
   desktopRunId: rendered?.results?.find(r => r.kind === "desktop" && r.routeKey === "institution")?.identity?.runId || "",
   mobileRunId: rendered?.results?.find(r => r.kind === "mobile" && r.routeKey === "institution")?.identity?.runId || "",

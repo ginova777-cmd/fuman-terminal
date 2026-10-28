@@ -5,11 +5,13 @@ const digest=b=>crypto.createHash('sha256').update(b).digest('hex');
 function fixture({formalAuthority=false}={}) {
  const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'institution-proof-fixture-')),file=path.join(tmp,'institution.json');
  const scriptPath=path.join(tmp,'run-institution.ps1');fs.writeFileSync(scriptPath,'# isolated fixture only\n');
- const authority=formalAuthority?link.loadAuthority():{sha:'a'.repeat(40),scriptPath,scriptSha256:digest(fs.readFileSync(scriptPath))};
- const r={runId:'institution-20261012-20261012130002',marketDate:'20261012',startedAt:'2026-10-12T13:00:02Z',finishedAt:'2026-10-12T13:20:00Z',status:'complete',complete:true,exitCode:0,total:2,scanned:2,triSurfaceStatus:'complete',recoveryReplay:false};
+ const schedulerScriptPath=path.join(tmp,'run-buy-sell-complete.ps1');fs.writeFileSync(schedulerScriptPath,'# isolated wrapper fixture');
+ const authority=formalAuthority?link.loadAuthority():{sha:'a'.repeat(40),scriptPath,scriptSha256:digest(fs.readFileSync(scriptPath)),schedulerScriptPath,schedulerScriptSha256:digest(fs.readFileSync(schedulerScriptPath))};
+ const r={runId:'institution-20261012-20261012130002',marketDate:'20261012',startedAt:'2026-10-12T13:10:02Z',finishedAt:'2026-10-12T13:20:00Z',status:'complete',complete:true,exitCode:0,total:2,scanned:2,triSurfaceStatus:'complete',recoveryReplay:false};
  for(const k of ['desktopRunId','mobileRunId','scorecardRunId'])r[k]=r.runId;
- const task='\\Fuman 買賣超 Cache 2100',instance='{isolated-instance}',exe='C:/Program Files/PowerShell/7/pwsh.exe';
- const observation={ok:true,runnerPid:1234,parentPid:1234,runnerStartedAt:'2026-10-12T13:00:01Z',runnerOwnerSid:'S-1-5-21-fixture',taskPrincipalSid:'S-1-5-21-fixture',executablePath:exe,commandLine:`pwsh -File "${authority.scriptPath}"`,taskName:task,actions:[{Execute:exe,Arguments:`-File "${authority.scriptPath}"`}],events:[{id:107,recordId:1,time:'2026-10-12T13:00:00Z',fields:{TaskName:task,InstanceId:instance}},{id:200,recordId:2,time:'2026-10-12T13:00:01Z',fields:{TaskName:task,TaskInstanceId:instance,EnginePID:'1234',ActionName:exe}}]};
+ const task='\\Fuman Buy Sell Complete 2110',instance='{isolated-instance}',exe='C:/Program Files/PowerShell/7/pwsh.exe';
+ const observation={ok:true,runnerPid:1234,parentPid:1234,runnerStartedAt:'2026-10-12T13:10:01Z',runnerOwnerSid:'S-1-5-21-fixture',taskPrincipalSid:'S-1-5-21-fixture',executablePath:exe,commandLine:`pwsh -File "${authority.scriptPath}"`,taskName:task,actions:[{Execute:exe,Arguments:`-File "${authority.schedulerScriptPath}" -Mode Complete`}],events:[{id:107,recordId:1,time:'2026-10-12T13:10:00Z',fields:{TaskName:task,InstanceId:instance}},{id:200,recordId:2,time:'2026-10-12T13:10:01Z',fields:{TaskName:task,TaskInstanceId:instance,EnginePID:'1000',ActionName:exe}}]};
+ observation.scheduler={pid:1000,childParentPid:1000,startedAt:'2026-10-12T13:10:00Z',commandLine:`pwsh -File "${authority.schedulerScriptPath}" -Mode Complete`,executablePath:exe,ownerSid:observation.runnerOwnerSid};
  const assessment={naturalSlotComplete:true,recoveryReplay:false,naturalEvidenceStatus:'NATURAL_TRIGGER_VERIFIED',naturalTaskInstanceId:instance};
  const evidence={contract:'strategy-natural-trigger-v1',strategy:'institution',runId:r.runId,tradeDate:r.marketDate,checkedAt:'2026-10-12T13:20:01Z',release:{ok:true,...authority},observation,assessment};
  const naturalPath=path.join(tmp,'natural-origin','institution','fixture.json');fs.mkdirSync(path.dirname(naturalPath),{recursive:true});

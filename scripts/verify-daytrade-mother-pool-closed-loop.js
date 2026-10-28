@@ -342,7 +342,10 @@ async function main() {
     const proofHash=fastSync?.candle_save_proof?.sha256;
     if(!/^[a-f0-9]{64}$/.test(proofHash||''))throw Error('PROOF_MISSING');
     const candleCache=JSON.parse(fs.readFileSync(path.join(RUNTIME,'cache','intraday','fugle-daytrade-ws-candles-v2.json'),'utf8'));
-    const rows=require('./sync-daytrade-websocket-supabase-fast').mapCandleCache(candleCache,clock.tradeDate,Date.now());
+    const bound=fastSync.candle_source_snapshot;
+    const source=bound?JSON.parse(require('../lib/daytrade-candle-bound-source.cjs').read(RUNTIME,bound)):candleCache;
+    if(bound && Date.parse(bound.as_of)>Date.parse(fastSync.completed_at))throw Error('CANDLE_BOUND_SOURCE_TIME');
+    const rows=require('./sync-daytrade-websocket-supabase-fast').mapCandleCache(source,clock.tradeDate,bound?Date.parse(bound.as_of):Date.now());
     candleSaveEvidence=require('../lib/mother-pool-receipt-current.cjs').verifyCandleProof({receipt:fastSync,
       proofRaw:fs.readFileSync(path.join(RUNTIME,'state','candle-save-proofs',proofHash+'.json'),'utf8'),snapshotRaw,rows,
       tradeDate:clock.tradeDate,target:String(process.env.SUPABASE_URL||process.env.FUMAN_SUPABASE_URL||'https://cpmpfhbzutkiecccekfr.supabase.co').replace(/\/+$/,'')+'/fugle_daytrade_intraday_1m',
