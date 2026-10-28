@@ -44,6 +44,7 @@ async function main() {
   add(failed, runner?.trade_date === tradeDate, "runner_trade_date_mismatch");
   add(failed, runner?.canonical_run_id === `fugle_daytrade_source:${compact}:canonical`, "canonical_run_id_mismatch");
   add(failed, Number(runner?.scanner_summary?.mother_pool_coverage_ratio || 0) >= candleMinimum, "mother_pool_1m_coverage_below_080");
+  add(failed, Number.isInteger(runner?.scanner_summary?.entry_window_symbols) && runner.scanner_summary.entry_window_symbols > 0, "required_entry_window_data_unavailable");
   add(failed, runner?.scanner_summary?.technical_trend_gate?.required === false, "technical_trend_gate_missing");
   add(failed, runner?.scanner_summary?.atr_rvol_gate?.required === false, "atr_rvol_gate_missing");
   add(failed, String(runner?.scanner_summary?.atr_rvol_gate?.rule || "").includes("minimum_two_comparable_sessions"), "atr_rvol_minimum_history_policy_mismatch");
