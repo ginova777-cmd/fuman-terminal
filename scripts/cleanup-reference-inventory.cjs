@@ -1,0 +1,32 @@
+'use strict';
+const fs=require('fs'),crypto=require('crypto');const {Worker,isMainThread,parentPort,workerData}=require('worker_threads');const {StringDecoder}=require('string_decoder');
+function one(file,entry){if(entry?.cacheRecord){entry=require('./cleanup-reference-cache.cjs').read(entry.cacheRecord);if(entry.file!==file)throw Error('reference_cache_file_identity');}const before=fs.lstatSync(file);if(!before.isFile()||before.isSymbolicLink())throw Error('reference_link_or_special:'+file);const fd=fs.openSync(file,'r'),buffer=Buffer.allocUnsafe(1024*1024),digest=crypto.createHash('sha256');
+ const decoder=new StringDecoder('utf8'),scanner=new (require('./cleanup-reference-strings.cjs').ReferenceStrings)();
+ // A cached extraction may be reused only after the full current content hash matches.
+ const candidate=entry&&entry.size===before.size&&entry.mtimeMs===before.mtimeMs&&Array.isArray(entry.ids)&&Array.isArray(entry.references);
+ try{const opened=fs.fstatSync(fd);if(opened.ino!==before.ino||opened.dev!==before.dev||opened.size!==before.size||opened.mtimeMs!==before.mtimeMs)throw Error('reference_replaced:'+file);let n;while((n=fs.readSync(fd,buffer,0,buffer.length,null))){const bytes=buffer.subarray(0,n);digest.update(bytes);if(!candidate)scanner.write(decoder.write(bytes));}const sha256=digest.digest('hex');let found;
+  if(candidate&&sha256===entry.sha256)found={ids:entry.ids,references:entry.references};
+  else if(candidate){fs.closeSync(fd);return one(file,null);}
+  else{scanner.write(decoder.end());found=scanner.finish();}
+  const after=fs.lstatSync(file),done=fs.fstatSync(fd);if(after.isSymbolicLink()||before.ino!==after.ino||before.dev!==after.dev||before.size!==after.size||before.mtimeMs!==after.mtimeMs||done.size!==before.size||done.mtimeMs!==before.mtimeMs)throw Error('reference_changed_during_inventory:'+file);
+  return {file,size:before.size,mtimeMs:before.mtimeMs,sha256,...found};
+ }finally{try{fs.closeSync(fd);}catch(e){if(e.code!=='EBADF')throw e;}}
+}
+async function collect(paths,cache={},persist=false,options={}){const ids=new Set(),references=new Set(),files=[],next={},seen=new Set();const expected=new Set(paths);if(expected.size!==paths.length)throw Error('reference_duplicate_path');
+ if(options.onProgress)options.onProgress({stage:'partition_start',totalFiles:paths.length,memory:process.memoryUsage()});const groups=Array.from({length:Math.min(4,require('os').availableParallelism?.()||2)},()=>({bytes:0,rows:[]}));
+ for(const {file,size} of paths.map(file=>({file,size:fs.statSync(file).size})).sort((a,b)=>b.size-a.size)){groups.sort((a,b)=>a.bytes-b.bytes);groups[0].rows.push({file,entry:cache[file]});groups[0].bytes+=size;}
+ if(options.onProgress)options.onProgress({stage:'partition_complete',totalFiles:paths.length,totalBytes:groups.reduce((n,g)=>n+g.bytes,0),memory:process.memoryUsage()});let processedBytes=0;const workers=[];const check=v=>{if(typeof v!=='string')throw Error('reference_value_invalid');return v;};
+ try{await Promise.all(groups.filter(g=>g.rows.length).map(g=>new Promise((resolve,reject)=>{const w=new Worker(__filename,{workerData:{rows:g.rows}});workers.push(w);w.on('error',reject);w.on('message',message=>{try{if(message.error)throw Error(message.error);for(const row of message.rows){if(!expected.has(row.file)||seen.has(row.file))throw Error('reference_worker_membership');seen.add(row.file);processedBytes+=row.size;row.ids=row.ids.map(check);row.references=row.references.map(check);row.ids.forEach(v=>ids.add(v));row.references.forEach(v=>references.add(v.toLowerCase().replaceAll('\\','/')));files.push({file:row.file,sha256:row.sha256});if(options.onRow)options.onRow(row);if(persist){const {file,...entry}=row;next[file]=entry;}}if(options.onProgress)options.onProgress({files:seen.size,bytes:processedBytes,uniqueStrings:ids.size+references.size,runIds:ids.size,references:references.size,memory:process.memoryUsage()});w.postMessage({accepted:true});}catch(e){reject(e);}});w.on('exit',code=>code===0?resolve():reject(Error('reference_worker_exit:'+code)));})));
+ if(seen.size!==expected.size)throw Error('reference_inventory_incomplete');const order=new Map(paths.map((p,i)=>[p,i]));files.sort((a,b)=>order.get(a.file)-order.get(b.file));return {ids:[...ids].sort(),files,next,contains:s=>{if(!s)return false;const needle=s.toLowerCase().replaceAll('\\','/');for(const value of references)if(value.includes(needle))return true;return false;}};
+ }finally{await Promise.all(workers.map(w=>w.terminate()));}
+}
+if(!isMainThread){(async()=>{try{for(const item of workerData.rows){const row=one(item.file,item.entry);delete item.entry;await new Promise(resolve=>{parentPort.once('message',resolve);parentPort.postMessage({rows:[row]});});}}catch(e){parentPort.postMessage({error:e.message});}})();}
+module.exports={collect,one};
+
+
+
+
+
+
+
+
