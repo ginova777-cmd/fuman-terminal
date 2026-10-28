@@ -654,31 +654,31 @@ async function main() {
   failureContext = { args, maintenance, startedAt: startedAt.toISOString() };
   const proof=require('./cleanup-item-observation'),cleanupItems=[],rootResults=[];
   const runtimeResult={root:args.runtimeRoot,deleted:[],skipped:[]};
-  function observed(id,paths,operation){
-    const before=proof.files(paths),preview=operation(true),planned=preview.deleted||[];
+  async function observed(id,paths,operation){
+    const before=await require('./cleanup-parallel-inventory.cjs').filesParallel(paths),preview=operation(true),planned=preview.deleted||[];
       const aged=before.filter(r=>planned.some(p=>r.key===p||r.key.startsWith(p+path.sep))).map(r=>r.key);
       // These legacy predicates prove age/name only, not incident, rollback or consumer safety.
       const hold=['C02','C03','C04','C05','C06','C07','C08'].includes(id);
       const candidates=hold?[]:aged;
       const protectedExclusions=hold?aged.map(key=>({key,reason:'retirement_reference_or_backup_archive_proof_required_use_local_manifest'})):[];
       const result=hold?{...preview,deleted:[],skipped:[...(preview.skipped||[]),...protectedExclusions]}:args.dryRun?preview:operation(false);
-      const after=maintenance&&!args.dryRun?proof.files(paths):[];
+      const after=maintenance&&!args.dryRun?await require('./cleanup-parallel-inventory.cjs').filesParallel(paths):[];
       const beforeKeys=new Set(before.map(r=>r.key));
       const preservedNewMembers=after.filter(r=>!beforeKeys.has(r.key));
       if(maintenance&&!args.dryRun)cleanupItems.push(proof.persist(path.join(args.runtimeRoot,'status/cleanup-items',maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before,after,preservedNewMembers,candidates,protectedExclusions,checkedAt:new Date().toISOString()}));
     return result;
   }
   const rootPaths=args.roots.flatMap(root=>[...EXACT_RETIRED,...listRetiredDataFiles(root),...RETIRED_DIRECTORIES,...RESERVED_ROUTE_ARTIFACTS].map(rel=>path.join(root,rel)));
-  observed('C01',rootPaths,dryRun=>{const rows=args.roots.map(root=>cleanupRoot(root,{...args,dryRun}));if(dryRun&&rows.some(r=>r.issues.length)){const error=Error('retired_root_inventory_issues');error.rootIssues=rows;throw error;}if(dryRun===args.dryRun)rootResults.push(...rows);return {deleted:rows.flatMap(r=>r.deleted)};});
-  function runtimeStep(id,paths,fn){const result=observed(id,paths,dryRun=>{const r={deleted:[],skipped:[]};fn(r,dryRun);return r;});runtimeResult.deleted.push(...result.deleted);runtimeResult.skipped.push(...result.skipped);}
+  await observed('C01',rootPaths,dryRun=>{const rows=args.roots.map(root=>cleanupRoot(root,{...args,dryRun}));if(dryRun&&rows.some(r=>r.issues.length)){const error=Error('retired_root_inventory_issues');error.rootIssues=rows;throw error;}if(dryRun===args.dryRun)rootResults.push(...rows);return {deleted:rows.flatMap(r=>r.deleted)};});
+  async function runtimeStep(id,paths,fn){const result=await observed(id,paths,dryRun=>{const r={deleted:[],skipped:[]};fn(r,dryRun);return r;});runtimeResult.deleted.push(...result.deleted);runtimeResult.skipped.push(...result.skipped);}
   const at=(...parts)=>path.join(args.runtimeRoot,...parts);
-  runtimeStep('C02',[at('archive','strategy2-intraday','static-latest')],(r,d)=>pruneOldFiles(at('archive','strategy2-intraday','static-latest'),RUNTIME_RETENTION_DAYS,r,d));
-  runtimeStep('C03',[at('archive','strategy2-intraday','history')],(r,d)=>pruneOldFiles(at('archive','strategy2-intraday','history'),RUNTIME_HISTORY_RETENTION_DAYS,r,d));
-  runtimeStep('C04',[at('cache','fugle')],(r,d)=>pruneMatchingDirectories(at('cache','fugle'),name=>/^historical-legacy-mixed-units-/i.test(name),r,d));
-  runtimeStep('C05',[at('data','retired')],(r,d)=>pruneRetiredDataFiles(at('data','retired'),RUNTIME_RETIRED_RETENTION_DAYS,r,d));
-  runtimeStep('C06',[at('data','scan-receipts')],(r,d)=>pruneOldFilesWhere(at('data','scan-receipts'),RUNTIME_SCAN_RECEIPT_RETENTION_DAYS,isPrunableScanReceipt,r,d));
-  runtimeStep('C07',[at('data'),at('cache')],(r,d)=>{pruneOldFilesWhere(at('data'),RUNTIME_BACKUP_RETENTION_DAYS,isBackupLikeRuntimeFile,r,d);pruneOldFilesWhere(at('cache'),RUNTIME_BACKUP_RETENTION_DAYS,isBackupLikeRuntimeFile,r,d);});
-  runtimeStep('C08',RUNTIME_STALE_FRONT_PAGE_FILES.map(rel=>at(rel)),(r,d)=>pruneStaleRuntimeFrontPageFiles(args.runtimeRoot,r,d));
+  await runtimeStep('C02',[at('archive','strategy2-intraday','static-latest')],(r,d)=>pruneOldFiles(at('archive','strategy2-intraday','static-latest'),RUNTIME_RETENTION_DAYS,r,d));
+  await runtimeStep('C03',[at('archive','strategy2-intraday','history')],(r,d)=>pruneOldFiles(at('archive','strategy2-intraday','history'),RUNTIME_HISTORY_RETENTION_DAYS,r,d));
+  await runtimeStep('C04',[at('cache','fugle')],(r,d)=>pruneMatchingDirectories(at('cache','fugle'),name=>/^historical-legacy-mixed-units-/i.test(name),r,d));
+  await runtimeStep('C05',[at('data','retired')],(r,d)=>pruneRetiredDataFiles(at('data','retired'),RUNTIME_RETIRED_RETENTION_DAYS,r,d));
+  await runtimeStep('C06',[at('data','scan-receipts')],(r,d)=>pruneOldFilesWhere(at('data','scan-receipts'),RUNTIME_SCAN_RECEIPT_RETENTION_DAYS,isPrunableScanReceipt,r,d));
+  await runtimeStep('C07',[at('data'),at('cache')],(r,d)=>{pruneOldFilesWhere(at('data'),RUNTIME_BACKUP_RETENTION_DAYS,isBackupLikeRuntimeFile,r,d);pruneOldFilesWhere(at('cache'),RUNTIME_BACKUP_RETENTION_DAYS,isBackupLikeRuntimeFile,r,d);});
+  await runtimeStep('C08',RUNTIME_STALE_FRONT_PAGE_FILES.map(rel=>at(rel)),(r,d)=>pruneStaleRuntimeFrontPageFiles(args.runtimeRoot,r,d));
 
   const payload = {
     ok: rootResults.every(r=>r.issues.length===0),

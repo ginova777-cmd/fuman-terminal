@@ -45,8 +45,9 @@ async function run({apply=false,noStatus=false,maintenanceAuthorization=null}={}
     const excluded=[manifest,...entries.entries.map(e=>e.evidenceFile).filter(Boolean),...lib.files(path.join(RUNTIME,"status")).filter(p=>/^(?:cleanup-local-assets-|runtime-retention-)/i.test(path.basename(p))||p.replaceAll("\\", "/").includes("/cleanup-local-assets-runs/"))];
     let refs=null;
     // Expensive complete reference scan is unnecessary when no item can be mutated.
-    if(entries.entries.length)refs=await require('./cleanup-extended-retention').referenceInventory(false,excluded);
-    const ctx={policy:lib.policy,now:Date.now(),productionRoot:authority.productionRoot,activity:entries.entries.length?lib.activity():{processes:[],tasks:[]},referenced:p=>refs&&[p,p.replaceAll('\\','/'),p.replaceAll('/','\\'),path.basename(p)].some(v=>refs.contains(v))};
+    const hasLiveManifestTargets=entries.entries.some(e=>typeof e?.path==='string'&&fs.existsSync(e.path));
+    if(hasLiveManifestTargets)refs=await require('./cleanup-extended-retention').referenceInventory(false,excluded);
+    const ctx={policy:lib.policy,now:Date.now(),productionRoot:authority.productionRoot,activity:hasLiveManifestTargets?lib.activity():{processes:[],tasks:[]},referenced:p=>refs&&[p,p.replaceAll('\\','/'),p.replaceAll('/','\\'),path.basename(p)].some(v=>refs.contains(v))};
     const seen=new Set();
     for(const entry of entries.entries){
       if(!entry||typeof entry.path!=='string'){receipt.errors.push('manifest_entry_path_missing');continue;}

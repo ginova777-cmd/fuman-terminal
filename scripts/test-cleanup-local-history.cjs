@@ -40,4 +40,9 @@ const result=await context.module.exports.run({apply:true,maintenanceAuthorizati
 assert.equal(result.ok,true,JSON.stringify(result.errors));assert.equal(result.processed.length,6);assert.equal(result.counts.deletedFiles,6);assert.equal(result.cleanupItems.length,5);for(const item of result.cleanupItems)assert.equal(require('./cleanup-item-observation').verify(item).status,'complete');assert.equal(L.verify(result).ok,true);
 assert.equal(L.verify({...result,counts:{...result.counts,deletedFiles:999}}).ok,false);
 console.log(JSON.stringify({ok:true,scope:'six new categories through real local runner and N01-N05 independent readback; external providers isolated',runId:result.runId,receipt:result.receiptFile,productionActions:false}));
+const originalRequire=context.require;context.require=n=>n==='./cleanup-extended-retention'?{referenceInventory:async()=>{throw Error('absent_targets_must_not_scan_references');}}:originalRequire(n);
+auth.runId+='-absent-repeat';
+const repeated=await context.module.exports.run({apply:true,maintenanceAuthorization:'isolated-provider'});
+assert.equal(repeated.ok,true);assert.equal(repeated.processed.length,0);assert.equal(repeated.preserved.filter(p=>p.reason==='already_absent').length,6);
+console.log(JSON.stringify({ok:true,scope:'absent targets skip reference scan; existing-target verification remains covered by first run'}));
 })().catch(e=>{console.error(e);process.exitCode=1;});
