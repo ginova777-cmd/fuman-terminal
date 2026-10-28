@@ -18,9 +18,11 @@ function reconcile(p){
  const exclusions=p.protectedExclusions||[];
  if(!Array.isArray(exclusions)||new Set(exclusions.map(e=>e.key)).size!==exclusions.length||exclusions.some(e=>!before.has(e.key)||candidates.has(e.key)||typeof e.reason!=='string'||!e.reason.trim()))throw Error('item_protected_exclusions_invalid');
  for(const r of protectedSet)if(after.get(r.key)?.sha256!==r.sha256)throw Error('item_protected_changed:'+r.key);
- const unknown=[...after.keys()].filter(k=>!before.has(k));if(unknown.length)throw Error('item_unexpected_new_members');
+ const unknown=[...after.keys()].filter(k=>!before.has(k));
+ const additions=index(p.preservedNewMembers||[],'new_members');
+ if(unknown.length!==additions.size||[...additions].some(([key,row])=>before.has(key)||after.get(key)?.sha256!==row.sha256))throw Error('item_unexpected_new_members');
  const remaining=p.candidates.filter(k=>after.has(k));
- return {id:p.id,runId:p.runId,status:remaining.length?'failed':'complete',inventoryComplete:true,readbackVerified:remaining.length===0,protectedReadbackVerified:true,deleted:p.candidates.length-remaining.length,remaining:remaining.length,protectedSet,scanned:before.size,eligibleCandidates:p.candidates.length,protectedExclusions:exclusions};
+ return {id:p.id,runId:p.runId,status:remaining.length?'failed':'complete',inventoryComplete:true,readbackVerified:remaining.length===0,protectedReadbackVerified:true,deleted:p.candidates.length-remaining.length,remaining:remaining.length,protectedSet,scanned:before.size,eligibleCandidates:p.candidates.length,protectedExclusions:exclusions,preservedNewMembers:[...additions.values()]};
 }
 function persist(file,observation){
  const item=reconcile(observation);fs.mkdirSync(path.dirname(file),{recursive:true});
@@ -31,12 +33,13 @@ function verify(item){
  const observations=(item.evidence||[]).map(e=>{const bytes=fs.readFileSync(e.file);if(hash(bytes)!==e.sha256)throw Error('item_observation_hash');return JSON.parse(bytes);});
  if(observations.length!==1)throw Error('item_observation_count');
  const actual=reconcile(observations[0]);
- for(const k of ['id','runId','status','inventoryComplete','readbackVerified','protectedReadbackVerified','deleted','remaining','protectedSet','scanned','eligibleCandidates','protectedExclusions'])if(JSON.stringify(item[k])!==JSON.stringify(actual[k]))throw Error('item_observation_summary_mismatch:'+k);
+ for(const k of ['id','runId','status','inventoryComplete','readbackVerified','protectedReadbackVerified','deleted','remaining','protectedSet','scanned','eligibleCandidates','protectedExclusions','preservedNewMembers'])if(JSON.stringify(k==='preservedNewMembers'?(item[k]||[]):item[k])!==JSON.stringify(actual[k]))throw Error('item_observation_summary_mismatch:'+k);
  return actual;
 }
 function files(paths){
- const out=new Map();
- function visit(file){if(!fs.existsSync(file))return;const stat=fs.lstatSync(file);if(stat.isSymbolicLink())throw Error('item_inventory_link');if(stat.isDirectory()){for(const name of fs.readdirSync(file))visit(path.join(file,name));return;}if(!stat.isFile())throw Error('item_inventory_special_file');if(out.size>=100000)throw Error('item_inventory_bound');const bytes=fs.readFileSync(file),after=fs.statSync(file);if(stat.size!==after.size||stat.mtimeMs!==after.mtimeMs)throw Error('item_inventory_changed');out.set(file,{key:file,sha256:hash(bytes)});}
- for(const file of paths)visit(file);return [...out.values()].sort((a,b)=>a.key.localeCompare(b.key));
+ const out=new Map(),buffer=Buffer.allocUnsafe(1024*1024);
+ function visit(file,optional=false){let stat;try{stat=fs.lstatSync(file);}catch(error){if(optional&&error.code==='ENOENT')return;throw error;}if(stat.isSymbolicLink())throw Error('item_inventory_link');if(stat.isDirectory()){for(const name of fs.readdirSync(file))visit(path.join(file,name));return;}if(!stat.isFile())throw Error('item_inventory_special_file');const fd=fs.openSync(file,'r'),digest=crypto.createHash('sha256');
+ try{const opened=fs.fstatSync(fd);if(opened.ino!==stat.ino||opened.dev!==stat.dev||opened.size!==stat.size||opened.mtimeMs!==stat.mtimeMs)throw Error('item_inventory_replaced');let count;while((count=fs.readSync(fd,buffer,0,buffer.length,null))>0)digest.update(buffer.subarray(0,count));const after=fs.lstatSync(file),finished=fs.fstatSync(fd);if(after.isSymbolicLink()||stat.ino!==after.ino||stat.dev!==after.dev||stat.size!==after.size||stat.mtimeMs!==after.mtimeMs||stat.size!==finished.size||stat.mtimeMs!==finished.mtimeMs)throw Error('item_inventory_changed');out.set(file,{key:file,sha256:digest.digest('hex')});}finally{fs.closeSync(fd);}}
+ for(const file of paths)visit(file,true);return [...out.values()].sort((a,b)=>a.key.localeCompare(b.key));
 }
 module.exports={reconcile,persist,verify,files};

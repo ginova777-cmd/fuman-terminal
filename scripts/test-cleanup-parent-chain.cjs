@@ -7,7 +7,7 @@ function contextFor(runtime){
  vm.runInContext(source,ctx);return ctx.module.exports;
 }
 test('one Parent Run executes the real isolated stages and independent Root',async()=>{
- const evidence=path.resolve(root,'../../outputs/TOM-CLEANUP-FIRST-COMPLETE-20261017');fs.mkdirSync(evidence,{recursive:true});
+ const evidence=path.resolve(root,'..');fs.mkdirSync(evidence,{recursive:true});
  const runtime=fs.mkdtempSync(path.join(evidence,'cleanup-parent-run-')),context=contextFor(runtime),issuedAt=new Date().toISOString(),runId='cleanup-isolated-'+crypto.randomUUID(),authFile=path.join(runtime,'authorization.json');
  fs.writeFileSync(authFile,JSON.stringify({contract:'cleanup-maintenance-authorization-v1',scope:context.scopedPolicy.scope,authorizedBy:'user',authorizationText:'isolated fixtures only; no production actions',date:context.date(),runId,keepDays:15,preserveWorkdaySchedule:true,sourceRoot:root,executionRoot:root,runtimeRoot:runtime,issuedAt,expiresAt:new Date(Date.now()+2*60000).toISOString()}));
  const auth=context.authorization(authFile),configFile=path.join(runtime,'fixture-config.json');fs.writeFileSync(configFile,JSON.stringify({contract:'cleanup-isolated-test-v1',runtime,auth}));

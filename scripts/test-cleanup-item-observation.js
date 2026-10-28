@@ -1,7 +1,7 @@
 'use strict';
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),path=require('path'),os=require('os'),vm=require('vm'),crypto=require('crypto'),{createRequire}=require('module');
 const proof=require('./cleanup-item-observation');
-const evidenceRoot=path.resolve(__dirname,'../../../outputs/TOM-CLEANUP-FIRST-COMPLETE-20261017/item-evidence-20261017/fixtures');fs.mkdirSync(evidenceRoot,{recursive:true});
+const evidenceRoot=path.resolve(__dirname,'../../isolated-item-fixtures');fs.mkdirSync(evidenceRoot,{recursive:true});
 const base=fs.mkdtempSync(path.join(evidenceRoot,'cleanup-29-evidence-')); 
 const sha=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 function put(file,content,old=true){fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,content);if(old){const d=new Date(Date.now()-90*86400000);fs.utimesSync(file,d,d);}return file;}
@@ -13,7 +13,7 @@ test('C01-C08 real isolated runner writes eight independently reconciled observa
  const ctx=load('cleanup-api-only-retired-artifacts.js',runtime,auth),front=vm.runInContext('RUNTIME_STALE_FRONT_PAGE_FILES[0]',ctx);put(path.join(runtime,front),'{}');
  await vm.runInContext('main()',ctx);
  const r=JSON.parse(fs.readFileSync(path.join(runtime,'status/api-only-retired-cleanup-status.json')));assert.equal(r.ok,true);assert.equal(r.cleanupItems.length,8);
- for(const item of r.cleanupItems){assert.equal(proof.verify(item).status,'complete');if(['C06','C07','C08'].includes(item.id)){assert.equal(item.deleted,0);assert(item.protectedExclusions.length>0);}else assert(item.deleted>=1,item.id+' had no positive deletion');assert.equal(item.remaining,0);}
+ for(const item of r.cleanupItems){assert.equal(proof.verify(item).status,'complete');if(['C02','C03','C04','C05','C06','C07','C08'].includes(item.id)){assert.equal(item.deleted,0);assert(item.protectedExclusions.length>0);}else assert(item.deleted>=1,item.id+' had no positive deletion');assert.equal(item.remaining,0);}
  assert.equal(sha(fs.readFileSync(protectedFile)),protectedHash);
  console.log(JSON.stringify({scope:'C01-C08 isolated execution',receipt:path.join(runtime,'status/api-only-retired-cleanup-status.json')}));
 });
@@ -80,7 +80,7 @@ test('N01-N05 actual local-assets runner verifies delete gzip and Git retirement
  entry('interrupted_temp',put(path.join(runtime,'tmp/abandoned.tmp'),'partial'));
  const held=put(path.join(runtime,'outputs/held.png'),'preserve');entries.push({path:held,category:'test_artifact',retiredAt:old,evidenceFile:'absent',evidenceSha256:'absent'});
  put(path.join(runtime,'config/cleanup-local-assets.json'),JSON.stringify({contract:'cleanup-local-assets-manifest-v1',entries}),false);
- const policy={...L.policy,protectedRoots:[mirror],allowedRoots:[runtime]};const native=createRequire(path.join(__dirname,'run-cleanup-local-assets.js'));
+ const policy={...L.policy,protectedRoots:[mirror],intakeInventoryRoots:[],allowedRoots:[runtime]};const native=createRequire(path.join(__dirname,'run-cleanup-local-assets.js'));
  const realFs={...fs,readFileSync:(file,...args)=>String(file).endsWith('release_root_authority_v1.json')?JSON.stringify({productionRoot:mirror}):fs.readFileSync(file,...args)};
  const ctx=load('run-cleanup-local-assets.js',runtime,auth,{'fs':realFs,'./cleanup-local-assets':{...L,policy,activity:()=>({processes:[],tasks:[]})},'child_process':{spawnSync:()=>({status:0})},'./cleanup-extended-retention':{referenceInventory:async()=>({files:[],contains:()=>false})}});
  // Import path does not invoke CLI; explicit call executes the actual existing run function.

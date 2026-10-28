@@ -15,11 +15,12 @@ async function run({apply=false,noStatus=false,maintenanceAuthorization=null}={}
     else {const calendar=await require('./twse-trading-day').isTwseTradingDay(new Date(),{stateDir:path.join(RUNTIME,'state'),ignoreOverrides:true});if(calendar.error||calendar.source==='weekend_fallback'||!calendar.isTradingDay)throw Error('local_assets_non_trading_day_apply_rejected');}
   }
   const maintenance=maintenanceAuthorization?require('./cleanup-maintenance-context').authorization(maintenanceAuthorization):null;
+  const capacityBefore=require('./cleanup-local-capacity').snapshot(RUNTIME);
   const manifest=path.join(RUNTIME,lib.policy.manifest);
   const entries=fs.existsSync(manifest)?read(manifest):{contract:'cleanup-local-assets-manifest-v1',entries:[]};
   if(entries.contract!=='cleanup-local-assets-manifest-v1'||!Array.isArray(entries.entries))throw Error('local_assets_manifest_invalid');
   const inventoryBefore=new Map(entries.entries.filter(e=>e&&typeof e.path==='string'&&fs.existsSync(e.path)).map(e=>[e.path,lib.fingerprint(e.path)]));
-  const receipt={contract:lib.policy.contract,runId:require('crypto').randomUUID(),checkedAt:new Date().toISOString(),applied:apply,ok:false,maintenanceRunId:maintenance?.runId||null,maintenanceAuthorizationSha256:maintenance?.sha256||null,manifestPresent:fs.existsSync(manifest),categories:Object.keys(lib.policy.categories),candidates:[],processed:[],preserved:[],errors:[],protectedEvidence:[],inventory:[]};
+  const receipt={contract:lib.policy.contract,runId:require('crypto').randomUUID(),checkedAt:new Date().toISOString(),applied:apply,ok:false,maintenanceRunId:maintenance?.runId||null,maintenanceAuthorizationSha256:maintenance?.sha256||null,manifestPresent:fs.existsSync(manifest),categories:Object.keys(lib.policy.categories),localCalendar:require('./cleanup-local-calendar').describe(),candidates:[],processed:[],preserved:[],errors:[],protectedEvidence:[],inventory:[]};
   const journal=path.join(RUNTIME,'status/cleanup-local-assets-runs',receipt.runId+'.json');
   const progress=()=>{if(apply)save(journal,receipt);};
   // Only catalog sizes; absence of retirement evidence is an explicit preservation reason.
@@ -27,6 +28,13 @@ async function run({apply=false,noStatus=false,maintenanceAuthorization=null}={}
     const p=path.join(RUNTIME,root);if(!fs.existsSync(p))continue;
     const all=lib.files(p);receipt.inventory.push({root:p,files:all.length,bytes:all.reduce((n,f)=>n+fs.statSync(f).size,0),reason:'unregistered_assets_preserved'});
     for(const file of all.filter(f=>!entries.entries.some(e=>typeof e?.path==='string'&&lib.inside(e.path,f)))){const bytes=fs.readFileSync(file);receipt.protectedEvidence.push({path:file,sha256:lib.hash(bytes),bytes:bytes.length,appendAllowed:path.basename(file)==='production-health.jsonl'});}
+  }
+  // Discovery is an exclusion inventory, never authorization to delete a root.
+  for(const intakeRoot of lib.policy.intakeInventoryRoots||[]){
+    if(!fs.existsSync(intakeRoot)){receipt.inventory.push({root:intakeRoot,files:0,bytes:0,linksProtected:0,reason:'intake_root_absent'});continue;}
+    let files=0,bytes=0,linksProtected=0;const protectedUninspectedPaths=[];const digest=require('crypto').createHash('sha256');
+    function visit(p){if(entries.entries.some(e=>typeof e?.path==='string'&&lib.inside(e.path,p)))return;if(require('./cleanup-local-history-guards').protectedPath(p)){protectedUninspectedPaths.push({path:p,reason:'protected_identity'});return;}let stat;try{stat=fs.lstatSync(p);}catch(error){protectedUninspectedPaths.push({path:p,reason:error.code||'unreadable'});return;}if(stat.isSymbolicLink()){linksProtected++;digest.update(JSON.stringify({path:p,link:true}));return;}if(stat.isDirectory()){let names;try{names=fs.readdirSync(p).sort();}catch(error){protectedUninspectedPaths.push({path:p,reason:error.code||'unreadable'});return;}for(const name of names)visit(path.join(p,name));return;}if(!stat.isFile())throw Error('intake_special_file:'+p);files++;bytes+=stat.size;digest.update(JSON.stringify({path:p,bytes:stat.size,mtimeMs:stat.mtimeMs}));}
+    visit(intakeRoot);receipt.inventory.push({root:intakeRoot,files,bytes,linksProtected,protectedUninspectedPaths,fileCountIncludesUninspected:false,metadataSha256:digest.digest('hex'),reason:'unregistered_intake_preserved',protectionMode:'excluded_from_mutation_manifest'});
   }
   const lock=path.join(RUNTIME,'locks/cleanup-local-assets.lock');let fd;
   if(apply){fs.mkdirSync(path.dirname(lock),{recursive:true});fd=fs.openSync(lock,'wx');fs.writeSync(fd,JSON.stringify({pid:process.pid,startedAt:receipt.checkedAt}));}
@@ -52,11 +60,15 @@ async function run({apply=false,noStatus=false,maintenanceAuthorization=null}={}
         if(apply){try{ctx.activity=lib.activity();ctx.now=Date.now();refs=await require('./cleanup-extended-retention').referenceInventory(false,excluded);const current=lib.validate(entry,ctx);if(current.treeSha256!==item.treeSha256)throw Error('changed_after_preview');receipt.pendingAction={path:current.path,action:current.action,treeSha256:current.treeSha256};progress();receipt.processed.push(lib.applyOne(current));receipt.pendingAction=null;progress();}catch(error){receipt.errors.push("apply_failed:"+entry.path+":"+error.message);progress();}}
       }catch(error){const files=lib.fingerprint(entry.path);receipt.preserved.push({path:entry.path,category:entry.category,reason:error.message,files,treeSha256:lib.hash(JSON.stringify(files))});}
     }
+    receipt.capacity=require('./cleanup-local-capacity').assess(capacityBefore,require('./cleanup-local-capacity').snapshot(RUNTIME),lib.policy.capacity.minimumFreeBytes);
+    receipt.counts={scannedFiles:[...inventoryBefore.values()].reduce((n,rows)=>n+rows.length,0),deletedFiles:receipt.processed.reduce((n,item)=>n+item.files.length,0),protectedFiles:receipt.preserved.reduce((n,item)=>n+(item.files?.length||0),0),remainingCandidates:receipt.candidates.length-receipt.processed.length};
+    if(receipt.capacity.belowWatermark)receipt.errors.push('local_capacity_below_watermark');
+    receipt.notificationRequired=receipt.errors.length>0;
     receipt.ok=receipt.errors.length===0;
     if(apply){receipt.readback=lib.verify(receipt);receipt.ok=receipt.ok&&receipt.readback.ok;}
     if(apply&&maintenance){
       receipt.cleanupItems=[];
-      const groups={N01:['retired_cache'],N02:['test_artifact'],N03:['sealed_log'],N04:['retired_worktree','retired_backup'],N05:['interrupted_temp']};
+      const groups={N01:['retired_cache'],N02:['test_artifact','engineering_test'],N03:['sealed_log'],N04:['retired_worktree','retired_backup','engineering_backup'],N05:['interrupted_temp','telegram_history','telegram_plan','mother_pool_history','closed_execution']};
       for(const [id,categories] of Object.entries(groups)){
         const listed=entries.entries.filter(e=>categories.includes(e.category)&&inventoryBefore.has(e.path));
         const before=listed.map(e=>({key:e.path,sha256:lib.hash(JSON.stringify(inventoryBefore.get(e.path)))}));

@@ -2,12 +2,86 @@
   "contract": "cleanup-local-assets-v1",
   "manifest": "config/cleanup-local-assets.json",
   "categories": {
-    "retired_cache": { "keepDays": 30, "action": "delete", "evidenceType": "retired_release" },
-    "test_artifact": { "keepDays": 30, "action": "delete", "evidenceType": "closed_test" },
-    "sealed_log": { "keepDays": 30, "action": "gzip", "evidenceType": "sealed_log" },
-    "retired_worktree": { "keepDays": 45, "action": "git_worktree_remove", "evidenceType": "retired_release" },
-    "retired_backup": { "keepDays": 45, "action": "delete", "evidenceType": "verified_backup_retirement" },
-    "interrupted_temp": { "keepDays": 7, "action": "delete", "evidenceType": "terminated_job" }
+    "retired_cache": {
+      "keepDays": 7,
+      "action": "delete",
+      "evidenceType": "retired_release"
+    },
+    "test_artifact": {
+      "keepDays": 7,
+      "action": "delete",
+      "evidenceType": "closed_test"
+    },
+    "sealed_log": {
+      "keepDays": 7,
+      "action": "gzip",
+      "evidenceType": "sealed_log"
+    },
+    "retired_worktree": {
+      "keepDays": 7,
+      "action": "git_worktree_remove",
+      "evidenceType": "retired_release"
+    },
+    "retired_backup": {
+      "keepDays": 7,
+      "action": "delete",
+      "evidenceType": "verified_backup_retirement"
+    },
+    "interrupted_temp": {
+      "keepDays": 7,
+      "action": "delete",
+      "evidenceType": "terminated_job"
+    },
+    "engineering_test": {
+      "keepDays": 7,
+      "action": "delete",
+      "evidenceType": "closed_engineering_test",
+      "allowedRoots": [
+        "C:/Users/ginov/Documents/Codex/2026-09-30/new-chat/outputs"
+      ]
+    },
+    "engineering_backup": {
+      "keepDays": 7,
+      "action": "archive_d",
+      "evidenceType": "verified_backup_retirement",
+      "allowedRoots": [
+        "C:/Users/ginov/Documents/Codex/2026-09-30/new-chat/outputs",
+        "C:/fuman-release-owner"
+      ]
+    },
+    "telegram_history": {
+      "keepDays": 7,
+      "action": "delete",
+      "evidenceType": "closed_telegram_batch",
+      "allowedRoots": [
+        "C:/fuman-runtime/data/telegram-detectors"
+      ]
+    },
+    "telegram_plan": {
+      "keepDays": 7,
+      "action": "delete",
+      "evidenceType": "closed_telegram_plan",
+      "allowedRoots": [
+        "C:/fuman-runtime/data/telegram-detectors"
+      ]
+    },
+    "mother_pool_history": {
+      "keepDays": 7,
+      "action": "delete",
+      "evidenceType": "closed_mother_pool_history",
+      "allowedRoots": [
+        "C:/fuman-runtime/data/mother-pool"
+      ]
+    },
+    "closed_execution": {
+      "keepDays": 7,
+      "action": "delete",
+      "evidenceType": "closed_execution",
+      "allowedRoots": [
+        "C:/fuman-runtime/logs",
+        "C:/fuman-runtime/tmp"
+      ]
+    }
   },
   "protectedRoots": [
     "C:/fuman-terminal-preserved-20260919-cleanup",
@@ -17,9 +91,33 @@
     "C:/fuman-terminal",
     "C:/fuman-terminal-publish-sync"
   ],
-  "allowedRoots": ["C:/fuman-runtime/outputs", "C:/fuman-runtime/logs", "C:/fuman-runtime/tmp", "C:/fuman-release-owner"],
-  "protectedNames": ["production-health.jsonl", "sent-notifications.jsonl"],
+  "allowedRoots": [
+    "C:/fuman-runtime/outputs",
+    "C:/fuman-runtime/logs",
+    "C:/fuman-runtime/tmp",
+    "C:/fuman-release-owner"
+  ],
+  "protectedNames": [
+    "production-health.jsonl",
+    "sent-notifications.jsonl"
+  ],
   "lockPolicy": "report_only",
   "schedule": "existing_daily_retention_stage",
-  "missingEvidence": "preserve"
+  "missingEvidence": "preserve",
+  "calendar": {
+    "timeZone": "Asia/Taipei",
+    "keepCalendarDays": 7,
+    "scope": "local_only"
+  },
+  "engineeringArchiveRoot": "D:/Codex-Recovery/retired-engineering-backups",
+  "capacity": {
+    "minimumFreeBytes": 10737418240,
+    "volume": "C:/",
+    "failureRequiresNotification": true
+  },
+  "intakeInventoryRoots": [
+    "C:/Users/ginov/Documents/Codex/2026-09-30/new-chat/outputs",
+    "C:/fuman-runtime/data/telegram-detectors",
+    "C:/fuman-runtime/data/mother-pool"
+  ]
 }

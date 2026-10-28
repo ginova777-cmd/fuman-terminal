@@ -67,8 +67,10 @@ async function main(){
   try { lockFd=fs.openSync(lock,'wx'); }
   catch(error){if(error.code==='EEXIST'){const blocked=Error('cleanup_maintenance_lock_exists_owner_review_required');blocked.code=error.code;throw blocked;}throw error;}
   const j={contract:'cleanup-maintenance-execution-v1',outerStartedAt:new Date(outerStarted).toISOString(),runId:auth.runId,authorizationSha256:auth.sha256,deadlineAt:new Date(roundDeadline).toISOString(),executionMode:auth.executionMode||"authorized_maintenance",completionScope:auth.scope,deferredItems:context.scopedPolicy && auth.scope===context.scopedPolicy.scope?context.scopedPolicy.deferredItems:[],startedAt:new Date().toISOString(),steps:[],protection:{before:protectionBefore}};
+  j.localRetention=require('./cleanup-local-calendar').describe();
+  j.capacityBefore=require('./cleanup-local-capacity').snapshot(context.RUNTIME);
   const logDir=path.join(context.RUNTIME,'logs',auth.runId);
-  const saveTotal=receipt=>{const archive=path.join(context.RUNTIME,'status/cleanup-totals',auth.runId+'.json');fs.mkdirSync(path.dirname(archive),{recursive:true});fs.writeFileSync(archive,JSON.stringify(receipt,null,2)+'\n',{flag:'wx'});save(totalFile,receipt);};
+  const saveTotal=receipt=>{receipt.localRetention=j.localRetention;receipt.capacity=j.capacity;receipt.notificationRequired=receipt.complete!==true||j.capacity?.belowWatermark===true;const archive=path.join(context.RUNTIME,'status/cleanup-totals',auth.runId+'.json');fs.mkdirSync(path.dirname(archive),{recursive:true});fs.writeFileSync(archive,JSON.stringify(receipt,null,2)+'\n',{flag:'wx'});save(totalFile,receipt);};
   const totalFile=path.join(context.RUNTIME,'status',`cleanup-total-${auth.date.replaceAll('-','')}.json`);fs.mkdirSync(logDir,{recursive:true});save(auth.journalFile,j);
   let executionError;
   try {
@@ -108,6 +110,8 @@ async function main(){
   } catch(error) {
     executionError=error;j.firstFailure=j.firstFailure||{reason:error.message};
   } finally {
+    j.capacity=require('./cleanup-local-capacity').assess(j.capacityBefore,require('./cleanup-local-capacity').snapshot(context.RUNTIME),require('../data/contracts/cleanup_local_assets_v1.json').capacity.minimumFreeBytes);
+    if(j.capacity.belowWatermark&&!executionError){executionError=Error('local_capacity_below_watermark');j.firstFailure={reason:executionError.message};}
     j.finishedAt=new Date().toISOString();j.protection.changed=j.protection.before.filter(x=>!fs.existsSync(x.file)||context.hash(x.file)!==x.sha256);j.protection.ok=j.protection.changed.length===0;save(auth.journalFile,j);
   }
   try {

@@ -3,6 +3,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 const { assertTree } = require('./cleanup-path-protection');
+const {cutoff:localCutoff}=require('./cleanup-local-calendar');
 let retentionReferenceMs = Date.now();
 let failureContext;
 const REPO_ROOT = path.resolve(__dirname, "..");
@@ -170,13 +171,13 @@ const RETIRED_DIRECTORIES = [
   ".vercel/output",
 ];
 
-const RUNTIME_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_RUNTIME_RETENTION_DAYS || 14);
-const RUNTIME_HISTORY_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_HISTORY_RETENTION_DAYS || 3);
-const LOG_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_LOG_RETENTION_DAYS || 30);
-const RUNTIME_RETIRED_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_RETIRED_RETENTION_DAYS || 14);
-const RUNTIME_SCAN_RECEIPT_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_SCAN_RECEIPT_RETENTION_DAYS || 30);
-const RUNTIME_BACKUP_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_BACKUP_RETENTION_DAYS || 14);
-const RUNTIME_TMP_RETENTION_DAYS = Number(process.env.FUMAN_API_ONLY_CLEANUP_TMP_RETENTION_DAYS || 3);
+const RUNTIME_RETENTION_DAYS = 7;
+const RUNTIME_HISTORY_RETENTION_DAYS = 7;
+const LOG_RETENTION_DAYS = 7;
+const RUNTIME_RETIRED_RETENTION_DAYS = 7;
+const RUNTIME_SCAN_RECEIPT_RETENTION_DAYS = 7;
+const RUNTIME_BACKUP_RETENTION_DAYS = 7;
+const RUNTIME_TMP_RETENTION_DAYS = 7;
 const RUNTIME_STALE_FRONT_PAGE_FILES = [
   "data/heatmap-latest.json",
   "data/market-summary.json",
@@ -432,7 +433,7 @@ function pruneMatchingDirectories(parentDir, predicate, result, dryRun) {
 
 function pruneOldFiles(dir, maxAgeDays, result, dryRun) {
   if (!fs.existsSync(dir)) return;
-  const cutoff = retentionReferenceMs - maxAgeDays * 24 * 60 * 60 * 1000;
+  const cutoff = localCutoff(retentionReferenceMs,maxAgeDays);
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const target = path.join(dir, entry.name);
     if (entry.name.toLowerCase() === "production-health.jsonl") continue;
@@ -446,7 +447,7 @@ function pruneOldFiles(dir, maxAgeDays, result, dryRun) {
     }
     if (!entry.isFile()) continue;
     const stat = fs.statSync(target);
-    if (stat.mtimeMs > cutoff) continue;
+    if (stat.mtimeMs >= cutoff) continue;
     if (!dryRun) fs.unlinkSync(target);
     result.deleted.push(target);
   }
@@ -454,7 +455,7 @@ function pruneOldFiles(dir, maxAgeDays, result, dryRun) {
 
 function pruneOldFilesWhere(dir, maxAgeDays, predicate, result, dryRun) {
   if (!fs.existsSync(dir)) return;
-  const cutoff = retentionReferenceMs - maxAgeDays * 24 * 60 * 60 * 1000;
+  const cutoff = localCutoff(retentionReferenceMs,maxAgeDays);
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const target = path.join(dir, entry.name);
     if (entry.name.toLowerCase() === "production-health.jsonl") continue;
@@ -468,7 +469,7 @@ function pruneOldFilesWhere(dir, maxAgeDays, predicate, result, dryRun) {
     }
     if (!entry.isFile()) continue;
     const stat = fs.statSync(target);
-    if (stat.mtimeMs > cutoff) continue;
+    if (stat.mtimeMs >= cutoff) continue;
     if (!predicate(target, entry.name)) continue;
     if (!dryRun) fs.unlinkSync(target);
     result.deleted.push(target);
@@ -500,8 +501,8 @@ function dateKeyFromName(name) {
 
 function pruneRetiredDataFiles(dir, maxAgeDays, result, dryRun) {
   if (!fs.existsSync(dir)) return;
-  const cutoffKey = taipeiDateKey(new Date(retentionReferenceMs - maxAgeDays * 24 * 60 * 60 * 1000));
-  const cutoffMs = retentionReferenceMs - maxAgeDays * 24 * 60 * 60 * 1000;
+  const cutoffKey = taipeiDateKey(new Date(localCutoff(retentionReferenceMs,maxAgeDays)));
+  const cutoffMs = localCutoff(retentionReferenceMs,maxAgeDays);
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const target = path.join(dir, entry.name);
     if (entry.name.toLowerCase() === "production-health.jsonl") continue;
@@ -516,7 +517,7 @@ function pruneRetiredDataFiles(dir, maxAgeDays, result, dryRun) {
     if (!entry.isFile()) continue;
     const nameDateKey = dateKeyFromName(entry.name);
     const stat = fs.statSync(target);
-    const isOld = nameDateKey ? nameDateKey < cutoffKey : stat.mtimeMs <= cutoffMs;
+    const isOld = nameDateKey ? nameDateKey < cutoffKey : stat.mtimeMs < cutoffMs;
     if (!isOld) continue;
     if (!dryRun) fs.unlinkSync(target);
     result.deleted.push(target);
@@ -657,11 +658,14 @@ async function main() {
     const before=proof.files(paths),preview=operation(true),planned=preview.deleted||[];
       const aged=before.filter(r=>planned.some(p=>r.key===p||r.key.startsWith(p+path.sep))).map(r=>r.key);
       // These legacy predicates prove age/name only, not incident, rollback or consumer safety.
-      const hold=['C06','C07','C08'].includes(id);
+      const hold=['C02','C03','C04','C05','C06','C07','C08'].includes(id);
       const candidates=hold?[]:aged;
-      const protectedExclusions=hold?aged.map(key=>({key,reason:'incident_rollback_or_consumer_safety_unverified'})):[];
+      const protectedExclusions=hold?aged.map(key=>({key,reason:'retirement_reference_or_backup_archive_proof_required_use_local_manifest'})):[];
       const result=hold?{...preview,deleted:[],skipped:[...(preview.skipped||[]),...protectedExclusions]}:args.dryRun?preview:operation(false);
-      if(maintenance&&!args.dryRun)cleanupItems.push(proof.persist(path.join(args.runtimeRoot,'status/cleanup-items',maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before,after:proof.files(paths),candidates,protectedExclusions,checkedAt:new Date().toISOString()}));
+      const after=maintenance&&!args.dryRun?proof.files(paths):[];
+      const beforeKeys=new Set(before.map(r=>r.key));
+      const preservedNewMembers=after.filter(r=>!beforeKeys.has(r.key));
+      if(maintenance&&!args.dryRun)cleanupItems.push(proof.persist(path.join(args.runtimeRoot,'status/cleanup-items',maintenance.runId,id+'.json'),{contract:'cleanup-item-observation-v1',id,runId:maintenance.runId,inventoryComplete:true,readbackComplete:true,before,after,preservedNewMembers,candidates,protectedExclusions,checkedAt:new Date().toISOString()}));
     return result;
   }
   const rootPaths=args.roots.flatMap(root=>[...EXACT_RETIRED,...listRetiredDataFiles(root),...RETIRED_DIRECTORIES,...RESERVED_ROUTE_ARTIFACTS].map(rel=>path.join(root,rel)));
