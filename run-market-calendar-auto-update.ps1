@@ -17,6 +17,14 @@ Push-Location $root
 try {
   & node @nodeArgs 2>&1 | Tee-Object -FilePath $log -Append
   $exit = $LASTEXITCODE
+  if ($exit -eq 0 -and -not $DryRun) {
+    & node --use-system-ca scripts/supabase-incident-guard.js check --class=guard --action=market-calendar-display-publication 2>&1 | Tee-Object -FilePath $log -Append
+    $exit = $LASTEXITCODE
+    if ($exit -eq 0) {
+      & node --use-system-ca scripts/publish-market-calendar-display.cjs 2>&1 | Tee-Object -FilePath $log -Append
+      $exit = $LASTEXITCODE
+    }
+  }
   "[$(Get-Date -Format o)] Market calendar auto update end exit=$exit" | Tee-Object -FilePath $log -Append
   exit $exit
 } finally {

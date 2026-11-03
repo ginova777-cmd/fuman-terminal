@@ -1,6 +1,7 @@
 "use strict";
 
-const { buildMarketCalendarContract } = require("../lib/market-calendar-contract");
+const { readSnapshot } = require("../lib/supabase-snapshots");
+const { KEY, publicPayload } = require("../lib/market-calendar-display.cjs");
 
 function originFrom(request) {
   const host = request.headers["x-forwarded-host"] || request.headers.host || "fuman-terminal.vercel.app";
@@ -27,8 +28,11 @@ module.exports = async function handler(request, response) {
   }
 
   try {
-    const previousTradingDate = String(request.query?.previousTradingDate || "").trim();
-    const payload = await buildMarketCalendarContract({ now: dateFromRequest(request), previousTradingDate });
+    const requested = dateFromRequest(request);
+    const snapshot = await readSnapshot(KEY, { maxAttempts: 1 });
+    // Never infer the last trading date from the cloud's stale bundled overrides.
+    // Caller-supplied previousTradingDate is not calendar evidence.
+    const payload = publicPayload(snapshot?.payload, requested);
     if (request.method === "HEAD") response.status(200).end("");
     else response.status(200).json(payload);
   } catch (error) {
