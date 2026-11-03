@@ -8,24 +8,32 @@ const {verify}=require('../lib/verify-mother-pool-a16');
 const {hash,read,atomic,readSide,client,compact}=require('../lib/mother-pool-a16-io');
 const localFailure=require('../lib/a16-local-failure-policy');
 const arg=n=>process.argv.find(x=>x.startsWith('--'+n+'='))?.slice(n.length+3);
-const root=path.join(__dirname,'..'),runtime=process.env.FUMAN_RUNTIME_DIR||'C:/fuman-runtime';
+const root=path.join(__dirname,'..'),defaultRuntime=process.env.FUMAN_RUNTIME_DIR||'C:/fuman-runtime';
 const scheduled=process.argv.includes('--scheduled'),apply=process.argv.includes('--apply');
 const local=()=>new Date(Date.now()+28800000).toISOString();
-function guard(){const r=spawnSync(process.execPath,[path.join(__dirname,'supabase-incident-guard.js'),'check','--class=writer','--action=mother-pool-a16'],{encoding:'utf8',windowsHide:true});if(r.status!==0)throw Error('SUPABASE_INCIDENT_BLOCKED');}
-async function main(){
+function guard(timeout){const r=spawnSync(process.execPath,[path.join(__dirname,'supabase-incident-guard.js'),'check','--class=writer','--action=mother-pool-a16'],{encoding:'utf8',windowsHide:true,timeout});if(r.status!==0)throw Error('SUPABASE_INCIDENT_BLOCKED');}
+async function main({universe:providedUniverse,canWrite,runtime=defaultRuntime,apply:applyRequested=false,scheduled:natural=true,deadline}={}){
+ const apply=applyRequested,scheduled=natural;
+ const assertOwner=async()=>{if(typeof canWrite!=='function'||await canWrite()!==true)throw Error('A16_WRITER_AUTHORIZATION_REQUIRED');};
+ await assertOwner();
  if(!apply)throw Error('APPLY_REQUIRED');
- const universe=read(arg('universe')),date=universe.trade_date;
+ if(!Number.isFinite(deadline)||deadline<=Date.now())throw Error('A16_WRITER_DEADLINE_MISSING');
+ const remaining=cap=>{const n=Math.min(cap,deadline-Date.now());if(n<=0)throw Error('A16_ROUND_DEADLINE_REACHED');return n;};
+ const universe=providedUniverse||read(arg('universe')),date=universe.trade_date;
  if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||universe.canonical_run_id!==`fugle_daytrade_source:${date.replaceAll('-','')}:canonical`||!Array.isArray(universe.symbols)||!universe.symbols.length||universe.symbols.some(s=>!/^\d{4}$/.test(s))||new Set(universe.symbols).size!==universe.symbols.length)throw Error('UNIVERSE_INVALID');
  if(scheduled&&(local().slice(0,10)!==date||local().slice(11,16)<'06:00'||local().slice(11,16)>='09:00'))throw Error('OUTSIDE_NATURAL_PREOPEN');
- const day=await isTwseTradingDay(new Date(date+'T12:00:00+08:00'),{stateDir:path.join(runtime,'state'),ignoreOverrides:true});
+ const day=await isTwseTradingDay(new Date(date+'T12:00:00+08:00'),{stateDir:path.join(runtime,'state'),ignoreOverrides:true,deadlineMs:deadline});
  if(day.isTradingDay!==true||day.error||!['cache','twse'].includes(day.source))throw Error('TARGET_NOT_VERIFIED_TRADING_DAY');
- guard();
+ await assertOwner();guard(remaining(60000));
  const dir=path.join(runtime,'data','mother-pool-a16',date),mode=scheduled?'scheduled':'acceptance_probe';fs.mkdirSync(dir,{recursive:true});
  const lock=path.join(dir,'warmup.lock');let lockFd;
  try{lockFd=fs.openSync(lock,'wx');fs.writeFileSync(lockFd,JSON.stringify({pid:process.pid,started_at:new Date().toISOString()}));}catch{throw Error('A16_WARMUP_LOCKED');}
  try {
+  const universeFile=path.join(dir,'requested-symbols.json');
+  if(fs.existsSync(universeFile)){if(hash(read(universeFile))!==hash(universe))throw Error('A16_UNIVERSE_CHANGED');}
+  else atomic(universeFile,universe);
   const planFile=path.join(dir,'session-plan.json');
-  if(!fs.existsSync(planFile)){const p=spawnSync(process.execPath,['--use-system-ca',path.join(__dirname,'prepare-mother-pool-historical-sessions.js'),'--trade-date='+date,'--out='+planFile],{encoding:'utf8',windowsHide:true,timeout:60000});if(p.status!==0)throw Error('CALENDAR_PLAN_FAILED');}
+  if(!fs.existsSync(planFile)){const p=spawnSync(process.execPath,['--use-system-ca',path.join(__dirname,'prepare-mother-pool-historical-sessions.js'),'--trade-date='+date,'--out='+planFile],{encoding:'utf8',windowsHide:true,timeout:remaining(60000)});if(p.status!==0)throw Error('CALENDAR_PLAN_FAILED');}
   const planRaw=fs.readFileSync(planFile,'utf8'),plan=JSON.parse(planRaw),sha=bytes=>require('node:crypto').createHash('sha256').update(bytes).digest('hex');
   if(plan.status!=='SESSION_DATES_VERIFIED'||plan.trade_date!==date||!plan.sources?.length)throw Error('CALENDAR_PLAN_INVALID');
   for(const s of plan.sources)if(sha(fs.readFileSync(s.file))!==s.sha256)throw Error('CALENDAR_SOURCE_CHANGED');
@@ -34,14 +42,17 @@ async function main(){
   const calendar={plan_file:planFile,sha256:sha(planRaw),checked_at:plan.checked_at,sources:plan.sources};
   const universeHash=hash(universe),generation=`a16-${date}-${mode}-${universeHash.slice(0,16)}`,rows=[];
   const receiptDir=path.join(dir,generation),summaryFile=path.join(dir,scheduled?'writer-summary.json':generation+'-summary.json');
-  const apiKey=fs.readFileSync(path.join(runtime,'secrets','fugle-api-key.txt'),'utf8').trim(),db=client(runtime);
+  if(scheduled)rows.push(...require('../lib/mother-pool-a16-resume.cjs').retained({runtime,universe,generation,mode,asOf:new Date().toISOString()}));
+  const apiKey=fs.readFileSync(path.join(runtime,'secrets','fugle-api-key.txt'),'utf8').trim(),db=client(runtime,{canWrite,deadline});
   function summary(){const failed=rows.filter(r=>r.source_ready!==true||r.db_readback_ok!==true||r.anon_readback_ok!==true||r.verifier_passed!==true||r.requested_count!==1084||r.written_count!==1084||r.readback_count!==1084||!/^[0-9a-f]{64}$/.test(r.payload_sha256||''));return {contract:'mother_pool_a16_writer_summary_v1',trade_date:date,canonical_run_id:universe.canonical_run_id,generation,mode,universe_sha256:universeHash,requested_symbols:universe.symbols,requested_count:universe.symbols.length,attempted_count:rows.length,rows,rows_sha256:hash(rows),status:rows.length===universe.symbols.length&&!failed.length?'complete':'blocked',complete:rows.length===universe.symbols.length&&!failed.length,failed_checks:[...(rows.length<universe.symbols.length?['WARMUP_PENDING']:[]),...new Set(failed.map(r=>r.first_blocker||'A16_SOURCE_NOT_READY'))],first_blocker:failed[0]?.first_blocker|| (rows.length<universe.symbols.length?'WARMUP_PENDING':null),formal_candidate_allowed:false,publish_allowed:false,updated_at:new Date().toISOString()};}
   for(const symbol of universe.symbols){
+   if(rows.some(row=>row.symbol===symbol))continue;
    if(scheduled&&(local().slice(0,10)!==date||local().slice(11,16)>='09:00'))break;
-   guard();try{const file=path.join(runtime,'data','mother-pool-historical-minutes',date,symbol+'.json');let history;
+   await assertOwner();guard(remaining(60000));try{const file=path.join(runtime,'data','mother-pool-historical-minutes',date,symbol+'.json');let history;
    try{const cached=read(file);if(cached.calendar?.sha256===calendar.sha256&&cached.symbol===symbol&&cached.trade_date===date&&cached.result?.status==='HISTORY_FETCHED')history=cached;}catch(error){if(error.code!=='ENOENT')throw error;}
    if(!history){
-    const result=await fetchHistory({symbol,tradeDate:date,sessionDates:plan.session_dates,apiKey});
+    await assertOwner();
+    const result=await fetchHistory({symbol,tradeDate:date,sessionDates:plan.session_dates,apiKey,timeoutMs:remaining(10000)});
     // Raw response is the evidence. Avoid storing a duplicate expanded copy of
     // all OHLCV bars: every reader revalidates the raw response through adapt().
     if(result.normalized){const {rows:expanded,...metadata}=result.normalized;result.normalized=metadata;}
@@ -51,6 +62,7 @@ async function main(){
    const sideJournals=readSide(runtime,symbol,plan.session_dates),input={symbol,tradeDate:date,canonicalRunId:universe.canonical_run_id,asOf:new Date().toISOString(),history,sideJournals};
    let receipt=build(input),verifier=verify(receipt,input);let dbResult={db_readback_ok:false,anon_readback_ok:false,written_count:0,readback_count:0},failure=null;
    if(verifier.verification_passed)try{
+    await assertOwner();
     const intentFile=path.join(receiptDir,symbol+'-write-intent.json');
     let pending=null;
     if(fs.existsSync(intentFile)){
@@ -99,7 +111,8 @@ async function main(){
    }
   }
   const final=summary();atomic(summaryFile,final);console.log(JSON.stringify({status:final.status,complete:final.complete,attempted_count:rows.length,summary:summaryFile}));
-  process.exitCode=final.complete?0:2;
+  return final;
  }finally{fs.closeSync(lockFd);fs.unlinkSync(lock);}
 }
-main().catch(e=>{console.error(JSON.stringify({status:'blocked',complete:false,error:e.message}));process.exitCode=1;});
+module.exports={run:main};
+if(require.main===module)main().then(final=>{process.exitCode=final.complete?0:2;}).catch(e=>{console.error(JSON.stringify({status:'blocked',complete:false,error:e.message}));process.exitCode=1;});

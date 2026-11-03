@@ -22,6 +22,12 @@ $env:FUMAN_RUNTIME_DIR = $runtime
 $env:NODE_OPTIONS = "--use-system-ca"
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 if (-not (Test-Path -LiteralPath $nodeExe)) { $nodeExe = "node.exe" }
+$marketMode = if ($RecoveryReplay) { "recovery_replay" } elseif ($Recovery) { "recovery" } else { "natural" }
+if (-not $RecoveryReplay) {
+  & (Join-Path $PSScriptRoot "scripts\invoke-market-status-guard.ps1") -Stage "strategy3" -TradeDate "" -ExecutionMode $marketMode
+  if ($LASTEXITCODE -eq 10) { exit 0 }
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 $pwshExe = (Get-Process -Id $PID).Path
 $logDir = Join-Path $runtime "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null

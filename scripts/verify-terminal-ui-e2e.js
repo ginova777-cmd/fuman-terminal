@@ -314,7 +314,7 @@ async function launchBrowser(options = {}) {
     } catch (error) {
       stableHits = 0;
       lastError = error;
-      if (child.exitCode !== null) throw new Error(`browser exited early: ${stderr}`);
+      if (require('../lib/browser-startup-status.cjs').failedExit(child.exitCode)) throw new Error(`browser exited early code=${child.exitCode}: ${stderr}`);
       await sleep(150);
     }
   }
@@ -2756,6 +2756,13 @@ async function runE2eOnce(options = {}) {
     }
   } finally {
     if (!KEEP_BROWSER) {
+      // Close the actual browser, including Windows launcher handoff children.
+      try {
+        const version = await fetchJson(`http://127.0.0.1:${browser.port}/json/version`);
+        const control = new Cdp(version.webSocketDebuggerUrl);
+        try { await control.connect(); await control.send('Browser.close', {}, 5000); }
+        finally { control.close(); }
+      } catch {}
       try { browser.child.kill(); } catch {}
       await fs.rm(browser.userDataDir, { recursive: true, force: true }).catch(() => null);
     }

@@ -40,7 +40,8 @@ async function observeWriterRefreshes(afterTime, required, timeoutMs, tradeDate,
   const started = Date.now();
   let events = [];
   do {
-    events = require('../lib/opening-report-writer-refresh-evidence').readAfter(RUNTIME, tradeDate, afterTime).filter(event=>requiredSymbols.every(symbol=>event.symbols.includes(symbol))&&require('../lib/opening-report-refresh-proof.cjs').verified(RUNTIME,event,reportRunId));
+    const candidates = require('../lib/opening-report-writer-refresh-evidence').readAfter(RUNTIME, tradeDate, afterTime).filter(event=>requiredSymbols.every(symbol=>event.symbols.includes(symbol)));
+    events = reportRunId ? require('../lib/opening-report-complete-refresh.cjs').completed(RUNTIME, candidates, {report_run_id:reportRunId,checked_at:new Date(afterTime).toISOString()}).map(({event,terminal})=>({...event,writer_terminal_evidence:{path:terminal.path,sha256:terminal.sha256}})) : [];
     if (events.length >= required || Date.now() - started >= timeoutMs) break;
     await sleep(Math.min(5000, Math.max(0, timeoutMs - (Date.now() - started))));
   } while (Date.now() - started <= timeoutMs);

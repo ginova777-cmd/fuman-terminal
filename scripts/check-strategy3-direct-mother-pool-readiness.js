@@ -34,7 +34,7 @@ async function main() {
   const coverageRatio = expectedCount ? readyCount / expectedCount : 0;
   const ok = water.ok === true && !water.skipped && expectedCount > 0 && coverageRatio >= MIN_MOTHER_POOL_COVERAGE_RATIO;
   const issues = [...(water.failedChecks || [])];
-  if (coverageRatio < MIN_MOTHER_POOL_COVERAGE_RATIO) issues.push("strategy3_v2_mother_pool_v4_1_usable_1m_coverage_below_90_percent");
+  if (coverageRatio < MIN_MOTHER_POOL_COVERAGE_RATIO) issues.push("strategy3_v2_mother_pool_v4_1_usable_1m_coverage_below_80_percent");
   const payload = {
     ok,
     ready: ok,
