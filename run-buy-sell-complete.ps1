@@ -7,6 +7,12 @@ $env:FUMAN_RUNTIME_DIR = $runtime
 $env:FUMAN_REPLAY_TRADE_DATE = $ReplayTradeDate
 $env:FUMAN_ALLOW_REPLAY_CLOSED_DAY = [string](-not [string]::IsNullOrWhiteSpace($ReplayTradeDate))
 $env:FUMAN_INSTITUTION_REPLAY_VALIDATED = "0"
+$marketMode = if ($ReplayTradeDate) { "recovery_replay" } elseif ($Mode -eq "Recovery") { "recovery" } else { "natural" }
+if (-not $ReplayTradeDate) {
+  & (Join-Path $PSScriptRoot "scripts\invoke-market-status-guard.ps1") -Stage "buy-sell" -TradeDate "" -ExecutionMode $marketMode
+  if ($LASTEXITCODE -eq 10) { exit 0 }
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
 $env:NODE_OPTIONS = "--use-system-ca"
 $nodeExe = "C:\Program Files\nodejs\node.exe"
 if (-not (Test-Path -LiteralPath $nodeExe)) { $nodeExe = "node.exe" }
