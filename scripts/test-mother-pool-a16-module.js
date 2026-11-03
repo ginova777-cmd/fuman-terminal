@@ -11,7 +11,8 @@ const dates=Array.from({length:20},(_,i)=>'2026-08-'+String(i+1).padStart(2,'0')
 const raw={symbol:'2330',exchange:'TWSE',market:'TSE',type:'EQUITY',timeframe:'1',data:dates.flatMap((d,i)=>[{date:d+'T09:00:00+08:00',open:100,high:100,low:100,close:100,volume:10+i},{date:d+'T09:01:00+08:00',open:100,high:102,low:100,close:101,volume:20+i}])};
 const history={contract:'mother_pool_historical_minute_fetch_evidence_v1',symbol:'2330',trade_date:date,calendar_verified:true,requested_sessions:dates,calendar:{checked_at:'2026-09-28T12:00:00Z',sha256:'a'.repeat(64)},result:{status:'HISTORY_FETCHED',raw,fetched_at:'2026-09-28T12:01:00Z',normalized:{raw_sha256:crypto.createHash('sha256').update(JSON.stringify(raw)).digest('hex')}}};
 const receipt=build({symbol:'2330',tradeDate:date,canonicalRunId:identity.canonical_run_id,asOf,history});
-const db={readback_contract:'a16_db_anon_v2',db_readback_ok:true,anon_readback_ok:true,written_count:1084,readback_count:1084,payload_sha256:io.hash(io.compact(receipt))};
+const proofs=receipt=>['DB','ANON'].map(role=>({role,row_count:1,trade_date:date,canonical_run_id:identity.canonical_run_id,symbol:'2330',generation,payload_sha256:io.hash(io.compact(receipt)),checked_at:asOf}));
+const db={readback_evidence:proofs(receipt),readback_contract:'a16_db_anon_v2',db_readback_ok:true,anon_readback_ok:true,written_count:1084,readback_count:1084,payload_sha256:io.hash(io.compact(receipt))};
 const file=path.join(runtime,'data','mother-pool-a16',date,generation,'2330.json');
 const artifact={verifier:require('../lib/verify-mother-pool-a16').verify(receipt,{history,symbol:'2330',tradeDate:date,canonicalRunId:identity.canonical_run_id,asOf}),generation,mode:'scheduled',receipt,db};io.atomic(file,artifact);
 const historyFile=path.join(runtime,'data','mother-pool-historical-minutes',date,'2330.json');io.atomic(historyFile,history);
@@ -45,7 +46,7 @@ for(const d of dates){const trades=[],side=[];
 fullHistory.result.normalized.raw_sha256=crypto.createHash('sha256').update(JSON.stringify(fullHistory.result.raw)).digest('hex');
 io.atomic(historyFile,fullHistory);
 const fullReceipt=build({symbol:'2330',tradeDate:date,canonicalRunId:identity.canonical_run_id,asOf,history:fullHistory,sideJournals});assert.equal(fullReceipt.complete,true);
-const fullDb={...db,payload_sha256:io.hash(io.compact(fullReceipt))};io.atomic(file,{...artifact,receipt:fullReceipt,db:fullDb,verifier:require('../lib/verify-mother-pool-a16').verify(fullReceipt,{history:fullHistory,sideJournals,symbol:'2330',tradeDate:date,canonicalRunId:identity.canonical_run_id,asOf})});
+const fullDb={...db,readback_evidence:proofs(fullReceipt),payload_sha256:io.hash(io.compact(fullReceipt))};io.atomic(file,{...artifact,receipt:fullReceipt,db:fullDb,verifier:require('../lib/verify-mother-pool-a16').verify(fullReceipt,{history:fullHistory,sideJournals,symbol:'2330',tradeDate:date,canonicalRunId:identity.canonical_run_id,asOf})});
 const fullRows=[{...rows[0],...fullDb,source_ready:true,first_blocker:null}];io.atomic(path.join(runtime,'data','mother-pool-a16',date,'writer-summary.json'),{...summary,rows:fullRows,rows_sha256:io.hash(fullRows)});
 const started=Date.now(),fullPlan=collect(input);assert.equal(fullPlan.rows[0].status,'READY');assert.equal(verify(fullPlan.rows,{...identity,observed_at:asOf,writer_write_set:{plan:fullPlan}},{runtime}),true);
 assert.equal(fullPlan.rows[0].baseline_counts.ABS_RETURN.not_applicable,1);

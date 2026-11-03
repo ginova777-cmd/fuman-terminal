@@ -1,0 +1,14 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('fs'),vm=require('vm'),path=require('path');
+async function run(entry,ready=80){
+ let writes=0,receipt;
+ const scanner={mother_pool:{symbol_count:100},ready_20_candle_symbols:ready,entry_window_symbols:entry,results:[],water:{ok:true,receipt:{},failedChecks:[]}};
+ const contract={ROOT:'.',RUNTIME_DIR:'isolated',STRATEGY:'strategy3',MIN_MOTHER_POOL_COVERAGE_RATIO:.8,MOTHER_POOL_CONTRACT_VERSION:'4.1.0',taipeiDate:()=> '2026-10-28',nowTaipeiIso:()=> '2026-10-28T13:00:00+08:00',newRunId:()=> 'fixture',writeJson:(_,r)=>{receipt=r;return 'fixture.json'},scanReceiptPath:()=> 'fixture.json',failClosed:(reason,fields)=>({ok:false,status:'FAIL_CLOSED',reason_code:reason,publish_allowed:false,line_allowed:false,...fields})};
+ const context={module:{exports:{}},process:{argv:['node','fixture','--apply','--recovery-replay'],exitCode:0},console:{log(){}},__dirname:__dirname,fixture:scanner,onApply:()=>{writes++;return {ok:true}},require:(id)=>id==='./strategy3-v2-contract'?contract:id==='../lib/server-supabase-key'?{terminalSupabaseKey:()=>'',terminalSupabaseUrl:()=>''}:id==='path'?path:id==='child_process'?{}:{}};
+ vm.createContext(context);
+ vm.runInContext(fs.readFileSync(path.join(__dirname,'run-strategy3-v2-complete-scan.js'),'utf8')+'\nbuildScannerCoreResults=async()=>fixture;runMarketGuard=()=>({closed:false,exitCode:0});runReadiness=()=>({ok:true,payload:{ok:true}});applySupabaseRun=async()=>onApply();module.exports.testMain=main;',context);
+ await context.module.exports.testMain();return {writes,receipt,code:context.process.exitCode};
+}
+test('missing entry window blocks actual scanner before DB apply even with 80% bars',async()=>{for(const n of [0,undefined,null,-1,NaN,1.5]){const r=await run(n);assert.equal(r.writes,0);assert.equal(r.receipt.ok,false);assert(r.receipt.issues.includes('strategy3_v2_required_entry_window_data_unavailable'));assert.equal(r.code,1);}});
+test('valid entry data permits honest zero-result scan; 80% remains required',async()=>{const r=await run(80);assert.equal(r.writes,1);assert.equal(r.receipt.result_count,0);assert.equal(r.receipt.ok,true);const low=await run(79,79);assert.equal(low.writes,0);assert.equal(low.receipt.ok,false);});
+test('independent recovery verifier rejects missing entry evidence',()=>{const source=fs.readFileSync(path.join(__dirname,'verify-strategy3-recovery-replay-complete.js'),'utf8');const line=source.split('\n').find(x=>x.includes('"required_entry_window_data_unavailable"'));assert(line);for(const entry of [0,undefined,80]){const failed=[];vm.runInNewContext(line,{runner:{scanner_summary:{entry_window_symbols:entry}},failed,add:(f,ok,label)=>{if(!ok)f.push(label)}});assert.equal(failed.length,entry===80?0:1);}});

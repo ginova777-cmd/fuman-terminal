@@ -1,7 +1,7 @@
 'use strict';
 const assert=require('node:assert/strict'),ranking=require('../lib/strategy5-ranking-bonuses'),technical=require('../lib/strategy5-technical-selection');
 const target='2000-01-20',dates=Array.from({length:15},(_,i)=>'2000-01-'+String(i+6).padStart(2,'0'));
-const bars=[100,102,101,103,102,104,103,105,104,106,105,112].map((close,i)=>({date:'2000-01-'+String(i+9).padStart(2,'0'),open:close-1,high:close+2,low:close-2,close}));
+const bars=[90,92,91,93,92,94,93,95,94,96,95,97,96,98,97,99,98,100,99,101,100,112].map((close,i)=>({date:new Date(Date.UTC(2000,0,-1+i)).toISOString().slice(0,10),open:close-1,high:close+2,low:close-2,close}));
 const input=(symbol,vol=250,pct=50)=>({symbol,recentVolume:{expectedDates:dates,rows:dates.map((date,i)=>({date,volume_lots:i===14?vol:100}))},daytrade:{symbol,source:'official-test',sourceHash:'isolated',tradeDate:target,totalVolumeDate:target,unit:'shares',daytradeShares:vol*1000*pct/100,totalVolumeShares:vol*1000}});
 assert.equal(ranking.calculate(input('2330'),target).totalPoints,10);
 assert.equal(ranking.calculate(input('2330',249.999,49.999),target).totalPoints,0);

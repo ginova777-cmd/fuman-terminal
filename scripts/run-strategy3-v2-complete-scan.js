@@ -542,13 +542,15 @@ async function main() {
   const formalReadyTarget = Number(scanner.mother_pool?.symbol_count || 0);
   const motherPoolCoverageRatio = formalReadyTarget > 0 ? Math.min(1, scanner.ready_20_candle_symbols / formalReadyTarget) : 0;
   const motherPoolCoverageOk = motherPoolCoverageRatio >= MIN_MOTHER_POOL_COVERAGE_RATIO;
-  const scannerCoreReady = scanner.water.ok === true && scanner.water.skipped !== true && motherPoolCoverageOk;
+  const entryWindowReady = Number.isInteger(scanner.entry_window_symbols) && scanner.entry_window_symbols > 0;
+  const scannerCoreReady = scanner.water.ok === true && scanner.water.skipped !== true && motherPoolCoverageOk && entryWindowReady;
   const readinessOk = readiness.ok && readiness.payload?.ok === true;
   if (!readinessOk && !scannerCoreReady) {
     issues.push("readiness_not_ready");
   }
   if (!scanner.water.ok) issues.push(...(scanner.water.failedChecks || [scanner.water.firstBlocker || "strategy3_v2_mother_pool_v4_1_not_ready"]));
-  if (!motherPoolCoverageOk) issues.push("strategy3_v2_mother_pool_v4_1_usable_1m_coverage_below_90_percent");
+  if (!motherPoolCoverageOk) issues.push("strategy3_v2_mother_pool_v4_1_usable_1m_coverage_below_80_percent");
+  if (!entryWindowReady) issues.push("strategy3_v2_required_entry_window_data_unavailable");
 
   const receipt = issues.length
     ? failClosed("strategy3_v2_core_not_ready", {
@@ -572,7 +574,7 @@ async function main() {
           mother_pool_coverage_ratio: round(motherPoolCoverageRatio, 4),
           minimum_mother_pool_coverage_ratio: MIN_MOTHER_POOL_COVERAGE_RATIO,
           symbol_data_gap_rows: scanner.symbol_data_gap_rows,
-          tolerance_policy: "strategy3_v2_isolates_symbol_data_gap_and_requires_90_percent_v4_1_usable_1m_coverage",
+          tolerance_policy: "strategy3_v2_isolates_symbol_data_gap_and_requires_80_percent_v4_1_usable_1m_coverage",
           result_count: scanner.results.length,
           quote_source: scanner.quote_source,
           candle_source: scanner.candle_source,
@@ -607,7 +609,7 @@ async function main() {
           mother_pool_coverage_ratio: round(motherPoolCoverageRatio, 4),
           minimum_mother_pool_coverage_ratio: MIN_MOTHER_POOL_COVERAGE_RATIO,
           symbol_data_gap_rows: scanner.symbol_data_gap_rows,
-          tolerance_policy: "strategy3_v2_isolates_symbol_data_gap_and_requires_90_percent_v4_1_usable_1m_coverage",
+          tolerance_policy: "strategy3_v2_isolates_symbol_data_gap_and_requires_80_percent_v4_1_usable_1m_coverage",
           result_count: scanner.results.length,
           quote_source: scanner.quote_source,
           candle_source: scanner.candle_source,

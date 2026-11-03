@@ -6,6 +6,10 @@ param(
 $ErrorActionPreference = "Stop"
 $repo = $ProjectRoot
 $nodeExe = "node"
+$env:FUMAN_RUNTIME_DIR = $RuntimeRoot
+& (Join-Path $ProjectRoot 'scripts\invoke-market-status-guard.ps1') -Stage 'strategy4-prewarm' -ExecutionMode 'natural'
+if ($LASTEXITCODE -eq 10) { exit 0 }
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 $receiptDir = Join-Path $RuntimeRoot "data\scan-receipts"
 $logDir = Join-Path $RuntimeRoot "logs"
 New-Item -ItemType Directory -Force -Path $receiptDir, $logDir | Out-Null

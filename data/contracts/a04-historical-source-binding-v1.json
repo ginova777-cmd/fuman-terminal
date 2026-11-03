@@ -1,11 +1,18 @@
 {
   "contract": "a04_historical_source_binding_v1",
-  "status": "UNBOUND",
-  "owner_decision": "MP-A04-OWNER-DECISION-20261013",
+  "status": "APPROVED",
   "source": "strategy4_daily_ohlcv_view",
-  "source_contract": null,
-  "source_version": null,
-  "approval_reference": null,
-  "row_sources": [],
-  "note": "Source Owner must supply the historical source contract and provenance. No production source is enabled by this candidate."
+  "source_contract": "a04_fugle_snapshot_original_v1",
+  "source_version": "ac7689ed51f2ed68ecb673e9cb11b0d19fe72d850818a881ccb8cf0452f6d742",
+  "approval_reference": "2026-10-27 user-authorized forward original retention and independent readback; old unproven rows UNKNOWN",
+  "row_sources": [
+    "fugle-snapshot-tse",
+    "fugle-snapshot-otc",
+    "fugle-snapshot-tib"
+  ],
+  "available_at_semantics": "local database ingestion availability; NOT upstream publication time",
+  "unknown_symbols": [
+    "2323",
+    "6173"
+  ]
 }
