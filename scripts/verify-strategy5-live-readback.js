@@ -33,6 +33,7 @@ async function main() {
     assert(crypto.createHash('sha256').update(raw).digest('hex') === run.payload.technicalSourceHash, 'technical evidence hash mismatch');
     const evidence = JSON.parse(raw);
     assert(evidence.runId === scan.runId && evidence.tradeDate === date && evidence.contract === technical.CONTRACT, 'evidence identity mismatch');
+    assert.strictEqual(run.payload.selectionCoverage?.indicatorContract, technical.INDICATOR_CONTRACT, 'Strategy5 RSI v2 contract required');
     const recomputed = technical.evaluate(evidence.candidates, evidence.sources, date);
     assert.deepStrictEqual(recomputed.selectionCoverage, run.payload.selectionCoverage, 'coverage recomputation mismatch');
     assert(recomputed.selectionCoverage.ok, 'candidate coverage below threshold');
@@ -42,6 +43,13 @@ async function main() {
       const expected = recomputed.selected.find(r => r.code === row.code);
       assert(row.run_id === scan.runId && row.complete && String(row.scan_date).slice(0,10) === date, 'row identity mismatch');
       assert.deepStrictEqual(row.payload.technicalTrend, expected.technicalTrend, 'stored indicators mismatch ' + row.code);
+      assert.strictEqual(row.payload.technicalTrend.indicatorContract, technical.INDICATOR_CONTRACT, 'row RSI v2 contract required');
+      for (const [frame, timeframe] of [['daily','1d'], ['hourly60','60m']]) {
+        const value = row.payload.technicalTrend[frame];
+        if (!value.available) continue;
+        assert.strictEqual(value.contract, technical.INDICATOR_CONTRACT, 'frame RSI contract mismatch');
+        assert.deepStrictEqual(value.rsiEvidence, {timeframe, method:'rolling-gain-loss', fast_period:5, slow_period:15, warmup:17, contract_version:technical.INDICATOR_CONTRACT}, 'RSI parameters missing or mismatched');
+      }
       assert.deepStrictEqual(row.payload.matches, expected.matches, 'base strategies changed ' + row.code);
       assert(expected.rankingBonus, 'bonus evidence missing '+row.code);
       assert.deepStrictEqual(row.payload.rankingBonus,expected.rankingBonus,'bonus evidence mismatch '+row.code);
