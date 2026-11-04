@@ -1,5 +1,6 @@
 'use strict';
 const DAY=86400000;
+const {expired}=require('./cleanup-local-calendar');
 // Explicit per-file review evidence is required; a filename/mtime is never permission.
 function classifyEvidence(row, now, sha256) {
  const protect=reason=>({eligible:false,reason});
@@ -14,7 +15,7 @@ function classifyEvidence(row, now, sha256) {
  else if(row.incidentState==='none'&&row.success===true)since=Date.parse(row.completedAt);
  else return protect('incident_or_success_unknown');
  if(!Number.isFinite(since)||since>now)return protect('retention_start_invalid');
- return now-since>15*DAY?{eligible:true,reason:'retention_elapsed'}:protect('retention_not_elapsed');
+ return expired(since,now)?{eligible:true,reason:'retention_elapsed'}:protect('retention_not_elapsed');
 }
 module.exports={classifyEvidence};
 

@@ -62,7 +62,7 @@ async function main() {
   const requiredReadyCount = Math.ceil(expectedCount * MIN_MOTHER_POOL_COVERAGE_RATIO);
   const coverageRatio = expectedCount ? readyCount / expectedCount : 0;
   const issues = [...(water.failedChecks || [])];
-  if (coverageRatio < MIN_MOTHER_POOL_COVERAGE_RATIO) issues.push("strategy3_v2_mother_pool_v4_1_usable_1m_coverage_below_90_percent");
+  if (coverageRatio < MIN_MOTHER_POOL_COVERAGE_RATIO) issues.push("strategy3_v2_mother_pool_v4_1_usable_1m_coverage_below_80_percent");
   const uniqueIssues = [...new Set(issues)];
   const ready = water.ok === true && expectedCount > 0 && coverageRatio >= MIN_MOTHER_POOL_COVERAGE_RATIO;
   const ws = readJson(statusFile, {});

@@ -3,7 +3,7 @@
 const fs=require('fs'),path=require('path'),crypto=require('crypto'),zlib=require('zlib'),cp=require('child_process');
 const {assertTree}=require('./cleanup-path-protection');
 const policy=require('../data/contracts/cleanup_local_assets_v1.json');
-const DAY=86400000;
+const {cutoff}=require('./cleanup-local-calendar');
 const hash=b=>crypto.createHash('sha256').update(b).digest('hex');
 const key=p=>path.resolve(p).replaceAll('\\','/').toLowerCase();
 const inside=(r,p)=>key(p)===key(r)||key(p).startsWith(key(r)+'/');
@@ -13,7 +13,7 @@ function files(root){
   function visit(p){const s=fs.lstatSync(p);if(s.isSymbolicLink())throw Error('link_rejected:'+p);if(s.isDirectory())for(const n of fs.readdirSync(p))visit(path.join(p,n));else if(s.isFile())out.push(p);else throw Error('special_file_rejected:'+p);}
   visit(root);return out;
 }
-function fingerprint(p){return files(p).sort().map(f=>{const s=fs.statSync(f);const sha256=hash(fs.readFileSync(f));const after=fs.statSync(f);if(s.size!==after.size||s.mtimeMs!==after.mtimeMs)throw Error('file_changed:'+f);return {path:path.relative(p,f).replaceAll('\\','/'),bytes:s.size,sha256};});}
+function fingerprint(p){return files(p).sort().map(f=>{const s=fs.lstatSync(f);const sha256=require('./cleanup-item-observation').files([f])[0]?.sha256;const after=fs.lstatSync(f);if(!sha256||after.isSymbolicLink()||s.ino!==after.ino||s.dev!==after.dev||s.size!==after.size||s.mtimeMs!==after.mtimeMs)throw Error('file_changed:'+f);return {path:path.relative(p,f).replaceAll('\\','/'),bytes:s.size,sha256};});}
 function git(root,args){return cp.execFileSync('git',['-c','core.fsmonitor=false','-c','maintenance.auto=false','-c','gc.auto=0','-C',root,...args],{encoding:'utf8',windowsHide:true}).trim();}
 function activity(){
   const script="$ErrorActionPreference='Stop'; $p=@(Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine); $t=@(Get-ScheduledTask | ForEach-Object {foreach($a in $_.Actions){[pscustomobject]@{execute=$a.Execute;arguments=$a.Arguments;workingDirectory=$a.WorkingDirectory}}}); @{processes=$p;tasks=$t}|ConvertTo-Json -Depth 5 -Compress";
@@ -27,22 +27,23 @@ function validate(entry,ctx){
   if(!path.isAbsolute(entry.path))throw Error('absolute_path_required');
   if([...ctx.policy.protectedRoots,...(ctx.productionRoot?[ctx.productionRoot]:[])].some(r=>inside(r,p)||inside(p,r)))throw Error('protected_root');
   if(ctx.policy.protectedNames.includes(path.basename(p).toLowerCase())||/\.lock$|(?:^|[\\/])(?:scorecard88|scan-receipts|locks)(?:[\\/]|$)/i.test(p))throw Error('protected_evidence_or_lock');
-  const root=ctx.policy.allowedRoots.find(r=>inside(r,p)&&key(r)!==key(p));if(!root)throw Error('root_not_allowed');assertTree(root,p);
+  const root=(rule.allowedRoots||ctx.policy.allowedRoots).find(r=>inside(r,p)&&key(r)!==key(p));if(!root)throw Error('root_not_allowed');assertTree(root,p);
   const members=files(p);if(members.some(f=>ctx.policy.protectedNames.includes(path.basename(f).toLowerCase())||/\.lock$|(?:receipt|scorecard88).*\.json$/i.test(path.basename(f))))throw Error('protected_child');
-  if(members.some(f=>fs.statSync(f).mtimeMs>=ctx.now-rule.keepDays*DAY))throw Error('retention_not_elapsed');
-  if(!Number.isFinite(Date.parse(entry.retiredAt))||Date.parse(entry.retiredAt)>=ctx.now-rule.keepDays*DAY)throw Error('retirement_not_elapsed');
+  if(members.some(f=>fs.statSync(f).mtimeMs>=cutoff(ctx.now,rule.keepDays)))throw Error('retention_not_elapsed');
+  if(!Number.isFinite(Date.parse(entry.retiredAt))||Date.parse(entry.retiredAt)>=cutoff(ctx.now,rule.keepDays))throw Error('retirement_not_elapsed');
   if(!entry.evidenceFile||!entry.evidenceSha256||hash(fs.readFileSync(entry.evidenceFile))!==entry.evidenceSha256)throw Error('evidence_hash_mismatch');
   const e=read(entry.evidenceFile);
   if(e.contract!=='cleanup-local-retirement-evidence-v1'||e.type!==rule.evidenceType||key(e.path)!==key(p)||e.retiredAt!==entry.retiredAt||e.status!=='closed'||e.formalEvidence!==false||e.rollbackRequired!==false||e.unresolvedWork!==false)throw Error('retirement_evidence_invalid');
   if(!e.owner||!e.reason||!Number.isFinite(Date.parse(e.checkedAt))||Date.parse(e.checkedAt)>ctx.now)throw Error('evidence_identity_missing');
   if(!Array.isArray(e.leasePaths)||e.leasePaths.some(f=>!path.isAbsolute(f)||fs.existsSync(f)))throw Error('lease_inventory_missing_or_active');
+  require('./cleanup-local-history-guards').validate(entry,e,ctx,members);
   const before=fingerprint(p);if(hash(JSON.stringify(before))!==e.treeSha256)throw Error('tree_hash_mismatch');
   if(ctx.referenced(p)||members.some(f=>ctx.referenced(f)))throw Error('referenced_by_evidence');
   const activePaths=[p,...(e.repository?[e.repository]:[])];
   if(ctx.activity.processes.some(v=>activePaths.some(a=>pathMention(v.CommandLine,a))|| (e.ownerPid&&v.ProcessId===e.ownerPid))||ctx.activity.tasks.some(v=>Object.values(v).some(s=>activePaths.some(a=>pathMention(s,a)))))throw Error('active_process_or_schedule');
   if(entry.category==='test_artifact'&&!members.every(f=>/\.(?:png|jpe?g|webp|webm|mp4|zip|trace)$/i.test(f)))throw Error('test_artifact_type_rejected');
-  if(entry.category==='sealed_log'&&(!fs.statSync(p).isFile()||!e.sealedAt||Date.parse(e.sealedAt)>ctx.now-rule.keepDays*DAY||!Number.isFinite(Date.parse(e.sealedAt))||e.readerSupportsGzip!==true||!/\.(?:log|jsonl)$/i.test(p)))throw Error('log_not_sealed_or_reader_unsupported');
-  if(entry.category==='interrupted_temp'&&(!e.ownerPid||!e.terminatedAt||!Number.isFinite(Date.parse(e.terminatedAt))||Date.parse(e.terminatedAt)>ctx.now-rule.keepDays*DAY||!members.every(f=>/\.(?:tmp|partial|download)$/i.test(f))))throw Error('job_termination_unproven');
+  if(entry.category==='sealed_log'&&(!fs.statSync(p).isFile()||!e.sealedAt||Date.parse(e.sealedAt)>cutoff(ctx.now,rule.keepDays)||!Number.isFinite(Date.parse(e.sealedAt))||e.readerSupportsGzip!==true||!/\.(?:log|jsonl)$/i.test(p)))throw Error('log_not_sealed_or_reader_unsupported');
+  if(entry.category==='interrupted_temp'&&(!e.ownerPid||!e.terminatedAt||!Number.isFinite(Date.parse(e.terminatedAt))||Date.parse(e.terminatedAt)>cutoff(ctx.now,rule.keepDays)||!members.every(f=>/\.(?:tmp|partial|download)$/i.test(f))))throw Error('job_termination_unproven');
   if(entry.category==='retired_backup'){
     if(!e.replacementBackup||!fs.existsSync(e.replacementBackup)||inside(p,e.replacementBackup)||!e.replacementTreeSha256||e.treeSha256!==e.replacementTreeSha256||hash(JSON.stringify(fingerprint(e.replacementBackup)))!==e.replacementTreeSha256)throw Error('replacement_backup_unverified');
     if(!e.restoreReceiptFile||hash(fs.readFileSync(e.restoreReceiptFile))!==e.restoreReceiptSha256)throw Error('restore_receipt_unverified');
@@ -59,12 +60,38 @@ function validate(entry,ctx){
     if(entry.category==='retired_cache'&&(!inside(e.repository,p)||!['node_modules','dist','build','.next','output'].includes(path.basename(p))))throw Error('cache_path_invalid');
     if(entry.category==='retired_worktree'&&(key(e.repository)!==key(p)||!e.worktreeOwner||!git(e.worktreeOwner,['worktree','list','--porcelain']).replaceAll('\\','/').includes('worktree '+p.replaceAll('\\','/'))))throw Error('worktree_registration_missing');
   }
-  return {path:p,category:entry.category,action:rule.action,bytes:before.reduce((n,f)=>n+f.bytes,0),treeSha256:e.treeSha256,evidenceSha256:entry.evidenceSha256,evidenceFile:entry.evidenceFile,files:before,evidence:e};
+  return {path:p,category:entry.category,action:rule.action,bytes:before.reduce((n,f)=>n+f.bytes,0),treeSha256:e.treeSha256,evidenceSha256:entry.evidenceSha256,evidenceFile:entry.evidenceFile,files:before,evidence:e,archiveRoot:ctx.policy.engineeringArchiveRoot};
 }
 function applyOne(item){
   // Caller has revalidated paths, content, retirement, process and reference evidence.
   assertTree(path.dirname(item.path),item.path);
   if(hash(JSON.stringify(fingerprint(item.path)))!==item.treeSha256)throw Error('content_changed_before_apply');
+  if(item.action==='archive_d'){
+    const root=path.resolve(item.archiveRoot||'');
+    if(!/^d:\\/i.test(root)||!fs.existsSync(root)||fs.lstatSync(root).isSymbolicLink()||key(fs.realpathSync(root))!==key(root))throw Error('archive_d_root_unverified');
+    const dest=path.join(root,crypto.randomUUID());fs.mkdirSync(dest);
+    assertTree(root,dest);
+    const sourceIsDirectory=fs.statSync(item.path).isDirectory();
+    for(const row of item.files){
+      const source=sourceIsDirectory?path.join(item.path,row.path):item.path;
+      const target=path.join(dest,row.path||'asset');
+      if(!inside(dest,target)||key(target)===key(dest))throw Error('archive_member_outside_root');
+      fs.mkdirSync(path.dirname(target),{recursive:true});assertTree(root,path.dirname(target));
+      fs.copyFileSync(source,target,fs.constants.COPYFILE_EXCL);
+      if(require('./cleanup-item-observation').files([target])[0]?.sha256!==row.sha256)throw Error('archive_d_copy_hash_mismatch');
+    }
+    const backup=sourceIsDirectory?dest:path.join(dest,'asset');
+    if(hash(JSON.stringify(fingerprint(backup)))!==item.treeSha256)throw Error('archive_d_readback_mismatch');
+    assertTree(path.dirname(item.path),item.path);
+    if(hash(JSON.stringify(fingerprint(item.path)))!==item.treeSha256)throw Error('source_changed_after_archive');
+    const index=path.join(root,path.basename(dest)+'.index.json');
+    fs.writeFileSync(index,JSON.stringify({contract:'cleanup-backup-archive-v1',source:item.path,backup,treeSha256:item.treeSha256,files:item.files,checkedAt:new Date().toISOString()})+'\n',{flag:'wx'});
+    const archiveIndexSha256=hash(fs.readFileSync(index));
+    if(item.evidence.leasePaths.some(file=>fs.existsSync(file)))throw Error('lease_became_active');
+    if(hash(fs.readFileSync(item.evidenceFile))!==item.evidenceSha256||item.evidence.referenceSources.some(source=>hash(fs.readFileSync(source.path))!==source.sha256))throw Error('protection_evidence_changed_after_archive');
+    fs.rmSync(item.path,{recursive:sourceIsDirectory,force:false});
+    return {...item,backupArchive:backup,archiveIndex:index,archiveIndexSha256};
+  }
   if(item.action==='gzip'){
     const original=fs.readFileSync(item.path),dest=item.path+'.gz',index=dest+'.index.json';
     if(fs.existsSync(dest)||fs.existsSync(index))throw Error('archive_already_exists');
@@ -81,9 +108,12 @@ function applyOne(item){
 function verify(receipt){
   const issues=[];if(receipt.contract!==policy.contract||receipt.applied!==true)issues.push('not_applied_local_assets_receipt');
   if(receipt.ok!==true||!receipt.runId||!Array.isArray(receipt.candidates)||!Array.isArray(receipt.processed)||!Array.isArray(receipt.preserved)||!Array.isArray(receipt.errors)||!Array.isArray(receipt.protectedEvidence)||!Array.isArray(receipt.inventory)||JSON.stringify(receipt.categories)!==JSON.stringify(Object.keys(policy.categories)))issues.push('incomplete_receipt_contract');
+  if(receipt.localCalendar){
+    try{if(JSON.stringify(receipt.localCalendar)!==JSON.stringify(require('./cleanup-local-calendar').describe(Date.parse(receipt.checkedAt))))issues.push('calendar_receipt_mismatch');const c=receipt.capacity;if(!c||JSON.stringify(c)!==JSON.stringify(require('./cleanup-local-capacity').assess(c.before,c.after,policy.capacity.minimumFreeBytes)))issues.push('capacity_receipt_mismatch');const counts=receipt.counts;if(!counts||counts.deletedFiles!==(receipt.processed||[]).reduce((n,item)=>n+item.files.length,0)||counts.protectedFiles!==(receipt.preserved||[]).reduce((n,item)=>n+(item.files?.length||0),0)||counts.remainingCandidates!==(receipt.candidates||[]).length-(receipt.processed||[]).length)issues.push('local_count_mismatch');}catch{issues.push('local_capacity_or_counts_missing');}
+  }
   const planned=receipt.candidates||[],processed=receipt.processed||[];
   if(planned.length!==processed.length||new Set(processed.map(p=>key(p.path))).size!==processed.length||processed.some(p=>!planned.some(c=>key(c.path)===key(p.path)&&c.treeSha256===p.treeSha256&&c.action===p.action)))issues.push('planned_processed_mismatch');
-  for(const item of receipt.processed||[]){if(fs.existsSync(item.path))issues.push('source_remaining:'+item.path);if(item.archive){try{const b=fs.readFileSync(item.archive);if(hash(b)!==item.archiveSha256||hash(zlib.gunzipSync(b))!==item.originalSha256||read(item.index).sourceSha256!==item.originalSha256)issues.push('archive_invalid:'+item.archive);}catch{issues.push('archive_missing:'+item.archive);}}}
+  for(const item of receipt.processed||[]){if(item.action==='archive_d'){try{const index=read(item.archiveIndex);if(hash(fs.readFileSync(item.archiveIndex))!==item.archiveIndexSha256||index.contract!=='cleanup-backup-archive-v1'||index.source!==item.path||index.backup!==item.backupArchive||index.treeSha256!==item.treeSha256||hash(JSON.stringify(fingerprint(item.backupArchive)))!==item.treeSha256)issues.push('backup_archive_invalid:'+item.path);}catch{issues.push('backup_archive_missing:'+item.path);}}if(fs.existsSync(item.path))issues.push('source_remaining:'+item.path);if(item.archive){try{const b=fs.readFileSync(item.archive);if(hash(b)!==item.archiveSha256||hash(zlib.gunzipSync(b))!==item.originalSha256||read(item.index).sourceSha256!==item.originalSha256)issues.push('archive_invalid:'+item.archive);}catch{issues.push('archive_missing:'+item.archive);}}}
   for(const item of receipt.preserved||[]){
     if(item.reason==='already_absent'){if(fs.existsSync(item.path))issues.push('preserved_absence_changed:'+item.path);continue;}
     try{if(!item.treeSha256||!Array.isArray(item.files)||hash(JSON.stringify(item.files))!==item.treeSha256||!fs.existsSync(item.path)||hash(JSON.stringify(fingerprint(item.path)))!==item.treeSha256)issues.push('preserved_asset_changed:'+item.path);}catch{issues.push('preserved_asset_unreadable:'+item.path);}

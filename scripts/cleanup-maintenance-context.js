@@ -25,6 +25,7 @@ function verifyJournal(auth) {
   const j=JSON.parse(fs.readFileSync(auth.journalFile,'utf8'));
   if(!Number.isFinite(Date.parse(j.startedAt))||!Number.isFinite(Date.parse(j.finishedAt))||Date.parse(j.finishedAt)<Date.parse(j.startedAt))throw Error('cleanup_execution_time_invalid');
   if(j.contract!=='cleanup-maintenance-execution-v1'||j.runId!==auth.runId||j.authorizationSha256!==auth.sha256||!j.finishedAt||Date.parse(j.startedAt)<Date.parse(auth.issuedAt)||Date.parse(j.finishedAt)>Date.now()||j.protection?.ok!==true) throw Error('cleanup_maintenance_execution_invalid');
+  if(j.localRetention){const c=j.capacity;if(!c||JSON.stringify(c)!==JSON.stringify(require('./cleanup-local-capacity').assess(c.before,c.after,require('../data/contracts/cleanup_local_assets_v1.json').capacity.minimumFreeBytes))||c.belowWatermark)throw Error('cleanup_capacity_readback_failed');}
   const expectedSteps=requiredSteps(auth);
   if(auth.scope===scopedPolicy.scope && (j.completionScope!==scopedPolicy.scope||JSON.stringify(j.deferredItems)!==JSON.stringify(scopedPolicy.deferredItems)))throw Error('cleanup_scope_drift');
   if(auth.scope===scopedPolicy.scope){

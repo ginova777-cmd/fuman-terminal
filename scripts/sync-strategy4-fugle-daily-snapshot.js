@@ -8,6 +8,8 @@ const SUPABASE_URL = process.env.SUPABASE_URL || "https://cpmpfhbzutkiecccekfr.s
 const TARGET_DATE = String(process.argv.find((arg) => arg.startsWith("--date=")) || "").slice(7) || taipeiDate();
 const DRY_RUN = process.argv.includes("--dry-run");
 const MIN_ROWS = Math.max(1500, Number(process.env.STRATEGY4_FUGLE_SNAPSHOT_MIN_ROWS || 1500));
+const originals=new Map();
+const provenance=require('../lib/a04-retained-provenance.cjs');
 const CACHE_DIR = path.join(RUNTIME_DIR, "cache", "fugle", "historical");
 function taipeiDate() {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Taipei", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
@@ -29,6 +31,7 @@ async function fetchJson(url, headers, attempts = 3) {
       const response = await fetch(url, { headers, signal: AbortSignal.timeout(30000) });
       const text = await response.text();
       if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 180)}`);
+      if(!DRY_RUN && url.startsWith('https://api.fugle.tw/marketdata/v1.0/stock/snapshot/quotes/')){const market=url.split('/').at(-1);originals.set(market,provenance.retain({runtime:RUNTIME_DIR,market,bytes:Buffer.from(text),capturedAt:new Date().toISOString(),producerSha256:require('crypto').createHash('sha256').update(fs.readFileSync(__filename)).digest('hex')}));}
       return text ? JSON.parse(text) : null;
     } catch (error) {
       failure = error;
@@ -99,8 +102,8 @@ async function main() {
   const missing = [...stocks.keys()].filter((symbol) => !snapshot.has(symbol));
   if (accepted.length < MIN_ROWS) throw new Error(`fugle_snapshot_accepted_rows_too_low:${accepted.length}<${MIN_ROWS}:missing=${missing.length}`);
   const updatedAt = new Date().toISOString();
-  const ohlcv = accepted.map(({ meta, quote }) => ({ symbol: quote.symbol, market: meta.market || "", trade_date: TARGET_DATE, open: quote.open, high: quote.high, low: quote.low, close: quote.close, volume: quote.volumeLots, source: quote.source, name: meta.name || quote.name, industry: meta.industry || "", updated_at: updatedAt, payload: { source: quote.source, volume_unit: "lots", raw_volume_lots: quote.volumeLots, snapshot_script: "sync-strategy4-fugle-daily-snapshot.js" } }));
-  const volume = accepted.map(({ meta, quote }) => ({ symbol: quote.symbol, market: meta.market || "", trade_date: TARGET_DATE, volume: quote.volumeLots, updated_at: updatedAt, payload: { source: quote.source, volume_unit: "lots", raw_volume_lots: quote.volumeLots, snapshot_script: "sync-strategy4-fugle-daily-snapshot.js" } }));
+  const ohlcv = accepted.map(({ meta, quote }) => ({ symbol: quote.symbol, market: meta.market || "", trade_date: TARGET_DATE, open: quote.open, high: quote.high, low: quote.low, close: quote.close, volume: quote.volumeLots, source: quote.source, name: meta.name || quote.name, industry: meta.industry || "", updated_at: updatedAt, payload: { source: quote.source, volume_unit: "lots", raw_volume_lots: quote.volumeLots, snapshot_script: "sync-strategy4-fugle-daily-snapshot.js", a04_original: originals.get(quote.source.split("-").at(-1).toUpperCase()) || null } }));
+  const volume = accepted.map(({ meta, quote }) => ({ symbol: quote.symbol, market: meta.market || "", trade_date: TARGET_DATE, volume: quote.volumeLots, updated_at: updatedAt, payload: { source: quote.source, volume_unit: "lots", raw_volume_lots: quote.volumeLots, snapshot_script: "sync-strategy4-fugle-daily-snapshot.js", a04_original: originals.get(quote.source.split("-").at(-1).toUpperCase()) || null } }));
   accepted.forEach(({ quote }) => updateCache(quote, updatedAt));
   await upsert("fugle_daily_ohlcv", "symbol,trade_date", ohlcv); await upsert("fugle_daily_volume", "symbol,trade_date", volume);
   await upsert("fugle_daily_sync_status", "trade_date,source", [{ trade_date: TARGET_DATE, source: "fugle", started_at: updatedAt, finished_at: new Date().toISOString(), symbols_expected: stocks.size, symbols_loaded: accepted.length, missing_symbols_count: missing.length, status: "complete", error_message: null, updated_at: new Date().toISOString(), payload: { importer: "sync-strategy4-fugle-daily-snapshot.js", source: "fugle_snapshot", tse_rows: tse.size, otc_rows: otc.size, tib_rows: tib.size, accepted_rows: accepted.length, missing_sample: missing.slice(0, 100), target_trade_date: TARGET_DATE } }]);

@@ -7,7 +7,7 @@ const RUNTIME = process.env.FUMAN_RUNTIME_DIR || "C:\\fuman-runtime";
 const TERMINAL = "C:\\fuman-terminal";
 const PUBLISH_SYNC = "C:\\fuman-terminal-publish-sync";
 const { assertTree, treeExpired } = require('./cleanup-path-protection');
-const DAY = 86400000;
+const {cutoff,describe}=require('./cleanup-local-calendar');
 const apply = process.argv.includes("--apply");
 const json = process.argv.includes("--json");
 
@@ -16,7 +16,7 @@ function taipeiDate() {
   const get = (type) => parts.find((part) => part.type === type)?.value || "";
   return `${get("year")}${get("month")}${get("day")}`;
 }
-function expired(stat, days) { return stat.mtimeMs < Date.now() - days * DAY; }
+function expired(stat, days) { return stat.mtimeMs < cutoff(Date.now(), days); }
 function dirBytes(root) {
   let bytes = 0;
   if (!fs.existsSync(root)) return bytes;
@@ -45,7 +45,7 @@ function findDirs(root, allow, days, list) {
     if (!entry.isDirectory() || !allow(entry.name)) continue;
     const full = path.join(root, entry.name);
     const stat = fs.statSync(full);
-    if (treeExpired(full, Date.now() - days * DAY)) list.push({ path: full, bytes: dirBytes(full), kind: "directory" });
+    if (treeExpired(full, cutoff(Date.now(), days))) list.push({ path: full, bytes: dirBytes(full), kind: "directory" });
   }
 }
 const crypto = require("crypto");
@@ -55,7 +55,7 @@ const cacheDecisions = [];
 let evidenceReview;
 async function listCandidates() {
   const list = [];
-  findFiles(path.join(RUNTIME, "state"), (name) => /^daytrade-unattended-gate-(?:watchdog|0700|0845|0900|0910|0935)-evidence-.*\.json$/i.test(name), 15, list);
+  findFiles(path.join(RUNTIME, "state"), (name) => /^daytrade-unattended-gate-(?:watchdog|0700|0845|0900|0910|0935)-evidence-.*\.json$/i.test(name), 7, list);
   const review=evidenceReview=await buildEvidenceReview(list,{runtime:RUNTIME,referenceInventory:require('./cleanup-extended-retention').referenceInventory});
   for(let i=list.length-1;i>=0;i--){
     const item=list[i]; const sha256=crypto.createHash('sha256').update(fs.readFileSync(item.path)).digest('hex');
@@ -98,8 +98,9 @@ const payload = {
   evidenceDecisions, cacheDecisions, evidenceReviewComplete: evidenceDecisions.every(d=>!['protection_evidence_missing_or_stale','reference_review_not_current','incident_or_success_unknown','retention_start_invalid','formal_or_rollback_policy_unknown'].includes(d.reason)),
   maintenanceRunId:maintenance?.runId||null,maintenanceAuthorizationSha256:maintenance?.sha256||null,
   localAssets, ok: failures.length === 0, applied: apply, dryRun: !apply, checkedAt: new Date().toISOString(), contract: "runtime-retention-v1",
-  retention: { watchdogEvidenceDays: 15, datedLogsDays: 30, fugleCacheDays: 7, testOutputsDays: 30, retiredVersionsDays: 45, terminatedTempDays: 7 },
-  protected: ["cache/intraday/fugle-daytrade-ws-candles.json", "daily OHLCV and volume", "Strategy3/4 results", "/88, mobile and latest scorecard", "newest 15 days of formal evidence", "production-health.jsonl"],
+  localCalendar: describe(),
+  retention: { watchdogEvidenceDays: 7, datedLogsDays: 7, fugleCacheDays: 7, testOutputsDays: 7, retiredVersionsDays: 7, terminatedTempDays: 7 },
+  protected: ["cache/intraday/fugle-daytrade-ws-candles.json", "daily OHLCV and volume", "Strategy3/4 results", "/88, mobile and latest scorecard", "formal or unresolved evidence regardless of age", "production-health.jsonl"],
   candidates: candidates.length + localAssets.candidates.length, candidateBytes: [...candidates,...localAssets.candidates].reduce((n, item) => n + item.bytes, 0),
   candidateItems: process.argv.includes("--list") ? candidates : undefined,
   deleted: deleted.length + localAssets.processed.length, deletedBytes: [...deleted,...localAssets.processed].reduce((n, item) => n + item.bytes, 0), failures,
