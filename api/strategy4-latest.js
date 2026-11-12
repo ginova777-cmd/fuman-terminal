@@ -112,7 +112,7 @@ function cleanNumber(value) {
 
 function isAllowedDataContractSource(value) {
   const source = String(value || "").trim();
-  return !source || ALLOWED_DATA_CONTRACT_SOURCES.has(source);
+  return !source || ALLOWED_DATA_CONTRACT_SOURCES.has(source) || source==='longyue-shared:FinMind.TaiwanStockPrice';
 }
 
 function isAcceptedTargetDateCompleteRun(run, supabaseCoverage, qualityStatus, fallbackUsed) {
@@ -551,6 +551,11 @@ async function fetchLatestCompleteRun() {
     if (candidate.schema_version && candidate.schema_version !== EXPECTED_SCHEMA) return false;
     if (candidate.volume_unit && candidate.volume_unit !== EXPECTED_UNIT) return false;
     if (!isAllowedDataContractSource(candidate.data_contract_source)) return false;
+    if(candidate.data_contract_source==='longyue-shared:FinMind.TaiwanStockPrice'){
+      const p=candidate.payload||{};
+      if(!require('../lib/strategy4-universe-contract.cjs').validateEvidence(p.fixedUniverse,p.scannedCodes,String(candidate.scan_date).slice(0,10)))return false;
+      if(p.sharedDailyRevision?.revision!==p.fixedUniverse?.sharedSource?.revision)return false;
+    }
     return true;
   });
   if (!row?.run_id) return null;
