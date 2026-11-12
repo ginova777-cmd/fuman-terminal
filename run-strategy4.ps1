@@ -27,6 +27,10 @@ if ($FixedUniverseFile) {
   if (-not (Test-Path -LiteralPath $fixedUniversePath -PathType Leaf)) { throw "Fixed universe file not found: $fixedUniversePath" }
   $env:STRATEGY4_FIXED_UNIVERSE_FILE = $fixedUniversePath
 }
+$marketMode = if ($Recovery) { "recovery" } else { "natural" }
+& (Join-Path $repo "scripts\invoke-market-status-guard.ps1") -Stage "strategy4" -TradeDate "" -ExecutionMode $marketMode
+if ($LASTEXITCODE -eq 10) { exit 0 }
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 Set-Location $repo
 
