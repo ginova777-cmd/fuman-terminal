@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('assert/strict'),producer=require('../lib/institution-daily-indicators.cjs'),verify=require('../lib/verify-rsi-period-contract.cjs');
+assert.equal(producer.CONTRACT,'technical-kd5-3-rsi5-15-v2');
+const bars=Array.from({length:30},(_,i)=>({high:110+i,low:90+i,close:100+i+(i%3)}));
+const trend=producer.indicatorTrend(bars);
+assert.deepEqual(verify.verifyRow(trend,producer),[]);
+assert.deepEqual(verify.verifyRow({...trend,contract:'institution-daily-kd5-3-rsi5-15-v1'},producer),['RSI_PRODUCER_CONTRACT_MISMATCH']);
+assert(verify.verifyRow({...trend,rsi5:trend.rsi5-1},producer).includes('RSI_VALUE_MISMATCH:rsi5'));
+assert.equal(producer.PARAMETERS.rsiFast,5);assert.equal(producer.PARAMETERS.rsiSlow,15);
+console.log('PASS active v2 independent recomputation; legacy contract and altered RSI rejected');
