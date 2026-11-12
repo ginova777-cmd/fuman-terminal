@@ -8870,6 +8870,12 @@
     return true;
   }
 
+  function institutionEmptyReadbackComplete(meta) {
+    return !!meta && meta.ok === true && /^institution-\d{8}-\d{14}$/.test(meta.runId || "")
+      && meta.resultCount === 0 && String(meta.evidenceStatus || "").toLowerCase() === "complete"
+      && meta.publishAllowed !== false && meta.latestOverwriteAllowed !== false && !meta.error;
+  }
+
   function renderUnifiedListShell(route, meta, panel) {
     meta = strategyMeta(route);
     const payloadMeta = canvasPayloadMeta(route) || {};
@@ -8886,6 +8892,9 @@
       return renderMemberStrategyPendingShell(route, meta, panel);
     }
     if (isMemberStrategyPreviewRoute(route) && hasMemberPreviewToken() && !rows.length && !allRows.length && !payloadMetaHasResolvedResponse(payloadMeta)) {
+      return renderMemberStrategyPendingShell(route, meta, panel);
+    }
+    if (isChipTradeRoute(route) && !rows.length && !allRows.length && !institutionEmptyReadbackComplete(payloadMeta)) {
       return renderMemberStrategyPendingShell(route, meta, panel);
     }
     const displayCount = unifiedDisplayCount(route, rows, allRows, payloadMeta);
