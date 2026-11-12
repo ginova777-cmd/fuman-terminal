@@ -1,4 +1,4 @@
-param([switch]$RecoveryReplay)
+param([switch]$RecoveryReplay, [string]$ResumeVerificationRunId = "", [string]$ResumeVerificationLog = "")
 if ($RecoveryReplay) { throw 'Recovery execution requires its separately approved runner; natural Institution receipt must be preserved' }
 $ErrorActionPreference = "Stop"
 $PSNativeCommandUseErrorActionPreference = $false
@@ -349,6 +349,37 @@ function Invoke-InstitutionSnapshotRefresh($RunId = "", $Count = 0, $Warning = "
 }
 
 "=== Institution scan start $(Get-Date) ===" | Out-File $log -Encoding utf8
+if ($ResumeVerificationRunId) {
+  # Resume only an already committed scan whose local closure failed. No source
+  # sync, scanner invocation, new runId, or direct success-receipt editing.
+  if ($env:FUMAN_INSTITUTION_REPLAY_VALIDATED -ne '1' -or -not $env:FUMAN_REPLAY_TRADE_DATE) { throw 'resume_requires_validated_replay_date' }
+  & $nodeExe (Join-Path $PSScriptRoot 'scripts/verify-release-root-authority.js') --require-production-root
+  if ($LASTEXITCODE -ne 0) { throw 'resume_release_identity_failed' }
+  $priorPath = Join-Path $receiptDir 'institution.json'
+  $prior = Get-Content $priorPath -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
+  $originalLog = [IO.Path]::GetFullPath($ResumeVerificationLog)
+  if (-not $originalLog.StartsWith([IO.Path]::GetFullPath($logDir)+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase) -or $originalLog -ne $prior.log -or $prior.status -ne 'failed' -or $prior.blockingReason -notlike '*strict tri-surface*') { throw 'resume_original_failure_identity_invalid' }
+  $originalLines = @(Get-Content $originalLog -Encoding utf8 | Where-Object { $_ -like 'institution authoritative readback metadata: *' })
+  if ($originalLines.Count -ne 1) { throw 'resume_metadata_not_unique' }
+  $metadata = ($originalLines[0] -replace '^institution authoritative readback metadata: ', '') | ConvertFrom-Json -AsHashtable
+  if ($metadata.runId -cne $ResumeVerificationRunId -or $metadata.usedDate -ne ($env:FUMAN_REPLAY_TRADE_DATE -replace '-', '') -or $metadata.blankTotal -ne 0) { throw 'resume_metadata_identity_invalid' }
+  $resumeDir = Join-Path $runtime ('outputs/institution-verification-resume/'+[guid]::NewGuid().ToString('N'))
+  New-Item -ItemType Directory -Path $resumeDir | Out-Null
+  Copy-Item -LiteralPath $priorPath -Destination (Join-Path $resumeDir 'original-failed-receipt.json')
+  Copy-Item -LiteralPath $originalLog -Destination (Join-Path $resumeDir 'original-scan.log')
+  $inputPath = Join-Path $resumeDir 'verification-input.json'
+  @{status='verification_input_only';runId=$metadata.runId;matches=$metadata.resultCount;scanned=$metadata.sourceRows;total=$metadata.sourceRows;fallbackUsed=$false;selectionCoverage=$metadata.selectionCoverage}|ConvertTo-Json -Depth 50|Set-Content $inputPath -Encoding utf8
+  & $nodeExe --use-system-ca (Join-Path $PSScriptRoot 'scripts/verify-institution-live-readback.js') "--verification-input=$inputPath" *>&1 | Tee-Object -FilePath $log -Append
+  if ($LASTEXITCODE -ne 0) { throw 'resume_independent_database_verification_failed' }
+  $originalLines[0] | Out-File $log -Append -Encoding utf8
+  . "${PSScriptRoot}\verify-post-scan-tri-surface.ps1"
+  $script:InstitutionSourceUniverseCount = [int]$metadata.sourceRows
+  Write-InstitutionReceipt 'verifying' 0 $false ([int]$metadata.resultCount) $ResumeVerificationRunId
+  $row = Assert-PostScanTriSurfaceClosure -Route institution -RunId $ResumeVerificationRunId -LogPath $log -SkipPublication
+  Write-InstitutionReceipt 'complete' 0 $true ([int]$metadata.resultCount) $ResumeVerificationRunId
+  Update-PostScanReceiptEvidence -RuntimeRoot $runtime -Route institution -RunId $ResumeVerificationRunId -ExpectedDate (Get-PostScanExpectedDateKey) -Row $row
+  exit 0
+}
 . "${PSScriptRoot}\schedule-guard.ps1"
 . "${PSScriptRoot}\flow-health.ps1"
 Invoke-FumanWeekdayGuard -Label "Institution scan" -LogPath $log -AllowAfterFormalSourceWindow

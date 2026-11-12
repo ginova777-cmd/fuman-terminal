@@ -1703,6 +1703,7 @@ async function runStreamingCollector() {
             if (Object.prototype.hasOwnProperty.call(channelCandles, inferredChannel)) channelCandles[inferredChannel] += 1;
             lastMessageAt = nowIso();
             runLastMessageAt = lastMessageAt;
+            for (const candle of candles) subscriptionEvidence.marketMessage("candles", candle.symbol, lastTransportMessageAt);
             mergeStreamingCandles(candles);
           }
           return;
@@ -1723,6 +1724,7 @@ async function runStreamingCollector() {
           if (Object.prototype.hasOwnProperty.call(channelQuotes, inferredChannel)) channelQuotes[inferredChannel] += 1;
           lastMessageAt = nowIso();
           runLastMessageAt = lastMessageAt;
+          subscriptionEvidence.marketMessage(inferredChannel, quote.symbol, receivedAt);
           mergeStreamingQuotes([quote]);
         }
       }));
