@@ -2713,7 +2713,7 @@
     if (canvasInflight.has(inflightKey)) return canvasInflight.get(inflightKey);
     const url = compactCanvasUrlForRoute(route, force);
     const controller = new AbortController();
-    const timeoutMs = isProtectedDataRoute(route) ? 6500 : 9000;
+    const timeoutMs = isChipTradeRoute(route) ? 30000 : isProtectedDataRoute(route) ? 6500 : 9000;
     const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
     const task = fetch(url, { cache: isProtectedDataRoute(route) || force ? "no-store" : "default", signal: controller.signal })
       .then(async (response) => {
@@ -8876,6 +8876,14 @@
       && meta.publishAllowed !== false && meta.latestOverwriteAllowed !== false && !meta.error;
   }
 
+  function institutionZeroResultProven(meta) {
+    return meta?.ok === true
+      && /^institution-\d{8}-\d{14}$/.test(String(meta.runId || ""))
+      && meta.resultCount === 0
+      && meta.evidenceStatus === "complete"
+      && meta.publishAllowed === true;
+  }
+
   function renderUnifiedListShell(route, meta, panel) {
     meta = strategyMeta(route);
     const payloadMeta = canvasPayloadMeta(route) || {};
@@ -8887,6 +8895,9 @@
       .slice(0, (isStrategy3Route(route) || isStrategy4Route(route) || isChipTradeRoute(route)) ? 2000 : 160);
     if (isStrategy5Route(route) && canvasState.signalFilter === "multi_strategy_confluence") {
       rows = strategy5TerminalConfluenceRows(allRows).slice(0, 160);
+    }
+    if (isChipTradeRoute(route) && !rows.length && !allRows.length && !institutionZeroResultProven(payloadMeta)) {
+      return renderMemberStrategyPendingShell(route, meta, panel);
     }
     if (isStrategy5Route(route) && !rows.length && !allRows.length && !(payloadMeta.ok === true && payloadMeta.runId && payloadMeta.resultCount === 0)) {
       return renderMemberStrategyPendingShell(route, meta, panel);
