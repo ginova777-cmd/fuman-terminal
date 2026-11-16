@@ -699,7 +699,7 @@ function normalizeRows(payload, tab = "") {
   if (tab === "strategy3") {
     return rows.filter((row) => isValidBusinessRow(row, tab));
   }
-  return rows.filter((row) => isValidBusinessRow(row, tab)).slice(0, ["strategy4", "chip"].includes(tab) ? 2000 : 20);
+  return rows.filter((row) => isValidBusinessRow(row, tab)).slice(0, ["strategy4", "strategy5", "chip"].includes(tab) ? 2000 : 20);
 }
 
 function isEmptyStrategy2Snapshot(payload) {
@@ -1144,7 +1144,7 @@ module.exports = async function handler(request, response) {
     }
   }
   try {
-    const endpointLimit = tab === "strategy3" ? 1200 : tab === "chip" ? 2000 : 60;
+    const endpointLimit = tab === "strategy3" ? 1200 : ["strategy5", "chip"].includes(tab) ? 2000 : 60;
     const endpoint = appendQuery(config.endpoint, {
       mobile: 1,
       canvas: 1,
